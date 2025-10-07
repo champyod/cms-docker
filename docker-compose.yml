@@ -1,3 +1,15 @@
+# Contest Management System (CMS) - Docker Compose Configuration
+# Professional Docker deployment solution created by CCYod
+# Repository: https://github.com/champyod/cms-docker
+# 
+# This configuration provides a complete CMS deployment with:
+# - PostgreSQL database with proper CMS permissions
+# - CMS core services (Contest, Admin, Evaluation, Workers)
+# - CMS ranking service (Scoreboard)
+# - Nginx reverse proxy (optional, for domain routing)
+# - Health checks and persistent volumes
+# - Support for Raspberry Pi distributed workers
+
 version: '3.8'
 
 services:

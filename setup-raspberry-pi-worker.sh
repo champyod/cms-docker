@@ -10,6 +10,7 @@ set -e
 
 echo "======================================"
 echo "CMS Raspberry Pi Worker Setup"
+echo "Docker deployment solution by CCYod"
 echo "======================================"
 
 # Function to prompt for user input

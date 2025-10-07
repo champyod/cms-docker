@@ -1,5 +1,7 @@
 # CMS Portainer Deployment Guide
 
+*Docker deployment solution created by CCYod*
+
 ## Quick Deployment Steps
 
 ### 1. Add Stack in Portainer

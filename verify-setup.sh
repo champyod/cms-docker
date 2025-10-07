@@ -4,6 +4,7 @@
 
 echo "==================================="
 echo "CMS Docker Setup Verification"
+echo "Docker deployment solution by CCYod"
 echo "==================================="
 
 # Colors

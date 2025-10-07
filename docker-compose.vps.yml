@@ -1,5 +1,9 @@
-# Docker Compose for VPS Public Port Deployment
-# Use this version for direct port access without domain
+# Contest Management System (CMS) - VPS Docker Compose Configuration
+# Professional Docker deployment solution created by CCYod
+# Repository: https://github.com/champyod/cms-docker
+#
+# VPS-optimized configuration for direct port access (no domain required)
+# Suitable for VPS deployment with public ports and Raspberry Pi workers
 
 version: '3.8'
 

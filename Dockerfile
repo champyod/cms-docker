@@ -69,6 +69,9 @@ RUN <<EOF
     usermod -aG isolate cmsuser
     # Disable sudo password
     echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+    # Create CMS directories with proper ownership
+    mkdir -p /opt/cms/{log,cache,lib,run,config}
+    chown -R cmsuser:cmsuser /opt/cms
 EOF
 
 # Set cmsuser as default user
@@ -100,9 +103,6 @@ RUN <<EOF
     cp /home/cmsuser/src/scripts/start-cms.sh /home/cmsuser/cms/scripts/
     cp /home/cmsuser/src/scripts/start-ranking.sh /home/cmsuser/cms/scripts/
     chmod +x /home/cmsuser/cms/scripts/*.sh
-    # Create required directories
-    mkdir -p /opt/cms/{log,cache,lib,run,config}
-    chown -R cmsuser:cmsuser /opt/cms
 EOF
 
 CMD ["/bin/bash"]

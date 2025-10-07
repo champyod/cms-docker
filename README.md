@@ -7,7 +7,9 @@
 [![Portainer](https://img.shields.io/badge/Portainer-Compatible-green?logo=portainer)](https://portainer.io)
 [![License](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE.txt)
 
-**Professional Docker deployment solution for Contest Management System**
+**Professional Docker deployment solution for Contest Management System**  
+*Created by CCYod*  
+*Based on [CMS](https://github.com/cms-dev/cms) developed by [cms-dev team](http://cms-dev.github.io/)*
 
 [Features](#-features) • [Architecture](#-architecture) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Support](#-support)
 
@@ -18,7 +20,8 @@
 ## 📋 Table of Contents
 
 - [🎯 Overview](#-overview)
-- [✨ Features](#-features)  
+- [✨ Features](#-features)
+- [✅ Project Status](#-project-status)
 - [🏗️ Architecture](#-architecture)
 - [🚀 Quick Start](#-quick-start)
 - [⚙️ Configuration](#-configuration)
@@ -36,7 +39,7 @@
 
 ## 🎯 Overview
 
-This repository provides a **production-ready Docker deployment** solution for the [Contest Management System (CMS)](http://cms-dev.github.io/), designed for programming contest organizers who need:
+This repository provides a **production-ready Docker deployment** solution for the [Contest Management System (CMS)](https://github.com/cms-dev/cms), designed for programming contest organizers who need:
 
 - **Easy deployment** with Portainer integration
 - **Scalable architecture** supporting distributed workers
@@ -45,7 +48,7 @@ This repository provides a **production-ready Docker deployment** solution for t
 
 ### What is CMS?
 
-CMS (Contest Management System) is a distributed system for running programming contests, originally designed for the International Olympiad in Informatics (IOI). It provides:
+CMS (Contest Management System) is a distributed system for running programming contests, originally designed for the International Olympiad in Informatics (IOI). It was developed by the [cms-dev team](http://cms-dev.github.io/) and provides:
 
 - **Contest Web Server**: Participant interface for problem viewing and submission
 - **Admin Web Server**: Contest management and administrative tools
@@ -80,6 +83,28 @@ CMS (Contest Management System) is a distributed system for running programming 
 - **Load balancing** with nginx reverse proxy
 - **Resource monitoring** and management
 - **Configurable worker limits** and sandbox settings
+
+---
+
+## ✅ Project Status
+
+This Docker deployment solution is **complete and production-ready** as of October 2025. All components have been implemented and tested:
+
+### 🎯 **Completed Components**
+- ✅ **Main Server Configuration** - VPS deployment with public ports
+- ✅ **Raspberry Pi Worker Setup** - Automated worker deployment and management
+- ✅ **Environment Variables** - Full Portainer integration support
+- ✅ **Automated Scripts** - Complete setup automation for both VPS and Pi
+- ✅ **Documentation** - Comprehensive deployment and management guides
+- ✅ **Security Implementation** - UFW firewall, Docker isolation, secure defaults
+- ✅ **Attribution** - Proper crediting of original CMS project and contributors
+
+### 🚀 **Ready for Production**
+- **Tested Architecture**: VPS + Raspberry Pi distributed workers
+- **Portainer Integration**: Environment variable configuration
+- **Multiple Deployment Options**: Nginx proxy or direct port access
+- **Comprehensive Monitoring**: Health checks and logging
+- **Security Hardened**: Firewall rules and container isolation
 
 ---
 
@@ -607,6 +632,17 @@ cms-docker/
 
 ## 🤝 Contributing
 
+**This Docker deployment solution was created by [CCYod](https://github.com/champyod)** to provide a professional, production-ready deployment method for Contest Management System.
+
+### Base Project Attribution
+
+This repository is **based on a fork** of the official [Contest Management System (CMS)](https://github.com/cms-dev/cms) developed by the [cms-dev team](http://cms-dev.github.io/). The original CMS is licensed under AGPL v3+ and provides the core contest management functionality.
+
+**Key Links:**
+- **Original CMS Repository**: https://github.com/cms-dev/cms
+- **CMS Official Website**: http://cms-dev.github.io/
+- **CMS Documentation**: https://cms.readthedocs.io/
+
 We welcome contributions! Here's how to get started:
 
 ### Development Setup
@@ -672,6 +708,14 @@ For enterprise deployments and custom solutions:
 ## 📄 License
 
 This project is licensed under the **GNU Affero General Public License v3** - see the [LICENSE.txt](LICENSE.txt) file for details.
+
+### Docker Deployment Solution
+
+This Docker deployment solution is created and maintained by **CCYod** as a contribution to the CMS community, providing:
+- Professional production-ready deployment
+- Automated setup and configuration
+- Raspberry Pi distributed worker support
+- Comprehensive documentation and guides
 
 ### Original CMS License
 

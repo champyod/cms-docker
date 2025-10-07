@@ -1,5 +1,7 @@
 # CMS VPS + Raspberry Pi Deployment Guide
 
+*Docker deployment solution created by CCYod*
+
 ## Architecture Overview
 
 This deployment consists of:
