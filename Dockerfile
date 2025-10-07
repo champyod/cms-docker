@@ -70,7 +70,7 @@ RUN <<EOF
     # Disable sudo password
     echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
     # Create CMS directories with proper ownership
-    mkdir -p /opt/cms/{log,cache,lib,run,config}
+    mkdir -p /opt/cms/{log,cache,lib,run,config,scripts}
     chown -R cmsuser:cmsuser /opt/cms
 EOF
 
@@ -98,7 +98,12 @@ RUN <<EOF
         -e 's/127.0.0.1/0.0.0.0/' \
         ./config/cms.sample.toml >../cms/etc/cms-devdb.toml
     sed -i 's/127.0.0.1/0.0.0.0/' ../cms/etc/cms_ranking.toml
-    # Copy startup scripts to the CMS directory
+    # Copy startup scripts to the expected location
+    mkdir -p /opt/cms/scripts
+    cp /home/cmsuser/src/scripts/start-cms.sh /opt/cms/scripts/
+    cp /home/cmsuser/src/scripts/start-ranking.sh /opt/cms/scripts/
+    chmod +x /opt/cms/scripts/*.sh
+    # Also copy to home directory for backup
     mkdir -p /home/cmsuser/cms/scripts
     cp /home/cmsuser/src/scripts/start-cms.sh /home/cmsuser/cms/scripts/
     cp /home/cmsuser/src/scripts/start-ranking.sh /home/cmsuser/cms/scripts/
