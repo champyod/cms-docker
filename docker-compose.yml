@@ -1,0 +1,170 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: cms-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cmsdb}
+      POSTGRES_USER: ${POSTGRES_USER:-cmsuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    ports:
+      - "${POSTGRES_PUBLIC_PORT:-5432}:5432"
+    networks:
+      - cms-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cmsuser}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # CMS Core Services
+  cms-core:
+    build: .
+    container_name: cms-core
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Database Configuration
+      CMS_DB_HOST: postgres
+      CMS_DB_PORT: 5432
+      CMS_DB_NAME: ${POSTGRES_DB:-cmsdb}
+      CMS_DB_USER: ${POSTGRES_USER:-cmsuser}
+      CMS_DB_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      
+      # Web Server Configuration
+      CMS_SECRET_KEY: ${CMS_SECRET_KEY:-8e045a51e4b102ea803c06f92841a1fb}
+      CMS_TORNADO_DEBUG: ${CMS_TORNADO_DEBUG:-false}
+      
+      # Contest Web Server
+      CMS_CONTEST_LISTEN_ADDRESS: ${CMS_CONTEST_LISTEN_ADDRESS:-0.0.0.0}
+      CMS_CONTEST_LISTEN_PORT: ${CMS_CONTEST_LISTEN_PORT:-8888}
+      CMS_CONTEST_COOKIE_DURATION: ${CMS_CONTEST_COOKIE_DURATION:-10800}
+      
+      # Admin Web Server
+      CMS_ADMIN_LISTEN_ADDRESS: ${CMS_ADMIN_LISTEN_ADDRESS:-0.0.0.0}
+      CMS_ADMIN_LISTEN_PORT: ${CMS_ADMIN_LISTEN_PORT:-8889}
+      CMS_ADMIN_COOKIE_DURATION: ${CMS_ADMIN_COOKIE_DURATION:-36000}
+      
+      # Ranking Configuration
+      CMS_RANKING_USERNAME: ${CMS_RANKING_USERNAME:-admin}
+      CMS_RANKING_PASSWORD: ${CMS_RANKING_PASSWORD:-changeme}
+      
+      # Storage Paths
+      CMS_LOG_DIR: ${CMS_LOG_DIR:-/opt/cms/log}
+      CMS_CACHE_DIR: ${CMS_CACHE_DIR:-/opt/cms/cache}
+      CMS_DATA_DIR: ${CMS_DATA_DIR:-/opt/cms/lib}
+      CMS_RUN_DIR: ${CMS_RUN_DIR:-/opt/cms/run}
+      
+      # Service Configuration
+      CMS_NUM_WORKERS: ${CMS_NUM_WORKERS:-4}
+      CMS_MAX_SUBMISSION_LENGTH: ${CMS_MAX_SUBMISSION_LENGTH:-100000}
+      CMS_MAX_INPUT_LENGTH: ${CMS_MAX_INPUT_LENGTH:-5000000}
+    volumes:
+      - cms_log:/opt/cms/log
+      - cms_cache:/opt/cms/cache
+      - cms_data:/opt/cms/lib
+      - cms_run:/opt/cms/run
+      - contest_data:/opt/cms/contests
+      - ./config:/opt/cms/config:ro
+    ports:
+      - "${CMS_CONTEST_PUBLIC_PORT:-8888}:8888"   # Contest Web Server
+      - "${CMS_ADMIN_PUBLIC_PORT:-8889}:8889"     # Admin Web Server
+      - "${CMS_LOG_SERVICE_PORT:-29000}:29000"    # LogService (for external workers)
+      - "${CMS_RESOURCE_SERVICE_PORT:-28000}:28000" # ResourceService
+      - "${CMS_SCORING_SERVICE_PORT:-28500}:28500"  # ScoringService
+      - "${CMS_EVALUATION_SERVICE_PORT:-25000}:25000" # EvaluationService
+      - "${CMS_PROXY_SERVICE_PORT:-28600}:28600"    # ProxyService
+    networks:
+      - cms-network
+    command: /opt/cms/scripts/start-cms.sh
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # CMS Ranking Server
+  cms-ranking:
+    build: .
+    container_name: cms-ranking
+    restart: unless-stopped
+    depends_on:
+      - cms-core
+    environment:
+      # Ranking Server Configuration
+      CMS_RANKING_BIND_ADDRESS: ${CMS_RANKING_BIND_ADDRESS:-0.0.0.0}
+      CMS_RANKING_HTTP_PORT: ${CMS_RANKING_HTTP_PORT:-8890}
+      CMS_RANKING_USERNAME: ${CMS_RANKING_USERNAME:-admin}
+      CMS_RANKING_PASSWORD: ${CMS_RANKING_PASSWORD:-changeme}
+      CMS_RANKING_REALM: ${CMS_RANKING_REALM:-Scoreboard}
+      CMS_RANKING_BUFFER_SIZE: ${CMS_RANKING_BUFFER_SIZE:-100}
+      
+      # Storage
+      CMS_RANKING_LOG_DIR: ${CMS_RANKING_LOG_DIR:-/opt/cms/log/ranking}
+      CMS_RANKING_LIB_DIR: ${CMS_RANKING_LIB_DIR:-/opt/cms/lib/ranking}
+    volumes:
+      - cms_ranking_log:/opt/cms/log/ranking
+      - cms_ranking_lib:/opt/cms/lib/ranking
+      - ./config:/opt/cms/config:ro
+    ports:
+      - "${CMS_RANKING_PUBLIC_PORT:-8890}:8890"
+    networks:
+      - cms-network
+    command: /opt/cms/scripts/start-ranking.sh
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8890/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx Reverse Proxy (Optional - disable if using direct ports)
+  nginx:
+    image: nginx:alpine
+    container_name: cms-nginx
+    restart: unless-stopped
+    depends_on:
+      - cms-core
+      - cms-ranking
+    environment:
+      CMS_DOMAIN: ${CMS_DOMAIN:-localhost}
+      USE_NGINX: ${USE_NGINX:-false}
+    volumes:
+      - ./nginx/nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    networks:
+      - cms-network
+    profiles:
+      - nginx  # Only start nginx when specifically requested
+
+volumes:
+  postgres_data:
+    driver: local
+  cms_log:
+    driver: local
+  cms_cache:
+    driver: local
+  cms_data:
+    driver: local
+  cms_run:
+    driver: local
+  cms_ranking_log:
+    driver: local
+  cms_ranking_lib:
+    driver: local
+  contest_data:
+    driver: local
+
+networks:
+  cms-network:
+    driver: bridge

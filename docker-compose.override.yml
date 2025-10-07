@@ -1,0 +1,40 @@
+# Docker Compose override for development
+# This file provides development-specific configuration
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.override.yml up
+
+version: '3.8'
+
+services:
+  cms-core:
+    environment:
+      CMS_TORNADO_DEBUG: "true"
+      CMS_SECRET_KEY: "development_key_do_not_use_in_production"
+    volumes:
+      # Mount source code for development
+      - .:/home/cmsuser/src:ro
+      # Mount config directory for easier development
+      - ./config:/opt/cms/config
+    ports:
+      # Expose additional ports for development
+      - "29000:29000"  # LogService
+      - "28000:28000"  # ResourceService
+      - "28500:28500"  # ScoringService
+      - "25000:25000"  # EvaluationService
+      - "28600:28600"  # ProxyService
+    command: |
+      bash -c "
+        echo 'Starting CMS in development mode...'
+        /opt/cms/scripts/start-cms.sh
+      "
+
+  cms-ranking:
+    environment:
+      CMS_RANKING_USERNAME: "dev"
+      CMS_RANKING_PASSWORD: "dev"
+    volumes:
+      - ./config:/opt/cms/config
+
+  nginx:
+    # For development, we might want to disable nginx and access services directly
+    profiles:
+      - production  # Only start nginx in production profile

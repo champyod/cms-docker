@@ -1,3 +1,6 @@
+# CMS Docker Deployment - .gitignore
+
+# Original CMS files
 *~
 .DS_Store
 *.mo
@@ -16,3 +19,54 @@ log/
 codecov/
 .dev/
 test_logs/
+
+# Docker deployment specific
+# Environment files
+.env
+.env.local
+.env.production
+
+# Docker volumes and data
+volumes/
+data/
+
+# Logs
+logs/
+*.log
+
+# Backup files
+*.sql
+backup_*
+cms-backup-*
+
+# SSL certificates
+nginx/ssl/*.pem
+nginx/ssl/*.key
+nginx/ssl/*.crt
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Generated documentation
+DEPLOYMENT-SUMMARY.md
+
+# Local management scripts (auto-generated)
+cms-manage
+deploy-to-portainer.sh
+
+# Python environments
+env/
+venv/
+.venv/
+__pycache__/
+
+# Local development overrides
+docker-compose.override.local.yml

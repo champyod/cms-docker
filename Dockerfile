@@ -95,6 +95,14 @@ RUN <<EOF
         -e 's/127.0.0.1/0.0.0.0/' \
         ./config/cms.sample.toml >../cms/etc/cms-devdb.toml
     sed -i 's/127.0.0.1/0.0.0.0/' ../cms/etc/cms_ranking.toml
+    # Copy startup scripts to the CMS directory
+    mkdir -p /home/cmsuser/cms/scripts
+    cp /home/cmsuser/src/scripts/start-cms.sh /home/cmsuser/cms/scripts/
+    cp /home/cmsuser/src/scripts/start-ranking.sh /home/cmsuser/cms/scripts/
+    chmod +x /home/cmsuser/cms/scripts/*.sh
+    # Create required directories
+    mkdir -p /opt/cms/{log,cache,lib,run,config}
+    chown -R cmsuser:cmsuser /opt/cms
 EOF
 
 CMD ["/bin/bash"]
