@@ -101,9 +101,9 @@ listen_port = 8811
 EOF
 
 # Initialize database if needed
-if ! cmsInitDB --check 2>/dev/null; then
+if ! CMS_CONFIG=/opt/cms/config/cms.toml cmsInitDB --check 2>/dev/null; then
     echo "Initializing CMS database..."
-    cmsInitDB
+    CMS_CONFIG=/opt/cms/config/cms.toml cmsInitDB
 fi
 
 # Create required directories
@@ -114,22 +114,22 @@ mkdir -p "${CMS_DATA_DIR}/submissions" "${CMS_DATA_DIR}/tests"
 echo "Starting CMS core services..."
 
 # Start ResourceService first (it manages other services)
-cmsResourceService &
+CMS_CONFIG=/opt/cms/config/cms.toml cmsResourceService &
 
 # Start core backend services
-cmsLogService &
-cmsScoringService &
-cmsEvaluationService &
-cmsProxyService &
+CMS_CONFIG=/opt/cms/config/cms.toml cmsLogService &
+CMS_CONFIG=/opt/cms/config/cms.toml cmsScoringService &
+CMS_CONFIG=/opt/cms/config/cms.toml cmsEvaluationService &
+CMS_CONFIG=/opt/cms/config/cms.toml cmsProxyService &
 
 # Start workers
 for i in $(seq 0 $((CMS_NUM_WORKERS-1))); do
-    cmsWorker $i &
+    CMS_CONFIG=/opt/cms/config/cms.toml cmsWorker $i &
 done
 
 # Start web servers
-cmsContestWebServer &
-cmsAdminWebServer &
+CMS_CONFIG=/opt/cms/config/cms.toml cmsContestWebServer &
+CMS_CONFIG=/opt/cms/config/cms.toml cmsAdminWebServer &
 
 # Wait for all background processes
 wait
