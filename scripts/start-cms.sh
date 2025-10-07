@@ -1,11 +1,22 @@
 #!/bin/bash
 set -e
 
+# Debug: Print environment variables
+echo "=== Environment Variables ==="
+echo "CMS_DB_HOST: ${CMS_DB_HOST}"
+echo "CMS_DB_PORT: ${CMS_DB_PORT}"
+echo "CMS_DB_USER: ${CMS_DB_USER}"
+echo "CMS_DB_NAME: ${CMS_DB_NAME}"
+echo "CMS_DB_PASSWORD: [REDACTED]"
+echo "=============================="
+
 # Wait for database to be ready
 echo "Waiting for database..."
 until pg_isready -h $CMS_DB_HOST -p $CMS_DB_PORT -U $CMS_DB_USER; do
+    echo "Database not ready, waiting..."
     sleep 2
 done
+echo "Database is ready!"
 
 # Generate CMS configuration
 echo "Generating CMS configuration..."
@@ -100,10 +111,32 @@ listen_address = "0.0.0.0"
 listen_port = 8811
 EOF
 
+echo "=== Generated CMS Configuration ==="
+cat /opt/cms/config/cms.toml
+echo "=================================="
+
+# Test database connection with psql
+echo "Testing direct database connection..."
+PGPASSWORD="${CMS_DB_PASSWORD}" psql -h "${CMS_DB_HOST}" -p "${CMS_DB_PORT}" -U "${CMS_DB_USER}" -d "${CMS_DB_NAME}" -c "SELECT version();" || {
+    echo "ERROR: Cannot connect to database directly!"
+    echo "Connection details:"
+    echo "  Host: ${CMS_DB_HOST}"
+    echo "  Port: ${CMS_DB_PORT}"
+    echo "  User: ${CMS_DB_USER}"
+    echo "  Database: ${CMS_DB_NAME}"
+    exit 1
+}
+
 # Initialize database if needed
+echo "Checking if database is initialized..."
 if ! CMS_CONFIG=/opt/cms/config/cms.toml cmsInitDB --check 2>/dev/null; then
-    echo "Initializing CMS database..."
+    echo "Database not initialized. Initializing CMS database..."
+    echo "Using configuration: /opt/cms/config/cms.toml"
+    echo "Database connection string in config:"
+    grep "url =" /opt/cms/config/cms.toml
     CMS_CONFIG=/opt/cms/config/cms.toml cmsInitDB
+else
+    echo "Database already initialized."
 fi
 
 # Create required directories
