@@ -268,7 +268,14 @@ CMS_PROXY_SERVICE_PORT=28600
 ```env
 # Auto-Contest Creation
 CMS_AUTO_CREATE_CONTEST=true         # Automatically create sample contest
-CMS_CONTEST_ID=1                     # Auto-select contest ID (null for manual)
+CMS_CONTEST_ID=auto                  # Smart contest selection (auto/latest/manual/number)
+
+# Contest Selection Strategy
+CMS_CONTEST_SELECTION_STRATEGY=active # active/latest/earliest contest preference
+
+# Contest Monitoring
+CMS_CONTEST_MONITOR=true             # Monitor for contest changes
+CMS_CONTEST_MONITOR_INTERVAL=30      # Check interval in seconds
 
 # Contest Details (used when auto-creating)
 CMS_CONTEST_NAME=Programming Contest 2024
@@ -278,12 +285,23 @@ CMS_CONTEST_END_TIME=2024-01-01T14:00:00
 CMS_CONTEST_TIMEZONE=UTC             # Contest timezone
 ```
 
-**Contest Management Options:**
+**🎯 Smart Contest Management:**
 
-- **Auto-Creation**: Set `CMS_AUTO_CREATE_CONTEST=true` to automatically create a sample contest on first startup
-- **Manual Creation**: Set `CMS_AUTO_CREATE_CONTEST=false` to create contests manually via admin panel
-- **Contest Selection**: Set `CMS_CONTEST_ID` to auto-select a specific contest, or `null` for manual selection
-- **Schedule**: Use ISO 8601 format for start/end times (YYYY-MM-DDTHH:MM:SS)
+- **`CMS_CONTEST_ID=auto`** - Automatically discovers best contest (recommended)
+- **`CMS_CONTEST_ID=latest`** - Always uses most recently created contest
+- **`CMS_CONTEST_ID=1`** - Uses specific contest ID with auto-fallback
+- **`CMS_CONTEST_ID=manual`** - No auto-selection, admin chooses via web interface
+
+**Selection Strategies:**
+- **`active`** - Prefers currently running contests, then upcoming, then latest
+- **`latest`** - Always selects the most recently created contest
+- **`earliest`** - Uses the oldest contest in the database
+
+**🔄 Handles Contest Changes:**
+- Contest deletion and recreation
+- Multiple contests switching
+- Empty database scenarios
+- Real-time contest monitoring
 
 #### Contest Token System & Limits
 
@@ -471,6 +489,81 @@ cms-worker-logs
 # Monitor real-time
 cms-worker-logs | grep ERROR
 ```
+
+### Contest Management
+
+**🎯 Dynamic Contest Handling**: Our Docker deployment automatically handles contest deletion and recreation through intelligent contest discovery.
+
+#### Contest CLI Tool
+
+```bash
+# Check current contest status
+./scripts/cms-contest status
+
+# List all available contests
+./scripts/cms-contest list
+
+# Show currently selected contest
+./scripts/cms-contest current
+
+# Select specific contest by ID
+./scripts/cms-contest select 2
+
+# Enable auto-discovery mode (default)
+./scripts/cms-contest select auto
+
+# Enable manual selection mode
+./scripts/cms-contest select manual
+
+# Refresh contest selection
+./scripts/cms-contest refresh
+
+# View contest management logs
+./scripts/cms-contest logs
+
+# Monitor contest changes (foreground)
+./scripts/cms-contest monitor
+```
+
+#### Contest Selection Strategies
+
+**Auto-Discovery** (Recommended):
+- `CMS_CONTEST_ID=auto` - Automatically finds best contest
+- `CMS_CONTEST_SELECTION_STRATEGY=active` - Prefers active contests
+- `CMS_CONTEST_SELECTION_STRATEGY=latest` - Uses newest contest
+- `CMS_CONTEST_SELECTION_STRATEGY=earliest` - Uses oldest contest
+
+**Manual Selection**:
+- `CMS_CONTEST_ID=manual` - Admin chooses via web interface
+- `CMS_CONTEST_ID=1` - Use specific contest ID
+
+**Automatic Monitoring**:
+- `CMS_CONTEST_MONITOR=true` - Monitor for contest changes
+- `CMS_CONTEST_MONITOR_INTERVAL=30` - Check every 30 seconds
+
+#### Common Contest Scenarios
+
+1. **Contest Deleted & Recreated** (Handles automatically):
+   ```bash
+   # Before: Contest ID 1 selected
+   # Admin deletes contest 1, creates new contest 2
+   # After: Auto-switches to contest ID 2
+   ```
+
+2. **Multiple Active Contests**:
+   ```bash
+   # Automatically selects based on strategy:
+   # - "active": Running contest
+   # - "latest": Most recently created
+   # - "earliest": Oldest contest
+   ```
+
+3. **No Contests Available**:
+   ```bash
+   # Gracefully handles empty database
+   # Creates sample contest if auto-creation enabled
+   # Otherwise waits for manual contest creation
+   ```
 
 ### Database Management
 

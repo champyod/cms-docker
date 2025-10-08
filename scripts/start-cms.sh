@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# Get script directory for sourcing other scripts
+script_dir=$(dirname "$(readlink -f "$0")")
+
 # Debug: Print environment variables
 echo "=== Environment Variables ==="
 echo "CMS_DB_HOST: ${CMS_DB_HOST}"
@@ -82,8 +85,7 @@ for i in $(seq 0 $((CMS_NUM_WORKERS-1))); do
 done
 echo "]" >> /opt/cms/config/cms.toml
 
-cat >> /opt/cms/config/cms.toml <<EOF
-
+# Continue adding configuration sections
 cat >> /opt/cms/config/cms.toml <<EOF
 
 [worker]
@@ -189,8 +191,11 @@ if [ "${CMS_AUTO_CREATE_CONTEST:-false}" = "true" ]; then
     # Wait a moment for database to be fully ready
     sleep 2
     
-    # Check if any contests exist using SQL query
-    contest_count=$(CMS_CONFIG=/opt/cms/config/cms.toml PGPASSWORD="${CMS_DB_PASSWORD}" psql -h "${CMS_DB_HOST}" -p "${CMS_DB_PORT}" -U "${CMS_DB_USER}" -d "${CMS_DB_NAME}" -t -c "SELECT COUNT(*) FROM contests;" 2>/dev/null | tr -d ' ' || echo "0")
+    # Use contest manager to check and handle contests
+    source "${script_dir}/contest-manager.sh"
+    
+    # Check current contest status
+    contest_count=$(get_contest_count)
     
     if [ "$contest_count" -eq 0 ]; then
         echo "No contests found. Creating sample contest..."
@@ -237,8 +242,6 @@ EOF
         
         if [ $? -eq 0 ]; then
             echo "Sample contest created successfully!"
-            # Set the contest ID to 1 (first contest)
-            export CMS_CONTEST_ID=1
         else
             echo "Warning: Failed to create sample contest. You can create contests manually via admin panel."
         fi
@@ -246,14 +249,22 @@ EOF
         # Clean up
         rm -f /tmp/create_contest.sql
     else
-        echo "Found $contest_count existing contest(s). Using existing contests."
-        if [ "${CMS_CONTEST_ID:-null}" = "null" ]; then
-            echo "No specific contest ID set. First contest will be auto-selected."
-            export CMS_CONTEST_ID=1
-        fi
+        echo "Found $contest_count existing contest(s)."
     fi
+    
+    # Use contest manager to resolve and set contest ID
+    echo "Resolving contest selection..."
+    show_contest_info
+    
 else
     echo "Auto-contest creation disabled. Use admin panel to create contests manually."
+    
+    # Still try to resolve contest ID even without auto-creation
+    if command -v show_contest_info >/dev/null 2>&1; then
+        echo "Checking for existing contests..."
+        source "${script_dir}/contest-manager.sh"
+        show_contest_info
+    fi
 fi
 
 # Create required directories
@@ -280,6 +291,17 @@ done
 # Start web servers
 CMS_CONFIG=/opt/cms/config/cms.toml cmsContestWebServer &
 CMS_CONFIG=/opt/cms/config/cms.toml cmsAdminWebServer &
+
+# Start contest monitoring if enabled
+if [ "${CMS_CONTEST_MONITOR:-false}" = "true" ]; then
+    echo "Starting contest monitoring..."
+    source "${script_dir}/contest-manager.sh"
+    monitor_contest_changes &
+fi
+
+echo "All CMS services started successfully!"
+echo "Contest Web Server: http://localhost:${CMS_CONTEST_LISTEN_PORT:-8888}"
+echo "Admin Web Server: http://localhost:${CMS_ADMIN_LISTEN_PORT:-8889}"
 
 # Wait for all background processes
 wait
