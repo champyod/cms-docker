@@ -86,6 +86,9 @@ WORKDIR /home/cmsuser/src
 RUN --mount=type=cache,target=/home/cmsuser/.cache/pip,uid=1001 ./install.py venv
 ENV PATH="/home/cmsuser/cms/bin:$PATH"
 
+# Force cache invalidation by removing old scripts before copying
+RUN rm -f /home/cmsuser/src/scripts/start-cms.sh /home/cmsuser/src/scripts/start-ranking.sh
+
 COPY --chown=cmsuser:cmsuser . /home/cmsuser/src
 
 RUN --mount=type=cache,target=/home/cmsuser/.cache/pip,uid=1001 ./install.py cms --devel
