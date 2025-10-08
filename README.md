@@ -194,9 +194,10 @@ curl -fsSL https://raw.githubusercontent.com/your-username/cms-docker/main/setup
 
 2. **Configure Environment**:
    ```bash
-   cp .env.sample .env
-   nano .env  # Edit with your settings
+   cp .env.sample .env     # Create local environment file
+   nano .env               # Edit with your settings
    ```
+   > 📝 **Note**: `.env` file is gitignored for security. Always customize your local copy.
 
 3. **Deploy in Portainer**:
    - Navigate to **Stacks** → **Add stack**
@@ -732,7 +733,8 @@ cms-docker/
 ├── 🐳 docker-compose.vps.yml         # VPS direct-port configuration  
 ├── 🐳 docker-compose.override.yml    # Development overrides
 ├── 🐳 Dockerfile                     # CMS container definition
-├── ⚙️ .env.sample                    # Environment template
+├── ⚙️ .env.sample                    # Environment template (copy to .env)
+├── ⚙️ .env                           # Your local config (gitignored)
 ├── 🚀 setup.sh                       # Automated setup script
 ├── 🍓 setup-raspberry-pi-worker.sh   # Pi worker installer
 ├── ✅ verify-setup.sh                # Setup verification
