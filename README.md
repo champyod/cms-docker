@@ -262,6 +262,94 @@ CMS_EVALUATION_SERVICE_PORT=25000
 CMS_PROXY_SERVICE_PORT=28600
 ```
 
+#### Contest Configuration
+
+```env
+# Auto-Contest Creation
+CMS_AUTO_CREATE_CONTEST=true         # Automatically create sample contest
+CMS_CONTEST_ID=1                     # Auto-select contest ID (null for manual)
+
+# Contest Details (used when auto-creating)
+CMS_CONTEST_NAME=Programming Contest 2024
+CMS_CONTEST_DESCRIPTION=Annual Programming Championship
+CMS_CONTEST_START_TIME=2024-01-01T09:00:00
+CMS_CONTEST_END_TIME=2024-01-01T14:00:00
+CMS_CONTEST_TIMEZONE=UTC             # Contest timezone
+```
+
+**Contest Management Options:**
+
+- **Auto-Creation**: Set `CMS_AUTO_CREATE_CONTEST=true` to automatically create a sample contest on first startup
+- **Manual Creation**: Set `CMS_AUTO_CREATE_CONTEST=false` to create contests manually via admin panel
+- **Contest Selection**: Set `CMS_CONTEST_ID` to auto-select a specific contest, or `null` for manual selection
+- **Schedule**: Use ISO 8601 format for start/end times (YYYY-MM-DDTHH:MM:SS)
+
+#### Contest Token System & Limits
+
+```env
+# Programming Languages (JSON array format)
+CMS_CONTEST_LANGUAGES=["C++17 / g++", "C11 / gcc", "Python 3 / CPython", "Java / JDK"]
+
+# Token System (Submission Throttling)
+CMS_CONTEST_TOKEN_MODE=finite         # Token mode: finite, infinite, disabled
+CMS_CONTEST_TOKEN_MAX=100            # Max tokens per participant
+CMS_CONTEST_TOKEN_MIN_INTERVAL=60    # Min seconds between submissions
+CMS_CONTEST_TOKEN_INITIAL=2          # Initial tokens
+CMS_CONTEST_TOKEN_GEN_NUMBER=1       # Tokens generated per interval
+CMS_CONTEST_TOKEN_GEN_INTERVAL=600   # Token generation interval (seconds)
+
+# Contest Limits
+CMS_CONTEST_MAX_SUBMISSIONS=100      # Max submissions per participant
+CMS_CONTEST_MAX_USER_TESTS=100       # Max custom tests per participant
+CMS_CONTEST_SCORE_PRECISION=2        # Decimal places for scores
+```
+
+#### Advanced Configuration
+
+```env
+# Performance & Security
+CMS_NUM_PROXIES=1                     # Number of reverse proxies
+CMS_KEEP_SANDBOX=false               # Keep sandbox files (debugging)
+CMS_SANDBOX_MAX_FILE_SIZE=1048576    # Max file size (KB)
+
+# Compilation Limits
+CMS_COMPILATION_MAX_PROCESSES=1000   # Max processes during compilation
+CMS_COMPILATION_MAX_TIME=10.0        # Max compilation time (seconds)
+CMS_COMPILATION_MAX_MEMORY=524288    # Max compilation memory (KB)
+
+# Trusted Execution (for checkers)
+CMS_TRUSTED_MAX_PROCESSES=1000       # Max processes for trusted code
+CMS_TRUSTED_MAX_TIME=10.0           # Max execution time (seconds)
+CMS_TRUSTED_MAX_MEMORY=4194304      # Max memory for trusted code (KB)
+```
+
+#### Printing Configuration
+
+```env
+# Print Job Settings
+CMS_PRINT_MAX_LENGTH=10000000        # Max print file size (bytes)
+CMS_PRINT_PAPER_SIZE=A4             # Paper size (A4, Letter, etc.)
+CMS_PRINT_MAX_PAGES=10              # Max pages per job
+CMS_PRINT_MAX_JOBS=10               # Max jobs per user
+CMS_PRINT_PDF_ALLOWED=false         # Allow PDF printing
+```
+
+#### Monitoring & Notifications
+
+```env
+# Prometheus Metrics
+CMS_PROMETHEUS_ADDRESS=0.0.0.0       # Metrics endpoint address
+CMS_PROMETHEUS_PORT=8811             # Metrics port
+
+# Telegram Bot (Optional)
+CMS_TELEGRAM_ENABLED=false           # Enable Telegram notifications
+CMS_TELEGRAM_BOT_TOKEN=              # Bot token from @BotFather
+CMS_TELEGRAM_CHAT_ID=                # Chat ID for notifications
+```
+CMS_EVALUATION_SERVICE_PORT=25000
+CMS_PROXY_SERVICE_PORT=28600
+```
+
 #### Optional Features
 
 ```env
