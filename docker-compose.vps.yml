@@ -10,7 +10,7 @@ version: '3.8'
 services:
   postgres:
     build:
-      context: ..
+      context: .
       dockerfile: docker/postgres/Dockerfile
     container_name: cms-postgres
     restart: unless-stopped
