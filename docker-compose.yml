@@ -15,7 +15,9 @@ version: '3.8'
 services:
   # PostgreSQL Database
   postgres:
-    image: postgres:15-alpine
+    build:
+      context: .
+      dockerfile: docker/postgres/Dockerfile
     container_name: cms-postgres
     restart: unless-stopped
     environment:
@@ -24,7 +26,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
     ports:
       - "${POSTGRES_PUBLIC_PORT:-5432}:5432"
     networks:

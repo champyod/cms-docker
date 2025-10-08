@@ -108,6 +108,9 @@ RUN <<EOF
     cp /home/cmsuser/src/scripts/start-cms.sh /home/cmsuser/cms/scripts/
     cp /home/cmsuser/src/scripts/start-ranking.sh /home/cmsuser/cms/scripts/
     chmod +x /home/cmsuser/cms/scripts/*.sh
+    # Copy the database initialization script
+    cp /home/cmsuser/src/scripts/init-db.sh /opt/cms/scripts/
+    chmod +x /opt/cms/scripts/init-db.sh
 EOF
 
 CMD ["/bin/bash"]
