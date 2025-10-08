@@ -7,19 +7,39 @@ echo "CMS_DB_HOST: ${CMS_DB_HOST}"
 echo "CMS_DB_PORT: ${CMS_DB_PORT}"
 echo "CMS_DB_USER: ${CMS_DB_USER}"
 echo "CMS_DB_NAME: ${CMS_DB_NAME}"
-echo "CMS_DB_PASSWORD: [REDACTED]"
+echo "CMS_DB_PASSWORD: [REDACTED - Length: ${#CMS_DB_PASSWORD}]"
 echo "CMS_AUTO_CREATE_CONTEST: ${CMS_AUTO_CREATE_CONTEST:-false}"
 echo "CMS_CONTEST_ID: ${CMS_CONTEST_ID:-null}"
 echo "CMS_CONTEST_NAME: ${CMS_CONTEST_NAME:-Default}"
+echo "CMS_CONTEST_LISTEN_PORT: ${CMS_CONTEST_LISTEN_PORT:-8888}"
+echo "CMS_ADMIN_LISTEN_PORT: ${CMS_ADMIN_LISTEN_PORT:-8889}"
 echo "=============================="
 
+# Validate required environment variables
+if [ -z "$CMS_DB_HOST" ] || [ -z "$CMS_DB_PASSWORD" ] || [ -z "$CMS_SECRET_KEY" ]; then
+    echo "ERROR: Required environment variables are missing!"
+    echo "Please ensure these are set:"
+    echo "  - CMS_DB_HOST (current: '${CMS_DB_HOST}')"
+    echo "  - CMS_DB_PASSWORD (current: '${CMS_DB_PASSWORD:+SET}${CMS_DB_PASSWORD:-MISSING}')"
+    echo "  - CMS_SECRET_KEY (current: '${CMS_SECRET_KEY:+SET}${CMS_SECRET_KEY:-MISSING}')"
+    exit 1
+fi
+
 # Wait for database to be ready
-echo "Waiting for database..."
-until pg_isready -h $CMS_DB_HOST -p $CMS_DB_PORT -U $CMS_DB_USER; do
-    echo "Database not ready, waiting..."
+echo "Waiting for database server..."
+until pg_isready -h $CMS_DB_HOST -p $CMS_DB_PORT; do
+    echo "Database server not ready, waiting..."
     sleep 2
 done
-echo "Database is ready!"
+echo "Database server is ready!"
+
+# Wait for database and user to be ready
+echo "Waiting for database and user to be ready..."
+until PGPASSWORD="${CMS_DB_PASSWORD}" psql -h "${CMS_DB_HOST}" -p "${CMS_DB_PORT}" -U "${CMS_DB_USER}" -d "${CMS_DB_NAME}" -c "SELECT 1;" >/dev/null 2>&1; do
+    echo "Database connection not ready, waiting..."
+    sleep 2
+done
+echo "Database connection is ready!"
 
 # Generate CMS configuration
 echo "Generating CMS configuration..."
@@ -61,6 +81,8 @@ for i in $(seq 0 $((CMS_NUM_WORKERS-1))); do
     echo "    [\"0.0.0.0\", $port]," >> /opt/cms/config/cms.toml
 done
 echo "]" >> /opt/cms/config/cms.toml
+
+cat >> /opt/cms/config/cms.toml <<EOF
 
 cat >> /opt/cms/config/cms.toml <<EOF
 
@@ -136,6 +158,7 @@ echo "=================================="
 
 # Test database connection with psql
 echo "Testing direct database connection..."
+echo "Full connection command: PGPASSWORD=[REDACTED] psql -h ${CMS_DB_HOST} -p ${CMS_DB_PORT} -U ${CMS_DB_USER} -d ${CMS_DB_NAME}"
 PGPASSWORD="${CMS_DB_PASSWORD}" psql -h "${CMS_DB_HOST}" -p "${CMS_DB_PORT}" -U "${CMS_DB_USER}" -d "${CMS_DB_NAME}" -c "SELECT version();" || {
     echo "ERROR: Cannot connect to database directly!"
     echo "Connection details:"
@@ -143,6 +166,7 @@ PGPASSWORD="${CMS_DB_PASSWORD}" psql -h "${CMS_DB_HOST}" -p "${CMS_DB_PORT}" -U 
     echo "  Port: ${CMS_DB_PORT}"
     echo "  User: ${CMS_DB_USER}"
     echo "  Database: ${CMS_DB_NAME}"
+    echo "  Password length: ${#CMS_DB_PASSWORD} characters"
     exit 1
 }
 
