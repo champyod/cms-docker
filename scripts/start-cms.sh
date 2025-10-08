@@ -118,7 +118,7 @@ max_submission_length = ${CMS_MAX_SUBMISSION_LENGTH}
 max_input_length = ${CMS_MAX_INPUT_LENGTH}
 docs_path = "${CMS_DOCS_PATH:-/usr/share/cms/docs}"
 # Auto-select contest if specified
-contest = ${CMS_CONTEST_ID:-null}
+contest = $(if [ "${CMS_CONTEST_ID}" == "auto" ]; then echo "null"; else echo "${CMS_CONTEST_ID:-null}"; fi)
 
 [admin_web_server]
 listen_address = "${CMS_ADMIN_LISTEN_ADDRESS}"
@@ -126,7 +126,7 @@ listen_port = ${CMS_ADMIN_LISTEN_PORT}
 cookie_duration = ${CMS_ADMIN_COOKIE_DURATION}
 num_proxies_used = ${CMS_NUM_PROXIES:-1}
 # Auto-select contest if specified  
-contest = ${CMS_CONTEST_ID:-null}
+contest = $(if [ "${CMS_CONTEST_ID}" == "auto" ]; then echo "null"; else echo "${CMS_CONTEST_ID:-null}"; fi)
 
 [proxy_service]
 rankings = ["http://${CMS_RANKING_USERNAME}:${CMS_RANKING_PASSWORD}@cms-ranking:8890/"]

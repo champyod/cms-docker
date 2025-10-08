@@ -18,7 +18,10 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme123!}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+      - type: bind
+        source: ./scripts/init-db.sh
+        target: /docker-entrypoint-initdb.d/init-db.sh
+        read_only: true
     ports:
       - "${POSTGRES_PUBLIC_PORT:-5432}:5432"
     networks:
