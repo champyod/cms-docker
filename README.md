@@ -618,6 +618,39 @@ pg_isready -h VPS_IP -p 5432 -U cmsuser
 docker exec cms-core env | grep CMS_DB
 ```
 
+#### PostgreSQL Authentication Failures
+If you see "password authentication failed" or "database does not exist" errors after changing credentials:
+
+**Root Cause**: PostgreSQL volumes contain data with old credentials and only initialize on empty volumes.
+
+**Symptoms**:
+```bash
+# Common error messages in logs
+FATAL: password authentication failed for user "cmsuser"
+FATAL: database "cms" does not exist
+```
+
+**Solution** (⚠️ **This will delete all data**):
+1. **In Portainer**:
+   - Go to **Volumes** section
+   - Find volume named `cms-docker_postgres_data` (or similar)
+   - **Delete** the volume
+   - Restart the stack
+
+2. **Command Line**:
+   ```bash
+   # Stop the stack
+   docker-compose down
+   
+   # Remove PostgreSQL volume
+   docker volume rm cms-docker_postgres_data
+   
+   # Start fresh
+   docker-compose up -d
+   ```
+
+**Prevention**: Always configure correct credentials in `.env` file before first deployment.
+
 #### Worker Not Connecting
 ```bash
 # Check network connectivity
