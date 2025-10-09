@@ -47,7 +47,7 @@ COPY --chown=cmsuser:cmsuser . /home/cmsuser/cms
 
 RUN sudo pip3 install --break-system-packages .
 
-RUN sudo python3 prerequisites.py --yes --cmsuser=cmsuser install
+RUN sudo python3 prerequisites.py --yes --as-root --cmsuser=cmsuser install
 
 RUN sudo sed 's|/cmsuser:your_password_here@localhost:5432/cmsdb"|/postgres@testdb:5432/cmsdbfortesting"|' ./config/cms.conf.sample \
     | sudo tee /usr/local/etc/cms-testdb.conf

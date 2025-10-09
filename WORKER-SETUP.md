@@ -236,7 +236,7 @@ docker pull your-username/cms:latest
 docker tag your-username/cms:latest cms:latest
 
 # OR build locally
-git clone https://github.com/CCYod/cms-docker.git
+git clone https://github.com/champyod/cms-docker.git
 cd cms-docker
 docker build -t cms:latest .
 ```

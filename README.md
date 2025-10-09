@@ -70,7 +70,7 @@ Choose your preferred setup method:
 
 ```bash
 # Clone repository
-git clone https://github.com/CCYod/cms-docker.git
+git clone https://github.com/champyod/cms-docker.git
 cd cms-docker
 
 # Run automated setup
@@ -193,7 +193,7 @@ For advanced users who prefer command-line control:
 
 ```bash
 # 1. Clone and configure
-git clone https://github.com/CCYod/cms-docker.git
+git clone https://github.com/champyod/cms-docker.git
 cd cms-docker
 
 # 2. Copy and edit environment files

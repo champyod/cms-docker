@@ -96,7 +96,7 @@ The fastest way to get CMS running:
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/CCYod/cms-docker.git
+git clone https://github.com/champyod/cms-docker.git
 cd cms-docker
 
 # 2. Run automated setup
@@ -216,7 +216,7 @@ For users who want full control:
 ### Step 1: Clone Repository
 
 ```bash
-git clone https://github.com/CCYod/cms-docker.git
+git clone https://github.com/champyod/cms-docker.git
 cd cms-docker
 ```
 
