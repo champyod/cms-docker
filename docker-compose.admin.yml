@@ -1,0 +1,106 @@
+version: '3.8'
+
+# CMS Admin Stack
+# This stack contains the administrative interface for managing contests
+# Requires: Core services stack must be running first
+
+services:
+  # CMS Admin Web Server - Administrative interface
+  admin-web-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cms-admin-web-server
+    restart: unless-stopped
+    environment:
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.conf}
+      SERVICE_TYPE: AdminWebServer
+      SERVICE_SHARD: ${ADMIN_WEB_SERVER_SHARD:-0}
+      ADMIN_LISTEN_PORT: ${ADMIN_LISTEN_PORT:-8889}
+      ADMIN_LISTEN_ADDRESS: ${ADMIN_LISTEN_ADDRESS:-0.0.0.0}
+    volumes:
+      - ./config/cms.conf:/usr/local/etc/cms.conf:ro
+      - cms-logs:/var/local/log/cms
+      - cms-cache:/var/local/cache/cms
+      - cms-data:/var/local/lib/cms
+    networks:
+      - cms-network
+    ports:
+      - "${ADMIN_PORT_EXTERNAL:-8889}:${ADMIN_LISTEN_PORT:-8889}"
+    privileged: true
+    cgroup: host
+    command: >
+      sh -c "sleep 10 && cmsAdminWebServer ${ADMIN_WEB_SERVER_SHARD:-0}"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.cms-admin.rule=Host(`${ADMIN_DOMAIN:-admin.cms.local}`)"
+      - "traefik.http.services.cms-admin.loadbalancer.server.port=${ADMIN_LISTEN_PORT:-8889}"
+
+  # Ranking Web Server - Live rankings display
+  ranking-web-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cms-ranking-web-server
+    restart: unless-stopped
+    environment:
+      CMS_RANKING_CONFIG: ${CMS_RANKING_CONFIG:-/usr/local/etc/cms.ranking.conf}
+      RANKING_LISTEN_PORT: ${RANKING_LISTEN_PORT:-8890}
+      RANKING_LISTEN_ADDRESS: ${RANKING_LISTEN_ADDRESS:-0.0.0.0}
+    volumes:
+      - ./config/cms.ranking.conf:/usr/local/etc/cms.ranking.conf:ro
+      - cms-logs:/var/local/log/cms
+      - cms-ranking-data:/var/local/lib/cms/ranking
+    networks:
+      - cms-network
+    ports:
+      - "${RANKING_PORT_EXTERNAL:-8890}:${RANKING_LISTEN_PORT:-8890}"
+    command: >
+      sh -c "sleep 10 && cmsRankingWebServer"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.cms-ranking.rule=Host(`${RANKING_DOMAIN:-ranking.cms.local}`)"
+      - "traefik.http.services.cms-ranking.loadbalancer.server.port=${RANKING_LISTEN_PORT:-8890}"
+
+  # Printing Service - Manages printing requests (optional)
+  printing-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cms-printing-service
+    restart: unless-stopped
+    environment:
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.conf}
+      SERVICE_TYPE: PrintingService
+      SERVICE_SHARD: ${PRINTING_SERVICE_SHARD:-0}
+      PRINTING_ENABLED: ${PRINTING_ENABLED:-false}
+    volumes:
+      - ./config/cms.conf:/usr/local/etc/cms.conf:ro
+      - cms-logs:/var/local/log/cms
+      - cms-cache:/var/local/cache/cms
+    networks:
+      - cms-network
+    privileged: true
+    cgroup: host
+    profiles:
+      - printing
+    command: >
+      sh -c "if [ \"$PRINTING_ENABLED\" = \"true\" ]; then sleep 10 && cmsPrintingService ${PRINTING_SERVICE_SHARD:-0}; else echo 'Printing service disabled'; sleep infinity; fi"
+
+networks:
+  cms-network:
+    external: true
+    name: cms-network
+
+volumes:
+  cms-logs:
+    external: true
+    name: cms-logs
+  cms-cache:
+    external: true
+    name: cms-cache
+  cms-data:
+    external: true
+    name: cms-data
+  cms-ranking-data:
+    name: cms-ranking-data
