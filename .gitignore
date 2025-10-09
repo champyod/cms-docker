@@ -16,3 +16,10 @@ log/
 codecov/
 .dev/
 test_logs/
+
+# Local environment configuration files
+*.local
+.env*.local
+
+# VSCode settings
+.vscode/
