@@ -28,6 +28,29 @@ if [ -z "$CMS_DB_HOST" ] || [ -z "$CMS_DB_PASSWORD" ] || [ -z "$CMS_SECRET_KEY" 
     exit 1
 fi
 
+# Set default values for environment variables to prevent undefined variable issues
+export CMS_DB_HOST=${CMS_DB_HOST:-postgres}
+export CMS_DB_PORT=${CMS_DB_PORT:-5432}
+export CMS_DB_USER=${CMS_DB_USER:-cmsuser}
+export CMS_DB_NAME=${CMS_DB_NAME:-cmsdb}
+export CMS_NUM_WORKERS=${CMS_NUM_WORKERS:-1}
+export CMS_TORNADO_DEBUG=${CMS_TORNADO_DEBUG:-false}
+export CMS_CONTEST_LISTEN_ADDRESS=${CMS_CONTEST_LISTEN_ADDRESS:-0.0.0.0}
+export CMS_CONTEST_LISTEN_PORT=${CMS_CONTEST_LISTEN_PORT:-8888}
+export CMS_ADMIN_LISTEN_ADDRESS=${CMS_ADMIN_LISTEN_ADDRESS:-0.0.0.0}
+export CMS_ADMIN_LISTEN_PORT=${CMS_ADMIN_LISTEN_PORT:-8889}
+export CMS_CONTEST_COOKIE_DURATION=${CMS_CONTEST_COOKIE_DURATION:-10800}
+export CMS_ADMIN_COOKIE_DURATION=${CMS_ADMIN_COOKIE_DURATION:-36000}
+export CMS_LOG_DIR=${CMS_LOG_DIR:-/opt/cms/log}
+export CMS_CACHE_DIR=${CMS_CACHE_DIR:-/opt/cms/cache}
+export CMS_DATA_DIR=${CMS_DATA_DIR:-/opt/cms/lib}
+export CMS_RUN_DIR=${CMS_RUN_DIR:-/opt/cms/run}
+export CMS_RANKING_USERNAME=${CMS_RANKING_USERNAME:-admin}
+export CMS_RANKING_PASSWORD=${CMS_RANKING_PASSWORD:-ranking123!}
+export CMS_CONTEST_ID=${CMS_CONTEST_ID:-null}
+export CMS_MAX_SUBMISSION_LENGTH=${CMS_MAX_SUBMISSION_LENGTH:-100000}
+export CMS_MAX_INPUT_LENGTH=${CMS_MAX_INPUT_LENGTH:-5000000}
+
 # Wait for database to be ready
 echo "Waiting for database server..."
 until pg_isready -h $CMS_DB_HOST -p $CMS_DB_PORT; do
@@ -85,6 +108,13 @@ for i in $(seq 0 $((CMS_NUM_WORKERS-1))); do
 done
 echo "]" >> /opt/cms/config/cms.toml
 
+# Resolve contest ID for configuration
+if [ "${CMS_CONTEST_ID}" == "auto" ]; then
+    CONTEST_CONFIG_VALUE="null"
+else
+    CONTEST_CONFIG_VALUE="${CMS_CONTEST_ID:-null}"
+fi
+
 # Continue adding configuration sections
 cat >> /opt/cms/config/cms.toml <<EOF
 
@@ -118,7 +148,7 @@ max_submission_length = ${CMS_MAX_SUBMISSION_LENGTH}
 max_input_length = ${CMS_MAX_INPUT_LENGTH}
 docs_path = "${CMS_DOCS_PATH:-/usr/share/cms/docs}"
 # Auto-select contest if specified
-contest = $(if [ "${CMS_CONTEST_ID}" == "auto" ]; then echo "null"; else echo "${CMS_CONTEST_ID:-null}"; fi)
+contest = ${CONTEST_CONFIG_VALUE}
 
 [admin_web_server]
 listen_address = "${CMS_ADMIN_LISTEN_ADDRESS}"
@@ -126,7 +156,7 @@ listen_port = ${CMS_ADMIN_LISTEN_PORT}
 cookie_duration = ${CMS_ADMIN_COOKIE_DURATION}
 num_proxies_used = ${CMS_NUM_PROXIES:-1}
 # Auto-select contest if specified  
-contest = $(if [ "${CMS_CONTEST_ID}" == "auto" ]; then echo "null"; else echo "${CMS_CONTEST_ID:-null}"; fi)
+contest = ${CONTEST_CONFIG_VALUE}
 
 [proxy_service]
 rankings = ["http://${CMS_RANKING_USERNAME}:${CMS_RANKING_PASSWORD}@cms-ranking:8890/"]
@@ -157,6 +187,37 @@ fi
 echo "=== Generated CMS Configuration ==="
 cat /opt/cms/config/cms.toml
 echo "=================================="
+
+# Validate TOML syntax
+echo "Validating TOML configuration syntax..."
+if command -v python3 >/dev/null 2>&1; then
+    python3 -c "
+import sys
+try:
+    import tomllib
+except ImportError:
+    try:
+        import tomli as tomllib
+    except ImportError:
+        print('Warning: No TOML library available for validation')
+        sys.exit(0)
+
+try:
+    with open('/opt/cms/config/cms.toml', 'rb') as f:
+        tomllib.load(f)
+    print('✓ TOML configuration syntax is valid')
+except Exception as e:
+    print(f'✗ TOML configuration syntax error: {e}')
+    print('Configuration file content:')
+    with open('/opt/cms/config/cms.toml', 'r') as f:
+        lines = f.readlines()
+        for i, line in enumerate(lines, 1):
+            print(f'{i:3d}: {line}', end='')
+    sys.exit(1)
+" || echo "TOML validation skipped (Python/tomllib not available)"
+else
+    echo "TOML validation skipped (Python not available)"
+fi
 
 # Test database connection with psql
 echo "Testing direct database connection..."
