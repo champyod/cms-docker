@@ -64,6 +64,23 @@ env:
 		cat .env.local >> .env; \
 		echo "" >> .env; \
 	fi
+	@# Configuration Files
+	@if [ -d config/cms.conf ]; then \
+		echo "Removing directory config/cms.conf (created by Docker volumes)..."; \
+		rm -rf config/cms.conf; \
+	fi
+	@if [ ! -f config/cms.conf ]; then \
+		echo "Copying config/cms.conf.sample to config/cms.conf..."; \
+		cp config/cms.conf.sample config/cms.conf; \
+	fi
+	@if [ -d config/cms.ranking.conf ]; then \
+		echo "Removing directory config/cms.ranking.conf (created by Docker volumes)..."; \
+		rm -rf config/cms.ranking.conf; \
+	fi
+	@if [ ! -f config/cms.ranking.conf ]; then \
+		echo "Copying config/cms.ranking.conf.sample to config/cms.ranking.conf..."; \
+		cp config/cms.ranking.conf.sample config/cms.ranking.conf; \
+	fi
 	@echo "" >> .env
 	@echo "# Docker Compose File Configuration" >> .env
 	@echo "COMPOSE_FILE=docker-compose.core.yml:docker-compose.admin.yml:docker-compose.contest.yml:docker-compose.worker.yml" >> .env
