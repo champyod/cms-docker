@@ -4,7 +4,6 @@ FROM ubuntu:24.04
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     build-essential \
     cgroup-lite \
-    cppreference-doc-en-html \
     fp-compiler \
     git \
     ghc \
@@ -13,8 +12,10 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     libffi-dev \
     libpq-dev \
     libyaml-dev \
+    libsystemd-dev \
     mono-mcs \
     openjdk-8-jdk-headless \
+    pkg-config \
     php-cli \
     postgresql-client \
     pypy3 \

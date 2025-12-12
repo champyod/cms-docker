@@ -17,9 +17,14 @@ codecov/
 .dev/
 test_logs/
 
-# Local environment configuration files
+# Environment Configuration
+.env
+.env.*
+!.env.*.example
+!.env.example
+
+# Local overrides (legacy)
 *.local
-.env*.local
 
 # VSCode settings
 .vscode/
