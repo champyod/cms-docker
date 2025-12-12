@@ -11,6 +11,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    container_name: cms-worker-${WORKER_SHARD:-0}
     restart: unless-stopped
     environment:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.conf}
