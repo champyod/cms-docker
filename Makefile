@@ -84,6 +84,11 @@ env:
 	@echo "Generating and proactively setting a secure SECRET_KEY in config/cms.conf..."; \
 	SECRET=$$(python3 -c 'import secrets; print(secrets.token_hex(16))'); \
 	sed -i 's/"secret_key":             "8e045a51e4b102ea803c06f92841a1fb",/"secret_key":             "'$${SECRET}'",/' config/cms.conf
+	@if grep -q "POSTGRES_PASSWORD=" .env.core; then \
+		echo "Injecting database password from .env.core into config/cms.conf..."; \
+		DB_PASS=$$(grep "POSTGRES_PASSWORD=" .env.core | cut -d '=' -f2); \
+		sed -i "s/your_password_here/$$DB_PASS/" config/cms.conf; \
+	fi
 	@echo "" >> .env
 	@echo "# Docker Compose File Configuration" >> .env
 	@echo "COMPOSE_FILE=docker-compose.core.yml:docker-compose.admin.yml:docker-compose.contest.yml:docker-compose.worker.yml" >> .env
