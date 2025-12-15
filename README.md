@@ -59,6 +59,32 @@ docker logs cms-log-service -f
 docker logs cms-admin-web-server -f
 ```
 
+## Worker
+
+Deploy workers to judge submissions:
+
+```bash
+docker compose -f docker-compose.worker.yml up -d
+
+# Check worker logs
+docker logs cms-worker-0 -f
+```
+
+## Scoreboard (Ranking)
+
+Deployed with Admin stack at `http://YOUR_IP:8890`.
+Credentials: Set `RANKING_USERNAME` and `RANKING_PASSWORD` in `.env.admin`.
+
+## Remote Workers
+
+**Current limitation:** Remote workers (on separate machines) require manual configuration:
+
+1. Expose core service ports on the main server (26000+ for workers)
+2. Edit `config/cms.conf` on the remote worker to use the main server's public IP
+3. Set unique `WORKER_SHARD` (10+) in `.env.worker`
+
+This setup is designed for **single-server** deployment. Multi-server support is planned.
+
 ## Requirements
 
 - Docker 20.10+
