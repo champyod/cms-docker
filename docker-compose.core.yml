@@ -149,6 +149,7 @@ services:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.conf}
       SERVICE_TYPE: ProxyService
       SERVICE_SHARD: ${PROXY_SERVICE_SHARD:-0}
+      CONTEST_ID: ${CONTEST_ID:-1}
     volumes:
       - ./config/cms.conf:/usr/local/etc/cms.conf:ro
       - cms-logs:/var/local/log/cms
@@ -158,7 +159,7 @@ services:
     privileged: true
     cgroup: host
     command: >
-      sh -c "sleep 5 && cmsProxyService ${PROXY_SERVICE_SHARD:-0}"
+      sh -c "sleep 5 && cmsProxyService ${PROXY_SERVICE_SHARD:-0} -c ${CONTEST_ID:-1}"
 
   # CMS Checker Service - Validates submissions
   checker-service:
