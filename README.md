@@ -4,6 +4,14 @@ Docker-based deployment for [Contest Management System (CMS)](https://github.com
 
 ## Quick Start
 
+### Local / VM Deployment (No Public IP)
+By default, the setup binds to `0.0.0.0`, so you can access the services via:
+- **Localhost:** `http://localhost:8889` (Admin), `http://localhost:8888` (Contest)
+- **VM IP:** `http://<vm-ip>:8889` (Admin), `http://<vm-ip>:8888` (Contest)
+
+You do **not** need a public IP or domain name for local testing.
+
+### Steps
 ```bash
 # 1. Clone and setup
 git clone https://github.com/champyod/cms-docker.git

@@ -36,11 +36,11 @@ services:
       database:
         condition: service_healthy
     environment:
-      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.conf}
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: LogService
       SERVICE_SHARD: ${LOG_SERVICE_SHARD:-0}
     volumes:
-      - ./config/cms.conf:/usr/local/etc/cms.conf:ro
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
       - cms-cache:/var/local/cache/cms
     networks:
@@ -63,11 +63,11 @@ services:
       log-service:
         condition: service_started
     environment:
-      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.conf}
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: ResourceService
       SERVICE_SHARD: ${RESOURCE_SERVICE_SHARD:-0}
     volumes:
-      - ./config/cms.conf:/usr/local/etc/cms.conf:ro
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
       - cms-cache:/var/local/cache/cms
     networks:
@@ -90,11 +90,11 @@ services:
       log-service:
         condition: service_started
     environment:
-      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.conf}
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: ScoringService
       SERVICE_SHARD: ${SCORING_SERVICE_SHARD:-0}
     volumes:
-      - ./config/cms.conf:/usr/local/etc/cms.conf:ro
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
       - cms-cache:/var/local/cache/cms
       - cms-data:/var/local/lib/cms
@@ -118,12 +118,12 @@ services:
       log-service:
         condition: service_started
     environment:
-      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.conf}
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: EvaluationService
       SERVICE_SHARD: ${EVALUATION_SERVICE_SHARD:-0}
       CONTEST_ID: ${CONTEST_ID:-1}
     volumes:
-      - ./config/cms.conf:/usr/local/etc/cms.conf:ro
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
       - cms-cache:/var/local/cache/cms
       - cms-data:/var/local/lib/cms
@@ -147,12 +147,12 @@ services:
       log-service:
         condition: service_started
     environment:
-      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.conf}
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: ProxyService
       SERVICE_SHARD: ${PROXY_SERVICE_SHARD:-0}
       CONTEST_ID: ${CONTEST_ID:-1}
     volumes:
-      - ./config/cms.conf:/usr/local/etc/cms.conf:ro
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
       - cms-cache:/var/local/cache/cms
     networks:
@@ -175,11 +175,11 @@ services:
       log-service:
         condition: service_started
     environment:
-      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.conf}
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: Checker
       SERVICE_SHARD: ${CHECKER_SERVICE_SHARD:-0}
     volumes:
-      - ./config/cms.conf:/usr/local/etc/cms.conf:ro
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
       - cms-cache:/var/local/cache/cms
       - cms-data:/var/local/lib/cms

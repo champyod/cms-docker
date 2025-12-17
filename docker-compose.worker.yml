@@ -14,7 +14,7 @@ services:
     container_name: cms-worker-${WORKER_SHARD:-0}
     restart: unless-stopped
     environment:
-      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.conf}
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: Worker
       # Worker shard - Each worker needs a unique shard number
       WORKER_SHARD: ${WORKER_SHARD:-0}
@@ -29,7 +29,7 @@ services:
       WORKER_MEMORY_LIMIT: ${WORKER_MEMORY_LIMIT:-4G}
       WORKER_CPU_LIMIT: ${WORKER_CPU_LIMIT:-4}
     volumes:
-      - ./config/cms.conf:/usr/local/etc/cms.conf:ro
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
       - cms-cache:/var/local/cache/cms
       - cms-data:/var/local/lib/cms

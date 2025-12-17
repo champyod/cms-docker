@@ -14,7 +14,7 @@ services:
     container_name: cms-contest-web-server-${CONTEST_ID:-1}
     restart: unless-stopped
     environment:
-      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.conf}
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: ContestWebServer
       SERVICE_SHARD: ${CONTEST_WEB_SERVER_SHARD:-0}
       CONTEST_LISTEN_PORT: ${CONTEST_LISTEN_PORT:-8888}
@@ -30,7 +30,7 @@ services:
       # Number of proxies (nginx, load balancer, etc.)
       NUM_PROXIES_USED: ${NUM_PROXIES_USED:-1}
     volumes:
-      - ./config/cms.conf:/usr/local/etc/cms.conf:ro
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
       - cms-cache:/var/local/cache/cms
       - cms-data:/var/local/lib/cms
