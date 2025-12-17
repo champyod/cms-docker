@@ -15,11 +15,11 @@ cp .env.core.example .env.core  # Edit with your settings
 make env
 
 # 3. Deploy
-docker compose -f docker-compose.core.yml up -d
+make core
 docker exec -it cms-log-service cmsInitDB
 docker exec -it cms-log-service cmsAddAdmin admin -p YourPassword!
-docker compose -f docker-compose.admin.yml up -d
-docker compose -f docker-compose.contest.yml up -d
+make admin
+make contest
 ```
 
 ## Services
@@ -39,7 +39,7 @@ Environment files:
 - `.env.contest` - Contest settings
 - `.env.worker` - Worker settings
 
-Run `make env` to generate the combined `.env` and `config/cms.conf`.
+Run `make env` to generate the combined `.env` and `config/cms.toml`.
 
 ## Commands
 
@@ -64,8 +64,7 @@ docker logs cms-admin-web-server -f
 Deploy workers to judge submissions:
 
 ```bash
-docker compose -f docker-compose.worker.yml up -d
-
+make worker
 # Check worker logs
 docker logs cms-worker-0 -f
 ```
@@ -80,7 +79,7 @@ Credentials: Set `RANKING_USERNAME` and `RANKING_PASSWORD` in `.env.admin`.
 **Current limitation:** Remote workers (on separate machines) require manual configuration:
 
 1. Expose core service ports on the main server (26000+ for workers)
-2. Edit `config/cms.conf` on the remote worker to use the main server's public IP
+2. Edit `config/cms.toml` on the remote worker to use the main server's public IP
 3. Set unique `WORKER_SHARD` (10+) in `.env.worker`
 
 This setup is designed for **single-server** deployment. Multi-server support is planned.
