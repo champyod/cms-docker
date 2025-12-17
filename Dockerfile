@@ -3,34 +3,6 @@
 ARG BASE_IMAGE=ubuntu:noble
 FROM ${BASE_IMAGE}
 
-<<<<<<< HEAD
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    build-essential \
-    cgroup-lite \
-    fp-compiler \
-    git \
-    ghc \
-    libcap-dev \
-    libcups2-dev \
-    libffi-dev \
-    libpq-dev \
-    libyaml-dev \
-    libsystemd-dev \
-    mono-mcs \
-    openjdk-8-jdk-headless \
-    pkg-config \
-    php-cli \
-    postgresql-client \
-    pypy3 \
-    python3-pip \
-    python3.12 \
-    python3.12-dev \
-    rustc \
-    shared-mime-info \
-    sudo \
-    wait-for-it \
-    zip
-=======
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked <<EOF
 #!/bin/bash -ex
@@ -70,7 +42,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     )
     apt-get install -y "${PACKAGES[@]}"
 EOF
->>>>>>> upstream/main
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked <<EOF
@@ -115,9 +86,6 @@ COPY --chown=cmsuser:cmsuser . /home/cmsuser/src
 
 RUN --mount=type=cache,target=/home/cmsuser/.cache/pip,uid=1001 ./install.py cms --devel
 
-<<<<<<< HEAD
-RUN sudo python3 scripts/prerequisites.py --yes --as-root --cmsuser=cmsuser install
-=======
 RUN <<EOF
 #!/bin/bash -ex
     sed 's|/cmsuser:your_password_here@localhost:5432/cmsdb"|/postgres@testdb:5432/cmsdbfortesting"|' \
@@ -127,6 +95,5 @@ RUN <<EOF
         ./config/cms.sample.toml >../cms/etc/cms-devdb.toml
     sed -i 's/127.0.0.1/0.0.0.0/' ../cms/etc/cms_ranking.toml
 EOF
->>>>>>> upstream/main
 
 CMD ["/bin/bash"]
