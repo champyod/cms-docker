@@ -29,17 +29,25 @@ git clone https://github.com/champyod/cms-docker.git
 cd cms-docker
 git submodule update --init --recursive
 
-# 2. Configure environment
+# 2. Configure environment (Critical Step)
 cp .env.core.example .env.core  # Edit with your settings
-make env
+make env  # Generates .env and config/cms.toml
 
 # 3. Deploy
 make core
-docker exec -it cms-log-service cmsInitDB
-docker exec -it cms-log-service cmsAddAdmin admin -p YourPassword!
+# Wait for services to be healthy (check 'docker ps')
+docker exec -it cms-log-service cmsInitDB  # Create database schema
+docker exec -it cms-log-service cmsAddAdmin admin -p YourPassword! # Create admin
 make admin
 make contest
-```
+make worker
+
+### Troubleshooting
+
+- **"Relation 'contests' does not exist"**: Run `docker exec -it cms-log-service cmsInitDB`.
+- **Stuck at "Compiling"**: The Worker failed to connect. Run `docker restart cms-worker-0`.
+- **"Unable to invalidate" / "Service not connected"**: Core services mesh is broken. Run `docker restart cms-evaluation-service` or restart the whole stack.
+- **Config changes not applying**: `make env` does not overwrite. Delete `config/cms.toml` then run `make env` again.```
 
 ## Services
 
