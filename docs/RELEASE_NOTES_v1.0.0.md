@@ -1,25 +1,28 @@
 # Release Notes - v1.0.0
 
+## Initial Release with Docker Compose Support
+
+This is the initial release of **cms-docker**, a Dockerized version of the [Contest Management System (CMS)](https://github.com/cms-dev/cms).
+This release focuses on providing a robust **Docker Compose** setup to easily deploy and manage CMS environments.
+
 ## Release Information
 - **Version:** 1.0.0
 - **Release Date:** 2025-12-17
+- **Based on:** [cms-dev/cms](https://github.com/cms-dev/cms)
 
-## Major Changes
+## Key Features
 
-### Project Restructuring
-- The project file structure has been significantly reorganized for better maintainability.
-- Source code has been moved to the `src/` directory.
-- `cms`, `cmscommon`, `cmscontrib`, `cmsranking`, `cmstaskenv`, and `isolate` packages are now located in `src/`.
-- Utility scripts `prerequisites.py` and `copy_translations.py` have been moved to `scripts/`.
-- `setup.py` and `Dockerfile` have been updated to reflect these path changes.
+### Docker & Docker Compose Support
+- **Full Dockerization:** All CMS services (Core, Admin, Contest, Worker) are containerized.
+- **Docker Compose:** Easy deployment using `docker-compose.yml` files for different environments (Core, Admin, Contest, Worker).
+- **Simplified Setup:** `Makefile` commands (`make env`, `make core`, etc.) to streamline configuration and deployment.
 
-### Cleanup
-- Root directory has been decluttered.
-- Documentation files (`ACCESS-CONFIGURATION.md`, `PORTAINER-GUIDE.md`, `QUICK-REFERENCE.md`, `SETUP-GUIDE.md`, `TROUBLESHOOTING.md`, `WORKER-SETUP.md`) have been moved to the `docs/` directory.
-- **Removed Tests:** Test suites (`cmstestsuite`) and test-related scripts (`_*test*.sh`, `cms-test.sh`, `docker-compose.test.yml`, `pytest.ini`) have been removed from the repository to streamline the production release.
-
-## Installation
-The installation process remains largely the same, but internal paths have changed. `setup.py` handles the new package location transparently.
+### Project Structure
+- The repository has been restructured for better maintainability in this dockerized context:
+    - Source code relocated to `src/`.
+    - Documentation moved to `docs/`.
+    - Helper scripts moved to `scripts/`.
+    - **Cleanup:** Unnecessary test suites and development artifacts from the original repo have been removed to keep the image light.
 
 ## Usage
-Refer to the `README.md` and documentation in the `docs/` directory for usage instructions.
+Please refer to the `README.md` and the guides in `docs/` for detailed installation and deployment instructions.
