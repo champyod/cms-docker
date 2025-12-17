@@ -11,6 +11,17 @@ By default, the setup binds to `0.0.0.0`, so you can access the services via:
 
 You do **not** need a public IP or domain name for local testing.
 
+### Build Configuration (Optional)
+This repository uses the **Thai Ubuntu mirror** (`th.archive.ubuntu.com`) by default for faster builds. If you are in another region, you can change this:
+
+**Option 1: Build command**
+```bash
+docker compose build --build-arg APT_MIRROR=archive.ubuntu.com
+```
+
+**Option 2: Docker Compose (Permanent)**
+Add `args: { APT_MIRROR: archive.ubuntu.com }` to the `build` section of your services in `docker-compose.yml`.
+
 ### Steps
 ```bash
 # 1. Clone and setup

@@ -3,6 +3,9 @@
 ARG BASE_IMAGE=ubuntu:noble
 FROM ${BASE_IMAGE}
 
+# Default mirror for faster builds in Thailand. Override with --build-arg APT_MIRROR=archive.ubuntu.com
+ARG APT_MIRROR=th.archive.ubuntu.com
+
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked <<EOF
 #!/bin/bash -ex
@@ -12,6 +15,14 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     rm -f /etc/apt/apt.conf.d/docker-clean
     # Note that we use apt-get here instead of plain apt, because plain apt
     # also deletes .deb files after successful install.
+
+    # Use configured mirror for faster builds
+    if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+        sed -i "s/archive.ubuntu.com/${APT_MIRROR}/g" /etc/apt/sources.list.d/ubuntu.sources
+    elif [ -f /etc/apt/sources.list ]; then
+        sed -i "s/archive.ubuntu.com/${APT_MIRROR}/g" /etc/apt/sources.list
+    fi
+
     apt-get update
     apt-get upgrade -y
     PACKAGES=(
