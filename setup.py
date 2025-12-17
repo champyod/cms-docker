@@ -64,30 +64,6 @@ PACKAGE_DATA = {
         "static/lib/*.*",
         "static/*.*",
     ],
-    "cmstestsuite": [
-        "code/*.*",
-        "tasks/batch_stdio/data/*.*",
-        "tasks/batch_fileio/data/*.*",
-        "tasks/batch_fileio_managed/code/*",
-        "tasks/batch_fileio_managed/data/*.*",
-        "tasks/communication_fifoio_stubbed/code/*",
-        "tasks/communication_fifoio_stubbed/data/*.*",
-        "tasks/communication_many_fifoio_stubbed/code/*",
-        "tasks/communication_many_fifoio_stubbed/data/*.*",
-        "tasks/communication_many_stdio_stubbed/code/*",
-        "tasks/communication_many_stdio_stubbed/data/*.*",
-        "tasks/communication_stdio/code/*",
-        "tasks/communication_stdio/data/*.*",
-        "tasks/communication_stdio_stubbed/code/*",
-        "tasks/communication_stdio_stubbed/data/*.*",
-        "tasks/outputonly/data/*.*",
-        "tasks/outputonly_comparator/code/*",
-        "tasks/outputonly_comparator/data/*.*",
-        "tasks/twosteps/code/*.*",
-        "tasks/twosteps/data/*.*",
-        "tasks/twosteps_comparator/code/*",
-        "tasks/twosteps_comparator/data/*.*",
-    ],
 }
 
 
@@ -137,7 +113,6 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "cmsRunFunctionalTests=cmstestsuite.RunFunctionalTests:main",
             "cmsAddAdmin=cmscontrib.AddAdmin:main",
             "cmsAddParticipation=cmscontrib.AddParticipation:main",
             "cmsAddStatement=cmscontrib.AddStatement:main",
