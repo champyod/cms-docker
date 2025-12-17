@@ -93,7 +93,7 @@ PACKAGE_DATA = {
 
 def find_version():
     """Return the version string obtained from cms/__init__.py"""
-    path = os.path.join("cms", "__init__.py")
+    path = os.path.join("src", "cms", "__init__.py")
     with open(path, "rt", encoding="utf-8") as f:
         version_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]",
                                   f.read(), re.M)
@@ -116,7 +116,8 @@ setup(
     author_email="contestms@googlegroups.com",
     url="https://github.com/cms-dev/cms",
     description="A contest management system and grader for IOI-like programming competitions",
-    packages=find_packages(),
+    package_dir={'': 'src'},
+    packages=find_packages(where='src'),
     package_data=PACKAGE_DATA,
     cmdclass={"build": build_with_l10n},
     scripts=[
