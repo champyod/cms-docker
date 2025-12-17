@@ -53,17 +53,46 @@ PACKAGE_DATA = {
         "contest/templates/*.*",
         "contest/templates/macro/*.*",
     ],
-    "cms.service": [
-        "templates/printing/*.*",
-    ],
     "cms.locale": [
         "*/LC_MESSAGES/*.*",
+    ],
+    "cmscontrib": [
+        "loaders/polygon/testlib.h",
     ],
     "cmsranking": [
         "static/img/*.*",
         "static/lib/*.*",
         "static/*.*",
     ],
+<<<<<<< HEAD
+=======
+    "cmstestsuite": [
+        "code/*.*",
+        "tasks/batch_and_output/code/*",
+        "tasks/batch_and_output/data/*",
+        "tasks/batch_stdio/data/*.*",
+        "tasks/batch_fileio/data/*.*",
+        "tasks/batch_fileio_managed/code/*",
+        "tasks/batch_fileio_managed/data/*.*",
+        "tasks/communication_fifoio_stubbed/code/*",
+        "tasks/communication_fifoio_stubbed/data/*.*",
+        "tasks/communication_many_fifoio_stubbed/code/*",
+        "tasks/communication_many_fifoio_stubbed/data/*.*",
+        "tasks/communication_many_stdio_stubbed/code/*",
+        "tasks/communication_many_stdio_stubbed/data/*.*",
+        "tasks/communication_stdio/code/*",
+        "tasks/communication_stdio/data/*.*",
+        "tasks/communication_stdio_stubbed/code/*",
+        "tasks/communication_stdio_stubbed/data/*.*",
+        "tasks/outputonly/data/*.*",
+        "tasks/outputonly_comparator/code/*",
+        "tasks/outputonly_comparator/data/*.*",
+        "tasks/twosteps/code/*.*",
+        "tasks/twosteps/data/*.*",
+        "tasks/twosteps_comparator/code/*",
+        "tasks/twosteps_comparator/data/*.*",
+    ],
+>>>>>>> upstream/main
 }
 
 
@@ -88,12 +117,16 @@ class build_with_l10n(build):
 setup(
     name="cms",
     version=find_version(),
+<<<<<<< HEAD
     author="The CMS development team",
     author_email="contestms@googlegroups.com",
     url="https://github.com/cms-dev/cms",
     description="A contest management system and grader for IOI-like programming competitions",
     package_dir={'': 'src'},
     packages=find_packages(where='src'),
+=======
+    packages=find_packages(),
+>>>>>>> upstream/main
     package_data=PACKAGE_DATA,
     cmdclass={"build": build_with_l10n},
     scripts=[
@@ -106,7 +139,6 @@ setup(
         "scripts/cmsContestWebServer",
         "scripts/cmsAdminWebServer",
         "scripts/cmsProxyService",
-        "scripts/cmsPrintingService",
         "scripts/cmsRankingWebServer",
         "scripts/cmsInitDB",
         "scripts/cmsDropDB",
@@ -143,6 +175,7 @@ setup(
         ],
         "cms.grading.tasktypes": [
             "Batch=cms.grading.tasktypes.Batch:Batch",
+            "BatchAndOutput=cms.grading.tasktypes.BatchAndOutput:BatchAndOutput",
             "Communication=cms.grading.tasktypes.Communication:Communication",
             "OutputOnly=cms.grading.tasktypes.OutputOnly:OutputOnly",
             "TwoSteps=cms.grading.tasktypes.TwoSteps:TwoSteps",
@@ -169,12 +202,4 @@ setup(
             "Rust=cms.grading.languages.rust:Rust",
         ],
     },
-    keywords="ioi programming contest grader management system",
-    license_expression="AGPL-3.0-or-later",
-    classifiers=[
-        "Development Status :: 5 - Production/Stable",
-        "Natural Language :: English",
-        "Operating System :: POSIX :: Linux",
-        "Programming Language :: Python :: 3.12",
-    ],
 )

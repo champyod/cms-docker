@@ -33,7 +33,7 @@ from copy import deepcopy
 import yaml
 
 from cms import TOKEN_MODE_DISABLED, TOKEN_MODE_FINITE, TOKEN_MODE_INFINITE, \
-    FEEDBACK_LEVEL_FULL, FEEDBACK_LEVEL_RESTRICTED
+    FEEDBACK_LEVEL_FULL, FEEDBACK_LEVEL_RESTRICTED, FEEDBACK_LEVEL_OI_RESTRICTED
 from cms.db import Contest, User, Task, Statement, Attachment, Team, Dataset, \
     Manager, Testcase
 from cms.grading.languagemanager import LANGUAGES, HEADER_EXTS
@@ -253,8 +253,8 @@ class YamlLoader(ContestLoader, TaskLoader, UserLoader, TeamLoader):
         load(conf, args, "analysis_start", conv=parse_datetime)
         load(conf, args, "analysis_stop", conv=parse_datetime)
 
-        tasks = load(conf, None, ["tasks", "problemi"])
-        participations = load(conf, None, ["users", "utenti"])
+        tasks: list[str] | None = load(conf, None, ["tasks", "problemi"])
+        participations: list[dict] | None = load(conf, None, ["users", "utenti"])
         participations = [] if participations is None else participations
         for p in participations:
             p["password"] = build_password(p["password"])
@@ -340,7 +340,7 @@ class YamlLoader(ContestLoader, TaskLoader, UserLoader, TeamLoader):
 
         return Team(**args)
 
-    def get_task(self, get_statement=True):
+    def get_task(self, get_statement=True) -> Task | None:
         """See docstring in class TaskLoader."""
         name = os.path.split(self.path)[1]
 
@@ -459,12 +459,14 @@ class YamlLoader(ContestLoader, TaskLoader, UserLoader, TeamLoader):
 
         args["submission_format"] = ["%s.%%l" % name]
 
-        # Import the feedback level when explicitly set to full
+        # Import the feedback level when explicitly set
         # (default behaviour is restricted)
         if conf.get("feedback_level", None) == FEEDBACK_LEVEL_FULL:
             args["feedback_level"] = FEEDBACK_LEVEL_FULL
         elif conf.get("feedback_level", None) == FEEDBACK_LEVEL_RESTRICTED:
             args["feedback_level"] = FEEDBACK_LEVEL_RESTRICTED
+        elif conf.get("feedback_level", None) == FEEDBACK_LEVEL_OI_RESTRICTED:
+            args["feedback_level"] = FEEDBACK_LEVEL_OI_RESTRICTED
 
         if conf.get("score_mode", None) == SCORE_MODE_MAX:
             args["score_mode"] = SCORE_MODE_MAX
@@ -601,95 +603,98 @@ class YamlLoader(ContestLoader, TaskLoader, UserLoader, TeamLoader):
         else:
             evaluation_param = "diff"
 
-        # Detect subtasks by checking GEN
-        gen_filename = os.path.join(self.path, 'gen', 'GEN')
-        try:
-            with open(gen_filename, "rt", encoding="utf-8") as gen_file:
-                subtasks = []
-                testcases = 0
-                points = None
-                for line in gen_file:
-                    line = line.strip()
-                    splitted = line.split('#', 1)
-
-                    if len(splitted) == 1:
-                        # This line represents a testcase, otherwise
-                        # it's just a blank
-                        if splitted[0] != '':
-                            testcases += 1
-
-                    else:
-                        testcase, comment = splitted
-                        testcase = testcase.strip()
-                        comment = comment.strip()
-                        testcase_detected = len(testcase) > 0
-                        copy_testcase_detected = comment.startswith("COPY:")
-                        subtask_detected = comment.startswith('ST:')
-
-                        flags = [testcase_detected,
-                                 copy_testcase_detected,
-                                 subtask_detected]
-                        if len([x for x in flags if x]) > 1:
-                            raise Exception("No testcase and command in"
-                                            " the same line allowed")
-
-                        # This line represents a testcase and contains a
-                        # comment, but the comment doesn't start a new
-                        # subtask
-                        if testcase_detected or copy_testcase_detected:
-                            testcases += 1
-
-                        # This line starts a new subtask
-                        if subtask_detected:
-                            # Close the previous subtask
-                            if points is None:
-                                assert testcases == 0
-                            else:
-                                subtasks.append([points, testcases])
-                            # Open the new one
-                            testcases = 0
-                            points = int(comment[3:].strip())
-
-                # Close last subtask (if no subtasks were defined, just
-                # fallback to Sum)
-                if points is None:
-                    args["score_type"] = "Sum"
-                    total_value = float(conf.get("total_value", 100.0))
-                    input_value = 0.0
-                    n_input = testcases
-                    if n_input != 0:
-                        input_value = total_value / n_input
-                    args["score_type_parameters"] = input_value
-                else:
-                    subtasks.append([points, testcases])
-                    assert 100 == sum([int(st[0]) for st in subtasks])
-                    n_input = sum([int(st[1]) for st in subtasks])
-                    args["score_type"] = "GroupMin"
-                    args["score_type_parameters"] = subtasks
-
-                if "n_input" in conf:
-                    assert int(conf['n_input']) == n_input
-
-        # If gen/GEN doesn't exist, just fallback to Sum
-        except OSError:
-            args["score_type"] = "Sum"
-            total_value = float(conf.get("total_value", 100.0))
-            input_value = 0.0
-            n_input = int(conf['n_input'])
-            if n_input != 0:
-                input_value = total_value / n_input
-            args["score_type_parameters"] = input_value
-
         # Override score_type if explicitly specified
-        if "score_type" in conf and "score_type_parameters" in conf:
+        if "score_type" in conf and "score_type_parameters" in conf and "n_input" in conf:
             logger.info("Overriding 'score_type' and 'score_type_parameters' "
                         "as per task.yaml")
+            n_input = conf["n_input"]
             load(conf, args, "score_type")
             load(conf, args, "score_type_parameters")
-        elif "score_type" in conf or "score_type_parameters" in conf:
-            logger.warning("To override score type data, task.yaml must "
-                           "specify both 'score_type' and "
-                           "'score_type_parameters'.")
+        else:
+            if "score_type" in conf or "score_type_parameters" in conf:
+                logger.warning("To override score type data, task.yaml must "
+                            "specify all 'score_type', "
+                            "'score_type_parameters' and "
+                            "'n_input'.")
+                
+            # Detect subtasks by checking GEN
+            gen_filename = os.path.join(self.path, 'gen', 'GEN')
+            try:
+                with open(gen_filename, "rt", encoding="utf-8") as gen_file:
+                    subtasks = []
+                    testcases = 0
+                    points = None
+                    for line in gen_file:
+                        line = line.strip()
+                        splitted = line.split('#', 1)
+
+                        if len(splitted) == 1:
+                            # This line represents a testcase, otherwise
+                            # it's just a blank
+                            if splitted[0] != '':
+                                testcases += 1
+
+                        else:
+                            testcase, comment = splitted
+                            testcase = testcase.strip()
+                            comment = comment.strip()
+                            testcase_detected = len(testcase) > 0
+                            copy_testcase_detected = comment.startswith("COPY:")
+                            subtask_detected = comment.startswith('ST:')
+
+                            flags = [testcase_detected,
+                                    copy_testcase_detected,
+                                    subtask_detected]
+                            if len([x for x in flags if x]) > 1:
+                                raise Exception("No testcase and command in"
+                                                " the same line allowed")
+
+                            # This line represents a testcase and contains a
+                            # comment, but the comment doesn't start a new
+                            # subtask
+                            if testcase_detected or copy_testcase_detected:
+                                testcases += 1
+
+                            # This line starts a new subtask
+                            if subtask_detected:
+                                # Close the previous subtask
+                                if points is None:
+                                    assert testcases == 0
+                                else:
+                                    subtasks.append([points, testcases])
+                                # Open the new one
+                                testcases = 0
+                                points = int(comment[3:].strip())
+
+                    # Close last subtask (if no subtasks were defined, just
+                    # fallback to Sum)
+                    if points is None:
+                        args["score_type"] = "Sum"
+                        total_value = float(conf.get("total_value", 100.0))
+                        input_value = 0.0
+                        n_input = testcases
+                        if n_input != 0:
+                            input_value = total_value / n_input
+                        args["score_type_parameters"] = input_value
+                    else:
+                        subtasks.append([points, testcases])
+                        assert 100 == sum([int(st[0]) for st in subtasks])
+                        n_input = sum([int(st[1]) for st in subtasks])
+                        args["score_type"] = "GroupMin"
+                        args["score_type_parameters"] = subtasks
+
+                    if "n_input" in conf:
+                        assert int(conf['n_input']) == n_input
+
+            # If gen/GEN doesn't exist, just fallback to Sum
+            except OSError:
+                args["score_type"] = "Sum"
+                total_value = float(conf.get("total_value", 100.0))
+                input_value = 0.0
+                n_input = int(conf['n_input'])
+                if n_input != 0:
+                    input_value = total_value / n_input
+                args["score_type_parameters"] = input_value
 
         # If output_only is set, then the task type is OutputOnly
         if conf.get('output_only', False):
@@ -754,12 +759,34 @@ class YamlLoader(ContestLoader, TaskLoader, UserLoader, TeamLoader):
                                 Manager(other_filename, digest)]
                     break
 
-            # Otherwise, the task type is Batch
+            # Otherwise, the task type is Batch or BatchAndOutput
             else:
                 args["task_type"] = "Batch"
-                args["task_type_parameters"] = \
-                    [compilation_param, [infile_param, outfile_param],
-                     evaluation_param]
+                args["task_type_parameters"] = [
+                    compilation_param,
+                    [infile_param, outfile_param],
+                    evaluation_param,
+                ]
+
+                output_only_testcases = load(conf, None, "output_only_testcases",
+                                             conv=lambda x: "" if x is None else x)
+                output_optional_testcases = load(conf, None, "output_optional_testcases",
+                                             conv=lambda x: "" if x is None else x)
+                if len(output_only_testcases) > 0 or len(output_optional_testcases) > 0:
+                    args["task_type"] = "BatchAndOutput"
+                    output_only_codenames = set()
+                    if len(output_only_testcases) > 0:
+                        output_only_codenames = \
+                            {"%03d" % int(x.strip()) for x in output_only_testcases.split(',')}
+                        args["task_type_parameters"].append(','.join(output_only_codenames))
+                    else:
+                        args["task_type_parameters"].append("")
+                    output_codenames = set()
+                    if len(output_optional_testcases) > 0:
+                        output_codenames = \
+                            {"%03d" % int(x.strip()) for x in output_optional_testcases.split(',')}
+                    output_codenames.update(output_only_codenames)
+                    task.submission_format.extend(["output_%s.txt" % s for s in sorted(output_codenames)])
 
         args["testcases"] = []
         for i in range(n_input):
@@ -769,11 +796,18 @@ class YamlLoader(ContestLoader, TaskLoader, UserLoader, TeamLoader):
             output_digest = self.file_cacher.put_file_from_path(
                 os.path.join(self.path, "output", "output%d.txt" % i),
                 "Output %d for task %s" % (i, task.name))
+            test_codename = "%03d" % i
             args["testcases"] += [
-                Testcase("%03d" % i, False, input_digest, output_digest)]
+                Testcase(test_codename, False, input_digest, output_digest)]
+            add_attachment = False
             if args["task_type"] == "OutputOnly":
                 task.attachments.set(
-                    Attachment("input_%03d.txt" % i, input_digest))
+                    Attachment("input_%s.txt" % test_codename, input_digest))
+            elif args["task_type"] == "BatchAndOutput":
+                if output_codenames is not None and test_codename in output_codenames:
+                    task.attachments.set(
+                        Attachment("input_%s.txt" % test_codename, input_digest))
+
         public_testcases = load(conf, None, ["public_testcases", "risultati"],
                                 conv=lambda x: "" if x is None else x)
         if public_testcases == "all":

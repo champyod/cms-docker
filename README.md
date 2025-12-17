@@ -2,6 +2,7 @@
 
 Docker-based deployment for [Contest Management System (CMS)](https://github.com/cms-dev/cms).
 
+<<<<<<< HEAD
 ## Quick Start
 
 ```bash
@@ -23,6 +24,38 @@ docker compose -f docker-compose.contest.yml up -d
 ```
 
 ## Services
+=======
+[![Build Status](https://github.com/cms-dev/cms/actions/workflows/main.yml/badge.svg)](https://github.com/cms-dev/cms/actions)
+[![Codecov](https://codecov.io/gh/cms-dev/cms/branch/main/graph/badge.svg)](https://codecov.io/gh/cms-dev/cms)
+[![Get support on Telegram](https://img.shields.io/badge/Questions%3F-Join%20the%20Telegram%20group!-%2326A5E4?style=flat&logo=telegram)](https://t.me/contestms)
+[![Translation status](https://hosted.weblate.org/widget/cms/svg-badge.svg)](https://hosted.weblate.org/engage/cms/)
+
+[🌍 Help translate CMS in your language using Weblate!](https://hosted.weblate.org/engage/cms/)
+
+Introduction
+------------
+
+CMS, or Contest Management System, is a distributed system for running
+and (to some extent) organizing a programming contest.
+
+CMS has been designed to be general and to handle many different types
+of contests, tasks, scorings, etc. Nonetheless, CMS has been
+explicitly build to be used in the 2012 International Olympiad in
+Informatics, held in September 2012 in Italy.
+
+
+Download
+--------
+
+**For end-users it's best to download the latest stable version of CMS,
+which can be found already packaged at <http://cms-dev.github.io/>.**
+
+This git repository, which contains the development version in its
+main branch, is intended for developers and everyone interested in
+contributing or just curious to see how the code works and wanting to
+hack on it.
+
+>>>>>>> upstream/main
 
 | Stack | Services | Port |
 |-------|----------|------|

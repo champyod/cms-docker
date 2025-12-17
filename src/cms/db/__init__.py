@@ -66,8 +66,6 @@ __all__ = [
     # usertest
     "UserTest", "UserTestFile", "UserTestManager", "UserTestResult",
     "UserTestExecutable",
-    # printjob
-    "PrintJob",
     # init
     "init_db",
     # drop
@@ -81,9 +79,9 @@ __all__ = [
 
 # Instantiate or import these objects.
 
-version = 44
+version = 47
 
-engine = create_engine(config.database, echo=config.database_debug,
+engine = create_engine(config.database.url, echo=config.database.debug,
                        pool_timeout=60, pool_recycle=120)
 
 metadata = MetaData(engine)
@@ -103,7 +101,6 @@ from .submission import Submission, File, Token, SubmissionResult, \
     Executable, Evaluation
 from .usertest import UserTest, UserTestFile, UserTestManager, \
     UserTestResult, UserTestExecutable
-from .printjob import PrintJob
 
 from .init import init_db
 from .drop import drop_db
@@ -119,14 +116,14 @@ configure_mappers()
 # The following is a method of Dataset that cannot be put in the right
 # file because of circular dependencies.
 
-def get_submission_results_for_dataset(self, dataset):
+def get_submission_results_for_dataset(self, dataset) -> list[SubmissionResult]:
     """Return a list of all submission results against the specified
     dataset.
 
     Also preloads the executable and evaluation objects relative to
     the submission results.
 
-    returns ([SubmissionResult]): list of submission results.
+    returns: list of submission results.
 
     """
     # We issue this query manually to optimize it: we load all
