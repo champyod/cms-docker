@@ -55,7 +55,7 @@ TelegramBot = []
 
 [database]
 # Connection string for the database.
-url = "postgresql+psycopg2://cmsuser:your_password_here@localhost:5432/cmsdb"
+url = "postgresql+psycopg2://cmsuser:your_password_here@database:5432/cmsdb"
 
 # Whether SQLAlchemy prints DB queries on stdout.
 debug = false
@@ -168,7 +168,7 @@ num_proxies_used = 0
 # List of URLs (with embedded username and password) of the RWSs where
 # the scores are to be sent. Don't include the load balancing proxy (if
 # any), just the backends.
-rankings = ["http://usern4me:passw0rd@localhost:8890/"]
+rankings = ["http://usern4me:passw0rd@cms-ranking-web-server:8890/"]
 # If any ranking uses HTTPS, specify a file with the certificates you
 # trust. (this string is passed as the "verify" option to requests.put,
 # see the documentation of requests for more info.)
