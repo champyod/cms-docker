@@ -65,29 +65,29 @@ env:
 		echo "" >> .env; \
 	fi
 	@# Configuration Files
-	@if [ -d config/cms.conf ]; then \
-		echo "Removing directory config/cms.conf (created by Docker volumes)..."; \
-		rm -rf config/cms.conf; \
+	@if [ -d config/cms.toml ]; then \
+		echo "Removing directory config/cms.toml (created by Docker volumes)..."; \
+		rm -rf config/cms.toml; \
 	fi
-	@if [ ! -f config/cms.conf ]; then \
-		echo "Copying config/cms.conf.sample to config/cms.conf..."; \
-		cp config/cms.conf.sample config/cms.conf; \
+	@if [ ! -f config/cms.toml ]; then \
+		echo "Copying config/cms.sample.toml to config/cms.toml..."; \
+		cp config/cms.sample.toml config/cms.toml; \
 	fi
-	@if [ -d config/cms.ranking.conf ]; then \
-		echo "Removing directory config/cms.ranking.conf (created by Docker volumes)..."; \
-		rm -rf config/cms.ranking.conf; \
+	@if [ -d config/cms_ranking.toml ]; then \
+		echo "Removing directory config/cms_ranking.toml (created by Docker volumes)..."; \
+		rm -rf config/cms_ranking.toml; \
 	fi
-	@if [ ! -f config/cms.ranking.conf ]; then \
-		echo "Copying config/cms.ranking.conf.sample to config/cms.ranking.conf..."; \
-		cp config/cms.ranking.conf.sample config/cms.ranking.conf; \
+	@if [ ! -f config/cms_ranking.toml ]; then \
+		echo "Copying config/cms_ranking.sample.toml to config/cms_ranking.toml..."; \
+		cp config/cms_ranking.sample.toml config/cms_ranking.toml; \
 	fi
-	@echo "Generating and proactively setting a secure SECRET_KEY in config/cms.conf..."; \
+	@echo "Generating and proactively setting a secure SECRET_KEY in config/cms.toml..."; \
 	SECRET=$$(python3 -c 'import secrets; print(secrets.token_hex(16))'); \
-	sed -i 's/"secret_key":             "8e045a51e4b102ea803c06f92841a1fb",/"secret_key":             "'$${SECRET}'",/' config/cms.conf
+	sed -i 's/secret_key = "8e045a51e4b102ea803c06f92841a1fb"/secret_key = "'$${SECRET}'"/' config/cms.toml
 	@if grep -q "POSTGRES_PASSWORD=" .env.core; then \
-		echo "Injecting database password from .env.core into config/cms.conf..."; \
+		echo "Injecting database password from .env.core into config/cms.toml..."; \
 		DB_PASS=$$(grep "POSTGRES_PASSWORD=" .env.core | cut -d '=' -f2); \
-		sed -i "s/your_password_here/$$DB_PASS/" config/cms.conf; \
+		sed -i "s/your_password_here/$$DB_PASS/" config/cms.toml; \
 	fi
 	@echo "" >> .env
 	@echo "# Docker Compose File Configuration" >> .env
