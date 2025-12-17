@@ -29,6 +29,16 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Verify CMS Import
-        # Simple verification that the python package is installed and importable
+        # Debug verification to find out why it exited with 125
         run: |
-          docker run --rm cms-docker:latest python3 -c "import cms; print('CMS successfully imported from:', cms.__file__)"
+          docker run --rm cms-docker:latest /bin/bash -c "
+            set -x
+            echo '=== Environment ==='
+            env
+            echo '=== Python Location ==='
+            which python3
+            echo '=== PIP List ==='
+            pip list
+            echo '=== Import Test ==='
+            python3 -c \"import cms; print('CMS imported successfully from:', cms.__file__)\"
+          "
