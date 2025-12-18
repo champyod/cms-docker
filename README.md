@@ -101,15 +101,52 @@ docker logs cms-worker-0 -f
 Deployed with Admin stack at `http://YOUR_IP:8890`.
 Credentials: Set `RANKING_USERNAME` and `RANKING_PASSWORD` in `.env.admin`.
 
-## Remote Workers
+### Server Setup (Main Machine)
 
-**Current limitation:** Remote workers (on separate machines) require manual configuration:
+1.  **Expose Ports**: Edit `docker-compose.core.yml` to expose LogService (29000), ResourceService (28000), and Database (5432).
+    ```yaml
+    # Example for LogService
+    ports:
+      - "29000:29000"
+    ```
+2.  **Allow Connection**: Update `config/cms.toml` to recognize the Worker's IP.
+    ```toml
+    Worker = [
+        ...
+        ["192.168.122.1", 26002],  # IP of the remote worker machine
+    ]
+    ```
+3.  **Restart**: Run `make core`.
 
-1. Expose core service ports on the main server (26000+ for workers)
-2. Edit `config/cms.toml` on the remote worker to use the main server's public IP
-3. Set unique `WORKER_SHARD` (10+) in `.env.worker`
+### Worker Setup (Remote Machine)
 
-This setup is designed for **single-server** deployment. Multi-server support is planned.
+1.  **Configure Network**: Edit `docker-compose.worker.yml` to use Host Networking (bypasses Docker bridge issues).
+    ```yaml
+    network_mode: "host"
+    # Remove 'networks' and 'ports' sections
+    ```
+2.  **Configure Environment**: Edit `.env.worker`:
+    ```bash
+    WORKER_SHARD=2                  # Unique shard ID
+    CORE_SERVICES_HOST=192.168.122.79  # IP of the Main Server
+    ```
+3.  **Configure Config**: Update `config/cms.sample.toml` (and regenerate `cms.toml` via `make env`):
+    - Point `LogService`, `ResourceService`, and `database` URL to the Main Server IP (`192.168.122.79`).
+    - Bind the Worker to the *Host Machine's IP*:
+      ```toml
+      Worker = [ ... ["192.168.122.1", 26002] ... ]
+      ```
+4.  **Deploy**:
+    ```bash
+    rm config/cms.toml && make env
+    make worker
+    ```
+
+    **Important**: If your worker is on the host machine and the server is in a VM (KVM/Libvirt), you may need to open the port on the `libvirt` zone:
+    ```bash
+    sudo firewall-cmd --zone=libvirt --add-port=26002/tcp --permanent
+    sudo firewall-cmd --reload
+    ```
 
 ## Requirements
 
