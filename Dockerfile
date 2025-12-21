@@ -102,6 +102,8 @@ RUN <<EOF
     # Need to set user ID manually: otherwise it'd be 1000 on debian
     # and 1001 on ubuntu.
     useradd -ms /bin/bash -u 1001 cmsuser
+    # Create isolate group if not exists (apt package creates it, source build doesn't)
+    groupadd -f isolate
     usermod -aG sudo cmsuser
     usermod -aG isolate cmsuser
     # Disable sudo password
