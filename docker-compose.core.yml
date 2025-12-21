@@ -48,6 +48,9 @@ services:
       - cms-cache:/var/local/cache/cms
     networks:
       - cms-network
+    # Expose for remote workers via Tailscale
+    ports:
+      - "${TAILSCALE_IP:-127.0.0.1}:29000:29000"
     privileged: true
     cgroup: host
     command: >
@@ -75,6 +78,10 @@ services:
       - cms-cache:/var/local/cache/cms
     networks:
       - cms-network
+    # Expose for remote workers via Tailscale
+    ports:
+      - "${TAILSCALE_IP:-127.0.0.1}:28000:28000"
+      - "${TAILSCALE_IP:-127.0.0.1}:28001:28001"
     privileged: true
     cgroup: host
     command: >
