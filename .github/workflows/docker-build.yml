@@ -11,37 +11,40 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform:
+          - linux/amd64
+          - linux/arm64
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker Image
+      - name: Build Docker Image (${{ matrix.platform }})
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile
+          platforms: ${{ matrix.platform }}
           push: false
-          tags: cms-docker:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: cms-docker:${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
+          cache-from: type=gha,scope=${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
           load: true
           build-args: |
             APT_MIRROR=archive.ubuntu.com
 
-      - name: Verify CMS Import
-        # Debug verification to find out why it exited with 125
+      - name: Verify CMS Import (${{ matrix.platform }})
+        if: matrix.platform == 'linux/amd64'
         run: |
-          docker run --rm cms-docker:latest /bin/bash -c "
+          docker run --rm cms-docker:amd64 /bin/bash -c "
             set -x
-            echo '=== Environment ==='
-            env
-            echo '=== Python Location ==='
-            which python3
-            echo '=== PIP List ==='
-            pip list
             echo '=== Import Test ==='
             python3 -c \"import cms; print('CMS imported successfully from:', cms.__file__)\"
           "
