@@ -65,7 +65,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 #!/bin/bash -ex
     export DEBIAN_FRONTEND=noninteractive
     CODENAME=$(source /etc/os-release; echo $VERSION_CODENAME)
-    echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/isolate.asc]" \
+    ARCH=$(dpkg --print-architecture)
+    echo "deb [arch=${ARCH} signed-by=/etc/apt/keyrings/isolate.asc]" \
         "http://www.ucw.cz/isolate/debian/ ${CODENAME}-isolate main" \
         >/etc/apt/sources.list.d/isolate.list
     curl https://www.ucw.cz/isolate/debian/signing-key.asc \
