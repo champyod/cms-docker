@@ -5,8 +5,8 @@ FROM ${BASE_IMAGE}
 
 # Default mirror for faster builds in Thailand. Override with --build-arg APT_MIRROR=archive.ubuntu.com
 ARG APT_MIRROR=th.archive.ubuntu.com
-# ARM (Raspberry Pi) mirror. Most Thai mirrors don't host ARM packages, so default to global.
-ARG APT_PORTS_MIRROR=th.ports.ubuntu.com
+# ARM (Raspberry Pi) mirror. Global CDN is actually faster than Thai mirror.
+ARG APT_PORTS_MIRROR=ports.ubuntu.com
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked <<EOF
