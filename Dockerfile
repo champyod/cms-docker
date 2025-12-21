@@ -68,15 +68,16 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     CODENAME=$(source /etc/os-release; echo $VERSION_CODENAME)
     
     # Add isolate repository
+    mkdir -p /etc/apt/keyrings
     echo "deb [arch=${ARCH} signed-by=/etc/apt/keyrings/isolate.asc]" \
         "http://www.ucw.cz/isolate/debian/ ${CODENAME}-isolate main" \
         >/etc/apt/sources.list.d/isolate.list
-    curl https://www.ucw.cz/isolate/debian/signing-key.asc \
-        >/etc/apt/keyrings/isolate.asc
-    apt-get update
+    curl -fsSL https://www.ucw.cz/isolate/debian/signing-key.asc \
+        >/etc/apt/keyrings/isolate.asc || echo "Warning: Failed to download isolate key"
     
-    # Try to install package (works on amd64, experimental on arm64)
-    if apt-get install -y isolate 2>/dev/null; then
+    # Update and try to install package (works on amd64, experimental on arm64)
+    apt-get update || true
+    if apt-get install -y isolate; then
         echo "Installed isolate from package"
     else
         # Fall back to building from source (arm64 packages may not exist for this distro)
@@ -86,6 +87,14 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         cd /tmp/isolate
         make install
         rm -rf /tmp/isolate
+        
+        # Create isolate users (required for sandbox, usually created by package)
+        groupadd -f isolate
+        for i in $(seq 0 99); do
+            useradd --system --no-create-home --home-dir /nonexistent \
+                    --shell /usr/sbin/nologin "isolate-$i" || true
+            usermod -aG isolate "isolate-$i" || true
+        done
     fi
     
     # Configure isolate cgroup root (config path differs between apt and source install)
