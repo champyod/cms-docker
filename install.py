@@ -105,7 +105,7 @@ def install_package() -> None:
         [str(target_path / 'bin/pip'), 'install']
             + ['-c', 'constraints.txt']
             + (['-e'] if args.editable else [])
-            + ['.' + ('[devel]' if args.devel else "")],
+            + ['./src' + ('[devel]' if args.devel else "")],
         check=True)
 
 
