@@ -47,7 +47,20 @@ make worker
 - **"Relation 'contests' does not exist"**: Run `docker exec -it cms-log-service cmsInitDB`.
 - **Stuck at "Compiling"**: The Worker failed to connect. Run `docker restart cms-worker-0`.
 - **"Unable to invalidate" / "Service not connected"**: Core services mesh is broken. Run `docker restart cms-evaluation-service` or restart the whole stack.
-- **Config changes not applying**: `make env` does not overwrite. Delete `config/cms.toml` then run `make env` again.```
+- **Config changes not applying**: `make env` does not overwrite. Delete `config/cms.toml` then run `make env` again.
+- **"No space left on device"**: 
+  1. **Prune**: Run `docker system prune -a --volumes` to free space.
+  2. **Sequential Build**: Parallel builds can exhaust disk/inodes. Build services one by one:
+     ```bash
+     docker compose build log-service
+     docker compose build resource-service
+     docker compose build scoring-service
+     docker compose build checker-service
+     docker compose build evaluation-service
+     docker compose build proxy-service
+     docker compose build worker
+     make core
+     ```
 
 ## Services
 
