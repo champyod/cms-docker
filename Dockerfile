@@ -65,20 +65,22 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 #!/bin/bash -ex
     export DEBIAN_FRONTEND=noninteractive
     ARCH=$(dpkg --print-architecture)
+    CODENAME=$(source /etc/os-release; echo $VERSION_CODENAME)
     
-    if [ "$ARCH" = "amd64" ]; then
-        # Use prebuilt package on x86
-        CODENAME=$(source /etc/os-release; echo $VERSION_CODENAME)
-        echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/isolate.asc]" \
-            "http://www.ucw.cz/isolate/debian/ ${CODENAME}-isolate main" \
-            >/etc/apt/sources.list.d/isolate.list
-        curl https://www.ucw.cz/isolate/debian/signing-key.asc \
-            >/etc/apt/keyrings/isolate.asc
-        apt-get update
-        apt-get install -y isolate
+    # Add isolate repository
+    echo "deb [arch=${ARCH} signed-by=/etc/apt/keyrings/isolate.asc]" \
+        "http://www.ucw.cz/isolate/debian/ ${CODENAME}-isolate main" \
+        >/etc/apt/sources.list.d/isolate.list
+    curl https://www.ucw.cz/isolate/debian/signing-key.asc \
+        >/etc/apt/keyrings/isolate.asc
+    apt-get update
+    
+    # Try to install package (works on amd64, experimental on arm64)
+    if apt-get install -y isolate 2>/dev/null; then
+        echo "Installed isolate from package"
     else
-        # Build from source on ARM (no prebuilt packages available)
-        apt-get update
+        # Fall back to building from source (arm64 packages may not exist for this distro)
+        echo "Package not available, building from source..."
         apt-get install -y libcap-dev libsystemd-dev asciidoc-base
         git clone https://github.com/ioi/isolate.git /tmp/isolate
         cd /tmp/isolate

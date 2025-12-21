@@ -11,6 +11,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # Use debian:bookworm for Raspberry Pi (has native arm64 isolate packages)
+        BASE_IMAGE: ${BASE_IMAGE:-ubuntu:noble}
     container_name: cms-worker-${WORKER_SHARD:-0}
     restart: unless-stopped
     environment:
