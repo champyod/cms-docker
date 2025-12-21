@@ -5,6 +5,8 @@ FROM ${BASE_IMAGE}
 
 # Default mirror for faster builds in Thailand. Override with --build-arg APT_MIRROR=archive.ubuntu.com
 ARG APT_MIRROR=th.archive.ubuntu.com
+# ARM (Raspberry Pi) mirror. Most Thai mirrors don't host ARM packages, so default to global.
+ARG APT_PORTS_MIRROR=th.ports.ubuntu.com
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked <<EOF
@@ -20,11 +22,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
         sed -i "s|archive.ubuntu.com|${APT_MIRROR}|g" /etc/apt/sources.list.d/ubuntu.sources
         sed -i "s|security.ubuntu.com|${APT_MIRROR}|g" /etc/apt/sources.list.d/ubuntu.sources
-        sed -i "s|ports.ubuntu.com|${APT_MIRROR}|g" /etc/apt/sources.list.d/ubuntu.sources
+        sed -i "s|ports.ubuntu.com|${APT_PORTS_MIRROR}|g" /etc/apt/sources.list.d/ubuntu.sources
     elif [ -f /etc/apt/sources.list ]; then
         sed -i "s|archive.ubuntu.com|${APT_MIRROR}|g" /etc/apt/sources.list
         sed -i "s|security.ubuntu.com|${APT_MIRROR}|g" /etc/apt/sources.list
-        sed -i "s|ports.ubuntu.com|${APT_MIRROR}|g" /etc/apt/sources.list
+        sed -i "s|ports.ubuntu.com|${APT_PORTS_MIRROR}|g" /etc/apt/sources.list
     fi
 
     apt-get update
