@@ -40,6 +40,9 @@ services:
       - worker-tmp-${WORKER_SHARD:-0}:/tmp
     networks:
       - cms-network
+    # Expose for VPS connection (ResourceService)
+    ports:
+      - "2600${WORKER_SHARD:-0}:2600${WORKER_SHARD:-0}"
     privileged: true
     cgroup: host
     # Security options for sandbox isolation
