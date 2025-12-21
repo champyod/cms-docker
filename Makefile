@@ -94,6 +94,20 @@ env:
 		DB_PASS=$$(grep "POSTGRES_PASSWORD=" .env.core | cut -d '=' -f2); \
 		sed -i "s/your_password_here/$$DB_PASS/" config/cms.toml; \
 	fi
+	@# For remote workers: replace 'database' hostname with CORE_SERVICES_IP
+	@if [ -f .env.worker ] && grep -q "CORE_SERVICES_IP=" .env.worker; then \
+		CORE_IP=$$(grep "CORE_SERVICES_IP=" .env.worker | cut -d '=' -f2); \
+		if [ -n "$$CORE_IP" ]; then \
+			echo "Configuring remote worker: replacing 'database' with $$CORE_IP in config/cms.toml..."; \
+			sed -i "s/@database:/@$$CORE_IP:/g" config/cms.toml; \
+			echo "Replacing service hostnames with $$CORE_IP for remote connection..."; \
+			sed -i "s/cms-log-service/$$CORE_IP/g" config/cms.toml; \
+			sed -i "s/cms-resource-service/$$CORE_IP/g" config/cms.toml; \
+			sed -i "s/cms-scoring-service/$$CORE_IP/g" config/cms.toml; \
+			sed -i "s/cms-evaluation-service/$$CORE_IP/g" config/cms.toml; \
+			sed -i "s/cms-checker-service/$$CORE_IP/g" config/cms.toml; \
+		fi; \
+	fi
 	@echo "" >> .env
 	@echo "# Docker Compose File Configuration" >> .env
 	@echo "COMPOSE_FILE=docker-compose.core.yml:docker-compose.admin.yml:docker-compose.contest.yml:docker-compose.worker.yml" >> .env
