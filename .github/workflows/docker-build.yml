@@ -27,6 +27,9 @@ jobs:
           tags: cms-docker:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          load: true
+          build-args: |
+            APT_MIRROR=archive.ubuntu.com
 
       - name: Verify CMS Import
         # Debug verification to find out why it exited with 125
