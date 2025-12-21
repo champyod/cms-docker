@@ -64,15 +64,28 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked <<EOF
 #!/bin/bash -ex
     export DEBIAN_FRONTEND=noninteractive
-    CODENAME=$(source /etc/os-release; echo $VERSION_CODENAME)
     ARCH=$(dpkg --print-architecture)
-    echo "deb [arch=${ARCH} signed-by=/etc/apt/keyrings/isolate.asc]" \
-        "http://www.ucw.cz/isolate/debian/ ${CODENAME}-isolate main" \
-        >/etc/apt/sources.list.d/isolate.list
-    curl https://www.ucw.cz/isolate/debian/signing-key.asc \
-        >/etc/apt/keyrings/isolate.asc
-    apt-get update
-    apt-get install -y isolate
+    
+    if [ "$ARCH" = "amd64" ]; then
+        # Use prebuilt package on x86
+        CODENAME=$(source /etc/os-release; echo $VERSION_CODENAME)
+        echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/isolate.asc]" \
+            "http://www.ucw.cz/isolate/debian/ ${CODENAME}-isolate main" \
+            >/etc/apt/sources.list.d/isolate.list
+        curl https://www.ucw.cz/isolate/debian/signing-key.asc \
+            >/etc/apt/keyrings/isolate.asc
+        apt-get update
+        apt-get install -y isolate
+    else
+        # Build from source on ARM (no prebuilt packages available)
+        apt-get update
+        apt-get install -y libcap-dev libsystemd-dev asciidoc-base
+        git clone https://github.com/ioi/isolate.git /tmp/isolate
+        cd /tmp/isolate
+        make install
+        rm -rf /tmp/isolate
+    fi
+    
     sed -i 's@^cg_root .*@cg_root = /sys/fs/cgroup@' /etc/isolate
 EOF
 
