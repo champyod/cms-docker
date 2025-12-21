@@ -88,7 +88,12 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         rm -rf /tmp/isolate
     fi
     
-    sed -i 's@^cg_root .*@cg_root = /sys/fs/cgroup@' /etc/isolate
+    # Configure isolate cgroup root (config path differs between apt and source install)
+    if [ -f /etc/isolate ]; then
+        sed -i 's@^cg_root .*@cg_root = /sys/fs/cgroup@' /etc/isolate
+    elif [ -f /usr/local/etc/isolate ]; then
+        sed -i 's@^cg_root .*@cg_root = /sys/fs/cgroup@' /usr/local/etc/isolate
+    fi
 EOF
 
 # Create cmsuser user with sudo privileges and access to isolate
