@@ -76,15 +76,15 @@ env:
 		sed -i 's/"127.0.0.1"/"0.0.0.0"/g' config/cms.toml; \
 		sed -i 's/\["127.0.0.1"\]/\["0.0.0.0"\]/g' config/cms.toml; \
 	fi
-	@if [ -d config/cms_ranking.toml ]; then \
-		echo "Removing directory config/cms_ranking.toml (created by Docker volumes)..."; \
-		rm -rf config/cms_ranking.toml; \
+	@if [ -d config/cms.ranking.toml ]; then \
+		echo "Removing directory config/cms.ranking.toml (created by Docker volumes)..."; \
+		rm -rf config/cms.ranking.toml; \
 	fi
-	@if [ ! -f config/cms_ranking.toml ]; then \
-		echo "Copying config/cms_ranking.sample.toml to config/cms_ranking.toml..."; \
-		cp config/cms_ranking.sample.toml config/cms_ranking.toml; \
-		echo "Setting bind address to 0.0.0.0 in config/cms_ranking.toml..."; \
-		sed -i 's/"127.0.0.1"/"0.0.0.0"/g' config/cms_ranking.toml; \
+	@if [ ! -f config/cms.ranking.toml ]; then \
+		echo "Copying config/cms.ranking.sample.toml to config/cms.ranking.toml..."; \
+		cp config/cms.ranking.sample.toml config/cms.ranking.toml; \
+		echo "Setting bind address to 0.0.0.0 in config/cms.ranking.toml..."; \
+		sed -i 's/"127.0.0.1"/"0.0.0.0"/g' config/cms.ranking.toml; \
 	fi
 	@echo "Generating and proactively setting a secure SECRET_KEY in config/cms.toml..."; \
 	SECRET=$$(python3 -c 'import secrets; print(secrets.token_hex(16))'); \
