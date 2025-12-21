@@ -114,52 +114,75 @@ docker logs cms-worker-0 -f
 Deployed with Admin stack at `http://YOUR_IP:8890`.
 Credentials: Set `RANKING_USERNAME` and `RANKING_PASSWORD` in `.env.admin`.
 
-### Server Setup (Main Machine)
+### Secure Remote Worker Setup (e.g., Raspberry Pi via Tailscale)
+This guide assumes you are using **Tailscale** for a secure private network between your VPS and Worker.
 
-1.  **Expose Ports**: Edit `docker-compose.core.yml` to expose LogService (29000), ResourceService (28000), and Database (5432).
-    ```yaml
-    # Example for LogService
-    ports:
-      - "29000:29000"
-    ```
-2.  **Allow Connection**: Update `config/cms.toml` to recognize the Worker's IP.
-    ```toml
-    Worker = [
-        ...
-        ["192.168.122.1", 26002],  # IP of the remote worker machine
-    ]
-    ```
-3.  **Restart**: Run `make core`.
+### 1. VPS Setup (Main Server)
+The VPS needs to allow the worker to connect to its internal services via the VPN.
 
-### Worker Setup (Remote Machine)
-
-1.  **Configure Network**: Edit `docker-compose.worker.yml` to use Host Networking (bypasses Docker bridge issues).
-    ```yaml
-    network_mode: "host"
-    # Remove 'networks' and 'ports' sections
-    ```
-2.  **Configure Environment**: Edit `.env.worker`:
-    ```bash
-    WORKER_SHARD=2                  # Unique shard ID
-    CORE_SERVICES_HOST=192.168.122.79  # IP of the Main Server
-    ```
-3.  **Configure Config**: Update `config/cms.sample.toml` (and regenerate `cms.toml` via `make env`):
-    - Point `LogService`, `ResourceService`, and `database` URL to the Main Server IP (`192.168.122.79`).
-    - Bind the Worker to the *Host Machine's IP*:
-      ```toml
-      Worker = [ ... ["192.168.122.1", 26002] ... ]
+1.  **Expose Ports to Tailscale**:
+    - Add your **VPS Tailscale IP** to `.env.core`:
+      ```bash
+      TAILSCALE_IP=100.x.y.z
       ```
-4.  **Deploy**:
+    - Run `make core` to apply changes. This updates `docker-compose.core.yml` to bind ports 29000 (Log), 28000 (Resource), 28001 (File), and 5432 (DB) **only** to your VPN IP. Secure! 🛡️
+
+2.  **Allow Worker Connection**:
+    - Edit `config/cms.toml` (or `cms.sample.toml` then `make env`):
+      ```toml
+      Worker = [
+          ["cms-worker-0", 26000],        # Local worker (optional)
+          ["100.a.b.c", 26000],           # REMOTE WORKER (Your Pi's Tailscale IP)
+      ]
+      ```
+    - Restart services: `docker compose -f docker-compose.core.yml up -d`
+
+### 2. Worker Setup (Raspberry Pi / Remote Machine)
+
+1.  **Clone Repo**:
     ```bash
-    rm config/cms.toml && make env
-    make worker
+    git clone https://github.com/champyod/cms-docker.git
+    cd cms-docker
     ```
 
-    **Important**: If your worker is on the host machine and the server is in a VM (KVM/Libvirt), you may need to open the port on the `libvirt` zone:
+2.  **Configure Environment**:
+    - Copy `.env.worker.example` to `.env.worker`.
+    - Set `BASE_IMAGE=debian:bookworm` (for Raspberry Pi, has native arm64 isolate packages).
+
+3.  **Configure CMS**:
+    - Copy `config/cms.sample.toml` to `config/cms.toml`.
+    - **Manually Edit** `config/cms.toml`:
+      - **Database**: `url = "postgresql+psycopg2://cmsuser:YOUR_PASSWORD@100.x.y.z:5432/cmsdb"` (VPS Tailscale IP)
+      - **Services**: Change `cms-log-service`, `cms-resource-service` etc. to **VPS Tailscale IP** (`100.x.y.z`).
+      - **Worker Bind**: Allow Docker to bind locally:
+        ```toml
+        Worker = [ ["0.0.0.0", 26000] ]
+        ```
+    - *Note: Do NOT run `make env` on the worker, as it lacks the core .env credentials.*
+
+4.  **Enable Cgroups (Raspberry Pi Only)**:
+    - Pi OS disables memory cgroups by default. Adding this is **mandatory** for sandbox to work.
+    - Edit `/boot/firmware/cmdline.txt` and append to the end of the line:
+      ```text
+      cgroup_enable=cpuset cgroup_enable=memory cgroup_memory=1
+      ```
+    - Reboot: `sudo reboot`
+
+5.  **Running**:
     ```bash
-    sudo firewall-cmd --zone=libvirt --add-port=26002/tcp --permanent
-    sudo firewall-cmd --reload
+    # Build and start
+    docker compose -f docker-compose.worker.yml build worker
+    docker compose -f docker-compose.worker.yml up -d
     ```
+
+### Troubleshooting Remote Workers
+- **"Connection refused"**: Check if VPS exposed ports (28000/29000/5432) on the correct Tailscale IP. Run `netstat -tunlp | grep 5432` on VPS.
+- **"Sandbox error"**:
+  - Did you reboot the Pi after adding cgroups?
+  - Are `isolate-N` users created? (The Dockerfile now handles this automatically).
+- **Stuck at "Executing"**:
+  - The VPS ResourceService can't reach the Pi. Check if Pi's `docker-compose.worker.yml` exposes port 26000.
+  - Check if VPS `cms.toml` has the correct Pi Tailscale IP in `Worker` list.
 
 ## Requirements
 
