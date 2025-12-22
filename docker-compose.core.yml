@@ -56,7 +56,8 @@ services:
     privileged: true
     cgroup: host
     command: >
-      sh -c "wait-for-it database:5432 -t 60 -- cmsLogService ${LOG_SERVICE_SHARD:-0}"
+      sh -c "mkdir -p /var/local/log/cms/LogService-${LOG_SERVICE_SHARD:-0} &&
+      wait-for-it database:5432 -t 60 -- cmsLogService ${LOG_SERVICE_SHARD:-0}"
 
   # CMS Resource Service - Resource monitoring and management
   resource-service:
@@ -89,7 +90,8 @@ services:
     privileged: true
     cgroup: host
     command: >
-      sh -c "sleep 5 && cmsResourceService ${RESOURCE_SERVICE_SHARD:-0}"
+      sh -c "mkdir -p /var/local/log/cms/ResourceService-${RESOURCE_SERVICE_SHARD:-0} &&
+      sleep 5 && cmsResourceService ${RESOURCE_SERVICE_SHARD:-0}"
 
   # CMS Scoring Service - Handles scoring and ranking
   scoring-service:
@@ -119,7 +121,8 @@ services:
     privileged: true
     cgroup: host
     command: >
-      sh -c "sleep 5 && cmsScoringService ${SCORING_SERVICE_SHARD:-0}"
+      sh -c "mkdir -p /var/local/log/cms/ScoringService-${SCORING_SERVICE_SHARD:-0} &&
+      sleep 5 && cmsScoringService ${SCORING_SERVICE_SHARD:-0}"
 
   # CMS Evaluation Service - Manages evaluation queue
   evaluation-service:
@@ -150,7 +153,8 @@ services:
     privileged: true
     cgroup: host
     command: >
-      sh -c "sleep 5 && cmsEvaluationService ${EVALUATION_SERVICE_SHARD:-0} -c ${CONTEST_ID:-1}"
+      sh -c "mkdir -p /var/local/log/cms/EvaluationService-${EVALUATION_SERVICE_SHARD:-0} &&
+      sleep 5 && cmsEvaluationService ${EVALUATION_SERVICE_SHARD:-0} -c ${CONTEST_ID:-1}"
 
   # CMS Proxy Service - Handles communication between services
   proxy-service:
@@ -180,7 +184,8 @@ services:
     privileged: true
     cgroup: host
     command: >
-      sh -c "sleep 5 && cmsProxyService ${PROXY_SERVICE_SHARD:-0} -c ${CONTEST_ID:-1}"
+      sh -c "mkdir -p /var/local/log/cms/ProxyService-${PROXY_SERVICE_SHARD:-0} &&
+      sleep 5 && cmsProxyService ${PROXY_SERVICE_SHARD:-0} -c ${CONTEST_ID:-1}"
 
   # CMS Checker Service - Validates submissions
   checker-service:
@@ -210,7 +215,8 @@ services:
     privileged: true
     cgroup: host
     command: >
-      sh -c "sleep 5 && cmsChecker ${CHECKER_SERVICE_SHARD:-0}"
+      sh -c "mkdir -p /var/local/log/cms/Checker-${CHECKER_SERVICE_SHARD:-0} &&
+      sleep 5 && cmsChecker ${CHECKER_SERVICE_SHARD:-0}"
 
 networks:
   cms-network:
