@@ -69,11 +69,11 @@ env:
 	@if [ ! -f config/cms.toml ]; then \
 		echo "Generating config/cms.toml from template using envsubst..."; \
 		mkdir -p config; \
+		set -a; [ -f .env ] && . ./.env; set +a; \
 		if [ -z "$$SECRET_KEY" ]; then \
 			export SECRET_KEY=$$(python3 -c 'import secrets; print(secrets.token_hex(16))'); \
 			echo "Generated temporary SECRET_KEY for config generation."; \
 		fi; \
-		set -a; [ -f .env ] && . ./.env; set +a; \
 		envsubst < config/templates/cms.sample.toml > config/cms.toml; \
 	fi
 	@if [ -d config/cms.ranking.toml ]; then rm -rf config/cms.ranking.toml; fi

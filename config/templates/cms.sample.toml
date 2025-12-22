@@ -37,7 +37,7 @@ data_dir = "${CMS_DATA_DIR}"
 # Database connection string
 # Format: postgresql+psycopg2://<user>:<password>@<host>:<port>/<dbname>
 [database]
-connection_string = "postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}"
+url = "postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}"
 
 # -------------------------------------------------------------------------
 # Core services
