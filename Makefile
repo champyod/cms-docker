@@ -8,6 +8,8 @@ help:
 	@echo "  make admin    - Deploys only CMS Admin services"
 	@echo "  make contest  - Deploys only CMS Contest services"
 	@echo "  make worker   - Deploys only CMS Worker services"
+	@echo "  make down     - Stops all services and removes volumes"
+	@echo "  make prune    - Removes all stopped containers, unused images, and build cache (frees disk space)"
 	@echo "  make clean    - Removes .env file"
 
 env:
@@ -110,6 +112,17 @@ contest:
 
 worker:
 	docker compose -f docker-compose.worker.yml up -d --build
+
+down:
+	docker compose -f docker-compose.core.yml down -v
+	docker compose -f docker-compose.admin.yml down -v
+	docker compose -f docker-compose.contest.yml down -v
+	docker compose -f docker-compose.worker.yml down -v
+
+prune:
+	@echo "WARNING: This will remove all stopped containers, unused networks, unused images, and build cache."
+	@read -p "Are you sure? [y/N] " ans && [ $${ans:-N} = y ]
+	docker system prune -a --volumes
 
 clean:
 	rm -f .env

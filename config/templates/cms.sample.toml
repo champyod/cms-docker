@@ -71,10 +71,10 @@ listen_port = 28600
 # -------------------------------------------------------------------------
 
 [admin_web_server]
-listen_port = ${ADMIN_LISTEN_PORT}
+listen_port = [${ADMIN_LISTEN_PORT}]
 listen_address = ["0.0.0.0"]
 
 [contest_web_server]
-listen_port = ${CONTEST_LISTEN_PORT}
+listen_port = [${CONTEST_LISTEN_PORT}]
 listen_address = ["0.0.0.0"]
 contest_id = ${CONTEST_ID}
