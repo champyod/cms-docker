@@ -70,7 +70,7 @@ INSTALL_DIRS = [
 
 INSTALL_CONFIGS = [
     ('cms.toml', 'config/cms.sample.toml'),
-    ('cms_ranking.toml', 'config/cms_ranking.sample.toml'),
+    ('cms_ranking.toml', 'config/cms.ranking.sample.toml'),
 ]
 
 
