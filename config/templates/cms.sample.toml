@@ -11,7 +11,8 @@ listen_address = ["0.0.0.0"]
 # -------------------------------------------------------------------------
 # Database connection string
 # Format: postgresql+psycopg2://<user>:<password>@<host>:<port>/<dbname>
-database = "postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}"
+[database]
+connection_string = "postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}"
 
 # -------------------------------------------------------------------------
 # Security configuration
