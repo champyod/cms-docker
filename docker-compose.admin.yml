@@ -10,6 +10,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        APT_MIRROR: ${APT_MIRROR:-th.archive.ubuntu.com}
+        APT_PORTS_MIRROR: ${APT_PORTS_MIRROR:-ports.ubuntu.com}
     container_name: cms-admin-web-server
     restart: unless-stopped
     environment:
@@ -41,6 +44,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        APT_MIRROR: ${APT_MIRROR:-th.archive.ubuntu.com}
+        APT_PORTS_MIRROR: ${APT_PORTS_MIRROR:-ports.ubuntu.com}
     container_name: cms-ranking-web-server
     restart: unless-stopped
     environment:
@@ -67,6 +73,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        APT_MIRROR: ${APT_MIRROR:-th.archive.ubuntu.com}
+        APT_PORTS_MIRROR: ${APT_PORTS_MIRROR:-ports.ubuntu.com}
     container_name: cms-printing-service
     restart: unless-stopped
     environment:

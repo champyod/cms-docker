@@ -5,7 +5,8 @@ This file tracks what has been done and what we're currently working on.
 ---
 
 ## Current Focus
-- **Fixing RankingWebServer** - Found issues: `raphael.js` 404 and missing config file. Created `cms.ranking.toml`. Need to rebuild/restart on VPS.
+- **VPS disk space issue** - Need to clear space with `docker system prune -a --volumes` before rebuilding.
+- **Rebuild ranking-web-server** after clearing disk space.
 
 ---
 
