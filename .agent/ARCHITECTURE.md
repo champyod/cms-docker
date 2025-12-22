@@ -27,14 +27,14 @@ cms-docker/
 │   ├── install.py             # CMS installer script
 │   ├── pyproject.toml         # Python package definition
 │   ├── constraints.txt        # Pinned dependencies
-│   ├── config/                # Sample config files
-│   │   ├── cms.sample.toml    # Main CMS config template
-│   │   └── cms.ranking.sample.toml
 │   ├── cms/                   # CMS Python package source
 │   ├── cmsranking/            # Ranking server (custom static files)
 │   └── ...                    # Other CMS source code
 │
-├── config/                    # Generated configs (created by `make env`)
+├── config/                    # Configuration management
+│   ├── templates/             # NEW: Root-level config templates
+│   │   ├── cms.sample.toml    # Main CMS template
+│   │   └── cms.ranking.sample.toml
 │   ├── cms.toml               # Active CMS config (gitignored)
 │   └── cms.ranking.toml       # Active ranking config (gitignored)
 │

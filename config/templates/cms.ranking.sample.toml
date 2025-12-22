@@ -1,0 +1,28 @@
+# CMS Ranking configuration file
+
+# -------------------------------------------------------------------------
+# Web server configuration
+# -------------------------------------------------------------------------
+# Address and port to bind the ranking web server to
+bind_address = "0.0.0.0"
+http_port = ${RANKING_LISTEN_PORT}
+
+# -------------------------------------------------------------------------
+# Authentication configuration
+# -------------------------------------------------------------------------
+# Credentials required to access the ranking web server
+username = "${RANKING_USERNAME}"
+password = "${RANKING_PASSWORD}"
+
+# Name of the HTTP authentication realm
+realm_name = "Scoreboard"
+
+# -------------------------------------------------------------------------
+# Ranking engine configuration
+# -------------------------------------------------------------------------
+# Number of events to keep in memory for live updates
+buffer_size = 100
+
+[public]
+# Whether to show the ID column in the ranking table
+show_id_column = false

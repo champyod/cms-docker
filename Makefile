@@ -74,14 +74,14 @@ env:
 			echo "Generated temporary SECRET_KEY for config generation."; \
 		fi; \
 		set -a; [ -f .env ] && . ./.env; set +a; \
-		envsubst < src/config/cms.sample.toml > config/cms.toml; \
+		envsubst < config/templates/cms.sample.toml > config/cms.toml; \
 	fi
 	@if [ -d config/cms.ranking.toml ]; then rm -rf config/cms.ranking.toml; fi
 	@if [ ! -f config/cms.ranking.toml ]; then \
 		echo "Generating config/cms.ranking.toml from template using envsubst..."; \
 		mkdir -p config; \
 		set -a; [ -f .env ] && . ./.env; set +a; \
-		envsubst < src/config/cms.ranking.sample.toml > config/cms.ranking.toml; \
+		envsubst < config/templates/cms.ranking.sample.toml > config/cms.ranking.toml; \
 	fi
 	@# For remote workers: if CORE_SERVICES_IP is set, it overrides the hostnames in config
 	@set -a; [ -f .env ] && . ./.env; set +a; \

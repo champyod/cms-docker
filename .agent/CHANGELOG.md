@@ -81,16 +81,20 @@ Cleaned up root directory by removing CMS repo files that belong in the submodul
   - All `compose up` commands now use `--no-build` flag
 
 #### 7. Configuration Management Refactoring
-**Files:** `Makefile`, `src/config/cms.sample.toml`, `src/config/cms.ranking.sample.toml`, `.env.*.example`, `.github/workflows/docker-build.yml`
+**Files:** `Makefile`, `config/templates/*.sample.toml`, `.env.*.example`, `.github/workflows/docker-build.yml`
 
 - **Template-based config**: Replaced `sed`-based configuration with `envsubst` for better security and reliability.
+- **Root Repository Templates**: Configuration templates were moved to `config/templates/` in the main repository (instead of the submodule) to ensure they are correctly tracked by git and accessible in CI environments.
 - **Placeholder substitution**: Config files now use `${VAR}` placeholders which are injected at deployment time.
 - **Unified Environment Variables**: 
   - Reduced redundancy in `.env.*` files.
   - `.env.core` is now the single source of truth for database credentials.
   - Secondary env files inherit shared variables from core.
 - **Auto-generated Secrets**: `Makefile` now automatically generates a secure `SECRET_KEY` if not present in the environment.
-- **CI Streamlining**: Simplified GitHub Actions configuration setup to use the same `make env` logic as local deployments.
+- **CI Enhancements**: 
+  - Moved static test variables to the workflow `env:` block and integrated **GitHub Secrets** (`secrets.CMS_*`) for sensitive credentials with secure fallbacks.
+  - Added **Artifact Collection**: The workspace (`.env*` and `config/`) is now uploaded as a workflow artifact upon failure, facilitating easier debugging.
+  - Simplified GitHub Actions configuration setup to use the same `make env` logic as local deployments.
 
 ---
 

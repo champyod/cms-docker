@@ -79,6 +79,13 @@ jobs:
   integration-test:
     runs-on: ubuntu-latest
     needs: build
+    env:
+      POSTGRES_DB: cmsdb
+      POSTGRES_USER: cmsuser
+      POSTGRES_PASSWORD: ${{ secrets.CMS_POSTGRES_PASSWORD || 'testpassword123' }}
+      RANKING_USERNAME: usern4me
+      RANKING_PASSWORD: ${{ secrets.CMS_RANKING_PASSWORD || 'passw0rd' }}
+      SECRET_KEY: ${{ secrets.CMS_SECRET_KEY || '8e045a51e4b102ea803c06f92841a1fb' }}
     steps:
       - name: Free disk space
         run: |
@@ -125,12 +132,12 @@ jobs:
       - name: Setup Test Environment
         run: |
           # Create core environment file
-          cat > .env.core << 'EOF'
+          cat > .env.core << EOF
           PUBLIC_IP=0.0.0.0
           APT_MIRROR=archive.ubuntu.com
-          POSTGRES_DB=cmsdb
-          POSTGRES_USER=cmsuser
-          POSTGRES_PASSWORD=testpassword123
+          POSTGRES_DB=${{ env.POSTGRES_DB }}
+          POSTGRES_USER=${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ env.POSTGRES_PASSWORD }}
           POSTGRES_HOST=database
           POSTGRES_HOST_AUTH_METHOD=md5
           CMS_CONFIG=/usr/local/etc/cms.toml
@@ -140,29 +147,29 @@ jobs:
           EOF
 
           # Create admin environment file
-          cat > .env.admin << 'EOF'
+          cat > .env.admin << EOF
           ADMIN_LISTEN_PORT=8889
           ADMIN_LISTEN_ADDRESS=0.0.0.0
           ADMIN_PORT_EXTERNAL=8889
           RANKING_LISTEN_PORT=8890
           RANKING_LISTEN_ADDRESS=0.0.0.0
           RANKING_PORT_EXTERNAL=8890
-          RANKING_USERNAME=usern4me
-          RANKING_PASSWORD=passw0rd
+          RANKING_USERNAME=${{ env.RANKING_USERNAME }}
+          RANKING_PASSWORD=${{ env.RANKING_PASSWORD }}
           EOF
 
           # Create contest environment file
-          cat > .env.contest << 'EOF'
+          cat > .env.contest << EOF
           CONTEST_WEB_SERVER_SHARD=0
           CONTEST_LISTEN_PORT=8888
           CONTEST_LISTEN_ADDRESS=0.0.0.0
           CONTEST_PORT_EXTERNAL=8888
           CONTEST_ID=1
-          SECRET_KEY=8e045a51e4b102ea803c06f92841a1fb
+          SECRET_KEY=${{ env.SECRET_KEY }}
           EOF
 
           # Create worker environment file
-          cat > .env.worker << 'EOF'
+          cat > .env.worker << EOF
           WORKER_SHARD=0
           EOF
 
@@ -174,6 +181,16 @@ jobs:
           echo "=== Verifying generated config/cms.toml ==="
           grep -i "url =" config/cms.toml || true
           grep -i "secret_key =" config/cms.toml || true
+
+      - name: Upload Config Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cms-config-test
+          path: |
+            .env*
+            config/
+          retention-days: 7
 
       - name: Build Services Sequentially
         run: |

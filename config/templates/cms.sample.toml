@@ -1,0 +1,80 @@
+[global]
+    # CMS configuration file
+
+    # -------------------------------------------------------------------------
+    # Server configuration
+    # -------------------------------------------------------------------------
+    # List of IP addresses to listen on
+    listen_address = ["0.0.0.0"]
+
+    # -------------------------------------------------------------------------
+    # Database configuration
+    # -------------------------------------------------------------------------
+    # Database connection string
+    # Format: postgresql+psycopg2://<user>:<password>@<host>:<port>/<dbname>
+    database = "postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}"
+
+    # -------------------------------------------------------------------------
+    # Security configuration
+    # -------------------------------------------------------------------------
+    # Secret key for session signing
+    # Generate with: python3 -c 'from cmscommon import crypto; print(crypto.get_hex_random_key())'
+    secret_key = "${SECRET_KEY}"
+
+    # -------------------------------------------------------------------------
+    # Log configuration
+    # -------------------------------------------------------------------------
+    # Directory where to store log files
+    log_dir = "${CMS_LOG_DIR}"
+    
+    # -------------------------------------------------------------------------
+    # Cache configuration
+    # -------------------------------------------------------------------------
+    # Directory where to store cache files
+    cache_dir = "${CMS_CACHE_DIR}"
+
+    # -------------------------------------------------------------------------
+    # Data configuration
+    # -------------------------------------------------------------------------
+    # Directory where to store data files
+    data_dir = "${CMS_DATA_DIR}"
+
+    # -------------------------------------------------------------------------
+    # Core services
+    # -------------------------------------------------------------------------
+    # Configuration for LogService
+    [log_service]
+    listen_port = 29000
+
+    # Configuration for ResourceService
+    [resource_service]
+    listen_port = 28000
+
+    # Configuration for ScoringService
+    [scoring_service]
+    listen_port = 28500
+
+    # Configuration for CheckerService
+    [checker_service]
+    listen_port = 22000
+
+    # Configuration for EvaluationService
+    [evaluation_service]
+    listen_port = 25000
+
+    # Configuration for ProxyService
+    [proxy_service]
+    listen_port = 28600
+
+    # -------------------------------------------------------------------------
+    # Web services
+    # -------------------------------------------------------------------------
+
+    [admin_web_server]
+    listen_port = ${ADMIN_LISTEN_PORT}
+    listen_address = "0.0.0.0"
+
+    [contest_web_server]
+    listen_port = ${CONTEST_LISTEN_PORT}
+    listen_address = "0.0.0.0"
+    contest_id = ${CONTEST_ID}
