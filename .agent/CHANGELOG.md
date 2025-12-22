@@ -65,6 +65,21 @@ Cleaned up root directory by removing CMS repo files that belong in the submodul
 - Created comprehensive architecture documentation
 - Created this changelog for tracking modifications
 
+#### 6. CI Disk Space Fix
+**File:** `.github/workflows/docker-build.yml`
+
+- Added "Free disk space" step to both `build` and `integration-test` jobs
+- Removes unused packages: dotnet, ghc, boost, android SDK, CodeQL, swift
+- Runs `docker system prune -af` and `docker volume prune -f`
+- Shows disk space before/after cleanup for debugging
+- **Sequential builds**: Changed from parallel compose builds to sequential per-service builds:
+  - Core: log-service → resource-service → scoring-service → checker-service → evaluation-service → proxy-service
+  - Admin: admin-web-server → ranking-web-server
+  - Contest: contest-web-server
+  - Worker: worker
+  - Each build followed by `docker system prune -f` to free intermediate layers
+  - All `compose up` commands now use `--no-build` flag
+
 ---
 
 ## Template for Future Entries

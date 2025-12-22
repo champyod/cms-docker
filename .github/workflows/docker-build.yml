@@ -21,6 +21,26 @@ jobs:
             base_image: debian:bookworm
             tag: arm64
     steps:
+      - name: Free disk space
+        run: |
+          echo "=== Disk space before cleanup ==="
+          df -h
+          
+          echo "=== Removing unnecessary packages ==="
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/share/swift
+          
+          echo "=== Cleaning Docker ==="
+          docker system prune -af || true
+          docker volume prune -f || true
+          
+          echo "=== Disk space after cleanup ==="
+          df -h
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -60,6 +80,26 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
+      - name: Free disk space
+        run: |
+          echo "=== Disk space before cleanup ==="
+          df -h
+          
+          echo "=== Removing unnecessary packages ==="
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/share/swift
+          
+          echo "=== Cleaning Docker ==="
+          docker system prune -af || true
+          docker volume prune -f || true
+          
+          echo "=== Disk space after cleanup ==="
+          df -h
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -240,6 +280,37 @@ jobs:
           sed -i 's/"127.0.0.1"/"0.0.0.0"/g' config/cms.toml
           sed -i 's/\["127.0.0.1"\]/\["0.0.0.0"\]/g' config/cms.toml
 
+      - name: Build Services Sequentially
+        run: |
+          echo "=== Building services one by one to prevent disk space issues ==="
+          
+          echo "=== Building log-service ==="
+          docker compose -f docker-compose.core.yml build log-service
+          docker system prune -f || true
+          
+          echo "=== Building resource-service ==="
+          docker compose -f docker-compose.core.yml build resource-service
+          docker system prune -f || true
+          
+          echo "=== Building scoring-service ==="
+          docker compose -f docker-compose.core.yml build scoring-service
+          docker system prune -f || true
+          
+          echo "=== Building checker-service ==="
+          docker compose -f docker-compose.core.yml build checker-service
+          docker system prune -f || true
+          
+          echo "=== Building evaluation-service ==="
+          docker compose -f docker-compose.core.yml build evaluation-service
+          docker system prune -f || true
+          
+          echo "=== Building proxy-service ==="
+          docker compose -f docker-compose.core.yml build proxy-service
+          docker system prune -f || true
+          
+          echo "=== Disk space after sequential builds ==="
+          df -h
+
       - name: Start Core Services
         run: |
           echo "=== Starting Core Services ==="
@@ -252,8 +323,8 @@ jobs:
             exit 1
           }
 
-          echo "=== Starting remaining core services ==="
-          docker compose -f docker-compose.core.yml up -d
+          echo "=== Starting remaining core services (already built) ==="
+          docker compose -f docker-compose.core.yml up -d --no-build
 
           echo "=== Waiting for services to start ==="
           sleep 30
@@ -279,10 +350,18 @@ jobs:
 
           echo "=== Database initialized successfully ==="
 
-      - name: Start Admin Services
+      - name: Build and Start Admin Services
         run: |
+          echo "=== Building admin-web-server ==="
+          docker compose -f docker-compose.admin.yml build admin-web-server
+          docker system prune -f || true
+          
+          echo "=== Building ranking-web-server ==="
+          docker compose -f docker-compose.admin.yml build ranking-web-server
+          docker system prune -f || true
+          
           echo "=== Starting Admin Services ==="
-          docker compose -f docker-compose.admin.yml up -d
+          docker compose -f docker-compose.admin.yml up -d --no-build
 
           echo "=== Waiting for admin services to start ==="
           sleep 20
@@ -302,10 +381,14 @@ jobs:
           echo "=== Admin Web Server Response ==="
           curl -s -o /dev/null -w "HTTP Status: %{http_code}\n" http://localhost:8889/
 
-      - name: Start Contest Services
+      - name: Build and Start Contest Services
         run: |
+          echo "=== Building contest-web-server ==="
+          docker compose -f docker-compose.contest.yml build contest-web-server
+          docker system prune -f || true
+          
           echo "=== Starting Contest Services ==="
-          docker compose -f docker-compose.contest.yml up -d contest-web-server
+          docker compose -f docker-compose.contest.yml up -d --no-build contest-web-server
 
           echo "=== Waiting for contest services to start ==="
           sleep 20
@@ -333,11 +416,15 @@ jobs:
             docker logs cms-contest-web-server-1
           fi
 
-      - name: Start Worker Services
+      - name: Build and Start Worker Services
         run: |
+          echo "=== Building worker ==="
+          docker compose -f docker-compose.worker.yml build worker || true
+          docker system prune -f || true
+
           echo "=== Starting Worker Services ==="
           # Note: Worker may fail in GitHub Actions due to sandbox restrictions
-          docker compose -f docker-compose.worker.yml up -d || true
+          docker compose -f docker-compose.worker.yml up -d --no-build || true
 
           echo "=== Waiting for worker to start ==="
           sleep 15
