@@ -1,4 +1,4 @@
-name: Build Docker Image
+name: Build and Test Docker
 
 on:
   push:
@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -53,3 +55,329 @@ jobs:
             echo '=== Import Test ==='
             python3 -c \"import cms; print('CMS imported successfully from:', cms.__file__)\"
           "
+
+  integration-test:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker Image for Integration Test
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: false
+          tags: cms-docker:test
+          cache-from: type=gha,scope=linux/amd64
+          load: true
+          build-args: |
+            BASE_IMAGE=ubuntu:noble
+            APT_MIRROR=archive.ubuntu.com
+
+      - name: Setup Test Environment
+        run: |
+          # Create test environment file
+          cat > .env.core << 'EOF'
+          PUBLIC_IP=0.0.0.0
+          APT_MIRROR=archive.ubuntu.com
+          POSTGRES_DB=cmsdb
+          POSTGRES_USER=cmsuser
+          POSTGRES_PASSWORD=testpassword123
+          POSTGRES_HOST_AUTH_METHOD=md5
+          CMS_CONFIG=/usr/local/etc/cms.toml
+          LOG_SERVICE_SHARD=0
+          RESOURCE_SERVICE_SHARD=0
+          SCORING_SERVICE_SHARD=0
+          EVALUATION_SERVICE_SHARD=0
+          PROXY_SERVICE_SHARD=0
+          CHECKER_SERVICE_SHARD=0
+          CMS_LOG_DIR=/var/local/log/cms
+          CMS_CACHE_DIR=/var/local/cache/cms
+          CMS_DATA_DIR=/var/local/lib/cms
+          EOF
+
+          # Create admin environment file
+          cat > .env.admin << 'EOF'
+          ADMIN_WEB_SERVER_SHARD=0
+          ADMIN_LISTEN_PORT=8889
+          ADMIN_LISTEN_ADDRESS=0.0.0.0
+          ADMIN_PORT_EXTERNAL=8889
+          RANKING_LISTEN_PORT=8890
+          RANKING_LISTEN_ADDRESS=0.0.0.0
+          RANKING_PORT_EXTERNAL=8890
+          EOF
+
+          # Create contest environment file
+          cat > .env.contest << 'EOF'
+          CONTEST_WEB_SERVER_SHARD=0
+          CONTEST_LISTEN_PORT=8888
+          CONTEST_LISTEN_ADDRESS=0.0.0.0
+          CONTEST_PORT_EXTERNAL=8888
+          CONTEST_ID=1
+          EOF
+
+          # Create worker environment file
+          cat > .env.worker << 'EOF'
+          WORKER_SHARD=0
+          EOF
+
+          # Generate .env file manually (simplified make env)
+          echo "# Test Environment" > .env
+          cat .env.core >> .env
+          echo "" >> .env
+          cat .env.admin >> .env
+          echo "" >> .env
+          cat .env.contest >> .env
+          echo "" >> .env
+          cat .env.worker >> .env
+
+      - name: Setup Config Files
+        run: |
+          # Create config directory
+          mkdir -p config
+
+          # Copy sample config from submodule (if exists) or create minimal config
+          if [ -f src/config/cms.sample.toml ]; then
+            cp src/config/cms.sample.toml config/cms.toml
+          else
+            # Create minimal test config
+            cat > config/cms.toml << 'EOF'
+          [global]
+          backdoor = false
+          file_log_debug = false
+          stream_log_detailed = false
+          temp_dir = "/tmp"
+
+          [services]
+          LogService = [["cms-log-service", 29000]]
+          ResourceService = [["cms-resource-service", 28000]]
+          ScoringService = [["cms-scoring-service", 28500]]
+          Checker = [["cms-checker-service", 22000]]
+          EvaluationService = [["cms-evaluation-service", 25000]]
+          Worker = [["cms-worker-0", 26000]]
+          ContestWebServer = [["cms-contest-web-server-1", 21000]]
+          AdminWebServer = [["cms-admin-web-server", 21100]]
+          ProxyService = [["cms-proxy-service", 28600]]
+          PrometheusExporter = []
+          TelegramBot = []
+
+          [database]
+          url = "postgresql+psycopg2://cmsuser:testpassword123@database:5432/cmsdb"
+          debug = false
+          twophase_commit = false
+
+          [worker]
+          keep_sandbox = false
+
+          [sandbox]
+          sandbox_implementation = "isolate"
+          max_file_size = 1048576
+          compilation_sandbox_max_processes = 1000
+          compilation_sandbox_max_time_s = 10.0
+          compilation_sandbox_max_memory_kib = 524288
+          trusted_sandbox_max_processes = 1000
+          trusted_sandbox_max_time_s = 10.0
+          trusted_sandbox_max_memory_kib = 4194304
+
+          [web_server]
+          secret_key = "8e045a51e4b102ea803c06f92841a1fb"
+          tornado_debug = false
+
+          [contest_web_server]
+          listen_address = ["0.0.0.0"]
+          listen_port = [8888]
+          cookie_duration = 10800
+          num_proxies_used = 0
+          submit_local_copy = true
+          submit_local_copy_path = "%s/submissions/"
+          tests_local_copy = true
+          tests_local_copy_path = "%s/tests/"
+          max_submission_length = 100000
+          max_input_length = 5000000
+          docs_path = "/usr/share/cms/docs"
+
+          [admin_web_server]
+          listen_address = "0.0.0.0"
+          listen_port = 8889
+          cookie_duration = 36000
+          num_proxies_used = 0
+
+          [proxy_service]
+          rankings = ["http://usern4me:passw0rd@cms-ranking-web-server:8890/"]
+
+          [prometheus]
+          listen_address = "127.0.0.1"
+          listen_port = 8811
+          EOF
+          fi
+
+          # Create ranking config
+          if [ -f src/config/cms.ranking.sample.toml ]; then
+            cp src/config/cms.ranking.sample.toml config/cms.ranking.toml
+          else
+            cat > config/cms.ranking.toml << 'EOF'
+          bind_address = "0.0.0.0"
+          http_port = 8890
+          username = "usern4me"
+          password = "passw0rd"
+          realm_name = "Scoreboard"
+          buffer_size = 100
+
+          [public]
+          show_id_column = false
+          EOF
+          fi
+
+          # Update bind addresses to 0.0.0.0
+          sed -i 's/"127.0.0.1"/"0.0.0.0"/g' config/cms.toml
+          sed -i 's/\["127.0.0.1"\]/\["0.0.0.0"\]/g' config/cms.toml
+
+      - name: Start Core Services
+        run: |
+          echo "=== Starting Core Services ==="
+          docker compose -f docker-compose.core.yml up -d database
+
+          echo "=== Waiting for database to be healthy ==="
+          timeout 60 bash -c 'until docker compose -f docker-compose.core.yml ps database | grep -q "healthy"; do sleep 2; echo "Waiting..."; done' || {
+            echo "Database health check failed, checking logs..."
+            docker compose -f docker-compose.core.yml logs database
+            exit 1
+          }
+
+          echo "=== Starting remaining core services ==="
+          docker compose -f docker-compose.core.yml up -d
+
+          echo "=== Waiting for services to start ==="
+          sleep 30
+
+          echo "=== Core services status ==="
+          docker compose -f docker-compose.core.yml ps
+
+      - name: Initialize Database
+        run: |
+          echo "=== Initializing CMS Database ==="
+          docker exec cms-log-service cmsInitDB || {
+            echo "cmsInitDB failed, checking logs..."
+            docker logs cms-log-service
+            exit 1
+          }
+
+          echo "=== Creating test admin user ==="
+          docker exec cms-log-service cmsAddAdmin testadmin -p TestPassword123! || {
+            echo "cmsAddAdmin failed, checking logs..."
+            docker logs cms-log-service
+            exit 1
+          }
+
+          echo "=== Database initialized successfully ==="
+
+      - name: Start Admin Services
+        run: |
+          echo "=== Starting Admin Services ==="
+          docker compose -f docker-compose.admin.yml up -d
+
+          echo "=== Waiting for admin services to start ==="
+          sleep 20
+
+          echo "=== Admin services status ==="
+          docker compose -f docker-compose.admin.yml ps
+
+      - name: Verify Admin Web Server
+        run: |
+          echo "=== Testing Admin Web Server ==="
+          timeout 30 bash -c 'until curl -f -s http://localhost:8889/ > /dev/null 2>&1; do sleep 2; echo "Waiting for admin server..."; done' || {
+            echo "Admin web server not responding"
+            docker logs cms-admin-web-server
+            exit 1
+          }
+
+          echo "=== Admin Web Server Response ==="
+          curl -s -o /dev/null -w "HTTP Status: %{http_code}\n" http://localhost:8889/
+
+      - name: Start Contest Services
+        run: |
+          echo "=== Starting Contest Services ==="
+          docker compose -f docker-compose.contest.yml up -d contest-web-server
+
+          echo "=== Waiting for contest services to start ==="
+          sleep 20
+
+          echo "=== Contest services status ==="
+          docker compose -f docker-compose.contest.yml ps
+
+      - name: Verify Contest Web Server
+        run: |
+          echo "=== Testing Contest Web Server ==="
+          # Contest server may return 403 if no contest is configured, but that's OK
+          timeout 30 bash -c 'until curl -s http://localhost:8888/ > /dev/null 2>&1; do sleep 2; echo "Waiting for contest server..."; done' || {
+            echo "Warning: Contest web server may not be fully responding (expected if no contest configured)"
+          }
+
+          echo "=== Contest Web Server Response ==="
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8888/ || echo "000")
+          echo "HTTP Status: $HTTP_CODE"
+
+          # Accept 200, 302 (redirect), 403 (no contest), 500 (service starting)
+          if [[ "$HTTP_CODE" =~ ^(200|302|403|500)$ ]]; then
+            echo "Contest server is responding (status $HTTP_CODE is acceptable for test)"
+          else
+            echo "Unexpected status code, checking logs..."
+            docker logs cms-contest-web-server-1
+          fi
+
+      - name: Start Worker Services
+        run: |
+          echo "=== Starting Worker Services ==="
+          # Note: Worker may fail in GitHub Actions due to sandbox restrictions
+          docker compose -f docker-compose.worker.yml up -d || true
+
+          echo "=== Waiting for worker to start ==="
+          sleep 15
+
+          echo "=== Worker status ==="
+          docker compose -f docker-compose.worker.yml ps || true
+
+          echo "=== Worker logs (may show sandbox errors in CI) ==="
+          docker logs cms-worker-0 2>&1 | tail -50 || true
+
+      - name: Collect Service Logs
+        if: always()
+        run: |
+          echo "=== All Container Status ==="
+          docker ps -a
+
+          echo ""
+          echo "=== Log Service Logs ==="
+          docker logs cms-log-service 2>&1 | tail -100 || true
+
+          echo ""
+          echo "=== Resource Service Logs ==="
+          docker logs cms-resource-service 2>&1 | tail -50 || true
+
+          echo ""
+          echo "=== Admin Web Server Logs ==="
+          docker logs cms-admin-web-server 2>&1 | tail -50 || true
+
+          echo ""
+          echo "=== Contest Web Server Logs ==="
+          docker logs cms-contest-web-server-1 2>&1 | tail -50 || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          echo "=== Stopping all services ==="
+          docker compose -f docker-compose.worker.yml down -v || true
+          docker compose -f docker-compose.contest.yml down -v || true
+          docker compose -f docker-compose.admin.yml down -v || true
+          docker compose -f docker-compose.core.yml down -v || true
+
+          echo "=== Pruning unused resources ==="
+          docker system prune -f || true

@@ -70,8 +70,9 @@ env:
 		rm -rf config/cms.toml; \
 	fi
 	@if [ ! -f config/cms.toml ]; then \
-		echo "Copying config/cms.sample.toml to config/cms.toml..."; \
-		cp config/cms.sample.toml config/cms.toml; \
+		echo "Copying src/config/cms.sample.toml to config/cms.toml..."; \
+		mkdir -p config; \
+		cp src/config/cms.sample.toml config/cms.toml; \
 		echo "Setting bind address to 0.0.0.0 in config/cms.toml..."; \
 		sed -i 's/"127.0.0.1"/"0.0.0.0"/g' config/cms.toml; \
 		sed -i 's/\["127.0.0.1"\]/\["0.0.0.0"\]/g' config/cms.toml; \
@@ -81,8 +82,9 @@ env:
 		rm -rf config/cms.ranking.toml; \
 	fi
 	@if [ ! -f config/cms.ranking.toml ]; then \
-		echo "Copying config/cms.ranking.sample.toml to config/cms.ranking.toml..."; \
-		cp config/cms.ranking.sample.toml config/cms.ranking.toml; \
+		echo "Copying src/config/cms.ranking.sample.toml to config/cms.ranking.toml..."; \
+		mkdir -p config; \
+		cp src/config/cms.ranking.sample.toml config/cms.ranking.toml; \
 		echo "Setting bind address to 0.0.0.0 in config/cms.ranking.toml..."; \
 		sed -i 's/"127.0.0.1"/"0.0.0.0"/g' config/cms.ranking.toml; \
 	fi
