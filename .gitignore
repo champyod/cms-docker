@@ -28,3 +28,6 @@ test_logs/
 
 # VSCode settings
 .vscode/
+
+# Agent documentation (keep README.md and progress.md tracked)
+.agent/environment.md
