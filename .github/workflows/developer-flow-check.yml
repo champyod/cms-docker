@@ -31,6 +31,19 @@ jobs:
           echo "=== Generating config using Makefile ==="
           make env
 
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install toml
+
+      - name: Validate Config Structure
+        run: |
+          echo "=== Running fast validation script ==="
+          python3 scripts/validate_config.py config/cms.toml
+
       - name: Verify Generated Configuration
         run: |
           echo "=== Checking config/cms.toml ==="
