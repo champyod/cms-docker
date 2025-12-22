@@ -128,7 +128,14 @@ make worker                     # Start workers
 
 ---
 
-## Environment Configuration
+### Configuration Templates
+The system uses root-level templates in `config/templates/` to generate the final CMS configuration.
+
+**Database Configuration Example:**
+```toml
+[database]
+connection_string = "postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}"
+```
 
 ### .env.core (Required)
 | Variable | Description | Default |

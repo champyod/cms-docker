@@ -179,7 +179,7 @@ jobs:
           make env
           
           echo "=== Verifying generated config/cms.toml ==="
-          grep -i "url =" config/cms.toml || true
+          grep -i "connection_string =" config/cms.toml || true
           grep -i "secret_key =" config/cms.toml || true
 
       - name: Upload Config Artifacts
