@@ -1,0 +1,15 @@
+# Include all static files for cmsranking
+recursive-include src/cmsranking/static *
+
+# Include all static files for cms.server
+recursive-include src/cms/server/static *
+recursive-include src/cms/server/admin/static *
+recursive-include src/cms/server/admin/templates *
+recursive-include src/cms/server/contest/static *
+recursive-include src/cms/server/contest/templates *
+
+# Include locale files
+recursive-include src/cms/locale *.mo *.po *.pot
+
+# Include testlib.h for polygon loader
+include src/cmscontrib/loaders/polygon/testlib.h
