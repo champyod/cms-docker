@@ -119,6 +119,10 @@ RUN <<EOF
     echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 EOF
 
+# Create CMS data directories with correct permissions
+RUN mkdir -p /var/local/log/cms /var/local/cache/cms /var/local/lib/cms && \
+    chown -R cmsuser:cmsuser /var/local/log/cms /var/local/cache/cms /var/local/lib/cms
+
 # Set cmsuser as default user
 USER cmsuser
 ENV LANG=C.UTF-8
