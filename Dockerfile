@@ -136,17 +136,4 @@ ENV PATH="/home/cmsuser/cms/bin:$PATH"
 # Install CMS with development dependencies
 RUN --mount=type=cache,target=/home/cmsuser/.cache/pip,uid=1001 ./install.py cms --devel
 
-# Setup test configurations
-RUN <<EOF
-#!/bin/bash -ex
-    sed 's|/cmsuser:your_password_here@localhost:5432/cmsdb"|/postgres@testdb:5432/cmsdbfortesting"|' \
-        ./config/cms.sample.toml >../../cms/etc/cms-testdb.toml
-    sed -e 's|/cmsuser:your_password_here@localhost:5432/cmsdb"|/postgres@devdb:5432/cmsdb"|' \
-        -e 's/127.0.0.1/0.0.0.0/' \
-        ./config/cms.sample.toml >../../cms/etc/cms-devdb.toml
-    sed -i 's/127.0.0.1/0.0.0.0/' ../../cms/etc/cms_ranking.toml
-EOF
-
-WORKDIR /home/cmsuser/cms-docker
-
 CMD ["/bin/bash"]
