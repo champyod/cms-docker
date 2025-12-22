@@ -92,15 +92,14 @@ rankings = ["http://${RANKING_USERNAME}:${RANKING_PASSWORD}@cms-ranking-web-serv
 # -------------------------------------------------------------------------
 
 [admin_web_server]
-listen_port = [${ADMIN_LISTEN_PORT}]
-listen_address = ["0.0.0.0"]
+listen_port = ${ADMIN_LISTEN_PORT}
+listen_address = "0.0.0.0"
 cookie_duration = 36000
 num_proxies_used = 0
 
 [contest_web_server]
 listen_port = [${CONTEST_LISTEN_PORT}]
 listen_address = ["0.0.0.0"]
-contest_id = ${CONTEST_ID}
 cookie_duration = 10800
 num_proxies_used = 0
 submit_local_copy = true
