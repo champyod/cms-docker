@@ -124,7 +124,7 @@ USER cmsuser
 ENV LANG=C.UTF-8
 
 RUN mkdir /home/cmsuser/src
-COPY --chown=cmsuser:cmsuser install.py constraints.txt /home/cmsuser/src/
+COPY --chown=cmsuser:cmsuser src/install.py src/constraints.txt /home/cmsuser/src/
 
 WORKDIR /home/cmsuser/src
 
@@ -138,10 +138,10 @@ RUN --mount=type=cache,target=/home/cmsuser/.cache/pip,uid=1001 ./install.py cms
 RUN <<EOF
 #!/bin/bash -ex
     sed 's|/cmsuser:your_password_here@localhost:5432/cmsdb"|/postgres@testdb:5432/cmsdbfortesting"|' \
-        ./config/cms.sample.toml >../cms/etc/cms-testdb.toml
+        ./src/config/cms.sample.toml >../cms/etc/cms-testdb.toml
     sed -e 's|/cmsuser:your_password_here@localhost:5432/cmsdb"|/postgres@devdb:5432/cmsdb"|' \
         -e 's/127.0.0.1/0.0.0.0/' \
-        ./config/cms.sample.toml >../cms/etc/cms-devdb.toml
+        ./src/config/cms.sample.toml >../cms/etc/cms-devdb.toml
     sed -i 's/127.0.0.1/0.0.0.0/' ../cms/etc/cms_ranking.toml
 EOF
 
