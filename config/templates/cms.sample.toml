@@ -6,6 +6,12 @@
 # List of IP addresses to listen on
 listen_address = ["0.0.0.0"]
 
+# Global settings
+backdoor = false
+file_log_debug = false
+stream_log_detailed = false
+temp_dir = "/tmp"
+
 # -------------------------------------------------------------------------
 # Security configuration
 # -------------------------------------------------------------------------
@@ -40,8 +46,22 @@ data_dir = "${CMS_DATA_DIR}"
 url = "postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}"
 
 # -------------------------------------------------------------------------
+# -------------------------------------------------------------------------
 # Core services
 # -------------------------------------------------------------------------
+[services]
+LogService = [["cms-log-service", 29000]]
+ResourceService = [["cms-resource-service", 28000]]
+ScoringService = [["cms-scoring-service", 28500]]
+Checker = [["cms-checker-service", 22000]]
+EvaluationService = [["cms-evaluation-service", 25000]]
+Worker = [
+    ["cms-worker-0", 26000]
+]
+ContestWebServer = [["cms-contest-web-server-${CONTEST_ID}", ${CONTEST_LISTEN_PORT}]]
+AdminWebServer = [["cms-admin-web-server", ${ADMIN_LISTEN_PORT}]]
+ProxyService = [["cms-proxy-service", 28600]]
+
 # Configuration for LogService
 [log_service]
 listen_port = 29000
@@ -65,6 +85,7 @@ listen_port = 25000
 # Configuration for ProxyService
 [proxy_service]
 listen_port = 28600
+rankings = ["http://${RANKING_USERNAME}:${RANKING_PASSWORD}@cms-ranking-web-server:${RANKING_LISTEN_PORT}/"]
 
 # -------------------------------------------------------------------------
 # Web services
@@ -73,8 +94,42 @@ listen_port = 28600
 [admin_web_server]
 listen_port = [${ADMIN_LISTEN_PORT}]
 listen_address = ["0.0.0.0"]
+cookie_duration = 36000
+num_proxies_used = 0
 
 [contest_web_server]
 listen_port = [${CONTEST_LISTEN_PORT}]
 listen_address = ["0.0.0.0"]
 contest_id = ${CONTEST_ID}
+cookie_duration = 10800
+num_proxies_used = 0
+submit_local_copy = true
+submit_local_copy_path = "%s/submissions/"
+tests_local_copy = true
+tests_local_copy_path = "%s/tests/"
+max_submission_length = 100000
+max_input_length = 5000000
+docs_path = "/usr/share/cms/docs"
+
+# -------------------------------------------------------------------------
+# Worker configuration
+# -------------------------------------------------------------------------
+[worker]
+keep_sandbox = false
+
+[sandbox]
+sandbox_implementation = "isolate"
+max_file_size = 1048576
+compilation_sandbox_max_processes = 1000
+compilation_sandbox_max_time_s = 10.0
+compilation_sandbox_max_memory_kib = 524288
+trusted_sandbox_max_processes = 1000
+trusted_sandbox_max_time_s = 10.0
+trusted_sandbox_max_memory_kib = 4194304
+
+# -------------------------------------------------------------------------
+# Web Server Shared Configuration
+# -------------------------------------------------------------------------
+[web_server]
+secret_key = "${SECRET_KEY}"
+tornado_debug = false
