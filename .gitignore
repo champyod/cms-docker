@@ -28,3 +28,7 @@ test_logs/
 
 # VSCode settings
 .vscode/
+
+# Generated Configuration
+config/cms.toml
+config/cms.ranking.toml
