@@ -113,3 +113,5 @@ worker:
 
 clean:
 	rm -f .env
+	rm -f config/cms.toml
+	rm -f config/cms.ranking.toml
