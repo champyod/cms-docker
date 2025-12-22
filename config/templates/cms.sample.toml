@@ -1,80 +1,79 @@
-[global]
-    # CMS configuration file
+# CMS configuration file
 
-    # -------------------------------------------------------------------------
-    # Server configuration
-    # -------------------------------------------------------------------------
-    # List of IP addresses to listen on
-    listen_address = ["0.0.0.0"]
+# -------------------------------------------------------------------------
+# Server configuration
+# -------------------------------------------------------------------------
+# List of IP addresses to listen on
+listen_address = ["0.0.0.0"]
 
-    # -------------------------------------------------------------------------
-    # Database configuration
-    # -------------------------------------------------------------------------
-    # Database connection string
-    # Format: postgresql+psycopg2://<user>:<password>@<host>:<port>/<dbname>
-    database = "postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}"
+# -------------------------------------------------------------------------
+# Database configuration
+# -------------------------------------------------------------------------
+# Database connection string
+# Format: postgresql+psycopg2://<user>:<password>@<host>:<port>/<dbname>
+database = "postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}"
 
-    # -------------------------------------------------------------------------
-    # Security configuration
-    # -------------------------------------------------------------------------
-    # Secret key for session signing
-    # Generate with: python3 -c 'from cmscommon import crypto; print(crypto.get_hex_random_key())'
-    secret_key = "${SECRET_KEY}"
+# -------------------------------------------------------------------------
+# Security configuration
+# -------------------------------------------------------------------------
+# Secret key for session signing
+# Generate with: python3 -c 'from cmscommon import crypto; print(crypto.get_hex_random_key())'
+secret_key = "${SECRET_KEY}"
 
-    # -------------------------------------------------------------------------
-    # Log configuration
-    # -------------------------------------------------------------------------
-    # Directory where to store log files
-    log_dir = "${CMS_LOG_DIR}"
-    
-    # -------------------------------------------------------------------------
-    # Cache configuration
-    # -------------------------------------------------------------------------
-    # Directory where to store cache files
-    cache_dir = "${CMS_CACHE_DIR}"
+# -------------------------------------------------------------------------
+# Log configuration
+# -------------------------------------------------------------------------
+# Directory where to store log files
+log_dir = "${CMS_LOG_DIR}"
 
-    # -------------------------------------------------------------------------
-    # Data configuration
-    # -------------------------------------------------------------------------
-    # Directory where to store data files
-    data_dir = "${CMS_DATA_DIR}"
+# -------------------------------------------------------------------------
+# Cache configuration
+# -------------------------------------------------------------------------
+# Directory where to store cache files
+cache_dir = "${CMS_CACHE_DIR}"
 
-    # -------------------------------------------------------------------------
-    # Core services
-    # -------------------------------------------------------------------------
-    # Configuration for LogService
-    [log_service]
-    listen_port = 29000
+# -------------------------------------------------------------------------
+# Data configuration
+# -------------------------------------------------------------------------
+# Directory where to store data files
+data_dir = "${CMS_DATA_DIR}"
 
-    # Configuration for ResourceService
-    [resource_service]
-    listen_port = 28000
+# -------------------------------------------------------------------------
+# Core services
+# -------------------------------------------------------------------------
+# Configuration for LogService
+[log_service]
+listen_port = 29000
 
-    # Configuration for ScoringService
-    [scoring_service]
-    listen_port = 28500
+# Configuration for ResourceService
+[resource_service]
+listen_port = 28000
 
-    # Configuration for CheckerService
-    [checker_service]
-    listen_port = 22000
+# Configuration for ScoringService
+[scoring_service]
+listen_port = 28500
 
-    # Configuration for EvaluationService
-    [evaluation_service]
-    listen_port = 25000
+# Configuration for CheckerService
+[checker_service]
+listen_port = 22000
 
-    # Configuration for ProxyService
-    [proxy_service]
-    listen_port = 28600
+# Configuration for EvaluationService
+[evaluation_service]
+listen_port = 25000
 
-    # -------------------------------------------------------------------------
-    # Web services
-    # -------------------------------------------------------------------------
+# Configuration for ProxyService
+[proxy_service]
+listen_port = 28600
 
-    [admin_web_server]
-    listen_port = ${ADMIN_LISTEN_PORT}
-    listen_address = "0.0.0.0"
+# -------------------------------------------------------------------------
+# Web services
+# -------------------------------------------------------------------------
 
-    [contest_web_server]
-    listen_port = ${CONTEST_LISTEN_PORT}
-    listen_address = "0.0.0.0"
-    contest_id = ${CONTEST_ID}
+[admin_web_server]
+listen_port = ${ADMIN_LISTEN_PORT}
+listen_address = "0.0.0.0"
+
+[contest_web_server]
+listen_port = ${CONTEST_LISTEN_PORT}
+listen_address = "0.0.0.0"
+contest_id = ${CONTEST_ID}
