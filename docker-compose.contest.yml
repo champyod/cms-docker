@@ -11,6 +11,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     container_name: cms-contest-web-server-${CONTEST_ID:-1}
     restart: unless-stopped
     environment:

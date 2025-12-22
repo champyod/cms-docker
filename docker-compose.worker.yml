@@ -14,6 +14,7 @@ services:
       args:
         # Use debian:bookworm for Raspberry Pi (has native arm64 isolate packages)
         BASE_IMAGE: ${BASE_IMAGE:-ubuntu:noble}
+        APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     container_name: cms-worker-${WORKER_SHARD:-0}
     restart: unless-stopped
     environment:

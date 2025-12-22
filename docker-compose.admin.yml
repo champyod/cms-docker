@@ -10,6 +10,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     container_name: cms-admin-web-server
     restart: unless-stopped
     environment:
@@ -41,6 +43,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     container_name: cms-ranking-web-server
     restart: unless-stopped
     environment:
