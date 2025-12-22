@@ -73,7 +73,6 @@ def validate_config(config_path):
     if not check_type(config, 'contest_web_server', 'listen_port', list): errors += 1
     
     # 4. Check Proxy Service
-    if not check_type(config, 'proxy_service', 'listen_port', int): errors += 1
     if not check_type(config, 'proxy_service', 'rankings', list): errors += 1
     
     if errors > 0:

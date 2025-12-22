@@ -1,53 +1,28 @@
-# CMS configuration file
+# CMS Configuration File
 
 # -------------------------------------------------------------------------
-# Server configuration
+# Global Configuration
 # -------------------------------------------------------------------------
-# List of IP addresses to listen on
-listen_address = ["0.0.0.0"]
-
-# Global settings
+[global]
+log_dir = "${CMS_LOG_DIR}"
+cache_dir = "${CMS_CACHE_DIR}"
+data_dir = "${CMS_DATA_DIR}"
+# run_dir = "${CMS_RUN_DIR}"
+# temp_dir = "/tmp"
 backdoor = false
 file_log_debug = false
 stream_log_detailed = false
-temp_dir = "/tmp"
 
 # -------------------------------------------------------------------------
-# Security configuration
+# Database Configuration
 # -------------------------------------------------------------------------
-# Secret key for session signing
-# Generate with: python3 -c 'from cmscommon import crypto; print(crypto.get_hex_random_key())'
-secret_key = "${SECRET_KEY}"
-
-# -------------------------------------------------------------------------
-# Log configuration
-# -------------------------------------------------------------------------
-# Directory where to store log files
-log_dir = "${CMS_LOG_DIR}"
-
-# -------------------------------------------------------------------------
-# Cache configuration
-# -------------------------------------------------------------------------
-# Directory where to store cache files
-cache_dir = "${CMS_CACHE_DIR}"
-
-# -------------------------------------------------------------------------
-# Data configuration
-# -------------------------------------------------------------------------
-# Directory where to store data files
-data_dir = "${CMS_DATA_DIR}"
-
-# -------------------------------------------------------------------------
-# Database configuration
-# -------------------------------------------------------------------------
-# Database connection string
-# Format: postgresql+psycopg2://<user>:<password>@<host>:<port>/<dbname>
 [database]
 url = "postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}"
+debug = false
+twophase_commit = false
 
 # -------------------------------------------------------------------------
-# -------------------------------------------------------------------------
-# Core services
+# Service Topology (Core Services)
 # -------------------------------------------------------------------------
 [services]
 LogService = [["cms-log-service", 29000]]
@@ -62,56 +37,8 @@ ContestWebServer = [["cms-contest-web-server-${CONTEST_ID}", ${CONTEST_LISTEN_PO
 AdminWebServer = [["cms-admin-web-server", ${ADMIN_LISTEN_PORT}]]
 ProxyService = [["cms-proxy-service", 28600]]
 
-# Configuration for LogService
-[log_service]
-listen_port = 29000
-
-# Configuration for ResourceService
-[resource_service]
-listen_port = 28000
-
-# Configuration for ScoringService
-[scoring_service]
-listen_port = 28500
-
-# Configuration for CheckerService
-[checker_service]
-listen_port = 22000
-
-# Configuration for EvaluationService
-[evaluation_service]
-listen_port = 25000
-
-# Configuration for ProxyService
-[proxy_service]
-listen_port = 28600
-rankings = ["http://${RANKING_USERNAME}:${RANKING_PASSWORD}@cms-ranking-web-server:${RANKING_LISTEN_PORT}/"]
-
 # -------------------------------------------------------------------------
-# Web services
-# -------------------------------------------------------------------------
-
-[admin_web_server]
-listen_port = ${ADMIN_LISTEN_PORT}
-listen_address = "0.0.0.0"
-cookie_duration = 36000
-num_proxies_used = 0
-
-[contest_web_server]
-listen_port = [${CONTEST_LISTEN_PORT}]
-listen_address = ["0.0.0.0"]
-cookie_duration = 10800
-num_proxies_used = 0
-submit_local_copy = true
-submit_local_copy_path = "%s/submissions/"
-tests_local_copy = true
-tests_local_copy_path = "%s/tests/"
-max_submission_length = 100000
-max_input_length = 5000000
-docs_path = "/usr/share/cms/docs"
-
-# -------------------------------------------------------------------------
-# Worker configuration
+# Worker & Sandbox Configuration
 # -------------------------------------------------------------------------
 [worker]
 keep_sandbox = false
@@ -132,3 +59,31 @@ trusted_sandbox_max_memory_kib = 4194304
 [web_server]
 secret_key = "${SECRET_KEY}"
 tornado_debug = false
+
+# -------------------------------------------------------------------------
+# Specific Web Server Configuration
+# -------------------------------------------------------------------------
+[admin_web_server]
+listen_port = ${ADMIN_LISTEN_PORT}
+listen_address = "0.0.0.0"
+cookie_duration = 36000
+num_proxies_used = 0
+
+[contest_web_server]
+listen_port = [${CONTEST_LISTEN_PORT}]
+listen_address = ["0.0.0.0"]
+cookie_duration = 10800
+num_proxies_used = 0
+submit_local_copy = true
+submit_local_copy_path = "%s/submissions/"
+tests_local_copy = true
+tests_local_copy_path = "%s/tests/"
+max_submission_length = 100000
+max_input_length = 5000000
+docs_path = "/usr/share/cms/docs"
+
+# -------------------------------------------------------------------------
+# Proxy Service (Rankings)
+# -------------------------------------------------------------------------
+[proxy_service]
+rankings = ["http://${RANKING_USERNAME}:${RANKING_PASSWORD}@cms-ranking-web-server:${RANKING_LISTEN_PORT}/"]
