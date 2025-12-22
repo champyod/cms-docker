@@ -1,0 +1,66 @@
+name: Developer Flow Verification
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+
+jobs:
+  verify-dx:
+    name: Verify Out-of-the-box Experience
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Simulate Developer Setup
+        run: |
+          echo "=== Copying .env templates (User step 1) ==="
+          for f in .env.*.example; do
+            cp -- "$f" "${f%.example}"
+          done
+          
+          # Verify files were created
+          ls -la .env.core .env.admin .env.contest .env.worker
+
+      - name: Run make env (User step 2)
+        run: |
+          echo "=== Generating config using Makefile ==="
+          make env
+
+      - name: Verify Generated Configuration
+        run: |
+          echo "=== Checking config/cms.toml ==="
+          if [ ! -f config/cms.toml ]; then
+            echo "Error: config/cms.toml was not generated!"
+            exit 1
+          fi
+          
+          echo "=== Verifying default values in cms.toml ==="
+          # Check for default connection string format
+          grep "postgresql+psycopg2://cmsuser:cmspassword@database:5432/cmsdb" config/cms.toml
+          
+          # Check for generated secret key (should not be empty or placeholder)
+          SECRET=$(grep "secret_key =" config/cms.toml | cut -d '"' -f2)
+          if [ -z "$SECRET" ] || [ "$SECRET" == "YOUR_SECRET_KEY_HERE" ]; then
+            echo "Error: secret_key was not generated correctly!"
+            exit 1
+          fi
+          echo "Success: Generated secret_key is $SECRET"
+
+      - name: Verify Ranking Configuration
+        run: |
+          echo "=== Checking config/cms.ranking.toml ==="
+          if [ ! -f config/cms.ranking.toml ]; then
+            echo "Error: config/cms.ranking.toml was not generated!"
+            exit 1
+          fi
+          
+          grep "password = \"cms_ranking_pass\"" config/cms.ranking.toml
+          grep "username = \"admin\"" config/cms.ranking.toml
+
+      - name: Clean up
+        run: make clean || true
