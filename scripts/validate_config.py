@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 import sys
 import os
-import toml
+import sys
+import os
+try:
+    import tomli as toml
+except ImportError:
+    # For Python 3.11+
+    import tomllib as toml
 
 def check_type(config, section, key, expected_type, allow_optional=False):
     """Checks the type of a key in a section."""
@@ -30,7 +36,8 @@ def validate_config(config_path):
         return False
     
     try:
-        config = toml.load(config_path)
+        with open(config_path, "rb") as f:
+            config = toml.load(f)
     except Exception as e:
         print(f"ERROR: Failed to parse TOML file: {e}")
         return False
