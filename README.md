@@ -2,102 +2,125 @@
 
 Docker-based deployment for [Contest Management System (CMS)](https://github.com/cms-dev/cms).
 
+## Prerequisites
+
+- **Docker** 20.10+
+- **Docker Compose** v2+
+- **Git** (with submodule support)
+- **System**: 1+ CPU, 2GB+ RAM (recommended: 2+ CPU, 4GB+ RAM)
+
 ## Quick Start
 
-### Local / VM Deployment (No Public IP)
-By default, the setup binds to `0.0.0.0`, so you can access the services via:
-- **Localhost:** `http://localhost:8889` (Admin), `http://localhost:8888` (Contest)
-- **VM IP:** `http://<vm-ip>:8889` (Admin), `http://<vm-ip>:8888` (Contest)
+### Step 1: Clone Repository
 
-You do **not** need a public IP or domain name for local testing.
+```bash
+git clone --recursive https://github.com/cms-dev/cms-docker.git
+cd cms-docker
 
-### Build Configuration (Optional)
-This repository uses the **Thai Ubuntu mirror** (`th.archive.ubuntu.com`) by default for faster builds. If you are in another region, you can change this:
+# If you already cloned, initialize submodules:
+git submodule update --init --recursive
+```
 
-**Option 1: Build command**
+### Step 2: Configure Environment
+
+```bash
+# Copy example environment files
+cp .env.core.example .env.core
+cp .env.admin.example .env.admin  # Optional
+cp .env.contest.example .env.contest  # Optional
+cp .env.worker.example .env.worker  # Optional
+
+# Edit .env.core with your settings (database password, etc.)
+nano .env.core
+
+# Generate combined .env and config/cms.toml
+make env
+```
+
+### Step 3: Deploy Core Services
+
+```bash
+# Start core services (database, log, resource, evaluation, etc.)
+make core
+
+# Wait for database to be healthy (check with 'docker ps')
+# Then initialize database schema
+docker exec -it cms-log-service cmsInitDB
+
+# Create initial admin user
+docker exec -it cms-log-service cmsAddAdmin admin -p YourSecurePassword123!
+```
+
+### Step 4: Deploy Web Interfaces
+
+```bash
+# Start admin interface (port 8889) and ranking (port 8890)
+make admin
+
+# Start contest interface for participants (port 8888)
+make contest
+```
+
+### Step 5: Deploy Worker
+
+```bash
+# Start worker for evaluating submissions
+make worker
+```
+
+### Step 6: Access the System
+
+| Interface | URL | Description |
+|-----------|-----|-------------|
+| Admin | `http://localhost:8889` | Administration panel |
+| Contest | `http://localhost:8888` | Participant interface |
+| Ranking | `http://localhost:8890` | Public scoreboard |
+
+> **Note:** Replace `localhost` with your server IP if accessing remotely.
+
+## Build Configuration
+
+This repository uses the **Thai Ubuntu mirror** (`th.archive.ubuntu.com`) by default. To use a different mirror:
+
+**Option 1: Set in environment**
+```bash
+export APT_MIRROR=mirrors.digitalocean.com/ubuntu
+make core
+```
+
+**Option 2: Build command**
 ```bash
 docker compose build --build-arg APT_MIRROR=archive.ubuntu.com
 ```
 
-**Option 2: Docker Compose (Permanent)**
-Add `args: { APT_MIRROR: archive.ubuntu.com }` to the `build` section of your services in `docker-compose.yml`.
+## Troubleshooting
 
-### Steps
-```bash
-# 1. Clone and setup
-git clone https://github.com/champyod/cms-docker.git
-cd cms-docker
-git submodule update --init --recursive
+| Problem | Solution |
+|---------|----------|
+| "Relation 'contests' does not exist" | Run `docker exec -it cms-log-service cmsInitDB` |
+| Stuck at "Compiling" | Worker failed to connect. Run `docker restart cms-worker-0` |
+| "Unable to invalidate" / "Service not connected" | Run `docker restart cms-evaluation-service` |
+| Config changes not applying | Delete `config/cms.toml` then run `make env` again |
+| "No space left on device" | Run `docker system prune -a --volumes` to free space |
 
-# 2. Configure environment (Critical Step)
-cp .env.core.example .env.core  # Edit with your settings
-make env  # Generates .env and config/cms.toml
-
-# 3. Deploy
-make core
-# Wait for services to be healthy (check 'docker ps')
-docker exec -it cms-log-service cmsInitDB  # Create database schema
-docker exec -it cms-log-service cmsAddAdmin admin -p YourPassword! # Create admin
-make admin
-make contest
-make worker
-
-### Troubleshooting
-
-- **"Relation 'contests' does not exist"**: Run `docker exec -it cms-log-service cmsInitDB`.
-- **Stuck at "Compiling"**: The Worker failed to connect. Run `docker restart cms-worker-0`.
-- **"Unable to invalidate" / "Service not connected"**: Core services mesh is broken. Run `docker restart cms-evaluation-service` or restart the whole stack.
-- **Config changes not applying**: `make env` does not overwrite. Delete `config/cms.toml` then run `make env` again.
-- **"No space left on device"**: 
-  1. **Prune**: Run `docker system prune -a --volumes` to free space.
-  2. **Sequential Build**: Parallel builds can exhaust disk/inodes. Build services one by one:
-     ```bash
-     docker compose build log-service
-     docker compose build resource-service
-     docker compose build scoring-service
-     docker compose build checker-service
-     docker compose build evaluation-service
-     docker compose build proxy-service
-     docker compose build worker
-     make core
-     ```
-
-## Services
-
-| Stack | Services | Port |
-|-------|----------|------|
-| Core | Database, LogService, ResourceService, ScoringService, EvaluationService, ProxyService, CheckerService | - |
-| Admin | AdminWebServer, RankingWebServer | 8889, 8890 |
-| Contest | ContestWebServer | 8888 |
-| Worker | Worker | - |
-
-## Configuration
-
-Environment files:
-- `.env.core` - Database and core settings
-- `.env.admin` - Admin interface settings
-- `.env.contest` - Contest settings
-- `.env.worker` - Worker settings
-
-Run `make env` to generate the combined `.env` and `config/cms.toml`.
-
-## Commands
+## Commands Reference
 
 ```bash
 # Deploy stacks
-make core      # Core services
-make admin     # Admin + Ranking
-make contest   # Contest web server
-make worker    # Worker
+make core      # Core services (database, log, resource, etc.)
+make admin     # Admin interface + Ranking scoreboard
+make contest   # Contest web interface
+make worker    # Worker for judging submissions
 
 # Admin management
 docker exec -it cms-log-service cmsAddAdmin <username> -p <password>
-docker exec -it cms-database psql -U cmsuser -d cmsdb -c "DELETE FROM admins WHERE username = '<username>';"
 
 # View logs
 docker logs cms-log-service -f
 docker logs cms-admin-web-server -f
+docker logs cms-worker-0 -f
 ```
+
 
 ## Worker
 
