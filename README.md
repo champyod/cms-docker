@@ -147,9 +147,12 @@ docker cp your_logo.png cms-ranking-web-server:/var/local/lib/cms/ranking/logo.p
 
 # Restart to apply
 docker restart cms-ranking-web-server
+
+# IMPORTANT: Resync ranking data
+docker restart cms-proxy-service
 ```
 
-> **Note:** Make sure `lib_dir` in `config/cms.ranking.toml` is set to `/var/local/lib/cms/ranking` for persistent storage.
+> **Note:** Always restart `cms-proxy-service` after restarting `cms-ranking-web-server` to resync users, teams, and submissions.
 
 **Remove white background** (optional):
 ```bash
