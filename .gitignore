@@ -10,7 +10,7 @@ cms.egg-info
 .unittestfailures
 .coverage*
 cache/
-lib/
+/lib/
 log/
 .vagrant/
 codecov/
