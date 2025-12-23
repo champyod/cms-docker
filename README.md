@@ -137,6 +137,36 @@ docker logs cms-worker-0 -f
 Deployed with Admin stack at `http://YOUR_IP:8890`.
 Credentials: Set `RANKING_USERNAME` and `RANKING_PASSWORD` in `.env.admin`.
 
+### Custom Logo
+
+Replace the default placeholder logo with your own:
+
+```bash
+# Copy your logo to the ranking server
+docker cp your_logo.png cms-ranking-web-server:/var/local/lib/cms/ranking/logo.png
+
+# Restart to apply
+docker restart cms-ranking-web-server
+```
+
+> **Note:** Make sure `lib_dir` in `config/cms.ranking.toml` is set to `/var/local/lib/cms/ranking` for persistent storage.
+
+**Remove white background** (optional):
+```bash
+convert your_logo.png -fuzz 10% -transparent white your_logo_transparent.png
+```
+
+### Team Flags
+
+Upload flags for teams (displayed next to team names):
+
+```bash
+# Upload flag for team "myteam"
+docker cp myteam_flag.png cms-ranking-web-server:/var/local/lib/cms/ranking/flags/myteam.png
+```
+
+Supported formats: PNG, JPG, GIF.
+
 ### Secure Remote Worker Setup (e.g., Raspberry Pi via Tailscale)
 This guide assumes you are using **Tailscale** for a secure private network between your VPS and Worker.
 
