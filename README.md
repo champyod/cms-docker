@@ -78,6 +78,31 @@ make worker
 
 > **Note:** Replace `localhost` with your server IP if accessing remotely.
 
+### Secure Access (No Domain Required)
+
+Deploy instantly with **Tailscale Funnel** to get a free, secure `https://` URL that works anywhere (even behind local NAT).
+
+1. **Setup**:
+   - Create account at [tailscale.com](https://tailscale.com)
+   - Enable "Funnel" in [DNS Settings](https://login.tailscale.com/admin/dns)
+   - Add `"nodeAttrs": [{"target": ["*"], "attr": ["funnel"]}]` to [Access Controls](https://login.tailscale.com/admin/acls/file)
+
+2. **Configure**:
+   - Copy `.env.tailscale.example` to `.env.tailscale`
+   - Add your Auth Key (from [Keys settings](https://login.tailscale.com/admin/settings/keys))
+
+3. **Run**:
+   ```bash
+   docker compose -f docker-compose.contest.yml -f docker-compose.tailscale.yml \
+     --env-file .env.contest --env-file .env.tailscale up -d
+   ```
+
+4. **Access**:
+   - Check URL: `docker logs cms-tailscale`
+   - Example: `https://cms.ccyod-docker.ts.net` (Accessible by anyone, no VPN required)
+
+> **Credit**: Special thanks to **[Tailscale](https://tailscale.com)** for extending their free tier to include Funnel! We are not affiliated with Tailscale, just grateful for this awesome tool that makes secure local hosting so easy. ❤️
+
 ## Build Configuration
 
 This repository uses the **Thai Ubuntu mirror** (`th.archive.ubuntu.com`) by default. To use a different mirror:
