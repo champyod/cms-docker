@@ -5,36 +5,27 @@ version: '3.8'
 # Requires: Core services stack must be running first
 
 services:
-  # CMS Admin Web Server - Administrative interface
+  # CMS Admin Web Server - New Bun-based Admin Panel
   admin-web-server:
     build:
-      context: .
+      context: ./admin-panel
       dockerfile: Dockerfile
     container_name: cms-admin-web-server
     restart: unless-stopped
     environment:
-      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
-      SERVICE_TYPE: AdminWebServer
-      SERVICE_SHARD: ${ADMIN_WEB_SERVER_SHARD:-0}
-      ADMIN_LISTEN_PORT: ${ADMIN_LISTEN_PORT:-8889}
-      ADMIN_LISTEN_ADDRESS: ${ADMIN_LISTEN_ADDRESS:-0.0.0.0}
+      # Pass API URL if needed
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8889} 
     volumes:
-      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
+      # No volumes needed for static frontend typically, but keeping logs just in case
       - cms-logs:/var/local/log/cms
-      - cms-cache:/var/local/cache/cms
-      - cms-data:/var/local/lib/cms
     networks:
       - cms-network
     ports:
-      - "${ADMIN_PORT_EXTERNAL:-8889}:${ADMIN_LISTEN_PORT:-8889}"
-    privileged: true
-    cgroup: host
-    command: >
-      sh -c "sleep 10 && cmsAdminWebServer ${ADMIN_WEB_SERVER_SHARD:-0}"
+      - "${ADMIN_PORT_EXTERNAL:-8889}:3000"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.cms-admin.rule=Host(`${ADMIN_DOMAIN:-admin.cms.local}`)"
-      - "traefik.http.services.cms-admin.loadbalancer.server.port=${ADMIN_LISTEN_PORT:-8889}"
+      - "traefik.http.services.cms-admin.loadbalancer.server.port=3000"
 
   # Ranking Web Server - Live rankings display
   ranking-web-server:
