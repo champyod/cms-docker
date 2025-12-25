@@ -58,14 +58,35 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked <<EOF
 #!/bin/bash -ex
     export DEBIAN_FRONTEND=noninteractive
-    CODENAME=$(source /etc/os-release; echo $VERSION_CODENAME)
-    echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/isolate.asc]" \
-        "http://www.ucw.cz/isolate/debian/ ${CODENAME}-isolate main" \
-        >/etc/apt/sources.list.d/isolate.list
-    curl https://www.ucw.cz/isolate/debian/signing-key.asc \
-        >/etc/apt/keyrings/isolate.asc
-    apt-get update
-    apt-get install -y isolate
+    
+    # Detect Architecture
+    ARCH=$(dpkg --print-architecture)
+    
+    if [ "\$ARCH" = "amd64" ]; then
+        echo "Installing Isolate from UCW Repository (AMD64)..."
+        CODENAME=$(source /etc/os-release; echo \$VERSION_CODENAME)
+        echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/isolate.asc]" \
+            "http://www.ucw.cz/isolate/debian/ \${CODENAME}-isolate main" \
+            >/etc/apt/sources.list.d/isolate.list
+        curl https://www.ucw.cz/isolate/debian/signing-key.asc \
+            >/etc/apt/keyrings/isolate.asc
+        apt-get update
+        apt-get install -y isolate
+    else
+        echo "Building Isolate from Source (ARM64/Other)..."
+        apt-get update
+        # Install build dependencies if missing (libcap-dev is already in list, need libsystemd-dev)
+        apt-get install -y libsystemd-dev
+        
+        git clone https://github.com/ioi/isolate.git /tmp/isolate
+        pushd /tmp/isolate
+        make -j$(nproc)
+        make install
+        popd
+        rm -rf /tmp/isolate
+    fi
+    
+    # Common config
     sed -i 's@^cg_root .*@cg_root = /sys/fs/cgroup@' /etc/isolate
 EOF
 
