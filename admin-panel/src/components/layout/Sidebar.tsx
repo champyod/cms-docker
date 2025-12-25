@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { cn } from '@/lib/utils';
-import { Home, Users, Trophy, Settings, LogOut, ChevronRight } from 'lucide-react';
+import { Home, Users, Trophy, Settings, LogOut, ChevronRight, FileCode } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -81,6 +81,7 @@ export const Sidebar: React.FC<{ className?: string, locale: string }> = ({ clas
           <SidebarItem icon={Home} label="Dashboard" href={`/${locale}`} collapsed={collapsed} />
           <SidebarItem icon={Users} label="Users" href={`/${locale}/users`} collapsed={collapsed} />
           <SidebarItem icon={Trophy} label="Contests" href={`/${locale}/contests`} collapsed={collapsed} />
+          <SidebarItem icon={FileCode} label="Submissions" href={`/${locale}/submissions`} collapsed={collapsed} />
           <SidebarItem icon={Settings} label="Settings" href={`/${locale}/settings`} collapsed={collapsed} />
         </nav>
 
