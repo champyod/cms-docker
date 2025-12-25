@@ -87,7 +87,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
     
     # Common config
-    sed -i 's@^cg_root .*@cg_root = /sys/fs/cgroup@' /etc/isolate
+    if [ -f /etc/isolate ]; then
+        sed -i 's@^cg_root .*@cg_root = /sys/fs/cgroup@' /etc/isolate
+    fi
 EOF
 
 # Create cmsuser user with sudo privileges and access to isolate
