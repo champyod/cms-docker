@@ -12,3 +12,490 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+model admins {
+  id                   Int             @id @default(autoincrement())
+  name                 String          @db.VarChar
+  username             String          @unique @db.VarChar
+  authentication       String          @db.VarChar
+  enabled              Boolean
+  permission_all       Boolean
+  permission_messaging Boolean
+  announcements        announcements[]
+  messages             messages[]
+  questions            questions[]
+}
+
+model announcements {
+  id         Int      @id @default(autoincrement())
+  timestamp  DateTime @db.Timestamp(6)
+  subject    String   @db.VarChar
+  text       String   @db.VarChar
+  contest_id Int
+  admin_id   Int?
+  admins     admins?  @relation(fields: [admin_id], references: [id])
+  contests   contests @relation(fields: [contest_id], references: [id], onDelete: Cascade)
+
+  @@index([admin_id], map: "ix_announcements_admin_id")
+  @@index([contest_id], map: "ix_announcements_contest_id")
+}
+
+model attachments {
+  id       Int    @id @default(autoincrement())
+  task_id  Int
+  filename String @db.VarChar
+  digest   String @db.VarChar
+  tasks    tasks  @relation(fields: [task_id], references: [id], onDelete: Cascade)
+
+  @@unique([task_id, filename])
+  @@index([task_id], map: "ix_attachments_task_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model contests {
+  id                                               Int                      @id @default(autoincrement())
+  name                                             String                   @unique @db.VarChar
+  description                                      String                   @db.VarChar
+  allowed_localizations                            String[]                 @db.VarChar
+  languages                                        String[]                 @db.VarChar
+  submissions_download_allowed                     Boolean
+  allow_questions                                  Boolean
+  allow_user_tests                                 Boolean
+  allow_unofficial_submission_before_analysis_mode Boolean
+  block_hidden_participations                      Boolean
+  allow_password_authentication                    Boolean
+  allow_registration                               Boolean
+  ip_restriction                                   Boolean
+  ip_autologin                                     Boolean
+  token_mode                                       token_mode
+  token_max_number                                 Int?
+  token_min_interval                               Unsupported("interval")
+  token_gen_initial                                Int
+  token_gen_number                                 Int
+  token_gen_interval                               Unsupported("interval")
+  token_gen_max                                    Int?
+  start                                            DateTime                 @db.Timestamp(6)
+  stop                                             DateTime                 @db.Timestamp(6)
+  analysis_enabled                                 Boolean
+  analysis_start                                   DateTime                 @db.Timestamp(6)
+  analysis_stop                                    DateTime                 @db.Timestamp(6)
+  timezone                                         String?                  @db.VarChar
+  per_user_time                                    Unsupported("interval")?
+  max_submission_number                            Int?
+  max_user_test_number                             Int?
+  min_submission_interval                          Unsupported("interval")?
+  min_submission_interval_grace_period             Unsupported("interval")?
+  min_user_test_interval                           Unsupported("interval")?
+  score_precision                                  Int
+  announcements                                    announcements[]
+  participations                                   participations[]
+  tasks                                            tasks[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model datasets {
+  id                                         Int                     @id @default(autoincrement())
+  task_id                                    Int
+  description                                String                  @db.VarChar
+  autojudge                                  Boolean
+  time_limit                                 Float?
+  memory_limit                               BigInt?
+  task_type                                  String                  @db.VarChar
+  task_type_parameters                       Json
+  score_type                                 String                  @db.VarChar
+  score_type_parameters                      Json
+  tasks_datasets_task_idTotasks              tasks                   @relation("datasets_task_idTotasks", fields: [task_id], references: [id], onDelete: Cascade)
+  evaluations                                evaluations[]
+  executables                                executables[]
+  managers                                   managers[]
+  submission_results                         submission_results[]
+  tasks_tasks_id_active_dataset_idTodatasets tasks?                  @relation("tasks_id_active_dataset_idTodatasets")
+  testcases                                  testcases[]
+  user_test_executables                      user_test_executables[]
+  user_test_results                          user_test_results[]
+
+  @@unique([id, task_id])
+  @@unique([task_id, description])
+}
+
+model evaluations {
+  id                         Int                @id @default(autoincrement())
+  submission_id              Int
+  dataset_id                 Int
+  testcase_id                Int
+  outcome                    String?            @db.VarChar
+  text                       String[]           @db.VarChar
+  execution_time             Float?
+  execution_wall_clock_time  Float?
+  execution_memory           BigInt?
+  evaluation_shard           Int?
+  evaluation_sandbox_paths   String[]           @db.VarChar
+  evaluation_sandbox_digests String[]           @db.VarChar
+  datasets                   datasets           @relation(fields: [dataset_id], references: [id], onDelete: Cascade)
+  submission_results         submission_results @relation(fields: [submission_id, dataset_id], references: [submission_id, dataset_id], onDelete: Cascade)
+  submissions                submissions        @relation(fields: [submission_id], references: [id], onDelete: Cascade)
+  testcases                  testcases          @relation(fields: [testcase_id], references: [id], onDelete: Cascade)
+
+  @@unique([submission_id, dataset_id, testcase_id])
+  @@index([dataset_id], map: "ix_evaluations_dataset_id")
+  @@index([submission_id], map: "ix_evaluations_submission_id")
+  @@index([testcase_id], map: "ix_evaluations_testcase_id")
+}
+
+model executables {
+  id                 Int                @id @default(autoincrement())
+  submission_id      Int
+  dataset_id         Int
+  filename           String             @db.VarChar
+  digest             String             @db.VarChar
+  datasets           datasets           @relation(fields: [dataset_id], references: [id], onDelete: Cascade)
+  submission_results submission_results @relation(fields: [submission_id, dataset_id], references: [submission_id, dataset_id], onDelete: Cascade)
+  submissions        submissions        @relation(fields: [submission_id], references: [id], onDelete: Cascade)
+
+  @@unique([submission_id, dataset_id, filename])
+  @@index([dataset_id], map: "ix_executables_dataset_id")
+  @@index([submission_id], map: "ix_executables_submission_id")
+}
+
+model files {
+  id            Int         @id @default(autoincrement())
+  submission_id Int
+  filename      String      @db.VarChar
+  digest        String      @db.VarChar
+  submissions   submissions @relation(fields: [submission_id], references: [id], onDelete: Cascade)
+
+  @@unique([submission_id, filename])
+  @@index([submission_id], map: "ix_files_submission_id")
+}
+
+model fsobjects {
+  digest      String  @id @db.VarChar
+  loid        Int     @db.Oid
+  description String? @db.VarChar
+}
+
+model managers {
+  id         Int      @id @default(autoincrement())
+  dataset_id Int
+  filename   String   @db.VarChar
+  digest     String   @db.VarChar
+  datasets   datasets @relation(fields: [dataset_id], references: [id], onDelete: Cascade)
+
+  @@unique([dataset_id, filename])
+  @@index([dataset_id], map: "ix_managers_dataset_id")
+}
+
+model messages {
+  id               Int            @id @default(autoincrement())
+  timestamp        DateTime       @db.Timestamp(6)
+  subject          String         @db.VarChar
+  text             String         @db.VarChar
+  participation_id Int
+  admin_id         Int?
+  admins           admins?        @relation(fields: [admin_id], references: [id])
+  participations   participations @relation(fields: [participation_id], references: [id], onDelete: Cascade)
+
+  @@index([admin_id], map: "ix_messages_admin_id")
+  @@index([participation_id], map: "ix_messages_participation_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model participations {
+  id            Int                     @id @default(autoincrement())
+  ip            Unsupported("_cidr")[]
+  starting_time DateTime?               @db.Timestamp(6)
+  delay_time    Unsupported("interval")
+  extra_time    Unsupported("interval")
+  password      String?                 @db.VarChar
+  hidden        Boolean
+  unrestricted  Boolean
+  contest_id    Int
+  user_id       Int
+  team_id       Int?
+  messages      messages[]
+  contests      contests                @relation(fields: [contest_id], references: [id], onDelete: Cascade)
+  teams         teams?                  @relation(fields: [team_id], references: [id])
+  users         users                   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  questions     questions[]
+  submissions   submissions[]
+  user_tests    user_tests[]
+
+  @@unique([contest_id, user_id])
+  @@index([contest_id], map: "ix_participations_contest_id")
+  @@index([user_id], map: "ix_participations_user_id")
+}
+
+model questions {
+  id                 Int            @id @default(autoincrement())
+  question_timestamp DateTime       @db.Timestamp(6)
+  subject            String         @db.VarChar
+  text               String         @db.VarChar
+  reply_timestamp    DateTime?      @db.Timestamp(6)
+  ignored            Boolean
+  reply_subject      String?        @db.VarChar
+  reply_text         String?        @db.VarChar
+  participation_id   Int
+  admin_id           Int?
+  admins             admins?        @relation(fields: [admin_id], references: [id])
+  participations     participations @relation(fields: [participation_id], references: [id], onDelete: Cascade)
+
+  @@index([admin_id], map: "ix_questions_admin_id")
+  @@index([participation_id], map: "ix_questions_participation_id")
+}
+
+model statements {
+  id       Int    @id @default(autoincrement())
+  task_id  Int
+  language String @db.VarChar
+  digest   String @db.VarChar
+  tasks    tasks  @relation(fields: [task_id], references: [id], onDelete: Cascade)
+
+  @@unique([task_id, language])
+  @@index([task_id], map: "ix_statements_task_id")
+}
+
+model submission_results {
+  submission_id               Int
+  dataset_id                  Int
+  compilation_outcome         compilation_outcome?
+  compilation_text            String[]             @db.VarChar
+  compilation_tries           Int
+  compilation_stdout          String?              @db.VarChar
+  compilation_stderr          String?              @db.VarChar
+  compilation_time            Float?
+  compilation_wall_clock_time Float?
+  compilation_memory          BigInt?
+  compilation_shard           Int?
+  compilation_sandbox_paths   String[]             @db.VarChar
+  compilation_sandbox_digests String[]             @db.VarChar
+  evaluation_outcome          evaluation_outcome?
+  evaluation_tries            Int
+  score                       Float?
+  score_details               Json?
+  scored_at                   DateTime?            @db.Timestamp(6)
+  public_score                Float?
+  public_score_details        Json?
+  ranking_score_details       String[]             @db.VarChar
+  evaluations                 evaluations[]
+  executables                 executables[]
+  datasets                    datasets             @relation(fields: [dataset_id], references: [id], onDelete: Cascade)
+  submissions                 submissions          @relation(fields: [submission_id], references: [id], onDelete: Cascade)
+
+  @@id([submission_id, dataset_id])
+}
+
+model submissions {
+  opaque_id          BigInt
+  id                 Int                  @id @default(autoincrement())
+  participation_id   Int
+  task_id            Int
+  timestamp          DateTime             @db.Timestamp(6)
+  language           String?              @db.VarChar
+  comment            String               @db.VarChar
+  official           Boolean
+  evaluations        evaluations[]
+  executables        executables[]
+  files              files[]
+  submission_results submission_results[]
+  participations     participations       @relation(fields: [participation_id], references: [id], onDelete: Cascade)
+  tasks              tasks                @relation(fields: [task_id], references: [id], onDelete: Cascade)
+  tokens             tokens?
+
+  @@unique([participation_id, opaque_id], map: "participation_opaque_unique")
+  @@index([participation_id], map: "ix_submissions_participation_id")
+  @@index([task_id], map: "ix_submissions_task_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model tasks {
+  id                                            Int                      @id @default(autoincrement())
+  num                                           Int?
+  contest_id                                    Int?
+  name                                          String                   @unique @db.VarChar
+  title                                         String                   @db.VarChar
+  submission_format                             String[]                 @db.VarChar
+  primary_statements                            String[]                 @db.VarChar
+  allowed_languages                             String[]                 @db.VarChar
+  token_mode                                    token_mode
+  token_max_number                              Int?
+  token_min_interval                            Unsupported("interval")
+  token_gen_initial                             Int
+  token_gen_number                              Int
+  token_gen_interval                            Unsupported("interval")
+  token_gen_max                                 Int?
+  max_submission_number                         Int?
+  max_user_test_number                          Int?
+  min_submission_interval                       Unsupported("interval")?
+  min_user_test_interval                        Unsupported("interval")?
+  feedback_level                                feedback_level
+  score_precision                               Int
+  score_mode                                    score_mode
+  active_dataset_id                             Int?
+  attachments                                   attachments[]
+  datasets_datasets_task_idTotasks              datasets[]               @relation("datasets_task_idTotasks")
+  statements                                    statements[]
+  submissions                                   submissions[]
+  datasets_tasks_id_active_dataset_idTodatasets datasets?                @relation("tasks_id_active_dataset_idTodatasets", fields: [id, active_dataset_id], references: [task_id, id], onDelete: SetNull, onUpdate: SetNull, map: "fk_active_dataset_id")
+  contests                                      contests?                @relation(fields: [contest_id], references: [id], onDelete: Cascade)
+  user_tests                                    user_tests[]
+
+  @@unique([contest_id, name])
+  @@unique([contest_id, num])
+  @@unique([id, active_dataset_id])
+  @@index([contest_id], map: "ix_tasks_contest_id")
+}
+
+model teams {
+  id             Int              @id @default(autoincrement())
+  code           String           @unique @db.VarChar
+  name           String           @db.VarChar
+  participations participations[]
+}
+
+model testcases {
+  id          Int           @id @default(autoincrement())
+  dataset_id  Int
+  codename    String        @db.VarChar
+  public      Boolean
+  input       String        @db.VarChar
+  output      String        @db.VarChar
+  evaluations evaluations[]
+  datasets    datasets      @relation(fields: [dataset_id], references: [id], onDelete: Cascade)
+
+  @@unique([dataset_id, codename])
+  @@index([dataset_id], map: "ix_testcases_dataset_id")
+}
+
+model tokens {
+  id            Int         @id @default(autoincrement())
+  submission_id Int         @unique
+  timestamp     DateTime    @db.Timestamp(6)
+  submissions   submissions @relation(fields: [submission_id], references: [id], onDelete: Cascade)
+
+  @@index([submission_id], map: "ix_tokens_submission_id")
+}
+
+model user_test_executables {
+  id                Int               @id @default(autoincrement())
+  user_test_id      Int
+  dataset_id        Int
+  filename          String            @db.VarChar
+  digest            String            @db.VarChar
+  datasets          datasets          @relation(fields: [dataset_id], references: [id], onDelete: Cascade)
+  user_test_results user_test_results @relation(fields: [user_test_id, dataset_id], references: [user_test_id, dataset_id], onDelete: Cascade)
+  user_tests        user_tests        @relation(fields: [user_test_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_test_id, dataset_id, filename])
+  @@index([dataset_id], map: "ix_user_test_executables_dataset_id")
+  @@index([user_test_id], map: "ix_user_test_executables_user_test_id")
+}
+
+model user_test_files {
+  id           Int        @id @default(autoincrement())
+  user_test_id Int
+  filename     String     @db.VarChar
+  digest       String     @db.VarChar
+  user_tests   user_tests @relation(fields: [user_test_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_test_id, filename])
+  @@index([user_test_id], map: "ix_user_test_files_user_test_id")
+}
+
+model user_test_managers {
+  id           Int        @id @default(autoincrement())
+  user_test_id Int
+  filename     String     @db.VarChar
+  digest       String     @db.VarChar
+  user_tests   user_tests @relation(fields: [user_test_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_test_id, filename])
+  @@index([user_test_id], map: "ix_user_test_managers_user_test_id")
+}
+
+model user_test_results {
+  user_test_id                Int
+  dataset_id                  Int
+  output                      String?                 @db.VarChar
+  compilation_outcome         String?                 @db.VarChar
+  compilation_text            String[]                @db.VarChar
+  compilation_tries           Int
+  compilation_stdout          String?                 @db.VarChar
+  compilation_stderr          String?                 @db.VarChar
+  compilation_time            Float?
+  compilation_wall_clock_time Float?
+  compilation_memory          BigInt?
+  compilation_shard           Int?
+  compilation_sandbox_paths   String[]                @db.VarChar
+  compilation_sandbox_digests String[]                @db.VarChar
+  evaluation_outcome          String?                 @db.VarChar
+  evaluation_text             String[]                @db.VarChar
+  evaluation_tries            Int
+  execution_time              Float?
+  execution_wall_clock_time   Float?
+  execution_memory            BigInt?
+  evaluation_shard            Int?
+  evaluation_sandbox_paths    String[]                @db.VarChar
+  evaluation_sandbox_digests  String[]                @db.VarChar
+  user_test_executables       user_test_executables[]
+  datasets                    datasets                @relation(fields: [dataset_id], references: [id], onDelete: Cascade)
+  user_tests                  user_tests              @relation(fields: [user_test_id], references: [id], onDelete: Cascade)
+
+  @@id([user_test_id, dataset_id])
+}
+
+model user_tests {
+  id                    Int                     @id @default(autoincrement())
+  participation_id      Int
+  task_id               Int
+  timestamp             DateTime                @db.Timestamp(6)
+  language              String?                 @db.VarChar
+  input                 String                  @db.VarChar
+  user_test_executables user_test_executables[]
+  user_test_files       user_test_files[]
+  user_test_managers    user_test_managers[]
+  user_test_results     user_test_results[]
+  participations        participations          @relation(fields: [participation_id], references: [id], onDelete: Cascade)
+  tasks                 tasks                   @relation(fields: [task_id], references: [id], onDelete: Cascade)
+
+  @@index([participation_id], map: "ix_user_tests_participation_id")
+  @@index([task_id], map: "ix_user_tests_task_id")
+}
+
+model users {
+  id                  Int              @id @default(autoincrement())
+  first_name          String           @db.VarChar
+  last_name           String           @db.VarChar
+  username            String           @unique @db.VarChar
+  password            String           @db.VarChar
+  email               String?          @db.VarChar
+  timezone            String?          @db.VarChar
+  preferred_languages String[]         @db.VarChar
+  participations      participations[]
+}
+
+enum compilation_outcome {
+  ok
+  fail
+}
+
+enum evaluation_outcome {
+  ok
+}
+
+enum feedback_level {
+  full
+  restricted
+  oi_restricted
+}
+
+enum score_mode {
+  max_tokened_last
+  max
+  max_subtask
+}
+
+enum token_mode {
+  disabled
+  finite
+  infinite
+}

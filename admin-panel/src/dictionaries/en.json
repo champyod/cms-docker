@@ -1,0 +1,11 @@
+{
+  "dashboard": {
+    "welcome": "Welcome back, Admin",
+    "description": "Here's what's happening with your contests today.",
+    "stats": {
+      "totalUsers": "Total Users",
+      "totalContests": "Total Contests",
+      "totalSubmissions": "Total Submissions"
+    }
+  }
+}
