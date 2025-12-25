@@ -68,7 +68,7 @@ export function UserModal({ isOpen, onClose, user, onSuccess }: UserModalProps) 
         onSuccess();
         onClose();
       } else {
-        setError(result.error);
+        setError(result.error || 'Operation failed');
       }
     } catch (err) {
       setError('An unexpected error occurred');

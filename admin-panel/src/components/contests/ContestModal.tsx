@@ -63,10 +63,20 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
 
     try {
       let result;
+      // createContest/updateContest expect Omit<contests, ...> & { start: string|Date, stop: string|Date ... }
+      // formData contains strings for start/stop which are valid inputs (parsed by Date constructor if needed or accepted as string)
+      // but TypeScript needs reassurance.
+      const payload = {
+        name: formData.name,
+        description: formData.description,
+        start: formData.start,
+        stop: formData.stop,
+      };
+
       if (contest) {
-        result = await updateContest(contest.id, formData);
+        result = await updateContest(contest.id, payload);
       } else {
-        result = await createContest(formData);
+        result = await createContest(payload);
       }
 
       if (result.success) {
