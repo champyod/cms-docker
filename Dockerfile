@@ -3,8 +3,8 @@
 ARG BASE_IMAGE=ubuntu:noble
 FROM ${BASE_IMAGE}
 
-# Default mirror for faster builds in Thailand. Override with --build-arg APT_MIRROR=archive.ubuntu.com
-ARG APT_MIRROR=th.archive.ubuntu.com
+# Default mirror. Override with --build-arg APT_MIRROR=mirror.example.com
+ARG APT_MIRROR=archive.ubuntu.com
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked <<EOF
@@ -82,6 +82,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         pushd /tmp/isolate
         make -j$(nproc)
         make install
+        # Manually create isolate group if not exists (source build doesn't always do it)
+        getent group isolate || groupadd -r isolate
         popd
         rm -rf /tmp/isolate
     fi
