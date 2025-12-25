@@ -4,7 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/core/Button';
 import { Activity, Users, Trophy, Server } from 'lucide-react';
 
-const StatCard = ({ title, value, change, icon: Icon, color }: any) => (
+const StatCard = ({ title, value, change, icon: Icon, color }: { title: string; value: string; change: string | number; icon: React.ComponentType<{ className?: string }>; color: string }) => (
   <Card className="relative overflow-hidden group">
     <div className={`absolute right-4 top-4 p-3 rounded-2xl ${color} bg-opacity-20 text-white`}>
       <Icon className="w-6 h-6" />

@@ -28,3 +28,6 @@ test_logs/
 
 # VSCode settings
 .vscode/
+
+.agent/environment.md
+.result
