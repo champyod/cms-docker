@@ -58,6 +58,27 @@ env:
 		echo "" >> .env; \
 		echo "WARNING: Using .env.worker.example template"; \
 	fi
+	@# Generate admin-panel/.env for Prisma
+	@echo "Generating admin-panel/.env..."
+	@if [ -f .env.core ]; then \
+		# Extract variables from .env.core to build DATABASE_URL
+		DB_USER=$$(grep "^POSTGRES_USER=" .env.core | cut -d '=' -f2); \
+		DB_PASS=$$(grep "^POSTGRES_PASSWORD=" .env.core | cut -d '=' -f2); \
+		DB_NAME=$$(grep "^POSTGRES_DB=" .env.core | cut -d '=' -f2); \
+		echo "DATABASE_URL=\"postgresql://$$DB_USER:$$DB_PASS@localhost:5432/$$DB_NAME\"" > admin-panel/.env; \
+	else \
+		echo "# Please configure .env.core first" > admin-panel/.env; \
+	fi
+	@if [ -f .env.worker ]; then \
+		echo "### .env.worker ###" >> .env; \
+		cat .env.worker >> .env; \
+		echo "" >> .env; \
+	elif [ -f .env.worker.example ]; then \
+		echo "### .env.worker.example (Template used - please create .env.worker) ###" >> .env; \
+		cat .env.worker.example >> .env; \
+		echo "" >> .env; \
+		echo "WARNING: Using .env.worker.example template"; \
+	fi
 	@# Local Environment
 	@if [ -f .env.local ]; then \
 		echo "### .env.local ###" >> .env; \
