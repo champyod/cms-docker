@@ -33,14 +33,36 @@ git submodule update --init --recursive
 cp .env.core.example .env.core  # Edit with your settings
 make env  # Generates .env and config/cms.toml
 
-# 3. Deploy
-make core
-# Wait for services to be healthy (check 'docker ps')
-docker exec -it cms-log-service cmsInitDB  # Create database schema
-docker exec -it cms-log-service cmsAddAdmin admin -p YourPassword! # Create admin
-make admin
-make contest
-make worker
+### Deployment (Recommended: Pre-built Images)
+This method is faster and saves disk space on the VM as it pulls images from GitHub Container Registry.
+
+```bash
+# 1. Login to GitHub Container Registry (One time setup)
+# Use your GitHub Username and a Personal Access Token (Classic) with 'read:packages' scope
+echo "YOUR_PAT_TOKEN" | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
+
+# 2. Deploy
+make pull         # Pull latest images
+make core-img     # Start Core services
+
+# 3. Initialize (First time only)
+# Wait a few seconds for services to start, then run:
+docker exec -it cms-log-service cmsInitDB                  # Create database schema
+docker exec -it cms-log-service cmsAddAdmin admin -p pass  # Create admin user
+
+make admin-img    # Start Admin services
+make contest-img  # Start Contest services
+make worker-img   # Start Worker services
+```
+
+### Development (Build from Source)
+Use these commands if you are modifying the source code and need to rebuild locally.
+```bash
+make core      # Build and deploy Core
+make admin     # Build and deploy Admin
+make contest   # Build and deploy Contest
+make worker    # Build and deploy Worker
+```
 
 ### Troubleshooting
 
