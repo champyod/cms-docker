@@ -56,6 +56,12 @@ make contest-img  # Start Contest services
 make worker-img   # Start Worker services
 ```
 
+### Automatic Updates (Optional)
+To enable automatic updates (checking every 60 seconds):
+1.  Open `docker-compose.core.img.yml`.
+2.  Uncomment the `watchtower` service block.
+3.  Run `make core-img`.
+
 ### Development (Build from Source)
 Use these commands if you are modifying the source code and need to rebuild locally.
 ```bash

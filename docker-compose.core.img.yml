@@ -12,3 +12,14 @@ services:
     image: ghcr.io/champyod/cms-docker-core:major-admin-panel
   checker-service:
     image: ghcr.io/champyod/cms-docker-core:major-admin-panel
+
+  # Auto-updater for all containers (Disabled by default)
+  # To ENABLE: Uncomment this block and run 'make core-img'
+  # watchtower:
+  #   image: containrrr/watchtower
+  #   container_name: cms-watchtower
+  #   restart: unless-stopped
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #     - /home/ccyod/.docker/config.json:/config.json  # Mount auth credentials
+  #   command: --interval 60 --cleanup --include-stopped
