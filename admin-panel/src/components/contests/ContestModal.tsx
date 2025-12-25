@@ -5,7 +5,7 @@ import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
 import { X, Loader2 } from 'lucide-react';
 import { createContest, updateContest } from '@/app/actions/contests';
-import { contests } from '@/generated/prisma/client';
+import { contests } from '@prisma/client';
 
 interface ContestModalProps {
   isOpen: boolean;

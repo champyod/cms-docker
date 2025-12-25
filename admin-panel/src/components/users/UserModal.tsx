@@ -6,7 +6,7 @@ import { Card } from '@/components/core/Card';
 import { X, Loader2 } from 'lucide-react';
 import { createUser, updateUser } from '@/app/actions/users';
 
-import { users } from '@/generated/prisma/client';
+import { users } from '@prisma/client';
 
 interface UserModalProps {
   isOpen: boolean;

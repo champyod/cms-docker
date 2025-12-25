@@ -6,7 +6,7 @@ import { Button } from '@/components/core/Button';
 import { Edit2, Trash2, Plus, Calendar, Clock } from 'lucide-react';
 import { ContestModal } from './ContestModal';
 import { deleteContest } from '@/app/actions/contests';
-import { contests } from '@/generated/prisma/client';
+import { contests } from '@prisma/client';
 
 export function ContestList({ initialContests, totalPages }: { initialContests: contests[], totalPages: number }) {
   const [contests] = useState(initialContests);

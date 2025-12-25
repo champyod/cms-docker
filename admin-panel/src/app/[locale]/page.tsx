@@ -10,7 +10,7 @@ import {
   CheckCircle2,
   AlertCircle
 } from 'lucide-react';
-import { prisma } from '@/lib/prisma';
+import { prisma } from '../../lib/prisma';
 
 async function getStats() {
   const [

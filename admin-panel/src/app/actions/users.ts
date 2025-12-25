@@ -1,6 +1,6 @@
 'use server'
 
-import { prisma } from '@/lib/prisma';
+import { prisma } from '../../lib/prisma';
 import { revalidatePath } from 'next/cache';
 import bcrypt from 'bcryptjs';
 
@@ -35,7 +35,7 @@ export async function getUsers({ page = 1, search = '' }: { page?: number; searc
   };
 }
 
-import { users } from '@/generated/prisma/client';
+import { users } from '@prisma/client';
 
 // ...
 

@@ -1,4 +1,4 @@
-# Use the official Bun image - Trigger CI
+# Use the official Bun image
 FROM oven/bun:latest as base
 WORKDIR /app
 

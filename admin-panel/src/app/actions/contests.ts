@@ -1,7 +1,7 @@
 'use server'
 
-import { prisma } from '@/lib/prisma';
-import { contests } from '@/generated/prisma/client';
+import { prisma } from '../../lib/prisma';
+import { contests } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 
 const CONTESTS_PER_PAGE = 20;

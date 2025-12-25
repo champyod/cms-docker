@@ -1,4 +1,4 @@
-import { submissions, submission_results, users, tasks, contests } from '@/generated/prisma/client';
+import { submissions, submission_results, users, tasks, contests } from '@prisma/client';
 
 export type SubmissionWithRelations = submissions & {
     participations: {

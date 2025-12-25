@@ -7,7 +7,7 @@ import { Edit2, Trash2, Plus } from 'lucide-react';
 import { UserModal } from './UserModal';
 import { deleteUser } from '@/app/actions/users';
 
-import { users } from '@/generated/prisma/client';
+import { users } from '@prisma/client';
 
 export function UserList({ initialUsers, totalPages }: { initialUsers: users[], totalPages: number }) {
   const [users] = useState(initialUsers); // Removed unused setUsers
