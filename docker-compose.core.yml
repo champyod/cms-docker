@@ -15,6 +15,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-cmsuser}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cmspassword}
       POSTGRES_HOST_AUTH_METHOD: ${POSTGRES_HOST_AUTH_METHOD:-md5}
+    ports:
+      - "5432:5432"
     volumes:
       - cms-database-data:/var/lib/postgresql/data
     networks:
