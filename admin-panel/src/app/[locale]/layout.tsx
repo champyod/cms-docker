@@ -12,7 +12,7 @@ export default async function AuthenticatedLayout({
   const { locale } = resolvedParams;
 
   return (
-    <div className="flex min-h-screen overflow-hidden bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-[#0a0a0e] to-black">
+    <div className="flex min-h-screen overflow-hidden bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-neutral-900 via-black to-neutral-950">
       <Sidebar className="z-20" locale={locale} />
       <main className="flex-1 flex flex-col relative overflow-hidden">
         {/* Background Effects */}

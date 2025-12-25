@@ -7,8 +7,8 @@
 
 @layer base {
   body {
-    @apply bg-slate-950 text-white antialiased;
-    background: radial-gradient(circle at top left, #1e1b4b, #020617);
+    @apply bg-black text-white antialiased;
+      background: radial-gradient(circle at top left, #171717, #000000);
     min-height: 100vh;
   }
 }
@@ -16,24 +16,24 @@
 @layer components {
   /* Glass Panel - Base transparency */
   .glass-panel {
-    @apply bg-white/5 backdrop-blur-xl border border-white/10 shadow-xl;
+    @apply bg-white/5 backdrop-blur-xl border border-white/5 shadow-xl;
   }
   
   /* Glass Card - Rounded, interactive */
   .glass-card {
-    @apply bg-white/5 backdrop-blur-lg border border-white/10 rounded-3xl shadow-lg transition-all duration-300;
+    @apply bg-neutral-900/50 backdrop-blur-lg border border-white/5 rounded-3xl shadow-lg transition-all duration-300;
   }
   .glass-card-hover {
-    @apply hover:bg-white/10;
+    @apply hover:bg-white/5;
   }
 
   /* Glass Input - Floating feel */
   .glass-input {
-    @apply bg-white/5 border border-white/10 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-white placeholder-white/30 backdrop-blur-md;
+    @apply bg-neutral-950/50 border border-white/10 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-white placeholder-white/20 backdrop-blur-md;
   }
   
   /* Glass Button - Clickable */
   .glass-button {
-    @apply bg-white/10 hover:bg-white/20 active:bg-white/30 border border-white/20 rounded-xl px-4 py-2 transition-all duration-200 backdrop-blur-md font-medium cursor-pointer;
+    @apply bg-white/5 hover:bg-white/10 active:bg-white/20 border border-white/10 rounded-xl px-4 py-2 transition-all duration-200 backdrop-blur-md font-medium cursor-pointer;
   }
 }
