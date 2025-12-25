@@ -13,7 +13,7 @@ COPY . .
 RUN bun run build
 
 # Production image, copy all the files and run next
-FROM oven/bun:1.1 as release
+FROM oven/bun:latest as release
 WORKDIR /app
 
 ENV NODE_ENV=production
