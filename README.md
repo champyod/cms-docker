@@ -32,6 +32,7 @@ git submodule update --init --recursive
 # 2. Configure environment (Critical Step)
 cp .env.core.example .env.core  # Edit with your settings
 make env  # Generates .env and config/cms.toml
+```
 
 ### Deployment (Recommended: Pre-built Images)
 This method is faster and saves disk space on the VM as it pulls images from GitHub Container Registry.
@@ -69,7 +70,7 @@ make worker    # Build and deploy Worker
 - **"Relation 'contests' does not exist"**: Run `docker exec -it cms-log-service cmsInitDB`.
 - **Stuck at "Compiling"**: The Worker failed to connect. Run `docker restart cms-worker-0`.
 - **"Unable to invalidate" / "Service not connected"**: Core services mesh is broken. Run `docker restart cms-evaluation-service` or restart the whole stack.
-- **Config changes not applying**: `make env` does not overwrite. Delete `config/cms.toml` then run `make env` again.```
+- **Config changes not applying**: `make env` does not overwrite. Delete `config/cms.toml` then run `make env` again.
 
 ## Services
 
