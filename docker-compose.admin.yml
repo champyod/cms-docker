@@ -10,6 +10,7 @@ services:
     build:
       context: ./admin-panel
       dockerfile: Dockerfile
+    image: cms-admin-web-server
     container_name: cms-admin-web-server
     restart: unless-stopped
     environment:

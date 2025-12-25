@@ -1,0 +1,4 @@
+version: '3.8'
+services:
+  contest-web-server:
+    image: ghcr.io/champyod/cms-docker-core:major-admin-panel

@@ -1,0 +1,14 @@
+version: '3.8'
+services:
+  log-service:
+    image: ghcr.io/champyod/cms-docker-core:major-admin-panel
+  resource-service:
+    image: ghcr.io/champyod/cms-docker-core:major-admin-panel
+  scoring-service:
+    image: ghcr.io/champyod/cms-docker-core:major-admin-panel
+  evaluation-service:
+    image: ghcr.io/champyod/cms-docker-core:major-admin-panel
+  proxy-service:
+    image: ghcr.io/champyod/cms-docker-core:major-admin-panel
+  checker-service:
+    image: ghcr.io/champyod/cms-docker-core:major-admin-panel

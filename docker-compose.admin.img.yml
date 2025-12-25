@@ -1,0 +1,6 @@
+version: '3.8'
+services:
+  admin-web-server:
+    image: ghcr.io/champyod/cms-docker-admin-panel:major-admin-panel
+  ranking-web-server:
+    image: ghcr.io/champyod/cms-docker-core:major-admin-panel

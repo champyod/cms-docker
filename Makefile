@@ -118,5 +118,23 @@ contest:
 worker:
 	docker compose -f docker-compose.worker.yml up -d --build
 
+pull:
+	docker compose -f docker-compose.core.yml -f docker-compose.core.img.yml pull
+	docker compose -f docker-compose.admin.yml -f docker-compose.admin.img.yml pull
+	docker compose -f docker-compose.contest.yml -f docker-compose.contest.img.yml pull
+	docker compose -f docker-compose.worker.yml -f docker-compose.worker.img.yml pull
+
+core-img:
+	docker compose -f docker-compose.core.yml -f docker-compose.core.img.yml up -d --no-build
+
+admin-img:
+	docker compose -f docker-compose.admin.yml -f docker-compose.admin.img.yml up -d --no-build
+
+contest-img:
+	docker compose -f docker-compose.contest.yml -f docker-compose.contest.img.yml up -d --no-build
+
+worker-img:
+	docker compose -f docker-compose.worker.yml -f docker-compose.worker.img.yml up -d --no-build
+
 clean:
 	rm -f .env
