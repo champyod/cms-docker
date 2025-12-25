@@ -18,9 +18,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
     # Use configured mirror for faster builds
     if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
-        sed -i "s/archive.ubuntu.com/${APT_MIRROR}/g" /etc/apt/sources.list.d/ubuntu.sources
+        sed -i "s|archive.ubuntu.com|${APT_MIRROR}|g" /etc/apt/sources.list.d/ubuntu.sources
     elif [ -f /etc/apt/sources.list ]; then
-        sed -i "s/archive.ubuntu.com/${APT_MIRROR}/g" /etc/apt/sources.list
+        sed -i "s|archive.ubuntu.com|${APT_MIRROR}|g" /etc/apt/sources.list
     fi
 
     apt-get update
