@@ -68,10 +68,10 @@ model contests {
   ip_autologin                                     Boolean
   token_mode                                       token_mode
   token_max_number                                 Int?
-  token_min_interval                               Unsupported("interval")
+  token_min_interval                               Unsupported("interval")?
   token_gen_initial                                Int
   token_gen_number                                 Int
-  token_gen_interval                               Unsupported("interval")
+  token_gen_interval                               Unsupported("interval")?
   token_gen_max                                    Int?
   start                                            DateTime                 @db.Timestamp(6)
   stop                                             DateTime                 @db.Timestamp(6)
