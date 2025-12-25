@@ -100,7 +100,14 @@ env:
 	@echo ".env file generated. You can now run: docker compose up -d --build"
 
 core:
-	docker compose -f docker-compose.core.yml up -d --build
+	docker compose -f docker-compose.core.yml up -d database
+	docker compose -f docker-compose.core.yml build log-service
+	docker compose -f docker-compose.core.yml build resource-service
+	docker compose -f docker-compose.core.yml build scoring-service
+	docker compose -f docker-compose.core.yml build evaluation-service
+	docker compose -f docker-compose.core.yml build proxy-service
+	docker compose -f docker-compose.core.yml build checker-service
+	docker compose -f docker-compose.core.yml up -d
 
 admin:
 	docker compose -f docker-compose.admin.yml up -d --build
