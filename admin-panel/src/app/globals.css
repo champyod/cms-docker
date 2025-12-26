@@ -1,3 +1,5 @@
+/* Tailwind CSS v4 Configuration & Base Styles */
+/* Note: @theme and @apply with v4 syntax might trigger IDE warnings but are correct. */
 @import "tailwindcss";
 
 @theme {
@@ -16,12 +18,12 @@
 @layer components {
   /* Glass Panel - Base transparency */
   .glass-panel {
-    @apply bg-black/40 backdrop-blur-xl border border-white/5 shadow-xl;
+    @apply bg-neutral-900/60 backdrop-blur-xl border border-white/5 shadow-xl;
   }
   
   /* Glass Card - Rounded, interactive */
   .glass-card {
-    @apply bg-black/40 backdrop-blur-lg border border-white/5 rounded-3xl shadow-lg transition-all duration-300;
+    @apply bg-neutral-900/60 backdrop-blur-lg border border-white/5 rounded-3xl shadow-lg transition-all duration-300;
   }
   .glass-card-hover {
     @apply hover:bg-white/5;

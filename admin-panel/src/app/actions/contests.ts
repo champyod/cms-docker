@@ -35,10 +35,11 @@ export async function getContests({ page = 1, search = '' }: { page?: number; se
 
 export async function createContest(data: Omit<contests, 'id' | 'allowed_localizations' | 'languages' | 'submissions_download_allowed' | 'allow_questions' | 'allow_user_tests' | 'allow_unofficial_submission_before_analysis_mode' | 'block_hidden_participations' | 'allow_password_authentication' | 'allow_registration' | 'ip_restriction' | 'ip_autologin' | 'token_mode' | 'token_max_number' | 'token_min_interval' | 'token_gen_initial' | 'token_gen_number' | 'token_gen_interval' | 'token_gen_max' | 'analysis_enabled' | 'analysis_start' | 'analysis_stop' | 'timezone' | 'per_user_time' | 'max_submission_number' | 'max_user_test_number' | 'min_submission_interval' | 'min_submission_interval_grace_period' | 'min_user_test_interval' | 'score_precision' | 'start' | 'stop'> & { 
     start: string | Date; 
-    stop: string | Date;
+  stop: string | Date; 
+  timezone: string;
     description: string;
 }) {
-  const { name, description, start, stop } = data;
+  const { name, description, start, stop, timezone } = data;
 
   try {
     const contest = await prisma.contests.create({
@@ -66,6 +67,7 @@ export async function createContest(data: Omit<contests, 'id' | 'allowed_localiz
         analysis_start: new Date(stop), // Default to stop time
         analysis_stop: new Date(stop),  // Default to stop time
         score_precision: 0,
+        timezone: timezone,
       },
     });
     revalidatePath('/[locale]/contests');

@@ -3,14 +3,16 @@ import { UserList } from '@/components/users/UserList';
 import { getDictionary } from '@/i18n';
 
 export default async function UsersPage({
-  params: { locale },
+  params,
   searchParams,
 }: {
-  params: { locale: string };
-  searchParams: { page?: string, search?: string };
+    params: Promise<{ locale: string }>;
+    searchParams: Promise<{ page?: string; search?: string }>;
 }) {
-  const page = Number(searchParams.page) || 1;
-  const search = searchParams.search || '';
+  const { locale } = await params;
+  const sParams = await searchParams;
+  const page = Number(sParams.page) || 1;
+  const search = sParams.search || '';
   
   const { users, totalPages } = await getUsers({ page, search });
   const dict = await getDictionary(locale);

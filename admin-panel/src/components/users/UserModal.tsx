@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
-import { X, Loader2 } from 'lucide-react';
+import { X, Loader2, Eye, EyeOff } from 'lucide-react';
 import { createUser, updateUser } from '@/app/actions/users';
 
 import { users } from '@prisma/client';
@@ -18,13 +18,14 @@ interface UserModalProps {
 export function UserModal({ isOpen, onClose, user, onSuccess }: UserModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
     username: '',
     email: '',
     password: '',
-    timezone: '',
+    timezone: 'Asia/Bangkok', // Default timezone
   });
 
   useEffect(() => {
@@ -35,7 +36,7 @@ export function UserModal({ isOpen, onClose, user, onSuccess }: UserModalProps) 
         username: user.username,
         email: user.email || '',
         password: '', // Don't fill password on edit
-        timezone: user.timezone || '',
+        timezone: user.timezone || 'Asia/Bangkok',
       });
     } else {
       setFormData({
@@ -44,7 +45,7 @@ export function UserModal({ isOpen, onClose, user, onSuccess }: UserModalProps) 
         username: '',
         email: '',
         password: '',
-        timezone: '',
+        timezone: 'Asia/Bangkok',
       });
     }
   }, [user, isOpen]);
@@ -79,7 +80,7 @@ export function UserModal({ isOpen, onClose, user, onSuccess }: UserModalProps) 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <Card className="w-full max-w-md p-6 relative animate-in fade-in zoom-in-95 duration-200">
+      <Card className="w-full max-w-md p-6 relative animate-in fade-in zoom-in-95 duration-200 bg-neutral-900/80 border-white/10 shadow-2xl">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-neutral-400 hover:text-white transition-colors"
@@ -100,86 +101,100 @@ export function UserModal({ isOpen, onClose, user, onSuccess }: UserModalProps) 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-neutral-400">First Name</label>
+              <label className="text-xs font-medium text-neutral-400 uppercase tracking-wider">First Name</label>
               <input
                 required
                 type="text"
                 value={formData.first_name}
                 onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                className="w-full px-3 py-2 bg-neutral-900/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all"
+                className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all font-sans"
                 placeholder="John"
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-neutral-400">Last Name</label>
+              <label className="text-xs font-medium text-neutral-400 uppercase tracking-wider">Last Name</label>
               <input
                 required
                 type="text"
                 value={formData.last_name}
                 onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                className="w-full px-3 py-2 bg-neutral-900/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all"
+                className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all font-sans"
                 placeholder="Doe"
               />
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-neutral-400">Username</label>
+            <label className="text-xs font-medium text-neutral-400 uppercase tracking-wider">Username</label>
             <input
               required
-              disabled={!!user} // Username usually shouldn't change
               type="text"
               value={formData.username}
               onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-              className="w-full px-3 py-2 bg-neutral-900/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all disabled:opacity-50"
+              className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all font-mono"
               placeholder="johndoe"
             />
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-neutral-400">Email (Optional)</label>
+            <label className="text-xs font-medium text-neutral-400 uppercase tracking-wider">Email (Optional)</label>
             <input
               type="email"
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="w-full px-3 py-2 bg-neutral-900/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all"
+              className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all font-sans"
               placeholder="john@example.com"
             />
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-neutral-400">
-              {user ? 'New Password (leave blank to keep)' : 'Password'}
+            <label className="text-xs font-medium text-neutral-400 uppercase tracking-wider">
+              {user ? 'New Password (Optional)' : 'Password'}
             </label>
-            <input
-              required={!user}
-              type="password"
-              value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              className="w-full px-3 py-2 bg-neutral-900/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all"
-              placeholder="••••••••"
-            />
+            <div className="relative group">
+              <input
+                required={!user}
+                type={showPassword ? "text" : "password"}
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all font-mono pr-10"
+                placeholder="••••••••"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute inset-y-0 right-3 flex items-center text-neutral-500 hover:text-white transition-colors"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
 
            <div className="space-y-1.5">
-            <label className="text-xs font-medium text-neutral-400">Timezone</label>
+            <label className="text-xs font-medium text-neutral-400 uppercase tracking-wider">Timezone</label>
             <input
               type="text"
               value={formData.timezone}
               onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
-              className="w-full px-3 py-2 bg-neutral-900/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all"
-              placeholder="UTC"
+              className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all"
+              placeholder="Asia/Bangkok"
             />
           </div>
 
-          <div className="pt-4 flex justify-end gap-3">
-            <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>
+          <div className="pt-6 flex justify-end gap-3">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onClose}
+              disabled={loading}
+              className="text-neutral-400 hover:text-white"
+            >
               Cancel
             </Button>
             <Button 
               type="submit" 
               variant="primary" 
-              className="bg-indigo-500 hover:bg-indigo-600 text-white min-w-[100px]"
+              className="bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white shadow-lg shadow-indigo-500/20 px-6"
               disabled={loading}
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (user ? 'Save Changes' : 'Create User')}

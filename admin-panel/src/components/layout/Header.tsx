@@ -2,7 +2,7 @@ import React from 'react';
 import { cn } from '@/lib/utils';
 import { Bell, Search, User } from 'lucide-react';
 
-export const Header: React.FC<{ className?: string }> = ({ className }) => {
+export const Header: React.FC<{ className?: string; username?: string }> = ({ className, username }) => {
   return (
     <header className={cn("flex items-center justify-between h-20 px-8", className)}>
       {/* Page Title / Breadcrumbs */}
@@ -34,8 +34,8 @@ export const Header: React.FC<{ className?: string }> = ({ className }) => {
         {/* User Profile */}
         <div className="flex items-center gap-3 pl-4 border-l border-white/10">
             <div className="text-right hidden md:block">
-                <p className="text-sm font-medium text-white">Admin User</p>
-                <p className="text-xs text-slate-400">Super Admin</p>
+            <p className="text-sm font-medium text-white">{username || 'Admin User'}</p>
+            <p className="text-xs text-slate-400">Admin</p>
             </div>
             <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-cyan-500 p-[2px]">
                 <div className="w-full h-full rounded-full bg-slate-950 flex items-center justify-center overflow-hidden">

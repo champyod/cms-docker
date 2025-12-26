@@ -31,6 +31,7 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
     description: '',
     start: '',
     stop: '',
+    timezone: 'Asia/Bangkok',
   });
 
   useEffect(() => {
@@ -40,6 +41,7 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
         description: contest.description,
         start: formatDateForInput(contest.start),
         stop: formatDateForInput(contest.stop),
+        timezone: contest.timezone || 'Asia/Bangkok',
       });
     } else {
         // Default start: Now, Stop: Now + 5 hours
@@ -50,6 +52,7 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
         description: '',
         start: formatDateForInput(now),
         stop: formatDateForInput(end),
+        timezone: 'Asia/Bangkok',
       });
     }
   }, [contest, isOpen]);
@@ -63,14 +66,12 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
 
     try {
       let result;
-      // createContest/updateContest expect Omit<contests, ...> & { start: string|Date, stop: string|Date ... }
-      // formData contains strings for start/stop which are valid inputs (parsed by Date constructor if needed or accepted as string)
-      // but TypeScript needs reassurance.
       const payload = {
         name: formData.name,
         description: formData.description,
         start: formData.start,
         stop: formData.stop,
+        timezone: formData.timezone,
       };
 
       if (contest) {
@@ -93,83 +94,102 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <Card className="w-full max-w-lg p-6 relative animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
+      <Card className="w-full max-w-lg p-8 relative animate-in fade-in zoom-in-95 duration-200 glass-card border-white/10 shadow-2xl">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-neutral-400 hover:text-white transition-colors"
+          className="absolute top-6 right-6 text-neutral-400 hover:text-white transition-colors"
         >
           <X className="w-5 h-5" />
         </button>
 
-        <h2 className="text-xl font-bold text-white mb-6">
+        <h2 className="text-2xl font-bold text-white mb-8 tracking-tight">
           {contest ? 'Edit Contest' : 'Create New Contest'}
         </h2>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
+          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm flex items-center gap-3">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-neutral-400">Contest Name</label>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-[0.2em]">Contest Name</label>
             <input
               required
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-3 py-2 bg-neutral-900/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all placeholder:text-neutral-600"
+              className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white text-sm focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all font-sans placeholder:text-neutral-700 shadow-inner"
               placeholder="IOI 2025 Selection Round 1"
             />
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-neutral-400">Description</label>
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-[0.2em]">Description</label>
             <textarea
               required
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full px-3 py-2 bg-neutral-900/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all h-24 resize-none placeholder:text-neutral-600"
+              className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white text-sm focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all h-28 resize-none font-sans placeholder:text-neutral-700 shadow-inner"
               placeholder="Detailed description of the contest..."
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-             <div className="space-y-1.5">
-                <label className="text-xs font-medium text-neutral-400">Start Time</label>
+          <div className="grid grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-[0.2em]">Start Time</label>
                 <input
                     required
                     type="datetime-local"
                     value={formData.start}
                     onChange={(e) => setFormData({ ...formData, start: e.target.value })}
-                    className="w-full px-3 py-2 bg-neutral-900/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all [color-scheme:dark]"
+                className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white text-sm focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all [color-scheme:dark] shadow-inner"
                 />
             </div>
-             <div className="space-y-1.5">
-                <label className="text-xs font-medium text-neutral-400">Stop Time</label>
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-[0.2em]">Stop Time</label>
                 <input
                     required
                     type="datetime-local"
                     value={formData.stop}
                     onChange={(e) => setFormData({ ...formData, stop: e.target.value })}
-                    className="w-full px-3 py-2 bg-neutral-900/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all [color-scheme:dark]"
+                className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white text-sm focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all [color-scheme:dark] shadow-inner"
                 />
             </div>
           </div>
 
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-[0.2em]">Timezone</label>
+            <input
+              required
+              type="text"
+              value={formData.timezone}
+              onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
+              className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white text-sm focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all font-mono placeholder:text-neutral-700 shadow-inner"
+              placeholder="Asia/Bangkok"
+            />
+          </div>
+
           <div className="pt-4 flex justify-end gap-3">
-            <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onClose}
+              disabled={loading}
+              className="px-6 text-neutral-400 hover:text-white"
+            >
               Cancel
             </Button>
             <Button 
               type="submit" 
               variant="primary" 
-              className="bg-indigo-500 hover:bg-indigo-600 text-white min-w-[100px]"
+              className="bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white min-w-[140px] shadow-lg shadow-indigo-500/20 rounded-xl"
               disabled={loading}
             >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (contest ? 'Save Changes' : 'Create Contest')}
+              {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : (contest ? 'Save Changes' : 'Create Contest')}
             </Button>
           </div>
         </form>
