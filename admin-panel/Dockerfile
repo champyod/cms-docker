@@ -13,7 +13,8 @@ COPY . .
 RUN bunx prisma generate
 
 # Build the application
-RUN bun run build
+# Provide dummy DATABASE_URL to avoid Prisma constructor error during static page generation
+RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" bun run build
 
 # Production image, copy all the files and run next
 FROM oven/bun:latest as release
