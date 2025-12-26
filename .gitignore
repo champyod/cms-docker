@@ -9,9 +9,9 @@ cms.egg-info
 .testfailures
 .unittestfailures
 .coverage*
-cache/
-lib/
-log/
+/cache/
+/lib/
+/log/
 .vagrant/
 codecov/
 .dev/
