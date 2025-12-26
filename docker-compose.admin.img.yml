@@ -2,5 +2,7 @@ version: '3.8'
 services:
   admin-web-server:
     image: ghcr.io/champyod/cms-docker-admin-panel:major-admin-panel
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
   ranking-web-server:
     image: ghcr.io/champyod/cms-docker-core:major-admin-panel
