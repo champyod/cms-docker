@@ -1,20 +1,14 @@
 'use client';
 
-import React from 'react';
+import React, { useActionState } from 'react';
 import { Card } from '@/components/core/Card';
 import { Input } from '@/components/core/Input';
 import { Button } from '@/components/core/Button';
-import { Lock, User } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { Lock, User, AlertCircle } from 'lucide-react';
+import { login } from '@/app/actions/auth';
 
 export default function LoginPage() {
-  const router = useRouter();
-
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    // Simulate login
-    router.push('/en');
-  };
+  const [state, loginAction, pending] = useActionState(login, null);
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
@@ -30,21 +24,32 @@ export default function LoginPage() {
           <p className="text-slate-400 mt-2">Sign in to access the admin panel</p>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-6">
+        <form action={loginAction} className="space-y-6">
+          {state?.error && (
+            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center gap-3 text-red-400 text-sm animate-in fade-in slide-in-from-top-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <p>{state.error}</p>
+            </div>
+          )}
+
           <Input 
+            name="username"
             label="Username" 
             placeholder="admin" 
             icon={<User className="w-4 h-4" />}
+            required
           />
           <Input 
+            name="password"
             label="Password" 
             type="password" 
             placeholder="••••••••" 
             icon={<Lock className="w-4 h-4" />}
+            required
           />
           
-          <Button type="submit" className="w-full" size="lg">
-            Sign In
+          <Button type="submit" className="w-full" size="lg" disabled={pending}>
+            {pending ? "Signing In..." : "Sign In"}
           </Button>
         </form>
       </Card>
