@@ -6,11 +6,13 @@ import { Card } from '@/components/core/Card';
 import { 
   Settings, Users, Trophy, Clock, Shield, Zap, 
   Plus, Trash2, ExternalLink, Play, Square, 
-  ChevronDown, ChevronUp, Save
+  ChevronDown, ChevronUp, Save, Power
 } from 'lucide-react';
 import { ParticipantModal } from './ParticipantModal';
 import { ContestCommunications } from './ContestCommunications';
 import { updateContestSettings, addParticipant, removeParticipant } from '@/app/actions/contests';
+import { switchContest } from '@/app/actions/services';
+import { useRouter } from 'next/navigation';
 
 
 type ContestWithRelations = contests & {
@@ -33,6 +35,10 @@ export function ContestDetailView({ contest, availableUsers, availableTasks }: C
     services: true,
   });
   const [saving, setSaving] = useState(false);
+  const [activating, setActivating] = useState(false);
+  const router = useRouter();
+
+
   const [formData, setFormData] = useState({
     name: contest.name,
     description: contest.description,
@@ -64,6 +70,22 @@ export function ContestDetailView({ contest, availableUsers, availableTasks }: C
       console.error('Failed to save:', error);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleActivate = async () => {
+    if (!confirm('Are you sure you want to ACTIVATE this contest? This will update the system configuration and RESTART services.')) {
+      return;
+    }
+    setActivating(true);
+    const result = await switchContest(contest.id);
+    setActivating(false);
+
+    if (result.success) {
+      alert('Contest activating! Services are restarting... check the dashboard in a moment.');
+      router.refresh();
+    } else {
+      alert('Failed to activate contest: ' + result.error);
     }
   };
 
@@ -103,7 +125,17 @@ export function ContestDetailView({ contest, availableUsers, availableTasks }: C
             <Zap className="w-5 h-5 text-amber-400" />
             <span className="font-bold text-white">Contest Status</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleActivate}
+              disabled={activating}
+              className="flex items-center gap-2 px-3 py-1.5 bg-amber-600/20 text-amber-400 border border-amber-500/30 rounded-lg text-xs font-medium hover:bg-amber-600/30 transition-colors disabled:opacity-50"
+            >
+              <Power className="w-3 h-3" />
+              {activating ? 'Restarting Services...' : 'Activate This Contest'}
+            </button>
+
+            <div className="flex items-center gap-2">
             {(() => {
               const now = new Date();
               const start = contest.start ? new Date(contest.start) : null;
@@ -121,6 +153,7 @@ export function ContestDetailView({ contest, availableUsers, availableTasks }: C
                 return <span className="px-3 py-1 bg-red-600/30 text-red-400 rounded-full text-sm">Ended</span>;
               }
             })()}
+            </div>
           </div>
         </div>
 
@@ -164,11 +197,68 @@ export function ContestDetailView({ contest, availableUsers, availableTasks }: C
         </div>
       </Card>
 
-      {/* Contest Settings */}
+      {/* Participants */}
+      <Card className="glass-card border-white/5 overflow-hidden">
+        <button
+          onClick={() => toggleSection('participants')}
+          className="w-full p-4 flex items-center justify-between hover:bg-white/5 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <Users className="w-5 h-5 text-green-400" />
+            <span className="font-bold text-white">Participants ({contest.participations.length})</span>
+          </div>
+          {expandedSections.participants ? <ChevronUp className="w-4 h-4 text-neutral-400" /> : <ChevronDown className="w-4 h-4 text-neutral-400" />}
+        </button>
+
+        {expandedSections.participants && (
+          <div>
+            <div className="p-4 border-b border-white/5 bg-black/20 flex justify-end">
+              <button
+                onClick={() => setIsParticipantModalOpen(true)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-green-600/20 text-green-400 rounded-lg text-sm hover:bg-green-600/30 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Add Participant
+              </button>
+            </div>
+            <div className="divide-y divide-white/5">
+              {contest.participations.map((participation) => (
+                <div key={participation.id} className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors group">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-green-500 to-emerald-500 flex items-center justify-center text-xs font-bold text-white">
+                      {participation.users.username.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="font-medium text-white">{participation.users.username}</div>
+                      <div className="text-xs text-neutral-500">{participation.users.first_name} {participation.users.last_name}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {participation.hidden && <span className="text-xs px-2 py-0.5 bg-neutral-700 text-neutral-300 rounded-full">Hidden</span>}
+                    <button
+                      onClick={() => handleRemoveParticipant(participation.id)}
+                      className="p-1.5 text-neutral-500 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {contest.participations.length === 0 && (
+                <div className="p-8 text-center text-neutral-500 text-sm">
+                  No participants yet
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* Settings */}
       <Card className="glass-card border-white/5 overflow-hidden">
         <button
           onClick={() => toggleSection('info')}
-          className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
+          className="w-full p-4 flex items-center justify-between hover:bg-white/5 transition-colors"
         >
           <div className="flex items-center gap-3">
             <Settings className="w-5 h-5 text-indigo-400" />
@@ -230,7 +320,7 @@ export function ContestDetailView({ contest, availableUsers, availableTasks }: C
                 />
               </div>
               <div className="flex items-center justify-between">
-                <label className="text-sm text-neutral-300">Download Submissions</label>
+                <label className="text-sm text-neutral-300">Allow Submissions Download</label>
                 <input
                   type="checkbox"
                   checked={formData.submissions_download_allowed}
@@ -239,7 +329,7 @@ export function ContestDetailView({ contest, availableUsers, availableTasks }: C
                 />
               </div>
               <div className="flex items-center justify-between">
-                <label className="text-sm text-neutral-300">Password Auth</label>
+                <label className="text-sm text-neutral-300">Allow Password Auth</label>
                 <input
                   type="checkbox"
                   checked={formData.allow_password_authentication}
@@ -270,121 +360,21 @@ export function ContestDetailView({ contest, availableUsers, availableTasks }: C
         )}
       </Card>
 
-      {/* Participants */}
-      <Card className="glass-card border-white/5 overflow-hidden">
-        <button
-          onClick={() => toggleSection('participants')}
-          className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            <Users className="w-5 h-5 text-emerald-400" />
-            <span className="font-bold text-white">Participants</span>
-            <span className="text-xs bg-white/10 px-2 py-0.5 rounded-full text-neutral-400">
-              {contest.participations.length}
-            </span>
-          </div>
-          {expandedSections.participants ? <ChevronUp className="w-4 h-4 text-neutral-400" /> : <ChevronDown className="w-4 h-4 text-neutral-400" />}
-        </button>
-        
-        {expandedSections.participants && (
-          <div className="p-4 pt-0">
-            <button
-              onClick={() => setIsParticipantModalOpen(true)}
-              className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg text-sm hover:bg-indigo-600/30 transition-colors mb-4"
-            >
-              <Plus className="w-4 h-4" />
-              Add Participant
-            </button>
-            
-            {contest.participations.length === 0 ? (
-              <p className="text-neutral-500 text-sm">No participants yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {contest.participations.map((p) => (
-                  <div key={p.id} className="flex items-center justify-between p-3 bg-black/30 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-indigo-600/20 flex items-center justify-center text-indigo-400 font-bold text-sm">
-                        {p.users.username.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium text-white">{p.users.username}</div>
-                        <div className="text-xs text-neutral-500">
-                          {p.users.first_name} {p.users.last_name}
-                          {p.hidden && <span className="ml-2 text-amber-400">(Hidden)</span>}
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleRemoveParticipant(p.id)}
-                      className="p-1.5 text-red-400 hover:bg-red-500/20 rounded transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </Card>
+      {/* Contest Communications (Announcements, Questions, Ranking) */}
+      <ContestCommunications
+        contestId={contest.id}
+        initialAnnouncements={[]} // Data fetching handled in component or passed from page
+        initialQuestions={[]}
+        initialRankings={[]}
+      />
 
-      {/* Tasks */}
-      <Card className="glass-card border-white/5 overflow-hidden">
-        <button
-          onClick={() => toggleSection('tasks')}
-          className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            <Trophy className="w-5 h-5 text-amber-400" />
-            <span className="font-bold text-white">Tasks</span>
-            <span className="text-xs bg-white/10 px-2 py-0.5 rounded-full text-neutral-400">
-              {contest.tasks.length}
-            </span>
-          </div>
-          {expandedSections.tasks ? <ChevronUp className="w-4 h-4 text-neutral-400" /> : <ChevronDown className="w-4 h-4 text-neutral-400" />}
-        </button>
-        
-        {expandedSections.tasks && (
-          <div className="p-4 pt-0">
-            {contest.tasks.length === 0 ? (
-              <p className="text-neutral-500 text-sm">No tasks assigned to this contest.</p>
-            ) : (
-              <div className="space-y-2">
-                {contest.tasks.map((task, index) => (
-                  <a
-                    key={task.id}
-                    href={`/en/tasks/${task.id}`}
-                    className="flex items-center justify-between p-3 bg-black/30 rounded-lg hover:bg-black/50 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-amber-600/20 flex items-center justify-center text-amber-400 font-bold text-sm">
-                        {index + 1}
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium text-white">{task.title || task.name}</div>
-                        <div className="text-xs text-neutral-500">{task.name}</div>
-                      </div>
-                    </div>
-                    <ExternalLink className="w-4 h-4 text-neutral-500" />
-                  </a>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </Card>
-
-      {/* Communications: Announcements, Questions, Ranking */}
-      <ContestCommunications contestId={contest.id} adminId={1} />
-
-      {/* Participant Modal */}
       <ParticipantModal
         isOpen={isParticipantModalOpen}
         onClose={() => setIsParticipantModalOpen(false)}
         contestId={contest.id}
         availableUsers={nonParticipants}
+        onSuccess={() => window.location.reload()}
       />
     </div>
   );
 }
-

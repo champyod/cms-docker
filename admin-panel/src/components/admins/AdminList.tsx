@@ -5,11 +5,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/core/Button';
 import { Edit2, Trash2, Plus, Shield, ShieldCheck } from 'lucide-react';
 import { admins } from '@prisma/client';
-import { createAdmin, updateAdmin, deleteAdmin } from '@/app/actions/admins';
+import { updateAdmin, deleteAdmin } from '@/app/actions/admins';
+import { AdminModal } from './AdminModal';
 
 export function AdminList({ initialAdmins }: { initialAdmins: admins[] }) {
   const [adminsList] = useState(initialAdmins);
-  const [showForm, setShowForm] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAdmin, setEditingAdmin] = useState<admins | null>(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -18,16 +19,6 @@ export function AdminList({ initialAdmins }: { initialAdmins: admins[] }) {
     permission_all: false,
     permission_messaging: true,
   });
-
-  const handleCreate = async () => {
-    if (!formData.name.trim() || !formData.username.trim() || !formData.password.trim()) return;
-    const result = await createAdmin(formData);
-    if (result.success) {
-      window.location.reload();
-    } else {
-      alert(result.error);
-    }
-  };
 
   const handleUpdate = async () => {
     if (!editingAdmin) return;
@@ -78,7 +69,7 @@ export function AdminList({ initialAdmins }: { initialAdmins: admins[] }) {
         <Button 
           variant="primary" 
           className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white pl-3 pr-4"
-          onClick={() => { setShowForm(true); setEditingAdmin(null); setFormData({ name: '', username: '', password: '', permission_all: false, permission_messaging: true }); }}
+          onClick={() => setIsModalOpen(true)}
         >
           <Plus className="w-4 h-4" />
           Add Admin

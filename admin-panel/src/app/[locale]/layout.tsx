@@ -1,7 +1,9 @@
+import { ToastProvider } from '@/components/providers/ToastProvider';
+
 export default async function LocaleLayout({
   children,
 }: {
     children: React.ReactNode;
 }) {
-  return <>{children}</>;
+  return <ToastProvider>{children}</ToastProvider>;
 }

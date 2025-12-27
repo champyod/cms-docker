@@ -70,3 +70,22 @@ export async function unignoreQuestion(questionId: number) {
     return { success: false, error: e.message };
   }
 }
+
+export async function getUnansweredQuestions(contestId: number | null) {
+  const where: any = {
+    reply_timestamp: null,
+    ignored: false
+  };
+
+  if (contestId) {
+    where.participations = { contest_id: contestId };
+  }
+
+  return prisma.questions.findMany({
+    where,
+    include: {
+      participations: { include: { users: { select: { username: true } } } }
+    },
+    orderBy: { question_timestamp: 'desc' }
+  });
+}

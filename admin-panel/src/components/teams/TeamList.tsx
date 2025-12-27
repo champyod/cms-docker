@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
 import { Edit2, Trash2, Plus, Users } from 'lucide-react';
-import { createTeam, updateTeam, deleteTeam } from '@/app/actions/teams';
+import { updateTeam, deleteTeam } from '@/app/actions/teams';
+import { TeamModal } from './TeamModal';
 
 interface TeamWithCount {
   id: number;
@@ -15,23 +16,13 @@ interface TeamWithCount {
 
 export function TeamList({ initialTeams }: { initialTeams: TeamWithCount[] }) {
   const [teams] = useState(initialTeams);
-  const [showForm, setShowForm] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<TeamWithCount | null>(null);
-  const [formData, setFormData] = useState({ code: '', name: '' });
-
-  const handleCreate = async () => {
-    if (!formData.code.trim() || !formData.name.trim()) return;
-    const result = await createTeam(formData);
-    if (result.success) {
-      window.location.reload();
-    } else {
-      alert(result.error);
-    }
-  };
+  const [editFormData, setEditFormData] = useState({ code: '', name: '' });
 
   const handleUpdate = async () => {
     if (!editingTeam) return;
-    const result = await updateTeam(editingTeam.id, formData);
+    const result = await updateTeam(editingTeam.id, editFormData);
     if (result.success) {
       window.location.reload();
     } else {
@@ -52,7 +43,7 @@ export function TeamList({ initialTeams }: { initialTeams: TeamWithCount[] }) {
 
   const startEdit = (team: TeamWithCount) => {
     setEditingTeam(team);
-    setFormData({ code: team.code, name: team.name });
+    setEditFormData({ code: team.code, name: team.name });
   };
 
   return (
@@ -62,22 +53,26 @@ export function TeamList({ initialTeams }: { initialTeams: TeamWithCount[] }) {
         <Button 
           variant="primary" 
           className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white pl-3 pr-4"
-          onClick={() => { setShowForm(true); setEditingTeam(null); setFormData({ code: '', name: '' }); }}
+          onClick={() => setIsModalOpen(true)}
         >
           <Plus className="w-4 h-4" />
           Add Team
         </Button>
       </div>
 
-      {(showForm || editingTeam) && (
+      {editingTeam && (
         <div className="p-4 bg-black/30 rounded-lg space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Edit2 className="w-4 h-4 text-indigo-400" />
+            <span className="text-sm font-medium text-white">Edit Team: {editingTeam.name}</span>
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-neutral-500 uppercase mb-1">Code</label>
               <input
                 type="text"
-                value={formData.code}
-                onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                value={editFormData.code}
+                onChange={(e) => setEditFormData({ ...editFormData, code: e.target.value })}
                 className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm"
               />
             </div>
@@ -85,21 +80,21 @@ export function TeamList({ initialTeams }: { initialTeams: TeamWithCount[] }) {
               <label className="block text-xs font-bold text-neutral-500 uppercase mb-1">Name</label>
               <input
                 type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                value={editFormData.name}
+                onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
                 className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm"
               />
             </div>
           </div>
           <div className="flex gap-2">
             <button
-              onClick={editingTeam ? handleUpdate : handleCreate}
+              onClick={handleUpdate}
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm"
             >
-              {editingTeam ? 'Update' : 'Create'}
+              Update
             </button>
             <button
-              onClick={() => { setShowForm(false); setEditingTeam(null); }}
+              onClick={() => setEditingTeam(null)}
               className="px-4 py-2 bg-neutral-700 hover:bg-neutral-600 text-white rounded-lg text-sm"
             >
               Cancel
@@ -148,6 +143,12 @@ export function TeamList({ initialTeams }: { initialTeams: TeamWithCount[] }) {
           </TableBody>
         </Table>
       </div>
+
+      <TeamModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={() => window.location.reload()}
+      />
     </div>
   );
 }
