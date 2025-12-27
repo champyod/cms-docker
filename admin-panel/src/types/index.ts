@@ -6,6 +6,11 @@ export type SubmissionWithRelations = submissions & {
         contests: { name: string };
     };
     tasks: { id: number; name: string; title: string };
-    submission_results: { score: number | null; dataset_id: number }[];
+    submission_results: {
+        score: number | null;
+        dataset_id: number;
+        compilation_outcome: string | null;
+        evaluation_outcome: string | null;
+    }[];
     files: { filename: string; digest: string }[];
 };
