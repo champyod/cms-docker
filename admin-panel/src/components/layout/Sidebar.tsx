@@ -83,6 +83,8 @@ export const Sidebar: React.FC<{ className?: string, locale: string }> = ({ clas
           <SidebarItem icon={Trophy} label="Contests" href={`/${locale}/contests`} collapsed={collapsed} />
           <SidebarItem icon={FileCode} label="Tasks" href={`/${locale}/tasks`} collapsed={collapsed} />
           <SidebarItem icon={Activity} label="Submissions" href={`/${locale}/submissions`} collapsed={collapsed} />
+          <SidebarItem icon={Users} label="Teams" href={`/${locale}/teams`} collapsed={collapsed} />
+          <SidebarItem icon={Settings} label="Admins" href={`/${locale}/admins`} collapsed={collapsed} />
           <SidebarItem icon={Activity} label="Resources" href={`/${locale}/resources`} collapsed={collapsed} />
           <SidebarItem icon={Settings} label="Settings" href={`/${locale}/settings`} collapsed={collapsed} />
         </nav>
