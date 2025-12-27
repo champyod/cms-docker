@@ -113,3 +113,37 @@ export async function toggleSubmissionOfficial(submissionId: number) {
       return { success: false, error: e.message };
   }
 }
+
+// Recalculate a submission's score/evaluation
+export async function recalculateSubmission(submissionId: number, type: 'score' | 'evaluation' | 'full' = 'score') {
+  try {
+    // Get the submission
+    const submission = await prisma.submissions.findUnique({
+      where: { id: submissionId },
+      include: { tasks: { select: { active_dataset_id: true } } }
+    });
+
+    if (!submission) {
+      return { success: false, error: 'Submission not found' };
+    }
+
+    // For now, we just mark evaluations for re-evaluation by clearing them
+    // The actual re-evaluation is done by the CMS EvaluationService
+    if (type === 'evaluation' || type === 'full') {
+      await prisma.evaluations.deleteMany({
+        where: { submission_id: submissionId }
+      });
+    }
+
+    if (type === 'score' || type === 'full') {
+      await prisma.submission_results.deleteMany({
+        where: { submission_id: submissionId }
+      });
+    }
+
+    return { success: true, message: 'Submission queued for recalculation' };
+  } catch (error) {
+    const e = error as Error;
+    return { success: false, error: e.message };
+  }
+}
