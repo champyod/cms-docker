@@ -1,16 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Shield, Loader, Eye, EyeOff } from 'lucide-react';
-import { createAdmin } from '@/app/actions/admins';
+import { createAdmin, updateAdmin } from '@/app/actions/admins';
+import { admins } from '@prisma/client';
 
 interface AdminModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  initialData?: admins | null;
 }
 
-export function AdminModal({ isOpen, onClose, onSuccess }: AdminModalProps) {
+export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminModalProps) {
   const [formData, setFormData] = useState({
     name: '',
     username: '',
@@ -22,25 +24,54 @@ export function AdminModal({ isOpen, onClose, onSuccess }: AdminModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    if (initialData) {
+      setFormData({
+        name: initialData.name,
+        username: initialData.username,
+        password: '',
+        permission_all: initialData.permission_all,
+        permission_messaging: initialData.permission_messaging,
+      });
+    } else {
+      setFormData({ name: '', username: '', password: '', permission_all: false, permission_messaging: true });
+    }
+    setError('');
+  }, [initialData, isOpen]);
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name.trim() || !formData.username.trim() || !formData.password.trim()) {
-      setError('All fields are required');
+    if (!formData.name.trim() || !formData.username.trim()) {
+      setError('Name and Username are required');
+      return;
+    }
+    if (!initialData && !formData.password.trim()) {
+      setError('Password is required for new admins');
       return;
     }
 
     setLoading(true);
     setError('');
 
-    const result = await createAdmin(formData);
+    let result;
+    if (initialData) {
+      result = await updateAdmin(initialData.id, {
+        name: formData.name,
+        permission_all: formData.permission_all,
+        permission_messaging: formData.permission_messaging,
+        ...(formData.password ? { password: formData.password } : {})
+      });
+    } else {
+      result = await createAdmin(formData);
+    }
+
     if (result.success) {
       onSuccess();
       onClose();
-      setFormData({ name: '', username: '', password: '', permission_all: false, permission_messaging: true });
     } else {
-      setError(result.error || 'Failed to create admin');
+      setError(result.error || 'Operation failed');
     }
     setLoading(false);
   };
@@ -53,7 +84,7 @@ export function AdminModal({ isOpen, onClose, onSuccess }: AdminModalProps) {
         <div className="flex items-center justify-between p-4 border-b border-white/10">
           <div className="flex items-center gap-2">
             <Shield className="w-5 h-5 text-purple-400" />
-            <h2 className="text-lg font-bold text-white">Add Administrator</h2>
+            <h2 className="text-lg font-bold text-white">{initialData ? 'Edit Administrator' : 'Add Administrator'}</h2>
           </div>
           <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-lg transition-colors">
             <X className="w-5 h-5 text-neutral-400" />
@@ -85,12 +116,15 @@ export function AdminModal({ isOpen, onClose, onSuccess }: AdminModalProps) {
               value={formData.username}
               onChange={(e) => setFormData({ ...formData, username: e.target.value })}
               placeholder="e.g., johnd"
-              className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-lg text-white focus:outline-none focus:border-indigo-500/50"
+              disabled={!!initialData}
+              className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-lg text-white focus:outline-none focus:border-indigo-500/50 disabled:opacity-50"
             />
           </div>
           
           <div>
-            <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Password</label>
+            <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">
+              Password {initialData && '(Leave empty to keep current)'}
+            </label>
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
@@ -149,7 +183,7 @@ export function AdminModal({ isOpen, onClose, onSuccess }: AdminModalProps) {
               className="flex-1 px-4 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {loading ? <Loader className="w-4 h-4 animate-spin" /> : null}
-              {loading ? 'Creating...' : 'Create Admin'}
+              {loading ? (initialData ? 'Updating...' : 'Creating...') : (initialData ? 'Update Admin' : 'Create Admin')}
             </button>
           </div>
         </form>

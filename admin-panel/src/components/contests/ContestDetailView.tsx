@@ -9,10 +9,12 @@ import { Card } from '@/components/core/Card';
 import { 
   Settings, Users, Trophy, Clock, Shield, Zap, 
   Plus, Trash2, ExternalLink, Play, Square, 
-  ChevronDown, ChevronUp, Save, Power
+  ChevronDown, ChevronUp, Save, Power, ClipboardList
 } from 'lucide-react';
 import { ParticipantModal } from './ParticipantModal';
+import { TaskSelectionModal } from './TaskSelectionModal';
 import { ContestCommunications } from './ContestCommunications';
+import { removeTaskFromContest } from '@/app/actions/contests';
 
 type ContestWithRelations = contests & {
   tasks: tasks[];
@@ -28,6 +30,7 @@ interface ContestDetailViewProps {
 
 export function ContestDetailView({ contest, availableUsers, availableTasks, user }: ContestDetailViewProps) {
   const [isParticipantModalOpen, setIsParticipantModalOpen] = useState(false);
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     info: true,
     participants: true,
@@ -35,6 +38,15 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, use
     services: true,
   });
   const [saving, setSaving] = useState(false);
+
+  // ... (previous handlers)
+
+  const handleRemoveTask = async (taskId: number) => {
+    if (confirm('Remove this task from the contest?')) {
+      await removeTaskFromContest(taskId);
+      window.location.reload();
+    }
+  };
   const [activating, setActivating] = useState(false);
   const router = useRouter();
 
@@ -254,6 +266,65 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, use
         )}
       </Card>
 
+      {/* Tasks */}
+      <Card className="glass-card border-white/5 overflow-hidden">
+        <button
+          onClick={() => toggleSection('tasks')}
+          className="w-full p-4 flex items-center justify-between hover:bg-white/5 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <ClipboardList className="w-5 h-5 text-amber-400" />
+            <span className="font-bold text-white">Tasks ({contest.tasks.length})</span>
+          </div>
+          {expandedSections.tasks ? <ChevronUp className="w-4 h-4 text-neutral-400" /> : <ChevronDown className="w-4 h-4 text-neutral-400" />}
+        </button>
+
+        {expandedSections.tasks && (
+          <div>
+            <div className="p-4 border-b border-white/5 bg-black/20 flex justify-end">
+              <button
+                onClick={() => setIsTaskModalOpen(true)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-amber-600/20 text-amber-400 rounded-lg text-sm hover:bg-amber-600/30 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Add Task
+              </button>
+            </div>
+            <div className="divide-y divide-white/5">
+              {contest.tasks.map((task) => (
+                <div key={task.id} className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors group">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-amber-600/20 flex items-center justify-center text-amber-400 font-bold text-sm">
+                      {task.name.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="font-medium text-white">{task.name}</div>
+                      <div className="text-xs text-neutral-500">{task.title}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <a href={`/tasks/${task.id}`} className="p-1.5 text-neutral-500 hover:text-indigo-400 transition-colors">
+                      <Settings className="w-4 h-4" />
+                    </a>
+                    <button
+                      onClick={() => handleRemoveTask(task.id)}
+                      className="p-1.5 text-neutral-500 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {contest.tasks.length === 0 && (
+                <div className="p-8 text-center text-neutral-500 text-sm">
+                  No tasks assigned to this contest
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </Card>
+
       {/* Settings */}
       <Card className="glass-card border-white/5 overflow-hidden">
         <button
@@ -371,6 +442,14 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, use
         onClose={() => setIsParticipantModalOpen(false)}
         contestId={contest.id}
         availableUsers={nonParticipants}
+        onSuccess={() => window.location.reload()}
+      />
+
+      <TaskSelectionModal
+        isOpen={isTaskModalOpen}
+        onClose={() => setIsTaskModalOpen(false)}
+        contestId={contest.id}
+        availableTasks={availableTasks.filter(t => !contest.tasks.find(ct => ct.id === t.id))}
         onSuccess={() => window.location.reload()}
       />
     </div>

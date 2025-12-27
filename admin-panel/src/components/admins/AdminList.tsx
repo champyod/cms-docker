@@ -12,28 +12,6 @@ export function AdminList({ initialAdmins }: { initialAdmins: admins[] }) {
   const [adminsList] = useState(initialAdmins);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAdmin, setEditingAdmin] = useState<admins | null>(null);
-  const [formData, setFormData] = useState({
-    name: '',
-    username: '',
-    password: '',
-    permission_all: false,
-    permission_messaging: true,
-  });
-
-  const handleUpdate = async () => {
-    if (!editingAdmin) return;
-    const result = await updateAdmin(editingAdmin.id, {
-      name: formData.name,
-      permission_all: formData.permission_all,
-      permission_messaging: formData.permission_messaging,
-      ...(formData.password ? { password: formData.password } : {}),
-    });
-    if (result.success) {
-      window.location.reload();
-    } else {
-      alert(result.error);
-    }
-  };
 
   const handleDelete = async (id: number) => {
     if (confirm('Delete this admin?')) {
@@ -53,13 +31,12 @@ export function AdminList({ initialAdmins }: { initialAdmins: admins[] }) {
 
   const startEdit = (admin: admins) => {
     setEditingAdmin(admin);
-    setFormData({
-      name: admin.name,
-      username: admin.username,
-      password: '',
-      permission_all: admin.permission_all,
-      permission_messaging: admin.permission_messaging,
-    });
+    setIsModalOpen(true);
+  };
+
+  const handleClose = () => {
+    setIsModalOpen(false);
+    setEditingAdmin(null);
   };
 
   return (
@@ -69,87 +46,12 @@ export function AdminList({ initialAdmins }: { initialAdmins: admins[] }) {
         <Button 
           variant="primary" 
           className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white pl-3 pr-4"
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => { setEditingAdmin(null); setIsModalOpen(true); }}
         >
           <Plus className="w-4 h-4" />
           Add Admin
         </Button>
       </div>
-
-      {editingAdmin && (
-        <div className="p-4 bg-black/30 rounded-lg space-y-4">
-          <div className="text-white text-sm mb-4">Editing {editingAdmin.username}</div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-neutral-500 uppercase mb-1">Name</label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-neutral-500 uppercase mb-1">Username</label>
-              <input
-                type="text"
-                value={formData.username}
-                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                disabled={!!editingAdmin}
-                className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm disabled:opacity-50"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-neutral-500 uppercase mb-1">
-              Password {editingAdmin && '(leave empty to keep current)'}
-            </label>
-            <input
-              type="password"
-              value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm"
-            />
-          </div>
-          <div className="flex gap-6">
-            <label className="flex items-center gap-2 text-sm text-neutral-300">
-              <input
-                type="checkbox"
-                checked={formData.permission_all}
-                onChange={(e) => setFormData({ ...formData, permission_all: e.target.checked })}
-                className="w-4 h-4 rounded"
-              />
-              Full Permissions
-            </label>
-            <label className="flex items-center gap-2 text-sm text-neutral-300">
-              <input
-                type="checkbox"
-                checked={formData.permission_messaging}
-                onChange={(e) => setFormData({ ...formData, permission_messaging: e.target.checked })}
-                className="w-4 h-4 rounded"
-              />
-              Messaging
-            </label>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={handleUpdate}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm"
-            >
-              Update
-            </button>
-            <button
-              onClick={() => {
-                setEditingAdmin(null);
-                setFormData({ name: '', username: '', password: '', permission_all: false, permission_messaging: false });
-              }}
-              className="px-4 py-2 text-neutral-700 hover:bg-neutral-600 text-white rounded-lg text-sm bg-neutral-800"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
 
       <div className="border border-white/5 rounded-xl overflow-hidden bg-neutral-900/40">
         <Table>
@@ -213,7 +115,8 @@ export function AdminList({ initialAdmins }: { initialAdmins: admins[] }) {
 
       <AdminModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={handleClose}
+        initialData={editingAdmin}
         onSuccess={() => window.location.reload()}
       />
     </div>

@@ -189,3 +189,29 @@ export async function removeParticipant(participationId: number) {
     return { success: false, error: e.message };
   }
 }
+
+export async function addTaskToContest(contestId: number, taskId: number) {
+  try {
+    await prisma.tasks.update({
+      where: { id: taskId },
+      data: { contest_id: contestId }
+    });
+    revalidatePath('/[locale]/contests');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+export async function removeTaskFromContest(taskId: number) {
+  try {
+    await prisma.tasks.update({
+      where: { id: taskId },
+      data: { contest_id: null }
+    });
+    revalidatePath('/[locale]/contests');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+}

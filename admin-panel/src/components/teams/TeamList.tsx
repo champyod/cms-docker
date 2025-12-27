@@ -18,17 +18,6 @@ export function TeamList({ initialTeams }: { initialTeams: TeamWithCount[] }) {
   const [teams] = useState(initialTeams);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<TeamWithCount | null>(null);
-  const [editFormData, setEditFormData] = useState({ code: '', name: '' });
-
-  const handleUpdate = async () => {
-    if (!editingTeam) return;
-    const result = await updateTeam(editingTeam.id, editFormData);
-    if (result.success) {
-      window.location.reload();
-    } else {
-      alert(result.error);
-    }
-  };
 
   const handleDelete = async (id: number) => {
     if (confirm('Delete this team?')) {
@@ -43,7 +32,7 @@ export function TeamList({ initialTeams }: { initialTeams: TeamWithCount[] }) {
 
   const startEdit = (team: TeamWithCount) => {
     setEditingTeam(team);
-    setEditFormData({ code: team.code, name: team.name });
+    setIsModalOpen(true);
   };
 
   return (
@@ -60,48 +49,7 @@ export function TeamList({ initialTeams }: { initialTeams: TeamWithCount[] }) {
         </Button>
       </div>
 
-      {editingTeam && (
-        <div className="p-4 bg-black/30 rounded-lg space-y-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Edit2 className="w-4 h-4 text-indigo-400" />
-            <span className="text-sm font-medium text-white">Edit Team: {editingTeam.name}</span>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-neutral-500 uppercase mb-1">Code</label>
-              <input
-                type="text"
-                value={editFormData.code}
-                onChange={(e) => setEditFormData({ ...editFormData, code: e.target.value })}
-                className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-neutral-500 uppercase mb-1">Name</label>
-              <input
-                type="text"
-                value={editFormData.name}
-                onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
-                className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm"
-              />
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={handleUpdate}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm"
-            >
-              Update
-            </button>
-            <button
-              onClick={() => setEditingTeam(null)}
-              className="px-4 py-2 bg-neutral-700 hover:bg-neutral-600 text-white rounded-lg text-sm"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+
 
       <div className="border border-white/5 rounded-xl overflow-hidden bg-neutral-900/40">
         <Table>
@@ -146,8 +94,9 @@ export function TeamList({ initialTeams }: { initialTeams: TeamWithCount[] }) {
 
       <TeamModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => { setIsModalOpen(false); setEditingTeam(null); }}
         onSuccess={() => window.location.reload()}
+        initialData={editingTeam}
       />
     </div>
   );

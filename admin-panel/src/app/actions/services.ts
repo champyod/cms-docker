@@ -10,13 +10,35 @@ const execPromise = util.promisify(exec);
 
 export async function switchContest(contestId: number) {
   try {
-    const envPath = path.join(process.cwd(), '../.env.contest');
+    // Verify path existence or traverse up
+    let envPath = path.resolve(process.cwd(), '../.env.contest');
+    try {
+      await fs.access(envPath);
+    } catch {
+      // Fallback: try current directory or other typical locations
+      const altPath = path.resolve(process.cwd(), '.env.contest');
+      try {
+        await fs.access(altPath);
+        envPath = altPath;
+      } catch {
+        // Try one level up if in .next/server or similar
+        const upUpPath = path.resolve(process.cwd(), '../../.env.contest');
+        try {
+          await fs.access(upUpPath);
+          envPath = upUpPath;
+        } catch {
+          console.error('Could not find .env.contest in', process.cwd(), 'or parents');
+          // Keep default and let readFile fail with precise error
+        }
+      }
+    }
+
     let content = '';
     try {
       content = await fs.readFile(envPath, 'utf-8');
     } catch (e) {
-      console.error('Failed to read .env.contest', e);
-      return { success: false, error: 'Could not read configuration file' };
+      console.error(`Failed to read .env.contest at ${envPath}`, e);
+      return { success: false, error: 'Could not read configuration file at ' + envPath };
     }
 
     const newContent = content.replace(/^CONTEST_ID=\d+/m, `CONTEST_ID=${contestId}`);

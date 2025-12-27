@@ -20,9 +20,14 @@ export default async function TaskDetailPage({
     notFound();
   }
 
+  // Serialize BigInts to avoid client-side errors
+  const serializedTask = JSON.parse(JSON.stringify(task, (key, value) =>
+    typeof value === 'bigint' ? value.toString() : value
+  ));
+
   return (
     <div className="space-y-8">
-      <TaskDetailView task={task} />
+      <TaskDetailView task={serializedTask} />
     </div>
   );
 }
