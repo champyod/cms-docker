@@ -1,14 +1,16 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
-import { Edit2, Trash2, Plus, Calendar, Clock } from 'lucide-react';
+import { Edit2, Trash2, Plus, Calendar, Clock, ExternalLink } from 'lucide-react';
 import { ContestModal } from './ContestModal';
 import { deleteContest } from '@/app/actions/contests';
 import { contests } from '@prisma/client';
 
 export function ContestList({ initialContests, totalPages }: { initialContests: contests[], totalPages: number }) {
+  const router = useRouter();
   const [contests] = useState(initialContests);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedContest, setSelectedContest] = useState<contests | null>(null);
@@ -83,8 +85,15 @@ export function ContestList({ initialContests, totalPages }: { initialContests: 
               return (
                 <TableRow key={contest.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                     <TableCell className="font-mono text-neutral-500 text-xs">#{contest.id}</TableCell>
-                    <TableCell className="font-medium text-white max-w-[200px] truncate" title={contest.name}>
-                        {contest.name}
+                  <TableCell className="font-medium text-white max-w-[200px]">
+                    <button
+                      onClick={() => router.push(`/en/contests/${contest.id}`)}
+                      className="flex items-center gap-2 hover:text-indigo-400 transition-colors truncate"
+                      title={contest.name}
+                    >
+                      {contest.name}
+                      <ExternalLink className="w-3 h-3 opacity-50" />
+                    </button>
                     </TableCell>
                     <TableCell>
                         <span className={`px-2 py-1 rounded-full text-xs font-medium border ${status.color}`}>

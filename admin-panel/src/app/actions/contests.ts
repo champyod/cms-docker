@@ -47,6 +47,9 @@ export async function createContest(data: {
     // and cannot set them through the typed API
     const startDate = new Date(start);
     const stopDate = new Date(stop);
+    // Analysis times must be >= stop time per check constraint
+    const analysisStart = new Date(stopDate.getTime() + 1000); // 1 second after stop
+    const analysisStop = new Date(stopDate.getTime() + 2000);  // 2 seconds after stop
 
     await prisma.$executeRaw`
       INSERT INTO contests (
@@ -71,7 +74,7 @@ export async function createContest(data: {
         'disabled', 0, 0,
         '0 seconds'::interval, '30 minutes'::interval,
         ${startDate}, ${stopDate},
-        false, ${stopDate}, ${stopDate},
+        false, ${analysisStart}, ${analysisStop},
         0, ${timezone}
       )
     `;
@@ -113,6 +116,71 @@ export async function deleteContest(id: number) {
   try {
     await prisma.contests.delete({
       where: { id },
+    });
+    revalidatePath('/[locale]/contests');
+    return { success: true };
+  } catch (error) {
+    const e = error as Error;
+    return { success: false, error: e.message };
+  }
+}
+
+export async function updateContestSettings(id: number, data: {
+  name?: string;
+  description?: string;
+  timezone?: string;
+  allow_questions?: boolean;
+  allow_user_tests?: boolean;
+  submissions_download_allowed?: boolean;
+  allow_password_authentication?: boolean;
+  allow_registration?: boolean;
+  analysis_enabled?: boolean;
+  token_mode?: string;
+  score_precision?: number;
+}) {
+  try {
+    await prisma.contests.update({
+      where: { id },
+      data: {
+        ...(data.name && { name: data.name }),
+        ...(data.description && { description: data.description }),
+        ...(data.timezone !== undefined && { timezone: data.timezone || null }),
+        ...(data.allow_questions !== undefined && { allow_questions: data.allow_questions }),
+        ...(data.allow_user_tests !== undefined && { allow_user_tests: data.allow_user_tests }),
+        ...(data.submissions_download_allowed !== undefined && { submissions_download_allowed: data.submissions_download_allowed }),
+        ...(data.allow_password_authentication !== undefined && { allow_password_authentication: data.allow_password_authentication }),
+        ...(data.allow_registration !== undefined && { allow_registration: data.allow_registration }),
+        ...(data.analysis_enabled !== undefined && { analysis_enabled: data.analysis_enabled }),
+        ...(data.score_precision !== undefined && { score_precision: data.score_precision }),
+      },
+    });
+    revalidatePath('/[locale]/contests');
+    return { success: true };
+  } catch (error) {
+    const e = error as Error;
+    return { success: false, error: e.message };
+  }
+}
+
+export async function addParticipant(contestId: number, userId: number) {
+  try {
+    // Use raw SQL for interval fields
+    await prisma.$executeRaw`
+      INSERT INTO participations (contest_id, user_id, hidden, unrestricted, delay_time, extra_time)
+      VALUES (${contestId}, ${userId}, false, false, '0 seconds'::interval, '0 seconds'::interval)
+    `;
+    revalidatePath('/[locale]/contests');
+    return { success: true };
+  } catch (error) {
+    const e = error as Error;
+    return { success: false, error: e.message };
+  }
+}
+
+export async function removeParticipant(participationId: number) {
+  try {
+    await prisma.participations.delete({
+      where: { id: participationId },
     });
     revalidatePath('/[locale]/contests');
     return { success: true };
