@@ -33,50 +33,54 @@ export async function getContests({ page = 1, search = '' }: { page?: number; se
   };
 }
 
-export async function createContest(data: Omit<contests, 'id' | 'allowed_localizations' | 'languages' | 'submissions_download_allowed' | 'allow_questions' | 'allow_user_tests' | 'allow_unofficial_submission_before_analysis_mode' | 'block_hidden_participations' | 'allow_password_authentication' | 'allow_registration' | 'ip_restriction' | 'ip_autologin' | 'token_mode' | 'token_max_number' | 'token_min_interval' | 'token_gen_initial' | 'token_gen_number' | 'token_gen_interval' | 'token_gen_max' | 'analysis_enabled' | 'analysis_start' | 'analysis_stop' | 'timezone' | 'per_user_time' | 'max_submission_number' | 'max_user_test_number' | 'min_submission_interval' | 'min_submission_interval_grace_period' | 'min_user_test_interval' | 'score_precision' | 'start' | 'stop'> & { 
-    start: string | Date; 
+export async function createContest(data: {
+  name: string;
+  description: string;
+  start: string | Date; 
   stop: string | Date; 
   timezone: string;
-    description: string;
 }) {
   const { name, description, start, stop, timezone } = data;
 
   try {
-    const contest = await prisma.contests.create({
-      data: {
-        name,
-        description,
-        start: new Date(start),
-        stop: new Date(stop),
-        // Defaults for required fields (assuming minimal setup for now)
-        allowed_localizations: [],
-        languages: [],
-        submissions_download_allowed: true,
-        allow_questions: true,
-        allow_user_tests: false,
-        allow_unofficial_submission_before_analysis_mode: false,
-        block_hidden_participations: false,
-        allow_password_authentication: true,
-        allow_registration: false,
-        ip_restriction: false,
-        ip_autologin: false,
-        token_mode: 'disabled', 
-        token_gen_initial: 0,
-        token_gen_number: 0,
-        // Note: token_min_interval and token_gen_interval are Unsupported("interval") 
-        // types in Prisma and use database defaults
-        analysis_enabled: false,
-        analysis_start: new Date(stop), // Default to stop time
-        analysis_stop: new Date(stop),  // Default to stop time
-        score_precision: 0,
-        timezone: timezone,
-      },
-    });
+    // Use raw SQL because Prisma marks interval fields as Unsupported
+    // and cannot set them through the typed API
+    const startDate = new Date(start);
+    const stopDate = new Date(stop);
+
+    await prisma.$executeRaw`
+      INSERT INTO contests (
+        name, description, 
+        allowed_localizations, languages,
+        submissions_download_allowed, allow_questions, allow_user_tests,
+        allow_unofficial_submission_before_analysis_mode, block_hidden_participations,
+        allow_password_authentication, allow_registration,
+        ip_restriction, ip_autologin,
+        token_mode, token_gen_initial, token_gen_number,
+        token_min_interval, token_gen_interval,
+        start, stop,
+        analysis_enabled, analysis_start, analysis_stop,
+        score_precision, timezone
+      ) VALUES (
+        ${name}, ${description},
+        ARRAY[]::varchar[], ARRAY[]::varchar[],
+        true, true, false,
+        false, false,
+        true, false,
+        false, false,
+        'disabled', 0, 0,
+        '0 seconds'::interval, '30 minutes'::interval,
+        ${startDate}, ${stopDate},
+        false, ${stopDate}, ${stopDate},
+        0, ${timezone}
+      )
+    `;
+
     revalidatePath('/[locale]/contests');
-    return { success: true, contest };
+    return { success: true };
   } catch (error) {
     const e = error as Error & { code?: string };
-    if (e.code === 'P2002') {
+    if (e.code === 'P2002' || e.message?.includes('unique constraint')) {
       return { success: false, error: 'Contest name already exists' };
     }
     return { success: false, error: e.message };
