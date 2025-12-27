@@ -45,6 +45,10 @@ export function ContestDetailView({ contest, availableUsers, availableTasks }: C
     analysis_enabled: contest.analysis_enabled,
     token_mode: contest.token_mode,
     score_precision: contest.score_precision,
+    start: contest.start ? new Date(contest.start).toISOString().slice(0, 16) : '',
+    stop: contest.stop ? new Date(contest.stop).toISOString().slice(0, 16) : '',
+    analysis_start: contest.analysis_start ? new Date(contest.analysis_start).toISOString().slice(0, 16) : '',
+    analysis_stop: contest.analysis_stop ? new Date(contest.analysis_stop).toISOString().slice(0, 16) : '',
   });
 
   const toggleSection = (section: string) => {
@@ -92,30 +96,70 @@ export function ContestDetailView({ contest, availableUsers, availableTasks }: C
         </button>
       </div>
 
-      {/* Service Controls */}
+      {/* Contest Status & Times */}
       <Card className="p-4 glass-card border-white/5">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <Zap className="w-5 h-5 text-amber-400" />
-            <span className="font-bold text-white">Service Controls</span>
+            <span className="font-bold text-white">Contest Status</span>
           </div>
-          <div className="flex items-center gap-3">
-            <a
-              href={`/contest/${contest.id}`}
-              target="_blank"
-              className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600/20 text-emerald-400 rounded-lg text-sm hover:bg-emerald-600/30 transition-colors"
-            >
-              <ExternalLink className="w-4 h-4" />
-              Contest Web
-            </a>
-            <a
-              href={`/ranking/${contest.id}`}
-              target="_blank"
-              className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg text-sm hover:bg-indigo-600/30 transition-colors"
-            >
-              <Trophy className="w-4 h-4" />
-              Ranking
-            </a>
+          <div className="flex items-center gap-2">
+            {(() => {
+              const now = new Date();
+              const start = contest.start ? new Date(contest.start) : null;
+              const stop = contest.stop ? new Date(contest.stop) : null;
+              const analysisStart = contest.analysis_start ? new Date(contest.analysis_start) : null;
+              const analysisStop = contest.analysis_stop ? new Date(contest.analysis_stop) : null;
+
+              if (!start || now < start) {
+                return <span className="px-3 py-1 bg-neutral-600/30 text-neutral-400 rounded-full text-sm">Not Started</span>;
+              } else if (stop && now < stop) {
+                return <span className="px-3 py-1 bg-emerald-600/30 text-emerald-400 rounded-full text-sm animate-pulse">Running</span>;
+              } else if (analysisStart && analysisStop && now >= analysisStart && now < analysisStop) {
+                return <span className="px-3 py-1 bg-purple-600/30 text-purple-400 rounded-full text-sm">Analysis Mode</span>;
+              } else {
+                return <span className="px-3 py-1 bg-red-600/30 text-red-400 rounded-full text-sm">Ended</span>;
+              }
+            })()}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-xs font-bold text-neutral-500 uppercase mb-1">Contest Start</label>
+            <input
+              type="datetime-local"
+              value={formData.start}
+              onChange={(e) => setFormData({ ...formData, start: e.target.value })}
+              className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-neutral-500 uppercase mb-1">Contest Stop</label>
+            <input
+              type="datetime-local"
+              value={formData.stop}
+              onChange={(e) => setFormData({ ...formData, stop: e.target.value })}
+              className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-neutral-500 uppercase mb-1">Analysis Start</label>
+            <input
+              type="datetime-local"
+              value={formData.analysis_start}
+              onChange={(e) => setFormData({ ...formData, analysis_start: e.target.value })}
+              className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-neutral-500 uppercase mb-1">Analysis Stop</label>
+            <input
+              type="datetime-local"
+              value={formData.analysis_stop}
+              onChange={(e) => setFormData({ ...formData, analysis_stop: e.target.value })}
+              className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50"
+            />
           </div>
         </div>
       </Card>
