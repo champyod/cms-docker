@@ -63,8 +63,8 @@ export async function createContest(data: Omit<contests, 'id' | 'allowed_localiz
         token_mode: 'disabled', 
         token_gen_initial: 0,
         token_gen_number: 0,
-        token_min_interval: '0 seconds', // Fix: Null constraint violation
-        token_gen_interval: '30 minutes', // Fix: Just in case
+        // Note: token_min_interval and token_gen_interval are Unsupported("interval") 
+        // types in Prisma and use database defaults
         analysis_enabled: false,
         analysis_start: new Date(stop), // Default to stop time
         analysis_stop: new Date(stop),  // Default to stop time
