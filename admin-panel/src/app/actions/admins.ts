@@ -18,6 +18,9 @@ export async function createAdmin(data: {
   password: string;
   permission_all?: boolean;
   permission_messaging?: boolean;
+  permission_tasks?: boolean;
+  permission_users?: boolean;
+  permission_contests?: boolean;
 }) {
   try {
     const hashedPassword = await bcrypt.hash(data.password, 10);
@@ -29,6 +32,9 @@ export async function createAdmin(data: {
         enabled: true,
         permission_all: data.permission_all ?? false,
         permission_messaging: data.permission_messaging ?? true,
+        permission_tasks: data.permission_tasks ?? false,
+        permission_users: data.permission_users ?? false,
+        permission_contests: data.permission_contests ?? false,
       }
     });
     revalidatePath('/[locale]/admins');
@@ -48,6 +54,9 @@ export async function updateAdmin(adminId: number, data: {
   enabled?: boolean;
   permission_all?: boolean;
   permission_messaging?: boolean;
+  permission_tasks?: boolean;
+  permission_users?: boolean;
+  permission_contests?: boolean;
   password?: string;
 }) {
   try {
@@ -56,6 +65,9 @@ export async function updateAdmin(adminId: number, data: {
     if (data.enabled !== undefined) updateData.enabled = data.enabled;
     if (data.permission_all !== undefined) updateData.permission_all = data.permission_all;
     if (data.permission_messaging !== undefined) updateData.permission_messaging = data.permission_messaging;
+    if (data.permission_tasks !== undefined) updateData.permission_tasks = data.permission_tasks;
+    if (data.permission_users !== undefined) updateData.permission_users = data.permission_users;
+    if (data.permission_contests !== undefined) updateData.permission_contests = data.permission_contests;
     if (data.password) {
       const hashedPassword = await bcrypt.hash(data.password, 10);
       updateData.authentication = `bcrypt:${hashedPassword}`;

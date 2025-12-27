@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Shield, Loader, Eye, EyeOff } from 'lucide-react';
+import { X, Shield, Loader, Eye, EyeOff, Info } from 'lucide-react';
 import { createAdmin, updateAdmin } from '@/app/actions/admins';
 import { admins } from '@prisma/client';
+import { cn } from '@/lib/utils';
 
 interface AdminModalProps {
   isOpen: boolean;
@@ -19,6 +20,9 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
     password: '',
     permission_all: false,
     permission_messaging: true,
+    permission_tasks: false,
+    permission_users: false,
+    permission_contests: false,
   });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -32,9 +36,21 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
         password: '',
         permission_all: initialData.permission_all,
         permission_messaging: initialData.permission_messaging,
+        permission_tasks: initialData.permission_tasks,
+        permission_users: initialData.permission_users,
+        permission_contests: initialData.permission_contests,
       });
     } else {
-      setFormData({ name: '', username: '', password: '', permission_all: false, permission_messaging: true });
+      setFormData({
+        name: '',
+        username: '',
+        password: '',
+        permission_all: false,
+        permission_messaging: true,
+        permission_tasks: false,
+        permission_users: false,
+        permission_contests: false,
+      });
     }
     setError('');
   }, [initialData, isOpen]);
@@ -61,6 +77,9 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
         name: formData.name,
         permission_all: formData.permission_all,
         permission_messaging: formData.permission_messaging,
+        permission_tasks: formData.permission_tasks,
+        permission_users: formData.permission_users,
+        permission_contests: formData.permission_contests,
         ...(formData.password ? { password: formData.password } : {})
       });
     } else {
@@ -142,31 +161,116 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
             </div>
           </div>
           
+          <div>
+            <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Role</label>
+            <div className="flex gap-2 p-1 bg-black/50 rounded-lg border border-white/10">
+              <button
+                type="button"
+                onClick={() => setFormData({
+                  ...formData,
+                  permission_all: true,
+                  permission_messaging: true,
+                  permission_tasks: true,
+                  permission_users: true,
+                  permission_contests: true
+                })}
+                className={cn(
+                  "flex-1 py-1.5 px-3 rounded text-xs font-medium transition-all",
+                  formData.permission_all
+                    ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/20"
+                    : "text-neutral-500 hover:text-white"
+                )}
+              >
+                Superadmin
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormData({
+                  ...formData,
+                  permission_all: false,
+                  permission_messaging: true,
+                  permission_tasks: true,
+                  permission_users: false,
+                  permission_contests: true
+                })}
+                className={cn(
+                  "flex-1 py-1.5 px-3 rounded text-xs font-medium transition-all",
+                  (!formData.permission_all)
+                    ? "bg-purple-600 text-white shadow-lg shadow-purple-500/20"
+                    : "text-neutral-500 hover:text-white"
+                )}
+              >
+                Committee
+              </button>
+            </div>
+          </div>
+
           <div className="space-y-3 pt-2">
-            <div className="flex items-center justify-between p-3 bg-black/30 rounded-lg">
-              <div>
-                <label className="text-sm text-neutral-300 font-medium">Full Permissions</label>
-                <p className="text-xs text-neutral-500">Can manage everything (users, contests, tasks)</p>
+            {!formData.permission_all ? (
+              <>
+                <div className="flex items-center justify-between p-3 bg-black/30 rounded-lg border border-white/5">
+                  <div>
+                    <label className="text-sm text-neutral-300 font-medium">Messaging</label>
+                    <p className="text-xs text-neutral-500">View/reply to questions and announcements</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={formData.permission_messaging}
+                    onChange={(e) => setFormData({ ...formData, permission_messaging: e.target.checked })}
+                    className="w-5 h-5 rounded accent-purple-500"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-black/30 rounded-lg border border-white/5">
+                  <div>
+                    <label className="text-sm text-neutral-300 font-medium">Task Management</label>
+                    <p className="text-xs text-neutral-500">Can view and customize tasks</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={formData.permission_tasks}
+                    onChange={(e) => setFormData({ ...formData, permission_tasks: e.target.checked })}
+                    className="w-5 h-5 rounded accent-purple-500"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-black/30 rounded-lg border border-white/5">
+                  <div>
+                    <label className="text-sm text-neutral-300 font-medium">Contest Management</label>
+                    <p className="text-xs text-neutral-500">Can view and edit basic contest settings</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={formData.permission_contests}
+                    onChange={(e) => setFormData({ ...formData, permission_contests: e.target.checked })}
+                    className="w-5 h-5 rounded accent-purple-500"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-black/30 rounded-lg border border-white/5">
+                  <div>
+                    <label className="text-sm text-neutral-300 font-medium">User Management (Participants)</label>
+                    <p className="text-xs text-neutral-500">Can manage contestants and participations</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={formData.permission_users}
+                    onChange={(e) => setFormData({ ...formData, permission_users: e.target.checked })}
+                    className="w-5 h-5 rounded accent-purple-500"
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-lg">
+                <div className="flex items-center gap-2 mb-1">
+                  <Shield className="w-4 h-4 text-indigo-400" />
+                  <span className="text-sm font-bold text-indigo-400">Full Access Granted</span>
+                </div>
+                <p className="text-xs text-neutral-400 italic">
+                  Superadmins have full control over the system, including infrastructure, settings, and other administrators.
+                </p>
               </div>
-              <input
-                type="checkbox"
-                checked={formData.permission_all}
-                onChange={(e) => setFormData({ ...formData, permission_all: e.target.checked })}
-                className="w-5 h-5 rounded"
-              />
-            </div>
-            <div className="flex items-center justify-between p-3 bg-black/30 rounded-lg">
-              <div>
-                <label className="text-sm text-neutral-300 font-medium">Messaging Only</label>
-                <p className="text-xs text-neutral-500">Can only view/reply to questions and announcements</p>
-              </div>
-              <input
-                type="checkbox"
-                checked={formData.permission_messaging}
-                onChange={(e) => setFormData({ ...formData, permission_messaging: e.target.checked })}
-                className="w-5 h-5 rounded"
-              />
-            </div>
+            )}
           </div>
 
           <div className="flex gap-3 pt-4">

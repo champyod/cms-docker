@@ -3,6 +3,7 @@
 import { exec } from 'child_process';
 import util from 'util';
 import path from 'path';
+import { ensurePermission } from '@/lib/permissions';
 
 const execPromise = util.promisify(exec);
 
@@ -18,6 +19,7 @@ export interface ContainerInfo {
 }
 
 export async function getContainers() {
+  await ensurePermission('all');
   try {
     const { stdout } = await execPromise('docker ps -a --format "{{json .}}"');
     const lines = stdout.trim().split('\n');
@@ -41,6 +43,7 @@ export async function getContainers() {
 }
 
 export async function controlContainer(id: string, action: 'start' | 'stop' | 'restart') {
+  await ensurePermission('all');
   try {
     const { stdout, stderr } = await execPromise(`docker ${action} ${id}`);
     if (stderr && !stdout) throw new Error(stderr);
@@ -52,6 +55,7 @@ export async function controlContainer(id: string, action: 'start' | 'stop' | 'r
 }
 
 export async function getContainerLogs(id: string, tail: number = 100) {
+  await ensurePermission('all');
   try {
     const { stdout, stderr } = await execPromise(`docker logs --tail ${tail} ${id}`);
     return { success: true, logs: stdout || stderr };
@@ -62,6 +66,7 @@ export async function getContainerLogs(id: string, tail: number = 100) {
 }
 
 export async function runCompose(action: 'up' | 'down' | 'restart' | 'build', serviceType?: 'core' | 'admin' | 'contest' | 'worker') {
+  await ensurePermission('all');
   try {
     const repoRoot = getRepoRoot();
     let fileArgs = '';

@@ -21,6 +21,9 @@ model admins {
   enabled              Boolean
   permission_all       Boolean
   permission_messaging Boolean
+  permission_tasks     Boolean         @default(false)
+  permission_users     Boolean         @default(false)
+  permission_contests  Boolean         @default(false)
   announcements        announcements[]
   messages             messages[]
   questions            questions[]

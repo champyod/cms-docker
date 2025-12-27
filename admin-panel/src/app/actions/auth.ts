@@ -34,7 +34,12 @@ export async function login(prevState: any, formData: FormData) {
       return { error: "Invalid credentials" };
     }
 
-    await createSession(admin.id.toString(), admin.username);
+    await createSession(admin.id.toString(), admin.username, {
+      permission_all: admin.permission_all,
+      permission_tasks: admin.permission_tasks,
+      permission_users: admin.permission_users,
+      permission_contests: admin.permission_contests,
+    });
     
   } catch (error) {
     console.error("Login error:", error);

@@ -2,8 +2,10 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import { ensurePermission } from '@/lib/permissions';
 
 export async function readEnvFile(filename: string) {
+  await ensurePermission('all');
   try {
     const repoRoot = process.env.IS_DOCKER === 'true' ? '/repo-root' : path.resolve(process.cwd(), '..');
     const envPath = path.join(repoRoot, filename);
@@ -28,6 +30,7 @@ export async function readEnvFile(filename: string) {
 }
 
 export async function updateEnvFile(filename: string, updates: Record<string, string>) {
+  await ensurePermission('all');
   try {
     const repoRoot = process.env.IS_DOCKER === 'true' ? '/repo-root' : path.resolve(process.cwd(), '..');
     const envPath = path.join(repoRoot, filename);

@@ -41,8 +41,23 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ icon: Icon, label, href, coll
   );
 };
 
-export const Sidebar: React.FC<{ className?: string, locale: string }> = ({ className, locale }) => {
+export const Sidebar: React.FC<{
+  className?: string,
+  locale: string,
+  permissions?: {
+    permission_all: boolean;
+    permission_tasks: boolean;
+    permission_users: boolean;
+    permission_contests: boolean;
+  }
+}> = ({ className, locale, permissions }) => {
   const [collapsed, setCollapsed] = React.useState(false);
+
+  // If permissions is missing, default to no extra permissions (safe)
+  const isSuperAdmin = permissions?.permission_all ?? false;
+  const canManageTasks = isSuperAdmin || (permissions?.permission_tasks ?? false);
+  const canManageUsers = isSuperAdmin || (permissions?.permission_users ?? false);
+  const canManageContests = isSuperAdmin || (permissions?.permission_contests ?? false);
 
   return (
     <aside 
@@ -79,15 +94,15 @@ export const Sidebar: React.FC<{ className?: string, locale: string }> = ({ clas
         {/* Navigation */}
         <nav className="flex-1 space-y-2">
           <SidebarItem icon={Home} label="Dashboard" href={`/${locale}`} collapsed={collapsed} />
-          <SidebarItem icon={Users} label="Users" href={`/${locale}/users`} collapsed={collapsed} />
-          <SidebarItem icon={Trophy} label="Contests" href={`/${locale}/contests`} collapsed={collapsed} />
-          <SidebarItem icon={FileCode} label="Tasks" href={`/${locale}/tasks`} collapsed={collapsed} />
+          {canManageUsers && <SidebarItem icon={Users} label="Users (Participants)" href={`/${locale}/users`} collapsed={collapsed} />}
+          {canManageContests && <SidebarItem icon={Trophy} label="Contests" href={`/${locale}/contests`} collapsed={collapsed} />}
+          {canManageTasks && <SidebarItem icon={FileCode} label="Tasks" href={`/${locale}/tasks`} collapsed={collapsed} />}
           <SidebarItem icon={Activity} label="Submissions" href={`/${locale}/submissions`} collapsed={collapsed} />
-          <SidebarItem icon={Users} label="Teams" href={`/${locale}/teams`} collapsed={collapsed} />
-          <SidebarItem icon={Shield} label="Admins" href={`/${locale}/admins`} collapsed={collapsed} />
-          <SidebarItem icon={Activity} label="Resources" href={`/${locale}/resources`} collapsed={collapsed} />
-          <SidebarItem icon={Box} label="Containers" href={`/${locale}/containers`} collapsed={collapsed} />
-          <SidebarItem icon={Settings} label="Settings" href={`/${locale}/settings`} collapsed={collapsed} />
+          {canManageUsers && <SidebarItem icon={Users} label="Teams" href={`/${locale}/teams`} collapsed={collapsed} />}
+          {isSuperAdmin && <SidebarItem icon={Shield} label="Admins" href={`/${locale}/admins`} collapsed={collapsed} />}
+          {isSuperAdmin && <SidebarItem icon={Activity} label="Resources" href={`/${locale}/resources`} collapsed={collapsed} />}
+          {isSuperAdmin && <SidebarItem icon={Box} label="Containers" href={`/${locale}/containers`} collapsed={collapsed} />}
+          {isSuperAdmin && <SidebarItem icon={Settings} label="Settings" href={`/${locale}/settings`} collapsed={collapsed} />}
         </nav>
 
         {/* Footer actions */}

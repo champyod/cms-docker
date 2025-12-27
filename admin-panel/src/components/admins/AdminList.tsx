@@ -79,6 +79,15 @@ export function AdminList({ initialAdmins }: { initialAdmins: admins[] }) {
                     {admin.permission_messaging && (
                       <span className="px-2 py-0.5 text-xs bg-blue-500/20 text-blue-400 rounded-full">Messaging</span>
                     )}
+                    {admin.permission_tasks && (
+                      <span className="px-2 py-0.5 text-xs bg-orange-500/20 text-orange-400 rounded-full">Tasks</span>
+                    )}
+                    {admin.permission_users && (
+                      <span className="px-2 py-0.5 text-xs bg-teal-500/20 text-teal-400 rounded-full">Users</span>
+                    )}
+                    {admin.permission_contests && (
+                      <span className="px-2 py-0.5 text-xs bg-indigo-500/20 text-indigo-400 rounded-full">Contests</span>
+                    )}
                   </div>
                 </TableCell>
                 <TableCell>

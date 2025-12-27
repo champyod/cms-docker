@@ -5,12 +5,14 @@ import path from 'path';
 import { revalidatePath } from 'next/cache';
 import { exec } from 'child_process';
 import util from 'util';
+import { ensurePermission } from '@/lib/permissions';
 
 const execPromise = util.promisify(exec);
 
 const getRepoRoot = () => process.env.IS_DOCKER === 'true' ? '/repo-root' : path.resolve(process.cwd(), '..');
 
 export async function switchContest(contestId: number) {
+  await ensurePermission('contests');
   try {
     // Verify path existence
     const repoRoot = getRepoRoot();
@@ -70,6 +72,7 @@ export async function switchContest(contestId: number) {
 }
 
 export async function restartServices(type: 'all' | 'core' | 'worker' = 'all') {
+  await ensurePermission('all');
   try {
     const rootDir = getRepoRoot();
     let cmd = '';
