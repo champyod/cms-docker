@@ -10,9 +10,10 @@ interface ParticipantModalProps {
   onClose: () => void;
   contestId: number;
   availableUsers: users[];
+  onSuccess?: () => void;
 }
 
-export function ParticipantModal({ isOpen, onClose, contestId, availableUsers }: ParticipantModalProps) {
+export function ParticipantModal({ isOpen, onClose, contestId, availableUsers, onSuccess }: ParticipantModalProps) {
   const [search, setSearch] = useState('');
   const [adding, setAdding] = useState<number | null>(null);
 

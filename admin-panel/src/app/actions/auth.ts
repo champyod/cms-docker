@@ -1,7 +1,7 @@
 'use server';
 
 import { prisma } from "@/lib/prisma";
-import { createSession, deleteSession } from "@/lib/auth";
+import { createSession, deleteSession, getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
@@ -23,9 +23,6 @@ export async function login(prevState: any, formData: FormData) {
       return { error: "Invalid credentials or account disabled" };
     }
 
-    // CMS uses bcrypt for passwords
-    // Note: The 'authentication' field in CMS 'admins' table starts with 'bcrypt:' prefix usually
-    // or it might be raw bcrypt. Let's handle both.
     let storedHash = admin.authentication;
     if (storedHash.startsWith("bcrypt:")) {
       storedHash = storedHash.substring(7);
@@ -45,10 +42,24 @@ export async function login(prevState: any, formData: FormData) {
   }
 
   revalidatePath("/");
-  redirect("/en"); // Adjust based on locale if needed
+  redirect("/en");
 }
 
 export async function logout() {
   await deleteSession();
   redirect("/en/auth/login");
+}
+
+export async function getCurrentUser() {
+  const session = await getSession();
+  if (!session || !session.userId) return null;
+
+  // Convert userId to number safely
+  const id = parseInt(session.userId);
+  if (isNaN(id)) return null;
+
+  const admin = await prisma.admins.findUnique({
+    where: { id }
+  });
+  return admin;
 }

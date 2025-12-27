@@ -1,7 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { contests, tasks, users, participations } from '@prisma/client';
+import { contests, tasks, users, participations, admins } from '@prisma/client';
+import { useRouter } from 'next/navigation';
+import { updateContestSettings, addParticipant, removeParticipant } from '@/app/actions/contests';
+import { switchContest } from '@/app/actions/services';
 import { Card } from '@/components/core/Card';
 import { 
   Settings, Users, Trophy, Clock, Shield, Zap, 
@@ -10,10 +13,6 @@ import {
 } from 'lucide-react';
 import { ParticipantModal } from './ParticipantModal';
 import { ContestCommunications } from './ContestCommunications';
-import { updateContestSettings, addParticipant, removeParticipant } from '@/app/actions/contests';
-import { switchContest } from '@/app/actions/services';
-import { useRouter } from 'next/navigation';
-
 
 type ContestWithRelations = contests & {
   tasks: tasks[];
@@ -24,9 +23,10 @@ interface ContestDetailViewProps {
   contest: ContestWithRelations;
   availableUsers: users[];
   availableTasks: tasks[];
+  user: admins;
 }
 
-export function ContestDetailView({ contest, availableUsers, availableTasks }: ContestDetailViewProps) {
+export function ContestDetailView({ contest, availableUsers, availableTasks, user }: ContestDetailViewProps) {
   const [isParticipantModalOpen, setIsParticipantModalOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     info: true,
@@ -363,9 +363,7 @@ export function ContestDetailView({ contest, availableUsers, availableTasks }: C
       {/* Contest Communications (Announcements, Questions, Ranking) */}
       <ContestCommunications
         contestId={contest.id}
-        initialAnnouncements={[]} // Data fetching handled in component or passed from page
-        initialQuestions={[]}
-        initialRankings={[]}
+        adminId={user.id}
       />
 
       <ParticipantModal

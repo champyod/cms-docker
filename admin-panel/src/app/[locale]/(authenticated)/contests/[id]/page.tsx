@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { notFound } from 'next/navigation';
 import { ContestDetailView } from '@/components/contests/ContestDetailView';
+import { getCurrentUser } from '@/app/actions/auth';
 
 async function getContest(id: number) {
   const contest = await prisma.contests.findUnique({
@@ -45,22 +46,29 @@ export default async function ContestDetailPage({
     notFound();
   }
 
-  const [contest, availableUsers, availableTasks] = await Promise.all([
+  const [contest, availableUsers, availableTasks, user] = await Promise.all([
     getContest(contestId),
     getAvailableUsers(),
-    getAvailableTasks()
+    getAvailableTasks(),
+    getCurrentUser()
   ]);
 
   if (!contest) {
     notFound();
   }
 
+  if (!user) {
+    // Should be handled by middleware/layout generally but for type safety:
+    return null; // or redirect
+  }
+
   return (
     <div className="space-y-8">
       <ContestDetailView 
-        contest={contest} 
+        contest={contest as any} 
         availableUsers={availableUsers}
         availableTasks={availableTasks}
+        user={user}
       />
     </div>
   );

@@ -76,8 +76,9 @@ export function AdminList({ initialAdmins }: { initialAdmins: admins[] }) {
         </Button>
       </div>
 
-      {(showForm || editingAdmin) && (
+      {editingAdmin && (
         <div className="p-4 bg-black/30 rounded-lg space-y-4">
+          <div className="text-white text-sm mb-4">Editing {editingAdmin.username}</div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-neutral-500 uppercase mb-1">Name</label>
@@ -85,7 +86,7 @@ export function AdminList({ initialAdmins }: { initialAdmins: admins[] }) {
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm"
+                className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50"
               />
             </div>
             <div>
@@ -132,14 +133,17 @@ export function AdminList({ initialAdmins }: { initialAdmins: admins[] }) {
           </div>
           <div className="flex gap-2">
             <button
-              onClick={editingAdmin ? handleUpdate : handleCreate}
+              onClick={handleUpdate}
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm"
             >
-              {editingAdmin ? 'Update' : 'Create'}
+              Update
             </button>
             <button
-              onClick={() => { setShowForm(false); setEditingAdmin(null); }}
-              className="px-4 py-2 bg-neutral-700 hover:bg-neutral-600 text-white rounded-lg text-sm"
+              onClick={() => {
+                setEditingAdmin(null);
+                setFormData({ name: '', username: '', password: '', permission_all: false, permission_messaging: false });
+              }}
+              className="px-4 py-2 text-neutral-700 hover:bg-neutral-600 text-white rounded-lg text-sm bg-neutral-800"
             >
               Cancel
             </button>
@@ -206,6 +210,12 @@ export function AdminList({ initialAdmins }: { initialAdmins: admins[] }) {
           </TableBody>
         </Table>
       </div>
+
+      <AdminModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={() => window.location.reload()}
+      />
     </div>
   );
 }
