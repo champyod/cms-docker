@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Admin Bootstrapping Script for CMS
-# Creates a full Superadmin directly in the database
+# Creates a full Superadmin directly in the database using Bun or Node.js
 
 set -e
 
@@ -17,9 +17,10 @@ NAME=${3:-"System Administrator"}
 echo "Creating Superadmin user: $USERNAME..."
 
 # JavaScript payload for Prisma execution
+# Note: Native .ts execution if Bun is used
 PAYLOAD=$(cat <<EOP
 import { PrismaClient } from '@prisma/client';
-import * as bcrypt from 'bcryptjs';
+import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
@@ -65,36 +66,53 @@ EOP
 
 echo "$PAYLOAD" > /tmp/bootstrap.ts
 
-# Execution Strategy
-# 1. Try local npx if in dev environment
-# 2. Try docker exec if container is running
-# 3. Fail with clear instructions
+# Detect Local Runtime
+LOCAL_RUNTIME=""
+if command -v bun >/dev/null 2>&1; then
+    LOCAL_RUNTIME="bun"
+elif command -v npx >/dev/null 2>&1; then
+    LOCAL_RUNTIME="npx"
+fi
 
-if command -v npx >/dev/null 2>&1 && [ -d "admin-panel" ]; then
-    echo "Detected local Node.js environment. Running via npx..."
+# Try local execution if in dev environment
+if [ -n "$LOCAL_RUNTIME" ] && [ -d "admin-panel" ]; then
+    echo "Detected local $LOCAL_RUNTIME environment. Running..."
     cd admin-panel
-    npx ts-node --compiler-options '{"module": "commonjs"}' /tmp/bootstrap.ts
+    if [ "$LOCAL_RUNTIME" = "bun" ]; then
+        bun /tmp/bootstrap.ts
+    else
+        npx ts-node --compiler-options '{"module": "commonjs"}' /tmp/bootstrap.ts
+    fi
+    rm /tmp/bootstrap.ts
     exit 0
 fi
 
-if command -v docker >/dev/null 2>&1 && docker ps --format '{{.Names}}' | grep -q "cms-admin-panel"; then
-    echo "Detected running 'cms-admin-panel' container. Running via Docker..."
-    docker cp /tmp/bootstrap.ts cms-admin-panel:/tmp/bootstrap.ts
-    docker exec -it cms-admin-panel sh -c "npx ts-node --compiler-options '{\"module\": \"commonjs\"}' /tmp/bootstrap.ts"
-    exit 0
+# Try Docker execution
+if command -v docker >/dev/null 2>&1; then
+    # Find active admin-web-server container
+    CONTAINER_NAME=$(docker ps --format '{{.Names}}' | grep "admin-web-server" | head -n 1)
+    
+    if [ -n "$CONTAINER_NAME" ]; then
+        echo "Detected running container: $CONTAINER_NAME. Running via Docker..."
+        docker cp /tmp/bootstrap.ts "$CONTAINER_NAME":/tmp/bootstrap.ts
+        
+        # Check if Bun is in the container
+        if docker exec "$CONTAINER_NAME" command -v bun >/dev/null 2>&1; then
+            docker exec -it "$CONTAINER_NAME" bun /tmp/bootstrap.ts
+        else
+            docker exec -it "$CONTAINER_NAME" npx ts-node --compiler-options '{"module": "commonjs"}' /tmp/bootstrap.ts
+        fi
+        rm /tmp/bootstrap.ts
+        exit 0
+    fi
 fi
 
 echo "----------------------------------------------------------------"
-echo "ERROR: Could not find local 'npx' or a running 'cms-admin-panel' container."
+echo "ERROR: Could not find local runtime (bun/npx) or a running admin container."
 echo "----------------------------------------------------------------"
-echo "To bootstrap the admin on your remote server, please run:"
+echo "Ensure the admin-panel container is running (make admin-img)."
+echo "You can check running containers with: docker ps"
 echo ""
-echo "  1. Copy this script to the remote server."
-echo "  2. Ensure the admin-panel container is running (make admin-img)."
-echo "  3. Run: ./scripts/bootstrap-admin.sh $USERNAME $PASSWORD \"$NAME\""
-echo ""
-echo "If you are running manually inside the container:"
-echo "  docker exec -it cms-admin-panel npx ts-node --eval \"... (js code) ...\""
 
 rm /tmp/bootstrap.ts
 exit 1
