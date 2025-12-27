@@ -17,8 +17,12 @@ services:
       # Pass API URL if needed
       VITE_API_URL: ${VITE_API_URL:-http://localhost:8889}
       DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
+      IS_DOCKER: "true"
     volumes:
-      # No volumes needed for static frontend typically, but keeping logs just in case
+      # Mount Docker socket to allow managing other containers
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Mount the root repository to allow editing config/env files on the host
+      - ./:/repo-root
       - cms-logs:/var/local/log/cms
     networks:
       - cms-network

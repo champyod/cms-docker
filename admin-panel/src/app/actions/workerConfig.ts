@@ -5,9 +5,10 @@ import path from 'path';
 
 // Helper to find cms.toml
 async function getCmsConfigPath() {
+  const repoRoot = process.env.IS_DOCKER === 'true' ? '/repo-root' : path.resolve(process.cwd(), '..');
   const possiblePaths = [
+    path.join(repoRoot, 'config/cms.toml'),
     path.join(process.cwd(), 'config', 'cms.toml'),
-    path.join(process.cwd(), '../config/cms.toml'),
     '/usr/local/etc/cms.toml'
   ];
 

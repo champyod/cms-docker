@@ -5,7 +5,8 @@ import path from 'path';
 
 export async function readEnvFile(filename: string) {
   try {
-    const envPath = path.join(process.cwd(), `../${filename}`);
+    const repoRoot = process.env.IS_DOCKER === 'true' ? '/repo-root' : path.resolve(process.cwd(), '..');
+    const envPath = path.join(repoRoot, filename);
     const content = await fs.readFile(envPath, 'utf-8');
     
     // Parse into key-value pairs
@@ -28,7 +29,8 @@ export async function readEnvFile(filename: string) {
 
 export async function updateEnvFile(filename: string, updates: Record<string, string>) {
   try {
-    const envPath = path.join(process.cwd(), `../${filename}`);
+    const repoRoot = process.env.IS_DOCKER === 'true' ? '/repo-root' : path.resolve(process.cwd(), '..');
+    const envPath = path.join(repoRoot, filename);
     let content = await fs.readFile(envPath, 'utf-8');
     
     // Update or append

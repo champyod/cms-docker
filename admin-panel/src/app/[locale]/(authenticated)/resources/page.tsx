@@ -1,4 +1,5 @@
 import { ResourceView } from '@/components/resources/ResourceView';
+import { WorkerNodesConfig } from '@/components/settings/WorkerNodesConfig';
 
 export default async function ResourcesPage() {
   return (
@@ -13,6 +14,14 @@ export default async function ResourcesPage() {
       </div>
 
       <ResourceView />
+
+      <div className="pt-8 border-t border-white/5">
+        <div className="mb-6">
+          <h2 className="text-xl font-bold text-white">Worker Node Management</h2>
+          <p className="text-sm text-neutral-400">Configure host and port settings in cms.toml</p>
+        </div>
+        <WorkerNodesConfig />
+      </div>
     </div>
   );
 }

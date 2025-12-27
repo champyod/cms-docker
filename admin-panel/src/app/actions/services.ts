@@ -8,10 +8,13 @@ import util from 'util';
 
 const execPromise = util.promisify(exec);
 
+const getRepoRoot = () => process.env.IS_DOCKER === 'true' ? '/repo-root' : path.resolve(process.cwd(), '..');
+
 export async function switchContest(contestId: number) {
   try {
-    // Verify path existence or traverse up
-    let envPath = path.resolve(process.cwd(), '../.env.contest');
+    // Verify path existence
+    const repoRoot = getRepoRoot();
+    let envPath = path.join(repoRoot, '.env.contest');
     try {
       await fs.access(envPath);
     } catch {
@@ -68,7 +71,7 @@ export async function switchContest(contestId: number) {
 
 export async function restartServices(type: 'all' | 'core' | 'worker' = 'all') {
   try {
-    const rootDir = path.resolve(process.cwd(), '..');
+    const rootDir = getRepoRoot();
     let cmd = '';
 
     // Using docker compose directly as Makefile might be complex or missing specific targets
