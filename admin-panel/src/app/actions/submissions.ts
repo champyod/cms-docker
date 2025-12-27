@@ -44,7 +44,17 @@ export async function getSubmissions({
             }
           },
         submission_results: {
-          select: { score: true, dataset_id: true, compilation_outcome: true, evaluation_outcome: true }
+          select: {
+            score: true,
+            dataset_id: true,
+            compilation_outcome: true,
+            evaluation_outcome: true,
+            compilation_time: true,
+            compilation_memory: true,
+            compilation_text: true,
+            compilation_stdout: true,
+            compilation_stderr: true
+          }
           },
           files: { select: { filename: true, digest: true } }
       }

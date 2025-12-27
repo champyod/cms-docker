@@ -11,6 +11,11 @@ export type SubmissionWithRelations = submissions & {
         dataset_id: number;
         compilation_outcome: string | null;
         evaluation_outcome: string | null;
+        compilation_time: number | null;
+        compilation_memory: bigint | null;
+        compilation_text: string[];
+        compilation_stdout: string | null;
+        compilation_stderr: string | null;
     }[];
     files: { filename: string; digest: string }[];
 };
