@@ -12,9 +12,8 @@ export default async function SubmissionsPage({
   const { locale } = await params;
   const sParams = await searchParams;
   const page = Number(sParams.page) || 1;
-  const search = sParams.search || '';
   
-  const { submissions, totalPages } = await getSubmissions({ page, search });
+  const { submissions, totalPages } = await getSubmissions({ page });
 
   return (
     <div className="space-y-8">
