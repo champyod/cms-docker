@@ -16,6 +16,7 @@ export function WorkerNodesConfig() {
   
   const [newHost, setNewHost] = useState('');
   const [newPort, setNewPort] = useState('26000');
+  const [showAddForm, setShowAddForm] = useState(false);
 
   useEffect(() => {
     loadWorkers();
@@ -33,6 +34,7 @@ export function WorkerNodesConfig() {
     setWorkers([...workers, { host: newHost, port: parseInt(newPort) }]);
     setNewHost('');
     setNewPort('26000');
+    setShowAddForm(false);
   };
 
   const handleRemove = (index: number) => {
@@ -79,16 +81,58 @@ export function WorkerNodesConfig() {
             <p className="text-sm text-neutral-400">Configure core service connection endpoints</p>
           </div>
         </div>
-        <Button onClick={handleSave} className="bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20">
-          <Save className="w-4 h-4 mr-2" /> Save Changes
-        </Button>
+        <div className="flex gap-3">
+          <Button
+            variant="secondary"
+            onClick={() => setShowAddForm(!showAddForm)}
+            className="border-white/10 text-white"
+          >
+            <Plus className="w-4 h-4 mr-2" /> Add Node
+          </Button>
+          <Button onClick={handleSave} className="bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20">
+            <Save className="w-4 h-4 mr-2" /> Save Changes
+          </Button>
+        </div>
       </div>
 
       <div className="p-6 space-y-4">
+        {showAddForm && (
+          <div className="mb-6 bg-indigo-500/5 p-4 rounded-xl border border-indigo-500/20 animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-4 flex items-center justify-between">
+              Add New Worker Node
+              <button onClick={() => setShowAddForm(false)} className="text-neutral-500 hover:text-white">✕</button>
+            </div>
+            <div className="flex gap-4 items-end">
+              <div className="flex-1">
+                <label className="block text-[10px] uppercase text-neutral-500 font-bold mb-1.5">Hostname or IP Address</label>
+                <input
+                  value={newHost}
+                  onChange={e => setNewHost(e.target.value)}
+                  placeholder="e.g., 10.0.0.5"
+                  className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2 text-white text-sm font-mono focus:outline-none focus:border-indigo-500/50"
+                  autoFocus
+                />
+              </div>
+              <div className="w-32">
+                <label className="block text-[10px] uppercase text-neutral-500 font-bold mb-1.5">Port</label>
+                <input
+                  value={newPort}
+                  onChange={e => setNewPort(e.target.value)}
+                  type="number"
+                  className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2 text-white text-sm font-mono focus:outline-none focus:border-indigo-500/50"
+                />
+              </div>
+              <Button onClick={handleAdd} size="sm" className="bg-indigo-500 hover:bg-indigo-400 text-white px-4 h-9">
+                Add Node
+              </Button>
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <div className="flex items-center justify-center py-10 text-neutral-500 gap-3">
             <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-            Loading cms.toml...
+            Loading configuration...
           </div>
         ) : (
             <div className="grid grid-cols-1 gap-3">
@@ -137,33 +181,6 @@ export function WorkerNodesConfig() {
                 )}
             </div>
         )}
-
-        <div className="mt-6 pt-6 border-t border-white/5">
-          <div className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-4">Add New Node</div>
-          <div className="flex gap-4 items-end bg-black/20 p-4 rounded-xl border border-white/5">
-            <div className="flex-1">
-              <label className="block text-[10px] uppercase text-neutral-500 font-bold mb-1.5">Hostname or IP Address</label>
-              <input
-                value={newHost}
-                onChange={e => setNewHost(e.target.value)}
-                placeholder="e.g., 10.0.0.5 or worker-vps"
-                className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-indigo-500/50"
-              />
-            </div>
-            <div className="w-32">
-              <label className="block text-[10px] uppercase text-neutral-500 font-bold mb-1.5">Service Port</label>
-              <input
-                value={newPort}
-                onChange={e => setNewPort(e.target.value)}
-                type="number"
-                className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-indigo-500/50"
-              />
-            </div>
-            <Button onClick={handleAdd} className="bg-white/5 hover:bg-white/10 text-white h-[42px] px-6">
-              <Plus className="w-4 h-4 mr-2" /> Add Node
-            </Button>
-          </div>
-        </div>
       </div>
     </Card>
   );

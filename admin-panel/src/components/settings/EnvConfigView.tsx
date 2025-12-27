@@ -20,21 +20,39 @@ interface ConfigSection {
 
 const CONFIG_SECTIONS: ConfigSection[] = [
   {
-    title: 'Worker Connection Settings',
-    filename: '.env.worker',
+    title: 'Database Configuration',
+    filename: '.env.core',
     fields: [
-      { key: 'CORE_SERVICES_HOST', label: 'Core Host/IP', description: 'Address where CMS Core/Resource Service is running. Use "localhost" for local, or public IP for remote.' },
-      { key: 'WORKER_SHARD', label: 'Worker Shard ID', description: 'Unique integer ID for this worker.' },
-      { key: 'WORKER_NAME', label: 'Worker Name', description: 'Friendly name for identification.' },
-      { key: 'WORKER_CPU_LIMIT', label: 'CPU Limit', description: 'e.g. 4' },
-      { key: 'WORKER_MEMORY_LIMIT', label: 'Memory Limit', description: 'e.g. 4G' },
+      { key: 'POSTGRES_DB', label: 'Database Name', description: 'PostgreSQL database name.' },
+      { key: 'POSTGRES_USER', label: 'Database User', description: 'PostgreSQL username.' },
+      { key: 'POSTGRES_PASSWORD', label: 'Database Password', description: 'PostgreSQL password.' },
     ]
   },
   {
-    title: 'Core/Public Access Settings',
+    title: 'Network & Access',
     filename: '.env.core',
     fields: [
       { key: 'PUBLIC_IP', label: 'Public IP', description: 'Public facing IP address of this server.' },
+      { key: 'APT_MIRROR', label: 'Ubuntu Mirror', description: 'Mirror for apt updates.' },
+    ]
+  },
+  {
+    title: 'Contest Settings',
+    filename: '.env.contest',
+    fields: [
+      { key: 'CONTEST_ID', label: 'Active Contest ID', description: 'Currently serving contest.' },
+      { key: 'ACCESS_METHOD', label: 'Access Method', description: 'public_port or domain.' },
+      { key: 'SECRET_KEY', label: 'Secret Key', description: 'Used for session signing.' },
+      { key: 'COOKIE_DURATION', label: 'Cookie Duration', description: 'Session length in seconds.' },
+    ]
+  },
+  {
+    title: 'Ranking Settings',
+    filename: '.env.admin',
+    fields: [
+      { key: 'RANKING_USERNAME', label: 'Ranking Username', description: 'Auth for scoreboard.' },
+      { key: 'RANKING_PASSWORD', label: 'Ranking Password', description: 'Auth for scoreboard.' },
+      { key: 'ADMIN_COOKIE_DURATION', label: 'Admin Session', description: 'Admin panel session length.' },
     ]
   }
 ];
