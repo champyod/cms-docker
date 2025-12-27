@@ -6,12 +6,15 @@ import { Card } from '@/components/core/Card';
 import { 
   Settings, FileText, Paperclip, Database, TestTube, 
   ChevronDown, ChevronUp, Save, Plus, Trash2, ExternalLink, Upload,
-  Copy, Edit, CheckCircle, ToggleLeft, ToggleRight
+  Copy, Edit, CheckCircle, ToggleLeft, ToggleRight, Download
 } from 'lucide-react';
 import { updateTask } from '@/app/actions/tasks';
 import { activateDataset, cloneDataset, deleteDataset, renameDataset, toggleAutojudge } from '@/app/actions/datasets';
 import { deleteTestcase, toggleTestcasePublic } from '@/app/actions/testcases';
+import { deleteStatement, deleteAttachment } from '@/app/actions/statements';
 import { DatasetModal } from './DatasetModal';
+import { StatementModal } from './StatementModal';
+import { AttachmentModal } from './AttachmentModal';
 
 type DatasetWithRelations = datasets & {
   testcases: testcases[];
@@ -43,6 +46,8 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
     score_precision: task.score_precision,
   });
   const [isDatasetModalOpen, setIsDatasetModalOpen] = useState(false);
+  const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
+  const [isAttachmentModalOpen, setIsAttachmentModalOpen] = useState(false);
 
   const toggleSection = (section: string) => {
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
@@ -208,7 +213,10 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
         
         {expandedSections.statements && (
           <div className="p-4 pt-0">
-            <button className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600/20 text-emerald-400 rounded-lg text-sm hover:bg-emerald-600/30 transition-colors mb-4">
+            <button
+              onClick={() => setIsStatementModalOpen(true)}
+              className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600/20 text-emerald-400 rounded-lg text-sm hover:bg-emerald-600/30 transition-colors mb-4"
+            >
               <Upload className="w-4 h-4" />
               Upload Statement
             </button>
@@ -404,7 +412,10 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
               {task.attachments.length}
             </span>
           </div>
-          <button className="flex items-center gap-2 px-3 py-1.5 bg-purple-600/20 text-purple-400 rounded-lg text-sm hover:bg-purple-600/30 transition-colors">
+          <button
+            onClick={() => setIsAttachmentModalOpen(true)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-purple-600/20 text-purple-400 rounded-lg text-sm hover:bg-purple-600/30 transition-colors"
+          >
             <Upload className="w-4 h-4" />
             Upload
           </button>
@@ -415,9 +426,20 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             {task.attachments.map((att) => (
-              <div key={att.id} className="flex items-center gap-2 p-2 bg-black/30 rounded-lg text-sm text-neutral-300">
+              <div key={att.id} className="flex items-center gap-2 p-2 bg-black/30 rounded-lg text-sm text-neutral-300 group">
                 <Paperclip className="w-3 h-3 text-purple-400" />
-                <span className="truncate">{att.filename}</span>
+                <span className="truncate flex-1">{att.filename}</span>
+                <button
+                  onClick={async () => {
+                    if (confirm('Delete this attachment?')) {
+                      await deleteAttachment(att.id);
+                      window.location.reload();
+                    }
+                  }}
+                  className="p-1 text-red-400 opacity-0 group-hover:opacity-100 hover:bg-red-500/20 rounded transition-all"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
               </div>
             ))}
           </div>
@@ -428,6 +450,23 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
       <DatasetModal
         isOpen={isDatasetModalOpen}
         onClose={() => setIsDatasetModalOpen(false)}
+        taskId={task.id}
+        onSuccess={() => window.location.reload()}
+      />
+
+      {/* Statement Modal */}
+      <StatementModal
+        isOpen={isStatementModalOpen}
+        onClose={() => setIsStatementModalOpen(false)}
+        taskId={task.id}
+        existingLanguages={task.statements.map(s => s.language)}
+        onSuccess={() => window.location.reload()}
+      />
+
+      {/* Attachment Modal */}
+      <AttachmentModal
+        isOpen={isAttachmentModalOpen}
+        onClose={() => setIsAttachmentModalOpen(false)}
         taskId={task.id}
         onSuccess={() => window.location.reload()}
       />
