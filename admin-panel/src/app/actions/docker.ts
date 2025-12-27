@@ -51,6 +51,16 @@ export async function controlContainer(id: string, action: 'start' | 'stop' | 'r
   }
 }
 
+export async function getContainerLogs(id: string, tail: number = 100) {
+  try {
+    const { stdout, stderr } = await execPromise(`docker logs --tail ${tail} ${id}`);
+    return { success: true, logs: stdout || stderr };
+  } catch (error) {
+    console.error(`Failed to get logs for container ${id}:`, error);
+    return { success: false, error: (error as Error).message };
+  }
+}
+
 export async function runCompose(action: 'up' | 'down' | 'restart' | 'build', serviceType?: 'core' | 'admin' | 'contest' | 'worker') {
   try {
     const repoRoot = getRepoRoot();

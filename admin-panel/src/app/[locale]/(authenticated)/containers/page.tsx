@@ -5,15 +5,17 @@ import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
 import { 
   Play, Square, RotateCcw, Box, RefreshCw, 
-  CheckCircle2, AlertCircle, Clock, Cpu, HardDrive, Layers
+  CheckCircle2, AlertCircle, Clock, Cpu, HardDrive, Layers, Terminal
 } from 'lucide-react';
 import { getContainers, controlContainer, runCompose, ContainerInfo } from '@/app/actions/docker';
 import { useToast } from '@/components/providers/ToastProvider';
+import { LogViewerModal } from '@/components/containers/LogViewerModal';
 
 export default function ContainersPage() {
   const [containers, setContainers] = useState<ContainerInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [selectedContainer, setSelectedContainer] = useState<{ id: string, name: string } | null>(null);
   const { addToast } = useToast();
 
   const loadContainers = async () => {
@@ -64,6 +66,13 @@ export default function ContainersPage() {
 
   return (
     <div className="space-y-8">
+      {selectedContainer && (
+        <LogViewerModal
+          containerId={selectedContainer.id}
+          containerName={selectedContainer.name}
+          onClose={() => setSelectedContainer(null)}
+        />
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-white tracking-tight">Container Control Center</h1>
@@ -119,6 +128,14 @@ export default function ContainersPage() {
                 </div>
                 
                 <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button
+                    size="sm"
+                    onClick={() => setSelectedContainer({ id: container.id, name: container.name })}
+                    className="p-2 bg-indigo-600/10 text-indigo-400 hover:bg-indigo-600/20 border-0"
+                    title="View Logs"
+                  >
+                    <Terminal className="w-3.5 h-3.5" />
+                  </Button>
                    {container.state !== 'running' ? (
                      <Button 
                         size="sm" 
