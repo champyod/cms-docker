@@ -34,16 +34,20 @@ export async function login(prevState: any, formData: FormData) {
       return { error: "Invalid credentials" };
     }
 
-    await createSession(admin.id.toString(), admin.username, {
-      permission_all: admin.permission_all,
-      permission_tasks: admin.permission_tasks,
-      permission_users: admin.permission_users,
-      permission_contests: admin.permission_contests,
-    });
+    // Handle permissions with fallbacks for legacy/unmigrated databases
+    const isSuperAdmin = !!admin.permission_all;
+    const permissions = {
+      permission_all: isSuperAdmin,
+      permission_tasks: isSuperAdmin || !!(admin as any).permission_tasks,
+      permission_users: isSuperAdmin || !!(admin as any).permission_users,
+      permission_contests: isSuperAdmin || !!(admin as any).permission_contests,
+    };
+
+    await createSession(admin.id.toString(), admin.username, permissions);
     
   } catch (error) {
     console.error("Login error:", error);
-    return { error: "An unexpected error occurred" };
+    return { error: "An unexpected error occurred. Please ensure database is synchronized." };
   }
 
   revalidatePath("/");
