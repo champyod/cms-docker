@@ -5,9 +5,13 @@ import { tasks, statements, attachments, datasets, testcases, managers, contests
 import { Card } from '@/components/core/Card';
 import { 
   Settings, FileText, Paperclip, Database, TestTube, 
-  ChevronDown, ChevronUp, Save, Plus, Trash2, ExternalLink, Upload
+  ChevronDown, ChevronUp, Save, Plus, Trash2, ExternalLink, Upload,
+  Copy, Edit, CheckCircle, ToggleLeft, ToggleRight
 } from 'lucide-react';
 import { updateTask } from '@/app/actions/tasks';
+import { activateDataset, cloneDataset, deleteDataset, renameDataset, toggleAutojudge } from '@/app/actions/datasets';
+import { deleteTestcase, toggleTestcasePublic } from '@/app/actions/testcases';
+import { DatasetModal } from './DatasetModal';
 
 type DatasetWithRelations = datasets & {
   testcases: testcases[];
@@ -38,6 +42,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
     title: task.title,
     score_precision: task.score_precision,
   });
+  const [isDatasetModalOpen, setIsDatasetModalOpen] = useState(false);
 
   const toggleSection = (section: string) => {
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
@@ -55,7 +60,56 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
     }
   };
 
-  const datasets = task.datasets_datasets_task_idTotasks;
+  const handleActivateDataset = async (datasetId: number) => {
+    await activateDataset(datasetId);
+    window.location.reload();
+  };
+
+  const handleCloneDataset = async (datasetId: number, description: string) => {
+    const newName = prompt('Enter name for cloned dataset:', `${description} (copy)`);
+    if (newName) {
+      await cloneDataset(datasetId, newName);
+      window.location.reload();
+    }
+  };
+
+  const handleRenameDataset = async (datasetId: number, currentDesc: string) => {
+    const newName = prompt('Enter new name:', currentDesc);
+    if (newName && newName !== currentDesc) {
+      await renameDataset(datasetId, newName);
+      window.location.reload();
+    }
+  };
+
+  const handleDeleteDataset = async (datasetId: number) => {
+    if (confirm('Delete this dataset? This cannot be undone.')) {
+      const result = await deleteDataset(datasetId);
+      if (!result.success) {
+        alert(result.error);
+      } else {
+        window.location.reload();
+      }
+    }
+  };
+
+  const handleToggleAutojudge = async (datasetId: number) => {
+    await toggleAutojudge(datasetId);
+    window.location.reload();
+  };
+
+  const handleDeleteTestcase = async (tcId: number) => {
+    if (confirm('Delete this testcase?')) {
+      await deleteTestcase(tcId);
+      window.location.reload();
+    }
+  };
+
+  const handleToggleTestcasePublic = async (tcId: number) => {
+    await toggleTestcasePublic(tcId);
+    window.location.reload();
+  };
+
+  const taskDatasets = task.datasets_datasets_task_idTotasks;
 
   return (
     <div className="space-y-6">
@@ -193,7 +247,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
             <Database className="w-5 h-5 text-amber-400" />
             <span className="font-bold text-white">Datasets</span>
             <span className="text-xs bg-white/10 px-2 py-0.5 rounded-full text-neutral-400">
-              {datasets.length}
+              {taskDatasets.length}
             </span>
           </div>
           {expandedSections.datasets ? <ChevronUp className="w-4 h-4 text-neutral-400" /> : <ChevronDown className="w-4 h-4 text-neutral-400" />}
@@ -201,16 +255,19 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
         
         {expandedSections.datasets && (
           <div className="p-4 pt-0">
-            <button className="flex items-center gap-2 px-3 py-1.5 bg-amber-600/20 text-amber-400 rounded-lg text-sm hover:bg-amber-600/30 transition-colors mb-4">
+            <button
+              onClick={() => setIsDatasetModalOpen(true)}
+              className="flex items-center gap-2 px-3 py-1.5 bg-amber-600/20 text-amber-400 rounded-lg text-sm hover:bg-amber-600/30 transition-colors mb-4"
+            >
               <Plus className="w-4 h-4" />
               Create Dataset
             </button>
             
-            {datasets.length === 0 ? (
+            {taskDatasets.length === 0 ? (
               <p className="text-neutral-500 text-sm">No datasets created yet.</p>
             ) : (
               <div className="space-y-4">
-                {datasets.map((dataset) => (
+                  {taskDatasets.map((dataset) => (
                   <div key={dataset.id} className="p-4 bg-black/30 rounded-lg space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -219,48 +276,116 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
                         {dataset.id === task.active_dataset_id && (
                           <span className="px-2 py-0.5 text-xs bg-emerald-500/20 text-emerald-400 rounded-full">Active</span>
                         )}
+                        {dataset.autojudge && (
+                          <span className="px-2 py-0.5 text-xs bg-blue-500/20 text-blue-400 rounded-full">Autojudge</span>
+                        )}
                       </div>
-                      <div className="text-xs text-neutral-400">
-                        {dataset.task_type} / {dataset.score_type}
+                      <div className="flex items-center gap-2">
+                        {dataset.id !== task.active_dataset_id && (
+                          <button
+                            onClick={() => handleActivateDataset(dataset.id)}
+                            className="p-1.5 text-emerald-400 hover:bg-emerald-500/20 rounded text-xs flex items-center gap-1"
+                            title="Make Live"
+                          >
+                            <CheckCircle className="w-3 h-3" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleCloneDataset(dataset.id, dataset.description)}
+                          className="p-1.5 text-indigo-400 hover:bg-indigo-500/20 rounded"
+                          title="Clone"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => handleRenameDataset(dataset.id, dataset.description)}
+                          className="p-1.5 text-neutral-400 hover:bg-white/10 rounded"
+                          title="Rename"
+                        >
+                          <Edit className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => handleToggleAutojudge(dataset.id)}
+                          className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded"
+                          title="Toggle Autojudge"
+                        >
+                          {dataset.autojudge ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                        </button>
+                        {dataset.id !== task.active_dataset_id && (
+                          <button
+                            onClick={() => handleDeleteDataset(dataset.id)}
+                            className="p-1.5 text-red-400 hover:bg-red-500/20 rounded"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
                       </div>
                     </div>
                     
-                    <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div className="grid grid-cols-4 gap-4 text-sm">
                       <div>
-                        <span className="text-neutral-500 text-xs uppercase">Time Limit</span>
-                        <div className="text-white">{dataset.time_limit ? `${dataset.time_limit}s` : '-'}</div>
+                        <span className="text-neutral-500 text-xs uppercase">Type</span>
+                        <div className="text-white text-xs">{dataset.task_type}</div>
                       </div>
                       <div>
-                        <span className="text-neutral-500 text-xs uppercase">Memory Limit</span>
-                        <div className="text-white">{dataset.memory_limit ? `${Number(dataset.memory_limit) / (1024*1024)} MiB` : '-'}</div>
+                        <span className="text-neutral-500 text-xs uppercase">Time</span>
+                        <div className="text-white text-xs">{dataset.time_limit ? `${dataset.time_limit}s` : '-'}</div>
                       </div>
                       <div>
-                        <span className="text-neutral-500 text-xs uppercase">Testcases</span>
-                        <div className="text-white">{dataset.testcases.length}</div>
+                        <span className="text-neutral-500 text-xs uppercase">Memory</span>
+                        <div className="text-white text-xs">{dataset.memory_limit ? `${Number(dataset.memory_limit) / (1024 * 1024)} MiB` : '-'}</div>
+                      </div>
+                      <div>
+                        <span className="text-neutral-500 text-xs uppercase">Score</span>
+                        <div className="text-white text-xs">{dataset.score_type}</div>
                       </div>
                     </div>
 
-                    {dataset.testcases.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-white/5">
-                        <div className="flex items-center gap-2 mb-2">
+                    {/* Testcases */}
+                    <div className="mt-3 pt-3 border-t border-white/5">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
                           <TestTube className="w-4 h-4 text-cyan-400" />
-                          <span className="text-xs font-bold text-neutral-400 uppercase">Testcases</span>
+                          <span className="text-xs font-bold text-neutral-400 uppercase">Testcases ({dataset.testcases.length})</span>
                         </div>
-                        <div className="grid grid-cols-4 gap-2">
-                          {dataset.testcases.slice(0, 8).map((tc) => (
-                            <div key={tc.id} className="px-2 py-1 bg-black/40 rounded text-xs text-neutral-300 flex items-center justify-between">
-                              <span>{tc.codename}</span>
-                              {tc.public && <span className="text-emerald-400">P</span>}
+                        <button className="text-xs text-cyan-400 hover:underline">+ Add Testcase</button>
+                      </div>
+                      {dataset.testcases.length === 0 ? (
+                        <p className="text-neutral-500 text-xs">No testcases yet.</p>
+                      ) : (
+                        <div className="grid grid-cols-6 gap-1">
+                          {dataset.testcases.slice(0, 12).map((tc) => (
+                            <div
+                              key={tc.id}
+                              className="px-2 py-1 bg-black/40 rounded text-xs text-neutral-300 flex items-center justify-between group"
+                            >
+                              <span className="truncate">{tc.codename}</span>
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={() => handleToggleTestcasePublic(tc.id)}
+                                  className={tc.public ? 'text-emerald-400' : 'text-neutral-500'}
+                                  title={tc.public ? 'Public' : 'Private'}
+                                >
+                                  {tc.public ? 'P' : 'H'}
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteTestcase(tc.id)}
+                                  className="text-red-400"
+                                >
+                                  ×
+                                </button>
+                              </div>
                             </div>
                           ))}
-                          {dataset.testcases.length > 8 && (
+                            {dataset.testcases.length > 12 && (
                             <div className="px-2 py-1 bg-black/40 rounded text-xs text-neutral-500">
-                              +{dataset.testcases.length - 8} more
+                                +{dataset.testcases.length - 12} more
                             </div>
                           )}
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -298,6 +423,14 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
           </div>
         )}
       </Card>
+
+      {/* Dataset Modal */}
+      <DatasetModal
+        isOpen={isDatasetModalOpen}
+        onClose={() => setIsDatasetModalOpen(false)}
+        taskId={task.id}
+        onSuccess={() => window.location.reload()}
+      />
     </div>
   );
 }
