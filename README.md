@@ -26,7 +26,7 @@ make core-img
 # Initialize Database (First time only)
 docker exec -it cms-log-service cmsInitDB 
 
-# Bootstrap First Superadmin
+# Bootstrap First Superadmin (Run on the machine where services are active)
 ./scripts/bootstrap-admin.sh admin yourpassword "Root Admin"
 
 # Start the rest of the stack
