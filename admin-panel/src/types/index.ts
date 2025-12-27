@@ -1,10 +1,11 @@
-import { submissions, submission_results, users, tasks, contests } from '@prisma/client';
+import { submissions, submission_results, tasks } from '@prisma/client';
 
 export type SubmissionWithRelations = submissions & {
     participations: {
-        users: users;
-        contests: contests;
+        users: { username: string };
+        contests: { name: string };
     };
-    tasks: tasks;
-    submission_results: submission_results[];
+    tasks: { id: number; name: string; title: string };
+    submission_results: { score: number | null; dataset_id: number }[];
+    files: { filename: string; digest: string }[];
 };
