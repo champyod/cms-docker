@@ -9,7 +9,9 @@ import {
   ChevronDown, ChevronUp, Save
 } from 'lucide-react';
 import { ParticipantModal } from './ParticipantModal';
+import { ContestCommunications } from './ContestCommunications';
 import { updateContestSettings, addParticipant, removeParticipant } from '@/app/actions/contests';
+
 
 type ContestWithRelations = contests & {
   tasks: tasks[];
@@ -328,6 +330,9 @@ export function ContestDetailView({ contest, availableUsers, availableTasks }: C
         )}
       </Card>
 
+      {/* Communications: Announcements, Questions, Ranking */}
+      <ContestCommunications contestId={contest.id} adminId={1} />
+
       {/* Participant Modal */}
       <ParticipantModal
         isOpen={isParticipantModalOpen}
@@ -338,3 +343,4 @@ export function ContestDetailView({ contest, availableUsers, availableTasks }: C
     </div>
   );
 }
+
