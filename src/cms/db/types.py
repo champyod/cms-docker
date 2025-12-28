@@ -61,13 +61,17 @@ class Codename(TypeDecorator):
 
     @classmethod
     def get_create_command(cls):
-        return DDL("CREATE DOMAIN %(domain)s VARCHAR "
-                   "CHECK (VALUE ~ '^[A-Za-z0-9_-]+$')",
+        return DDL("DO $$ BEGIN "
+                   "    IF to_regtype('%(domain)s') IS NULL THEN "
+                   "        CREATE DOMAIN %(domain)s VARCHAR "
+                   "        CHECK (VALUE ~ '^[A-Za-z0-9_-]+$'); "
+                   "    END IF; "
+                   "END $$;",
                    context={"domain": cls.domain_name})
 
     @classmethod
     def get_drop_command(cls):
-        return DDL("DROP DOMAIN %(domain)s",
+        return DDL("DROP DOMAIN IF EXISTS %(domain)s",
                    context={"domain": cls.domain_name})
 
 
@@ -95,15 +99,19 @@ class Filename(TypeDecorator):
 
     @classmethod
     def get_create_command(cls):
-        return DDL("CREATE DOMAIN %(domain)s VARCHAR "
-                   "CHECK (VALUE ~ '^[A-Za-z0-9_.-]+$') "
-                   "CHECK (VALUE != '.') "
-                   "CHECK (VALUE != '..')",
+        return DDL("DO $$ BEGIN "
+                   "    IF to_regtype('%(domain)s') IS NULL THEN "
+                   "        CREATE DOMAIN %(domain)s VARCHAR "
+                   "        CHECK (VALUE ~ '^[A-Za-z0-9_.-]+$') "
+                   "        CHECK (VALUE != '.') "
+                   "        CHECK (VALUE != '..'); "
+                   "    END IF; "
+                   "END $$;",
                    context={"domain": cls.domain_name})
 
     @classmethod
     def get_drop_command(cls):
-        return DDL("DROP DOMAIN %(domain)s",
+        return DDL("DROP DOMAIN IF EXISTS %(domain)s",
                    context={"domain": cls.domain_name})
 
 
@@ -137,15 +145,19 @@ class FilenameSchema(TypeDecorator):
 
     @classmethod
     def get_create_command(cls):
-        return DDL("CREATE DOMAIN %(domain)s VARCHAR "
-                   "CHECK (VALUE ~ '^[A-Za-z0-9_.-]+(.%%l)?$') "
-                   "CHECK (VALUE != '.') "
-                   "CHECK (VALUE != '..')",
+        return DDL("DO $$ BEGIN "
+                   "    IF to_regtype('%(domain)s') IS NULL THEN "
+                   "        CREATE DOMAIN %(domain)s VARCHAR "
+                   "        CHECK (VALUE ~ '^[A-Za-z0-9_.-]+(.%%l)?$') "
+                   "        CHECK (VALUE != '.') "
+                   "        CHECK (VALUE != '..'); "
+                   "    END IF; "
+                   "END $$;",
                    context={"domain": cls.domain_name})
 
     @classmethod
     def get_drop_command(cls):
-        return DDL("DROP DOMAIN %(domain)s",
+        return DDL("DROP DOMAIN IF EXISTS %(domain)s",
                    context={"domain": cls.domain_name})
 
 
@@ -184,17 +196,21 @@ class FilenameSchemaArray(TypeDecorator):
         # character basis so we can work around it by concatenating the
         # items of the array (using array_to_string) and match the
         # regexp on the result.
-        return DDL("CREATE DOMAIN %(domain)s VARCHAR[] "
-                   "CHECK (array_to_string(VALUE, '') ~ '^[A-Za-z0-9_.%%-]*$') "
-                   "CHECK (array_to_string(VALUE, ',') "
-                   "       ~ '^([A-Za-z0-9_.-]+(.%%l)?(,|$))*$') "
-                   "CHECK ('.' != ALL(VALUE)) "
-                   "CHECK ('..' != ALL(VALUE))",
+        return DDL("DO $$ BEGIN "
+                   "    IF to_regtype('%(domain)s') IS NULL THEN "
+                   "        CREATE DOMAIN %(domain)s VARCHAR[] "
+                   "        CHECK (array_to_string(VALUE, '') ~ '^[A-Za-z0-9_.%%-]*$') "
+                   "        CHECK (array_to_string(VALUE, ',') "
+                   "               ~ '^([A-Za-z0-9_.-]+(.%%l)?(,|$))*$') "
+                   "        CHECK ('.' != ALL(VALUE)) "
+                   "        CHECK ('..' != ALL(VALUE)); "
+                   "    END IF; "
+                   "END $$;",
                    context={"domain": cls.domain_name})
 
     @classmethod
     def get_drop_command(cls):
-        return DDL("DROP DOMAIN %(domain)s",
+        return DDL("DROP DOMAIN IF EXISTS %(domain)s",
                    context={"domain": cls.domain_name})
 
 
@@ -228,14 +244,18 @@ class Digest(TypeDecorator):
 
     @classmethod
     def get_create_command(cls):
-        return DDL("CREATE DOMAIN %(domain)s VARCHAR "
-                   "CHECK (VALUE ~ '^([0-9a-f]{40}|%(tombstone)s)$')",
+        return DDL("DO $$ BEGIN "
+                   "    IF to_regtype('%(domain)s') IS NULL THEN "
+                   "        CREATE DOMAIN %(domain)s VARCHAR "
+                   "        CHECK (VALUE ~ '^([0-9a-f]{40}|%(tombstone)s)$'); "
+                   "    END IF; "
+                   "END $$;",
                    context={"domain": cls.domain_name,
                             "tombstone": cls.TOMBSTONE})
 
     @classmethod
     def get_drop_command(cls):
-        return DDL("DROP DOMAIN %(domain)s",
+        return DDL("DROP DOMAIN IF EXISTS %(domain)s",
                    context={"domain": cls.domain_name})
 
 
