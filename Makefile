@@ -126,11 +126,11 @@ db-init:
 	@$(MAKE) db-sync
 
 db-sync:
-	@echo "Synchronizing Admin Panel schema (Prisma)..."
+	@echo "Synchronizing Admin Panel schema (forcing Prisma v6)..."
 	@if [ -d "admin-panel" ] && command -v bun >/dev/null 2>&1; then \
-		cd admin-panel && bun x prisma db push; \
+		cd admin-panel && bun x prisma@6 db push; \
 	elif [ -d "admin-panel" ] && command -v npm >/dev/null 2>&1; then \
-		cd admin-panel && npx prisma db push; \
+		cd admin-panel && npx prisma@6 db push; \
 	else \
 		echo "Skipping Prisma sync: admin-panel not found or no bun/npm available."; \
 	fi
