@@ -118,6 +118,22 @@ core:
 	docker compose -f docker-compose.core.yml build proxy-service
 	docker compose -f docker-compose.core.yml build checker-service
 	docker compose -f docker-compose.core.yml up -d
+	@echo "Services started. Run 'make db-init' to initialize CMS database."
+
+db-init:
+	@echo "Initializing CMS database schema..."
+	@docker exec -it cms-log-service cmsInitDB
+	@$(MAKE) db-sync
+
+db-sync:
+	@echo "Synchronizing Admin Panel schema (Prisma)..."
+	@if [ -d "admin-panel" ] && command -v bun >/dev/null 2>&1; then \
+		cd admin-panel && bun x prisma db push; \
+	elif [ -d "admin-panel" ] && command -v npm >/dev/null 2>&1; then \
+		cd admin-panel && npx prisma db push; \
+	else \
+		echo "Skipping Prisma sync: admin-panel not found or no bun/npm available."; \
+	fi
 
 admin:
 	docker compose -f docker-compose.admin.yml up -d --build
@@ -136,6 +152,7 @@ pull:
 
 core-img:
 	docker compose -f docker-compose.core.yml -f docker-compose.core.img.yml up -d --no-build
+	@echo "Core images started. Run 'make db-init' to initialize CMS database."
 
 admin-img:
 	docker compose -f docker-compose.admin.yml -f docker-compose.admin.img.yml up -d --no-build

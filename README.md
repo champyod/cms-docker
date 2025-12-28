@@ -46,14 +46,16 @@ echo "YOUR_PAT_TOKEN" | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-
 make pull         # Pull latest images
 make core-img     # Start Core services
 
-# 3. Initialize (First time only)
-# Wait a few seconds for services to start, then run:
-docker exec -it cms-log-service cmsInitDB                  # Create database schema
-docker exec -it cms-log-service cmsAddAdmin admin -p pass  # Create admin user
+# 3. Initialize Database (First time only)
+# This will run cmsInitDB followed by Prisma synchronization
+make db-init
 
-make admin-img    # Start Admin services
-make contest-img  # Start Contest services
-make worker-img   # Start Worker services
+# 4. Create Admin User
+# Use the official CMS tool to create your first superadmin
+docker exec -it cms-log-service cmsAddAdmin admin -p yourpassword
+
+# 5. Start the rest of the stacks
+make admin-img contest-img worker-img
 ```
 
 ### Automatic Updates (Optional)
@@ -73,9 +75,10 @@ make worker    # Build and deploy Worker
 
 ### Troubleshooting
 
-- **"Relation 'contests' does not exist"**: Run `docker exec -it cms-log-service cmsInitDB`.
+- **"Type codename already exists"**: This happens if database initialization was interrupted or partially run.
+  If you want a fresh start, run: `docker compose down -v` to clear volumes, then start again from `make core-img`.
+- **"Relation 'contests' does not exist"**: Run `make db-init`.
 - **Stuck at "Compiling"**: The Worker failed to connect. Run `docker restart cms-worker-0`.
-- **"Unable to invalidate" / "Service not connected"**: Core services mesh is broken. Run `docker restart cms-evaluation-service` or restart the whole stack.
 - **Config changes not applying**: `make env` does not overwrite. Delete `config/cms.toml` then run `make env` again.
 
 ## Services
