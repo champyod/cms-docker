@@ -135,6 +135,10 @@ db-sync:
 		echo "Skipping Prisma sync: admin-panel not found or no bun/npm available."; \
 	fi
 
+db-clean:
+	@echo "WARNING: This will delete all database data and reset everything."
+	docker compose -f docker-compose.core.yml -f docker-compose.admin.yml -f docker-compose.contest.yml -f docker-compose.worker.yml down -v
+
 admin:
 	docker compose -f docker-compose.admin.yml up -d --build
 
