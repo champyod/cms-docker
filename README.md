@@ -48,14 +48,21 @@ make core-img     # Start Core services
 
 # 3. Initialize Database (First time only)
 # This will run cmsInitDB followed by Prisma synchronization
-make db-init
+make cms-init
 
 # 4. Create Admin User
-# Use the official CMS tool to create your first superadmin
-docker exec -it cms-log-service cmsAddAdmin admin -p yourpassword
+# Use the official CMS command to create your first superadmin
+make admin-create
 
 # 5. Start the rest of the stacks
 make admin-img contest-img worker-img
+```
+
+### Full System Reset
+If you encounter "DuplicateObject" or "Relation does not exist" errors, perform a full reset:
+```bash
+make db-reset   # Deletes volumes, restarts core
+make cms-init    # Re-initializes everything
 ```
 
 ### Automatic Updates (Optional)

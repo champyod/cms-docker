@@ -118,14 +118,14 @@ core:
 	docker compose -f docker-compose.core.yml build proxy-service
 	docker compose -f docker-compose.core.yml build checker-service
 	docker compose -f docker-compose.core.yml up -d
-	@echo "Services started. Run 'make db-init' to initialize CMS database."
+	@echo "Services started. Use 'make db-reset' for a first-time setup or 'make cms-init' to just initialize the database."
 
-db-init:
-	@echo "Initializing CMS database schema..."
+cms-init:
+	@echo "Initializing CMS core database schema..."
 	@docker exec -it cms-log-service cmsInitDB
-	@$(MAKE) db-sync
+	@$(MAKE) prisma-sync
 
-db-sync:
+prisma-sync:
 	@echo "Synchronizing Admin Panel schema (forcing Prisma v6)..."
 	@if [ -d "admin-panel" ] && command -v bun >/dev/null 2>&1; then \
 		cd admin-panel && bun x prisma@6 db push; \
@@ -135,9 +135,19 @@ db-sync:
 		echo "Skipping Prisma sync: admin-panel not found or no bun/npm available."; \
 	fi
 
+admin-create:
+	@echo "Creating first Superadmin account..."
+	@printf "Username: "; read cmd_user; \
+	stty -echo; printf "Password: "; read cmd_pass; stty echo; echo; \
+	docker exec -it cms-log-service cmsAddAdmin $$cmd_user -p $$cmd_pass
+
 db-clean:
 	@echo "WARNING: This will delete all database data and reset everything."
 	docker compose -f docker-compose.core.yml -f docker-compose.admin.yml -f docker-compose.contest.yml -f docker-compose.worker.yml down -v
+
+db-reset: db-clean core-img
+	@echo "Database has been reset and services restarted."
+	@echo "Please wait ~10 seconds for DB to stabilize, then run: make cms-init"
 
 admin:
 	docker compose -f docker-compose.admin.yml up -d --build
@@ -156,7 +166,7 @@ pull:
 
 core-img:
 	docker compose -f docker-compose.core.yml -f docker-compose.core.img.yml up -d --no-build
-	@echo "Core images started. Run 'make db-init' to initialize CMS database."
+	@echo "Core images started."
 
 admin-img:
 	docker compose -f docker-compose.admin.yml -f docker-compose.admin.img.yml up -d --no-build
