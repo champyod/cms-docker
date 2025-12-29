@@ -123,6 +123,8 @@ core:
 cms-init:
 	@echo "Initializing CMS core database schema..."
 	@docker exec -it cms-log-service cmsInitDB
+	@echo "Patching database schema for Admin Panel..."
+	@docker exec -i cms-database psql -U cmsuser -d cmsdb < scripts/fix_db_schema.sql
 
 prisma-sync:
 	@echo "Synchronizing Admin Panel schema (forcing Prisma v6)..."
