@@ -94,7 +94,7 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-black/80 backdrop-blur-md p-4">
       <Card className="w-full max-w-lg p-8 relative animate-in fade-in zoom-in-95 duration-200 glass-card border-white/10 shadow-2xl">
         <button
           onClick={onClose}

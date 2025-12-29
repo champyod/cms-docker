@@ -96,8 +96,8 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden">
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
       
       <div className="relative z-10 w-full max-w-md bg-neutral-900 border border-white/10 rounded-xl shadow-2xl">
         <div className="flex items-center justify-between p-4 border-b border-white/10">
@@ -124,7 +124,7 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               placeholder="e.g., John Doe"
-              className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-lg text-white focus:outline-none focus:border-indigo-500/50"
+              className="w-full px-4 py-3 bg-black/80 border border-white/10 rounded-lg text-white focus:outline-none focus:border-indigo-500/50"
             />
           </div>
           
@@ -136,7 +136,7 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
               onChange={(e) => setFormData({ ...formData, username: e.target.value })}
               placeholder="e.g., johnd"
               disabled={!!initialData}
-              className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-lg text-white focus:outline-none focus:border-indigo-500/50 disabled:opacity-50"
+              className="w-full px-4 py-3 bg-black/80 border border-white/10 rounded-lg text-white focus:outline-none focus:border-indigo-500/50 disabled:opacity-50"
             />
           </div>
           
@@ -149,7 +149,7 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
                 type={showPassword ? 'text' : 'password'}
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-lg text-white focus:outline-none focus:border-indigo-500/50 pr-10"
+                className="w-full px-4 py-3 bg-black/80 border border-white/10 rounded-lg text-white focus:outline-none focus:border-indigo-500/50 pr-10"
               />
               <button
                 type="button"
@@ -163,7 +163,7 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
           
           <div>
             <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Role</label>
-            <div className="flex gap-2 p-1 bg-black/50 rounded-lg border border-white/10">
+            <div className="flex gap-2 p-1 bg-black/80 rounded-lg border border-white/10">
               <button
                 type="button"
                 onClick={() => setFormData({

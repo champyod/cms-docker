@@ -38,8 +38,8 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, 
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="absolute inset-0" onClick={onClose} />
+    <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="fixed inset-0" onClick={onClose} />
       <Card className={cn("relative w-full max-w-lg max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200", className)}>
         <div className="flex items-center justify-between mb-4">
           {title && <h2 className="text-xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">{title}</h2>}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
 import { X, Loader2, RefreshCw, Terminal, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
@@ -35,7 +35,7 @@ export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModal
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-black/80 backdrop-blur-sm p-4">
       <Card className="w-full max-w-4xl max-h-[90vh] flex flex-col relative animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
         
         {/* Header */}
@@ -119,7 +119,7 @@ export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModal
                         <Terminal className="w-4 h-4 text-neutral-400" />
                         Compilation Logs
                     </h3>
-                    <div className="bg-black/50 rounded-lg p-4 font-mono text-xs text-neutral-300 overflow-x-auto whitespace-pre-wrap border border-white/10">
+                    <div className="bg-black/80 rounded-lg p-4 font-mono text-xs text-neutral-300 overflow-x-auto whitespace-pre-wrap border border-white/10">
                         {result.compilation_text.join('\n')}
                         {result.compilation_stdout && `\nStdout:\n${result.compilation_stdout}`}
                         {result.compilation_stderr && `\nStderr:\n${result.compilation_stderr}`}

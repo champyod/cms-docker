@@ -60,7 +60,7 @@ export function LogViewerModal({ containerId, containerName, onClose }: LogViewe
   ).join('\n');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden p-4 bg-black/80 backdrop-blur-sm">
       <div className="w-full max-w-4xl h-[80vh] flex flex-col glass-panel rounded-3xl overflow-hidden shadow-2xl border border-white/10">
         {/* Header */}
         <div className="p-4 border-b border-white/5 bg-white/[0.03] flex items-center justify-between">
@@ -108,7 +108,7 @@ export function LogViewerModal({ containerId, containerName, onClose }: LogViewe
         </div>
 
         {/* Log Area */}
-        <div className="flex-1 bg-black/60 p-4 relative overflow-hidden flex flex-col">
+        <div className="flex-1 bg-black/80 p-4 relative overflow-hidden flex flex-col">
           <pre 
             ref={logRef}
             className="flex-1 overflow-auto font-mono text-xs text-neutral-300 whitespace-pre-wrap break-all custom-scrollbar"
@@ -121,7 +121,7 @@ export function LogViewerModal({ containerId, containerName, onClose }: LogViewe
             className={`absolute bottom-6 right-8 px-3 py-1.5 rounded-full text-[10px] font-bold border transition-all ${
               autoScroll 
                 ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/30' 
-                : 'bg-black/60 border-white/10 text-neutral-400 hover:text-white'
+                : 'bg-black/80 border-white/10 text-neutral-400 hover:text-white'
             }`}
           >
             {autoScroll ? 'AUTO-SCROLL ON' : 'AUTO-SCROLL OFF'}

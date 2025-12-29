@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, User, Clock, Shield, Mail } from 'lucide-react';
 import { updateParticipation, sendMessage } from '@/app/actions/participations';
 
@@ -77,8 +77,8 @@ export function ParticipationEditModal({ isOpen, onClose, participation, adminId
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden">
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
       
       <div className="relative z-10 w-full max-w-lg bg-neutral-900 border border-white/10 rounded-xl shadow-2xl">
         <div className="flex items-center justify-between p-4 border-b border-white/10">
@@ -131,7 +131,7 @@ export function ParticipationEditModal({ isOpen, onClose, participation, adminId
                     type="number"
                     value={formData.extra_time_minutes}
                     onChange={(e) => setFormData({ ...formData, extra_time_minutes: parseInt(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm"
+                    className="w-full px-3 py-2 bg-black/80 border border-white/10 rounded-lg text-white text-sm"
                   />
                 </div>
                 <div>
@@ -140,7 +140,7 @@ export function ParticipationEditModal({ isOpen, onClose, participation, adminId
                     type="number"
                     value={formData.delay_time_minutes}
                     onChange={(e) => setFormData({ ...formData, delay_time_minutes: parseInt(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm"
+                    className="w-full px-3 py-2 bg-black/80 border border-white/10 rounded-lg text-white text-sm"
                   />
                 </div>
               </div>
@@ -152,7 +152,7 @@ export function ParticipationEditModal({ isOpen, onClose, participation, adminId
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   placeholder="Leave empty to use user password"
-                  className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm"
+                  className="w-full px-3 py-2 bg-black/80 border border-white/10 rounded-lg text-white text-sm"
                 />
               </div>
               
@@ -209,7 +209,7 @@ export function ParticipationEditModal({ isOpen, onClose, participation, adminId
                   type="text"
                   value={messageData.subject}
                   onChange={(e) => setMessageData({ ...messageData, subject: e.target.value })}
-                  className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm"
+                  className="w-full px-3 py-2 bg-black/80 border border-white/10 rounded-lg text-white text-sm"
                 />
               </div>
               <div>
@@ -218,7 +218,7 @@ export function ParticipationEditModal({ isOpen, onClose, participation, adminId
                   value={messageData.text}
                   onChange={(e) => setMessageData({ ...messageData, text: e.target.value })}
                   rows={4}
-                  className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm"
+                  className="w-full px-3 py-2 bg-black/80 border border-white/10 rounded-lg text-white text-sm"
                 />
               </div>
               
