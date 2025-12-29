@@ -39,6 +39,9 @@ export default async function TaskDetailPage({
       testcases: ds.testcases || [],
       managers: ds.managers || [],
     })),
+    submission_format: task.submission_format || [],
+    primary_statements: task.primary_statements || [],
+    allowed_languages: task.allowed_languages || [],
     // Remove the original long property name to avoid confusion and reduce payload
     datasets_datasets_task_idTotasks: undefined,
   };

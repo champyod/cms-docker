@@ -49,59 +49,34 @@ export async function getServerStats() {
 }
 
 export async function getWorkerStats() {
-  // Check if we have workers configured in the database
-  // CMS stores workers in the 'workers' table
-  try {
-    const dbWorkers = await prisma.$queryRaw<any[]>`
-      SELECT id, name FROM workers ORDER BY name
-    `;
+  // Workers are configured in config/cms.toml, not in the database in this environment.
+  // We avoid querying the non-existent 'workers' table.
 
-    // Get active evaluations per shard
-    const activeEvaluations = await prisma.evaluations.findMany({
-      where: { outcome: null },
-      select: { evaluation_shard: true }
-    });
+  // Get active evaluations per shard
+  const activeEvaluations = await prisma.evaluations.findMany({
+    where: { outcome: null },
+    select: { evaluation_shard: true }
+  });
 
-    // Group by shard
-    const shardCounts: Record<number, number> = {};
-    activeEvaluations.forEach(ev => {
-      if (ev.evaluation_shard !== null) {
-        shardCounts[ev.evaluation_shard] = (shardCounts[ev.evaluation_shard] || 0) + 1;
-      }
-    });
-
-    // If we have workers in DB, show them
-    if (dbWorkers && dbWorkers.length > 0) {
-      return dbWorkers.map((w, idx) => ({
-        id: `worker-${w.id}`,
-        name: w.name || `Worker ${idx}`,
-        // We can't actually tell if worker is running without pinging it
-        // So show 'busy' if processing, 'idle' if in DB but no tasks
-        status: (shardCounts[idx] || 0) > 0 ? 'busy' : 'idle',
-        tasks: shardCounts[idx] || 0,
-        load: Math.min(100, (shardCounts[idx] || 0) * 10)
-      }));
+  // Group by shard
+  const shardCounts: Record<number, number> = {};
+  activeEvaluations.forEach(ev => {
+    if (ev.evaluation_shard !== null) {
+      shardCounts[ev.evaluation_shard] = (shardCounts[ev.evaluation_shard] || 0) + 1;
     }
+  });
 
-    // No workers in DB - show that
-    return [{
-      id: 'no-workers',
-      name: 'No workers configured',
-      status: 'offline',
-      tasks: 0,
-      load: 0
-    }];
-  } catch (error) {
-    // If workers table doesn't exist, show a message
-    console.warn('Could not query workers:', error);
-    return [{
-      id: 'unknown',
-      name: 'Workers status unavailable',
-      status: 'unknown',
-      tasks: 0,
-      load: 0
-    }];
-  }
+  // Since we can't easily query the workers from DB, we'll just check if there are any active shards
+  // Or simply return a placeholder indicating workers are managed via file.
+
+  // Improving the fallback to be more informative
+  return [{
+    id: 'cms-toml',
+    name: 'Workers (Managed in cms.toml)',
+    status: Object.keys(shardCounts).length > 0 ? 'busy' : 'idle',
+    tasks: Object.values(shardCounts).reduce((a, b) => a + b, 0),
+    load: 0 // Cannot calculate load without capacity
+  }];
 }
 
 

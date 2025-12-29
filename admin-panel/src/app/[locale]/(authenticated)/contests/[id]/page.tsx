@@ -12,7 +12,8 @@ async function getContest(id: number) {
       },
       participations: {
         include: {
-          users: true
+          users: true,
+          teams: true,
         }
       }
     }
@@ -34,6 +35,12 @@ async function getAvailableTasks() {
   });
 }
 
+async function getTeams() {
+  return prisma.teams.findMany({
+    orderBy: { name: 'asc' }
+  });
+}
+
 export default async function ContestDetailPage({
   params,
 }: {
@@ -46,10 +53,11 @@ export default async function ContestDetailPage({
     notFound();
   }
 
-  const [contest, availableUsers, availableTasks, user] = await Promise.all([
+  const [contest, availableUsers, availableTasks, teams, user] = await Promise.all([
     getContest(contestId),
     getAvailableUsers(),
     getAvailableTasks(),
+    getTeams(),
     getCurrentUser()
   ]);
 
@@ -68,8 +76,10 @@ export default async function ContestDetailPage({
         contest={contest as any} 
         availableUsers={availableUsers}
         availableTasks={availableTasks}
+        teams={teams}
         user={user}
       />
     </div>
   );
 }
+

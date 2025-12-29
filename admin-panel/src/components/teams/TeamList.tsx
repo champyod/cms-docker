@@ -71,6 +71,11 @@ export function TeamList({ initialTeams }: { initialTeams: TeamWithCount[] }) {
                 <TableCell className="text-neutral-400 text-sm">{team._count.participations}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-2">
+                    <a href={`/teams/${team.id}`}>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-neutral-400 hover:text-emerald-400">
+                        <Users className="w-4 h-4" />
+                      </Button>
+                    </a>
                     <Button variant="ghost" size="sm" onClick={() => startEdit(team)} className="h-8 w-8 p-0 text-neutral-400 hover:text-indigo-400">
                       <Edit2 className="w-4 h-4" />
                     </Button>

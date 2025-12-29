@@ -62,3 +62,55 @@ export async function deleteTeam(teamId: number) {
     return { success: false, error: e.message };
   }
 }
+
+// Get a single team with members and contests
+export async function getTeamWithDetails(teamId: number) {
+  const team = await prisma.teams.findUnique({
+    where: { id: teamId },
+    include: {
+      participations: {
+        include: {
+          users: true,
+          contests: {
+            select: { id: true, name: true, description: true, start: true, stop: true }
+          }
+        }
+      }
+    }
+  });
+
+  if (!team) return null;
+
+  // Extract unique members (users)
+  const membersMap = new Map<number, { user: typeof team.participations[0]['users']; contests: { id: number; name: string }[] }>();
+
+  team.participations.forEach(p => {
+    if (!membersMap.has(p.user_id)) {
+      membersMap.set(p.user_id, { user: p.users, contests: [] });
+    }
+    membersMap.get(p.user_id)!.contests.push({ id: p.contests.id, name: p.contests.name });
+  });
+
+  // Extract unique contests
+  const contestsMap = new Map<number, { id: number; name: string; description: string; start: Date; stop: Date }>();
+  team.participations.forEach(p => {
+    if (!contestsMap.has(p.contest_id)) {
+      contestsMap.set(p.contest_id, {
+        id: p.contests.id,
+        name: p.contests.name,
+        description: p.contests.description,
+        start: p.contests.start,
+        stop: p.contests.stop,
+      });
+    }
+  });
+
+  return {
+    id: team.id,
+    code: team.code,
+    name: team.name,
+    members: Array.from(membersMap.values()),
+    contests: Array.from(contestsMap.values()),
+  };
+}
+

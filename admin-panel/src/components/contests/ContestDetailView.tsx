@@ -1,36 +1,43 @@
 'use client';
 
 import { useState } from 'react';
-import { contests, tasks, users, participations, admins } from '@prisma/client';
+import { contests, tasks, users, participations, admins, teams } from '@prisma/client';
 import { useRouter } from 'next/navigation';
 import { updateContestSettings, addParticipant, removeParticipant } from '@/app/actions/contests';
+import { setTestUser } from '@/app/actions/participations';
 import { switchContest } from '@/app/actions/services';
 import { Card } from '@/components/core/Card';
 import { 
   Settings, Users, Trophy, Clock, Shield, Zap, 
   Plus, Trash2, ExternalLink, Play, Square, 
-  ChevronDown, ChevronUp, Save, Power, ClipboardList
+  ChevronDown, ChevronUp, Save, Power, ClipboardList, FlaskConical
 } from 'lucide-react';
 import { ParticipantModal } from './ParticipantModal';
 import { TaskSelectionModal } from './TaskSelectionModal';
 import { ContestCommunications } from './ContestCommunications';
+import { ParticipationModal } from './ParticipationModal';
+import { TeamBulkAddModal } from './TeamBulkAddModal';
 import { removeTaskFromContest } from '@/app/actions/contests';
 
 type ContestWithRelations = contests & {
   tasks: tasks[];
-  participations: (participations & { users: users })[];
+  participations: (participations & { users: users; teams: teams | null })[];
 };
 
 interface ContestDetailViewProps {
   contest: ContestWithRelations;
   availableUsers: users[];
   availableTasks: tasks[];
+  teams: teams[];
   user: admins;
 }
 
-export function ContestDetailView({ contest, availableUsers, availableTasks, user }: ContestDetailViewProps) {
+export function ContestDetailView({ contest, availableUsers, availableTasks, teams, user }: ContestDetailViewProps) {
   const [isParticipantModalOpen, setIsParticipantModalOpen] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [isParticipationModalOpen, setIsParticipationModalOpen] = useState(false);
+  const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
+  const [selectedParticipation, setSelectedParticipation] = useState<{ id: number; username: string } | null>(null);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     info: true,
     participants: true,
@@ -39,7 +46,21 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, use
   });
   const [saving, setSaving] = useState(false);
 
-  // ... (previous handlers)
+  const handleOpenParticipationSettings = (participationId: number, username: string) => {
+    setSelectedParticipation({ id: participationId, username });
+    setIsParticipationModalOpen(true);
+  };
+
+  const handleMarkAsTest = async (participationId: number) => {
+    if (confirm('Mark this user as a test user? (Hidden + Unrestricted)')) {
+      const result = await setTestUser(participationId);
+      if (result.success) {
+        window.location.reload();
+      } else {
+        alert('Failed: ' + result.error);
+      }
+    }
+  };
 
   const handleRemoveTask = async (taskId: number) => {
     if (confirm('Remove this task from the contest?')) {
@@ -224,7 +245,14 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, use
 
         {expandedSections.participants && (
           <div>
-            <div className="p-4 border-b border-white/5 bg-black/20 flex justify-end">
+            <div className="p-4 border-b border-white/5 bg-black/20 flex justify-end gap-2">
+              <button
+                onClick={() => setIsTeamModalOpen(true)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg text-sm hover:bg-indigo-600/30 transition-colors"
+              >
+                <Users className="w-4 h-4" />
+                Add Team
+              </button>
               <button
                 onClick={() => setIsParticipantModalOpen(true)}
                 className="flex items-center gap-2 px-3 py-1.5 bg-green-600/20 text-green-400 rounded-lg text-sm hover:bg-green-600/30 transition-colors"
@@ -245,8 +273,28 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, use
                       <div className="text-xs text-neutral-500">{participation.users.first_name} {participation.users.last_name}</div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    {participation.teams && (
+                      <span className="text-xs px-2 py-0.5 bg-indigo-600/20 text-indigo-400 rounded-full">
+                        {participation.teams.code}
+                      </span>
+                    )}
+                    {participation.unrestricted && <span className="text-xs px-2 py-0.5 bg-amber-600/20 text-amber-400 rounded-full">Unrestricted</span>}
                     {participation.hidden && <span className="text-xs px-2 py-0.5 bg-neutral-700 text-neutral-300 rounded-full">Hidden</span>}
+                    <button
+                      onClick={() => handleMarkAsTest(participation.id)}
+                      className="p-1.5 text-neutral-500 hover:text-amber-400 transition-colors opacity-0 group-hover:opacity-100"
+                      title="Mark as Test User"
+                    >
+                      <FlaskConical className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleOpenParticipationSettings(participation.id, participation.users.username)}
+                      className="p-1.5 text-neutral-500 hover:text-indigo-400 transition-colors opacity-0 group-hover:opacity-100"
+                      title="Settings"
+                    >
+                      <Settings className="w-4 h-4" />
+                    </button>
                     <button
                       onClick={() => handleRemoveParticipant(participation.id)}
                       className="p-1.5 text-neutral-500 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
@@ -450,6 +498,28 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, use
         onClose={() => setIsTaskModalOpen(false)}
         contestId={contest.id}
         availableTasks={availableTasks.filter(t => !contest.tasks.find(ct => ct.id === t.id))}
+        onSuccess={() => window.location.reload()}
+      />
+
+      {selectedParticipation && (
+        <ParticipationModal
+          isOpen={isParticipationModalOpen}
+          onClose={() => {
+            setIsParticipationModalOpen(false);
+            setSelectedParticipation(null);
+          }}
+          participationId={selectedParticipation.id}
+          username={selectedParticipation.username}
+          teams={teams}
+          onSuccess={() => window.location.reload()}
+        />
+      )}
+
+      <TeamBulkAddModal
+        isOpen={isTeamModalOpen}
+        onClose={() => setIsTeamModalOpen(false)}
+        contestId={contest.id}
+        teams={teams}
         onSuccess={() => window.location.reload()}
       />
     </div>
