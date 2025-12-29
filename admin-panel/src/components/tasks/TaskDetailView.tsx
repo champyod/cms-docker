@@ -114,7 +114,10 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
     window.location.reload();
   };
 
-  const taskDatasets = task.datasets;
+  // Defensive defaults - ensure all array fields are actually arrays
+  const taskStatements = Array.isArray(task.statements) ? task.statements : [];
+  const taskAttachments = Array.isArray(task.attachments) ? task.attachments : [];
+  const taskDatasets = Array.isArray(task.datasets) ? task.datasets : [];
 
   return (
     <div className="space-y-6">
@@ -205,7 +208,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
             <FileText className="w-5 h-5 text-emerald-400" />
             <span className="font-bold text-white">Statements</span>
             <span className="text-xs bg-white/10 px-2 py-0.5 rounded-full text-neutral-400">
-              {task.statements.length}
+              {taskStatements.length}
             </span>
           </div>
           {expandedSections.statements ? <ChevronUp className="w-4 h-4 text-neutral-400" /> : <ChevronDown className="w-4 h-4 text-neutral-400" />}
@@ -221,11 +224,11 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
               Upload Statement
             </button>
             
-            {task.statements.length === 0 ? (
+            {taskStatements.length === 0 ? (
               <p className="text-neutral-500 text-sm">No statements uploaded yet.</p>
             ) : (
               <div className="space-y-2">
-                {task.statements.map((stmt) => (
+                  {taskStatements.map((stmt) => (
                   <div key={stmt.id} className="flex items-center justify-between p-3 bg-black/30 rounded-lg">
                     <div className="flex items-center gap-3">
                       <FileText className="w-4 h-4 text-emerald-400" />
@@ -425,7 +428,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
           <p className="text-neutral-500 text-sm">No attachments.</p>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            {task.attachments.map((att) => (
+              {taskAttachments.map((att) => (
               <div key={att.id} className="flex items-center gap-2 p-2 bg-black/30 rounded-lg text-sm text-neutral-300 group">
                 <Paperclip className="w-3 h-3 text-purple-400" />
                 <span className="truncate flex-1">{att.filename}</span>
@@ -459,7 +462,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
         isOpen={isStatementModalOpen}
         onClose={() => setIsStatementModalOpen(false)}
         taskId={task.id}
-        existingLanguages={task.statements.map(s => s.language)}
+        existingLanguages={taskStatements.map(s => s.language)}
         onSuccess={() => window.location.reload()}
       />
 
