@@ -34,7 +34,19 @@ cp .env.core.example .env.core  # Edit with your settings
 make env  # Generates .env and config/cms.toml
 ```
 
-### Deployment (Recommended: Pre-built Images)
+## Configuration
+
+Environment files:
+- `.env.core` - Database and core settings
+- `.env.admin` - Admin interface settings
+- `.env.contest` - Contest settings
+- `.env.worker` - Worker settings
+
+Run `make env` to generate the combined `.env` and `config/cms.toml`.
+
+## Deployment Reference
+
+### Option A: Pre-built Images (Recommended)
 This method is faster and saves disk space on the VM as it pulls images from GitHub Container Registry.
 
 ```bash
@@ -58,27 +70,54 @@ make admin-create
 make admin-img contest-img worker-img
 ```
 
-### Full System Reset
+### Option B: Build from Source (Manual)
+Use these commands if you are modifying the source code and need to rebuild locally.
+
+```bash
+# 1. Build and Deploy
+make core      # Build and deploy Core
+make admin     # Build and deploy Admin
+make contest   # Build and deploy Contest
+make worker    # Build and deploy Worker
+
+# 2. Initialize Database (First time only)
+make cms-init
+
+# 3. Create Admin User
+make admin-create
+```
+
+### Maintenance
+
+#### Updating Deployment
+To update your deployment with the latest images:
+
+```bash
+# 1. Pull the latest images
+make pull
+
+# 2. Update and restart Core services
+make core-img
+
+# 3. Update and restart other services
+make admin-img contest-img worker-img
+
+# 4. (Optional) Remove old unused images
+docker image prune -f
+```
+
+#### Full System Reset
 If you encounter "DuplicateObject" or "Relation does not exist" errors, perform a full reset:
 ```bash
 make db-reset   # Deletes volumes, restarts core
 make cms-init    # Re-initializes everything
 ```
 
-### Automatic Updates (Optional)
+#### Automatic Updates (Optional)
 To enable automatic updates (checking every 60 seconds):
 1.  Open `docker-compose.core.img.yml`.
 2.  Uncomment the `watchtower` service block.
 3.  Run `make core-img`.
-
-### Development (Build from Source)
-Use these commands if you are modifying the source code and need to rebuild locally.
-```bash
-make core      # Build and deploy Core
-make admin     # Build and deploy Admin
-make contest   # Build and deploy Contest
-make worker    # Build and deploy Worker
-```
 
 ### Troubleshooting
 
@@ -96,34 +135,6 @@ make worker    # Build and deploy Worker
 | Admin | AdminWebServer, RankingWebServer | 8889, 8890 |
 | Contest | ContestWebServer | 8888 |
 | Worker | Worker | - |
-
-## Configuration
-
-Environment files:
-- `.env.core` - Database and core settings
-- `.env.admin` - Admin interface settings
-- `.env.contest` - Contest settings
-- `.env.worker` - Worker settings
-
-Run `make env` to generate the combined `.env` and `config/cms.toml`.
-
-## Commands
-
-```bash
-# Deploy stacks
-make core      # Core services
-make admin     # Admin + Ranking
-make contest   # Contest web server
-make worker    # Worker
-
-# Admin management
-docker exec -it cms-log-service cmsAddAdmin <username> -p <password>
-docker exec -it cms-database psql -U cmsuser -d cmsdb -c "DELETE FROM admins WHERE username = '<username>';"
-
-# View logs
-docker logs cms-log-service -f
-docker logs cms-admin-web-server -f
-```
 
 ## Worker
 
@@ -176,6 +187,15 @@ Credentials: Set `RANKING_USERNAME` and `RANKING_PASSWORD` in `.env.admin`.
       Worker = [ ... ["192.168.122.1", 26002] ... ]
       ```
 4.  **Deploy**:
+    
+    **Option 1: Pre-built Images (Recommended)**
+    ```bash
+    rm config/cms.toml && make env
+    make pull
+    make worker-img
+    ```
+    
+    **Option 2: Build from Source**
     ```bash
     rm config/cms.toml && make env
     make worker

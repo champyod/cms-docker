@@ -25,7 +25,7 @@ type TaskWithRelations = tasks & {
   contests: contests | null;
   statements: statements[];
   attachments: attachments[];
-  datasets_datasets_task_idTotasks: DatasetWithRelations[];
+  datasets: DatasetWithRelations[];
   _count: { submissions: number };
 };
 
@@ -114,7 +114,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
     window.location.reload();
   };
 
-  const taskDatasets = task.datasets_datasets_task_idTotasks;
+  const taskDatasets = task.datasets;
 
   return (
     <div className="space-y-6">
