@@ -29,19 +29,21 @@ export default async function TaskDetailPage({
       stop: task.contests.stop.toISOString(),
       analysis_start: task.contests.analysis_start.toISOString(),
       analysis_stop: task.contests.analysis_stop.toISOString(),
-      // Handle other potential Dates or BigInts in contests if necessary
     } : null,
-    statements: task.statements || [],
-    attachments: task.attachments || [],
-    datasets: (task.datasets_datasets_task_idTotasks || []).map(ds => ({
+    statements: Array.isArray(task.statements) ? task.statements : [],
+    attachments: Array.isArray(task.attachments) ? task.attachments : [],
+    datasets: (Array.isArray(task.datasets_datasets_task_idTotasks) ? task.datasets_datasets_task_idTotasks : []).map(ds => ({
       ...ds,
       memory_limit: ds.memory_limit ? ds.memory_limit.toString() : null,
-      testcases: ds.testcases || [],
-      managers: ds.managers || [],
+      testcases: Array.isArray(ds.testcases) ? ds.testcases : [],
+      managers: Array.isArray(ds.managers) ? ds.managers : [],
+      // Ensure JSON fields are plain objects
+      task_type_parameters: ds.task_type_parameters ?? {},
+      score_type_parameters: ds.score_type_parameters ?? {},
     })),
-    submission_format: task.submission_format || [],
-    primary_statements: task.primary_statements || [],
-    allowed_languages: task.allowed_languages || [],
+    submission_format: Array.isArray(task.submission_format) ? task.submission_format : [],
+    primary_statements: Array.isArray(task.primary_statements) ? task.primary_statements : [],
+    allowed_languages: Array.isArray(task.allowed_languages) ? task.allowed_languages : [],
     // Remove the original long property name to avoid confusion and reduce payload
     datasets_datasets_task_idTotasks: undefined,
   };

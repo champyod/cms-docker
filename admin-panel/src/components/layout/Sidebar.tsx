@@ -107,8 +107,8 @@ export const Sidebar: React.FC<{
 
         {/* Footer actions */}
         <div className="mt-auto pt-4 border-t border-white/5 space-y-2">
-           {/* Logout usually redirects to auth page or api */}
-           <a href={`/${locale}/auth/login`} className={cn(
+          {/* Sign out - properly deletes session */}
+          <a href={`/${locale}/auth/signout`} className={cn(
                "flex items-center w-full p-3 rounded-xl transition-all duration-200 group relative hover:bg-white/5 text-slate-400 hover:text-white",
                 collapsed && "justify-center"
            )}>
