@@ -39,6 +39,14 @@ export function LogViewerModal({ containerId, containerName, onClose }: LogViewe
     return () => clearInterval(interval);
   }, [containerId, tail]);
 
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, []);
+
   useEffect(() => {
     if (autoScroll && logRef.current) {
       logRef.current.scrollTop = logRef.current.scrollHeight;

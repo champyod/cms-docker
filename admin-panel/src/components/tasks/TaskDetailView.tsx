@@ -278,7 +278,10 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
               <p className="text-neutral-500 text-sm">No datasets created yet.</p>
             ) : (
               <div className="space-y-4">
-                  {taskDatasets.map((dataset) => (
+                  {taskDatasets.map((dataset) => {
+                    // Defensive: ensure testcases is always an array
+                    const datasetTestcases = Array.isArray(dataset.testcases) ? dataset.testcases : [];
+                    return (
                   <div key={dataset.id} className="p-4 bg-black/30 rounded-lg space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -358,15 +361,15 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
                           <TestTube className="w-4 h-4 text-cyan-400" />
-                          <span className="text-xs font-bold text-neutral-400 uppercase">Testcases ({dataset.testcases.length})</span>
+                              <span className="text-xs font-bold text-neutral-400 uppercase">Testcases ({datasetTestcases.length})</span>
                         </div>
                         <button className="text-xs text-cyan-400 hover:underline">+ Add Testcase</button>
                       </div>
-                      {dataset.testcases.length === 0 ? (
+                          {datasetTestcases.length === 0 ? (
                         <p className="text-neutral-500 text-xs">No testcases yet.</p>
                       ) : (
                         <div className="grid grid-cols-6 gap-1">
-                          {dataset.testcases.slice(0, 12).map((tc) => (
+                                {datasetTestcases.slice(0, 12).map((tc) => (
                             <div
                               key={tc.id}
                               className="px-2 py-1 bg-black/40 rounded text-xs text-neutral-300 flex items-center justify-between group"
@@ -389,16 +392,17 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
                               </div>
                             </div>
                           ))}
-                            {dataset.testcases.length > 12 && (
+                                {datasetTestcases.length > 12 && (
                             <div className="px-2 py-1 bg-black/40 rounded text-xs text-neutral-500">
-                                +{dataset.testcases.length - 12} more
+                                    +{datasetTestcases.length - 12} more
                             </div>
                           )}
                         </div>
                       )}
                     </div>
                   </div>
-                ))}
+                    );
+                  })}
               </div>
             )}
           </div>
