@@ -20,10 +20,23 @@ export default async function TaskDetailPage({
     notFound();
   }
 
-  // Serialize BigInts to avoid client-side errors
-  const serializedTask = JSON.parse(JSON.stringify(task, (key, value) =>
-    typeof value === 'bigint' ? value.toString() : value
-  ));
+  // Serialize BigInts and Dates to avoid client-side errors
+  const serialize = (obj: any): any => {
+    if (obj === null || obj === undefined) return obj;
+    if (typeof obj === 'bigint') return obj.toString();
+    if (obj instanceof Date) return obj.toISOString();
+    if (Array.isArray(obj)) return obj.map(serialize);
+    if (typeof obj === 'object') {
+      const newObj: any = {};
+      for (const key in obj) {
+        newObj[key] = serialize(obj[key]);
+      }
+      return newObj;
+    }
+    return obj;
+  };
+
+  const serializedTask = serialize(task);
 
   return (
     <div className="space-y-8">

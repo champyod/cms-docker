@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
-import { Edit2, Trash2, Plus, Calendar, Clock, ExternalLink } from 'lucide-react';
+import { Trash2, Plus, Calendar, Clock, ExternalLink } from 'lucide-react';
 import { ContestModal } from './ContestModal';
 import { deleteContest } from '@/app/actions/contests';
 import { contests } from '@prisma/client';
@@ -15,10 +15,7 @@ export function ContestList({ initialContests, totalPages }: { initialContests: 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedContest, setSelectedContest] = useState<contests | null>(null);
 
-  const handleEdit = (contest: contests) => {
-    setSelectedContest(contest);
-    setIsModalOpen(true);
-  };
+
 
   const handleDelete = async (id: number) => {
     if (confirm('Are you sure you want to delete this contest? This is IRREVERSIBLE.')) {
@@ -116,15 +113,7 @@ export function ContestList({ initialContests, totalPages }: { initialContests: 
                     <div className="flex items-center justify-end gap-2">
                         <Button 
                             variant="ghost" 
-                            size="sm" 
-                            onClick={() => handleEdit(contest)}
-                            className="h-8 w-8 p-0 text-neutral-400 hover:text-indigo-400"
-                        >
-                        <Edit2 className="w-4 h-4" />
-                        </Button>
-                        <Button 
-                            variant="ghost" 
-                            size="sm" 
+                        size="sm" 
                             onClick={() => handleDelete(contest.id)}
                             className="h-8 w-8 p-0 text-neutral-400 hover:text-red-400"
                         >

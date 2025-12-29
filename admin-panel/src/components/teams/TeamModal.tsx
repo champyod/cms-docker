@@ -81,7 +81,31 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData }: TeamModal
         )}
 
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
-          // ... (inputs remain same)
+          <div>
+            <label className="block text-sm font-medium text-neutral-400 mb-1">
+              Team Code
+            </label>
+            <input
+              type="text"
+              value={formData.code}
+              onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+              className="w-full px-4 py-3 bg-neutral-800 border border-white/10 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all font-mono"
+              placeholder="e.g. THA-01"
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-neutral-400 mb-1">
+              Team Name
+            </label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="w-full px-4 py-3 bg-neutral-800 border border-white/10 rounded-lg text-white placeholder-neutral-500 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all"
+              placeholder="e.g. Thailand Team 1"
+            />
+          </div>
           <div className="flex gap-3 pt-4">
             <button
               type="button"
