@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { X, FileText, Upload, Loader } from 'lucide-react';
-import { addStatement, STATEMENT_LANGUAGES } from '@/app/actions/statements';
+import { addStatement } from '@/app/actions/statements';
+import { STATEMENT_LANGUAGES } from '@/lib/constants';
 
 interface StatementModalProps {
   isOpen: boolean;

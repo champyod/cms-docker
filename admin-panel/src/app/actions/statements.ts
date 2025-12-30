@@ -4,23 +4,8 @@ import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import crypto from 'crypto';
 
-// Language codes commonly used for statements
-export const STATEMENT_LANGUAGES = [
-  { code: 'en', name: 'English' },
-  { code: 'th', name: 'Thai' },
-  { code: 'zh', name: 'Chinese' },
-  { code: 'ja', name: 'Japanese' },
-  { code: 'ko', name: 'Korean' },
-  { code: 'vi', name: 'Vietnamese' },
-  { code: 'id', name: 'Indonesian' },
-  { code: 'fr', name: 'French' },
-  { code: 'de', name: 'German' },
-  { code: 'es', name: 'Spanish' },
-  { code: 'pt', name: 'Portuguese' },
-  { code: 'ru', name: 'Russian' },
-  { code: 'ar', name: 'Arabic' },
-  { code: 'it', name: 'Italian' },
-];
+import { STATEMENT_LANGUAGES } from '@/lib/constants';
+export { STATEMENT_LANGUAGES };
 
 // Calculate SHA256 digest
 function calculateDigest(data: Buffer): string {
