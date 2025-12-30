@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
-import { Eye, Clock, User as UserIcon, FileCode, Trophy } from 'lucide-react';
+import { Eye, Clock, User as UserIcon, FileCode, Trophy, HelpCircle } from 'lucide-react';
+import Link from 'next/link';
 import { SubmissionModal } from './SubmissionModal';
 import { useRouter } from 'next/navigation';
 
@@ -34,7 +35,12 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage }: 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-xl font-bold text-white">All Submissions</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-xl font-bold text-white">All Submissions</h2>
+          <Link href="/en/docs#submissions" className="p-1 hover:bg-white/10 rounded-full transition-colors text-neutral-400 hover:text-white" title="View Documentation">
+            <HelpCircle className="w-4 h-4" />
+          </Link>
+        </div>
         <div className="text-sm text-neutral-400">
             Page {currentPage} of {totalPages}
         </div>

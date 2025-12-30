@@ -3,10 +3,11 @@
 import { useState } from 'react';
 import { tasks, statements, attachments, datasets, testcases, managers, contests } from '@prisma/client';
 import { Card } from '@/components/core/Card';
+import Link from 'next/link';
 import { 
   Settings, FileText, Paperclip, Database, TestTube, 
   ChevronDown, ChevronUp, Save, Plus, Trash2, ExternalLink, Upload,
-  Copy, Edit, CheckCircle, ToggleLeft, ToggleRight, Download
+  Copy, Edit, CheckCircle, ToggleLeft, ToggleRight, Download, HelpCircle
 } from 'lucide-react';
 import { updateTask } from '@/app/actions/tasks';
 import { activateDataset, cloneDataset, deleteDataset, renameDataset, toggleAutojudge } from '@/app/actions/datasets';
@@ -145,16 +146,23 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
 
       {/* Task Settings */}
       <Card className="glass-card border-white/5 overflow-hidden">
-        <button
+        <div
+          className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors cursor-pointer"
           onClick={() => toggleSection('info')}
-          className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
         >
           <div className="flex items-center gap-3">
             <Settings className="w-5 h-5 text-indigo-400" />
             <span className="font-bold text-white">Task Settings</span>
           </div>
-          {expandedSections.info ? <ChevronUp className="w-4 h-4 text-neutral-400" /> : <ChevronDown className="w-4 h-4 text-neutral-400" />}
-        </button>
+          <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
+            <Link href="/en/docs#task-types" className="p-1 hover:bg-white/10 rounded-full transition-colors text-neutral-400 hover:text-white" title="View Documentation">
+              <HelpCircle className="w-4 h-4" />
+            </Link>
+            <button onClick={() => toggleSection('info')} className="p-1">
+              {expandedSections.info ? <ChevronUp className="w-4 h-4 text-neutral-400" /> : <ChevronDown className="w-4 h-4 text-neutral-400" />}
+            </button>
+          </div>
+        </div>
         
         {expandedSections.info && (
           <div className="p-4 pt-0 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -247,9 +255,9 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
 
       {/* Datasets */}
       <Card className="glass-card border-white/5 overflow-hidden">
-        <button
+        <div
+          className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors cursor-pointer"
           onClick={() => toggleSection('datasets')}
-          className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors"
         >
           <div className="flex items-center gap-3">
             <Database className="w-5 h-5 text-amber-400" />
@@ -258,23 +266,35 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
               {taskDatasets.length}
             </span>
           </div>
-          {expandedSections.datasets ? <ChevronUp className="w-4 h-4 text-neutral-400" /> : <ChevronDown className="w-4 h-4 text-neutral-400" />}
-        </button>
+          <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
+            <Link href="/en/docs#datasets" className="p-1 hover:bg-white/10 rounded-full transition-colors text-neutral-400 hover:text-white" title="View Documentation">
+              <HelpCircle className="w-4 h-4" />
+            </Link>
+            <button onClick={() => toggleSection('datasets')} className="p-1">
+              {expandedSections.datasets ? <ChevronUp className="w-4 h-4 text-neutral-400" /> : <ChevronDown className="w-4 h-4 text-neutral-400" />}
+            </button>
+          </div>
+        </div>
         
         {expandedSections.datasets && (
           <div className="p-4 pt-0">
-            <button
-              onClick={() => setIsDatasetModalOpen(true)}
-              className="flex items-center gap-2 px-3 py-1.5 bg-amber-600/20 text-amber-400 rounded-lg text-sm hover:bg-amber-600/30 transition-colors mb-4"
-            >
-              <Plus className="w-4 h-4" />
-              Create Dataset
-            </button>
-            
             {taskDatasets.length === 0 ? (
-              <p className="text-neutral-500 text-sm">No datasets created yet.</p>
+              <>
+                <button
+                  onClick={() => setIsDatasetModalOpen(true)}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-amber-600/20 text-amber-400 rounded-lg text-sm hover:bg-amber-600/30 transition-colors mb-4"
+                >
+                  <Plus className="w-4 h-4" />
+                  Create Dataset
+                </button>
+                <p className="text-neutral-500 text-sm">No datasets created yet. Create one to add testcases.</p>
+              </>
             ) : (
-              <div className="space-y-4">
+              // Dataset Management Logic handled in map below
+              null
+            )}
+
+            <div className="space-y-4">
                   {taskDatasets.map((dataset) => (
                   <div key={dataset.id} className="p-4 bg-black/30 rounded-lg space-y-3">
                     <div className="flex items-center justify-between">
@@ -396,8 +416,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
                     </div>
                   </div>
                   ))}
-              </div>
-            )}
+            </div>
           </div>
         )}
       </Card>

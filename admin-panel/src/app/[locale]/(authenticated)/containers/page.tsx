@@ -5,8 +5,9 @@ import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
 import { 
   Play, Square, RotateCcw, Box, RefreshCw, 
-  CheckCircle2, AlertCircle, Clock, Cpu, HardDrive, Layers, Terminal
+  CheckCircle2, AlertCircle, Clock, Cpu, HardDrive, Layers, Terminal, HelpCircle
 } from 'lucide-react';
+import Link from 'next/link';
 import { getContainers, controlContainer, runCompose, ContainerInfo } from '@/app/actions/docker';
 import { useToast } from '@/components/providers/ToastProvider';
 import { LogViewerModal } from '@/components/containers/LogViewerModal';
@@ -75,7 +76,12 @@ export default function ContainersPage() {
       )}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Container Control Center</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold text-white tracking-tight">Container Control Center</h1>
+            <Link href="/en/docs#services" className="p-1 hover:bg-white/10 rounded-full transition-colors text-neutral-400 hover:text-white" title="View Documentation">
+              <HelpCircle className="w-5 h-5" />
+            </Link>
+          </div>
           <p className="text-neutral-400 mt-1">Manage and monitor Docker services in real-time.</p>
         </div>
         <div className="flex gap-3">

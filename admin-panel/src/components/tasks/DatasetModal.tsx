@@ -60,7 +60,9 @@ export function DatasetModal({ isOpen, onClose, taskId, onSuccess }: DatasetModa
         setError(result.error || 'An error occurred');
       }
     } catch (err) {
-      setError('An unexpected error occurred');
+      console.error('Dataset creation error:', err);
+      // @ts-ignore
+      setError(err.message || 'An unexpected error occurred');
     } finally {
       setLoading(false);
     }
