@@ -9,13 +9,14 @@ import {
   ChevronDown, ChevronUp, Save, Plus, Trash2, ExternalLink, Upload,
   Copy, Edit, CheckCircle, ToggleLeft, ToggleRight, Download, HelpCircle
 } from 'lucide-react';
-import { updateTask } from '@/app/actions/tasks';
 import { activateDataset, cloneDataset, deleteDataset, renameDataset, toggleAutojudge } from '@/app/actions/datasets';
 import { deleteTestcase, toggleTestcasePublic } from '@/app/actions/testcases';
 import { deleteStatement, deleteAttachment } from '@/app/actions/statements';
 import { DatasetModal } from './DatasetModal';
 import { StatementModal } from './StatementModal';
 import { AttachmentModal } from './AttachmentModal';
+import { TaskModal } from './TaskModal';
+import { TestcaseUploadModal } from './TestcaseUploadModal';
 
 type DatasetWithRelations = datasets & {
   testcases: testcases[];
@@ -40,30 +41,17 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
     statements: true,
     datasets: true,
   });
-  const [saving, setSaving] = useState(false);
-  const [formData, setFormData] = useState({
-    name: task.name,
-    title: task.title,
-    score_precision: task.score_precision,
-  });
+
+  const [isTaskSettingsOpen, setIsTaskSettingsOpen] = useState(false);
   const [isDatasetModalOpen, setIsDatasetModalOpen] = useState(false);
   const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
   const [isAttachmentModalOpen, setIsAttachmentModalOpen] = useState(false);
 
+  // Testcase upload state
+  const [currentDatasetId, setCurrentDatasetId] = useState<number | null>(null);
+
   const toggleSection = (section: string) => {
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await updateTask(task.id, formData);
-      window.location.reload();
-    } catch (error) {
-      console.error('Failed to save:', error);
-    } finally {
-      setSaving(false);
-    }
   };
 
   const handleActivateDataset = async (datasetId: number) => {
@@ -115,6 +103,10 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
     window.location.reload();
   };
 
+  const openTestcaseUpload = (datasetId: number) => {
+    setCurrentDatasetId(datasetId);
+  };
+
   const taskDatasets = task.datasets;
 
   return (
@@ -135,16 +127,15 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
           )}
         </div>
         <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors disabled:opacity-50"
+          onClick={() => setIsTaskSettingsOpen(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors"
         >
-          <Save className="w-4 h-4" />
-          {saving ? 'Saving...' : 'Save Changes'}
+          <Settings className="w-4 h-4" />
+          Task Settings
         </button>
       </div>
 
-      {/* Task Settings */}
+      {/* Task Settings Summary (Read-Only) */}
       <Card className="glass-card border-white/5 overflow-hidden">
         <div
           className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors cursor-pointer"
@@ -152,7 +143,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
         >
           <div className="flex items-center gap-3">
             <Settings className="w-5 h-5 text-indigo-400" />
-            <span className="font-bold text-white">Task Settings</span>
+            <span className="font-bold text-white">Configuration</span>
           </div>
           <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
             <Link href="/en/docs#task-types" className="p-1 hover:bg-white/10 rounded-full transition-colors text-neutral-400 hover:text-white" title="View Documentation">
@@ -165,39 +156,22 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
         </div>
         
         {expandedSections.info && (
-          <div className="p-4 pt-0 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-neutral-500 uppercase mb-1">Name</label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-neutral-500 uppercase mb-1">Title</label>
-              <input
-                type="text"
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50"
-              />
-            </div>
-            <div>
+          <div className="p-4 pt-0 grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-black/30 p-3 rounded-lg border border-white/5">
               <label className="block text-xs font-bold text-neutral-500 uppercase mb-1">Score Precision</label>
-              <input
-                type="number"
-                value={formData.score_precision}
-                onChange={(e) => setFormData({ ...formData, score_precision: parseInt(e.target.value) || 0 })}
-                className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50"
-              />
+              <div className="text-white text-sm">{task.score_precision}</div>
             </div>
-            <div>
+            <div className="bg-black/30 p-3 rounded-lg border border-white/5">
+              <label className="block text-xs font-bold text-neutral-500 uppercase mb-1">Score Mode</label>
+              <div className="text-white text-sm capitalize">{task.score_mode.replace(/_/g, ' ')}</div>
+            </div>
+            <div className="bg-black/30 p-3 rounded-lg border border-white/5">
+              <label className="block text-xs font-bold text-neutral-500 uppercase mb-1">Feedback</label>
+              <div className="text-white text-sm capitalize">{task.feedback_level.replace(/_/g, ' ')}</div>
+            </div>
+            <div className="bg-black/30 p-3 rounded-lg border border-white/5">
               <label className="block text-xs font-bold text-neutral-500 uppercase mb-1">Submissions</label>
-              <div className="px-3 py-2 bg-black/30 border border-white/5 rounded-lg text-neutral-400 text-sm">
-                {task._count.submissions} total
-              </div>
+              <div className="text-white text-sm">{task._count.submissions}</div>
             </div>
           </div>
         )}
@@ -240,8 +214,16 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
                       <span className="text-sm text-white">Language: {stmt.language}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <a href="#" className="text-xs text-indigo-400 hover:underline">Download</a>
-                      <button className="p-1 text-red-400 hover:bg-red-500/20 rounded">
+                        <a href={`/api/statements/${stmt.digest}`} target="_blank" className="text-xs text-indigo-400 hover:underline">Download</a>
+                        <button
+                          onClick={async () => {
+                            if (confirm('Delete this statement?')) {
+                              await deleteStatement(stmt.id);
+                              window.location.reload();
+                            }
+                          }}
+                          className="p-1 text-red-400 hover:bg-red-500/20 rounded"
+                        >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -291,7 +273,15 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
               </>
             ) : (
               // Dataset Management Logic handled in map below
-              null
+                <div className="mb-4">
+                  <button
+                    onClick={() => setIsDatasetModalOpen(true)}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-amber-600/20 text-amber-400 rounded-lg text-sm hover:bg-amber-600/30 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    New Dataset
+                  </button>
+                </div>
             )}
 
             <div className="space-y-4">
@@ -377,7 +367,12 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
                           <TestTube className="w-4 h-4 text-cyan-400" />
                             <span className="text-xs font-bold text-neutral-400 uppercase">Testcases ({dataset.testcases.length})</span>
                         </div>
-                        <button className="text-xs text-cyan-400 hover:underline">+ Add Testcase</button>
+                          <button
+                            onClick={() => openTestcaseUpload(dataset.id)}
+                            className="text-xs text-cyan-400 hover:underline flex items-center gap-1"
+                          >
+                            <Plus className="w-3 h-3" /> Add Testcases (Bulk)
+                          </button>
                       </div>
                         {dataset.testcases.length === 0 ? (
                         <p className="text-neutral-500 text-xs">No testcases yet.</p>
@@ -465,7 +460,14 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
         )}
       </Card>
 
-      {/* Dataset Modal */}
+      {/* Modals */}
+      <TaskModal
+        isOpen={isTaskSettingsOpen}
+        onClose={() => setIsTaskSettingsOpen(false)}
+        task={task}
+        onSuccess={() => window.location.reload()}
+      />
+
       <DatasetModal
         isOpen={isDatasetModalOpen}
         onClose={() => setIsDatasetModalOpen(false)}
@@ -473,7 +475,6 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
         onSuccess={() => window.location.reload()}
       />
 
-      {/* Statement Modal */}
       <StatementModal
         isOpen={isStatementModalOpen}
         onClose={() => setIsStatementModalOpen(false)}
@@ -482,13 +483,21 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
         onSuccess={() => window.location.reload()}
       />
 
-      {/* Attachment Modal */}
       <AttachmentModal
         isOpen={isAttachmentModalOpen}
         onClose={() => setIsAttachmentModalOpen(false)}
         taskId={task.id}
         onSuccess={() => window.location.reload()}
       />
+
+      {currentDatasetId && (
+        <TestcaseUploadModal
+          isOpen={true}
+          onClose={() => setCurrentDatasetId(null)}
+          datasetId={currentDatasetId}
+          onSuccess={() => window.location.reload()}
+        />
+      )}
     </div>
   );
 }

@@ -8,16 +8,14 @@ import { Edit2, Trash2, Plus, FileText, Database, ExternalLink } from 'lucide-re
 import { TaskModal } from './TaskModal';
 import { deleteTask } from '@/app/actions/tasks';
 
-interface TaskWithRelations {
-  id: number;
-  name: string;
-  title: string;
-  contest_id: number | null;
+import { tasks } from '@prisma/client';
+
+type TaskWithRelations = tasks & {
   contests: { id: number; name: string } | null;
   statements: { id: number; language: string }[];
   datasets_datasets_task_idTotasks: { id: number; description: string }[];
   _count: { submissions: number };
-}
+};
 
 export function TaskList({ initialTasks, totalPages }: { initialTasks: TaskWithRelations[], totalPages: number }) {
   const router = useRouter();
