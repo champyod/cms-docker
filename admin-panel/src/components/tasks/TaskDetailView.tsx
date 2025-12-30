@@ -114,10 +114,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
     window.location.reload();
   };
 
-  // Defensive defaults - ensure all array fields are actually arrays
-  const taskStatements = Array.isArray(task.statements) ? task.statements : [];
-  const taskAttachments = Array.isArray(task.attachments) ? task.attachments : [];
-  const taskDatasets = Array.isArray(task.datasets) ? task.datasets : [];
+  const taskDatasets = task.datasets;
 
   return (
     <div className="space-y-6">
@@ -208,7 +205,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
             <FileText className="w-5 h-5 text-emerald-400" />
             <span className="font-bold text-white">Statements</span>
             <span className="text-xs bg-white/10 px-2 py-0.5 rounded-full text-neutral-400">
-              {taskStatements.length}
+              {task.statements.length}
             </span>
           </div>
           {expandedSections.statements ? <ChevronUp className="w-4 h-4 text-neutral-400" /> : <ChevronDown className="w-4 h-4 text-neutral-400" />}
@@ -224,11 +221,11 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
               Upload Statement
             </button>
             
-            {taskStatements.length === 0 ? (
+            {task.statements.length === 0 ? (
               <p className="text-neutral-500 text-sm">No statements uploaded yet.</p>
             ) : (
               <div className="space-y-2">
-                  {taskStatements.map((stmt) => (
+                  {task.statements.map((stmt) => (
                   <div key={stmt.id} className="flex items-center justify-between p-3 bg-black/30 rounded-lg">
                     <div className="flex items-center gap-3">
                       <FileText className="w-4 h-4 text-emerald-400" />
@@ -278,10 +275,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
               <p className="text-neutral-500 text-sm">No datasets created yet.</p>
             ) : (
               <div className="space-y-4">
-                  {taskDatasets.map((dataset) => {
-                    // Defensive: ensure testcases is always an array
-                    const datasetTestcases = Array.isArray(dataset.testcases) ? dataset.testcases : [];
-                    return (
+                  {taskDatasets.map((dataset) => (
                   <div key={dataset.id} className="p-4 bg-black/30 rounded-lg space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -361,15 +355,15 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
                           <TestTube className="w-4 h-4 text-cyan-400" />
-                              <span className="text-xs font-bold text-neutral-400 uppercase">Testcases ({datasetTestcases.length})</span>
+                            <span className="text-xs font-bold text-neutral-400 uppercase">Testcases ({dataset.testcases.length})</span>
                         </div>
                         <button className="text-xs text-cyan-400 hover:underline">+ Add Testcase</button>
                       </div>
-                          {datasetTestcases.length === 0 ? (
+                        {dataset.testcases.length === 0 ? (
                         <p className="text-neutral-500 text-xs">No testcases yet.</p>
                       ) : (
                         <div className="grid grid-cols-6 gap-1">
-                                {datasetTestcases.slice(0, 12).map((tc) => (
+                              {dataset.testcases.slice(0, 12).map((tc) => (
                             <div
                               key={tc.id}
                               className="px-2 py-1 bg-black/40 rounded text-xs text-neutral-300 flex items-center justify-between group"
@@ -392,17 +386,16 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
                               </div>
                             </div>
                           ))}
-                                {datasetTestcases.length > 12 && (
+                              {dataset.testcases.length > 12 && (
                             <div className="px-2 py-1 bg-black/40 rounded text-xs text-neutral-500">
-                                    +{datasetTestcases.length - 12} more
+                                  +{dataset.testcases.length - 12} more
                             </div>
                           )}
                         </div>
                       )}
                     </div>
                   </div>
-                    );
-                  })}
+                  ))}
               </div>
             )}
           </div>
@@ -432,7 +425,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
           <p className="text-neutral-500 text-sm">No attachments.</p>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              {taskAttachments.map((att) => (
+              {task.attachments.map((att) => (
               <div key={att.id} className="flex items-center gap-2 p-2 bg-black/30 rounded-lg text-sm text-neutral-300 group">
                 <Paperclip className="w-3 h-3 text-purple-400" />
                 <span className="truncate flex-1">{att.filename}</span>
@@ -466,7 +459,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
         isOpen={isStatementModalOpen}
         onClose={() => setIsStatementModalOpen(false)}
         taskId={task.id}
-        existingLanguages={taskStatements.map(s => s.language)}
+        existingLanguages={task.statements.map(s => s.language)}
         onSuccess={() => window.location.reload()}
       />
 

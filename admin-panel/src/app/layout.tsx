@@ -3,7 +3,7 @@ import './globals.css';
 import { ToastProvider } from '@/components/core/Toast';
 import { Inter } from 'next/font/google';
 
-const inter = Inter({ subsets: ['latin'] });
+const inter = Inter({ subsets: ['latin'], display: 'swap' });
 
 export const metadata: Metadata = {
   title: 'CMS Admin Panel',
