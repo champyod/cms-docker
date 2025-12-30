@@ -18,9 +18,12 @@ export function StatementModal({ isOpen, onClose, taskId, existingLanguages, onS
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Defensive: ensure existingLanguages is an array
+  const safeExistingLanguages = Array.isArray(existingLanguages) ? existingLanguages : [];
+
   // Filter out languages that already have statements
   const availableLanguages = STATEMENT_LANGUAGES.filter(
-    l => !existingLanguages.includes(l.code) || l.code === language
+    l => !safeExistingLanguages.includes(l.code) || l.code === language
   );
 
   useEffect(() => {
