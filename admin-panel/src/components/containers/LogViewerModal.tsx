@@ -68,8 +68,16 @@ export function LogViewerModal({ containerId, containerName, onClose }: LogViewe
   ).join('\n');
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden p-4 bg-black/80 backdrop-blur-sm">
-      <div className="w-full max-w-4xl h-[80vh] flex flex-col glass-panel rounded-3xl overflow-hidden shadow-2xl border border-white/10">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ touchAction: 'none' }}>
+      {/* Full screen backdrop - prevents interaction with background */}
+      <div
+        className="fixed inset-0 bg-black/80 backdrop-blur-sm"
+        onClick={(e) => { e.stopPropagation(); }}
+        style={{ touchAction: 'none' }}
+      />
+
+      {/* Modal content */}
+      <div className="relative z-10 w-full max-w-4xl h-[80vh] flex flex-col glass-panel rounded-3xl overflow-hidden shadow-2xl border border-white/10">
         {/* Header */}
         <div className="p-4 border-b border-white/5 bg-white/[0.03] flex items-center justify-between">
           <div className="flex items-center gap-3">
