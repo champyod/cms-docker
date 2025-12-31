@@ -22,10 +22,11 @@ export async function PUT(
     const intervalFields: any = {};
     const requiredIntervals = ['token_min_interval', 'token_gen_interval'];
     const optionalIntervals = ['min_submission_interval', 'min_user_test_interval'];
+    const arrayFields = ['submission_format', 'primary_statements', 'allowed_languages'];
     const nullableKeys = ['contest_id', 'token_max_number', 'token_gen_max', 'max_submission_number', 'max_user_test_number', ...optionalIntervals];
 
     for (const key in sanitizedData) {
-      if ([...requiredIntervals, ...optionalIntervals].includes(key)) {
+      if ([...requiredIntervals, ...optionalIntervals, ...arrayFields].includes(key)) {
         if (requiredIntervals.includes(key) && sanitizedData[key] === null) continue;
         intervalFields[key] = sanitizedData[key];
       } else if (sanitizedData[key] !== null || nullableKeys.includes(key)) standardFields[key] = sanitizedData[key];
@@ -50,6 +51,23 @@ export async function PUT(
       addClause('token_gen_interval', 'minutes');
       addClause('min_submission_interval', 'seconds');
       addClause('min_user_test_interval', 'seconds');
+
+      if (intervalFields.submission_format !== undefined) {
+        qParams.push(intervalFields.submission_format);
+        setClauses.push(`submission_format = $${qParams.length}::filename_schema_array`);
+      }
+      if (intervalFields.primary_statements !== undefined) {
+        qParams.push(intervalFields.primary_statements);
+        setClauses.push(`primary_statements = $${qParams.length}::varchar[]`);
+      }
+      if (intervalFields.allowed_languages !== undefined) {
+        if (intervalFields.allowed_languages === null) setClauses.push(`allowed_languages = NULL`);
+        else {
+          qParams.push(intervalFields.allowed_languages);
+          setClauses.push(`allowed_languages = $${qParams.length}::varchar[]`);
+        }
+      }
+
       if (setClauses.length > 0) {
         qParams.push(id);
         await prisma.$executeRawUnsafe(`UPDATE tasks SET ${setClauses.join(', ')} WHERE id = $${qParams.length}`, ...qParams);
