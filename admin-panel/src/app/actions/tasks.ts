@@ -85,12 +85,20 @@ export interface TaskData {
   min_user_test_interval?: number;
 }
 
+// Helper to sanitize Next.js Server Action serialization artifacts
+function sanitize<T>(value: T | undefined | null): T | null {
+  if (value === undefined || value === null || (value as any) === '$undefined') {
+    return null;
+  }
+  return value;
+}
+
 export async function createTask(data: TaskData) {
   try {
-    const token_min_interval = `${data.token_min_interval || 0} seconds`;
-    const token_gen_interval = `${data.token_gen_interval || 30} minutes`;
-    const min_submission_interval = `${data.min_submission_interval || 0} seconds`;
-    const min_user_test_interval = `${data.min_user_test_interval || 0} seconds`;
+    const token_min_interval = sanitize(data.token_min_interval) !== null ? `${data.token_min_interval} seconds` : '0 seconds';
+    const token_gen_interval = sanitize(data.token_gen_interval) !== null ? `${data.token_gen_interval} minutes` : '30 minutes';
+    const min_submission_interval = sanitize(data.min_submission_interval) !== null ? `${data.min_submission_interval} seconds` : '0 seconds';
+    const min_user_test_interval = sanitize(data.min_user_test_interval) !== null ? `${data.min_user_test_interval} seconds` : '0 seconds';
 
     await prisma.$executeRaw`
       INSERT INTO tasks (
@@ -102,11 +110,11 @@ export async function createTask(data: TaskData) {
         min_submission_interval, min_user_test_interval,
         feedback_level, score_precision, score_mode
       ) VALUES (
-        ${data.name}, ${data.title}, ${data.contest_id || null}, null,
+        ${data.name}, ${data.title}, ${sanitize(data.contest_id)}, null,
         ${data.submission_format || []}, ARRAY[]::varchar[], ${data.allowed_languages || []},
-        ${data.token_mode || 'disabled'}::token_mode, ${data.token_max_number ?? null}, ${token_min_interval}::interval,
-        ${data.token_gen_initial || 0}, ${data.token_gen_number || 0}, ${token_gen_interval}::interval, ${data.token_gen_max ?? null},
-        ${data.max_submission_number ?? null}, ${data.max_user_test_number ?? null},
+        ${data.token_mode || 'disabled'}::token_mode, ${sanitize(data.token_max_number)}, ${token_min_interval}::interval,
+        ${data.token_gen_initial || 0}, ${data.token_gen_number || 0}, ${token_gen_interval}::interval, ${sanitize(data.token_gen_max)},
+        ${sanitize(data.max_submission_number)}, ${sanitize(data.max_user_test_number)},
         ${min_submission_interval}::interval, ${min_user_test_interval}::interval,
         ${data.feedback_level || 'restricted'}::feedback_level, ${data.score_precision || 0}, ${data.score_mode || 'max'}::score_mode
       )
@@ -125,16 +133,16 @@ export async function createTask(data: TaskData) {
 
 export async function updateTask(id: number, data: Partial<TaskData>) {
   try {
-    const token_min_interval = data.token_min_interval !== undefined ? `${data.token_min_interval} seconds` : null;
-    const token_gen_interval = data.token_gen_interval !== undefined ? `${data.token_gen_interval} minutes` : null;
-    const min_submission_interval = data.min_submission_interval !== undefined ? `${data.min_submission_interval} seconds` : null;
-    const min_user_test_interval = data.min_user_test_interval !== undefined ? `${data.min_user_test_interval} seconds` : null;
+    const token_min_interval = sanitize(data.token_min_interval) !== null ? `${data.token_min_interval} seconds` : null;
+    const token_gen_interval = sanitize(data.token_gen_interval) !== null ? `${data.token_gen_interval} minutes` : null;
+    const min_submission_interval = sanitize(data.min_submission_interval) !== null ? `${data.min_submission_interval} seconds` : null;
+    const min_user_test_interval = sanitize(data.min_user_test_interval) !== null ? `${data.min_user_test_interval} seconds` : null;
 
     await prisma.$executeRaw`
       UPDATE tasks SET
         name = COALESCE(${data.name}, name),
         title = COALESCE(${data.title}, title),
-        contest_id = COALESCE(${data.contest_id}, contest_id),
+        contest_id = COALESCE(${sanitize(data.contest_id)}, contest_id),
         allowed_languages = COALESCE(${data.allowed_languages}, allowed_languages),
         submission_format = COALESCE(${data.submission_format}, submission_format),
         
@@ -143,13 +151,13 @@ export async function updateTask(id: number, data: Partial<TaskData>) {
         feedback_level = COALESCE(${data.feedback_level}::feedback_level, feedback_level),
 
         token_mode = COALESCE(${data.token_mode}::token_mode, token_mode),
-        token_max_number = COALESCE(${data.token_max_number}, token_max_number),
-        token_gen_initial = COALESCE(${data.token_gen_initial}, token_gen_initial),
-        token_gen_number = COALESCE(${data.token_gen_number}, token_gen_number),
-        token_gen_max = COALESCE(${data.token_gen_max}, token_gen_max),
+        token_max_number = COALESCE(${sanitize(data.token_max_number)}, token_max_number),
+        token_gen_initial = COALESCE(${sanitize(data.token_gen_initial)}, token_gen_initial),
+        token_gen_number = COALESCE(${sanitize(data.token_gen_number)}, token_gen_number),
+        token_gen_max = COALESCE(${sanitize(data.token_gen_max)}, token_gen_max),
 
-        max_submission_number = COALESCE(${data.max_submission_number}, max_submission_number),
-        max_user_test_number = COALESCE(${data.max_user_test_number}, max_user_test_number),
+        max_submission_number = COALESCE(${sanitize(data.max_submission_number)}, max_submission_number),
+        max_user_test_number = COALESCE(${sanitize(data.max_user_test_number)}, max_user_test_number),
 
         token_min_interval = CASE WHEN ${token_min_interval}::text IS NOT NULL THEN ${token_min_interval}::interval ELSE token_min_interval END,
         token_gen_interval = CASE WHEN ${token_gen_interval}::text IS NOT NULL THEN ${token_gen_interval}::interval ELSE token_gen_interval END,

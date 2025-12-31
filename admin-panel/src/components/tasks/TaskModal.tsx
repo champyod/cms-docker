@@ -42,19 +42,8 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Helper to parse interval from simple string or object if needed
-  // For now assuming existing data comes as we expect or we default
-  // Real implementation might need to parse Postgres interval objects if Prisma returns them
-  // But usually for crud we might rely on defaults if they are complex
-
   useEffect(() => {
     if (task) {
-      // Helper to extract number from interval (mocking for now, adjust based on actual data)
-      // Since we don't have easy interval parsing here without a library or raw query mapping
-      // We will try to rely on what is passed. If it's a Prisma object, it might be tricky.
-      // For now, let's assume we need to re-fetch or use defaults if undefined.
-      // Actually, let's keep it simple: if properties are missing/incompatible, use defaults.
-
       setFormData({
         name: task.name,
         title: task.title,
@@ -70,8 +59,6 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
         token_gen_max: task.token_gen_max ?? undefined,
         max_submission_number: task.max_submission_number ?? undefined,
         max_user_test_number: task.max_user_test_number ?? undefined,
-        // Intervals are tricky. We might just leave them undefined (not updating) if we can't parse easily
-        // Or we assume the user will set them if they want to change.
         token_min_interval: undefined,
         token_gen_interval: undefined,
         min_submission_interval: undefined,
