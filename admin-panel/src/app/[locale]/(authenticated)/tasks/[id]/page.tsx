@@ -32,7 +32,7 @@ export default async function TaskDetailPage({
     } : null,
     statements: Array.isArray(task.statements) ? task.statements : [],
     attachments: Array.isArray(task.attachments) ? task.attachments : [],
-    datasets: (Array.isArray(task.datasets_datasets_task_idTotasks) ? task.datasets_datasets_task_idTotasks : []).map(ds => ({
+    datasets: (Array.isArray(task.datasets_datasets_task_idTotasks) ? task.datasets_datasets_task_idTotasks : []).map((ds: any) => ({
       ...ds,
       memory_limit: ds.memory_limit ? ds.memory_limit.toString() : null,
       testcases: Array.isArray(ds.testcases) ? ds.testcases : [],
