@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { X, Database, Loader2, Plus, Trash2, CheckCircle2 } from 'lucide-react';
 import { Portal } from '../core/Portal';
-import { createDataset } from '@/app/actions/datasets';
+import { apiClient } from '@/lib/apiClient';
 
 interface DatasetModalProps {
   isOpen: boolean;
@@ -43,12 +43,9 @@ export function DatasetModal({ isOpen, onClose, taskId, onSuccess }: DatasetModa
     setLoading(true);
 
     try {
-      const result = await createDataset(taskId, {
-        description: formData.description,
-        time_limit: formData.time_limit,
-        memory_limit: formData.memory_limit,
-        task_type: formData.task_type,
-        score_type: formData.score_type,
+      const result = await apiClient.post('/api/datasets', {
+        taskId,
+        ...formData
       });
 
       if (result.success) {

@@ -6,7 +6,7 @@ import { Button } from '@/components/core/Button';
 import { Edit2, Trash2, Plus, HelpCircle } from 'lucide-react';
 import Link from 'next/link';
 import { UserModal } from './UserModal';
-import { deleteUser } from '@/app/actions/users';
+import { apiClient } from '@/lib/apiClient';
 
 import { users } from '@prisma/client';
 
@@ -22,10 +22,8 @@ export function UserList({ initialUsers, totalPages }: { initialUsers: users[], 
 
   const handleDelete = async (id: number) => {
     if (confirm('Are you sure you want to delete this user?')) {
-      const result = await deleteUser(id);
+      const result = await apiClient.delete(`/api/users/${id}`);
       if (result.success) {
-         // Optimistic update or refresh needed. 
-         // Since we used revalidatePath in action, simpler here is to refresh.
          window.location.reload(); 
       } else {
         alert('Failed to delete user');

@@ -9,9 +9,7 @@ import {
   ChevronDown, ChevronUp, Save, Plus, Trash2, ExternalLink, Upload,
   Copy, Edit, CheckCircle, ToggleLeft, ToggleRight, Download, HelpCircle
 } from 'lucide-react';
-import { activateDataset, cloneDataset, deleteDataset, renameDataset, toggleAutojudge } from '@/app/actions/datasets';
-import { deleteTestcase, toggleTestcasePublic } from '@/app/actions/testcases';
-import { deleteStatement, deleteAttachment } from '@/app/actions/statements';
+import { apiClient } from '@/lib/apiClient';
 import { DatasetModal } from './DatasetModal';
 import { StatementModal } from './StatementModal';
 import { AttachmentModal } from './AttachmentModal';
@@ -55,14 +53,14 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
   };
 
   const handleActivateDataset = async (datasetId: number) => {
-    await activateDataset(datasetId);
+    await apiClient.put(`/api/datasets/${datasetId}`, { action: 'activate' });
     window.location.reload();
   };
 
   const handleCloneDataset = async (datasetId: number, description: string) => {
     const newName = prompt('Enter name for cloned dataset:', `${description} (copy)`);
     if (newName) {
-      await cloneDataset(datasetId, newName);
+      await apiClient.post(`/api/datasets/${datasetId}/clone`, { newDescription: newName });
       window.location.reload();
     }
   };
@@ -70,14 +68,14 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
   const handleRenameDataset = async (datasetId: number, currentDesc: string) => {
     const newName = prompt('Enter new name:', currentDesc);
     if (newName && newName !== currentDesc) {
-      await renameDataset(datasetId, newName);
+      await apiClient.put(`/api/datasets/${datasetId}`, { action: 'rename', description: newName });
       window.location.reload();
     }
   };
 
   const handleDeleteDataset = async (datasetId: number) => {
     if (confirm('Delete this dataset? This cannot be undone.')) {
-      const result = await deleteDataset(datasetId);
+      const result = await apiClient.delete(`/api/datasets/${datasetId}`);
       if (!result.success) {
         alert(result.error);
       } else {
@@ -87,19 +85,19 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
   };
 
   const handleToggleAutojudge = async (datasetId: number) => {
-    await toggleAutojudge(datasetId);
+    await apiClient.put(`/api/datasets/${datasetId}`, { action: 'toggle-autojudge' });
     window.location.reload();
   };
 
   const handleDeleteTestcase = async (tcId: number) => {
     if (confirm('Delete this testcase?')) {
-      await deleteTestcase(tcId);
+      await apiClient.delete(`/api/testcases/${tcId}`);
       window.location.reload();
     }
   };
 
   const handleToggleTestcasePublic = async (tcId: number) => {
-    await toggleTestcasePublic(tcId);
+    await apiClient.put(`/api/testcases/${tcId}`, { action: 'toggle-public' });
     window.location.reload();
   };
 
@@ -218,7 +216,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
                         <button
                           onClick={async () => {
                             if (confirm('Delete this statement?')) {
-                              await deleteStatement(stmt.id);
+                              await apiClient.delete(`/api/statements/${stmt.id}`);
                               window.location.reload();
                             }
                           }}
@@ -446,7 +444,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
                 <button
                   onClick={async () => {
                     if (confirm('Delete this attachment?')) {
-                      await deleteAttachment(att.id);
+                      await apiClient.delete(`/api/attachments/${att.id}`);
                       window.location.reload();
                     }
                   }}

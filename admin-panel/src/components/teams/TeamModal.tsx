@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Users, Loader } from 'lucide-react';
-import { createTeam, updateTeam } from '@/app/actions/teams';
+import { apiClient } from '@/lib/apiClient';
 
 interface TeamData {
   id?: number;
@@ -49,12 +49,9 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData }: TeamModal
     setLoading(true);
     setError('');
 
-    let result;
-    if (initialData && initialData.id) {
-      result = await updateTeam(initialData.id, formData);
-    } else {
-      result = await createTeam(formData);
-    }
+    const result = (initialData && initialData.id)
+      ? await apiClient.put(`/api/teams/${initialData.id}`, formData)
+      : await apiClient.post('/api/teams', formData);
 
     if (result.success) {
       onSuccess();

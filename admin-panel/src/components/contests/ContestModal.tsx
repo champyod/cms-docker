@@ -5,7 +5,8 @@ import { createPortal } from 'react-dom';
 import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
 import { X, Loader2, Calendar, Shield, Cpu, Clock, Settings, FileText } from 'lucide-react';
-import { createContest, updateContest, ContestData } from '@/app/actions/contests';
+import type { ContestData } from '@/app/actions/contests';
+import { apiClient } from '@/lib/apiClient';
 import { contests } from '@prisma/client';
 import { PROGRAMMING_LANGUAGES } from '@/lib/constants';
 
@@ -150,13 +151,10 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
 
     try {
       const payload = { ...formData };
-      let result;
 
-      if (contest) {
-        result = await updateContest(contest.id, payload);
-      } else {
-        result = await createContest(payload);
-      }
+      const result = contest
+        ? await apiClient.put(`/api/contests/${contest.id}`, payload)
+        : await apiClient.post('/api/contests', payload);
 
       if (result.success) {
         onSuccess();

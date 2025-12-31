@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { X, Paperclip, Upload, Loader } from 'lucide-react';
 import { Portal } from '../core/Portal';
-import { addAttachment } from '@/app/actions/statements';
+import { apiClient } from '@/lib/apiClient';
 
 interface AttachmentModalProps {
   isOpen: boolean;
@@ -62,7 +62,11 @@ export function AttachmentModal({ isOpen, onClose, taskId, onSuccess }: Attachme
       const reader = new FileReader();
       reader.onload = async () => {
         const base64 = (reader.result as string).split(',')[1];
-        const result = await addAttachment(taskId, filename, base64);
+        const result = await apiClient.post('/api/attachments', {
+          taskId,
+          filename,
+          fileData: base64
+        });
         
         if (result.success) {
           onSuccess();

@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom';
 
 import { useState, useEffect } from 'react';
 import { X, FileCode, Settings, Clock, Cpu, FileType, CheckSquare } from 'lucide-react';
-import { createTask, updateTask, type TaskData, type TaskDiagnostic } from '@/app/actions/tasks';
+import type { TaskData } from '@/app/actions/tasks';
+import { apiClient } from '@/lib/apiClient';
 import { tasks } from '@prisma/client';
 import { PROGRAMMING_LANGUAGES } from '@/lib/constants';
 import { useToast } from '@/components/core/Toast';
@@ -109,20 +110,11 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
 
     try {
       const result = task
-        ? await updateTask(task.id, formData)
-        : await createTask(formData);
+        ? await apiClient.put(`/api/tasks/${task.id}`, formData)
+        : await apiClient.post('/api/tasks', formData);
 
       if (result.success) {
-        if ('diagnostics' in result && result.diagnostics && result.diagnostics.length > 0) {
-          const errors = result.diagnostics.filter(d => d.type === 'error');
-          if (errors.length > 0) {
-            addToast(`Task saved with ${errors.length} configuration errors.`, 'warning');
-          } else {
-            addToast('Task saved with warnings.', 'info');
-          }
-        } else {
-          addToast(task ? 'Task updated successfully' : 'Task created successfully', 'success');
-        }
+        addToast(task ? 'Task updated successfully' : 'Task created successfully', 'success');
         onSuccess();
         onClose();
       } else {

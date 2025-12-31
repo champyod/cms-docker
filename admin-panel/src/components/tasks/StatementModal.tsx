@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { X, FileText, Upload, Loader } from 'lucide-react';
 import { Portal } from '../core/Portal';
-import { addStatement } from '@/app/actions/statements';
+import { apiClient } from '@/lib/apiClient';
 import { STATEMENT_LANGUAGES } from '@/lib/constants';
 
 interface StatementModalProps {
@@ -59,7 +59,11 @@ export function StatementModal({ isOpen, onClose, taskId, existingLanguages, onS
       const reader = new FileReader();
       reader.onload = async () => {
         const base64 = (reader.result as string).split(',')[1];
-        const result = await addStatement(taskId, language, base64);
+        const result = await apiClient.post('/api/statements', {
+          taskId,
+          language,
+          fileData: base64
+        });
         
         if (result.success) {
           onSuccess();

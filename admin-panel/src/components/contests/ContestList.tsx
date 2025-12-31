@@ -7,7 +7,7 @@ import { Button } from '@/components/core/Button';
 import Link from 'next/link';
 import { Trash2, Plus, Calendar, Clock, ExternalLink, HelpCircle } from 'lucide-react';
 import { ContestModal } from './ContestModal';
-import { deleteContest } from '@/app/actions/contests';
+import { apiClient } from '@/lib/apiClient';
 import { contests } from '@prisma/client';
 
 export function ContestList({ initialContests, totalPages }: { initialContests: contests[], totalPages: number }) {
@@ -20,7 +20,7 @@ export function ContestList({ initialContests, totalPages }: { initialContests: 
 
   const handleDelete = async (id: number) => {
     if (confirm('Are you sure you want to delete this contest? This is IRREVERSIBLE.')) {
-      const result = await deleteContest(id);
+      const result = await apiClient.delete(`/api/contests/${id}`);
       if (result.success) {
          window.location.reload(); 
       } else {

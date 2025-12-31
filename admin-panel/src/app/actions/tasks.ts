@@ -2,9 +2,13 @@
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
-import { tasks } from '@prisma/client';
 
 const TASKS_PER_PAGE = 20;
+
+export interface TaskDiagnostic {
+  type: 'error' | 'warning';
+  message: string;
+}
 
 export async function getTasks({ page = 1, search = '' }: { page?: number; search?: string }) {
   const skip = (page - 1) * TASKS_PER_PAGE;
@@ -40,29 +44,17 @@ export async function getTasks({ page = 1, search = '' }: { page?: number; searc
     prisma.tasks.count({ where }),
   ]);
 
-  // Calculate diagnostics for each task
   const tasksWithDiagnostics = rawTasks.map((task) => {
     const diagnostics: TaskDiagnostic[] = [];
-
     if (!task.active_dataset_id) {
       diagnostics.push({ type: 'error', message: 'No active dataset selected.' });
     } else {
       const activeDataset = task.datasets_datasets_task_idTotasks.find((d: any) => d.id === task.active_dataset_id);
-      if (!activeDataset) {
-        diagnostics.push({ type: 'error', message: 'Active dataset not found.' });
-      } else if (activeDataset._count.testcases === 0) {
-        diagnostics.push({ type: 'error', message: 'Active dataset has no test cases.' });
-      }
+      if (!activeDataset) diagnostics.push({ type: 'error', message: 'Active dataset not found.' });
+      else if (activeDataset._count.testcases === 0) diagnostics.push({ type: 'error', message: 'Active dataset has no test cases.' });
     }
-
-    if (task.statements.length === 0) {
-      diagnostics.push({ type: 'error', message: 'No statements found.' });
-    }
-
-    if (!task.contest_id) {
-      diagnostics.push({ type: 'warning', message: 'Not assigned to any contest.' });
-    }
-
+    if (task.statements.length === 0) diagnostics.push({ type: 'error', message: 'No statements found.' });
+    if (!task.contest_id) diagnostics.push({ type: 'warning', message: 'Not assigned to any contest.' });
     return { ...task, diagnostics };
   });
 
@@ -77,16 +69,7 @@ export async function getTask(id: number) {
   return prisma.tasks.findUnique({
     where: { id },
     include: {
-      contests: {
-        select: {
-          id: true,
-          name: true,
-          start: true,
-          stop: true,
-          analysis_start: true,
-          analysis_stop: true
-        }
-      },
+      contests: { select: { id: true, name: true, start: true, stop: true, analysis_start: true, analysis_stop: true } },
       statements: { select: { id: true, language: true } },
       attachments: true,
       datasets_datasets_task_idTotasks: {
@@ -95,60 +78,27 @@ export async function getTask(id: number) {
           managers: true,
         }
       },
-      _count: {
-        select: { submissions: true }
-      }
+      _count: { select: { submissions: true } }
     }
   });
-}
-
-export interface TaskDiagnostic {
-  type: 'error' | 'warning';
-  message: string;
 }
 
 export async function getTaskDiagnostics(taskId: number): Promise<TaskDiagnostic[]> {
   if (!taskId || isNaN(taskId)) return [];
-
   const task = await prisma.tasks.findUnique({
     where: { id: taskId },
     include: {
       statements: { select: { id: true } },
-      datasets_datasets_task_idTotasks: {
-        include: { testcases: { select: { id: true } } }
-      }
+      datasets_datasets_task_idTotasks: { include: { testcases: { select: { id: true } } } }
     }
   });
-
   if (!task) return [];
-
   const diagnostics: TaskDiagnostic[] = [];
-
-  // Critical errors (unusable)
-  if (!task.active_dataset_id) {
-    diagnostics.push({ type: 'error', message: 'No active dataset selected. Task cannot be judged.' });
-  }
-
-  const activeDataset = task.active_dataset_id
-    ? await prisma.datasets.findUnique({
-      where: { id: task.active_dataset_id },
-      include: { testcases: { select: { id: true } } }
-    })
-    : null;
-
-  if (task.active_dataset_id && (!activeDataset?.testcases || activeDataset.testcases.length === 0)) {
-    diagnostics.push({ type: 'error', message: 'Active dataset has no test cases.' });
-  }
-
-  if (task.statements.length === 0) {
-    diagnostics.push({ type: 'error', message: 'No statements found. Users won\'t see instructions.' });
-  }
-
-  // Warnings
-  if (!task.contest_id) {
-    diagnostics.push({ type: 'warning', message: 'Not assigned to any contest.' });
-  }
-
+  if (!task.active_dataset_id) diagnostics.push({ type: 'error', message: 'No active dataset selected. Task cannot be judged.' });
+  const activeDataset = task.active_dataset_id ? await prisma.datasets.findUnique({ where: { id: task.active_dataset_id }, include: { testcases: { select: { id: true } } } }) : null;
+  if (task.active_dataset_id && (!activeDataset?.testcases || activeDataset.testcases.length === 0)) diagnostics.push({ type: 'error', message: 'Active dataset has no test cases.' });
+  if (task.statements.length === 0) diagnostics.push({ type: 'error', message: 'No statements found. Users won\'t see instructions.' });
+  if (!task.contest_id) diagnostics.push({ type: 'warning', message: 'Not assigned to any contest.' });
   return diagnostics;
 }
 
@@ -174,21 +124,14 @@ export interface TaskData {
   min_user_test_interval?: number;
 }
 
-// Helper to sanitize Next.js Server Action serialization artifacts
 function sanitize<T>(value: T | undefined | null): T | null {
-  if (value === undefined || value === null || (value as any) === '$undefined') {
-    return null;
-  }
-  if (typeof value === 'string' && value.trim() === '') {
-    return null;
-  }
-  if (Array.isArray(value)) {
-    return value.map(v => (v === '$undefined' || v === '' ? null : v)) as unknown as T;
-  }
+  if (value === undefined || value === null || (value as any) === '$undefined') return null;
+  if (typeof value === 'string' && value.trim() === '') return null;
+  if (Array.isArray(value)) return value.map(v => (v === '$undefined' || v === '' ? null : v)) as unknown as T;
   return value;
 }
 
-export async function createTask(data: TaskData): Promise<{ success: boolean; warning?: string | null; error?: string }> {
+export async function createTask(data: TaskData) {
   try {
     const token_min_interval = sanitize(data.token_min_interval) !== null ? `${data.token_min_interval} seconds` : '0 seconds';
     const token_gen_interval = sanitize(data.token_gen_interval) !== null ? `${data.token_gen_interval} minutes` : '30 minutes';
@@ -214,155 +157,61 @@ export async function createTask(data: TaskData): Promise<{ success: boolean; wa
         ${data.feedback_level || 'restricted'}::feedback_level, ${data.score_precision || 0}, ${data.score_mode || 'max'}::score_mode
       )
     `;
-    
     revalidatePath('/[locale]/tasks');
-
-    let warning = null;
-    if (!sanitize(data.contest_id)) {
-      warning = "Task created but not assigned to any contest. It will also need a dataset to be usable.";
-    } else {
-      warning = "Task created. It will need a dataset to be usable.";
-    }
-
-    return { success: true, warning };
-  } catch (error) {
-    const e = error as Error & { code?: string };
-    if (e.message?.includes('unique constraint')) {
-      return { success: false, error: 'Task name already exists' };
-    }
-    return { success: false, error: e.message };
+    return { success: true };
+  } catch (error: any) {
+    if (error.message?.includes('unique constraint')) return { success: false, error: 'Task name already exists' };
+    return { success: false, error: error.message };
   }
 }
 
-export async function updateTask(id: number, data: Partial<TaskData>): Promise<{ success: boolean; diagnostics?: TaskDiagnostic[]; error?: string }> {
-  if (!id || isNaN(id)) {
-    console.error('Update Task Error: Invalid ID provided', id);
-    return { success: false, error: 'Invalid Task ID provided' };
-  }
-
+export async function updateTask(id: number, data: Partial<TaskData>) {
   try {
-    // 1. Sanitize all incoming fields
     const sanitizedData: any = {};
-    for (const key in data) {
-      sanitizedData[key] = sanitize((data as any)[key]);
-    }
+    for (const key in data) sanitizedData[key] = sanitize((data as any)[key]);
 
-    // 2. Prepare updates
     const standardFields: any = {};
     const intervalFields: any = {};
-
-    // Defined in schema as NOT NULL
-    const requiredIntervalKeys = [
-      'token_min_interval',
-      'token_gen_interval',
-    ];
-
-    // Defined in schema as NULLable
-    const optionalIntervalKeys = [
-      'min_submission_interval',
-      'min_user_test_interval',
-    ];
-
-    const allIntervalKeys = [...requiredIntervalKeys, ...optionalIntervalKeys];
-
-    // Fields that are allowed to be set to NULL in the database
-    const nullableKeys = [
-      'contest_id',
-      'token_max_number',
-      'token_gen_max',
-      'max_submission_number',
-      'max_user_test_number',
-      ...optionalIntervalKeys
-    ];
+    const requiredIntervals = ['token_min_interval', 'token_gen_interval'];
+    const optionalIntervals = ['min_submission_interval', 'min_user_test_interval'];
+    const nullableKeys = ['contest_id', 'token_max_number', 'token_gen_max', 'max_submission_number', 'max_user_test_number', ...optionalIntervals];
 
     for (const key in sanitizedData) {
-      if (allIntervalKeys.includes(key)) {
-        // If it's a required interval, only update if not null
-        if (requiredIntervalKeys.includes(key)) {
-          if (sanitizedData[key] !== null) {
-            intervalFields[key] = sanitizedData[key];
-          }
-        } else {
-          // It's an optional interval, always include (can be set to null)
-          intervalFields[key] = sanitizedData[key];
-        }
-      } else {
-        // Standard fields: include if not null OR if explicitly allowed to be null
-        if (sanitizedData[key] !== null || nullableKeys.includes(key)) {
-          standardFields[key] = sanitizedData[key];
-        }
-      }
+      if ([...requiredIntervals, ...optionalIntervals].includes(key)) {
+        if (requiredIntervals.includes(key) && sanitizedData[key] === null) continue;
+        intervalFields[key] = sanitizedData[key];
+      } else if (sanitizedData[key] !== null || nullableKeys.includes(key)) standardFields[key] = sanitizedData[key];
     }
 
-    // Perform updates if there are standard fields
-    if (Object.keys(standardFields).length > 0) {
-      try {
-        await prisma.tasks.update({
-          where: { id: Number(id) },
-          data: standardFields,
-        });
-      } catch (prismaErr: any) {
-        console.error('Prisma Update Error:', prismaErr);
-        if (prismaErr.code === 'P2002') return { success: false, error: 'Task name already exists' };
-        throw new Error(`Database standard update failed: ${prismaErr.message}`);
-      }
-    }
+    if (Object.keys(standardFields).length > 0) await prisma.tasks.update({ where: { id }, data: standardFields });
 
-    // 3. Update interval fields using raw SQL
     if (Object.keys(intervalFields).length > 0) {
-      const setClauses: string[] = [];
-      const params: any[] = [];
-
-      const addIntervalClause = (key: string, unit: string) => {
-        if (key in intervalFields) {
-          if (intervalFields[key] === null) {
-            setClauses.push(`${key} = NULL`);
-          } else {
+      const setClauses: string[] = [], params: any[] = [];
+      const addClause = (key: string, unit: string) => {
+        if (intervalFields[key] !== undefined) {
+          if (intervalFields[key] === null) setClauses.push(`${key} = NULL`);
+          else {
             params.push(`${intervalFields[key]} ${unit}`);
             setClauses.push(`${key} = $${params.length}::interval`);
           }
         }
       };
-
-      addIntervalClause('token_min_interval', 'seconds');
-      addIntervalClause('token_gen_interval', 'minutes');
-      addIntervalClause('min_submission_interval', 'seconds');
-      addIntervalClause('min_user_test_interval', 'seconds');
-
+      addClause('token_min_interval', 'seconds');
+      addClause('token_gen_interval', 'minutes');
+      addClause('min_submission_interval', 'seconds');
+      addClause('min_user_test_interval', 'seconds');
       if (setClauses.length > 0) {
         params.push(id);
-        const query = `UPDATE tasks SET ${setClauses.join(', ')} WHERE id = $${params.length}`;
-        try {
-          await prisma.$executeRawUnsafe(query, ...params);
-        } catch (sqlErr: any) {
-          console.error('SQL Update Error:', sqlErr);
-          throw new Error(`Database interval update failed: ${sqlErr.message}`);
-        }
+        await prisma.$executeRawUnsafe(`UPDATE tasks SET ${setClauses.join(', ')} WHERE id = $${params.length}`, ...params);
       }
     }
 
-    // Safe revalidation
-    try {
-      revalidatePath('/', 'layout');
-    } catch (e) {
-      console.warn('Revalidation warning:', e);
-    }
-
-    // Optionally include diagnostics if it's safe
-    let diagnostics: TaskDiagnostic[] = [];
-    try {
-      diagnostics = await getTaskDiagnostics(id);
-    } catch (dErr) {
-      console.error('Diagnostics warning:', dErr);
-    }
-
-    return { success: true, diagnostics };
+    revalidatePath('/[locale]/tasks', 'page');
+    return { success: true };
   } catch (error: any) {
-    console.error('Update Task Global Error:', error);
-    return {
-      success: false,
-      error: error.message || 'An unexpected error occurred during update' 
-    };
+    console.error('Update Task Error:', error);
+    if (error.code === 'P2002') return { success: false, error: 'Task name already exists' };
+    return { success: false, error: error.message || 'An unexpected error occurred' };
   }
 }
 
@@ -372,8 +221,7 @@ export async function deleteTask(id: number) {
     revalidatePath('/[locale]/tasks');
     return { success: true };
   } catch (error) {
-    const e = error as Error;
-    return { success: false, error: e.message };
+    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -381,22 +229,14 @@ export async function assignTaskToContest(taskId: number, contestId: number | nu
   try {
     let num = null;
     if (contestId) {
-      const maxNum = await prisma.tasks.aggregate({
-        where: { contest_id: contestId },
-        _max: { num: true }
-      });
+      const maxNum = await prisma.tasks.aggregate({ where: { contest_id: contestId }, _max: { num: true } });
       num = (maxNum._max.num || 0) + 1;
     }
-    
-    await prisma.tasks.update({
-      where: { id: taskId },
-      data: { contest_id: contestId, num }
-    });
+    await prisma.tasks.update({ where: { id: taskId }, data: { contest_id: contestId, num } });
     revalidatePath('/[locale]/tasks');
     revalidatePath('/[locale]/contests');
     return { success: true };
   } catch (error) {
-    const e = error as Error;
-    return { success: false, error: e.message };
+    return { success: false, error: (error as Error).message };
   }
 }

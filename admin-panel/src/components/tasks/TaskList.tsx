@@ -6,8 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/core/Button';
 import { Edit2, Trash2, Plus, FileText, Database, ExternalLink, AlertTriangle } from 'lucide-react';
 import { TaskModal } from './TaskModal';
-import { deleteTask } from '@/app/actions/tasks';
-
+import { apiClient } from '@/lib/apiClient';
 import { tasks } from '@prisma/client';
 import { TaskDiagnostic } from '@/app/actions/tasks';
 
@@ -32,7 +31,7 @@ export function TaskList({ initialTasks, totalPages }: { initialTasks: TaskWithR
 
   const handleDelete = async (id: number) => {
     if (confirm('Are you sure you want to delete this task? This is IRREVERSIBLE.')) {
-      const result = await deleteTask(id);
+      const result = await apiClient.delete(`/api/tasks/${id}`);
       if (result.success) {
         window.location.reload();
       } else {

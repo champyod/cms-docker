@@ -5,8 +5,7 @@ import { createPortal } from 'react-dom';
 import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
 import { X, Loader2, Eye, EyeOff } from 'lucide-react';
-import { createUser, updateUser } from '@/app/actions/users';
-
+import { apiClient } from '@/lib/apiClient';
 import { users } from '@prisma/client';
 
 interface UserModalProps {
@@ -64,12 +63,9 @@ export function UserModal({ isOpen, onClose, user, onSuccess }: UserModalProps) 
     setError('');
 
     try {
-      let result;
-      if (user) {
-        result = await updateUser(user.id, formData);
-      } else {
-        result = await createUser(formData);
-      }
+      const result = user
+        ? await apiClient.put(`/api/users/${user.id}`, formData)
+        : await apiClient.post('/api/users', formData);
 
       if (result.success) {
         onSuccess();
