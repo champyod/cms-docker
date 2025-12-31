@@ -108,6 +108,8 @@ export interface TaskDiagnostic {
 }
 
 export async function getTaskDiagnostics(taskId: number): Promise<TaskDiagnostic[]> {
+  if (!taskId || isNaN(taskId)) return [];
+
   const task = await prisma.tasks.findUnique({
     where: { id: taskId },
     include: {
@@ -233,6 +235,11 @@ export async function createTask(data: TaskData): Promise<{ success: boolean; wa
 }
 
 export async function updateTask(id: number, data: Partial<TaskData>): Promise<{ success: boolean; diagnostics?: TaskDiagnostic[]; error?: string }> {
+  if (!id || isNaN(id)) {
+    console.error('Update Task Error: Invalid ID provided', id);
+    return { success: false, error: 'Invalid Task ID provided' };
+  }
+
   try {
     // 1. Sanitize all incoming fields
     const sanitizedData: any = {};
@@ -289,10 +296,16 @@ export async function updateTask(id: number, data: Partial<TaskData>): Promise<{
 
     // Perform updates if there are standard fields
     if (Object.keys(standardFields).length > 0) {
-      await prisma.tasks.update({
-        where: { id },
-        data: standardFields,
-      });
+      try {
+        await prisma.tasks.update({
+          where: { id: Number(id) },
+          data: standardFields,
+        });
+      } catch (prismaErr: any) {
+        console.error('Prisma Update Error:', prismaErr);
+        if (prismaErr.code === 'P2002') return { success: false, error: 'Task name already exists' };
+        throw new Error(`Database standard update failed: ${prismaErr.message}`);
+      }
     }
 
     // 3. Update interval fields using raw SQL
@@ -328,19 +341,27 @@ export async function updateTask(id: number, data: Partial<TaskData>): Promise<{
       }
     }
 
-    // Try revalidate but don't fail if it doesn't work
+    // Safe revalidation
     try {
       revalidatePath('/', 'layout');
     } catch (e) {
-      console.error('Revalidate error:', e);
+      console.warn('Revalidation warning:', e);
     }
 
-    return { success: true };
+    // Optionally include diagnostics if it's safe
+    let diagnostics: TaskDiagnostic[] = [];
+    try {
+      diagnostics = await getTaskDiagnostics(id);
+    } catch (dErr) {
+      console.error('Diagnostics warning:', dErr);
+    }
+
+    return { success: true, diagnostics };
   } catch (error: any) {
     console.error('Update Task Global Error:', error);
     return {
       success: false,
-      error: error.message || 'An unexpected error occurred during update'
+      error: error.message || 'An unexpected error occurred during update' 
     };
   }
 }
