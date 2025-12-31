@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '@/components/core/Button';
 import { 
   X, RefreshCw, Terminal, Download, 
@@ -20,7 +21,12 @@ export function LogViewerModal({ containerId, containerName, onClose }: LogViewe
   const [autoScroll, setAutoScroll] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [tail, setTail] = useState(100);
+  const [mounted, setMounted] = useState(false);
   const logRef = useRef<HTMLPreElement>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -67,7 +73,9 @@ export function LogViewerModal({ containerId, containerName, onClose }: LogViewe
     line.toLowerCase().includes(searchTerm.toLowerCase())
   ).join('\n');
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ touchAction: 'none' }}>
       {/* Full screen backdrop - prevents interaction with background */}
       <div
@@ -157,6 +165,7 @@ export function LogViewerModal({ containerId, containerName, onClose }: LogViewe
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

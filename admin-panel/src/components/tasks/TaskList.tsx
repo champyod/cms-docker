@@ -9,12 +9,14 @@ import { TaskModal } from './TaskModal';
 import { deleteTask } from '@/app/actions/tasks';
 
 import { tasks } from '@prisma/client';
+import { TaskDiagnostic } from '@/app/actions/tasks';
 
 type TaskWithRelations = tasks & {
   contests: { id: number; name: string } | null;
-  statements: { id: number; language: string }[];
+  statements: { id: number }[];
   datasets_datasets_task_idTotasks: { id: number; description: string }[];
   _count: { submissions: number };
+  diagnostics: TaskDiagnostic[];
 };
 
 export function TaskList({ initialTasks, totalPages }: { initialTasks: TaskWithRelations[], totalPages: number }) {
@@ -76,23 +78,38 @@ export function TaskList({ initialTasks, totalPages }: { initialTasks: TaskWithR
           </TableHeader>
           <TableBody>
             {tasks.map((task) => {
-              const isUnusable = !task.active_dataset_id;
+              const hasErrors = task.diagnostics.some(d => d.type === 'error');
+              const hasWarnings = task.diagnostics.some(d => d.type === 'warning');
 
               return (
-                <TableRow key={task.id} className={`border-b border-white/5 hover:bg-white/5 transition-colors ${isUnusable ? 'opacity-60' : ''}`}>
+                <TableRow key={task.id} className={`border-b border-white/5 hover:bg-white/5 transition-colors ${hasErrors ? 'opacity-60' : ''}`}>
                   <TableCell className="font-mono text-neutral-500 text-xs text-nowrap">#{task.id}</TableCell>
                   <TableCell className="font-medium text-white max-w-[150px]">
-                    <button
-                      onClick={() => router.push(`/en/tasks/${task.id}`)}
-                      className={`flex items-center gap-2 hover:text-indigo-400 transition-colors truncate ${isUnusable ? 'text-neutral-400' : ''}`}
-                      title={isUnusable ? `${task.name} (Unusable - No active dataset)` : task.name}
-                    >
-                      {isUnusable && <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />}
-                      {task.name}
-                      <ExternalLink className="w-3 h-3 opacity-50" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {task.diagnostics.length > 0 && (
+                        <div className="group relative">
+                          <AlertTriangle className={`w-4 h-4 cursor-help shrink-0 ${hasErrors ? 'text-red-500' : 'text-amber-500'}`} />
+                          <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block z-50 min-w-[200px] p-2 bg-neutral-800 border border-white/10 rounded-lg shadow-xl text-xs space-y-1">
+                            <p className="font-bold border-b border-white/5 pb-1 mb-1">Task Issues</p>
+                            {task.diagnostics.map((d, i) => (
+                              <div key={i} className={`flex gap-1.5 ${d.type === 'error' ? 'text-red-400' : 'text-amber-400'}`}>
+                                <span>•</span>
+                                <span>{d.message}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <button
+                        onClick={() => router.push(`/en/tasks/${task.id}`)}
+                        className={`flex items-center gap-2 hover:text-indigo-400 transition-colors truncate ${hasErrors ? 'text-neutral-400' : ''}`}
+                      >
+                        {task.name}
+                        <ExternalLink className="w-3 h-3 opacity-50" />
+                      </button>
+                    </div>
                   </TableCell>
-                  <TableCell className={`max-w-[200px] truncate ${isUnusable ? 'text-neutral-500 italic' : 'text-neutral-300'}`} title={task.title}>
+                  <TableCell className={`max-w-[200px] truncate ${hasErrors ? 'text-neutral-500 italic' : 'text-neutral-300'}`} title={task.title}>
                     {task.title}
                   </TableCell>
                   <TableCell>
@@ -101,10 +118,7 @@ export function TaskList({ initialTasks, totalPages }: { initialTasks: TaskWithR
                         {task.contests.name}
                       </span>
                     ) : (
-                      <div className="flex items-center gap-1.5 text-neutral-500 text-xs">
-                        <AlertTriangle className="w-3 h-3 text-amber-500/50" />
-                        Unassigned
-                      </div>
+                        <span className="text-neutral-500 text-xs italic">Unassigned</span>
                     )}
                   </TableCell>
                   <TableCell>

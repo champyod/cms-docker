@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
 import { X, Loader2, RefreshCw, Terminal, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
@@ -16,9 +17,15 @@ interface SubmissionModalProps {
 
 export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModalProps) {
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
   const result = submission.submission_results[0]; // Active result
 
-  if (!isOpen) return null;
+    if (!isOpen || !mounted) return null;
 
   const handleRecalculate = async (type: 'score' | 'evaluation' | 'full') => {
       if (!confirm(`Are you sure you want to recalculate (${type})? This will clear current results.`)) return;
@@ -34,7 +41,7 @@ export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModal
       }
   };
 
-  return (
+    return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-black/80 backdrop-blur-sm p-4">
       <Card className="w-full max-w-4xl max-h-[90vh] flex flex-col relative animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
         
@@ -172,6 +179,7 @@ export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModal
         </div>
 
       </Card>
-    </div>
+      </div>,
+      document.body
   );
 }

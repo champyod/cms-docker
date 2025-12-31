@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Database } from 'lucide-react';
+import { X, Database, Loader2, Plus, Trash2, CheckCircle2 } from 'lucide-react';
+import { Portal } from '../core/Portal';
 import { createDataset } from '@/app/actions/datasets';
 
 interface DatasetModalProps {
@@ -36,8 +37,6 @@ export function DatasetModal({ isOpen, onClose, taskId, onSuccess }: DatasetModa
     };
   }, [isOpen]);
 
-  if (!isOpen) return null;
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -68,20 +67,21 @@ export function DatasetModal({ isOpen, onClose, taskId, onSuccess }: DatasetModa
     }
   };
 
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden">
-      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      
-      <div className="relative z-10 w-full max-w-lg mx-4 bg-neutral-900 border border-white/10 rounded-xl shadow-2xl">
-        <div className="flex items-center justify-between p-4 border-b border-white/10">
-          <div className="flex items-center gap-2">
-            <Database className="w-5 h-5 text-amber-400" />
-            <h2 className="text-lg font-bold text-white">Create Dataset</h2>
+    <Portal>
+      <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-black/80 backdrop-blur-sm p-4" onClick={onClose}>
+        <div className="relative z-10 w-full max-w-lg bg-neutral-900 border border-white/10 rounded-xl shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between p-4 border-b border-white/10">
+            <div className="flex items-center gap-2">
+              <Database className="w-5 h-5 text-amber-400" />
+              <h2 className="text-lg font-bold text-white">Create Dataset</h2>
+            </div>
+            <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-lg transition-colors">
+              <X className="w-5 h-5 text-neutral-400" />
+            </button>
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-lg transition-colors">
-            <X className="w-5 h-5 text-neutral-400" />
-          </button>
-        </div>
         
         {error && (
           <div className="mx-4 mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
@@ -168,5 +168,6 @@ export function DatasetModal({ isOpen, onClose, taskId, onSuccess }: DatasetModa
         </form>
       </div>
     </div>
+    </Portal>
   );
 }

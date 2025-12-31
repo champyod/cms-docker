@@ -16,7 +16,7 @@ export async function getTasks({ page = 1, search = '' }: { page?: number; searc
     ],
   } : {};
 
-  const [tasks, total] = await Promise.all([
+  const [rawTasks, total] = await Promise.all([
     prisma.tasks.findMany({
       where,
       skip,
@@ -24,9 +24,13 @@ export async function getTasks({ page = 1, search = '' }: { page?: number; searc
       orderBy: { id: 'desc' },
       include: {
         contests: { select: { id: true, name: true } },
-        statements: true,
+        statements: { select: { id: true } },
         datasets_datasets_task_idTotasks: {
-          select: { id: true, description: true }
+          select: {
+            id: true,
+            description: true,
+            _count: { select: { testcases: true } }
+          }
         },
         _count: {
           select: { submissions: true }
@@ -36,8 +40,34 @@ export async function getTasks({ page = 1, search = '' }: { page?: number; searc
     prisma.tasks.count({ where }),
   ]);
 
+  // Calculate diagnostics for each task
+  const tasksWithDiagnostics = rawTasks.map((task) => {
+    const diagnostics: TaskDiagnostic[] = [];
+
+    if (!task.active_dataset_id) {
+      diagnostics.push({ type: 'error', message: 'No active dataset selected.' });
+    } else {
+      const activeDataset = task.datasets_datasets_task_idTotasks.find((d: any) => d.id === task.active_dataset_id);
+      if (!activeDataset) {
+        diagnostics.push({ type: 'error', message: 'Active dataset not found.' });
+      } else if (activeDataset._count.testcases === 0) {
+        diagnostics.push({ type: 'error', message: 'Active dataset has no test cases.' });
+      }
+    }
+
+    if (task.statements.length === 0) {
+      diagnostics.push({ type: 'error', message: 'No statements found.' });
+    }
+
+    if (!task.contest_id) {
+      diagnostics.push({ type: 'warning', message: 'Not assigned to any contest.' });
+    }
+
+    return { ...task, diagnostics };
+  });
+
   return {
-    tasks,
+    tasks: tasksWithDiagnostics,
     totalPages: Math.ceil(total / TASKS_PER_PAGE),
     total,
   };
@@ -47,12 +77,21 @@ export async function getTask(id: number) {
   return prisma.tasks.findUnique({
     where: { id },
     include: {
-      contests: true,
-      statements: true,
+      contests: {
+        select: {
+          id: true,
+          name: true,
+          start: true,
+          stop: true,
+          analysis_start: true,
+          analysis_stop: true
+        }
+      },
+      statements: { select: { id: true, language: true } },
       attachments: true,
       datasets_datasets_task_idTotasks: {
         include: {
-          testcases: { orderBy: { codename: 'asc' } },
+          testcases: { select: { id: true, codename: true } },
           managers: true,
         }
       },
@@ -61,6 +100,55 @@ export async function getTask(id: number) {
       }
     }
   });
+}
+
+export interface TaskDiagnostic {
+  type: 'error' | 'warning';
+  message: string;
+}
+
+export async function getTaskDiagnostics(taskId: number): Promise<TaskDiagnostic[]> {
+  const task = await prisma.tasks.findUnique({
+    where: { id: taskId },
+    include: {
+      statements: { select: { id: true } },
+      datasets_datasets_task_idTotasks: {
+        where: { id: { not: undefined } }, // Just to check if any exist
+        include: { testcases: { select: { id: true } } }
+      }
+    }
+  });
+
+  if (!task) return [];
+
+  const diagnostics: TaskDiagnostic[] = [];
+
+  // Critical errors (unusable)
+  if (!task.active_dataset_id) {
+    diagnostics.push({ type: 'error', message: 'No active dataset selected. Task cannot be judged.' });
+  }
+
+  const activeDataset = task.active_dataset_id
+    ? await prisma.datasets.findUnique({
+      where: { id: task.active_dataset_id },
+      include: { testcases: { select: { id: true } } }
+    })
+    : null;
+
+  if (task.active_dataset_id && (!activeDataset?.testcases || activeDataset.testcases.length === 0)) {
+    diagnostics.push({ type: 'error', message: 'Active dataset has no test cases.' });
+  }
+
+  if (task.statements.length === 0) {
+    diagnostics.push({ type: 'error', message: 'No statements found. Users won\'t see instructions.' });
+  }
+
+  // Warnings
+  if (!task.contest_id) {
+    diagnostics.push({ type: 'warning', message: 'Not assigned to any contest.' });
+  }
+
+  return diagnostics;
 }
 
 export interface TaskData {
@@ -90,8 +178,11 @@ function sanitize<T>(value: T | undefined | null): T | null {
   if (value === undefined || value === null || (value as any) === '$undefined') {
     return null;
   }
+  if (typeof value === 'string' && value.trim() === '') {
+    return null;
+  }
   if (Array.isArray(value)) {
-    return value.map(v => (v === '$undefined' ? null : v)) as unknown as T;
+    return value.map(v => (v === '$undefined' || v === '' ? null : v)) as unknown as T;
   }
   return value;
 }
@@ -142,7 +233,7 @@ export async function createTask(data: TaskData): Promise<{ success: boolean; wa
   }
 }
 
-export async function updateTask(id: number, data: Partial<TaskData>): Promise<{ success: boolean; warning?: string | null; error?: string }> {
+export async function updateTask(id: number, data: Partial<TaskData>): Promise<{ success: boolean; diagnostics?: TaskDiagnostic[]; error?: string }> {
   try {
     // 1. Sanitize all incoming fields
     const sanitizedData: any = {};
@@ -150,7 +241,7 @@ export async function updateTask(id: number, data: Partial<TaskData>): Promise<{
       sanitizedData[key] = sanitize((data as any)[key]);
     }
 
-    // 2. Update standard fields using Prisma for type safety and partial updates
+    // 2. Prepare updates
     const standardFields: any = {};
     const intervalFields: any = {};
 
@@ -161,11 +252,24 @@ export async function updateTask(id: number, data: Partial<TaskData>): Promise<{
       'min_user_test_interval',
     ];
 
+    // Explicitly allow NULLs for these fields so they can be cleared
+    const nullableKeys = [
+      'contest_id',
+      'token_max_number',
+      'token_gen_max',
+      'max_submission_number',
+      'max_user_test_number',
+      ...intervalKeys
+    ];
+
     for (const key in sanitizedData) {
       if (intervalKeys.includes(key)) {
         intervalFields[key] = sanitizedData[key];
-      } else if (sanitizedData[key] !== null) {
-        standardFields[key] = sanitizedData[key];
+      } else {
+        // Only skip null if it's NOT a nullable field
+        if (sanitizedData[key] !== null || nullableKeys.includes(key)) {
+          standardFields[key] = sanitizedData[key];
+        }
       }
     }
 
@@ -182,40 +286,30 @@ export async function updateTask(id: number, data: Partial<TaskData>): Promise<{
     }
 
     // 3. Update interval fields using raw SQL (Prisma doesn't support them well)
-    // Only update if they were actually provided and not just "missing"
     if (Object.keys(intervalFields).length > 0) {
-      const token_min_interval = intervalFields.token_min_interval !== null ? `${intervalFields.token_min_interval} seconds` : null;
-      const token_gen_interval = intervalFields.token_gen_interval !== null ? `${intervalFields.token_gen_interval} minutes` : null;
-      const min_submission_interval = intervalFields.min_submission_interval !== null ? `${intervalFields.min_submission_interval} seconds` : null;
-      const min_user_test_interval = intervalFields.min_user_test_interval !== null ? `${intervalFields.min_user_test_interval} seconds` : null;
+      const getVal = (val: any, unit: string) => val !== null ? `${val} ${unit}` : null;
+
+      const token_min_interval = getVal(intervalFields.token_min_interval, 'seconds');
+      const token_gen_interval = getVal(intervalFields.token_gen_interval, 'minutes');
+      const min_submission_interval = getVal(intervalFields.min_submission_interval, 'seconds');
+      const min_user_test_interval = getVal(intervalFields.min_user_test_interval, 'seconds');
 
       await prisma.$executeRaw`
         UPDATE tasks SET
-          token_min_interval = CASE WHEN ${token_min_interval}::text IS NOT NULL THEN ${token_min_interval}::interval ELSE token_min_interval END,
-          token_gen_interval = CASE WHEN ${token_gen_interval}::text IS NOT NULL THEN ${token_gen_interval}::interval ELSE token_gen_interval END,
-          min_submission_interval = CASE WHEN ${min_submission_interval}::text IS NOT NULL THEN ${min_submission_interval}::interval ELSE min_submission_interval END,
-          min_user_test_interval = CASE WHEN ${min_user_test_interval}::text IS NOT NULL THEN ${min_user_test_interval}::interval ELSE min_user_test_interval END
+          token_min_interval = ${token_min_interval}::interval,
+          token_gen_interval = ${token_gen_interval}::interval,
+          min_submission_interval = ${min_submission_interval}::interval,
+          min_user_test_interval = ${min_user_test_interval}::interval
         WHERE id = ${id}
       `;
     }
 
-    // 4. Check for "completeness" warnings
-    const task = await prisma.tasks.findUnique({
-      where: { id },
-      select: { active_dataset_id: true, contest_id: true }
-    });
-
-    let warning = null;
-    if (!task?.active_dataset_id) {
-      warning = "Task has no active dataset and will be unusable in contests.";
-    } else if (!task?.contest_id) {
-      warning = "Task is not assigned to any contest.";
-    }
+    const diagnostics = await getTaskDiagnostics(id);
 
     revalidatePath('/[locale]/tasks');
     revalidatePath(`/[locale]/tasks/${id}`);
 
-    return { success: true, warning };
+    return { success: true, diagnostics };
   } catch (error) {
     const e = error as Error;
     console.error('Update Task Error:', e);

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
 import { X, Loader2, Eye, EyeOff } from 'lucide-react';
@@ -19,6 +20,11 @@ export function UserModal({ isOpen, onClose, user, onSuccess }: UserModalProps) 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
@@ -50,7 +56,7 @@ export function UserModal({ isOpen, onClose, user, onSuccess }: UserModalProps) 
     }
   }, [user, isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,7 +84,7 @@ export function UserModal({ isOpen, onClose, user, onSuccess }: UserModalProps) 
     }
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-black/80 backdrop-blur-sm p-4">
       <Card className="w-full max-w-md p-6 relative animate-in fade-in zoom-in-95 duration-200 bg-neutral-900/80 border-white/10 shadow-2xl">
         <button
@@ -202,6 +208,7 @@ export function UserModal({ isOpen, onClose, user, onSuccess }: UserModalProps) 
           </div>
         </form>
       </Card>
-    </div>
+    </div>,
+    document.body
   );
 }

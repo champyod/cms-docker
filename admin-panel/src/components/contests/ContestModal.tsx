@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
 import { X, Loader2, Calendar, Shield, Cpu, Clock, Settings, FileText } from 'lucide-react';
@@ -28,6 +29,11 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<Tab>('general');
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -177,9 +183,9 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
     });
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-black/80 backdrop-blur-md p-4">
       <Card className="w-full max-w-4xl h-[90vh] flex flex-col p-0 relative animate-in fade-in zoom-in-95 duration-200 glass-card border-white/10 shadow-2xl overflow-hidden">
         {/* Header */}
@@ -431,6 +437,7 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
             </Button>
         </div>
       </Card>
-    </div>
+    </div>,
+    document.body
   );
 }

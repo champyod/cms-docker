@@ -1,11 +1,13 @@
 'use client';
+import { createPortal } from 'react-dom';
 
 import { useState, useEffect } from 'react';
 import { X, FileCode, Settings, Clock, Cpu, FileType, CheckSquare } from 'lucide-react';
-import { createTask, updateTask, type TaskData } from '@/app/actions/tasks';
+import { createTask, updateTask, type TaskData, type TaskDiagnostic } from '@/app/actions/tasks';
 import { tasks } from '@prisma/client';
 import { PROGRAMMING_LANGUAGES } from '@/lib/constants';
 import { useToast } from '@/components/core/Toast';
+import { AlertTriangle, AlertCircle } from 'lucide-react';
 
 interface TaskModalProps {
   isOpen: boolean;
@@ -43,6 +45,11 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (task) {
@@ -76,8 +83,6 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
     setError('');
   }, [task, isOpen]);
 
-  if (!isOpen) return null;
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -89,8 +94,13 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
         : await createTask(formData);
 
       if (result.success) {
-        if ('warning' in result && result.warning) {
-          addToast(result.warning, 'warning');
+        if ('diagnostics' in result && result.diagnostics && result.diagnostics.length > 0) {
+          const errors = result.diagnostics.filter(d => d.type === 'error');
+          if (errors.length > 0) {
+            addToast(`Task saved with ${errors.length} errors. It will be unusable until fixed.`, 'warning');
+          } else {
+            addToast('Task saved with warnings.', 'info');
+          }
         } else {
           addToast(task ? 'Task updated successfully' : 'Task created successfully', 'success');
         }
@@ -122,7 +132,9 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
     setFormData({ ...formData, submission_format: updated });
   };
 
-  return (
+  if (!isOpen || !mounted) return null;
+
+  return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden">
       <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
       
@@ -436,6 +448,7 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

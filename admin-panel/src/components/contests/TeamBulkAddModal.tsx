@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { X, Users, UsersRound } from 'lucide-react';
+import { Portal } from '../core/Portal';
 import { addTeamToContest } from '@/app/actions/participations';
 import { teams } from '@prisma/client';
 
@@ -69,10 +70,9 @@ export function TeamBulkAddModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden">
-      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      
-      <div className="relative z-10 w-full max-w-md mx-4 bg-neutral-900 border border-white/10 rounded-xl shadow-2xl">
+    <Portal>
+      <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-black/80 backdrop-blur-sm p-4" onClick={onClose}>
+        <div className="relative z-10 w-full max-w-md mx-4 bg-neutral-900 border border-white/10 rounded-xl shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b border-white/10">
           <div className="flex items-center gap-2">
             <UsersRound className="w-5 h-5 text-indigo-400" />
@@ -156,5 +156,6 @@ export function TeamBulkAddModal({
         </form>
       </div>
     </div>
+    </Portal>
   );
 }

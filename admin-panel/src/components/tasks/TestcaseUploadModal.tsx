@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { X, Upload, FileText, Check, AlertCircle, Loader } from 'lucide-react';
+import { Portal } from '../core/Portal';
 import { batchUploadTestcases } from '@/app/actions/testcases';
 
 interface TestcaseUploadModalProps {
@@ -114,10 +115,9 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden">
-      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      
-      <div className="relative z-10 w-full max-w-2xl h-[80vh] bg-neutral-900 border border-white/10 rounded-xl shadow-2xl flex flex-col">
+    <Portal>
+      <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-black/80 backdrop-blur-sm p-4" onClick={onClose}>
+        <div className="relative z-10 w-full max-w-2xl h-[80vh] bg-neutral-900 border border-white/10 rounded-xl shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b border-white/10 shrink-0">
           <div className="flex items-center gap-2">
             <Upload className="w-5 h-5 text-cyan-400" />
@@ -194,5 +194,6 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
         </div>
       </div>
     </div>
+    </Portal>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Shield, Loader, Eye, EyeOff, Info } from 'lucide-react';
 import { createAdmin, updateAdmin } from '@/app/actions/admins';
 import { admins } from '@prisma/client';
@@ -27,6 +28,11 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (initialData) {
@@ -55,7 +61,7 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
     setError('');
   }, [initialData, isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,7 +101,7 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
     setLoading(false);
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden">
       <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
       
@@ -292,6 +298,7 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
