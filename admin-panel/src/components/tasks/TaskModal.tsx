@@ -51,6 +51,25 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
     setMounted(true);
   }, []);
 
+  // Helper to parse Postgres intervals returned by Prisma
+  const parseInterval = (val: any) => {
+    if (!val) return undefined;
+    if (typeof val === 'number') return val;
+    // Typical Postgres interval object: { days, hours, minutes, seconds, milliseconds }
+    if (typeof val === 'object') {
+      let total = 0;
+      if (val.days) total += val.days * 24 * 3600;
+      if (val.hours) total += val.hours * 3600;
+      if (val.minutes) total += val.minutes * 60;
+      if (val.seconds) total += val.seconds;
+      // We mostly care about seconds or minutes depending on context
+      // but the inputs expect raw numbers.
+      // This is a bit lossy but works for the current schema usage.
+      return total;
+    }
+    return undefined;
+  };
+
   useEffect(() => {
     if (task) {
       setFormData({
@@ -68,10 +87,10 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
         token_gen_max: task.token_gen_max ?? undefined,
         max_submission_number: task.max_submission_number ?? undefined,
         max_user_test_number: task.max_user_test_number ?? undefined,
-        token_min_interval: undefined,
-        token_gen_interval: undefined,
-        min_submission_interval: undefined,
-        min_user_test_interval: undefined,
+        token_min_interval: parseInterval((task as any).token_min_interval),
+        token_gen_interval: parseInterval((task as any).token_gen_interval) ? Math.floor(parseInterval((task as any).token_gen_interval)! / 60) : undefined,
+        min_submission_interval: parseInterval((task as any).min_submission_interval),
+        min_user_test_interval: parseInterval((task as any).min_user_test_interval),
       });
     } else {
       setFormData({
@@ -97,7 +116,7 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
         if ('diagnostics' in result && result.diagnostics && result.diagnostics.length > 0) {
           const errors = result.diagnostics.filter(d => d.type === 'error');
           if (errors.length > 0) {
-            addToast(`Task saved with ${errors.length} errors. It will be unusable until fixed.`, 'warning');
+            addToast(`Task saved with ${errors.length} configuration errors.`, 'warning');
           } else {
             addToast('Task saved with warnings.', 'info');
           }
@@ -107,10 +126,10 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
         onSuccess();
         onClose();
       } else {
-        setError('error' in result && result.error ? (result.error as string) : 'An error occurred');
+        setError(result.error || 'An error occurred');
       }
-    } catch (err) {
-      setError('An unexpected error occurred');
+    } catch (err: any) {
+      setError(err?.message || 'An unexpected error occurred');
     } finally {
       setLoading(false);
     }
@@ -320,15 +339,17 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
 
                   {formData.token_mode !== 'disabled' && (
                     <div className="grid grid-cols-2 gap-6 p-4 bg-white/5 rounded-xl">
-                      <div>
-                        <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Max Tokens</label>
-                        <input
-                          type="number"
-                          value={formData.token_max_number === undefined ? '' : formData.token_max_number}
-                          onChange={(e) => setFormData({ ...formData, token_max_number: e.target.value ? parseInt(e.target.value) : undefined })}
-                          className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-indigo-500/50"
-                        />
-                      </div>
+                      {formData.token_mode === 'finite' && (
+                        <div>
+                          <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Max Tokens</label>
+                          <input
+                            type="number"
+                            value={formData.token_max_number === undefined ? '' : formData.token_max_number}
+                            onChange={(e) => setFormData({ ...formData, token_max_number: e.target.value ? parseInt(e.target.value) : undefined })}
+                            className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-indigo-500/50"
+                          />
+                        </div>
+                      )}
                       <div>
                         <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Min Interval (s)</label>
                         <input
@@ -365,16 +386,18 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
                           className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-indigo-500/50"
                         />
                       </div>
-                      <div>
-                        <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Max Gen Count</label>
-                        <input
-                          type="number"
-                          value={formData.token_gen_max === undefined ? '' : formData.token_gen_max}
-                          onChange={(e) => setFormData({ ...formData, token_gen_max: e.target.value ? parseInt(e.target.value) : undefined })}
-                          placeholder="Unlimited"
-                          className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-indigo-500/50"
-                        />
-                      </div>
+                      {formData.token_mode === 'finite' && (
+                        <div>
+                          <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Max Gen Count</label>
+                          <input
+                            type="number"
+                            value={formData.token_gen_max === undefined ? '' : formData.token_gen_max}
+                            onChange={(e) => setFormData({ ...formData, token_gen_max: e.target.value ? parseInt(e.target.value) : undefined })}
+                            placeholder="Unlimited"
+                            className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-indigo-500/50"
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

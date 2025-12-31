@@ -245,39 +245,50 @@ export async function updateTask(id: number, data: Partial<TaskData>): Promise<{
     const standardFields: any = {};
     const intervalFields: any = {};
 
-    const intervalKeys = [
+    // Defined in schema as NOT NULL
+    const requiredIntervalKeys = [
       'token_min_interval',
       'token_gen_interval',
+    ];
+
+    // Defined in schema as NULLable
+    const optionalIntervalKeys = [
       'min_submission_interval',
       'min_user_test_interval',
     ];
 
-    // Explicitly allow NULLs for these fields so they can be cleared
+    const allIntervalKeys = [...requiredIntervalKeys, ...optionalIntervalKeys];
+
+    // Fields that are allowed to be set to NULL in the database
     const nullableKeys = [
       'contest_id',
       'token_max_number',
       'token_gen_max',
       'max_submission_number',
       'max_user_test_number',
-      ...intervalKeys
+      ...optionalIntervalKeys
     ];
 
     for (const key in sanitizedData) {
-      if (intervalKeys.includes(key)) {
-        intervalFields[key] = sanitizedData[key];
+      if (allIntervalKeys.includes(key)) {
+        // If it's a required interval, only update if not null
+        if (requiredIntervalKeys.includes(key)) {
+          if (sanitizedData[key] !== null) {
+            intervalFields[key] = sanitizedData[key];
+          }
+        } else {
+          // It's an optional interval, always include (can be set to null)
+          intervalFields[key] = sanitizedData[key];
+        }
       } else {
-        // Only skip null if it's NOT a nullable field
+        // Standard fields: include if not null OR if explicitly allowed to be null
         if (sanitizedData[key] !== null || nullableKeys.includes(key)) {
           standardFields[key] = sanitizedData[key];
         }
       }
     }
 
-    // Handle enums explicitly if they are provided
-    if (standardFields.score_mode) standardFields.score_mode = standardFields.score_mode;
-    if (standardFields.feedback_level) standardFields.feedback_level = standardFields.feedback_level;
-    if (standardFields.token_mode) standardFields.token_mode = standardFields.token_mode;
-
+    // Perform updates if there are standard fields
     if (Object.keys(standardFields).length > 0) {
       await prisma.tasks.update({
         where: { id },
@@ -285,23 +296,32 @@ export async function updateTask(id: number, data: Partial<TaskData>): Promise<{
       });
     }
 
-    // 3. Update interval fields using raw SQL (Prisma doesn't support them well)
+    // 3. Update interval fields using raw SQL
     if (Object.keys(intervalFields).length > 0) {
-      const getVal = (val: any, unit: string) => val !== null ? `${val} ${unit}` : null;
+      const setClauses: string[] = [];
+      const params: any[] = [];
 
-      const token_min_interval = getVal(intervalFields.token_min_interval, 'seconds');
-      const token_gen_interval = getVal(intervalFields.token_gen_interval, 'minutes');
-      const min_submission_interval = getVal(intervalFields.min_submission_interval, 'seconds');
-      const min_user_test_interval = getVal(intervalFields.min_user_test_interval, 'seconds');
+      const addIntervalClause = (key: string, unit: string) => {
+        if (key in intervalFields) {
+          if (intervalFields[key] === null) {
+            setClauses.push(`${key} = NULL`);
+          } else {
+            params.push(`${intervalFields[key]} ${unit}`);
+            setClauses.push(`${key} = $${params.length}::interval`);
+          }
+        }
+      };
 
-      await prisma.$executeRaw`
-        UPDATE tasks SET
-          token_min_interval = ${token_min_interval}::interval,
-          token_gen_interval = ${token_gen_interval}::interval,
-          min_submission_interval = ${min_submission_interval}::interval,
-          min_user_test_interval = ${min_user_test_interval}::interval
-        WHERE id = ${id}
-      `;
+      addIntervalClause('token_min_interval', 'seconds');
+      addIntervalClause('token_gen_interval', 'minutes');
+      addIntervalClause('min_submission_interval', 'seconds');
+      addIntervalClause('min_user_test_interval', 'seconds');
+
+      if (setClauses.length > 0) {
+        params.push(id);
+        const query = `UPDATE tasks SET ${setClauses.join(', ')} WHERE id = $${params.length}`;
+        await prisma.$executeRawUnsafe(query, ...params);
+      }
     }
 
     const diagnostics = await getTaskDiagnostics(id);
@@ -311,9 +331,15 @@ export async function updateTask(id: number, data: Partial<TaskData>): Promise<{
 
     return { success: true, diagnostics };
   } catch (error) {
-    const e = error as Error;
+    const e = error as Error & { code?: string; meta?: any };
     console.error('Update Task Error:', e);
-    return { success: false, error: e.message };
+
+    if (e.code === 'P2002') {
+      const target = e.meta?.target || [];
+      if (target.includes('name')) return { success: false, error: 'Task name already exists' };
+    }
+
+    return { success: false, error: e.message || 'An unexpected error occurred during update' };
   }
 }
 
