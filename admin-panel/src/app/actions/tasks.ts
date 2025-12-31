@@ -113,7 +113,6 @@ export async function getTaskDiagnostics(taskId: number): Promise<TaskDiagnostic
     include: {
       statements: { select: { id: true } },
       datasets_datasets_task_idTotasks: {
-        where: { id: { not: undefined } }, // Just to check if any exist
         include: { testcases: { select: { id: true } } }
       }
     }
@@ -320,26 +319,29 @@ export async function updateTask(id: number, data: Partial<TaskData>): Promise<{
       if (setClauses.length > 0) {
         params.push(id);
         const query = `UPDATE tasks SET ${setClauses.join(', ')} WHERE id = $${params.length}`;
-        await prisma.$executeRawUnsafe(query, ...params);
+        try {
+          await prisma.$executeRawUnsafe(query, ...params);
+        } catch (sqlErr: any) {
+          console.error('SQL Update Error:', sqlErr);
+          throw new Error(`Database interval update failed: ${sqlErr.message}`);
+        }
       }
     }
 
-    const diagnostics = await getTaskDiagnostics(id);
-
-    revalidatePath('/[locale]/tasks');
-    revalidatePath(`/[locale]/tasks/${id}`);
-
-    return { success: true, diagnostics };
-  } catch (error) {
-    const e = error as Error & { code?: string; meta?: any };
-    console.error('Update Task Error:', e);
-
-    if (e.code === 'P2002') {
-      const target = e.meta?.target || [];
-      if (target.includes('name')) return { success: false, error: 'Task name already exists' };
+    // Try revalidate but don't fail if it doesn't work
+    try {
+      revalidatePath('/', 'layout');
+    } catch (e) {
+      console.error('Revalidate error:', e);
     }
 
-    return { success: false, error: e.message || 'An unexpected error occurred during update' };
+    return { success: true };
+  } catch (error: any) {
+    console.error('Update Task Global Error:', error);
+    return {
+      success: false,
+      error: error.message || 'An unexpected error occurred during update'
+    };
   }
 }
 
