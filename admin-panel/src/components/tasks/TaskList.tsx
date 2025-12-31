@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
-import { Edit2, Trash2, Plus, FileText, Database, ExternalLink } from 'lucide-react';
+import { Edit2, Trash2, Plus, FileText, Database, ExternalLink, AlertTriangle } from 'lucide-react';
 import { TaskModal } from './TaskModal';
 import { deleteTask } from '@/app/actions/tasks';
 
@@ -75,65 +75,73 @@ export function TaskList({ initialTasks, totalPages }: { initialTasks: TaskWithR
             </TableRow>
           </TableHeader>
           <TableBody>
-            {tasks.map((task) => (
-              <TableRow key={task.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                <TableCell className="font-mono text-neutral-500 text-xs">#{task.id}</TableCell>
-                <TableCell className="font-medium text-white max-w-[150px]">
-                  <button 
-                    onClick={() => router.push(`/en/tasks/${task.id}`)}
-                    className="flex items-center gap-2 hover:text-indigo-400 transition-colors truncate"
-                    title={task.name}
-                  >
-                    {task.name}
-                    <ExternalLink className="w-3 h-3 opacity-50" />
-                  </button>
-                </TableCell>
-                <TableCell className="text-neutral-300 max-w-[200px] truncate" title={task.title}>
-                  {task.title}
-                </TableCell>
-                <TableCell>
-                  {task.contests ? (
-                    <span className="px-2 py-1 rounded-full text-xs font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                      {task.contests.name}
-                    </span>
-                  ) : (
-                    <span className="text-neutral-500 text-xs">Unassigned</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-3 text-xs text-neutral-400">
-                    <div className="flex items-center gap-1" title="Statements">
-                      <FileText className="w-3 h-3" />
-                      <span>{task.statements.length}</span>
-                    </div>
-                    <div className="flex items-center gap-1" title="Datasets">
-                      <Database className="w-3 h-3" />
-                      <span>{task.datasets_datasets_task_idTotasks.length}</span>
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={() => handleEdit(task)}
-                      className="h-8 w-8 p-0 text-neutral-400 hover:text-indigo-400"
+            {tasks.map((task) => {
+              const isUnusable = !task.active_dataset_id;
+
+              return (
+                <TableRow key={task.id} className={`border-b border-white/5 hover:bg-white/5 transition-colors ${isUnusable ? 'opacity-60' : ''}`}>
+                  <TableCell className="font-mono text-neutral-500 text-xs text-nowrap">#{task.id}</TableCell>
+                  <TableCell className="font-medium text-white max-w-[150px]">
+                    <button
+                      onClick={() => router.push(`/en/tasks/${task.id}`)}
+                      className={`flex items-center gap-2 hover:text-indigo-400 transition-colors truncate ${isUnusable ? 'text-neutral-400' : ''}`}
+                      title={isUnusable ? `${task.name} (Unusable - No active dataset)` : task.name}
                     >
-                      <Edit2 className="w-4 h-4" />
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={() => handleDelete(task.id)}
-                      className="h-8 w-8 p-0 text-neutral-400 hover:text-red-400"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
+                      {isUnusable && <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />}
+                      {task.name}
+                      <ExternalLink className="w-3 h-3 opacity-50" />
+                    </button>
+                  </TableCell>
+                  <TableCell className={`max-w-[200px] truncate ${isUnusable ? 'text-neutral-500 italic' : 'text-neutral-300'}`} title={task.title}>
+                    {task.title}
+                  </TableCell>
+                  <TableCell>
+                    {task.contests ? (
+                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                        {task.contests.name}
+                      </span>
+                    ) : (
+                      <div className="flex items-center gap-1.5 text-neutral-500 text-xs">
+                        <AlertTriangle className="w-3 h-3 text-amber-500/50" />
+                        Unassigned
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-3 text-xs text-neutral-400">
+                      <div className="flex items-center gap-1" title="Statements">
+                        <FileText className="w-3 h-3" />
+                        <span>{task.statements.length}</span>
+                      </div>
+                      <div className="flex items-center gap-1" title="Datasets">
+                        <Database className="w-3 h-3" />
+                        <span>{task.datasets_datasets_task_idTotasks.length}</span>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEdit(task)}
+                        className="h-8 w-8 p-0 text-neutral-400 hover:text-indigo-400"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(task.id)}
+                        className="h-8 w-8 p-0 text-neutral-400 hover:text-red-400"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
             {tasks.length === 0 && (
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-12 text-neutral-500">

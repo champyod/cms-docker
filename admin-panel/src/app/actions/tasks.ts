@@ -90,10 +90,13 @@ function sanitize<T>(value: T | undefined | null): T | null {
   if (value === undefined || value === null || (value as any) === '$undefined') {
     return null;
   }
+  if (Array.isArray(value)) {
+    return value.map(v => (v === '$undefined' ? null : v)) as unknown as T;
+  }
   return value;
 }
 
-export async function createTask(data: TaskData) {
+export async function createTask(data: TaskData): Promise<{ success: boolean; warning?: string | null; error?: string }> {
   try {
     const token_min_interval = sanitize(data.token_min_interval) !== null ? `${data.token_min_interval} seconds` : '0 seconds';
     const token_gen_interval = sanitize(data.token_gen_interval) !== null ? `${data.token_gen_interval} minutes` : '30 minutes';
@@ -121,7 +124,15 @@ export async function createTask(data: TaskData) {
     `;
     
     revalidatePath('/[locale]/tasks');
-    return { success: true };
+
+    let warning = null;
+    if (!sanitize(data.contest_id)) {
+      warning = "Task created but not assigned to any contest. It will also need a dataset to be usable.";
+    } else {
+      warning = "Task created. It will need a dataset to be usable.";
+    }
+
+    return { success: true, warning };
   } catch (error) {
     const e = error as Error & { code?: string };
     if (e.message?.includes('unique constraint')) {
@@ -131,45 +142,83 @@ export async function createTask(data: TaskData) {
   }
 }
 
-export async function updateTask(id: number, data: Partial<TaskData>) {
+export async function updateTask(id: number, data: Partial<TaskData>): Promise<{ success: boolean; warning?: string | null; error?: string }> {
   try {
-    const token_min_interval = sanitize(data.token_min_interval) !== null ? `${data.token_min_interval} seconds` : null;
-    const token_gen_interval = sanitize(data.token_gen_interval) !== null ? `${data.token_gen_interval} minutes` : null;
-    const min_submission_interval = sanitize(data.min_submission_interval) !== null ? `${data.min_submission_interval} seconds` : null;
-    const min_user_test_interval = sanitize(data.min_user_test_interval) !== null ? `${data.min_user_test_interval} seconds` : null;
+    // 1. Sanitize all incoming fields
+    const sanitizedData: any = {};
+    for (const key in data) {
+      sanitizedData[key] = sanitize((data as any)[key]);
+    }
 
-    await prisma.$executeRaw`
-      UPDATE tasks SET
-        name = COALESCE(${data.name}, name),
-        title = COALESCE(${data.title}, title),
-        contest_id = COALESCE(${sanitize(data.contest_id)}, contest_id),
-        allowed_languages = COALESCE(${data.allowed_languages}, allowed_languages),
-        submission_format = COALESCE(${data.submission_format}, submission_format),
-        
-        score_precision = COALESCE(${data.score_precision}, score_precision),
-        score_mode = COALESCE(${data.score_mode}::score_mode, score_mode),
-        feedback_level = COALESCE(${data.feedback_level}::feedback_level, feedback_level),
+    // 2. Update standard fields using Prisma for type safety and partial updates
+    const standardFields: any = {};
+    const intervalFields: any = {};
 
-        token_mode = COALESCE(${data.token_mode}::token_mode, token_mode),
-        token_max_number = COALESCE(${sanitize(data.token_max_number)}, token_max_number),
-        token_gen_initial = COALESCE(${sanitize(data.token_gen_initial)}, token_gen_initial),
-        token_gen_number = COALESCE(${sanitize(data.token_gen_number)}, token_gen_number),
-        token_gen_max = COALESCE(${sanitize(data.token_gen_max)}, token_gen_max),
+    const intervalKeys = [
+      'token_min_interval',
+      'token_gen_interval',
+      'min_submission_interval',
+      'min_user_test_interval',
+    ];
 
-        max_submission_number = COALESCE(${sanitize(data.max_submission_number)}, max_submission_number),
-        max_user_test_number = COALESCE(${sanitize(data.max_user_test_number)}, max_user_test_number),
+    for (const key in sanitizedData) {
+      if (intervalKeys.includes(key)) {
+        intervalFields[key] = sanitizedData[key];
+      } else if (sanitizedData[key] !== null) {
+        standardFields[key] = sanitizedData[key];
+      }
+    }
 
-        token_min_interval = CASE WHEN ${token_min_interval}::text IS NOT NULL THEN ${token_min_interval}::interval ELSE token_min_interval END,
-        token_gen_interval = CASE WHEN ${token_gen_interval}::text IS NOT NULL THEN ${token_gen_interval}::interval ELSE token_gen_interval END,
-        min_submission_interval = CASE WHEN ${min_submission_interval}::text IS NOT NULL THEN ${min_submission_interval}::interval ELSE min_submission_interval END,
-        min_user_test_interval = CASE WHEN ${min_user_test_interval}::text IS NOT NULL THEN ${min_user_test_interval}::interval ELSE min_user_test_interval END
-      WHERE id = ${id}
-    `;
+    // Handle enums explicitly if they are provided
+    if (standardFields.score_mode) standardFields.score_mode = standardFields.score_mode;
+    if (standardFields.feedback_level) standardFields.feedback_level = standardFields.feedback_level;
+    if (standardFields.token_mode) standardFields.token_mode = standardFields.token_mode;
+
+    if (Object.keys(standardFields).length > 0) {
+      await prisma.tasks.update({
+        where: { id },
+        data: standardFields,
+      });
+    }
+
+    // 3. Update interval fields using raw SQL (Prisma doesn't support them well)
+    // Only update if they were actually provided and not just "missing"
+    if (Object.keys(intervalFields).length > 0) {
+      const token_min_interval = intervalFields.token_min_interval !== null ? `${intervalFields.token_min_interval} seconds` : null;
+      const token_gen_interval = intervalFields.token_gen_interval !== null ? `${intervalFields.token_gen_interval} minutes` : null;
+      const min_submission_interval = intervalFields.min_submission_interval !== null ? `${intervalFields.min_submission_interval} seconds` : null;
+      const min_user_test_interval = intervalFields.min_user_test_interval !== null ? `${intervalFields.min_user_test_interval} seconds` : null;
+
+      await prisma.$executeRaw`
+        UPDATE tasks SET
+          token_min_interval = CASE WHEN ${token_min_interval}::text IS NOT NULL THEN ${token_min_interval}::interval ELSE token_min_interval END,
+          token_gen_interval = CASE WHEN ${token_gen_interval}::text IS NOT NULL THEN ${token_gen_interval}::interval ELSE token_gen_interval END,
+          min_submission_interval = CASE WHEN ${min_submission_interval}::text IS NOT NULL THEN ${min_submission_interval}::interval ELSE min_submission_interval END,
+          min_user_test_interval = CASE WHEN ${min_user_test_interval}::text IS NOT NULL THEN ${min_user_test_interval}::interval ELSE min_user_test_interval END
+        WHERE id = ${id}
+      `;
+    }
+
+    // 4. Check for "completeness" warnings
+    const task = await prisma.tasks.findUnique({
+      where: { id },
+      select: { active_dataset_id: true, contest_id: true }
+    });
+
+    let warning = null;
+    if (!task?.active_dataset_id) {
+      warning = "Task has no active dataset and will be unusable in contests.";
+    } else if (!task?.contest_id) {
+      warning = "Task is not assigned to any contest.";
+    }
 
     revalidatePath('/[locale]/tasks');
-    return { success: true };
+    revalidatePath(`/[locale]/tasks/${id}`);
+
+    return { success: true, warning };
   } catch (error) {
     const e = error as Error;
+    console.error('Update Task Error:', e);
     return { success: false, error: e.message };
   }
 }

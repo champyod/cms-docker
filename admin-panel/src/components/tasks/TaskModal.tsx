@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { X, FileCode, Settings, Clock, Cpu, FileType, CheckSquare } from 'lucide-react';
-import { createTask, updateTask, TaskData } from '@/app/actions/tasks';
+import { createTask, updateTask, type TaskData } from '@/app/actions/tasks';
 import { tasks } from '@prisma/client';
 import { PROGRAMMING_LANGUAGES } from '@/lib/constants';
+import { useToast } from '@/components/core/Toast';
 
 interface TaskModalProps {
   isOpen: boolean;
@@ -18,6 +19,7 @@ type Tab = 'general' | 'grading' | 'limits' | 'tokens' | 'languages';
 const SUBMISSION_FORMATS = ['%s.%l', '%s.zip'];
 
 export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) {
+  const { addToast } = useToast();
   const [activeTab, setActiveTab] = useState<Tab>('general');
   const [formData, setFormData] = useState<TaskData>({
     name: '',
@@ -87,10 +89,15 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
         : await createTask(formData);
 
       if (result.success) {
+        if ('warning' in result && result.warning) {
+          addToast(result.warning, 'warning');
+        } else {
+          addToast(task ? 'Task updated successfully' : 'Task created successfully', 'success');
+        }
         onSuccess();
         onClose();
       } else {
-        setError(result.error || 'An error occurred');
+        setError('error' in result && result.error ? (result.error as string) : 'An error occurred');
       }
     } catch (err) {
       setError('An unexpected error occurred');
@@ -102,7 +109,7 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
   const handleLanguageToggle = (lang: string) => {
     const current = formData.allowed_languages || [];
     const updated = current.includes(lang)
-      ? current.filter(l => l !== lang)
+      ? current.filter((l: string) => l !== lang)
       : [...current, lang];
     setFormData({ ...formData, allowed_languages: updated });
   };
@@ -110,7 +117,7 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
   const handleFormatToggle = (fmt: string) => {
     const current = formData.submission_format || [];
     const updated = current.includes(fmt)
-      ? current.filter(f => f !== fmt)
+      ? current.filter((f: string) => f !== fmt)
       : [...current, fmt];
     setFormData({ ...formData, submission_format: updated });
   };
