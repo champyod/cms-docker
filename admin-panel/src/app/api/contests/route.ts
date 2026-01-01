@@ -21,6 +21,8 @@ export async function POST(req: NextRequest) {
     const min_submission_interval = `${data.min_submission_interval || 0} seconds`;
     const min_user_test_interval = `${data.min_user_test_interval || 0} seconds`;
 
+    const nullablePositive = (val: any) => (val && val != '0' ? val : null);
+
     await prisma.$executeRaw`
       INSERT INTO contests (
         name, description, 
@@ -43,9 +45,9 @@ export async function POST(req: NextRequest) {
         ${data.allow_unofficial_submission_before_analysis_mode ?? false}, ${data.block_hidden_participations ?? false},
         ${data.allow_password_authentication ?? true}, ${data.allow_registration ?? false},
         ${data.ip_restriction ?? false}, ${data.ip_autologin ?? false},
-        ${token_mode}::token_mode, ${data.token_max_number ?? 0}, ${token_min_interval}::interval,
-        ${data.token_gen_initial ?? 0}, ${data.token_gen_number ?? 0}, ${token_gen_interval}::interval, ${data.token_gen_max ?? 0},
-        ${data.max_submission_number ?? 0}, ${data.max_user_test_number ?? 0},
+        ${token_mode}::token_mode, ${nullablePositive(data.token_max_number)}, ${token_min_interval}::interval,
+        ${data.token_gen_initial ?? 0}, ${data.token_gen_number ?? 0}, ${token_gen_interval}::interval, ${nullablePositive(data.token_gen_max)},
+        ${nullablePositive(data.max_submission_number)}, ${nullablePositive(data.max_user_test_number)},
         ${min_submission_interval}::interval, ${min_user_test_interval}::interval,
         ${startDate}, ${stopDate},
         ${data.analysis_enabled ?? false}, ${analysisStart}, ${analysisStop},

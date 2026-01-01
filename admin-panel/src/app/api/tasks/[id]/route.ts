@@ -18,6 +18,19 @@ export async function PUT(
     const sanitizedData: any = {};
     for (const key in data) sanitizedData[key] = sanitize(data[key]);
 
+    // Handle "infinite" / "no limit" for max numbers where 0 implies infinite
+    const maxNumberFields = ['max_submission_number', 'max_user_test_number', 'token_max_number', 'token_gen_max'];
+    for (const key of maxNumberFields) {
+      if (sanitizedData[key] === 0 || sanitizedData[key] === '0') {
+        sanitizedData[key] = null;
+      }
+    }
+
+    // Clean array fields to remove nulls created by sanitize
+    if (Array.isArray(sanitizedData.submission_format)) {
+      sanitizedData.submission_format = sanitizedData.submission_format.filter((v: any) => v !== null);
+    }
+
     const standardFields: any = {};
     const intervalFields: any = {};
     const requiredIntervals = ['token_min_interval', 'token_gen_interval'];

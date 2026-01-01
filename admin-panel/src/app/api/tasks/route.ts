@@ -15,6 +15,13 @@ export async function POST(req: NextRequest) {
     const min_submission_interval = sanitize(data.min_submission_interval) !== null ? `${data.min_submission_interval} seconds` : '0 seconds';
     const min_user_test_interval = sanitize(data.min_user_test_interval) !== null ? `${data.min_user_test_interval} seconds` : '0 seconds';
 
+    const nullablePositive = (val: any) => {
+      const sanitized = sanitize(val);
+      return (sanitized !== null && sanitized !== 0 && sanitized !== '0') ? sanitized : null;
+    };
+
+    const cleanArray = (arr: any[]) => Array.isArray(arr) ? arr.filter(v => v !== null && v !== '') : [];
+
     await prisma.$executeRaw`
       INSERT INTO tasks (
         name, title, contest_id, num,
@@ -26,10 +33,10 @@ export async function POST(req: NextRequest) {
         feedback_level, score_precision, score_mode
       ) VALUES (
         ${data.name}, ${data.title}, ${sanitize(data.contest_id)}, null,
-        ${data.submission_format || []}::filename_schema_array, ${data.primary_statements || []}::varchar[], ${data.allowed_languages || []}::varchar[],
-        ${data.token_mode || 'disabled'}::token_mode, ${sanitize(data.token_max_number)}, ${token_min_interval}::interval,
-        ${data.token_gen_initial || 0}, ${data.token_gen_number || 0}, ${token_gen_interval}::interval, ${sanitize(data.token_gen_max)},
-        ${sanitize(data.max_submission_number)}, ${sanitize(data.max_user_test_number)},
+        ${cleanArray(data.submission_format)}::filename_schema_array, ${cleanArray(data.primary_statements)}::varchar[], ${cleanArray(data.allowed_languages)}::varchar[],
+        ${data.token_mode || 'disabled'}::token_mode, ${nullablePositive(data.token_max_number)}, ${token_min_interval}::interval,
+        ${data.token_gen_initial || 0}, ${data.token_gen_number || 0}, ${token_gen_interval}::interval, ${nullablePositive(data.token_gen_max)},
+        ${nullablePositive(data.max_submission_number)}, ${nullablePositive(data.max_user_test_number)},
         ${min_submission_interval}::interval, ${min_user_test_interval}::interval,
         ${data.feedback_level || 'restricted'}::feedback_level, ${data.score_precision || 0}, ${data.score_mode || 'max'}::score_mode
       )
