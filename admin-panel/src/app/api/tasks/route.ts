@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
         feedback_level, score_precision, score_mode
       ) VALUES (
         ${data.name}, ${data.title}, ${sanitize(data.contest_id)}, null,
-        ${cleanArray(data.submission_format)}::filename_schema_array, ${cleanArray(data.primary_statements)}::varchar[], ${cleanArray(data.allowed_languages)}::varchar[],
+        ${cleanArray(data.submission_format)}::varchar[], ${cleanArray(data.primary_statements)}::varchar[], ${cleanArray(data.allowed_languages)}::varchar[],
         ${data.token_mode || 'disabled'}::token_mode, ${nullablePositive(data.token_max_number)}, ${token_min_interval}::interval,
         ${data.token_gen_initial || 0}, ${data.token_gen_number || 0}, ${token_gen_interval}::interval, ${nullablePositive(data.token_gen_max)},
         ${nullablePositive(data.max_submission_number)}, ${nullablePositive(data.max_user_test_number)},

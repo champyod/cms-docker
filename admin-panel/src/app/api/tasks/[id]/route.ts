@@ -67,7 +67,7 @@ export async function PUT(
 
       if (intervalFields.submission_format !== undefined) {
         qParams.push(intervalFields.submission_format);
-        setClauses.push(`submission_format = $${qParams.length}::filename_schema_array`);
+        setClauses.push(`submission_format = $${qParams.length}::varchar[]`);
       }
       if (intervalFields.primary_statements !== undefined) {
         qParams.push(intervalFields.primary_statements);
