@@ -27,7 +27,14 @@ export async function POST(req: NextRequest) {
 
     revalidatePath('/[locale]/tasks', 'page');
     revalidatePath(`/[locale]/tasks/${taskId}`, 'page');
-    return apiSuccess({ dataset });
+
+    // Convert BigInt to string before returning JSON
+    const responseDataset = {
+      ...dataset,
+      memory_limit: dataset.memory_limit ? dataset.memory_limit.toString() : null
+    };
+
+    return apiSuccess({ dataset: responseDataset });
   } catch (error: any) {
     return apiError(error);
   }
