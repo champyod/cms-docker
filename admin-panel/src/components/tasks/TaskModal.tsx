@@ -65,7 +65,15 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
   // Helper to parse Postgres intervals returned by Prisma
   const parseInterval = (val: any) => {
     if (!val) return undefined;
-    if (typeof val === 'number') return val;
+    if (typeof val === 'string') {
+      // Try parsing "HH:MM:SS" or simple number strings
+      if (/^\d+$/.test(val)) return parseInt(val);
+      const parts = val.split(':').map(Number);
+      if (parts.length === 3 && parts.every(n => !isNaN(n))) {
+        return parts[0] * 3600 + parts[1] * 60 + parts[2];
+      }
+      return undefined;
+    }
     // Typical Postgres interval object: { days, hours, minutes, seconds, milliseconds }
     if (typeof val === 'object') {
       let total = 0;

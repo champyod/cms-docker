@@ -12,8 +12,9 @@ export async function POST(req: NextRequest) {
     
     const token_min_interval = sanitize(data.token_min_interval) !== null ? `${data.token_min_interval} seconds` : '0 seconds';
     const token_gen_interval = sanitize(data.token_gen_interval) !== null ? `${data.token_gen_interval} minutes` : '30 minutes';
-    const min_submission_interval = sanitize(data.min_submission_interval) !== null ? `${data.min_submission_interval} seconds` : '0 seconds';
-    const min_user_test_interval = sanitize(data.min_user_test_interval) !== null ? `${data.min_user_test_interval} seconds` : '0 seconds';
+    // Use NULL for min intervals if 0 or null, to satisfy > 0 check constraint
+    const min_submission_interval = (sanitize(data.min_submission_interval) !== null && sanitize(data.min_submission_interval) !== 0) ? `${data.min_submission_interval} seconds` : null;
+    const min_user_test_interval = (sanitize(data.min_user_test_interval) !== null && sanitize(data.min_user_test_interval) !== 0) ? `${data.min_user_test_interval} seconds` : null;
 
     const nullablePositive = (val: any) => {
       const sanitized = sanitize(val);
