@@ -108,20 +108,20 @@ export interface TaskData {
   contest_id?: number | null;
   score_mode?: string;
   feedback_level?: string;
-  score_precision?: number;
+  score_precision?: number | null;
   allowed_languages?: string[];
   submission_format?: string[];
   token_mode?: string;
-  token_max_number?: number;
-  token_min_interval?: number;
-  token_gen_initial?: number;
-  token_gen_number?: number;
-  token_gen_interval?: number;
-  token_gen_max?: number;
-  max_submission_number?: number;
-  max_user_test_number?: number;
-  min_submission_interval?: number;
-  min_user_test_interval?: number;
+  token_max_number?: number | null;
+  token_min_interval?: number | null;
+  token_gen_initial?: number | null;
+  token_gen_number?: number | null;
+  token_gen_interval?: number | null;
+  token_gen_max?: number | null;
+  max_submission_number?: number | null;
+  max_user_test_number?: number | null;
+  min_submission_interval?: number | null;
+  min_user_test_interval?: number | null;
 }
 
 function sanitize<T>(value: T | undefined | null): T | null {
