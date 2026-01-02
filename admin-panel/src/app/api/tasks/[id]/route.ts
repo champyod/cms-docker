@@ -29,6 +29,19 @@ export async function PUT(
     // Clean array fields to remove nulls created by sanitize
     if (Array.isArray(sanitizedData.submission_format)) {
       sanitizedData.submission_format = sanitizedData.submission_format.filter((v: any) => v !== null);
+
+      // Replace %s in submission_format with task name
+      const hasPlaceholder = sanitizedData.submission_format.some((fmt: string) => fmt.includes('%s'));
+      if (hasPlaceholder) {
+        let taskName = sanitizedData.name;
+        if (!taskName) {
+           const existingTask = await prisma.tasks.findUnique({ where: { id }, select: { name: true } });
+           taskName = existingTask?.name;
+        }
+        if (taskName) {
+          sanitizedData.submission_format = sanitizedData.submission_format.map((fmt: string) => fmt.replace(/%s/g, taskName));
+        }
+      }
     }
 
     const standardFields: any = {};
@@ -36,13 +49,20 @@ export async function PUT(
     const requiredIntervals = ['token_min_interval', 'token_gen_interval'];
     const optionalIntervals = ['min_submission_interval', 'min_user_test_interval'];
     const arrayFields = ['submission_format', 'primary_statements', 'allowed_languages'];
-    const nullableKeys = ['contest_id', 'token_max_number', 'token_gen_max', 'max_submission_number', 'max_user_test_number', ...optionalIntervals];
+    const nullableKeys = ['contest_id', 'token_max_number', 'token_gen_max', 'max_submission_number', 'max_user_test_number', 'score_precision', ...optionalIntervals];
 
     for (const key in sanitizedData) {
       if ([...requiredIntervals, ...optionalIntervals, ...arrayFields].includes(key)) {
         if (requiredIntervals.includes(key) && sanitizedData[key] === null) continue;
         intervalFields[key] = sanitizedData[key];
-      } else if (sanitizedData[key] !== null || nullableKeys.includes(key)) standardFields[key] = sanitizedData[key];
+      } else if (sanitizedData[key] !== null || nullableKeys.includes(key)) {
+        // Default NOT NULL numeric fields to 0 if they were cleared (null)
+        if (sanitizedData[key] === null && ['score_precision', 'token_gen_initial', 'token_gen_number'].includes(key)) {
+          standardFields[key] = 0;
+        } else {
+          standardFields[key] = sanitizedData[key];
+        }
+      }
     }
 
     if (Object.keys(standardFields).length > 0) {

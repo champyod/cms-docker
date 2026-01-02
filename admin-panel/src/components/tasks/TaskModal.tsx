@@ -2,7 +2,7 @@
 import { createPortal } from 'react-dom';
 
 import { useState, useEffect } from 'react';
-import { X, FileCode, Settings, Clock, Cpu, FileType, CheckSquare } from 'lucide-react';
+import { X, FileCode, Settings, Clock, Cpu, FileType, CheckSquare, Info } from 'lucide-react';
 import type { TaskData } from '@/app/actions/tasks';
 import { apiClient } from '@/lib/apiClient';
 import { tasks } from '@prisma/client';
@@ -20,6 +20,16 @@ interface TaskModalProps {
 type Tab = 'general' | 'grading' | 'limits' | 'tokens' | 'languages';
 
 const SUBMISSION_FORMATS = ['%s.%l', '%s.zip'];
+const InfoButton = ({ text }: { text: string }) => (
+  <div className="group relative inline-block ml-1.5 align-middle">
+    <Info className="w-3.5 h-3.5 text-neutral-500 hover:text-indigo-400 cursor-help transition-colors" />
+    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-neutral-800 border border-white/10 rounded-lg text-[11px] font-medium text-neutral-300 w-48 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none shadow-xl">
+      {text}
+      <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-neutral-800" />
+    </div>
+  </div>
+);
+
 
 export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) {
   const { addToast } = useToast();
@@ -35,9 +45,9 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
     token_mode: 'disabled',
     token_max_number: undefined,
     token_min_interval: undefined,
-    token_gen_initial: 2,
-    token_gen_number: 2,
-    token_gen_interval: 30,
+    token_gen_initial: undefined,
+    token_gen_number: undefined,
+    token_gen_interval: undefined,
     token_gen_max: undefined,
     max_submission_number: undefined,
     max_user_test_number: undefined,
@@ -83,8 +93,8 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
         submission_format: task.submission_format,
         token_mode: task.token_mode,
         token_max_number: task.token_max_number ?? undefined,
-        token_gen_initial: task.token_gen_initial,
-        token_gen_number: task.token_gen_number,
+        token_gen_initial: task.token_gen_initial ?? undefined,
+        token_gen_number: task.token_gen_number ?? undefined,
         token_gen_max: task.token_gen_max ?? undefined,
         max_submission_number: task.max_submission_number ?? undefined,
         max_user_test_number: task.max_user_test_number ?? undefined,
@@ -95,9 +105,9 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
       });
     } else {
       setFormData({
-        name: '', title: '', score_mode: 'max', feedback_level: 'restricted', score_precision: 0,
+        name: '', title: '', score_mode: 'max', feedback_level: 'restricted', score_precision: undefined,
         allowed_languages: [], submission_format: [], token_mode: 'disabled',
-        token_gen_initial: 2, token_gen_number: 2, token_gen_interval: 30
+        token_gen_initial: undefined, token_gen_number: undefined, token_gen_interval: undefined
       });
     }
     setError('');
@@ -199,7 +209,10 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
               {activeTab === 'general' && (
                 <div className="space-y-6">
                   <div>
-                    <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Task Name (Short ID)</label>
+                    <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">
+                      Task Name (Short ID)
+                      <InfoButton text="Unique identifier (e.g., 'aplusb'). Only letters, numbers, underscores and dashes allowed." />
+                    </label>
                     <input
                       type="text"
                       value={formData.name}
@@ -228,7 +241,10 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
                 <div className="space-y-6">
                   <div className="grid grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Score Mode</label>
+                      <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">
+                        Score Mode
+                        <InfoButton text="Defines how the final score is calculated from multiple datasets/submissions." />
+                      </label>
                       <select
                         value={formData.score_mode}
                         onChange={(e) => setFormData({ ...formData, score_mode: e.target.value })}
@@ -240,7 +256,10 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Feedback Level</label>
+                      <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">
+                        Feedback Level
+                        <InfoButton text="Determines how much information is shown to the participant after a submission." />
+                      </label>
                       <select
                         value={formData.feedback_level}
                         onChange={(e) => setFormData({ ...formData, feedback_level: e.target.value })}
@@ -256,8 +275,9 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
                     <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Score Precision</label>
                     <input
                       type="number"
-                      value={formData.score_precision}
-                      onChange={(e) => setFormData({ ...formData, score_precision: parseInt(e.target.value) || 0 })}
+                      value={formData.score_precision === undefined ? '' : formData.score_precision}
+                      onChange={(e) => setFormData({ ...formData, score_precision: e.target.value ? parseInt(e.target.value) : undefined })}
+                      placeholder="0"
                       className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-indigo-500/50"
                     />
                     <p className="text-xs text-neutral-500 mt-1">Number of decimal places for score.</p>
@@ -270,7 +290,10 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
                 <div className="space-y-6">
                   <div className="grid grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Max Submissions</label>
+                      <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">
+                        Max Submissions
+                        <InfoButton text="Maximum submissions per user. Enter 0 or leave empty for unlimited." />
+                      </label>
                       <input
                         type="number"
                         value={formData.max_submission_number === undefined ? '' : formData.max_submission_number}
@@ -280,7 +303,10 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Max User Tests</label>
+                      <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">
+                        Max User Tests
+                        <InfoButton text="Maximum user tests per user. Enter 0 or leave empty for unlimited." />
+                      </label>
                       <input
                         type="number"
                         value={formData.max_user_test_number === undefined ? '' : formData.max_user_test_number}
@@ -317,7 +343,10 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
               {activeTab === 'tokens' && (
                 <div className="space-y-6">
                   <div>
-                    <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Token Mode</label>
+                    <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">
+                      Token Mode
+                      <InfoButton text="Tokens control how often participants can request feedback on their submissions." />
+                    </label>
                     <select
                       value={formData.token_mode}
                       onChange={(e) => setFormData({ ...formData, token_mode: e.target.value })}
@@ -329,7 +358,7 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
                     </select>
                   </div>
 
-                  {formData.token_mode !== 'disabled' && (
+                  {formData.token_mode === 'finite' && (
                     <div className="grid grid-cols-2 gap-6 p-4 bg-white/5 rounded-xl">
                       {formData.token_mode === 'finite' && (
                         <div>
@@ -352,11 +381,12 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Initial Tokens</label>
+                        <label className="block text-xs font-bold text-neutral-500 uppercase mb-2 text-indigo-400">Initial Tokens</label>
                         <input
                           type="number"
-                          value={formData.token_gen_initial}
-                          onChange={(e) => setFormData({ ...formData, token_gen_initial: parseInt(e.target.value) || 0 })}
+                          value={formData.token_gen_initial === undefined ? '' : formData.token_gen_initial}
+                          onChange={(e) => setFormData({ ...formData, token_gen_initial: e.target.value ? parseInt(e.target.value) : undefined })}
+                          placeholder="2"
                           className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-indigo-500/50"
                         />
                       </div>
@@ -364,17 +394,19 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
                         <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Gen Amount</label>
                         <input
                           type="number"
-                          value={formData.token_gen_number}
-                          onChange={(e) => setFormData({ ...formData, token_gen_number: parseInt(e.target.value) || 0 })}
+                          value={formData.token_gen_number === undefined ? '' : formData.token_gen_number}
+                          onChange={(e) => setFormData({ ...formData, token_gen_number: e.target.value ? parseInt(e.target.value) : undefined })}
+                          placeholder="2"
                           className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-indigo-500/50"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Gen Interval (min)</label>
+                        <label className="block text-xs font-bold text-neutral-500 uppercase mb-2 text-indigo-400">Gen Interval (min)</label>
                         <input
                           type="number"
                           value={formData.token_gen_interval === undefined ? '' : formData.token_gen_interval}
                           onChange={(e) => setFormData({ ...formData, token_gen_interval: e.target.value ? parseInt(e.target.value) : undefined })}
+                          placeholder="30"
                           className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-indigo-500/50"
                         />
                       </div>
@@ -399,7 +431,10 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
               {activeTab === 'languages' && (
                 <div className="space-y-8">
                   <div>
-                    <label className="block text-xs font-bold text-neutral-500 uppercase mb-4">Submission Formats</label>
+                    <label className="block text-xs font-bold text-neutral-500 uppercase mb-4">
+                      Submission Formats
+                      <InfoButton text="Required filenames. %s = Task Name, %l = Language extension." />
+                    </label>
                     <div className="grid grid-cols-2 gap-3">
                       {SUBMISSION_FORMATS.map(fmt => (
                         <button
