@@ -113,6 +113,8 @@ env:
 	@echo "COMPOSE_FILE=docker-compose.core.yml:docker-compose.admin.yml:docker-compose.contest.yml:docker-compose.worker.yml" >> .env
 	@echo ".env file generated. You can now run: docker compose up -d --build"
 
+
+# Source Build Targets (Development)
 core:
 	docker compose -f docker-compose.core.yml up -d --build
 
@@ -124,6 +126,32 @@ contest:
 
 worker:
 	docker compose -f docker-compose.worker.yml up -d --build
+
+# Image Based Targets (Production/User)
+core-img:
+	docker compose -f docker-compose.core.img.yml up -d
+
+admin-img:
+	docker compose -f docker-compose.admin.img.yml up -d
+
+worker-img:
+	docker compose -f docker-compose.worker.img.yml up -d
+
+# Utilities
+pull:
+	docker compose -f docker-compose.core.img.yml -f docker-compose.admin.img.yml -f docker-compose.worker.img.yml pull
+
+cms-init:
+	docker compose -f docker-compose.core.yml run --rm log-service cmsInitDB
+
+create-admin:
+	docker compose -f docker-compose.core.yml run --rm log-service cmsAddAdmin
+
+up:
+	docker compose -f docker-compose.core.img.yml -f docker-compose.admin.img.yml -f docker-compose.worker.img.yml up -d
+
+down:
+	docker compose -f docker-compose.core.yml -f docker-compose.admin.yml -f docker-compose.worker.yml -f docker-compose.core.img.yml -f docker-compose.admin.img.yml -f docker-compose.worker.img.yml down
 
 clean:
 	rm -f .env

@@ -1,0 +1,204 @@
+version: '3.8'
+
+# CMS Core Services Stack (Image Based)
+# This stack contains the essential backend services required for CMS operation
+# Deploy this stack first before any other stacks
+
+services:
+  # PostgreSQL Database
+  database:
+    image: postgres:15
+    container_name: cms-database
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cmsdb}
+      POSTGRES_USER: ${POSTGRES_USER:-cmsuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cmspassword}
+      POSTGRES_HOST_AUTH_METHOD: ${POSTGRES_HOST_AUTH_METHOD:-md5}
+    volumes:
+      - cms-database-data:/var/lib/postgresql/data
+    networks:
+      - cms-network
+    # Expose database on Tailscale IP for remote workers (set TAILSCALE_IP in .env)
+    ports:
+      - "${TAILSCALE_IP:-127.0.0.1}:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cmsuser} -d ${POSTGRES_DB:-cmsdb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # CMS Log Service - Centralized logging
+  log-service:
+    image: ghcr.io/champyod/cms-docker:latest
+    container_name: cms-log-service
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
+      SERVICE_TYPE: LogService
+      SERVICE_SHARD: ${LOG_SERVICE_SHARD:-0}
+    volumes:
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
+      - cms-logs:/var/local/log/cms
+      - cms-cache:/var/local/cache/cms
+    networks:
+      - cms-network
+    # Expose for remote workers via Tailscale
+    ports:
+      - "${TAILSCALE_IP:-127.0.0.1}:29000:29000"
+    privileged: true
+    cgroup: host
+    command: >
+      sh -c "wait-for-it database:5432 -t 60 -- cmsLogService ${LOG_SERVICE_SHARD:-0}"
+
+  # CMS Resource Service - Resource monitoring and management
+  resource-service:
+    image: ghcr.io/champyod/cms-docker:latest
+    container_name: cms-resource-service
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+      log-service:
+        condition: service_started
+    environment:
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
+      SERVICE_TYPE: ResourceService
+      SERVICE_SHARD: ${RESOURCE_SERVICE_SHARD:-0}
+    volumes:
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
+      - cms-logs:/var/local/log/cms
+      - cms-cache:/var/local/cache/cms
+    networks:
+      - cms-network
+    # Expose for remote workers via Tailscale
+    ports:
+      - "${TAILSCALE_IP:-127.0.0.1}:28000:28000"
+      - "${TAILSCALE_IP:-127.0.0.1}:28001:28001"
+    privileged: true
+    cgroup: host
+    command: >
+      sh -c "sleep 5 && cmsResourceService ${RESOURCE_SERVICE_SHARD:-0}"
+
+  # CMS Scoring Service - Handles scoring and ranking
+  scoring-service:
+    image: ghcr.io/champyod/cms-docker:latest
+    container_name: cms-scoring-service
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+      log-service:
+        condition: service_started
+    environment:
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
+      SERVICE_TYPE: ScoringService
+      SERVICE_SHARD: ${SCORING_SERVICE_SHARD:-0}
+    volumes:
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
+      - cms-logs:/var/local/log/cms
+      - cms-cache:/var/local/cache/cms
+      - cms-data:/var/local/lib/cms
+    networks:
+      - cms-network
+    privileged: true
+    cgroup: host
+    command: >
+      sh -c "sleep 5 && cmsScoringService ${SCORING_SERVICE_SHARD:-0}"
+
+  # CMS Evaluation Service - Manages evaluation queue
+  evaluation-service:
+    image: ghcr.io/champyod/cms-docker:latest
+    container_name: cms-evaluation-service
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+      log-service:
+        condition: service_started
+    environment:
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
+      SERVICE_TYPE: EvaluationService
+      SERVICE_SHARD: ${EVALUATION_SERVICE_SHARD:-0}
+      CONTEST_ID: ${CONTEST_ID:-1}
+    volumes:
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
+      - cms-logs:/var/local/log/cms
+      - cms-cache:/var/local/cache/cms
+      - cms-data:/var/local/lib/cms
+    networks:
+      - cms-network
+    privileged: true
+    cgroup: host
+    command: >
+      sh -c "sleep 5 && cmsEvaluationService ${EVALUATION_SERVICE_SHARD:-0} -c ${CONTEST_ID:-1}"
+
+  # CMS Proxy Service - Handles communication between services
+  proxy-service:
+    image: ghcr.io/champyod/cms-docker:latest
+    container_name: cms-proxy-service
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+      log-service:
+        condition: service_started
+    environment:
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
+      SERVICE_TYPE: ProxyService
+      SERVICE_SHARD: ${PROXY_SERVICE_SHARD:-0}
+      CONTEST_ID: ${CONTEST_ID:-1}
+    volumes:
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
+      - cms-logs:/var/local/log/cms
+      - cms-cache:/var/local/cache/cms
+    networks:
+      - cms-network
+    privileged: true
+    cgroup: host
+    command: >
+      sh -c "sleep 5 && cmsProxyService ${PROXY_SERVICE_SHARD:-0} -c ${CONTEST_ID:-1}"
+
+  # CMS Checker Service - Validates submissions
+  checker-service:
+    image: ghcr.io/champyod/cms-docker:latest
+    container_name: cms-checker-service
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+      log-service:
+        condition: service_started
+    environment:
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
+      SERVICE_TYPE: Checker
+      SERVICE_SHARD: ${CHECKER_SERVICE_SHARD:-0}
+    volumes:
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
+      - cms-logs:/var/local/log/cms
+      - cms-cache:/var/local/cache/cms
+      - cms-data:/var/local/lib/cms
+    networks:
+      - cms-network
+    privileged: true
+    cgroup: host
+    command: >
+      sh -c "sleep 5 && cmsChecker ${CHECKER_SERVICE_SHARD:-0}"
+
+networks:
+  cms-network:
+    name: cms-network
+    driver: bridge
+
+volumes:
+  cms-database-data:
+    name: cms-database-data
+  cms-logs:
+    name: cms-logs
+  cms-cache:
+    name: cms-cache
+  cms-data:
+    name: cms-data

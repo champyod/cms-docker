@@ -1,0 +1,85 @@
+version: '3.8'
+
+# CMS Worker Stack (Image Based)
+# This stack contains worker services for evaluating submissions
+# Can be deployed on separate machines and scaled horizontally
+# Requires: Core services stack must be accessible
+
+services:
+  # CMS Worker - Evaluates submissions in isolated sandboxes
+  worker:
+    image: ghcr.io/champyod/cms-docker:latest
+    container_name: cms-worker-${WORKER_SHARD:-0}
+    restart: unless-stopped
+    environment:
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
+      SERVICE_TYPE: Worker
+      # Worker shard - Each worker needs a unique shard number
+      WORKER_SHARD: ${WORKER_SHARD:-0}
+      # Connection to core services
+      CORE_SERVICES_HOST: ${CORE_SERVICES_HOST:-cms-log-service}
+      # Worker settings
+      KEEP_SANDBOX: ${KEEP_SANDBOX:-false}
+      MAX_FILE_SIZE: ${MAX_FILE_SIZE:-1048576}
+      # Worker identification
+      WORKER_NAME: ${WORKER_NAME:-worker-${WORKER_SHARD:-0}}
+      # Resource limits
+      WORKER_MEMORY_LIMIT: ${WORKER_MEMORY_LIMIT:-4G}
+      WORKER_CPU_LIMIT: ${WORKER_CPU_LIMIT:-4}
+    volumes:
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
+      - cms-logs:/var/local/log/cms
+      - cms-cache:/var/local/cache/cms
+      - cms-data:/var/local/lib/cms
+      # Temporary directory for sandboxes
+      - worker-tmp-${WORKER_SHARD:-0}:/tmp
+    networks:
+      - cms-network
+    # Expose for VPS connection (ResourceService)
+    ports:
+      - "2600${WORKER_SHARD:-0}:2600${WORKER_SHARD:-0}"
+    privileged: true
+    cgroup: host
+    # Security options for sandbox isolation
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfined
+    cap_add:
+      - SYS_ADMIN
+      - SYS_PTRACE
+    command: >
+      sh -c "sleep 15 && cmsWorker ${WORKER_SHARD:-0}"
+    deploy:
+      resources:
+        limits:
+          cpus: ${WORKER_CPU_LIMIT:-0.5}
+          memory: ${WORKER_MEMORY_LIMIT:-512M}
+        reservations:
+          cpus: ${WORKER_CPU_RESERVATION:-0.1}
+          memory: ${WORKER_MEMORY_RESERVATION:-256M}
+      # Replicas can be scaled based on load
+      replicas: ${WORKER_REPLICAS:-1}
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f cmsWorker || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+networks:
+  cms-network:
+    external: true
+    name: cms-network
+
+volumes:
+  cms-logs:
+    external: true
+    name: cms-logs
+  cms-cache:
+    external: true
+    name: cms-cache
+  cms-data:
+    external: true
+    name: cms-data
+  worker-tmp-0:
+    name: cms-worker-tmp-${WORKER_SHARD:-0}
