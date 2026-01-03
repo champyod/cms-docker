@@ -386,7 +386,7 @@ export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess }: Da
           </button>
           {activeTab === 'general' && (
             <button
-              onClick={() => document.getElementById('dataset-form')?.requestSubmit()}
+              onClick={() => (document.getElementById('dataset-form') as HTMLFormElement)?.requestSubmit()}
               disabled={loading}
               className="flex items-center gap-2 px-6 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-amber-900/20"
             >
