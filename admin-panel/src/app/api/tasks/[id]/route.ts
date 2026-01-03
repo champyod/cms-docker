@@ -20,7 +20,7 @@ export async function PUT(
 
     // Handle "infinite" / "no limit" for max numbers where 0 implies infinite
     // Handle "infinite" / "no limit" for max numbers where 0 implies infinite
-    const maxNumberFields = ['max_submission_number', 'max_user_test_number', 'token_max_number', 'token_gen_max', 'min_submission_interval', 'min_user_test_interval'];
+    const maxNumberFields = ['max_submission_number', 'max_user_test_number', 'token_max_number', 'token_gen_max'];
     for (const key of maxNumberFields) {
       if (sanitizedData[key] === 0 || sanitizedData[key] === '0') {
         sanitizedData[key] = null;

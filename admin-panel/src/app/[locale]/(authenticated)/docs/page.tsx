@@ -165,6 +165,34 @@ export default function DocsPage() {
                     <li><strong className="text-white">OutputOnly:</strong> No code submission; users upload pre-computed output files.</li>
                     <li><strong className="text-white">TwoSteps:</strong> Program is run twice (e.g., for header/library problems).</li>
                   </ul>
+
+                  <div className="mt-4 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-lg">
+                    <h4 className="font-bold text-indigo-400 text-xs uppercase tracking-wider mb-2 flex items-center gap-2">
+                      <Terminal className="w-3 h-3" />
+                      Manager Files
+                    </h4>
+                    <div className="space-y-3">
+                      <div>
+                        <code className="text-xs bg-black/30 px-1 py-0.5 rounded text-amber-200">checker</code>
+                        <p className="text-[10px] text-neutral-400 mt-1">
+                          Source file (cpp/py) that validates output. <br />
+                          Signature: <code>check(input, output, answer)</code>
+                        </p>
+                      </div>
+                      <div>
+                        <code className="text-xs bg-black/30 px-1 py-0.5 rounded text-amber-200">grader / stub</code>
+                        <p className="text-[10px] text-neutral-400 mt-1">
+                          Driver program for communication tasks. Compiles with user code.
+                        </p>
+                      </div>
+                      <div>
+                        <code className="text-xs bg-black/30 px-1 py-0.5 rounded text-amber-200">*.lib.h / *.h</code>
+                        <p className="text-[10px] text-neutral-400 mt-1">
+                          Header files required for compilation.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </Card>
                  <Card className="glass-card p-6 border-white/10">
                   <h3 className="font-bold text-white mb-2 underline decoration-indigo-500/30">Datasets</h3>
@@ -176,6 +204,14 @@ export default function DocsPage() {
                     <strong>Managers:</strong> Custom checker/manager programs.<br/>
                     <strong>Limits:</strong> Time/Memory limits per dataset.
                   </p>
+
+                  <div className="mt-4 pt-4 border-t border-white/5 space-y-3">
+                    <h4 className="font-bold text-white text-xs uppercase tracking-wider">Common Fields</h4>
+                    <ul className="text-xs text-neutral-400 space-y-2">
+                      <li><strong className="text-neutral-300">Time Limit:</strong> Maximum CPU time allowed per testcase (seconds).</li>
+                      <li><strong className="text-neutral-300">Memory Limit:</strong> Maximum address space allowed (MiB). </li>
+                    </ul>
+                  </div>
                 </Card>
               </div>
 
@@ -203,6 +239,7 @@ export default function DocsPage() {
                       <li><strong className="text-neutral-300">Sum:</strong> Final score is the sum of subtask scores.</li>
                       <li><strong className="text-neutral-300">GroupMin:</strong> All testcases in a group must pass to get the group points.</li>
                       <li><strong className="text-neutral-300">GroupMul:</strong> Scores from different groups are multiplied (rare).</li>
+                      <li><strong className="text-neutral-300">GroupThreshold:</strong> Points awarded if group score exceeds a specific threshold.</li>
                     </ul>
                   </div>
                 </div>

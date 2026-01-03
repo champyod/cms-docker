@@ -42,6 +42,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
 
   const [isTaskSettingsOpen, setIsTaskSettingsOpen] = useState(false);
   const [isDatasetModalOpen, setIsDatasetModalOpen] = useState(false);
+  const [editingDataset, setEditingDataset] = useState<DatasetWithRelations | null>(null);
   const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
   const [isAttachmentModalOpen, setIsAttachmentModalOpen] = useState(false);
 
@@ -261,7 +262,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
             {taskDatasets.length === 0 ? (
               <>
                 <button
-                  onClick={() => setIsDatasetModalOpen(true)}
+                  onClick={() => { setEditingDataset(null); setIsDatasetModalOpen(true); }}
                   className="flex items-center gap-2 px-3 py-1.5 bg-amber-600/20 text-amber-400 rounded-lg text-sm hover:bg-amber-600/30 transition-colors mb-4"
                 >
                   <Plus className="w-4 h-4" />
@@ -273,7 +274,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
               // Dataset Management Logic handled in map below
                 <div className="mb-4">
                   <button
-                    onClick={() => setIsDatasetModalOpen(true)}
+                    onClick={() => { setEditingDataset(null); setIsDatasetModalOpen(true); }}
                     className="flex items-center gap-2 px-3 py-1.5 bg-amber-600/20 text-amber-400 rounded-lg text-sm hover:bg-amber-600/30 transition-colors"
                   >
                     <Plus className="w-4 h-4" />
@@ -297,6 +298,13 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
                         )}
                       </div>
                       <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => { setEditingDataset(dataset); setIsDatasetModalOpen(true); }}
+                            className="p-1.5 text-neutral-400 hover:bg-white/10 rounded"
+                            title="Settings"
+                          >
+                            <Settings className="w-3 h-3" />
+                          </button>
                         {dataset.id !== task.active_dataset_id && (
                           <button
                             onClick={() => handleActivateDataset(dataset.id)}
@@ -470,6 +478,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
         isOpen={isDatasetModalOpen}
         onClose={() => setIsDatasetModalOpen(false)}
         taskId={task.id}
+        dataset={editingDataset}
         onSuccess={() => window.location.reload()}
       />
 

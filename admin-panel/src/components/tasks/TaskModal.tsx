@@ -109,7 +109,7 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
         max_submission_number: task.max_submission_number ?? null,
         max_user_test_number: task.max_user_test_number ?? null,
         token_min_interval: parseInterval((task as any).token_min_interval) ?? null,
-        token_gen_interval: parseInterval((task as any).token_gen_interval) ? Math.floor(parseInterval((task as any).token_gen_interval)! / 60) : null,
+        token_gen_interval: parseInterval((task as any).token_gen_interval) !== undefined ? Math.floor(parseInterval((task as any).token_gen_interval)! / 60) : null,
         min_submission_interval: parseInterval((task as any).min_submission_interval) ?? null,
         min_user_test_interval: parseInterval((task as any).min_user_test_interval) ?? null,
       });
