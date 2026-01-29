@@ -81,13 +81,12 @@ env:
 		echo "Removing directory config/cms.toml (created by Docker volumes)..."; \
 		rm -rf config/cms.toml; \
 	fi
-	@if [ ! -f config/cms.toml ]; then \
-		echo "Copying config/cms.sample.toml to config/cms.toml..."; \
-		cp config/cms.sample.toml config/cms.toml; \
-		echo "Setting bind address to 0.0.0.0 in config/cms.toml..."; \
-		sed -i 's/"127.0.0.1"/"0.0.0.0"/g' config/cms.toml; \
-		sed -i 's/\["127.0.0.1"\]/\["0.0.0.0"\]/g' config/cms.toml; \
-	fi
+	@echo "Refreshing config/cms.toml from sample..."
+	@cp config/cms.sample.toml config/cms.toml
+	@echo "Setting bind address to 0.0.0.0 in config/cms.toml..."
+	@sed -i 's/"127.0.0.1"/"0.0.0.0"/g' config/cms.toml
+	@sed -i 's/\["127.0.0.1"\]/\["0.0.0.0"\]/g' config/cms.toml
+
 	@if [ -d config/cms_ranking.toml ]; then \
 		echo "Removing directory config/cms_ranking.toml (created by Docker volumes)..."; \
 		rm -rf config/cms_ranking.toml; \
