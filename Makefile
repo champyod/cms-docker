@@ -3,12 +3,14 @@
 
 help:
 	@echo "Available commands:"
-	@echo "  make env      - Generates .env file from .env.* configuration files"
-	@echo "  make core     - Deploys only CMS Core services"
-	@echo "  make admin    - Deploys only CMS Admin services"
-	@echo "  make contest  - Deploys only CMS Contest services"
-	@echo "  make worker   - Deploys only CMS Worker services"
-	@echo "  make clean    - Removes .env file"
+	@echo "  make env            - Generates .env file from .env.* configuration files"
+	@echo "  make {service}      - Deploys service (core, admin, contest, worker, infra)"
+	@echo "  make {service}-img  - Deploys service using pre-built images"
+	@echo "  make {service}-stop - Stops the specified service"
+	@echo "  make {service}-clean- Removes the specified service and its volumes"
+	@echo "  make db-clean       - Removes ALL services and volumes (Full Reset)"
+	@echo "  make clean          - Removes .env file"
+
 
 env:
 	@echo "Generating .env file..."
@@ -58,6 +60,17 @@ env:
 		echo "" >> .env; \
 		echo "WARNING: Using .env.worker.example template"; \
 	fi
+	@# Infra Environment
+	@if [ -f .env.infra ]; then \
+		echo "### .env.infra ###" >> .env; \
+		cat .env.infra >> .env; \
+		echo "" >> .env; \
+	elif [ -f .env.infra.example ]; then \
+		echo "### .env.infra.example (Template used - please create .env.infra) ###" >> .env; \
+		cat .env.infra.example >> .env; \
+		echo "" >> .env; \
+		echo "WARNING: Using .env.infra.example template"; \
+	fi
 	@# Generate admin-panel/.env for Prisma
 	@echo "Generating admin-panel/.env..."
 	@if [ -f .env.core ]; then \
@@ -86,7 +99,7 @@ env:
 	@echo "Setting bind address to 0.0.0.0 in config/cms.toml..."
 	@sed -i 's/"127.0.0.1"/"0.0.0.0"/g' config/cms.toml
 	@sed -i 's/\["127.0.0.1"\]/\["0.0.0.0"\]/g' config/cms.toml
-
+	
 	@if [ -d config/cms_ranking.toml ]; then \
 		echo "Removing directory config/cms_ranking.toml (created by Docker volumes)..."; \
 		rm -rf config/cms_ranking.toml; \
@@ -106,7 +119,7 @@ env:
 	@echo "" >> .env
 	@echo "" >> .env
 	@echo "# Docker Compose File Configuration" >> .env
-	@echo "COMPOSE_FILE=docker-compose.core.yml:docker-compose.admin.yml:docker-compose.contest.yml:docker-compose.worker.yml" >> .env
+	@echo "COMPOSE_FILE=docker-compose.core.yml:docker-compose.admin.yml:docker-compose.contest.yml:docker-compose.worker.yml:docker-compose.monitor.yml" >> .env
 	@echo ".env file generated. You can now run: docker compose up -d --build"
 
 core:
@@ -144,7 +157,7 @@ admin-create:
 
 db-clean:
 	@echo "WARNING: This will delete all database data and reset everything."
-	docker compose -f docker-compose.core.yml -f docker-compose.admin.yml -f docker-compose.contest.yml -f docker-compose.worker.yml down -v
+	docker compose -f docker-compose.core.yml -f docker-compose.admin.yml -f docker-compose.contest.yml -f docker-compose.worker.yml -f docker-compose.monitor.yml down -v
 
 db-reset: db-clean core-img
 	@echo "Database has been reset and services restarted."
@@ -159,11 +172,47 @@ contest:
 worker:
 	docker compose -f docker-compose.worker.yml up -d --build
 
+core-stop:
+	docker compose -f docker-compose.core.yml down
+
+core-clean:
+	docker compose -f docker-compose.core.yml down -v
+
+admin-stop:
+	docker compose -f docker-compose.admin.yml down
+
+admin-clean:
+	docker compose -f docker-compose.admin.yml down -v
+
+contest-stop:
+	docker compose -f docker-compose.contest.yml down
+
+contest-clean:
+	docker compose -f docker-compose.contest.yml down -v
+
+worker-stop:
+	docker compose -f docker-compose.worker.yml down
+
+worker-clean:
+	docker compose -f docker-compose.worker.yml down -v
+
+infra:
+	docker compose -f docker-compose.monitor.yml up -d --build
+
+infra-stop:
+	docker compose -f docker-compose.monitor.yml down
+
+infra-clean:
+	docker compose -f docker-compose.monitor.yml down -v
+
 pull:
-	docker compose -f docker-compose.core.yml -f docker-compose.core.img.yml pull
-	docker compose -f docker-compose.admin.yml -f docker-compose.admin.img.yml pull
-	docker compose -f docker-compose.contest.yml -f docker-compose.contest.img.yml pull
-	docker compose -f docker-compose.worker.yml -f docker-compose.worker.img.yml pull
+	docker compose \
+		-f docker-compose.core.yml -f docker-compose.core.img.yml \
+		-f docker-compose.admin.yml -f docker-compose.admin.img.yml \
+		-f docker-compose.contest.yml -f docker-compose.contest.img.yml \
+		-f docker-compose.worker.yml -f docker-compose.worker.img.yml \
+		-f docker-compose.monitor.yml \
+		pull
 
 core-img:
 	docker compose -f docker-compose.core.yml -f docker-compose.core.img.yml up -d --no-build

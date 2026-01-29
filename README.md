@@ -1,241 +1,209 @@
 # CMS Docker Deployment
 
-Docker-based deployment for [Contest Management System (CMS)](https://github.com/cms-dev/cms).
+Scalable, containerized deployment for the [Contest Management System (CMS)](https://github.com/cms-dev/cms).
 
 ## Quick Start
 
-### Local / VM Deployment (No Public IP)
-By default, the setup binds to `0.0.0.0`, so you can access the services via:
-- **Localhost:** `http://localhost:8889` (Admin), `http://localhost:8888` (Contest)
-- **VM IP:** `http://<vm-ip>:8889` (Admin), `http://<vm-ip>:8888` (Contest)
+### 1. Build & Setup
+Clone the repository and initialize the configuration.
 
-You do **not** need a public IP or domain name for local testing.
-
-### Build Configuration (Optional)
-This repository uses the **Thai Ubuntu mirror** (`th.archive.ubuntu.com`) by default for faster builds. If you are in another region, you can change this:
-
-**Option 1: Build command**
 ```bash
-docker compose build --build-arg APT_MIRROR=archive.ubuntu.com
-```
-
-**Option 2: Docker Compose (Permanent)**
-Add `args: { APT_MIRROR: archive.ubuntu.com }` to the `build` section of your services in `docker-compose.yml`.
-
-### Steps
-```bash
-# 1. Clone and setup
+# Clone
 git clone https://github.com/champyod/cms-docker.git
 cd cms-docker
 git submodule update --init --recursive
 
-# 2. Configure environment (Critical Step)
-cp .env.core.example .env.core    # 1. Main config (DB, Public IP) - EDIT THIS FIRST!
-cp .env.admin.example .env.admin  # 2. Admin settings (Ports, Auth)
-cp .env.contest.example .env.contest # 3. Contest settings (Ports, Secrets)
-cp .env.worker.example .env.worker   # 4. Worker settings (Capacity)
+# Initialize Configuration
+cp .env.core.example .env.core
+cp .env.admin.example .env.admin
+cp .env.contest.example .env.contest
+cp .env.worker.example .env.worker
+cp .env.infra.example .env.infra   # Infrastructure Monitoring
 
-# 3. Generate combined configuration
-# This combines all .env.* files into a single .env and prevents duplicate variables
+# Generate Environment
+# This compiles all .env files and configurations
 make env
 ```
 
-## Configuration
+### 2. Deploy Services
+You can choose to deploy using pre-built images (recommended) or build from source.
 
-**Key Concept:** `.env.core` is the **single source of truth** for shared variables like Database credentials and Paths. Other files (`.env.admin`, etc.) inherit these values to prevent configuration mismatches.
-
-Environment files:
-- **`.env.core` (Primary)** - Database credentials, Public IP, Access Mode, Domain, and core paths. **Start here.**
-- `.env.admin` - Admin interface specific settings (Ports, Session duration)
-- `.env.contest` - Contest interface specific settings (Contest ID, Secrets)
-- `.env.worker` - Worker specific settings (CPU/RAM limits)
-
-Run `make env` to generate the combined `.env` and `config/cms.toml`.
-
-## Deployment Reference
-
-### Option A: Pre-built Images (Recommended)
-This method is faster and saves disk space on the VM as it pulls images from GitHub Container Registry.
+**Option A: Pre-built Images (Recommended)**
+Uses Optimized images from GitHub Container Registry.
 
 ```bash
-# 1. Login to GitHub Container Registry (One time setup)
-# Use your GitHub Username and a Personal Access Token (Classic) with 'read:packages' scope
-echo "YOUR_PAT_TOKEN" | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
+# Login (Required for private packages, optionally skip if public)
+# echo "TOKEN" | docker login ghcr.io -u USER --password-stdin
 
-# 2. Deploy
-make pull         # Pull latest images
-make core-img     # Start Core services
-
-# 3. Initialize Database (First time only)
-# This will run cmsInitDB followed by Prisma synchronization
-make cms-init
-
-# 4. Create Admin User
-# Use the official CMS command to create your first superadmin
-make admin-create
-
-# 5. Start the rest of the stacks
-make admin-img contest-img worker-img
-```
-
-### Option B: Build from Source (Manual)
-Use these commands if you are modifying the source code and need to rebuild locally.
-
-```bash
-# 1. Build and Deploy
-make core      # Build and deploy Core
-make admin     # Build and deploy Admin
-make contest   # Build and deploy Contest
-make worker    # Build and deploy Worker
-
-# 2. Initialize Database (First time only)
-make cms-init
-
-# 3. Create Admin User
-make admin-create
-```
-
-### Maintenance
-
-#### Updating Deployment
-To update your deployment with the latest images:
-
-```bash
-# 1. Pull the latest images
 make pull
-
-# 2. Update and restart Core services
-make core-img
-
-# 3. Update and restart other services
-make admin-img contest-img worker-img
-
-# 4. (Optional) Remove old unused images
-docker image prune -f
+make core-img     # Start Core Services (DB, Log, Resource)
+make cms-init     # Initialize Database (Run once)
+make admin-create # Create Superadmin
+make admin-img    # Start Admin Panel
+make contest-img  # Start Contest Interface
 ```
 
-#### Full System Reset
-If you encounter "DuplicateObject" or "Relation does not exist" errors, perform a full reset:
-```bash
-make db-reset   # Deletes volumes, restarts core
-make cms-init    # Re-initializes everything
-```
-
-#### Automatic Updates (Optional)
-To enable automatic updates (checking every 60 seconds):
-1.  Open `docker-compose.core.img.yml`.
-2.  Uncomment the `watchtower` service block.
-3.  Run `make core-img`.
-
-### Troubleshooting
-
-- **"Type codename already exists"**: This happens if database initialization was interrupted or partially run.
-  If you want a fresh start, run: `docker compose down -v` to clear volumes, then start again from `make core-img`.
-- **"Relation 'contests' does not exist"**: Run `make db-init`.
-- **Stuck at "Compiling"**: The Worker failed to connect. Run `docker restart cms-worker-0`.
-- **Config changes not applying**: `make env` does not overwrite. Delete `config/cms.toml` then run `make env` again.
-
-## Services
-
-| Stack | Services | Port (Internal) | Port (External / Host) | Env Var to Change |
-|-------|----------|-----------------|------------------------|-------------------|
-| Core | Database | 5432 | 5432 | `POSTGRES_PORT_EXTERNAL` (.env.core) |
-| Core | LogService | 29000 | 29000 | `docker-compose.core.yml` |
-| Core | ResourceService | 28000 | 28000 | `docker-compose.core.yml` |
-| Admin | AdminWebServer | 8889 | 8889 | `ADMIN_LISTEN_PORT` (.env.admin) |
-| Admin | RankingWebServer | 8890 | 8890 | `RANKING_LISTEN_PORT` (.env.admin) |
-| Contest | ContestWebServer | 8888 | 8888 | `CONTEST_LISTEN_PORT` (.env.contest) |
-
-### Port Conflicts
-If you are running other services that already use port **5432** (Postgres) or **8888**:
-
-1. Open `.env.core` and change the External Port:
-   ```ini
-   POSTGRES_PORT_EXTERNAL=5433  # Creates mapping 5433:5432
-   ```
-2. Restart Core services:
-   ```bash
-   make core-img
-   ```
-   Your database will now be accessible on host port 5433, but internal CMS services will still connect transparently on 5432.
-
-## Worker
-
-Deploy workers to judge submissions:
+**Option B: Build from Source**
+Builds everything locally.
 
 ```bash
-make worker
-# Check worker logs
-docker logs cms-worker-0 -f
+make core
+make cms-init
+make admin-create
+make admin contest worker
 ```
 
-## Scoreboard (Ranking)
+### 3. Access
+By default, services are bound to `0.0.0.0`:
+*   **Modern Admin Panel (Next.js by CCYod)**: [http://localhost:8891](http://localhost:8891)
+*   **Classic Admin Panel (Original CMS)**: [http://localhost:8889](http://localhost:8889)
+*   **Contestant Interface**: [http://localhost:8888](http://localhost:8888)
+*   **Ranking**: [http://localhost:8890](http://localhost:8890)
 
-Deployed with Admin stack at `http://YOUR_IP:8890`.
-Credentials: Set `RANKING_USERNAME` and `RANKING_PASSWORD` in `.env.admin`.
+---
 
-### Server Setup (Main Machine)
+## Infrastructure Monitoring
 
-1.  **Expose Ports**: Edit `docker-compose.core.yml` to expose LogService (29000), ResourceService (28000), and Database (5432).
+This repository includes a lightweight monitoring service that tracks CPU, Memory, Disk, and Docker status, alerting via Discord.
+
+### Configuration
+1.  Copy the example config: `cp .env.infra.example .env.infra`
+2.  Edit `.env.infra`:
+    ```ini
+    DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+    DISCORD_USER_ID=123456789...
+    MONITOR_INTERVAL=10
+    ```
+3.  Deploy: `make infra`
+
+### Management
+```bash
+make infra        # Start monitoring
+make infra-stop   # Stop monitoring
+```
+
+---
+
+## Command Reference
+
+The `Makefile` provides a standardized interface for managing the stack.
+
+| Command | Action |
+| :--- | :--- |
+| `make env` | Generates `.env` and `config/cms.toml` from templates. |
+| `make core` / `admin` / `contest` | Build and start specific stacks. |
+| `make {service}-img` | Start specific stacks using pre-built images. |
+| `make {service}-stop` | Stop specific stacks (`core`, `admin`, `contest`, `infra`). |
+| `make {service}-clean` | Stop and **delete volumes** for specific stacks. |
+| `make db-clean` | **FULL RESET**: Deletes all services and data. |
+| `make cms-init` | Initialize or patch the database schema. |
+| `make admin-create` | Interactive utility to create a new admin. |
+
+---
+
+## Architecture
+
+This deployment isolates CMS components into four logical stacks for scalability.
+
+### Core Stack (`docker-compose.core.yml`)
+*   **PostgreSQL**: Main database.
+*   **LogService**: Central logging RPC.
+*   **ResourceService**: File storage RPC.
+*   **ScoringService**: Calculates scores.
+*   **ProxyService**: Balances worker connections.
+*   **Checker**: Runs solutions (Internal).
+
+### Admin Stack (`docker-compose.admin.yml`)
+*   **AdminPanel (Next.js by CCYod)**: The modern, responsive administration interface (Port 8891).
+*   **AdminWebServer (Classic)**: The original CMS admin interface (Port 8889).
+*   **RankingWebServer**: Real-time scoreboard.
+
+### Contest Stack (`docker-compose.contest.yml`)
+*   **ContestWebServer**: The interface for contestants to submit solutions.
+
+### Worker Stack (`docker-compose.worker.yml`)
+*   **Worker**: Distributed sandboxed execution environments.
+
+### Monitor Stack (`docker-compose.monitor.yml`)
+*   **Monitor**: Lightweight resource tracking and alerting.
+
+---
+
+## Configuration Details
+
+### Environment Files
+*   **`.env.core`**: The **Source of Truth**. Contains DB credentials, external application URL/IP, and secrets. Start configuration here.
+*   **`.env.admin`**: Admin panel ports and auth settings.
+*   **`.env.contest`**: Contest interface ports.
+*   **`.env.worker`**: Worker resource limits.
+
+### Advanced: Distributed Workers
+To scale the system, you can run Workers on separate machines.
+
+#### 1. Server Setup (Main Machine)
+1.  **Expose RPC Services**:
+    Edit `docker-compose.core.yml` to expose ports `29000` (LogService) and `28000` (ResourceService):
     ```yaml
-    # Example for LogService
+    # LogService
     ports:
       - "29000:29000"
+    
+    # ResourceService
+    ports:
+      - "28000:28000"
     ```
-2.  **Allow Connection**: Update `config/cms.toml` to recognize the Worker's IP.
+2.  **Allow Connection**:
+    Edit `config/cms.toml` (or `config/cms.sample.toml` if regenerating) to whitelist the Worker's IP.
     ```toml
     Worker = [
-        ...
-        ["192.168.122.1", 26002],  # IP of the remote worker machine
+        ["127.0.0.1", 26000],      # Local Worker
+        ["192.168.1.50", 26001],   # Remote Worker IP and Port
     ]
     ```
-3.  **Restart**: Run `make core`.
+3.  **Restart Core**: `make core-img` (or `make core`)
 
-### Worker Setup (Remote Machine)
-
-1.  **Configure Network**: Edit `docker-compose.worker.yml` to use Host Networking (bypasses Docker bridge issues).
+#### 2. Worker Setup (Remote Machine)
+1.  **Configure Network**:
+    Edit `docker-compose.worker.yml` to use Host Networking. This bypasses Docker's bridge network and is often required for the Worker to correctly communicate back to the Core.
     ```yaml
-    network_mode: "host"
-    # Remove 'networks' and 'ports' sections
+    services:
+      worker:
+        network_mode: "host"
+        # remove 'networks' and 'ports' sections
     ```
-2.  **Configure Environment**: Edit `.env.worker`:
-    ```bash
-    WORKER_SHARD=2                  # Unique shard ID
-    CORE_SERVICES_HOST=192.168.122.79  # IP of the Main Server
+2.  **Configure Environment**:
+    Edit `.env.worker`:
+    ```ini
+    WORKER_SHARD=1                    # Unique ID (0, 1, 2...)
+    CORE_SERVICES_HOST=192.168.1.10   # IP of the Main Server
     ```
-3.  **Configure Config**: Update `config/cms.sample.toml` (and regenerate `cms.toml` via `make env`):
-    - Point `LogService`, `ResourceService`, and `database` URL to the Main Server IP (`192.168.122.79`).
-    - Bind the Worker to the *Host Machine's IP*:
-      ```toml
-      Worker = [ ... ["192.168.122.1", 26002] ... ]
-      ```
-4.  **Deploy**:
-    
-    **Option 1: Pre-built Images (Recommended)**
+3.  **Configure Config**:
+    On the worker machine, `config/cms.toml` needs to know where the LogService is.
+    *   Update `LogService` and `ResourceService` addresses to point to the Main Server IP.
+    *   Update `database` connection string if needed.
+    *   *Tip*: You can mostly copy `config/cms.toml` from the main server, but ensure the `Worker` section reflects the local binding.
+4.  **Firewall (Important)**
+    If your worker is on a VM (e.g., KVM/Libvirt), open the port:
     ```bash
-    rm config/cms.toml && make env
-    make pull
-    make worker-img
-    ```
-    
-    **Option 2: Build from Source**
-    ```bash
-    rm config/cms.toml && make env
-    make worker
-    ```
-
-    **Important**: If your worker is on the host machine and the server is in a VM (KVM/Libvirt), you may need to open the port on the `libvirt` zone:
-    ```bash
-    sudo firewall-cmd --zone=libvirt --add-port=26002/tcp --permanent
+    sudo firewall-cmd --zone=libvirt --add-port=26001/tcp --permanent
     sudo firewall-cmd --reload
     ```
+5.  **Deploy**:
+    ```bash
+    make worker-img
+    ```
 
-## Requirements
+---
 
-- Docker 20.10+
-- Docker Compose v2
-- 1+ CPU, 2GB+ RAM (recommended: 2+ CPU, 4GB+ RAM)
+## Troubleshooting
+
+*   **Database Errors ("DuplicateObject")**:
+    This means the DB is already initialized. Use `make db-clean` if you want a complete reset.
+*   **Worker Not Connecting**:
+    Check `docker logs cms-worker-0`. Ensure `config/cms.toml` has the correct `LogService` IP if running distributed.
+*   **Changes Not Applying**:
+    `make env` does not overwrite existing config files to prevent data loss. Delete `config/cms.toml` separately if you want to force regeneration.
 
 ## License
 
-AGPL-3.0 (same as CMS)
+AGPL-3.0 (Derived from CMS)

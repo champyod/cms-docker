@@ -1,0 +1,18 @@
+services:
+  monitor:
+    build:
+      context: .
+      dockerfile: docker/monitor/Dockerfile
+    image: cms-monitor
+    container_name: cms-monitor
+    restart: always
+    pid: host   # Required to see Host CPU/Memory usage
+    environment:
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - DISCORD_USER_ID=${DISCORD_USER_ID}
+      - MONITOR_INTERVAL=5
+      - MONITOR_COOLDOWN=300
+      - DISK_PATH=/host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /:/host:ro # Mount host root to /host to check disk usage
