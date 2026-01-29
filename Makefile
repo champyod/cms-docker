@@ -99,31 +99,22 @@ env:
 		sed -i 's/"127.0.0.1"/"0.0.0.0"/g' config/cms_ranking.toml; \
 	fi
 	@echo "Generating and proactively setting a secure SECRET_KEY in config/cms.toml..."; \
+	@echo "Generating and proactively setting a secure SECRET_KEY in config/cms.toml..."; \
 	SECRET=$$(python3 -c 'import secrets; print(secrets.token_hex(16))'); \
 	sed -i 's/secret_key = "8e045a51e4b102ea803c06f92841a1fb"/secret_key = "'$${SECRET}'"/' config/cms.toml
 	@echo "Injecting database configuration from .env.core into config/cms.toml..."; \
-	python3 -c 'import os; \
-		env_core = {}; \
-		with open(".env.core") as f: \
-			for line in f: \
-				if "=" in line and not line.strip().startswith("#"): \
-					k, v = line.strip().split("=", 1); \
-					env_core[k.strip()] = v.strip(); \
-		\
-		mapped = { \
-			"your_password_here": env_core.get("POSTGRES_PASSWORD", "cmspassword"), \
-			"cmsuser": env_core.get("POSTGRES_USER", "cmsuser"), \
-			"cmsdb": env_core.get("POSTGRES_DB", "cmsdb"), \
-			"database": env_core.get("POSTGRES_HOST", "database"), \
-			":5432": ":" + env_core.get("POSTGRES_PORT", "5432") \
-		}; \
-		\
-		with open("config/cms.toml", "r") as f: content = f.read(); \
-		\
-		for k, v in mapped.items(): \
-			content = content.replace(k, v); \
-		\
-		with open("config/cms.toml", "w") as f: f.write(content);'
+	if grep -q "POSTGRES_PASSWORD=" .env.core; then \
+		DB_USER=$$(grep "^POSTGRES_USER=" .env.core | cut -d '=' -f2-); \
+		DB_PASS=$$(grep "^POSTGRES_PASSWORD=" .env.core | cut -d '=' -f2-); \
+		DB_NAME=$$(grep "^POSTGRES_DB=" .env.core | cut -d '=' -f2-); \
+		DB_HOST=$$(grep "^POSTGRES_HOST=" .env.core | cut -d '=' -f2-); \
+		DB_PORT=$$(grep "^POSTGRES_PORT=" .env.core | cut -d '=' -f2-); \
+		SAFE_PASS=$$(echo "$$DB_PASS" | sed 's/[|&]/\\&/g'); \
+		sed -i "s|your_password_here|$$SAFE_PASS|" config/cms.toml; \
+		sed -i "s|cmsuser|$$DB_USER|" config/cms.toml; \
+		sed -i "s|cmsdb|$$DB_NAME|" config/cms.toml; \
+		sed -i "s|database:5432|$$DB_HOST:$$DB_PORT|" config/cms.toml; \
+	fi
 	@echo "" >> .env
 	@echo "# Docker Compose File Configuration" >> .env
 	@echo "COMPOSE_FILE=docker-compose.core.yml:docker-compose.admin.yml:docker-compose.contest.yml:docker-compose.worker.yml" >> .env
