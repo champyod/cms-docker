@@ -40,12 +40,14 @@ ResourceService = [["cms-resource-service", 28000]]
 ScoringService = [["cms-scoring-service", 28500]]
 Checker = [["cms-checker-service", 22000]]
 EvaluationService = [["cms-evaluation-service", 25000]]
-Worker = [
-    ["cms-worker-0", 26000],
-    ["cms-worker-1", 26001],
-    ["cms-worker-2", 26002],
-    ["cms-worker-3", 26003],
-]
+# Worker definitions are now managed through the Admin Panel UI
+# Uncomment and modify if you need to manually define workers
+# Worker = [
+#     ["cms-worker-0", 26000],
+#     ["cms-worker-1", 26001],
+#     ["cms-worker-2", 26002],
+#     ["cms-worker-3", 26003],
+# ]
 ContestWebServer = [["cms-contest-web-server-1", 21000]]
 AdminWebServer = [["cms-admin-web-server", 21100]]
 ProxyService = [["cms-proxy-service", 28600]]
