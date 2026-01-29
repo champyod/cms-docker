@@ -30,17 +30,25 @@ cd cms-docker
 git submodule update --init --recursive
 
 # 2. Configure environment (Critical Step)
-cp .env.core.example .env.core  # Edit with your settings
-make env  # Generates .env and config/cms.toml
+cp .env.core.example .env.core    # 1. Main config (DB, Public IP) - EDIT THIS FIRST!
+cp .env.admin.example .env.admin  # 2. Admin settings (Ports, Auth)
+cp .env.contest.example .env.contest # 3. Contest settings (Ports, Secrets)
+cp .env.worker.example .env.worker   # 4. Worker settings (Capacity)
+
+# 3. Generate combined configuration
+# This combines all .env.* files into a single .env and prevents duplicate variables
+make env
 ```
 
 ## Configuration
 
+**Key Concept:** `.env.core` is the **single source of truth** for shared variables like Database credentials and Paths. Other files (`.env.admin`, etc.) inherit these values to prevent configuration mismatches.
+
 Environment files:
-- `.env.core` - Database and core settings
-- `.env.admin` - Admin interface settings
-- `.env.contest` - Contest settings
-- `.env.worker` - Worker settings
+- **`.env.core` (Primary)** - Database credentials, Public IP, Access Mode, Domain, and core paths. **Start here.**
+- `.env.admin` - Admin interface specific settings (Ports, Session duration)
+- `.env.contest` - Contest interface specific settings (Contest ID, Secrets)
+- `.env.worker` - Worker specific settings (CPU/RAM limits)
 
 Run `make env` to generate the combined `.env` and `config/cms.toml`.
 
