@@ -211,7 +211,7 @@ pull:
 		-f docker-compose.admin.yml -f docker-compose.admin.img.yml \
 		-f docker-compose.contest.yml -f docker-compose.contest.img.yml \
 		-f docker-compose.worker.yml -f docker-compose.worker.img.yml \
-		-f docker-compose.monitor.yml \
+		-f docker-compose.monitor.yml -f docker-compose.monitor.img.yml \
 		pull
 
 core-img:
@@ -226,6 +226,9 @@ contest-img:
 
 worker-img:
 	docker compose -f docker-compose.worker.yml -f docker-compose.worker.img.yml up -d --no-build
+
+infra-img:
+	docker compose -f docker-compose.monitor.yml -f docker-compose.monitor.img.yml up -d --no-build
 
 clean:
 	rm -f .env

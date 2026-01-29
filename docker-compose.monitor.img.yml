@@ -1,0 +1,3 @@
+services:
+  monitor:
+    image: ghcr.io/champyod/cms-docker-monitor:major-admin-panel
