@@ -132,7 +132,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels) for Admin Panel
+      - name: Extract metadata (tags, labels) for Admin Panel (Next.js)
         id: meta-admin
         uses: docker/metadata-action@v5
         with:
