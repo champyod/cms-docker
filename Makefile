@@ -61,11 +61,11 @@ env:
 	@# Generate admin-panel/.env for Prisma
 	@echo "Generating admin-panel/.env..."
 	@if [ -f .env.core ]; then \
-		DB_USER=$$(grep "^POSTGRES_USER=" .env.core | cut -d '=' -f2); \
-		DB_PASS=$$(grep "^POSTGRES_PASSWORD=" .env.core | cut -d '=' -f2); \
-		DB_NAME=$$(grep "^POSTGRES_DB=" .env.core | cut -d '=' -f2); \
-		DB_HOST=$$(grep "^POSTGRES_HOST=" .env.core | cut -d '=' -f2); \
-		DB_PORT=$$(grep "^POSTGRES_PORT=" .env.core | cut -d '=' -f2); \
+		DB_USER=$$(grep "^POSTGRES_USER=" .env.core | cut -d '=' -f2-); \
+		DB_PASS=$$(grep "^POSTGRES_PASSWORD=" .env.core | cut -d '=' -f2-); \
+		DB_NAME=$$(grep "^POSTGRES_DB=" .env.core | cut -d '=' -f2-); \
+		DB_HOST=$$(grep "^POSTGRES_HOST=" .env.core | cut -d '=' -f2-); \
+		DB_PORT=$$(grep "^POSTGRES_PORT=" .env.core | cut -d '=' -f2-); \
 		echo "DATABASE_URL=\"postgresql://$$DB_USER:$$DB_PASS@localhost:$$DB_PORT/$$DB_NAME\"" > admin-panel/.env; \
 	else \
 		echo "# Please configure .env.core first" > admin-panel/.env; \
@@ -102,17 +102,28 @@ env:
 	SECRET=$$(python3 -c 'import secrets; print(secrets.token_hex(16))'); \
 	sed -i 's/secret_key = "8e045a51e4b102ea803c06f92841a1fb"/secret_key = "'$${SECRET}'"/' config/cms.toml
 	@echo "Injecting database configuration from .env.core into config/cms.toml..."; \
-	if grep -q "POSTGRES_PASSWORD=" .env.core; then \
-		DB_USER=$$(grep "^POSTGRES_USER=" .env.core | cut -d '=' -f2); \
-		DB_PASS=$$(grep "^POSTGRES_PASSWORD=" .env.core | cut -d '=' -f2); \
-		DB_NAME=$$(grep "^POSTGRES_DB=" .env.core | cut -d '=' -f2); \
-		DB_HOST=$$(grep "^POSTGRES_HOST=" .env.core | cut -d '=' -f2); \
-		DB_PORT=$$(grep "^POSTGRES_PORT=" .env.core | cut -d '=' -f2); \
-		sed -i "s/your_password_here/$$DB_PASS/" config/cms.toml; \
-		sed -i "s/cmsuser/$$DB_USER/" config/cms.toml; \
-		sed -i "s/cmsdb/$$DB_NAME/" config/cms.toml; \
-		sed -i "s/database:5432/$$DB_HOST:$$DB_PORT/" config/cms.toml; \
-	fi
+	python3 -c 'import os; \
+		env_core = {}; \
+		with open(".env.core") as f: \
+			for line in f: \
+				if "=" in line and not line.strip().startswith("#"): \
+					k, v = line.strip().split("=", 1); \
+					env_core[k.strip()] = v.strip(); \
+		\
+		mapped = { \
+			"your_password_here": env_core.get("POSTGRES_PASSWORD", "cmspassword"), \
+			"cmsuser": env_core.get("POSTGRES_USER", "cmsuser"), \
+			"cmsdb": env_core.get("POSTGRES_DB", "cmsdb"), \
+			"database": env_core.get("POSTGRES_HOST", "database"), \
+			":5432": ":" + env_core.get("POSTGRES_PORT", "5432") \
+		}; \
+		\
+		with open("config/cms.toml", "r") as f: content = f.read(); \
+		\
+		for k, v in mapped.items(): \
+			content = content.replace(k, v); \
+		\
+		with open("config/cms.toml", "w") as f: f.write(content);'
 	@echo "" >> .env
 	@echo "# Docker Compose File Configuration" >> .env
 	@echo "COMPOSE_FILE=docker-compose.core.yml:docker-compose.admin.yml:docker-compose.contest.yml:docker-compose.worker.yml" >> .env
