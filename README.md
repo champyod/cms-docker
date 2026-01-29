@@ -137,12 +137,27 @@ To enable automatic updates (checking every 60 seconds):
 
 ## Services
 
-| Stack | Services | Port |
-|-------|----------|------|
-| Core | Database, LogService, ResourceService, ScoringService, EvaluationService, ProxyService, CheckerService | - |
-| Admin | AdminWebServer, RankingWebServer | 8889, 8890 |
-| Contest | ContestWebServer | 8888 |
-| Worker | Worker | - |
+| Stack | Services | Port (Internal) | Port (External / Host) | Env Var to Change |
+|-------|----------|-----------------|------------------------|-------------------|
+| Core | Database | 5432 | 5432 | `POSTGRES_PORT_EXTERNAL` (.env.core) |
+| Core | LogService | 29000 | 29000 | `docker-compose.core.yml` |
+| Core | ResourceService | 28000 | 28000 | `docker-compose.core.yml` |
+| Admin | AdminWebServer | 8889 | 8889 | `ADMIN_LISTEN_PORT` (.env.admin) |
+| Admin | RankingWebServer | 8890 | 8890 | `RANKING_LISTEN_PORT` (.env.admin) |
+| Contest | ContestWebServer | 8888 | 8888 | `CONTEST_LISTEN_PORT` (.env.contest) |
+
+### Port Conflicts
+If you are running other services that already use port **5432** (Postgres) or **8888**:
+
+1. Open `.env.core` and change the External Port:
+   ```ini
+   POSTGRES_PORT_EXTERNAL=5433  # Creates mapping 5433:5432
+   ```
+2. Restart Core services:
+   ```bash
+   make core-img
+   ```
+   Your database will now be accessible on host port 5433, but internal CMS services will still connect transparently on 5432.
 
 ## Worker
 
