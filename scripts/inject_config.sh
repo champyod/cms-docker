@@ -51,4 +51,46 @@ sed -i "s|cmsuser|$DB_USER|g" "$CONFIG_FILE"
 sed -i "s|cmsdb|$DB_NAME|g" "$CONFIG_FILE"
 sed -i "s|database:5432|$DB_HOST:$DB_PORT|g" "$CONFIG_FILE"
 
+# Build Worker array from WORKER_N environment variables
+echo "Building worker configuration..."
+WORKER_ARRAY=""
+WORKER_COUNT=0
+
+# Read all WORKER_N variables from .env.core
+for i in {0..99}; do
+    WORKER_VAR="WORKER_$i"
+    WORKER_VALUE=$(get_env_val "$WORKER_VAR")
+    
+    if [ -n "$WORKER_VALUE" ]; then
+        # Parse hostname:port
+        WORKER_HOST=$(echo "$WORKER_VALUE" | cut -d ':' -f1)
+        WORKER_PORT=$(echo "$WORKER_VALUE" | cut -d ':' -f2)
+        
+        # Add to array
+        if [ -z "$WORKER_ARRAY" ]; then
+            WORKER_ARRAY="[\"$WORKER_HOST\", $WORKER_PORT]"
+        else
+            WORKER_ARRAY="$WORKER_ARRAY,\n    [\"$WORKER_HOST\", $WORKER_PORT]"
+        fi
+        
+        WORKER_COUNT=$((WORKER_COUNT + 1))
+        echo "  - Worker $i: $WORKER_HOST:$WORKER_PORT"
+    fi
+done
+
+# Inject workers into cms.toml
+if [ $WORKER_COUNT -gt 0 ]; then
+    # Find the commented Worker section and uncomment/replace it
+    # The pattern matches the commented worker block in cms.sample.toml
+    sed -i "/^# Worker definitions are now managed/,/^# \]/d" "$CONFIG_FILE"
+    
+    # Insert the Worker array after EvaluationService
+    WORKER_SECTION="Worker = [\n    $WORKER_ARRAY\n]"
+    sed -i "/^EvaluationService = /a\\$WORKER_SECTION" "$CONFIG_FILE"
+    
+    echo "Injected $WORKER_COUNT worker(s) into configuration."
+else
+    echo "No workers configured. Skipping worker injection."
+fi
+
 echo "Configuration injection complete."

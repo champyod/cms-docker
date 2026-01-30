@@ -1,0 +1,54 @@
+---
+# Sample Batch Contest Configuration
+# Use this file with: ./scripts/create-contests.sh -f examples/contests.yaml
+
+contests:
+  # Practice Contest for Beginners
+  - name: "Practice Contest 2024"
+    description: "A warm-up contest for new participants"
+    start_time: "2024-03-01T10:00:00"
+    end_time: "2024-03-01T12:00:00"
+    token_mode: "disabled"
+    max_submission_number: 50
+    min_submission_interval: 60
+    
+  # Weekly Programming Challenge
+  - name: "Weekly Challenge #1"
+    description: "Weekly programming challenge - Easy to Medium problems"
+    start_time: "2024-03-08T14:00:00"
+    end_time: "2024-03-08T17:00:00"
+    token_mode: "finite"
+    token_max_number: 100
+    token_gen_time: 30
+    token_gen_number: 2
+    max_submission_number: 100
+    min_submission_interval: 30
+    
+  # Advanced Competition
+  - name: "Advanced Contest 2024"
+    description: "Expert level algorithmic problems"
+    start_time: "2024-03-15T09:00:00"
+    end_time: "2024-03-15T14:00:00"
+    token_mode: "infinite"
+    max_submission_number: 200
+    min_submission_interval: 20
+    
+  # School Championship
+  - name: "School Programming Championship"
+    description: "Annual school-wide programming competition"
+    start_time: "2024-03-22T13:00:00"
+    end_time: "2024-03-22T18:00:00"
+    token_mode: "finite"
+    token_max_number: 50
+    token_gen_time: 60
+    max_submission_number: 150
+    min_submission_interval: 45
+
+  # Marathon Contest
+  - name: "24-Hour Marathon 2024"
+    description: "Endurance programming marathon"
+    start_time: "2024-04-01T00:00:00"
+    end_time: "2024-04-02T00:00:00"
+    token_mode: "infinite"
+    max_submission_number: 500
+    min_submission_interval: 10

@@ -9,6 +9,16 @@ export async function POST(req: NextRequest) {
 
   try {
     const data = await req.json();
+
+    // Validate contest name
+    const nameRegex = /^[A-Za-z0-9_-]+$/;
+    if (!data.name || !nameRegex.test(data.name)) {
+      return apiError({
+        message: 'Contest name must contain only letters, numbers, hyphens and underscores',
+        status: 400
+      });
+    }
+
     const startDate = new Date(data.start);
     const stopDate = new Date(data.stop);
     const analysisStart = data.analysis_start ? new Date(data.analysis_start) : new Date(stopDate.getTime() + 1000);

@@ -2,6 +2,8 @@
 
 Scalable, containerized deployment for the [Contest Management System (CMS)](https://github.com/cms-dev/cms).
 
+> **📚 New to CMS?** Check out our [**Step-by-Step Tutorial**](TUTORIAL.md) for a complete walkthrough!
+
 ## Quick Start
 
 ### 1. Build & Setup
@@ -62,6 +64,47 @@ By default, services are bound to `0.0.0.0`:
 
 ---
 
+## Worker Management
+
+Workers are now configured via environment variables in `.env.core`, ensuring they persist across `make env` regenerations.
+
+### Adding Workers via Admin UI
+The modern Admin Panel (port 8891) provides a UI to manage workers. When you add/remove workers through the UI:
+1.  The UI calls `scripts/manage-workers.sh` to update `.env.core`
+2.  Run `make env` to regenerate `cms.toml` with the new worker configuration
+3.  Restart relevant services: `make core-img`
+
+### Manual Worker Configuration
+Edit `.env.core` and add workers in the format:
+```ini
+WORKER_0=cms-worker-0:26000
+WORKER_1=192.168.1.50:26001
+WORKER_2=remote-server:26000
+```
+
+Then regenerate configuration:
+```bash
+make env
+make core-img  # or: docker restart cms-log-service
+```
+
+### Helper Script
+```bash
+# List workers
+./scripts/manage-workers.sh list
+
+# Add a worker
+./scripts/manage-workers.sh add "cms-worker-1" 26001
+
+# Remove worker
+./scripts/manage-workers.sh remove 1
+
+# Update worker
+./scripts/manage-workers.sh update 0 "new-host" 26000
+```
+
+---
+
 ## Infrastructure Monitoring
 
 This repository includes a lightweight monitoring service that tracks CPU, Memory, Disk, and Docker status, alerting via Discord.
@@ -81,6 +124,47 @@ This repository includes a lightweight monitoring service that tracks CPU, Memor
 make infra        # Start monitoring
 make infra-stop   # Stop monitoring
 ```
+
+---
+
+## Batch Contest Creation
+
+Create multiple contests at once using YAML or JSON configuration files.
+
+### Quick Start
+
+```bash
+# Create contests from YAML
+./scripts/create-contests.sh -f examples/contests.yaml
+
+# Dry run (preview without creating)
+./scripts/create-contests.sh -f examples/contests.yaml --dry-run
+
+# Using JSON
+./scripts/create-contests.sh -f examples/contests.json
+```
+
+### Sample Configuration
+
+**examples/contests.yaml:**
+```yaml
+contests:
+  - name: "Practice Contest 2024"
+    description: "A warm-up contest"
+    start_time: "2024-03-01T10:00:00"
+    end_time: "2024-03-01T12:00:00"
+    token_mode: "disabled"
+    max_submission_number: 50
+    
+  - name: "Advanced Challenge"
+    description: "Expert problems"
+    start_time: "2024-03-15T09:00:00"
+    end_time: "2024-03-15T14:00:00"
+    token_mode: "finite"
+    token_max_number: 100
+```
+
+See [`examples/contests.yaml`](examples/contests.yaml) for more examples.
 
 ---
 

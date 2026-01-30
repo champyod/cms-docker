@@ -9,6 +9,7 @@ import type { ContestData } from '@/app/actions/contests';
 import { apiClient } from '@/lib/apiClient';
 import { contests } from '@prisma/client';
 import { PROGRAMMING_LANGUAGES } from '@/lib/constants';
+import { useToast } from '@/components/providers/ToastProvider';
 
 interface ContestModalProps {
   isOpen: boolean;
@@ -27,6 +28,7 @@ const formatDateForInput = (date: Date | string | undefined) => {
 type Tab = 'general' | 'access' | 'tokens' | 'limits' | 'analysis';
 
 export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestModalProps) {
+  const { addToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<Tab>('general');
@@ -149,6 +151,20 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
     setLoading(true);
     setError('');
 
+    // Validate name format
+    const nameRegex = /^[A-Za-z0-9_-]+$/;
+    if (!nameRegex.test(formData.name)) {
+      const msg = 'Contest name must contain only letters, numbers, hyphens and underscores';
+      setError(msg);
+      addToast({
+        type: 'error',
+        title: 'Invalid Name',
+        message: msg
+      });
+      setLoading(false);
+      return;
+    }
+
     try {
       const payload = { ...formData };
 
@@ -157,13 +173,30 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
         : await apiClient.post('/api/contests', payload);
 
       if (result.success) {
+        addToast({
+          type: 'success',
+          title: contest ? 'Contest Updated' : 'Contest Created',
+          message: `Successfully ${contest ? 'updated' : 'created'} contest "${formData.name}"`
+        });
         onSuccess();
         onClose();
       } else {
-        setError(result.error || 'Operation failed');
+        const msg = result.error || 'Operation failed';
+        setError(msg);
+        addToast({
+          type: 'error',
+          title: 'Error',
+          message: msg
+        });
       }
-    } catch (err) {
-      setError('An unexpected error occurred');
+    } catch {
+      const msg = 'An unexpected error occurred';
+      setError(msg);
+      addToast({
+        type: 'error',
+        title: 'Error',
+        message: msg
+      });
     } finally {
       setLoading(false);
     }
@@ -239,6 +272,8 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
                     <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Contest Name</label>
                     <input
                       required
+                      pattern="^[A-Za-z0-9_-]+$"
+                      title="Only letters, numbers, hyphens and underscores are allowed"
                       type="text"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
