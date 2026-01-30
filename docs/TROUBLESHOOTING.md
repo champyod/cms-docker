@@ -798,7 +798,7 @@ If you can't solve the issue:
    ```
 
 2. **Check documentation:**
-   - [Setup Guide](SETUP-GUIDE.md)
+   - [Tutorial](TUTORIAL.md)
    - [Worker Setup](WORKER-SETUP.md)
    - [Access Configuration](ACCESS-CONFIGURATION.md)
 
@@ -818,9 +818,9 @@ If you can't solve the issue:
 
 ## Support Resources
 
-- 📖 [Full Documentation](README.md)
-- 🚀 [Setup Guide](SETUP-GUIDE.md)
+- 📖 [Full Documentation](../README.md)
+- 🚀 [Tutorial](TUTORIAL.md)
 - 📦 [Portainer Guide](PORTAINER-GUIDE.md)
 - 🌐 [Access Configuration](ACCESS-CONFIGURATION.md)
-- 📋 [Quick Reference](QUICK-REFERENCE.md)
+- 📋 [Quick Reference](QUICKREF.md)
 - 🌍 [Worker Setup](WORKER-SETUP.md)

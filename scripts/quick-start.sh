@@ -454,7 +454,7 @@ else
     echo "  🏆 Ranking Interface:  http://${RANKING_DOMAIN}"
     echo ""
     print_warning "Make sure DNS is configured and reverse proxy is setup"
-    echo "  See ACCESS-CONFIGURATION.md for detailed instructions"
+    echo "  See docs/ACCESS-CONFIGURATION.md for detailed instructions"
 fi
 echo ""
 
@@ -488,7 +488,7 @@ echo "  - View logs: docker logs <container-name>"
 echo "  - Restart service: docker restart <container-name>"
 echo ""
 
-print_success "For detailed documentation, see DOCKER-DEPLOYMENT.md"
+print_success "For detailed documentation, see README.md"
 echo ""
 
 # Save summary to file
@@ -543,9 +543,9 @@ Services Deployed:
   - Workers: $([ "$DEPLOY_MODE" = "1" ] || [ "$DEPLOY_WORKERS" != "n" ] && echo "$NUM_WORKERS" || echo "0")
 
 For more information, see:
-  - Quick Start: QUICKSTART.md
-  - Full Guide: DOCKER-DEPLOYMENT.md
-  - Access Config: ACCESS-CONFIGURATION.md
+  - Tutorial: docs/TUTORIAL.md
+  - Full Guide: README.md
+  - Access Config: docs/ACCESS-CONFIGURATION.md
 EOF
 
 print_success "Deployment summary saved to DEPLOYMENT-SUMMARY.txt"

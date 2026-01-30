@@ -196,8 +196,8 @@ docker restart <name>  # Restart container
 ## Documentation
 
 - **Tutorial**: [TUTORIAL.md](TUTORIAL.md)
-- **Full README**: [README.md](README.md)
-- **Admin UI Integration**: [admin-panel/INTEGRATION.md](admin-panel/INTEGRATION.md)
+- **Full README**: [README.md](../README.md)
+- **Admin UI Integration**: [admin-panel/INTEGRATION.md](../admin-panel/INTEGRATION.md)
 - **CMS Docs**: https://cms.readthedocs.io/
 
 ## Support

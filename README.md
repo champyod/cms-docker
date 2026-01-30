@@ -2,7 +2,7 @@
 
 Scalable, containerized deployment for the [Contest Management System (CMS)](https://github.com/cms-dev/cms).
 
-> **📚 New to CMS?** Check out our [**Step-by-Step Tutorial**](TUTORIAL.md) for a complete walkthrough!
+> **📚 New to CMS?** Check out our [**Step-by-Step Tutorial**](docs/TUTORIAL.md) for a complete walkthrough!
 
 ## Quick Start
 

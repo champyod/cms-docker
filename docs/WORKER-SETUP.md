@@ -591,14 +591,14 @@ Add to crontab:
 
 ## Next Steps
 
-- **[Setup Guide](SETUP-GUIDE.md)** - Main setup instructions
+- **[Tutorial](TUTORIAL.md)** - Main setup instructions
 - **[Troubleshooting](TROUBLESHOOTING.md)** - Fix common issues
-- **[Quick Reference](QUICK-REFERENCE.md)** - Common commands
+- **[Quick Reference](QUICKREF.md)** - Common commands
 
 ---
 
 ## Support
 
-- 📖 [Full Documentation](README.md)
+- 📖 [Full Documentation](../README.md)
 - 💬 [Telegram Community](https://t.me/contestms)
 - 🐛 [Report Issues](https://github.com/cms-dev/cms/issues)

@@ -415,7 +415,7 @@ docker compose -f docker-compose.worker.yml up -d --scale worker=3
 
 ## Next Steps
 
-- **Read the full documentation**: [README.md](README.md)
+- **Read the full documentation**: [README.md](../README.md)
 - **Join the CMS community**: [CMS GitHub](https://github.com/cms-dev/cms)
 - **Explore advanced features**: Worker distribution, custom graders, special tasks
 
