@@ -1,0 +1,33 @@
+{
+  "dependencies": {
+    "cms-database": [
+      "cms-log-service"
+    ],
+    "cms-log-service": [
+      "cms-resource-service",
+      "cms-scoring-service",
+      "cms-evaluation-service",
+      "cms-proxy-service",
+      "cms-checker-service",
+      "cms-worker",
+      "cms-contest-web-server",
+      "cms-ranking-web-server"
+    ],
+    "cms-contest-web-server": [
+      "cms-nginx-contest"
+    ]
+  },
+  "env_triggers": {
+    "POSTGRES_DB": ["cms-database", "cms-admin-panel-next"],
+    "POSTGRES_USER": ["cms-database", "cms-admin-panel-next"],
+    "POSTGRES_PASSWORD": ["cms-database", "cms-admin-panel-next"],
+    "CMS_CONFIG": ["cms-log-service", "cms-resource-service", "cms-scoring-service", "cms-evaluation-service", "cms-proxy-service", "cms-checker-service"],
+    "CONTEST_ID": ["cms-contest-web-server", "cms-evaluation-service", "cms-proxy-service", "cms-nginx-contest"],
+    "WORKER_SHARD": ["cms-worker"],
+    "PUBLIC_IP": ["cms-admin-panel-next"],
+    "VITE_API_URL": ["cms-admin-panel-next"],
+    "TAILSCALE_IP": ["cms-admin-panel-next"],
+    "SECRET_KEY": ["cms-contest-web-server"],
+    "COOKIE_DURATION": ["cms-contest-web-server"]
+  }
+}

@@ -71,7 +71,61 @@ export async function switchContest(contestId: number) {
   }
 }
 
-export async function restartServices(type: 'all' | 'core' | 'worker' = 'all') {
+interface RestartPolicies {
+    dependencies: Record<string, string[]>;
+    env_triggers: Record<string, string[]>;
+}
+
+async function getRestartPolicies(): Promise<RestartPolicies | null> {
+    const rootDir = getRepoRoot();
+    const policyPath = path.join(rootDir, 'config', 'restart_policies.json');
+    try {
+        const content = await fs.readFile(policyPath, 'utf-8');
+        return JSON.parse(content);
+    } catch (e) {
+        console.error('Failed to read restart policies:', e);
+        return null;
+    }
+}
+
+export async function analyzeRestartRequirements(changedKeys: string[]) {
+    const policies = await getRestartPolicies();
+    if (!policies) return { requiredRestarts: [] };
+
+    const initialSet = new Set<string>();
+    
+    // 1. Identify direct impacts from env vars
+    for (const key of changedKeys) {
+        const affected = policies.env_triggers[key];
+        if (affected) {
+            affected.forEach(s => initialSet.add(s));
+        }
+    }
+
+    // 2. Expand dependencies (transitive closure)
+    // If A restarts, and B depends on A, B must restart.
+    // The 'dependencies' map in JSON is: "A": ["B", "C"] meaning "If A restarts, B and C must restart".
+    
+    const finalSet = new Set(initialSet);
+    const queue = Array.from(initialSet);
+    
+    while (queue.length > 0) {
+        const current = queue.shift()!;
+        const dependents = policies.dependencies[current];
+        if (dependents) {
+            for (const dep of dependents) {
+                if (!finalSet.has(dep)) {
+                    finalSet.add(dep);
+                    queue.push(dep);
+                }
+            }
+        }
+    }
+
+    return { requiredRestarts: Array.from(finalSet) };
+}
+
+export async function restartServices(type: 'all' | 'core' | 'worker' | 'custom', customList?: string[]) {
   await ensurePermission('all');
   try {
     const rootDir = getRepoRoot();
@@ -79,9 +133,27 @@ export async function restartServices(type: 'all' | 'core' | 'worker' = 'all') {
 
     // Using docker compose directly as Makefile might be complex or missing specific targets
     if (type === 'core') {
-      cmd = 'docker compose -f docker-compose.core.yml up -d --build';
+      cmd = 'docker compose -f docker-compose.core.yml up -d --build --force-recreate';
     } else if (type === 'worker') {
-      cmd = 'docker compose -f docker-compose.worker.yml up -d --build';
+      cmd = 'docker compose -f docker-compose.worker.yml up -d --build --force-recreate';
+    } else if (type === 'custom' && customList && customList.length > 0) {
+        // We need to map service names to compose files or just run all compose files with the list
+        // A safe bet is to run all relevant compose files and specify the services.
+        // However, services might belong to different compose files.
+        // docker compose -f ... -f ... up -d --force-recreate service1 service2
+        const files = [
+            'docker-compose.core.yml',
+            'docker-compose.admin.yml',
+            'docker-compose.worker.yml',
+            'docker-compose.contest.yml',
+            'docker-compose.monitor.yml'
+        ].map(f => `-f ${f}`).join(' ');
+        
+        // Sanitize customList to avoid injection
+        const safeList = customList.filter(s => /^[a-zA-Z0-9_-]+$/.test(s)).join(' ');
+        if (!safeList) throw new Error("Invalid service list");
+
+        cmd = `docker compose ${files} up -d --force-recreate ${safeList}`;
     } else {
       // All basic services
       cmd = 'docker compose -f docker-compose.core.yml -f docker-compose.contest.yml -f docker-compose.worker.yml up -d --build';
