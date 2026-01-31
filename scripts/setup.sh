@@ -190,6 +190,7 @@ SCORING_SERVICE_SHARD=0
 EVALUATION_SERVICE_SHARD=0
 PROXY_SERVICE_SHARD=0
 CHECKER_SERVICE_SHARD=0
+# Workers are managed via Admin UI and stored here as WORKER_N variables
 EOF
 
 # ... (rest of environment generation same until deployment)
