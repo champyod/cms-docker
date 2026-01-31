@@ -111,12 +111,11 @@ env:
 		echo "Setting bind address to 0.0.0.0 in config/cms_ranking.toml..."; \
 		sed -i 's/"127.0.0.1"/"0.0.0.0"/g' config/cms_ranking.toml; \
 	fi
-	@echo "Generating and proactively setting a secure SECRET_KEY in config/cms.toml..."; \
-	@echo "Generating and proactively setting a secure SECRET_KEY in config/cms.toml..."; \
-	SECRET=$$(python3 -c 'import secrets; print(secrets.token_hex(16))'); \
-	sed -i 's/secret_key = "8e045a51e4b102ea803c06f92841a1fb"/secret_key = "'$${SECRET}'"/' config/cms.toml
+	@echo "Generating a secure SECRET_KEY in config/cms.toml..."
+	@SECRET=$$(python3 -c 'import secrets; print(secrets.token_hex(16))'); \
+	sed -i "s/secret_key = \"8e045a51e4b102ea803c06f92841a1fb\"/secret_key = \"$${SECRET}\"/" config/cms.toml
 	@# Inject database configuration from .env.core into config/cms.toml...
-	chmod +x scripts/inject_config.sh && ./scripts/inject_config.sh
+	@chmod +x scripts/inject_config.sh && ./scripts/inject_config.sh
 	@# Generate Multi-Contest Compose
 	@if [ -f .env.contest ]; then \
 		CONFIG=$$(grep "^CONTESTS_DEPLOY_CONFIG=" .env.contest | cut -d '=' -f2-); \

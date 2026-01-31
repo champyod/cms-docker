@@ -19,31 +19,26 @@ version: '3.8'
 services:
 EOF
 
-# Parse JSON using sed/grep (no jq required)
-# 1. Strip whitespace and quotes
-# 2. Split objects into lines
-# 3. Iterate and extract values
-ITEMS=$(echo "$CONFIG" | sed 's/[[:space:]]//g; s/'.'{//; s/'}'//; s/'},{'}'\n'{'/g')
-
 COUNT=0
-if [ "$CONFIG" != "[]" ] && [ -n "$ITEMS" ]; then
-    while read -r line; do
-        [ -z "$line" ] && continue
-        
-        # Extract values using regex-like grep/sed
-        ID=$(echo "$line" | sed -n 's/.*id:\([0-9]*\).*/\1/p' || echo "")
-        # Try both "id":1 and id:1 formats
-        if [ -z "$ID" ]; then ID=$(echo "$line" | sed -n 's/.*"id":\([0-9]*\).*/\1/p'); fi
-        
-        PORT=$(echo "$line" | sed -n 's/.*port:\([0-9]*\).*/\1/p' || echo "")
-        if [ -z "$PORT" ]; then PORT=$(echo "$line" | sed -n 's/.*"port":\([0-9]*\).*/\1/p'); fi
-        
-        DOMAIN=$(echo "$line" | sed -n 's/.*domain:"\([^"]*\)".*/\1/p' || echo "")
-        if [ -z "$DOMAIN" ]; then DOMAIN=$(echo "$line" | sed -n 's/.*domain:\([^,}]*\).*/\1/p'); fi
-        if [ -z "$DOMAIN" ]; then DOMAIN="contest-$ID.cms.local"; fi
 
-        if [ -n "$ID" ] && [ -n "$PORT" ]; then
-            cat >> "$OUTPUT_FILE" << EOF
+# Extract each JSON object from the array using grep
+# This handles [{"id":1,...},{"id":2,...}]
+echo "$CONFIG" | grep -o '{[^}]*}' | while read -r line; do
+    [ -z "$line" ] && continue
+    
+    # Extract values using grep and cut
+    # Handles both "key":value and "key":"value"
+    ID=$(echo "$line" | grep -oE '"id":[[:space:]]*[0-9]+' | cut -d: -f2 | tr -d '[:space:]')
+    PORT=$(echo "$line" | grep -oE '"port":[[:space:]]*[0-9]+' | cut -d: -f2 | tr -d '[:space:]')
+    DOMAIN=$(echo "$line" | grep -oE '"domain":[[:space:]]*"[^"]*"' | cut -d: -f2 | tr -d '[:space:]"' )
+    
+    # Fallback for domain if missing
+    if [ -z "$DOMAIN" ]; then
+        DOMAIN="contest-$ID.cms.local"
+    fi
+
+    if [ -n "$ID" ] && [ -n "$PORT" ]; then
+        cat >> "$OUTPUT_FILE" << EOF
   contest-web-server-$ID:
     build:
       context: .
@@ -51,18 +46,18 @@ if [ "$CONFIG" != "[]" ] && [ -n "$ITEMS" ]; then
     container_name: cms-contest-web-server-$ID
     restart: unless-stopped
     environment:
-      CMS_CONFIG: 
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: ContestWebServer
       SERVICE_SHARD: 0
       CONTEST_LISTEN_PORT: 8888
       CONTEST_LISTEN_ADDRESS: 0.0.0.0
       CONTEST_ID: $ID
-      SECRET_KEY: 
-      COOKIE_DURATION: 10800
-      MAX_SUBMISSION_LENGTH: 100000
-      MAX_INPUT_LENGTH: 5000000
-      SUBMIT_LOCAL_COPY: true
-      NUM_PROXIES_USED: 1
+      SECRET_KEY: ${SECRET_KEY}
+      COOKIE_DURATION: ${COOKIE_DURATION:-10800}
+      MAX_SUBMISSION_LENGTH: ${MAX_SUBMISSION_LENGTH:-100000}
+      MAX_INPUT_LENGTH: ${MAX_INPUT_LENGTH:-5000000}
+      SUBMIT_LOCAL_COPY: ${SUBMIT_LOCAL_COPY:-true}
+      NUM_PROXIES_USED: ${NUM_PROXIES_USED:-1}
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
@@ -82,12 +77,11 @@ if [ "$CONFIG" != "[]" ] && [ -n "$ITEMS" ]; then
       - "traefik.http.routers.cms-contest-$ID.rule=Host(`$DOMAIN`)"
       - "traefik.http.services.cms-contest-$ID.loadbalancer.server.port=8888"
 EOF
-            COUNT=$((COUNT + 1))
-        fi
-    done <<< "$ITEMS"
-fi
+        COUNT=$((COUNT + 1))
+    fi
+done
 
-if [ "$COUNT" -eq 0 ]; then
+if [ $(grep -c "  contest-web-server-" "$OUTPUT_FILE") -eq 0 ]; then
     echo "  # No contests configured" >> "$OUTPUT_FILE"
 fi
 
@@ -112,16 +106,12 @@ volumes:
 EOF
 
 # Add generated volumes
-if [ "$CONFIG" != "[]" ] && [ -n "$ITEMS" ]; then
-    while read -r line; do
-        [ -z "$line" ] && continue
-        ID=$(echo "$line" | sed -n 's/.*id:\([0-9]*\).*/\1/p' || echo "")
-        if [ -z "$ID" ]; then ID=$(echo "$line" | sed -n 's/.*"id":\([0-9]*\).*/\1/p'); fi
-        if [ -n "$ID" ]; then
-            echo "  cms-submissions-$ID:" >> "$OUTPUT_FILE"
-            echo "    name: cms-submissions-contest-$ID" >> "$OUTPUT_FILE"
-        fi
-done <<< "$ITEMS"
-fi
+echo "$CONFIG" | grep -o '{[^}]*}' | while read -r line; do
+    ID=$(echo "$line" | grep -oE '"id":[[:space:]]*[0-9]+' | cut -d: -f2 | tr -d '[:space:]')
+    if [ -n "$ID" ]; then
+        echo "  cms-submissions-$ID:" >> "$OUTPUT_FILE"
+        echo "    name: cms-submissions-contest-$ID" >> "$OUTPUT_FILE"
+    fi
+done
 
-echo "Successfully generated $OUTPUT_FILE with $COUNT contests."
+echo "Successfully generated $OUTPUT_FILE"
