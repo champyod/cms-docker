@@ -118,7 +118,8 @@ configure_env_file() {
     # 2. Check for orphan variables (in target but not in example)
     if [ -f "$target_file" ]; then
         # Get all keys from target file that are not in example file
-        while IFS= read -r target_line; do
+        # Using FD 4 to read the file so we can still use stdin for user input
+        while IFS= read -r target_line <&4 || [ -n "$target_line" ]; do
             if [[ "$target_line" =~ ^([^#=]+)=(.*)$ ]]; then
                 local t_key="${BASH_REMATCH[1]}"
                 local t_val="${BASH_REMATCH[2]}"
@@ -130,14 +131,14 @@ configure_env_file() {
                     echo -e "  [R] Remove it"
                     
                     read -p "Choice for $t_key [K]: " orphan_choice
-                    if [[ ! "$orphan_choice" =~ ^[Rr] ]]; then
-                        echo "$target_line" >> "$temp_file"
-                    else
+                    if [[ "$orphan_choice" =~ ^[Rr] ]]; then
                         print_info "Removing $t_key..."
+                    else
+                        echo "$target_line" >> "$temp_file"
                     fi
                 fi
             fi
-        done < "$target_file"
+        done 4< "$target_file"
     fi
 
     mv "$temp_file" "$target_file"
