@@ -224,13 +224,16 @@ infra-clean:
 	$(COMPOSE) -f docker-compose.monitor.yml down -v
 
 pull:
-	$(COMPOSE) \
-		-f docker-compose.core.yml -f docker-compose.core.img.yml \
-		-f docker-compose.admin.yml -f docker-compose.admin.img.yml \
-		-f docker-compose.contest.yml -f docker-compose.contest.img.yml \
-		-f docker-compose.worker.yml -f docker-compose.worker.img.yml \
-		-f docker-compose.monitor.yml -f docker-compose.monitor.img.yml \
-		pull
+	@echo "Pulling core, admin, worker, and monitor images..."
+	@$(COMPOSE) -f docker-compose.core.yml -f docker-compose.core.img.yml pull || true
+	@$(COMPOSE) -f docker-compose.admin.yml -f docker-compose.admin.img.yml pull || true
+	@$(COMPOSE) -f docker-compose.worker.yml -f docker-compose.worker.img.yml pull || true
+	@$(COMPOSE) -f docker-compose.monitor.yml -f docker-compose.monitor.img.yml pull || true
+	@if [ -f docker-compose.contests.generated.yml ] && grep -q "contest-web-server-" docker-compose.contests.generated.yml; then \
+		echo "Pulling contest images from generated file..."; \
+		$(COMPOSE) -f docker-compose.contests.generated.yml pull || true; \
+	fi
+	@echo "Pull complete."
 
 core-img:
 	$(COMPOSE) -f docker-compose.core.yml -f docker-compose.core.img.yml up -d --no-build
