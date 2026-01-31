@@ -305,7 +305,6 @@ if [ "$SETUP_TYPE" = "main" ]; then
     
     make cms-init
     make prisma-sync
-    docker exec -i cms-database psql -U cmsuser -d cmsdb < scripts/fix_db_schema.sql
     
     if [ "$IS_UPDATE" != "true" ]; then
         print_step "User Configuration"

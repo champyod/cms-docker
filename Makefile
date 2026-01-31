@@ -142,10 +142,14 @@ core:
 	@echo "Services started. Use 'make db-reset' for a first-time setup or 'make cms-init' to just initialize the database."
 
 cms-init:
+	@echo "Synchronizing PostgreSQL password..."
+	@DB_PASS=$$(grep "^POSTGRES_PASSWORD=" .env.core | cut -d '=' -f2-); \
+	docker exec -i cms-database psql -U postgres -c "ALTER USER cmsuser WITH PASSWORD '$$DB_PASS';" || echo "Warning: Could not sync password (this is normal if DB is not initialized yet)."
 	@echo "Initializing CMS core database schema..."
 	@docker exec -it cms-log-service cmsInitDB || echo "Note: cmsInitDB skipped or already initialized."
 	@echo "Patching database schema for Admin Panel..."
-	@docker exec -i cms-database psql -U cmsuser -d cmsdb < scripts/fix_db_schema.sql
+	@DB_PASS=$$(grep "^POSTGRES_PASSWORD=" .env.core | cut -d '=' -f2-); \
+	docker exec -i -e PGPASSWORD="$$DB_PASS" cms-database psql -U cmsuser -d cmsdb < scripts/fix_db_schema.sql
 
 prisma-sync:
 	@echo "Synchronizing Admin Panel schema (forcing Prisma v6)..."
