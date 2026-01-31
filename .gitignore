@@ -31,3 +31,5 @@ test_logs/
 
 .agent/environment.md
 .result
+docker-compose.contests.generated.yml
+admin-panel/.env
