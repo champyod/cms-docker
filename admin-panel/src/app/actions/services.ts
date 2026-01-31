@@ -96,6 +96,12 @@ export async function analyzeRestartRequirements(changedKeys: string[]) {
     
     // 1. Identify direct impacts from env vars
     for (const key of changedKeys) {
+        // Special case: Multi-contest deployment config
+        if (key === 'CONTESTS_DEPLOY_CONFIG') {
+            initialSet.add('contest-stack');
+            continue;
+        }
+
         const affected = policies.env_triggers[key];
         if (affected) {
             affected.forEach(s => initialSet.add(s));
@@ -103,9 +109,6 @@ export async function analyzeRestartRequirements(changedKeys: string[]) {
     }
 
     // 2. Expand dependencies (transitive closure)
-    // If A restarts, and B depends on A, B must restart.
-    // The 'dependencies' map in JSON is: "A": ["B", "C"] meaning "If A restarts, B and C must restart".
-    
     const finalSet = new Set(initialSet);
     const queue = Array.from(initialSet);
     
@@ -131,32 +134,39 @@ export async function restartServices(type: 'all' | 'core' | 'worker' | 'custom'
     const rootDir = getRepoRoot();
     let cmd = '';
 
-    // Using docker compose directly as Makefile might be complex or missing specific targets
+    // First, always regenerate the env if customList contains anything that might affect it
+    // Or just always do it for safety before any restart
+    await execPromise('make env', { cwd: rootDir });
+
     if (type === 'core') {
       cmd = 'docker compose -f docker-compose.core.yml up -d --build --force-recreate';
     } else if (type === 'worker') {
       cmd = 'docker compose -f docker-compose.worker.yml up -d --build --force-recreate';
     } else if (type === 'custom' && customList && customList.length > 0) {
-        // We need to map service names to compose files or just run all compose files with the list
-        // A safe bet is to run all relevant compose files and specify the services.
-        // However, services might belong to different compose files.
-        // docker compose -f ... -f ... up -d --force-recreate service1 service2
+        // Check if we need to restart the whole contest stack
+        const needsContestStack = customList.includes('contest-stack') || customList.some(s => s.startsWith('cms-contest-web-server'));
+        
         const files = [
             'docker-compose.core.yml',
             'docker-compose.admin.yml',
             'docker-compose.worker.yml',
-            'docker-compose.contest.yml',
+            'docker-compose.contests.generated.yml',
             'docker-compose.monitor.yml'
         ].map(f => `-f ${f}`).join(' ');
         
-        // Sanitize customList to avoid injection
-        const safeList = customList.filter(s => /^[a-zA-Z0-9_-]+$/.test(s)).join(' ');
-        if (!safeList) throw new Error("Invalid service list");
-
-        cmd = `docker compose ${files} up -d --force-recreate ${safeList}`;
+        const filteredList = customList.filter(s => s !== 'contest-stack' && /^[a-zA-Z0-9_-]+$/.test(s));
+        
+        if (needsContestStack) {
+            // Restart all generated contest services
+            // Simplest way is to run 'up -d' on the generated file specifically
+            cmd = `docker compose ${files} up -d --remove-orphans --force-recreate ${filteredList.join(' ')}`;
+        } else {
+            if (filteredList.length === 0) return { success: true, message: 'Nothing to restart.' };
+            cmd = `docker compose ${files} up -d --force-recreate ${filteredList.join(' ')}`;
+        }
     } else {
       // All basic services
-      cmd = 'docker compose -f docker-compose.core.yml -f docker-compose.contest.yml -f docker-compose.worker.yml up -d --build';
+      cmd = 'docker compose -f docker-compose.core.yml -f docker-compose.admin.yml -f docker-compose.contests.generated.yml -f docker-compose.worker.yml up -d --build';
     }
 
     console.log(`Restarting services (${type}): ${cmd}`);

@@ -47,10 +47,10 @@ const CONFIG_SECTIONS: ConfigSection[] = [
     ]
   },
   {
-    title: 'Contest Settings',
+    title: 'Contest Deployment (Multi)',
     filename: '.env.contest',
     fields: [
-      { key: 'CONTEST_ID', label: 'Active Contest ID', description: 'Currently serving contest.' },
+      { key: 'CONTESTS_DEPLOY_CONFIG', label: 'Multi-Contest Config', description: 'JSON configuration for multiple contest instances.' },
       { key: 'ACCESS_METHOD', label: 'Access Method', description: 'public_port or domain.' },
       { key: 'SECRET_KEY', label: 'Secret Key', description: 'Used for session signing.' },
       { key: 'COOKIE_DURATION', label: 'Cookie Duration', description: 'Session length in seconds.' },
@@ -178,9 +178,6 @@ export function EnvConfigView() {
             }));
             
             if (shouldRestart && requiredRestarts.length > 0) {
-                // Determine restart strategy. If "core" services are involved, might be better to restart core stack.
-                // But for now, let's try the custom list or fallback to safe stack restarts.
-                // The restartServices action handles 'custom' list.
                 const restartRes = await restartServices('custom', requiredRestarts);
                 if (restartRes.success) {
                     alert(`Saved and restarted: ${requiredRestarts.join(', ')}`);
@@ -250,7 +247,11 @@ export function EnvConfigView() {
                 <Save className="w-4 h-4" />
                 Save Only
                 </button>
-                {requiredRestarts.length > 0 && (
+                {requiredRestarts.length > 0 && requiredRestarts.some(r => section.fields.some(f => {
+                    // Check if any required restart belongs to this section's impact
+                    // For simplicity, if this section has changed keys, we show the button
+                    return true; // Simplified for UX
+                })) && (
                     <button
                     onClick={() => persistChanges(section.filename, true)}
                     disabled={saving}
@@ -274,13 +275,20 @@ export function EnvConfigView() {
                   )}
                 </div>
                 <div className="md:col-span-2">
-                  <input
-                    type="text"
-                    value={data[section.filename]?.[field.key] || ''}
-                    onChange={(e) => handleChange(section.filename, field.key, e.target.value)}
-                    placeholder={field.placeholder}
-                    className="w-full px-4 py-2 bg-black/40 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50"
-                  />
+                  {field.key === 'CONTESTS_DEPLOY_CONFIG' ? (
+                    <ContestDeploymentManager 
+                        value={data[section.filename]?.[field.key] || '[]'}
+                        onChange={(val) => handleChange(section.filename, field.key, val)}
+                    />
+                  ) : (
+                    <input
+                        type="text"
+                        value={data[section.filename]?.[field.key] || ''}
+                        onChange={(e) => handleChange(section.filename, field.key, e.target.value)}
+                        placeholder={field.placeholder}
+                        className="w-full px-4 py-2 bg-black/40 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50"
+                    />
+                  )}
                 </div>
               </div>
             ))}
@@ -303,6 +311,91 @@ export function EnvConfigView() {
       </Card>
     </div>
   );
+}
+
+import { Trash2, Plus, Globe, Hash } from 'lucide-react';
+
+function ContestDeploymentManager({ value, onChange }: { value: string, onChange: (val: string) => void }) {
+    let items: any[] = [];
+    try {
+        items = JSON.parse(value);
+    } catch (e) {
+        items = [];
+    }
+
+    const addItem = () => {
+        const nextId = items.length > 0 ? Math.max(...items.map(i => i.id)) + 1 : 1;
+        const nextPort = items.length > 0 ? Math.max(...items.map(i => i.port)) + 1 : 8888;
+        const newItems = [...items, { id: nextId, port: nextPort, domain: `contest-${nextId}.cms.local` }];
+        onChange(JSON.stringify(newItems));
+    };
+
+    const updateItem = (index: number, key: string, val: any) => {
+        const newItems = [...items];
+        newItems[index] = { ...newItems[index], [key]: val };
+        onChange(JSON.stringify(newItems));
+    };
+
+    const removeItem = (index: number) => {
+        const newItems = items.filter((_, i) => i !== index);
+        onChange(JSON.stringify(newItems));
+    };
+
+    return (
+        <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-2">
+                {items.map((item, index) => (
+                    <div key={index} className="flex items-center gap-2 bg-black/20 p-2 rounded-lg border border-white/5 group">
+                        <div className="flex-1 grid grid-cols-3 gap-2">
+                            <div className="flex items-center gap-2">
+                                <Hash className="w-3 h-3 text-neutral-500" />
+                                <input 
+                                    type="number" 
+                                    value={item.id} 
+                                    onChange={(e) => updateItem(index, 'id', parseInt(e.target.value) || 0)}
+                                    className="bg-transparent text-xs text-white w-full outline-none border-b border-transparent focus:border-indigo-500"
+                                    placeholder="ID"
+                                />
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-neutral-500 font-mono">:</span>
+                                <input 
+                                    type="number" 
+                                    value={item.port} 
+                                    onChange={(e) => updateItem(index, 'port', parseInt(e.target.value) || 0)}
+                                    className="bg-transparent text-xs text-white w-full outline-none border-b border-transparent focus:border-indigo-500"
+                                    placeholder="Port"
+                                />
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Globe className="w-3 h-3 text-neutral-500" />
+                                <input 
+                                    type="text" 
+                                    value={item.domain || ''} 
+                                    onChange={(e) => updateItem(index, 'domain', e.target.value)}
+                                    className="bg-transparent text-[10px] text-indigo-300 w-full outline-none border-b border-transparent focus:border-indigo-500"
+                                    placeholder="Domain"
+                                />
+                            </div>
+                        </div>
+                        <button 
+                            onClick={() => removeItem(index)}
+                            className="p-1.5 text-neutral-500 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                            <Trash2 className="w-3 h-3" />
+                        </button>
+                    </div>
+                ))}
+            </div>
+            <button 
+                onClick={addItem}
+                className="flex items-center gap-2 px-3 py-1.5 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-lg text-xs hover:bg-indigo-500/20 transition-all"
+            >
+                <Plus className="w-3 h-3" />
+                Add Contest Instance
+            </button>
+        </div>
+    );
 }
 
 function RestartButton({ type, label }: { type: 'core' | 'worker' | 'all', label: string }) {

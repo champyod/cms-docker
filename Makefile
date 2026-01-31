@@ -114,12 +114,18 @@ env:
 	@echo "Generating and proactively setting a secure SECRET_KEY in config/cms.toml..."; \
 	SECRET=$$(python3 -c 'import secrets; print(secrets.token_hex(16))'); \
 	sed -i 's/secret_key = "8e045a51e4b102ea803c06f92841a1fb"/secret_key = "'$${SECRET}'"/' config/cms.toml
-	@echo "Injecting database configuration from .env.core into config/cms.toml..."; \
+	@# Inject database configuration from .env.core into config/cms.toml...
 	chmod +x scripts/inject_config.sh && ./scripts/inject_config.sh
+	@# Generate Multi-Contest Compose
+	@if [ -f .env.contest ]; then \
+		CONFIG=$(grep "^CONTESTS_DEPLOY_CONFIG=" .env.contest | cut -d '=' -f2-); \
+		export CONTESTS_DEPLOY_CONFIG="$CONFIG"; \
+		bun scripts/generate-contest-compose.ts; \
+	fi
 	@echo "" >> .env
 	@echo "" >> .env
 	@echo "# Docker Compose File Configuration" >> .env
-	@echo "COMPOSE_FILE=docker-compose.core.yml:docker-compose.admin.yml:docker-compose.contest.yml:docker-compose.worker.yml:docker-compose.monitor.yml" >> .env
+	@echo "COMPOSE_FILE=docker-compose.core.yml:docker-compose.admin.yml:docker-compose.contests.generated.yml:docker-compose.worker.yml:docker-compose.monitor.yml" >> .env
 	@echo ".env file generated. You can now run: docker compose up -d --build"
 
 core:
