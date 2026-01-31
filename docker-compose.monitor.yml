@@ -5,7 +5,7 @@ services:
       dockerfile: docker/monitor/Dockerfile
     image: cms-monitor
     container_name: cms-monitor
-    restart: always
+    restart: on-failure:5
     pid: host   # Required to see Host CPU/Memory usage
     environment:
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
@@ -24,6 +24,7 @@ services:
       - /:/host:ro # Mount host root to /host to check disk usage
       - ./backups:/app/backups
       - ./scripts/cms-backup.sh:/usr/local/bin/cms-backup.sh:ro
+      - ./config:/repo-root/config:ro # Mount config to read container restart settings
     networks:
       - cms-network
 

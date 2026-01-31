@@ -7,7 +7,7 @@ services:
   database:
     image: postgres:15
     container_name: cms-database
-    restart: unless-stopped
+    restart: on-failure:5
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-cmsdb}
       POSTGRES_USER: ${POSTGRES_USER:-cmsuser}
@@ -34,7 +34,7 @@ services:
       args:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     container_name: cms-log-service
-    restart: unless-stopped
+    restart: on-failure:5
     depends_on:
       database:
         condition: service_healthy
@@ -67,7 +67,7 @@ services:
       args:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     container_name: cms-resource-service
-    restart: unless-stopped
+    restart: on-failure:5
     depends_on:
       database:
         condition: service_healthy
@@ -104,7 +104,7 @@ services:
       args:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     container_name: cms-scoring-service
-    restart: unless-stopped
+    restart: on-failure:5
     depends_on:
       database:
         condition: service_healthy
@@ -140,7 +140,7 @@ services:
       args:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     container_name: cms-evaluation-service
-    restart: unless-stopped
+    restart: on-failure:5
     depends_on:
       database:
         condition: service_healthy
@@ -177,7 +177,7 @@ services:
       args:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     container_name: cms-proxy-service
-    restart: unless-stopped
+    restart: on-failure:5
     depends_on:
       database:
         condition: service_healthy
@@ -213,7 +213,7 @@ services:
       args:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     container_name: cms-checker-service
-    restart: unless-stopped
+    restart: on-failure:5
     depends_on:
       database:
         condition: service_healthy

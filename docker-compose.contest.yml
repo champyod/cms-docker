@@ -67,7 +67,7 @@ services:
   nginx-proxy:
     image: nginx:alpine
     container_name: cms-nginx-contest-${CONTEST_ID:-1}
-    restart: unless-stopped
+    restart: on-failure:5
     depends_on:
       - contest-web-server
     environment:
