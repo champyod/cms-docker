@@ -4,14 +4,13 @@ import { useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
 import { Edit2, Trash2, Plus, Shield, ShieldCheck } from 'lucide-react';
-import { admins } from '@prisma/client';
 import { updateAdmin, deleteAdmin } from '@/app/actions/admins';
 import { AdminModal } from './AdminModal';
 
-export function AdminList({ initialAdmins }: { initialAdmins: admins[] }) {
+export function AdminList({ initialAdmins }: { initialAdmins: any[] }) {
   const [adminsList] = useState(initialAdmins);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingAdmin, setEditingAdmin] = useState<admins | null>(null);
+  const [editingAdmin, setEditingAdmin] = useState<any | null>(null);
 
   const handleDelete = async (id: number) => {
     if (confirm('Delete this admin?')) {
@@ -24,12 +23,12 @@ export function AdminList({ initialAdmins }: { initialAdmins: admins[] }) {
     }
   };
 
-  const handleToggleEnabled = async (admin: admins) => {
+  const handleToggleEnabled = async (admin: any) => {
     await updateAdmin(admin.id, { enabled: !admin.enabled });
     window.location.reload();
   };
 
-  const startEdit = (admin: admins) => {
+  const startEdit = (admin: any) => {
     setEditingAdmin(admin);
     setIsModalOpen(true);
   };

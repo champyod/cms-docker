@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { tasks } from '@prisma/client';
 import { X, Plus, Search, ClipboardList } from 'lucide-react';
 import { Portal } from '../core/Portal';
 import { addTaskToContest } from '@/app/actions/contests';
@@ -10,7 +9,7 @@ interface TaskSelectionModalProps {
   isOpen: boolean;
   onClose: () => void;
   contestId: number;
-  availableTasks: tasks[];
+  availableTasks: any[];
   onSuccess?: () => void;
 }
 
@@ -31,7 +30,7 @@ export function TaskSelectionModal({ isOpen, onClose, contestId, availableTasks,
 
   if (!isOpen) return null;
 
-  const filteredTasks = availableTasks.filter(t =>
+  const filteredTasks = availableTasks.filter((t: any) =>
     t.name.toLowerCase().includes(search.toLowerCase()) ||
     t.title.toLowerCase().includes(search.toLowerCase())
   );
@@ -79,7 +78,7 @@ export function TaskSelectionModal({ isOpen, onClose, contestId, availableTasks,
             {filteredTasks.length === 0 ? (
               <p className="text-neutral-500 text-sm text-center py-4">No available tasks found</p>
             ) : (
-              filteredTasks.map((task) => (
+              filteredTasks.map((task: any) => (
                 <div
                   key={task.id}
                   className="flex items-center justify-between p-3 bg-black/30 rounded-lg hover:bg-black/50 transition-colors"

@@ -8,13 +8,12 @@ import Link from 'next/link';
 import { Trash2, Plus, Calendar, Clock, ExternalLink, HelpCircle } from 'lucide-react';
 import { ContestModal } from './ContestModal';
 import { apiClient } from '@/lib/apiClient';
-import { contests } from '@prisma/client';
 
-export function ContestList({ initialContests, totalPages }: { initialContests: contests[], totalPages: number }) {
+export function ContestList({ initialContests, totalPages }: { initialContests: any[], totalPages: number }) {
   const router = useRouter();
   const [contests] = useState(initialContests);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedContest, setSelectedContest] = useState<contests | null>(null);
+  const [selectedContest, setSelectedContest] = useState<any | null>(null);
 
 
 

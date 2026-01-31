@@ -60,7 +60,7 @@ export async function getWorkerStats() {
 
   // Group by shard
   const shardCounts: Record<number, number> = {};
-  activeEvaluations.forEach(ev => {
+  activeEvaluations.forEach((ev: any) => {
     if (ev.evaluation_shard !== null) {
       shardCounts[ev.evaluation_shard] = (shardCounts[ev.evaluation_shard] || 0) + 1;
     }

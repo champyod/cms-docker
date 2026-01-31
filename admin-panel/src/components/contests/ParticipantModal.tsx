@@ -1,17 +1,18 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { users } from '@prisma/client';
-import { X, UserPlus, Search } from 'lucide-react';
-import { Portal } from '../core/Portal';
+import { Button } from '@/components/core/Button';
+import { Card } from '@/components/core/Card';
+import { Search, Plus, UserPlus, X, Loader2 } from 'lucide-react';
 import { addParticipant } from '@/app/actions/contests';
+import { Portal } from '../core/Portal';
 
 interface ParticipantModalProps {
   isOpen: boolean;
   onClose: () => void;
   contestId: number;
-  availableUsers: users[];
-  onSuccess?: () => void;
+  availableUsers: any[];
+  onSuccess: () => void;
 }
 
 export function ParticipantModal({ isOpen, onClose, contestId, availableUsers, onSuccess }: ParticipantModalProps) {

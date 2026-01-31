@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { X, FileCode, Settings, Clock, Cpu, FileType, CheckSquare, Info } from 'lucide-react';
 import type { TaskData } from '@/app/actions/tasks';
 import { apiClient } from '@/lib/apiClient';
-import { tasks } from '@prisma/client';
+
 import { PROGRAMMING_LANGUAGES } from '@/lib/constants';
 import { useToast } from '@/components/core/Toast';
 import { AlertTriangle, AlertCircle } from 'lucide-react';
@@ -13,7 +13,7 @@ import { AlertTriangle, AlertCircle } from 'lucide-react';
 interface TaskModalProps {
   isOpen: boolean;
   onClose: () => void;
-  task?: tasks | null;
+  task?: any | null;
   onSuccess: () => void;
 }
 

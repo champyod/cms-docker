@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { tasks, statements, attachments, datasets, testcases, managers, contests } from '@prisma/client';
 import { Card } from '@/components/core/Card';
 import Link from 'next/link';
 import { 
@@ -16,18 +15,9 @@ import { AttachmentModal } from './AttachmentModal';
 import { TaskModal } from './TaskModal';
 import { TestcaseUploadModal } from './TestcaseUploadModal';
 
-type DatasetWithRelations = datasets & {
-  testcases: testcases[];
-  managers: managers[];
-};
+type DatasetWithRelations = any;
 
-type TaskWithRelations = tasks & {
-  contests: contests | null;
-  statements: statements[];
-  attachments: attachments[];
-  datasets: DatasetWithRelations[];
-  _count: { submissions: number };
-};
+type TaskWithRelations = any;
 
 interface TaskDetailViewProps {
   task: TaskWithRelations;
@@ -206,7 +196,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
               <p className="text-neutral-500 text-sm">No statements uploaded yet.</p>
             ) : (
               <div className="space-y-2">
-                  {task.statements.map((stmt) => (
+                  {task.statements.map((stmt: any) => (
                   <div key={stmt.id} className="flex items-center justify-between p-3 bg-black/30 rounded-lg">
                     <div className="flex items-center gap-3">
                       <FileText className="w-4 h-4 text-emerald-400" />
@@ -284,7 +274,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
             )}
 
             <div className="space-y-4">
-                  {taskDatasets.map((dataset) => (
+                  {taskDatasets.map((dataset: any) => (
                   <div key={dataset.id} className="p-4 bg-black/30 rounded-lg space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -384,7 +374,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
                         <p className="text-neutral-500 text-xs">No testcases yet.</p>
                       ) : (
                         <div className="grid grid-cols-6 gap-1">
-                              {dataset.testcases.slice(0, 12).map((tc) => (
+                              {dataset.testcases.slice(0, 12).map((tc: any) => (
                             <div
                               key={tc.id}
                               className="px-2 py-1 bg-black/40 rounded text-xs text-neutral-300 flex items-center justify-between group"
@@ -445,7 +435,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
           <p className="text-neutral-500 text-sm">No attachments.</p>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              {task.attachments.map((att) => (
+              {task.attachments.map((att: any) => (
               <div key={att.id} className="flex items-center gap-2 p-2 bg-black/30 rounded-lg text-sm text-neutral-300 group">
                 <Paperclip className="w-3 h-3 text-purple-400" />
                 <span className="truncate flex-1">{att.filename}</span>
@@ -486,7 +476,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
         isOpen={isStatementModalOpen}
         onClose={() => setIsStatementModalOpen(false)}
         taskId={task.id}
-        existingLanguages={task.statements.map(s => s.language)}
+        existingLanguages={task.statements.map((s: any) => s.language)}
         onSuccess={() => window.location.reload()}
       />
 

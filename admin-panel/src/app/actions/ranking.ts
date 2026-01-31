@@ -41,16 +41,16 @@ export async function getRanking(contestId: number) {
   });
 
   // Calculate scores per user per task
-  const ranking = participations.map(p => {
+  const ranking = participations.map((p: any) => {
     const taskScores: Record<number, number> = {};
     
     // Group submissions by task and get best score
-    p.submissions.forEach(sub => {
+    p.submissions.forEach((sub: any) => {
       if (sub.tasks) {
         const taskId = sub.tasks.id;
         // Get score from active dataset result
         const results = sub.submission_results;
-        results.forEach(res => {
+        results.forEach((res: any) => {
           if (res.score !== null) {
             const score = Number(res.score);
             if (!taskScores[taskId] || score > taskScores[taskId]) {
@@ -72,11 +72,11 @@ export async function getRanking(contestId: number) {
   });
 
   // Sort by total score descending
-  ranking.sort((a, b) => b.totalScore - a.totalScore);
+  ranking.sort((a: any, b: any) => b.totalScore - a.totalScore);
 
   // Assign ranks
   let currentRank = 1;
-  ranking.forEach((entry, index) => {
+  ranking.forEach((entry: any, index: number) => {
     if (index > 0 && entry.totalScore < ranking[index - 1].totalScore) {
       currentRank = index + 1;
     }

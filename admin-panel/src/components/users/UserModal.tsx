@@ -6,12 +6,11 @@ import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
 import { X, Loader2, Eye, EyeOff } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
-import { users } from '@prisma/client';
 
 interface UserModalProps {
   isOpen: boolean;
   onClose: () => void;
-  user?: users | null; // If present, edit mode
+  user?: any | null; // If present, edit mode
   onSuccess: () => void;
 }
 

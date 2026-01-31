@@ -35,11 +35,9 @@ export async function getUsers({ page = 1, search = '' }: { page?: number; searc
   };
 }
 
-import { users } from '@prisma/client';
-
 // ...
 
-export async function createUser(data: Omit<users, 'id' | 'password' | 'preferred_languages'> & { password?: string }) {
+export async function createUser(data: Omit<any, 'id' | 'password' | 'preferred_languages'> & { password?: string }) {
   const { first_name, last_name, username, email, password, timezone } = data;
   
   if (!password) {
@@ -74,10 +72,10 @@ export async function createUser(data: Omit<users, 'id' | 'password' | 'preferre
   }
 }
 
-export async function updateUser(id: number, data: Partial<users> & { password?: string }) {
+export async function updateUser(id: number, data: Partial<any> & { password?: string }) {
   const { first_name, last_name, email, password, timezone } = data;
   
-  const updateData: Partial<users> = {
+  const updateData: Partial<any> = {
     first_name,
     last_name,
     email: email || null,

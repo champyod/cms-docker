@@ -4,13 +4,12 @@ import { useState, useEffect } from 'react';
 import { X, Users, UsersRound } from 'lucide-react';
 import { Portal } from '../core/Portal';
 import { addTeamToContest } from '@/app/actions/participations';
-import { teams } from '@prisma/client';
 
 interface TeamBulkAddModalProps {
   isOpen: boolean;
   onClose: () => void;
   contestId: number;
-  teams: teams[];
+  teams: any[];
   onSuccess: () => void;
 }
 

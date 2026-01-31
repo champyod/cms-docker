@@ -4,14 +4,13 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Shield, Loader, Eye, EyeOff, Info } from 'lucide-react';
 import { createAdmin, updateAdmin } from '@/app/actions/admins';
-import { admins } from '@prisma/client';
 import { cn } from '@/lib/utils';
 
 interface AdminModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  initialData?: admins | null;
+  initialData?: any | null;
 }
 
 export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminModalProps) {

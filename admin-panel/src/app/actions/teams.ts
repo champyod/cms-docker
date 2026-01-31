@@ -84,7 +84,7 @@ export async function getTeamWithDetails(teamId: number) {
   // Extract unique members (users)
   const membersMap = new Map<number, { user: typeof team.participations[0]['users']; contests: { id: number; name: string }[] }>();
 
-  team.participations.forEach(p => {
+  team.participations.forEach((p: any) => {
     if (!membersMap.has(p.user_id)) {
       membersMap.set(p.user_id, { user: p.users, contests: [] });
     }
@@ -93,7 +93,7 @@ export async function getTeamWithDetails(teamId: number) {
 
   // Extract unique contests
   const contestsMap = new Map<number, { id: number; name: string; description: string; start: Date; stop: Date }>();
-  team.participations.forEach(p => {
+  team.participations.forEach((p: any) => {
     if (!contestsMap.has(p.contest_id)) {
       contestsMap.set(p.contest_id, {
         id: p.contests.id,

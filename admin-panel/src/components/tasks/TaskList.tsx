@@ -7,16 +7,9 @@ import { Button } from '@/components/core/Button';
 import { Edit2, Trash2, Plus, FileText, Database, ExternalLink, AlertTriangle } from 'lucide-react';
 import { TaskModal } from './TaskModal';
 import { apiClient } from '@/lib/apiClient';
-import { tasks } from '@prisma/client';
 import { TaskDiagnostic } from '@/app/actions/tasks';
 
-type TaskWithRelations = tasks & {
-  contests: { id: number; name: string } | null;
-  statements: { id: number }[];
-  datasets_datasets_task_idTotasks: { id: number; description: string }[];
-  _count: { submissions: number };
-  diagnostics: TaskDiagnostic[];
-};
+type TaskWithRelations = any;
 
 export function TaskList({ initialTasks, totalPages }: { initialTasks: TaskWithRelations[], totalPages: number }) {
   const router = useRouter();
@@ -76,9 +69,9 @@ export function TaskList({ initialTasks, totalPages }: { initialTasks: TaskWithR
             </TableRow>
           </TableHeader>
           <TableBody>
-            {tasks.map((task) => {
-              const hasErrors = task.diagnostics.some(d => d.type === 'error');
-              const hasWarnings = task.diagnostics.some(d => d.type === 'warning');
+            {tasks.map((task: any) => {
+              const hasErrors = task.diagnostics.some((d: any) => d.type === 'error');
+              const hasWarnings = task.diagnostics.some((d: any) => d.type === 'warning');
 
               return (
                 <TableRow key={task.id} className={`border-b border-white/5 hover:bg-white/5 transition-colors ${hasErrors ? 'opacity-60' : ''}`}>
@@ -90,7 +83,7 @@ export function TaskList({ initialTasks, totalPages }: { initialTasks: TaskWithR
                           <AlertTriangle className={`w-4 h-4 cursor-help shrink-0 ${hasErrors ? 'text-red-500' : 'text-amber-500'}`} />
                           <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block z-50 min-w-[200px] p-2 bg-neutral-800 border border-white/10 rounded-lg shadow-xl text-xs space-y-1">
                             <p className="font-bold border-b border-white/5 pb-1 mb-1">Task Issues</p>
-                            {task.diagnostics.map((d, i) => (
+                            {task.diagnostics.map((d: any, i: number) => (
                               <div key={i} className={`flex gap-1.5 ${d.type === 'error' ? 'text-red-400' : 'text-amber-400'}`}>
                                 <span>•</span>
                                 <span>{d.message}</span>

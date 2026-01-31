@@ -101,7 +101,7 @@ export async function addTeamToContest(
     });
 
     // Get unique user IDs
-    const userIds = [...new Set(teamParticipations.map(p => p.user_id))];
+    const userIds = [...new Set(teamParticipations.map((p: { user_id: number }) => p.user_id))];
 
     if (userIds.length === 0) {
       return { success: false, error: 'No users are associated with this team' };
@@ -115,7 +115,7 @@ export async function addTeamToContest(
       },
       select: { user_id: true },
     });
-    const existingUserIds = new Set(existingParticipations.map(p => p.user_id));
+    const existingUserIds = new Set(existingParticipations.map((p: { user_id: number }) => p.user_id));
 
     // Filter to users not already in contest
     const newUserIds = userIds.filter(id => !existingUserIds.has(id));

@@ -8,14 +8,12 @@ import Link from 'next/link';
 import { UserModal } from './UserModal';
 import { apiClient } from '@/lib/apiClient';
 
-import { users } from '@prisma/client';
-
-export function UserList({ initialUsers, totalPages }: { initialUsers: users[], totalPages: number }) {
-  const [users] = useState(initialUsers); // Removed unused setUsers
+export function UserList({ initialUsers, totalPages }: { initialUsers: any[], totalPages: number }) {
+  const [usersList] = useState(initialUsers);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<users | null>(null);
+  const [selectedUser, setSelectedUser] = useState<any | null>(null);
 
-  const handleEdit = (user: users) => {
+  const handleEdit = (user: any) => {
     setSelectedUser(user);
     setIsModalOpen(true);
   };
@@ -71,7 +69,7 @@ export function UserList({ initialUsers, totalPages }: { initialUsers: users[], 
             </TableRow>
           </TableHeader>
           <TableBody>
-            {users.map((user) => (
+            {usersList.map((user: any) => (
               <TableRow key={user.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                 <TableCell className="font-mono text-neutral-500 text-xs">#{user.id}</TableCell>
                 <TableCell className="font-medium text-white">{user.first_name} {user.last_name}</TableCell>
@@ -99,7 +97,7 @@ export function UserList({ initialUsers, totalPages }: { initialUsers: users[], 
                 </TableCell>
               </TableRow>
             ))}
-            {users.length === 0 && (
+            {usersList.length === 0 && (
                 <TableRow>
                     <TableCell colSpan={5} className="text-center py-12 text-neutral-500">
                         No users found.

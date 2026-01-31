@@ -4,14 +4,13 @@ import { useState, useEffect } from 'react';
 import { X, Settings, Users, Clock, Shield, Network, Key, Calendar } from 'lucide-react';
 import { Portal } from '../core/Portal';
 import { updateParticipation, getParticipationDetails } from '@/app/actions/participations';
-import { teams } from '@prisma/client';
 
 interface ParticipationModalProps {
   isOpen: boolean;
   onClose: () => void;
   participationId: number;
   username: string;
-  teams: teams[];
+  teams: any[];
   onSuccess: () => void;
 }
 

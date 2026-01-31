@@ -44,7 +44,7 @@ export async function getTasks({ page = 1, search = '' }: { page?: number; searc
     prisma.tasks.count({ where }),
   ]);
 
-  const tasksWithDiagnostics = rawTasks.map((task) => {
+  const tasksWithDiagnostics = rawTasks.map((task: any) => {
     const diagnostics: TaskDiagnostic[] = [];
     if (!task.active_dataset_id) {
       diagnostics.push({ type: 'error', message: 'No active dataset selected.' });
