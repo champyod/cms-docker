@@ -3,26 +3,50 @@
 import { useState, useEffect } from 'react';
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
-import { 
-  Play, Square, RotateCcw, Box, RefreshCw, 
-  CheckCircle2, AlertCircle, Clock, Cpu, HardDrive, Layers, Terminal, HelpCircle
+import {
+  Play, Square, RotateCcw, Box, RefreshCw,
+  CheckCircle2, AlertCircle, Clock, Cpu, HardDrive, Layers, Terminal, HelpCircle, Settings, Power
 } from 'lucide-react';
 import Link from 'next/link';
 import { getContainers, controlContainer, runCompose, ContainerInfo } from '@/app/actions/docker';
+import {
+  getContainerConfig,
+  updateContainerConfig,
+  resetRestartCount,
+  getContainerRestartCount,
+  ContainerRestartConfig
+} from '@/app/actions/containerConfig';
 import { useToast } from '@/components/providers/ToastProvider';
 import { LogViewerModal } from '@/components/containers/LogViewerModal';
+import { ContainerSettingsModal } from '@/components/containers/ContainerSettingsModal';
 
 export default function ContainersPage() {
   const [containers, setContainers] = useState<ContainerInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [selectedContainer, setSelectedContainer] = useState<{ id: string, name: string } | null>(null);
+  const [settingsContainer, setSettingsContainer] = useState<{ id: string, name: string } | null>(null);
+  const [containerConfig, setContainerConfig] = useState<ContainerRestartConfig>({});
+  const [restartCounts, setRestartCounts] = useState<Record<string, number>>({});
   const { addToast } = useToast();
 
   const loadContainers = async () => {
     setLoading(true);
     const data = await getContainers();
     setContainers(data);
+
+    // Load container config and restart counts
+    const config = await getContainerConfig();
+    setContainerConfig(config);
+
+    // Load restart counts for each container
+    const counts: Record<string, number> = {};
+    for (const container of data) {
+      const count = await getContainerRestartCount(container.id);
+      counts[container.id] = count;
+    }
+    setRestartCounts(counts);
+
     setLoading(false);
   };
 
@@ -65,6 +89,32 @@ export default function ContainersPage() {
     }
   };
 
+  const handleToggleAutoRestart = async (containerId: string, currentValue: boolean) => {
+    const res = await updateContainerConfig(containerId, {
+      autoRestart: !currentValue,
+    });
+    if (res.success) {
+      addToast({
+        title: 'Success',
+        message: `Auto-restart ${!currentValue ? 'enabled' : 'disabled'}`,
+        type: 'success'
+      });
+      loadContainers();
+    } else {
+      addToast({ title: 'Error', message: res.error, type: 'error' });
+    }
+  };
+
+  const handleResetRestartCount = async (containerId: string) => {
+    const res = await resetRestartCount(containerId);
+    if (res.success) {
+      addToast({ title: 'Success', message: 'Restart count reset', type: 'success' });
+      loadContainers();
+    } else {
+      addToast({ title: 'Error', message: res.error, type: 'error' });
+    }
+  };
+
   return (
     <div className="space-y-8">
       {selectedContainer && (
@@ -72,6 +122,15 @@ export default function ContainersPage() {
           containerId={selectedContainer.id}
           containerName={selectedContainer.name}
           onClose={() => setSelectedContainer(null)}
+        />
+      )}
+      {settingsContainer && (
+        <ContainerSettingsModal
+          containerId={settingsContainer.id}
+          containerName={settingsContainer.name}
+          config={containerConfig[settingsContainer.id] || { autoRestart: false, maxRestarts: 5, currentRestarts: 0 }}
+          onClose={() => setSettingsContainer(null)}
+          onUpdate={loadContainers}
         />
       )}
       <div className="flex items-center justify-between">
@@ -118,61 +177,120 @@ export default function ContainersPage() {
             </h2>
         </div>
         <div className="divide-y divide-white/5">
-          {containers.map((container) => (
-            <div key={container.id} className="p-4 flex items-center justify-between hover:bg-white/[0.02] transition-colors group">
-              <div className="flex items-center gap-4">
-                 <div className={`w-2 h-2 rounded-full ${container.state === 'running' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
-                 <div>
-                    <div className="font-bold text-white text-sm group-hover:text-indigo-400 transition-colors">{container.name}</div>
-                    <div className="text-[10px] text-neutral-500 font-mono mt-0.5">{container.image} • {container.id.substring(0, 12)}</div>
-                 </div>
-              </div>
+          {containers.map((container) => {
+            const config = containerConfig[container.id] || { autoRestart: false, maxRestarts: 5, currentRestarts: 0 };
+            const restartCount = restartCounts[container.id] || 0;
+            const autoRestartEnabled = config.autoRestart;
+            const maxRestartsReached = restartCount >= config.maxRestarts;
 
-              <div className="flex items-center gap-6">
-                <div className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getStatusColor(container.state)}`}>
-                    {container.state.toUpperCase()}
+            return (
+              <div key={container.id} className="p-4 hover:bg-white/[0.02] transition-colors group">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-4">
+                    <div className={`w-2 h-2 rounded-full ${container.state === 'running' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+                    <div>
+                      <div className="font-bold text-white text-sm group-hover:text-indigo-400 transition-colors">{container.name}</div>
+                      <div className="text-[10px] text-neutral-500 font-mono mt-0.5">{container.image} • {container.id.substring(0, 12)}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-6">
+                    <div className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getStatusColor(container.state)}`}>
+                      {container.state.toUpperCase()}
+                    </div>
+
+                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button
+                        size="sm"
+                        onClick={() => setSelectedContainer({ id: container.id, name: container.name })}
+                        className="p-2 bg-indigo-600/10 text-indigo-400 hover:bg-indigo-600/20 border-0"
+                        title="View Logs"
+                      >
+                        <Terminal className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => setSettingsContainer({ id: container.id, name: container.name })}
+                        className="p-2 bg-purple-600/10 text-purple-400 hover:bg-purple-600/20 border-0"
+                        title="Container Settings"
+                      >
+                        <Settings className="w-3.5 h-3.5" />
+                      </Button>
+                      {container.state !== 'running' ? (
+                        <Button
+                          size="sm"
+                          onClick={() => handleControl(container.id, 'start')}
+                          disabled={actionLoading === container.id}
+                          className="p-2 bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 border-0"
+                        >
+                          <Play className="w-3.5 h-3.5" />
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          onClick={() => handleControl(container.id, 'stop')}
+                          disabled={actionLoading === container.id}
+                          className="p-2 bg-red-600/20 text-red-400 hover:bg-red-600/30 border-0"
+                        >
+                          <Square className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        onClick={() => handleControl(container.id, 'restart')}
+                        disabled={actionLoading === container.id}
+                        className="p-2 bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30 border-0"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
                 </div>
-                
-                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button
-                    size="sm"
-                    onClick={() => setSelectedContainer({ id: container.id, name: container.name })}
-                    className="p-2 bg-indigo-600/10 text-indigo-400 hover:bg-indigo-600/20 border-0"
-                    title="View Logs"
-                  >
-                    <Terminal className="w-3.5 h-3.5" />
-                  </Button>
-                   {container.state !== 'running' ? (
-                     <Button 
-                        size="sm" 
-                        onClick={() => handleControl(container.id, 'start')}
-                        disabled={actionLoading === container.id}
-                        className="p-2 bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 border-0"
-                     >
-                       <Play className="w-3.5 h-3.5" />
-                     </Button>
-                   ) : (
-                     <Button 
-                        size="sm" 
-                        onClick={() => handleControl(container.id, 'stop')}
-                        disabled={actionLoading === container.id}
-                        className="p-2 bg-red-600/20 text-red-400 hover:bg-red-600/30 border-0"
-                     >
-                       <Square className="w-3.5 h-3.5" />
-                     </Button>
-                   )}
-                   <Button 
-                      size="sm" 
-                      onClick={() => handleControl(container.id, 'restart')}
-                      disabled={actionLoading === container.id}
-                      className="p-2 bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30 border-0"
-                   >
-                     <RotateCcw className="w-3.5 h-3.5" />
-                   </Button>
+
+                {/* Restart Policy Info Bar */}
+                <div className="flex items-center gap-3 ml-6 text-xs">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleToggleAutoRestart(container.id, autoRestartEnabled)}
+                      className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
+                        autoRestartEnabled ? 'bg-emerald-600' : 'bg-neutral-700'
+                      }`}
+                      title={`Auto-restart: ${autoRestartEnabled ? 'Enabled' : 'Disabled'}`}
+                    >
+                      <span
+                        className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
+                          autoRestartEnabled ? 'translate-x-3.5' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </button>
+                    <span className="text-neutral-400">
+                      Auto-restart: <span className={autoRestartEnabled ? 'text-emerald-400' : 'text-neutral-500'}>
+                        {autoRestartEnabled ? 'ON' : 'OFF'}
+                      </span>
+                    </span>
+                  </div>
+
+                  <div className="text-neutral-500">•</div>
+
+                  <div className={`${maxRestartsReached ? 'text-red-400' : 'text-neutral-400'}`}>
+                    Restarts: {restartCount} / {config.maxRestarts}
+                  </div>
+
+                  {maxRestartsReached && (
+                    <>
+                      <div className="text-red-500">• Limit reached!</div>
+                      <button
+                        onClick={() => handleResetRestartCount(container.id)}
+                        className="text-indigo-400 hover:text-indigo-300 underline"
+                      >
+                        Reset
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           
           {containers.length === 0 && !loading && (
             <div className="p-20 text-center text-neutral-500">
