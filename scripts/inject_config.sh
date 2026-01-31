@@ -52,20 +52,9 @@ sed -i "s|cmsdb|$DB_NAME|g" "$CONFIG_FILE"
 sed -i "s|database:5432|$DB_HOST:$DB_PORT|g" "$CONFIG_FILE"
 
 # Handle Listen IP and Tailscale
-TAILSCALE_IP=$(get_env_val "TAILSCALE_IP")
-if [ -n "$TAILSCALE_IP" ]; then
-    echo "Setting service addresses to Tailscale IP: $TAILSCALE_IP"
-    # Update internal service discovery to use Tailscale IP instead of container names
-    # This allows remote workers to connect to these addresses
-    sed -i "s/\"cms-log-service\"/\"$TAILSCALE_IP\"/g" "$CONFIG_FILE"
-    sed -i "s/\"cms-resource-service\"/\"$TAILSCALE_IP\"/g" "$CONFIG_FILE"
-    sed -i "s/\"cms-scoring-service\"/\"$TAILSCALE_IP\"/g" "$CONFIG_FILE"
-    sed -i "s/\"cms-checker-service\"/\"$TAILSCALE_IP\"/g" "$CONFIG_FILE"
-    sed -i "s/\"cms-evaluation-service\"/\"$TAILSCALE_IP\"/g" "$CONFIG_FILE"
-    sed -i "s/\"cms-proxy-service\"/\"$TAILSCALE_IP\"/g" "$CONFIG_FILE"
-    sed -i "s/\"cms-contest-web-server-1\"/\"$TAILSCALE_IP\"/g" "$CONFIG_FILE"
-    sed -i "s/\"cms-admin-web-server\"/\"$TAILSCALE_IP\"/g" "$CONFIG_FILE"
-fi
+# NOTE: We NO LONGER replace container names with Tailscale IP here.
+# Services must bind to hostnames they actually own (like cms-log-service).
+# Port mapping in docker-compose.core.yml handles the external VPN visibility.
 
 # Ensure all web servers listen on all interfaces inside the container
 sed -i 's/"127.0.0.1"/"0.0.0.0"/g' "$CONFIG_FILE"

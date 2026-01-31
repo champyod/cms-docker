@@ -26,6 +26,13 @@ services:
       # Resource limits
       WORKER_MEMORY_LIMIT: ${WORKER_MEMORY_LIMIT:-4G}
       WORKER_CPU_LIMIT: ${WORKER_CPU_LIMIT:-4}
+    extra_hosts:
+      - "cms-log-service:${CORE_SERVICES_HOST:-127.0.0.1}"
+      - "cms-resource-service:${CORE_SERVICES_HOST:-127.0.0.1}"
+      - "cms-scoring-service:${CORE_SERVICES_HOST:-127.0.0.1}"
+      - "cms-checker-service:${CORE_SERVICES_HOST:-127.0.0.1}"
+      - "cms-evaluation-service:${CORE_SERVICES_HOST:-127.0.0.1}"
+      - "cms-proxy-service:${CORE_SERVICES_HOST:-127.0.0.1}"
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
