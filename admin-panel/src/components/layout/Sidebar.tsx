@@ -1,8 +1,11 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { Home, Users, Trophy, Settings, LogOut, ChevronRight, FileCode, Activity, Shield, Box } from 'lucide-react';
+import { 
+  Home, Users, Trophy, Settings, LogOut, ChevronRight, 
+  FileCode, Activity, Shield, Box, Rocket, Wrench, ChevronDown, LayoutDashboard, Database
+} from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -15,30 +18,68 @@ interface SidebarItemProps {
 
 const SidebarItem: React.FC<SidebarItemProps> = ({ icon: Icon, label, href, collapsed }) => {
   const pathname = usePathname();
-  // Simple check for active state - usually you'd check if pathname starts with href for nested match
-  // Assuming href is like '/en' or '/en/users'
   const isActive = pathname === href || (href !== '/en' && pathname.startsWith(href));
 
   return (
     <Link
       href={href}
       className={cn(
-        "flex items-center w-full p-3 rounded-xl transition-all duration-200 group relative",
+        "flex items-center w-full p-2.5 rounded-xl transition-all duration-200 group relative",
         isActive 
           ? "bg-indigo-600/20 text-indigo-300" 
           : "hover:bg-white/5 text-slate-400 hover:text-white",
         collapsed && "justify-center"
       )}
     >
-      <Icon className={cn("w-5 h-5", isActive && "text-indigo-400")} />
+      <Icon className={cn("w-4.5 h-4.5", isActive && "text-indigo-400")} />
       {!collapsed && (
         <span className="ml-3 font-medium text-sm">{label}</span>
       )}
       {!collapsed && isActive && (
-        <div className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.6)]" />
+        <div className="ml-auto w-1 h-1 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.6)]" />
       )}
     </Link>
   );
+};
+
+interface SidebarGroupProps {
+    label: string;
+    icon: React.ElementType;
+    children: React.ReactNode;
+    collapsed: boolean;
+    defaultOpen?: boolean;
+}
+
+const SidebarGroup: React.FC<SidebarGroupProps> = ({ label, icon: Icon, children, collapsed, defaultOpen = true }) => {
+    const [isOpen, setIsOpen] = useState(defaultOpen);
+
+    if (collapsed) {
+        return (
+            <div className="flex flex-col items-center gap-2 py-2">
+                <div className="w-8 h-px bg-white/5 my-1" />
+                {children}
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-1">
+            <button 
+                onClick={() => setIsOpen(!isOpen)}
+                className="flex items-center w-full px-3 py-2 text-slate-500 hover:text-slate-300 transition-colors uppercase tracking-widest text-[10px] font-bold group"
+            >
+                <Icon className="w-3 h-3 mr-2 opacity-50 group-hover:opacity-100" />
+                <span>{label}</span>
+                <ChevronDown className={cn("ml-auto w-3 h-3 transition-transform duration-200", !isOpen && "-rotate-90")} />
+            </button>
+            <div className={cn(
+                "overflow-hidden transition-all duration-300 space-y-1 pl-2 border-l border-white/5 ml-4",
+                isOpen ? "max-h-[500px] opacity-100 py-1" : "max-h-0 opacity-0"
+            )}>
+                {children}
+            </div>
+        </div>
+    );
 };
 
 export const Sidebar: React.FC<{
@@ -53,7 +94,6 @@ export const Sidebar: React.FC<{
 }> = ({ className, locale, permissions }) => {
   const [collapsed, setCollapsed] = React.useState(false);
 
-  // If permissions is missing, default to no extra permissions (safe)
   const isSuperAdmin = permissions?.permission_all ?? false;
   const canManageTasks = isSuperAdmin || (permissions?.permission_tasks ?? false);
   const canManageUsers = isSuperAdmin || (permissions?.permission_users ?? false);
@@ -92,24 +132,35 @@ export const Sidebar: React.FC<{
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 space-y-2">
-          <SidebarItem icon={Home} label="Dashboard" href={`/${locale}`} collapsed={collapsed} />
-          {canManageUsers && <SidebarItem icon={Users} label="Users (Participants)" href={`/${locale}/users`} collapsed={collapsed} />}
-          {canManageContests && <SidebarItem icon={Trophy} label="Contests" href={`/${locale}/contests`} collapsed={collapsed} />}
-          {canManageTasks && <SidebarItem icon={FileCode} label="Tasks" href={`/${locale}/tasks`} collapsed={collapsed} />}
-          <SidebarItem icon={Activity} label="Submissions" href={`/${locale}/submissions`} collapsed={collapsed} />
-          {canManageUsers && <SidebarItem icon={Users} label="Teams" href={`/${locale}/teams`} collapsed={collapsed} />}
-          {isSuperAdmin && <SidebarItem icon={Shield} label="Admins" href={`/${locale}/admins`} collapsed={collapsed} />}
-          {isSuperAdmin && <SidebarItem icon={Activity} label="Resources" href={`/${locale}/resources`} collapsed={collapsed} />}
-          {isSuperAdmin && <SidebarItem icon={Box} label="Containers" href={`/${locale}/containers`} collapsed={collapsed} />}
-          {isSuperAdmin && <SidebarItem icon={Settings} label="Settings" href={`/${locale}/settings`} collapsed={collapsed} />}
+        <nav className="flex-1 space-y-6 overflow-y-auto no-scrollbar pr-1">
+          <div className="space-y-1">
+            <SidebarItem icon={Home} label="Dashboard" href={`/${locale}`} collapsed={collapsed} />
+          </div>
+
+          <SidebarGroup label="Contest" icon={Trophy} collapsed={collapsed}>
+            {canManageContests && <SidebarItem icon={Trophy} label="Contests" href={`/${locale}/contests`} collapsed={collapsed} />}
+            {canManageTasks && <SidebarItem icon={FileCode} label="Tasks" href={`/${locale}/tasks`} collapsed={collapsed} />}
+            <SidebarItem icon={Activity} label="Submissions" href={`/${locale}/submissions`} collapsed={collapsed} />
+            {canManageUsers && <SidebarItem icon={Users} label="Users" href={`/${locale}/users`} collapsed={collapsed} />}
+            {canManageUsers && <SidebarItem icon={Users} label="Teams" href={`/${locale}/teams`} collapsed={collapsed} />}
+          </SidebarGroup>
+
+          {isSuperAdmin && (
+            <SidebarGroup label="Infrastructure" icon={Database} collapsed={collapsed}>
+                <SidebarItem icon={Rocket} label="Deployments" href={`/${locale}/deployments`} collapsed={collapsed} />
+                <SidebarItem icon={Shield} label="Admins" href={`/${locale}/admins`} collapsed={collapsed} />
+                <SidebarItem icon={Activity} label="Resources" href={`/${locale}/resources`} collapsed={collapsed} />
+                <SidebarItem icon={Box} label="Containers" href={`/${locale}/containers`} collapsed={collapsed} />
+                <SidebarItem icon={Wrench} label="Maintenance" href={`/${locale}/maintenance`} collapsed={collapsed} />
+                <SidebarItem icon={Settings} label="Settings" href={`/${locale}/settings`} collapsed={collapsed} />
+            </SidebarGroup>
+          )}
         </nav>
 
         {/* Footer actions */}
         <div className="mt-auto pt-4 border-t border-white/5 space-y-2">
-          {/* Sign out - properly deletes session */}
           <a href={`/${locale}/auth/signout`} className={cn(
-               "flex items-center w-full p-3 rounded-xl transition-all duration-200 group relative hover:bg-white/5 text-slate-400 hover:text-white",
+               "flex items-center w-full p-2.5 rounded-xl transition-all duration-200 group relative hover:bg-white/5 text-slate-400 hover:text-white",
                 collapsed && "justify-center"
            )}>
               <LogOut className="w-5 h-5" />
@@ -120,3 +171,4 @@ export const Sidebar: React.FC<{
     </aside>
   );
 };
+
