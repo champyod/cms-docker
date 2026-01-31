@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Card } from '@/components/core/Card';
 import { readEnvFile, updateEnvFile } from '@/app/actions/env';
 import { analyzeRestartRequirements, restartServices } from '@/app/actions/services';
-import { Save, RefreshCw, Loader, AlertTriangle, Trash2, Plus, Globe, Hash, Rocket } from 'lucide-react';
+import { Save, RefreshCw, Loader, AlertTriangle, Trash2, Plus, Globe, Hash, Rocket, Shield } from 'lucide-react';
 
 export default function DeploymentsPage() {
   const [config, setConfig] = useState<any[]>([]);

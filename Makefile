@@ -95,14 +95,14 @@ env:
 	fi
 	@# Configuration Files
 	@if [ -d config/cms.toml ]; then \
-		echo "Removing directory config/cms.toml (created by Docker volumes)...\"; \
+		echo "Removing directory config/cms.toml (created by Docker volumes)..."; \
 		rm -rf config/cms.toml; \
 	fi
 	@echo "Refreshing config/cms.toml from sample..."
 	@cp config/cms.sample.toml config/cms.toml
 	
 	@if [ -d config/cms_ranking.toml ]; then \
-		echo "Removing directory config/cms_ranking.toml (created by Docker volumes)...\"; \
+		echo "Removing directory config/cms_ranking.toml (created by Docker volumes)..."; \
 		rm -rf config/cms_ranking.toml; \
 	fi
 	@if [ ! -f config/cms_ranking.toml ]; then \
