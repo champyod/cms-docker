@@ -1,3 +1,5 @@
+SHELL := /bin/bash
+export PATH := $(HOME)/.bun/bin:$(PATH)
 
 .PHONY: env help clean core admin contest worker
 
