@@ -148,7 +148,8 @@ cms-init:
 
 prisma-sync:
 	@echo "Synchronizing Admin Panel schema (forcing Prisma v6)..."
-	@if [ -d "admin-panel" ] && command -v bun >/dev/null 2>&1; then \
+	@export PATH="$(HOME)/.bun/bin:$(PATH)"; \
+	if [ -d "admin-panel" ] && command -v bun >/dev/null 2>&1; then \
 		cd admin-panel && bun x prisma@6 db push; \
 	elif [ -d "admin-panel" ] && command -v npm >/dev/null 2>&1; then \
 		cd admin-panel && npx prisma@6 db push; \
