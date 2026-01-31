@@ -214,10 +214,11 @@ EOF
 
 # Prepare .env.contest
 if [ "$IS_UPDATE" = "true" ]; then
-    EXISTING_MULTI_CONFIG=$(grep "^CONTESTS_DEPLOY_CONFIG=" .env.contest 2>/dev/null | cut -d '=' -f2- || echo '[{"id":1,"port":8888,"domain":"contest.cms.local"}]')
+    EXISTING_MULTI_CONFIG=$(grep "^CONTESTS_DEPLOY_CONFIG=" .env.contest 2>/dev/null | cut -d '=' -f2- || echo '[]')
     SECRET_KEY=$(grep "^SECRET_KEY=" .env.contest 2>/dev/null | cut -d '=' -f2-)
 else
-    EXISTING_MULTI_CONFIG='[{"id":1,"port":8888,"domain":"contest.cms.local"}]'
+    # Start with NO contests. Everything will be created via Admin UI.
+    EXISTING_MULTI_CONFIG='[]'
     SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
 fi
 

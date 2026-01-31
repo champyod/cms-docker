@@ -119,7 +119,9 @@ env:
 	@# Generate Multi-Contest Compose
 	@if [ -f .env.contest ]; then \
 		CONFIG=$$(grep "^CONTESTS_DEPLOY_CONFIG=" .env.contest | cut -d '=' -f2-); \
+		TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env.admin 2>/dev/null | cut -d '=' -f2- || echo "img"); \
 		export CONTESTS_DEPLOY_CONFIG="$$CONFIG"; \
+		export DEPLOYMENT_TYPE="$$TYPE"; \
 		bash scripts/generate-contest-compose.sh; \
 	fi
 	@echo "" >> .env
@@ -174,10 +176,12 @@ admin:
 	$(COMPOSE) -f docker-compose.admin.yml up -d --build
 
 contest:
-	@if [ -f docker-compose.contests.generated.yml ]; then \
+	@if [ -f docker-compose.contests.generated.yml ] && grep -q "contest-web-server-" docker-compose.contests.generated.yml; then \
 		$(COMPOSE) -f docker-compose.contests.generated.yml up -d --build; \
-	else \
+	elif [ -f docker-compose.contest.yml ]; then \
 		$(COMPOSE) -f docker-compose.contest.yml up -d --build; \
+	else \
+		echo "No contests configured. Skip deployment."; \
 	fi
 
 worker:
@@ -196,16 +200,16 @@ admin-clean:
 	$(COMPOSE) -f docker-compose.admin.yml down -v
 
 contest-stop:
-	@if [ -f docker-compose.contests.generated.yml ]; then \
+	@if [ -f docker-compose.contests.generated.yml ] && grep -q "contest-web-server-" docker-compose.contests.generated.yml; then \
 		$(COMPOSE) -f docker-compose.contests.generated.yml down; \
-	else \
+	elif [ -f docker-compose.contest.yml ]; then \
 		$(COMPOSE) -f docker-compose.contest.yml down; \
 	fi
 
 contest-clean:
-	@if [ -f docker-compose.contests.generated.yml ]; then \
+	@if [ -f docker-compose.contests.generated.yml ] && grep -q "contest-web-server-" docker-compose.contests.generated.yml; then \
 		$(COMPOSE) -f docker-compose.contests.generated.yml down -v; \
-	else \
+	elif [ -f docker-compose.contest.yml ]; then \
 		$(COMPOSE) -f docker-compose.contest.yml down -v; \
 	fi
 
@@ -241,10 +245,12 @@ admin-img:
 	$(COMPOSE) -f docker-compose.admin.yml -f docker-compose.admin.img.yml up -d --no-build
 
 contest-img:
-	@if [ -f docker-compose.contests.generated.yml ]; then \
+	@if [ -f docker-compose.contests.generated.yml ] && grep -q "contest-web-server-" docker-compose.contests.generated.yml; then \
 		$(COMPOSE) -f docker-compose.contests.generated.yml up -d --no-build; \
-	else \
+	elif [ -f docker-compose.contest.yml ]; then \
 		$(COMPOSE) -f docker-compose.contest.yml -f docker-compose.contest.img.yml up -d --no-build; \
+	else \
+		echo "No contests configured. Skip deployment."; \
 	fi
 
 worker-img:
