@@ -142,11 +142,6 @@ listen_docker_events() {
     touch "$NOTIF_CACHE"
 
     docker events --filter 'event=start' --filter 'event=stop' --filter 'event=die' --filter 'event=restart' --format '{{.Status}} container {{.Actor.Attributes.name}}' | while read -r event; do
-        # Maintenance Mode Check
-        if [ -f "/tmp/cms_maintenance" ]; then
-            continue
-        fi
-
         # Cooldown Logic: Don't notify for the same container more than once every 60s
         CONT_NAME=$(echo "$event" | awk '{print $3}')
         CURRENT_TIME=$(date +%s)
