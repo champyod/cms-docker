@@ -24,14 +24,26 @@ EOF
 # This handles [{"id":1,...},{"id":2,...}]
 echo "$CONFIG" | grep -o '{[^}]*}' | while read -r line; do
     [ -z "$line" ] && continue
-    
+
     # Extract values using grep and cut
     ID=$(echo "$line" | grep -oE '"id":[[:space:]]*[0-9]+' | cut -d: -f2 | tr -d '[:space:]')
     PORT=$(echo "$line" | grep -oE '"port":[[:space:]]*[0-9]+' | cut -d: -f2 | tr -d '[:space:]')
-    DOMAIN=$(echo "$line" | grep -oE '"domain":[[:space:]]*"[^"]*"' | cut -d: -f2 | tr -d '[:space:]"' )
-    
+    DOMAIN=$(echo "$line" | grep -oE '"domain":[[:space:]]*"[^"]*"' | cut -d: -f2 | tr -d '[:space:]"')
+    ACCESS_METHOD=$(echo "$line" | grep -oE '"accessMethod":[[:space:]]*"[^"]*"' | cut -d: -f2 | tr -d '[:space:]"')
+    PROTOCOL=$(echo "$line" | grep -oE '"protocol":[[:space:]]*"[^"]*"' | cut -d: -f2 | tr -d '[:space:]"')
+    TLS_CERT=$(echo "$line" | grep -oE '"tlsCertPath":[[:space:]]*"[^"]*"' | cut -d: -f2 | tr -d '[:space:]"')
+    TLS_KEY=$(echo "$line" | grep -oE '"tlsKeyPath":[[:space:]]*"[^"]*"' | cut -d: -f2 | tr -d '[:space:]"')
+    TAILSCALE_DOMAIN=$(echo "$line" | grep -oE '"tailscaleDomain":[[:space:]]*"[^"]*"' | cut -d: -f2 | tr -d '[:space:]"')
+
+    # Defaults
     if [ -z "$DOMAIN" ]; then
         DOMAIN="contest-$ID.cms.local"
+    fi
+    if [ -z "$ACCESS_METHOD" ]; then
+        ACCESS_METHOD="public_ip"
+    fi
+    if [ -z "$PROTOCOL" ]; then
+        PROTOCOL="http"
     fi
 
     if [ -n "$ID" ] && [ -n "$PORT" ]; then
@@ -70,17 +82,67 @@ EOF
       - cms-cache:/var/local/cache/cms
       - cms-data:/var/local/lib/cms
       - cms-submissions-$ID:/var/local/lib/cms/submissions
+EOF
+
+        # Add TLS certificate volumes if HTTPS enabled
+        if [ "$PROTOCOL" = "https" ] && [ -n "$TLS_CERT" ] && [ -n "$TLS_KEY" ]; then
+            echo "      - $TLS_CERT:/etc/ssl/certs/contest.crt:ro" >> "$OUTPUT_FILE"
+            echo "      - $TLS_KEY:/etc/ssl/private/contest.key:ro" >> "$OUTPUT_FILE"
+        fi
+
+        cat >> "$OUTPUT_FILE" << EOF
     networks:
       - cms-network
-    ports:
-      - "$PORT:8888"
+EOF
+
+        # Port binding based on access method
+        if [ "$ACCESS_METHOD" = "public_ip" ]; then
+            echo "    ports:" >> "$OUTPUT_FILE"
+            echo "      - \"0.0.0.0:$PORT:8888\"" >> "$OUTPUT_FILE"
+        elif [ "$ACCESS_METHOD" = "tailscale" ] && [ -n "$TAILSCALE_DOMAIN" ]; then
+            # Bind to Tailscale IP if available
+            TAILSCALE_IP=\${TAILSCALE_IP:-127.0.0.1}
+            echo "    ports:" >> "$OUTPUT_FILE"
+            echo "      - \"\$TAILSCALE_IP:$PORT:8888\"" >> "$OUTPUT_FILE"
+        elif [ "$ACCESS_METHOD" = "domain" ]; then
+            # No port binding, only accessible via reverse proxy
+            echo "    expose:" >> "$OUTPUT_FILE"
+            echo "      - \"8888\"" >> "$OUTPUT_FILE"
+        fi
+
+        cat >> "$OUTPUT_FILE" << EOF
     privileged: true
     cgroup: host
     command: >
       sh -c "sleep 10 && cmsContestWebServer 0 -c $ID"
     labels:
       - "traefik.enable=true"
+EOF
+
+        # Traefik router configuration
+        if [ "$PROTOCOL" = "https" ]; then
+            cat >> "$OUTPUT_FILE" << EOF
       - "traefik.http.routers.cms-contest-$ID.rule=Host(\`$DOMAIN\`)"
+      - "traefik.http.routers.cms-contest-$ID.entrypoints=websecure"
+      - "traefik.http.routers.cms-contest-$ID.tls=true"
+EOF
+            if [ -n "$TLS_CERT" ] && [ -n "$TLS_KEY" ]; then
+                cat >> "$OUTPUT_FILE" << EOF
+      - "traefik.http.routers.cms-contest-$ID.tls.certresolver=custom"
+EOF
+            else
+                cat >> "$OUTPUT_FILE" << EOF
+      - "traefik.http.routers.cms-contest-$ID.tls.certresolver=letsencrypt"
+EOF
+            fi
+        else
+            cat >> "$OUTPUT_FILE" << EOF
+      - "traefik.http.routers.cms-contest-$ID.rule=Host(\`$DOMAIN\`)"
+      - "traefik.http.routers.cms-contest-$ID.entrypoints=web"
+EOF
+        fi
+
+        cat >> "$OUTPUT_FILE" << EOF
       - "traefik.http.services.cms-contest-$ID.loadbalancer.server.port=8888"
 EOF
     fi
