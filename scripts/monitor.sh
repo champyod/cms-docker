@@ -137,11 +137,29 @@ EOF
 
 listen_docker_events() {
     echo "Starting Docker event listener..."
+    # Track last notification time per container to prevent spam
+    NOTIF_CACHE="/tmp/monitor_notif_cache"
+    touch "$NOTIF_CACHE"
+
     docker events --filter 'event=start' --filter 'event=stop' --filter 'event=die' --filter 'event=restart' --format '{{.Status}} container {{.Actor.Attributes.name}}' | while read -r event; do
         # Maintenance Mode Check
         if [ -f "/tmp/cms_maintenance" ]; then
             continue
         fi
+
+        # Cooldown Logic: Don't notify for the same container more than once every 60s
+        CONT_NAME=$(echo "$event" | awk '{print $3}')
+        CURRENT_TIME=$(date +%s)
+        LAST_NOTIF=$(grep "^${CONT_NAME}:" "$NOTIF_CACHE" | cut -d: -f2 || echo "0")
+        
+        if [ $((CURRENT_TIME - LAST_NOTIF)) -lt 60 ]; then
+            continue
+        fi
+        
+        # Update cache
+        grep -v "^${CONT_NAME}:" "$NOTIF_CACHE" > "${NOTIF_CACHE}.tmp" || true
+        echo "${CONT_NAME}:${CURRENT_TIME}" >> "${NOTIF_CACHE}.tmp"
+        mv "${NOTIF_CACHE}.tmp" "$NOTIF_CACHE"
 
         COLOR=3447003
         case "$event" in

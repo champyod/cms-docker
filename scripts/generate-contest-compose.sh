@@ -50,7 +50,7 @@ EOF
 
         cat >> "$OUTPUT_FILE" << EOF
     container_name: cms-contest-web-server-$ID
-    restart: unless-stopped
+    restart: on-failure:5
     environment:
       CMS_CONFIG: \${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: ContestWebServer

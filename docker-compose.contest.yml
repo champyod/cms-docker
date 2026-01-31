@@ -10,7 +10,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: cms-contest-web-server-${CONTEST_ID:-1}
-    restart: unless-stopped
+    restart: on-failure:5
     environment:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: ContestWebServer
