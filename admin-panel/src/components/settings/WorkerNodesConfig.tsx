@@ -108,10 +108,11 @@ export function WorkerNodesConfig() {
                 <input
                   value={newHost}
                   onChange={e => setNewHost(e.target.value)}
-                  placeholder="e.g., 10.0.0.5"
+                  placeholder="e.g., cms-worker-0 or 192.168.1.50"
                   className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2 text-white text-sm font-mono focus:outline-none focus:border-indigo-500/50"
                   autoFocus
                 />
+                <p className="text-[9px] text-neutral-600 mt-1 italic">Supports local container names or remote server IPs.</p>
               </div>
               <div className="w-32">
                 <label className="block text-[10px] uppercase text-neutral-500 font-bold mb-1.5">Port</label>

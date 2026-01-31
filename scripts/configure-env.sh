@@ -43,7 +43,7 @@ configure_env_file() {
     # Create temporary file for new config
     local temp_file=$(mktemp)
     
-    # Process each line from the example file
+    # 1. Process template variables
     # Using FD 3 to read the file so we can still use stdin for user input
     while IFS= read -r line <&3 || [ -n "$line" ]; do
         # Skip empty lines and comments
@@ -114,6 +114,31 @@ configure_env_file() {
             echo "$line" >> "$temp_file"
         fi
     done 3< "$example_file"
+
+    # 2. Check for orphan variables (in target but not in example)
+    if [ -f "$target_file" ]; then
+        # Get all keys from target file that are not in example file
+        while IFS= read -r target_line; do
+            if [[ "$target_line" =~ ^([^#=]+)=(.*)$ ]]; then
+                local t_key="${BASH_REMATCH[1]}"
+                local t_val="${BASH_REMATCH[2]}"
+                
+                if ! grep -q "^${t_key}=" "$example_file"; then
+                    echo -e "\n${YELLOW}${BOLD}Obsolete Variable detected:${NC} ${CYAN}${t_key}${NC} (Not in template)"
+                    echo -e "  Current value: ${YELLOW}${t_val}${NC}"
+                    echo -e "  [K] Keep it"
+                    echo -e "  [R] Remove it"
+                    
+                    read -p "Choice for $t_key [K]: " orphan_choice
+                    if [[ ! "$orphan_choice" =~ ^[Rr] ]]; then
+                        echo "$target_line" >> "$temp_file"
+                    else
+                        print_info "Removing $t_key..."
+                    fi
+                fi
+            fi
+        done < "$target_file"
+    fi
 
     mv "$temp_file" "$target_file"
     print_success "Updated $target_file"
