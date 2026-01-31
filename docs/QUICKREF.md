@@ -7,7 +7,7 @@ cd cms-docker
 git submodule update --init --recursive
 
 ./scripts/configure-env.sh   # Interactive .env setup
-./setup.sh                   # Comprehensive deployment/update
+./scripts/setup.sh           # Comprehensive deployment/update
 ```
 
 ## Advanced Manual Setup

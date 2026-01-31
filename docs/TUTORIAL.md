@@ -29,7 +29,7 @@ The configuration script will guide you through setting up credentials, public I
 Run the automated setup script:
 
 ```bash
-./setup.sh
+./scripts/setup.sh
 ```
 
 1.  **Select Strategy**: Choose `1) PRE-BUILT IMAGES` for the fastest setup.

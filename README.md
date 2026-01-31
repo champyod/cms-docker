@@ -29,7 +29,7 @@ Use the interactive configuration tool to set up your `.env` files. This script 
 Run the comprehensive setup script. It will detect if you are performing a fresh install or an update, ask for your preferred deployment strategy (Pre-built Images vs. Source Build), and handle the entire deployment process automatically.
 
 ```bash
-./setup.sh
+./scripts/setup.sh
 ```
 
 ---

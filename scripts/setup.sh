@@ -10,6 +10,9 @@
 
 set -e
 
+# Change directory to the project root (one level up from scripts/)
+cd "$(dirname "$0")/.."
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -41,14 +44,32 @@ echo -e "${NC}"
 
 # Check prerequisites
 print_step "Checking prerequisites..."
-PREREQS=("docker" "docker-compose" "openssl" "python3" "curl")
+
+if ! command -v docker &> /dev/null; then
+    print_error "Docker is not installed. Please install it first."
+    exit 1
+fi
+
+# Check for Docker Compose (V2 preferred, V1 fallback)
+if docker compose version &> /dev/null; then
+    COMPOSE_CMD="docker compose"
+    print_success "Docker Compose V2 found."
+elif command -v docker-compose &> /dev/null; then
+    COMPOSE_CMD="docker-compose"
+    print_success "Docker Compose V1 found."
+else
+    print_error "Docker Compose is not installed. Please install it first."
+    exit 1
+fi
+
+PREREQS=("openssl" "python3" "curl")
 for cmd in "${PREREQS[@]}"; do
     if ! command -v $cmd &> /dev/null; then
         print_error "$cmd is not installed. Please install it first."
         exit 1
     fi
 done
-print_success "Prerequisites found."
+print_success "All prerequisites found."
 
 # 0. Detection & Update Logic
 IS_UPDATE=false
