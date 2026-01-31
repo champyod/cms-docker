@@ -47,34 +47,12 @@ const CONFIG_SECTIONS: ConfigSection[] = [
     ]
   },
   {
-    title: 'Contest Deployment (Multi)',
-    filename: '.env.contest',
-    fields: [
-      { key: 'CONTESTS_DEPLOY_CONFIG', label: 'Multi-Contest Config', description: 'JSON configuration for multiple contest instances.' },
-      { key: 'ACCESS_METHOD', label: 'Access Method', description: 'public_port or domain.' },
-      { key: 'SECRET_KEY', label: 'Secret Key', description: 'Used for session signing.' },
-      { key: 'COOKIE_DURATION', label: 'Cookie Duration', description: 'Session length in seconds.' },
-    ]
-  },
-  {
     title: 'Ranking Settings',
     filename: '.env.admin',
     fields: [
       { key: 'RANKING_USERNAME', label: 'Ranking Username', description: 'Auth for scoreboard.' },
       { key: 'RANKING_PASSWORD', label: 'Ranking Password', description: 'Auth for scoreboard.' },
       { key: 'ADMIN_COOKIE_DURATION', label: 'Admin Session', description: 'Admin panel session length.' },
-    ]
-  },
-  {
-    title: 'Infrastructure & Backups',
-    filename: '.env.infra',
-    fields: [
-      { key: 'DISCORD_WEBHOOK_URL', label: 'Discord Webhook', description: 'URL for system alerts and logs.' },
-      { key: 'DISCORD_USER_ID', label: 'Discord User ID', description: 'User to mention in alerts (optional).' },
-      { key: 'BACKUP_INTERVAL_MINS', label: 'Backup Interval (min)', description: '0 to disable auto-backup.' },
-      { key: 'BACKUP_MAX_COUNT', label: 'Max Backup Count', description: 'Number of old backups to keep.' },
-      { key: 'BACKUP_MAX_AGE_DAYS', label: 'Max Backup Age (days)', description: 'Delete backups older than X days.' },
-      { key: 'BACKUP_MAX_SIZE_GB', label: 'Max Storage (GB)', description: 'Limit total backup directory size.' },
     ]
   }
 ];
@@ -84,7 +62,6 @@ export function EnvConfigView() {
   const [data, setData] = useState<Record<string, Record<string, string>>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [backingUp, setBackingUp] = useState(false);
   const [error, setError] = useState('');
   const [requiredRestarts, setRequiredRestarts] = useState<string[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -211,20 +188,6 @@ export function EnvConfigView() {
     }
   };
 
-  const handleManualBackup = async () => {
-    if (!confirm('Start a manual backup of all submissions? This will also log to Discord.')) return;
-    setBackingUp(true);
-    try {
-        const { triggerManualBackup } = await import('@/app/actions/services');
-        const res = await triggerManualBackup();
-        if (res.success) alert('Backup triggered successfully! Check logs/Discord for progress.');
-        else alert('Error: ' + res.error);
-    } catch (e) {
-        alert('Failed to trigger backup');
-    }
-    setBackingUp(false);
-  };
-
   if (loading) {
     return <div className="text-white flex items-center gap-2"><Loader className="animate-spin" /> Loading configuration...</div>;
   }
@@ -266,16 +229,6 @@ export function EnvConfigView() {
               <p className="text-neutral-400 text-sm mt-1">Editing {section.filename}</p>
             </div>
             <div className="flex gap-2">
-                {section.title === 'Infrastructure & Backups' && (
-                    <button
-                        onClick={handleManualBackup}
-                        disabled={backingUp}
-                        className="flex items-center gap-2 px-4 py-2 bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600/30 rounded-lg transition-colors disabled:opacity-50 text-sm"
-                    >
-                        <Save className="w-4 h-4" />
-                        {backingUp ? 'Backing up...' : 'Trigger Manual Backup'}
-                    </button>
-                )}
                 <button
                 onClick={() => persistChanges(section.filename, false)}
                 disabled={saving}
@@ -310,12 +263,6 @@ export function EnvConfigView() {
                   )}
                 </div>
                 <div className="md:col-span-2">
-                  {field.key === 'CONTESTS_DEPLOY_CONFIG' ? (
-                    <ContestDeploymentManager 
-                        value={data[section.filename]?.[field.key] || '[]'}
-                        onChange={(val) => handleChange(section.filename, field.key, val)}
-                    />
-                  ) : (
                     <input
                         type="text"
                         value={data[section.filename]?.[field.key] || ''}
@@ -323,7 +270,6 @@ export function EnvConfigView() {
                         placeholder={field.placeholder}
                         className="w-full px-4 py-2 bg-black/40 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50"
                     />
-                  )}
                 </div>
               </div>
             ))}
@@ -346,91 +292,6 @@ export function EnvConfigView() {
       </Card>
     </div>
   );
-}
-
-import { Trash2, Plus, Globe, Hash } from 'lucide-react';
-
-function ContestDeploymentManager({ value, onChange }: { value: string, onChange: (val: string) => void }) {
-    let items: any[] = [];
-    try {
-        items = JSON.parse(value);
-    } catch (e) {
-        items = [];
-    }
-
-    const addItem = () => {
-        const nextId = items.length > 0 ? Math.max(...items.map(i => i.id)) + 1 : 1;
-        const nextPort = items.length > 0 ? Math.max(...items.map(i => i.port)) + 1 : 8888;
-        const newItems = [...items, { id: nextId, port: nextPort, domain: `contest-${nextId}.cms.local` }];
-        onChange(JSON.stringify(newItems));
-    };
-
-    const updateItem = (index: number, key: string, val: any) => {
-        const newItems = [...items];
-        newItems[index] = { ...newItems[index], [key]: val };
-        onChange(JSON.stringify(newItems));
-    };
-
-    const removeItem = (index: number) => {
-        const newItems = items.filter((_, i) => i !== index);
-        onChange(JSON.stringify(newItems));
-    };
-
-    return (
-        <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-2">
-                {items.map((item, index) => (
-                    <div key={index} className="flex items-center gap-2 bg-black/20 p-2 rounded-lg border border-white/5 group">
-                        <div className="flex-1 grid grid-cols-3 gap-2">
-                            <div className="flex items-center gap-2">
-                                <Hash className="w-3 h-3 text-neutral-500" />
-                                <input 
-                                    type="number" 
-                                    value={item.id} 
-                                    onChange={(e) => updateItem(index, 'id', parseInt(e.target.value) || 0)}
-                                    className="bg-transparent text-xs text-white w-full outline-none border-b border-transparent focus:border-indigo-500"
-                                    placeholder="ID"
-                                />
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span className="text-[10px] text-neutral-500 font-mono">:</span>
-                                <input 
-                                    type="number" 
-                                    value={item.port} 
-                                    onChange={(e) => updateItem(index, 'port', parseInt(e.target.value) || 0)}
-                                    className="bg-transparent text-xs text-white w-full outline-none border-b border-transparent focus:border-indigo-500"
-                                    placeholder="Port"
-                                />
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <Globe className="w-3 h-3 text-neutral-500" />
-                                <input 
-                                    type="text" 
-                                    value={item.domain || ''} 
-                                    onChange={(e) => updateItem(index, 'domain', e.target.value)}
-                                    className="bg-transparent text-[10px] text-indigo-300 w-full outline-none border-b border-transparent focus:border-indigo-500"
-                                    placeholder="Domain"
-                                />
-                            </div>
-                        </div>
-                        <button 
-                            onClick={() => removeItem(index)}
-                            className="p-1.5 text-neutral-500 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
-                        >
-                            <Trash2 className="w-3 h-3" />
-                        </button>
-                    </div>
-                ))}
-            </div>
-            <button 
-                onClick={addItem}
-                className="flex items-center gap-2 px-3 py-1.5 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-lg text-xs hover:bg-indigo-500/20 transition-all"
-            >
-                <Plus className="w-3 h-3" />
-                Add Contest Instance
-            </button>
-        </div>
-    );
 }
 
 function RestartButton({ type, label }: { type: 'core' | 'worker' | 'all', label: string }) {
