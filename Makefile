@@ -143,8 +143,9 @@ core:
 
 cms-init:
 	@echo "Synchronizing PostgreSQL password..."
-	@DB_PASS=$$(grep "^POSTGRES_PASSWORD=" .env.core | cut -d '=' -f2-); \
-	docker exec -i cms-database psql -U postgres -c "ALTER USER cmsuser WITH PASSWORD '$$DB_PASS';" || echo "Warning: Could not sync password (this is normal if DB is not initialized yet)."
+	@DB_USER=$$(grep "^POSTGRES_USER=" .env.core | cut -d '=' -f2- || echo "cmsuser"); \
+	DB_PASS=$$(grep "^POSTGRES_PASSWORD=" .env.core | cut -d '=' -f2-); \
+	docker exec -i cms-database psql -U $$DB_USER -d postgres -c "ALTER USER $$DB_USER WITH PASSWORD '$$DB_PASS';" || echo "Warning: Could not sync password (this is normal if DB is not initialized yet)."
 	@echo "Initializing CMS core database schema..."
 	@docker exec -it cms-log-service cmsInitDB || echo "Note: cmsInitDB skipped or already initialized."
 	@echo "Patching database schema for Admin Panel..."
