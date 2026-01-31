@@ -1,5 +1,8 @@
 SHELL := /bin/bash
 
+# Detect Docker Compose version
+COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
+
 .PHONY: env help clean core admin contest worker
 
 help:
@@ -92,29 +95,26 @@ env:
 	fi
 	@# Configuration Files
 	@if [ -d config/cms.toml ]; then \
-		echo "Removing directory config/cms.toml (created by Docker volumes)..."; \
+		echo "Removing directory config/cms.toml (created by Docker volumes)...\"; \
 		rm -rf config/cms.toml; \
 	fi
 	@echo "Refreshing config/cms.toml from sample..."
 	@cp config/cms.sample.toml config/cms.toml
-	@echo "Setting bind address to 0.0.0.0 in config/cms.toml..."
-	@sed -i 's/"127.0.0.1"/"0.0.0.0"/g' config/cms.toml
-	@sed -i 's/\["127.0.0.1"\]/\["0.0.0.0"\]/g' config/cms.toml
 	
 	@if [ -d config/cms_ranking.toml ]; then \
-		echo "Removing directory config/cms_ranking.toml (created by Docker volumes)..."; \
+		echo "Removing directory config/cms_ranking.toml (created by Docker volumes)...\"; \
 		rm -rf config/cms_ranking.toml; \
 	fi
 	@if [ ! -f config/cms_ranking.toml ]; then \
 		echo "Copying config/cms_ranking.sample.toml to config/cms_ranking.toml..."; \
 		cp config/cms_ranking.sample.toml config/cms_ranking.toml; \
 		echo "Setting bind address to 0.0.0.0 in config/cms_ranking.toml..."; \
-		sed -i 's/"127.0.0.1"/"0.0.0.0"/g' config/cms_ranking.toml; \
+		sed -i 's/\"127.0.0.1\"/\"0.0.0.0\"/g' config/cms_ranking.toml; \
 	fi
 	@echo "Generating a secure SECRET_KEY in config/cms.toml..."
 	@SECRET=$$(python3 -c 'import secrets; print(secrets.token_hex(16))'); \
-	sed -i "s/secret_key = \"8e045a51e4b102ea803c06f92841a1fb\"/secret_key = \"$${SECRET}\"/" config/cms.toml
-	@# Inject database configuration from .env.core into config/cms.toml...
+	sed -i "s/secret_key = \"8e045a51e4b102ea803c06f92841a1fb\"/secret_key = \"$$SECRET\"/" config/cms.toml
+	@# Inject database configuration and service addresses into config/cms.toml...
 	@chmod +x scripts/inject_config.sh && ./scripts/inject_config.sh
 	@# Generate Multi-Contest Compose
 	@if [ -f .env.contest ]; then \
@@ -126,17 +126,17 @@ env:
 	@echo "" >> .env
 	@echo "# Docker Compose File Configuration" >> .env
 	@echo "COMPOSE_FILE=docker-compose.core.yml:docker-compose.admin.yml:docker-compose.contests.generated.yml:docker-compose.worker.yml:docker-compose.monitor.yml" >> .env
-	@echo ".env file generated. You can now run: docker compose up -d --build"
+	@echo ".env file generated. You can now run: $(COMPOSE) up -d --build"
 
 core:
-	docker compose -f docker-compose.core.yml up -d --remove-orphans database
-	docker compose -f docker-compose.core.yml build log-service
-	docker compose -f docker-compose.core.yml build resource-service
-	docker compose -f docker-compose.core.yml build scoring-service
-	docker compose -f docker-compose.core.yml build evaluation-service
-	docker compose -f docker-compose.core.yml build proxy-service
-	docker compose -f docker-compose.core.yml build checker-service
-	docker compose -f docker-compose.core.yml up -d --remove-orphans
+	$(COMPOSE) -f docker-compose.core.yml up -d database
+	$(COMPOSE) -f docker-compose.core.yml build log-service
+	$(COMPOSE) -f docker-compose.core.yml build resource-service
+	$(COMPOSE) -f docker-compose.core.yml build scoring-service
+	$(COMPOSE) -f docker-compose.core.yml build evaluation-service
+	$(COMPOSE) -f docker-compose.core.yml build proxy-service
+	$(COMPOSE) -f docker-compose.core.yml build checker-service
+	$(COMPOSE) -f docker-compose.core.yml up -d
 	@echo "Services started. Use 'make db-reset' for a first-time setup or 'make cms-init' to just initialize the database."
 
 cms-init:
@@ -164,56 +164,68 @@ admin-create:
 
 db-clean:
 	@echo "WARNING: This will delete all database data and reset everything."
-	docker compose -f docker-compose.core.yml -f docker-compose.admin.yml -f docker-compose.contest.yml -f docker-compose.worker.yml -f docker-compose.monitor.yml down -v --remove-orphans
+	$(COMPOSE) -f docker-compose.core.yml -f docker-compose.admin.yml -f docker-compose.contest.yml -f docker-compose.worker.yml -f docker-compose.monitor.yml down -v --remove-orphans
 
 db-reset: db-clean core-img
 	@echo "Database has been reset and services restarted."
 	@echo "Please wait ~10 seconds for DB to stabilize, then run: make cms-init"
 
 admin:
-	docker compose -f docker-compose.admin.yml up -d --build --remove-orphans
+	$(COMPOSE) -f docker-compose.admin.yml up -d --build
 
 contest:
-	docker compose -f docker-compose.contest.yml up -d --build --remove-orphans
+	@if [ -f docker-compose.contests.generated.yml ]; then \
+		$(COMPOSE) -f docker-compose.contests.generated.yml up -d --build; \
+	else \
+		$(COMPOSE) -f docker-compose.contest.yml up -d --build; \
+	fi
 
 worker:
-	docker compose -f docker-compose.worker.yml up -d --build --remove-orphans
+	$(COMPOSE) -f docker-compose.worker.yml up -d --build
 
 core-stop:
-	docker compose -f docker-compose.core.yml down --remove-orphans
+	$(COMPOSE) -f docker-compose.core.yml down
 
 core-clean:
-	docker compose -f docker-compose.core.yml down -v --remove-orphans
+	$(COMPOSE) -f docker-compose.core.yml down -v
 
 admin-stop:
-	docker compose -f docker-compose.admin.yml down --remove-orphans
+	$(COMPOSE) -f docker-compose.admin.yml down
 
 admin-clean:
-	docker compose -f docker-compose.admin.yml down -v --remove-orphans
+	$(COMPOSE) -f docker-compose.admin.yml down -v
 
 contest-stop:
-	docker compose -f docker-compose.contest.yml down --remove-orphans
+	@if [ -f docker-compose.contests.generated.yml ]; then \
+		$(COMPOSE) -f docker-compose.contests.generated.yml down; \
+	else \
+		$(COMPOSE) -f docker-compose.contest.yml down; \
+	fi
 
 contest-clean:
-	docker compose -f docker-compose.contest.yml down -v --remove-orphans
+	@if [ -f docker-compose.contests.generated.yml ]; then \
+		$(COMPOSE) -f docker-compose.contests.generated.yml down -v; \
+	else \
+		$(COMPOSE) -f docker-compose.contest.yml down -v; \
+	fi
 
 worker-stop:
-	docker compose -f docker-compose.worker.yml down --remove-orphans
+	$(COMPOSE) -f docker-compose.worker.yml down
 
 worker-clean:
-	docker compose -f docker-compose.worker.yml down -v --remove-orphans
+	$(COMPOSE) -f docker-compose.worker.yml down -v
 
 infra:
-	docker compose -f docker-compose.monitor.yml up -d --build --remove-orphans
+	$(COMPOSE) -f docker-compose.monitor.yml up -d --build
 
 infra-stop:
-	docker compose -f docker-compose.monitor.yml down --remove-orphans
+	$(COMPOSE) -f docker-compose.monitor.yml down
 
 infra-clean:
-	docker compose -f docker-compose.monitor.yml down -v --remove-orphans
+	$(COMPOSE) -f docker-compose.monitor.yml down -v
 
 pull:
-	docker compose \
+	$(COMPOSE) \
 		-f docker-compose.core.yml -f docker-compose.core.img.yml \
 		-f docker-compose.admin.yml -f docker-compose.admin.img.yml \
 		-f docker-compose.contest.yml -f docker-compose.contest.img.yml \
@@ -222,20 +234,24 @@ pull:
 		pull
 
 core-img:
-	docker compose -f docker-compose.core.yml -f docker-compose.core.img.yml up -d --no-build --remove-orphans
+	$(COMPOSE) -f docker-compose.core.yml -f docker-compose.core.img.yml up -d --no-build
 	@echo "Core images started."
 
 admin-img:
-	docker compose -f docker-compose.admin.yml -f docker-compose.admin.img.yml up -d --no-build --remove-orphans
+	$(COMPOSE) -f docker-compose.admin.yml -f docker-compose.admin.img.yml up -d --no-build
 
 contest-img:
-	docker compose -f docker-compose.contest.yml -f docker-compose.contest.img.yml up -d --no-build --remove-orphans
+	@if [ -f docker-compose.contests.generated.yml ]; then \
+		$(COMPOSE) -f docker-compose.contests.generated.yml up -d --no-build; \
+	else \
+		$(COMPOSE) -f docker-compose.contest.yml -f docker-compose.contest.img.yml up -d --no-build; \
+	fi
 
 worker-img:
-	docker compose -f docker-compose.worker.yml -f docker-compose.worker.img.yml up -d --no-build --remove-orphans
+	$(COMPOSE) -f docker-compose.worker.yml -f docker-compose.worker.img.yml up -d --no-build
 
 infra-img:
-	docker compose -f docker-compose.monitor.yml -f docker-compose.monitor.img.yml up -d --no-build --remove-orphans
+	$(COMPOSE) -f docker-compose.monitor.yml -f docker-compose.monitor.img.yml up -d --no-build
 
 clean:
 	rm -f .env

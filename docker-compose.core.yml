@@ -14,7 +14,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cmspassword}
       POSTGRES_HOST_AUTH_METHOD: ${POSTGRES_HOST_AUTH_METHOD:-md5}
     ports:
-      - "${POSTGRES_PORT_EXTERNAL:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT_EXTERNAL:-5432}:5432"
     volumes:
       - cms-database-data:/var/lib/postgresql/data
     networks:
@@ -41,6 +41,8 @@ services:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: LogService
       SERVICE_SHARD: ${LOG_SERVICE_SHARD:-0}
+    ports:
+      - "${TAILSCALE_IP:-127.0.0.1}:29000:29000"
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
@@ -52,7 +54,7 @@ services:
     command: >
       sh -c "wait-for-it database:5432 -t 60 -- cmsLogService ${LOG_SERVICE_SHARD:-0}"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f cmsLogService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect(('127.0.0.1', 29000))\" || exit 1"]
+      test: ["CMD-SHELL", "pgrep -f cmsLogService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostname(), 29000))\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -76,6 +78,8 @@ services:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: ResourceService
       SERVICE_SHARD: ${RESOURCE_SERVICE_SHARD:-0}
+    ports:
+      - "${TAILSCALE_IP:-127.0.0.1}:28000:28000"
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
@@ -87,7 +91,7 @@ services:
     command: >
       sh -c "sleep 5 && cmsResourceService ${RESOURCE_SERVICE_SHARD:-0}"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f cmsResourceService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect(('127.0.0.1', 28000))\" || exit 1"]
+      test: ["CMD-SHELL", "pgrep -f cmsResourceService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostname(), 28000))\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -111,6 +115,8 @@ services:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: ScoringService
       SERVICE_SHARD: ${SCORING_SERVICE_SHARD:-0}
+    ports:
+      - "${TAILSCALE_IP:-127.0.0.1}:28500:28500"
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
@@ -123,7 +129,7 @@ services:
     command: >
       sh -c "sleep 5 && cmsScoringService ${SCORING_SERVICE_SHARD:-0}"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f cmsScoringService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect(('127.0.0.1', 28500))\" || exit 1"]
+      test: ["CMD-SHELL", "pgrep -f cmsScoringService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostname(), 28500))\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -148,6 +154,8 @@ services:
       SERVICE_TYPE: EvaluationService
       SERVICE_SHARD: ${EVALUATION_SERVICE_SHARD:-0}
       CONTEST_ID: ${CONTEST_ID:-1}
+    ports:
+      - "${TAILSCALE_IP:-127.0.0.1}:25000:25000"
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
@@ -160,7 +168,7 @@ services:
     command: >
       sh -c "sleep 5 && cmsEvaluationService ${EVALUATION_SERVICE_SHARD:-0} -c ${CONTEST_ID:-1}"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f cmsEvaluationService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect(('127.0.0.1', 25000))\" || exit 1"]
+      test: ["CMD-SHELL", "pgrep -f cmsEvaluationService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostname(), 25000))\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -185,6 +193,8 @@ services:
       SERVICE_TYPE: ProxyService
       SERVICE_SHARD: ${PROXY_SERVICE_SHARD:-0}
       CONTEST_ID: ${CONTEST_ID:-1}
+    ports:
+      - "${TAILSCALE_IP:-127.0.0.1}:28600:28600"
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
@@ -196,7 +206,7 @@ services:
     command: >
       sh -c "sleep 5 && cmsProxyService ${PROXY_SERVICE_SHARD:-0} -c ${CONTEST_ID:-1}"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f cmsProxyService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect(('127.0.0.1', 28600))\" || exit 1"]
+      test: ["CMD-SHELL", "pgrep -f cmsProxyService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostname(), 28600))\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -220,6 +230,8 @@ services:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: Checker
       SERVICE_SHARD: ${CHECKER_SERVICE_SHARD:-0}
+    ports:
+      - "${TAILSCALE_IP:-127.0.0.1}:22000:22000"
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
@@ -232,7 +244,7 @@ services:
     command: >
       sh -c "sleep 5 && cmsChecker ${CHECKER_SERVICE_SHARD:-0}"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f cmsChecker && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect(('127.0.0.1', 22000))\" || exit 1"]
+      test: ["CMD-SHELL", "pgrep -f cmsChecker && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostname(), 22000))\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5

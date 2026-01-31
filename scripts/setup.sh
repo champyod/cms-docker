@@ -55,15 +55,42 @@ if [ -f .env.core ]; then
     # Load existing variables
     DETECTED_DB_PASS=$(grep "^POSTGRES_PASSWORD=" .env.core | cut -d '=' -f2-)
     DETECTED_IP=$(grep "^PUBLIC_IP=" .env.core | cut -d '=' -f2-)
-    # Correctly detect deployment type, default to img if not found or empty
+    DETECTED_TAILSCALE_IP=$(grep "^TAILSCALE_IP=" .env.core | cut -d '=' -f2-)
+    
+    # Check .env.admin for DEPLOYMENT_TYPE
     DETECTED_DEPLOY_TYPE=$(grep "^DEPLOYMENT_TYPE=" .env.admin 2>/dev/null | cut -d '=' -f2-)
-    DETECTED_DEPLOY_TYPE=${DETECTED_DEPLOY_TYPE:-img}
+    
+    # Fallback: Check running containers if DEPLOYMENT_TYPE is missing
+    if [ -z "$DETECTED_DEPLOY_TYPE" ]; then
+        if docker ps --format '{{.Image}}' | grep -q "ghcr.io/champyod"; then
+            DETECTED_DEPLOY_TYPE="img"
+        else
+            DETECTED_DEPLOY_TYPE="src"
+        fi
+    fi
     
     print_info "Detected Public IP: $DETECTED_IP"
     print_info "Detected Strategy: $([ "$DETECTED_DEPLOY_TYPE" = "img" ] && echo "Pre-built Images" || echo "Source Build")"
 fi
 
-# 1. Deployment Choice
+# 1. Setup Type
+echo ""
+print_step "Setup Type"
+echo "What kind of node are you setting up?"
+echo "1) MAIN SERVER (DB, Log, Admin, Contest, etc.)"
+echo "2) REMOTE WORKER (Evaluation node only)"
+read -p "Select type [1]: " SETUP_TYPE_CHOICE
+SETUP_TYPE_CHOICE=${SETUP_TYPE_CHOICE:-1}
+
+if [ "$SETUP_TYPE_CHOICE" = "2" ]; then
+    SETUP_TYPE="worker"
+    print_info "Configuring as Remote Worker."
+else
+    SETUP_TYPE="main"
+    print_info "Configuring as Main Server."
+fi
+
+# 2. Deployment Strategy
 echo ""
 print_step "Deployment Strategy"
 if [ "$IS_UPDATE" = "true" ]; then
@@ -88,40 +115,60 @@ else
     DEPLOY_TYPE=$([ "$STRATEGY_CHOICE" = "1" ] && echo "img" || echo "src")
 fi
 
-# 2. Network Configuration
+# 3. Network & Security Configuration
 echo ""
-print_step "Network Configuration"
-if [ "$IS_UPDATE" = "true" ]; then
-    read -p "Use detected IP ($DETECTED_IP)? (y/n) [y]: " USE_OLD_IP
-    USE_OLD_IP=${USE_OLD_IP:-y}
-    if [ "$USE_OLD_IP" = "y" ]; then
-        PUBLIC_IP=$DETECTED_IP
-    else
-        NEW_DET_IP=$(curl -s -4 ifconfig.me || echo "127.0.0.1")
-        read -p "Enter new Public IP [$NEW_DET_IP]: " PUBLIC_IP
-        PUBLIC_IP=${PUBLIC_IP:-$NEW_DET_IP}
-    fi
-else
+print_step "Network & Security"
+if [ "$SETUP_TYPE" = "main" ]; then
     DETECTED_IP=$(curl -s -4 ifconfig.me || echo "127.0.0.1")
-    read -p "Public IP of this server [$DETECTED_IP]: " PUBLIC_IP
-    PUBLIC_IP=${PUBLIC_IP:-$DETECTED_IP}
+    if [ "$IS_UPDATE" = "true" ]; then
+        read -p "Use detected IP ($DETECTED_IP)? (y/n) [y]: " USE_OLD_IP
+        USE_OLD_IP=${USE_OLD_IP:-y}
+        if [ "$USE_OLD_IP" = "y" ]; then PUBLIC_IP=$DETECTED_IP; else read -p "Enter new Public IP: " PUBLIC_IP; fi
+    else
+        read -p "Public IP of this server [$DETECTED_IP]: " PUBLIC_IP
+        PUBLIC_IP=${PUBLIC_IP:-$DETECTED_IP}
+    fi
+
+    echo ""
+    print_info "Remote Worker Access Security"
+    echo "Do you want to allow remote workers to connect via Tailscale/VPN?"
+    echo "If yes, RPC ports will be bound to your VPN IP. If no, they remain local-only (127.0.0.1)."
+    read -p "Use Tailscale/VPN for RPC? (y/n) [n]: " USE_VPN
+    if [ "$USE_VPN" = "y" ]; then
+        if [ -n "$DETECTED_TAILSCALE_IP" ]; then
+            read -p "Enter Tailscale IP [$DETECTED_TAILSCALE_IP]: " TAILSCALE_IP
+            TAILSCALE_IP=${TAILSCALE_IP:-$DETECTED_TAILSCALE_IP}
+        else
+            read -p "Enter Tailscale IP: " TAILSCALE_IP
+        fi
+        REMOTE_WORKERS_ENABLED=true
+    else
+        TAILSCALE_IP=127.0.0.1
+        REMOTE_WORKERS_ENABLED=false
+    fi
+else
+    # Worker Setup
+    read -p "Enter Main Server IP/Hostname (Tailscale preferred): " MAIN_SERVER_IP
+    PUBLIC_IP=$MAIN_SERVER_IP
 fi
 
-# 3. Database Configuration
+# 4. Database Configuration (Main Server Only)
 echo ""
-print_step "Database Configuration"
-if [ "$IS_UPDATE" = "true" ]; then
-    print_info "Reusing existing database credentials to prevent data loss."
-    DB_PASS=$DETECTED_DB_PASS
-else
-    read -p "Database password [generate random]: " DB_PASS
-    if [ -z "$DB_PASS" ]; then
-        DB_PASS=$(openssl rand -base64 12 | tr -d "=+/" | cut -c1-12)
-        print_info "Generated password: $DB_PASS"
+if [ "$SETUP_TYPE" = "main" ]; then
+    print_step "Database Configuration"
+    if [ "$IS_UPDATE" = "true" ]; then
+        print_info "Reusing existing database credentials."
+        DB_PASS=$DETECTED_DB_PASS
+    else
+        read -p "Database password [generate random]: " DB_PASS
+        if [ -z "$DB_PASS" ]; then
+            DB_PASS=$(openssl rand -base64 12 | tr -d "=+/" | cut -c1-12)
+            print_info "Generated password: $DB_PASS"
+        fi
     fi
 fi
 
-# 4. Environment Generation
+# 5. Environment Generation
 echo ""
 print_step "Generating Configuration Files..."
 
@@ -129,9 +176,11 @@ print_step "Generating Configuration Files..."
 cat > .env.core << EOF
 # Generated by setup.sh
 PUBLIC_IP=$PUBLIC_IP
+TAILSCALE_IP=$TAILSCALE_IP
+REMOTE_WORKERS_ENABLED=$REMOTE_WORKERS_ENABLED
 POSTGRES_DB=cmsdb
 POSTGRES_USER=cmsuser
-POSTGRES_PASSWORD=$DB_PASS
+POSTGRES_PASSWORD=${DB_PASS:-remote_worker_no_db}
 POSTGRES_PORT_EXTERNAL=5432
 POSTGRES_HOST_AUTH_METHOD=md5
 CMS_CONFIG=/usr/local/etc/cms.toml
@@ -142,6 +191,8 @@ EVALUATION_SERVICE_SHARD=0
 PROXY_SERVICE_SHARD=0
 CHECKER_SERVICE_SHARD=0
 EOF
+
+# ... (rest of environment generation same until deployment)
 
 # Prepare .env.admin
 cat > .env.admin << EOF
@@ -160,7 +211,7 @@ RANKING_PASSWORD=adminpass
 ADMIN_COOKIE_DURATION=36000
 EOF
 
-# Prepare .env.contest (Preserve multi-contest config and secret key if update)
+# Prepare .env.contest
 if [ "$IS_UPDATE" = "true" ]; then
     EXISTING_MULTI_CONFIG=$(grep "^CONTESTS_DEPLOY_CONFIG=" .env.contest 2>/dev/null | cut -d '=' -f2- || echo '[{"id":1,"port":8888,"domain":"contest.cms.local"}]')
     SECRET_KEY=$(grep "^SECRET_KEY=" .env.contest 2>/dev/null | cut -d '=' -f2-)
@@ -171,7 +222,6 @@ fi
 
 cat > .env.contest << EOF
 # Generated by setup.sh
-# Multi-contest configuration (JSON array)
 CONTESTS_DEPLOY_CONFIG=$EXISTING_MULTI_CONFIG
 SECRET_KEY=$SECRET_KEY
 COOKIE_DURATION=10800
@@ -181,11 +231,10 @@ EOF
 # Prepare .env.worker
 cat > .env.worker << EOF
 # Generated by setup.sh
-# Worker resources (Used for local workers)
 WORKER_REPLICAS=1
 WORKER_MEMORY_LIMIT=2G
 WORKER_CPU_LIMIT=2
-# Note: Active worker shards are managed through the Admin UI or .env.core
+CORE_SERVICES_HOST=$PUBLIC_IP
 EOF
 
 # Prepare .env.infra
@@ -215,70 +264,49 @@ BACKUP_MAX_AGE_DAYS=10
 BACKUP_MAX_SIZE_GB=5
 EOF
 
-# Run Makefile env to combine them and inject into cms.toml
 make env
-print_success "Environment files and cms.toml generated."
+print_success "Environment files generated."
 
-# 5. Service Deployment (Core)
+# 6. Deployment
 echo ""
-print_step "Deploying Core Services..."
-if [ "$DEPLOY_TYPE" = "img" ]; then
-    make core-img
-    make infra-img
-else
-    make core
-    make infra
-fi
-
-print_info "Waiting for database to be healthy..."
-# Wait for database healthcheck
-until [ "$(docker inspect -f '{{.State.Health.Status}}' cms-database 2>/dev/null)" == "healthy" ]; do
-    printf "."
-    sleep 2
-done
-echo ""
-print_success "Database is ready."
-
-# 6. Database Initialization / Update
-echo ""
-print_step "Updating Database Schema..."
-# cmsInitDB is non-destructive (it won't wipe tables)
-docker exec -it cms-log-service cmsInitDB || print_info "Note: cmsInitDB skipped some steps (likely already initialized)."
-make prisma-sync
-# Patch schema (idempotent)
-docker exec -i cms-database psql -U cmsuser -d cmsdb < scripts/fix_db_schema.sql
-print_success "Database updated and schema patched."
-
-# 7. Deploy Admin Services
-echo ""
-print_step "Deploying Admin Panel..."
-if [ "$DEPLOY_TYPE" = "img" ]; then
-    $COMPOSE_CMD -f docker-compose.admin.yml -f docker-compose.admin.img.yml up -d --no-build --remove-orphans
-else
-    $COMPOSE_CMD -f docker-compose.admin.yml up -d --build --remove-orphans
-fi
-print_success "Admin Panel deployed."
-
-# 8. Deploy Contest Web Server
-echo ""
-print_step "Deploying Contest Web Server..."
-if [ "$DEPLOY_TYPE" = "img" ]; then
-    $COMPOSE_CMD -f docker-compose.contest.yml -f docker-compose.contest.img.yml up -d --no-build --remove-orphans
-else
-    $COMPOSE_CMD -f docker-compose.contest.yml up -d --build --remove-orphans
-fi
-print_success "Contest services deployed."
-print_info "Note: No workers deployed by default. Add workers via Admin UI -> Infrastructure -> Resources."
-
-# 9. Create Admin Account
-if [ "$IS_UPDATE" != "true" ]; then
-    echo ""
-    print_step "User Configuration"
-    read -p "Create a superadmin account now? (y/n) [y]: " CREATE_ADMIN
-    CREATE_ADMIN=${CREATE_ADMIN:-y}
-    if [ "$CREATE_ADMIN" = "y" ]; then
-        make admin-create
+if [ "$SETUP_TYPE" = "main" ]; then
+    print_step "Deploying Main Server Stacks..."
+    if [ "$DEPLOY_TYPE" = "img" ]; then
+        make core-img
+        make infra-img
+        make admin-img
+        make contest-img
+    else
+        make core
+        make infra
+        make admin
+        make contest
     fi
+    
+    print_info "Waiting for database..."
+    until [ "$(docker inspect -f '{{.State.Health.Status}}' cms-database 2>/dev/null)" == "healthy" ]; do printf "."; sleep 2; done
+    echo ""
+    
+    make cms-init
+    make prisma-sync
+    docker exec -i cms-database psql -U cmsuser -d cmsdb < scripts/fix_db_schema.sql
+    
+    if [ "$IS_UPDATE" != "true" ]; then
+        print_step "User Configuration"
+        read -p "Create a superadmin account now? (y/n) [y]: " CREATE_ADMIN
+        CREATE_ADMIN=${CREATE_ADMIN:-y}
+        if [ "$CREATE_ADMIN" = "y" ]; then make admin-create; fi
+    fi
+
+    # Local Worker Option
+    echo ""
+    read -p "Do you want to deploy a local worker on this machine? (y/n) [n]: " DEPLOY_LOCAL_WORKER
+    if [ "$DEPLOY_LOCAL_WORKER" = "y" ]; then
+        if [ "$DEPLOY_TYPE" = "img" ]; then make worker-img; else make worker; fi
+    fi
+else
+    print_step "Deploying Remote Worker..."
+    if [ "$DEPLOY_TYPE" = "img" ]; then make worker-img; else make worker; fi
 fi
 
 # Final Summary
@@ -287,15 +315,14 @@ echo -e "${GREEN}═════════════════════
 echo -e "${GREEN}             Setup Completed Successfully!                  ${NC}"
 echo -e "${GREEN}═══════════════════════════════════════════════════════════${NC}"
 echo ""
-echo -e "🚀 Services are now available at:"
-echo -e "   - ${CYAN}Admin UI (New):${NC}   http://$PUBLIC_IP:8891"
-echo -e "   - ${CYAN}Contest UI:${NC}      http://$PUBLIC_IP:8888"
-echo -e "   - ${CYAN}Admin API/Legacy:${NC} http://$PUBLIC_IP:8889"
-echo -e "   - ${CYAN}Ranking:${NC}        http://$PUBLIC_IP:8890"
-echo ""
-print_info "Note: The Admin UI allows you to manage contest deployments and workers."
-print_info "Saving changes in the Admin UI will automatically restart the required services."
+if [ "$SETUP_TYPE" = "main" ]; then
+    echo -e "🚀 Main Server available at:"
+    echo -e "   - Admin UI:   http://$PUBLIC_IP:8891"
+    echo -e "   - RPC Listen: $TAILSCALE_IP"
+else
+    echo -e "🚀 Remote Worker deployed and connecting to $PUBLIC_IP"
+fi
 echo ""
 print_success "Documentation: docs/DEPENDENCIES.md"
-print_success "Setup script saved your configuration in .env.* files"
 echo ""
+

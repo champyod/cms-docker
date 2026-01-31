@@ -48,7 +48,16 @@ You can now run multiple contests simultaneously on different ports.
 2.  Add instances with specific Contest IDs and Ports.
 3.  Click **Save & Restart Stack** to apply.
 
+### Secure Remote Workers (Tailscale)
+For maximum security, remote evaluation workers should connect over a VPN like **Tailscale**.
+1.  During `./scripts/setup.sh`, choose to enable Tailscale restriction.
+2.  Provide your server's Tailscale IP.
+3.  The system will bind all internal RPC ports (Log, Resource, etc.) to that IP, making them invisible to the public internet.
+4.  Remote workers simply need to connect to your Tailscale IP to start evaluating.
+
 ### Automated Backups
+... (rest same)
+
 The system now supports automated submission backups to CSV with smart cleanup policies.
 1.  Navigate to **Infrastructure** → **Maintenance** in the Admin Panel.
 2.  Configure backup intervals and retention limits (Count, Age, or Size).

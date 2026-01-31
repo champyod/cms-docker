@@ -66,17 +66,17 @@ The modern Admin Panel (port 8891) provides a unified interface to manage all wo
 4.  Run `make env` (or click **Apply Changes** in the UI) to regenerate `config/cms.toml`.
 5.  The system will guide you through restarting the core services to finalize the connection.
 
-### Manual Configuration
-Workers are defined in `.env.core` using the following pattern:
-```ini
-WORKER_0=cms-worker-0:26000
-WORKER_1=remote-ip:26001
-```
-After editing, always run `make env` to inject these into the actual CMS configuration.
+### Security: Tailscale & VPNs
+By default, RPC ports are restricted to `127.0.0.1` for security. To enable remote workers:
+1.  **Tailscale (Recommended)**: Run `./scripts/setup.sh` and provide your Tailscale IP when prompted. This binds services only to the Tailscale interface.
+2.  **Other VPNs**: Follow the same process but provide your VPN interface IP.
+3.  **Public Access (Dangerous)**: Set `TAILSCALE_IP=0.0.0.0` in `.env.core` and run `make env && make core-img`. This exposes evaluation ports to the entire internet.
 
 ---
 
 ## Quick Setup
+... (rest of the file)
+
 ... (rest of the file)
 
 
