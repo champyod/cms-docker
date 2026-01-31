@@ -61,16 +61,23 @@ configure_env_file() {
 
             # Check if key already exists in target file
             if [ -f "$target_file" ]; then
-                if grep -q "^${key}=" "$target_file"; then
-                    current_val=$(grep "^${key}=" "$target_file" | cut -d '=' -f2-)
+                # Use sed to extract the exact value for the key
+                current_val=$(sed -n "s/^${key}=//p" "$target_file" | head -n 1)
+                if [ -n "$current_val" ] || grep -q "^${key}=" "$target_file"; then
                     exists=true
                 fi
             fi
 
-            if [ "$exists" = true ]; then
-                # Variable exists: Ask to keep or update
+            # Check if current value is a placeholder
+            local is_placeholder=false
+            if [[ "$current_val" =~ YOUR_.*_HERE || "$current_val" == "CHANGE_ME" ]]; then
+                is_placeholder=true
+            fi
+
+            if [ "$exists" = true ] && [ "$is_placeholder" = false ]; then
+                # Variable exists and is not a placeholder: Ask to keep or update
                 if [ "$current_val" == "$default_val" ]; then
-                    # No change in template
+                    # No change needed, keep current
                     echo "${key}=${current_val}" >> "$temp_file"
                 else
                     echo -e "\n${BOLD}Variable:${NC} ${CYAN}${key}${NC}"
@@ -78,24 +85,25 @@ configure_env_file() {
                     echo -e "  [U] Use example:   ${GREEN}${default_val}${NC}"
                     echo -e "  [M] Specify manually"
                     
-                    read -p "Choice for $key [K]: " choice
+                    read -r -p "Choice for $key [K]: " choice
                     case ${choice:-K} in
                         [Uu]*) echo "${key}=${default_val}" >> "$temp_file" ;;
                         [Mm]*) 
-                            read -p "Enter value for $key: " manual_val
+                            read -r -p "Enter value for $key: " manual_val
                             echo "${key}=${manual_val}" >> "$temp_file"
                             ;; 
                         *) echo "${key}=${current_val}" >> "$temp_file" ;;
                     esac
                 fi
             else
-                # New variable: Ask for value
-                echo -e "\n${BOLD}New Variable detected:${NC} ${CYAN}${key}${NC}"
+                # New variable or placeholder: Force choice
+                echo -e "\n${BOLD}Setup required for:${NC} ${CYAN}${key}${NC}"
+                [ "$exists" = true ] && echo -e "  Current value is a placeholder: ${RED}${current_val}${NC}"
                 echo -e "  [D] Use default:   ${GREEN}${default_val}${NC}"
                 echo -e "  [R] Generate random ID/Password"
                 echo -e "  [M] Specify manually"
                 
-                read -p "Choice for $key [D]: " choice
+                read -r -p "Choice for $key [D]: " choice
                 case ${choice:-D} in
                     [Rr]*) 
                         local rand_val=$(generate_random)
@@ -103,7 +111,7 @@ configure_env_file() {
                         echo "${key}=${rand_val}" >> "$temp_file" 
                         ;; 
                     [Mm]*) 
-                        read -p "Enter value for $key: " manual_val
+                        read -r -p "Enter value for $key: " manual_val
                         echo "${key}=${manual_val}" >> "$temp_file"
                         ;; 
                     *) echo "${key}=${default_val}" >> "$temp_file" ;;
