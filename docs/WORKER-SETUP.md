@@ -55,58 +55,30 @@ Remote workers are evaluation containers that run on separate machines from your
 
 ---
 
-## Quick Setup
+## Worker Management (Recommended)
 
-### One-Command Installation
+The modern Admin Panel (port 8891) provides a unified interface to manage all workers (local and remote).
 
-On your remote worker machine:
+### Managing Workers via Admin UI
+1.  Navigate to **Infrastructure** → **Resources** in the Admin Panel.
+2.  Add or remove worker entries by specifying their `Hostname/IP` and `Port`.
+3.  The system automatically updates `.env.core` with `WORKER_N` variables.
+4.  Run `make env` (or click **Apply Changes** in the UI) to regenerate `config/cms.toml`.
+5.  The system will guide you through restarting the core services to finalize the connection.
 
-```bash
-curl -fsSL http://YOUR_MAIN_SERVER_IP/scripts/worker-connect.sh | sudo bash
+### Manual Configuration
+Workers are defined in `.env.core` using the following pattern:
+```ini
+WORKER_0=cms-worker-0:26000
+WORKER_1=remote-ip:26001
 ```
-
-**What it does:**
-1. ✅ Checks for Docker, installs if missing
-2. ✅ Prompts for main server IP
-3. ✅ Prompts for worker shard number
-4. ✅ Downloads configuration
-5. ✅ Creates environment file
-6. ✅ Pulls Docker image
-7. ✅ Creates systemd service
-8. ✅ Starts worker
-9. ✅ Shows status
-
-**Interactive Prompts:**
-
-```
-Enter the IP address of your main CMS server: 203.0.113.45
-Enter worker shard number (unique, e.g., 1, 2, 3): 1
-Enter worker name [worker-1]: worker-aws-1
-```
-
-**Setup time: ~5 minutes**
-
-### Serving the Script
-
-On your main server, make the script accessible:
-
-```bash
-# Option 1: Using Python HTTP server
-cd cms-docker/scripts
-python3 -m http.server 8000
-
-# Option 2: Using Nginx
-sudo cp worker-connect.sh /var/www/html/scripts/
-```
-
-Then workers can access:
-```bash
-curl -fsSL http://YOUR_SERVER_IP:8000/worker-connect.sh | sudo bash
-```
+After editing, always run `make env` to inject these into the actual CMS configuration.
 
 ---
 
-## Manual Setup
+## Quick Setup
+... (rest of the file)
+
 
 For users who want more control:
 

@@ -33,8 +33,11 @@ Defines which services must be restarted when a specific environment variable ch
 The Admin Panel (`admin-panel`) uses this configuration to:
 1.  **Detect Changes:** Compare current UI values with saved `.env` files.
 2.  **Analyze Impact:** Recursively determine the full list of services that need restarting based on the `env_triggers` and `dependencies`.
-3.  **Warn User:** Display a warning banner listing the affected services before saving.
-4.  **Automate Restart:** Provide a "Save & Restart" button that updates the `.env` files and restarts the specific Docker containers using `docker compose`.
+3.  **Dedicated Modules:**
+    *   **Deployments:** Manages multi-contest port mapping and triggers full-stack contest restarts.
+    *   **Maintenance:** Manages backup policies and Discord logging.
+4.  **Automate Restart:** Provides a "Save & Restart" button that updates the `.env` files and restarts the specific Docker containers using `docker compose`.
+
 
 ## Core Service Recovery
 

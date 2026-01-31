@@ -37,26 +37,21 @@ The Core stack must be healthy before any other services can function properly.
 
 ---
 
-## Restart Strategy
+## Automated Restart Logic (Recommended)
 
-Whenever you modify configuration files, follow this restart order to avoid "Restart Loops":
+The modern Admin Panel (port 8891) includes a **Dependency Analyzer** that automatically handles the restart strategy for you.
 
-### Scenario A: Modified `.env.core` (DB Credentials/IPs)
-1. Stop all services.
-2. `make env` to regenerate the unified `.env`.
-3. Start **Core Stack** first.
-4. Once Core is healthy, start other stacks.
+When you modify settings in the Admin Panel:
+1.  **Change Detection**: The UI identifies which variables have changed.
+2.  **Impact Analysis**: The system maps changed variables to specific services (e.g., changing `CONTEST_ID` identifies that `contest-web-server` needs a restart).
+3.  **Dependency Expansion**: The system recursively adds services that depend on the impacted ones.
+4.  **One-Click Apply**: You will be presented with a **"Save & Restart"** button that applies the configuration and executes the restarts in the correct sequence.
 
-### Scenario B: Modified `config/cms.toml` (Worker Nodes/Logging)
-1. Restart the **Core Stack** (specifically `log-service` and `resource-service`).
-2. Restart **Workers** so they can reconnect to the updated resource service.
+---
 
-### Scenario C: Core Services in Restart Loop
-If Core services are stuck restarting:
-1. **Check Database Health**: `docker logs cms-database`. If it's not starting, credentials in `.env.core` might be wrong.
-2. **Check Log Service**: `docker logs cms-log-service`. It often waits for the database.
-3. **Verify Configuration**: Ensure `config/cms.toml` exists and is readable.
-4. **Network Conflict**: Ensure `cms-network` is not being blocked by a pre-existing bridge with the same name.
+## Restart Strategy (Manual)
+... (rest of the file)
+
 
 ## Dependency Mermaid Diagram
 

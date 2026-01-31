@@ -4,50 +4,80 @@ Scalable, containerized deployment for the [Contest Management System (CMS)](htt
 
 > **📚 New to CMS?** Check out our [**Step-by-Step Tutorial**](docs/TUTORIAL.md) for a complete walkthrough!
 
-## Quick Start
+## Quick Start (Recommended)
 
-### 1. Build & Setup
-Clone the repository and initialize the configuration.
+The easiest way to deploy or update CMS is using our automated scripts.
+
+### 1. Initial Setup
+Clone the repository and initialize the submodules.
 
 ```bash
 # Clone
 git clone https://github.com/champyod/cms-docker.git
 cd cms-docker
 git submodule update --init --recursive
+```
 
-# Initialize Configuration
+### 2. Configure Environment
+Use the interactive configuration tool to set up your `.env` files. This script will ask you for credentials or generate secure random passwords for you.
+
+```bash
+./scripts/configure-env.sh
+```
+
+### 3. Deploy
+Run the comprehensive setup script. It will detect if you are performing a fresh install or an update, ask for your preferred deployment strategy (Pre-built Images vs. Source Build), and handle the entire deployment process automatically.
+
+```bash
+./setup.sh
+```
+
+---
+
+## Access & Management
+
+By default, services are bound to `0.0.0.0`:
+*   **Modern Admin Panel (Next.js)**: [http://localhost:8891](http://localhost:8891) — **Manage everything here!**
+*   **Contestant Interface**: [http://localhost:8888](http://localhost:8888)
+*   **Classic Admin Panel**: [http://localhost:8889](http://localhost:8889)
+*   **Ranking**: [http://localhost:8890](http://localhost:8890)
+
+### Multi-Contest Deployment
+You can now run multiple contests simultaneously on different ports.
+1.  Navigate to **Infrastructure** → **Deployments** in the Admin Panel.
+2.  Add instances with specific Contest IDs and Ports.
+3.  Click **Save & Restart Stack** to apply.
+
+### Automated Backups
+The system now supports automated submission backups to CSV with smart cleanup policies.
+1.  Navigate to **Infrastructure** → **Maintenance** in the Admin Panel.
+2.  Configure backup intervals and retention limits (Count, Age, or Size).
+3.  Backups are stored in the `./backups` directory and success/failure is logged to Discord.
+
+---
+
+## Advanced Manual Deployment
+
+If you prefer manual control, you can use the following commands:
+
+**Step 1: Configuration**
+```bash
 cp .env.core.example .env.core
-cp .env.admin.example .env.admin
-cp .env.contest.example .env.contest
-cp .env.worker.example .env.worker
-cp .env.infra.example .env.infra   # Infrastructure Monitoring
-
-# Generate Environment
-# This compiles all .env files and configurations
+# ... edit .env.* files ...
 make env
 ```
 
-### 2. Deploy Services
-You can choose to deploy using pre-built images (recommended) or build from source.
-
-**Option A: Pre-built Images (Recommended)**
-Uses Optimized images from GitHub Container Registry.
-
+**Step 2: Deploy with Images**
 ```bash
-# Login (Required for private packages, optionally skip if public)
-# echo "TOKEN" | docker login ghcr.io -u USER --password-stdin
-
 make pull
-make core-img     # Start Core Services (DB, Log, Resource)
-make cms-init     # Initialize Database (Run once)
+make core-img     # Start Core Services
+make cms-init     # Initialize Database
 make admin-create # Create Superadmin
 make admin-img    # Start Admin Panel
 make contest-img  # Start Contest Interface
 ```
 
-**Option B: Build from Source**
-Builds everything locally.
-
+**Step 3: Build from Source**
 ```bash
 make core
 make cms-init
@@ -55,16 +85,11 @@ make admin-create
 make admin contest worker
 ```
 
-### 3. Access
-By default, services are bound to `0.0.0.0`:
-*   **Modern Admin Panel (Next.js by CCYod)**: [http://localhost:8891](http://localhost:8891)
-*   **Classic Admin Panel (Original CMS)**: [http://localhost:8889](http://localhost:8889)
-*   **Contestant Interface**: [http://localhost:8888](http://localhost:8888)
-*   **Ranking**: [http://localhost:8890](http://localhost:8890)
-
 ---
 
 ## Worker Management
+... (rest of the file)
+
 
 Workers are now configured via environment variables in `.env.core`, ensuring they persist across `make env` regenerations.
 

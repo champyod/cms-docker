@@ -1,15 +1,26 @@
 # CMS Docker Quick Reference Card
 
-## Initial Setup
+## Initial Setup (Recommended)
 ```bash
 git clone https://github.com/champyod/cms-docker.git
 cd cms-docker
 git submodule update --init --recursive
-cp .env.*.example .env.*
-make env
+
+./scripts/configure-env.sh   # Interactive .env setup
+./setup.sh                   # Comprehensive deployment/update
 ```
 
-## Daily Operations
+## Advanced Manual Setup
+```bash
+cp .env.core.example .env.core
+# ... edit .env files ...
+make env
+make core-img                # or 'make core' for source
+make cms-init
+make admin-create
+make admin-img contest-img worker-img
+```
+
 
 ### Start Services
 ```bash

@@ -18,87 +18,30 @@ git clone https://github.com/champyod/cms-docker.git
 cd cms-docker
 git submodule update --init --recursive
 
-# Copy environment templates
-cp .env.core.example .env.core
-cp .env.admin.example .env.admin
-cp .env.contest.example .env.contest
-cp .env.worker.example .env.worker
+# Run the interactive configuration tool
+./scripts/configure-env.sh
 ```
 
-### Configure Core Settings
+The configuration script will guide you through setting up credentials, public IPs, and security keys. You can press Enter to use defaults or choose to generate random secure passwords.
 
-Edit `.env.core`:
+## Step 2: Deploy Services (5 minutes)
+
+Run the automated setup script:
 
 ```bash
-nano .env.core
+./setup.sh
 ```
 
-**Essential settings:**
-```ini
-# Your server's public IP (for remote workers)
-PUBLIC_IP=203.0.113.45  # Replace with your actual IP
-
-# Database password (change this!)
-POSTGRES_PASSWORD=your_secure_password_here
-
-# Workers (at least one)
-WORKER_0=cms-worker-0:26000
-```
-
-### Generate Configuration
-
-```bash
-make env
-```
-
-## Step 2: Deploy Services (10 minutes)
-
-### Option A: Using Pre-built Images (Recommended)
-
-```bash
-# Pull images
-make pull
-
-# Start core services (database, logging, etc.)
-make core-img
-
-# Wait 10 seconds for database to initialize
-sleep 10
-
-# Initialize database
-make cms-init
-
-# Create your admin account
-make admin-create
-# Enter username: admin
-# Enter password: (your secure password)
-
-# Start admin panel
-make admin-img
-
-# Start contest interface
-make contest-img
-
-# Start workers
-make worker-img
-```
-
-### Option B: Build from Source
-
-```bash
-make core
-sleep 10
-make cms-init
-make admin-create
-make admin contest worker
-```
+1.  **Select Strategy**: Choose `1) PRE-BUILT IMAGES` for the fastest setup.
+2.  **Confirm IP**: Verify the detected public IP address.
+3.  **Deploy**: The script will automatically deploy the core services, initialize the database, apply schema patches, and start the Admin Panel and Contest interfaces.
+4.  **Create Admin**: When prompted, create your first superadmin account.
 
 ## Step 3: Access the System
 
 Open your browser:
 
-- **Modern Admin Panel**: http://your-ip:8891
-- **Classic Admin Panel**: http://your-ip:8889
+- **Modern Admin Panel**: http://your-ip:8891 (Login with your admin account)
 - **Contest Interface**: http://your-ip:8888
 - **Scoreboard**: http://your-ip:8890
 
@@ -107,15 +50,22 @@ Open your browser:
 ### Using Modern Admin Panel (Port 8891)
 
 1. Navigate to http://your-ip:8891
-2. Click **"Infrastructure"** → **"Contests"**
-3. Click **"Create Contest"**
+2. Click **"Contest"** → **"Contests"** in the sidebar.
+3. Click **"Create New Contest"**
 4. Fill in:
    - **Name**: "Practice Contest 2024"
    - **Description**: "A practice contest for beginners"
-   - **Start Time**: (Choose date/time)
-   - **End Time**: (2 hours after start)
-   - **Token Settings**: Enable if needed
-5. Click **"Create"**
+   - **Start/Stop Time**: Choose dates.
+   - **Token Settings**: Use the **Tokens** tab to configure periodic credits.
+5. Click **"Create Contest"**
+
+### Manage Deployments
+
+To make your contest live:
+1. Navigate to **"Infrastructure"** → **"Deployments"**.
+2. Ensure your contest ID is mapped to a port (e.g., ID 1 on port 8888).
+3. Click **"Save & Restart Stack"**.
+
 
 ### Using Classic Admin Panel (Port 8889)
 
