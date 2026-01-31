@@ -174,13 +174,13 @@ export default function MaintenancePage() {
                             />
                         </div>
                         <div className="space-y-1">
-                            <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Mention User ID (Optional)</label>
+                            <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Mention Role ID (Optional)</label>
                             <input 
                                 type="text" 
-                                value={data.DISCORD_USER_ID || ''} 
-                                onChange={(e) => handleChange('DISCORD_USER_ID', e.target.value)}
+                                value={data.DISCORD_ROLE_ID || ''} 
+                                onChange={(e) => handleChange('DISCORD_ROLE_ID', e.target.value)}
                                 className="w-full bg-black/40 px-4 py-2 rounded-lg border border-white/10 text-white outline-none focus:border-indigo-500/50 font-mono text-sm"
-                                placeholder="1234567890..."
+                                placeholder="Role ID to tag in alerts"
                             />
                         </div>
                     </div>

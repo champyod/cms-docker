@@ -10,22 +10,29 @@ const MAX_BACKUPS = parseInt(process.env.BACKUP_MAX_COUNT || "50");
 const MAX_AGE_DAYS = parseInt(process.env.BACKUP_MAX_AGE_DAYS || "10");
 const MAX_SIZE_GB = parseFloat(process.env.BACKUP_MAX_SIZE_GB || "5");
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
+const DISCORD_ROLE_ID = process.env.DISCORD_ROLE_ID;
 
-async function sendDiscordLog(message: string, color: number = 3447003) {
+async function sendDiscordLog(message: string, color: number = 3447003, mention: boolean = false) {
   if (!DISCORD_WEBHOOK_URL) return;
   
   try {
+    const payload: any = {
+      embeds: [{
+        title: "CMS Backup System",
+        description: message,
+        color: color,
+        timestamp: new Date().toISOString()
+      }]
+    };
+
+    if (mention && DISCORD_ROLE_ID) {
+      payload.content = `<@&${DISCORD_ROLE_ID}>`;
+    }
+
     await fetch(DISCORD_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        embeds: [{
-          title: "CMS Backup System",
-          description: message,
-          color: color,
-          timestamp: new Date().toISOString()
-        }]
-      })
+      body: JSON.stringify(payload)
     });
   } catch (e) {
     console.error("Failed to send discord log:", e);
@@ -44,15 +51,7 @@ async function runBackup() {
   console.log(`Starting backup to ${filePath}...`);
 
   try {
-    // We use psql to export to CSV
-    // Assuming DATABASE_URL is available and psql is installed in the container
-    // Alternatively, we could use prisma or pg client, but psql is very efficient for CSV export.
-    
-    // Construct psql command for CSV export
-    // We need to handle the case where we are running inside a container and connecting to 'database' host
     const exportQuery = "COPY (SELECT * FROM submissions) TO STDOUT WITH CSV HEADER";
-    
-    // We'll use the environment variables directly if possible or parse DATABASE_URL
     const cmd = ["psql", DATABASE_URL || "", "-c", exportQuery];
     
     const proc = spawn(cmd, {
@@ -74,13 +73,13 @@ async function runBackup() {
     
     await sendDiscordLog(`✅ **Backup Successful**\nFilename: 
 ${filename}
-Size: ${sizeMB} MB`, 65280);
+Size: ${sizeMB} MB`, 65280, false);
     console.log(`Backup completed: ${filename} (${sizeMB} MB)`);
     
     await runCleanup();
   } catch (e: any) {
     console.error("Backup failed:", e);
-    await sendDiscordLog(`❌ **Backup Failed**\nError: ${e.message}`, 16711680);
+    await sendDiscordLog(`❌ **Backup Failed**\nError: ${e.message}`, 16711680, true);
   }
 }
 
@@ -93,17 +92,16 @@ async function runCleanup() {
       path: join(BACKUP_DIR, f),
       stats: fs.statSync(join(BACKUP_DIR, f))
     }))
-    .sort((a, b) => b.stats.mtimeMs - a.stats.mtimeMs); // Newest first
+    .sort((a, b) => b.stats.mtimeMs - a.stats.mtimeMs);
 
   if (files.length <= 1) {
-    console.log("Nothing to clean (at least 1 backup kept).");
+    console.log("Nothing to clean.");
     return;
   }
 
   let deletedCount = 0;
   let deletedSize = 0;
 
-  // 1. Clean by count
   if (MAX_BACKUPS > 0 && files.length > MAX_BACKUPS) {
     const toDelete = files.slice(MAX_BACKUPS);
     for (const f of toDelete) {
@@ -113,7 +111,6 @@ async function runCleanup() {
     }
   }
 
-  // Refresh list after count cleanup
   const remainingFiles = fs.readdirSync(BACKUP_DIR)
     .filter(f => f.endsWith(".csv"))
     .map(f => ({
@@ -123,11 +120,9 @@ async function runCleanup() {
     }))
     .sort((a, b) => b.stats.mtimeMs - a.stats.mtimeMs);
 
-  // 2. Clean by age
   const now = Date.now();
   const maxAgeMs = MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
   if (MAX_AGE_DAYS > 0) {
-    // Keep at least one!
     for (let i = 1; i < remainingFiles.length; i++) {
       const f = remainingFiles[i];
       if (now - f.stats.mtimeMs > maxAgeMs) {
@@ -138,11 +133,9 @@ async function runCleanup() {
     }
   }
 
-  // 3. Clean by size
   let currentTotalSize = remainingFiles.reduce((acc, f) => acc + f.stats.size, 0);
   const maxTotalSize = MAX_SIZE_GB * 1024 * 1024 * 1024;
   if (MAX_SIZE_GB > 0 && currentTotalSize > maxTotalSize) {
-    // Re-refresh remaining
     const currentFiles = fs.readdirSync(BACKUP_DIR)
         .filter(f => f.endsWith(".csv"))
         .map(f => ({
@@ -164,14 +157,10 @@ async function runCleanup() {
 
   if (deletedCount > 0) {
     const sizeMB = (deletedSize / (1024 * 1024)).toFixed(2);
-    await sendDiscordLog(`🧹 **Cleanup Performed**\nDeleted ${deletedCount} old backups.\nSpace freed: ${sizeMB} MB`, 15844367);
-    console.log(`Cleanup finished: deleted ${deletedCount} files.`);
-  } else {
-    console.log("No cleanup needed.");
+    await sendDiscordLog(`🧹 **Cleanup Performed**\nDeleted ${deletedCount} old backups.\nSpace freed: ${sizeMB} MB`, 15844367, false);
   }
 }
 
-// Check if running directly
 if (import.meta.main) {
     if (process.argv.includes("--cleanup-only")) {
         runCleanup();

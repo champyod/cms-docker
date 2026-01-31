@@ -9,7 +9,7 @@ services:
     pid: host   # Required to see Host CPU/Memory usage
     environment:
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
-      - DISCORD_USER_ID=${DISCORD_USER_ID}
+      - DISCORD_ROLE_ID=${DISCORD_ROLE_ID}
       - MONITOR_INTERVAL=5
       - MONITOR_COOLDOWN=300
       - DISK_PATH=/host
