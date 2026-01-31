@@ -128,7 +128,7 @@ env:
 	@echo "" >> .env
 	@echo "# Docker Compose File Configuration" >> .env
 	@echo "COMPOSE_FILE=docker-compose.core.yml:docker-compose.admin.yml:docker-compose.contests.generated.yml:docker-compose.worker.yml:docker-compose.monitor.yml" >> .env
-	@echo ".env file generated. You can now run: $(COMPOSE) up -d --build"
+	@echo ".env file generated. You can now run: ./scripts/setup.sh"
 
 core:
 	$(COMPOSE) -f docker-compose.core.yml up -d database

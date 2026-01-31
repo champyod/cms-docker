@@ -166,5 +166,5 @@ done
 echo ""
 print_step "Finalizing..."
 make env
-print_success "Configuration complete! You can now run ./setup.sh"
+print_success "Configuration complete! You can now run ./scripts/setup.sh"
 echo ""
