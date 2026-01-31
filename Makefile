@@ -118,8 +118,8 @@ env:
 	chmod +x scripts/inject_config.sh && ./scripts/inject_config.sh
 	@# Generate Multi-Contest Compose
 	@if [ -f .env.contest ]; then \
-		CONFIG=$(grep "^CONTESTS_DEPLOY_CONFIG=" .env.contest | cut -d '=' -f2-); \
-		export CONTESTS_DEPLOY_CONFIG="$CONFIG"; \
+		CONFIG=$$(grep "^CONTESTS_DEPLOY_CONFIG=" .env.contest | cut -d '=' -f2-); \
+		export CONTESTS_DEPLOY_CONFIG="$$CONFIG"; \
 		bun scripts/generate-contest-compose.ts; \
 	fi
 	@echo "" >> .env

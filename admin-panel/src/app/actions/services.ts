@@ -11,41 +11,35 @@ const execPromise = util.promisify(exec);
 
 const getRepoRoot = () => process.env.IS_DOCKER === 'true' ? '/repo-root' : path.resolve(process.cwd(), '..');
 
+async function logToDiscord(title: string, message: string, color: number = 3447003) {
+    const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+    if (!webhookUrl) return;
+
+    try {
+        await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                embeds: [{
+                    title,
+                    description: message,
+                    color,
+                    timestamp: new Date().toISOString()
+                }]
+            })
+        });
+    } catch (e) {
+        console.error('Failed to send discord log:', e);
+    }
+}
+
 export async function switchContest(contestId: number) {
   await ensurePermission('contests');
   try {
-    // Verify path existence
     const repoRoot = getRepoRoot();
     let envPath = path.join(repoRoot, '.env.contest');
-    try {
-      await fs.access(envPath);
-    } catch {
-      // Fallback: try current directory or other typical locations
-      const altPath = path.resolve(process.cwd(), '.env.contest');
-      try {
-        await fs.access(altPath);
-        envPath = altPath;
-      } catch {
-        // Try one level up if in .next/server or similar
-        const upUpPath = path.resolve(process.cwd(), '../../.env.contest');
-        try {
-          await fs.access(upUpPath);
-          envPath = upUpPath;
-        } catch {
-          console.error('Could not find .env.contest in', process.cwd(), 'or parents');
-          // Keep default and let readFile fail with precise error
-        }
-      }
-    }
-
-    let content = '';
-    try {
-      content = await fs.readFile(envPath, 'utf-8');
-    } catch (e) {
-      console.error(`Failed to read .env.contest at ${envPath}`, e);
-      return { success: false, error: 'Could not read configuration file at ' + envPath };
-    }
-
+    
+    let content = await fs.readFile(envPath, 'utf-8');
     const newContent = content.replace(/^CONTEST_ID=\d+/m, `CONTEST_ID=${contestId}`);
 
     if (content === newContent && !content.includes('CONTEST_ID=')) {
@@ -54,21 +48,15 @@ export async function switchContest(contestId: number) {
         await fs.writeFile(envPath, newContent);
     }
 
-    const rootDir = path.resolve(process.cwd(), '..');
-    const cmd = `docker compose -f docker-compose.contest.yml up -d --build`;
-    
-    console.log(`Executing: ${cmd} in ${rootDir}`);
-    const { stdout, stderr } = await execPromise(cmd, { cwd: rootDir });
-    console.log('Docker output:', stdout);
-    if (stderr) console.error('Docker stderr:', stderr);
+    const rootDir = getRepoRoot();
+    const cmd = `make env && docker compose -f docker-compose.contest.yml up -d --build`;
+    await execPromise(cmd, { cwd: rootDir });
+
+    await logToDiscord('Contest Switch', `Admin switched active contest to ID: **${contestId}**`, 16753920);
 
     revalidatePath('/[locale]/contests');
     return { success: true, message: 'Contest switched and services restarting...' };
-  } catch (error) {
-    const e = error as Error;
-    console.error('Switch contest error:', e);
-    return { success: false, error: e.message };
-  }
+  } catch (error) { return { success: false, error: (error as Error).message }; }
 }
 
 interface RestartPolicies {
@@ -94,21 +82,17 @@ export async function analyzeRestartRequirements(changedKeys: string[]) {
 
     const initialSet = new Set<string>();
     
-    // 1. Identify direct impacts from env vars
     for (const key of changedKeys) {
-        // Special case: Multi-contest deployment config
         if (key === 'CONTESTS_DEPLOY_CONFIG') {
             initialSet.add('contest-stack');
             continue;
         }
-
         const affected = policies.env_triggers[key];
         if (affected) {
             affected.forEach(s => initialSet.add(s));
         }
     }
 
-    // 2. Expand dependencies (transitive closure)
     const finalSet = new Set(initialSet);
     const queue = Array.from(initialSet);
     
@@ -134,49 +118,54 @@ export async function restartServices(type: 'all' | 'core' | 'worker' | 'custom'
     const rootDir = getRepoRoot();
     let cmd = '';
 
-    // First, always regenerate the env if customList contains anything that might affect it
-    // Or just always do it for safety before any restart
     await execPromise('make env', { cwd: rootDir });
+
+    const files = [
+        'docker-compose.core.yml',
+        'docker-compose.admin.yml',
+        'docker-compose.worker.yml',
+        'docker-compose.contests.generated.yml',
+        'docker-compose.monitor.yml'
+    ].map(f => `-f ${f}`).join(' ');
 
     if (type === 'core') {
       cmd = 'docker compose -f docker-compose.core.yml up -d --build --force-recreate';
     } else if (type === 'worker') {
       cmd = 'docker compose -f docker-compose.worker.yml up -d --build --force-recreate';
     } else if (type === 'custom' && customList && customList.length > 0) {
-        // Check if we need to restart the whole contest stack
         const needsContestStack = customList.includes('contest-stack') || customList.some(s => s.startsWith('cms-contest-web-server'));
-        
-        const files = [
-            'docker-compose.core.yml',
-            'docker-compose.admin.yml',
-            'docker-compose.worker.yml',
-            'docker-compose.contests.generated.yml',
-            'docker-compose.monitor.yml'
-        ].map(f => `-f ${f}`).join(' ');
-        
         const filteredList = customList.filter(s => s !== 'contest-stack' && /^[a-zA-Z0-9_-]+$/.test(s));
         
         if (needsContestStack) {
-            // Restart all generated contest services
-            // Simplest way is to run 'up -d' on the generated file specifically
             cmd = `docker compose ${files} up -d --remove-orphans --force-recreate ${filteredList.join(' ')}`;
         } else {
             if (filteredList.length === 0) return { success: true, message: 'Nothing to restart.' };
             cmd = `docker compose ${files} up -d --force-recreate ${filteredList.join(' ')}`;
         }
     } else {
-      // All basic services
-      cmd = 'docker compose -f docker-compose.core.yml -f docker-compose.admin.yml -f docker-compose.contests.generated.yml -f docker-compose.worker.yml up -d --build';
+      cmd = `docker compose ${files} up -d --build`;
     }
 
-    console.log(`Restarting services (${type}): ${cmd}`);
-    const { stdout, stderr } = await execPromise(cmd, { cwd: rootDir });
-    console.log('Restart output:', stdout);
+    await logToDiscord('Service Restart', `Admin triggered restart: **${type}** ${customList ? `(${customList.join(', ')})` : ''}`, 16753920);
 
+    const { stdout } = await execPromise(cmd, { cwd: rootDir });
     return { success: true, message: `Services (${type}) restarted.` };
   } catch (error) {
     return { success: false, error: (error as Error).message };
   }
+}
+
+export async function triggerManualBackup() {
+    await ensurePermission('all');
+    try {
+        const rootDir = getRepoRoot();
+        await logToDiscord('Manual Backup', 'Admin triggered a manual submissions backup.', 3447003);
+        const cmd = 'docker exec -d cms-monitor bun /usr/local/bin/cms-backup.ts';
+        await execPromise(cmd, { cwd: rootDir });
+        return { success: true, message: 'Backup process started in background.' };
+    } catch (error) {
+        return { success: false, error: (error as Error).message };
+    }
 }
 
 export async function getServiceStatus() {

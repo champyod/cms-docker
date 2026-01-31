@@ -64,6 +64,18 @@ const CONFIG_SECTIONS: ConfigSection[] = [
       { key: 'RANKING_PASSWORD', label: 'Ranking Password', description: 'Auth for scoreboard.' },
       { key: 'ADMIN_COOKIE_DURATION', label: 'Admin Session', description: 'Admin panel session length.' },
     ]
+  },
+  {
+    title: 'Infrastructure & Backups',
+    filename: '.env.infra',
+    fields: [
+      { key: 'DISCORD_WEBHOOK_URL', label: 'Discord Webhook', description: 'URL for system alerts and logs.' },
+      { key: 'DISCORD_USER_ID', label: 'Discord User ID', description: 'User to mention in alerts (optional).' },
+      { key: 'BACKUP_INTERVAL_MINS', label: 'Backup Interval (min)', description: '0 to disable auto-backup.' },
+      { key: 'BACKUP_MAX_COUNT', label: 'Max Backup Count', description: 'Number of old backups to keep.' },
+      { key: 'BACKUP_MAX_AGE_DAYS', label: 'Max Backup Age (days)', description: 'Delete backups older than X days.' },
+      { key: 'BACKUP_MAX_SIZE_GB', label: 'Max Storage (GB)', description: 'Limit total backup directory size.' },
+    ]
   }
 ];
 
@@ -72,6 +84,7 @@ export function EnvConfigView() {
   const [data, setData] = useState<Record<string, Record<string, string>>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [backingUp, setBackingUp] = useState(false);
   const [error, setError] = useState('');
   const [requiredRestarts, setRequiredRestarts] = useState<string[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -88,7 +101,7 @@ export function EnvConfigView() {
             if (result.success && result.config) {
               newData[section.filename] = result.config;
             } else {
-              console.error(`Failed to load ${section.filename}:`, result.error);
+              newData[section.filename] = {};
             }
         }
       }
@@ -198,6 +211,20 @@ export function EnvConfigView() {
     }
   };
 
+  const handleManualBackup = async () => {
+    if (!confirm('Start a manual backup of all submissions? This will also log to Discord.')) return;
+    setBackingUp(true);
+    try {
+        const { triggerManualBackup } = await import('@/app/actions/services');
+        const res = await triggerManualBackup();
+        if (res.success) alert('Backup triggered successfully! Check logs/Discord for progress.');
+        else alert('Error: ' + res.error);
+    } catch (e) {
+        alert('Failed to trigger backup');
+    }
+    setBackingUp(false);
+  };
+
   if (loading) {
     return <div className="text-white flex items-center gap-2"><Loader className="animate-spin" /> Loading configuration...</div>;
   }
@@ -239,6 +266,16 @@ export function EnvConfigView() {
               <p className="text-neutral-400 text-sm mt-1">Editing {section.filename}</p>
             </div>
             <div className="flex gap-2">
+                {section.title === 'Infrastructure & Backups' && (
+                    <button
+                        onClick={handleManualBackup}
+                        disabled={backingUp}
+                        className="flex items-center gap-2 px-4 py-2 bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600/30 rounded-lg transition-colors disabled:opacity-50 text-sm"
+                    >
+                        <Save className="w-4 h-4" />
+                        {backingUp ? 'Backing up...' : 'Trigger Manual Backup'}
+                    </button>
+                )}
                 <button
                 onClick={() => persistChanges(section.filename, false)}
                 disabled={saving}
@@ -248,8 +285,6 @@ export function EnvConfigView() {
                 Save Only
                 </button>
                 {requiredRestarts.length > 0 && requiredRestarts.some(r => section.fields.some(f => {
-                    // Check if any required restart belongs to this section's impact
-                    // For simplicity, if this section has changed keys, we show the button
                     return true; // Simplified for UX
                 })) && (
                     <button
