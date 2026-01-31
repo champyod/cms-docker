@@ -25,6 +25,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
     apt-get update
     apt-get upgrade -y
+    ARCH=$(dpkg --print-architecture)
     PACKAGES=(
         build-essential
         cppreference-doc-en-html
@@ -40,7 +41,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         mono-mcs
         php-cli
         postgresql-client
-        pypy3
         python3
         python3-dev
         python3-pip
@@ -51,6 +51,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         wait-for-it
         zip
     )
+    if [ "$ARCH" = "amd64" ]; then
+        PACKAGES+=(pypy3)
+    fi
     apt-get install -y "${PACKAGES[@]}"
 EOF
 
