@@ -71,6 +71,16 @@ fi
 sed -i 's/"127.0.0.1"/"0.0.0.0"/g' "$CONFIG_FILE"
 sed -i 's/\["127.0.0.1"\]/\["0.0.0.0"\]/g' "$CONFIG_FILE"
 
+# Handle Ranking Scoreboard Auth
+# We check environment variables which are populated by 'make env'
+R_USER=${RANKING_USERNAME:-usern4me}
+R_PASS=${RANKING_PASSWORD:-passw0rd}
+# Escape password for sed
+SAFE_R_PASS=$(echo "$R_PASS" | sed 's/\\/\\\\/g' | sed 's/|/\\|/g' | sed 's/&/\\&/g')
+
+echo "Injecting Ranking credentials..."
+sed -i "s|usern4me:passw0rd|$R_USER:$SAFE_R_PASS|g" "$CONFIG_FILE"
+
 # Build Worker array from WORKER_N environment variables
 echo "Building worker configuration..."
 WORKER_ARRAY=""
