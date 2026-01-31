@@ -20,10 +20,11 @@ services:
     networks:
       - cms-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cmsuser} -d ${POSTGRES_DB:-cmsdb}"]
+      test: ["CMD-SHELL", "pg_isready -h localhost -U ${POSTGRES_USER:-cmsuser}"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 20s
 
   # CMS Log Service - Centralized logging
   log-service:
@@ -49,12 +50,10 @@ services:
       - cms-cache:/var/local/cache/cms
     networks:
       - cms-network
-    privileged: true
-    cgroup: host
     command: >
       sh -c "wait-for-it database:5432 -t 60 -- cmsLogService ${LOG_SERVICE_SHARD:-0}"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f cmsLogService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostname(), 29000))\" || exit 1"]
+      test: ["CMD-SHELL", "pgrep -f cmsLogService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect(('127.0.0.1', 29000))\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -91,7 +90,7 @@ services:
     command: >
       sh -c "sleep 5 && cmsResourceService ${RESOURCE_SERVICE_SHARD:-0}"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f cmsResourceService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostname(), 28000))\" || exit 1"]
+      test: ["CMD-SHELL", "pgrep -f cmsResourceService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect(('127.0.0.1', 28000))\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -124,12 +123,10 @@ services:
       - cms-data:/var/local/lib/cms
     networks:
       - cms-network
-    privileged: true
-    cgroup: host
     command: >
       sh -c "sleep 5 && cmsScoringService ${SCORING_SERVICE_SHARD:-0}"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f cmsScoringService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostname(), 28500))\" || exit 1"]
+      test: ["CMD-SHELL", "pgrep -f cmsScoringService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect(('127.0.0.1', 28500))\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -163,12 +160,10 @@ services:
       - cms-data:/var/local/lib/cms
     networks:
       - cms-network
-    privileged: true
-    cgroup: host
     command: >
       sh -c "sleep 5 && cmsEvaluationService ${EVALUATION_SERVICE_SHARD:-0} -c ${CONTEST_ID:-1}"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f cmsEvaluationService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostname(), 25000))\" || exit 1"]
+      test: ["CMD-SHELL", "pgrep -f cmsEvaluationService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect(('127.0.0.1', 25000))\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -201,12 +196,10 @@ services:
       - cms-cache:/var/local/cache/cms
     networks:
       - cms-network
-    privileged: true
-    cgroup: host
     command: >
       sh -c "sleep 5 && cmsProxyService ${PROXY_SERVICE_SHARD:-0} -c ${CONTEST_ID:-1}"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f cmsProxyService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostname(), 28600))\" || exit 1"]
+      test: ["CMD-SHELL", "pgrep -f cmsProxyService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect(('127.0.0.1', 28600))\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -244,7 +237,7 @@ services:
     command: >
       sh -c "sleep 5 && cmsChecker ${CHECKER_SERVICE_SHARD:-0}"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f cmsChecker && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostname(), 22000))\" || exit 1"]
+      test: ["CMD-SHELL", "pgrep -f cmsChecker && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect(('127.0.0.1', 22000))\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
