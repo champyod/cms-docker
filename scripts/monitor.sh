@@ -135,6 +135,63 @@ EOF
     fi
 }
 
+get_container_restart_config() {
+    local container_id="$1"
+    local config_file="${REPO_ROOT:-$(dirname "$0")/..}/config/container-restart.json"
+
+    if [ ! -f "$config_file" ]; then
+        echo "false:5:0"
+        return
+    fi
+
+    # Try to parse JSON using basic tools (jq if available, otherwise skip)
+    if command -v jq &> /dev/null; then
+        local auto_restart=$(jq -r ".[\"$container_id\"].autoRestart // false" "$config_file" 2>/dev/null || echo "false")
+        local max_restarts=$(jq -r ".[\"$container_id\"].maxRestarts // 5" "$config_file" 2>/dev/null || echo "5")
+        local current_restarts=$(jq -r ".[\"$container_id\"].currentRestarts // 0" "$config_file" 2>/dev/null || echo "0")
+        echo "$auto_restart:$max_restarts:$current_restarts"
+    else
+        echo "false:5:0"
+    fi
+}
+
+should_suppress_notification() {
+    local container_name="$1"
+    local event_type="$2"
+
+    # Get container ID
+    local container_id=$(docker ps -aqf "name=$container_name" 2>/dev/null | head -1)
+    if [ -z "$container_id" ]; then
+        return 1  # Don't suppress if we can't find container
+    fi
+
+    # Get restart count from Docker
+    local restart_count=$(docker inspect "$container_id" --format='{{.RestartCount}}' 2>/dev/null || echo "0")
+
+    # Get config
+    local config=$(get_container_restart_config "$container_id")
+    local auto_restart=$(echo "$config" | cut -d: -f1)
+    local max_restarts=$(echo "$config" | cut -d: -f2)
+
+    # If auto-restart is disabled and container is dying/restarting, suppress after first notification
+    if [ "$auto_restart" = "false" ] && [ "$event_type" = "die" ] || [ "$event_type" = "restart" ]; then
+        # Check if we already notified about this container being disabled
+        if grep -q "^${container_name}:disabled:notified" "$NOTIF_CACHE" 2>/dev/null; then
+            return 0  # Suppress
+        fi
+    fi
+
+    # If restart count exceeds max, suppress repeated die/restart notifications
+    if [ "$restart_count" -ge "$max_restarts" ] && [ "$event_type" = "die" ] || [ "$event_type" = "restart" ]; then
+        # Check if we already notified about limit reached
+        if grep -q "^${container_name}:limit:notified" "$NOTIF_CACHE" 2>/dev/null; then
+            return 0  # Suppress
+        fi
+    fi
+
+    return 1  # Don't suppress
+}
+
 listen_docker_events() {
     echo "Starting Docker event listener..."
     # Track last notification time per container to prevent spam
@@ -144,26 +201,67 @@ listen_docker_events() {
     docker events --filter 'event=start' --filter 'event=stop' --filter 'event=die' --filter 'event=restart' --format '{{.Status}} container {{.Actor.Attributes.name}}' | while read -r event; do
         # Cooldown Logic: Don't notify for the same container more than once every 60s
         CONT_NAME=$(echo "$event" | awk '{print $3}')
+        EVENT_TYPE=$(echo "$event" | awk '{print $1}')
         CURRENT_TIME=$(date +%s)
-        LAST_NOTIF=$(grep "^${CONT_NAME}:" "$NOTIF_CACHE" | cut -d: -f2 || echo "0")
-        
+        LAST_NOTIF=$(grep "^${CONT_NAME}:" "$NOTIF_CACHE" | grep -v ":disabled:" | grep -v ":limit:" | cut -d: -f2 | tail -1 || echo "0")
+
+        # Check if we should suppress this notification
+        if should_suppress_notification "$CONT_NAME" "$EVENT_TYPE"; then
+            continue
+        fi
+
         if [ $((CURRENT_TIME - LAST_NOTIF)) -lt 60 ]; then
             continue
         fi
-        
+
+        # Get container info for enhanced notification
+        local container_id=$(docker ps -aqf "name=$CONT_NAME" 2>/dev/null | head -1)
+        local restart_count=$(docker inspect "$container_id" --format='{{.RestartCount}}' 2>/dev/null || echo "0")
+        local config=$(get_container_restart_config "$container_id")
+        local auto_restart=$(echo "$config" | cut -d: -f1)
+        local max_restarts=$(echo "$config" | cut -d: -f2)
+
         # Update cache
         grep -v "^${CONT_NAME}:" "$NOTIF_CACHE" > "${NOTIF_CACHE}.tmp" || true
         echo "${CONT_NAME}:${CURRENT_TIME}" >> "${NOTIF_CACHE}.tmp"
         mv "${NOTIF_CACHE}.tmp" "$NOTIF_CACHE"
 
         COLOR=3447003
+        MESSAGE="🔄 **$event**"
+
         case "$event" in
-            *"start"*) COLOR=65280 ;;
-            *"stop"*) COLOR=16711680 ;;
-            *"die"*) COLOR=16711680 ;;
-            *"restart"*) COLOR=16753920 ;;
+            *"start"*)
+                COLOR=65280
+                ;;
+            *"stop"*)
+                COLOR=16711680
+                ;;
+            *"die"*)
+                COLOR=16711680
+                # Add warning if auto-restart is disabled
+                if [ "$auto_restart" = "false" ]; then
+                    MESSAGE="🔴 **$event** (Auto-restart: DISABLED - requires manual intervention)"
+                    echo "${CONT_NAME}:disabled:notified" >> "$NOTIF_CACHE"
+                # Add warning if restart limit reached
+                elif [ "$restart_count" -ge "$max_restarts" ]; then
+                    MESSAGE="🚨 **$event** (Restart limit reached: $restart_count/$max_restarts - stopped auto-restart)"
+                    echo "${CONT_NAME}:limit:notified" >> "$NOTIF_CACHE"
+                else
+                    MESSAGE="⚠️ **$event** (Restarts: $restart_count/$max_restarts)"
+                fi
+                ;;
+            *"restart"*)
+                COLOR=16753920
+                if [ "$restart_count" -ge "$max_restarts" ]; then
+                    MESSAGE="🚨 **$event** (Restart limit reached: $restart_count/$max_restarts)"
+                    echo "${CONT_NAME}:limit:notified" >> "$NOTIF_CACHE"
+                else
+                    MESSAGE="🔄 **$event** (Restarts: $restart_count/$max_restarts)"
+                fi
+                ;;
         esac
-        send_discord_notification "Docker Event" "🔄 **$event**" $COLOR
+
+        send_discord_notification "Docker Event" "$MESSAGE" $COLOR
     done
 }
 
