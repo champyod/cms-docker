@@ -129,14 +129,14 @@ env:
 	@echo ".env file generated. You can now run: docker compose up -d --build"
 
 core:
-	docker compose -f docker-compose.core.yml up -d database
+	docker compose -f docker-compose.core.yml up -d --remove-orphans database
 	docker compose -f docker-compose.core.yml build log-service
 	docker compose -f docker-compose.core.yml build resource-service
 	docker compose -f docker-compose.core.yml build scoring-service
 	docker compose -f docker-compose.core.yml build evaluation-service
 	docker compose -f docker-compose.core.yml build proxy-service
 	docker compose -f docker-compose.core.yml build checker-service
-	docker compose -f docker-compose.core.yml up -d
+	docker compose -f docker-compose.core.yml up -d --remove-orphans
 	@echo "Services started. Use 'make db-reset' for a first-time setup or 'make cms-init' to just initialize the database."
 
 cms-init:
@@ -164,53 +164,53 @@ admin-create:
 
 db-clean:
 	@echo "WARNING: This will delete all database data and reset everything."
-	docker compose -f docker-compose.core.yml -f docker-compose.admin.yml -f docker-compose.contest.yml -f docker-compose.worker.yml -f docker-compose.monitor.yml down -v
+	docker compose -f docker-compose.core.yml -f docker-compose.admin.yml -f docker-compose.contest.yml -f docker-compose.worker.yml -f docker-compose.monitor.yml down -v --remove-orphans
 
 db-reset: db-clean core-img
 	@echo "Database has been reset and services restarted."
 	@echo "Please wait ~10 seconds for DB to stabilize, then run: make cms-init"
 
 admin:
-	docker compose -f docker-compose.admin.yml up -d --build
+	docker compose -f docker-compose.admin.yml up -d --build --remove-orphans
 
 contest:
-	docker compose -f docker-compose.contest.yml up -d --build
+	docker compose -f docker-compose.contest.yml up -d --build --remove-orphans
 
 worker:
-	docker compose -f docker-compose.worker.yml up -d --build
+	docker compose -f docker-compose.worker.yml up -d --build --remove-orphans
 
 core-stop:
-	docker compose -f docker-compose.core.yml down
+	docker compose -f docker-compose.core.yml down --remove-orphans
 
 core-clean:
-	docker compose -f docker-compose.core.yml down -v
+	docker compose -f docker-compose.core.yml down -v --remove-orphans
 
 admin-stop:
-	docker compose -f docker-compose.admin.yml down
+	docker compose -f docker-compose.admin.yml down --remove-orphans
 
 admin-clean:
-	docker compose -f docker-compose.admin.yml down -v
+	docker compose -f docker-compose.admin.yml down -v --remove-orphans
 
 contest-stop:
-	docker compose -f docker-compose.contest.yml down
+	docker compose -f docker-compose.contest.yml down --remove-orphans
 
 contest-clean:
-	docker compose -f docker-compose.contest.yml down -v
+	docker compose -f docker-compose.contest.yml down -v --remove-orphans
 
 worker-stop:
-	docker compose -f docker-compose.worker.yml down
+	docker compose -f docker-compose.worker.yml down --remove-orphans
 
 worker-clean:
-	docker compose -f docker-compose.worker.yml down -v
+	docker compose -f docker-compose.worker.yml down -v --remove-orphans
 
 infra:
-	docker compose -f docker-compose.monitor.yml up -d --build
+	docker compose -f docker-compose.monitor.yml up -d --build --remove-orphans
 
 infra-stop:
-	docker compose -f docker-compose.monitor.yml down
+	docker compose -f docker-compose.monitor.yml down --remove-orphans
 
 infra-clean:
-	docker compose -f docker-compose.monitor.yml down -v
+	docker compose -f docker-compose.monitor.yml down -v --remove-orphans
 
 pull:
 	docker compose \
@@ -222,20 +222,20 @@ pull:
 		pull
 
 core-img:
-	docker compose -f docker-compose.core.yml -f docker-compose.core.img.yml up -d --no-build
+	docker compose -f docker-compose.core.yml -f docker-compose.core.img.yml up -d --no-build --remove-orphans
 	@echo "Core images started."
 
 admin-img:
-	docker compose -f docker-compose.admin.yml -f docker-compose.admin.img.yml up -d --no-build
+	docker compose -f docker-compose.admin.yml -f docker-compose.admin.img.yml up -d --no-build --remove-orphans
 
 contest-img:
-	docker compose -f docker-compose.contest.yml -f docker-compose.contest.img.yml up -d --no-build
+	docker compose -f docker-compose.contest.yml -f docker-compose.contest.img.yml up -d --no-build --remove-orphans
 
 worker-img:
-	docker compose -f docker-compose.worker.yml -f docker-compose.worker.img.yml up -d --no-build
+	docker compose -f docker-compose.worker.yml -f docker-compose.worker.img.yml up -d --no-build --remove-orphans
 
 infra-img:
-	docker compose -f docker-compose.monitor.yml -f docker-compose.monitor.img.yml up -d --no-build
+	docker compose -f docker-compose.monitor.yml -f docker-compose.monitor.img.yml up -d --no-build --remove-orphans
 
 clean:
 	rm -f .env

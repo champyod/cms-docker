@@ -1,5 +1,3 @@
-version: '3.8'
-
 # CMS Worker Stack
 # This stack contains worker services for evaluating submissions
 # Can be deployed on separate machines and scaled horizontally

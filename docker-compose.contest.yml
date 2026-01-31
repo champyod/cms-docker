@@ -1,5 +1,3 @@
-version: '3.8'
-
 # CMS Contest Stack
 # This stack contains the contest web interface for participants
 # Requires: Core services stack must be running first

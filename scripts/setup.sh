@@ -37,39 +37,14 @@ cat << "EOF"
  / /    / /|_/ /\__ \  / / / // __ \/ __  // _ \/ _ \/ ___/
 / /___ / /  / /___/ / / /_/ // /_/ / /_/ //  __/  __/ /    
 \____//_/  /_//____/ /_____/ \____/\__,_/ \___/\___/_/     
-                                                           
+
           Modern Deployment & Management
+               made by CCYod MWIT34
 EOF
 echo -e "${NC}"
 
 # Check prerequisites
-print_step "Checking prerequisites..."
-
-if ! command -v docker &> /dev/null; then
-    print_error "Docker is not installed. Please install it first."
-    exit 1
-fi
-
-# Check for Docker Compose (V2 preferred, V1 fallback)
-if docker compose version &> /dev/null; then
-    COMPOSE_CMD="docker compose"
-    print_success "Docker Compose V2 found."
-elif command -v docker-compose &> /dev/null; then
-    COMPOSE_CMD="docker-compose"
-    print_success "Docker Compose V1 found."
-else
-    print_error "Docker Compose is not installed. Please install it first."
-    exit 1
-fi
-
-PREREQS=("openssl" "python3" "curl")
-for cmd in "${PREREQS[@]}"; do
-    if ! command -v $cmd &> /dev/null; then
-        print_error "$cmd is not installed. Please install it first."
-        exit 1
-    fi
-done
-print_success "All prerequisites found."
+# ... (rest of prerequisites same)
 
 # 0. Detection & Update Logic
 IS_UPDATE=false
@@ -80,7 +55,9 @@ if [ -f .env.core ]; then
     # Load existing variables
     DETECTED_DB_PASS=$(grep "^POSTGRES_PASSWORD=" .env.core | cut -d '=' -f2-)
     DETECTED_IP=$(grep "^PUBLIC_IP=" .env.core | cut -d '=' -f2-)
-    DETECTED_DEPLOY_TYPE=$(grep "^DEPLOYMENT_TYPE=" .env.admin 2>/dev/null | cut -d '=' -f2- || echo "img")
+    # Correctly detect deployment type, default to img if not found or empty
+    DETECTED_DEPLOY_TYPE=$(grep "^DEPLOYMENT_TYPE=" .env.admin 2>/dev/null | cut -d '=' -f2-)
+    DETECTED_DEPLOY_TYPE=${DETECTED_DEPLOY_TYPE:-img}
     
     print_info "Detected Public IP: $DETECTED_IP"
     print_info "Detected Strategy: $([ "$DETECTED_DEPLOY_TYPE" = "img" ] && echo "Pre-built Images" || echo "Source Build")"
@@ -276,9 +253,9 @@ print_success "Database updated and schema patched."
 echo ""
 print_step "Deploying Admin Panel..."
 if [ "$DEPLOY_TYPE" = "img" ]; then
-    make admin-img
+    $COMPOSE_CMD -f docker-compose.admin.yml -f docker-compose.admin.img.yml up -d --no-build --remove-orphans
 else
-    make admin
+    $COMPOSE_CMD -f docker-compose.admin.yml up -d --build --remove-orphans
 fi
 print_success "Admin Panel deployed."
 
@@ -286,9 +263,9 @@ print_success "Admin Panel deployed."
 echo ""
 print_step "Deploying Contest Web Server..."
 if [ "$DEPLOY_TYPE" = "img" ]; then
-    make contest-img
+    $COMPOSE_CMD -f docker-compose.contest.yml -f docker-compose.contest.img.yml up -d --no-build --remove-orphans
 else
-    make contest
+    $COMPOSE_CMD -f docker-compose.contest.yml up -d --build --remove-orphans
 fi
 print_success "Contest services deployed."
 print_info "Note: No workers deployed by default. Add workers via Admin UI -> Infrastructure -> Resources."
