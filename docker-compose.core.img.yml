@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   log-service:
     image: ghcr.io/champyod/cms-docker-core:major-admin-panel

@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   worker:
     image: ghcr.io/champyod/cms-docker-worker:major-admin-panel
