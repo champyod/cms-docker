@@ -284,6 +284,9 @@ print_success "Environment files generated."
 
 # 6. Deployment
 echo ""
+# Enable Maintenance Mode to stop Discord spam
+touch /tmp/cms_maintenance
+
 if [ "$SETUP_TYPE" = "main" ]; then
     print_step "Deploying Main Server Stacks..."
     if [ "$DEPLOY_TYPE" = "img" ]; then
@@ -323,6 +326,9 @@ else
     print_step "Deploying Remote Worker..."
     if [ "$DEPLOY_TYPE" = "img" ]; then make worker-img; else make worker; fi
 fi
+
+# Disable Maintenance Mode
+rm -f /tmp/cms_maintenance
 
 # Final Summary
 echo ""

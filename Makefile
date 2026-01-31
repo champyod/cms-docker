@@ -143,7 +143,7 @@ core:
 
 cms-init:
 	@echo "Initializing CMS core database schema..."
-	@docker exec -it cms-log-service cmsInitDB
+	@docker exec -it cms-log-service cmsInitDB || echo "Note: cmsInitDB skipped or already initialized."
 	@echo "Patching database schema for Admin Panel..."
 	@docker exec -i cms-database psql -U cmsuser -d cmsdb < scripts/fix_db_schema.sql
 

@@ -138,6 +138,11 @@ EOF
 listen_docker_events() {
     echo "Starting Docker event listener..."
     docker events --filter 'event=start' --filter 'event=stop' --filter 'event=die' --filter 'event=restart' --format '{{.Status}} container {{.Actor.Attributes.name}}' | while read -r event; do
+        # Maintenance Mode Check
+        if [ -f "/tmp/cms_maintenance" ]; then
+            continue
+        fi
+
         COLOR=3447003
         case "$event" in
             *"start"*) COLOR=65280 ;;
