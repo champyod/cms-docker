@@ -42,6 +42,13 @@ By default, services are bound to `0.0.0.0`:
 *   **Classic Admin Panel**: [http://localhost:8889](http://localhost:8889)
 *   **Ranking**: [http://localhost:8890](http://localhost:8890)
 
+### Container Restart Control
+Navigate to **Containers** in the Admin Panel to manage auto-restart policies:
+- Toggle auto-restart per container (default: OFF)
+- Set max restart attempts (default: 5)
+- View restart counts and reset when needed
+- All containers use `on-failure:5` policy to prevent infinite restart loops
+
 ### Multi-Contest Deployment
 You can now run multiple contests simultaneously on different ports.
 1.  Navigate to **Infrastructure** → **Deployments** in the Admin Panel.
