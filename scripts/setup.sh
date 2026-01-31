@@ -54,7 +54,7 @@ if [ -f .env.core ]; then
     
     # Load existing variables
     DETECTED_DB_PASS=$(grep "^POSTGRES_PASSWORD=" .env.core | cut -d '=' -f2-)
-    DETECTED_IP=$(grep "^PUBLIC_IP=" .env.core | cut -d '=' -f2-)
+    SAVED_PUBLIC_IP=$(grep "^PUBLIC_IP=" .env.core | cut -d '=' -f2-)
     DETECTED_TAILSCALE_IP=$(grep "^TAILSCALE_IP=" .env.core | cut -d '=' -f2-)
     
     # Check .env.admin for DEPLOYMENT_TYPE
@@ -69,7 +69,7 @@ if [ -f .env.core ]; then
         fi
     fi
     
-    print_info "Detected Public IP: $DETECTED_IP"
+    print_info "Detected Public IP: $SAVED_PUBLIC_IP"
     print_info "Detected Strategy: $([ "$DETECTED_DEPLOY_TYPE" = "img" ] && echo "Pre-built Images" || echo "Source Build")"
 fi
 
@@ -119,14 +119,27 @@ fi
 echo ""
 print_step "Network & Security"
 if [ "$SETUP_TYPE" = "main" ]; then
-    DETECTED_IP=$(curl -s -4 ifconfig.me || echo "127.0.0.1")
+    LIVE_IP=$(curl -s -4 ifconfig.me || echo "127.0.0.1")
     if [ "$IS_UPDATE" = "true" ]; then
-        read -p "Use detected IP ($DETECTED_IP)? (y/n) [y]: " USE_OLD_IP
-        USE_OLD_IP=${USE_OLD_IP:-y}
-        if [ "$USE_OLD_IP" = "y" ]; then PUBLIC_IP=$DETECTED_IP; else read -p "Enter new Public IP: " PUBLIC_IP; fi
+        print_info "Current saved IP: $SAVED_PUBLIC_IP"
+        if [ "$SAVED_PUBLIC_IP" != "$LIVE_IP" ]; then
+            print_warning "Your live detected IP ($LIVE_IP) is different from the saved one."
+            read -p "Use saved IP ($SAVED_PUBLIC_IP)? (y/n) [y]: " USE_OLD_IP
+            USE_OLD_IP=${USE_OLD_IP:-y}
+            if [ "$USE_OLD_IP" = "y" ]; then 
+                PUBLIC_IP=$SAVED_PUBLIC_IP
+            else 
+                read -p "Use live detected IP ($LIVE_IP)? (y/n) [y]: " USE_LIVE
+                USE_LIVE=${USE_LIVE:-y}
+                if [ "$USE_LIVE" = "y" ]; then PUBLIC_IP=$LIVE_IP; else read -p "Enter manual IP: " PUBLIC_IP; fi
+            fi
+        else
+            PUBLIC_IP=$SAVED_PUBLIC_IP
+            print_success "Using saved IP: $PUBLIC_IP"
+        fi
     else
-        read -p "Public IP of this server [$DETECTED_IP]: " PUBLIC_IP
-        PUBLIC_IP=${PUBLIC_IP:-$DETECTED_IP}
+        read -p "Public IP of this server [$LIVE_IP]: " PUBLIC_IP
+        PUBLIC_IP=${PUBLIC_IP:-$LIVE_IP}
     fi
 
     echo ""
