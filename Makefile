@@ -1,5 +1,4 @@
 SHELL := /bin/bash
-export PATH := $(HOME)/.bun/bin:$(PATH)
 
 .PHONY: env help clean core admin contest worker
 
@@ -122,7 +121,7 @@ env:
 	@if [ -f .env.contest ]; then \
 		CONFIG=$$(grep "^CONTESTS_DEPLOY_CONFIG=" .env.contest | cut -d '=' -f2-); \
 		export CONTESTS_DEPLOY_CONFIG="$$CONFIG"; \
-		bun scripts/generate-contest-compose.ts; \
+		bash scripts/generate-contest-compose.sh; \
 	fi
 	@echo "" >> .env
 	@echo "" >> .env
