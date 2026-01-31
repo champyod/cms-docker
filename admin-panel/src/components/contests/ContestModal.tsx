@@ -4,17 +4,16 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
-import { X, Loader2, Calendar, Shield, Cpu, Clock, Settings, FileText } from 'lucide-react';
+import { X, Loader2, Calendar, Shield, Cpu, Clock, Settings, FileText, CheckSquare, Square } from 'lucide-react';
 import type { ContestData } from '@/app/actions/contests';
 import { apiClient } from '@/lib/apiClient';
-import { contests } from '@prisma/client';
 import { PROGRAMMING_LANGUAGES } from '@/lib/constants';
 import { useToast } from '@/components/providers/ToastProvider';
 
 interface ContestModalProps {
   isOpen: boolean;
   onClose: () => void;
-  contest?: contests | null;
+  contest?: any | null;
   onSuccess: () => void;
 }
 
@@ -24,6 +23,11 @@ const formatDateForInput = (date: Date | string | undefined) => {
     const pad = (n: number) => n < 10 ? '0' + n : n;
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
+
+// Helper to parse Postgres interval to seconds/minutes if possible (simplified)
+// Assuming we get raw objects or strings. Prisma returns objects or strings depending on version.
+// For now, we assume we reset to 0/default on edit if parsing fails or implement basic parsing if needed.
+// Ideally, the API would return these as normalized numbers, but we'll stick to basic defaults for safety.
 
 type Tab = 'general' | 'access' | 'tokens' | 'limits' | 'analysis';
 
@@ -45,6 +49,7 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
     stop: '',
     timezone: 'Asia/Bangkok',
     languages: [] as string[],
+    allowed_localizations: '', // Comma separated string for UI
     submissions_download_allowed: true,
     allow_questions: true,
     allow_user_tests: false,
@@ -55,14 +60,14 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
     ip_restriction: false,
     ip_autologin: false,
     token_mode: 'disabled',
-    token_max_number: 0,
+    token_max_number: null as number | null,
     token_min_interval: 0, // seconds
     token_gen_initial: 0,
     token_gen_number: 0,
     token_gen_interval: 30, // minutes
-    token_gen_max: 0,
-    max_submission_number: 0,
-    max_user_test_number: 0,
+    token_gen_max: null as number | null,
+    max_submission_number: null as number | null,
+    max_user_test_number: null as number | null,
     min_submission_interval: 0,
     min_user_test_interval: 0,
     score_precision: 0,
@@ -80,6 +85,7 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
         stop: formatDateForInput(contest.stop),
         timezone: contest.timezone || 'Asia/Bangkok',
         languages: contest.languages || [],
+        allowed_localizations: (contest.allowed_localizations || []).join(', '),
         submissions_download_allowed: contest.submissions_download_allowed,
         allow_questions: contest.allow_questions,
         allow_user_tests: contest.allow_user_tests,
@@ -90,16 +96,16 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
         ip_restriction: contest.ip_restriction,
         ip_autologin: contest.ip_autologin,
         token_mode: contest.token_mode,
-        token_max_number: contest.token_max_number || 0,
-        token_min_interval: 0, // Need parse from interval
+        token_max_number: contest.token_max_number,
+        token_min_interval: 0, // TODO: Parse interval from DB if string/object
         token_gen_initial: contest.token_gen_initial,
         token_gen_number: contest.token_gen_number,
-        token_gen_interval: 0, // Need parse
-        token_gen_max: contest.token_gen_max || 0,
-        max_submission_number: contest.max_submission_number || 0,
-        max_user_test_number: contest.max_user_test_number || 0,
-        min_submission_interval: 0, // Need parse
-        min_user_test_interval: 0, // Need parse
+        token_gen_interval: 0, // TODO: Parse
+        token_gen_max: contest.token_gen_max,
+        max_submission_number: contest.max_submission_number,
+        max_user_test_number: contest.max_user_test_number,
+        min_submission_interval: 0, // TODO: Parse
+        min_user_test_interval: 0, // TODO: Parse
         score_precision: contest.score_precision,
         analysis_enabled: contest.analysis_enabled,
         analysis_start: formatDateForInput(contest.analysis_start),
@@ -117,7 +123,8 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
         start: formatDateForInput(now),
         stop: formatDateForInput(end),
         timezone: 'Asia/Bangkok',
-        languages: PROGRAMMING_LANGUAGES.map(l => l.split(' / ')[0].trim()), // Select all by default or none? Let's select all common ones
+        languages: PROGRAMMING_LANGUAGES.map(l => l.split(' / ')[0].trim()),
+        allowed_localizations: '',
         submissions_download_allowed: true,
         allow_questions: true,
         allow_user_tests: false,
@@ -128,14 +135,14 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
         ip_restriction: false,
         ip_autologin: false,
         token_mode: 'disabled',
-        token_max_number: 0,
+        token_max_number: null,
         token_min_interval: 0,
         token_gen_initial: 0,
         token_gen_number: 0,
         token_gen_interval: 30,
-        token_gen_max: 0,
-        max_submission_number: 100,
-        max_user_test_number: 0,
+        token_gen_max: null,
+        max_submission_number: 100, // Default to 100, but allow null
+        max_user_test_number: null,
         min_submission_interval: 60, // 60s
         min_user_test_interval: 60,
         score_precision: 2,
@@ -166,7 +173,16 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
     }
 
     try {
-      const payload = { ...formData };
+      // Prepare payload
+      const payload: any = { ...formData };
+      
+      // Convert allowed_localizations string to array
+      if (typeof payload.allowed_localizations === 'string') {
+        payload.allowed_localizations = payload.allowed_localizations
+            .split(',')
+            .map((s: string) => s.trim())
+            .filter((s: string) => s.length > 0);
+      }
 
       const result = contest
         ? await apiClient.put(`/api/contests/${contest.id}`, payload)
@@ -304,8 +320,18 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
                     <input required type="text" value={formData.timezone} onChange={(e) => setFormData({ ...formData, timezone: e.target.value })} className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white font-mono" />
                   </div>
                   <div className="space-y-2">
+                    <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Allowed Localizations</label>
+                    <input 
+                        type="text" 
+                        value={formData.allowed_localizations} 
+                        onChange={(e) => setFormData({ ...formData, allowed_localizations: e.target.value })} 
+                        className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white font-mono placeholder-white/20" 
+                        placeholder="en, th, etc. (Comma separated)"
+                    />
+                  </div>
+                  <div className="space-y-2">
                     <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Allowed Languages</label>
-                    <div className="grid grid-cols-3 gap-2 p-4 bg-black/20 rounded-xl border border-white/5">
+                    <div className="grid grid-cols-3 gap-2 p-4 bg-black/20 rounded-xl border border-white/5 max-h-48 overflow-y-auto">
                       {PROGRAMMING_LANGUAGES.map(langStr => {
                         const lang = langStr.split(' / ')[0].trim(); // Simplified value
                         const isSelected = formData.languages.includes(lang);
@@ -366,25 +392,86 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
                       <option value="finite">Finite</option>
                       <option value="infinite">Infinite</option>
                     </select>
+                    <p className="text-xs text-neutral-500 mt-1">
+                        {formData.token_mode === 'disabled' && "Users cannot use tokens."}
+                        {formData.token_mode === 'finite' && "Users receive tokens periodically."}
+                        {formData.token_mode === 'infinite' && "Users have unlimited tokens (but subject to min interval)."}
+                    </p>
                   </div>
+
                   {formData.token_mode !== 'disabled' && (
-                    <div className="grid grid-cols-2 gap-6">
+                    <div className="grid grid-cols-2 gap-6 animate-in fade-in duration-300">
+                      
+                      {/* Common fields for Finite and Infinite */}
                       <div className="space-y-2">
-                        <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Max Tokens</label>
-                        <input type="number" value={formData.token_max_number} onChange={(e) => setFormData({ ...formData, token_max_number: parseInt(e.target.value) || 0 })} className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white" />
+                        <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest flex items-center justify-between">
+                            Max Total Tokens
+                            <span className="text-[10px] normal-case font-normal text-neutral-400">Total allowed across contest</span>
+                        </label>
+                        <div className="flex gap-2">
+                            <input 
+                                type="number" 
+                                disabled={formData.token_max_number === null}
+                                value={formData.token_max_number ?? ''} 
+                                onChange={(e) => setFormData({ ...formData, token_max_number: parseInt(e.target.value) || 0 })} 
+                                className={`w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white ${formData.token_max_number === null ? 'opacity-50' : ''}`} 
+                                placeholder="Unlimited"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setFormData({ ...formData, token_max_number: formData.token_max_number === null ? 0 : null })}
+                                className={`px-3 rounded-xl border border-white/10 flex items-center gap-2 ${formData.token_max_number === null ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/50' : 'bg-black/20 text-neutral-400 hover:text-white'}`}
+                                title="Toggle Unlimited"
+                            >
+                                <span className="text-xs font-bold">∞</span>
+                            </button>
+                        </div>
                       </div>
+
                       <div className="space-y-2">
-                        <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Initial Tokens</label>
-                        <input type="number" value={formData.token_gen_initial} onChange={(e) => setFormData({ ...formData, token_gen_initial: parseInt(e.target.value) || 0 })} className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white" />
+                        <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Min Interval (sec)</label>
+                        <input type="number" value={formData.token_min_interval} onChange={(e) => setFormData({ ...formData, token_min_interval: parseInt(e.target.value) || 0 })} className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white" />
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Gen Amount</label>
-                        <input type="number" value={formData.token_gen_number} onChange={(e) => setFormData({ ...formData, token_gen_number: parseInt(e.target.value) || 0 })} className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white" />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Gen Interval (min)</label>
-                        <input type="number" value={formData.token_gen_interval} onChange={(e) => setFormData({ ...formData, token_gen_interval: parseInt(e.target.value) || 0 })} className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white" />
-                      </div>
+
+                      {/* Finite-only fields */}
+                      {formData.token_mode === 'finite' && (
+                        <>
+                            <div className="col-span-2 border-t border-white/5 my-2"></div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Initial Tokens</label>
+                                <input type="number" value={formData.token_gen_initial} onChange={(e) => setFormData({ ...formData, token_gen_initial: parseInt(e.target.value) || 0 })} className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white" />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Gen Amount</label>
+                                <input type="number" value={formData.token_gen_number} onChange={(e) => setFormData({ ...formData, token_gen_number: parseInt(e.target.value) || 0 })} className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white" />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Gen Interval (min)</label>
+                                <input type="number" value={formData.token_gen_interval} onChange={(e) => setFormData({ ...formData, token_gen_interval: parseInt(e.target.value) || 0 })} className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white" />
+                            </div>
+                             <div className="space-y-2">
+                                <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Gen Max Cap</label>
+                                <div className="flex gap-2">
+                                    <input 
+                                        type="number" 
+                                        disabled={formData.token_gen_max === null}
+                                        value={formData.token_gen_max ?? ''} 
+                                        onChange={(e) => setFormData({ ...formData, token_gen_max: parseInt(e.target.value) || 0 })} 
+                                        className={`w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white ${formData.token_gen_max === null ? 'opacity-50' : ''}`} 
+                                        placeholder="Unlimited"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData({ ...formData, token_gen_max: formData.token_gen_max === null ? 0 : null })}
+                                        className={`px-3 rounded-xl border border-white/10 flex items-center gap-2 ${formData.token_gen_max === null ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/50' : 'bg-black/20 text-neutral-400 hover:text-white'}`}
+                                        title="Toggle Unlimited"
+                                    >
+                                        <span className="text-xs font-bold">∞</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -396,7 +483,24 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
                   <div className="grid grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Max Submissions</label>
-                      <input type="number" value={formData.max_submission_number} onChange={(e) => setFormData({ ...formData, max_submission_number: parseInt(e.target.value) || 0 })} className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white" />
+                       <div className="flex gap-2">
+                            <input 
+                                type="number" 
+                                disabled={formData.max_submission_number === null}
+                                value={formData.max_submission_number ?? ''} 
+                                onChange={(e) => setFormData({ ...formData, max_submission_number: parseInt(e.target.value) || 0 })} 
+                                className={`w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white ${formData.max_submission_number === null ? 'opacity-50' : ''}`} 
+                                placeholder="Unlimited"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setFormData({ ...formData, max_submission_number: formData.max_submission_number === null ? 0 : null })}
+                                className={`px-3 rounded-xl border border-white/10 flex items-center gap-2 ${formData.max_submission_number === null ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/50' : 'bg-black/20 text-neutral-400 hover:text-white'}`}
+                                title="Toggle Unlimited"
+                            >
+                                <span className="text-xs font-bold">∞</span>
+                            </button>
+                        </div>
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Min Interval (sec)</label>
@@ -404,7 +508,24 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Max User Tests</label>
-                      <input type="number" value={formData.max_user_test_number} onChange={(e) => setFormData({ ...formData, max_user_test_number: parseInt(e.target.value) || 0 })} className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white" />
+                      <div className="flex gap-2">
+                            <input 
+                                type="number" 
+                                disabled={formData.max_user_test_number === null}
+                                value={formData.max_user_test_number ?? ''} 
+                                onChange={(e) => setFormData({ ...formData, max_user_test_number: parseInt(e.target.value) || 0 })} 
+                                className={`w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white ${formData.max_user_test_number === null ? 'opacity-50' : ''}`} 
+                                placeholder="Unlimited"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setFormData({ ...formData, max_user_test_number: formData.max_user_test_number === null ? 0 : null })}
+                                className={`px-3 rounded-xl border border-white/10 flex items-center gap-2 ${formData.max_user_test_number === null ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/50' : 'bg-black/20 text-neutral-400 hover:text-white'}`}
+                                title="Toggle Unlimited"
+                            >
+                                <span className="text-xs font-bold">∞</span>
+                            </button>
+                        </div>
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Min User Test Interval (sec)</label>

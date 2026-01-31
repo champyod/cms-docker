@@ -25,13 +25,12 @@ export async function POST(req: NextRequest) {
     const analysisStop = data.analysis_stop ? new Date(data.analysis_stop) : new Date(stopDate.getTime() + 2000);
 
     const languages = data.languages || [];
+    const allowed_localizations = data.allowed_localizations || [];
     const token_mode = data.token_mode || 'disabled';
     const token_min_interval = `${data.token_min_interval || 0} seconds`;
     const token_gen_interval = `${data.token_gen_interval || 30} minutes`;
     const min_submission_interval = `${data.min_submission_interval || 0} seconds`;
     const min_user_test_interval = `${data.min_user_test_interval || 0} seconds`;
-
-    const nullablePositive = (val: any) => (val && val != '0' ? val : null);
 
     await prisma.$executeRaw`
       INSERT INTO contests (
@@ -50,14 +49,14 @@ export async function POST(req: NextRequest) {
         score_precision, timezone
       ) VALUES (
         ${data.name}, ${data.description},
-        ARRAY[]::varchar[], ${languages},
+        ${allowed_localizations}, ${languages},
         ${data.submissions_download_allowed ?? true}, ${data.allow_questions ?? true}, ${data.allow_user_tests ?? false},
         ${data.allow_unofficial_submission_before_analysis_mode ?? false}, ${data.block_hidden_participations ?? false},
         ${data.allow_password_authentication ?? true}, ${data.allow_registration ?? false},
         ${data.ip_restriction ?? false}, ${data.ip_autologin ?? false},
-        ${token_mode}::token_mode, ${nullablePositive(data.token_max_number)}, ${token_min_interval}::interval,
-        ${data.token_gen_initial ?? 0}, ${data.token_gen_number ?? 0}, ${token_gen_interval}::interval, ${nullablePositive(data.token_gen_max)},
-        ${nullablePositive(data.max_submission_number)}, ${nullablePositive(data.max_user_test_number)},
+        ${token_mode}::token_mode, ${data.token_max_number ?? null}, ${token_min_interval}::interval,
+        ${data.token_gen_initial ?? 0}, ${data.token_gen_number ?? 0}, ${token_gen_interval}::interval, ${data.token_gen_max ?? null},
+        ${data.max_submission_number ?? null}, ${data.max_user_test_number ?? null},
         ${min_submission_interval}::interval, ${min_user_test_interval}::interval,
         ${startDate}, ${stopDate},
         ${data.analysis_enabled ?? false}, ${analysisStart}, ${analysisStop},

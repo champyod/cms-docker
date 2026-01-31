@@ -31,6 +31,7 @@ export async function PUT(
       UPDATE contests SET
         name = COALESCE(${data.name}, name),
         description = COALESCE(${data.description}, description),
+        allowed_localizations = COALESCE(${data.allowed_localizations}, allowed_localizations),
         languages = COALESCE(${data.languages}, languages),
         start = COALESCE(${startDate}, start),
         stop = COALESCE(${stopDate}, stop),
@@ -45,12 +46,14 @@ export async function PUT(
         ip_restriction = COALESCE(${data.ip_restriction}, ip_restriction),
         ip_autologin = COALESCE(${data.ip_autologin}, ip_autologin),
         token_mode = COALESCE(${data.token_mode}::token_mode, token_mode),
-        token_max_number = COALESCE(${data.token_max_number}, token_max_number),
+        
+        token_max_number = ${data.token_max_number},
+        token_gen_max = ${data.token_gen_max},
+        max_submission_number = ${data.max_submission_number},
+        max_user_test_number = ${data.max_user_test_number},
+
         token_gen_initial = COALESCE(${data.token_gen_initial}, token_gen_initial),
         token_gen_number = COALESCE(${data.token_gen_number}, token_gen_number),
-        token_gen_max = COALESCE(${data.token_gen_max}, token_gen_max),
-        max_submission_number = COALESCE(${data.max_submission_number}, max_submission_number),
-        max_user_test_number = COALESCE(${data.max_user_test_number}, max_user_test_number),
         score_precision = COALESCE(${data.score_precision}, score_precision),
         analysis_enabled = COALESCE(${data.analysis_enabled}, analysis_enabled),
         analysis_start = COALESCE(${analysisStart}, analysis_start),

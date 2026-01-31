@@ -38,6 +38,7 @@ export interface ContestData {
   start: string | Date; 
   stop: string | Date; 
   timezone: string;
+  allowed_localizations?: string[];
   languages?: string[];
   submissions_download_allowed?: boolean;
   allow_questions?: boolean;
@@ -49,14 +50,14 @@ export interface ContestData {
   ip_restriction?: boolean;
   ip_autologin?: boolean;
   token_mode?: string;
-  token_max_number?: number;
+  token_max_number?: number | null;
   token_min_interval?: number;
   token_gen_initial?: number;
   token_gen_number?: number;
   token_gen_interval?: number;
-  token_gen_max?: number;
-  max_submission_number?: number;
-  max_user_test_number?: number;
+  token_gen_max?: number | null;
+  max_submission_number?: number | null;
+  max_user_test_number?: number | null;
   min_submission_interval?: number;
   min_user_test_interval?: number;
   score_precision?: number;
@@ -74,6 +75,7 @@ export async function createContest(data: ContestData) {
 
     // Default values if not provided
     const languages = data.languages || [];
+    const allowed_localizations = data.allowed_localizations || [];
     const token_mode = data.token_mode || 'disabled';
     const token_min_interval = `${data.token_min_interval || 0} seconds`;
     const token_gen_interval = `${data.token_gen_interval || 30} minutes`;
@@ -97,14 +99,14 @@ export async function createContest(data: ContestData) {
         score_precision, timezone
       ) VALUES (
         ${data.name}, ${data.description},
-        ARRAY[]::varchar[], ${languages},
+        ${allowed_localizations}, ${languages},
         ${data.submissions_download_allowed ?? true}, ${data.allow_questions ?? true}, ${data.allow_user_tests ?? false},
         ${data.allow_unofficial_submission_before_analysis_mode ?? false}, ${data.block_hidden_participations ?? false},
         ${data.allow_password_authentication ?? true}, ${data.allow_registration ?? false},
         ${data.ip_restriction ?? false}, ${data.ip_autologin ?? false},
-        ${token_mode}::token_mode, ${data.token_max_number ?? 0}, ${token_min_interval}::interval,
-        ${data.token_gen_initial ?? 0}, ${data.token_gen_number ?? 0}, ${token_gen_interval}::interval, ${data.token_gen_max ?? 0},
-        ${data.max_submission_number ?? 0}, ${data.max_user_test_number ?? 0},
+        ${token_mode}::token_mode, ${data.token_max_number ?? null}, ${token_min_interval}::interval,
+        ${data.token_gen_initial ?? 0}, ${data.token_gen_number ?? 0}, ${token_gen_interval}::interval, ${data.token_gen_max ?? null},
+        ${data.max_submission_number ?? null}, ${data.max_user_test_number ?? null},
         ${min_submission_interval}::interval, ${min_user_test_interval}::interval,
         ${startDate}, ${stopDate},
         ${data.analysis_enabled ?? false}, ${analysisStart}, ${analysisStop},
@@ -125,16 +127,6 @@ export async function createContest(data: ContestData) {
 
 export async function updateContest(id: number, data: Partial<ContestData>) {
   try {
-    // Generate SET clause dynamically for raw query because of interval support
-    // This is complex, so we'll use a mix of prepared statements and logical building
-    // Actually, for safety and simplicity with intervals, raw SQL update is best for full update.
-
-    // However, since we have many optional fields, constructing the query is tricky.
-    // A simpler approach for this specific app usage (modal sends all fields) is to update all provided fields.
-
-    // Let's assume the modal sends a relatively full payload for the sections it manages.
-
-    // Helper to format date
     const toDate = (d: string | Date | undefined) => d ? new Date(d) : undefined;
 
     const startDate = toDate(data.start);
@@ -142,27 +134,20 @@ export async function updateContest(id: number, data: Partial<ContestData>) {
     const analysisStart = toDate(data.analysis_start);
     const analysisStop = toDate(data.analysis_stop);
 
-    // We will use prisma.update for standard fields and raw for intervals if needed
-    // But since we can't mix easily in one transaction without raw, let's use raw for everything if intervals are involved.
-    // Or, we update standard fields via Prisma and intervals via raw.
-    // Let's use raw for everything to be safe and consistent.
-
     const token_min_interval = data.token_min_interval !== undefined ? `${data.token_min_interval} seconds` : null;
     const token_gen_interval = data.token_gen_interval !== undefined ? `${data.token_gen_interval} minutes` : null;
     const min_submission_interval = data.min_submission_interval !== undefined ? `${data.min_submission_interval} seconds` : null;
     const min_user_test_interval = data.min_user_test_interval !== undefined ? `${data.min_user_test_interval} seconds` : null;
 
-    // We build the SET clause parts
-    // Note: Prisma raw does not support dynamic column names easily with template literals for safety.
-    // But here we know the columns.
-
-    // Simplification: The modal sends ALL current state. So we can just UPDATE everything.
-    // If some are undefined, we skip them? No, the modal sends the full object from state.
+    // We use undefined checks to determine if we should update or keep existing.
+    // However, for nullable fields, we need to distinguish between "undefined (do not update)" and "null (set to null)".
+    // The modal should send `null` when it wants to unset.
 
     await prisma.$executeRaw`
       UPDATE contests SET
         name = COALESCE(${data.name}, name),
         description = COALESCE(${data.description}, description),
+        allowed_localizations = COALESCE(${data.allowed_localizations}, allowed_localizations),
         languages = COALESCE(${data.languages}, languages),
         start = COALESCE(${startDate}, start),
         stop = COALESCE(${stopDate}, stop),
@@ -177,17 +162,29 @@ export async function updateContest(id: number, data: Partial<ContestData>) {
         ip_restriction = COALESCE(${data.ip_restriction}, ip_restriction),
         ip_autologin = COALESCE(${data.ip_autologin}, ip_autologin),
         token_mode = COALESCE(${data.token_mode}::token_mode, token_mode),
-        token_max_number = COALESCE(${data.token_max_number}, token_max_number),
+        
+        -- Nullable fields: If data provides a value (including null), use it. If undefined, keep existing.
+        -- But COALESCE(null, existing) returns existing. We need to be able to set NULL.
+        -- We can use a CASE statement checking if the parameter itself is provided in the object.
+        -- But prisma raw variables don't work like that easily. 
+        -- Instead, we can assume the modal ALWAYS sends the full object for these critical sections or we rely on the fact 
+        -- that we are passing values directly.
+        
+        -- Simplified approach: The modal sends the FULL state for update. 
+        -- So we can just set the value.
+        token_max_number = ${data.token_max_number},
+        token_gen_max = ${data.token_gen_max},
+        max_submission_number = ${data.max_submission_number},
+        max_user_test_number = ${data.max_user_test_number},
+
         token_gen_initial = COALESCE(${data.token_gen_initial}, token_gen_initial),
         token_gen_number = COALESCE(${data.token_gen_number}, token_gen_number),
-        token_gen_max = COALESCE(${data.token_gen_max}, token_gen_max),
-        max_submission_number = COALESCE(${data.max_submission_number}, max_submission_number),
-        max_user_test_number = COALESCE(${data.max_user_test_number}, max_user_test_number),
         score_precision = COALESCE(${data.score_precision}, score_precision),
         analysis_enabled = COALESCE(${data.analysis_enabled}, analysis_enabled),
         analysis_start = COALESCE(${analysisStart}, analysis_start),
         analysis_stop = COALESCE(${analysisStop}, analysis_stop),
-        -- Handle Intervals specially
+        
+        -- Intervals
         token_min_interval = CASE WHEN ${token_min_interval}::text IS NOT NULL THEN ${token_min_interval}::interval ELSE token_min_interval END,
         token_gen_interval = CASE WHEN ${token_gen_interval}::text IS NOT NULL THEN ${token_gen_interval}::interval ELSE token_gen_interval END,
         min_submission_interval = CASE WHEN ${min_submission_interval}::text IS NOT NULL THEN ${min_submission_interval}::interval ELSE min_submission_interval END,
