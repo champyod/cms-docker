@@ -1,0 +1,4 @@
+{
+  "// Note": "This file tracks container restart policies and counts",
+  "// Format": "{ containerId: { autoRestart: boolean, maxRestarts: number, currentRestarts: number } }"
+}
