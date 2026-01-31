@@ -209,7 +209,7 @@ check_once() {
     BACKUP_INTERVAL_SECS=$((BACKUP_INTERVAL_MINS * 60))
     if [ "$BACKUP_INTERVAL_MINS" -gt 0 ] && [ "$LAST_BACKUP_TIME" -gt 0 ]; then
         if [ $((CURRENT_TIME - LAST_BACKUP_TIME)) -ge "$BACKUP_INTERVAL_SECS" ]; then
-            bun /usr/local/bin/cms-backup.ts &
+            bash /usr/local/bin/cms-backup.sh &
             LAST_BACKUP_TIME=$CURRENT_TIME
         fi
     elif [ "$BACKUP_INTERVAL_MINS" -gt 0 ] && [ "$LAST_BACKUP_TIME" -eq 0 ]; then

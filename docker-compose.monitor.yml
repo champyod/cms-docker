@@ -23,7 +23,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /:/host:ro # Mount host root to /host to check disk usage
       - ./backups:/app/backups
-      - ./scripts/cms-backup.ts:/usr/local/bin/cms-backup.ts:ro
+      - ./scripts/cms-backup.sh:/usr/local/bin/cms-backup.sh:ro
     networks:
       - cms-network
 

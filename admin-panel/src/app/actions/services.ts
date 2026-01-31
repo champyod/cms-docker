@@ -160,7 +160,7 @@ export async function triggerManualBackup() {
     try {
         const rootDir = getRepoRoot();
         await logToDiscord('Manual Backup', 'Admin triggered a manual submissions backup.', 3447003);
-        const cmd = 'docker exec -d cms-monitor bun /usr/local/bin/cms-backup.ts';
+        const cmd = 'docker exec -d cms-monitor bash /usr/local/bin/cms-backup.sh';
         await execPromise(cmd, { cwd: rootDir });
         return { success: true, message: 'Backup process started in background.' };
     } catch (error) {
