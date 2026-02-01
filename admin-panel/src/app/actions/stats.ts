@@ -2,7 +2,11 @@
 
 import os from 'os';
 import fs from 'fs';
+import { exec } from 'child_process';
+import util from 'util';
 import { prisma } from '@/lib/prisma';
+
+const execPromise = util.promisify(exec);
 
 export async function getServerStats() {
   const cpus = os.cpus();
@@ -49,34 +53,46 @@ export async function getServerStats() {
 }
 
 export async function getWorkerStats() {
-  // Workers are configured in config/cms.toml, not in the database in this environment.
-  // We avoid querying the non-existent 'workers' table.
+  try {
+    // Get all cms-worker containers
+    const { stdout } = await execPromise('docker ps -a --filter "name=cms-worker" --format "{{.Names}}\t{{.Status}}"');
 
-  // Get active evaluations per shard
-  const activeEvaluations = await prisma.evaluations.findMany({
-    where: { outcome: null },
-    select: { evaluation_shard: true }
-  });
-
-  // Group by shard
-  const shardCounts: Record<number, number> = {};
-  activeEvaluations.forEach((ev: any) => {
-    if (ev.evaluation_shard !== null) {
-      shardCounts[ev.evaluation_shard] = (shardCounts[ev.evaluation_shard] || 0) + 1;
+    if (!stdout.trim()) {
+      return [];
     }
-  });
 
-  // Since we can't easily query the workers from DB, we'll just check if there are any active shards
-  // Or simply return a placeholder indicating workers are managed via file.
+    // Get active evaluations per shard
+    const activeEvaluations = await prisma.evaluations.findMany({
+      where: { outcome: null },
+      select: { evaluation_shard: true }
+    });
 
-  // Improving the fallback to be more informative
-  return [{
-    id: 'cms-toml',
-    name: 'Workers (Managed in cms.toml)',
-    status: Object.keys(shardCounts).length > 0 ? 'busy' : 'idle',
-    tasks: Object.values(shardCounts).reduce((a, b) => a + b, 0),
-    load: 0 // Cannot calculate load without capacity
-  }];
+    // Group by shard
+    const shardCounts: Record<number, number> = {};
+    activeEvaluations.forEach((ev: any) => {
+      if (ev.evaluation_shard !== null) {
+        shardCounts[ev.evaluation_shard] = (shardCounts[ev.evaluation_shard] || 0) + 1;
+      }
+    });
+
+    const workers = stdout.trim().split('\n').map((line, index) => {
+      const [name, status] = line.split('\t');
+      const isRunning = status.toLowerCase().includes('up');
+
+      return {
+        id: name,
+        name: name,
+        status: isRunning ? (shardCounts[index] > 0 ? 'busy' : 'idle') : 'stopped',
+        tasks: shardCounts[index] || 0,
+        load: shardCounts[index] ? Math.min(100, (shardCounts[index] / 10) * 100) : 0
+      };
+    });
+
+    return workers;
+  } catch (error) {
+    console.error('Failed to get worker stats:', error);
+    return [];
+  }
 }
 
 

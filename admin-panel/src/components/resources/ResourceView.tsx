@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { getServerStats, getWorkerStats } from '@/app/actions/stats';
 import { WorkerGrid } from '@/components/resources/WorkerGrid';
+import { CoreServicesStatus } from '@/components/resources/CoreServicesStatus';
+import { NetworkTrafficLogs } from '@/components/resources/NetworkTrafficLogs';
 import { Activity, Server, ShieldCheck, Clock, Cpu, Database, Network } from 'lucide-react';
 import { Card } from '@/components/core/Card';
 
@@ -39,28 +41,7 @@ export function ResourceView() {
   return (
     <div className="space-y-8">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="p-6 glass-card border-white/5 bg-gradient-to-br from-neutral-900/80 to-indigo-950/20">
-            <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400">
-                    <ShieldCheck className="w-5 h-5" />
-                </div>
-                <h2 className="text-lg font-bold text-white">Core Status</h2>
-            </div>
-            <div className="space-y-3">
-                <div className="flex justify-between items-center text-sm">
-                    <span className="text-neutral-400">Database</span>
-                    <span className="text-emerald-400 font-medium">HEALTHY</span>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                    <span className="text-neutral-400">System Uptime</span>
-                    <span className="text-neutral-300 font-mono text-xs">{serverStats?.uptime || '-'}</span>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                    <span className="text-neutral-400">Load Average</span>
-                    <span className="text-neutral-300 font-mono text-xs">{serverStats?.loadAvg?.join(', ') || '-'}</span>
-                </div>
-            </div>
-          </Card>
+          <CoreServicesStatus />
 
           <Card className="p-6 glass-card border-white/5 flex flex-col justify-center items-center text-center space-y-4">
             <div className="flex items-center gap-2 text-indigo-400 mb-2">
@@ -93,26 +74,45 @@ export function ResourceView() {
           </Card>
       </div>
 
-      {serverStats?.network && (
-        <Card className="p-4 glass-card border-white/5">
-            <div className="flex items-center gap-3 text-neutral-400">
-                <Network className="w-4 h-4" />
-                <span className="text-xs font-bold uppercase tracking-widest">Network Traffic (Total)</span>
-                <div className="flex-1" />
-                <div className="flex items-center gap-4 text-[10px] font-mono">
-                    <span className="text-emerald-400">RX: {formatBytes(serverStats.network.rx)}</span>
-                    <span className="text-indigo-400">TX: {formatBytes(serverStats.network.tx)}</span>
-                </div>
-            </div>
-        </Card>
-      )}
-
       <div className="space-y-4">
         <div className="flex items-center gap-2 text-white">
             <Activity className="w-5 h-5 text-indigo-400" />
             <h2 className="text-xl font-bold">Worker Nodes</h2>
         </div>
         <WorkerGrid workers={workers} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-6">
+        <div>
+          <div className="flex items-center gap-2 text-white mb-4">
+            <Network className="w-5 h-5 text-cyan-400" />
+            <h2 className="text-xl font-bold">System Metrics</h2>
+          </div>
+          <div className="grid grid-cols-1 gap-6">
+            <Card className="p-4 glass-card border-white/5">
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <div className="text-xs text-neutral-500 uppercase tracking-wider mb-1">Uptime</div>
+                  <div className="text-lg font-mono text-white">{serverStats?.uptime || '-'}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-neutral-500 uppercase tracking-wider mb-1">Load Avg</div>
+                  <div className="text-lg font-mono text-white">{serverStats?.loadAvg?.[0] || '-'}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-neutral-500 uppercase tracking-wider mb-1">Network Total</div>
+                  <div className="text-xs font-mono text-emerald-400">
+                    {serverStats?.network ? `↓ ${formatBytes(serverStats.network.rx)}` : '-'}
+                  </div>
+                  <div className="text-xs font-mono text-indigo-400">
+                    {serverStats?.network ? `↑ ${formatBytes(serverStats.network.tx)}` : '-'}
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </div>
+        </div>
+        <NetworkTrafficLogs />
       </div>
     </div>
   );

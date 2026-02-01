@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Card } from '@/components/core/Card';
 import { readEnvFile, updateEnvFile } from '@/app/actions/env';
 import { analyzeRestartRequirements, restartServices } from '@/app/actions/services';
-import { Save, RefreshCw, Loader, AlertTriangle } from 'lucide-react';
+import { pullLatestImages, rebuildImages } from '@/app/actions/docker-ops';
+import { Save, RefreshCw, Loader, AlertTriangle, Download, Package } from 'lucide-react';
 
 interface ConfigField {
   key: string;
@@ -294,13 +295,34 @@ export function EnvConfigView() {
           Note: Contest instances are managed in <strong>Infrastructure → Deployments</strong> page.
         </p>
       </Card>
+
+      <Card className="glass-card border-white/5 p-6">
+        <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-xl font-bold text-white">Image Management</h2>
+              <p className="text-neutral-400 text-sm mt-1">Pull latest images or rebuild from source.</p>
+            </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <PullImagesButton />
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-neutral-500 uppercase tracking-wider">Rebuild Stacks</p>
+              <div className="grid grid-cols-2 gap-2">
+                <RebuildButton stack="core" label="Core" />
+                <RebuildButton stack="admin" label="Admin" />
+                <RebuildButton stack="worker" label="Worker" />
+                <RebuildButton stack="all" label="All" />
+              </div>
+            </div>
+        </div>
+      </Card>
     </div>
   );
 }
 
 function RestartButton({ type, label }: { type: 'core' | 'admin' | 'worker' | 'all', label: string }) {
     const [restarting, setRestarting] = useState(false);
-    
+
     const handleRestart = async () => {
         if (!confirm(`Are you sure you want to ${label}? This will temporarily disrupt service.`)) return;
         setRestarting(true);
@@ -315,13 +337,69 @@ function RestartButton({ type, label }: { type: 'core' | 'admin' | 'worker' | 'a
     };
 
     return (
-        <button 
+        <button
             onClick={handleRestart}
             disabled={restarting}
             className="flex items-center gap-2 px-4 py-2 bg-amber-600/20 text-amber-400 border border-amber-500/30 rounded-lg hover:bg-amber-600/30 transition-colors disabled:opacity-50"
         >
             <RefreshCw className={`w-4 h-4 ${restarting ? 'animate-spin' : ''}`} />
             {restarting ? 'Restarting...' : label}
+        </button>
+    );
+}
+
+function PullImagesButton() {
+    const [pulling, setPulling] = useState(false);
+
+    const handlePull = async () => {
+        if (!confirm('Pull latest images from registry? This may take several minutes.')) return;
+        setPulling(true);
+        try {
+            const res = await pullLatestImages();
+            if (res.success) alert('✓ ' + res.message);
+            else alert('Error: ' + res.error);
+        } catch (e) {
+            alert('Failed to pull images');
+        }
+        setPulling(false);
+    };
+
+    return (
+        <button
+            onClick={handlePull}
+            disabled={pulling}
+            className="flex items-center gap-2 px-4 py-3 bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-lg hover:bg-blue-600/30 transition-colors disabled:opacity-50 w-full justify-center"
+        >
+            <Download className={`w-4 h-4 ${pulling ? 'animate-bounce' : ''}`} />
+            {pulling ? 'Pulling Images...' : 'Pull Latest Images'}
+        </button>
+    );
+}
+
+function RebuildButton({ stack, label }: { stack: 'core' | 'admin' | 'worker' | 'all', label: string }) {
+    const [rebuilding, setRebuilding] = useState(false);
+
+    const handleRebuild = async () => {
+        if (!confirm(`Rebuild ${label} stack from source? This may take 5-10 minutes.`)) return;
+        setRebuilding(true);
+        try {
+            const res = await rebuildImages(stack);
+            if (res.success) alert('✓ ' + res.message);
+            else alert('Error: ' + res.error);
+        } catch (e) {
+            alert('Failed to rebuild');
+        }
+        setRebuilding(false);
+    };
+
+    return (
+        <button
+            onClick={handleRebuild}
+            disabled={rebuilding}
+            className="flex items-center gap-2 px-3 py-2 bg-purple-600/20 text-purple-400 border border-purple-500/30 rounded-lg hover:bg-purple-600/30 transition-colors disabled:opacity-50 text-sm"
+        >
+            <Package className={`w-3 h-3 ${rebuilding ? 'animate-spin' : ''}`} />
+            {rebuilding ? 'Building...' : label}
         </button>
     );
 }
