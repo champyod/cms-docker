@@ -284,17 +284,21 @@ export function EnvConfigView() {
               <p className="text-neutral-400 text-sm mt-1">Force restart services if needed.</p>
             </div>
         </div>
-        <div className="flex gap-4">
-            <RestartButton type="core" label="Restart Core Stack" />
-            <RestartButton type="worker" label="Restart Worker Stack" />
-            <RestartButton type="all" label="Restart All Services" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <RestartButton type="core" label="Core Stack" />
+            <RestartButton type="admin" label="Admin Stack" />
+            <RestartButton type="worker" label="Worker Stack" />
+            <RestartButton type="all" label="All Services" />
         </div>
+        <p className="text-xs text-neutral-500 mt-4">
+          Note: Contest instances are managed in <strong>Infrastructure → Deployments</strong> page.
+        </p>
       </Card>
     </div>
   );
 }
 
-function RestartButton({ type, label }: { type: 'core' | 'worker' | 'all', label: string }) {
+function RestartButton({ type, label }: { type: 'core' | 'admin' | 'worker' | 'all', label: string }) {
     const [restarting, setRestarting] = useState(false);
     
     const handleRestart = async () => {

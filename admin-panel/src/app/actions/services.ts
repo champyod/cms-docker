@@ -112,7 +112,7 @@ export async function analyzeRestartRequirements(changedKeys: string[]) {
     return { requiredRestarts: Array.from(finalSet) };
 }
 
-export async function restartServices(type: 'all' | 'core' | 'worker' | 'custom', customList?: string[]) {
+export async function restartServices(type: 'all' | 'core' | 'admin' | 'worker' | 'custom', customList?: string[]) {
   await ensurePermission('all');
   try {
     const rootDir = getRepoRoot();
@@ -131,6 +131,8 @@ export async function restartServices(type: 'all' | 'core' | 'worker' | 'custom'
 
     if (type === 'core') {
       cmd = 'docker compose -f docker-compose.core.yml up -d --build --force-recreate';
+    } else if (type === 'admin') {
+      cmd = 'docker compose -f docker-compose.admin.yml up -d --build --force-recreate';
     } else if (type === 'worker') {
       cmd = 'docker compose -f docker-compose.worker.yml up -d --build --force-recreate';
     } else if (type === 'custom' && customList && customList.length > 0) {
@@ -142,19 +144,37 @@ export async function restartServices(type: 'all' | 'core' | 'worker' | 'custom'
         } else {
             if (filteredList.length === 0) return { success: true, message: 'Nothing to restart.' };
 
-            // For per-contest restart, restart all related services
+            // For per-contest restart, restart related services based on dependencies
             const contestServices: string[] = [];
+            const policies = await getRestartPolicies();
+
             filteredList.forEach(service => {
                 if (service.startsWith('cms-contest-web-server-')) {
                     const contestId = service.replace('cms-contest-web-server-', '');
-                    contestServices.push(
-                        `cms-contest-web-server-${contestId}`,
-                        `cms-evaluation-service-${contestId}`,
-                        `cms-proxy-service-${contestId}`,
-                        `cms-ranking-web-server-${contestId}`
-                    );
+                    // Add contest web server
+                    contestServices.push(`cms-contest-web-server-${contestId}`);
+                    // Add ranking server for this contest
+                    contestServices.push(`cms-ranking-web-server-${contestId}`);
+
+                    // Check dependencies from restart_policies.json
+                    if (policies && policies.dependencies['cms-contest-web-server']) {
+                        policies.dependencies['cms-contest-web-server'].forEach(dep => {
+                            if (!contestServices.includes(dep)) {
+                                contestServices.push(dep);
+                            }
+                        });
+                    }
                 } else {
                     contestServices.push(service);
+
+                    // Check dependencies for this service
+                    if (policies && policies.dependencies[service]) {
+                        policies.dependencies[service].forEach(dep => {
+                            if (!contestServices.includes(dep)) {
+                                contestServices.push(dep);
+                            }
+                        });
+                    }
                 }
             });
 
