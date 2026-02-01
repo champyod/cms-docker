@@ -82,7 +82,7 @@ export async function getWorkerStats() {
       return {
         id: name,
         name: name,
-        status: isRunning ? (shardCounts[index] > 0 ? 'busy' : 'idle') : 'stopped',
+        status: isRunning ? (shardCounts[index] > 0 ? 'busy' : 'online') : 'offline',
         tasks: shardCounts[index] || 0,
         load: shardCounts[index] ? Math.min(100, (shardCounts[index] / 10) * 100) : 0
       };
