@@ -270,3 +270,18 @@ export async function removeTaskFromContest(taskId: number) {
 export async function updateContestSettings(id: number, data: Partial<ContestData>) {
   return updateContest(id, data);
 }
+
+export async function getAvailableContests() {
+  try {
+    const contests = await prisma.contests.findMany({
+      select: {
+        id: true,
+        name: true,
+      },
+      orderBy: { id: 'asc' },
+    });
+    return { success: true, contests };
+  } catch (error) {
+    return { success: false, contests: [], error: (error as Error).message };
+  }
+}

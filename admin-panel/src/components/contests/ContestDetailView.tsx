@@ -1,15 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { updateContestSettings, addParticipant, removeParticipant } from '@/app/actions/contests';
 import { setTestUser } from '@/app/actions/participations';
-import { switchContest } from '@/app/actions/services';
 import { Card } from '@/components/core/Card';
-import { 
-  Settings, Users, Trophy, Clock, Shield, Zap, 
-  Plus, Trash2, ExternalLink, Play, Square, 
-  ChevronDown, ChevronUp, Save, Power, ClipboardList, FlaskConical
+import {
+  Settings, Users, Trophy, Clock, Shield, Zap,
+  Plus, Trash2, ExternalLink, Play, Square,
+  ChevronDown, ChevronUp, Save, ClipboardList, FlaskConical
 } from 'lucide-react';
 import { ParticipantModal } from './ParticipantModal';
 import { TaskSelectionModal } from './TaskSelectionModal';
@@ -64,8 +62,6 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, tea
       window.location.reload();
     }
   };
-  const [activating, setActivating] = useState(false);
-  const router = useRouter();
 
 
   const [formData, setFormData] = useState({
@@ -99,22 +95,6 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, tea
       console.error('Failed to save:', error);
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleActivate = async () => {
-    if (!confirm('Are you sure you want to ACTIVATE this contest? This will update the system configuration and RESTART services.')) {
-      return;
-    }
-    setActivating(true);
-    const result = await switchContest(contest.id);
-    setActivating(false);
-
-    if (result.success) {
-      alert('Contest activating! Services are restarting... check the dashboard in a moment.');
-      router.refresh();
-    } else {
-      alert('Failed to activate contest: ' + result.error);
     }
   };
 
@@ -154,17 +134,7 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, tea
             <Zap className="w-5 h-5 text-amber-400" />
             <span className="font-bold text-white">Contest Status</span>
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleActivate}
-              disabled={activating}
-              className="flex items-center gap-2 px-3 py-1.5 bg-amber-600/20 text-amber-400 border border-amber-500/30 rounded-lg text-xs font-medium hover:bg-amber-600/30 transition-colors disabled:opacity-50"
-            >
-              <Power className="w-3 h-3" />
-              {activating ? 'Restarting Services...' : 'Activate This Contest'}
-            </button>
-
-            <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
             {(() => {
               const now = new Date();
               const start = contest.start ? new Date(contest.start) : null;

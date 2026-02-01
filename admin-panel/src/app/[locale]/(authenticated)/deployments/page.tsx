@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Card } from '@/components/core/Card';
 import { readEnvFile, updateEnvFile } from '@/app/actions/env';
 import { analyzeRestartRequirements, restartServices } from '@/app/actions/services';
+import { getAvailableContests } from '@/app/actions/contests';
 import { Save, RefreshCw, Loader, AlertTriangle, Trash2, Plus, Globe, Hash, Rocket, Shield, Lock, Network } from 'lucide-react';
 
 export default function DeploymentsPage() {
@@ -14,14 +15,19 @@ export default function DeploymentsPage() {
   const [requiredRestarts, setRequiredRestarts] = useState<string[]>([]);
   const [originalConfig, setOriginalConfig] = useState<string>('[]');
   const [originalGlobal, setOriginalGlobal] = useState<string>('{}');
+  const [availableContests, setAvailableContests] = useState<{ id: number; name: string }[]>([]);
 
   const loadData = async () => {
     setLoading(true);
-    const result = await readEnvFile('.env.contest');
+    const [result, contestsResult] = await Promise.all([
+      readEnvFile('.env.contest'),
+      getAvailableContests()
+    ]);
+
     if (result.success && result.config) {
       const deployConfig = result.config.CONTESTS_DEPLOY_CONFIG || '[]';
       setOriginalConfig(deployConfig);
-      
+
       const globals = { ...result.config };
       delete globals.CONTESTS_DEPLOY_CONFIG;
       setGlobalSettings(globals);
@@ -33,6 +39,11 @@ export default function DeploymentsPage() {
         setConfig([]);
       }
     }
+
+    if (contestsResult.success) {
+      setAvailableContests(contestsResult.contests);
+    }
+
     setLoading(false);
   };
 
@@ -95,12 +106,23 @@ export default function DeploymentsPage() {
   };
 
   const addItem = () => {
-    const nextId = config.length > 0 ? Math.max(...config.map(i => i.id)) + 1 : 1;
+    // Get contests that are not already deployed
+    const deployedIds = new Set(config.map(i => i.id));
+    const undeployedContests = availableContests.filter(c => !deployedIds.has(c.id));
+
+    if (undeployedContests.length === 0) {
+      alert('No available contests to deploy. All contests are already deployed or no contests exist.');
+      return;
+    }
+
+    // Use the first available undeployed contest
+    const firstAvailable = undeployedContests[0];
     const nextPort = config.length > 0 ? Math.max(...config.map(i => i.port)) + 1 : 8888;
+
     setConfig([...config, {
-      id: nextId,
+      id: firstAvailable.id,
       port: nextPort,
-      domain: `contest-${nextId}.cms.local`,
+      domain: `contest-${firstAvailable.id}.cms.local`,
       accessMethod: 'public_ip',
       protocol: 'http',
       tlsCertPath: '',
@@ -190,19 +212,25 @@ export default function DeploymentsPage() {
                         <div className="flex items-center gap-4">
                             <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Contest ID</label>
+                                    <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Contest</label>
                                     <div className="flex items-center gap-2 bg-black/20 px-3 py-2 rounded-lg border border-white/5">
                                         <Hash className="w-3 h-3 text-neutral-500" />
-                                        <input
-                                            type="number"
+                                        <select
                                             value={item.id}
                                             onChange={(e) => {
+                                                const selectedId = parseInt(e.target.value);
                                                 const newConfig = [...config];
-                                                newConfig[index] = { ...newConfig[index], id: parseInt(e.target.value) || 0 };
+                                                newConfig[index] = { ...newConfig[index], id: selectedId };
                                                 setConfig(newConfig);
                                             }}
                                             className="bg-transparent text-sm text-white w-full outline-none"
-                                        />
+                                        >
+                                            {availableContests.map((contest) => (
+                                                <option key={contest.id} value={contest.id} className="bg-neutral-900">
+                                                    #{contest.id} - {contest.name}
+                                                </option>
+                                            ))}
+                                        </select>
                                     </div>
                                 </div>
                                 <div className="space-y-1">
