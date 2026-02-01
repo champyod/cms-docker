@@ -534,7 +534,7 @@ export default function DeploymentsPage() {
                         value={globalSettings.SECRET_KEY || ''}
                         onChange={(e) => handleGlobalChange('SECRET_KEY', e.target.value)}
                         className="w-full bg-black/40 px-4 py-2 rounded-lg border border-white/10 text-white outline-none focus:border-indigo-500/50 font-mono text-xs"
-                        style={{ WebkitTextSecurity: 'disc', textSecurity: 'disc' }}
+                        style={{ WebkitTextSecurity: 'disc', textSecurity: 'disc' } as React.CSSProperties}
                         placeholder="Generated automatically if empty"
                         autoComplete="off"
                         data-form-type="other"

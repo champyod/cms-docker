@@ -152,7 +152,6 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, tea
                 return <span className="px-3 py-1 bg-red-600/30 text-red-400 rounded-full text-sm">Ended</span>;
               }
             })()}
-            </div>
           </div>
         </div>
 
