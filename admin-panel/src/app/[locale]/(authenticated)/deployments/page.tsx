@@ -5,7 +5,8 @@ import { Card } from '@/components/core/Card';
 import { readEnvFile, updateEnvFile } from '@/app/actions/env';
 import { analyzeRestartRequirements, restartServices } from '@/app/actions/services';
 import { getAvailableContests } from '@/app/actions/contests';
-import { Save, RefreshCw, Loader, AlertTriangle, Trash2, Plus, Globe, Hash, Rocket, Shield, Lock, Network } from 'lucide-react';
+import { updateWorkers } from '@/app/actions/workerConfig';
+import { Save, RefreshCw, Loader, AlertTriangle, Trash2, Plus, Globe, Hash, Rocket, Shield, Lock, Network, Server, ChevronDown, ChevronUp } from 'lucide-react';
 
 export default function DeploymentsPage() {
   const [config, setConfig] = useState<any[]>([]);
@@ -16,6 +17,7 @@ export default function DeploymentsPage() {
   const [originalConfig, setOriginalConfig] = useState<string>('[]');
   const [originalGlobal, setOriginalGlobal] = useState<string>('{}');
   const [availableContests, setAvailableContests] = useState<{ id: number; name: string }[]>([]);
+  const [expandedWorkers, setExpandedWorkers] = useState<Record<number, boolean>>({});
 
   const loadData = async () => {
     setLoading(true);
@@ -34,7 +36,13 @@ export default function DeploymentsPage() {
       setOriginalGlobal(JSON.stringify(globals));
 
       try {
-        setConfig(JSON.parse(deployConfig));
+        const parsedConfig = JSON.parse(deployConfig);
+        // Ensure workers array exists for backward compatibility
+        const configWithWorkers = parsedConfig.map((item: any) => ({
+          ...item,
+          workers: item.workers || []
+        }));
+        setConfig(configWithWorkers);
       } catch (e) {
         setConfig([]);
       }
@@ -72,6 +80,28 @@ export default function DeploymentsPage() {
     };
 
     try {
+        // Aggregate all workers from all contest instances
+        const allWorkers: { host: string; port: number }[] = [];
+        const workerSet = new Set<string>();
+
+        config.forEach(instance => {
+            (instance.workers || []).forEach((worker: any) => {
+                const key = `${worker.host}:${worker.port}`;
+                if (worker.host && !workerSet.has(key)) {
+                    workerSet.add(key);
+                    allWorkers.push({ host: worker.host, port: worker.port });
+                }
+            });
+        });
+
+        // Update global cms.toml with aggregated workers
+        if (allWorkers.length > 0) {
+            const workerResult = await updateWorkers(allWorkers);
+            if (!workerResult.success) {
+                alert('Warning: Failed to update worker configuration in cms.toml: ' + workerResult.error);
+            }
+        }
+
         const result = await updateEnvFile('.env.contest', updates);
 
         if (!result.success) {
@@ -81,13 +111,52 @@ export default function DeploymentsPage() {
         }
 
         if (shouldRestart) {
-            const restartRes = await restartServices('custom', ['contest-stack']);
-            if (!restartRes.success) {
-                alert('Configuration saved, but restart failed: ' + restartRes.error + '\n\nPlease restart manually via: make contest-img');
-                setSaving(false);
-                return;
+            // Detect instance lifecycle changes
+            const originalInstances = JSON.parse(originalConfig);
+            const currentInstances = config;
+
+            const originalIds = new Set(originalInstances.map((i: any) => i.id));
+            const currentIds = new Set(currentInstances.map(i => i.id));
+
+            // Find new, edited, and removed instances
+            const newInstances = currentInstances.filter(i => !originalIds.has(i.id));
+            const removedInstances = originalInstances.filter((i: any) => !currentIds.has(i.id));
+            const editedInstances = currentInstances.filter(i => {
+                if (!originalIds.has(i.id)) return false;
+                const original = originalInstances.find((o: any) => o.id === i.id);
+                return JSON.stringify(original) !== JSON.stringify(i);
+            });
+
+            // Handle removed instances first (stop and remove)
+            if (removedInstances.length > 0) {
+                const servicesToRemove = removedInstances.flatMap((i: any) => [
+                    `cms-contest-web-server-${i.id}`,
+                    `cms-ranking-web-server-${i.id}`
+                ]);
+
+                alert(`Removing ${removedInstances.length} instance(s): ${removedInstances.map((i: any) => i.id).join(', ')}`);
             }
-            alert('✓ Configuration saved and contest stack restarted successfully!');
+
+            // Handle new and edited instances (restart/create)
+            const instancesToRestart = [...newInstances, ...editedInstances];
+            if (instancesToRestart.length > 0 || removedInstances.length > 0) {
+                // Regenerate and restart entire contest stack
+                const restartRes = await restartServices('custom', ['contest-stack']);
+                if (!restartRes.success) {
+                    alert('Configuration saved, but restart failed: ' + restartRes.error + '\n\nPlease restart manually via: make contest-img');
+                    setSaving(false);
+                    return;
+                }
+
+                const summary = [];
+                if (newInstances.length > 0) summary.push(`${newInstances.length} created`);
+                if (editedInstances.length > 0) summary.push(`${editedInstances.length} updated`);
+                if (removedInstances.length > 0) summary.push(`${removedInstances.length} removed`);
+
+                alert(`✓ Contest stack restarted successfully!\n${summary.join(', ')}`);
+            } else {
+                alert('✓ Configuration saved and contest stack restarted successfully!');
+            }
         } else {
             alert('✓ Configuration saved successfully! Use "Save & Restart Stack" to apply changes.');
         }
@@ -127,7 +196,8 @@ export default function DeploymentsPage() {
       protocol: 'http',
       tlsCertPath: '',
       tlsKeyPath: '',
-      tailscaleDomain: ''
+      tailscaleDomain: '',
+      workers: []
     }]);
   };
 
@@ -153,6 +223,29 @@ export default function DeploymentsPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const addWorker = (index: number) => {
+    const newConfig = [...config];
+    if (!newConfig[index].workers) newConfig[index].workers = [];
+    newConfig[index].workers.push({ host: '', port: 26000 });
+    setConfig(newConfig);
+  };
+
+  const removeWorker = (instanceIndex: number, workerIndex: number) => {
+    const newConfig = [...config];
+    newConfig[instanceIndex].workers.splice(workerIndex, 1);
+    setConfig(newConfig);
+  };
+
+  const updateWorker = (instanceIndex: number, workerIndex: number, field: 'host' | 'port', value: string) => {
+    const newConfig = [...config];
+    if (field === 'port') {
+      newConfig[instanceIndex].workers[workerIndex][field] = parseInt(value) || 26000;
+    } else {
+      newConfig[instanceIndex].workers[workerIndex][field] = value;
+    }
+    setConfig(newConfig);
   };
 
   if (loading) return <div className="p-8 text-white flex items-center gap-2"><Loader className="animate-spin" /> Loading deployments...</div>;
@@ -401,6 +494,53 @@ export default function DeploymentsPage() {
                             <span className="text-[10px] text-neutral-600">
                                 Restarts contest-web-server-{item.id} and related services
                             </span>
+                        </div>
+
+                        {/* Worker Nodes Configuration */}
+                        <div className="ml-6 mt-3 border-t border-white/5 pt-3">
+                            <button
+                                onClick={() => setExpandedWorkers(prev => ({ ...prev, [index]: !prev[index] }))}
+                                className="flex items-center gap-2 text-xs font-medium text-neutral-400 hover:text-white transition-colors w-full"
+                            >
+                                <Server className="w-3 h-3" />
+                                <span>Worker Nodes ({(item.workers || []).length})</span>
+                                {expandedWorkers[index] ? <ChevronUp className="w-3 h-3 ml-auto" /> : <ChevronDown className="w-3 h-3 ml-auto" />}
+                            </button>
+
+                            {expandedWorkers[index] && (
+                                <div className="mt-3 space-y-2">
+                                    {(item.workers || []).map((worker: any, wIndex: number) => (
+                                        <div key={wIndex} className="flex items-center gap-2 bg-black/20 p-2 rounded-lg border border-white/5">
+                                            <input
+                                                type="text"
+                                                value={worker.host}
+                                                onChange={(e) => updateWorker(index, wIndex, 'host', e.target.value)}
+                                                placeholder="Host (e.g., cms-worker-0)"
+                                                className="flex-1 bg-black/40 px-2 py-1 rounded text-xs text-white border border-white/10 outline-none focus:border-indigo-500/50 font-mono"
+                                            />
+                                            <input
+                                                type="number"
+                                                value={worker.port}
+                                                onChange={(e) => updateWorker(index, wIndex, 'port', e.target.value)}
+                                                className="w-20 bg-black/40 px-2 py-1 rounded text-xs text-white border border-white/10 outline-none focus:border-indigo-500/50 font-mono"
+                                            />
+                                            <button
+                                                onClick={() => removeWorker(index, wIndex)}
+                                                className="p-1 text-red-400/60 hover:text-red-400 transition-colors"
+                                            >
+                                                <Trash2 className="w-3 h-3" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                    <button
+                                        onClick={() => addWorker(index)}
+                                        className="flex items-center gap-1 px-2 py-1 bg-green-600/10 hover:bg-green-600/20 text-green-400 rounded text-xs transition-colors"
+                                    >
+                                        <Plus className="w-3 h-3" />
+                                        Add Worker
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     </div>
                 ))}
