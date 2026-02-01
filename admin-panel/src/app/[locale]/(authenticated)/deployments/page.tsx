@@ -299,11 +299,11 @@ export default function DeploymentsPage() {
                                 </select>
                             </div>
 
-                            {(item.accessMethod === 'domain') && (
+                            {item.accessMethod === 'domain' && (
                                 <div className="space-y-1 md:col-span-2">
                                     <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest flex items-center gap-1">
                                         <Globe className="w-3 h-3" />
-                                        Domain Name (Required)
+                                        Domain Name
                                     </label>
                                     <input
                                         type="text"
@@ -317,7 +317,15 @@ export default function DeploymentsPage() {
                                         placeholder="e.g. contest.example.com"
                                     />
                                     <p className="text-[10px] text-neutral-500">
-                                        Contest accessible via reverse proxy (Traefik) only
+                                        Contest accessible via reverse proxy only (no direct port binding)
+                                    </p>
+                                </div>
+                            )}
+
+                            {item.accessMethod === 'public_ip' && (
+                                <div className="space-y-1 md:col-span-2">
+                                    <p className="text-[10px] text-neutral-500">
+                                        Contest accessible at {item.protocol}://your-ip:{item.port}
                                     </p>
                                 </div>
                             )}
@@ -345,28 +353,6 @@ export default function DeploymentsPage() {
                                 </div>
                             )}
 
-                            {(item.accessMethod === 'public_ip') && (
-                                <div className="space-y-1 md:col-span-2">
-                                    <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest flex items-center gap-1">
-                                        <Globe className="w-3 h-3" />
-                                        Domain (Optional, for Traefik)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={item.domain || ''}
-                                        onChange={(e) => {
-                                            const newConfig = [...config];
-                                            newConfig[index] = { ...newConfig[index], domain: e.target.value };
-                                            setConfig(newConfig);
-                                        }}
-                                        className="w-full bg-black/40 px-3 py-2 rounded-lg border border-white/10 text-white text-sm outline-none focus:border-indigo-500/50"
-                                        placeholder="e.g. contest.example.com (optional)"
-                                    />
-                                    <p className="text-[10px] text-neutral-500">
-                                        Contest accessible at http://your-ip:{item.port}
-                                    </p>
-                                </div>
-                            )}
 
                             {(item.protocol === 'https') && (
                                 <>
