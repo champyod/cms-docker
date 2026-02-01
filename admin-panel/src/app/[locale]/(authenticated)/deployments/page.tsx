@@ -159,7 +159,7 @@ export default function DeploymentsPage() {
                 {config.map((item, index) => (
                     <div key={index} className="bg-white/[0.02] p-4 rounded-xl border border-white/5 group hover:border-indigo-500/30 transition-colors space-y-4">
                         <div className="flex items-center gap-4">
-                            <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Contest ID</label>
                                     <div className="flex items-center gap-2 bg-black/20 px-3 py-2 rounded-lg border border-white/5">
@@ -191,20 +191,6 @@ export default function DeploymentsPage() {
                                             className="bg-transparent text-sm text-white w-full outline-none"
                                         />
                                     </div>
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Domain</label>
-                                    <input
-                                        type="text"
-                                        value={item.domain || ''}
-                                        onChange={(e) => {
-                                            const newConfig = [...config];
-                                            newConfig[index] = { ...newConfig[index], domain: e.target.value };
-                                            setConfig(newConfig);
-                                        }}
-                                        className="bg-black/20 px-3 py-2 rounded-lg border border-white/5 text-sm text-indigo-300 w-full outline-none focus:border-indigo-500/50"
-                                        placeholder="e.g. contest.example.com"
-                                    />
                                 </div>
                             </div>
                             <button
@@ -256,9 +242,35 @@ export default function DeploymentsPage() {
                                 </select>
                             </div>
 
+                            {(item.accessMethod === 'domain') && (
+                                <div className="space-y-1 md:col-span-2">
+                                    <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest flex items-center gap-1">
+                                        <Globe className="w-3 h-3" />
+                                        Domain Name (Required)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={item.domain || ''}
+                                        onChange={(e) => {
+                                            const newConfig = [...config];
+                                            newConfig[index] = { ...newConfig[index], domain: e.target.value };
+                                            setConfig(newConfig);
+                                        }}
+                                        className="w-full bg-black/40 px-3 py-2 rounded-lg border border-indigo-500/20 text-white text-sm outline-none focus:border-indigo-500/50"
+                                        placeholder="e.g. contest.example.com"
+                                    />
+                                    <p className="text-[10px] text-neutral-500">
+                                        Contest accessible via reverse proxy (Traefik) only
+                                    </p>
+                                </div>
+                            )}
+
                             {(item.accessMethod === 'tailscale') && (
                                 <div className="space-y-1 md:col-span-2">
-                                    <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Tailscale Domain</label>
+                                    <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest flex items-center gap-1">
+                                        <Network className="w-3 h-3" />
+                                        Tailscale Domain
+                                    </label>
                                     <input
                                         type="text"
                                         value={item.tailscaleDomain || ''}
@@ -267,9 +279,35 @@ export default function DeploymentsPage() {
                                             newConfig[index] = { ...newConfig[index], tailscaleDomain: e.target.value };
                                             setConfig(newConfig);
                                         }}
-                                        className="w-full bg-black/40 px-3 py-2 rounded-lg border border-white/10 text-white text-sm outline-none focus:border-indigo-500/50"
+                                        className="w-full bg-black/40 px-3 py-2 rounded-lg border border-purple-500/20 text-white text-sm outline-none focus:border-purple-500/50"
                                         placeholder="e.g. contest.tailnet-name.ts.net"
                                     />
+                                    <p className="text-[10px] text-neutral-500">
+                                        Contest bound to Tailscale IP, accessible via VPN only
+                                    </p>
+                                </div>
+                            )}
+
+                            {(item.accessMethod === 'public_ip') && (
+                                <div className="space-y-1 md:col-span-2">
+                                    <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest flex items-center gap-1">
+                                        <Globe className="w-3 h-3" />
+                                        Domain (Optional, for Traefik)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={item.domain || ''}
+                                        onChange={(e) => {
+                                            const newConfig = [...config];
+                                            newConfig[index] = { ...newConfig[index], domain: e.target.value };
+                                            setConfig(newConfig);
+                                        }}
+                                        className="w-full bg-black/40 px-3 py-2 rounded-lg border border-white/10 text-white text-sm outline-none focus:border-indigo-500/50"
+                                        placeholder="e.g. contest.example.com (optional)"
+                                    />
+                                    <p className="text-[10px] text-neutral-500">
+                                        Contest accessible at http://your-ip:{item.port}
+                                    </p>
                                 </div>
                             )}
 
