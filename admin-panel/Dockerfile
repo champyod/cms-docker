@@ -19,9 +19,9 @@ RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" bun run build
 # Production image, copy all the files and run next
 FROM oven/bun:latest as release
 
-# Install Docker CLI to allow managing containers
+# Install Docker CLI and make to allow managing containers and running make commands
 RUN apt-get update && \
-    apt-get install -y curl && \
+    apt-get install -y curl make && \
     curl -fsSL https://get.docker.com | sh && \
     rm -rf /var/lib/apt/lists/*
 
