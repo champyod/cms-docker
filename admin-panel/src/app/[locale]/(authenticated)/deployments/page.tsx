@@ -431,12 +431,15 @@ export default function DeploymentsPage() {
             <Card className="glass-card border-white/5 p-6 space-y-6">
                 <div className="space-y-1">
                     <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Security Secret Key</label>
-                    <input 
-                        type="password" 
-                        value={globalSettings.SECRET_KEY || ''} 
+                    <input
+                        type="text"
+                        value={globalSettings.SECRET_KEY || ''}
                         onChange={(e) => handleGlobalChange('SECRET_KEY', e.target.value)}
                         className="w-full bg-black/40 px-4 py-2 rounded-lg border border-white/10 text-white outline-none focus:border-indigo-500/50 font-mono text-xs"
+                        style={{ WebkitTextSecurity: 'disc', textSecurity: 'disc' }}
                         placeholder="Generated automatically if empty"
+                        autoComplete="off"
+                        data-form-type="other"
                     />
                 </div>
 
