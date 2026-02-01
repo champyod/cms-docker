@@ -5,25 +5,27 @@ import { Card } from '@/components/core/Card';
 import { readEnvFile, updateEnvFile } from '@/app/actions/env';
 import { analyzeRestartRequirements, restartServices } from '@/app/actions/services';
 import { getAvailableContests } from '@/app/actions/contests';
-import { updateWorkers } from '@/app/actions/workerConfig';
-import { Save, RefreshCw, Loader, AlertTriangle, Trash2, Plus, Globe, Hash, Rocket, Shield, Lock, Network, Server, ChevronDown, ChevronUp } from 'lucide-react';
+import { getWorkers, updateWorkers } from '@/app/actions/workerConfig';
+import { Save, RefreshCw, Loader, AlertTriangle, Trash2, Plus, Globe, Hash, Rocket, Shield, Lock, Network, Server } from 'lucide-react';
 
 export default function DeploymentsPage() {
   const [config, setConfig] = useState<any[]>([]);
+  const [workers, setWorkers] = useState<{ host: string; port: number }[]>([]);
   const [globalSettings, setGlobalSettings] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [requiredRestarts, setRequiredRestarts] = useState<string[]>([]);
   const [originalConfig, setOriginalConfig] = useState<string>('[]');
+  const [originalWorkers, setOriginalWorkers] = useState<string>('[]');
   const [originalGlobal, setOriginalGlobal] = useState<string>('{}');
   const [availableContests, setAvailableContests] = useState<{ id: number; name: string }[]>([]);
-  const [expandedWorkers, setExpandedWorkers] = useState<Record<number, boolean>>({});
 
   const loadData = async () => {
     setLoading(true);
-    const [result, contestsResult] = await Promise.all([
+    const [result, contestsResult, workersResult] = await Promise.all([
       readEnvFile('.env.contest'),
-      getAvailableContests()
+      getAvailableContests(),
+      getWorkers()
     ]);
 
     if (result.success && result.config) {
@@ -37,12 +39,12 @@ export default function DeploymentsPage() {
 
       try {
         const parsedConfig = JSON.parse(deployConfig);
-        // Ensure workers array exists for backward compatibility
-        const configWithWorkers = parsedConfig.map((item: any) => ({
-          ...item,
-          workers: item.workers || []
-        }));
-        setConfig(configWithWorkers);
+        // Remove workers from config if they exist (backward compatibility)
+        const configWithoutWorkers = parsedConfig.map((item: any) => {
+          const { workers, ...rest } = item;
+          return rest;
+        });
+        setConfig(configWithoutWorkers);
       } catch (e) {
         setConfig([]);
       }
@@ -52,6 +54,10 @@ export default function DeploymentsPage() {
       setAvailableContests(contestsResult.contests);
     }
 
+    // Load global workers
+    setWorkers(workersResult);
+    setOriginalWorkers(JSON.stringify(workersResult));
+
     setLoading(false);
   };
 
@@ -59,7 +65,9 @@ export default function DeploymentsPage() {
     loadData();
   }, []);
 
-  const isDirty = JSON.stringify(config) !== originalConfig || JSON.stringify(globalSettings) !== originalGlobal;
+  const isDirty = JSON.stringify(config) !== originalConfig ||
+                  JSON.stringify(workers) !== originalWorkers ||
+                  JSON.stringify(globalSettings) !== originalGlobal;
 
   useEffect(() => {
     if (isDirty) {
@@ -74,32 +82,22 @@ export default function DeploymentsPage() {
   const handleSave = async (shouldRestart: boolean = false) => {
     setSaving(true);
     const configStr = JSON.stringify(config);
+    const workersStr = JSON.stringify(workers);
     const updates = {
         ...globalSettings,
         CONTESTS_DEPLOY_CONFIG: configStr
     };
 
     try {
-        // Aggregate all workers from all contest instances
-        const allWorkers: { host: string; port: number }[] = [];
-        const workerSet = new Set<string>();
+        // Check if workers changed
+        const workersChanged = workersStr !== originalWorkers;
 
-        config.forEach(instance => {
-            (instance.workers || []).forEach((worker: any) => {
-                const key = `${worker.host}:${worker.port}`;
-                if (worker.host && !workerSet.has(key)) {
-                    workerSet.add(key);
-                    allWorkers.push({ host: worker.host, port: worker.port });
-                }
-            });
-        });
-
-        // Update global cms.toml with aggregated workers
-        if (allWorkers.length > 0) {
-            const workerResult = await updateWorkers(allWorkers);
-            if (!workerResult.success) {
-                alert('Warning: Failed to update worker configuration in cms.toml: ' + workerResult.error);
-            }
+        // Update global cms.toml with workers
+        const workerResult = await updateWorkers(workers);
+        if (!workerResult.success) {
+            alert('Failed to update worker configuration in cms.toml: ' + workerResult.error);
+            setSaving(false);
+            return;
         }
 
         const result = await updateEnvFile('.env.contest', updates);
@@ -155,13 +153,25 @@ export default function DeploymentsPage() {
 
                 alert(`✓ Contest stack restarted successfully!\n${summary.join(', ')}`);
             } else {
-                alert('✓ Configuration saved and contest stack restarted successfully!');
+                // No contest changes, check if workers changed
+                if (workersChanged) {
+                    const workerRes = await restartServices('worker');
+                    if (!workerRes.success) {
+                        alert('Configuration saved, but worker restart failed: ' + workerRes.error);
+                        setSaving(false);
+                        return;
+                    }
+                    alert('✓ Configuration saved and worker stack restarted successfully!');
+                } else {
+                    alert('✓ Configuration saved and contest stack restarted successfully!');
+                }
             }
         } else {
             alert('✓ Configuration saved successfully! Use "Save & Restart Stack" to apply changes.');
         }
 
         setOriginalConfig(configStr);
+        setOriginalWorkers(workersStr);
         setOriginalGlobal(JSON.stringify(globalSettings));
     } catch (error) {
         alert('Unexpected error: ' + (error as Error).message);
@@ -196,8 +206,7 @@ export default function DeploymentsPage() {
       protocol: 'http',
       tlsCertPath: '',
       tlsKeyPath: '',
-      tailscaleDomain: '',
-      workers: []
+      tailscaleDomain: ''
     }]);
   };
 
@@ -225,27 +234,22 @@ export default function DeploymentsPage() {
     }
   };
 
-  const addWorker = (index: number) => {
-    const newConfig = [...config];
-    if (!newConfig[index].workers) newConfig[index].workers = [];
-    newConfig[index].workers.push({ host: '', port: 26000 });
-    setConfig(newConfig);
+  const addGlobalWorker = () => {
+    setWorkers([...workers, { host: '', port: 26000 }]);
   };
 
-  const removeWorker = (instanceIndex: number, workerIndex: number) => {
-    const newConfig = [...config];
-    newConfig[instanceIndex].workers.splice(workerIndex, 1);
-    setConfig(newConfig);
+  const removeGlobalWorker = (index: number) => {
+    setWorkers(workers.filter((_, i) => i !== index));
   };
 
-  const updateWorker = (instanceIndex: number, workerIndex: number, field: 'host' | 'port', value: string) => {
-    const newConfig = [...config];
+  const updateGlobalWorker = (index: number, field: 'host' | 'port', value: string) => {
+    const newWorkers = [...workers];
     if (field === 'port') {
-      newConfig[instanceIndex].workers[workerIndex][field] = parseInt(value) || 26000;
+      newWorkers[index][field] = parseInt(value) || 26000;
     } else {
-      newConfig[instanceIndex].workers[workerIndex][field] = value;
+      newWorkers[index][field] = value;
     }
-    setConfig(newConfig);
+    setWorkers(newWorkers);
   };
 
   if (loading) return <div className="p-8 text-white flex items-center gap-2"><Loader className="animate-spin" /> Loading deployments...</div>;
@@ -496,52 +500,6 @@ export default function DeploymentsPage() {
                             </span>
                         </div>
 
-                        {/* Worker Nodes Configuration */}
-                        <div className="ml-6 mt-3 border-t border-white/5 pt-3">
-                            <button
-                                onClick={() => setExpandedWorkers(prev => ({ ...prev, [index]: !prev[index] }))}
-                                className="flex items-center gap-2 text-xs font-medium text-neutral-400 hover:text-white transition-colors w-full"
-                            >
-                                <Server className="w-3 h-3" />
-                                <span>Worker Nodes ({(item.workers || []).length})</span>
-                                {expandedWorkers[index] ? <ChevronUp className="w-3 h-3 ml-auto" /> : <ChevronDown className="w-3 h-3 ml-auto" />}
-                            </button>
-
-                            {expandedWorkers[index] && (
-                                <div className="mt-3 space-y-2">
-                                    {(item.workers || []).map((worker: any, wIndex: number) => (
-                                        <div key={wIndex} className="flex items-center gap-2 bg-black/20 p-2 rounded-lg border border-white/5">
-                                            <input
-                                                type="text"
-                                                value={worker.host}
-                                                onChange={(e) => updateWorker(index, wIndex, 'host', e.target.value)}
-                                                placeholder="Host (e.g., cms-worker-0)"
-                                                className="flex-1 bg-black/40 px-2 py-1 rounded text-xs text-white border border-white/10 outline-none focus:border-indigo-500/50 font-mono"
-                                            />
-                                            <input
-                                                type="number"
-                                                value={worker.port}
-                                                onChange={(e) => updateWorker(index, wIndex, 'port', e.target.value)}
-                                                className="w-20 bg-black/40 px-2 py-1 rounded text-xs text-white border border-white/10 outline-none focus:border-indigo-500/50 font-mono"
-                                            />
-                                            <button
-                                                onClick={() => removeWorker(index, wIndex)}
-                                                className="p-1 text-red-400/60 hover:text-red-400 transition-colors"
-                                            >
-                                                <Trash2 className="w-3 h-3" />
-                                            </button>
-                                        </div>
-                                    ))}
-                                    <button
-                                        onClick={() => addWorker(index)}
-                                        className="flex items-center gap-1 px-2 py-1 bg-green-600/10 hover:bg-green-600/20 text-green-400 rounded text-xs transition-colors"
-                                    >
-                                        <Plus className="w-3 h-3" />
-                                        Add Worker
-                                    </button>
-                                </div>
-                            )}
-                        </div>
                     </div>
                 ))}
                 
@@ -639,6 +597,63 @@ export default function DeploymentsPage() {
                         <label htmlFor="localCopy" className="text-xs text-neutral-300">Store Local Copy of Submissions</label>
                     </div>
                 </div>
+            </Card>
+
+            <Card className="glass-card border-white/5 p-6">
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                        <Server className="w-5 h-5 text-cyan-400" />
+                        <h3 className="text-base font-bold text-white">Worker Nodes</h3>
+                    </div>
+                    <span className="px-2 py-0.5 bg-cyan-500/10 text-cyan-400 text-[10px] font-bold uppercase tracking-widest rounded border border-cyan-500/20">
+                        {workers.length} Configured
+                    </span>
+                </div>
+
+                <p className="text-xs text-neutral-400 mb-4">
+                    Workers are shared across all contests and connect to the EvaluationService
+                </p>
+
+                <div className="space-y-2 mb-3">
+                    {workers.map((worker, index) => (
+                        <div key={index} className="flex items-center gap-2 bg-black/20 p-3 rounded-lg border border-white/5">
+                            <input
+                                type="text"
+                                value={worker.host}
+                                onChange={(e) => updateGlobalWorker(index, 'host', e.target.value)}
+                                placeholder="Host (e.g., cms-worker-0)"
+                                className="flex-1 bg-black/40 px-3 py-2 rounded text-sm text-white border border-white/10 outline-none focus:border-cyan-500/50 font-mono"
+                            />
+                            <input
+                                type="number"
+                                value={worker.port}
+                                onChange={(e) => updateGlobalWorker(index, 'port', e.target.value)}
+                                className="w-24 bg-black/40 px-3 py-2 rounded text-sm text-white border border-white/10 outline-none focus:border-cyan-500/50 font-mono"
+                            />
+                            <button
+                                onClick={() => removeGlobalWorker(index)}
+                                className="p-2 text-red-400/60 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                            </button>
+                        </div>
+                    ))}
+
+                    {workers.length === 0 && (
+                        <div className="p-6 text-center bg-black/20 rounded-lg border border-white/5">
+                            <Server className="w-8 h-8 text-neutral-700 mx-auto mb-2" />
+                            <p className="text-xs text-neutral-500">No workers configured</p>
+                        </div>
+                    )}
+                </div>
+
+                <button
+                    onClick={addGlobalWorker}
+                    className="flex items-center gap-2 px-3 py-2 bg-cyan-600/10 hover:bg-cyan-600/20 text-cyan-400 rounded-lg text-sm transition-colors w-full justify-center font-medium border border-cyan-500/20"
+                >
+                    <Plus className="w-4 h-4" />
+                    Add Worker Node
+                </button>
             </Card>
         </div>
       </div>
