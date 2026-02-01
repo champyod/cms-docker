@@ -144,6 +144,110 @@ EOF
 
         cat >> "$OUTPUT_FILE" << EOF
       - "traefik.http.services.cms-contest-$ID.loadbalancer.server.port=8888"
+
+  # Per-Contest EvaluationService for Contest $ID
+  evaluation-service-$ID:
+EOF
+        if [ "$DEPLOY_TYPE" = "img" ]; then
+            echo "    image: $CORE_IMAGE" >> "$OUTPUT_FILE"
+        else
+            cat >> "$OUTPUT_FILE" << EOF
+    build:
+      context: .
+      dockerfile: Dockerfile
+EOF
+        fi
+
+        cat >> "$OUTPUT_FILE" << EOF
+    container_name: cms-evaluation-service-$ID
+    restart: on-failure:5
+    depends_on:
+      - contest-web-server-$ID
+    environment:
+      CMS_CONFIG: \${CMS_CONFIG:-/usr/local/etc/cms.toml}
+      SERVICE_TYPE: EvaluationService
+      SERVICE_SHARD: 0
+      CONTEST_ID: $ID
+    volumes:
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
+      - cms-logs:/var/local/log/cms
+      - cms-cache:/var/local/cache/cms
+      - cms-data:/var/local/lib/cms
+    networks:
+      - cms-network
+    ports:
+      - "$((25000 + ID)):25000"
+    command: >
+      sh -c "sleep 5 && cmsEvaluationService 0 -c $ID"
+
+  # Per-Contest ProxyService for Contest $ID
+  proxy-service-$ID:
+EOF
+        if [ "$DEPLOY_TYPE" = "img" ]; then
+            echo "    image: $CORE_IMAGE" >> "$OUTPUT_FILE"
+        else
+            cat >> "$OUTPUT_FILE" << EOF
+    build:
+      context: .
+      dockerfile: Dockerfile
+EOF
+        fi
+
+        cat >> "$OUTPUT_FILE" << EOF
+    container_name: cms-proxy-service-$ID
+    restart: on-failure:5
+    depends_on:
+      - contest-web-server-$ID
+    environment:
+      CMS_CONFIG: \${CMS_CONFIG:-/usr/local/etc/cms.toml}
+      SERVICE_TYPE: ProxyService
+      SERVICE_SHARD: 0
+      CONTEST_ID: $ID
+    volumes:
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
+      - cms-logs:/var/local/log/cms
+      - cms-cache:/var/local/cache/cms
+    networks:
+      - cms-network
+    ports:
+      - "$((28600 + ID)):28600"
+    command: >
+      sh -c "sleep 5 && cmsProxyService 0 -c $ID"
+
+  # Per-Contest RankingWebServer for Contest $ID
+  ranking-web-server-$ID:
+EOF
+        if [ "$DEPLOY_TYPE" = "img" ]; then
+            echo "    image: $CORE_IMAGE" >> "$OUTPUT_FILE"
+        else
+            cat >> "$OUTPUT_FILE" << EOF
+    build:
+      context: .
+      dockerfile: Dockerfile
+EOF
+        fi
+
+        cat >> "$OUTPUT_FILE" << EOF
+    container_name: cms-ranking-web-server-$ID
+    restart: on-failure:5
+    environment:
+      CMS_RANKING_CONFIG: \${CMS_RANKING_CONFIG:-/usr/local/etc/cms_ranking.toml}
+      RANKING_LISTEN_PORT: 8890
+      RANKING_LISTEN_ADDRESS: 0.0.0.0
+    volumes:
+      - ./config/cms_ranking.toml:/usr/local/etc/cms_ranking.toml:ro
+      - cms-logs:/var/local/log/cms
+      - cms-ranking-data-$ID:/var/local/lib/cms/ranking
+    networks:
+      - cms-network
+    ports:
+      - "$((8890 + ID)):8890"
+    command: >
+      sh -c "sleep 10 && cmsRankingWebServer"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.cms-ranking-$ID.rule=Host(\`ranking-$ID.\${DOMAIN:-cms.local}\`)"
+      - "traefik.http.services.cms-ranking-$ID.loadbalancer.server.port=8890"
 EOF
     fi
 done
@@ -178,6 +282,8 @@ echo "$CONFIG" | grep -o '{[^}]*}' | while read -r line; do
     if [ -n "$ID" ]; then
         echo "  cms-submissions-$ID:" >> "$OUTPUT_FILE"
         echo "    name: cms-submissions-contest-$ID" >> "$OUTPUT_FILE"
+        echo "  cms-ranking-data-$ID:" >> "$OUTPUT_FILE"
+        echo "    name: cms-ranking-data-contest-$ID" >> "$OUTPUT_FILE"
     fi
 done
 

@@ -118,6 +118,7 @@ export async function restartServices(type: 'all' | 'core' | 'worker' | 'custom'
     const rootDir = getRepoRoot();
     let cmd = '';
 
+    // Regenerate env and contest compose
     await execPromise('make env', { cwd: rootDir });
 
     const files = [
@@ -135,12 +136,29 @@ export async function restartServices(type: 'all' | 'core' | 'worker' | 'custom'
     } else if (type === 'custom' && customList && customList.length > 0) {
         const needsContestStack = customList.includes('contest-stack') || customList.some(s => s.startsWith('cms-contest-web-server'));
         const filteredList = customList.filter(s => s !== 'contest-stack' && /^[a-zA-Z0-9_-]+$/.test(s));
-        
+
         if (needsContestStack) {
-            cmd = `docker compose ${files} up -d --remove-orphans --force-recreate ${filteredList.join(' ')}`;
+            cmd = `docker compose ${files} up -d --remove-orphans --force-recreate`;
         } else {
             if (filteredList.length === 0) return { success: true, message: 'Nothing to restart.' };
-            cmd = `docker compose ${files} up -d --force-recreate ${filteredList.join(' ')}`;
+
+            // For per-contest restart, restart all related services
+            const contestServices: string[] = [];
+            filteredList.forEach(service => {
+                if (service.startsWith('cms-contest-web-server-')) {
+                    const contestId = service.replace('cms-contest-web-server-', '');
+                    contestServices.push(
+                        `cms-contest-web-server-${contestId}`,
+                        `cms-evaluation-service-${contestId}`,
+                        `cms-proxy-service-${contestId}`,
+                        `cms-ranking-web-server-${contestId}`
+                    );
+                } else {
+                    contestServices.push(service);
+                }
+            });
+
+            cmd = `docker compose ${files} up -d --force-recreate ${contestServices.join(' ')}`;
         }
     } else {
       cmd = `docker compose ${files} up -d --build`;
@@ -148,9 +166,16 @@ export async function restartServices(type: 'all' | 'core' | 'worker' | 'custom'
 
     await logToDiscord('Service Restart', `Admin triggered restart: **${type}** ${customList ? `(${customList.join(', ')})` : ''}`, 16753920);
 
-    const { stdout } = await execPromise(cmd, { cwd: rootDir });
-    return { success: true, message: `Services (${type}) restarted.` };
+    const { stdout, stderr } = await execPromise(cmd, { cwd: rootDir, timeout: 120000 });
+
+    // Check if command actually succeeded
+    if (stderr && stderr.includes('error')) {
+      return { success: false, error: stderr };
+    }
+
+    return { success: true, message: `Services (${type}) restarted.`, output: stdout };
   } catch (error) {
+    console.error('Restart error:', error);
     return { success: false, error: (error as Error).message };
   }
 }

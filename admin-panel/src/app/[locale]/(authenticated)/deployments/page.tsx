@@ -55,30 +55,39 @@ export default function DeploymentsPage() {
   const handleSave = async (shouldRestart: boolean = false) => {
     setSaving(true);
     const configStr = JSON.stringify(config);
-    const updates = { 
+    const updates = {
         ...globalSettings,
-        CONTESTS_DEPLOY_CONFIG: configStr 
+        CONTESTS_DEPLOY_CONFIG: configStr
     };
-    
-    const result = await updateEnvFile('.env.contest', updates);
-    
-    if (result.success) {
-        setOriginalConfig(configStr);
-        setOriginalGlobal(JSON.stringify(globalSettings));
+
+    try {
+        const result = await updateEnvFile('.env.contest', updates);
+
+        if (!result.success) {
+            alert('Failed to save configuration: ' + result.error);
+            setSaving(false);
+            return;
+        }
+
         if (shouldRestart) {
             const restartRes = await restartServices('custom', ['contest-stack']);
-            if (restartRes.success) {
-                alert('Saved and restarted contest stack successfully!');
-            } else {
-                alert('Saved, but restart failed: ' + restartRes.error);
+            if (!restartRes.success) {
+                alert('Configuration saved, but restart failed: ' + restartRes.error + '\n\nPlease restart manually via: make contest-img');
+                setSaving(false);
+                return;
             }
+            alert('✓ Configuration saved and contest stack restarted successfully!');
         } else {
-            alert('Saved successfully!');
+            alert('✓ Configuration saved successfully! Use "Save & Restart Stack" to apply changes.');
         }
-    } else {
-        alert('Failed to save: ' + result.error);
+
+        setOriginalConfig(configStr);
+        setOriginalGlobal(JSON.stringify(globalSettings));
+    } catch (error) {
+        alert('Unexpected error: ' + (error as Error).message);
+    } finally {
+        setSaving(false);
     }
-    setSaving(false);
   };
 
   const handleGlobalChange = (key: string, val: string) => {
@@ -102,6 +111,26 @@ export default function DeploymentsPage() {
 
   const removeItem = (index: number) => {
     setConfig(config.filter((_, i) => i !== index));
+  };
+
+  const handleRestartContest = async (contestId: number) => {
+    if (!confirm(`Restart all services for Contest ${contestId}?`)) return;
+
+    setSaving(true);
+    try {
+      const serviceName = `cms-contest-web-server-${contestId}`;
+      const res = await restartServices('custom', [serviceName]);
+
+      if (res.success) {
+        alert(`✓ Contest ${contestId} services restarted successfully!`);
+      } else {
+        alert(`Failed to restart Contest ${contestId}: ${res.error}`);
+      }
+    } catch (error) {
+      alert('Error: ' + (error as Error).message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) return <div className="p-8 text-white flex items-center gap-2"><Loader className="animate-spin" /> Loading deployments...</div>;
@@ -343,6 +372,21 @@ export default function DeploymentsPage() {
                                     </div>
                                 </>
                             )}
+                        </div>
+
+                        {/* Instance Actions */}
+                        <div className="flex items-center gap-2 ml-6 pt-2 border-t border-white/5">
+                            <button
+                                onClick={() => handleRestartContest(item.id)}
+                                disabled={saving}
+                                className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 rounded-lg transition-colors text-xs font-medium disabled:opacity-50"
+                            >
+                                <RefreshCw className={`w-3 h-3 ${saving ? 'animate-spin' : ''}`} />
+                                Restart Instance
+                            </button>
+                            <span className="text-[10px] text-neutral-600">
+                                Restarts contest-web-server-{item.id} and related services
+                            </span>
                         </div>
                     </div>
                 ))}
