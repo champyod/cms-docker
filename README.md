@@ -50,16 +50,28 @@ Navigate to **Containers** in the Admin Panel to manage auto-restart policies:
 - All containers use `on-failure:5` policy to prevent infinite restart loops
 
 ### Multi-Contest Deployment
-Run multiple contests with flexible access methods:
-1.  Navigate to **Infrastructure** → **Deployments** in the Admin Panel
-2.  Configure each contest with:
+Run multiple isolated contests with dedicated services:
+
+**Per-Contest Services** (each contest gets its own):
+- ContestWebServer (contestant interface)
+- EvaluationService (submission evaluation)
+- ProxyService (worker communication)
+- RankingWebServer (live scoreboard)
+
+**Configuration**:
+1.  Navigate to **Infrastructure** → **Deployments**
+2.  Add contest instance with:
     - **Contest ID** and **Port**
     - **Access Method**: Public IP, Domain Name, or Tailscale Tunnel
     - **Protocol**: HTTP or HTTPS with TLS certificates
-    - **Domain** for reverse proxy access
-3.  For HTTPS: Provide TLS certificate and key paths
-4.  For Tailscale: Specify Tailscale domain
-5.  Click **Save & Restart Stack** to apply
+3.  Click **Save & Restart Stack** to deploy
+4.  Use **Restart Instance** button to restart individual contest services
+
+**Port Assignments** (per contest ID):
+- Contest UI: `8888 + ID`
+- Evaluation: `25000 + ID`
+- Proxy: `28600 + ID`
+- Ranking: `8890 + ID`
 
 ### Secure Remote Workers (Tailscale)
 For maximum security, remote evaluation workers should connect over a VPN like **Tailscale**.
