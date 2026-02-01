@@ -140,7 +140,7 @@ get_container_restart_config() {
     local config_file="${REPO_ROOT:-$(dirname "$0")/..}/config/container-restart.json"
 
     if [ ! -f "$config_file" ]; then
-        echo "false:5:0"
+        echo "false:5:0:true"
         return
     fi
 
@@ -149,9 +149,10 @@ get_container_restart_config() {
         local auto_restart=$(jq -r ".[\"$container_id\"].autoRestart // false" "$config_file" 2>/dev/null || echo "false")
         local max_restarts=$(jq -r ".[\"$container_id\"].maxRestarts // 5" "$config_file" 2>/dev/null || echo "5")
         local current_restarts=$(jq -r ".[\"$container_id\"].currentRestarts // 0" "$config_file" 2>/dev/null || echo "0")
-        echo "$auto_restart:$max_restarts:$current_restarts"
+        local discord_notifications=$(jq -r ".[\"$container_id\"].discordNotifications // true" "$config_file" 2>/dev/null || echo "true")
+        echo "$auto_restart:$max_restarts:$current_restarts:$discord_notifications"
     else
-        echo "false:5:0"
+        echo "false:5:0:true"
     fi
 }
 
@@ -165,13 +166,19 @@ should_suppress_notification() {
         return 1  # Don't suppress if we can't find container
     fi
 
-    # Get restart count from Docker
-    local restart_count=$(docker inspect "$container_id" --format='{{.RestartCount}}' 2>/dev/null || echo "0")
-
     # Get config
     local config=$(get_container_restart_config "$container_id")
     local auto_restart=$(echo "$config" | cut -d: -f1)
     local max_restarts=$(echo "$config" | cut -d: -f2)
+    local discord_notifications=$(echo "$config" | cut -d: -f4)
+
+    # If Discord notifications are disabled for this container, suppress all notifications
+    if [ "$discord_notifications" = "false" ]; then
+        return 0  # Suppress
+    fi
+
+    # Get restart count from Docker
+    local restart_count=$(docker inspect "$container_id" --format='{{.RestartCount}}' 2>/dev/null || echo "0")
 
     # If auto-restart is disabled and container is dying/restarting, suppress after first notification
     if [ "$auto_restart" = "false" ] && [ "$event_type" = "die" ] || [ "$event_type" = "restart" ]; then

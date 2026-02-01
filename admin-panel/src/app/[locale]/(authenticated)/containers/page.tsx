@@ -5,7 +5,7 @@ import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
 import {
   Play, Square, RotateCcw, Box, RefreshCw,
-  CheckCircle2, AlertCircle, Clock, Cpu, HardDrive, Layers, Terminal, HelpCircle, Settings, Power
+  CheckCircle2, AlertCircle, Clock, Cpu, HardDrive, Layers, Terminal, HelpCircle, Settings, Power, Bell, BellOff
 } from 'lucide-react';
 import Link from 'next/link';
 import { getContainers, controlContainer, runCompose, ContainerInfo } from '@/app/actions/docker';
@@ -14,6 +14,7 @@ import {
   updateContainerConfig,
   resetRestartCount,
   getContainerRestartCount,
+  syncContainerConfigWithDocker,
   ContainerRestartConfig
 } from '@/app/actions/containerConfig';
 import { useToast } from '@/components/providers/ToastProvider';
@@ -37,7 +38,17 @@ export default function ContainersPage() {
 
     // Load container config and restart counts
     const config = await getContainerConfig();
-    setContainerConfig(config);
+
+    // Sync CMS containers with Docker settings
+    for (const container of data) {
+      if (container.isCmsContainer && !config[container.id]) {
+        await syncContainerConfigWithDocker(container.id);
+      }
+    }
+
+    // Reload config after sync
+    const updatedConfig = await getContainerConfig();
+    setContainerConfig(updatedConfig);
 
     // Load restart counts for each container
     const counts: Record<string, number> = {};
@@ -115,6 +126,22 @@ export default function ContainersPage() {
     }
   };
 
+  const handleToggleDiscordNotifications = async (containerId: string, currentValue: boolean) => {
+    const res = await updateContainerConfig(containerId, {
+      discordNotifications: !currentValue,
+    });
+    if (res.success) {
+      addToast({
+        title: 'Success',
+        message: `Discord notifications ${!currentValue ? 'enabled' : 'disabled'}`,
+        type: 'success'
+      });
+      loadContainers();
+    } else {
+      addToast({ title: 'Error', message: res.error, type: 'error' });
+    }
+  };
+
   return (
     <div className="space-y-8">
       {selectedContainer && (
@@ -178,10 +205,11 @@ export default function ContainersPage() {
         </div>
         <div className="divide-y divide-white/5">
           {containers.map((container) => {
-            const config = containerConfig[container.id] || { autoRestart: false, maxRestarts: 5, currentRestarts: 0 };
+            const config = containerConfig[container.id] || { autoRestart: false, maxRestarts: 5, currentRestarts: 0, discordNotifications: true };
             const restartCount = restartCounts[container.id] || 0;
             const autoRestartEnabled = config.autoRestart;
             const maxRestartsReached = restartCount >= config.maxRestarts;
+            const discordEnabled = config.discordNotifications ?? true;
 
             return (
               <div key={container.id} className="p-4 hover:bg-white/[0.02] transition-colors group">
@@ -189,7 +217,12 @@ export default function ContainersPage() {
                   <div className="flex items-center gap-4">
                     <div className={`w-2 h-2 rounded-full ${container.state === 'running' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
                     <div>
-                      <div className="font-bold text-white text-sm group-hover:text-indigo-400 transition-colors">{container.name}</div>
+                      <div className="font-bold text-white text-sm group-hover:text-indigo-400 transition-colors flex items-center gap-2">
+                        {container.name}
+                        {!container.isCmsContainer && (
+                          <span className="px-1.5 py-0.5 bg-neutral-700 text-neutral-400 text-[9px] rounded uppercase font-bold">External</span>
+                        )}
+                      </div>
                       <div className="text-[10px] text-neutral-500 font-mono mt-0.5">{container.image} • {container.id.substring(0, 12)}</div>
                     </div>
                   </div>
@@ -247,47 +280,66 @@ export default function ContainersPage() {
                   </div>
                 </div>
 
-                {/* Restart Policy Info Bar */}
-                <div className="flex items-center gap-3 ml-6 text-xs">
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleToggleAutoRestart(container.id, autoRestartEnabled)}
-                      className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
-                        autoRestartEnabled ? 'bg-emerald-600' : 'bg-neutral-700'
-                      }`}
-                      title={`Auto-restart: ${autoRestartEnabled ? 'Enabled' : 'Disabled'}`}
-                    >
-                      <span
-                        className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
-                          autoRestartEnabled ? 'translate-x-3.5' : 'translate-x-0.5'
-                        }`}
-                      />
-                    </button>
-                    <span className="text-neutral-400">
-                      Auto-restart: <span className={autoRestartEnabled ? 'text-emerald-400' : 'text-neutral-500'}>
-                        {autoRestartEnabled ? 'ON' : 'OFF'}
-                      </span>
-                    </span>
-                  </div>
-
-                  <div className="text-neutral-500">•</div>
-
-                  <div className={`${maxRestartsReached ? 'text-red-400' : 'text-neutral-400'}`}>
-                    Restarts: {restartCount} / {config.maxRestarts}
-                  </div>
-
-                  {maxRestartsReached && (
-                    <>
-                      <div className="text-red-500">• Limit reached!</div>
+                {/* Restart Policy Info Bar - Only for CMS containers */}
+                {container.isCmsContainer && (
+                  <div className="flex items-center gap-3 ml-6 text-xs">
+                    <div className="flex items-center gap-2">
                       <button
-                        onClick={() => handleResetRestartCount(container.id)}
-                        className="text-indigo-400 hover:text-indigo-300 underline"
+                        onClick={() => handleToggleAutoRestart(container.id, autoRestartEnabled)}
+                        className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
+                          autoRestartEnabled ? 'bg-emerald-600' : 'bg-neutral-700'
+                        }`}
+                        title={`Auto-restart: ${autoRestartEnabled ? 'Enabled' : 'Disabled'}`}
                       >
-                        Reset
+                        <span
+                          className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
+                            autoRestartEnabled ? 'translate-x-3.5' : 'translate-x-0.5'
+                          }`}
+                        />
                       </button>
-                    </>
-                  )}
-                </div>
+                      <span className="text-neutral-400">
+                        Auto-restart: <span className={autoRestartEnabled ? 'text-emerald-400' : 'text-neutral-500'}>
+                          {autoRestartEnabled ? 'ON' : 'OFF'}
+                        </span>
+                      </span>
+                    </div>
+
+                    <div className="text-neutral-500">•</div>
+
+                    <div className={`${maxRestartsReached ? 'text-red-400' : 'text-neutral-400'}`}>
+                      Restarts: {restartCount} / {config.maxRestarts}
+                    </div>
+
+                    {maxRestartsReached && (
+                      <>
+                        <div className="text-red-500">• Limit reached!</div>
+                        <button
+                          onClick={() => handleResetRestartCount(container.id)}
+                          className="text-indigo-400 hover:text-indigo-300 underline"
+                        >
+                          Reset
+                        </button>
+                      </>
+                    )}
+
+                    <div className="text-neutral-500">•</div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleToggleDiscordNotifications(container.id, discordEnabled)}
+                        className={`flex items-center gap-1 px-2 py-1 rounded transition-colors ${
+                          discordEnabled
+                            ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30'
+                            : 'bg-neutral-700 text-neutral-500 hover:bg-neutral-600'
+                        }`}
+                        title={`Discord notifications: ${discordEnabled ? 'Enabled' : 'Disabled'}`}
+                      >
+                        {discordEnabled ? <Bell className="w-3 h-3" /> : <BellOff className="w-3 h-3" />}
+                        <span className="text-[10px] font-bold">Discord</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

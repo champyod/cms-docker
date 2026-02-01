@@ -18,6 +18,7 @@ export interface ContainerRestartConfig {
     maxRestarts: number;
     currentRestarts: number;
     lastRestartTime?: number;
+    discordNotifications: boolean;
   };
 }
 
@@ -35,6 +36,7 @@ export async function updateContainerConfig(containerId: string, config: {
   autoRestart?: boolean;
   maxRestarts?: number;
   currentRestarts?: number;
+  discordNotifications?: boolean;
 }) {
   await ensurePermission('all');
   try {
@@ -45,12 +47,15 @@ export async function updateContainerConfig(containerId: string, config: {
       maxRestarts: config.maxRestarts ?? currentConfig[containerId]?.maxRestarts ?? 5,
       currentRestarts: config.currentRestarts ?? currentConfig[containerId]?.currentRestarts ?? 0,
       lastRestartTime: currentConfig[containerId]?.lastRestartTime,
+      discordNotifications: config.discordNotifications ?? currentConfig[containerId]?.discordNotifications ?? true,
     };
 
     await writeFile(CONFIG_PATH(), JSON.stringify(currentConfig, null, 2));
 
     // Update Docker container restart policy
-    await updateDockerRestartPolicy(containerId, currentConfig[containerId].autoRestart, currentConfig[containerId].maxRestarts);
+    if (config.autoRestart !== undefined) {
+      await updateDockerRestartPolicy(containerId, currentConfig[containerId].autoRestart, currentConfig[containerId].maxRestarts);
+    }
 
     return { success: true };
   } catch (error) {
@@ -101,15 +106,40 @@ export async function getContainerRestartCount(containerId: string): Promise<num
   }
 }
 
+export async function syncContainerConfigWithDocker(containerId: string) {
+  await ensurePermission('all');
+  try {
+    // Get Docker restart policy
+    const { stdout } = await execPromise(`docker inspect ${containerId} --format='{{.HostConfig.RestartPolicy.Name}}:{{.HostConfig.RestartPolicy.MaximumRetryCount}}'`);
+    const [policyName, maxRetries] = stdout.trim().split(':');
+
+    const config = await getContainerConfig();
+    const currentConfig = config[containerId] || {};
+
+    // Sync with Docker settings
+    const dockerAutoRestart = policyName === 'on-failure' || policyName === 'always' || policyName === 'unless-stopped';
+    const dockerMaxRestarts = policyName === 'on-failure' ? parseInt(maxRetries) || 5 : 999;
+
+    await updateContainerConfig(containerId, {
+      autoRestart: dockerAutoRestart,
+      maxRestarts: dockerMaxRestarts,
+      currentRestarts: currentConfig.currentRestarts || 0,
+      discordNotifications: currentConfig.discordNotifications ?? true,
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to sync container config:', error);
+    return { success: false, error: (error as Error).message };
+  }
+}
+
 export async function initializeContainerConfig(containerId: string, containerName: string) {
   await ensurePermission('all');
   const config = await getContainerConfig();
 
   if (!config[containerId]) {
-    await updateContainerConfig(containerId, {
-      autoRestart: false,
-      maxRestarts: 5,
-      currentRestarts: 0,
-    });
+    // Sync with Docker first
+    await syncContainerConfigWithDocker(containerId);
   }
 }

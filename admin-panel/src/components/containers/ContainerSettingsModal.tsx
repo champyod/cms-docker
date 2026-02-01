@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
-import { X, Settings, Power, RotateCcw } from 'lucide-react';
+import { X, Settings, Power, RotateCcw, Bell } from 'lucide-react';
 import { updateContainerConfig, resetRestartCount } from '@/app/actions/containerConfig';
 import { useToast } from '@/components/providers/ToastProvider';
 
@@ -14,6 +14,7 @@ interface ContainerSettingsModalProps {
     autoRestart: boolean;
     maxRestarts: number;
     currentRestarts: number;
+    discordNotifications: boolean;
   };
   onClose: () => void;
   onUpdate: () => void;
@@ -28,6 +29,7 @@ export function ContainerSettingsModal({
 }: ContainerSettingsModalProps) {
   const [autoRestart, setAutoRestart] = useState(config.autoRestart);
   const [maxRestarts, setMaxRestarts] = useState(config.maxRestarts);
+  const [discordNotifications, setDiscordNotifications] = useState(config.discordNotifications ?? true);
   const [saving, setSaving] = useState(false);
   const { addToast } = useToast();
 
@@ -36,6 +38,7 @@ export function ContainerSettingsModal({
     const res = await updateContainerConfig(containerId, {
       autoRestart,
       maxRestarts,
+      discordNotifications,
     });
 
     if (res.success) {
@@ -138,6 +141,41 @@ export function ContainerSettingsModal({
             </p>
           </div>
 
+          {/* Discord Notifications */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-sm font-bold text-white flex items-center gap-2">
+                  <Bell className="w-4 h-4 text-blue-400" />
+                  Discord Notifications
+                </label>
+                <p className="text-xs text-neutral-400 mt-1">
+                  Send container events (start/stop/die/restart) to Discord webhook
+                </p>
+              </div>
+              <button
+                onClick={() => setDiscordNotifications(!discordNotifications)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  discordNotifications ? 'bg-blue-600' : 'bg-neutral-700'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    discordNotifications ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {!discordNotifications && (
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
+                <p className="text-xs text-amber-300">
+                  ⚠️ Discord notifications disabled. Container events will not be sent to webhook.
+                </p>
+              </div>
+            )}
+          </div>
+
           {/* Current Status */}
           <div className="bg-black/40 border border-white/5 rounded-lg p-4 space-y-2">
             <div className="text-xs font-bold text-neutral-400">CURRENT STATUS</div>
@@ -151,6 +189,12 @@ export function ContainerSettingsModal({
               <span className="text-sm text-neutral-300">Restart Count</span>
               <span className={`text-sm font-bold ${config.currentRestarts >= config.maxRestarts ? 'text-red-400' : 'text-indigo-400'}`}>
                 {config.currentRestarts} / {config.maxRestarts}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-neutral-300">Discord Alerts</span>
+              <span className={`text-sm font-bold ${config.discordNotifications ? 'text-blue-400' : 'text-neutral-500'}`}>
+                {config.discordNotifications ? 'ENABLED' : 'DISABLED'}
               </span>
             </div>
             {config.currentRestarts >= config.maxRestarts && (
