@@ -2,6 +2,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
+import { ensurePermission } from '@/lib/permissions';
 
 // Get participation details
 export async function getParticipation(participationId: number) {
@@ -28,6 +29,8 @@ export async function updateParticipation(participationId: number, data: {
   ip?: string;
   starting_time?: string | null;
 }) {
+  await ensurePermission('contests');
+
   try {
     const extraTime = data.extra_time_seconds ?? 0;
     const delayTime = data.delay_time_seconds ?? 0;
@@ -71,6 +74,8 @@ export async function updateParticipation(participationId: number, data: {
 
 // Mark user as test user (hidden + unrestricted)
 export async function setTestUser(participationId: number) {
+  await ensurePermission('contests');
+
   try {
     await prisma.participations.update({
       where: { id: participationId },
@@ -93,6 +98,8 @@ export async function addTeamToContest(
   teamId: number,
   options: { hidden?: boolean; unrestricted?: boolean } = {}
 ) {
+  await ensurePermission('contests');
+
   try {
     // Get all users that have participations with this team in any contest
     const teamParticipations = await prisma.participations.findMany({
@@ -180,6 +187,8 @@ export async function sendMessage(participationId: number, adminId: number, data
   subject: string;
   text: string;
 }) {
+  await ensurePermission('messaging');
+
   try {
     await prisma.messages.create({
       data: {

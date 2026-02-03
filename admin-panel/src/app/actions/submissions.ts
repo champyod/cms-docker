@@ -1,6 +1,7 @@
 'use server'
 
 import { prisma } from '@/lib/prisma';
+import { ensurePermission } from '@/lib/permissions';
 
 const SUBMISSIONS_PER_PAGE = 20;
 
@@ -95,6 +96,8 @@ export async function getSubmission(submissionId: number) {
 
 // Update submission comment
 export async function updateSubmissionComment(submissionId: number, comment: string) {
+    await ensurePermission('messaging');
+
     try {
         await prisma.submissions.update({
             where: { id: submissionId },
@@ -109,6 +112,8 @@ export async function updateSubmissionComment(submissionId: number, comment: str
 
 // Toggle official status
 export async function toggleSubmissionOfficial(submissionId: number) {
+    await ensurePermission('contests');
+
     try {
         const sub = await prisma.submissions.findUnique({ where: { id: submissionId } });
         if (!sub) return { success: false, error: 'Submission not found' };
@@ -126,6 +131,8 @@ export async function toggleSubmissionOfficial(submissionId: number) {
 
 // Recalculate a submission's score/evaluation
 export async function recalculateSubmission(submissionId: number, type: 'score' | 'evaluation' | 'full' = 'score') {
+  await ensurePermission('contests');
+
   try {
     // Get the submission
     const submission = await prisma.submissions.findUnique({

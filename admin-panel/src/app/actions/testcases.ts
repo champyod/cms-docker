@@ -2,6 +2,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
+import { ensurePermission } from '@/lib/permissions';
 
 // Add a single testcase
 export async function addTestcase(datasetId: number, data: {
@@ -10,6 +11,8 @@ export async function addTestcase(datasetId: number, data: {
   outputDigest: string;
   isPublic: boolean;
 }) {
+  await ensurePermission('tasks');
+
   try {
     await prisma.testcases.create({
       data: {
@@ -33,6 +36,8 @@ export async function addTestcase(datasetId: number, data: {
 
 // Delete a testcase
 export async function deleteTestcase(testcaseId: number) {
+  await ensurePermission('tasks');
+
   try {
     await prisma.testcases.delete({
       where: { id: testcaseId }
@@ -47,6 +52,8 @@ export async function deleteTestcase(testcaseId: number) {
 
 // Toggle testcase public flag
 export async function toggleTestcasePublic(testcaseId: number) {
+  await ensurePermission('tasks');
+
   try {
     const tc = await prisma.testcases.findUnique({
       where: { id: testcaseId }
@@ -71,6 +78,8 @@ export async function toggleTestcasePublic(testcaseId: number) {
 
 // Update testcase public status in bulk
 export async function updateTestcasesPublic(testcaseIds: number[], isPublic: boolean) {
+  await ensurePermission('tasks');
+
   try {
     await prisma.testcases.updateMany({
       where: { id: { in: testcaseIds } },
@@ -120,6 +129,8 @@ export async function batchUploadTestcases(datasetId: number, testcases: {
   outputBase64: string;
   isPublic: boolean;
 }[]) {
+  await ensurePermission('tasks');
+
   try {
     for (const tc of testcases) {
       // Decode and store input
