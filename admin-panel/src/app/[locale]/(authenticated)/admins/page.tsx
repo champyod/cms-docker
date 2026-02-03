@@ -1,7 +1,16 @@
 import { getAdmins } from '@/app/actions/admins';
 import { AdminList } from '@/components/admins/AdminList';
+import { checkPermission } from '@/lib/permissions';
+import { redirect } from 'next/navigation';
 
-export default async function AdminsPage() {
+export default async function AdminsPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  if (!await checkPermission('all', false)) redirect(`/${locale}`);
+
   const admins = await getAdmins();
 
   return (

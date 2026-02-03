@@ -1,15 +1,18 @@
 import { getTask } from '@/app/actions/tasks';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { TaskDetailView } from '@/components/tasks/TaskDetailView';
+import { checkPermission } from '@/lib/permissions';
 
 export default async function TaskDetailPage({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params: Promise<{ id: string; locale: string }>;
 }) {
-  const { id } = await params;
+  const { id, locale } = await params;
+  if (!await checkPermission('tasks', false)) redirect(`/${locale}`);
+
   const taskId = parseInt(id, 10);
-  
+
   if (isNaN(taskId)) {
     notFound();
   }

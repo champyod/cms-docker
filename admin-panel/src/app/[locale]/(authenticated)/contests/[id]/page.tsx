@@ -1,7 +1,8 @@
 import { prisma } from '@/lib/prisma';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { ContestDetailView } from '@/components/contests/ContestDetailView';
 import { getCurrentUser } from '@/app/actions/auth';
+import { checkPermission } from '@/lib/permissions';
 
 async function getContest(id: number) {
   const contest = await prisma.contests.findUnique({
@@ -44,11 +45,13 @@ async function getTeams() {
 export default async function ContestDetailPage({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params: Promise<{ id: string; locale: string }>;
 }) {
-  const { id } = await params;
+  const { id, locale } = await params;
+  if (!await checkPermission('contests', false)) redirect(`/${locale}`);
+
   const contestId = parseInt(id, 10);
-  
+
   if (isNaN(contestId)) {
     notFound();
   }

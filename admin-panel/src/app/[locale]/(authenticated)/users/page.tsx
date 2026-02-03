@@ -1,6 +1,8 @@
 import { getUsers } from '@/app/actions/users';
 import { UserList } from '@/components/users/UserList';
 import { getDictionary } from '@/i18n';
+import { checkPermission } from '@/lib/permissions';
+import { redirect } from 'next/navigation';
 
 export default async function UsersPage({
   params,
@@ -10,10 +12,12 @@ export default async function UsersPage({
     searchParams: Promise<{ page?: string; search?: string }>;
 }) {
   const { locale } = await params;
+  if (!await checkPermission('users', false)) redirect(`/${locale}`);
+
   const sParams = await searchParams;
   const page = Number(sParams.page) || 1;
   const search = sParams.search || '';
-  
+
   const { users, totalPages } = await getUsers({ page, search });
   const dict = await getDictionary(locale);
 

@@ -1,6 +1,8 @@
 import { getSubmissions } from '@/app/actions/submissions';
 import { SubmissionList } from '@/components/submissions/SubmissionList';
 import { getDictionary } from '@/i18n';
+import { checkPermission } from '@/lib/permissions';
+import { redirect } from 'next/navigation';
 
 export default async function SubmissionsPage({
   params,
@@ -10,6 +12,8 @@ export default async function SubmissionsPage({
     searchParams: Promise<{ page?: string; search?: string }>;
 }) {
   const { locale } = await params;
+  if (!await checkPermission('contests', false)) redirect(`/${locale}`);
+
   const sParams = await searchParams;
   const page = Number(sParams.page) || 1;
   
