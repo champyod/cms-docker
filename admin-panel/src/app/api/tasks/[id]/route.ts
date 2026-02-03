@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { sanitize, verifyApiAuth, apiError, apiSuccess } from '@/lib/api-utils';
+import { sanitize, verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 
@@ -7,7 +7,7 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { authorized, response } = await verifyApiAuth();
+  const { authorized, response } = await verifyApiPermission('tasks');
   if (!authorized) return response;
 
   const id = parseInt((await params).id);
@@ -120,7 +120,7 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { authorized, response } = await verifyApiAuth();
+  const { authorized, response } = await verifyApiPermission('tasks');
   if (!authorized) return response;
 
   const id = parseInt((await params).id);
