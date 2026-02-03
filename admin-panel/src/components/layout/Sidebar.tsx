@@ -90,6 +90,7 @@ export const Sidebar: React.FC<{
     permission_tasks: boolean;
     permission_users: boolean;
     permission_contests: boolean;
+    permission_messaging: boolean;
   }
 }> = ({ className, locale, permissions }) => {
   const [collapsed, setCollapsed] = React.useState(false);
@@ -140,7 +141,7 @@ export const Sidebar: React.FC<{
           <SidebarGroup label="Contest" icon={Trophy} collapsed={collapsed}>
             {canManageContests && <SidebarItem icon={Trophy} label="Contests" href={`/${locale}/contests`} collapsed={collapsed} />}
             {canManageTasks && <SidebarItem icon={FileCode} label="Tasks" href={`/${locale}/tasks`} collapsed={collapsed} />}
-            <SidebarItem icon={Activity} label="Submissions" href={`/${locale}/submissions`} collapsed={collapsed} />
+            {canManageContests && <SidebarItem icon={Activity} label="Submissions" href={`/${locale}/submissions`} collapsed={collapsed} />}
             {canManageUsers && <SidebarItem icon={Users} label="Users" href={`/${locale}/users`} collapsed={collapsed} />}
             {canManageUsers && <SidebarItem icon={Users} label="Teams" href={`/${locale}/teams`} collapsed={collapsed} />}
           </SidebarGroup>
