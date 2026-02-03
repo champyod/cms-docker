@@ -39,6 +39,7 @@ export async function login(prevState: any, formData: FormData) {
       permission_tasks: admin.permission_tasks,
       permission_users: admin.permission_users,
       permission_contests: admin.permission_contests,
+      permission_messaging: admin.permission_messaging,
     });
     
   } catch (error) {
