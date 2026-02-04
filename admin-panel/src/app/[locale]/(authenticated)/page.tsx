@@ -8,9 +8,11 @@ import {
   ArrowUpRight,
   Clock,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  AlertTriangle
 } from 'lucide-react';
 import { prisma } from '@/lib/prisma';
+import { getServiceStatus } from '@/app/actions/services';
 
 async function getStats() {
   const [
@@ -51,13 +53,47 @@ async function getStats() {
   };
 }
 
+async function getRecentActivity() {
+  const submissions = await prisma.submissions.findMany({
+    take: 10,
+    orderBy: { timestamp: 'desc' },
+    include: {
+      tasks: { select: { name: true } },
+      participations: {
+        include: {
+          users: { select: { username: true } }
+        }
+      }
+    }
+  });
+
+  return submissions.map(s => ({
+    id: s.id,
+    timestamp: s.timestamp,
+    username: s.participations?.users?.username ?? 'Unknown',
+    taskName: s.tasks?.name ?? 'Unknown',
+  }));
+}
+
 export default async function DashboardPage({
   params: { locale },
 }: {
   params: { locale: string };
 }) {
   const dict = await getDictionary(locale);
-  const stats = await getStats();
+  const [stats, serviceStatus, recentActivity] = await Promise.all([
+    getStats(),
+    getServiceStatus(),
+    getRecentActivity(),
+  ]);
+
+  const statusConfig = {
+    ok: { label: 'Normal', color: 'text-green-500', bgColor: 'bg-green-500/10', textColor: 'text-green-400', icon: CheckCircle2, detail: 'All services operational' },
+    degraded: { label: 'Degraded', color: 'text-amber-500', bgColor: 'bg-amber-500/10', textColor: 'text-amber-400', icon: AlertTriangle, detail: `${(serviceStatus as any).running ?? 0}/${(serviceStatus as any).total ?? 0} containers running` },
+    down: { label: 'Down', color: 'text-red-500', bgColor: 'bg-red-500/10', textColor: 'text-red-400', icon: AlertCircle, detail: 'Services unavailable' },
+  };
+  const sc = statusConfig[serviceStatus.status] || statusConfig.down;
+  const StatusIcon = sc.icon;
 
   return (
     <div className="space-y-8">
@@ -137,14 +173,14 @@ export default async function DashboardPage({
           <div className="flex justify-between items-start z-10">
             <div>
               <p className="text-sm font-medium text-neutral-400">System Status</p>
-              <h3 className="text-3xl font-bold mt-2 text-green-500">Normal</h3>
+              <h3 className={`text-3xl font-bold mt-2 ${sc.color}`}>{sc.label}</h3>
             </div>
-            <div className="p-2 bg-green-500/10 rounded-lg text-green-400">
-              <CheckCircle2 className="w-5 h-5" />
+            <div className={`p-2 ${sc.bgColor} rounded-lg ${sc.textColor}`}>
+              <StatusIcon className="w-5 h-5" />
             </div>
           </div>
-          <div className="flex items-center gap-2 text-sm text-green-400 z-10">
-            <span>All services operational</span>
+          <div className={`flex items-center gap-2 text-sm ${sc.textColor} z-10`}>
+            <span>{sc.detail}</span>
           </div>
         </Card>
       </div>
@@ -152,9 +188,31 @@ export default async function DashboardPage({
       {/* Recent Activity Section */}
       <h2 className="text-xl font-semibold text-white mt-8">Recent Activity</h2>
       <Card className="p-6 overflow-hidden">
-        <div className="flex items-center justify-center py-12 text-neutral-500">
-          No recent activity to display
-        </div>
+        {recentActivity.length > 0 ? (
+          <div className="space-y-3">
+            {recentActivity.map((item) => (
+              <div key={item.id} className="flex items-center gap-4 p-3 rounded-lg bg-white/5 border border-white/5">
+                <div className="p-2 bg-cyan-500/10 rounded-lg text-cyan-400">
+                  <FileCode className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-white truncate">
+                    <span className="font-medium text-indigo-400">{item.username}</span>
+                    {' submitted to '}
+                    <span className="font-medium text-amber-400">{item.taskName}</span>
+                  </p>
+                </div>
+                <div className="text-xs text-neutral-500 whitespace-nowrap">
+                  {item.timestamp ? new Date(item.timestamp).toLocaleString() : ''}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex items-center justify-center py-12 text-neutral-500">
+            No recent activity to display
+          </div>
+        )}
       </Card>
     </div>
   );

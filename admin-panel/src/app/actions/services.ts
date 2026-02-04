@@ -11,22 +11,27 @@ const execPromise = util.promisify(exec);
 
 const getRepoRoot = () => process.env.IS_DOCKER === 'true' ? '/repo-root' : path.resolve(process.cwd(), '..');
 
-async function logToDiscord(title: string, message: string, color: number = 3447003) {
+async function logToDiscord(title: string, message: string, color: number = 3447003, mention: boolean = false) {
     const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
     if (!webhookUrl) return;
 
     try {
+        const roleId = process.env.DISCORD_ROLE_ID;
+        const payload: any = {
+            embeds: [{
+                title,
+                description: message,
+                color,
+                timestamp: new Date().toISOString()
+            }]
+        };
+        if (mention && roleId) {
+            payload.content = `<@&${roleId}>`;
+        }
         await fetch(webhookUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                embeds: [{
-                    title,
-                    description: message,
-                    color,
-                    timestamp: new Date().toISOString()
-                }]
-            })
+            body: JSON.stringify(payload)
         });
     } catch (e) {
         console.error('Failed to send discord log:', e);
@@ -52,7 +57,7 @@ export async function switchContest(contestId: number) {
     const cmd = `make env && docker compose -f docker-compose.contest.yml up -d --build`;
     await execPromise(cmd, { cwd: rootDir });
 
-    await logToDiscord('Contest Switch', `Admin switched active contest to ID: **${contestId}**`, 16753920);
+    await logToDiscord('Contest Switch', `Admin switched active contest to ID: **${contestId}**`, 16753920, true);
 
     revalidatePath('/[locale]/contests');
     return { success: true, message: 'Contest switched and services restarting...' };
@@ -184,7 +189,7 @@ export async function restartServices(type: 'all' | 'core' | 'admin' | 'worker' 
       cmd = `docker compose ${files} up -d --build`;
     }
 
-    await logToDiscord('Service Restart', `Admin triggered restart: **${type}** ${customList ? `(${customList.join(', ')})` : ''}`, 16753920);
+    await logToDiscord('Service Restart', `Admin triggered restart: **${type}** ${customList ? `(${customList.join(', ')})` : ''}`, 16753920, true);
 
     const { stdout, stderr } = await execPromise(cmd, { cwd: rootDir, timeout: 120000 });
 
@@ -214,5 +219,30 @@ export async function triggerManualBackup() {
 }
 
 export async function getServiceStatus() {
-    return { status: 'ok' };
+    try {
+        const { stdout } = await execPromise('docker ps -a --format "{{json .}}"');
+        if (!stdout.trim()) return { status: 'down' as const, running: 0, total: 0 };
+
+        const lines = stdout.trim().split('\n');
+        let running = 0;
+        let total = 0;
+
+        for (const line of lines) {
+            const parsed = JSON.parse(line);
+            const name = parsed.Names || '';
+            if (name.startsWith('cms-') || name.includes('cms')) {
+                total++;
+                if (parsed.State === 'running') running++;
+            }
+        }
+
+        const status = total === 0 ? 'down' as const
+            : running === total ? 'ok' as const
+            : running === 0 ? 'down' as const
+            : 'degraded' as const;
+
+        return { status, running, total };
+    } catch {
+        return { status: 'down' as const, running: 0, total: 0 };
+    }
 }
