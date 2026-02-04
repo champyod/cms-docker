@@ -8,6 +8,9 @@ import {
   Save, RefreshCw, Loader, AlertTriangle, 
   Database, Bell, Clock, Shield, Trash2, Zap
 } from 'lucide-react';
+import { PageContent, PageHeader, Stack } from '@/components/core/Layout';
+import { Text } from '@/components/core/Typography';
+import { Loading } from '@/components/core/Loading';
 
 export default function MaintenancePage() {
   const [data, setData] = useState<Record<string, string>>({});
@@ -55,41 +58,41 @@ export default function MaintenancePage() {
     setBackingUp(false);
   };
 
-  if (loading) return <div className="p-8 text-white flex items-center gap-2"><Loader className="animate-spin" /> Loading maintenance...</div>;
+  if (loading) return <Loading text="Loading maintenance..." fullScreen />;
 
   return (
-    <div className="space-y-8 p-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white mb-2">Maintenance & Backups</h1>
-          <p className="text-neutral-400">Configure automated backups and system notifications.</p>
-        </div>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex items-center gap-2 px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors disabled:opacity-50 font-medium"
-        >
-          <Save className="w-4 h-4" />
-          {saving ? 'Saving...' : 'Save Settings'}
-        </button>
-      </div>
+    <PageContent>
+      <PageHeader 
+        title="Maintenance & Backups"
+        description="Configure automated backups and system notifications."
+        actions={
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-2 px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors disabled:opacity-50 font-medium shadow-lg shadow-indigo-900/20"
+          >
+            <Save className="w-4 h-4" />
+            {saving ? 'Saving...' : 'Save Settings'}
+          </button>
+        }
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Backup Section */}
-        <div className="space-y-6">
+        <Stack gap={6}>
             <Card className="glass-card border-white/5 p-6 h-full">
-                <div className="flex items-center gap-3 mb-6">
+                <Stack direction="row" align="center" gap={3} className="mb-6">
                     <div className="p-2 bg-emerald-500/10 rounded-lg">
                         <Database className="w-5 h-5 text-emerald-400" />
                     </div>
-                    <h2 className="text-xl font-bold text-white">Submissions Backup</h2>
-                </div>
+                    <Text variant="h2">Submissions Backup</Text>
+                </Stack>
 
-                <div className="space-y-6">
-                    <div className="space-y-4">
+                <Stack gap={6}>
+                    <Stack gap={4}>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                                <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Backup Interval (min)</label>
+                            <Stack gap={1}>
+                                <Text variant="label">Backup Interval (min)</Text>
                                 <input 
                                     type="number" 
                                     value={data.BACKUP_INTERVAL_MINS || ''} 
@@ -97,9 +100,9 @@ export default function MaintenancePage() {
                                     className="w-full bg-black/40 px-4 py-2 rounded-lg border border-white/10 text-white outline-none focus:border-emerald-500/50"
                                     placeholder="1440 (24h)"
                                 />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Max Count</label>
+                            </Stack>
+                            <Stack gap={1}>
+                                <Text variant="label">Max Count</Text>
                                 <input 
                                     type="number" 
                                     value={data.BACKUP_MAX_COUNT || ''} 
@@ -107,12 +110,12 @@ export default function MaintenancePage() {
                                     className="w-full bg-black/40 px-4 py-2 rounded-lg border border-white/10 text-white outline-none focus:border-emerald-500/50"
                                     placeholder="50"
                                 />
-                            </div>
+                            </Stack>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                                <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Max Age (days)</label>
+                            <Stack gap={1}>
+                                <Text variant="label">Max Age (days)</Text>
                                 <input 
                                     type="number" 
                                     value={data.BACKUP_MAX_AGE_DAYS || ''} 
@@ -120,9 +123,9 @@ export default function MaintenancePage() {
                                     className="w-full bg-black/40 px-4 py-2 rounded-lg border border-white/10 text-white outline-none focus:border-emerald-500/50"
                                     placeholder="10"
                                 />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Storage Limit (GB)</label>
+                            </Stack>
+                            <Stack gap={1}>
+                                <Text variant="label">Storage Limit (GB)</Text>
                                 <input 
                                     type="number" 
                                     value={data.BACKUP_MAX_SIZE_GB || ''} 
@@ -130,11 +133,11 @@ export default function MaintenancePage() {
                                     className="w-full bg-black/40 px-4 py-2 rounded-lg border border-white/10 text-white outline-none focus:border-emerald-500/50"
                                     placeholder="5"
                                 />
-                            </div>
+                            </Stack>
                         </div>
-                    </div>
+                    </Stack>
 
-                    <div className="pt-4 border-t border-white/5">
+                    <Stack gap={2} className="pt-4 border-t border-white/5">
                         <button
                             onClick={handleBackup}
                             disabled={backingUp}
@@ -143,28 +146,28 @@ export default function MaintenancePage() {
                             {backingUp ? <Loader className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
                             Trigger Manual Backup Now
                         </button>
-                        <p className="text-[10px] text-neutral-500 mt-2 text-center italic">
+                        <Text variant="small" color="text-neutral-500" className="text-center italic opacity-50">
                             Manual backups also respect cleanup policies.
-                        </p>
-                    </div>
-                </div>
+                        </Text>
+                    </Stack>
+                </Stack>
             </Card>
-        </div>
+        </Stack>
 
         {/* Discord Section */}
-        <div className="space-y-6">
+        <Stack gap={6}>
             <Card className="glass-card border-white/5 p-6 h-full">
-                <div className="flex items-center gap-3 mb-6">
+                <Stack direction="row" align="center" gap={3} className="mb-6">
                     <div className="p-2 bg-indigo-500/10 rounded-lg">
                         <Bell className="w-5 h-5 text-indigo-400" />
                     </div>
-                    <h2 className="text-xl font-bold text-white">Discord Notifications</h2>
-                </div>
+                    <Text variant="h2">Discord Notifications</Text>
+                </Stack>
 
-                <div className="space-y-6">
-                    <div className="space-y-4">
-                        <div className="space-y-1">
-                            <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Webhook URL</label>
+                <Stack gap={6}>
+                    <Stack gap={4}>
+                        <Stack gap={1}>
+                            <Text variant="label">Webhook URL</Text>
                             <input 
                                 type="password" 
                                 value={data.DISCORD_WEBHOOK_URL || ''} 
@@ -172,9 +175,9 @@ export default function MaintenancePage() {
                                 className="w-full bg-black/40 px-4 py-2 rounded-lg border border-white/10 text-white outline-none focus:border-indigo-500/50 font-mono text-sm"
                                 placeholder="https://discord.com/api/webhooks/..."
                             />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Mention Role ID (Optional)</label>
+                        </Stack>
+                        <Stack gap={1}>
+                            <Text variant="label">Mention Role ID (Optional)</Text>
                             <input 
                                 type="text" 
                                 value={data.DISCORD_ROLE_ID || ''} 
@@ -182,14 +185,14 @@ export default function MaintenancePage() {
                                 className="w-full bg-black/40 px-4 py-2 rounded-lg border border-white/10 text-white outline-none focus:border-indigo-500/50 font-mono text-sm"
                                 placeholder="Role ID to tag in alerts"
                             />
-                        </div>
-                    </div>
+                        </Stack>
+                    </Stack>
 
-                    <div className="p-4 bg-black/20 rounded-xl border border-white/5">
-                        <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2">
+                    <Stack gap={2} className="p-4 bg-black/20 rounded-xl border border-white/5">
+                        <Stack direction="row" align="center" gap={2} className="mb-2">
                             <Shield className="w-4 h-4 text-indigo-400" />
-                            Active Monitoring
-                        </h3>
+                            <Text variant="h4">Active Monitoring</Text>
+                        </Stack>
                         <ul className="text-xs text-neutral-400 space-y-2">
                             <li className="flex items-center gap-2">
                                 <span className="w-1 h-1 rounded-full bg-indigo-500" />
@@ -208,10 +211,11 @@ export default function MaintenancePage() {
                                 Admin Panel Actions (Switch Contest, manual restarts)
                             </li>
                         </ul>
-                    </div>
-                </div>
+                    </Stack>
+                </Stack>
             </Card>
-        </div>
+        </Stack>
+      </div>
       </div>
     </div>
   );
