@@ -3,8 +3,8 @@
 import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { 
-  Home, Users, Trophy, Settings, LogOut, ChevronRight, 
-  FileCode, Activity, Shield, Box, Rocket, Wrench, ChevronDown, LayoutDashboard, Database
+  Home, Users, Trophy, Settings, LogOut, ChevronRight,
+  FileCode, Activity, Shield, Box, Rocket, Wrench, ChevronDown, LayoutDashboard, Database, BookOpen
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -18,7 +18,8 @@ interface SidebarItemProps {
 
 const SidebarItem: React.FC<SidebarItemProps> = ({ icon: Icon, label, href, collapsed }) => {
   const pathname = usePathname();
-  const isActive = pathname === href || (href !== '/en' && pathname.startsWith(href));
+  const locale = pathname.split('/')[1] || 'en';
+  const isActive = pathname === href || (href !== `/${locale}` && pathname.startsWith(href));
 
   return (
     <Link
@@ -160,6 +161,7 @@ export const Sidebar: React.FC<{
 
         {/* Footer actions */}
         <div className="mt-auto pt-4 border-t border-white/5 space-y-2">
+          <SidebarItem icon={BookOpen} label="Documentation" href={`/${locale}/docs`} collapsed={collapsed} />
           <a href={`/${locale}/auth/signout`} className={cn(
                "flex items-center w-full p-2.5 rounded-xl transition-all duration-200 group relative hover:bg-white/5 text-slate-400 hover:text-white",
                 collapsed && "justify-center"

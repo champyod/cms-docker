@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/core/Button';
 import { Eye, Clock, User as UserIcon, FileCode, Trophy, HelpCircle } from 'lucide-react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { SubmissionModal } from './SubmissionModal';
 import { useRouter } from 'next/navigation';
 
@@ -13,6 +14,8 @@ import { SubmissionWithRelations } from '@/types';
 export function SubmissionList({ initialSubmissions, totalPages, currentPage }: { initialSubmissions: SubmissionWithRelations[], totalPages: number, currentPage: number }) {
   const [submissions] = useState(initialSubmissions);
   const [selectedSubmission, setSelectedSubmission] = useState<SubmissionWithRelations | null>(null);
+  const pathname = usePathname();
+  const locale = pathname.split('/')[1] || 'en';
   const router = useRouter();
 
   const handleView = (submission: SubmissionWithRelations) => {
@@ -37,7 +40,7 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage }: 
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-3">
           <h2 className="text-xl font-bold text-white">All Submissions</h2>
-          <Link href="/en/docs#submissions" className="p-1 hover:bg-white/10 rounded-full transition-colors text-neutral-400 hover:text-white" title="View Documentation">
+          <Link href={`/${locale}/docs#submissions`} className="p-1 hover:bg-white/10 rounded-full transition-colors text-neutral-400 hover:text-white" title="View Documentation">
             <HelpCircle className="w-4 h-4" />
           </Link>
         </div>

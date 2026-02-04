@@ -10,7 +10,7 @@ import { useRouter } from 'next/navigation';
 export const Header: React.FC<{ className?: string; username?: string }> = ({ className, username }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [hasNotifications, setHasNotifications] = useState(false);
-  const [lastCheckTime, setLastCheckTime] = useState(Date.now());
+  const lastCheckTimeRef = useRef(Date.now());
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const { addToast } = useToast();
   const router = useRouter();
@@ -43,14 +43,14 @@ export const Header: React.FC<{ className?: string; username?: string }> = ({ cl
           const latest = questions[0];
           const qTime = new Date(latest.question_timestamp).getTime();
 
-          if (qTime > lastCheckTime) {
+          if (qTime > lastCheckTimeRef.current) {
             addToast({
               type: 'warning',
               title: 'New Question Received!',
               message: `From ${latest.participations?.users?.username || 'User'}: ${latest.subject.substring(0, 30)}...`,
               duration: Infinity // Persistent as requested
             });
-            setLastCheckTime(Date.now());
+            lastCheckTimeRef.current = Date.now();
           }
         } else {
           setHasNotifications(false);
@@ -68,15 +68,13 @@ export const Header: React.FC<{ className?: string; username?: string }> = ({ cl
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [addToast, lastCheckTime]);
+  }, [addToast]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    // Simple implementation: just console log for now or maybe filter query param?
-    console.log('Searching for:', searchQuery);
     if (searchQuery.trim()) {
-      // Maybe redirect to tasks page with search?
-      // router.push(`/[locale]/tasks?search=${searchQuery}`);
+      const locale = window.location.pathname.split('/')[1] || 'en';
+      router.push(`/${locale}/search?q=${encodeURIComponent(searchQuery)}`);
     }
   };
 
@@ -108,11 +106,8 @@ export const Header: React.FC<{ className?: string; username?: string }> = ({ cl
         <button
           className="p-2.5 rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition-colors relative"
           onClick={() => {
-            if (hasNotifications) {
-              // Navigate to contest communications or open drawer?
-              // For now, let's just clear indicator
-              // setHasNotifications(false);
-            }
+            const locale = window.location.pathname.split('/')[1] || 'en';
+            router.push(`/${locale}/contests`);
           }}
         >
           <Bell className="w-5 h-5" />

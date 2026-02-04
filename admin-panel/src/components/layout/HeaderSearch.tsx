@@ -1,17 +1,19 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { Search } from 'lucide-react';
 
 export function HeaderSearch() {
   const [query, setQuery] = useState('');
   const router = useRouter();
+  const pathname = usePathname();
+  const locale = pathname.split('/')[1] || 'en';
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (query.trim()) {
-      router.push(`/search?q=${encodeURIComponent(query)}`);
+      router.push(`/${locale}/search?q=${encodeURIComponent(query)}`);
     }
   };
 

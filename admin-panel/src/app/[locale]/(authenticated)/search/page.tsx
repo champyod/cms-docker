@@ -1,6 +1,6 @@
 'use client';
 
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/core/Card';
 import { searchAll } from '@/app/actions/search'; // We'll implement this
@@ -9,6 +9,8 @@ import Link from 'next/link';
 
 export default function SearchPage() {
   const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const locale = pathname.split('/')[1] || 'en';
   const query = searchParams.get('q') || '';
   const [results, setResults] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -41,7 +43,7 @@ export default function SearchPage() {
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {results.users.map((u: any) => (
-                            <Link href={`/users/${u.id}`} key={u.id}>
+                            <Link href={`/${locale}/users/${u.id}`} key={u.id}>
                                 <Card className="p-4 hover:bg-white/5 transition-colors cursor-pointer">
                                     <div className="font-bold text-white">{u.username}</div>
                                     <div className="text-sm text-neutral-400">{u.first_name} {u.last_name}</div>
@@ -60,7 +62,7 @@ export default function SearchPage() {
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {results.tasks.map((t: any) => (
-                            <Link href={`/tasks/${t.id}`} key={t.id}>
+                            <Link href={`/${locale}/tasks/${t.id}`} key={t.id}>
                                 <Card className="p-4 hover:bg-white/5 transition-colors cursor-pointer">
                                     <div className="font-bold text-white">{t.name}</div>
                                     <div className="text-sm text-neutral-400">{t.title}</div>
@@ -79,7 +81,7 @@ export default function SearchPage() {
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {results.contests.map((c: any) => (
-                            <Link href={`/contests/${c.id}`} key={c.id}>
+                            <Link href={`/${locale}/contests/${c.id}`} key={c.id}>
                                 <Card className="p-4 hover:bg-white/5 transition-colors cursor-pointer">
                                     <div className="font-bold text-white">{c.name}</div>
                                     <div className="text-sm text-neutral-400">{c.description}</div>

@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/core/Button';
 import { Edit2, Trash2, Plus, HelpCircle } from 'lucide-react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { UserModal } from './UserModal';
 import { apiClient } from '@/lib/apiClient';
 
@@ -12,6 +13,8 @@ export function UserList({ initialUsers, totalPages }: { initialUsers: any[], to
   const [usersList] = useState(initialUsers);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
+  const pathname = usePathname();
+  const locale = pathname.split('/')[1] || 'en';
 
   const handleEdit = (user: any) => {
     setSelectedUser(user);
@@ -43,7 +46,7 @@ export function UserList({ initialUsers, totalPages }: { initialUsers: any[], to
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-3">
           <h2 className="text-xl font-bold text-white">All Users</h2>
-          <Link href="/en/docs#users" className="p-1 hover:bg-white/10 rounded-full transition-colors text-neutral-400 hover:text-white" title="View Documentation">
+          <Link href={`/${locale}/docs#users`} className="p-1 hover:bg-white/10 rounded-full transition-colors text-neutral-400 hover:text-white" title="View Documentation">
             <HelpCircle className="w-4 h-4" />
           </Link>
         </div>

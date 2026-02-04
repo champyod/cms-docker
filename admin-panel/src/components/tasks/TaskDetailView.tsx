@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import { Card } from '@/components/core/Card';
 import Link from 'next/link';
-import { 
-  Settings, FileText, Paperclip, Database, TestTube, 
+import { usePathname } from 'next/navigation';
+import {
+  Settings, FileText, Paperclip, Database, TestTube,
   ChevronDown, ChevronUp, Save, Plus, Trash2, ExternalLink, Upload,
   Copy, Edit, CheckCircle, ToggleLeft, ToggleRight, Download, HelpCircle
 } from 'lucide-react';
@@ -24,6 +25,8 @@ interface TaskDetailViewProps {
 }
 
 export function TaskDetailView({ task }: TaskDetailViewProps) {
+  const pathname = usePathname();
+  const locale = pathname.split('/')[1] || 'en';
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     info: true,
     statements: true,
@@ -135,7 +138,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
             <span className="font-bold text-white">Configuration</span>
           </div>
           <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
-            <Link href="/en/docs#task-types" className="p-1 hover:bg-white/10 rounded-full transition-colors text-neutral-400 hover:text-white" title="View Documentation">
+            <Link href={`/${locale}/docs#task-types`} className="p-1 hover:bg-white/10 rounded-full transition-colors text-neutral-400 hover:text-white" title="View Documentation">
               <HelpCircle className="w-4 h-4" />
             </Link>
             <button onClick={() => toggleSection('info')} className="p-1">
@@ -238,7 +241,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
             </span>
           </div>
           <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
-            <Link href="/en/docs#datasets" className="p-1 hover:bg-white/10 rounded-full transition-colors text-neutral-400 hover:text-white" title="View Documentation">
+            <Link href={`/${locale}/docs#datasets`} className="p-1 hover:bg-white/10 rounded-full transition-colors text-neutral-400 hover:text-white" title="View Documentation">
               <HelpCircle className="w-4 h-4" />
             </Link>
             <button onClick={() => toggleSection('datasets')} className="p-1">
