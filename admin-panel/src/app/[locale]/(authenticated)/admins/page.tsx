@@ -1,7 +1,10 @@
 import { getAdmins } from '@/app/actions/admins';
 import { AdminList } from '@/components/admins/AdminList';
 import { checkPermission } from '@/lib/permissions';
-import { redirect } from 'next/navigation';
+import { getDictionary } from '@/i18n';
+import { PermissionDenied } from '@/components/PermissionDenied';
+import { Stack } from '@/components/core/Layout';
+import { Text } from '@/components/core/Typography';
 
 export default async function AdminsPage({
   params,
@@ -9,22 +12,23 @@ export default async function AdminsPage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  if (!await checkPermission('all', false)) redirect(`/${locale}`);
+  const dict = await getDictionary(locale);
+  const hasPermission = await checkPermission('all', false);
+
+  if (!hasPermission) {
+    return <PermissionDenied permission="permission_all" locale={locale} dict={dict} />;
+  }
 
   const admins = await getAdmins();
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight text-white">
-          Administrators
-        </h1>
-        <p className="text-neutral-400">
-          Manage admin accounts and permissions.
-        </p>
-      </div>
+    <Stack gap={8}>
+      <Stack gap={2}>
+        <Text variant="h1">Administrators</Text>
+        <Text variant="muted">Manage admin accounts and permissions.</Text>
+      </Stack>
 
       <AdminList initialAdmins={admins} />
-    </div>
+    </Stack>
   );
 }

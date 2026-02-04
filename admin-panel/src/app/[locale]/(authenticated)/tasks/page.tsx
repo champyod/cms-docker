@@ -1,7 +1,10 @@
 import { getTasks } from '@/app/actions/tasks';
 import { TaskList } from '@/components/tasks/TaskList';
 import { checkPermission } from '@/lib/permissions';
-import { redirect } from 'next/navigation';
+import { getDictionary } from '@/i18n';
+import { PermissionDenied } from '@/components/PermissionDenied';
+import { Stack } from '@/components/core/Layout';
+import { Text } from '@/components/core/Typography';
 
 export default async function TasksPage({
   params: paramsPromise,
@@ -11,7 +14,12 @@ export default async function TasksPage({
   searchParams: Promise<{ page?: string; search?: string }>;
 }) {
   const { locale } = await paramsPromise;
-  if (!await checkPermission('tasks', false)) redirect(`/${locale}`);
+  const dict = await getDictionary(locale);
+  const hasPermission = await checkPermission('tasks', false);
+
+  if (!hasPermission) {
+    return <PermissionDenied permission="permission_tasks" locale={locale} dict={dict} />;
+  }
 
   const params = await searchParams;
   const page = parseInt(params.page || '1', 10);
@@ -20,17 +28,13 @@ export default async function TasksPage({
   const { tasks, totalPages, total } = await getTasks({ page, search });
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight text-white">
-          Tasks
-        </h1>
-        <p className="text-neutral-400">
-          Manage programming tasks, statements, and test cases.
-        </p>
-      </div>
+    <Stack gap={8}>
+      <Stack gap={2}>
+        <Text variant="h1">Tasks</Text>
+        <Text variant="muted">Manage programming tasks, statements, and test cases.</Text>
+      </Stack>
 
       <TaskList initialTasks={tasks} totalPages={totalPages} />
-    </div>
+    </Stack>
   );
 }

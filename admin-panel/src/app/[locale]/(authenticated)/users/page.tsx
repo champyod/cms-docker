@@ -2,7 +2,9 @@ import { getUsers } from '@/app/actions/users';
 import { UserList } from '@/components/users/UserList';
 import { getDictionary } from '@/i18n';
 import { checkPermission } from '@/lib/permissions';
-import { redirect } from 'next/navigation';
+import { PermissionDenied } from '@/components/PermissionDenied';
+import { Stack } from '@/components/core/Layout';
+import { Text } from '@/components/core/Typography';
 
 export default async function UsersPage({
   params,
@@ -12,27 +14,27 @@ export default async function UsersPage({
     searchParams: Promise<{ page?: string; search?: string }>;
 }) {
   const { locale } = await params;
-  if (!await checkPermission('users', false)) redirect(`/${locale}`);
+  const dict = await getDictionary(locale);
+  const hasPermission = await checkPermission('users', false);
+
+  if (!hasPermission) {
+    return <PermissionDenied permission="permission_users" locale={locale} dict={dict} />;
+  }
 
   const sParams = await searchParams;
   const page = Number(sParams.page) || 1;
   const search = sParams.search || '';
 
   const { users, totalPages } = await getUsers({ page, search });
-  const dict = await getDictionary(locale);
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight text-white">
-          User Management
-        </h1>
-        <p className="text-neutral-400">
-          Manage system users and participants.
-        </p>
-      </div>
+    <Stack gap={8}>
+      <Stack gap={2}>
+        <Text variant="h1">User Management</Text>
+        <Text variant="muted">Manage system users and participants.</Text>
+      </Stack>
 
       <UserList initialUsers={users} totalPages={totalPages} />
-    </div>
+    </Stack>
   );
 }

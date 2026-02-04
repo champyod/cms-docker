@@ -2,11 +2,9 @@ import { getContests } from '@/app/actions/contests';
 import { ContestList } from '@/components/contests/ContestList';
 import { getDictionary } from '@/i18n';
 import { checkPermission } from '@/lib/permissions';
-import { Card } from '@/components/core/Card';
+import { PermissionDenied } from '@/components/PermissionDenied';
 import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
-import { AlertCircle } from 'lucide-react';
-import Link from 'next/link';
 
 export default async function ContestsPage({
   params,
@@ -20,28 +18,7 @@ export default async function ContestsPage({
   const hasPermission = await checkPermission('contests', false);
 
   if (!hasPermission) {
-    return (
-      <Stack align="center" justify="center" className="min-h-[60vh]">
-        <Card className="p-8 max-w-md bg-red-500/10 border-red-500/20">
-          <Stack align="center" gap={4} className="text-center">
-            <AlertCircle className="w-12 h-12 text-red-400" />
-            <Text variant="h2">{dict.errors.permissionDenied}</Text>
-            <Text variant="muted">
-              {dict.errors.permissionRequired.replace('{permission}', 'permission_contests')}
-            </Text>
-            <Text variant="small" className="text-neutral-500">
-              {dict.errors.contactAdmin}
-            </Text>
-            <Link
-              href={`/${locale}`}
-              className="inline-flex items-center justify-center h-10 px-4 py-2 mt-2 bg-white/10 hover:bg-white/20 border border-white/10 text-white rounded-xl transition-all active:scale-95"
-            >
-              {dict.errors.returnToDashboard}
-            </Link>
-          </Stack>
-        </Card>
-      </Stack>
-    );
+    return <PermissionDenied permission="permission_contests" locale={locale} dict={dict} />;
   }
 
   const sParams = await searchParams;

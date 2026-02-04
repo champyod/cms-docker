@@ -1,5 +1,6 @@
 import { checkPermission } from '@/lib/permissions';
-import { redirect } from 'next/navigation';
+import { getDictionary } from '@/i18n';
+import { PermissionDenied } from '@/components/PermissionDenied';
 import { ContainersClient } from '@/components/containers/ContainersClient';
 
 export default async function ContainersPage({
@@ -8,9 +9,11 @@ export default async function ContainersPage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
+  const dict = await getDictionary(locale);
+  const hasPermission = await checkPermission('all', false);
 
-  if (!await checkPermission('all', false)) {
-    redirect(`/${locale}`);
+  if (!hasPermission) {
+    return <PermissionDenied permission="permission_all" locale={locale} dict={dict} />;
   }
 
   return <ContainersClient />;
