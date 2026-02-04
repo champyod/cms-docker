@@ -3,7 +3,7 @@ import { ElementType } from 'react';
 
 interface TextProps extends React.HTMLAttributes<HTMLElement> {
     as?: ElementType;
-    variant?: 'h1' | 'h2' | 'h3' | 'h4' | 'body' | 'small' | 'muted';
+    variant?: 'h1' | 'h2' | 'h3' | 'h4' | 'body' | 'small' | 'muted' | 'label';
     color?: string;
 }
 

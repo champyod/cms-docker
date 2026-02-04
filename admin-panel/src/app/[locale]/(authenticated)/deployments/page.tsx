@@ -501,7 +501,7 @@ export default function DeploymentsPage() {
                             </Text>
                         </Stack>
 
-                    </div>
+                    </Card>
                 ))}
                 
                 {config.length === 0 && (
