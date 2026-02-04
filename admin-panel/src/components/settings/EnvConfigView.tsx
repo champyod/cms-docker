@@ -238,9 +238,9 @@ export function EnvConfigView() {
                 <Save className="w-4 h-4" />
                 Save Only
                 </button>
-                {requiredRestarts.length > 0 && requiredRestarts.some(r => section.fields.some(f => {
-                    return true; // Simplified for UX
-                })) && (
+                {requiredRestarts.length > 0 && section.fields.some(f => {
+                    return data[section.filename]?.[f.key] !== originalData[section.filename]?.[f.key];
+                }) && (
                     <button
                     onClick={() => persistChanges(section.filename, true)}
                     disabled={saving}

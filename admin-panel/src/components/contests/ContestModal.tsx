@@ -24,10 +24,28 @@ const formatDateForInput = (date: Date | string | undefined) => {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-// Helper to parse Postgres interval to seconds/minutes if possible (simplified)
-// Assuming we get raw objects or strings. Prisma returns objects or strings depending on version.
-// For now, we assume we reset to 0/default on edit if parsing fails or implement basic parsing if needed.
-// Ideally, the API would return these as normalized numbers, but we'll stick to basic defaults for safety.
+// Helper to parse Postgres intervals returned by Prisma (returns seconds)
+const parseInterval = (val: any): number => {
+  if (!val) return 0;
+  if (typeof val === 'number') return val;
+  if (typeof val === 'string') {
+    if (/^\d+$/.test(val)) return parseInt(val);
+    const parts = val.split(':').map(Number);
+    if (parts.length === 3 && parts.every(n => !isNaN(n))) {
+      return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    }
+    return 0;
+  }
+  if (typeof val === 'object') {
+    let total = 0;
+    if (val.days !== undefined) total += val.days * 24 * 3600;
+    if (val.hours !== undefined) total += val.hours * 3600;
+    if (val.minutes !== undefined) total += val.minutes * 60;
+    if (val.seconds !== undefined) total += val.seconds;
+    return total;
+  }
+  return 0;
+};
 
 type Tab = 'general' | 'access' | 'tokens' | 'limits' | 'analysis';
 
@@ -97,15 +115,15 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
         ip_autologin: contest.ip_autologin,
         token_mode: contest.token_mode,
         token_max_number: contest.token_max_number,
-        token_min_interval: 0, // TODO: Parse interval from DB if string/object
+        token_min_interval: parseInterval(contest.token_min_interval),
         token_gen_initial: contest.token_gen_initial,
         token_gen_number: contest.token_gen_number,
-        token_gen_interval: 0, // TODO: Parse
+        token_gen_interval: Math.round(parseInterval(contest.token_gen_interval) / 60),
         token_gen_max: contest.token_gen_max,
         max_submission_number: contest.max_submission_number,
         max_user_test_number: contest.max_user_test_number,
-        min_submission_interval: 0, // TODO: Parse
-        min_user_test_interval: 0, // TODO: Parse
+        min_submission_interval: parseInterval(contest.min_submission_interval),
+        min_user_test_interval: parseInterval(contest.min_user_test_interval),
         score_precision: contest.score_precision,
         analysis_enabled: contest.analysis_enabled,
         analysis_start: formatDateForInput(contest.analysis_start),
