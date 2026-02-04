@@ -216,7 +216,6 @@ export default function MaintenancePage() {
             </Card>
         </Stack>
       </div>
-      </div>
-    </div>
+    </PageContent>
   );
 }

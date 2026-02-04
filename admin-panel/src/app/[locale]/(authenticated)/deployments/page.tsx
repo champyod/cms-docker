@@ -354,7 +354,7 @@ export default function DeploymentsPage() {
                             >
                                 <Trash2 className="w-5 h-5" />
                             </button>
-                        </div>
+                        </Stack>
 
                         {/* Advanced Settings */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-4 border-l-2 border-white/5">
