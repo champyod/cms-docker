@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card } from '@/components/core/Card';
 import { readEnvFile, updateEnvFile } from '@/app/actions/env';
-import { analyzeRestartRequirements, restartServices } from '@/app/actions/services';
+import { analyzeRestartRequirements, restartServices, updateServer } from '@/app/actions/services';
 import { pullLatestImages, rebuildImages } from '@/app/actions/docker-ops';
-import { Save, RefreshCw, Loader, AlertTriangle, Download, Package } from 'lucide-react';
+import { Save, RefreshCw, Loader, AlertTriangle, Download, Package, ArrowUpCircle } from 'lucide-react';
 
 interface ConfigField {
   key: string;
@@ -299,14 +299,18 @@ export function EnvConfigView() {
       <Card className="glass-card border-white/5 p-6">
         <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-xl font-bold text-white">Image Management</h2>
-              <p className="text-neutral-400 text-sm mt-1">Pull latest images or rebuild from source.</p>
+              <h2 className="text-xl font-bold text-white">Maintenance & Updates</h2>
+              <p className="text-neutral-400 text-sm mt-1">Manage system updates and images.</p>
             </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <PullImagesButton />
+            <div className="space-y-4">
+                <p className="text-xs font-bold text-neutral-500 uppercase tracking-wider">System Update</p>
+                <UpdateServerButton />
+                <PullImagesButton />
+            </div>
             <div className="space-y-2">
-              <p className="text-xs font-bold text-neutral-500 uppercase tracking-wider">Rebuild Stacks</p>
+              <p className="text-xs font-bold text-neutral-500 uppercase tracking-wider">Restart Stacks (Use Pre-built Images)</p>
               <div className="grid grid-cols-2 gap-2">
                 <RebuildButton stack="core" label="Core" />
                 <RebuildButton stack="admin" label="Admin" />
@@ -318,6 +322,34 @@ export function EnvConfigView() {
       </Card>
     </div>
   );
+}
+
+function UpdateServerButton() {
+    const [updating, setUpdating] = useState(false);
+
+    const handleUpdate = async () => {
+        if (!confirm('This will pull the latest images, restart all services, and update the database schema. The server will be unavailable for a few minutes. Continue?')) return;
+        setUpdating(true);
+        try {
+            const res = await updateServer();
+            if (res.success) alert('✓ ' + res.message);
+            else alert('Error: ' + res.error);
+        } catch (e) {
+            alert('Failed to trigger update');
+        }
+        setUpdating(false);
+    };
+
+    return (
+         <button
+            onClick={handleUpdate}
+            disabled={updating}
+            className="flex items-center gap-2 px-4 py-3 bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 rounded-lg hover:bg-emerald-600/30 transition-colors disabled:opacity-50 w-full justify-center"
+        >
+            <ArrowUpCircle className={`w-4 h-4 ${updating ? 'animate-spin' : ''}`} />
+            {updating ? 'Updating Server...' : 'Full Server Update'}
+        </button>
+    )
 }
 
 function RestartButton({ type, label }: { type: 'core' | 'admin' | 'worker' | 'all', label: string }) {

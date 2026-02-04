@@ -246,3 +246,24 @@ export async function getServiceStatus() {
         return { status: 'down' as const, running: 0, total: 0 };
     }
 }
+
+export async function updateServer() {
+    await ensurePermission('all');
+    try {
+        const rootDir = getRepoRoot();
+        await logToDiscord('Server Update', 'Admin triggered a server update.', 16753920, true);
+        
+        // Run update in background to avoid timeout
+        const scriptPath = path.join(rootDir, 'scripts/update-server.sh');
+        // We use spawn to let it run detached if needed, but here we want some feedback.
+        // Given Next.js server limits, a long running process might time out the request.
+        // We'll start it and return immediately.
+        
+        const cmd = `nohup ${scriptPath} > ${path.join(rootDir, 'update.log')} 2>&1 &`;
+        await execPromise(cmd);
+
+        return { success: true, message: 'Server update started in background. Check logs or wait a few minutes.' };
+    } catch (error) {
+        return { success: false, error: (error as Error).message };
+    }
+}
