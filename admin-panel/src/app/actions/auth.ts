@@ -5,6 +5,7 @@ import { createSession, deleteSession, getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 
 export async function login(prevState: any, formData: FormData) {
   const username = formData.get("username") as string;
@@ -23,12 +24,21 @@ export async function login(prevState: any, formData: FormData) {
       return { error: "Invalid credentials or account disabled" };
     }
 
-    let storedHash = admin.authentication;
-    if (storedHash.startsWith("bcrypt:")) {
-      storedHash = storedHash.substring(7);
-    }
+    const stored = admin.authentication;
+    let isValid = false;
 
-    const isValid = await bcrypt.compare(password, storedHash);
+    if (stored.startsWith("plaintext:")) {
+      const expected = stored.substring(10);
+      const a = Buffer.from(password);
+      const b = Buffer.from(expected);
+      isValid = a.length === b.length && crypto.timingSafeEqual(a, b);
+    } else {
+      let hash = stored;
+      if (hash.startsWith("bcrypt:")) {
+        hash = hash.substring(7);
+      }
+      isValid = await bcrypt.compare(password, hash);
+    }
 
     if (!isValid) {
       return { error: "Invalid credentials" };
@@ -48,12 +58,12 @@ export async function login(prevState: any, formData: FormData) {
   }
 
   revalidatePath("/");
-  redirect("/en");
+  redirect("/");
 }
 
 export async function logout() {
   await deleteSession();
-  redirect("/en/auth/login");
+  redirect("/auth/login");
 }
 
 export async function getCurrentUser() {
