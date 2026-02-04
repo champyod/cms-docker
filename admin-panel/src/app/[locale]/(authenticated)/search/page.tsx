@@ -2,10 +2,10 @@
 
 import { useSearchParams, usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Card } from '@/components/core/Card';
-import { searchAll } from '@/app/actions/search'; // We'll implement this
+import { searchAll } from '@/app/actions/search';
 import { Users, Trophy, ClipboardList, Shield } from 'lucide-react';
 import Link from 'next/link';
+import { SearchResultCard, SectionHeader } from '@/components/search/SearchComponents';
 
 export default function SearchPage() {
   const searchParams = useSearchParams();
@@ -38,16 +38,11 @@ export default function SearchPage() {
             {/* Users */}
             {results.users.length > 0 && (
                 <section>
-                    <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-                        <Users className="text-blue-400" /> Users ({results.users.length})
-                    </h2>
+                    <SectionHeader title="Users" count={results.users.length} icon={Users} iconColor="text-blue-400" />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {results.users.map((u: any) => (
                             <Link href={`/${locale}/users/${u.id}`} key={u.id}>
-                                <Card className="p-4 hover:bg-white/5 transition-colors cursor-pointer">
-                                    <div className="font-bold text-white">{u.username}</div>
-                                    <div className="text-sm text-neutral-400">{u.first_name} {u.last_name}</div>
-                                </Card>
+                                <SearchResultCard title={u.username} subtitle={`${u.first_name} ${u.last_name}`} />
                             </Link>
                         ))}
                     </div>
@@ -57,16 +52,11 @@ export default function SearchPage() {
             {/* Tasks */}
             {results.tasks.length > 0 && (
                 <section>
-                    <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-                        <ClipboardList className="text-emerald-400" /> Tasks ({results.tasks.length})
-                    </h2>
+                    <SectionHeader title="Tasks" count={results.tasks.length} icon={ClipboardList} iconColor="text-emerald-400" />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {results.tasks.map((t: any) => (
                             <Link href={`/${locale}/tasks/${t.id}`} key={t.id}>
-                                <Card className="p-4 hover:bg-white/5 transition-colors cursor-pointer">
-                                    <div className="font-bold text-white">{t.name}</div>
-                                    <div className="text-sm text-neutral-400">{t.title}</div>
-                                </Card>
+                                <SearchResultCard title={t.name} subtitle={t.title} />
                             </Link>
                         ))}
                     </div>
@@ -76,16 +66,11 @@ export default function SearchPage() {
             {/* Contests */}
             {results.contests.length > 0 && (
                 <section>
-                    <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-                        <Trophy className="text-amber-400" /> Contests ({results.contests.length})
-                    </h2>
+                     <SectionHeader title="Contests" count={results.contests.length} icon={Trophy} iconColor="text-amber-400" />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {results.contests.map((c: any) => (
                             <Link href={`/${locale}/contests/${c.id}`} key={c.id}>
-                                <Card className="p-4 hover:bg-white/5 transition-colors cursor-pointer">
-                                    <div className="font-bold text-white">{c.name}</div>
-                                    <div className="text-sm text-neutral-400">{c.description}</div>
-                                </Card>
+                                <SearchResultCard title={c.name} subtitle={c.description} />
                             </Link>
                         ))}
                     </div>
@@ -95,16 +80,11 @@ export default function SearchPage() {
              {/* Admins */}
             {results.admins.length > 0 && (
                 <section>
-                    <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
-                        <Shield className="text-purple-400" /> Admins ({results.admins.length})
-                    </h2>
+                    <SectionHeader title="Admins" count={results.admins.length} icon={Shield} iconColor="text-purple-400" />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {results.admins.map((a: any) => (
                             <div key={a.id} className="cursor-default">
-                                <Card className="p-4 bg-white/5">
-                                    <div className="font-bold text-white">{a.username}</div>
-                                    <div className="text-sm text-neutral-400">{a.name}</div>
-                                </Card>
+                                <SearchResultCard title={a.username} subtitle={a.name} className="cursor-default hover:bg-white/5" />
                             </div>
                         ))}
                     </div>
