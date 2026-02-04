@@ -7,5 +7,11 @@
       "totalContests": "การแข่งขันทั้งหมด",
       "totalSubmissions": "การส่งคำตอบทั้งหมด"
     }
+  },
+  "errors": {
+    "permissionDenied": "ไม่มีสิทธิ์เข้าถึง",
+    "permissionRequired": "คุณต้องการสิทธิ์ {permission} เพื่อเข้าถึงหน้านี้",
+    "contactAdmin": "ติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์การเข้าถึง",
+    "returnToDashboard": "กลับไปหน้าแดชบอร์ด"
   }
 }
