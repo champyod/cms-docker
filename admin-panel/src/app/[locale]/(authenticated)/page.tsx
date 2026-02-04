@@ -7,72 +7,17 @@ import {
   Activity,
   ArrowUpRight,
   Clock,
-  CheckCircle2,
-  AlertCircle,
-  AlertTriangle
 } from 'lucide-react';
 import { prisma } from '@/lib/prisma';
 import { getServiceStatus } from '@/app/actions/services';
+import { StatusBadge, StatusType } from '@/components/core/StatusBadge';
 
 async function getStats() {
-  const [
-    usersCount,
-    contestsCount,
-    activeContestsCount,
-    submissionsCount,
-    pendingSubmissions
-  ] = await Promise.all([
-    prisma.users.count(),
-    prisma.contests.count(),
-    prisma.contests.count({
-      where: {
-        AND: [
-          { start: { lte: new Date() } },
-          { stop: { gte: new Date() } }
-        ]
-      }
-    }),
-    prisma.submissions.count(),
-    prisma.submissions.count({
-      where: {
-        submission_results: {
-          some: {
-            score: null
-          }
-        }
-      }
-    })
-  ]);
-
-  return {
-    usersCount,
-    contestsCount,
-    activeContestsCount,
-    submissionsCount,
-    pendingSubmissions
-  };
+// ... existing getStats implementation ...
 }
 
 async function getRecentActivity() {
-  const submissions = await prisma.submissions.findMany({
-    take: 10,
-    orderBy: { timestamp: 'desc' },
-    include: {
-      tasks: { select: { name: true } },
-      participations: {
-        include: {
-          users: { select: { username: true } }
-        }
-      }
-    }
-  });
-
-  return submissions.map(s => ({
-    id: s.id,
-    timestamp: s.timestamp,
-    username: s.participations?.users?.username ?? 'Unknown',
-    taskName: s.tasks?.name ?? 'Unknown',
-  }));
+// ... existing getRecentActivity implementation ...
 }
 
 export default async function DashboardPage({
@@ -86,14 +31,6 @@ export default async function DashboardPage({
     getServiceStatus(),
     getRecentActivity(),
   ]);
-
-  const statusConfig = {
-    ok: { label: 'Normal', color: 'text-green-500', bgColor: 'bg-green-500/10', textColor: 'text-green-400', icon: CheckCircle2, detail: 'All services operational' },
-    degraded: { label: 'Degraded', color: 'text-amber-500', bgColor: 'bg-amber-500/10', textColor: 'text-amber-400', icon: AlertTriangle, detail: `${(serviceStatus as any).running ?? 0}/${(serviceStatus as any).total ?? 0} containers running` },
-    down: { label: 'Down', color: 'text-red-500', bgColor: 'bg-red-500/10', textColor: 'text-red-400', icon: AlertCircle, detail: 'Services unavailable' },
-  };
-  const sc = statusConfig[serviceStatus.status] || statusConfig.down;
-  const StatusIcon = sc.icon;
 
   return (
     <div className="space-y-8">
@@ -170,18 +107,11 @@ export default async function DashboardPage({
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
             <Activity className="w-24 h-24" />
           </div>
-          <div className="flex justify-between items-start z-10">
-            <div>
-              <p className="text-sm font-medium text-neutral-400">System Status</p>
-              <h3 className={`text-3xl font-bold mt-2 ${sc.color}`}>{sc.label}</h3>
-            </div>
-            <div className={`p-2 ${sc.bgColor} rounded-lg ${sc.textColor}`}>
-              <StatusIcon className="w-5 h-5" />
-            </div>
-          </div>
-          <div className={`flex items-center gap-2 text-sm ${sc.textColor} z-10`}>
-            <span>{sc.detail}</span>
-          </div>
+          <StatusBadge 
+            status={serviceStatus.status as StatusType} 
+            running={(serviceStatus as any).running} 
+            total={(serviceStatus as any).total} 
+          />
         </Card>
       </div>
 
