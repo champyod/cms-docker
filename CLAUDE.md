@@ -818,6 +818,31 @@ make prisma-sync   # Sync Prisma schema to DB
 make db-clean      # Reset everything (destructive)
 ```
 
+**IMPORTANT: Production Deployment**
+
+For production/final server deployments, **always use the `-img` variants**:
+- `make core-img` instead of `make core`
+- Pre-built images are faster and more reliable for production
+- Source builds (`make core`) are primarily for development
+
+Deployment workflow:
+```bash
+# 1. Pull latest changes
+git pull origin main
+
+# 2. Regenerate environment files
+make env
+
+# 3. Deploy with pre-built images (production)
+make core-img      # Use -img variant for production
+make admin
+make contest
+make worker
+
+# 4. Sync database if schema changed
+make prisma-sync
+```
+
 ### Admin Panel Docker Integration
 
 The admin panel can:
