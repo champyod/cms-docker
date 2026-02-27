@@ -1,7 +1,12 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import crypto from "crypto";
 
-const secretKey = process.env.AUTH_SECRET || "default-secret-key-change-me";
+const secretKey = (() => {
+  if (process.env.AUTH_SECRET) return process.env.AUTH_SECRET;
+  console.warn("WARNING: AUTH_SECRET is not set. Using a random secret — sessions will not persist across restarts.");
+  return crypto.randomBytes(32).toString("hex");
+})();
 const key = new TextEncoder().encode(secretKey);
 
 export async function encrypt(payload: any) {
@@ -24,13 +29,14 @@ export async function createSession(userId: string, username: string, permission
   permission_tasks: boolean;
   permission_users: boolean;
   permission_contests: boolean;
+  permission_messaging: boolean;
 }) {
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   const session = await encrypt({ userId, username, permissions, expiresAt });
 
   (await cookies()).set("session", session, {
     httpOnly: true,
-    secure: false, // Set to false to support non-HTTPS setups (common for internal VMs)
+    secure: process.env.NODE_ENV === 'production',
     expires: expiresAt,
     sameSite: "lax",
     path: "/",

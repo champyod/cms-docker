@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/core/Button';
 import { Edit2, Trash2, Plus, Users, HelpCircle } from 'lucide-react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { updateTeam, deleteTeam } from '@/app/actions/teams';
 import { TeamModal } from './TeamModal';
 
@@ -19,6 +20,8 @@ export function TeamList({ initialTeams }: { initialTeams: TeamWithCount[] }) {
   const [teams] = useState(initialTeams);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<TeamWithCount | null>(null);
+  const pathname = usePathname();
+  const locale = pathname.split('/')[1] || 'en';
 
   const handleDelete = async (id: number) => {
     if (confirm('Delete this team?')) {
@@ -41,7 +44,7 @@ export function TeamList({ initialTeams }: { initialTeams: TeamWithCount[] }) {
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-3">
           <h2 className="text-xl font-bold text-white">All Teams</h2>
-          <Link href="/en/docs#users" className="p-1 hover:bg-white/10 rounded-full transition-colors text-neutral-400 hover:text-white" title="View Documentation">
+          <Link href={`/${locale}/docs#users`} className="p-1 hover:bg-white/10 rounded-full transition-colors text-neutral-400 hover:text-white" title="View Documentation">
             <HelpCircle className="w-4 h-4" />
           </Link>
         </div>

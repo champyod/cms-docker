@@ -2,6 +2,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
+import { ensurePermission } from '@/lib/permissions';
 
 const TASKS_PER_PAGE = 20;
 
@@ -132,6 +133,8 @@ function sanitize<T>(value: T | undefined | null): T | null {
 }
 
 export async function createTask(data: TaskData) {
+  await ensurePermission('tasks');
+
   try {
     const token_min_interval = sanitize(data.token_min_interval) !== null ? `${data.token_min_interval} seconds` : '0 seconds';
     const token_gen_interval = sanitize(data.token_gen_interval) !== null ? `${data.token_gen_interval} minutes` : '30 minutes';
@@ -166,6 +169,8 @@ export async function createTask(data: TaskData) {
 }
 
 export async function updateTask(id: number, data: Partial<TaskData>) {
+  await ensurePermission('tasks');
+
   try {
     const sanitizedData: any = {};
     for (const key in data) sanitizedData[key] = sanitize((data as any)[key]);
@@ -216,6 +221,8 @@ export async function updateTask(id: number, data: Partial<TaskData>) {
 }
 
 export async function deleteTask(id: number) {
+  await ensurePermission('tasks');
+
   try {
     await prisma.tasks.delete({ where: { id } });
     revalidatePath('/[locale]/tasks');
@@ -226,6 +233,8 @@ export async function deleteTask(id: number) {
 }
 
 export async function assignTaskToContest(taskId: number, contestId: number | null) {
+  await ensurePermission('tasks');
+
   try {
     let num = null;
     if (contestId) {

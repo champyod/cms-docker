@@ -114,6 +114,13 @@ env:
 	@echo "Generating a secure SECRET_KEY in config/cms.toml..."
 	@SECRET=$$(python3 -c 'import secrets; print(secrets.token_hex(16))'); \
 	sed -i "s/secret_key = \"8e045a51e4b102ea803c06f92841a1fb\"/secret_key = \"$$SECRET\"/" config/cms.toml
+	@echo "Generating a secure AUTH_SECRET for the Admin Panel..."
+	@AUTH_SECRET=$$(openssl rand -hex 32); \
+	if grep -q "^AUTH_SECRET=" .env; then \
+		sed -i "s|^AUTH_SECRET=.*|AUTH_SECRET=$$AUTH_SECRET|" .env; \
+	else \
+		echo "AUTH_SECRET=$$AUTH_SECRET" >> .env; \
+	fi
 	@# Inject database configuration and service addresses into config/cms.toml...
 	@chmod +x scripts/inject_config.sh && ./scripts/inject_config.sh
 	@# Generate Multi-Contest Compose
@@ -173,11 +180,7 @@ admin:
 	$(COMPOSE) -f docker-compose.admin.yml up -d --build
 
 contest:
-	@if [ -f docker-compose.contests.generated.yml ] && grep -q "contest-web-server-" docker-compose.contests.generated.yml; then \
-		$(COMPOSE) -f docker-compose.contests.generated.yml up -d --build; \
-	else \
-		echo "No contests configured in Admin UI. Skip deployment."; \
-	fi
+	@bash scripts/select_contest.sh build
 
 worker:
 	$(COMPOSE) -f docker-compose.worker.yml up -d --build
@@ -224,13 +227,16 @@ infra-clean:
 	$(COMPOSE) -f docker-compose.monitor.yml down -v
 
 pull:
-	$(COMPOSE) \
-		-f docker-compose.core.yml -f docker-compose.core.img.yml \
-		-f docker-compose.admin.yml -f docker-compose.admin.img.yml \
-		-f docker-compose.contest.yml -f docker-compose.contest.img.yml \
-		-f docker-compose.worker.yml -f docker-compose.worker.img.yml \
-		-f docker-compose.monitor.yml -f docker-compose.monitor.img.yml \
-		pull
+	@echo "Pulling core, admin, worker, and monitor images..."
+	@$(COMPOSE) -f docker-compose.core.yml -f docker-compose.core.img.yml pull || true
+	@$(COMPOSE) -f docker-compose.admin.yml -f docker-compose.admin.img.yml pull || true
+	@$(COMPOSE) -f docker-compose.worker.yml -f docker-compose.worker.img.yml pull || true
+	@$(COMPOSE) -f docker-compose.monitor.yml -f docker-compose.monitor.img.yml pull || true
+	@if [ -f docker-compose.contests.generated.yml ] && grep -q "contest-web-server-" docker-compose.contests.generated.yml; then \
+		echo "Pulling contest images from generated file..."; \
+		$(COMPOSE) -f docker-compose.contests.generated.yml pull || true; \
+	fi
+	@echo "Pull complete."
 
 core-img:
 	$(COMPOSE) -f docker-compose.core.yml -f docker-compose.core.img.yml up -d --no-build
@@ -240,11 +246,10 @@ admin-img:
 	$(COMPOSE) -f docker-compose.admin.yml -f docker-compose.admin.img.yml up -d --no-build
 
 contest-img:
-	@if [ -f docker-compose.contests.generated.yml ] && grep -q "contest-web-server-" docker-compose.contests.generated.yml; then \
-		$(COMPOSE) -f docker-compose.contests.generated.yml up -d --no-build; \
-	else \
-		echo "No contests configured in Admin UI. Skip deployment."; \
-	fi
+	@bash scripts/select_contest.sh img
+
+contest-down:
+	$(COMPOSE) -f docker-compose.contest.yml -f docker-compose.contest.img.yml down
 
 worker-img:
 	$(COMPOSE) -f docker-compose.worker.yml -f docker-compose.worker.img.yml up -d --no-build

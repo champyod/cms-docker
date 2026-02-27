@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import bcrypt from 'bcryptjs';
+import { ensurePermission } from '@/lib/permissions';
 
 const USERS_PER_PAGE = 20;
 
@@ -38,8 +39,10 @@ export async function getUsers({ page = 1, search = '' }: { page?: number; searc
 // ...
 
 export async function createUser(data: Omit<any, 'id' | 'password' | 'preferred_languages'> & { password?: string }) {
+  await ensurePermission('users');
+
   const { first_name, last_name, username, email, password, timezone } = data;
-  
+
   if (!password) {
       return { success: false, error: 'Password is required' };
   }
@@ -73,6 +76,8 @@ export async function createUser(data: Omit<any, 'id' | 'password' | 'preferred_
 }
 
 export async function updateUser(id: number, data: Partial<any> & { password?: string }) {
+  await ensurePermission('users');
+
   const { first_name, last_name, email, password, timezone } = data;
   
   const updateData: Partial<any> = {
@@ -102,6 +107,8 @@ export async function updateUser(id: number, data: Partial<any> & { password?: s
 }
 
 export async function deleteUser(id: number) {
+  await ensurePermission('users');
+
   try {
     await prisma.users.delete({
       where: { id },

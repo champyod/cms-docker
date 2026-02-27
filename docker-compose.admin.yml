@@ -10,7 +10,7 @@ services:
       dockerfile: Dockerfile
     image: cms-admin-panel-next
     container_name: cms-admin-panel-next
-    restart: unless-stopped
+    restart: on-failure:5
     environment:
       # API and Server Configuration
       VITE_API_URL: ${VITE_API_URL:-http://localhost:8889}
@@ -19,6 +19,9 @@ services:
       
       # Database
       DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
+      
+      # Authentication
+      AUTH_SECRET: ${AUTH_SECRET}
       
       # Infrastructure Management
       REPO_ROOT: /repo-root
@@ -46,7 +49,7 @@ services:
       dockerfile: Dockerfile
     image: cms-admin-web-server
     container_name: cms-admin-web-server
-    restart: unless-stopped
+    restart: on-failure:5
     environment:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       ADMIN_LISTEN_PORT: ${ADMIN_LISTEN_PORT:-8889}
@@ -72,7 +75,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: cms-ranking-web-server
-    restart: unless-stopped
+    restart: on-failure:5
     environment:
       CMS_RANKING_CONFIG: ${CMS_RANKING_CONFIG:-/usr/local/etc/cms_ranking.toml}
       RANKING_LISTEN_PORT: ${RANKING_LISTEN_PORT:-8890}
@@ -98,7 +101,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: cms-printing-service
-    restart: unless-stopped
+    restart: on-failure:5
     environment:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: PrintingService

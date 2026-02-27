@@ -1,15 +1,18 @@
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { getTeamWithDetails } from '@/app/actions/teams';
 import { TeamDetailView } from '@/components/teams/TeamDetailView';
+import { checkPermission } from '@/lib/permissions';
 
 export default async function TeamDetailPage({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params: Promise<{ id: string; locale: string }>;
 }) {
-  const { id } = await params;
+  const { id, locale } = await params;
+  if (!await checkPermission('users', false)) redirect(`/${locale}`);
+
   const teamId = parseInt(id, 10);
-  
+
   if (isNaN(teamId)) {
     notFound();
   }

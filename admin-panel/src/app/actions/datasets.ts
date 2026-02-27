@@ -2,6 +2,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
+import { ensurePermission } from '@/lib/permissions';
 
 // Get a single dataset with testcases
 export async function getDataset(id: number) {
@@ -23,6 +24,8 @@ export async function createDataset(taskId: number, data: {
   task_type?: string;
   score_type?: string;
 }) {
+  await ensurePermission('tasks');
+
   try {
     const dataset = await prisma.datasets.create({
       data: {
@@ -47,6 +50,8 @@ export async function createDataset(taskId: number, data: {
 
 // Clone an existing dataset
 export async function cloneDataset(datasetId: number, newDescription: string) {
+  await ensurePermission('tasks');
+
   try {
     const original = await prisma.datasets.findUnique({
       where: { id: datasetId },
@@ -106,6 +111,8 @@ export async function cloneDataset(datasetId: number, newDescription: string) {
 
 // Rename dataset description
 export async function renameDataset(datasetId: number, description: string) {
+  await ensurePermission('tasks');
+
   try {
     await prisma.datasets.update({
       where: { id: datasetId },
@@ -121,6 +128,8 @@ export async function renameDataset(datasetId: number, description: string) {
 
 // Delete a dataset
 export async function deleteDataset(datasetId: number) {
+  await ensurePermission('tasks');
+
   try {
     // Check if this is the active dataset
     const dataset = await prisma.datasets.findUnique({
@@ -143,6 +152,8 @@ export async function deleteDataset(datasetId: number) {
 
 // Activate a dataset (set as active for the task)
 export async function activateDataset(datasetId: number) {
+  await ensurePermission('tasks');
+
   try {
     const dataset = await prisma.datasets.findUnique({
       where: { id: datasetId }
@@ -167,6 +178,8 @@ export async function activateDataset(datasetId: number) {
 
 // Toggle autojudge for a dataset
 export async function toggleAutojudge(datasetId: number) {
+  await ensurePermission('tasks');
+
   try {
     const dataset = await prisma.datasets.findUnique({
       where: { id: datasetId }
@@ -196,6 +209,8 @@ export async function updateDataset(datasetId: number, data: {
   task_type?: string;
   score_type?: string;
 }) {
+  await ensurePermission('tasks');
+
   try {
     await prisma.datasets.update({
       where: { id: datasetId },

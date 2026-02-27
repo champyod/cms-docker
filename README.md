@@ -42,11 +42,36 @@ By default, services are bound to `0.0.0.0`:
 *   **Classic Admin Panel**: [http://localhost:8889](http://localhost:8889)
 *   **Ranking**: [http://localhost:8890](http://localhost:8890)
 
+### Container Restart Control
+Navigate to **Containers** in the Admin Panel to manage auto-restart policies:
+- Toggle auto-restart per container (default: OFF)
+- Set max restart attempts (default: 5)
+- View restart counts and reset when needed
+- All containers use `on-failure:5` policy to prevent infinite restart loops
+
 ### Multi-Contest Deployment
-You can now run multiple contests simultaneously on different ports.
-1.  Navigate to **Infrastructure** → **Deployments** in the Admin Panel.
-2.  Add instances with specific Contest IDs and Ports.
-3.  Click **Save & Restart Stack** to apply.
+Run multiple isolated contests with dedicated services:
+
+**Per-Contest Services** (each contest gets its own):
+- ContestWebServer (contestant interface)
+- EvaluationService (submission evaluation)
+- ProxyService (worker communication)
+- RankingWebServer (live scoreboard)
+
+**Configuration**:
+1.  Navigate to **Infrastructure** → **Deployments**
+2.  Add contest instance with:
+    - **Contest ID** and **Port**
+    - **Access Method**: Public IP, Domain Name, or Tailscale Tunnel
+    - **Protocol**: HTTP or HTTPS with TLS certificates
+3.  Click **Save & Restart Stack** to deploy
+4.  Use **Restart Instance** button to restart individual contest services
+
+**Port Assignments** (per contest ID):
+- Contest UI: `8888 + ID`
+- Evaluation: `25000 + ID`
+- Proxy: `28600 + ID`
+- Ranking: `8890 + ID`
 
 ### Secure Remote Workers (Tailscale)
 For maximum security, remote evaluation workers should connect over a VPN like **Tailscale**.

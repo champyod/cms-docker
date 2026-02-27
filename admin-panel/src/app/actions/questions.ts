@@ -2,6 +2,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
+import { ensurePermission } from '@/lib/permissions';
 
 // Get questions for a contest
 export async function getQuestions(contestId: number) {
@@ -22,6 +23,8 @@ export async function replyToQuestion(questionId: number, adminId: number, data:
   reply_subject: string;
   reply_text: string;
 }) {
+  await ensurePermission('messaging');
+
   try {
     await prisma.questions.update({
       where: { id: questionId },
@@ -43,6 +46,8 @@ export async function replyToQuestion(questionId: number, adminId: number, data:
 
 // Ignore a question
 export async function ignoreQuestion(questionId: number) {
+  await ensurePermission('messaging');
+
   try {
     await prisma.questions.update({
       where: { id: questionId },
@@ -58,6 +63,8 @@ export async function ignoreQuestion(questionId: number) {
 
 // Unignore a question
 export async function unignoreQuestion(questionId: number) {
+  await ensurePermission('messaging');
+
   try {
     await prisma.questions.update({
       where: { id: questionId },

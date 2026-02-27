@@ -33,3 +33,6 @@ test_logs/
 .result
 docker-compose.contests.generated.yml
 admin-panel/.env
+
+# Agent tools
+.claude/

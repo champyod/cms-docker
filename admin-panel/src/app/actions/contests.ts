@@ -2,6 +2,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
+import { ensurePermission } from '@/lib/permissions';
 
 const CONTESTS_PER_PAGE = 20;
 
@@ -67,6 +68,8 @@ export interface ContestData {
 }
 
 export async function createContest(data: ContestData) {
+  await ensurePermission('contests');
+
   try {
     const startDate = new Date(data.start);
     const stopDate = new Date(data.stop);
@@ -126,6 +129,8 @@ export async function createContest(data: ContestData) {
 }
 
 export async function updateContest(id: number, data: Partial<ContestData>) {
+  await ensurePermission('contests');
+
   try {
     const toDate = (d: string | Date | undefined) => d ? new Date(d) : undefined;
 
@@ -201,6 +206,8 @@ export async function updateContest(id: number, data: Partial<ContestData>) {
 }
 
 export async function deleteContest(id: number) {
+  await ensurePermission('contests');
+
   try {
     await prisma.contests.delete({
       where: { id },
@@ -214,6 +221,8 @@ export async function deleteContest(id: number) {
 }
 
 export async function addParticipant(contestId: number, userId: number) {
+  await ensurePermission('contests');
+
   try {
     // Use raw SQL for interval fields
     await prisma.$executeRaw`
@@ -229,6 +238,8 @@ export async function addParticipant(contestId: number, userId: number) {
 }
 
 export async function removeParticipant(participationId: number) {
+  await ensurePermission('contests');
+
   try {
     await prisma.participations.delete({
       where: { id: participationId },
@@ -242,6 +253,8 @@ export async function removeParticipant(participationId: number) {
 }
 
 export async function addTaskToContest(contestId: number, taskId: number) {
+  await ensurePermission('contests');
+
   try {
     await prisma.tasks.update({
       where: { id: taskId },
@@ -255,6 +268,8 @@ export async function addTaskToContest(contestId: number, taskId: number) {
 }
 
 export async function removeTaskFromContest(taskId: number) {
+  await ensurePermission('contests');
+
   try {
     await prisma.tasks.update({
       where: { id: taskId },
@@ -269,4 +284,19 @@ export async function removeTaskFromContest(taskId: number) {
 
 export async function updateContestSettings(id: number, data: Partial<ContestData>) {
   return updateContest(id, data);
+}
+
+export async function getAvailableContests() {
+  try {
+    const contests = await prisma.contests.findMany({
+      select: {
+        id: true,
+        name: true,
+      },
+      orderBy: { id: 'asc' },
+    });
+    return { success: true, contests };
+  } catch (error) {
+    return { success: false, contests: [], error: (error as Error).message };
+  }
 }

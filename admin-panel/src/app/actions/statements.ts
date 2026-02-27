@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import crypto from 'crypto';
+import { ensurePermission } from '@/lib/permissions';
 
 import { STATEMENT_LANGUAGES } from '@/lib/constants';
 export { STATEMENT_LANGUAGES };
@@ -49,6 +50,8 @@ export async function getStatements(taskId: number) {
 
 // Add a statement
 export async function addStatement(taskId: number, language: string, fileData: string) {
+  await ensurePermission('tasks');
+
   try {
     // Decode base64 file data
     const buffer = Buffer.from(fileData, 'base64');
@@ -74,6 +77,8 @@ export async function addStatement(taskId: number, language: string, fileData: s
 
 // Delete a statement
 export async function deleteStatement(statementId: number) {
+  await ensurePermission('tasks');
+
   try {
     await prisma.statements.delete({
       where: { id: statementId }
@@ -96,6 +101,8 @@ export async function getAttachments(taskId: number) {
 
 // Add an attachment
 export async function addAttachment(taskId: number, filename: string, fileData: string) {
+  await ensurePermission('tasks');
+
   try {
     // Decode base64 file data
     const buffer = Buffer.from(fileData, 'base64');
@@ -121,6 +128,8 @@ export async function addAttachment(taskId: number, filename: string, fileData: 
 
 // Delete an attachment
 export async function deleteAttachment(attachmentId: number) {
+  await ensurePermission('tasks');
+
   try {
     await prisma.attachments.delete({
       where: { id: attachmentId }

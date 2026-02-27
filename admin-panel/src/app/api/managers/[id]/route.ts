@@ -1,12 +1,12 @@
 import { prisma } from '@/lib/prisma';
-import { verifyApiAuth, apiError, apiSuccess } from '@/lib/api-utils';
+import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { NextRequest } from 'next/server';
 
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { authorized, response } = await verifyApiAuth();
+  const { authorized, response } = await verifyApiPermission('tasks');
   if (!authorized) return response;
 
   const id = parseInt((await params).id);

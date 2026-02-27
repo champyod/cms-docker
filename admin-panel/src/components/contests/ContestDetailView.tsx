@@ -1,12 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { updateContestSettings, removeParticipant } from '@/app/actions/contests';
+import { updateContestSettings, addParticipant, removeParticipant } from '@/app/actions/contests';
 import { setTestUser } from '@/app/actions/participations';
 import { Card } from '@/components/core/Card';
-import { 
-  Settings, Users, Zap, 
-  Plus, Trash2, 
+import {
+  Settings, Users, Trophy, Clock, Shield, Zap,
+  Plus, Trash2, ExternalLink, Play, Square,
   ChevronDown, ChevronUp, Save, ClipboardList, FlaskConical
 } from 'lucide-react';
 import { ParticipantModal } from './ParticipantModal';
@@ -134,8 +134,7 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, tea
             <Zap className="w-5 h-5 text-amber-400" />
             <span className="font-bold text-white">Contest Status</span>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
             {(() => {
               const now = new Date();
               const start = contest.start ? new Date(contest.start) : null;
@@ -153,7 +152,6 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, tea
                 return <span className="px-3 py-1 bg-red-600/30 text-red-400 rounded-full text-sm">Ended</span>;
               }
             })()}
-            </div>
           </div>
         </div>
 

@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { verifyApiAuth, apiError, apiSuccess } from '@/lib/api-utils';
+import { verifyApiAuth, verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { NextRequest } from 'next/server';
 import crypto from 'crypto';
 
@@ -51,7 +51,7 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { authorized, response } = await verifyApiAuth();
+  const { authorized, response } = await verifyApiPermission('tasks');
   if (!authorized) return response;
 
   const datasetId = parseInt((await params).id);

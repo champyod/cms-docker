@@ -2,6 +2,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
+import { ensurePermission } from '@/lib/permissions';
 
 // Get all teams
 export async function getTeams() {
@@ -15,6 +16,8 @@ export async function getTeams() {
 
 // Create a team
 export async function createTeam(data: { code: string; name: string }) {
+  await ensurePermission('users');
+
   try {
     await prisma.teams.create({
       data: {
@@ -35,6 +38,8 @@ export async function createTeam(data: { code: string; name: string }) {
 
 // Update a team
 export async function updateTeam(teamId: number, data: { code?: string; name?: string }) {
+  await ensurePermission('users');
+
   try {
     await prisma.teams.update({
       where: { id: teamId },
@@ -53,6 +58,8 @@ export async function updateTeam(teamId: number, data: { code?: string; name?: s
 
 // Delete a team
 export async function deleteTeam(teamId: number) {
+  await ensurePermission('users');
+
   try {
     await prisma.teams.delete({ where: { id: teamId } });
     revalidatePath('/[locale]/teams');

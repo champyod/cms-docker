@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { Trash2, Plus, Calendar, Clock, ExternalLink, HelpCircle } from 'lucide-react';
 import { ContestModal } from './ContestModal';
 import { apiClient } from '@/lib/apiClient';
@@ -13,6 +14,8 @@ export function ContestList({ initialContests, totalPages }: { initialContests: 
   const router = useRouter();
   const [contests] = useState(initialContests);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const pathname = usePathname();
+  const locale = pathname.split('/')[1] || 'en';
   const [selectedContest, setSelectedContest] = useState<any | null>(null);
 
 
@@ -56,7 +59,7 @@ export function ContestList({ initialContests, totalPages }: { initialContests: 
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-3">
           <h2 className="text-xl font-bold text-white">All Contests</h2>
-          <Link href="/en/docs#contests" className="p-1 hover:bg-white/10 rounded-full transition-colors text-neutral-400 hover:text-white" title="View Documentation">
+          <Link href={`/${locale}/docs#contests`} className="p-1 hover:bg-white/10 rounded-full transition-colors text-neutral-400 hover:text-white" title="View Documentation">
             <HelpCircle className="w-4 h-4" />
           </Link>
         </div>

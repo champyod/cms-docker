@@ -7,7 +7,8 @@ FROM alpine:3.18
 # procps: for free, uptime, etc.
 # postgresql-client: for CSV exports.
 # bc: for calculations in backup script.
-RUN apk add --no-cache bash curl docker-cli procps postgresql-client bc
+# jq: for JSON parsing of container config.
+RUN apk add --no-cache bash curl docker-cli procps postgresql-client bc jq
 
 # We copy the script from the context (repo root)
 COPY scripts/monitor.sh /usr/local/bin/monitor.sh

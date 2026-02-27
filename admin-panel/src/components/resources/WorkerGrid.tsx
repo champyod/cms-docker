@@ -19,6 +19,18 @@ interface WorkerStats {
 }
 
 export function WorkerGrid({ workers }: { workers: WorkerStats[] }) {
+  if (!workers || workers.length === 0) {
+    return (
+      <Card className="p-8 glass-card border-white/5 text-center">
+        <div className="flex flex-col items-center gap-3 text-neutral-500">
+          <Server className="w-12 h-12 opacity-20" />
+          <p className="text-sm font-medium">No worker nodes found</p>
+          <p className="text-xs">Workers are configured per-contest in Deployments page</p>
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
       {workers.map((worker) => (

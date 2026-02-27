@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { verifyApiAuth, apiError, apiSuccess } from '@/lib/api-utils';
+import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import bcrypt from 'bcryptjs';
@@ -8,8 +8,8 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { authorized } = await verifyApiAuth();
-  if (!authorized) return apiError({ message: 'Unauthorized', status: 401 });
+  const { authorized, response } = await verifyApiPermission('users');
+  if (!authorized) return response;
 
   const id = parseInt((await params).id);
   if (isNaN(id)) return apiError({ message: 'Invalid ID', status: 400 });
@@ -47,8 +47,8 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { authorized } = await verifyApiAuth();
-  if (!authorized) return apiError({ message: 'Unauthorized', status: 401 });
+  const { authorized, response } = await verifyApiPermission('users');
+  if (!authorized) return response;
 
   const id = parseInt((await params).id);
   if (isNaN(id)) return apiError({ message: 'Invalid ID', status: 400 });

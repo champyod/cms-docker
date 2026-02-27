@@ -313,6 +313,8 @@ echo ""
 if [ "$SETUP_TYPE" = "main" ]; then
     print_step "Deploying Main Server Stacks..."
     if [ "$DEPLOY_TYPE" = "img" ]; then
+        print_info "Pulling latest images..."
+        make pull
         make core-img
         make infra-img
         make admin-img
@@ -342,11 +344,22 @@ if [ "$SETUP_TYPE" = "main" ]; then
     echo ""
     read -p "Do you want to deploy a local worker on this machine? (y/n) [n]: " DEPLOY_LOCAL_WORKER
     if [ "$DEPLOY_LOCAL_WORKER" = "y" ]; then
-        if [ "$DEPLOY_TYPE" = "img" ]; then make worker-img; else make worker; fi
+        if [ "$DEPLOY_TYPE" = "img" ]; then
+            make pull
+            make worker-img
+        else
+            make worker
+        fi
     fi
 else
     print_step "Deploying Remote Worker..."
-    if [ "$DEPLOY_TYPE" = "img" ]; then make worker-img; else make worker; fi
+    if [ "$DEPLOY_TYPE" = "img" ]; then
+        print_info "Pulling latest images..."
+        make pull
+        make worker-img
+    else
+        make worker
+    fi
 fi
 
 # Final Summary

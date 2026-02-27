@@ -1,5 +1,6 @@
 import { getSession } from './auth';
 import { NextResponse } from 'next/server';
+import type { Permission } from './permissions';
 
 export function sanitize<T>(value: T | undefined | null): T | null {
   if (value === undefined || value === null || (value as any) === '$undefined') return null;
@@ -14,6 +15,26 @@ export async function verifyApiAuth() {
     return { authorized: false, response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
   return { authorized: true, session };
+}
+
+export async function verifyApiPermission(permission: Permission) {
+  const session = await getSession();
+  if (!session) {
+    return { authorized: false as const, response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+  }
+
+  const { permissions } = session;
+  const hasPermission = permissions?.permission_all ||
+    (permission === 'contests' && permissions?.permission_contests) ||
+    (permission === 'tasks' && permissions?.permission_tasks) ||
+    (permission === 'users' && permissions?.permission_users) ||
+    (permission === 'messaging' && permissions?.permission_messaging);
+
+  if (!hasPermission) {
+    return { authorized: false as const, response: NextResponse.json({ error: `Forbidden: Missing ${permission} permission` }, { status: 403 }) };
+  }
+
+  return { authorized: true as const, session };
 }
 
 export function apiError(error: any) {

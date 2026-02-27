@@ -16,6 +16,7 @@ export interface ContainerInfo {
   status: string;
   state: string;
   created: string;
+  isCmsContainer: boolean;
 }
 
 export async function getContainers() {
@@ -24,16 +25,20 @@ export async function getContainers() {
     const { stdout } = await execPromise('docker ps -a --format "{{json .}}"');
     const lines = stdout.trim().split('\n');
     if (!stdout.trim()) return [];
-    
+
     return lines.map(line => {
       const parsed = JSON.parse(line);
+      const name = parsed.Names;
+      const isCmsContainer = name.startsWith('cms-') || name.includes('cms');
+
       return {
         id: parsed.ID,
-        name: parsed.Names,
+        name: name,
         image: parsed.Image,
         status: parsed.Status,
         state: parsed.State,
-        created: parsed.CreatedAt
+        created: parsed.CreatedAt,
+        isCmsContainer: isCmsContainer
       } as ContainerInfo;
     });
   } catch (error) {
