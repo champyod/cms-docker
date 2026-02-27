@@ -173,11 +173,7 @@ admin:
 	$(COMPOSE) -f docker-compose.admin.yml up -d --build
 
 contest:
-	@if [ -f docker-compose.contests.generated.yml ] && grep -q "contest-web-server-" docker-compose.contests.generated.yml; then \
-		$(COMPOSE) -f docker-compose.contests.generated.yml up -d --build; \
-	else \
-		echo "No contests configured in Admin UI. Skip deployment."; \
-	fi
+	@bash scripts/select_contest.sh build
 
 worker:
 	$(COMPOSE) -f docker-compose.worker.yml up -d --build
@@ -243,11 +239,10 @@ admin-img:
 	$(COMPOSE) -f docker-compose.admin.yml -f docker-compose.admin.img.yml up -d --no-build
 
 contest-img:
-	@if [ -f docker-compose.contests.generated.yml ] && grep -q "contest-web-server-" docker-compose.contests.generated.yml; then \
-		$(COMPOSE) -f docker-compose.contests.generated.yml up -d --no-build; \
-	else \
-		echo "No contests configured in Admin UI. Skip deployment."; \
-	fi
+	@bash scripts/select_contest.sh img
+
+contest-down:
+	$(COMPOSE) -f docker-compose.contest.yml -f docker-compose.contest.img.yml down
 
 worker-img:
 	$(COMPOSE) -f docker-compose.worker.yml -f docker-compose.worker.img.yml up -d --no-build

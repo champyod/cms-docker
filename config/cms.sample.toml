@@ -48,7 +48,7 @@ EvaluationService = [["cms-evaluation-service", 25000]]
 #     ["cms-worker-2", 26002],
 #     ["cms-worker-3", 26003],
 # ]
-ContestWebServer = [["cms-contest-web-server-1", 21000]]
+ContestWebServer = [["cms-contest-web-server", 21000]]
 AdminWebServer = [["cms-admin-web-server", 21100]]
 ProxyService = [["cms-proxy-service", 28600]]
 PrometheusExporter = []
