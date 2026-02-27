@@ -2,7 +2,6 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import { revalidatePath } from 'next/cache';
 import { exec } from 'child_process';
 import util from 'util';
 import { ensurePermission } from '@/lib/permissions';
@@ -31,32 +30,6 @@ async function logToDiscord(title: string, message: string, color: number = 3447
     } catch (e) {
         console.error('Failed to send discord log:', e);
     }
-}
-
-export async function switchContest(contestId: number) {
-  await ensurePermission('contests');
-  try {
-    const repoRoot = getRepoRoot();
-    let envPath = path.join(repoRoot, '.env.contest');
-    
-    let content = await fs.readFile(envPath, 'utf-8');
-    const newContent = content.replace(/^CONTEST_ID=\d+/m, `CONTEST_ID=${contestId}`);
-
-    if (content === newContent && !content.includes('CONTEST_ID=')) {
-        await fs.writeFile(envPath, content + `\nCONTEST_ID=${contestId}\n`);
-    } else {
-        await fs.writeFile(envPath, newContent);
-    }
-
-    const rootDir = getRepoRoot();
-    const cmd = `make env && docker compose -f docker-compose.contest.yml up -d --build`;
-    await execPromise(cmd, { cwd: rootDir });
-
-    await logToDiscord('Contest Switch', `Admin switched active contest to ID: **${contestId}**`, 16753920);
-
-    revalidatePath('/[locale]/contests');
-    return { success: true, message: 'Contest switched and services restarting...' };
-  } catch (error) { return { success: false, error: (error as Error).message }; }
 }
 
 interface RestartPolicies {

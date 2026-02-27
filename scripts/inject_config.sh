@@ -19,7 +19,7 @@ fi
 
 # Function to get value from env file
 get_env_val() {
-    grep "^$1=" "$ENV_FILE" | cut -d '=' -f2-
+    grep "^$1=" "$ENV_FILE" | cut -d '=' -f2- | tr -d '\r'
 }
 
 # Read variables
