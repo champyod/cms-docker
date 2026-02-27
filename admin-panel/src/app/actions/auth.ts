@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { createSession, deleteSession, getSession } from "@/lib/auth";
-import { redirect } from "next/navigation";
+import { redirect } from "@/lib/redirect";
 import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
@@ -58,12 +58,12 @@ export async function login(prevState: any, formData: FormData) {
   }
 
   revalidatePath("/");
-  redirect("/");
+  await redirect("/dashboard");
 }
 
 export async function logout() {
   await deleteSession();
-  redirect("/auth/login");
+  await redirect("/auth/login");
 }
 
 export async function getCurrentUser() {

@@ -1,5 +1,5 @@
 import { getSession } from "@/lib/auth";
-import { redirect } from "next/navigation";
+import { redirect } from "@/lib/redirect";
 
 export type Permission = 'all' | 'tasks' | 'users' | 'contests' | 'messaging';
 
@@ -7,7 +7,7 @@ export async function checkPermission(permission: Permission, redirectToLogin = 
   const session = await getSession();
   
   if (!session) {
-    if (redirectToLogin) redirect("/auth/login");
+    if (redirectToLogin) await redirect("/auth/login");
     return false;
   }
 

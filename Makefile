@@ -114,6 +114,13 @@ env:
 	@echo "Generating a secure SECRET_KEY in config/cms.toml..."
 	@SECRET=$$(python3 -c 'import secrets; print(secrets.token_hex(16))'); \
 	sed -i "s/secret_key = \"8e045a51e4b102ea803c06f92841a1fb\"/secret_key = \"$$SECRET\"/" config/cms.toml
+	@echo "Generating a secure AUTH_SECRET for the Admin Panel..."
+	@AUTH_SECRET=$$(openssl rand -hex 32); \
+	if grep -q "^AUTH_SECRET=" .env; then \
+		sed -i "s|^AUTH_SECRET=.*|AUTH_SECRET=$$AUTH_SECRET|" .env; \
+	else \
+		echo "AUTH_SECRET=$$AUTH_SECRET" >> .env; \
+	fi
 	@# Inject database configuration and service addresses into config/cms.toml...
 	@chmod +x scripts/inject_config.sh && ./scripts/inject_config.sh
 	@# Generate Multi-Contest Compose
