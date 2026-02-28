@@ -76,10 +76,11 @@ async function getRecentActivity() {
 }
 
 export default async function DashboardPage({
-  params: { locale },
+  params: paramsPromise,
 }: {
-  params: { locale: string };
+  params: Promise<{ locale: string }>;
 }) {
+  const { locale } = await paramsPromise;
   const dict = await getDictionary(locale);
   const [stats, serviceStatus, recentActivity] = await Promise.all([
     getStats(),
