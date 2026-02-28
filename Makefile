@@ -168,7 +168,7 @@ admin:
 	$(COMPOSE) -f docker-compose.admin.yml up -d --build
 
 contest:
-	@bash scripts/select_contest.sh build
+	$(COMPOSE) -f docker-compose.contest.yml up -d --build
 
 worker:
 	$(COMPOSE) -f docker-compose.worker.yml up -d --build
@@ -222,10 +222,10 @@ admin-img:
 	$(COMPOSE) -f docker-compose.admin.yml -f docker-compose.admin.img.yml up -d --no-build
 
 contest-img:
-	@bash scripts/select_contest.sh img
+	$(COMPOSE) -f docker-compose.contest.yml -f docker-compose.contest.img.yml up -d --no-build
 
 contest-down:
-	$(COMPOSE) -f docker-compose.contest.yml -f docker-compose.contest.img.yml down
+	$(COMPOSE) -f docker-compose.contest.yml down
 
 worker-img:
 	$(COMPOSE) -f docker-compose.worker.yml -f docker-compose.worker.img.yml up -d --no-build
