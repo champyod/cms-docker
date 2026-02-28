@@ -123,18 +123,6 @@ env:
 	fi
 	@# Inject database configuration and service addresses into config/cms.toml...
 	@chmod +x scripts/inject_config.sh && ./scripts/inject_config.sh
-	@# Generate Multi-Contest Compose
-	@if [ -f .env.contest ]; then \
-		CONFIG=$$(grep "^CONTESTS_DEPLOY_CONFIG=" .env.contest | cut -d '=' -f2-); \
-		TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env.admin 2>/dev/null | cut -d '=' -f2- || echo "img"); \
-		export CONTESTS_DEPLOY_CONFIG="$$CONFIG"; \
-		export DEPLOYMENT_TYPE="$$TYPE"; \
-		bash scripts/generate-contest-compose.sh; \
-	fi
-	@echo "" >> .env
-	@echo "" >> .env
-	@echo "# Docker Compose File Configuration" >> .env
-	@echo "COMPOSE_FILE=docker-compose.core.yml:docker-compose.admin.yml:docker-compose.contests.generated.yml:docker-compose.worker.yml:docker-compose.monitor.yml" >> .env
 	@echo ".env file generated. You can now run: ./scripts/setup.sh"
 
 core:
@@ -198,18 +186,10 @@ admin-clean:
 	$(COMPOSE) -f docker-compose.admin.yml down -v
 
 contest-stop:
-	@if [ -f docker-compose.contests.generated.yml ] && grep -q "contest-web-server-" docker-compose.contests.generated.yml; then \
-		$(COMPOSE) -f docker-compose.contests.generated.yml down; \
-	elif [ -f docker-compose.contest.yml ]; then \
-		$(COMPOSE) -f docker-compose.contest.yml down; \
-	fi
+	$(COMPOSE) -f docker-compose.contest.yml down
 
 contest-clean:
-	@if [ -f docker-compose.contests.generated.yml ] && grep -q "contest-web-server-" docker-compose.contests.generated.yml; then \
-		$(COMPOSE) -f docker-compose.contests.generated.yml down -v; \
-	elif [ -f docker-compose.contest.yml ]; then \
-		$(COMPOSE) -f docker-compose.contest.yml down -v; \
-	fi
+	$(COMPOSE) -f docker-compose.contest.yml down -v
 
 worker-stop:
 	$(COMPOSE) -f docker-compose.worker.yml down
@@ -232,10 +212,6 @@ pull:
 	@$(COMPOSE) -f docker-compose.admin.yml -f docker-compose.admin.img.yml pull || true
 	@$(COMPOSE) -f docker-compose.worker.yml -f docker-compose.worker.img.yml pull || true
 	@$(COMPOSE) -f docker-compose.monitor.yml -f docker-compose.monitor.img.yml pull || true
-	@if [ -f docker-compose.contests.generated.yml ] && grep -q "contest-web-server-" docker-compose.contests.generated.yml; then \
-		echo "Pulling contest images from generated file..."; \
-		$(COMPOSE) -f docker-compose.contests.generated.yml pull || true; \
-	fi
 	@echo "Pull complete."
 
 core-img:
