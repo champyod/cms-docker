@@ -75,7 +75,7 @@ env:
 		echo "" >> .env; \
 		echo "WARNING: Using .env.infra.example template"; \
 	fi
-	@# Generate admin-panel/.env for Prisma
+	@# Generate admin-panel/.env for Prisma and AUTH_SECRET
 	@echo "Generating admin-panel/.env..."
 	@if [ -f .env.core ]; then \
 		DB_USER=$$(grep "^POSTGRES_USER=" .env.core | cut -d '=' -f2-); \
@@ -83,7 +83,9 @@ env:
 		DB_NAME=$$(grep "^POSTGRES_DB=" .env.core | cut -d '=' -f2-); \
 		DB_HOST=$$(grep "^POSTGRES_HOST=" .env.core | cut -d '=' -f2-); \
 		DB_PORT=$$(grep "^POSTGRES_PORT=" .env.core | cut -d '=' -f2-); \
+		AUTH_SECRET=$$(grep "^AUTH_SECRET=" .env | cut -d '=' -f2-); \
 		echo "DATABASE_URL=\"postgresql://$$DB_USER:$$DB_PASS@localhost:$$DB_PORT/$$DB_NAME\"" > admin-panel/.env; \
+		echo "AUTH_SECRET=$$AUTH_SECRET" >> admin-panel/.env; \
 	else \
 		echo "# Please configure .env.core first" > admin-panel/.env; \
 	fi
