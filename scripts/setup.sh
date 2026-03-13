@@ -96,164 +96,223 @@ if [ -f .env.core ]; then
     
     print_info "Detected Public IP: $SAVED_PUBLIC_IP"
     print_info "Detected Strategy: $([ "$DETECTED_DEPLOY_TYPE" = "img" ] && echo "Pre-built Images" || echo "Source Build")"
-fi
 
-# 1. Setup Type
-echo ""
-print_step "Setup Type"
-echo "What kind of node are you setting up?"
-echo "1) MAIN SERVER (DB, Log, Admin, Contest, etc.)"
-echo "2) REMOTE WORKER (Evaluation node only)"
-read -p "Select type [1]: " SETUP_TYPE_CHOICE
-SETUP_TYPE_CHOICE=${SETUP_TYPE_CHOICE:-1}
-
-if [ "$SETUP_TYPE_CHOICE" = "2" ]; then
-    SETUP_TYPE="worker"
-    print_info "Configuring as Remote Worker."
-else
-    SETUP_TYPE="main"
-    print_info "Configuring as Main Server."
-fi
-
-# 2. Deployment Strategy
-echo ""
-print_step "Deployment Strategy"
-if [ "$IS_UPDATE" = "true" ]; then
-    echo "Current strategy is: $([ "$DETECTED_DEPLOY_TYPE" = "img" ] && echo "Pre-built Images" || echo "Source Build")"
-    read -p "Keep existing strategy? (y/n) [y]: " KEEP_STRAT
-    KEEP_STRAT=${KEEP_STRAT:-y}
-    if [ "$KEEP_STRAT" = "y" ]; then
-        DEPLOY_TYPE=$DETECTED_DEPLOY_TYPE
+    echo ""
+    print_step "Quick Update"
+    read -p "Do you want to run a Quick Update? This will keep all your old settings and just check for new missing variables. (y/n) [y]: " QUICK_UPDATE
+    QUICK_UPDATE=${QUICK_UPDATE:-y}
+    
+    if [ "$QUICK_UPDATE" = "y" ]; then
+        print_success "Quick Update selected. Bypassing configuration questions..."
+        
+        # Determine Setup Type automatically based on existing configs
+        if [ -n "$DETECTED_DB_PASS" ] && [ "$DETECTED_DB_PASS" != "remote_worker_no_db" ]; then
+            SETUP_TYPE="main"
+        else
+            SETUP_TYPE="worker"
+        fi
+        
+        DEPLOY_TYPE=${DETECTED_DEPLOY_TYPE:-img}
+        PUBLIC_IP=${SAVED_PUBLIC_IP:-127.0.0.1}
+        TAILSCALE_IP=${DETECTED_TAILSCALE_IP:-127.0.0.1}
+        
+        if [ "$TAILSCALE_IP" != "127.0.0.1" ]; then
+            REMOTE_WORKERS_ENABLED=true
+        else
+            REMOTE_WORKERS_ENABLED=false
+        fi
+        
+        DB_PASS=$DETECTED_DB_PASS
+        
+        if [ -z "$DETECTED_AUTH_SECRET" ]; then
+            AUTH_SECRET=$(openssl rand -hex 32)
+        else
+            AUTH_SECRET=$DETECTED_AUTH_SECRET
+        fi
+        
+        if [ -z "$DETECTED_CMS_SECRET" ]; then
+            CMS_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
+        else
+            CMS_SECRET=$DETECTED_CMS_SECRET
+        fi
+        
+        if [ -z "$DETECTED_CONTEST_SECRET" ]; then
+            CONTEST_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
+        else
+            CONTEST_SECRET=$DETECTED_CONTEST_SECRET
+        fi
+        
+        # Skip straight to Section 5 Generation
+        SKIP_QUESTIONS=true
     else
-        echo "1) PRE-BUILT IMAGES"
-        echo "2) BUILD FROM SOURCE"
-        read -p "Select new strategy [1]: " STRATEGY_CHOICE
+        SKIP_QUESTIONS=false
+    fi
+else
+    SKIP_QUESTIONS=false
+fi
+
+if [ "$SKIP_QUESTIONS" != "true" ]; then
+    # 1. Setup Type
+    echo ""
+    print_step "Setup Type"
+    echo "What kind of node are you setting up?"
+    echo "1) MAIN SERVER (DB, Log, Admin, Contest, etc.)"
+    echo "2) REMOTE WORKER (Evaluation node only)"
+    read -p "Select type [1]: " SETUP_TYPE_CHOICE
+    SETUP_TYPE_CHOICE=${SETUP_TYPE_CHOICE:-1}
+
+    if [ "$SETUP_TYPE_CHOICE" = "2" ]; then
+        SETUP_TYPE="worker"
+        print_info "Configuring as Remote Worker."
+    else
+        SETUP_TYPE="main"
+        print_info "Configuring as Main Server."
+    fi
+
+
+    # 2. Deployment Strategy
+    echo ""
+    print_step "Deployment Strategy"
+    if [ "$IS_UPDATE" = "true" ]; then
+        echo "Current strategy is: $([ "$DETECTED_DEPLOY_TYPE" = "img" ] && echo "Pre-built Images" || echo "Source Build")"
+        read -p "Keep existing strategy? (y/n) [y]: " KEEP_STRAT
+        KEEP_STRAT=${KEEP_STRAT:-y}
+        if [ "$KEEP_STRAT" = "y" ]; then
+            DEPLOY_TYPE=$DETECTED_DEPLOY_TYPE
+        else
+            echo "1) PRE-BUILT IMAGES"
+            echo "2) BUILD FROM SOURCE"
+            read -p "Select new strategy [1]: " STRATEGY_CHOICE
+            STRATEGY_CHOICE=${STRATEGY_CHOICE:-1}
+            DEPLOY_TYPE=$([ "$STRATEGY_CHOICE" = "1" ] && echo "img" || echo "src")
+        fi
+    else
+        echo "How would you like to deploy CMS?"
+        echo "1) PRE-BUILT IMAGES (Fastest, recommended for production)"
+        echo "2) BUILD FROM SOURCE (Allows custom code changes, takes longer)"
+        read -p "Select strategy [1]: " STRATEGY_CHOICE
         STRATEGY_CHOICE=${STRATEGY_CHOICE:-1}
         DEPLOY_TYPE=$([ "$STRATEGY_CHOICE" = "1" ] && echo "img" || echo "src")
     fi
-else
-    echo "How would you like to deploy CMS?"
-    echo "1) PRE-BUILT IMAGES (Fastest, recommended for production)"
-    echo "2) BUILD FROM SOURCE (Allows custom code changes, takes longer)"
-    read -p "Select strategy [1]: " STRATEGY_CHOICE
-    STRATEGY_CHOICE=${STRATEGY_CHOICE:-1}
-    DEPLOY_TYPE=$([ "$STRATEGY_CHOICE" = "1" ] && echo "img" || echo "src")
-fi
 
-# 3. Network & Security Configuration
-echo ""
-print_step "Network & Security"
-if [ "$SETUP_TYPE" = "main" ]; then
-    LIVE_IP=$(curl -s -4 ifconfig.me || echo "127.0.0.1")
-    if [ "$IS_UPDATE" = "true" ]; then
-        print_info "Current saved IP: $SAVED_PUBLIC_IP"
-        if [ "$SAVED_PUBLIC_IP" != "$LIVE_IP" ]; then
-            print_warning "Your live detected IP ($LIVE_IP) is different from the saved one."
-            read -p "Use saved IP ($SAVED_PUBLIC_IP)? (y/n) [y]: " USE_OLD_IP
-            USE_OLD_IP=${USE_OLD_IP:-y}
-            if [ "$USE_OLD_IP" = "y" ]; then 
-                PUBLIC_IP=$SAVED_PUBLIC_IP
-            else 
-                read -p "Use live detected IP ($LIVE_IP)? (y/n) [y]: " USE_LIVE
-                USE_LIVE=${USE_LIVE:-y}
-                if [ "$USE_LIVE" = "y" ]; then PUBLIC_IP=$LIVE_IP; else read -p "Enter manual IP: " PUBLIC_IP; fi
-            fi
-        else
-            PUBLIC_IP=$SAVED_PUBLIC_IP
-            print_success "Using saved IP: $PUBLIC_IP"
-        fi
-    else
-        read -p "Public IP of this server [$LIVE_IP]: " PUBLIC_IP
-        PUBLIC_IP=${PUBLIC_IP:-$LIVE_IP}
-    fi
-
+    # 3. Network & Security Configuration
     echo ""
-    print_info "Remote Worker Access Security"
-    echo "Do you want to allow remote workers to connect via Tailscale/VPN?"
-    echo "If yes, RPC ports will be bound to your VPN IP. If no, they remain local-only (127.0.0.1)."
-    read -p "Use Tailscale/VPN for RPC? (y/n) [n]: " USE_VPN
-    if [ "$USE_VPN" = "y" ]; then
-        if [ -n "$DETECTED_TAILSCALE_IP" ]; then
-            read -p "Enter Tailscale IP [$DETECTED_TAILSCALE_IP]: " TAILSCALE_IP
-            TAILSCALE_IP=${TAILSCALE_IP:-$DETECTED_TAILSCALE_IP}
-        else
-            read -p "Enter Tailscale IP: " TAILSCALE_IP
-        fi
-        REMOTE_WORKERS_ENABLED=true
-    else
-        TAILSCALE_IP=127.0.0.1
-        REMOTE_WORKERS_ENABLED=false
-    fi
-else
-    # Worker Setup
-    read -p "Enter Main Server IP/Hostname (Tailscale preferred): " MAIN_SERVER_IP
-    PUBLIC_IP=$MAIN_SERVER_IP
-fi
-
-# 4. Database Configuration & Secrets (Main Server Only)
-echo ""
-if [ "$SETUP_TYPE" = "main" ]; then
-    print_step "Database Configuration & Secrets"
-    if [ "$IS_UPDATE" = "true" ]; then
-        print_info "Reusing existing database credentials."
-        DB_PASS=$DETECTED_DB_PASS
-        
-        # Check AUTH_SECRET
-        if [ -n "$DETECTED_AUTH_SECRET" ]; then
-            read -p "Regenerate Admin Panel AUTH_SECRET? (y/n) [n]: " REGEN_AUTH
-            if [ "$REGEN_AUTH" = "y" ]; then
-                AUTH_SECRET=$(openssl rand -hex 32)
-            else
-                AUTH_SECRET=$DETECTED_AUTH_SECRET
-            fi
-        else
-            AUTH_SECRET=$(openssl rand -hex 32)
-        fi
-        
-        # Check CMS_SECRET_KEY
-        if [ -n "$DETECTED_CMS_SECRET" ]; then
-            read -p "Regenerate Core CMS Secret Key? (y/n) [n]: " REGEN_CMS_SEC
-            if [ "$REGEN_CMS_SEC" = "y" ]; then
-                CMS_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
-                if [ -f config/cms.toml ]; then
-                    sed -i "s/secret_key = \".*\"/secret_key = \"$CMS_SECRET\"/" config/cms.toml
+    print_step "Network & Security"
+    if [ "$SETUP_TYPE" = "main" ]; then
+        LIVE_IP=$(curl -s -4 ifconfig.me || echo "127.0.0.1")
+        if [ "$IS_UPDATE" = "true" ]; then
+            print_info "Current saved IP: $SAVED_PUBLIC_IP"
+            if [ "$SAVED_PUBLIC_IP" != "$LIVE_IP" ]; then
+                print_warning "Your live detected IP ($LIVE_IP) is different from the saved one."
+                read -p "Use saved IP ($SAVED_PUBLIC_IP)? (y/n) [y]: " USE_OLD_IP
+                USE_OLD_IP=${USE_OLD_IP:-y}
+                if [ "$USE_OLD_IP" = "y" ]; then 
+                    PUBLIC_IP=$SAVED_PUBLIC_IP
+                else 
+                    read -p "Use live detected IP ($LIVE_IP)? (y/n) [y]: " USE_LIVE
+                    USE_LIVE=${USE_LIVE:-y}
+                    if [ "$USE_LIVE" = "y" ]; then PUBLIC_IP=$LIVE_IP; else read -p "Enter manual IP: " PUBLIC_IP; fi
                 fi
             else
-                CMS_SECRET=$DETECTED_CMS_SECRET
+                PUBLIC_IP=$SAVED_PUBLIC_IP
+                print_success "Using saved IP: $PUBLIC_IP"
             fi
         else
-            CMS_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
+            read -p "Public IP of this server [$LIVE_IP]: " PUBLIC_IP
+            PUBLIC_IP=${PUBLIC_IP:-$LIVE_IP}
         fi
-        
-        # Check CONTEST_SECRET
-        if [ -n "$DETECTED_CONTEST_SECRET" ]; then
-            read -p "Regenerate Contest Server Secret Key? (y/n) [n]: " REGEN_CONTEST_SEC
-            if [ "$REGEN_CONTEST_SEC" = "y" ]; then
-                CONTEST_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
+
+        echo ""
+        print_info "Remote Worker Access Security"
+        echo "Do you want to allow remote workers to connect via Tailscale/VPN?"
+        echo "If yes, RPC ports will be bound to your VPN IP. If no, they remain local-only (127.0.0.1)."
+        read -p "Use Tailscale/VPN for RPC? (y/n) [n]: " USE_VPN
+        if [ "$USE_VPN" = "y" ]; then
+            if [ -n "$DETECTED_TAILSCALE_IP" ]; then
+                read -p "Enter Tailscale IP [$DETECTED_TAILSCALE_IP]: " TAILSCALE_IP
+                TAILSCALE_IP=${TAILSCALE_IP:-$DETECTED_TAILSCALE_IP}
             else
-                CONTEST_SECRET=$DETECTED_CONTEST_SECRET
+                read -p "Enter Tailscale IP: " TAILSCALE_IP
             fi
+            REMOTE_WORKERS_ENABLED=true
         else
-            CONTEST_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
+            TAILSCALE_IP=127.0.0.1
+            REMOTE_WORKERS_ENABLED=false
         fi
     else
-        read -p "Database password [generate random]: " DB_PASS
-        if [ -z "$DB_PASS" ]; then
-            DB_PASS=$(openssl rand -base64 12 | tr -d "=+/" | cut -c1-12)
-            print_info "Generated password: $DB_PASS"
-        fi
-        AUTH_SECRET=$(openssl rand -hex 32)
-        CMS_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
-        CONTEST_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
+        # Worker Setup
+        read -p "Enter Main Server IP/Hostname (Tailscale preferred): " MAIN_SERVER_IP
+        PUBLIC_IP=$MAIN_SERVER_IP
     fi
-fi
+
+    # 4. Database Configuration & Secrets (Main Server Only)
+    echo ""
+    if [ "$SETUP_TYPE" = "main" ]; then
+        print_step "Database Configuration & Secrets"
+        if [ "$IS_UPDATE" = "true" ]; then
+            print_info "Reusing existing database credentials."
+            DB_PASS=$DETECTED_DB_PASS
+            
+            # Check AUTH_SECRET
+            if [ -n "$DETECTED_AUTH_SECRET" ]; then
+                read -p "Regenerate Admin Panel AUTH_SECRET? (y/n) [n]: " REGEN_AUTH
+                if [ "$REGEN_AUTH" = "y" ]; then
+                    AUTH_SECRET=$(openssl rand -hex 32)
+                else
+                    AUTH_SECRET=$DETECTED_AUTH_SECRET
+                fi
+            else
+                AUTH_SECRET=$(openssl rand -hex 32)
+            fi
+            
+            # Check CMS_SECRET_KEY
+            if [ -n "$DETECTED_CMS_SECRET" ]; then
+                read -p "Regenerate Core CMS Secret Key? (y/n) [n]: " REGEN_CMS_SEC
+                if [ "$REGEN_CMS_SEC" = "y" ]; then
+                    CMS_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
+                    if [ -f config/cms.toml ]; then
+                        sed -i "s/secret_key = \".*\"/secret_key = \"$CMS_SECRET\"/" config/cms.toml
+                    fi
+                else
+                    CMS_SECRET=$DETECTED_CMS_SECRET
+                fi
+            else
+                CMS_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
+            fi
+            
+            # Check CONTEST_SECRET
+            if [ -n "$DETECTED_CONTEST_SECRET" ]; then
+                read -p "Regenerate Contest Server Secret Key? (y/n) [n]: " REGEN_CONTEST_SEC
+                if [ "$REGEN_CONTEST_SEC" = "y" ]; then
+                    CONTEST_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
+                else
+                    CONTEST_SECRET=$DETECTED_CONTEST_SECRET
+                fi
+            else
+                CONTEST_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
+            fi
+        else
+            read -p "Database password [generate random]: " DB_PASS
+            if [ -z "$DB_PASS" ]; then
+                DB_PASS=$(openssl rand -base64 12 | tr -d "=+/" | cut -c1-12)
+                print_info "Generated password: $DB_PASS"
+            fi
+            AUTH_SECRET=$(openssl rand -hex 32)
+            CMS_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
+            CONTEST_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
+        fi
+    fi
+fi # End SKIP_QUESTIONS block
+
 
 # 5. Environment Generation
 echo ""
 print_step "Updating Configuration Files..."
 
 REGENERATE="n"
-if [ "$IS_UPDATE" = "true" ]; then
+if [ "$QUICK_UPDATE" = "y" ]; then
+    echo "Quick Update: Keeping existing configuration structure."
+elif [ "$IS_UPDATE" = "true" ]; then
     echo "Existing configuration files detected."
     read -p "Regenerate files from scratch? (y/n) [n]: " REGENERATE
     REGENERATE=${REGENERATE:-n}
@@ -364,10 +423,20 @@ else
             grep -E '^[A-Za-z0-9_]+=' "$template" | while read -r line; do
                 key=$(echo "$line" | cut -d '=' -f1)
                 default_val=$(echo "$line" | cut -d '=' -f2-)
+                
+                # Skip known secrets handled dynamically
+                if [ "$key" = "AUTH_SECRET" ] || [ "$key" = "SECRET_KEY" ] || [ "$key" = "CMS_SECRET_KEY" ]; then
+                    continue
+                fi
+                
                 if ! grep -q "^${key}=" "$target"; then
                     print_warning "New variable found in upstream $template: ${key}=${default_val}"
-                    read -p "Add ${key} to $target? (y/n) [y]: " ADD_VAR
-                    ADD_VAR=${ADD_VAR:-y}
+                    if [ "$QUICK_UPDATE" = "y" ]; then
+                        ADD_VAR="y"
+                    else
+                        read -p "Add ${key} to $target? (y/n) [y]: " ADD_VAR
+                        ADD_VAR=${ADD_VAR:-y}
+                    fi
                     if [ "$ADD_VAR" = "y" ]; then
                         echo "${key}=${default_val}" >> "$target"
                         print_success "Added ${key} to $target"
