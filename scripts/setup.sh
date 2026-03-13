@@ -420,8 +420,15 @@ else
         [ -f "$template" ] || continue
         target="${template%.example}"
         if [ -f "$target" ]; then
-            grep -E '^[A-Za-z0-9_]+=' "$template" | while read -r line; do
-                key=$(echo "$line" | cut -d '=' -f1)
+            grep -E '^#?[[:space:]]*[A-Za-z0-9_]+=' "$template" | while read -r line; do
+                # Determine if it's a commented variable
+                is_commented=false
+                if [[ "$line" =~ ^# ]]; then
+                    is_commented=true
+                fi
+                
+                # Extract key and value
+                key=$(echo "$line" | sed -E 's/^#?[[:space:]]*([^=]+)=.*/\1/')
                 default_val=$(echo "$line" | cut -d '=' -f2-)
                 
                 # Skip known secrets handled dynamically
@@ -429,17 +436,24 @@ else
                     continue
                 fi
                 
-                if ! grep -q "^${key}=" "$target"; then
-                    print_warning "New variable found in upstream $template: ${key}=${default_val}"
-                    if [ "$QUICK_UPDATE" = "y" ]; then
-                        ADD_VAR="y"
+                # Check if the variable exists (commented or uncommented)
+                if ! grep -q -E "^#?[[:space:]]*${key}=" "$target"; then
+                    if [ "$is_commented" = true ]; then
+                        # Variable is commented in template, just append it commented silently
+                        echo "$line" >> "$target"
+                        print_info "Added commented variable ${key} to $target"
                     else
-                        read -p "Add ${key} to $target? (y/n) [y]: " ADD_VAR
-                        ADD_VAR=${ADD_VAR:-y}
-                    fi
-                    if [ "$ADD_VAR" = "y" ]; then
-                        echo "${key}=${default_val}" >> "$target"
-                        print_success "Added ${key} to $target"
+                        print_warning "New variable found in upstream $template: ${key}=${default_val}"
+                        if [ "$QUICK_UPDATE" = "y" ]; then
+                            ADD_VAR="y"
+                        else
+                            read -p "Add ${key} to $target? (y/n) [y]: " ADD_VAR
+                            ADD_VAR=${ADD_VAR:-y}
+                        fi
+                        if [ "$ADD_VAR" = "y" ]; then
+                            echo "${key}=${default_val}" >> "$target"
+                            print_success "Added ${key} to $target"
+                        fi
                     fi
                 fi
             done
