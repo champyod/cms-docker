@@ -4,11 +4,11 @@ Scalable, containerized deployment for the [Contest Management System (CMS)](htt
 
 > **📚 New to CMS?** Check out our [**Step-by-Step Tutorial**](docs/TUTORIAL.md) for a complete walkthrough!
 
-## Quick Start (Recommended)
+## 1. Automated Setup (Most Recommended)
 
 The easiest way to deploy or update CMS is using our automated scripts.
 
-### 1. Initial Setup
+### Initial Setup
 Clone the repository and initialize the submodules.
 
 ```bash
@@ -18,14 +18,14 @@ cd cms-docker
 git submodule update --init --recursive
 ```
 
-### 2. Configure Environment
+### Configure Environment
 Use the interactive configuration tool to set up your `.env` files. This script will ask you for credentials or generate secure random passwords for you.
 
 ```bash
 ./scripts/configure-env.sh
 ```
 
-### 3. Deploy
+### Deploy
 Run the comprehensive setup script. It will detect if you are performing a fresh install or an update, ask for your preferred deployment strategy (Pre-built Images vs. Source Build), and handle the entire deployment process automatically.
 
 ```bash
@@ -90,9 +90,12 @@ The system now supports automated submission backups to CSV with smart cleanup p
 
 ---
 
-## Advanced Manual Deployment
+## Manual Deployment Options
 
-If you prefer manual control, you can use the following commands:
+If you prefer manual control over the stack, you can use the following commands:
+
+### 2. Makefile Deployment (Pre-built Images)
+Use this if you want manual control with faster deployment using pre-built images.
 
 **Step 1: Configuration**
 ```bash
@@ -101,7 +104,7 @@ cp .env.core.example .env.core
 make env
 ```
 
-**Step 2: Deploy with Images**
+**Step 2: Deploy**
 ```bash
 make pull
 make core-img     # Start Core Services
@@ -111,7 +114,17 @@ make admin-img    # Start Admin Panel
 make contest-img  # Start Contest Interface
 ```
 
-**Step 3: Build from Source**
+### 3. Manual Build from Source
+Use this if you need to customize the CMS source or build for a specific architecture.
+
+**Step 1: Configuration**
+```bash
+cp .env.core.example .env.core
+# ... edit .env.* files ...
+make env
+```
+
+**Step 2: Build & Deploy**
 ```bash
 make core
 make cms-init
