@@ -98,8 +98,14 @@ env:
 		echo "Removing directory config/cms.toml (created by Docker volumes)..."; \
 		rm -rf config/cms.toml; \
 	fi
-	@echo "Refreshing config/cms.toml from sample..."
-	@cp config/cms.sample.toml config/cms.toml
+	@if [ ! -f config/cms.toml ]; then \
+		echo "Refreshing config/cms.toml from sample..."; \
+		cp config/cms.sample.toml config/cms.toml; \
+		echo "Injecting database configuration and service addresses into config/cms.toml..."; \
+		chmod +x scripts/inject_config.sh && ./scripts/inject_config.sh; \
+	else \
+		echo "Existing config/cms.toml detected. Retaining user configuration."; \
+	fi
 	
 	@if [ -d config/cms_ranking.toml ]; then \
 		echo "Removing directory config/cms_ranking.toml (created by Docker volumes)..."; \
@@ -110,19 +116,9 @@ env:
 		cp config/cms_ranking.sample.toml config/cms_ranking.toml; \
 		echo "Setting bind address to 0.0.0.0 in config/cms_ranking.toml..."; \
 		sed -i 's/\"127.0.0.1\"/\"0.0.0.0\"/g' config/cms_ranking.toml; \
-	fi
-	@echo "Generating a secure SECRET_KEY in config/cms.toml..."
-	@SECRET=$$(python3 -c 'import secrets; print(secrets.token_hex(16))'); \
-	sed -i "s/secret_key = \"8e045a51e4b102ea803c06f92841a1fb\"/secret_key = \"$$SECRET\"/" config/cms.toml
-	@echo "Generating a secure AUTH_SECRET for the Admin Panel..."
-	@AUTH_SECRET=$$(openssl rand -hex 32); \
-	if grep -q "^AUTH_SECRET=" .env; then \
-		sed -i "s|^AUTH_SECRET=.*|AUTH_SECRET=$$AUTH_SECRET|" .env; \
 	else \
-		echo "AUTH_SECRET=$$AUTH_SECRET" >> .env; \
+		echo "Existing config/cms_ranking.toml detected. Retaining user configuration."; \
 	fi
-	@# Inject database configuration and service addresses into config/cms.toml...
-	@chmod +x scripts/inject_config.sh && ./scripts/inject_config.sh
 	@echo ".env file generated. You can now run: ./scripts/setup.sh"
 
 core:

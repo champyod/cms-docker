@@ -28,6 +28,7 @@ DB_PASS=$(get_env_val "POSTGRES_PASSWORD")
 DB_NAME=$(get_env_val "POSTGRES_DB")
 DB_HOST=$(get_env_val "POSTGRES_HOST")
 DB_PORT=$(get_env_val "POSTGRES_PORT")
+CMS_SECRET=$(get_env_val "CMS_SECRET_KEY")
 
 # Default values if missing
 DB_USER=${DB_USER:-cmsuser}
@@ -50,6 +51,11 @@ sed -i "s|your_password_here|$SAFE_PASS|g" "$CONFIG_FILE"
 sed -i "s|cmsuser|$DB_USER|g" "$CONFIG_FILE"
 sed -i "s|cmsdb|$DB_NAME|g" "$CONFIG_FILE"
 sed -i "s|database:5432|$DB_HOST:$DB_PORT|g" "$CONFIG_FILE"
+
+if [ -n "$CMS_SECRET" ]; then
+    echo "  - Injecting CMS config secret_key..."
+    sed -i "s/secret_key = \".*\"/secret_key = \"$CMS_SECRET\"/g" "$CONFIG_FILE"
+fi
 
 # Handle Listen IP and Tailscale
 # NOTE: We NO LONGER replace container names with Tailscale IP here.
