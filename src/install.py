@@ -102,7 +102,6 @@ def install_package() -> None:
     progress("Installing CMS package" + (" (editable)" if args.editable else ""))
     subprocess.run(
         [str(target_path / 'bin/pip'), 'install']
-            + ['-c', 'constraints.txt']
             + (['-e'] if args.editable else [])
             + ['.' + ('[devel]' if args.devel else "")],
         check=True)

@@ -124,16 +124,23 @@ RUN <<EOF
 #!/bin/bash -ex
     # Create a temporary merged constraints file
     # We put root constraints first so they override src/constraints
-    cat constraints.txt src/constraints.txt > constraints.merged.txt
-    # De-duplicate: Keep first occurrence (the override)
-    awk -F'==' '!a[$1]++' constraints.merged.txt > constraints.txt
-    rm constraints.merged.txt
+    if [ -f constraints.txt ]; then
+        cat constraints.txt src/constraints.txt > constraints.merged.txt
+        # De-duplicate: Keep first occurrence (the override)
+        awk -F'==' '!a[$1]++' constraints.merged.txt > constraints.final.txt
+        # Copy the merged result to BOTH locations so any install script finds it
+        cp constraints.final.txt constraints.txt
+        cp constraints.final.txt src/constraints.txt
+        rm constraints.merged.txt constraints.final.txt
+    fi
 EOF
 
-RUN --mount=type=cache,target=/home/cmsuser/.cache/pip,uid=1001 ./install.py venv
+# Use the install script from src/
+RUN --mount=type=cache,target=/home/cmsuser/.cache/pip,uid=1001 python3 src/install.py venv
 ENV PATH="/home/cmsuser/cms/bin:$PATH"
 
-RUN --mount=type=cache,target=/home/cmsuser/.cache/pip,uid=1001 ./install.py cms --devel
+# Install CMS package from the src directory
+RUN --mount=type=cache,target=/home/cmsuser/.cache/pip,uid=1001 cd src && python3 install.py cms --devel
 
 RUN <<EOF
 #!/bin/bash -ex

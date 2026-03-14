@@ -38,8 +38,8 @@ else
 fi
 
 # 2. Check if initialization is actually needed
-# If the 'contests' table exists, CMS core is already initialized
-if docker exec -i -e PGPASSWORD="$DB_PASS" cms-database psql -U "$DB_USER" -d "$DB_NAME" -c "SELECT * FROM contests LIMIT 1" >/dev/null 2>&1; then
+# Check if the 'contests' table exists in the information_schema
+if docker exec -i -e PGPASSWORD="$DB_PASS" cms-database psql -U "$DB_USER" -d "$DB_NAME" -tAc "SELECT 1 FROM information_schema.tables WHERE table_name = 'contests'" | grep -q 1; then
     echo "[✓] CMS Core Schema detected. Skipping cmsInitDB."
 else
     echo "CMS Core Schema not found. Running cmsInitDB..."
