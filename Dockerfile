@@ -114,14 +114,24 @@ USER cmsuser
 ENV LANG=C.UTF-8
 
 RUN mkdir /home/cmsuser/src
-COPY --chown=cmsuser:cmsuser install.py constraints.txt /home/cmsuser/src/
-
 WORKDIR /home/cmsuser/src
+
+# Copy everything first so we can merge constraints
+COPY --chown=cmsuser:cmsuser . /home/cmsuser/src
+
+# Merge constraints: Root overrides take precedence over Submodule constraints
+RUN <<EOF
+#!/bin/bash -ex
+    # Create a temporary merged constraints file
+    # We put root constraints first so they override src/constraints
+    cat constraints.txt src/constraints.txt > constraints.merged.txt
+    # De-duplicate: Keep first occurrence (the override)
+    awk -F'==' '!a[$1]++' constraints.merged.txt > constraints.txt
+    rm constraints.merged.txt
+EOF
 
 RUN --mount=type=cache,target=/home/cmsuser/.cache/pip,uid=1001 ./install.py venv
 ENV PATH="/home/cmsuser/cms/bin:$PATH"
-
-COPY --chown=cmsuser:cmsuser . /home/cmsuser/src
 
 RUN --mount=type=cache,target=/home/cmsuser/.cache/pip,uid=1001 ./install.py cms --devel
 
