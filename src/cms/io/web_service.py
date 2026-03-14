@@ -66,16 +66,14 @@ class _WSGIConnection(tornado.httputil.HTTPConnection):
         start_line: tornado.httputil.ResponseStartLine,
         headers: tornado.httputil.HTTPHeaders,
         chunk: Optional[bytes] = None,
-    ) -> None:
+    ) -> None:  # type: ignore[override]
         self._status = "%d %s" % (start_line.code, start_line.reason)
         self._response_headers = list(headers.get_all())
         if chunk:
             self._write_buffer.append(chunk)
-        return None  # type: ignore[return-value]
 
-    def write(self, chunk: bytes) -> None:
+    def write(self, chunk: bytes) -> None:  # type: ignore[override]
         self._write_buffer.append(chunk)
-        return None  # type: ignore[return-value]
 
     def finish(self) -> None:
         pass

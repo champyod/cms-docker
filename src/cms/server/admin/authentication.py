@@ -19,6 +19,7 @@
 
 from collections.abc import Callable
 import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -69,7 +70,7 @@ class _SecureCookie(dict):
             if not hmac.compare_digest(sig, expected):
                 return None
             return data
-        except Exception:
+        except (ValueError, binascii.Error):
             return None
 
     @classmethod
@@ -87,7 +88,7 @@ class _SecureCookie(dict):
                 try:
                     cookie.update(json.loads(data))
                     cookie._modified = False
-                except Exception:
+                except (json.JSONDecodeError, ValueError):
                     pass
         return cookie
 
