@@ -29,7 +29,8 @@ represented by JSON objects.
 
 from abc import ABCMeta, abstractmethod
 
-from jinja2 import Markup, Template
+from markupsafe import Markup
+from jinja2 import Template
 import typing
 
 if typing.TYPE_CHECKING:

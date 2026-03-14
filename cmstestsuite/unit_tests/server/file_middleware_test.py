@@ -59,7 +59,11 @@ class TestFileByDigestMiddleware(unittest.TestCase):
 
     @responder
     def wrapped_wsgi_app(self, environ, start_response):
-        self.assertEqual(environ, self.environ)
+        # Werkzeug 3.x may add CONTENT_LENGTH and werkzeug.request to the
+        # environ when processing requests; check only the original keys.
+        for key, value in self.environ.items():
+            self.assertIn(key, environ)
+            self.assertEqual(environ[key], value)
         if self.serve_file:
             headers = {FileServerMiddleware.DIGEST_HEADER: self.digest}
             if self.provide_filename:

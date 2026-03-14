@@ -18,9 +18,11 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from collections.abc import Callable
+import base64
+import hashlib
+import hmac
 import json
 
-from werkzeug.contrib.securecookie import SecureCookie
 from werkzeug.local import Local, LocalManager
 from werkzeug.wrappers import Request, Response
 
@@ -29,18 +31,78 @@ from cmscommon.binary import hex_to_bin
 from cmscommon.datetime import make_timestamp
 
 
-class UTF8JSON:
-    @staticmethod
-    def dumps(d: object) -> bytes:
-        return json.dumps(d).encode('utf-8')
+class _SecureCookie(dict):
+    """HMAC-SHA256 signed cookie, dict-like interface.
 
-    @staticmethod
-    def loads(e: bytes) -> object:
-        return json.loads(e.decode('utf-8'))
+    Compatible replacement for the removed werkzeug.contrib.securecookie
+    module. Uses standard-library hmac/hashlib for signing so no extra
+    dependencies are required.  Existing sessions signed with the old
+    werkzeug SecureCookie will be invalidated (users will be logged out
+    once on upgrade), which is acceptable.
+    """
 
+    def __init__(self, secret_key: bytes = b"", data=None):
+        super().__init__(data or {})
+        self._secret_key = secret_key
+        self._modified = False
 
-class JSONSecureCookie(SecureCookie):
-    serialization_method = UTF8JSON
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        self._modified = True
+
+    def clear(self):
+        super().clear()
+        self._modified = True
+
+    @classmethod
+    def _sign(cls, key: bytes, data: bytes) -> str:
+        sig = hmac.new(key, data, hashlib.sha256).hexdigest()
+        encoded = base64.urlsafe_b64encode(data).decode("ascii")
+        return sig + "." + encoded
+
+    @classmethod
+    def _verify(cls, key: bytes, signed: str) -> bytes | None:
+        try:
+            sig, encoded = signed.split(".", 1)
+            data = base64.urlsafe_b64decode(encoded)
+            expected = hmac.new(key, data, hashlib.sha256).hexdigest()
+            if not hmac.compare_digest(sig, expected):
+                return None
+            return data
+        except Exception:
+            return None
+
+    @classmethod
+    def load_cookie(
+        cls,
+        request: Request,
+        name: str,
+        secret_key: bytes = b"",
+    ) -> "_SecureCookie":
+        cookie_value = request.cookies.get(name)
+        cookie = cls(secret_key=secret_key)
+        if cookie_value:
+            data = cls._verify(secret_key, cookie_value)
+            if data is not None:
+                try:
+                    cookie.update(json.loads(data))
+                    cookie._modified = False
+                except Exception:
+                    pass
+        return cookie
+
+    def save_cookie(
+        self,
+        response: Response,
+        name: str,
+        httponly: bool = False,
+        max_age: int | None = None,
+    ) -> None:
+        if not self._modified:
+            return
+        data = json.dumps(dict(self)).encode("utf-8")
+        signed = self._sign(self._secret_key, data)
+        response.set_cookie(name, signed, httponly=httponly, max_age=max_age)
 
 
 class AWSAuthMiddleware:
@@ -70,7 +132,7 @@ class AWSAuthMiddleware:
         self.wsgi_app = self._local_manager.make_middleware(self.wsgi_app)
 
         self._request: Request = self._local("request")
-        self._cookie: JSONSecureCookie = self._local("cookie")
+        self._cookie: _SecureCookie = self._local("cookie")
 
     @property
     def admin_id(self) -> int | None:
@@ -128,7 +190,7 @@ class AWSAuthMiddleware:
 
         """
         self._local.request = Request(environ)
-        self._local.cookie = JSONSecureCookie.load_cookie(
+        self._local.cookie = _SecureCookie.load_cookie(
             self._request, AWSAuthMiddleware.COOKIE,
             hex_to_bin(config.web_server.secret_key))
         self._verify_cookie()

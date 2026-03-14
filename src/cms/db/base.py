@@ -327,4 +327,4 @@ class Base:
 # doesn't consider Base to be a valid base class, and thus all derived classes
 # will be missing the methods from Base.
 if not typing.TYPE_CHECKING:
-    Base = as_declarative(bind=engine, metadata=metadata, constructor=None)(Base)
+    Base = as_declarative(bind=engine, metadata=metadata)(Base)
