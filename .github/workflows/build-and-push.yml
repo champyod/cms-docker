@@ -6,7 +6,9 @@ on:
     paths:
       - 'Dockerfile'
       - 'install.py'
+      - 'constraints.txt'
       - 'requirements.txt'
+      - 'src/**'
       - 'admin-panel/**'
       - 'docker/monitor/**'
       - 'scripts/monitor.sh'
