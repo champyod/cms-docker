@@ -20,15 +20,18 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import logging
-from io import BytesIO
-from typing import Callable, Dict, Any, List, Optional
 
-import tornado.web
-import tornado.httputil
-import tornado.log
+import collections
+try:
+    collections.MutableMapping
+except:
+    # Monkey-patch: Tornado 4.5.3 does not work on Python 3.11 by default
+    collections.MutableMapping = collections.abc.MutableMapping
+
+import tornado.wsgi
 from gevent.pywsgi import WSGIServer
-from werkzeug.middleware.dispatcher import DispatcherMiddleware
 from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.middleware.dispatcher import DispatcherMiddleware
 from werkzeug.middleware.shared_data import SharedDataMiddleware
 
 from cms.db.filecacher import FileCacher
@@ -41,165 +44,6 @@ logger = logging.getLogger(__name__)
 
 
 SECONDS_IN_A_YEAR = 365 * 24 * 60 * 60
-
-
-class _WSGIConnection(tornado.httputil.HTTPConnection):
-    """Mock HTTP connection used to capture a tornado handler's response.
-
-    This is part of the WSGIApplication WSGI adapter.  It buffers the
-    response status, headers and body so that WSGIApplication can
-    return them to the WSGI server in the expected format.
-    """
-
-    def __init__(self, method: str) -> None:
-        self.method = method
-        self._status: Optional[str] = None
-        self._response_headers: Optional[List[tuple]] = None
-        self._write_buffer: List[bytes] = []
-
-    # Required by RequestHandler.finish()
-    def set_close_callback(self, callback: Optional[Callable]) -> None:
-        pass
-
-    def write_headers(
-        self,
-        start_line: tornado.httputil.ResponseStartLine,
-        headers: tornado.httputil.HTTPHeaders,
-        chunk: Optional[bytes] = None,
-    ) -> None:  # type: ignore[override]
-        self._status = "%d %s" % (start_line.code, start_line.reason)
-        self._response_headers = list(headers.get_all())
-        if chunk:
-            self._write_buffer.append(chunk)
-
-    def write(self, chunk: bytes) -> None:  # type: ignore[override]
-        self._write_buffer.append(chunk)
-
-    def finish(self) -> None:
-        pass
-
-
-class WSGIApplication(tornado.web.Application):
-    """WSGI-compatible wrapper for tornado.web.Application.
-
-    This replaces tornado.wsgi.WSGIApplication which was removed in
-    tornado 6.0.  It provides a synchronous WSGI interface suitable for
-    use with gevent-based WSGI servers.
-
-    Request handlers must be synchronous (no async def / yield).
-    """
-
-    def __call__(
-        self,
-        environ: Dict[str, Any],
-        start_response: Callable,
-    ) -> List[bytes]:
-        """Handle a WSGI request synchronously."""
-        # Tornado routing expects just path + query string, not the full URL
-        uri = environ.get("PATH_INFO", "/")
-        query_string = environ.get("QUERY_STRING", "")
-        if query_string:
-            uri += "?" + query_string
-
-        # Build HTTP headers from WSGI environ
-        headers = tornado.httputil.HTTPHeaders()
-        content_type = environ.get("CONTENT_TYPE", "")
-        if content_type:
-            headers["Content-Type"] = content_type
-        content_length = environ.get("CONTENT_LENGTH", "")
-        if content_length:
-            headers["Content-Length"] = content_length
-        for key, value in environ.items():
-            if key.startswith("HTTP_"):
-                header_name = key[5:].replace("_", "-").title()
-                headers.add(header_name, value)
-
-        # Read request body
-        body = environ.get("wsgi.input", BytesIO()).read()
-
-        # Create a mock connection with a context carrying remote_ip/protocol
-        connection = _WSGIConnection(environ["REQUEST_METHOD"])
-        connection.context = type(  # type: ignore[attr-defined]
-            "_WSGIContext",
-            (),
-            {
-                "remote_ip": environ.get("REMOTE_ADDR", ""),
-                "protocol": environ.get("wsgi.url_scheme", "http"),
-            },
-        )()
-
-        # Build the tornado request object
-        request = tornado.httputil.HTTPServerRequest(
-            method=environ["REQUEST_METHOD"],
-            uri=uri,
-            version="HTTP/1.1",
-            headers=headers,
-            body=body,
-            connection=connection,
-        )
-
-        # Find the handler and execute it synchronously
-        delegate = self.find_handler(request)
-        handler = delegate.handler_class(
-            self, request, **delegate.handler_kwargs
-        )
-        transforms = [t(request) for t in self.transforms]
-        self._execute_sync(
-            handler, transforms, delegate.path_args, delegate.path_kwargs
-        )
-
-        start_response(
-            connection._status or "500 Internal Server Error",
-            connection._response_headers or [],
-        )
-        return connection._write_buffer
-
-    def _execute_sync(
-        self,
-        handler: tornado.web.RequestHandler,
-        transforms: list,
-        path_args: list,
-        path_kwargs: dict,
-    ) -> None:
-        """Execute a synchronous tornado handler, mirroring _execute."""
-        handler._transforms = transforms
-        try:
-            if handler.request.method not in handler.SUPPORTED_METHODS:
-                raise tornado.web.HTTPError(405)
-
-            handler.request._parse_body()
-
-            handler.path_args = [
-                handler.decode_argument(arg) for arg in path_args
-            ]
-            handler.path_kwargs = {
-                k: handler.decode_argument(v, name=k)
-                for k, v in path_kwargs.items()
-            }
-
-            if (
-                handler.request.method not in ("GET", "HEAD", "OPTIONS")
-                and self.settings.get("xsrf_cookies")
-            ):
-                handler.check_xsrf_cookie()
-
-            handler.prepare()
-
-            if handler._finished:
-                return
-
-            method = getattr(handler, handler.request.method.lower())
-            method(*handler.path_args, **handler.path_kwargs)
-
-            if handler._auto_finish and not handler._finished:
-                handler.finish()
-        except Exception as e:
-            try:
-                handler._handle_request_exception(e)
-            except Exception:
-                tornado.log.app_log.error(
-                    "Exception in exception handler", exc_info=True
-                )
 
 
 class WebService(Service):
@@ -223,7 +67,7 @@ class WebService(Service):
         auth_middleware = parameters.pop('auth_middleware', None)
         num_proxies_used = parameters.pop('num_proxies_used', None)
 
-        self.wsgi_app = WSGIApplication(handlers, **parameters)
+        self.wsgi_app = tornado.wsgi.WSGIApplication(handlers, **parameters)
         self.wsgi_app.service = self
 
         for entry in static_files:
@@ -259,7 +103,7 @@ class WebService(Service):
             num_proxies_used = 0
 
         if num_proxies_used > 0:
-            self.wsgi_app = ProxyFix(self.wsgi_app, x_for=num_proxies_used)
+            self.wsgi_app = ProxyFix(self.wsgi_app, num_proxies_used)
 
         self.web_server = WSGIServer((listen_address, listen_port), self)
 

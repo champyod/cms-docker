@@ -108,7 +108,6 @@ class FileServerMiddleware:
         response.set_etag(digest)
         response.cache_control.no_cache = True
         response.cache_control.private = True
-        response.headers["Accept-Ranges"] = "bytes"
         response.response = \
             wrap_file(environ, fobj, buffer_size=FileCacher.CHUNK_SIZE)
         response.direct_passthrough = True

@@ -18,92 +18,16 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from collections.abc import Callable
-import base64
-import binascii
-import hashlib
-import hmac
 import json
+import math
+import typing
 
+from tornado.web import create_signed_value, decode_signed_value
 from werkzeug.local import Local, LocalManager
 from werkzeug.wrappers import Request, Response
 
 from cms import config
-from cmscommon.binary import hex_to_bin
 from cmscommon.datetime import make_timestamp
-
-
-class _SecureCookie(dict):
-    """HMAC-SHA256 signed cookie, dict-like interface.
-
-    Compatible replacement for the removed werkzeug.contrib.securecookie
-    module. Uses standard-library hmac/hashlib for signing so no extra
-    dependencies are required.  Existing sessions signed with the old
-    werkzeug SecureCookie will be invalidated (users will be logged out
-    once on upgrade), which is acceptable.
-    """
-
-    def __init__(self, secret_key: bytes = b"", data=None):
-        super().__init__(data or {})
-        self._secret_key = secret_key
-        self._modified = False
-
-    def __setitem__(self, key, value):
-        super().__setitem__(key, value)
-        self._modified = True
-
-    def clear(self):
-        super().clear()
-        self._modified = True
-
-    @classmethod
-    def _sign(cls, key: bytes, data: bytes) -> str:
-        sig = hmac.new(key, data, hashlib.sha256).hexdigest()
-        encoded = base64.urlsafe_b64encode(data).decode("ascii")
-        return sig + "." + encoded
-
-    @classmethod
-    def _verify(cls, key: bytes, signed: str) -> bytes | None:
-        try:
-            sig, encoded = signed.split(".", 1)
-            data = base64.urlsafe_b64decode(encoded)
-            expected = hmac.new(key, data, hashlib.sha256).hexdigest()
-            if not hmac.compare_digest(sig, expected):
-                return None
-            return data
-        except (ValueError, binascii.Error):
-            return None
-
-    @classmethod
-    def load_cookie(
-        cls,
-        request: Request,
-        name: str,
-        secret_key: bytes = b"",
-    ) -> "_SecureCookie":
-        cookie_value = request.cookies.get(name)
-        cookie = cls(secret_key=secret_key)
-        if cookie_value:
-            data = cls._verify(secret_key, cookie_value)
-            if data is not None:
-                try:
-                    cookie.update(json.loads(data))
-                    cookie._modified = False
-                except (json.JSONDecodeError, ValueError):
-                    pass
-        return cookie
-
-    def save_cookie(
-        self,
-        response: Response,
-        name: str,
-        httponly: bool = False,
-        max_age: int | None = None,
-    ) -> None:
-        if not self._modified:
-            return
-        data = json.dumps(dict(self)).encode("utf-8")
-        signed = self._sign(self._secret_key, data)
-        response.set_cookie(name, signed, httponly=httponly, max_age=max_age)
 
 
 class AWSAuthMiddleware:
@@ -133,7 +57,7 @@ class AWSAuthMiddleware:
         self.wsgi_app = self._local_manager.make_middleware(self.wsgi_app)
 
         self._request: Request = self._local("request")
-        self._cookie: _SecureCookie = self._local("cookie")
+        self._cookie: dict[str, typing.Any] = self._local("cookie")
 
     @property
     def admin_id(self) -> int | None:
@@ -191,9 +115,20 @@ class AWSAuthMiddleware:
 
         """
         self._local.request = Request(environ)
-        self._local.cookie = _SecureCookie.load_cookie(
-            self._request, AWSAuthMiddleware.COOKIE,
-            hex_to_bin(config.web_server.secret_key))
+        cookie_str = decode_signed_value(
+            bytes.fromhex(config.web_server.secret_key),
+            AWSAuthMiddleware.COOKIE,
+            self._request.cookies.get(AWSAuthMiddleware.COOKIE),
+            # We do our own expiry checking, so an upper bound is fine here
+            max_age_days=math.ceil(
+                config.admin_web_server.cookie_duration / 60 / 60 / 24
+            ),
+        )
+        if cookie_str is not None:
+            self._local.cookie = json.loads(cookie_str.decode())
+        else:
+            self._local.cookie = {}
+
         self._verify_cookie()
 
         def my_start_response(status, headers, exc_info=None):
@@ -205,9 +140,20 @@ class AWSAuthMiddleware:
 
             """
             response = Response(status=status, headers=headers)
-            self._cookie.save_cookie(
-                response, AWSAuthMiddleware.COOKIE, httponly=True,
-                max_age=config.admin_web_server.cookie_duration)
+            # json.dumps doesn't like LocalProxy objects, so we grab the actual
+            # underlying value here with _get_current_object
+            cookie_str = json.dumps(self._cookie._get_current_object())
+            cookie_signed = create_signed_value(
+                bytes.fromhex(config.web_server.secret_key),
+                AWSAuthMiddleware.COOKIE,
+                cookie_str,
+            ).decode()
+            response.set_cookie(
+                AWSAuthMiddleware.COOKIE,
+                cookie_signed,
+                httponly=True,
+                max_age=config.admin_web_server.cookie_duration,
+            )
             return start_response(
                 status, response.headers.to_wsgi_list(), exc_info)
 
