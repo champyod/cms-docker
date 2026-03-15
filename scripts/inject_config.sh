@@ -29,6 +29,7 @@ DB_NAME=$(get_env_val "POSTGRES_DB")
 DB_HOST=$(get_env_val "POSTGRES_HOST")
 DB_PORT=$(get_env_val "POSTGRES_PORT")
 CMS_SECRET=$(get_env_val "CMS_SECRET_KEY")
+TAILSCALE_IP=$(get_env_val "TAILSCALE_IP")
 
 # Default values if missing
 DB_USER=${DB_USER:-cmsuser}
@@ -45,6 +46,30 @@ echo "Injecting configuration:"
 echo "  - DB Host: $DB_HOST:$DB_PORT"
 echo "  - DB User: $DB_USER"
 echo "  - DB Name: $DB_NAME"
+
+# Handle Service Discovery IP
+# If TAILSCALE_IP is set and not localhost, we use it for all services
+# so that both local and remote workers can connect to the same IP.
+if [ -n "$TAILSCALE_IP" ] && [ "$TAILSCALE_IP" != "127.0.0.1" ]; then
+    echo "  - Using Tailscale IP for service discovery: $TAILSCALE_IP"
+    SERVICE_IP=$TAILSCALE_IP
+    
+    # Replace container hostnames with the Tailscale IP in service definitions
+    sed -i "s/cms-log-service/$SERVICE_IP/g" "$CONFIG_FILE"
+    sed -i "s/cms-resource-service/$SERVICE_IP/g" "$CONFIG_FILE"
+    sed -i "s/cms-scoring-service/$SERVICE_IP/g" "$CONFIG_FILE"
+    sed -i "s/cms-checker-service/$SERVICE_IP/g" "$CONFIG_FILE"
+    sed -i "s/cms-evaluation-service/$SERVICE_IP/g" "$CONFIG_FILE"
+    sed -i "s/cms-proxy-service/$SERVICE_IP/g" "$CONFIG_FILE"
+    sed -i "s/cms-contest-web-server/$SERVICE_IP/g" "$CONFIG_FILE"
+    sed -i "s/cms-admin-web-server/$SERVICE_IP/g" "$CONFIG_FILE"
+    sed -i "s/cms-ranking-web-server/$SERVICE_IP/g" "$CONFIG_FILE"
+    
+    # If DB_HOST is 'database' (the default), and we are using Tailscale,
+    # we might want to point it to Tailscale too if the DB is exposed there.
+    # However, for the local database container, 'database' hostname is safer
+    # UNLESS the user explicitly set DB_HOST to the Tailscale IP in .env.
+fi
 
 # Perform replacements using | as delimiter
 sed -i "s|your_password_here|$SAFE_PASS|g" "$CONFIG_FILE"
