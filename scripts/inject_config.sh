@@ -92,38 +92,41 @@ echo "Building worker configuration..."
 WORKER_ARRAY=""
 WORKER_COUNT=0
 
-# Read all WORKER_N variables from .env.core
-for i in {0..99}; do
-    WORKER_VAR="WORKER_$i"
-    WORKER_VALUE=$(get_env_val "$WORKER_VAR")
-    
-    if [ -n "$WORKER_VALUE" ]; then
-        # Parse hostname:port
-        WORKER_HOST=$(echo "$WORKER_VALUE" | cut -d ':' -f1)
-        WORKER_PORT=$(echo "$WORKER_VALUE" | cut -d ':' -f2)
-        
-        # Add to array
+# Collect WORKER_N lines, sort by index numerically
+WORKER_LINES=$(grep -E '^WORKER_[0-9]+=' "$ENV_FILE" 2>/dev/null || true)
+if [ -n "$WORKER_LINES" ]; then
+    # Transform WORKER_#=host:port into "# host port" and sort by #
+    echo "$WORKER_LINES" | sed 's/^WORKER_//' | sort -t'=' -k1n | while IFS='=' read -r idx val; do
+        WORKER_HOST=$(echo "$val" | cut -d':' -f1)
+        WORKER_PORT=$(echo "$val" | cut -d':' -f2)
+        if [ -z "$WORKER_HOST" ] || [ -z "$WORKER_PORT" ]; then
+            continue
+        fi
         if [ -z "$WORKER_ARRAY" ]; then
             WORKER_ARRAY="[\"$WORKER_HOST\", $WORKER_PORT]"
         else
             WORKER_ARRAY="$WORKER_ARRAY,\n    [\"$WORKER_HOST\", $WORKER_PORT]"
         fi
-        
         WORKER_COUNT=$((WORKER_COUNT + 1))
-        echo "  - Worker $i: $WORKER_HOST:$WORKER_PORT"
-    fi
-done
+        echo "  - Worker $idx: $WORKER_HOST:$WORKER_PORT"
+    done
+fi
 
 # Inject workers into cms.toml
 if [ $WORKER_COUNT -gt 0 ]; then
-    # Find the commented Worker section and uncomment/replace it
-    # The pattern matches the commented worker block in cms.sample.toml
-    sed -i "/^# Worker definitions are now managed/,/^# \]/d" "$CONFIG_FILE"
-    
-    # Insert the Worker array after EvaluationService
+    # Remove any existing Worker = [ ... ] block
+    awk 'BEGIN{skip=0} { if ($0 ~ /^Worker = \[/) {skip=1; next} if (skip==1 && $0 ~ /^\]/) {skip=0; next} if (skip==0) print }' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+
+    # Prepare the Worker section text
     WORKER_SECTION="Worker = [\n    $WORKER_ARRAY\n]"
-    sed -i "/^EvaluationService = /a\\$WORKER_SECTION" "$CONFIG_FILE"
-    
+
+    # Insert the Worker array after EvaluationService line, or append at end if not found
+    if grep -q "^EvaluationService =" "$CONFIG_FILE"; then
+        sed -i "/^EvaluationService =/a\\$WORKER_SECTION" "$CONFIG_FILE"
+    else
+        echo -e "\n$WORKER_SECTION" >> "$CONFIG_FILE"
+    fi
+
     echo "Injected $WORKER_COUNT worker(s) into configuration."
 else
     echo "No workers configured. Skipping worker injection."
