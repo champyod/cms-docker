@@ -769,7 +769,6 @@ if [ "$SETUP_TYPE" = "main" ]; then
             [ "$DEPLOY_TYPE" = "img" ] && core_yml="docker-compose.core.img.yml"
             $COMPOSE_BIN -f "$core_yml" restart evaluation-service proxy-service
         fi
-        fi
     else
         print_warning "Skipping Contest Server stack."
     fi
