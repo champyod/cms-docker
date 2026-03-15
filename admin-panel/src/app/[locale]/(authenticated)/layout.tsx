@@ -1,6 +1,6 @@
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
-import { getSession } from "@/lib/auth";
+import { getSession, refreshSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { PageBackground } from "@/components/core/PageBackground";
 import { Stack } from "@/components/core/Layout";
@@ -21,6 +21,8 @@ export default async function AuthenticatedLayout({
     console.log(`[AuthGuard] No session found, redirecting to login`);
     redirect(`/${locale}/auth/login`);
   }
+
+  await refreshSession(session);
 
   return (
     <PageBackground className="flex">

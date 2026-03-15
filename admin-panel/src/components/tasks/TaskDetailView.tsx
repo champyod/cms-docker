@@ -110,7 +110,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
           <p className="text-neutral-400 mt-1 font-mono text-sm">{task.name}</p>
           {task.contests && (
             <a 
-              href={`/en/contests/${task.contests.id}`}
+              href={`/${locale}/contests/${task.contests.id}`}
               className="text-indigo-400 text-sm hover:underline flex items-center gap-1 mt-2"
             >
               Contest: {task.contests.name}

@@ -92,7 +92,7 @@ export function ContestList({ initialContests, totalPages }: { initialContests: 
                     <TableCell className="font-mono text-neutral-500 text-xs">#{contest.id}</TableCell>
                   <TableCell className="font-medium text-white max-w-[200px]">
                     <button
-                      onClick={() => router.push(`/en/contests/${contest.id}`)}
+                      onClick={() => router.push(`/${locale}/contests/${contest.id}`)}
                       className="flex items-center gap-2 hover:text-indigo-400 transition-colors truncate"
                       title={contest.name}
                     >

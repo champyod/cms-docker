@@ -1,6 +1,12 @@
+'use client';
+
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 export default function RootNotFound() {
+  const pathname = usePathname();
+  const locale = pathname?.split('/')[1] || 'en';
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-indigo-900/20 via-slate-950 to-slate-950">
       <div className="text-center space-y-6">
@@ -12,7 +18,7 @@ export default function RootNotFound() {
           </p>
         </div>
         <Link
-          href="/en"
+          href={`/${locale}`}
           className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/30 text-indigo-400 text-sm font-medium transition-colors"
         >
           Go to Dashboard

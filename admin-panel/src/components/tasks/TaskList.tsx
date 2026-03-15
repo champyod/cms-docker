@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
 import { Edit2, Trash2, Plus, FileText, Database, ExternalLink, AlertTriangle } from 'lucide-react';
@@ -13,6 +13,8 @@ type TaskWithRelations = any;
 
 export function TaskList({ initialTasks, totalPages }: { initialTasks: TaskWithRelations[], totalPages: number }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const locale = pathname.split('/')[1] || 'en';
   const [tasks] = useState(initialTasks);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskWithRelations | null>(null);
@@ -93,7 +95,7 @@ export function TaskList({ initialTasks, totalPages }: { initialTasks: TaskWithR
                         </div>
                       )}
                       <button
-                        onClick={() => router.push(`/en/tasks/${task.id}`)}
+                        onClick={() => router.push(`/${locale}/tasks/${task.id}`)}
                         className={`flex items-center gap-2 hover:text-indigo-400 transition-colors truncate ${hasErrors ? 'text-neutral-400' : ''}`}
                       >
                         {task.name}

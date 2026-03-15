@@ -2,6 +2,8 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import crypto from "crypto";
 
+const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
 const secretKey = (() => {
   if (process.env.AUTH_SECRET) return process.env.AUTH_SECRET;
   console.warn("WARNING: AUTH_SECRET is not set. Using a random secret — sessions will not persist across restarts.");
@@ -9,11 +11,14 @@ const secretKey = (() => {
 })();
 const key = new TextEncoder().encode(secretKey);
 
+// COOKIE_SECURE=true only if explicitly set — defaults false so HTTP access works
+const isSecureCookie = process.env.COOKIE_SECURE === 'true';
+
 export async function encrypt(payload: any) {
   return await new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("2h")
+    .setExpirationTime("7d")
     .sign(key);
 }
 
@@ -24,6 +29,16 @@ export async function decrypt(input: string): Promise<any> {
   return payload;
 }
 
+function buildCookieOptions(expiresAt: Date) {
+  return {
+    httpOnly: true,
+    secure: isSecureCookie,
+    expires: expiresAt,
+    sameSite: "lax" as const,
+    path: "/",
+  };
+}
+
 export async function createSession(userId: string, username: string, permissions: {
   permission_all: boolean;
   permission_tasks: boolean;
@@ -31,16 +46,20 @@ export async function createSession(userId: string, username: string, permission
   permission_contests: boolean;
   permission_messaging: boolean;
 }) {
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
   const session = await encrypt({ userId, username, permissions, expiresAt });
+  (await cookies()).set("session", session, buildCookieOptions(expiresAt));
+}
 
-  (await cookies()).set("session", session, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    expires: expiresAt,
-    sameSite: "lax",
-    path: "/",
-  });
+export async function refreshSession(payload: any) {
+  const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
+  const { userId, username, permissions } = payload;
+  const session = await encrypt({ userId, username, permissions, expiresAt });
+  try {
+    (await cookies()).set("session", session, buildCookieOptions(expiresAt));
+  } catch {
+    // cookies() may throw in read-only render contexts — safe to ignore
+  }
 }
 
 export async function deleteSession() {
@@ -52,7 +71,7 @@ export async function getSession() {
   if (!session) return null;
   try {
     return await decrypt(session);
-  } catch (error) {
+  } catch {
     return null;
   }
 }
