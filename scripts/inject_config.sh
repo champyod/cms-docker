@@ -36,25 +36,27 @@ DB_USER=${DB_USER:-cmsuser}
 DB_PASS=${DB_PASS:-your_password_here}
 DB_NAME=${DB_NAME:-cmsdb}
 DB_HOST=${DB_HOST:-database}
-DB_PORT=${DB_PORT:-5432}
+DB_PORT=$(get_env_val "POSTGRES_PORT")
+CMS_SECRET=$(get_env_val "CMS_SECRET_KEY")
+CORE_SERVICES_IP=$(get_env_val "CORE_SERVICES_IP")
 
-# Safely escape special characters for sed: | & \ /
-# We use | as delimiter, so we escape | and \
-SAFE_PASS=$(echo "$DB_PASS" | sed 's/\\/\\\\/g' | sed 's/|/\\|/g' | sed 's/&/\\&/g')
-
+# Default values if missing
+DB_USER=${DB_USER:-cmsuser}
+...
 echo "Injecting configuration:"
 echo "  - DB Host: $DB_HOST:$DB_PORT"
 echo "  - DB User: $DB_USER"
 echo "  - DB Name: $DB_NAME"
 
 # Handle Service Discovery IP
-# If TAILSCALE_IP is set and not localhost, we use it for all services
-# so that both local and remote workers can connect to the same IP.
-if [ -n "$TAILSCALE_IP" ] && [ "$TAILSCALE_IP" != "127.0.0.1" ]; then
-    echo "  - Using Tailscale IP for service discovery: $TAILSCALE_IP"
-    SERVICE_IP=$TAILSCALE_IP
-    
-    # Replace container hostnames with the Tailscale IP in service definitions
+# Only replace hostnames if we have a specific external/VPN IP.
+# If CORE_SERVICES_IP is 127.0.0.1, 0.0.0.0, or empty, we keep the default
+# container names (cms-log-service, etc.) which work best for local Docker networking.
+if [ -n "$CORE_SERVICES_IP" ] && [ "$CORE_SERVICES_IP" != "127.0.0.1" ] && [ "$CORE_SERVICES_IP" != "0.0.0.0" ]; then
+    echo "  - Using Specific IP for service discovery: $CORE_SERVICES_IP"
+    SERVICE_IP=$CORE_SERVICES_IP
+
+    # Replace container hostnames with the specific IP in service definitions
     sed -i "s/cms-log-service/$SERVICE_IP/g" "$CONFIG_FILE"
     sed -i "s/cms-resource-service/$SERVICE_IP/g" "$CONFIG_FILE"
     sed -i "s/cms-scoring-service/$SERVICE_IP/g" "$CONFIG_FILE"
@@ -64,13 +66,9 @@ if [ -n "$TAILSCALE_IP" ] && [ "$TAILSCALE_IP" != "127.0.0.1" ]; then
     sed -i "s/cms-contest-web-server/$SERVICE_IP/g" "$CONFIG_FILE"
     sed -i "s/cms-admin-web-server/$SERVICE_IP/g" "$CONFIG_FILE"
     sed -i "s/cms-ranking-web-server/$SERVICE_IP/g" "$CONFIG_FILE"
-    
-    # If DB_HOST is 'database' (the default), and we are using Tailscale,
-    # we might want to point it to Tailscale too if the DB is exposed there.
-    # However, for the local database container, 'database' hostname is safer
-    # UNLESS the user explicitly set DB_HOST to the Tailscale IP in .env.
+else
+    echo "  - Using internal Docker networking (container hostnames) for service discovery."
 fi
-
 # Perform replacements using | as delimiter
 sed -i "s|your_password_here|$SAFE_PASS|g" "$CONFIG_FILE"
 sed -i "s|cmsuser|$DB_USER|g" "$CONFIG_FILE"

@@ -329,9 +329,13 @@ if [ "$SKIP_QUESTIONS" != "true" ]; then
                 read -p "Enter Tailscale IP: " TAILSCALE_IP
             fi
             REMOTE_WORKERS_ENABLED=true
+            CORE_SERVICES_IP=$TAILSCALE_IP
         else
             TAILSCALE_IP=127.0.0.1
             REMOTE_WORKERS_ENABLED=false
+            # If no VPN, use Public IP for discovery if remote workers are needed, 
+            # otherwise 127.0.0.1 or the local docker network name is handled by compose.
+            CORE_SERVICES_IP=$PUBLIC_IP
         fi
     else
         # Worker Setup
@@ -493,6 +497,7 @@ else
     # Non-destructive update: Only update the variables determined by the setup flow
     update_env_var .env.core "PUBLIC_IP" "$PUBLIC_IP"
     update_env_var .env.core "TAILSCALE_IP" "$TAILSCALE_IP"
+    update_env_var .env.core "CORE_SERVICES_IP" "${CORE_SERVICES_IP:-$PUBLIC_IP}"
     update_env_var .env.core "REMOTE_WORKERS_ENABLED" "$REMOTE_WORKERS_ENABLED"
     [ -n "$DB_PASS" ] && update_env_var .env.core "POSTGRES_PASSWORD" "$DB_PASS"
     [ -n "$CMS_SECRET" ] && update_env_var .env.core "CMS_SECRET_KEY" "$CMS_SECRET"
