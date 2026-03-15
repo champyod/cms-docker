@@ -58,7 +58,7 @@ export async function login(prevState: any, formData: FormData) {
   }
 
   revalidatePath("/");
-  await redirect("/dashboard");
+  await redirect("/");
 }
 
 export async function logout() {
