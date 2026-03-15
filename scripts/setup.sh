@@ -18,7 +18,7 @@ DRY_RUN=false
 if [ "$1" = "--dry-run" ]; then
     DRY_RUN=true
     shift
-    print_info "Running in dry-run mode: no files will be modified, no services started."
+    echo "[DRY-RUN] Running in dry-run mode: no files will be modified, no services started."
 fi
 
 # Colors
