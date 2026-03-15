@@ -574,13 +574,9 @@ if [ "$SETUP_TYPE" = "main" ]; then
         local saved
         saved=$(read_env_var "$env_file" "$var_name" 2>/dev/null || echo "")
 
-        if [ "$QUICK_UPDATE" = "y" ] && [ -n "$saved" ]; then
-            RESOLVED_IP="$saved"
-        else
-            prompt_bind_ip "$label" "$saved" "$PUBLIC_IP" "$TAILSCALE_IP"
-            RESOLVED_IP="$SELECTED_IP"
-            update_env_var "$env_file" "$var_name" "$RESOLVED_IP"
-        fi
+        prompt_bind_ip "$label" "$saved" "$PUBLIC_IP" "$TAILSCALE_IP"
+        RESOLVED_IP="$SELECTED_IP"
+        update_env_var "$env_file" "$var_name" "$RESOLVED_IP"
     }
 
     # ── Helper: resolve port from saved env or prompt ──────────────────────────
@@ -595,13 +591,9 @@ if [ "$SETUP_TYPE" = "main" ]; then
         saved=$(read_env_var "$env_file" "$var_name" 2>/dev/null || echo "")
         local current="${saved:-$default}"
 
-        if [ "$QUICK_UPDATE" = "y" ]; then
-            RESOLVED_PORT="$current"
-        else
-            read -p "  ${label} port [${current}]: " USER_PORT
-            RESOLVED_PORT="${USER_PORT:-$current}"
-            update_env_var "$env_file" "$var_name" "$RESOLVED_PORT"
-        fi
+        read -p "  ${label} port [${current}]: " USER_PORT
+        RESOLVED_PORT="${USER_PORT:-$current}"
+        update_env_var "$env_file" "$var_name" "$RESOLVED_PORT"
     }
 
     if [ "$DEPLOY_TYPE" = "img" ]; then
@@ -696,16 +688,16 @@ if [ "$SETUP_TYPE" = "main" ]; then
             # Partial deployment
             print_info "Applying partial Admin deployment..."
             # Detect COMPOSE like Makefile
-            local COMPOSE=$(docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
-            local admin_yml="docker-compose.admin.yml"
+            COMPOSE_BIN=$(docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
+            admin_yml="docker-compose.admin.yml"
             [ "$DEPLOY_TYPE" = "img" ] && admin_yml="docker-compose.admin.img.yml"
             
-            local services=""
+            services=""
             [ "$DEPLOY_ADMIN_NEXT" = "y" ] && services="$services cms-admin-panel"
             [ "$DEPLOY_ADMIN_LEGACY" = "y" ] && services="$services cms-admin-legacy"
             [ "$DEPLOY_RANKING" = "y" ] && services="$services cms-ranking"
             
-            $COMPOSE -f "$admin_yml" up -d $services
+            $COMPOSE_BIN -f "$admin_yml" up -d $services
         fi
 
         if [ "$IS_UPDATE" != "true" ] && [ "$DEPLOY_ADMIN_LEGACY" = "y" ]; then
@@ -745,17 +737,17 @@ if [ "$SETUP_TYPE" = "main" ]; then
         print_info "Selecting contest to run..."
         
         # Try to list contests from database
-        local db_container="cms-database"
+        db_container="cms-database"
         if docker ps | grep -q "$db_container"; then
-            local db_pass=$(read_env_var .env.core POSTGRES_PASSWORD)
-            local db_user=$(read_env_var .env.core POSTGRES_USER)
-            local db_name=$(read_env_var .env.core POSTGRES_DB)
+            db_pass=$(read_env_var .env.core POSTGRES_PASSWORD)
+            db_user=$(read_env_var .env.core POSTGRES_USER)
+            db_name=$(read_env_var .env.core POSTGRES_DB)
             
             print_info "Available contests in database:"
             docker exec -e PGPASSWORD="$db_pass" "$db_container" psql -U "$db_user" -d "$db_name" -c "SELECT id, name, description FROM contests;" || print_warning "Could not query contests table."
         fi
 
-        local saved_contest_id=$(read_env_var .env.contest CONTEST_ID)
+        saved_contest_id=$(read_env_var .env.contest CONTEST_ID)
         read -p "  Enter Contest ID to run [${saved_contest_id:-1}]: " SELECTED_CONTEST_ID
         SELECTED_CONTEST_ID=${SELECTED_CONTEST_ID:-${saved_contest_id:-1}}
         update_env_var ".env.contest" "CONTEST_ID" "$SELECTED_CONTEST_ID"
@@ -772,10 +764,11 @@ if [ "$SETUP_TYPE" = "main" ]; then
         # Restart core services if contest ID changed to ensure evaluation/proxy pick it up
         if [ "$SELECTED_CONTEST_ID" != "$saved_contest_id" ] && [ "$DEPLOY_CORE" != "y" ]; then
             print_info "Contest ID changed. Restarting evaluation and proxy services..."
-            local COMPOSE=$(docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
-            local core_yml="docker-compose.core.yml"
+            COMPOSE_BIN=$(docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
+            core_yml="docker-compose.core.yml"
             [ "$DEPLOY_TYPE" = "img" ] && core_yml="docker-compose.core.img.yml"
-            $COMPOSE -f "$core_yml" restart evaluation-service proxy-service
+            $COMPOSE_BIN -f "$core_yml" restart evaluation-service proxy-service
+        fi
         fi
     else
         print_warning "Skipping Contest Server stack."
