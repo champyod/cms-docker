@@ -28,6 +28,38 @@ add_worker() {
     echo "Added worker $index: $hostname:$port"
 }
 
+# Function to bulk-add workers: host base_port count [--dry-run]
+bulk_add() {
+    local host="$1"
+    local base_port="$2"
+    local count="$3"
+    local dry_run="$4"
+
+    if [ -z "$host" ] || [ -z "$base_port" ] || [ -z "$count" ]; then
+        echo "Error: host, base_port and count required"
+        echo "Usage: $0 bulk-add <host> <base_port> <count> [--dry-run]"
+        exit 1
+    fi
+
+    local index=0
+    while grep -q "^WORKER_$index=" "$ENV_FILE" 2>/dev/null; do
+        index=$((index + 1))
+    done
+
+    local i=0
+    while [ $i -lt "$count" ]; do
+        local port=$((base_port + i))
+        if [ "$dry_run" = "--dry-run" ]; then
+            echo "DRY-RUN: Would add WORKER_$index=$host:$port"
+        else
+            echo "WORKER_$index=$host:$port" >> "$ENV_FILE"
+            echo "Added worker $index: $host:$port"
+        fi
+        index=$((index + 1))
+        i=$((i + 1))
+    done
+}
+
 # Function to remove a worker
 remove_worker() {
     local index="$1"
@@ -72,6 +104,9 @@ case "${1:-}" in
     add)
         add_worker "$2" "$3"
         ;;
+    bulk-add)
+        bulk_add "$2" "$3" "$4" "$5"
+        ;;
     remove)
         remove_worker "$2"
         ;;
@@ -89,6 +124,7 @@ case "${1:-}" in
         echo "  remove <index>                - Remove a worker by index"
         echo "  update <index> <hostname> <port> - Update an existing worker"
         echo "  list                          - List all configured workers"
+        echo "  bulk-add <host> <base_port> <count> [--dry-run] - Add multiple workers with incremental ports"
         exit 1
         ;;
 esac
