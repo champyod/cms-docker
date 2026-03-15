@@ -51,7 +51,7 @@ services:
     networks:
       - cms-network
     command: >
-      sh -c "wait-for-it database:5432 -t 60 -- cmsLogService ${LOG_SERVICE_SHARD:-0} -a 0.0.0.0"
+      sh -c "wait-for-it database:5432 -t 60 -- cmsLogService ${LOG_SERVICE_SHARD:-0}"
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f cmsLogService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostbyname(socket.gethostname()), 29000))\" || exit 1"]
       interval: 10s
@@ -88,7 +88,7 @@ services:
     privileged: true
     cgroup: host
     command: >
-      sh -c "sleep 5 && cmsResourceService ${RESOURCE_SERVICE_SHARD:-0} -a 0.0.0.0"
+      sh -c "sleep 5 && cmsResourceService ${RESOURCE_SERVICE_SHARD:-0}"
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f cmsResourceService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostbyname(socket.gethostname()), 28000))\" || exit 1"]
       interval: 10s
@@ -124,7 +124,7 @@ services:
     networks:
       - cms-network
     command: >
-      sh -c "sleep 5 && cmsScoringService ${SCORING_SERVICE_SHARD:-0} -a 0.0.0.0"
+      sh -c "sleep 5 && cmsScoringService ${SCORING_SERVICE_SHARD:-0}"
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f cmsScoringService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostbyname(socket.gethostname()), 28500))\" || exit 1"]
       interval: 10s
@@ -161,7 +161,7 @@ services:
     networks:
       - cms-network
     command: >
-      sh -c "sleep 5 && cmsEvaluationService ${EVALUATION_SERVICE_SHARD:-0} -c ${CONTEST_ID:-1} -a 0.0.0.0"
+      sh -c "sleep 5 && cmsEvaluationService ${EVALUATION_SERVICE_SHARD:-0} -c ${CONTEST_ID:-1}"
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f cmsEvaluationService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostbyname(socket.gethostname()), 25000))\" || exit 1"]
       interval: 10s
@@ -197,7 +197,7 @@ services:
     networks:
       - cms-network
     command: >
-      sh -c "sleep 5 && cmsProxyService ${PROXY_SERVICE_SHARD:-0} -c ${CONTEST_ID:-1} -a 0.0.0.0"
+      sh -c "sleep 5 && cmsProxyService ${PROXY_SERVICE_SHARD:-0} -c ${CONTEST_ID:-1}"
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f cmsProxyService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostbyname(socket.gethostname()), 28600))\" || exit 1"]
       interval: 10s
@@ -235,7 +235,7 @@ services:
     privileged: true
     cgroup: host
     command: >
-      sh -c "sleep 5 && cmsChecker ${CHECKER_SERVICE_SHARD:-0} -a 0.0.0.0"
+      sh -c "sleep 5 && cmsChecker ${CHECKER_SERVICE_SHARD:-0}"
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f cmsChecker && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostbyname(socket.gethostname()), 22000))\" || exit 1"]
       interval: 10s

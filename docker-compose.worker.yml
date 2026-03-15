@@ -52,7 +52,7 @@ services:
       - SYS_ADMIN
       - SYS_PTRACE
     command: >
-      sh -c "sleep 15 && cmsWorker ${WORKER_SHARD:-0} -a 0.0.0.0"
+      sh -c "sleep 15 && cmsWorker ${WORKER_SHARD:-0}"
     deploy:
       resources:
         limits:

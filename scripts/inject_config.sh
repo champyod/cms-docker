@@ -49,26 +49,14 @@ echo "  - DB User: $DB_USER"
 echo "  - DB Name: $DB_NAME"
 
 # Handle Service Discovery IP
-# Only replace hostnames if we have a specific external/VPN IP.
-# If CORE_SERVICES_IP is 127.0.0.1, 0.0.0.0, or empty, we keep the default
-# container names (cms-log-service, etc.) which work best for local Docker networking.
-if [ -n "$CORE_SERVICES_IP" ] && [ "$CORE_SERVICES_IP" != "127.0.0.1" ] && [ "$CORE_SERVICES_IP" != "0.0.0.0" ]; then
-    echo "  - Using Specific IP for service discovery: $CORE_SERVICES_IP"
-    SERVICE_IP=$CORE_SERVICES_IP
+# We now use extra_hosts in docker-compose files to route service names
+# to the correct CORE_SERVICES_IP. We no longer need to modify hostnames here.
+# This keeps the config cleaner and relies on Docker's networking.
 
-    # Replace container hostnames with the specific IP in service definitions
-    sed -i "s/cms-log-service/$SERVICE_IP/g" "$CONFIG_FILE"
-    sed -i "s/cms-resource-service/$SERVICE_IP/g" "$CONFIG_FILE"
-    sed -i "s/cms-scoring-service/$SERVICE_IP/g" "$CONFIG_FILE"
-    sed -i "s/cms-checker-service/$SERVICE_IP/g" "$CONFIG_FILE"
-    sed -i "s/cms-evaluation-service/$SERVICE_IP/g" "$CONFIG_FILE"
-    sed -i "s/cms-proxy-service/$SERVICE_IP/g" "$CONFIG_FILE"
-    sed -i "s/cms-contest-web-server/$SERVICE_IP/g" "$CONFIG_FILE"
-    sed -i "s/cms-admin-web-server/$SERVICE_IP/g" "$CONFIG_FILE"
-    sed -i "s/cms-ranking-web-server/$SERVICE_IP/g" "$CONFIG_FILE"
-else
-    echo "  - Using internal Docker networking (container hostnames) for service discovery."
-fi
+# Ensure all web servers listen on all interfaces inside the container
+sed -i 's/"127.0.0.1"/"0.0.0.0"/g' "$CONFIG_FILE"
+sed -i 's/\["127.0.0.1"\]/\["0.0.0.0"\]/g' "$CONFIG_FILE"
+
 # Perform replacements using | as delimiter
 sed -i "s|your_password_here|$SAFE_PASS|g" "$CONFIG_FILE"
 sed -i "s|cmsuser|$DB_USER|g" "$CONFIG_FILE"

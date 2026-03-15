@@ -63,7 +63,7 @@ services:
     ports:
       - "${ADMIN_BIND_IP:-0.0.0.0}:${ADMIN_PORT_EXTERNAL:-8889}:${ADMIN_LISTEN_PORT:-8889}"
     command: >
-      sh -c "sleep 10 && cmsAdminWebServer -a 0.0.0.0"
+      sh -c "sleep 10 && cmsAdminWebServer"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.cms-admin.rule=Host(`${ADMIN_DOMAIN:-admin.cms.local}`)"
@@ -89,7 +89,7 @@ services:
     ports:
       - "${RANKING_BIND_IP:-0.0.0.0}:${RANKING_PORT_EXTERNAL:-8890}:${RANKING_LISTEN_PORT:-8890}"
     command: >
-      sh -c "sleep 10 && cmsRankingWebServer -a 0.0.0.0"
+      sh -c "sleep 10 && cmsRankingWebServer"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.cms-ranking.rule=Host(`${RANKING_DOMAIN:-ranking.cms.local}`)"
