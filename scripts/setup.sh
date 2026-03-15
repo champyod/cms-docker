@@ -229,6 +229,35 @@ if [ "$SKIP_QUESTIONS" != "true" ]; then
     if [ "$SETUP_TYPE_CHOICE" = "2" ]; then
         SETUP_TYPE="worker"
         print_info "Configuring as Remote Worker."
+        
+        # Worker connectivity to Core
+        echo ""
+        print_info "Core Service Connectivity"
+        echo "How should this worker connect to the Main Server?"
+        echo "1) Network IP / Public IP"
+        echo "2) Tailscale / VPN IP (Recommended for security)"
+        echo "3) Manual IP/Hostname"
+        read -p "Select connectivity [2]: " CONN_CHOICE
+        CONN_CHOICE=${CONN_CHOICE:-2}
+        
+        case $CONN_CHOICE in
+            1) 
+                LIVE_IP=$(curl -s -4 ifconfig.me || echo "127.0.0.1")
+                read -p "Enter Main Server Public IP [$LIVE_IP]: " MAIN_SERVER_IP
+                MAIN_SERVER_IP=${MAIN_SERVER_IP:-$LIVE_IP}
+                ;;
+            2)
+                read -p "Enter Main Server VPN/Tailscale IP: " MAIN_SERVER_IP
+                ;;
+            3)
+                read -p "Enter Main Server IP/Hostname: " MAIN_SERVER_IP
+                ;;
+        esac
+        PUBLIC_IP=$MAIN_SERVER_IP
+        
+        # Ask for Core RPC Port
+        read -p "Enter Main Server RPC Port (LogService) [29000]: " CORE_RPC_PORT
+        CORE_RPC_PORT=${CORE_RPC_PORT:-29000}
     else
         SETUP_TYPE="main"
         print_info "Configuring as Main Server."
@@ -625,33 +654,61 @@ if [ "$SETUP_TYPE" = "main" ]; then
     if [ "$DEPLOY_CORE" != "y" ]; then
         print_warning "Note: Core stack is not being deployed in this run."
     fi
-    read -p "Deploy Admin Panel stack? (y/n) [y]: " DEPLOY_ADMIN
+    read -p "Deploy Admin services? (y/n) [y]: " DEPLOY_ADMIN
     DEPLOY_ADMIN=${DEPLOY_ADMIN:-y}
 
     if [ "$DEPLOY_ADMIN" = "y" ]; then
         echo ""
-        print_info "Configuring Admin Panel ports & IPs..."
+        print_info "Configuring Admin Panel components..."
 
-        resolve_port "ADMIN_NEXT_PORT_EXTERNAL" ".env.admin" "Admin Next.js (new panel)" "8891"
-        resolve_bind_ip "ADMIN_NEXT_BIND_IP" ".env.admin" "Admin Panel (Next.js)"
-        # Also update VITE_API_URL to reflect resolved admin legacy port later
-        resolve_port "ADMIN_PORT_EXTERNAL" ".env.admin" "Admin legacy panel" "8889"
-        resolve_bind_ip "ADMIN_BIND_IP" ".env.admin" "Admin Panel (legacy)"
-        resolve_port "RANKING_PORT_EXTERNAL" ".env.admin" "Ranking server" "8890"
-        resolve_bind_ip "RANKING_BIND_IP" ".env.admin" "Ranking Server"
-
-        # Update VITE_API_URL with the confirmed Admin legacy port
-        CONFIRMED_ADMIN_PORT=$(read_env_var .env.admin ADMIN_PORT_EXTERNAL)
-        update_env_var .env.admin "VITE_API_URL" "http://${PUBLIC_IP}:${CONFIRMED_ADMIN_PORT}"
-
-        make env  # Regenerate merged .env with updated values
-        if [ "$DEPLOY_TYPE" = "img" ]; then
-            make admin-img
-        else
-            make admin
+        # Sub-service selection
+        read -p "  Deploy Admin NEXT (modern panel)? (y/n) [y]: " DEPLOY_ADMIN_NEXT
+        DEPLOY_ADMIN_NEXT=${DEPLOY_ADMIN_NEXT:-y}
+        if [ "$DEPLOY_ADMIN_NEXT" = "y" ]; then
+            resolve_port "ADMIN_NEXT_PORT_EXTERNAL" ".env.admin" "Admin Next.js" "8891"
+            resolve_bind_ip "ADMIN_NEXT_BIND_IP" ".env.admin" "Admin Panel (Next.js)"
         fi
 
-        if [ "$IS_UPDATE" != "true" ]; then
+        read -p "  Deploy Admin LEGACY (original panel)? (y/n) [y]: " DEPLOY_ADMIN_LEGACY
+        DEPLOY_ADMIN_LEGACY=${DEPLOY_ADMIN_LEGACY:-y}
+        if [ "$DEPLOY_ADMIN_LEGACY" = "y" ]; then
+            resolve_port "ADMIN_PORT_EXTERNAL" ".env.admin" "Admin legacy" "8889"
+            resolve_bind_ip "ADMIN_BIND_IP" ".env.admin" "Admin Panel (legacy)"
+            
+            # Update VITE_API_URL with confirmed port
+            CONFIRMED_ADMIN_PORT=$(read_env_var .env.admin ADMIN_PORT_EXTERNAL)
+            update_env_var .env.admin "VITE_API_URL" "http://${PUBLIC_IP}:${CONFIRMED_ADMIN_PORT}"
+        fi
+
+        read -p "  Deploy RANKING server? (y/n) [y]: " DEPLOY_RANKING
+        DEPLOY_RANKING=${DEPLOY_RANKING:-y}
+        if [ "$DEPLOY_RANKING" = "y" ]; then
+            resolve_port "RANKING_PORT_EXTERNAL" ".env.admin" "Ranking server" "8890"
+            resolve_bind_ip "RANKING_BIND_IP" ".env.admin" "Ranking Server"
+        fi
+
+        make env  # Regenerate merged .env with updated values
+        
+        # Deploy selected components
+        if [ "$DEPLOY_ADMIN_NEXT" = "y" ] && [ "$DEPLOY_ADMIN_LEGACY" = "y" ] && [ "$DEPLOY_RANKING" = "y" ]; then
+            if [ "$DEPLOY_TYPE" = "img" ]; then make admin-img; else make admin; fi
+        else
+            # Partial deployment
+            print_info "Applying partial Admin deployment..."
+            # Detect COMPOSE like Makefile
+            local COMPOSE=$(docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
+            local admin_yml="docker-compose.admin.yml"
+            [ "$DEPLOY_TYPE" = "img" ] && admin_yml="docker-compose.admin.img.yml"
+            
+            local services=""
+            [ "$DEPLOY_ADMIN_NEXT" = "y" ] && services="$services cms-admin-panel"
+            [ "$DEPLOY_ADMIN_LEGACY" = "y" ] && services="$services cms-admin-legacy"
+            [ "$DEPLOY_RANKING" = "y" ] && services="$services cms-ranking"
+            
+            $COMPOSE -f "$admin_yml" up -d $services
+        fi
+
+        if [ "$IS_UPDATE" != "true" ] && [ "$DEPLOY_ADMIN_LEGACY" = "y" ]; then
             echo ""
             read -p "Create a superadmin account now? (y/n) [y]: " CREATE_ADMIN
             CREATE_ADMIN=${CREATE_ADMIN:-y}
@@ -683,11 +740,42 @@ if [ "$SETUP_TYPE" = "main" ]; then
         resolve_port "NGINX_HTTPS_PORT" ".env.contest" "Nginx HTTPS (proxy)" "443"
         resolve_bind_ip "NGINX_BIND_IP" ".env.contest" "Nginx Proxy"
 
+        # ── Contest Selection ────────────────────────────────────────────────
+        echo ""
+        print_info "Selecting contest to run..."
+        
+        # Try to list contests from database
+        local db_container="cms-database"
+        if docker ps | grep -q "$db_container"; then
+            local db_pass=$(read_env_var .env.core POSTGRES_PASSWORD)
+            local db_user=$(read_env_var .env.core POSTGRES_USER)
+            local db_name=$(read_env_var .env.core POSTGRES_DB)
+            
+            print_info "Available contests in database:"
+            docker exec -e PGPASSWORD="$db_pass" "$db_container" psql -U "$db_user" -d "$db_name" -c "SELECT id, name, description FROM contests;" || print_warning "Could not query contests table."
+        fi
+
+        local saved_contest_id=$(read_env_var .env.contest CONTEST_ID)
+        read -p "  Enter Contest ID to run [${saved_contest_id:-1}]: " SELECTED_CONTEST_ID
+        SELECTED_CONTEST_ID=${SELECTED_CONTEST_ID:-${saved_contest_id:-1}}
+        update_env_var ".env.contest" "CONTEST_ID" "$SELECTED_CONTEST_ID"
+        # Also update in .env.core for Evaluation/Proxy services
+        update_env_var ".env.core" "CONTEST_ID" "$SELECTED_CONTEST_ID"
+
         make env  # Regenerate merged .env
         if [ "$DEPLOY_TYPE" = "img" ]; then
             make contest-img
         else
             make contest
+        fi
+        
+        # Restart core services if contest ID changed to ensure evaluation/proxy pick it up
+        if [ "$SELECTED_CONTEST_ID" != "$saved_contest_id" ] && [ "$DEPLOY_CORE" != "y" ]; then
+            print_info "Contest ID changed. Restarting evaluation and proxy services..."
+            local COMPOSE=$(docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
+            local core_yml="docker-compose.core.yml"
+            [ "$DEPLOY_TYPE" = "img" ] && core_yml="docker-compose.core.img.yml"
+            $COMPOSE -f "$core_yml" restart evaluation-service proxy-service
         fi
     else
         print_warning "Skipping Contest Server stack."
