@@ -13,14 +13,6 @@ set -e
 # Change directory to the project root (one level up from scripts/)
 cd "$(dirname "$0")/.."
 
-# CLI flags
-DRY_RUN=false
-if [ "$1" = "--dry-run" ]; then
-    DRY_RUN=true
-    shift
-    echo "[DRY-RUN] Running in dry-run mode: no files will be modified, no services started."
-fi
-
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -35,6 +27,14 @@ print_success() { echo -e "${GREEN}[✓]${NC} $1"; }
 print_warning() { echo -e "${YELLOW}[!]${NC} $1"; }
 print_error() { echo -e "${RED}[✗]${NC} $1"; }
 print_step() { echo -e "${CYAN}[STEP]${NC} $1"; }
+
+# CLI flags
+DRY_RUN=false
+if [ "$1" = "--dry-run" ]; then
+    DRY_RUN=true
+    shift
+    print_info "Running in dry-run mode: no files will be modified, no services started."
+fi
 
 # Update a variable in a .env file without destroying the file
 update_env_var() {
@@ -69,6 +69,22 @@ write_or_print() {
     fi
 }
 
+run_or_print() {
+    local command="$1"
+    if [ "$DRY_RUN" = "true" ]; then
+        echo "DRY-RUN: Would run: $command"
+    else
+        eval "$command"
+    fi
+}
+
+is_positive_int() {
+    case "$1" in
+        ''|*[!0-9]*) return 1 ;;
+        *) [ "$1" -gt 0 ] ;;
+    esac
+}
+
 # Banner
 clear
 echo -e "${CYAN}"
@@ -89,23 +105,17 @@ echo -e "${NC}"
 
 # 0. Detection & Update Logic
 IS_UPDATE=false
-QUICK_UPDATE=n
 if [ -f .env.core ]; then
     IS_UPDATE=true
     print_warning "Existing configuration (.env.core) detected. Switching to UPDATE mode."
     
     # Load existing variables
-    DETECTED_DB_PASS=$(read_env_var .env.core POSTGRES_PASSWORD)
-    SAVED_PUBLIC_IP=$(read_env_var .env.core PUBLIC_IP)
-    DETECTED_TAILSCALE_IP=$(read_env_var .env.core TAILSCALE_IP)
-    
-    # Secrets detection
-    DETECTED_AUTH_SECRET=$(read_env_var .env.admin AUTH_SECRET)
-    DETECTED_CONTEST_SECRET=$(read_env_var .env.contest SECRET_KEY)
-    DETECTED_CMS_SECRET=$(read_env_var .env.core CMS_SECRET_KEY)
+    DETECTED_DB_PASS=$(grep "^POSTGRES_PASSWORD=" .env.core | cut -d '=' -f2-)
+    SAVED_PUBLIC_IP=$(grep "^PUBLIC_IP=" .env.core | cut -d '=' -f2-)
+    DETECTED_TAILSCALE_IP=$(grep "^TAILSCALE_IP=" .env.core | cut -d '=' -f2-)
     
     # Check .env.admin for DEPLOYMENT_TYPE
-    DETECTED_DEPLOY_TYPE=$(read_env_var .env.admin DEPLOYMENT_TYPE)
+    DETECTED_DEPLOY_TYPE=$(grep "^DEPLOYMENT_TYPE=" .env.admin 2>/dev/null | cut -d '=' -f2-)
     
     # Fallback: Check running containers if DEPLOYMENT_TYPE is missing
     if [ -z "$DETECTED_DEPLOY_TYPE" ]; then
@@ -118,256 +128,173 @@ if [ -f .env.core ]; then
     
     print_info "Detected Public IP: $SAVED_PUBLIC_IP"
     print_info "Detected Strategy: $([ "$DETECTED_DEPLOY_TYPE" = "img" ] && echo "Pre-built Images" || echo "Source Build")"
-
-    echo ""
-    print_step "Quick Update"
-    read -p "Do you want to run a Quick Update? This will keep all your old settings and just check for new missing variables. (y/n) [y]: " QUICK_UPDATE
-    QUICK_UPDATE=${QUICK_UPDATE:-y}
-    
-    if [ "$QUICK_UPDATE" = "y" ]; then
-        print_success "Quick Update selected. Bypassing configuration questions..."
-        
-        # Determine Setup Type automatically based on existing configs
-        if [ -n "$DETECTED_DB_PASS" ] && [ "$DETECTED_DB_PASS" != "remote_worker_no_db" ]; then
-            SETUP_TYPE="main"
-        else
-            SETUP_TYPE="worker"
-        fi
-        
-        DEPLOY_TYPE=${DETECTED_DEPLOY_TYPE:-img}
-        PUBLIC_IP=${SAVED_PUBLIC_IP:-127.0.0.1}
-        TAILSCALE_IP=${DETECTED_TAILSCALE_IP:-127.0.0.1}
-        
-        if [ "$TAILSCALE_IP" != "127.0.0.1" ]; then
-            REMOTE_WORKERS_ENABLED=true
-        else
-            REMOTE_WORKERS_ENABLED=false
-        fi
-        
-        DB_PASS=$DETECTED_DB_PASS
-        
-        if [ -z "$DETECTED_AUTH_SECRET" ]; then
-            AUTH_SECRET=$(openssl rand -hex 32)
-        else
-            AUTH_SECRET=$DETECTED_AUTH_SECRET
-        fi
-        
-        if [ -z "$DETECTED_CMS_SECRET" ]; then
-            CMS_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
-        else
-            CMS_SECRET=$DETECTED_CMS_SECRET
-        fi
-        
-        if [ -z "$DETECTED_CONTEST_SECRET" ]; then
-            CONTEST_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
-        else
-            CONTEST_SECRET=$DETECTED_CONTEST_SECRET
-        fi
-        
-        # Skip straight to Section 5 Generation
-        SKIP_QUESTIONS=true
-    else
-        SKIP_QUESTIONS=false
-    fi
-else
-    SKIP_QUESTIONS=false
 fi
 
-if [ "$SKIP_QUESTIONS" != "true" ]; then
-    # 1. Setup Type
-    echo ""
-    print_step "Setup Type"
-    echo "What kind of node are you setting up?"
-    echo "1) MAIN SERVER (DB, Log, Admin, Contest, etc.)"
-    echo "2) REMOTE WORKER (Evaluation node only)"
-    read -p "Select type [1]: " SETUP_TYPE_CHOICE
-    SETUP_TYPE_CHOICE=${SETUP_TYPE_CHOICE:-1}
+# 1. Setup Type
+echo ""
+print_step "Setup Type"
+echo "What kind of node are you setting up?"
+echo "1) MAIN SERVER (DB, Log, Admin, Contest, etc.)"
+echo "2) REMOTE WORKER (Evaluation node only)"
+read -p "Select type [1]: " SETUP_TYPE_CHOICE
+SETUP_TYPE_CHOICE=${SETUP_TYPE_CHOICE:-1}
 
-    if [ "$SETUP_TYPE_CHOICE" = "2" ]; then
-        SETUP_TYPE="worker"
-        print_info "Configuring as Remote Worker."
-        
-        # Worker connectivity to Core
-        echo ""
-        print_info "Core Service Connectivity"
-        echo "How should this worker connect to the Main Server?"
-        echo "1) Network IP / Public IP"
-        echo "2) Tailscale / VPN IP (Recommended for security)"
-        echo "3) Manual IP/Hostname"
-        read -p "Select connectivity [2]: " CONN_CHOICE
-        CONN_CHOICE=${CONN_CHOICE:-2}
-        
-        case $CONN_CHOICE in
-            1) 
-                LIVE_IP=$(curl -s -4 ifconfig.me || echo "127.0.0.1")
-                read -p "Enter Main Server Public IP [$LIVE_IP]: " MAIN_SERVER_IP
-                MAIN_SERVER_IP=${MAIN_SERVER_IP:-$LIVE_IP}
-                ;;
-            2)
-                read -p "Enter Main Server VPN/Tailscale IP: " MAIN_SERVER_IP
-                ;;
-            3)
-                read -p "Enter Main Server IP/Hostname: " MAIN_SERVER_IP
-                ;;
-        esac
-        PUBLIC_IP=$MAIN_SERVER_IP
-        
-        # Ask for Core RPC Port
-        read -p "Enter Main Server RPC Port (LogService) [29000]: " CORE_RPC_PORT
-        CORE_RPC_PORT=${CORE_RPC_PORT:-29000}
+if [ "$SETUP_TYPE_CHOICE" = "2" ]; then
+    SETUP_TYPE="worker"
+    print_info "Configuring as Remote Worker."
+else
+    SETUP_TYPE="main"
+    print_info "Configuring as Main Server."
+fi
+
+WORKER_SETUP_MODE=""
+WORKER_INSTANCE_COUNT=1
+WORKER_BASE_PORT=26000
+WORKER_REGISTER_HOST="RESERVED"
+WORKER_AUTO_START="y"
+
+if [ "$SETUP_TYPE" = "worker" ]; then
+    echo ""
+    print_step "Worker Setup Mode"
+    echo "1) WORKER CLIENT (run worker containers)"
+    echo "2) WORKER MOUNTING (register WORKER_N in .env.core)"
+    read -p "Select worker mode [1]: " WORKER_MODE_CHOICE
+    WORKER_MODE_CHOICE=${WORKER_MODE_CHOICE:-1}
+    if [ "$WORKER_MODE_CHOICE" = "2" ]; then
+        WORKER_SETUP_MODE="mounting"
     else
-        SETUP_TYPE="main"
-        print_info "Configuring as Main Server."
+        WORKER_SETUP_MODE="client"
     fi
 
+    read -p "How many worker instances? [1]: " WORKER_INSTANCE_COUNT
+    WORKER_INSTANCE_COUNT=${WORKER_INSTANCE_COUNT:-1}
+    if ! is_positive_int "$WORKER_INSTANCE_COUNT"; then
+        print_error "Worker instance count must be a positive integer."
+        exit 1
+    fi
 
-    # 2. Deployment Strategy
-    echo ""
-    print_step "Deployment Strategy"
-    if [ "$IS_UPDATE" = "true" ]; then
-        echo "Current strategy is: $([ "$DETECTED_DEPLOY_TYPE" = "img" ] && echo "Pre-built Images" || echo "Source Build")"
-        read -p "Keep existing strategy? (y/n) [y]: " KEEP_STRAT
-        KEEP_STRAT=${KEEP_STRAT:-y}
-        if [ "$KEEP_STRAT" = "y" ]; then
-            DEPLOY_TYPE=$DETECTED_DEPLOY_TYPE
-        else
-            echo "1) PRE-BUILT IMAGES"
-            echo "2) BUILD FROM SOURCE"
-            read -p "Select new strategy [1]: " STRATEGY_CHOICE
-            STRATEGY_CHOICE=${STRATEGY_CHOICE:-1}
-            DEPLOY_TYPE=$([ "$STRATEGY_CHOICE" = "1" ] && echo "img" || echo "src")
-        fi
+    read -p "Base worker port (ports = base + idx) [26000]: " WORKER_BASE_PORT
+    WORKER_BASE_PORT=${WORKER_BASE_PORT:-26000}
+    if ! is_positive_int "$WORKER_BASE_PORT"; then
+        print_error "Base worker port must be a positive integer."
+        exit 1
+    fi
+
+    if [ "$WORKER_SETUP_MODE" = "client" ]; then
+        read -p "Auto-start worker containers after config? (y/n) [y]: " WORKER_AUTO_START
+        WORKER_AUTO_START=${WORKER_AUTO_START:-y}
     else
-        echo "How would you like to deploy CMS?"
-        echo "1) PRE-BUILT IMAGES (Fastest, recommended for production)"
-        echo "2) BUILD FROM SOURCE (Allows custom code changes, takes longer)"
-        read -p "Select strategy [1]: " STRATEGY_CHOICE
+        read -p "Worker host/IP for registration [RESERVED]: " WORKER_REGISTER_HOST
+        WORKER_REGISTER_HOST=${WORKER_REGISTER_HOST:-RESERVED}
+    fi
+fi
+
+# 2. Deployment Strategy
+echo ""
+print_step "Deployment Strategy"
+if [ "$IS_UPDATE" = "true" ]; then
+    echo "Current strategy is: $([ "$DETECTED_DEPLOY_TYPE" = "img" ] && echo "Pre-built Images" || echo "Source Build")"
+    read -p "Keep existing strategy? (y/n) [y]: " KEEP_STRAT
+    KEEP_STRAT=${KEEP_STRAT:-y}
+    if [ "$KEEP_STRAT" = "y" ]; then
+        DEPLOY_TYPE=$DETECTED_DEPLOY_TYPE
+    else
+        echo "1) PRE-BUILT IMAGES"
+        echo "2) BUILD FROM SOURCE"
+        read -p "Select new strategy [1]: " STRATEGY_CHOICE
         STRATEGY_CHOICE=${STRATEGY_CHOICE:-1}
         DEPLOY_TYPE=$([ "$STRATEGY_CHOICE" = "1" ] && echo "img" || echo "src")
     fi
+else
+    echo "How would you like to deploy CMS?"
+    echo "1) PRE-BUILT IMAGES (Fastest, recommended for production)"
+    echo "2) BUILD FROM SOURCE (Allows custom code changes, takes longer)"
+    read -p "Select strategy [1]: " STRATEGY_CHOICE
+    STRATEGY_CHOICE=${STRATEGY_CHOICE:-1}
+    DEPLOY_TYPE=$([ "$STRATEGY_CHOICE" = "1" ] && echo "img" || echo "src")
+fi
 
-    # 3. Network & Security Configuration
-    echo ""
-    print_step "Network & Security"
-    if [ "$SETUP_TYPE" = "main" ]; then
-        LIVE_IP=$(curl -s -4 ifconfig.me || echo "127.0.0.1")
-        if [ "$IS_UPDATE" = "true" ]; then
-            print_info "Current saved IP: $SAVED_PUBLIC_IP"
-            if [ "$SAVED_PUBLIC_IP" != "$LIVE_IP" ]; then
-                print_warning "Your live detected IP ($LIVE_IP) is different from the saved one."
-                read -p "Use saved IP ($SAVED_PUBLIC_IP)? (y/n) [y]: " USE_OLD_IP
-                USE_OLD_IP=${USE_OLD_IP:-y}
-                if [ "$USE_OLD_IP" = "y" ]; then 
-                    PUBLIC_IP=$SAVED_PUBLIC_IP
-                else 
-                    read -p "Use live detected IP ($LIVE_IP)? (y/n) [y]: " USE_LIVE
-                    USE_LIVE=${USE_LIVE:-y}
-                    if [ "$USE_LIVE" = "y" ]; then PUBLIC_IP=$LIVE_IP; else read -p "Enter manual IP: " PUBLIC_IP; fi
-                fi
-            else
+# 3. Network & Security Configuration
+echo ""
+print_step "Network & Security"
+if [ "$SETUP_TYPE" = "main" ]; then
+    LIVE_IP=$(curl -s -4 ifconfig.me || echo "127.0.0.1")
+    if [ "$IS_UPDATE" = "true" ]; then
+        print_info "Current saved IP: $SAVED_PUBLIC_IP"
+        if [ "$SAVED_PUBLIC_IP" != "$LIVE_IP" ]; then
+            print_warning "Your live detected IP ($LIVE_IP) is different from the saved one."
+            read -p "Use saved IP ($SAVED_PUBLIC_IP)? (y/n) [y]: " USE_OLD_IP
+            USE_OLD_IP=${USE_OLD_IP:-y}
+            if [ "$USE_OLD_IP" = "y" ]; then 
                 PUBLIC_IP=$SAVED_PUBLIC_IP
-                print_success "Using saved IP: $PUBLIC_IP"
+            else 
+                read -p "Use live detected IP ($LIVE_IP)? (y/n) [y]: " USE_LIVE
+                USE_LIVE=${USE_LIVE:-y}
+                if [ "$USE_LIVE" = "y" ]; then PUBLIC_IP=$LIVE_IP; else read -p "Enter manual IP: " PUBLIC_IP; fi
             fi
         else
-            read -p "Public IP of this server [$LIVE_IP]: " PUBLIC_IP
-            PUBLIC_IP=${PUBLIC_IP:-$LIVE_IP}
-        fi
-
-        echo ""
-        print_info "Remote Worker Access Security"
-        echo "Do you want to allow remote workers to connect via Tailscale/VPN?"
-        echo "If yes, RPC ports will be bound to your VPN IP. If no, they remain local-only (127.0.0.1)."
-        read -p "Use Tailscale/VPN for RPC? (y/n) [n]: " USE_VPN
-        if [ "$USE_VPN" = "y" ]; then
-            if [ -n "$DETECTED_TAILSCALE_IP" ] && [ "$DETECTED_TAILSCALE_IP" != "127.0.0.1" ]; then
-                read -p "Enter Tailscale IP [$DETECTED_TAILSCALE_IP]: " TAILSCALE_IP
-                TAILSCALE_IP=${TAILSCALE_IP:-$DETECTED_TAILSCALE_IP}
-            else
-                read -p "Enter Tailscale IP: " TAILSCALE_IP
-            fi
-            REMOTE_WORKERS_ENABLED=true
-            CORE_SERVICES_IP=$TAILSCALE_IP
-        else
-            TAILSCALE_IP=127.0.0.1
-            REMOTE_WORKERS_ENABLED=false
-            # If no VPN, use Public IP for discovery if remote workers are needed, 
-            # otherwise 127.0.0.1 or the local docker network name is handled by compose.
-            CORE_SERVICES_IP=$PUBLIC_IP
+            PUBLIC_IP=$SAVED_PUBLIC_IP
+            print_success "Using saved IP: $PUBLIC_IP"
         fi
     else
-        # Worker Setup
+        read -p "Public IP of this server [$LIVE_IP]: " PUBLIC_IP
+        PUBLIC_IP=${PUBLIC_IP:-$LIVE_IP}
+    fi
+
+    echo ""
+    print_info "Remote Worker Access Security"
+    echo "Do you want to allow remote workers to connect via Tailscale/VPN?"
+    echo "If yes, RPC ports will be bound to your VPN IP. If no, they remain local-only (127.0.0.1)."
+    read -p "Use Tailscale/VPN for RPC? (y/n) [n]: " USE_VPN
+    if [ "$USE_VPN" = "y" ]; then
+        if [ -n "$DETECTED_TAILSCALE_IP" ]; then
+            read -p "Enter Tailscale IP [$DETECTED_TAILSCALE_IP]: " TAILSCALE_IP
+            TAILSCALE_IP=${TAILSCALE_IP:-$DETECTED_TAILSCALE_IP}
+        else
+            read -p "Enter Tailscale IP: " TAILSCALE_IP
+        fi
+        REMOTE_WORKERS_ENABLED=true
+    else
+        TAILSCALE_IP=127.0.0.1
+        REMOTE_WORKERS_ENABLED=false
+    fi
+else
+    # Worker Setup
+    if [ "$WORKER_SETUP_MODE" = "client" ]; then
         read -p "Enter Main Server IP/Hostname (Tailscale preferred): " MAIN_SERVER_IP
         PUBLIC_IP=$MAIN_SERVER_IP
-    fi
-
-    # 4. Database Configuration & Secrets (Main Server Only)
-    echo ""
-    if [ "$SETUP_TYPE" = "main" ]; then
-        print_step "Database Configuration & Secrets"
-        if [ "$IS_UPDATE" = "true" ]; then
-            print_info "Reusing existing database credentials."
-            DB_PASS=$DETECTED_DB_PASS
-            
-            # Check AUTH_SECRET
-            if [ -n "$DETECTED_AUTH_SECRET" ]; then
-                read -p "Regenerate Admin Panel AUTH_SECRET? (y/n) [n]: " REGEN_AUTH
-                if [ "$REGEN_AUTH" = "y" ]; then
-                    AUTH_SECRET=$(openssl rand -hex 32)
-                else
-                    AUTH_SECRET=$DETECTED_AUTH_SECRET
-                fi
-            else
-                AUTH_SECRET=$(openssl rand -hex 32)
-            fi
-            
-            # Check CMS_SECRET_KEY
-            if [ -n "$DETECTED_CMS_SECRET" ]; then
-                read -p "Regenerate Core CMS Secret Key? (y/n) [n]: " REGEN_CMS_SEC
-                if [ "$REGEN_CMS_SEC" = "y" ]; then
-                    CMS_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
-                    if [ -f config/cms.toml ]; then
-                        sed -i "s/secret_key = \".*\"/secret_key = \"$CMS_SECRET\"/" config/cms.toml
-                    fi
-                else
-                    CMS_SECRET=$DETECTED_CMS_SECRET
-                fi
-            else
-                CMS_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
-            fi
-            
-            # Check CONTEST_SECRET
-            if [ -n "$DETECTED_CONTEST_SECRET" ]; then
-                read -p "Regenerate Contest Server Secret Key? (y/n) [n]: " REGEN_CONTEST_SEC
-                if [ "$REGEN_CONTEST_SEC" = "y" ]; then
-                    CONTEST_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
-                else
-                    CONTEST_SECRET=$DETECTED_CONTEST_SECRET
-                fi
-            else
-                CONTEST_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
-            fi
+    else
+        if [ -f .env.core ]; then
+            EXISTING_PUBLIC_IP=$(grep "^PUBLIC_IP=" .env.core | cut -d '=' -f2-)
+            PUBLIC_IP=${EXISTING_PUBLIC_IP:-127.0.0.1}
         else
-            read -p "Database password [generate random]: " DB_PASS
-            if [ -z "$DB_PASS" ]; then
-                DB_PASS=$(openssl rand -base64 12 | tr -d "=+/" | cut -c1-12)
-                print_info "Generated password: $DB_PASS"
-            fi
-            AUTH_SECRET=$(openssl rand -hex 32)
-            CMS_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
-            CONTEST_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
+            PUBLIC_IP=127.0.0.1
         fi
     fi
-fi # End SKIP_QUESTIONS block
+fi
 
+# 4. Database Configuration (Main Server Only)
+echo ""
+if [ "$SETUP_TYPE" = "main" ]; then
+    print_step "Database Configuration"
+    if [ "$IS_UPDATE" = "true" ]; then
+        print_info "Reusing existing database credentials."
+        DB_PASS=$DETECTED_DB_PASS
+    else
+        read -p "Database password [generate random]: " DB_PASS
+        if [ -z "$DB_PASS" ]; then
+            DB_PASS=$(openssl rand -base64 12 | tr -d "=+/" | cut -c1-12)
+            print_info "Generated password: $DB_PASS"
+        fi
+    fi
+fi
 
 # 5. Environment Generation
 echo ""
 print_step "Updating Configuration Files..."
 
 REGENERATE="n"
-if [ "$QUICK_UPDATE" = "y" ]; then
-    echo "Quick Update: Keeping existing configuration structure."
-elif [ "$IS_UPDATE" = "true" ]; then
+if [ "$IS_UPDATE" = "true" ]; then
     echo "Existing configuration files detected."
     read -p "Regenerate files from scratch? (y/n) [n]: " REGENERATE
     REGENERATE=${REGENERATE:-n}
@@ -392,7 +319,6 @@ SCORING_SERVICE_SHARD=0
 EVALUATION_SERVICE_SHARD=0
 PROXY_SERVICE_SHARD=0
 CHECKER_SERVICE_SHARD=0
-CMS_SECRET_KEY=$CMS_SECRET
 # Workers are managed via Admin UI and stored here as WORKER_N variables
 EOF
 
@@ -411,7 +337,6 @@ RANKING_DOMAIN=ranking.cms.local
 RANKING_USERNAME=admin
 RANKING_PASSWORD=adminpass
 ADMIN_COOKIE_DURATION=36000
-AUTH_SECRET=$AUTH_SECRET
 EOF
 
     # Prepare .env.contest
@@ -420,7 +345,7 @@ EOF
     write_or_print .env.contest << EOF
 # Generated by setup.sh
 CONTESTS_DEPLOY_CONFIG=$EXISTING_MULTI_CONFIG
-SECRET_KEY=$CONTEST_SECRET
+SECRET_KEY=$SECRET_KEY
 COOKIE_DURATION=10800
 ACCESS_METHOD=public_port
 EOF
@@ -483,6 +408,36 @@ else
     fi
 fi
 
+if [ "$SETUP_TYPE" = "main" ]; then
+    echo ""
+    read -p "Configure worker mounting entries in .env.core now? (y/n) [n]: " CONFIGURE_WORKER_MOUNTING
+    CONFIGURE_WORKER_MOUNTING=${CONFIGURE_WORKER_MOUNTING:-n}
+    if [ "$CONFIGURE_WORKER_MOUNTING" = "y" ]; then
+        read -p "How many worker entries to add? [1]: " MAIN_WORKER_COUNT
+        MAIN_WORKER_COUNT=${MAIN_WORKER_COUNT:-1}
+        if ! is_positive_int "$MAIN_WORKER_COUNT"; then
+            print_error "Worker count must be a positive integer."
+            exit 1
+        fi
+
+        read -p "Base worker port (ports = base + idx) [26000]: " MAIN_WORKER_BASE_PORT
+        MAIN_WORKER_BASE_PORT=${MAIN_WORKER_BASE_PORT:-26000}
+        if ! is_positive_int "$MAIN_WORKER_BASE_PORT"; then
+            print_error "Base worker port must be a positive integer."
+            exit 1
+        fi
+
+        read -p "Worker host/IP for new entries [RESERVED]: " MAIN_WORKER_HOST
+        MAIN_WORKER_HOST=${MAIN_WORKER_HOST:-RESERVED}
+
+        run_or_print "./scripts/manage-workers.sh bulk-add '$MAIN_WORKER_HOST' '$MAIN_WORKER_BASE_PORT' '$MAIN_WORKER_COUNT'"
+    fi
+fi
+
+if [ "$SETUP_TYPE" = "worker" ] && [ "$WORKER_SETUP_MODE" = "mounting" ]; then
+    run_or_print "./scripts/manage-workers.sh bulk-add '$WORKER_REGISTER_HOST' '$WORKER_BASE_PORT' '$WORKER_INSTANCE_COUNT'"
+fi
+
 if [ "$DRY_RUN" = "true" ]; then
     echo "DRY-RUN: Would run: make env"
     echo "DRY-RUN: Environment files would be updated (no changes made)."
@@ -491,383 +446,126 @@ else
     print_success "Environment files updated."
 fi
 
+if [ "$SETUP_TYPE" = "worker" ] && [ "$WORKER_SETUP_MODE" = "client" ]; then
+    print_step "Preparing Worker Client Instances"
+    run_or_print "mkdir -p workers"
+
+    i=0
+    while [ $i -lt "$WORKER_INSTANCE_COUNT" ]; do
+        instance_port=$((WORKER_BASE_PORT + i))
+        env_file="workers/.env.worker.instance$i"
+
+        if [ "$DRY_RUN" = "true" ]; then
+            echo "DRY-RUN: Would generate $env_file with WORKER_SHARD=$i WORKER_PORT=$instance_port CORE_SERVICES_HOST=$PUBLIC_IP"
+        else
+            cat > "$env_file" << EOF
+WORKER_SHARD=$i
+WORKER_NAME=worker-$i
+WORKER_REPLICAS=1
+WORKER_MEMORY_LIMIT=2G
+WORKER_CPU_LIMIT=2
+WORKER_PORT=$instance_port
+CORE_SERVICES_HOST=$PUBLIC_IP
+CMS_CONFIG=/usr/local/etc/cms.toml
+EOF
+            print_success "Generated $env_file"
+        fi
+
+        if [ "$WORKER_AUTO_START" = "y" ]; then
+            run_or_print "docker compose --env-file '$env_file' -p 'cms-worker-$i' -f docker-compose.worker.yml up -d --build"
+        else
+            echo "Run later: docker compose --env-file '$env_file' -p 'cms-worker-$i' -f docker-compose.worker.yml up -d --build"
+        fi
+
+        i=$((i + 1))
+    done
+
+    echo ""
+    echo -e "${GREEN}Worker client setup complete.${NC}"
+    echo "Registered worker ports (for mounting on main): $WORKER_BASE_PORT..$((WORKER_BASE_PORT + WORKER_INSTANCE_COUNT - 1))"
+    exit 0
+fi
+
+if [ "$SETUP_TYPE" = "worker" ] && [ "$WORKER_SETUP_MODE" = "mounting" ]; then
+    if [ "$DRY_RUN" = "true" ]; then
+        echo "DRY-RUN: Would run: make core-img"
+    else
+        read -p "Restart core stack now to apply worker mounting entries? (y/n) [y]: " RESTART_CORE_AFTER_MOUNT
+        RESTART_CORE_AFTER_MOUNT=${RESTART_CORE_AFTER_MOUNT:-y}
+        if [ "$RESTART_CORE_AFTER_MOUNT" = "y" ]; then
+            make core-img
+        fi
+    fi
+
+    echo ""
+    echo -e "${GREEN}Worker mounting setup complete.${NC}"
+    exit 0
+fi
+
 # 6. Deployment
 echo ""
 
 if [ "$SETUP_TYPE" = "main" ]; then
     print_step "Deploying Main Server Stacks..."
-    # Offer worker registration/reservation
-    echo ""
-    read -p "Do you want to register/reserve worker slots now on this Main server? (y/n) [n]: " REGISTER_WORKERS
-    REGISTER_WORKERS=${REGISTER_WORKERS:-n}
-    if [ "$REGISTER_WORKERS" = "y" ]; then
-        read -p "How many worker slots to reserve? [2]: " WORKER_SLOTS
-        WORKER_SLOTS=${WORKER_SLOTS:-2}
-        read -p "Base port for workers (each instance will use base+idx) [26000]: " WORKER_BASE_PORT
-        WORKER_BASE_PORT=${WORKER_BASE_PORT:-26000}
-        read -p "Do you want to preserve existing WORKER_* entries and append? (y/n) [y]: " PRESERVE_WORKERS
-        PRESERVE_WORKERS=${PRESERVE_WORKERS:-y}
-
-        # If not preserving, optionally clear existing WORKER_* entries after confirmation
-        if [ "$PRESERVE_WORKERS" != "y" ]; then
-            read -p "This will append new entries without removing old ones. Proceed? (y/n) [y]: " PROCEED_APPEND
-            PROCEED_APPEND=${PROCEED_APPEND:-y}
-            if [ "$PROCEED_APPEND" != "y" ]; then
-                echo "Skipping worker reservation."
-            fi
-        fi
-
-        if [ "$PROCEED_APPEND" != "n" ]; then
-            # Use manage-workers.sh bulk-add to add entries. Respect DRY_RUN.
-            if [ "$DRY_RUN" = "true" ]; then
-                ./scripts/manage-workers.sh bulk-add "$TAILSCALE_IP" "$WORKER_BASE_PORT" "$WORKER_SLOTS" --dry-run
-            else
-                ./scripts/manage-workers.sh bulk-add "$TAILSCALE_IP" "$WORKER_BASE_PORT" "$WORKER_SLOTS"
-                echo "Regenerated .env.core with $WORKER_SLOTS new worker(s). Running make env to inject into config." 
-                make env
-            fi
-        fi
-    fi
     if [ "$DEPLOY_TYPE" = "img" ]; then
         print_info "Pulling latest images..."
         make pull
-    fi
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # CORE / DATABASE STACK
-    # ─────────────────────────────────────────────────────────────────────────
-    echo ""
-    print_step "Core / Database Stack"
-    echo "  (Required by: Admin Panel, Contest Server, Worker)"
-    read -p "Deploy Core/Database stack? (y/n) [y]: " DEPLOY_CORE
-    DEPLOY_CORE=${DEPLOY_CORE:-y}
-    DEPLOY_CORE_DONE=false
-
-    if [ "$DEPLOY_CORE" = "y" ]; then
-        echo ""
-        print_info "Configuring Database exposure..."
-        resolve_port "POSTGRES_PORT_EXTERNAL" ".env.core" "Postgres" "5432"
-        resolve_bind_ip "DB_BIND_IP" ".env.core" "Database (Postgres)"
-
-        if [ "$DEPLOY_TYPE" = "img" ]; then
-            make core-img
-        else
-            make core
-        fi
-
-        print_info "Waiting for database to be healthy..."
-        until [ "$(docker inspect -f '{{.State.Health.Status}}' cms-database 2>/dev/null)" == "healthy" ]; do
-            printf "."
-            sleep 2
-        done
-        echo ""
-
-        make cms-init
-        make prisma-sync
-        DEPLOY_CORE_DONE=true
+        make core-img
+        make infra-img
+        make admin-img
+        make contest-img
     else
-        print_warning "Skipping Core stack."
+        make core
+        make infra
+        make admin
+        make contest
     fi
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # ADMIN PANEL STACK
-    # ─────────────────────────────────────────────────────────────────────────
+    
+    print_info "Waiting for database..."
+    until [ "$(docker inspect -f '{{.State.Health.Status}}' cms-database 2>/dev/null)" == "healthy" ]; do printf "."; sleep 2; done
     echo ""
-    print_step "Admin Panel Stack"
-    echo "  (Depends on: Core stack)"
-    if [ "$DEPLOY_CORE" != "y" ]; then
-        print_warning "Note: Core stack is not being deployed in this run."
-    fi
-    read -p "Deploy Admin services? (y/n) [y]: " DEPLOY_ADMIN
-    DEPLOY_ADMIN=${DEPLOY_ADMIN:-y}
-
-    if [ "$DEPLOY_ADMIN" = "y" ]; then
-        echo ""
-        print_info "Configuring Admin Panel components..."
-
-        # Sub-service selection
-        read -p "  Deploy Admin NEXT (modern panel)? (y/n) [y]: " DEPLOY_ADMIN_NEXT
-        DEPLOY_ADMIN_NEXT=${DEPLOY_ADMIN_NEXT:-y}
-        if [ "$DEPLOY_ADMIN_NEXT" = "y" ]; then
-            resolve_port "ADMIN_NEXT_PORT_EXTERNAL" ".env.admin" "Admin Next.js" "8891"
-            resolve_bind_ip "ADMIN_NEXT_BIND_IP" ".env.admin" "Admin Panel (Next.js)"
-        fi
-
-        read -p "  Deploy Admin LEGACY (original panel)? (y/n) [y]: " DEPLOY_ADMIN_LEGACY
-        DEPLOY_ADMIN_LEGACY=${DEPLOY_ADMIN_LEGACY:-y}
-        if [ "$DEPLOY_ADMIN_LEGACY" = "y" ]; then
-            resolve_port "ADMIN_PORT_EXTERNAL" ".env.admin" "Admin legacy" "8889"
-            resolve_bind_ip "ADMIN_BIND_IP" ".env.admin" "Admin Panel (legacy)"
-            
-            # Update VITE_API_URL with confirmed port
-            CONFIRMED_ADMIN_PORT=$(read_env_var .env.admin ADMIN_PORT_EXTERNAL)
-            update_env_var .env.admin "VITE_API_URL" "http://${PUBLIC_IP}:${CONFIRMED_ADMIN_PORT}"
-        fi
-
-        read -p "  Deploy RANKING server? (y/n) [y]: " DEPLOY_RANKING
-        DEPLOY_RANKING=${DEPLOY_RANKING:-y}
-        if [ "$DEPLOY_RANKING" = "y" ]; then
-            resolve_port "RANKING_PORT_EXTERNAL" ".env.admin" "Ranking server" "8890"
-            resolve_bind_ip "RANKING_BIND_IP" ".env.admin" "Ranking Server"
-        fi
-
-        make env  # Regenerate merged .env with updated values
-        
-        # Deploy selected components
-        if [ "$DEPLOY_ADMIN_NEXT" = "y" ] && [ "$DEPLOY_ADMIN_LEGACY" = "y" ] && [ "$DEPLOY_RANKING" = "y" ]; then
-            if [ "$DEPLOY_TYPE" = "img" ]; then make admin-img; else make admin; fi
-        else
-            # Partial deployment
-            print_info "Applying partial Admin deployment..."
-            # Detect COMPOSE like Makefile
-            COMPOSE_BIN=$(docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
-            admin_yml="docker-compose.admin.yml"
-            [ "$DEPLOY_TYPE" = "img" ] && admin_yml="docker-compose.admin.img.yml"
-            
-            services=""
-            [ "$DEPLOY_ADMIN_NEXT" = "y" ] && services="$services cms-admin-panel"
-            [ "$DEPLOY_ADMIN_LEGACY" = "y" ] && services="$services cms-admin-legacy"
-            [ "$DEPLOY_RANKING" = "y" ] && services="$services cms-ranking"
-            
-            $COMPOSE_BIN -f "$admin_yml" up -d $services
-        fi
-
-        if [ "$IS_UPDATE" != "true" ] && [ "$DEPLOY_ADMIN_LEGACY" = "y" ]; then
-            echo ""
-            read -p "Create a superadmin account now? (y/n) [y]: " CREATE_ADMIN
-            CREATE_ADMIN=${CREATE_ADMIN:-y}
-            if [ "$CREATE_ADMIN" = "y" ]; then make admin-create; fi
-        fi
-    else
-        print_warning "Skipping Admin Panel stack."
+    
+    make cms-init
+    make prisma-sync
+    
+    if [ "$IS_UPDATE" != "true" ]; then
+        print_step "User Configuration"
+        read -p "Create a superadmin account now? (y/n) [y]: " CREATE_ADMIN
+        CREATE_ADMIN=${CREATE_ADMIN:-y}
+        if [ "$CREATE_ADMIN" = "y" ]; then make admin-create; fi
     fi
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # CONTEST SERVER STACK
-    # ─────────────────────────────────────────────────────────────────────────
-    echo ""
-    print_step "Contest Server Stack"
-    echo "  (Depends on: Core stack)"
-    if [ "$DEPLOY_CORE" != "y" ]; then
-        print_warning "Note: Core stack is not being deployed in this run."
-    fi
-    read -p "Deploy Contest Server stack? (y/n) [y]: " DEPLOY_CONTEST
-    DEPLOY_CONTEST=${DEPLOY_CONTEST:-y}
-
-    if [ "$DEPLOY_CONTEST" = "y" ]; then
-        echo ""
-        print_info "Configuring Contest Server ports & IPs..."
-
-        resolve_port "CONTEST_PORT_EXTERNAL" ".env.contest" "Contest web server" "8888"
-        resolve_bind_ip "CONTEST_BIND_IP" ".env.contest" "Contest Web Server"
-        resolve_port "NGINX_HTTP_PORT" ".env.contest" "Nginx HTTP (proxy)" "80"
-        resolve_port "NGINX_HTTPS_PORT" ".env.contest" "Nginx HTTPS (proxy)" "443"
-        resolve_bind_ip "NGINX_BIND_IP" ".env.contest" "Nginx Proxy"
-
-        # ── Contest Selection ────────────────────────────────────────────────
-        echo ""
-        print_info "Selecting contest to run..."
-        
-        # Try to list contests from database
-        db_container="cms-database"
-        if docker ps | grep -q "$db_container"; then
-            db_pass=$(read_env_var .env.core POSTGRES_PASSWORD)
-            db_user=$(read_env_var .env.core POSTGRES_USER)
-            db_name=$(read_env_var .env.core POSTGRES_DB)
-            
-            print_info "Available contests in database:"
-            docker exec -e PGPASSWORD="$db_pass" "$db_container" psql -U "$db_user" -d "$db_name" -c "SELECT id, name, description FROM contests;" || print_warning "Could not query contests table."
-        fi
-
-        saved_contest_id=$(read_env_var .env.contest CONTEST_ID)
-        read -p "  Enter Contest ID to run [${saved_contest_id:-1}]: " SELECTED_CONTEST_ID
-        SELECTED_CONTEST_ID=${SELECTED_CONTEST_ID:-${saved_contest_id:-1}}
-        update_env_var ".env.contest" "CONTEST_ID" "$SELECTED_CONTEST_ID"
-        # Also update in .env.core for Evaluation/Proxy services
-        update_env_var ".env.core" "CONTEST_ID" "$SELECTED_CONTEST_ID"
-
-        make env  # Regenerate merged .env
-        if [ "$DEPLOY_TYPE" = "img" ]; then
-            make contest-img
-        else
-            make contest
-        fi
-        
-        # Restart core services if contest ID changed to ensure evaluation/proxy pick it up
-        if [ "$SELECTED_CONTEST_ID" != "$saved_contest_id" ] && [ "$DEPLOY_CORE" != "y" ]; then
-            print_info "Contest ID changed. Restarting evaluation and proxy services..."
-            COMPOSE_BIN=$(docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
-            core_yml="docker-compose.core.yml"
-            [ "$DEPLOY_TYPE" = "img" ] && core_yml="docker-compose.core.img.yml"
-            $COMPOSE_BIN -f "$core_yml" restart evaluation-service proxy-service
-        fi
-    else
-        print_warning "Skipping Contest Server stack."
-    fi
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # INFRASTRUCTURE / MONITOR STACK
-    # ─────────────────────────────────────────────────────────────────────────
-    echo ""
-    print_step "Infrastructure / Monitor Stack"
-    echo "  (Standalone — Discord alerts, backup, health monitoring)"
-    read -p "Deploy Infrastructure/Monitor stack? (y/n) [y]: " DEPLOY_INFRA
-    DEPLOY_INFRA=${DEPLOY_INFRA:-y}
-
-    if [ "$DEPLOY_INFRA" = "y" ]; then
-        if [ "$DEPLOY_TYPE" = "img" ]; then
-            make infra-img
-        else
-            make infra
-        fi
-    else
-        print_warning "Skipping Infrastructure stack."
-    fi
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # LOCAL WORKER (optional)
-    # ─────────────────────────────────────────────────────────────────────────
+    # Local Worker Option
     echo ""
     read -p "Do you want to deploy a local worker on this machine? (y/n) [n]: " DEPLOY_LOCAL_WORKER
-    DEPLOY_LOCAL_WORKER=${DEPLOY_LOCAL_WORKER:-n}
     if [ "$DEPLOY_LOCAL_WORKER" = "y" ]; then
         if [ "$DEPLOY_TYPE" = "img" ]; then
+            make pull
             make worker-img
         else
             make worker
         fi
     fi
-
 else
-    # ─────────────────────────────────────────────────────────────────────────
-    # REMOTE WORKER ONLY
-    # ─────────────────────────────────────────────────────────────────────────
     print_step "Deploying Remote Worker..."
-
-    # Worker setup mode: client (run containers) or mounting (register with Core)
-    echo ""
-    echo "Worker setup mode:" 
-    echo "1) client   - run worker container(s) on this host (recommended)"
-    echo "2) mounting - register worker entries on the Main server (no containers started here)"
-    read -p "Select mode [1]: " WORKER_SETUP_MODE
-    WORKER_SETUP_MODE=${WORKER_SETUP_MODE:-1}
-
-    if [ "$WORKER_SETUP_MODE" = "2" ]; then
-        # Mounting: register worker entries in main server .env.core
-        read -p "Main server host/IP to register (Tailscale IP recommended): " REGISTER_HOST
-        read -p "How many worker entries to register? [1]: " REGISTER_COUNT
-        REGISTER_COUNT=${REGISTER_COUNT:-1}
-        read -p "Base port for workers on main (base + idx) [26000]: " REGISTER_BASE_PORT
-        REGISTER_BASE_PORT=${REGISTER_BASE_PORT:-26000}
-
-        if [ "$DRY_RUN" = "true" ]; then
-            ./scripts/manage-workers.sh bulk-add "$REGISTER_HOST" "$REGISTER_BASE_PORT" "$REGISTER_COUNT" --dry-run
-        else
-            ./scripts/manage-workers.sh bulk-add "$REGISTER_HOST" "$REGISTER_BASE_PORT" "$REGISTER_COUNT"
-            echo "Registered $REGISTER_COUNT worker(s) on $REGISTER_HOST:$REGISTER_BASE_PORT.." 
-            echo "Run 'make env' on main server (if needed) to inject into config/cms.toml."
-        fi
+    if [ "$DEPLOY_TYPE" = "img" ]; then
+        print_info "Pulling latest images..."
+        make pull
+        make worker-img
     else
-        # Client mode: run containers locally (possibly multiple instances)
-        read -p "How many worker instances to run on this host? [1]: " WORKER_REPLICAS_LOCAL
-        WORKER_REPLICAS_LOCAL=${WORKER_REPLICAS_LOCAL:-1}
-        read -p "Base port for local workers (ports = base+idx) [26000]: " LOCAL_BASE_PORT
-        LOCAL_BASE_PORT=${LOCAL_BASE_PORT:-26000}
-        read -p "Main server CORE_SERVICES_HOST (Tailscale IP or hostname): " CORE_SERVICES_HOST
-        CORE_SERVICES_HOST=${CORE_SERVICES_HOST:-$PUBLIC_IP}
-        read -p "Core LogService port [29000]: " CORE_LOG_PORT
-        CORE_LOG_PORT=${CORE_LOG_PORT:-29000}
-        read -p "Core ResourceService port [28000]: " CORE_RESOURCE_PORT
-        CORE_RESOURCE_PORT=${CORE_RESOURCE_PORT:-28000}
-
-        echo "Networking options for worker containers:" 
-        echo "1) host (network_mode: host) - recommended for remote workers"
-        echo "2) bridge (published ports) - per-instance external port mapping"
-        echo "3) tailscale-only (requires Tailscale on host) - no published ports"
-        read -p "Select networking mode [1]: " NET_MODE
-        NET_MODE=${NET_MODE:-1}
-
-        read -p "Auto-start containers after generation? (y/n) [y]: " AUTO_START
-        AUTO_START=${AUTO_START:-y}
-
-        mkdir -p workers
-        START_SCRIPT="workers/start-all.sh"
-        if [ "$DRY_RUN" = "true" ]; then
-            echo "DRY-RUN: Would create worker env files in ./workers/ and a start script: $START_SCRIPT"
-        else
-            rm -f "$START_SCRIPT"
-            echo "#!/bin/bash" > "$START_SCRIPT"
-            echo "set -e" >> "$START_SCRIPT"
-        fi
-
-        for ((i=0;i<WORKER_REPLICAS_LOCAL;i++)); do
-            shard=$i
-            port=$((LOCAL_BASE_PORT + i))
-            envfile="workers/.env.shard${i}"
-            if [ "$DRY_RUN" = "true" ]; then
-                echo "DRY-RUN: Would write $envfile with WORKER_SHARD=$shard, WORKER_PORT=$port, CORE_SERVICES_HOST=$CORE_SERVICES_HOST"
-            else
-                cat > "$envfile" << EOF
-WORKER_SHARD=$shard
-WORKER_PORT=$port
-CORE_SERVICES_HOST=$CORE_SERVICES_HOST
-CORE_LOG_PORT=$CORE_LOG_PORT
-CORE_RESOURCE_PORT=$CORE_RESOURCE_PORT
-WORKER_NAME=cms-worker-$shard
-EOF
-                chmod 600 "$envfile"
-            fi
-
-            proj="cms-worker-$shard"
-            if [ "$NET_MODE" = "1" ]; then
-                cmd="docker compose --env-file $envfile -p $proj -f docker-compose.worker.yml up -d --build"
-            elif [ "$NET_MODE" = "2" ]; then
-                # Bridge mode: recommend using host port = port; user may adjust later
-                cmd="docker compose --env-file $envfile -p $proj -f docker-compose.worker.yml up -d --build"
-            else
-                # Tailscale-only: still run compose but no published ports expected
-                cmd="docker compose --env-file $envfile -p $proj -f docker-compose.worker.yml up -d --build"
-            fi
-
-            if [ "$DRY_RUN" = "true" ]; then
-                echo "DRY-RUN: Would run: $cmd"
-            else
-                echo "$cmd" >> "$START_SCRIPT"
-            fi
-        done
-
-        if [ "$DRY_RUN" != "true" ]; then
-            chmod +x "$START_SCRIPT"
-            echo "Generated $WORKER_REPLICAS_LOCAL env files and start script at $START_SCRIPT"
-            if [ "$AUTO_START" = "y" ]; then
-                echo "Starting worker containers..."
-                bash "$START_SCRIPT"
-            else
-                echo "To start workers, run: $START_SCRIPT"
-            fi
-        fi
+        make worker
     fi
 fi
 
 # Final Summary
 echo ""
-# Default to "y" — Quick Update mode skips deploy prompts so these may be unset
-DEPLOY_ADMIN=${DEPLOY_ADMIN:-y}
-DEPLOY_CONTEST=${DEPLOY_CONTEST:-y}
-ADMIN_NEXT_PORT_OUT=$(read_env_var .env.admin ADMIN_NEXT_PORT_EXTERNAL); ADMIN_NEXT_PORT_OUT=${ADMIN_NEXT_PORT_OUT:-8891}
-ADMIN_PORT_OUT=$(read_env_var .env.admin ADMIN_PORT_EXTERNAL); ADMIN_PORT_OUT=${ADMIN_PORT_OUT:-8889}
-RANKING_PORT_OUT=$(read_env_var .env.admin RANKING_PORT_EXTERNAL); RANKING_PORT_OUT=${RANKING_PORT_OUT:-8890}
-CONTEST_PORT_OUT=$(read_env_var .env.contest CONTEST_PORT_EXTERNAL); CONTEST_PORT_OUT=${CONTEST_PORT_OUT:-8888}
 echo -e "${GREEN}═══════════════════════════════════════════════════════════${NC}"
 echo -e "${GREEN}             Setup Completed Successfully!                  ${NC}"
 echo -e "${GREEN}═══════════════════════════════════════════════════════════${NC}"
 echo ""
 if [ "$SETUP_TYPE" = "main" ]; then
     echo -e "🚀 Main Server available at:"
-    [ "$DEPLOY_ADMIN" = "y" ]   && echo -e "   - Admin UI (Next):   http://$PUBLIC_IP:$ADMIN_NEXT_PORT_OUT"
-    [ "$DEPLOY_ADMIN" = "y" ]   && echo -e "   - Admin UI (Legacy): http://$PUBLIC_IP:$ADMIN_PORT_OUT"
-    [ "$DEPLOY_ADMIN" = "y" ]   && echo -e "   - Ranking:           http://$PUBLIC_IP:$RANKING_PORT_OUT"
-    [ "$DEPLOY_CONTEST" = "y" ] && echo -e "   - Contest Server:    http://$PUBLIC_IP:$CONTEST_PORT_OUT"
+    echo -e "   - Admin UI:   http://$PUBLIC_IP:8891"
     echo -e "   - RPC Listen: $TAILSCALE_IP"
 else
     echo -e "🚀 Remote Worker deployed and connecting to $PUBLIC_IP"
@@ -875,3 +573,4 @@ fi
 echo ""
 print_success "Documentation: docs/DEPENDENCIES.md"
 echo ""
+

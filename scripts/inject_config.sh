@@ -92,44 +92,83 @@ echo "Building worker configuration..."
 WORKER_ARRAY=""
 WORKER_COUNT=0
 
-# Collect WORKER_N lines, sort by index numerically
-WORKER_LINES=$(grep -E '^WORKER_[0-9]+=' "$ENV_FILE" 2>/dev/null || true)
-if [ -n "$WORKER_LINES" ]; then
-    # Transform WORKER_#=host:port into "# host port" and sort by #
-    echo "$WORKER_LINES" | sed 's/^WORKER_//' | sort -t'=' -k1n | while IFS='=' read -r idx val; do
-        WORKER_HOST=$(echo "$val" | cut -d':' -f1)
-        WORKER_PORT=$(echo "$val" | cut -d':' -f2)
-        if [ -z "$WORKER_HOST" ] || [ -z "$WORKER_PORT" ]; then
-            continue
-        fi
-        if [ -z "$WORKER_ARRAY" ]; then
-            WORKER_ARRAY="[\"$WORKER_HOST\", $WORKER_PORT]"
-        else
-            WORKER_ARRAY="$WORKER_ARRAY,\n    [\"$WORKER_HOST\", $WORKER_PORT]"
-        fi
-        WORKER_COUNT=$((WORKER_COUNT + 1))
-        echo "  - Worker $idx: $WORKER_HOST:$WORKER_PORT"
-    done
-fi
+while IFS='=' read -r key value; do
+    case "$key" in
+        WORKER_[0-9]*)
+            worker_index=$(echo "$key" | sed 's/WORKER_//')
+            worker_host=$(echo "$value" | cut -d ':' -f1)
+            worker_port=$(echo "$value" | cut -d ':' -f2)
+
+            if [ -z "$worker_host" ] || [ -z "$worker_port" ]; then
+                echo "  - Skipping invalid $key=$value"
+                continue
+            fi
+
+            case "$worker_port" in
+                ''|*[!0-9]*)
+                    echo "  - Skipping invalid port in $key=$value"
+                    continue
+                    ;;
+            esac
+
+            if [ -z "$WORKER_ARRAY" ]; then
+                WORKER_ARRAY="[\"$worker_host\", $worker_port]"
+            else
+                WORKER_ARRAY="$WORKER_ARRAY,\n    [\"$worker_host\", $worker_port]"
+            fi
+
+            WORKER_COUNT=$((WORKER_COUNT + 1))
+            echo "  - Worker $worker_index: $worker_host:$worker_port"
+            ;;
+    esac
+done < <(grep '^WORKER_[0-9]\+=' "$ENV_FILE" | sort -t '_' -k2,2n)
+
+# Remove existing uncommented Worker block in [services] section to avoid duplicates
+python3 - << 'PY'
+from pathlib import Path
+
+config = Path("config/cms.toml")
+text = config.read_text()
+lines = text.splitlines()
+
+new_lines = []
+inside_services = False
+inside_worker = False
+worker_depth = 0
+
+for line in lines:
+    stripped = line.strip()
+
+    if stripped.startswith("[") and stripped.endswith("]"):
+        if inside_worker:
+            inside_worker = False
+            worker_depth = 0
+        inside_services = stripped == "[services]"
+
+    if inside_services and stripped.startswith("Worker = [") and not stripped.startswith("#"):
+        inside_worker = True
+        worker_depth = 1
+        continue
+
+    if inside_worker:
+        worker_depth += line.count("[")
+        worker_depth -= line.count("]")
+        if worker_depth <= 0:
+            inside_worker = False
+        continue
+
+    new_lines.append(line)
+
+config.write_text("\n".join(new_lines) + "\n")
+PY
 
 # Inject workers into cms.toml
 if [ $WORKER_COUNT -gt 0 ]; then
-    # Remove any existing Worker = [ ... ] block
-    awk 'BEGIN{skip=0} { if ($0 ~ /^Worker = \[/) {skip=1; next} if (skip==1 && $0 ~ /^\]/) {skip=0; next} if (skip==0) print }' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
-
-    # Prepare the Worker section text
     WORKER_SECTION="Worker = [\n    $WORKER_ARRAY\n]"
-
-    # Insert the Worker array after EvaluationService line, or append at end if not found
-    if grep -q "^EvaluationService =" "$CONFIG_FILE"; then
-        sed -i "/^EvaluationService =/a\\$WORKER_SECTION" "$CONFIG_FILE"
-    else
-        echo -e "\n$WORKER_SECTION" >> "$CONFIG_FILE"
-    fi
-
+    sed -i "/^EvaluationService = /a\\$WORKER_SECTION" "$CONFIG_FILE"
     echo "Injected $WORKER_COUNT worker(s) into configuration."
 else
-    echo "No workers configured. Skipping worker injection."
+    echo "No workers configured. Existing Worker block removed if present."
 fi
 
 echo "Configuration injection complete."
