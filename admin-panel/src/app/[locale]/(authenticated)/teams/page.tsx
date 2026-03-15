@@ -1,6 +1,6 @@
 import { getTeams } from '@/app/actions/teams';
 import { TeamList } from '@/components/teams/TeamList';
-import { checkPermission } from '@/lib/permissions';
+import { checkPermission, getPermissions } from '@/lib/permissions';
 import { getDictionary } from '@/i18n';
 import { PermissionDenied } from '@/components/PermissionDenied';
 import { Stack } from '@/components/core/Layout';
@@ -19,6 +19,7 @@ export default async function TeamsPage({
     return <PermissionDenied permission="permission_users" locale={locale} dict={dict} />;
   }
 
+  const permissions = await getPermissions();
   const teams = await getTeams();
 
   return (
@@ -28,7 +29,7 @@ export default async function TeamsPage({
         <Text variant="muted">Manage teams for competitive programming.</Text>
       </Stack>
 
-      <TeamList initialTeams={teams} />
+      <TeamList initialTeams={teams} permissions={permissions} />
     </Stack>
   );
 }

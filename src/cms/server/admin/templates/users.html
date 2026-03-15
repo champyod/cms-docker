@@ -12,7 +12,7 @@
    <input type="submit"
          name="operation"
          value="Remove"
-{% if not admin.permission_all %}
+{% if not admin.permission_all and not admin.permission_users %}
          disabled
 {% endif %}
          />

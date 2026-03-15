@@ -5,7 +5,24 @@ import { cn } from '@/lib/utils';
 import { Bell, Search, User, LogOut } from 'lucide-react';
 import { useToast } from '../providers/ToastProvider';
 import { getUnansweredQuestions } from '@/app/actions/questions';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
+
+const ROUTE_TITLES: Record<string, { title: string; description: string }> = {
+  '': { title: 'Dashboard', description: 'Overview of system status' },
+  'contests': { title: 'Contests', description: 'Manage all contests' },
+  'tasks': { title: 'Tasks', description: 'Manage programming tasks and test cases' },
+  'submissions': { title: 'Submissions', description: 'Monitor submission results' },
+  'users': { title: 'Users', description: 'Manage contestant accounts' },
+  'teams': { title: 'Teams', description: 'Manage participant teams' },
+  'admins': { title: 'Admins', description: 'Manage admin accounts' },
+  'containers': { title: 'Containers', description: 'Monitor Docker containers' },
+  'deployments': { title: 'Deployments', description: 'Manage service deployments' },
+  'resources': { title: 'Resources', description: 'System resource overview' },
+  'maintenance': { title: 'Maintenance', description: 'System maintenance tasks' },
+  'settings': { title: 'Settings', description: 'System configuration' },
+  'docs': { title: 'Documentation', description: 'Setup and usage guides' },
+  'search': { title: 'Search', description: 'Search across all records' },
+};
 
 export const Header: React.FC<{ className?: string; username?: string }> = ({ className, username }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -14,32 +31,21 @@ export const Header: React.FC<{ className?: string; username?: string }> = ({ cl
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const { addToast } = useToast();
   const router = useRouter();
+  const pathname = usePathname();
+
+  const segments = pathname.split('/').filter(Boolean);
+  const pageSegment = segments[1] || '';
+  const pageInfo = ROUTE_TITLES[pageSegment] ?? { title: pageSegment.charAt(0).toUpperCase() + pageSegment.slice(1), description: '' };
 
   // Poll for new questions every 30 seconds
   useEffect(() => {
     const checkNotifications = async () => {
-      // For polling, we might want to check for ALL contests or just active one?
-      // Since we don't have active contest ID easily available in Header, 
-      // let's assume we check for a dummy or make getUnansweredQuestions handle null (all contests).
-      // Updated getUnansweredQuestions handles null by returning empty, we need to update it to return ALL if null.
-      // Or better, let's just checking for a default contest ID 1 for now or pass it as prop?
-      // Actually, Header doesn't know contest ID. 
-      // Let's modify getUnansweredQuestions to accept null and find ALL unanswered questions across contests.
-
       try {
-        // We will need to update server action to run without contestId filtering if null passed
-        // For now, let's try with contestId 1 or find a way.
-        // Actually, the best way is to fetch ALL.
-
-        // Assuming we update the server action to handle null = all
         const questions = await getUnansweredQuestions(null);
 
         if (questions && questions.length > 0) {
           setHasNotifications(true);
 
-          // Check if any came in recently (since last check) to toast
-          // For simplicity, just toast if we have any and it's the first load or count increased?
-          // Let's just toast for the latest one if it's new.
           const latest = questions[0];
           const qTime = new Date(latest.question_timestamp).getTime();
 
@@ -48,7 +54,7 @@ export const Header: React.FC<{ className?: string; username?: string }> = ({ cl
               type: 'warning',
               title: 'New Question Received!',
               message: `From ${latest.participations?.users?.username || 'User'}: ${latest.subject.substring(0, 30)}...`,
-              duration: Infinity // Persistent as requested
+              duration: Infinity
             });
             lastCheckTimeRef.current = Date.now();
           }
@@ -82,8 +88,8 @@ export const Header: React.FC<{ className?: string; username?: string }> = ({ cl
     <header className={cn("flex items-center justify-between h-20 px-8", className)}>
       {/* Page Title / Breadcrumbs */}
       <div>
-        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-        <p className="text-sm text-slate-400">Overview of system status</p>
+        <h1 className="text-2xl font-bold text-white">{pageInfo.title}</h1>
+        {pageInfo.description && <p className="text-sm text-slate-400">{pageInfo.description}</p>}
       </div>
 
       {/* Right Actions */}

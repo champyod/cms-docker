@@ -10,7 +10,19 @@ import { Trash2, Plus, Calendar, Clock, ExternalLink, HelpCircle } from 'lucide-
 import { ContestModal } from './ContestModal';
 import { apiClient } from '@/lib/apiClient';
 
-export function ContestList({ initialContests, totalPages }: { initialContests: any[], totalPages: number }) {
+interface ContestListProps {
+  initialContests: any[];
+  totalPages: number;
+  permissions: {
+    permission_all: boolean;
+    permission_tasks: boolean;
+    permission_users: boolean;
+    permission_contests: boolean;
+    permission_messaging: boolean;
+  };
+}
+
+export function ContestList({ initialContests, totalPages, permissions }: ContestListProps) {
   const router = useRouter();
   const [contests] = useState(initialContests);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -18,9 +30,12 @@ export function ContestList({ initialContests, totalPages }: { initialContests: 
   const locale = pathname.split('/')[1] || 'en';
   const [selectedContest, setSelectedContest] = useState<any | null>(null);
 
+  const isSuperAdmin = permissions?.permission_all ?? false;
+  const canManageContests = isSuperAdmin || (permissions?.permission_contests ?? false);
 
 
   const handleDelete = async (id: number) => {
+    if (!canManageContests) return;
     if (confirm('Are you sure you want to delete this contest? This is IRREVERSIBLE.')) {
       const result = await apiClient.delete(`/api/contests/${id}`);
       if (result.success) {
@@ -32,6 +47,7 @@ export function ContestList({ initialContests, totalPages }: { initialContests: 
   };
 
   const handleCreate = () => {
+    if (!canManageContests) return;
     setSelectedContest(null);
     setIsModalOpen(true);
   };
@@ -63,14 +79,16 @@ export function ContestList({ initialContests, totalPages }: { initialContests: 
             <HelpCircle className="w-4 h-4" />
           </Link>
         </div>
-        <Button 
-            variant="primary" 
-            className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white pl-3 pr-4"
-            onClick={handleCreate}
-        >
-          <Plus className="w-4 h-4" />
-          Create Contest
-        </Button>
+        {canManageContests && (
+          <Button 
+              variant="primary" 
+              className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white pl-3 pr-4"
+              onClick={handleCreate}
+          >
+            <Plus className="w-4 h-4" />
+            Create Contest
+          </Button>
+        )}
       </div>
 
       <div className="border border-white/5 rounded-xl overflow-hidden bg-neutral-900/40 backdrop-blur-sm">
@@ -119,14 +137,16 @@ export function ContestList({ initialContests, totalPages }: { initialContests: 
                     </TableCell>
                     <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
-                        <Button 
-                            variant="ghost" 
-                        size="sm" 
-                            onClick={() => handleDelete(contest.id)}
-                            className="h-8 w-8 p-0 text-neutral-400 hover:text-red-400"
-                        >
-                        <Trash2 className="w-4 h-4" />
-                        </Button>
+                        {canManageContests && (
+                            <Button 
+                                variant="ghost" 
+                            size="sm" 
+                                onClick={() => handleDelete(contest.id)}
+                                className="h-8 w-8 p-0 text-neutral-400 hover:text-red-400"
+                            >
+                            <Trash2 className="w-4 h-4" />
+                            </Button>
+                        )}
                     </div>
                     </TableCell>
                 </TableRow>
@@ -142,7 +162,7 @@ export function ContestList({ initialContests, totalPages }: { initialContests: 
           </TableBody>
         </Table>
       </div>
-      
+       
       <ContestModal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 

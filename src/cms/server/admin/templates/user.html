@@ -131,9 +131,9 @@
       <input type="submit"
            name="operation"
            value="Remove" style="float: right;"
-  {% if not admin.permission_all %}
+   {% if not admin.permission_all and not admin.permission_users %}
            disabled
-  {% endif %}
+   {% endif %}
            />
   </form>
   <div class="hr"></div>

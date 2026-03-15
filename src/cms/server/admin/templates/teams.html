@@ -9,7 +9,7 @@
 <form action="{{ url("teams") }}" method="POST">
   {{ xsrf_form_html|safe }}
   Edit selected team:
-  <input type="submit" name="operation" value="Remove" {% if not admin.permission_all %} disabled {% endif %} />
+  <input type="submit" name="operation" value="Remove" {% if not admin.permission_all and not admin.permission_users %} disabled {% endif %} />
   <table class="bordered">
     <thead>
       <tr>

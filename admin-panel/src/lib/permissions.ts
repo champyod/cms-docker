@@ -39,3 +39,17 @@ export async function ensurePermission(permission: Permission) {
     throw new Error(`Unauthorized: Missing ${permission} permission`);
   }
 }
+
+export async function getPermissions() {
+  const session = await getSession();
+  if (!session?.permissions) {
+    return {
+      permission_all: false,
+      permission_tasks: false,
+      permission_users: false,
+      permission_contests: false,
+      permission_messaging: false,
+    };
+  }
+  return session.permissions;
+}

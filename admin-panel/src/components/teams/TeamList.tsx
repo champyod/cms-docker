@@ -16,14 +16,29 @@ interface TeamWithCount {
   _count: { participations: number };
 }
 
-export function TeamList({ initialTeams }: { initialTeams: TeamWithCount[] }) {
+interface TeamListProps {
+  initialTeams: TeamWithCount[];
+  permissions: {
+    permission_all: boolean;
+    permission_tasks: boolean;
+    permission_users: boolean;
+    permission_contests: boolean;
+    permission_messaging: boolean;
+  };
+}
+
+export function TeamList({ initialTeams, permissions }: TeamListProps) {
   const [teams] = useState(initialTeams);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<TeamWithCount | null>(null);
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
 
+  const isSuperAdmin = permissions?.permission_all ?? false;
+  const canManageUsers = isSuperAdmin || (permissions?.permission_users ?? false);
+
   const handleDelete = async (id: number) => {
+    if (!canManageUsers) return;
     if (confirm('Delete this team?')) {
       const result = await deleteTeam(id);
       if (result.success) {
@@ -35,6 +50,7 @@ export function TeamList({ initialTeams }: { initialTeams: TeamWithCount[] }) {
   };
 
   const startEdit = (team: TeamWithCount) => {
+    if (!canManageUsers) return;
     setEditingTeam(team);
     setIsModalOpen(true);
   };
@@ -48,14 +64,16 @@ export function TeamList({ initialTeams }: { initialTeams: TeamWithCount[] }) {
             <HelpCircle className="w-4 h-4" />
           </Link>
         </div>
-        <Button 
-          variant="primary" 
-          className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white pl-3 pr-4"
-          onClick={() => setIsModalOpen(true)}
-        >
-          <Plus className="w-4 h-4" />
-          Add Team
-        </Button>
+        {canManageUsers && (
+          <Button 
+            variant="primary" 
+            className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white pl-3 pr-4"
+            onClick={() => setIsModalOpen(true)}
+          >
+            <Plus className="w-4 h-4" />
+            Add Team
+          </Button>
+        )}
       </div>
 
 
@@ -85,12 +103,16 @@ export function TeamList({ initialTeams }: { initialTeams: TeamWithCount[] }) {
                         <Users className="w-4 h-4" />
                       </Button>
                     </a>
-                    <Button variant="ghost" size="sm" onClick={() => startEdit(team)} className="h-8 w-8 p-0 text-neutral-400 hover:text-indigo-400">
-                      <Edit2 className="w-4 h-4" />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(team.id)} className="h-8 w-8 p-0 text-neutral-400 hover:text-red-400">
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    {canManageUsers && (
+                      <>
+                        <Button variant="ghost" size="sm" onClick={() => startEdit(team)} className="h-8 w-8 p-0 text-neutral-400 hover:text-indigo-400">
+                          <Edit2 className="w-4 h-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDelete(team.id)} className="h-8 w-8 p-0 text-neutral-400 hover:text-red-400">
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>

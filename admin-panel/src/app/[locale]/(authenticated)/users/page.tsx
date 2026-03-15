@@ -1,7 +1,7 @@
 import { getUsers } from '@/app/actions/users';
 import { UserList } from '@/components/users/UserList';
 import { getDictionary } from '@/i18n';
-import { checkPermission } from '@/lib/permissions';
+import { checkPermission, getPermissions } from '@/lib/permissions';
 import { PermissionDenied } from '@/components/PermissionDenied';
 import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
@@ -21,6 +21,7 @@ export default async function UsersPage({
     return <PermissionDenied permission="permission_users" locale={locale} dict={dict} />;
   }
 
+  const permissions = await getPermissions();
   const sParams = await searchParams;
   const page = Number(sParams.page) || 1;
   const search = sParams.search || '';
@@ -34,7 +35,7 @@ export default async function UsersPage({
         <Text variant="muted">Manage system users and participants.</Text>
       </Stack>
 
-      <UserList initialUsers={users} totalPages={totalPages} />
+      <UserList initialUsers={users} totalPages={totalPages} permissions={permissions} />
     </Stack>
   );
 }

@@ -20,10 +20,18 @@ const DEFAULT_LOCALE: Locale = 'en';
 export async function redirect(path: string): Promise<never> {
   const headersList = await headers();
 
-  // Try to detect current locale from the referer URL
-  const referer = headersList.get('referer') ?? '';
-  const match = referer.match(/\/(en|th)(\/|$)/);
-  const locale: Locale = (match?.[1] as Locale) ?? DEFAULT_LOCALE;
+  // Try to detect current locale from the referer URL, or fallback to default
+  let locale: Locale = DEFAULT_LOCALE;
+  try {
+    const referer = headersList.get('referer') ?? '';
+    const match = referer.match(/\/(en|th)(\/|$)/);
+    if (match?.[1] === 'en' || match?.[1] === 'th') {
+      locale = match[1];
+    }
+  } catch {
+    // If header reading fails, use default locale
+    locale = DEFAULT_LOCALE;
+  }
 
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   nextRedirect(`/${locale}${normalizedPath}`);

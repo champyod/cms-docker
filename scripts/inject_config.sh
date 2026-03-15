@@ -30,32 +30,22 @@ DB_HOST=$(get_env_val "POSTGRES_HOST")
 DB_PORT=$(get_env_val "POSTGRES_PORT")
 CMS_SECRET=$(get_env_val "CMS_SECRET_KEY")
 TAILSCALE_IP=$(get_env_val "TAILSCALE_IP")
+CORE_SERVICES_IP=$(get_env_val "CORE_SERVICES_IP")
 
 # Default values if missing
 DB_USER=${DB_USER:-cmsuser}
 DB_PASS=${DB_PASS:-your_password_here}
 DB_NAME=${DB_NAME:-cmsdb}
 DB_HOST=${DB_HOST:-database}
-DB_PORT=$(get_env_val "POSTGRES_PORT")
-CMS_SECRET=$(get_env_val "CMS_SECRET_KEY")
-CORE_SERVICES_IP=$(get_env_val "CORE_SERVICES_IP")
+DB_PORT=${DB_PORT:-5432}
 
-# Default values if missing
-DB_USER=${DB_USER:-cmsuser}
-...
+# Safely escape special characters for sed: | & \ /
+# We use | as delimiter, so we escape | and \
+SAFE_PASS=$(echo "$DB_PASS" | sed 's/\\/\\\\/g' | sed 's/|/\\|/g' | sed 's/&/\\&/g')
 echo "Injecting configuration:"
 echo "  - DB Host: $DB_HOST:$DB_PORT"
 echo "  - DB User: $DB_USER"
 echo "  - DB Name: $DB_NAME"
-
-# Handle Service Discovery IP
-# We now use extra_hosts in docker-compose files to route service names
-# to the correct CORE_SERVICES_IP. We no longer need to modify hostnames here.
-# This keeps the config cleaner and relies on Docker's networking.
-
-# Ensure all web servers listen on all interfaces inside the container
-sed -i 's/"127.0.0.1"/"0.0.0.0"/g' "$CONFIG_FILE"
-sed -i 's/\["127.0.0.1"\]/\["0.0.0.0"\]/g' "$CONFIG_FILE"
 
 # Perform replacements using | as delimiter
 sed -i "s|your_password_here|$SAFE_PASS|g" "$CONFIG_FILE"
@@ -68,12 +58,9 @@ if [ -n "$CMS_SECRET" ]; then
     sed -i "s/secret_key = \".*\"/secret_key = \"$CMS_SECRET\"/g" "$CONFIG_FILE"
 fi
 
-# Handle Listen IP and Tailscale
-# NOTE: We NO LONGER replace container names with Tailscale IP here.
-# Services must bind to hostnames they actually own (like cms-log-service).
-# Port mapping in docker-compose.core.yml handles the external VPN visibility.
-
 # Ensure all web servers listen on all interfaces inside the container
+# NOTE: We do NOT replace container service names with Tailscale IP here;
+# extra_hosts in docker-compose files handles routing to CORE_SERVICES_IP.
 sed -i 's/"127.0.0.1"/"0.0.0.0"/g' "$CONFIG_FILE"
 sed -i 's/\["127.0.0.1"\]/\["0.0.0.0"\]/g' "$CONFIG_FILE"
 

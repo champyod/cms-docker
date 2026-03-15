@@ -1,7 +1,7 @@
 import { getContests } from '@/app/actions/contests';
 import { ContestList } from '@/components/contests/ContestList';
 import { getDictionary } from '@/i18n';
-import { checkPermission } from '@/lib/permissions';
+import { checkPermission, getPermissions } from '@/lib/permissions';
 import { PermissionDenied } from '@/components/PermissionDenied';
 import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
@@ -21,6 +21,7 @@ export default async function ContestsPage({
     return <PermissionDenied permission="permission_contests" locale={locale} dict={dict} />;
   }
 
+  const permissions = await getPermissions();
   const sParams = await searchParams;
   const page = Number(sParams.page) || 1;
   const search = sParams.search || '';
@@ -34,7 +35,7 @@ export default async function ContestsPage({
         <Text variant="muted">Create and manage programming contests.</Text>
       </Stack>
 
-      <ContestList initialContests={contests} totalPages={totalPages} />
+      <ContestList initialContests={contests} totalPages={totalPages} permissions={permissions} />
     </Stack>
   );
 }

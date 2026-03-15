@@ -121,7 +121,7 @@ $(document).ready(init);
           </li>
           {% endif %}
 
-{% if admin.permission_all %}
+{% if admin.permission_all or admin.permission_contests %}
           <li class="menu_entry">
             <a class="menu_link" href="{{ url("contests", "add") }}">
               (create new contest...)
@@ -154,7 +154,7 @@ $(document).ready(init);
           </li>
           {% endif %}
 
-{% if admin.permission_all %}
+{% if admin.permission_all or admin.permission_tasks %}
           <li class="menu_entry">
             <a class="menu_link" href="{{ url("tasks", "add") }}">
               (create new task...)
@@ -181,7 +181,7 @@ $(document).ready(init);
             </li>
           {% endif %}
 
-{% if admin.permission_all %}
+{% if admin.permission_all or admin.permission_users %}
           <li class="menu_entry">
             <a class="menu_link" href="{{ url("users", "add") }}">
               (create new user...)
@@ -208,7 +208,7 @@ $(document).ready(init);
             </li>
           {% endif %}
 
-{% if admin.permission_all %}
+{% if admin.permission_all or admin.permission_users %}
           <li class="menu_entry">
             <a class="menu_link" href="{{ url("teams", "add") }}">
               (create new team...)

@@ -9,19 +9,36 @@ import { usePathname } from 'next/navigation';
 import { UserModal } from './UserModal';
 import { apiClient } from '@/lib/apiClient';
 
-export function UserList({ initialUsers, totalPages }: { initialUsers: any[], totalPages: number }) {
+interface UserListProps {
+  initialUsers: any[];
+  totalPages: number;
+  permissions: {
+    permission_all: boolean;
+    permission_tasks: boolean;
+    permission_users: boolean;
+    permission_contests: boolean;
+    permission_messaging: boolean;
+  };
+}
+
+export function UserList({ initialUsers, totalPages, permissions }: UserListProps) {
   const [usersList] = useState(initialUsers);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
 
+  const isSuperAdmin = permissions?.permission_all ?? false;
+  const canManageUsers = isSuperAdmin || (permissions?.permission_users ?? false);
+
   const handleEdit = (user: any) => {
+    if (!canManageUsers) return;
     setSelectedUser(user);
     setIsModalOpen(true);
   };
 
   const handleDelete = async (id: number) => {
+    if (!canManageUsers) return;
     if (confirm('Are you sure you want to delete this user?')) {
       const result = await apiClient.delete(`/api/users/${id}`);
       if (result.success) {
@@ -33,6 +50,7 @@ export function UserList({ initialUsers, totalPages }: { initialUsers: any[], to
   };
 
   const handleCreate = () => {
+    if (!canManageUsers) return;
     setSelectedUser(null);
     setIsModalOpen(true);
   };
@@ -50,14 +68,16 @@ export function UserList({ initialUsers, totalPages }: { initialUsers: any[], to
             <HelpCircle className="w-4 h-4" />
           </Link>
         </div>
-        <Button 
-            variant="primary" 
-            className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white pl-3 pr-4"
-            onClick={handleCreate}
-        >
-          <Plus className="w-4 h-4" />
-          Create User
-        </Button>
+        {canManageUsers && (
+          <Button 
+              variant="primary" 
+              className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white pl-3 pr-4"
+              onClick={handleCreate}
+          >
+            <Plus className="w-4 h-4" />
+            Create User
+          </Button>
+        )}
       </div>
 
       <div className="border border-white/5 rounded-xl overflow-hidden bg-neutral-900/40 backdrop-blur-sm">
@@ -80,22 +100,26 @@ export function UserList({ initialUsers, totalPages }: { initialUsers: any[], to
                 <TableCell className="text-neutral-400">{user.email || '-'}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-2">
-                    <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => handleEdit(user)}
-                        className="h-8 w-8 p-0 text-neutral-400 hover:text-indigo-400"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </Button>
-                    <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => handleDelete(user.id)}
-                        className="h-8 w-8 p-0 text-neutral-400 hover:text-red-400"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    {canManageUsers && (
+                      <>
+                        <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => handleEdit(user)}
+                            className="h-8 w-8 p-0 text-neutral-400 hover:text-indigo-400"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </Button>
+                        <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => handleDelete(user.id)}
+                            className="h-8 w-8 p-0 text-neutral-400 hover:text-red-400"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>

@@ -11,7 +11,19 @@ import { TaskDiagnostic } from '@/app/actions/tasks';
 
 type TaskWithRelations = any;
 
-export function TaskList({ initialTasks, totalPages }: { initialTasks: TaskWithRelations[], totalPages: number }) {
+interface TaskListProps {
+  initialTasks: TaskWithRelations[];
+  totalPages: number;
+  permissions: {
+    permission_all: boolean;
+    permission_tasks: boolean;
+    permission_users: boolean;
+    permission_contests: boolean;
+    permission_messaging: boolean;
+  };
+}
+
+export function TaskList({ initialTasks, totalPages, permissions }: TaskListProps) {
   const router = useRouter();
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
@@ -19,12 +31,17 @@ export function TaskList({ initialTasks, totalPages }: { initialTasks: TaskWithR
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskWithRelations | null>(null);
 
+  const isSuperAdmin = permissions?.permission_all ?? false;
+  const canManageTasks = isSuperAdmin || (permissions?.permission_tasks ?? false);
+
   const handleEdit = (task: TaskWithRelations) => {
+    if (!canManageTasks) return;
     setSelectedTask(task);
     setIsModalOpen(true);
   };
 
   const handleDelete = async (id: number) => {
+    if (!canManageTasks) return;
     if (confirm('Are you sure you want to delete this task? This is IRREVERSIBLE.')) {
       const result = await apiClient.delete(`/api/tasks/${id}`);
       if (result.success) {
@@ -36,6 +53,7 @@ export function TaskList({ initialTasks, totalPages }: { initialTasks: TaskWithR
   };
 
   const handleCreate = () => {
+    if (!canManageTasks) return;
     setSelectedTask(null);
     setIsModalOpen(true);
   };
@@ -48,14 +66,16 @@ export function TaskList({ initialTasks, totalPages }: { initialTasks: TaskWithR
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-bold text-white">All Tasks</h2>
-        <Button 
-          variant="primary" 
-          className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white pl-3 pr-4"
-          onClick={handleCreate}
-        >
-          <Plus className="w-4 h-4" />
-          Create Task
-        </Button>
+        {canManageTasks && (
+          <Button 
+            variant="primary" 
+            className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white pl-3 pr-4"
+            onClick={handleCreate}
+          >
+            <Plus className="w-4 h-4" />
+            Create Task
+          </Button>
+        )}
       </div>
 
       <div className="border border-white/5 rounded-xl overflow-hidden bg-neutral-900/40 backdrop-blur-sm">
@@ -129,22 +149,26 @@ export function TaskList({ initialTasks, totalPages }: { initialTasks: TaskWithR
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEdit(task)}
-                        className="h-8 w-8 p-0 text-neutral-400 hover:text-indigo-400"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(task.id)}
-                        className="h-8 w-8 p-0 text-neutral-400 hover:text-red-400"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      {canManageTasks && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEdit(task)}
+                            className="h-8 w-8 p-0 text-neutral-400 hover:text-indigo-400"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDelete(task.id)}
+                            className="h-8 w-8 p-0 text-neutral-400 hover:text-red-400"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>

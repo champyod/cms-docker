@@ -1,6 +1,6 @@
 import { getTasks } from '@/app/actions/tasks';
 import { TaskList } from '@/components/tasks/TaskList';
-import { checkPermission } from '@/lib/permissions';
+import { checkPermission, getPermissions } from '@/lib/permissions';
 import { getDictionary } from '@/i18n';
 import { PermissionDenied } from '@/components/PermissionDenied';
 import { Stack } from '@/components/core/Layout';
@@ -21,6 +21,7 @@ export default async function TasksPage({
     return <PermissionDenied permission="permission_tasks" locale={locale} dict={dict} />;
   }
 
+  const permissions = await getPermissions();
   const params = await searchParams;
   const page = parseInt(params.page || '1', 10);
   const search = params.search || '';
@@ -34,7 +35,7 @@ export default async function TasksPage({
         <Text variant="muted">Manage programming tasks, statements, and test cases.</Text>
       </Stack>
 
-      <TaskList initialTasks={tasks} totalPages={totalPages} />
+      <TaskList initialTasks={tasks} totalPages={totalPages} permissions={permissions} />
     </Stack>
   );
 }

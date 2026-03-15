@@ -134,7 +134,7 @@ export const Sidebar: React.FC<{
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 space-y-6 overflow-y-auto no-scrollbar pr-1">
+        <nav className="flex-1 space-y-6 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20 pr-1">
           <div className="space-y-1">
             <SidebarItem icon={Home} label="Dashboard" href={`/${locale}`} collapsed={collapsed} />
           </div>
