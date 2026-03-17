@@ -114,7 +114,7 @@ env:
 		cp config/cms_ranking.sample.toml config/cms_ranking.toml; \
 	fi
 	@echo "Updating config/cms_ranking.toml..."
-	@sed -i 's/\"127.0.0.1\"/\"0.0.0.0\"/g' config/cms_ranking.toml; \
+	@sed -i 's/\"127.0.0.1\"/\"0.0.0.0\"/g' config/cms_ranking.toml
 	@echo ".env file generated. You can now run: ./scripts/setup.sh"
 
 core:

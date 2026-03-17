@@ -53,6 +53,23 @@ echo "  - DB Host: $DB_HOST:$DB_PORT"
 echo "  - DB User: $DB_USER"
 echo "  - DB Name: $DB_NAME"
 
+# Export variables for Python
+export DB_USER DB_PASS DB_NAME DB_HOST DB_PORT CMS_SECRET
+
+# Handle Ranking Scoreboard Auth
+# We check environment variables which are populated by 'make env'
+# These might be in .env.contest
+R_USER=$(grep "^RANKING_USERNAME=" .env.contest 2>/dev/null | cut -d '=' -f2-)
+R_PASS=$(grep "^RANKING_PASSWORD=" .env.contest 2>/dev/null | cut -d '=' -f2-)
+R_USER=${R_USER:-usern4me}
+R_PASS=${R_PASS:-passw0rd}
+
+# Escape username/password for sed in Ranking Config
+SAFE_R_USER=$(echo "$R_USER" | sed 's/\\/\\\\/g' | sed 's/|/\\|/g' | sed 's/&/\\&/g')
+SAFE_R_PASS=$(echo "$R_PASS" | sed 's/\\/\\\\/g' | sed 's/|/\\|/g' | sed 's/&/\\&/g')
+
+export R_USER SAFE_R_PASS
+
 # Perform replacements using Python for better robustness (it won't break if the sample placeholder is gone)
 python3 - << 'PY'
 import os
@@ -73,23 +90,25 @@ port = os.environ.get("DB_PORT", "5432")
 db = os.environ.get("DB_NAME", "cmsdb")
 
 # This regex matches the SQLAlchemy URL pattern in TOML
-db_url_pattern = r'url = "postgresql\+psycopg2://[^:]+:[^@]+@[^/]+/([^"]+)"'
+# We match everything inside the quotes of url = "..."
+db_url_pattern = r'^url = "postgresql\+psycopg2://.*"'
 new_url = f'url = "postgresql+psycopg2://{user}:{pw}@{host}:{port}/{db}"'
 
-if re.search(db_url_pattern, text):
-    text = re.sub(db_url_pattern, new_url, text)
+if re.search(db_url_pattern, text, re.MULTILINE):
+    text = re.sub(db_url_pattern, new_url, text, flags=re.MULTILINE)
 else:
-    # Fallback if the pattern doesn't match (e.g. still has the placeholder)
+    # Fallback if the pattern doesn't match
     text = text.replace('url = "postgresql+psycopg2://cmsuser:your_password_here@database:5432/cmsdb"', new_url)
 
 # Update secret key if present
 cms_secret = os.environ.get("CMS_SECRET", "")
 if cms_secret:
-    text = re.sub(r'secret_key = ".*"', f'secret_key = "{cms_secret}"', text)
+    text = re.sub(r'^secret_key = ".*"', f'secret_key = "{cms_secret}"', text, flags=re.MULTILINE)
 
 # Update Ranking credentials in ProxyService URL
 r_user = os.environ.get("R_USER", "usern4me")
 r_pass = os.environ.get("SAFE_R_PASS", "passw0rd")
+# match rankings = ["http://user:pass@..."]
 rank_url_pattern = r'rankings = \["http://[^:]+:[^@]+@'
 new_rank_start = f'rankings = ["http://{r_user}:{r_pass}@'
 text = re.sub(rank_url_pattern, new_rank_start, text)
@@ -104,6 +123,45 @@ PY
 # Update Ranking Config File
 sed -i "s|^username = \".*\"|username = \"$SAFE_R_USER\"|g" "$RANKING_CONFIG_FILE"
 sed -i "s|^password = \".*\"|password = \"$SAFE_R_PASS\"|g" "$RANKING_CONFIG_FILE"
+
+# Use Python to surgically remove any existing Worker block and provide a clean insertion point
+python3 - << 'PY'
+from pathlib import Path
+import re
+
+config_path = Path("config/cms.toml")
+if not config_path.exists():
+    exit(0)
+
+text = config_path.read_text()
+
+# Pattern to match Worker block: 
+# It can be 'Worker = [...]' or '# Worker = [...]' spanning multiple lines.
+lines = text.splitlines()
+new_lines = []
+skip_until = -1
+
+for i, line in enumerate(lines):
+    if i <= skip_until:
+        continue
+    
+    stripped = line.strip()
+    if (stripped.startswith("Worker = [") or stripped.startswith("# Worker = [") or stripped == "# Worker ="):
+        depth = 0
+        j = i
+        while j < len(lines):
+            depth += lines[j].count("[")
+            depth -= lines[j].count("]")
+            if depth <= 0 and (j > i or "]" in lines[j]):
+                skip_until = j
+                break
+            j += 1
+        continue
+    
+    new_lines.append(line)
+
+config_path.write_text("\n".join(new_lines) + "\n")
+PY
 
 # Build Worker array from WORKER_N environment variables
 echo "Building worker configuration..."
@@ -141,59 +199,16 @@ while IFS='=' read -r key value; do
     esac
 done < <(grep '^WORKER_[0-9]\+=' "$ENV_FILE" | sort -t '_' -k2,2n)
 
-# Use Python to surgically remove any existing Worker block and provide a clean insertion point
-python3 - << 'PY'
-from pathlib import Path
-import re
-
-config_path = Path("config/cms.toml")
-if not config_path.exists():
-    exit(0)
-
-text = config_path.read_text()
-
-# Pattern to match Worker block: 
-# It can be 'Worker = [...]' or '# Worker = [...]' spanning multiple lines.
-# We look for 'Worker = [' and then find the matching ']'
-lines = text.splitlines()
-new_lines = []
-skip_until = -1
-found_worker = False
-
-for i, line in enumerate(lines):
-    if i <= skip_until:
-        continue
-    
-    stripped = line.strip()
-    # Match both uncommented and commented Worker starts
-    if (stripped.startswith("Worker = [") or stripped.startswith("# Worker = [") or stripped == "# Worker ="):
-        # Found a worker block, let's find where it ends
-        depth = 0
-        j = i
-        while j < len(lines):
-            depth += lines[j].count("[")
-            depth -= lines[j].count("]")
-            if depth <= 0 and (j > i or "]" in lines[j]):
-                skip_until = j
-                break
-            j += 1
-        continue
-    
-    new_lines.append(line)
-
-config_path.write_text("\n".join(new_lines) + "\n")
-PY
-
 # Inject workers into cms.toml
 if [ $WORKER_COUNT -gt 0 ]; then
     # Create the formatted worker array with actual newlines
     WORKER_SECTION=$(printf "Worker = [\n    %s\n]" "$WORKER_ARRAY")
     
     # Use a more robust way to insert after EvaluationService
-    # We'll use python again to ensure it's placed correctly in the [services] section
     export WORKER_SECTION
     python3 - << 'PY'
 import os
+import re
 from pathlib import Path
 
 config_path = Path("config/cms.toml")
@@ -202,14 +217,20 @@ worker_section = os.environ.get("WORKER_SECTION", "")
 if config_path.exists() and worker_section:
     text = config_path.read_text()
     if "EvaluationService =" in text:
-        # Insert after the line containing EvaluationService
-        lines = text.splitlines()
-        new_lines = []
-        for line in lines:
-            new_lines.append(line)
-            if line.strip().startswith("EvaluationService ="):
-                new_lines.append(worker_section)
-        config_path.write_text("\n".join(new_lines) + "\n")
+        # Check if Worker already exists (double safety)
+        if re.search(r'^Worker = \[', text, re.MULTILINE):
+             text = re.sub(r'^Worker = \[.*?^\]', worker_section, text, flags=re.MULTILINE | re.DOTALL)
+        else:
+            # Insert after EvaluationService
+            lines = text.splitlines()
+            new_lines = []
+            for line in lines:
+                new_lines.append(line)
+                if line.strip().startswith("EvaluationService ="):
+                    new_lines.append(worker_section)
+            text = "\n".join(new_lines) + "\n"
+        
+        config_path.write_text(text)
 PY
     echo "Injected $WORKER_COUNT worker(s) into configuration."
 else
