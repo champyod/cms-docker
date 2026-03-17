@@ -150,8 +150,10 @@ if [ -f .env.core ]; then
     SAVED_PUBLIC_IP=$(grep "^PUBLIC_IP=" .env.core | cut -d '=' -f2-)
     DETECTED_TAILSCALE_IP=$(grep "^TAILSCALE_IP=" .env.core | cut -d '=' -f2-)
     
-    # Check .env.admin for DEPLOYMENT_TYPE
+    # Check .env.admin, .env.core, or .env.worker for DEPLOYMENT_TYPE
     DETECTED_DEPLOY_TYPE=$(grep "^DEPLOYMENT_TYPE=" .env.admin 2>/dev/null | cut -d '=' -f2-)
+    [ -z "$DETECTED_DEPLOY_TYPE" ] && DETECTED_DEPLOY_TYPE=$(grep "^DEPLOYMENT_TYPE=" .env.core 2>/dev/null | cut -d '=' -f2-)
+    [ -z "$DETECTED_DEPLOY_TYPE" ] && DETECTED_DEPLOY_TYPE=$(grep "^DEPLOYMENT_TYPE=" .env.worker 2>/dev/null | cut -d '=' -f2-)
     
     # Fallback: Check running containers if DEPLOYMENT_TYPE is missing
     if [ -z "$DETECTED_DEPLOY_TYPE" ]; then
@@ -424,6 +426,14 @@ WORKER_REPLICAS=1
 WORKER_MEMORY_LIMIT=2G
 WORKER_CPU_LIMIT=2
 CORE_SERVICES_HOST=$PUBLIC_IP
+DEPLOYMENT_TYPE=$DEPLOY_TYPE
+EOF
+    # Also create a minimal .env.core to satisfy inject_config.sh
+    write_or_print .env.core << EOF
+# Minimal .env.core for worker node
+PUBLIC_IP=$PUBLIC_IP
+CORE_SERVICES_IP=$PUBLIC_IP
+DEPLOYMENT_TYPE=$DEPLOY_TYPE
 EOF
     fi
 else
@@ -461,8 +471,18 @@ else
     else
         if [ "$DRY_RUN" = "true" ]; then
             echo "DRY-RUN: Would update .env.worker: CORE_SERVICES_HOST=$PUBLIC_IP"
+            echo "DRY-RUN: Would update .env.core: PUBLIC_IP=$PUBLIC_IP"
+            echo "DRY-RUN: Would update .env.core: CORE_SERVICES_IP=$PUBLIC_IP"
         else
             update_env_var .env.worker "CORE_SERVICES_HOST" "$PUBLIC_IP"
+            update_env_var .env.worker "DEPLOYMENT_TYPE" "$DEPLOY_TYPE"
+            # Also ensure .env.core exists or is updated for workers
+            if [ ! -f .env.core ]; then
+                echo "# Minimal .env.core for worker node" > .env.core
+            fi
+            update_env_var .env.core "PUBLIC_IP" "$PUBLIC_IP"
+            update_env_var .env.core "CORE_SERVICES_IP" "$PUBLIC_IP"
+            update_env_var .env.core "DEPLOYMENT_TYPE" "$DEPLOY_TYPE"
         fi
     fi
 fi
@@ -497,6 +517,25 @@ fi
 # (must run BEFORE make env so remote worker hosts don't need .env.core)
 if [ "$SETUP_TYPE" = "worker" ] && [ "$WORKER_SETUP_MODE" = "client" ]; then
     print_step "Preparing Worker Client Instances"
+    
+    if [ "$DRY_RUN" != "true" ]; then
+        # Ensure external resources exist on worker node
+        echo "Ensuring required Docker resources exist..."
+        docker network create cms-network 2>/dev/null || true
+        docker volume create cms-logs 2>/dev/null || true
+        docker volume create cms-cache 2>/dev/null || true
+        docker volume create cms-data 2>/dev/null || true
+        
+        # Ensure config file exists (make env will create/update it)
+        make env
+
+        # Pull images if using pre-built images
+        if [ "$DEPLOY_TYPE" = "img" ]; then
+            print_info "Pulling latest images..."
+            make pull
+        fi
+    fi
+
     run_or_print "mkdir -p workers"
 
     WORKER_START_CMDS=""
@@ -504,7 +543,13 @@ if [ "$SETUP_TYPE" = "worker" ] && [ "$WORKER_SETUP_MODE" = "client" ]; then
     while [ $i -lt "$WORKER_INSTANCE_COUNT" ]; do
         instance_port=$((WORKER_BASE_PORT + i))
         env_file="workers/.env.worker.instance$i"
-        compose_cmd="docker compose --env-file '$env_file' -p 'cms-worker-$i' -f docker-compose.worker.yml up -d --build"
+        
+        # Determine compose command based on deployment strategy
+        if [ "$DEPLOY_TYPE" = "img" ]; then
+            compose_cmd="docker compose --env-file '$env_file' -p 'cms-worker-$i' -f docker-compose.worker.yml -f docker-compose.worker.img.yml up -d --no-build"
+        else
+            compose_cmd="docker compose --env-file '$env_file' -p 'cms-worker-$i' -f docker-compose.worker.yml up -d --build"
+        fi
 
         if [ "$DRY_RUN" = "true" ]; then
             echo "DRY-RUN: Would generate $env_file"

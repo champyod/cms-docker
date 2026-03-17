@@ -39,7 +39,7 @@ services:
       - cms-cache:/var/local/cache/cms
       - cms-data:/var/local/lib/cms
       # Temporary directory for sandboxes
-      - worker-tmp-${WORKER_SHARD:-0}:/tmp
+      - worker-tmp:/tmp
     networks:
       - cms-network
     privileged: true
@@ -85,5 +85,5 @@ volumes:
   cms-data:
     external: true
     name: cms-data
-  worker-tmp-0:
+  worker-tmp:
     name: cms-worker-tmp-${WORKER_SHARD:-0}
