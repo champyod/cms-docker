@@ -53,34 +53,55 @@ echo "  - DB Host: $DB_HOST:$DB_PORT"
 echo "  - DB User: $DB_USER"
 echo "  - DB Name: $DB_NAME"
 
-# Perform replacements using | as delimiter
-sed -i "s|your_password_here|$SAFE_PASS|g" "$CONFIG_FILE"
-sed -i "s|cmsuser|$DB_USER|g" "$CONFIG_FILE"
-sed -i "s|cmsdb|$DB_NAME|g" "$CONFIG_FILE"
-sed -i "s|database:5432|$DB_HOST:$DB_PORT|g" "$CONFIG_FILE"
+# Perform replacements using Python for better robustness (it won't break if the sample placeholder is gone)
+python3 - << 'PY'
+import os
+import re
+from pathlib import Path
 
-if [ -n "$CMS_SECRET" ]; then
-    echo "  - Injecting CMS config secret_key..."
-    sed -i "s/secret_key = \".*\"/secret_key = \"$CMS_SECRET\"/g" "$CONFIG_FILE"
-fi
+config_path = Path("config/cms.toml")
+if not config_path.exists():
+    exit(0)
 
-# Ensure all web servers listen on all interfaces inside the container
-# NOTE: We do NOT replace container service names with Tailscale IP here;
-# extra_hosts in docker-compose files handles routing to CORE_SERVICES_IP.
-sed -i 's/"127.0.0.1"/"0.0.0.0"/g' "$CONFIG_FILE"
-sed -i 's/\["127.0.0.1"\]/\["0.0.0.0"\]/g' "$CONFIG_FILE"
+text = config_path.read_text()
 
-# Handle Ranking Scoreboard Auth
-# We check environment variables which are populated by 'make env'
-R_USER=${RANKING_USERNAME:-usern4me}
-R_PASS=${RANKING_PASSWORD:-passw0rd}
-# Escape username/password for sed
-SAFE_R_USER=$(echo "$R_USER" | sed 's/\\/\\\\/g' | sed 's/|/\\|/g' | sed 's/&/\\&/g')
-# Escape password for sed
-SAFE_R_PASS=$(echo "$R_PASS" | sed 's/\\/\\\\/g' | sed 's/|/\\|/g' | sed 's/&/\\&/g')
+# Update Database URL
+user = os.environ.get("DB_USER", "cmsuser")
+pw = os.environ.get("DB_PASS", "your_password_here")
+host = os.environ.get("DB_HOST", "database")
+port = os.environ.get("DB_PORT", "5432")
+db = os.environ.get("DB_NAME", "cmsdb")
 
-echo "Injecting Ranking credentials..."
-sed -i "s|usern4me:passw0rd|$R_USER:$SAFE_R_PASS|g" "$CONFIG_FILE"
+# This regex matches the SQLAlchemy URL pattern in TOML
+db_url_pattern = r'url = "postgresql\+psycopg2://[^:]+:[^@]+@[^/]+/([^"]+)"'
+new_url = f'url = "postgresql+psycopg2://{user}:{pw}@{host}:{port}/{db}"'
+
+if re.search(db_url_pattern, text):
+    text = re.sub(db_url_pattern, new_url, text)
+else:
+    # Fallback if the pattern doesn't match (e.g. still has the placeholder)
+    text = text.replace('url = "postgresql+psycopg2://cmsuser:your_password_here@database:5432/cmsdb"', new_url)
+
+# Update secret key if present
+cms_secret = os.environ.get("CMS_SECRET", "")
+if cms_secret:
+    text = re.sub(r'secret_key = ".*"', f'secret_key = "{cms_secret}"', text)
+
+# Update Ranking credentials in ProxyService URL
+r_user = os.environ.get("R_USER", "usern4me")
+r_pass = os.environ.get("SAFE_R_PASS", "passw0rd")
+rank_url_pattern = r'rankings = \["http://[^:]+:[^@]+@'
+new_rank_start = f'rankings = ["http://{r_user}:{r_pass}@'
+text = re.sub(rank_url_pattern, new_rank_start, text)
+
+# Global replacements
+text = text.replace('"127.0.0.1"', '"0.0.0.0"')
+text = text.replace('["127.0.0.1"]', '["0.0.0.0"]')
+
+config_path.write_text(text)
+PY
+
+# Update Ranking Config File
 sed -i "s|^username = \".*\"|username = \"$SAFE_R_USER\"|g" "$RANKING_CONFIG_FILE"
 sed -i "s|^password = \".*\"|password = \"$SAFE_R_PASS\"|g" "$RANKING_CONFIG_FILE"
 
