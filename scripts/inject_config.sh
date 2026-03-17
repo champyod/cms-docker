@@ -4,6 +4,7 @@ set -e
 # Define files
 ENV_FILE=".env.core"
 CONFIG_FILE="config/cms.toml"
+RANKING_CONFIG_FILE="config/cms_ranking.toml"
 
 echo "Running configuration injection script..."
 
@@ -14,6 +15,11 @@ fi
 
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "Error: $CONFIG_FILE not found."
+    exit 1
+fi
+
+if [ ! -f "$RANKING_CONFIG_FILE" ]; then
+    echo "Error: $RANKING_CONFIG_FILE not found."
     exit 1
 fi
 
@@ -68,11 +74,15 @@ sed -i 's/\["127.0.0.1"\]/\["0.0.0.0"\]/g' "$CONFIG_FILE"
 # We check environment variables which are populated by 'make env'
 R_USER=${RANKING_USERNAME:-usern4me}
 R_PASS=${RANKING_PASSWORD:-passw0rd}
+# Escape username/password for sed
+SAFE_R_USER=$(echo "$R_USER" | sed 's/\\/\\\\/g' | sed 's/|/\\|/g' | sed 's/&/\\&/g')
 # Escape password for sed
 SAFE_R_PASS=$(echo "$R_PASS" | sed 's/\\/\\\\/g' | sed 's/|/\\|/g' | sed 's/&/\\&/g')
 
 echo "Injecting Ranking credentials..."
 sed -i "s|usern4me:passw0rd|$R_USER:$SAFE_R_PASS|g" "$CONFIG_FILE"
+sed -i "s|^username = \".*\"|username = \"$SAFE_R_USER\"|g" "$RANKING_CONFIG_FILE"
+sed -i "s|^password = \".*\"|password = \"$SAFE_R_PASS\"|g" "$RANKING_CONFIG_FILE"
 
 # Build Worker array from WORKER_N environment variables
 echo "Building worker configuration..."
@@ -101,7 +111,7 @@ while IFS='=' read -r key value; do
             if [ -z "$WORKER_ARRAY" ]; then
                 WORKER_ARRAY="[\"$worker_host\", $worker_port]"
             else
-                WORKER_ARRAY="$WORKER_ARRAY,\n    [\"$worker_host\", $worker_port]"
+                WORKER_ARRAY=$(printf "%s,\n    [\"%s\", %s]" "$WORKER_ARRAY" "$worker_host" "$worker_port")
             fi
 
             WORKER_COUNT=$((WORKER_COUNT + 1))
@@ -110,49 +120,76 @@ while IFS='=' read -r key value; do
     esac
 done < <(grep '^WORKER_[0-9]\+=' "$ENV_FILE" | sort -t '_' -k2,2n)
 
-# Remove existing uncommented Worker block in [services] section to avoid duplicates
+# Use Python to surgically remove any existing Worker block and provide a clean insertion point
 python3 - << 'PY'
 from pathlib import Path
+import re
 
-config = Path("config/cms.toml")
-text = config.read_text()
+config_path = Path("config/cms.toml")
+if not config_path.exists():
+    exit(0)
+
+text = config_path.read_text()
+
+# Pattern to match Worker block: 
+# It can be 'Worker = [...]' or '# Worker = [...]' spanning multiple lines.
+# We look for 'Worker = [' and then find the matching ']'
 lines = text.splitlines()
-
 new_lines = []
-inside_services = False
-inside_worker = False
-worker_depth = 0
+skip_until = -1
+found_worker = False
 
-for line in lines:
+for i, line in enumerate(lines):
+    if i <= skip_until:
+        continue
+    
     stripped = line.strip()
-
-    if stripped.startswith("[") and stripped.endswith("]"):
-        if inside_worker:
-            inside_worker = False
-            worker_depth = 0
-        inside_services = stripped == "[services]"
-
-    if inside_services and stripped.startswith("Worker = [") and not stripped.startswith("#"):
-        inside_worker = True
-        worker_depth = 1
+    # Match both uncommented and commented Worker starts
+    if (stripped.startswith("Worker = [") or stripped.startswith("# Worker = [") or stripped == "# Worker ="):
+        # Found a worker block, let's find where it ends
+        depth = 0
+        j = i
+        while j < len(lines):
+            depth += lines[j].count("[")
+            depth -= lines[j].count("]")
+            if depth <= 0 and (j > i or "]" in lines[j]):
+                skip_until = j
+                break
+            j += 1
         continue
-
-    if inside_worker:
-        worker_depth += line.count("[")
-        worker_depth -= line.count("]")
-        if worker_depth <= 0:
-            inside_worker = False
-        continue
-
+    
     new_lines.append(line)
 
-config.write_text("\n".join(new_lines) + "\n")
+config_path.write_text("\n".join(new_lines) + "\n")
 PY
 
 # Inject workers into cms.toml
 if [ $WORKER_COUNT -gt 0 ]; then
-    WORKER_SECTION="Worker = [\n    $WORKER_ARRAY\n]"
-    sed -i "/^EvaluationService = /a\\$WORKER_SECTION" "$CONFIG_FILE"
+    # Create the formatted worker array with actual newlines
+    WORKER_SECTION=$(printf "Worker = [\n    %s\n]" "$WORKER_ARRAY")
+    
+    # Use a more robust way to insert after EvaluationService
+    # We'll use python again to ensure it's placed correctly in the [services] section
+    export WORKER_SECTION
+    python3 - << 'PY'
+import os
+from pathlib import Path
+
+config_path = Path("config/cms.toml")
+worker_section = os.environ.get("WORKER_SECTION", "")
+
+if config_path.exists() and worker_section:
+    text = config_path.read_text()
+    if "EvaluationService =" in text:
+        # Insert after the line containing EvaluationService
+        lines = text.splitlines()
+        new_lines = []
+        for line in lines:
+            new_lines.append(line)
+            if line.strip().startswith("EvaluationService ="):
+                new_lines.append(worker_section)
+        config_path.write_text("\n".join(new_lines) + "\n")
+PY
     echo "Injected $WORKER_COUNT worker(s) into configuration."
 else
     echo "No workers configured. Existing Worker block removed if present."

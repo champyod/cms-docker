@@ -85,6 +85,42 @@ is_positive_int() {
     esac
 }
 
+configure_ranking_auth() {
+    echo ""
+    print_step "Contest & Ranking Authentication"
+
+    local existing_ranking_username
+    local existing_ranking_password
+
+    existing_ranking_username=$(grep "^RANKING_USERNAME=" .env.contest 2>/dev/null | cut -d '=' -f2-)
+    existing_ranking_password=$(grep "^RANKING_PASSWORD=" .env.contest 2>/dev/null | cut -d '=' -f2-)
+    existing_ranking_username=${existing_ranking_username:-admin}
+    existing_ranking_password=${existing_ranking_password:-adminpass}
+
+    read -p "Ranking username [$existing_ranking_username]: " RANKING_USERNAME_INPUT
+    RANKING_USERNAME_INPUT=${RANKING_USERNAME_INPUT:-$existing_ranking_username}
+
+    read -s -p "Ranking password [hidden, leave blank to keep current]: " RANKING_PASSWORD_INPUT
+    echo ""
+    if [ -z "$RANKING_PASSWORD_INPUT" ]; then
+        RANKING_PASSWORD_INPUT=$existing_ranking_password
+    fi
+
+    if [ "$DRY_RUN" = "true" ]; then
+        echo "DRY-RUN: Would update .env.contest: RANKING_USERNAME=$RANKING_USERNAME_INPUT"
+        echo "DRY-RUN: Would update .env.contest: RANKING_PASSWORD=<hidden>"
+        echo "DRY-RUN: Would run: make env"
+        echo "DRY-RUN: Would run: ./scripts/inject_config.sh"
+        return
+    fi
+
+    update_env_var .env.contest "RANKING_USERNAME" "$RANKING_USERNAME_INPUT"
+    update_env_var .env.contest "RANKING_PASSWORD" "$RANKING_PASSWORD_INPUT"
+    make env
+    ./scripts/inject_config.sh
+    print_success "Ranking credentials updated in .env.contest, .env, config/cms.toml, and config/cms_ranking.toml"
+}
+
 # Banner
 clear
 echo -e "${CYAN}"
@@ -152,6 +188,8 @@ WORKER_INSTANCE_COUNT=1
 WORKER_BASE_PORT=26000
 WORKER_REGISTER_HOST="RESERVED"
 WORKER_AUTO_START="y"
+RANKING_USERNAME_INPUT=""
+RANKING_PASSWORD_INPUT=""
 
 if [ "$SETUP_TYPE" = "worker" ]; then
     echo ""
@@ -335,8 +373,6 @@ ADMIN_PORT_EXTERNAL=8889
 ADMIN_DOMAIN=admin.cms.local
 RANKING_PORT_EXTERNAL=8890
 RANKING_DOMAIN=ranking.cms.local
-RANKING_USERNAME=admin
-RANKING_PASSWORD=adminpass
 ADMIN_COOKIE_DURATION=36000
 EOF
 
@@ -349,6 +385,8 @@ CONTESTS_DEPLOY_CONFIG=$EXISTING_MULTI_CONFIG
 SECRET_KEY=$SECRET_KEY
 COOKIE_DURATION=10800
 ACCESS_METHOD=public_port
+RANKING_USERNAME=admin
+RANKING_PASSWORD=adminpass
 EOF
 
     # Prepare .env.worker
@@ -555,17 +593,20 @@ echo ""
 
 if [ "$SETUP_TYPE" = "main" ]; then
     print_step "Deploying Main Server Stacks..."
+
     if [ "$DEPLOY_TYPE" = "img" ]; then
         print_info "Pulling latest images..."
         make pull
         make core-img
         make infra-img
         make admin-img
+        configure_ranking_auth
         make contest-img
     else
         make core
         make infra
         make admin
+        configure_ranking_auth
         make contest
     fi
     
