@@ -105,16 +105,10 @@ env:
 	@echo "Injecting database configuration and service addresses into config/cms.toml..."; \
 	chmod +x scripts/inject_config.sh && ./scripts/inject_config.sh; \
 	
-	@if [ -d config/cms_ranking.toml ]; then \
-		echo "Removing directory config/cms_ranking.toml (created by Docker volumes)..."; \
-		rm -rf config/cms_ranking.toml; \
+	@if [ -f config/cms_ranking.toml ]; then \
+		echo "Updating config/cms_ranking.toml..."; \
+		sed -i 's/\"127.0.0.1\"/\"0.0.0.0\"/g' config/cms_ranking.toml; \
 	fi
-	@if [ ! -f config/cms_ranking.toml ]; then \
-		echo "Copying config/cms_ranking.sample.toml to config/cms_ranking.toml..."; \
-		cp config/cms_ranking.sample.toml config/cms_ranking.toml; \
-	fi
-	@echo "Updating config/cms_ranking.toml..."
-	@sed -i 's/\"127.0.0.1\"/\"0.0.0.0\"/g' config/cms_ranking.toml
 	@echo ".env file generated. You can now run: ./scripts/setup.sh"
 
 core:

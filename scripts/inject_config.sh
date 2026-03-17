@@ -19,8 +19,8 @@ if [ ! -f "$CONFIG_FILE" ]; then
 fi
 
 if [ ! -f "$RANKING_CONFIG_FILE" ]; then
-    echo "Error: $RANKING_CONFIG_FILE not found."
-    exit 1
+    echo "Info: $RANKING_CONFIG_FILE not found, skipping ranking injection."
+    SKIP_RANKING=true
 fi
 
 # Function to get value from env file
@@ -121,8 +121,10 @@ config_path.write_text(text)
 PY
 
 # Update Ranking Config File
-sed -i "s|^username = \".*\"|username = \"$SAFE_R_USER\"|g" "$RANKING_CONFIG_FILE"
-sed -i "s|^password = \".*\"|password = \"$SAFE_R_PASS\"|g" "$RANKING_CONFIG_FILE"
+if [ "$SKIP_RANKING" != "true" ]; then
+    sed -i "s|^username = \".*\"|username = \"$SAFE_R_USER\"|g" "$RANKING_CONFIG_FILE"
+    sed -i "s|^password = \".*\"|password = \"$SAFE_R_PASS\"|g" "$RANKING_CONFIG_FILE"
+fi
 
 # Use Python to surgically remove any existing Worker block and provide a clean insertion point
 python3 - << 'PY'
