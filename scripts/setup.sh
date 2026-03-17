@@ -85,6 +85,20 @@ is_positive_int() {
     esac
 }
 
+check_connection() {
+    local host=$1
+    local port=$2
+    local timeout=3
+    # Use bash's built-in /dev/tcp if available, otherwise try nc
+    if timeout $timeout bash -c "cat < /dev/tcp/$host/$port" >/dev/null 2>&1; then
+        return 0
+    elif command -v nc >/dev/null 2>&1; then
+        nc -z -w $timeout "$host" "$port" >/dev/null 2>&1
+        return $?
+    fi
+    return 1
+}
+
 configure_ranking_auth() {
     echo ""
     print_step "Contest & Ranking Authentication"
@@ -190,6 +204,15 @@ WORKER_INSTANCE_COUNT=1
 WORKER_BASE_PORT=26000
 WORKER_REGISTER_HOST="RESERVED"
 WORKER_AUTO_START="y"
+WORKER_MEMORY_LIMIT="2G"
+WORKER_CPU_LIMIT="2"
+WORKER_MEMORY_RESERVATION="1G"
+WORKER_CPU_RESERVATION="1"
+REMOTE_DB_HOST=""
+REMOTE_DB_PORT="5432"
+REMOTE_DB_NAME="cmsdb"
+REMOTE_DB_USER="cmsuser"
+REMOTE_DB_PASSWORD=""
 RANKING_USERNAME_INPUT=""
 RANKING_PASSWORD_INPUT=""
 
@@ -302,7 +325,105 @@ else
     # Worker Setup
     if [ "$WORKER_SETUP_MODE" = "client" ]; then
         read -p "Enter Main Server IP/Hostname (Tailscale preferred): " MAIN_SERVER_IP
-        PUBLIC_IP=$MAIN_SERVER_IP
+        PUBLIC_IP=${MAIN_SERVER_IP:-127.0.0.1}
+
+        existing_worker_memory_limit=$(grep "^WORKER_MEMORY_LIMIT=" .env.worker 2>/dev/null | cut -d '=' -f2-)
+        existing_worker_cpu_limit=$(grep "^WORKER_CPU_LIMIT=" .env.worker 2>/dev/null | cut -d '=' -f2-)
+        existing_worker_memory_reservation=$(grep "^WORKER_MEMORY_RESERVATION=" .env.worker 2>/dev/null | cut -d '=' -f2-)
+        existing_worker_cpu_reservation=$(grep "^WORKER_CPU_RESERVATION=" .env.worker 2>/dev/null | cut -d '=' -f2-)
+
+        WORKER_MEMORY_LIMIT=${existing_worker_memory_limit:-2G}
+        WORKER_CPU_LIMIT=${existing_worker_cpu_limit:-2}
+        WORKER_MEMORY_RESERVATION=${existing_worker_memory_reservation:-1G}
+        WORKER_CPU_RESERVATION=${existing_worker_cpu_reservation:-1}
+
+        read -p "Worker memory limit [$WORKER_MEMORY_LIMIT]: " WORKER_MEMORY_LIMIT_INPUT
+        WORKER_MEMORY_LIMIT=${WORKER_MEMORY_LIMIT_INPUT:-$WORKER_MEMORY_LIMIT}
+
+        read -p "Worker CPU limit [$WORKER_CPU_LIMIT]: " WORKER_CPU_LIMIT_INPUT
+        WORKER_CPU_LIMIT=${WORKER_CPU_LIMIT_INPUT:-$WORKER_CPU_LIMIT}
+
+        read -p "Worker memory reservation [$WORKER_MEMORY_RESERVATION]: " WORKER_MEMORY_RESERVATION_INPUT
+        WORKER_MEMORY_RESERVATION=${WORKER_MEMORY_RESERVATION_INPUT:-$WORKER_MEMORY_RESERVATION}
+
+        read -p "Worker CPU reservation [$WORKER_CPU_RESERVATION]: " WORKER_CPU_RESERVATION_INPUT
+        WORKER_CPU_RESERVATION=${WORKER_CPU_RESERVATION_INPUT:-$WORKER_CPU_RESERVATION}
+
+        existing_db_host=$(grep "^POSTGRES_HOST=" .env.core 2>/dev/null | cut -d '=' -f2-)
+        [ -z "$existing_db_host" ] && existing_db_host=$(grep "^POSTGRES_HOST=" .env.worker 2>/dev/null | cut -d '=' -f2-)
+        existing_db_port=$(grep "^POSTGRES_PORT=" .env.core 2>/dev/null | cut -d '=' -f2-)
+        [ -z "$existing_db_port" ] && existing_db_port=$(grep "^POSTGRES_PORT=" .env.worker 2>/dev/null | cut -d '=' -f2-)
+        existing_db_name=$(grep "^POSTGRES_DB=" .env.core 2>/dev/null | cut -d '=' -f2-)
+        [ -z "$existing_db_name" ] && existing_db_name=$(grep "^POSTGRES_DB=" .env.worker 2>/dev/null | cut -d '=' -f2-)
+        existing_db_user=$(grep "^POSTGRES_USER=" .env.core 2>/dev/null | cut -d '=' -f2-)
+        [ -z "$existing_db_user" ] && existing_db_user=$(grep "^POSTGRES_USER=" .env.worker 2>/dev/null | cut -d '=' -f2-)
+        existing_db_password=$(grep "^POSTGRES_PASSWORD=" .env.core 2>/dev/null | cut -d '=' -f2-)
+        [ -z "$existing_db_password" ] && existing_db_password=$(grep "^POSTGRES_PASSWORD=" .env.worker 2>/dev/null | cut -d '=' -f2-)
+
+        REMOTE_DB_HOST=${existing_db_host:-$PUBLIC_IP}
+        REMOTE_DB_PORT=${existing_db_port:-5432}
+        REMOTE_DB_NAME=${existing_db_name:-cmsdb}
+        REMOTE_DB_USER=${existing_db_user:-cmsuser}
+
+        read -p "Main Server Database Host [$REMOTE_DB_HOST]: " REMOTE_DB_HOST_INPUT
+        REMOTE_DB_HOST=${REMOTE_DB_HOST_INPUT:-$REMOTE_DB_HOST}
+
+        read -p "Main Server Database Port [$REMOTE_DB_PORT]: " REMOTE_DB_PORT_INPUT
+        REMOTE_DB_PORT=${REMOTE_DB_PORT_INPUT:-$REMOTE_DB_PORT}
+
+        read -p "Database name [$REMOTE_DB_NAME]: " REMOTE_DB_NAME_INPUT
+        REMOTE_DB_NAME=${REMOTE_DB_NAME_INPUT:-$REMOTE_DB_NAME}
+
+        read -p "Database user [$REMOTE_DB_USER]: " REMOTE_DB_USER_INPUT
+        REMOTE_DB_USER=${REMOTE_DB_USER_INPUT:-$REMOTE_DB_USER}
+
+        read -s -p "Database password [hidden, leave blank to keep current]: " REMOTE_DB_PASSWORD_INPUT
+        echo ""
+        if [ -n "$REMOTE_DB_PASSWORD_INPUT" ]; then
+            REMOTE_DB_PASSWORD=$REMOTE_DB_PASSWORD_INPUT
+        else
+            REMOTE_DB_PASSWORD=${existing_db_password:-}
+        fi
+
+        if [ -z "$REMOTE_DB_PASSWORD" ]; then
+            print_error "Database password is required for remote worker setup."
+            exit 1
+        fi
+
+        # Custom Core Ports
+        existing_log_port=$(grep "^CORE_LOG_PORT=" .env.worker 2>/dev/null | cut -d '=' -f2-)
+        CORE_LOG_PORT=${existing_log_port:-29000}
+        
+        read -p "Main Server Log Service Port [$CORE_LOG_PORT]: " CORE_LOG_PORT_INPUT
+        CORE_LOG_PORT_INPUT=${CORE_LOG_PORT_INPUT:-$CORE_LOG_PORT}
+
+        # Test Connection to Main Server
+        print_info "Testing connection to Main Server ($PUBLIC_IP:$CORE_LOG_PORT_INPUT)..."
+        if check_connection "$PUBLIC_IP" "$CORE_LOG_PORT_INPUT"; then
+            print_success "Connection to Main Server verified."
+        else
+            print_warning "Unable to connect to $PUBLIC_IP:$CORE_LOG_PORT_INPUT."
+            read -p "Continue anyway? (y/n) [y]: " CONTINUE_FAIL_CONN
+            CONTINUE_FAIL_CONN=${CONTINUE_FAIL_CONN:-y}
+            if [ "$CONTINUE_FAIL_CONN" != "y" ]; then exit 1; fi
+        fi
+
+        print_info "Testing connection to Main Server Database ($REMOTE_DB_HOST:$REMOTE_DB_PORT)..."
+        if check_connection "$REMOTE_DB_HOST" "$REMOTE_DB_PORT"; then
+            print_success "Database endpoint is reachable."
+        else
+            print_warning "Unable to connect to $REMOTE_DB_HOST:$REMOTE_DB_PORT."
+            read -p "Continue anyway? (y/n) [y]: " CONTINUE_FAIL_DB_CONN
+            CONTINUE_FAIL_DB_CONN=${CONTINUE_FAIL_DB_CONN:-y}
+            if [ "$CONTINUE_FAIL_DB_CONN" != "y" ]; then exit 1; fi
+        fi
+        
+        # Save custom port for later
+        update_env_var .env.worker "CORE_LOG_PORT" "$CORE_LOG_PORT_INPUT"
+        update_env_var .env.worker "WORKER_MEMORY_LIMIT" "$WORKER_MEMORY_LIMIT"
+        update_env_var .env.worker "WORKER_CPU_LIMIT" "$WORKER_CPU_LIMIT"
+        update_env_var .env.worker "WORKER_MEMORY_RESERVATION" "$WORKER_MEMORY_RESERVATION"
+        update_env_var .env.worker "WORKER_CPU_RESERVATION" "$WORKER_CPU_RESERVATION"
     else
         if [ -f .env.core ]; then
             EXISTING_PUBLIC_IP=$(grep "^PUBLIC_IP=" .env.core | cut -d '=' -f2-)
@@ -423,9 +544,16 @@ EOF
     write_or_print .env.worker << EOF
 # Generated by setup.sh
 WORKER_REPLICAS=1
-WORKER_MEMORY_LIMIT=2G
-WORKER_CPU_LIMIT=2
+WORKER_MEMORY_LIMIT=$WORKER_MEMORY_LIMIT
+WORKER_CPU_LIMIT=$WORKER_CPU_LIMIT
+WORKER_MEMORY_RESERVATION=$WORKER_MEMORY_RESERVATION
+WORKER_CPU_RESERVATION=$WORKER_CPU_RESERVATION
 CORE_SERVICES_HOST=$PUBLIC_IP
+POSTGRES_HOST=${REMOTE_DB_HOST:-$PUBLIC_IP}
+POSTGRES_PORT=${REMOTE_DB_PORT:-5432}
+POSTGRES_DB=${REMOTE_DB_NAME:-cmsdb}
+POSTGRES_USER=${REMOTE_DB_USER:-cmsuser}
+POSTGRES_PASSWORD=${REMOTE_DB_PASSWORD:-}
 DEPLOYMENT_TYPE=$DEPLOY_TYPE
 EOF
     # Also create a minimal .env.core to satisfy inject_config.sh
@@ -433,6 +561,11 @@ EOF
 # Minimal .env.core for worker node
 PUBLIC_IP=$PUBLIC_IP
 CORE_SERVICES_IP=$PUBLIC_IP
+POSTGRES_HOST=${REMOTE_DB_HOST:-$PUBLIC_IP}
+POSTGRES_PORT=${REMOTE_DB_PORT:-5432}
+POSTGRES_DB=${REMOTE_DB_NAME:-cmsdb}
+POSTGRES_USER=${REMOTE_DB_USER:-cmsuser}
+POSTGRES_PASSWORD=${REMOTE_DB_PASSWORD:-}
 DEPLOYMENT_TYPE=$DEPLOY_TYPE
 EOF
     fi
@@ -471,11 +604,34 @@ else
     else
         if [ "$DRY_RUN" = "true" ]; then
             echo "DRY-RUN: Would update .env.worker: CORE_SERVICES_HOST=$PUBLIC_IP"
+            [ -n "$REMOTE_DB_HOST" ] && echo "DRY-RUN: Would update .env.worker: POSTGRES_HOST=$REMOTE_DB_HOST"
+            [ -n "$REMOTE_DB_PORT" ] && echo "DRY-RUN: Would update .env.worker: POSTGRES_PORT=$REMOTE_DB_PORT"
+            [ -n "$REMOTE_DB_NAME" ] && echo "DRY-RUN: Would update .env.worker: POSTGRES_DB=$REMOTE_DB_NAME"
+            [ -n "$REMOTE_DB_USER" ] && echo "DRY-RUN: Would update .env.worker: POSTGRES_USER=$REMOTE_DB_USER"
+            [ -n "$REMOTE_DB_PASSWORD" ] && echo "DRY-RUN: Would update .env.worker: POSTGRES_PASSWORD=<hidden>"
+            [ -n "$WORKER_MEMORY_LIMIT" ] && echo "DRY-RUN: Would update .env.worker: WORKER_MEMORY_LIMIT=$WORKER_MEMORY_LIMIT"
+            [ -n "$WORKER_CPU_LIMIT" ] && echo "DRY-RUN: Would update .env.worker: WORKER_CPU_LIMIT=$WORKER_CPU_LIMIT"
+            [ -n "$WORKER_MEMORY_RESERVATION" ] && echo "DRY-RUN: Would update .env.worker: WORKER_MEMORY_RESERVATION=$WORKER_MEMORY_RESERVATION"
+            [ -n "$WORKER_CPU_RESERVATION" ] && echo "DRY-RUN: Would update .env.worker: WORKER_CPU_RESERVATION=$WORKER_CPU_RESERVATION"
             echo "DRY-RUN: Would update .env.core: PUBLIC_IP=$PUBLIC_IP"
             echo "DRY-RUN: Would update .env.core: CORE_SERVICES_IP=$PUBLIC_IP"
+            [ -n "$REMOTE_DB_HOST" ] && echo "DRY-RUN: Would update .env.core: POSTGRES_HOST=$REMOTE_DB_HOST"
+            [ -n "$REMOTE_DB_PORT" ] && echo "DRY-RUN: Would update .env.core: POSTGRES_PORT=$REMOTE_DB_PORT"
+            [ -n "$REMOTE_DB_NAME" ] && echo "DRY-RUN: Would update .env.core: POSTGRES_DB=$REMOTE_DB_NAME"
+            [ -n "$REMOTE_DB_USER" ] && echo "DRY-RUN: Would update .env.core: POSTGRES_USER=$REMOTE_DB_USER"
+            [ -n "$REMOTE_DB_PASSWORD" ] && echo "DRY-RUN: Would update .env.core: POSTGRES_PASSWORD=<hidden>"
         else
             update_env_var .env.worker "CORE_SERVICES_HOST" "$PUBLIC_IP"
             update_env_var .env.worker "DEPLOYMENT_TYPE" "$DEPLOY_TYPE"
+            [ -n "$REMOTE_DB_HOST" ] && update_env_var .env.worker "POSTGRES_HOST" "$REMOTE_DB_HOST"
+            [ -n "$REMOTE_DB_PORT" ] && update_env_var .env.worker "POSTGRES_PORT" "$REMOTE_DB_PORT"
+            [ -n "$REMOTE_DB_NAME" ] && update_env_var .env.worker "POSTGRES_DB" "$REMOTE_DB_NAME"
+            [ -n "$REMOTE_DB_USER" ] && update_env_var .env.worker "POSTGRES_USER" "$REMOTE_DB_USER"
+            [ -n "$REMOTE_DB_PASSWORD" ] && update_env_var .env.worker "POSTGRES_PASSWORD" "$REMOTE_DB_PASSWORD"
+            [ -n "$WORKER_MEMORY_LIMIT" ] && update_env_var .env.worker "WORKER_MEMORY_LIMIT" "$WORKER_MEMORY_LIMIT"
+            [ -n "$WORKER_CPU_LIMIT" ] && update_env_var .env.worker "WORKER_CPU_LIMIT" "$WORKER_CPU_LIMIT"
+            [ -n "$WORKER_MEMORY_RESERVATION" ] && update_env_var .env.worker "WORKER_MEMORY_RESERVATION" "$WORKER_MEMORY_RESERVATION"
+            [ -n "$WORKER_CPU_RESERVATION" ] && update_env_var .env.worker "WORKER_CPU_RESERVATION" "$WORKER_CPU_RESERVATION"
             # Also ensure .env.core exists or is updated for workers
             if [ ! -f .env.core ]; then
                 echo "# Minimal .env.core for worker node" > .env.core
@@ -483,6 +639,11 @@ else
             update_env_var .env.core "PUBLIC_IP" "$PUBLIC_IP"
             update_env_var .env.core "CORE_SERVICES_IP" "$PUBLIC_IP"
             update_env_var .env.core "DEPLOYMENT_TYPE" "$DEPLOY_TYPE"
+            [ -n "$REMOTE_DB_HOST" ] && update_env_var .env.core "POSTGRES_HOST" "$REMOTE_DB_HOST"
+            [ -n "$REMOTE_DB_PORT" ] && update_env_var .env.core "POSTGRES_PORT" "$REMOTE_DB_PORT"
+            [ -n "$REMOTE_DB_NAME" ] && update_env_var .env.core "POSTGRES_DB" "$REMOTE_DB_NAME"
+            [ -n "$REMOTE_DB_USER" ] && update_env_var .env.core "POSTGRES_USER" "$REMOTE_DB_USER"
+            [ -n "$REMOTE_DB_PASSWORD" ] && update_env_var .env.core "POSTGRES_PASSWORD" "$REMOTE_DB_PASSWORD"
         fi
     fi
 fi
@@ -554,13 +715,17 @@ if [ "$SETUP_TYPE" = "worker" ] && [ "$WORKER_SETUP_MODE" = "client" ]; then
         if [ "$DRY_RUN" = "true" ]; then
             echo "DRY-RUN: Would generate $env_file"
             echo "  WORKER_SHARD=$i  WORKER_PORT=$instance_port  CORE_SERVICES_HOST=$PUBLIC_IP"
+            echo "  WORKER_MEMORY_LIMIT=$WORKER_MEMORY_LIMIT  WORKER_CPU_LIMIT=$WORKER_CPU_LIMIT"
+            echo "  WORKER_MEMORY_RESERVATION=$WORKER_MEMORY_RESERVATION  WORKER_CPU_RESERVATION=$WORKER_CPU_RESERVATION"
         else
             cat > "$env_file" << EOF
 WORKER_SHARD=$i
 WORKER_NAME=worker-$i
 WORKER_REPLICAS=1
-WORKER_MEMORY_LIMIT=2G
-WORKER_CPU_LIMIT=2
+WORKER_MEMORY_LIMIT=$WORKER_MEMORY_LIMIT
+WORKER_CPU_LIMIT=$WORKER_CPU_LIMIT
+WORKER_MEMORY_RESERVATION=$WORKER_MEMORY_RESERVATION
+WORKER_CPU_RESERVATION=$WORKER_CPU_RESERVATION
 WORKER_PORT=$instance_port
 CORE_SERVICES_HOST=$PUBLIC_IP
 CMS_CONFIG=/usr/local/etc/cms.toml
@@ -596,6 +761,29 @@ fi
 
 # ── Worker-mounting: register WORKER_N entries in .env.core (run on main server)
 if [ "$SETUP_TYPE" = "worker" ] && [ "$WORKER_SETUP_MODE" = "mounting" ]; then
+    if [ "$DRY_RUN" != "true" ] && [ "$WORKER_REGISTER_HOST" != "RESERVED" ]; then
+        print_info "Verifying worker connectivity before registration..."
+        FAILED_WORKERS=0
+        i=0
+        while [ $i -lt "$WORKER_INSTANCE_COUNT" ]; do
+            target_port=$((WORKER_BASE_PORT + i))
+            printf "  - Testing worker $i ($WORKER_REGISTER_HOST:$target_port)... "
+            if check_connection "$WORKER_REGISTER_HOST" "$target_port"; then
+                print_success "ONLINE"
+            else
+                print_warning "OFFLINE"
+                FAILED_WORKERS=$((FAILED_WORKERS + 1))
+            fi
+            i=$((i + 1))
+        done
+        
+        if [ $FAILED_WORKERS -gt 0 ]; then
+            print_warning "$FAILED_WORKERS worker(s) are unreachable."
+            read -p "Do you want to continue registration anyway? (y/n) [y]: " CONTINUE_MOUNT
+            CONTINUE_MOUNT=${CONTINUE_MOUNT:-y}
+            if [ "$CONTINUE_MOUNT" != "y" ]; then exit 1; fi
+        fi
+    fi
     run_or_print "./scripts/manage-workers.sh bulk-add '$WORKER_REGISTER_HOST' '$WORKER_BASE_PORT' '$WORKER_INSTANCE_COUNT'"
 fi
 

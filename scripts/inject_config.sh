@@ -3,6 +3,7 @@ set -e
 
 # Define files
 ENV_FILE=".env.core"
+WORKER_ENV_FILE=".env.worker"
 CONFIG_FILE="config/cms.toml"
 RANKING_CONFIG_FILE="config/cms_ranking.toml"
 
@@ -28,6 +29,12 @@ get_env_val() {
     grep "^$1=" "$ENV_FILE" | cut -d '=' -f2- | tr -d '\r'
 }
 
+get_worker_env_val() {
+    if [ -f "$WORKER_ENV_FILE" ]; then
+        grep "^$1=" "$WORKER_ENV_FILE" | cut -d '=' -f2- | tr -d '\r'
+    fi
+}
+
 # Read variables
 DB_USER=$(get_env_val "POSTGRES_USER")
 DB_PASS=$(get_env_val "POSTGRES_PASSWORD")
@@ -39,6 +46,12 @@ TAILSCALE_IP=$(get_env_val "TAILSCALE_IP")
 CORE_SERVICES_IP=$(get_env_val "CORE_SERVICES_IP")
 
 # Default values if missing
+DB_USER=${DB_USER:-$(get_worker_env_val "POSTGRES_USER")}
+DB_PASS=${DB_PASS:-$(get_worker_env_val "POSTGRES_PASSWORD")}
+DB_NAME=${DB_NAME:-$(get_worker_env_val "POSTGRES_DB")}
+DB_HOST=${DB_HOST:-$(get_worker_env_val "POSTGRES_HOST")}
+DB_PORT=${DB_PORT:-$(get_worker_env_val "POSTGRES_PORT")}
+
 DB_USER=${DB_USER:-cmsuser}
 DB_PASS=${DB_PASS:-your_password_here}
 DB_NAME=${DB_NAME:-cmsdb}

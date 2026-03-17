@@ -332,11 +332,23 @@ To scale the system, you can run Workers on separate machines.
     ```ini
     WORKER_SHARD=1                    # Unique ID (0, 1, 2...)
     CORE_SERVICES_HOST=192.168.1.10   # IP of the Main Server
+    POSTGRES_HOST=192.168.1.10        # Main DB host/IP reachable by worker
+    POSTGRES_PORT=5432
+    POSTGRES_DB=cmsdb
+    POSTGRES_USER=cmsuser
+    POSTGRES_PASSWORD=your_password
+    WORKER_MEMORY_LIMIT=4G
+    WORKER_CPU_LIMIT=4
+    WORKER_MEMORY_RESERVATION=1G
+    WORKER_CPU_RESERVATION=1
     ```
+    Notes:
+    - If worker and main services run on the same machine, you can keep DB credentials only in `.env.core`.
+    - If this is a remote worker-only machine, set `POSTGRES_*` in `.env.worker` to point to the main DB.
 3.  **Configure Config**:
     On the worker machine, `config/cms.toml` needs to know where the LogService is.
     *   Update `LogService` and `ResourceService` addresses to point to the Main Server IP.
-    *   Update `database` connection string if needed.
+    *   Ensure `database` connection string points to the main DB host (not `database` unless DNS is configured for it).
     *   *Tip*: You can mostly copy `config/cms.toml` from the main server, but ensure the `Worker` section reflects the local binding.
 4.  **Firewall (Important)**
     If your worker is on a VM (e.g., KVM/Libvirt), open the port:
