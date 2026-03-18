@@ -3,7 +3,7 @@ SHELL := /bin/bash
 # Detect Docker Compose version
 COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
 
-.PHONY: env help clean core admin contest worker
+.PHONY: env help clean core admin contest worker pull pull-core pull-admin pull-contest pull-worker pull-infra
 
 help:
 	@echo "Available commands:"
@@ -12,6 +12,7 @@ help:
 	@echo "  make {service}-img  - Deploys service using pre-built images"
 	@echo "  make {service}-stop - Stops the specified service"
 	@echo "  make {service}-clean- Removes the specified service and its volumes"
+	@echo "  make pull-{service} - Pull only selected stack images"
 	@echo "  make db-clean       - Removes ALL services and volumes (Full Reset)"
 	@echo "  make clean          - Removes .env file"
 
@@ -208,11 +209,36 @@ infra-clean:
 
 pull:
 	@echo "Pulling core, admin, worker, and monitor images..."
-	@$(COMPOSE) -f docker-compose.core.yml -f docker-compose.core.img.yml pull || true
-	@$(COMPOSE) -f docker-compose.admin.yml -f docker-compose.admin.img.yml pull || true
-	@$(COMPOSE) -f docker-compose.worker.yml -f docker-compose.worker.img.yml pull || true
-	@$(COMPOSE) -f docker-compose.monitor.yml -f docker-compose.monitor.img.yml pull || true
+	@$(MAKE) pull-core
+	@$(MAKE) pull-admin
+	@$(MAKE) pull-contest
+	@$(MAKE) pull-worker
+	@$(MAKE) pull-infra
 	@echo "Pull complete."
+
+pull-core:
+	@echo "Pulling core images..."
+	@$(COMPOSE) -f docker-compose.core.yml -f docker-compose.core.img.yml pull || true
+
+pull-admin:
+	@echo "Pulling admin images..."
+	@$(COMPOSE) -f docker-compose.admin.yml -f docker-compose.admin.img.yml pull || true
+
+pull-contest:
+	@echo "Pulling contest images..."
+	@if [ -f docker-compose.contests.generated.yml ] && grep -q "cms-contest-web-server-" docker-compose.contests.generated.yml; then \
+		$(COMPOSE) -f docker-compose.contests.generated.yml pull || true; \
+	else \
+		$(COMPOSE) -f docker-compose.contest.yml -f docker-compose.contest.img.yml pull || true; \
+	fi
+
+pull-worker:
+	@echo "Pulling worker images..."
+	@$(COMPOSE) -f docker-compose.worker.yml -f docker-compose.worker.img.yml pull || true
+
+pull-infra:
+	@echo "Pulling infra images..."
+	@$(COMPOSE) -f docker-compose.monitor.yml -f docker-compose.monitor.img.yml pull || true
 
 core-img:
 	$(COMPOSE) -f docker-compose.core.yml -f docker-compose.core.img.yml up -d --no-build

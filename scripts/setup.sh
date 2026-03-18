@@ -156,7 +156,21 @@ run_update_mode() {
     fi
 
     if [ "$UPDATE_PULL" = "y" ] && [ "$deploy_type" = "img" ]; then
-        run_or_print "make pull"
+        if [ "$UPDATE_CORE" = "y" ]; then
+            run_or_print "make pull-core"
+        fi
+        if [ "$UPDATE_ADMIN" = "y" ]; then
+            run_or_print "make pull-admin"
+        fi
+        if [ "$UPDATE_CONTEST" = "y" ]; then
+            run_or_print "make pull-contest"
+        fi
+        if [ "$UPDATE_WORKER" = "y" ]; then
+            run_or_print "make pull-worker"
+        fi
+        if [ "$UPDATE_INFRA" = "y" ]; then
+            run_or_print "make pull-infra"
+        fi
     fi
 
     if [ "$UPDATE_CORE" = "y" ]; then
