@@ -2,40 +2,18 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
-import { Bell, Search, User, LogOut } from 'lucide-react';
+import { Bell, Search, User } from 'lucide-react';
 import { useToast } from '../providers/ToastProvider';
 import { getUnansweredQuestions } from '@/app/actions/questions';
-import { useRouter, usePathname } from 'next/navigation';
-
-const ROUTE_TITLES: Record<string, { title: string; description: string }> = {
-  '': { title: 'Dashboard', description: 'Overview of system status' },
-  'contests': { title: 'Contests', description: 'Manage all contests' },
-  'tasks': { title: 'Tasks', description: 'Manage programming tasks and test cases' },
-  'submissions': { title: 'Submissions', description: 'Monitor submission results' },
-  'users': { title: 'Users', description: 'Manage contestant accounts' },
-  'teams': { title: 'Teams', description: 'Manage participant teams' },
-  'admins': { title: 'Admins', description: 'Manage admin accounts' },
-  'containers': { title: 'Containers', description: 'Monitor Docker containers' },
-  'deployments': { title: 'Deployments', description: 'Manage service deployments' },
-  'resources': { title: 'Resources', description: 'System resource overview' },
-  'maintenance': { title: 'Maintenance', description: 'System maintenance tasks' },
-  'settings': { title: 'Settings', description: 'System configuration' },
-  'docs': { title: 'Documentation', description: 'Setup and usage guides' },
-  'search': { title: 'Search', description: 'Search across all records' },
-};
+import { useRouter } from 'next/navigation';
 
 export const Header: React.FC<{ className?: string; username?: string }> = ({ className, username }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [hasNotifications, setHasNotifications] = useState(false);
-  const lastCheckTimeRef = useRef(Date.now());
+  const lastCheckTimeRef = useRef(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const { addToast } = useToast();
   const router = useRouter();
-  const pathname = usePathname();
-
-  const segments = pathname.split('/').filter(Boolean);
-  const pageSegment = segments[1] || '';
-  const pageInfo = ROUTE_TITLES[pageSegment] ?? { title: pageSegment.charAt(0).toUpperCase() + pageSegment.slice(1), description: '' };
 
   // Poll for new questions every 30 seconds
   useEffect(() => {
@@ -85,12 +63,7 @@ export const Header: React.FC<{ className?: string; username?: string }> = ({ cl
   };
 
   return (
-    <header className={cn("flex items-center justify-between h-20 px-8", className)}>
-      {/* Page Title / Breadcrumbs */}
-      <div>
-        <h1 className="text-2xl font-bold text-white">{pageInfo.title}</h1>
-        {pageInfo.description && <p className="text-sm text-slate-400">{pageInfo.description}</p>}
-      </div>
+    <header className={cn("sticky top-0 flex items-center justify-end h-20 px-8 backdrop-blur-md bg-black/20 border-b border-white/5", className)}>
 
       {/* Right Actions */}
       <div className="flex items-center gap-4">
@@ -128,7 +101,7 @@ export const Header: React.FC<{ className?: string; username?: string }> = ({ cl
             <p className="text-sm font-medium text-white">{username || 'Admin User'}</p>
             <p className="text-xs text-slate-400">Admin</p>
             </div>
-            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-cyan-500 p-[2px]">
+            <div className="w-10 h-10 rounded-full bg-linear-to-tr from-indigo-500 to-cyan-500 p-0.5">
                 <div className="w-full h-full rounded-full bg-slate-950 flex items-center justify-center overflow-hidden">
                     <User className="w-5 h-5 text-slate-300" />
                 </div>

@@ -139,6 +139,61 @@ if [ "$SKIP_RANKING" != "true" ]; then
     sed -i "s|^password = \".*\"|password = \"$SAFE_R_PASS\"|g" "$RANKING_CONFIG_FILE"
 fi
 
+# Build ContestWebServer array from CONTESTS_DEPLOY_CONFIG
+echo "Building contest web server configuration..."
+CWS_ARRAY=""
+CWS_COUNT=0
+
+# Extract CONTESTS_DEPLOY_CONFIG from .env.contest
+DEPLOY_CONFIG=$(grep "^CONTESTS_DEPLOY_CONFIG=" .env.contest 2>/dev/null | cut -d '=' -f2-)
+if [ -n "$DEPLOY_CONFIG" ] && [ "$DEPLOY_CONFIG" != "[]" ]; then
+    # Use python to parse JSON and build the TOML array
+    CWS_SECTION=$(python3 - << 'PY'
+import json
+import os
+deploy_config_str = os.environ.get("DEPLOY_CONFIG", "[]")
+try:
+    deploy_config = json.loads(deploy_config_str)
+    if not isinstance(deploy_config, list):
+        print("")
+        exit(0)
+    
+    entries = []
+    for i, item in enumerate(deploy_config):
+        contest_id = item.get("id")
+        if contest_id:
+            # Service name matches the container name in generated compose
+            svc_name = f"cms-contest-web-server-{contest_id}"
+            # Port 21000 is internal RPC port for CWS
+            entries.append(f'["{svc_name}", 21000]')
+    
+    if entries:
+        print("ContestWebServer = [\n    " + ",\n    ".join(entries) + "\n]")
+except Exception as e:
+    print("")
+PY
+    )
+fi
+
+export CWS_SECTION
+if [ -n "$CWS_SECTION" ]; then
+    python3 - << 'PY'
+import os
+import re
+from pathlib import Path
+
+config_path = Path("config/cms.toml")
+cws_section = os.environ.get("CWS_SECTION", "")
+
+if config_path.exists() and cws_section:
+    text = config_path.read_text()
+    # Remove existing ContestWebServer block
+    text = re.sub(r'ContestWebServer\s*=\s*\[[\s\S]*?\]', cws_section, text)
+    config_path.write_text(text)
+PY
+    echo "Injected contest web server(s) into configuration."
+fi
+
 # Use Python to surgically remove any existing Worker block and provide a clean insertion point
 python3 - << 'PY'
 from pathlib import Path

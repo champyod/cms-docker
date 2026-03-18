@@ -2,10 +2,10 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import { revalidatePath } from 'next/cache';
 import { exec } from 'child_process';
 import util from 'util';
 import { ensurePermission } from '@/lib/permissions';
+import { prisma } from '@/lib/prisma';
 
 const execPromise = util.promisify(exec);
 
@@ -17,7 +17,7 @@ async function logToDiscord(title: string, message: string, color: number = 3447
 
     try {
         const roleId = process.env.DISCORD_ROLE_ID;
-        const payload: any = {
+        const payload: { embeds: Array<{ title: string; description: string; color: number; timestamp: string }>; content?: string } = {
             embeds: [{
                 title,
                 description: message,
@@ -52,6 +52,18 @@ async function getRestartPolicies(): Promise<RestartPolicies | null> {
     } catch (e) {
         console.error('Failed to read restart policies:', e);
         return null;
+    }
+}
+
+async function getContestComposeFile(): Promise<string> {
+    const rootDir = getRepoRoot();
+    const generatedPath = path.join(rootDir, 'docker-compose.contests.generated.yml');
+
+    try {
+        await fs.access(generatedPath);
+        return 'docker-compose.contests.generated.yml';
+    } catch {
+        return 'docker-compose.contest.yml';
     }
 }
 
@@ -91,11 +103,35 @@ export async function analyzeRestartRequirements(changedKeys: string[]) {
     return { requiredRestarts: Array.from(finalSet) };
 }
 
+export async function getLiveServiceConnections() {
+    try {
+        type LiveServiceConnection = {
+            name: string;
+            shard: number;
+            address: string;
+            port: number;
+        };
+
+        // Query the services table which LogService maintains
+        // Note: 'services' table is not in Prisma schema, so we use $queryRaw
+        const services = await prisma.$queryRaw<LiveServiceConnection[]>`
+            SELECT name, shard, address, port FROM services ORDER BY name, shard;
+        `;
+        
+        return { success: true, services };
+    } catch (error) {
+        console.error('Failed to fetch live service connections:', error);
+        // If table doesn't exist yet (first boot), return empty
+        return { success: true, services: [] };
+    }
+}
+
 export async function restartServices(type: 'all' | 'core' | 'admin' | 'worker' | 'custom', customList?: string[]) {
   await ensurePermission('all');
   try {
     const rootDir = getRepoRoot();
     let cmd = '';
+        const contestComposeFile = await getContestComposeFile();
 
     // Regenerate env and contest compose
     await execPromise('make env', { cwd: rootDir });
@@ -104,7 +140,7 @@ export async function restartServices(type: 'all' | 'core' | 'admin' | 'worker' 
         'docker-compose.core.yml',
         'docker-compose.admin.yml',
         'docker-compose.worker.yml',
-        'docker-compose.contests.generated.yml',
+        contestComposeFile,
         'docker-compose.monitor.yml'
     ].map(f => `-f ${f}`).join(' ');
 

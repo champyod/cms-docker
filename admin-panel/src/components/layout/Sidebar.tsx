@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { 
   Home, Users, Trophy, Settings, LogOut, ChevronRight,
-  FileCode, Activity, Shield, Box, Rocket, Wrench, ChevronDown, LayoutDashboard, Database, BookOpen
+  FileCode, Activity, Shield, Box, Rocket, Wrench, ChevronDown, Database, BookOpen
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -75,7 +75,7 @@ const SidebarGroup: React.FC<SidebarGroupProps> = ({ label, icon: Icon, children
             </button>
             <div className={cn(
                 "overflow-hidden transition-all duration-300 space-y-1 pl-2 border-l border-white/5 ml-4",
-                isOpen ? "max-h-[500px] opacity-100 py-1" : "max-h-0 opacity-0"
+              isOpen ? "max-h-125 opacity-100 py-1" : "max-h-0 opacity-0"
             )}>
                 {children}
             </div>
@@ -104,18 +104,20 @@ export const Sidebar: React.FC<{
   return (
     <aside 
       className={cn(
-        "flex flex-col h-screen py-6 pl-4 transition-all duration-300",
+        "sticky top-0 self-start flex flex-col h-screen py-6 pl-4 transition-all duration-300",
         collapsed ? "w-24" : "w-72",
         className
       )}
     >
       <div className={cn(
-        "flex-1 flex flex-col glass-panel rounded-3xl p-4 relative transition-all duration-300",
+        "flex-1 min-h-0 flex flex-col glass-panel rounded-3xl p-4 relative transition-all duration-300",
         collapsed && "items-center"
       )}>
         {/* Toggle Button */}
         <button 
           onClick={() => setCollapsed(!collapsed)}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           className="absolute -right-3 top-8 bg-indigo-600 rounded-full p-1 shadow-lg border border-indigo-400/50 text-white hover:bg-indigo-500 transition-colors z-10"
         >
           <ChevronRight className={cn("w-4 h-4 transition-transform", !collapsed && "rotate-180")} />
@@ -123,18 +125,18 @@ export const Sidebar: React.FC<{
 
         {/* Logo area */}
         <div className={cn("mb-10 px-2 flex items-center", collapsed && "justify-center")}>
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+          <div className="w-8 h-8 rounded-xl bg-linear-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
             <span className="font-bold text-white text-lg">C</span>
           </div>
           {!collapsed && (
-            <span className="ml-3 font-bold text-lg bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
+            <span className="ml-3 font-bold text-lg bg-linear-to-r from-white to-slate-400 bg-clip-text text-transparent">
               CMS Admin
             </span>
           )}
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 space-y-6 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20 pr-1">
+        <nav className="flex-1 min-h-0 space-y-6 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20 pr-1">
           <div className="space-y-1">
             <SidebarItem icon={Home} label="Dashboard" href={`/${locale}`} collapsed={collapsed} />
           </div>

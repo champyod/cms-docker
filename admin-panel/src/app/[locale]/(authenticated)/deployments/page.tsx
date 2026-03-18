@@ -3,17 +3,35 @@
 import { useState, useEffect } from 'react';
 import { Card } from '@/components/core/Card';
 import { readEnvFile, updateEnvFile } from '@/app/actions/env';
-import { analyzeRestartRequirements, restartServices } from '@/app/actions/services';
 import { getAvailableContests } from '@/app/actions/contests';
 import { getWorkers, updateWorkers } from '@/app/actions/workerConfig';
-import { Save, RefreshCw, Loader, AlertTriangle, Trash2, Plus, Globe, Hash, Rocket, Shield, Lock, Network, Server } from 'lucide-react';
+import { getLiveServiceConnections, analyzeRestartRequirements, restartServices } from '@/app/actions/services';
+import { Save, RefreshCw, AlertTriangle, Trash2, Plus, Globe, Hash, Rocket, Shield, Lock, Network, Server, Activity } from 'lucide-react';
 import { PageContent, PageHeader, Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
 import { Badge } from '@/components/core/Badge';
 import { Loading } from '@/components/core/Loading';
 
+type ContestDeployConfigItem = {
+    id: number;
+    port: number;
+    domain?: string;
+    accessMethod?: 'public_ip' | 'domain' | 'tailscale';
+    protocol?: 'http' | 'https';
+    tlsCertPath?: string;
+    tlsKeyPath?: string;
+    tailscaleDomain?: string;
+};
+
+type LiveService = {
+    name: string;
+    shard: number;
+    address: string;
+    port: number;
+};
+
 export default function DeploymentsPage() {
-  const [config, setConfig] = useState<any[]>([]);
+    const [config, setConfig] = useState<ContestDeployConfigItem[]>([]);
   const [workers, setWorkers] = useState<{ host: string; port: number }[]>([]);
   const [globalSettings, setGlobalSettings] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -23,13 +41,16 @@ export default function DeploymentsPage() {
   const [originalWorkers, setOriginalWorkers] = useState<string>('[]');
   const [originalGlobal, setOriginalGlobal] = useState<string>('{}');
   const [availableContests, setAvailableContests] = useState<{ id: number; name: string }[]>([]);
+    const [liveServices, setLiveServices] = useState<LiveService[]>([]);
+  const [lastCheck, setLastCheck] = useState<Date>(new Date());
 
   const loadData = async () => {
     setLoading(true);
-    const [result, contestsResult, workersResult] = await Promise.all([
+    const [result, contestsResult, workersResult, servicesResult] = await Promise.all([
       readEnvFile('.env.contest'),
       getAvailableContests(),
-      getWorkers()
+      getWorkers(),
+      getLiveServiceConnections()
     ]);
 
     if (result.success && result.config) {
@@ -42,14 +63,15 @@ export default function DeploymentsPage() {
       setOriginalGlobal(JSON.stringify(globals));
 
       try {
-        const parsedConfig = JSON.parse(deployConfig);
+                const parsedConfig = JSON.parse(deployConfig) as Array<ContestDeployConfigItem & { workers?: unknown }>;
         // Remove workers from config if they exist (backward compatibility)
-        const configWithoutWorkers = parsedConfig.map((item: any) => {
-          const { workers, ...rest } = item;
-          return rest;
-        });
+                const configWithoutWorkers = parsedConfig.map((item) => {
+                    const normalizedItem = { ...item };
+                    delete normalizedItem.workers;
+                    return normalizedItem;
+                });
         setConfig(configWithoutWorkers);
-      } catch (e) {
+            } catch {
         setConfig([]);
       }
     }
@@ -58,20 +80,67 @@ export default function DeploymentsPage() {
       setAvailableContests(contestsResult.contests);
     }
 
+    if (servicesResult.success) {
+      setLiveServices(servicesResult.services);
+      setLastCheck(new Date());
+    }
+
     // Load global workers
-    setWorkers(workersResult);
-    setOriginalWorkers(JSON.stringify(workersResult));
+        const normalizedWorkers = Array.isArray(workersResult) ? workersResult : [];
+        setWorkers(normalizedWorkers);
+        setOriginalWorkers(JSON.stringify(normalizedWorkers));
 
     setLoading(false);
   };
+
+  const refreshStatus = async () => {
+    const servicesResult = await getLiveServiceConnections();
+    if (servicesResult.success) {
+      setLiveServices(servicesResult.services);
+      setLastCheck(new Date());
+    }
+  };
+
+  useEffect(() => {
+    const interval = setInterval(refreshStatus, 10000); // Check every 10s
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     loadData();
   }, []);
 
-  const isDirty = JSON.stringify(config) !== originalConfig ||
+    const normalizedOriginalConfig = (() => {
+        try {
+            return JSON.stringify(JSON.parse(originalConfig));
+        } catch {
+            return '[]';
+        }
+    })();
+
+    const isDirty = JSON.stringify(config) !== normalizedOriginalConfig ||
                   JSON.stringify(workers) !== originalWorkers ||
                   JSON.stringify(globalSettings) !== originalGlobal;
+
+    const normalizeHost = (value: string) => value.trim().toLowerCase();
+
+    const isWorkerLive = (worker: { host: string; port: number }) => {
+        const workerHost = normalizeHost(worker.host);
+
+        return liveServices.some((service) => {
+            if (service.name !== 'Worker') return false;
+            if (service.port !== worker.port) return false;
+
+            const serviceHost = normalizeHost(service.address || '');
+            if (!workerHost || !serviceHost) return true;
+
+            return serviceHost === workerHost ||
+                serviceHost.includes(workerHost) ||
+                workerHost.includes(serviceHost) ||
+                (workerHost === 'localhost' && serviceHost === '127.0.0.1') ||
+                (workerHost === '127.0.0.1' && serviceHost === 'localhost');
+        });
+    };
 
   useEffect(() => {
     if (isDirty) {
@@ -114,29 +183,24 @@ export default function DeploymentsPage() {
 
         if (shouldRestart) {
             // Detect instance lifecycle changes
-            const originalInstances = JSON.parse(originalConfig);
+            const originalInstances = JSON.parse(originalConfig) as ContestDeployConfigItem[];
             const currentInstances = config;
 
-            const originalIds = new Set(originalInstances.map((i: any) => i.id));
+            const originalIds = new Set(originalInstances.map((instance) => instance.id));
             const currentIds = new Set(currentInstances.map(i => i.id));
 
             // Find new, edited, and removed instances
             const newInstances = currentInstances.filter(i => !originalIds.has(i.id));
-            const removedInstances = originalInstances.filter((i: any) => !currentIds.has(i.id));
+            const removedInstances = originalInstances.filter((instance) => !currentIds.has(instance.id));
             const editedInstances = currentInstances.filter(i => {
                 if (!originalIds.has(i.id)) return false;
-                const original = originalInstances.find((o: any) => o.id === i.id);
+                const original = originalInstances.find((instance) => instance.id === i.id);
                 return JSON.stringify(original) !== JSON.stringify(i);
             });
 
             // Handle removed instances first (stop and remove)
             if (removedInstances.length > 0) {
-                const servicesToRemove = removedInstances.flatMap((i: any) => [
-                    `cms-contest-web-server-${i.id}`,
-                    `cms-ranking-web-server-${i.id}`
-                ]);
-
-                alert(`Removing ${removedInstances.length} instance(s): ${removedInstances.map((i: any) => i.id).join(', ')}`);
+                alert(`Removing ${removedInstances.length} instance(s): ${removedInstances.map((instance) => instance.id).join(', ')}`);
             }
 
             // Handle new and edited instances (restart/create)
@@ -297,6 +361,68 @@ export default function DeploymentsPage() {
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
         <Stack gap={6} className="xl:col-span-2">
+            {/* Connectivity Dashboard */}
+            <Card className="bg-indigo-500/5 border-indigo-500/20 p-6">
+                <Stack direction="row" align="center" justify="between" className="mb-6">
+                    <Stack direction="row" align="center" gap={3}>
+                        <Activity className="w-6 h-6 text-indigo-400" />
+                        <div>
+                            <Text variant="h3">System Connectivity</Text>
+                            <Text variant="small" color="text-neutral-400">Live service registry from LogService</Text>
+                        </div>
+                    </Stack>
+                    <Stack align="end" gap={0}>
+                        <Badge variant={liveServices.length > 0 ? 'emerald' : 'red'}>
+                            {liveServices.length} Services Registered
+                        </Badge>
+                        <Text variant="label" className="text-[10px] text-neutral-500 mt-1 uppercase tracking-wider">
+                            Last Checked: {lastCheck.toLocaleTimeString()}
+                        </Text>
+                    </Stack>
+                </Stack>
+
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {[
+                        { name: 'LogService', icon: Shield },
+                        { name: 'ResourceService', icon: Server },
+                        { name: 'EvaluationService', icon: Activity },
+                        { name: 'ScoringService', icon: Hash },
+                        { name: 'ProxyService', icon: Network },
+                        { name: 'Checker', icon: Shield },
+                        { name: 'ContestWebServer', icon: Globe },
+                        { name: 'AdminWebServer', icon: Lock }
+                    ].map(svc => {
+                        // Check if at least one shard of this service is live
+                        const isLive = liveServices.some(ls => ls.name === svc.name);
+                        const liveCount = liveServices.filter(ls => ls.name === svc.name).length;
+                        const Icon = svc.icon;
+                        
+                        return (
+                            <div key={svc.name} className={`p-3 rounded-xl border transition-all ${
+                                isLive 
+                                ? 'bg-green-500/5 border-green-500/20 text-green-400' 
+                                : 'bg-red-500/5 border-red-500/10 text-neutral-500'
+                            }`}>
+                                <Stack direction="row" align="center" gap={2}>
+                                    <Icon className={`w-4 h-4 ${isLive ? 'animate-pulse' : ''}`} />
+                                    <div className="min-w-0">
+                                        <Text variant="label" className="truncate block font-medium" color={isLive ? 'text-green-400' : 'text-neutral-500'}>
+                                            {svc.name}
+                                        </Text>
+                                        <Stack direction="row" align="center" gap={1}>
+                                            <div className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-neutral-700'}`} />
+                                            <Text variant="small" className="text-[10px] uppercase font-bold tracking-tighter">
+                                                {isLive ? `${liveCount} Live` : 'Offline'}
+                                            </Text>
+                                        </Stack>
+                                    </div>
+                                </Stack>
+                            </div>
+                        );
+                    })}
+                </div>
+            </Card>
+
             <Stack direction="row" align="center" justify="between" className="px-2" gap={0}>
                 <Stack direction="row" align="center" gap={2}>
                     <Rocket className="w-5 h-5 text-indigo-400" />
@@ -306,7 +432,7 @@ export default function DeploymentsPage() {
             </Stack>
             <Stack gap={3}>
                 {config.map((item, index) => (
-                    <Card key={index} className="bg-white/[0.02] p-4 border border-white/5 group hover:border-indigo-500/30 transition-colors space-y-4">
+                    <Card key={index} className="bg-white/2 p-4 border border-white/5 group hover:border-indigo-500/30 transition-colors space-y-4">
                         <Stack direction="row" align="start" gap={4}>
                             <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <Stack gap={1}>
@@ -321,6 +447,8 @@ export default function DeploymentsPage() {
                                                 newConfig[index] = { ...newConfig[index], id: selectedId };
                                                 setConfig(newConfig);
                                             }}
+                                            title="Contest"
+                                            aria-label="Contest"
                                             className="bg-transparent text-sm text-white w-full outline-none"
                                         >
                                             {availableContests.map((contest) => (
@@ -343,6 +471,9 @@ export default function DeploymentsPage() {
                                                 newConfig[index] = { ...newConfig[index], port: parseInt(e.target.value) || 0 };
                                                 setConfig(newConfig);
                                             }}
+                                            title="External Port"
+                                            aria-label="External Port"
+                                            placeholder="8888"
                                             className="bg-transparent text-sm text-white w-full outline-none"
                                         />
                                     </Stack>
@@ -350,6 +481,8 @@ export default function DeploymentsPage() {
                             </div>
                             <button
                                 onClick={() => removeItem(index)}
+                                title="Remove contest instance"
+                                aria-label="Remove contest instance"
                                 className="p-2 text-neutral-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
                             >
                                 <Trash2 className="w-5 h-5" />
@@ -367,9 +500,14 @@ export default function DeploymentsPage() {
                                     value={item.accessMethod || 'public_ip'}
                                     onChange={(e) => {
                                         const newConfig = [...config];
-                                        newConfig[index] = { ...newConfig[index], accessMethod: e.target.value };
+                                        newConfig[index] = {
+                                            ...newConfig[index],
+                                            accessMethod: e.target.value as ContestDeployConfigItem['accessMethod']
+                                        };
                                         setConfig(newConfig);
                                     }}
+                                    title="Access Method"
+                                    aria-label="Access Method"
                                     className="w-full bg-black/40 px-3 py-2 rounded-lg border border-white/10 text-white text-sm outline-none focus:border-indigo-500/50"
                                 >
                                     <option value="public_ip">Public IP:Port</option>
@@ -387,9 +525,14 @@ export default function DeploymentsPage() {
                                     value={item.protocol || 'http'}
                                     onChange={(e) => {
                                         const newConfig = [...config];
-                                        newConfig[index] = { ...newConfig[index], protocol: e.target.value };
+                                        newConfig[index] = {
+                                            ...newConfig[index],
+                                            protocol: e.target.value as ContestDeployConfigItem['protocol']
+                                        };
                                         setConfig(newConfig);
                                     }}
+                                    title="Protocol"
+                                    aria-label="Protocol"
                                     className="w-full bg-black/40 px-3 py-2 rounded-lg border border-white/10 text-white text-sm outline-none focus:border-indigo-500/50"
                                 >
                                     <option value="http">HTTP</option>
@@ -505,7 +648,7 @@ export default function DeploymentsPage() {
                 ))}
                 
                 {config.length === 0 && (
-                    <Stack align="center" justify="center" className="p-12 border-2 border-dashed border-white/5 rounded-2xl bg-white/[0.01]">
+                    <Stack align="center" justify="center" className="p-12 border-2 border-dashed border-white/5 rounded-2xl bg-white/1">
                         <Rocket className="w-12 h-12 text-neutral-700 mb-4" />
                         <Text variant="muted">No contest instances configured.</Text>
                     </Stack>
@@ -531,11 +674,12 @@ export default function DeploymentsPage() {
                 <Stack gap={1}>
                     <Text variant="label">Security Secret Key</Text>
                     <input
-                        type="text"
+                        type="password"
                         value={globalSettings.SECRET_KEY || ''}
                         onChange={(e) => handleGlobalChange('SECRET_KEY', e.target.value)}
                         className="w-full bg-black/40 px-4 py-2 rounded-lg border border-white/10 text-white outline-none focus:border-indigo-500/50 font-mono text-xs"
-                        style={{ WebkitTextSecurity: 'disc', textSecurity: 'disc' } as React.CSSProperties}
+                        title="Security Secret Key"
+                        aria-label="Security Secret Key"
                         placeholder="Generated automatically if empty"
                         autoComplete="off"
                         data-form-type="other"
@@ -614,29 +758,48 @@ export default function DeploymentsPage() {
                 </Text>
 
                 <Stack gap={2} className="mb-3">
-                    {workers.map((worker, index) => (
-                        <Stack key={index} direction="row" align="center" gap={2} className="bg-black/20 p-3 rounded-lg border border-white/5">
-                            <input
-                                type="text"
-                                value={worker.host}
-                                onChange={(e) => updateGlobalWorker(index, 'host', e.target.value)}
-                                placeholder="Host (e.g., cms-worker-0)"
-                                className="flex-1 bg-black/40 px-3 py-2 rounded text-sm text-white border border-white/10 outline-none focus:border-cyan-500/50 font-mono"
-                            />
-                            <input
-                                type="number"
-                                value={worker.port}
-                                onChange={(e) => updateGlobalWorker(index, 'port', e.target.value)}
-                                className="w-24 bg-black/40 px-3 py-2 rounded text-sm text-white border border-white/10 outline-none focus:border-cyan-500/50 font-mono"
-                            />
-                            <button
-                                onClick={() => removeGlobalWorker(index)}
-                                className="p-2 text-red-400/60 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
-                            >
-                                <Trash2 className="w-4 h-4" />
-                            </button>
-                        </Stack>
-                    ))}
+                    {workers.map((worker, index) => {
+                        const isLive = isWorkerLive(worker);
+                        
+                        return (
+                            <Stack key={index} gap={1} className="bg-black/20 p-3 rounded-lg border border-white/5 relative group">
+                                <Stack direction="row" align="center" justify="between" className="mb-1">
+                                    <Stack direction="row" align="center" gap={1.5}>
+                                        <div className={`w-2 h-2 rounded-full ${isLive ? 'bg-cyan-500 animate-pulse' : 'bg-neutral-700'}`} />
+                                        <Text variant="label" className="text-[10px] uppercase font-bold tracking-widest" color={isLive ? 'text-cyan-400' : 'text-neutral-500'}>
+                                            {isLive ? 'Live' : 'Offline'}
+                                        </Text>
+                                    </Stack>
+                                    <button
+                                        onClick={() => removeGlobalWorker(index)}
+                                        title="Remove worker node"
+                                        aria-label="Remove worker node"
+                                        className="p-1 text-neutral-600 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors opacity-0 group-hover:opacity-100"
+                                    >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                </Stack>
+                                <Stack direction="row" align="center" gap={2}>
+                                    <input
+                                        type="text"
+                                        value={worker.host}
+                                        onChange={(e) => updateGlobalWorker(index, 'host', e.target.value)}
+                                        placeholder="Host (e.g., cms-worker-0)"
+                                        className="flex-1 bg-black/40 px-3 py-2 rounded text-sm text-white border border-white/10 outline-none focus:border-cyan-500/50 font-mono"
+                                    />
+                                    <input
+                                        type="number"
+                                        value={worker.port}
+                                        onChange={(e) => updateGlobalWorker(index, 'port', e.target.value)}
+                                        title="Worker Port"
+                                        aria-label="Worker Port"
+                                        placeholder="26000"
+                                        className="w-24 bg-black/40 px-3 py-2 rounded text-sm text-white border border-white/10 outline-none focus:border-cyan-500/50 font-mono"
+                                    />
+                                </Stack>
+                            </Stack>
+                        );
+                    })}
 
                     {workers.length === 0 && (
                         <Stack align="center" justify="center" className="p-6 bg-black/20 rounded-lg border border-white/5">
