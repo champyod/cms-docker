@@ -252,7 +252,7 @@ contest-img:
 	@if [ -f docker-compose.contests.generated.yml ] && grep -q "cms-contest-web-server-" docker-compose.contests.generated.yml; then \
 		$(COMPOSE) -f docker-compose.contests.generated.yml up -d --no-build; \
 	else \
-		$(COMPOSE) -f docker-compose.contest.yml up -d --no-build; \
+		$(COMPOSE) -f docker-compose.contest.yml -f docker-compose.contest.img.yml up -d --no-build; \
 	fi
 
 contest-down:
