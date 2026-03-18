@@ -12,6 +12,7 @@ help:
 	@echo "  make {service}-img  - Deploys service using pre-built images"
 	@echo "  make {service}-stop - Stops the specified service"
 	@echo "  make {service}-clean- Removes the specified service and its volumes"
+	@echo "  make pull           - Pull images for all stacks"
 	@echo "  make pull-{service} - Pull only selected stack images"
 	@echo "  make db-clean       - Removes ALL services and volumes (Full Reset)"
 	@echo "  make clean          - Removes .env file"
@@ -208,7 +209,7 @@ infra-clean:
 	$(COMPOSE) -f docker-compose.monitor.yml down -v
 
 pull:
-	@echo "Pulling core, admin, worker, and monitor images..."
+	@echo "Pulling images for core/admin/contest/worker/infra stacks..."
 	@$(MAKE) pull-core
 	@$(MAKE) pull-admin
 	@$(MAKE) pull-contest
