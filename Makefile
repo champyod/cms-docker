@@ -156,7 +156,7 @@ admin:
 	$(COMPOSE) -f docker-compose.admin.yml up -d --build
 
 contest:
-	@if [ -f docker-compose.contests.generated.yml ]; then \
+	@if [ -f docker-compose.contests.generated.yml ] && grep -q "cms-contest-web-server-" docker-compose.contests.generated.yml; then \
 		$(COMPOSE) -f docker-compose.contests.generated.yml up -d --build; \
 	else \
 		$(COMPOSE) -f docker-compose.contest.yml up -d --build; \
@@ -178,14 +178,14 @@ admin-clean:
 	$(COMPOSE) -f docker-compose.admin.yml down -v
 
 contest-stop:
-	@if [ -f docker-compose.contests.generated.yml ]; then \
+	@if [ -f docker-compose.contests.generated.yml ] && grep -q "cms-contest-web-server-" docker-compose.contests.generated.yml; then \
 		$(COMPOSE) -f docker-compose.contests.generated.yml stop; \
 	else \
 		$(COMPOSE) -f docker-compose.contest.yml stop; \
 	fi
 
 contest-clean:
-	@if [ -f docker-compose.contests.generated.yml ]; then \
+	@if [ -f docker-compose.contests.generated.yml ] && grep -q "cms-contest-web-server-" docker-compose.contests.generated.yml; then \
 		$(COMPOSE) -f docker-compose.contests.generated.yml down -v; \
 	else \
 		$(COMPOSE) -f docker-compose.contest.yml down -v; \
@@ -222,14 +222,14 @@ admin-img:
 	$(COMPOSE) -f docker-compose.admin.yml -f docker-compose.admin.img.yml up -d --no-build
 
 contest-img:
-	@if [ -f docker-compose.contests.generated.yml ]; then \
+	@if [ -f docker-compose.contests.generated.yml ] && grep -q "cms-contest-web-server-" docker-compose.contests.generated.yml; then \
 		$(COMPOSE) -f docker-compose.contests.generated.yml up -d --no-build; \
 	else \
 		$(COMPOSE) -f docker-compose.contest.yml up -d --no-build; \
 	fi
 
 contest-down:
-	@if [ -f docker-compose.contests.generated.yml ]; then \
+	@if [ -f docker-compose.contests.generated.yml ] && grep -q "cms-contest-web-server-" docker-compose.contests.generated.yml; then \
 		$(COMPOSE) -f docker-compose.contests.generated.yml down; \
 	else \
 		$(COMPOSE) -f docker-compose.contest.yml down; \

@@ -3,9 +3,7 @@
 import {
   Server,
   Cpu,
-  Database,
   CheckCircle2,
-  AlertCircle,
   Clock
 } from 'lucide-react';
 import { Card } from '@/components/core/Card';
@@ -25,7 +23,7 @@ export function WorkerGrid({ workers }: { workers: WorkerStats[] }) {
         <div className="flex flex-col items-center gap-3 text-neutral-500">
           <Server className="w-12 h-12 opacity-20" />
           <p className="text-sm font-medium">No worker nodes found</p>
-          <p className="text-xs">Workers are configured per-contest in Deployments page</p>
+          <p className="text-xs">Workers are globally shared and configured in Infrastructure → Deployments</p>
         </div>
       </Card>
     );

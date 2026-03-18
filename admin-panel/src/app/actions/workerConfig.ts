@@ -2,6 +2,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import { ensurePermission } from '@/lib/permissions';
 
 // Helper to find cms.toml
 async function getCmsConfigPath() {
@@ -21,33 +22,85 @@ async function getCmsConfigPath() {
   return null;
 }
 
+async function getRepoRootPath() {
+  return process.env.IS_DOCKER === 'true' ? '/repo-root' : path.resolve(process.cwd(), '..');
+}
+
+function extractWorkerBlock(content: string): string | null {
+  const keyIndex = content.search(/(^|\n)\s*Worker\s*=\s*\[/);
+  if (keyIndex === -1) return null;
+
+  const openIndex = content.indexOf('[', keyIndex);
+  if (openIndex === -1) return null;
+
+  let depth = 0;
+  for (let index = openIndex; index < content.length; index += 1) {
+    const char = content[index];
+    if (char === '[') depth += 1;
+    if (char === ']') depth -= 1;
+    if (depth === 0) {
+      return content.slice(openIndex + 1, index);
+    }
+  }
+
+  return null;
+}
+
+function parseWorkersFromBlock(block: string): Array<{ host: string; port: number }> {
+  const workers: Array<{ host: string; port: number }> = [];
+  const regex = /\[\s*"([^"]+)"\s*,\s*(\d+)\s*\]/g;
+
+  let match = regex.exec(block);
+  while (match !== null) {
+    workers.push({ host: match[1], port: parseInt(match[2], 10) });
+    match = regex.exec(block);
+  }
+
+  return workers;
+}
+
+function parseWorkersFromEnvCore(content: string): Array<{ host: string; port: number }> {
+  const workers: Array<{ index: number; host: string; port: number }> = [];
+  const lines = content.split('\n');
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    const match = trimmed.match(/^WORKER_(\d+)=(.+):(\d+)$/);
+    if (!match) continue;
+
+    workers.push({
+      index: parseInt(match[1], 10),
+      host: match[2],
+      port: parseInt(match[3], 10)
+    });
+  }
+
+  return workers
+    .sort((a, b) => a.index - b.index)
+    .map(({ host, port }) => ({ host, port }));
+}
+
 export async function getWorkers() {
+  await ensurePermission('all');
+
   const configPath = await getCmsConfigPath();
-  if (!configPath) return [];
 
   try {
-    const content = await fs.readFile(configPath, 'utf-8');
-    // Regex to find Worker = [...] pattern
-    // Handling multi-line arrays
-    const workerMatch = content.match(/Worker\s*=\s*\[([\s\S]*?)\]/);
-    
-    if (workerMatch && workerMatch[1]) {
-      const inner = workerMatch[1];
-      // inner looks like:
-      // ["host", port],
-      // ["host2", port2]
-      
-      const workers: { host: string; port: number }[] = [];
-      const lines = inner.split('\n');
-      for (const line of lines) {
-        // Match ["host", port]
-        const match = line.match(/\[\s*"([^"]+)"\s*,\s*(\d+)\s*\]/);
-        if (match) {
-          workers.push({ host: match[1], port: parseInt(match[2]) });
-        }
+    if (configPath) {
+      const content = await fs.readFile(configPath, 'utf-8');
+      const workerBlock = extractWorkerBlock(content);
+      if (workerBlock) {
+        const workers = parseWorkersFromBlock(workerBlock);
+        if (workers.length > 0) return workers;
       }
-      return workers;
     }
+
+    const repoRoot = await getRepoRootPath();
+    const envCorePath = path.join(repoRoot, '.env.core');
+    const envCoreContent = await fs.readFile(envCorePath, 'utf-8');
+    return parseWorkersFromEnvCore(envCoreContent);
   } catch (error) {
     console.error('Failed to parse workers from cms.toml', error);
   }
@@ -55,6 +108,8 @@ export async function getWorkers() {
 }
 
 export async function updateWorkers(workers: { host: string; port: number }[]) {
+  await ensurePermission('all');
+
   const configPath = await getCmsConfigPath();
   if (!configPath) return { success: false, error: 'cms.toml not found' };
 

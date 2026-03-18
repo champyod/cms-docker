@@ -2,6 +2,7 @@
 
 import os from 'os';
 import fs from 'fs';
+import path from 'path';
 import { exec } from 'child_process';
 import util from 'util';
 import { prisma } from '@/lib/prisma';
@@ -39,7 +40,7 @@ export async function getServerStats() {
       }
       networkStats = { rx: totalRx, tx: totalTx };
     }
-  } catch (error) {
+  } catch {
     console.warn('Could not read /proc/net/dev for network stats');
   }
 
@@ -54,12 +55,33 @@ export async function getServerStats() {
 
 export async function getWorkerStats() {
   try {
+    const repoRoot = process.env.IS_DOCKER === 'true' ? '/repo-root' : path.resolve(process.cwd(), '..');
+    const envCorePath = path.join(repoRoot, '.env.core');
+
+    let configuredWorkers: Array<{ shard: number; host: string; port: number }> = [];
+    try {
+      const envCoreContent = fs.readFileSync(envCorePath, 'utf8');
+      configuredWorkers = envCoreContent
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.startsWith('WORKER_'))
+        .map((line) => {
+          const match = line.match(/^WORKER_(\d+)=(.+):(\d+)$/);
+          if (!match) return null;
+          return {
+            shard: parseInt(match[1], 10),
+            host: match[2],
+            port: parseInt(match[3], 10)
+          };
+        })
+        .filter((worker): worker is { shard: number; host: string; port: number } => worker !== null)
+        .sort((a, b) => a.shard - b.shard);
+    } catch {
+      configuredWorkers = [];
+    }
+
     // Get all cms-worker containers
     const { stdout } = await execPromise('docker ps -a --filter "name=cms-worker" --format "{{.Names}}\t{{.Status}}"');
-
-    if (!stdout.trim()) {
-      return [];
-    }
 
     // Get active evaluations per shard
     const activeEvaluations = await prisma.evaluations.findMany({
@@ -69,11 +91,48 @@ export async function getWorkerStats() {
 
     // Group by shard
     const shardCounts: Record<number, number> = {};
-    activeEvaluations.forEach((ev: any) => {
+    activeEvaluations.forEach((ev) => {
       if (ev.evaluation_shard !== null) {
         shardCounts[ev.evaluation_shard] = (shardCounts[ev.evaluation_shard] || 0) + 1;
       }
     });
+
+    const liveWorkerServices = await prisma.$queryRaw<Array<{ address: string; port: number; shard: number }>>`
+      SELECT address, port, shard FROM services WHERE name = 'Worker' ORDER BY shard;
+    `;
+
+    const normalizeHost = (value: string) => value.trim().toLowerCase();
+    const isWorkerServiceLive = (host: string, port: number) => {
+      const targetHost = normalizeHost(host);
+      return liveWorkerServices.some((service) => {
+        if (service.port !== port) return false;
+        const liveHost = normalizeHost(service.address || '');
+        return liveHost === targetHost ||
+          liveHost.includes(targetHost) ||
+          targetHost.includes(liveHost) ||
+          (targetHost === 'localhost' && liveHost === '127.0.0.1') ||
+          (targetHost === '127.0.0.1' && liveHost === 'localhost');
+      });
+    };
+
+    if (configuredWorkers.length > 0) {
+      return configuredWorkers.map((worker) => {
+        const taskCount = shardCounts[worker.shard] || 0;
+        const isLive = isWorkerServiceLive(worker.host, worker.port);
+
+        return {
+          id: `worker-${worker.shard}`,
+          name: `${worker.host}:${worker.port}`,
+          status: isLive ? (taskCount > 0 ? 'busy' : 'online') : 'offline',
+          tasks: taskCount,
+          load: taskCount > 0 ? Math.min(100, (taskCount / 10) * 100) : 0
+        };
+      });
+    }
+
+    if (!stdout.trim()) {
+      return [];
+    }
 
     const workers = stdout.trim().split('\n').map((line, index) => {
       const [name, status] = line.split('\t');

@@ -30,10 +30,15 @@ print_step() { echo -e "${CYAN}[STEP]${NC} $1"; }
 
 # CLI flags
 DRY_RUN=false
+UPDATE_ONLY=false
 if [ "$1" = "--dry-run" ]; then
     DRY_RUN=true
     shift
     print_info "Running in dry-run mode: no files will be modified, no services started."
+fi
+if [ "$1" = "--update" ]; then
+    UPDATE_ONLY=true
+    shift
 fi
 
 # Update a variable in a .env file without destroying the file
@@ -99,6 +104,110 @@ check_connection() {
     return 1
 }
 
+run_update_mode() {
+    print_step "Update Mode"
+    print_info "Keeping existing .env/.toml configuration. Only refreshing selected stacks."
+
+    local deploy_type
+    deploy_type=$(grep "^DEPLOYMENT_TYPE=" .env.admin 2>/dev/null | cut -d '=' -f2-)
+    [ -z "$deploy_type" ] && deploy_type=$(grep "^DEPLOYMENT_TYPE=" .env.core 2>/dev/null | cut -d '=' -f2-)
+    [ -z "$deploy_type" ] && deploy_type="img"
+
+    echo "Detected strategy: $([ "$deploy_type" = "img" ] && echo "Pre-built Images" || echo "Source Build")"
+
+    read -p "Refresh generated .env/config first (make env)? (y/n) [y]: " UPDATE_RUN_ENV
+    UPDATE_RUN_ENV=${UPDATE_RUN_ENV:-y}
+
+    read -p "Pull latest images first? (y/n) [y]: " UPDATE_PULL
+    UPDATE_PULL=${UPDATE_PULL:-y}
+
+    echo ""
+    echo "Select stacks to update:"
+    read -p "Update core stack? (y/n) [y]: " UPDATE_CORE
+    UPDATE_CORE=${UPDATE_CORE:-y}
+    read -p "Update admin stack? (y/n) [y]: " UPDATE_ADMIN
+    UPDATE_ADMIN=${UPDATE_ADMIN:-y}
+    read -p "Update contest stack? (y/n) [y]: " UPDATE_CONTEST
+    UPDATE_CONTEST=${UPDATE_CONTEST:-y}
+    read -p "Update worker stack? (y/n) [n]: " UPDATE_WORKER
+    UPDATE_WORKER=${UPDATE_WORKER:-n}
+    read -p "Update infra stack? (y/n) [n]: " UPDATE_INFRA
+    UPDATE_INFRA=${UPDATE_INFRA:-n}
+
+    read -p "Run DB/schema sync (cms-init + prisma-sync)? (y/n) [n]: " UPDATE_DB_SYNC
+    UPDATE_DB_SYNC=${UPDATE_DB_SYNC:-n}
+
+    echo ""
+    print_info "Update plan:"
+    echo "  - make env: $UPDATE_RUN_ENV"
+    echo "  - pull images: $UPDATE_PULL"
+    echo "  - core/admin/contest/worker/infra: $UPDATE_CORE/$UPDATE_ADMIN/$UPDATE_CONTEST/$UPDATE_WORKER/$UPDATE_INFRA"
+    echo "  - db sync: $UPDATE_DB_SYNC"
+
+    read -p "Proceed with update? (y/n) [y]: " UPDATE_CONFIRM
+    UPDATE_CONFIRM=${UPDATE_CONFIRM:-y}
+    if [ "$UPDATE_CONFIRM" != "y" ]; then
+        print_warning "Update cancelled."
+        exit 0
+    fi
+
+    if [ "$UPDATE_RUN_ENV" = "y" ]; then
+        run_or_print "make env"
+    fi
+
+    if [ "$UPDATE_PULL" = "y" ] && [ "$deploy_type" = "img" ]; then
+        run_or_print "make pull"
+    fi
+
+    if [ "$UPDATE_CORE" = "y" ]; then
+        if [ "$deploy_type" = "img" ]; then
+            run_or_print "make core-img"
+        else
+            run_or_print "make core"
+        fi
+    fi
+
+    if [ "$UPDATE_ADMIN" = "y" ]; then
+        if [ "$deploy_type" = "img" ]; then
+            run_or_print "make admin-img"
+        else
+            run_or_print "make admin"
+        fi
+    fi
+
+    if [ "$UPDATE_CONTEST" = "y" ]; then
+        if [ "$deploy_type" = "img" ]; then
+            run_or_print "make contest-img"
+        else
+            run_or_print "make contest"
+        fi
+    fi
+
+    if [ "$UPDATE_WORKER" = "y" ]; then
+        if [ "$deploy_type" = "img" ]; then
+            run_or_print "make worker-img"
+        else
+            run_or_print "make worker"
+        fi
+    fi
+
+    if [ "$UPDATE_INFRA" = "y" ]; then
+        if [ "$deploy_type" = "img" ]; then
+            run_or_print "make infra-img"
+        else
+            run_or_print "make infra"
+        fi
+    fi
+
+    if [ "$UPDATE_DB_SYNC" = "y" ]; then
+        run_or_print "make cms-init"
+        run_or_print "make prisma-sync"
+    fi
+
+    print_success "Update mode completed."
+    exit 0
+}
+
 configure_ranking_auth() {
     echo ""
     print_step "Contest & Ranking Authentication"
@@ -134,6 +243,10 @@ configure_ranking_auth() {
     ./scripts/inject_config.sh
     print_success "Ranking credentials updated in .env.contest, .env, config/cms.toml, and config/cms_ranking.toml"
 }
+
+if [ "$UPDATE_ONLY" = "true" ]; then
+    run_update_mode
+fi
 
 # Banner
 clear

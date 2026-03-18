@@ -15,12 +15,11 @@ export default async function ResourcesPage() {
       <ResourceView />
 
       <div className="pt-8 border-t border-white/5">
-        <div className="p-6 bg-white/[0.02] rounded-xl border border-white/5">
+        <div className="p-6 bg-white/2 rounded-xl border border-white/5">
           <h2 className="text-xl font-bold text-white mb-2">Worker Node Management</h2>
           <p className="text-sm text-neutral-400">
-            Worker nodes are now configured per-contest in <strong>Infrastructure → Deployments</strong>.
-            Each contest instance can have its own set of workers, and all workers are aggregated
-            into the global cms.toml configuration.
+            Worker nodes are configured globally in <strong>Infrastructure → Deployments</strong>.
+            All contests share the same worker pool through EvaluationService.
           </p>
         </div>
       </div>
