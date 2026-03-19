@@ -114,7 +114,6 @@ services:
     networks:
       - cms-network
     privileged: true
-    cgroup: host
     profiles:
       - printing
     command: >

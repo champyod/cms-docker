@@ -15,7 +15,6 @@ services:
     volumes:
       - "..:/home/cmsuser/src"
     privileged: true
-    cgroup: host
     command: >
       wait-for-it devdb:5432 -- bash
     ports:

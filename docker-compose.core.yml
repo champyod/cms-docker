@@ -88,7 +88,6 @@ services:
     networks:
       - cms-network
     privileged: true
-    cgroup: host
     command: >
       sh -c "sudo mkdir -p /var/local/log/cms/ResourceService-${RESOURCE_SERVICE_SHARD:-0} && 
              sudo chmod -R 777 /var/local/log/cms &&
@@ -243,7 +242,6 @@ services:
     networks:
       - cms-network
     privileged: true
-    cgroup: host
     command: >
       sh -c "sudo mkdir -p /var/local/log/cms/Checker-${CHECKER_SERVICE_SHARD:-0} && 
              sudo chmod -R 777 /var/local/log/cms &&

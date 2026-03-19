@@ -38,9 +38,10 @@ services:
     ports:
       - "${CONTEST_BIND_IP:-0.0.0.0}:${CONTEST_PORT_EXTERNAL:-8888}:${CONTEST_LISTEN_PORT:-8888}"
     privileged: true
-    cgroup: host
     command: >
-      sh -c "sleep 10 && cmsContestWebServer ${CONTEST_WEB_SERVER_SHARD:-0} -c ${CONTEST_ID:-1}"
+      sh -c "sudo mkdir -p /var/local/log/cms/ContestWebServer-${CONTEST_WEB_SERVER_SHARD:-0} /var/local/cache/cms /var/local/lib/cms && 
+             sudo chmod -R 777 /var/local/log/cms /var/local/cache/cms /var/local/lib/cms &&
+             sleep 10 && cmsContestWebServer ${CONTEST_WEB_SERVER_SHARD:-0} -c ${CONTEST_ID:-1}"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.cms-contest.rule=Host(`${CONTEST_DOMAIN:-contest.cms.local}`)"
