@@ -429,6 +429,16 @@ else
         read -p "Main Server Log Service Port [$CORE_LOG_PORT]: " CORE_LOG_PORT_INPUT
         CORE_LOG_PORT_INPUT=${CORE_LOG_PORT_INPUT:-$CORE_LOG_PORT}
 
+        # Secret Key Sync
+        existing_secret_key=$(grep "^CMS_SECRET_KEY=" .env.core 2>/dev/null | cut -d '=' -f2-)
+        read -p "Main Server Secret Key (from .env.core) [$existing_secret_key]: " SECRET_KEY_INPUT
+        CMS_SECRET_KEY=${SECRET_KEY_INPUT:-$existing_secret_key}
+        if [ -z "$CMS_SECRET_KEY" ]; then
+            print_error "CMS_SECRET_KEY is required for remote worker to authenticate with core."
+            exit 1
+        fi
+        update_env_var .env.core "CMS_SECRET_KEY" "$CMS_SECRET_KEY"
+
         # Test Connection to Main Server
         print_info "Testing connection to Main Server ($PUBLIC_IP:$CORE_LOG_PORT_INPUT)..."
         if check_connection "$PUBLIC_IP" "$CORE_LOG_PORT_INPUT"; then
