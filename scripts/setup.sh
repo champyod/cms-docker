@@ -249,19 +249,26 @@ if [ "$SETUP_TYPE" = "worker" ]; then
         WORKER_SETUP_MODE="client"
     fi
 
-    read -p "How many worker instances? [1]: " WORKER_INSTANCE_COUNT
-    WORKER_INSTANCE_COUNT=${WORKER_INSTANCE_COUNT:-1}
+    existing_worker_count=$(grep "^WORKER_INSTANCE_COUNT=" .env.worker 2>/dev/null | cut -d '=' -f2-)
+    WORKER_INSTANCE_COUNT=${existing_worker_count:-1}
+    read -p "How many worker instances? [$WORKER_INSTANCE_COUNT]: " WORKER_INSTANCE_COUNT_INPUT
+    WORKER_INSTANCE_COUNT=${WORKER_INSTANCE_COUNT_INPUT:-$WORKER_INSTANCE_COUNT}
     if ! is_positive_int "$WORKER_INSTANCE_COUNT"; then
         print_error "Worker instance count must be a positive integer."
         exit 1
     fi
+    # Save the count for next time
+    update_env_var .env.worker "WORKER_INSTANCE_COUNT" "$WORKER_INSTANCE_COUNT"
 
-    read -p "Base worker port (ports = base + idx) [26000]: " WORKER_BASE_PORT
-    WORKER_BASE_PORT=${WORKER_BASE_PORT:-26000}
+    existing_base_port=$(grep "^WORKER_BASE_PORT=" .env.worker 2>/dev/null | cut -d '=' -f2-)
+    WORKER_BASE_PORT=${existing_base_port:-26000}
+    read -p "Base worker port (ports = base + idx) [$WORKER_BASE_PORT]: " WORKER_BASE_PORT_INPUT
+    WORKER_BASE_PORT=${WORKER_BASE_PORT_INPUT:-$WORKER_BASE_PORT}
     if ! is_positive_int "$WORKER_BASE_PORT"; then
         print_error "Base worker port must be a positive integer."
         exit 1
     fi
+    update_env_var .env.worker "WORKER_BASE_PORT" "$WORKER_BASE_PORT"
 
     if [ "$WORKER_SETUP_MODE" = "client" ]; then
         read -p "Auto-start worker containers after config? (y/n) [y]: " WORKER_AUTO_START
@@ -761,8 +768,8 @@ EOF
         
         # Pull images if using pre-built images
         if [ "$DEPLOY_TYPE" = "img" ]; then
-            print_info "Pulling latest images..."
-            make pull
+            print_info "Pulling latest worker images..."
+            make pull-worker
         fi
     fi
 

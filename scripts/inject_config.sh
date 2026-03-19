@@ -130,6 +130,17 @@ text = re.sub(rank_url_pattern, new_rank_start, text)
 text = text.replace('"127.0.0.1"', '"0.0.0.0"')
 text = text.replace('["127.0.0.1"]', '["0.0.0.0"]')
 
+# Inject correct paths for Docker volumes
+text = re.sub(r'^#\s*log_dir = .*', 'log_dir = "/var/local/log/cms"', text, flags=re.MULTILINE)
+text = re.sub(r'^#\s*cache_dir = .*', 'cache_dir = "/var/local/cache/cms"', text, flags=re.MULTILINE)
+text = re.sub(r'^#\s*data_dir = .*', 'data_dir = "/var/local/lib/cms"', text, flags=re.MULTILINE)
+
+# Ensure they are set even if not commented out in sample
+if 'log_dir =' not in text:
+    text = "[global]\nlog_dir = \"/var/local/log/cms\"\n" + text
+if 'cache_dir =' not in text:
+    text = text.replace('log_dir = "/var/local/log/cms"', 'log_dir = "/var/local/log/cms"\ncache_dir = "/var/local/cache/cms"\ndata_dir = "/var/local/lib/cms"')
+
 config_path.write_text(text)
 PY
 
