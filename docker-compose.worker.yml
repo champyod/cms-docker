@@ -52,8 +52,8 @@ services:
       - SYS_ADMIN
       - SYS_PTRACE
     command: >
-      sh -c "sudo mkdir -p /var/local/log/cms/Worker-${WORKER_SHARD:-0} && 
-             sudo chmod -R 777 /var/local/log/cms &&
+      sh -c "sudo mkdir -p /var/local/log/cms/Worker-${WORKER_SHARD:-0} /var/local/cache/cms /var/local/lib/cms && 
+             sudo chmod -R 777 /var/local/log/cms /var/local/cache/cms /var/local/lib/cms &&
              sleep 15 && 
              cmsWorker ${WORKER_SHARD:-0}"
     deploy:
