@@ -65,14 +65,15 @@ services:
         SHARD=${WORKER_SHARD:-0}
         
         # Create required directories
-        sudo mkdir -p /var/local/log/cms/Worker-\$SHARD /var/local/cache/cms /var/local/lib/cms
+        sudo mkdir -p /var/local/log/cms/Worker-$$SHARD /var/local/cache/cms /var/local/lib/cms
         sudo chmod -R 777 /var/local/log/cms /var/local/cache/cms /var/local/lib/cms
 
         # Ensure isolate runtime cgroup config exists
         sudo mkdir -p /run/isolate
-        if [ ! -f /run/isolate/cgroup ]; then
-          echo '/sys/fs/cgroup' | sudo tee /run/isolate/cgroup >/dev/null
-        fi
+        CGROUP_REL_PATH=$$(awk -F: '/^0::/ {print $$3}' /proc/self/cgroup)
+        if [ -z "$$CGROUP_REL_PATH" ]; then CGROUP_REL_PATH="/"; fi
+        CGROUP_BASE="/sys/fs/cgroup$$CGROUP_REL_PATH"
+        echo "$$CGROUP_BASE" | sudo tee /run/isolate/cgroup >/dev/null
         sudo chmod 755 /run/isolate
         sudo chmod 644 /run/isolate/cgroup
 
@@ -83,9 +84,14 @@ services:
           sleep 1
         fi
 
-        # Fallback for containerized workers: pre-create isolate box cgroups
+        # Ensure controllers are delegated in current cgroup scope
+        if [ -f "$$CGROUP_BASE/cgroup.subtree_control" ]; then
+          sudo bash -c "echo +cpu +memory +pids > $$CGROUP_BASE/cgroup.subtree_control" 2>/dev/null || true
+        fi
+
+        # Pre-create isolate box cgroups under current scope
         for box_id in $$(seq 0 999); do
-          sudo mkdir -p /sys/fs/cgroup/box-$$box_id 2>/dev/null || true
+          sudo mkdir -p "$$CGROUP_BASE/box-$$box_id" 2>/dev/null || true
         done
         
         # Clean up stale isolate cgroups from previous runs
@@ -100,9 +106,9 @@ services:
         done
         
         # Setup cgroup v2 if available
-        if [ -f /sys/fs/cgroup/cgroup.subtree_control ]; then
+        if [ -f "$$CGROUP_BASE/cgroup.subtree_control" ]; then
           echo 'Configuring cgroup v2 controllers...'
-          sudo bash -c 'echo +cpu +memory +pids > /sys/fs/cgroup/cgroup.subtree_control' 2>/dev/null || true
+          sudo bash -c "echo +cpu +memory +pids > $$CGROUP_BASE/cgroup.subtree_control" 2>/dev/null || true
         fi
         
         sleep 2
