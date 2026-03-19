@@ -42,8 +42,10 @@ services:
       - cms-data:/var/local/lib/cms
       # Temporary directory for sandboxes
       - worker-tmp:/tmp
-      # Mount cgroups for isolate
+      # Mount cgroups for isolate (both v1 and v2 support)
       - /sys/fs/cgroup:/sys/fs/cgroup:rw
+      - /sys/fs/cgroup.hybrid:/sys/fs/cgroup.hybrid:rw
+      - /proc/sys/kernel:/proc/sys/kernel:ro
     ports:
       - "${WORKER_PORT:-26000}:${WORKER_PORT:-26000}"
     networks:
@@ -56,11 +58,34 @@ services:
     cap_add:
       - SYS_ADMIN
       - SYS_PTRACE
+      - SYS_RESOURCE
+      - NET_ADMIN
     command: >
-      sh -c "sudo mkdir -p /var/local/log/cms/Worker-${WORKER_SHARD:-0} /var/local/cache/cms /var/local/lib/cms && 
-             sudo chmod -R 777 /var/local/log/cms /var/local/cache/cms /var/local/lib/cms &&
-             sleep 15 && 
-             cmsWorker ${WORKER_SHARD:-0}"
+      sh -c "
+        set -e
+        SHARD=${WORKER_SHARD:-0}
+        
+        # Create required directories
+        sudo mkdir -p /var/local/log/cms/Worker-$$SHARD /var/local/cache/cms /var/local/lib/cms
+        sudo chmod -R 777 /var/local/log/cms /var/local/cache/cms /var/local/lib/cms
+        
+        # Initialize cgroup structure
+        if [ -d /sys/fs/cgroup/isolate ]; then
+          echo 'Cleaning up stale isolate cgroups...'
+          sudo cgdelete -r cpu,cpuacct,memory,pids,freezer:isolate 2>/dev/null || true
+        fi
+        
+        # Ensure cgroup subsystems are ready
+        echo 'Setting up cgroup controllers...'
+        if [ -f /sys/fs/cgroup/cgroup.subtree_control ]; then
+          # cgroup v2
+          sudo bash -c 'echo +memory +pids +cpu > /sys/fs/cgroup/cgroup.subtree_control' 2>/dev/null || true
+        fi
+        
+        sleep 2
+        echo 'Starting worker service...'
+        cmsWorker $$SHARD
+      "
     deploy:
       resources:
         limits:
