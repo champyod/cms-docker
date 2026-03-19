@@ -42,10 +42,8 @@ services:
       - cms-data:/var/local/lib/cms
       # Temporary directory for sandboxes
       - worker-tmp:/tmp
-      # Mount cgroups for isolate (both v1 and v2 support)
+      # Mount cgroups for isolate (cgroup v1 and v2)
       - /sys/fs/cgroup:/sys/fs/cgroup:rw
-      - /sys/fs/cgroup.hybrid:/sys/fs/cgroup.hybrid:rw
-      - /proc/sys/kernel:/proc/sys/kernel:ro
     ports:
       - "${WORKER_PORT:-26000}:${WORKER_PORT:-26000}"
     networks:
@@ -63,28 +61,32 @@ services:
     command: >
       sh -c "
         set -e
-        SHARD=${WORKER_SHARD:-0}
+        SHARD=\${WORKER_SHARD:-0}
         
         # Create required directories
-        sudo mkdir -p /var/local/log/cms/Worker-$$SHARD /var/local/cache/cms /var/local/lib/cms
+        sudo mkdir -p /var/local/log/cms/Worker-\$SHARD /var/local/cache/cms /var/local/lib/cms
         sudo chmod -R 777 /var/local/log/cms /var/local/cache/cms /var/local/lib/cms
         
-        # Initialize cgroup structure
-        if [ -d /sys/fs/cgroup/isolate ]; then
-          echo 'Cleaning up stale isolate cgroups...'
-          sudo cgdelete -r cpu,cpuacct,memory,pids,freezer:isolate 2>/dev/null || true
-        fi
-        
-        # Ensure cgroup subsystems are ready
-        echo 'Setting up cgroup controllers...'
+        # Clean up stale isolate cgroups from previous runs
+        echo 'Cleaning up stale isolate cgroups...'
+        # Try cgroup v2 cleanup
         if [ -f /sys/fs/cgroup/cgroup.subtree_control ]; then
-          # cgroup v2
-          sudo bash -c 'echo +memory +pids +cpu > /sys/fs/cgroup/cgroup.subtree_control' 2>/dev/null || true
+          sudo bash -c 'find /sys/fs/cgroup -name \"isolate\" -type d -exec rmdir {} + 2>/dev/null' || true
+        fi
+        # Try cgroup v1 cleanup
+        for subsys in cpu cpuacct memory pids freezer; do
+          [ -d \"/sys/fs/cgroup/\$subsys/isolate\" ] && sudo cgdelete -r \"\$subsys:isolate\" 2>/dev/null || true
+        done
+        
+        # Setup cgroup v2 if available
+        if [ -f /sys/fs/cgroup/cgroup.subtree_control ]; then
+          echo 'Configuring cgroup v2 controllers...'
+          sudo bash -c 'echo +cpu +memory +pids > /sys/fs/cgroup/cgroup.subtree_control' 2>/dev/null || true
         fi
         
         sleep 2
         echo 'Starting worker service...'
-        cmsWorker $$SHARD
+        cmsWorker \$SHARD
       "
     deploy:
       resources:
