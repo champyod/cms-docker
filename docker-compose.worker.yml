@@ -52,7 +52,10 @@ services:
       - SYS_ADMIN
       - SYS_PTRACE
     command: >
-      sh -c "sleep 15 && cmsWorker ${WORKER_SHARD:-0}"
+      sh -c "mkdir -p /var/local/log/cms/Worker-${WORKER_SHARD:-0} && 
+             chmod -R 777 /var/local/log/cms &&
+             sleep 15 && 
+             cmsWorker ${WORKER_SHARD:-0}"
     deploy:
       resources:
         limits:
