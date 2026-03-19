@@ -14,6 +14,8 @@ services:
     environment:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: Worker
+      # Required for isolate inside docker
+      ISOLATE_CGROUP_CONTROL: 1
       # Worker shard - Each worker needs a unique shard number
       WORKER_SHARD: ${WORKER_SHARD:-0}
       # Connection to core services
@@ -40,6 +42,8 @@ services:
       - cms-data:/var/local/lib/cms
       # Temporary directory for sandboxes
       - worker-tmp:/tmp
+      # Mount cgroups for isolate
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
     ports:
       - "${WORKER_PORT:-26000}:${WORKER_PORT:-26000}"
     networks:
