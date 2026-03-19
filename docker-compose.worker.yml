@@ -75,6 +75,18 @@ services:
         fi
         sudo chmod 755 /run/isolate
         sudo chmod 644 /run/isolate/cgroup
+
+        # Start isolate cgroup keeper when available (needed on systemd/cgroup v2 setups)
+        if command -v isolate-cg-keeper >/dev/null 2>&1; then
+          sudo pkill -f isolate-cg-keeper >/dev/null 2>&1 || true
+          sudo nohup isolate-cg-keeper >/var/local/log/cms/isolate-cg-keeper.log 2>&1 &
+          sleep 1
+        fi
+
+        # Fallback for containerized workers: pre-create isolate box cgroups
+        for box_id in $$(seq 0 999); do
+          sudo mkdir -p /sys/fs/cgroup/box-$$box_id 2>/dev/null || true
+        done
         
         # Clean up stale isolate cgroups from previous runs
         echo 'Cleaning up stale isolate cgroups...'
