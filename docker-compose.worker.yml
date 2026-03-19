@@ -61,7 +61,7 @@ services:
     command: >
       sh -c "
         set -e
-        SHARD=\${WORKER_SHARD:-0}
+        SHARD=${WORKER_SHARD:-0}
         
         # Create required directories
         sudo mkdir -p /var/local/log/cms/Worker-\$SHARD /var/local/cache/cms /var/local/lib/cms
@@ -75,7 +75,7 @@ services:
         fi
         # Try cgroup v1 cleanup
         for subsys in cpu cpuacct memory pids freezer; do
-          [ -d \"/sys/fs/cgroup/\$subsys/isolate\" ] && sudo cgdelete -r \"\$subsys:isolate\" 2>/dev/null || true
+          [ -d \"/sys/fs/cgroup/$$subsys/isolate\" ] && sudo cgdelete -r \"$$subsys:isolate\" 2>/dev/null || true
         done
         
         # Setup cgroup v2 if available
@@ -86,7 +86,7 @@ services:
         
         sleep 2
         echo 'Starting worker service...'
-        cmsWorker \$SHARD
+        cmsWorker $$SHARD
       "
     deploy:
       resources:
