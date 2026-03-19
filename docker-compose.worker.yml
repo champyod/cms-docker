@@ -66,6 +66,14 @@ services:
         # Create required directories
         sudo mkdir -p /var/local/log/cms/Worker-\$SHARD /var/local/cache/cms /var/local/lib/cms
         sudo chmod -R 777 /var/local/log/cms /var/local/cache/cms /var/local/lib/cms
+
+        # Ensure isolate runtime cgroup config exists
+        sudo mkdir -p /run/isolate
+        if [ ! -f /run/isolate/cgroup ]; then
+          echo '/sys/fs/cgroup' | sudo tee /run/isolate/cgroup >/dev/null
+        fi
+        sudo chmod 755 /run/isolate
+        sudo chmod 644 /run/isolate/cgroup
         
         # Clean up stale isolate cgroups from previous runs
         echo 'Cleaning up stale isolate cgroups...'
