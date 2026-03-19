@@ -20,7 +20,7 @@ services:
     networks:
       - cms-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h localhost"]
+      test: ["CMD-SHELL", "pg_isready -h localhost -U ${POSTGRES_USER:-cmsuser}"]
       interval: 10s
       timeout: 5s
       retries: 5

@@ -40,6 +40,8 @@ services:
       - cms-data:/var/local/lib/cms
       # Temporary directory for sandboxes
       - worker-tmp:/tmp
+    ports:
+      - "${WORKER_PORT:-26000}:26000"
     networks:
       - cms-network
     privileged: true
