@@ -68,13 +68,47 @@ if [ "$DEPLOY_TYPE" = "img" ]; then
     [ "$HAS_INFRA" = true ] && make infra-img
     [ "$HAS_ADMIN" = true ] && make admin-img
     [ "$HAS_CONTEST" = true ] && make contest-img
-    [ "$HAS_WORKER" = true ] && make worker-img
+    
+    if [ "$HAS_WORKER" = true ]; then
+        # Check if we have multiple shards (project-based)
+        SHARD_COUNT=$(docker ps -a --format '{{.Names}}' | grep -c '^cms-worker-[0-9]\+$' || echo 0)
+        if [ "$SHARD_COUNT" -gt 0 ]; then
+            log "Updating $SHARD_COUNT worker shard(s)..."
+            # Get unique shard indices from container names
+            for shard_name in $(docker ps -a --format '{{.Names}}' | grep '^cms-worker-[0-9]\+$'); do
+                idx=${shard_name#cms-worker-}
+                env_file="workers/.env.worker.instance$idx"
+                if [ -f "$env_file" ]; then
+                    log "Restarting shard $idx..."
+                    docker compose --env-file "$env_file" -p "cms-worker-$idx" -f docker-compose.worker.yml -f docker-compose.worker.img.yml up -d --no-build
+                fi
+            done
+        else
+            make worker-img
+        fi
+    fi
 else
     [ "$HAS_CORE" = true ] && make core
     [ "$HAS_INFRA" = true ] && make infra
     [ "$HAS_ADMIN" = true ] && make admin
     [ "$HAS_CONTEST" = true ] && make contest
-    [ "$HAS_WORKER" = true ] && make worker
+    
+    if [ "$HAS_WORKER" = true ]; then
+        SHARD_COUNT=$(docker ps -a --format '{{.Names}}' | grep -c '^cms-worker-[0-9]\+$' || echo 0)
+        if [ "$SHARD_COUNT" -gt 0 ]; then
+            log "Updating $SHARD_COUNT worker shard(s)..."
+            for shard_name in $(docker ps -a --format '{{.Names}}' | grep '^cms-worker-[0-9]\+$'); do
+                idx=${shard_name#cms-worker-}
+                env_file="workers/.env.worker.instance$idx"
+                if [ -f "$env_file" ]; then
+                    log "Restarting shard $idx (source build)..."
+                    docker compose --env-file "$env_file" -p "cms-worker-$idx" -f docker-compose.worker.yml up -d --build
+                fi
+            done
+        else
+            make worker
+        fi
+    fi
 fi
 
 # Sync DB schema

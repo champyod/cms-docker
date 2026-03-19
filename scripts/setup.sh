@@ -106,119 +106,12 @@ check_connection() {
 
 run_update_mode() {
     print_step "Update Mode"
-    print_info "Keeping existing .env/.toml configuration. Only refreshing selected stacks."
-
-    local deploy_type
-    deploy_type=$(grep "^DEPLOYMENT_TYPE=" .env.admin 2>/dev/null | cut -d '=' -f2-)
-    [ -z "$deploy_type" ] && deploy_type=$(grep "^DEPLOYMENT_TYPE=" .env.core 2>/dev/null | cut -d '=' -f2-)
-    [ -z "$deploy_type" ] && deploy_type="img"
-
-    echo "Detected strategy: $([ "$deploy_type" = "img" ] && echo "Pre-built Images" || echo "Source Build")"
-
-    read -p "Refresh generated .env/config first (make env)? (y/n) [y]: " UPDATE_RUN_ENV
-    UPDATE_RUN_ENV=${UPDATE_RUN_ENV:-y}
-
-    read -p "Pull latest images first? (y/n) [y]: " UPDATE_PULL
-    UPDATE_PULL=${UPDATE_PULL:-y}
-
-    echo ""
-    echo "Select stacks to update:"
-    read -p "Update core stack? (y/n) [y]: " UPDATE_CORE
-    UPDATE_CORE=${UPDATE_CORE:-y}
-    read -p "Update admin stack? (y/n) [y]: " UPDATE_ADMIN
-    UPDATE_ADMIN=${UPDATE_ADMIN:-y}
-    read -p "Update contest stack? (y/n) [y]: " UPDATE_CONTEST
-    UPDATE_CONTEST=${UPDATE_CONTEST:-y}
-    read -p "Update worker stack? (y/n) [n]: " UPDATE_WORKER
-    UPDATE_WORKER=${UPDATE_WORKER:-n}
-    read -p "Update infra stack? (y/n) [n]: " UPDATE_INFRA
-    UPDATE_INFRA=${UPDATE_INFRA:-n}
-
-    read -p "Run DB/schema sync (cms-init + prisma-sync)? (y/n) [n]: " UPDATE_DB_SYNC
-    UPDATE_DB_SYNC=${UPDATE_DB_SYNC:-n}
-
-    echo ""
-    print_info "Update plan:"
-    echo "  - make env: $UPDATE_RUN_ENV"
-    echo "  - pull images: $UPDATE_PULL"
-    echo "  - core/admin/contest/worker/infra: $UPDATE_CORE/$UPDATE_ADMIN/$UPDATE_CONTEST/$UPDATE_WORKER/$UPDATE_INFRA"
-    echo "  - db sync: $UPDATE_DB_SYNC"
-
-    read -p "Proceed with update? (y/n) [y]: " UPDATE_CONFIRM
-    UPDATE_CONFIRM=${UPDATE_CONFIRM:-y}
-    if [ "$UPDATE_CONFIRM" != "y" ]; then
-        print_warning "Update cancelled."
-        exit 0
-    fi
-
-    if [ "$UPDATE_RUN_ENV" = "y" ]; then
-        run_or_print "make env"
-    fi
-
-    if [ "$UPDATE_PULL" = "y" ] && [ "$deploy_type" = "img" ]; then
-        if [ "$UPDATE_CORE" = "y" ]; then
-            run_or_print "make pull-core"
-        fi
-        if [ "$UPDATE_ADMIN" = "y" ]; then
-            run_or_print "make pull-admin"
-        fi
-        if [ "$UPDATE_CONTEST" = "y" ]; then
-            run_or_print "make pull-contest"
-        fi
-        if [ "$UPDATE_WORKER" = "y" ]; then
-            run_or_print "make pull-worker"
-        fi
-        if [ "$UPDATE_INFRA" = "y" ]; then
-            run_or_print "make pull-infra"
-        fi
-    fi
-
-    if [ "$UPDATE_CORE" = "y" ]; then
-        if [ "$deploy_type" = "img" ]; then
-            run_or_print "make core-img"
-        else
-            run_or_print "make core"
-        fi
-    fi
-
-    if [ "$UPDATE_ADMIN" = "y" ]; then
-        if [ "$deploy_type" = "img" ]; then
-            run_or_print "make admin-img"
-        else
-            run_or_print "make admin"
-        fi
-    fi
-
-    if [ "$UPDATE_CONTEST" = "y" ]; then
-        if [ "$deploy_type" = "img" ]; then
-            run_or_print "make contest-img"
-        else
-            run_or_print "make contest"
-        fi
-    fi
-
-    if [ "$UPDATE_WORKER" = "y" ]; then
-        if [ "$deploy_type" = "img" ]; then
-            run_or_print "make worker-img"
-        else
-            run_or_print "make worker"
-        fi
-    fi
-
-    if [ "$UPDATE_INFRA" = "y" ]; then
-        if [ "$deploy_type" = "img" ]; then
-            run_or_print "make infra-img"
-        else
-            run_or_print "make infra"
-        fi
-    fi
-
-    if [ "$UPDATE_DB_SYNC" = "y" ]; then
-        run_or_print "make cms-init"
-        run_or_print "make prisma-sync"
-    fi
-
-    print_success "Update mode completed."
+    print_info "Using automated shard-aware update script (scripts/update-server.sh)..."
+    
+    chmod +x scripts/update-server.sh
+    ./scripts/update-server.sh
+    
+    print_success "Update completed via update-server.sh."
     exit 0
 }
 
@@ -451,8 +344,13 @@ if [ "$SETUP_TYPE" = "main" ]; then
 else
     # Worker Setup
     if [ "$WORKER_SETUP_MODE" = "client" ]; then
-        read -p "Enter Main Server IP/Hostname (Tailscale preferred): " MAIN_SERVER_IP
-        PUBLIC_IP=${MAIN_SERVER_IP:-127.0.0.1}
+        # Load existing Main Server IP if available
+        existing_main_ip=$(grep "^CORE_SERVICES_HOST=" .env.worker 2>/dev/null | cut -d '=' -f2-)
+        [ -z "$existing_main_ip" ] && existing_main_ip=$(grep "^PUBLIC_IP=" .env.core 2>/dev/null | cut -d '=' -f2-)
+        
+        read -p "Enter Main Server IP/Hostname (Tailscale preferred) [$existing_main_ip]: " MAIN_SERVER_IP
+        PUBLIC_IP=${MAIN_SERVER_IP:-$existing_main_ip}
+        PUBLIC_IP=${PUBLIC_IP:-127.0.0.1}
 
         existing_worker_memory_limit=$(grep "^WORKER_MEMORY_LIMIT=" .env.worker 2>/dev/null | cut -d '=' -f2-)
         existing_worker_cpu_limit=$(grep "^WORKER_CPU_LIMIT=" .env.worker 2>/dev/null | cut -d '=' -f2-)
@@ -464,10 +362,10 @@ else
         WORKER_MEMORY_RESERVATION=${existing_worker_memory_reservation:-1G}
         WORKER_CPU_RESERVATION=${existing_worker_cpu_reservation:-1}
 
-        read -p "Worker memory limit [$WORKER_MEMORY_LIMIT]: " WORKER_MEMORY_LIMIT_INPUT
+        read -p "Worker memory limit (e.g., 2G, 1.5G) [$WORKER_MEMORY_LIMIT]: " WORKER_MEMORY_LIMIT_INPUT
         WORKER_MEMORY_LIMIT=${WORKER_MEMORY_LIMIT_INPUT:-$WORKER_MEMORY_LIMIT}
 
-        read -p "Worker CPU limit [$WORKER_CPU_LIMIT]: " WORKER_CPU_LIMIT_INPUT
+        read -p "Worker CPU limit (e.g., 2, 0.8) [$WORKER_CPU_LIMIT]: " WORKER_CPU_LIMIT_INPUT
         WORKER_CPU_LIMIT=${WORKER_CPU_LIMIT_INPUT:-$WORKER_CPU_LIMIT}
 
         read -p "Worker memory reservation [$WORKER_MEMORY_RESERVATION]: " WORKER_MEMORY_RESERVATION_INPUT
@@ -813,15 +711,6 @@ if [ "$SETUP_TYPE" = "worker" ] && [ "$WORKER_SETUP_MODE" = "client" ]; then
         docker volume create cms-logs 2>/dev/null || true
         docker volume create cms-cache 2>/dev/null || true
         docker volume create cms-data 2>/dev/null || true
-        
-        # Ensure config file exists (make env will create/update it)
-        make env
-
-        # Pull images if using pre-built images
-        if [ "$DEPLOY_TYPE" = "img" ]; then
-            print_info "Pulling latest images..."
-            make pull
-        fi
     fi
 
     run_or_print "mkdir -p workers"
@@ -840,11 +729,14 @@ if [ "$SETUP_TYPE" = "worker" ] && [ "$WORKER_SETUP_MODE" = "client" ]; then
         fi
 
         if [ "$DRY_RUN" = "true" ]; then
-            echo "DRY-RUN: Would generate $env_file"
+            echo "DRY-RUN: Would generate $env_file and add WORKER_$i=0.0.0.0:$instance_port to .env.core"
             echo "  WORKER_SHARD=$i  WORKER_PORT=$instance_port  CORE_SERVICES_HOST=$PUBLIC_IP"
             echo "  WORKER_MEMORY_LIMIT=$WORKER_MEMORY_LIMIT  WORKER_CPU_LIMIT=$WORKER_CPU_LIMIT"
             echo "  WORKER_MEMORY_RESERVATION=$WORKER_MEMORY_RESERVATION  WORKER_CPU_RESERVATION=$WORKER_CPU_RESERVATION"
         else
+            # Inject worker into .env.core for cms.toml generation
+            update_env_var .env.core "WORKER_$i" "0.0.0.0:$instance_port"
+
             cat > "$env_file" << EOF
 WORKER_SHARD=$i
 WORKER_NAME=worker-$i
@@ -859,6 +751,31 @@ CMS_CONFIG=/usr/local/etc/cms.toml
 EOF
             print_success "Generated $env_file"
         fi
+        i=$((i + 1))
+    done
+
+    # Generate config files AFTER all workers are injected into .env.core
+    if [ "$DRY_RUN" != "true" ]; then
+        print_info "Generating configuration with injected worker shards..."
+        make env
+        
+        # Pull images if using pre-built images
+        if [ "$DEPLOY_TYPE" = "img" ]; then
+            print_info "Pulling latest images..."
+            make pull
+        fi
+    fi
+
+    # Start the containers
+    i=0
+    while [ $i -lt "$WORKER_INSTANCE_COUNT" ]; do
+        instance_port=$((WORKER_BASE_PORT + i))
+        env_file="workers/.env.worker.instance$i"
+        if [ "$DEPLOY_TYPE" = "img" ]; then
+            compose_cmd="docker compose --env-file '$env_file' -p 'cms-worker-$i' -f docker-compose.worker.yml -f docker-compose.worker.img.yml up -d --no-build"
+        else
+            compose_cmd="docker compose --env-file '$env_file' -p 'cms-worker-$i' -f docker-compose.worker.yml up -d --build"
+        fi
 
         if [ "$WORKER_AUTO_START" = "y" ]; then
             run_or_print "$compose_cmd"
@@ -866,7 +783,6 @@ EOF
             echo "Run later: $compose_cmd"
         fi
         WORKER_START_CMDS="$WORKER_START_CMDS\n  $compose_cmd"
-
         i=$((i + 1))
     done
 
@@ -879,8 +795,10 @@ EOF
     echo "  Ports     : $WORKER_BASE_PORT .. $((WORKER_BASE_PORT + WORKER_INSTANCE_COUNT - 1))"
     echo "  Core host : $PUBLIC_IP"
     echo ""
+    # Detect local VPN IP for help message
+    LOCAL_VPN_IP=$(ip addr show tailscale0 2>/dev/null | grep -Po 'inet \K[\d.]+' || hostname -I | awk '{print $1}')
     echo "Register these workers on the main server (.env.core) with:"
-    echo "  ./scripts/manage-workers.sh bulk-add '$PUBLIC_IP' '$WORKER_BASE_PORT' '$WORKER_INSTANCE_COUNT'"
+    echo "  ./scripts/manage-workers.sh bulk-add '$LOCAL_VPN_IP' '$WORKER_BASE_PORT' '$WORKER_INSTANCE_COUNT'"
     echo "  make env && make core-img"
     echo ""
     exit 0
