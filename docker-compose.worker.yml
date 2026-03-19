@@ -60,61 +60,39 @@ services:
       - SYS_RESOURCE
       - NET_ADMIN
     command: >
-      sh -c "
+      sh -lc '
         set -e
         SHARD=${WORKER_SHARD:-0}
-        
-        # Create required directories
+
         sudo mkdir -p /var/local/log/cms/Worker-$$SHARD /var/local/cache/cms /var/local/lib/cms
         sudo chmod -R 777 /var/local/log/cms /var/local/cache/cms /var/local/lib/cms
 
-        # Ensure isolate runtime cgroup config exists
         sudo mkdir -p /run/isolate
-        CGROUP_REL_PATH=$$(awk -F: '/^0::/ {print $$3}' /proc/self/cgroup)
-        if [ -z "$$CGROUP_REL_PATH" ]; then CGROUP_REL_PATH="/"; fi
+        CGROUP_REL_PATH=$$(awk -F: "/^0::/ {print \$3}" /proc/self/cgroup)
+        if [ -z "$$CGROUP_REL_PATH" ]; then
+          CGROUP_REL_PATH="/"
+        fi
         CGROUP_BASE="/sys/fs/cgroup$$CGROUP_REL_PATH"
         echo "$$CGROUP_BASE" | sudo tee /run/isolate/cgroup >/dev/null
         sudo chmod 755 /run/isolate
         sudo chmod 644 /run/isolate/cgroup
 
-        # Start isolate cgroup keeper when available (needed on systemd/cgroup v2 setups)
-        if command -v isolate-cg-keeper >/dev/null 2>&1; then
-          sudo pkill -f isolate-cg-keeper >/dev/null 2>&1 || true
-          sudo nohup isolate-cg-keeper >/var/local/log/cms/isolate-cg-keeper.log 2>&1 &
-          sleep 1
-        fi
-
-        # Ensure controllers are delegated in current cgroup scope
         if [ -f "$$CGROUP_BASE/cgroup.subtree_control" ]; then
-          sudo bash -c "echo +cpu +memory +pids > $$CGROUP_BASE/cgroup.subtree_control" 2>/dev/null || true
+          echo "+cpu +memory +pids" | sudo tee "$$CGROUP_BASE/cgroup.subtree_control" >/dev/null || true
         fi
 
-        # Pre-create isolate box cgroups under current scope
         for box_id in $$(seq 0 999); do
           sudo mkdir -p "$$CGROUP_BASE/box-$$box_id" 2>/dev/null || true
         done
-        
-        # Clean up stale isolate cgroups from previous runs
-        echo 'Cleaning up stale isolate cgroups...'
-        # Try cgroup v2 cleanup
-        if [ -f /sys/fs/cgroup/cgroup.subtree_control ]; then
-          sudo bash -c 'find /sys/fs/cgroup -name \"isolate\" -type d -exec rmdir {} + 2>/dev/null' || true
-        fi
-        # Try cgroup v1 cleanup
+
+        echo "Cleaning up stale isolate cgroups..."
         for subsys in cpu cpuacct memory pids freezer; do
-          [ -d \"/sys/fs/cgroup/$$subsys/isolate\" ] && sudo cgdelete -r \"$$subsys:isolate\" 2>/dev/null || true
+          [ -d "/sys/fs/cgroup/$$subsys/isolate" ] && sudo cgdelete -r "$$subsys:isolate" 2>/dev/null || true
         done
-        
-        # Setup cgroup v2 if available
-        if [ -f "$$CGROUP_BASE/cgroup.subtree_control" ]; then
-          echo 'Configuring cgroup v2 controllers...'
-          sudo bash -c "echo +cpu +memory +pids > $$CGROUP_BASE/cgroup.subtree_control" 2>/dev/null || true
-        fi
-        
-        sleep 2
-        echo 'Starting worker service...'
-        cmsWorker $$SHARD
-      "
+
+        echo "Starting worker service..."
+        exec cmsWorker $$SHARD
+      '
     deploy:
       resources:
         limits:
