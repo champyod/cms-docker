@@ -49,6 +49,7 @@ services:
     networks:
       - cms-network
     privileged: true
+    cgroup: host
     # Security options for sandbox isolation
     security_opt:
       - seccomp:unconfined
