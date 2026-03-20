@@ -16,6 +16,8 @@ services:
       SERVICE_TYPE: Worker
       # Required for isolate inside docker
       ISOLATE_CGROUP_CONTROL: ${ISOLATE_CGROUP_CONTROL:-1}
+      # Delegated host cgroup path prepared by scripts/setup-worker-cgroup.sh
+      ISOLATE_CGROUP_PATH: ${ISOLATE_CGROUP_PATH:-/sys/fs/cgroup/cms-isolate}
       # Worker shard - Each worker needs a unique shard number
       WORKER_SHARD: ${WORKER_SHARD:-0}
       # Connection to core services
@@ -70,20 +72,21 @@ services:
 
         if [ "$$CGROUP_CONTROL" = "1" ]; then
           sudo mkdir -p /run/isolate
-          CGROUP_REL_PATH=$$(awk -F: "/^0::/ {print \$3}" /proc/self/cgroup)
-          if [ -z "$$CGROUP_REL_PATH" ]; then
-            CGROUP_REL_PATH="/"
+          CGROUP_BASE=${ISOLATE_CGROUP_PATH:-/sys/fs/cgroup/cms-isolate}
+
+          if [ ! -d "$$CGROUP_BASE" ]; then
+            echo "ERROR: ISOLATE_CGROUP_PATH does not exist: $$CGROUP_BASE"
+            echo "Run scripts/setup-worker-cgroup.sh on the worker host first."
+            exit 1
           fi
-          CGROUP_BASE="/sys/fs/cgroup$$CGROUP_REL_PATH"
+
           echo "$$CGROUP_BASE" | sudo tee /run/isolate/cgroup >/dev/null
           sudo chmod 755 /run/isolate
           sudo chmod 644 /run/isolate/cgroup
 
           echo "Attempting to enable cgroup v2 controllers for resource limits..."
           if [ -f "$$CGROUP_BASE/cgroup.subtree_control" ]; then
-            sudo bash -c "echo +cpu $$CGROUP_BASE/cgroup.subtree_control 2>/dev/null || true" || true
-            sudo bash -c "echo +memory $$CGROUP_BASE/cgroup.subtree_control 2>/dev/null || true" || true
-            sudo bash -c "echo +pids $$CGROUP_BASE/cgroup.subtree_control 2>/dev/null || true" || true
+            echo "+cpu +memory +pids" | sudo tee "$$CGROUP_BASE/cgroup.subtree_control" >/dev/null || true
           fi
 
           echo "Pre-creating box cgroups for isolate (IDs 0-999)..."

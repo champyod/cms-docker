@@ -111,6 +111,8 @@ Create `.env.worker`:
 # Worker Configuration
 WORKER_SHARD=1  # MUST be unique per worker
 WORKER_NAME=worker-remote-1
+ISOLATE_CGROUP_CONTROL=1
+ISOLATE_CGROUP_PATH=/sys/fs/cgroup/cms-isolate
 
 # Main Server Connection
 CORE_SERVICES_HOST=203.0.113.45  # Your main server public IP
@@ -150,11 +152,16 @@ services:
       - WORKER_SHARD=${WORKER_SHARD}
       - WORKER_NAME=${WORKER_NAME:-worker-${WORKER_SHARD}}
       - CORE_SERVICES_HOST=${CORE_SERVICES_HOST}
+      - ISOLATE_CGROUP_CONTROL=${ISOLATE_CGROUP_CONTROL:-1}
+      - ISOLATE_CGROUP_PATH=${ISOLATE_CGROUP_PATH:-/sys/fs/cgroup/cms-isolate}
     
     volumes:
       - ./config/cms.conf:/usr/local/etc/cms.conf:ro
       - cms-worker-cache:/var/local/cache/cms
       - cms-worker-log:/var/local/log/cms
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+
+    cgroup: host
     
     deploy:
       resources:
@@ -213,13 +220,38 @@ cd cms-docker
 docker build -t cms:latest .
 ```
 
-### Step 7: Start Worker
+### Step 7: Configure cgroup delegation for isolate
+
+On the worker host, prepare a delegated cgroup path before starting the worker.
+
+```bash
+# From repository root
+sudo ./scripts/setup-worker-cgroup.sh /sys/fs/cgroup/cms-isolate
+```
+
+If you don't have the script yet, use manual commands:
+
+```bash
+sudo mkdir -p /etc/systemd/system/docker.service.d
+cat <<'EOF' | sudo tee /etc/systemd/system/docker.service.d/10-delegate.conf
+[Service]
+Delegate=yes
+TasksMax=infinity
+EOF
+sudo systemctl daemon-reload
+sudo systemctl restart docker
+sudo sh -c 'echo +cpu +memory +pids > /sys/fs/cgroup/cgroup.subtree_control'
+sudo mkdir -p /sys/fs/cgroup/cms-isolate
+sudo sh -c 'echo +cpu +memory +pids > /sys/fs/cgroup/cms-isolate/cgroup.subtree_control'
+```
+
+### Step 8: Start Worker
 
 ```bash
 docker compose up -d
 ```
 
-### Step 8: Verify Connection
+### Step 9: Verify Connection
 
 ```bash
 # Check logs
