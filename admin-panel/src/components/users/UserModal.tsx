@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
-import { X, Loader2, Eye, EyeOff } from 'lucide-react';
+import { X, Loader2 } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
+import { PasswordFieldWithGenerator } from '@/components/core/PasswordFieldWithGenerator';
 
 interface UserModalProps {
   isOpen: boolean;
@@ -17,7 +18,6 @@ interface UserModalProps {
 export function UserModal({ isOpen, onClose, user, onSuccess }: UserModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -149,26 +149,13 @@ export function UserModal({ isOpen, onClose, user, onSuccess }: UserModalProps) 
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-neutral-400 uppercase tracking-wider">
-              {user ? 'New Password (Optional)' : 'Password'}
-            </label>
-            <div className="relative group">
-              <input
-                required={!user}
-                type={showPassword ? "text" : "password"}
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="w-full px-3 py-2 bg-black/80 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all font-mono pr-10"
-                placeholder="••••••••"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-3 flex items-center text-neutral-500 hover:text-white transition-colors"
-              >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
+            <PasswordFieldWithGenerator
+              label={user ? 'New Password (Optional)' : 'Password'}
+              value={formData.password}
+              onChange={(password) => setFormData({ ...formData, password })}
+              required={!user}
+              placeholder="••••••••"
+            />
           </div>
 
            <div className="space-y-1.5">

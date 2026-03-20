@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Shield, Loader, Eye, EyeOff, Info } from 'lucide-react';
+import { X, Shield, Loader, Info } from 'lucide-react';
 import { createAdmin, updateAdmin } from '@/app/actions/admins';
 import { cn } from '@/lib/utils';
+import { PasswordFieldWithGenerator } from '@/components/core/PasswordFieldWithGenerator';
 
 interface AdminModalProps {
   isOpen: boolean;
@@ -24,7 +25,6 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
     permission_users: false,
     permission_contests: false,
   });
-  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [mounted, setMounted] = useState(false);
@@ -146,24 +146,13 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
           </div>
           
           <div>
-            <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">
-              Password {initialData && '(Leave empty to keep current)'}
-            </label>
-            <div className="relative">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="w-full px-4 py-3 bg-black/80 border border-white/10 rounded-lg text-white focus:outline-none focus:border-indigo-500/50 pr-10"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white"
-              >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
+            <PasswordFieldWithGenerator
+              label={`Password ${initialData ? '(Leave empty to keep current)' : ''}`}
+              value={formData.password}
+              onChange={(password) => setFormData({ ...formData, password })}
+              required={!initialData}
+              placeholder="••••••••"
+            />
           </div>
           
           <div>

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { X, User, Clock, Shield, Mail } from 'lucide-react';
 import { Portal } from '../core/Portal';
 import { updateParticipation, sendMessage } from '@/app/actions/participations';
+import { PasswordFieldWithGenerator } from '@/components/core/PasswordFieldWithGenerator';
 
 interface ParticipationEditModalProps {
   isOpen: boolean;
@@ -147,12 +148,11 @@ export function ParticipationEditModal({ isOpen, onClose, participation, adminId
               
               <div>
                 <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Password (optional)</label>
-                <input
-                  type="text"
+                <PasswordFieldWithGenerator
                   value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  onChange={(password) => setFormData({ ...formData, password })}
                   placeholder="Leave empty to use user password"
-                  className="w-full px-3 py-2 bg-black/80 border border-white/10 rounded-lg text-white text-sm"
+                  hint="Leave empty to use user password"
                 />
               </div>
               
