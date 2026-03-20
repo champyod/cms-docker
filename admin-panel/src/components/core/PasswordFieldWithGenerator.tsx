@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Copy, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { Modal } from './Modal';
+import { useToast } from '@/components/providers/ToastProvider';
 
 type CaseMode = 'both' | 'upper' | 'lower';
 
@@ -39,23 +40,27 @@ export function PasswordFieldWithGenerator({
 }: PasswordFieldWithGeneratorProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
-  const [copyDone, setCopyDone] = useState(false);
+  const { addToast } = useToast();
 
   const [length, setLength] = useState(8);
   const [includeLetters, setIncludeLetters] = useState(true);
   const [caseMode, setCaseMode] = useState<CaseMode>('both');
   const [includeNumbers, setIncludeNumbers] = useState(true);
-  const [includeSymbols, setIncludeSymbols] = useState(true);
-  const [symbols, setSymbols] = useState('-+=_[]?');
+  const [includeSpecialSymbols, setIncludeSpecialSymbols] = useState(true);
+  const [includeOperatorSymbols, setIncludeOperatorSymbols] = useState(true);
   const [generated, setGenerated] = useState('');
 
   const charset = useMemo(() => {
     let chars = '';
+    const specialSymbols = '@#$%^&*!~';
+    const operatorSymbols = '-+=_[]?';
+
     if (includeLetters) chars += buildLetters(caseMode);
     if (includeNumbers) chars += '0123456789';
-    if (includeSymbols) chars += symbols;
+    if (includeSpecialSymbols) chars += specialSymbols;
+    if (includeOperatorSymbols) chars += operatorSymbols;
     return chars;
-  }, [includeLetters, includeNumbers, includeSymbols, caseMode, symbols]);
+  }, [includeLetters, includeNumbers, includeSpecialSymbols, includeOperatorSymbols, caseMode]);
 
   const generatePassword = () => {
     if (!charset.length) return;
@@ -68,9 +73,40 @@ export function PasswordFieldWithGenerator({
 
   const handleCopy = async () => {
     if (!value) return;
-    await navigator.clipboard.writeText(value);
-    setCopyDone(true);
-    setTimeout(() => setCopyDone(false), 1200);
+
+    const fallbackCopy = () => {
+      const textarea = document.createElement('textarea');
+      textarea.value = value;
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      const success = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      return success;
+    };
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+        addToast({ type: 'success', title: 'Copied', message: 'Password copied to clipboard.' });
+        return;
+      }
+
+      if (fallbackCopy()) {
+        addToast({ type: 'success', title: 'Copied', message: 'Password copied to clipboard.' });
+      } else {
+        addToast({ type: 'error', title: 'Copy failed', message: 'Unable to copy password. Please copy manually.' });
+      }
+    } catch {
+      const success = fallbackCopy();
+      if (success) {
+        addToast({ type: 'success', title: 'Copied', message: 'Password copied to clipboard.' });
+      } else {
+        addToast({ type: 'error', title: 'Copy failed', message: 'Unable to copy password. Please copy manually.' });
+      }
+    }
   };
 
   return (
@@ -112,9 +148,7 @@ export function PasswordFieldWithGenerator({
           </button>
         </div>
       </div>
-      {(hint || copyDone) && (
-        <p className="text-xs text-neutral-500 mt-1">{copyDone ? 'Copied' : hint}</p>
-      )}
+      {hint && <p className="text-xs text-neutral-500 mt-1">{hint}</p>}
 
       <Modal
         isOpen={isGeneratorOpen}
@@ -145,8 +179,20 @@ export function PasswordFieldWithGenerator({
               <input type="checkbox" checked={includeNumbers} onChange={(event) => setIncludeNumbers(event.target.checked)} />
             </label>
             <label className="flex items-center justify-between p-3 bg-black/40 rounded-lg border border-white/10 sm:col-span-2">
-              <span className="text-sm text-white">Symbols</span>
-              <input type="checkbox" checked={includeSymbols} onChange={(event) => setIncludeSymbols(event.target.checked)} />
+              <span className="text-sm text-white">Special symbols (@ # $ % ...)</span>
+              <input
+                type="checkbox"
+                checked={includeSpecialSymbols}
+                onChange={(event) => setIncludeSpecialSymbols(event.target.checked)}
+              />
+            </label>
+            <label className="flex items-center justify-between p-3 bg-black/40 rounded-lg border border-white/10 sm:col-span-2">
+              <span className="text-sm text-white">Operator symbols (- + = _ [ ] ?)</span>
+              <input
+                type="checkbox"
+                checked={includeOperatorSymbols}
+                onChange={(event) => setIncludeOperatorSymbols(event.target.checked)}
+              />
             </label>
           </div>
 
@@ -162,18 +208,6 @@ export function PasswordFieldWithGenerator({
               <option value="upper">Upper Only</option>
               <option value="lower">Lower Only</option>
             </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Symbols Set</label>
-            <input
-              type="text"
-              value={symbols}
-              onChange={(event) => setSymbols(event.target.value)}
-              disabled={!includeSymbols}
-              className="w-full px-3 py-2 bg-black/80 border border-white/10 rounded-lg text-white font-mono disabled:opacity-50"
-              placeholder="-+=_[]?"
-            />
           </div>
 
           <div className="p-3 bg-black/50 border border-white/10 rounded-lg break-all text-sm text-indigo-300 min-h-11">
