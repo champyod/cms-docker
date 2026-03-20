@@ -15,7 +15,7 @@ services:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: Worker
       # Required for isolate inside docker
-      ISOLATE_CGROUP_CONTROL: 1
+      ISOLATE_CGROUP_CONTROL: ${ISOLATE_CGROUP_CONTROL:-1}
       # Worker shard - Each worker needs a unique shard number
       WORKER_SHARD: ${WORKER_SHARD:-0}
       # Connection to core services
@@ -63,34 +63,46 @@ services:
       sh -lc '
         set -e
         SHARD=${WORKER_SHARD:-0}
+        CGROUP_CONTROL=${ISOLATE_CGROUP_CONTROL:-1}
 
         sudo mkdir -p /var/local/log/cms/Worker-$$SHARD /var/local/cache/cms /var/local/lib/cms
         sudo chmod -R 777 /var/local/log/cms /var/local/cache/cms /var/local/lib/cms
 
-        sudo mkdir -p /run/isolate
-        CGROUP_REL_PATH=$$(awk -F: "/^0::/ {print \$3}" /proc/self/cgroup)
-        if [ -z "$$CGROUP_REL_PATH" ]; then
-          CGROUP_REL_PATH="/"
+        if [ "$$CGROUP_CONTROL" = "1" ]; then
+          sudo mkdir -p /run/isolate
+          CGROUP_REL_PATH=$$(awk -F: "/^0::/ {print \$3}" /proc/self/cgroup)
+          if [ -z "$$CGROUP_REL_PATH" ]; then
+            CGROUP_REL_PATH="/"
+          fi
+          CGROUP_BASE="/sys/fs/cgroup$$CGROUP_REL_PATH"
+          echo "$$CGROUP_BASE" | sudo tee /run/isolate/cgroup >/dev/null
+          sudo chmod 755 /run/isolate
+          sudo chmod 644 /run/isolate/cgroup
+
+          echo "Attempting to enable cgroup v2 controllers for resource limits..."
+          if [ -f "$$CGROUP_BASE/cgroup.subtree_control" ]; then
+            sudo bash -c "echo +cpu $$CGROUP_BASE/cgroup.subtree_control 2>/dev/null || true" || true
+            sudo bash -c "echo +memory $$CGROUP_BASE/cgroup.subtree_control 2>/dev/null || true" || true
+            sudo bash -c "echo +pids $$CGROUP_BASE/cgroup.subtree_control 2>/dev/null || true" || true
+          fi
+
+          echo "Pre-creating box cgroups for isolate (IDs 0-999)..."
+          for box_id in $$(seq 0 999); do
+            sudo mkdir -p "$$CGROUP_BASE/box-$$box_id" 2>/dev/null || true
+            if [ -d "$$CGROUP_BASE/box-$$box_id" ]; then
+              sudo chmod 755 "$$CGROUP_BASE/box-$$box_id" 2>/dev/null || true
+            fi
+          done
+        else
+          echo "ISOLATE_CGROUP_CONTROL disabled: starting worker without isolate cgroup mode"
         fi
-        CGROUP_BASE="/sys/fs/cgroup$$CGROUP_REL_PATH"
-        echo "$$CGROUP_BASE" | sudo tee /run/isolate/cgroup >/dev/null
-        sudo chmod 755 /run/isolate
-        sudo chmod 644 /run/isolate/cgroup
 
-        if [ -f "$$CGROUP_BASE/cgroup.subtree_control" ]; then
-          echo "+cpu +memory +pids" | sudo tee "$$CGROUP_BASE/cgroup.subtree_control" >/dev/null || true
-        fi
-
-        for box_id in $$(seq 0 999); do
-          sudo mkdir -p "$$CGROUP_BASE/box-$$box_id" 2>/dev/null || true
-        done
-
-        echo "Cleaning up stale isolate cgroups..."
+        echo "Cleaning up stale isolate cgroups (v1)..."
         for subsys in cpu cpuacct memory pids freezer; do
           [ -d "/sys/fs/cgroup/$$subsys/isolate" ] && sudo cgdelete -r "$$subsys:isolate" 2>/dev/null || true
         done
 
-        echo "Starting worker service..."
+        echo "Worker startup complete. Starting service..."
         exec cmsWorker $$SHARD
       '
     deploy:
