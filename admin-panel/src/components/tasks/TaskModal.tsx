@@ -7,7 +7,7 @@ import type { TaskData } from '@/app/actions/tasks';
 import { apiClient } from '@/lib/apiClient';
 
 import { PROGRAMMING_LANGUAGES } from '@/lib/constants';
-import { useToast } from '@/components/core/Toast';
+import { useToast } from '@/components/providers/ToastProvider';
 import { AlertTriangle, AlertCircle } from 'lucide-react';
 
 interface TaskModalProps {
@@ -134,7 +134,11 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
         : await apiClient.post('/api/tasks', formData);
 
       if (result.success) {
-        addToast(task ? 'Task updated successfully' : 'Task created successfully', 'success');
+        addToast({
+          type: 'success',
+          title: task ? 'Task updated' : 'Task created',
+          message: task ? 'Task updated successfully' : 'Task created successfully',
+        });
         onSuccess();
         onClose();
       } else {
@@ -166,7 +170,7 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
   if (!isOpen || !mounted) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden">
+    <div className="fixed inset-0 z-100 flex items-center justify-center overflow-hidden">
       <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
       
       <div className="relative z-10 w-full max-w-4xl h-[80vh] bg-neutral-900 border border-white/10 rounded-xl shadow-2xl flex flex-col">
@@ -177,7 +181,7 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
               {task ? 'Edit Task' : 'Create New Task'}
             </h2>
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-lg transition-colors">
+          <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-lg transition-colors" title="Close modal">
             <X className="w-5 h-5 text-neutral-400" />
           </button>
         </div>
@@ -391,7 +395,7 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-neutral-500 uppercase mb-2 text-indigo-400">Initial Tokens</label>
+                        <label className="block text-xs font-bold text-indigo-400 uppercase mb-2">Initial Tokens</label>
                         <input
                           type="number"
                           value={(formData.token_gen_initial === undefined || formData.token_gen_initial === null) ? '' : formData.token_gen_initial}
@@ -411,7 +415,7 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-neutral-500 uppercase mb-2 text-indigo-400">Gen Interval (min)</label>
+                        <label className="block text-xs font-bold text-indigo-400 uppercase mb-2">Gen Interval (min)</label>
                         <input
                           type="number"
                           value={(formData.token_gen_interval === undefined || formData.token_gen_interval === null) ? '' : formData.token_gen_interval}
