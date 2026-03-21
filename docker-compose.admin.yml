@@ -32,6 +32,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       # Mount the root repository to allow editing config/env files on the host
       - ./:/repo-root
+      # Host procfs for true host-level metrics in Resources page
+      - /proc:/host/proc:ro
       - cms-logs:/var/local/log/cms
     networks:
       - cms-network
