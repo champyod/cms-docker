@@ -215,6 +215,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
                             }
                           }}
                           className="p-1 text-red-400 hover:bg-red-500/20 rounded"
+                          title="Delete statement"
                         >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -450,6 +451,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps) {
                     }
                   }}
                   className="p-1 text-red-400 opacity-0 group-hover:opacity-100 hover:bg-red-500/20 rounded transition-all"
+                  title="Delete attachment"
                 >
                   <Trash2 className="w-3 h-3" />
                 </button>
