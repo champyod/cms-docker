@@ -1,6 +1,21 @@
 import { ResourceView } from '@/components/resources/ResourceView';
+import { checkPermission } from '@/lib/permissions';
+import { getDictionary } from '@/i18n';
+import { PermissionDenied } from '@/components/PermissionDenied';
 
-export default async function ResourcesPage() {
+export default async function ResourcesPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  const dict = await getDictionary(locale);
+  const hasPermission = await checkPermission('all', false);
+
+  if (!hasPermission) {
+    return <PermissionDenied permission="permission_all" locale={locale} dict={dict} />;
+  }
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-2">
@@ -13,16 +28,6 @@ export default async function ResourcesPage() {
       </div>
 
       <ResourceView />
-
-      <div className="pt-8 border-t border-white/5">
-        <div className="p-6 bg-white/2 rounded-xl border border-white/5">
-          <h2 className="text-xl font-bold text-white mb-2">Worker Node Management</h2>
-          <p className="text-sm text-neutral-400">
-            Worker nodes are configured globally in <strong>Infrastructure → Deployments</strong>.
-            All contests share the same worker pool through EvaluationService.
-          </p>
-        </div>
-      </div>
     </div>
   );
 }

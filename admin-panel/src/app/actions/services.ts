@@ -104,6 +104,7 @@ export async function analyzeRestartRequirements(changedKeys: string[]) {
 }
 
 export async function getLiveServiceConnections() {
+    await ensurePermission('all');
     try {
         type LiveServiceConnection = {
             name: string;

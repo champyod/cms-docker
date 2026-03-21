@@ -6,10 +6,12 @@ import path from 'path';
 import { exec } from 'child_process';
 import util from 'util';
 import { prisma } from '@/lib/prisma';
+import { ensurePermission } from '@/lib/permissions';
 
 const execPromise = util.promisify(exec);
 
 export async function getServerStats() {
+  await ensurePermission('all');
   const cpus = os.cpus();
   const totalMem = os.totalmem();
   const freeMem = os.freemem();
@@ -54,6 +56,7 @@ export async function getServerStats() {
 }
 
 export async function getWorkerStats() {
+  await ensurePermission('all');
   try {
     const repoRoot = process.env.IS_DOCKER === 'true' ? '/repo-root' : path.resolve(process.cwd(), '..');
     const envCorePath = path.join(repoRoot, '.env.core');
@@ -64,13 +67,13 @@ export async function getWorkerStats() {
       configuredWorkers = envCoreContent
         .split('\n')
         .map((line) => line.trim())
-        .filter((line) => line.startsWith('WORKER_'))
+        .filter((line) => line && !line.startsWith('#'))
         .map((line) => {
-          const match = line.match(/^WORKER_(\d+)=(.+):(\d+)$/);
+          const match = line.match(/^(?:export\s+)?WORKER_(\d+)\s*=\s*['\"]?([^:'\"]+)['\"]?\s*:\s*(\d+)\s*$/);
           if (!match) return null;
           return {
             shard: parseInt(match[1], 10),
-            host: match[2],
+            host: match[2].trim(),
             port: parseInt(match[3], 10)
           };
         })
@@ -102,9 +105,11 @@ export async function getWorkerStats() {
     `;
 
     const normalizeHost = (value: string) => value.trim().toLowerCase();
-    const isWorkerServiceLive = (host: string, port: number) => {
+    const isWorkerServiceLive = (host: string, port: number, shard: number) => {
       const targetHost = normalizeHost(host);
       return liveWorkerServices.some((service) => {
+        if (service.shard === shard) return true;
+
         if (service.port !== port) return false;
         const liveHost = normalizeHost(service.address || '');
         return liveHost === targetHost ||
@@ -118,7 +123,7 @@ export async function getWorkerStats() {
     if (configuredWorkers.length > 0) {
       return configuredWorkers.map((worker) => {
         const taskCount = shardCounts[worker.shard] || 0;
-        const isLive = isWorkerServiceLive(worker.host, worker.port);
+        const isLive = isWorkerServiceLive(worker.host, worker.port, worker.shard);
 
         return {
           id: `worker-${worker.shard}`,

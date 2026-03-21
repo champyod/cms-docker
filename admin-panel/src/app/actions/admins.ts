@@ -3,9 +3,11 @@
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import bcrypt from 'bcryptjs';
+import { ensurePermission } from '@/lib/permissions';
 
 // Get all admins
 export async function getAdmins() {
+  await ensurePermission('all');
   return prisma.admins.findMany({
     orderBy: { username: 'asc' }
   });
@@ -22,6 +24,7 @@ export async function createAdmin(data: {
   permission_users?: boolean;
   permission_contests?: boolean;
 }) {
+  await ensurePermission('all');
   try {
     const hashedPassword = await bcrypt.hash(data.password, 10);
     await prisma.admins.create({
@@ -59,6 +62,7 @@ export async function updateAdmin(adminId: number, data: {
   permission_contests?: boolean;
   password?: string;
 }) {
+  await ensurePermission('all');
   try {
     const updateData: any = {};
     if (data.name) updateData.name = data.name;
@@ -87,6 +91,7 @@ export async function updateAdmin(adminId: number, data: {
 
 // Delete an admin
 export async function deleteAdmin(adminId: number) {
+  await ensurePermission('all');
   try {
     await prisma.admins.delete({ where: { id: adminId } });
     revalidatePath('/[locale]/admins');
