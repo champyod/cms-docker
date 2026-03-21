@@ -65,8 +65,9 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage }: 
             {submissions.map((submission) => {
               const result = submission.submission_results[0]; // Assuming first result is the one we care about for list
               const score = result?.score;
+              const compilationFailed = result?.compilation_outcome === 'fail';
               const compiling = result?.compilation_outcome === null;
-              const evaluating = result?.evaluation_outcome === null;
+              const evaluating = !compilationFailed && result?.evaluation_outcome === null;
 
               return (
                 <TableRow 
@@ -95,7 +96,9 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage }: 
                         </div>
                     </TableCell>
                     <TableCell>
-                        {compiling ? (
+                      {compilationFailed ? (
+                        <span className="text-xs px-2 py-1 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">Compilation Failed</span>
+                      ) : compiling ? (
                              <span className="text-xs px-2 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 animate-pulse">Compiling</span>
                         ) : evaluating ? (
                              <span className="text-xs px-2 py-1 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 animate-pulse">Evaluating</span>

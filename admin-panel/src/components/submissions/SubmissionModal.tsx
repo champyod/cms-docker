@@ -24,6 +24,7 @@ export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModal
     }, []);
 
   const result = submission.submission_results[0]; // Active result
+    const compilationFailed = result?.compilation_outcome === 'fail';
 
     if (!isOpen || !mounted) return null;
 
@@ -100,12 +101,14 @@ export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModal
                  <div className="bg-white/5 rounded-xl p-4 border border-white/5">
                     <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2">Evaluation</h3>
                     <div className="flex items-center gap-2">
-                         {result?.evaluation_outcome === 'ok' ? (
+                         {compilationFailed ? (
+                            <AlertCircle className="text-neutral-500 w-5 h-5" />
+                         ) : result?.evaluation_outcome === 'ok' ? (
                             <CheckCircle2 className="text-green-400 w-5 h-5" />
                         ) : (
                             <AlertCircle className="text-neutral-500 w-5 h-5" />
                         )}
-                        <span className="text-white font-medium capitalize">{result?.evaluation_outcome || 'Pending/Skipped'}</span>
+                        <span className="text-white font-medium capitalize">{compilationFailed ? 'Skipped (Compilation Failed)' : (result?.evaluation_outcome || 'Pending/Skipped')}</span>
                     </div>
                 </div>
 
@@ -113,7 +116,8 @@ export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModal
                     <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2">Detailed Status</h3>
                      <span className="text-white font-medium capitalize flex items-center gap-2">
                         {result?.compilation_outcome === null ? 'Compiling' :
-                         result?.evaluation_outcome === null ? 'Evaluating' :
+                                 result?.compilation_outcome === 'fail' ? 'Compilation Failed' :
+                                 result?.evaluation_outcome === null ? 'Evaluating' :
                          result?.score === null ? 'Scoring' : 'Done'}
                      </span>
                 </div>
