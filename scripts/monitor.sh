@@ -45,36 +45,67 @@ while getopts "di:c:h" opt; do
 done
 
 get_cpu_usage() {
-    read cpu a b c previdle e f g h < /proc/stat
-    prevtotal=$((a+b+c+previdle+e+f+g+h))
+    read -r _ user nice system idle iowait irq softirq steal guest guest_nice < /proc/stat
+    prev_idle=$((idle + iowait))
+    prev_non_idle=$((user + nice + system + irq + softirq + steal))
+    prev_total=$((prev_idle + prev_non_idle))
+
     sleep 0.5
-    read cpu a b c idle e f g h < /proc/stat
-    total=$((a+b+c+idle+e+f+g+h))
-    cpu_usage=$((100*( (total-prevtotal) - (idle-previdle) ) / (total-prevtotal) ))
+
+    read -r _ user nice system idle iowait irq softirq steal guest guest_nice < /proc/stat
+    idle_now=$((idle + iowait))
+    non_idle_now=$((user + nice + system + irq + softirq + steal))
+    total_now=$((idle_now + non_idle_now))
+
+    total_delta=$((total_now - prev_total))
+    idle_delta=$((idle_now - prev_idle))
+    if [ "$total_delta" -le 0 ]; then
+        echo "0"
+        return
+    fi
+
+    cpu_usage=$((100 * (total_delta - idle_delta) / total_delta))
     echo "$cpu_usage"
 }
 
 get_mem_usage() {
-    while read -r line; do
-        if [[ $line == Mem:* ]]; then
-            set -- $line
-            local total=$2
-            local used=$3
-            local free=$4
-            local available=$7
-            if [ -n "$available" ]; then
-                echo $(( 100 * (total - available) / total ))
-            else
-                echo $(( 100 * used / total ))
-            fi
-            return
-        fi
-    done < <(free -m)
+    local mem_line
+    mem_line=$(free -m 2>/dev/null | awk '/^Mem:/ {print $2" "$3" "$7; exit}')
+    if [ -z "$mem_line" ]; then
+        echo "0"
+        return
+    fi
+
+    set -- $mem_line
+    local total=${1:-0}
+    local used=${2:-0}
+    local available=${3:-0}
+
+    if ! [[ "$total" =~ ^[0-9]+$ ]] || [ "$total" -le 0 ]; then
+        echo "0"
+        return
+    fi
+
+    if [[ "$available" =~ ^[0-9]+$ ]]; then
+        echo $(( 100 * (total - available) / total ))
+    else
+        echo $(( 100 * used / total ))
+    fi
 }
 
 get_disk_usage() {
     local target="${DISK_PATH:-/}"
-    df "$target" | tail -1 | awk '{print $5}' | sed 's/%//'
+    local usage
+    usage=$(df -P "$target" 2>/dev/null | awk 'NR==2 {gsub(/%/, "", $5); print $5; exit}')
+    if [[ "$usage" =~ ^[0-9]+$ ]]; then
+        echo "$usage"
+    else
+        echo "0"
+    fi
+}
+
+is_integer() {
+    [[ "$1" =~ ^[0-9]+$ ]]
 }
 
 send_discord_alert() {
@@ -286,9 +317,9 @@ check_once() {
 
     IS_ALERT=false
     FAIL_REASON=""
-    if [ "$CPU_USAGE" -ge "$CPU_THRESHOLD" ]; then IS_ALERT=true; FAIL_REASON="${FAIL_REASON}High CPU ($CPU_USAGE%). "; fi
-    if [ "$MEM_USAGE" -ge "$MEM_THRESHOLD" ]; then IS_ALERT=true; FAIL_REASON="${FAIL_REASON}High Memory ($MEM_USAGE%). "; fi
-    if [ "$DISK_USAGE" -ge "$DISK_THRESHOLD" ]; then IS_ALERT=true; FAIL_REASON="${FAIL_REASON}High Disk ($DISK_USAGE%). "; fi
+    if is_integer "$CPU_USAGE" && [ "$CPU_USAGE" -ge "$CPU_THRESHOLD" ]; then IS_ALERT=true; FAIL_REASON="${FAIL_REASON}High CPU ($CPU_USAGE%). "; fi
+    if is_integer "$MEM_USAGE" && [ "$MEM_USAGE" -ge "$MEM_THRESHOLD" ]; then IS_ALERT=true; FAIL_REASON="${FAIL_REASON}High Memory ($MEM_USAGE%). "; fi
+    if is_integer "$DISK_USAGE" && [ "$DISK_USAGE" -ge "$DISK_THRESHOLD" ]; then IS_ALERT=true; FAIL_REASON="${FAIL_REASON}High Disk ($DISK_USAGE%). "; fi
 
     CURRENT_TIME=$(date +%s)
     if [ "$IS_ALERT" = true ]; then
