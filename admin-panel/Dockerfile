@@ -11,7 +11,7 @@ RUN pnpm install --no-frozen-lockfile
 COPY . .
 
 # Generate Prisma client
-RUN pnpm prisma generate
+RUN pnpm prisma generate --schema=./prisma/schema.prisma
 
 # Build the application
 # Provide dummy DATABASE_URL to avoid Prisma constructor error during static page generation
