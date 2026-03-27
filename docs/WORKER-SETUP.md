@@ -263,6 +263,43 @@ docker logs -f cms-worker-1
 # etc.
 ```
 
+### Step 10: Apply phased hardening (recommended)
+
+Start with safe defaults (no behavior change), then tighten one control at a time.
+
+```bash
+# In worker env file
+WORKER_PRIVILEGED=true
+WORKER_READ_ONLY_ROOTFS=false
+WORKER_PIDS_LIMIT=4096
+WORKER_SECCOMP_PROFILE=unconfined
+WORKER_APPARMOR_PROFILE=unconfined
+```
+
+Apply network egress restriction to allow only core RPC traffic:
+
+```bash
+# Dry run first
+sudo bash scripts/harden-worker-network.sh --core-ip YOUR_CORE_SERVER_IP
+
+# Apply rules
+sudo bash scripts/harden-worker-network.sh --core-ip YOUR_CORE_SERVER_IP --apply
+```
+
+Validate worker security + isolate cgroup behavior after each change:
+
+```bash
+bash scripts/validate-worker-security.sh
+```
+
+Then tighten one setting per rollout and re-test:
+
+```bash
+# Example phase step
+WORKER_READ_ONLY_ROOTFS=true
+# restart worker, then run validation script
+```
+
 ---
 
 ## Network Configuration

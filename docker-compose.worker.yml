@@ -50,12 +50,18 @@ services:
       - "${WORKER_PORT:-26000}:${WORKER_PORT:-26000}"
     networks:
       - cms-network
-    privileged: true
+    privileged: ${WORKER_PRIVILEGED:-true}
     cgroup: host
+    read_only: ${WORKER_READ_ONLY_ROOTFS:-false}
+    ulimits:
+      nproc: ${WORKER_ULIMIT_NPROC:-8192}
+      nofile:
+        soft: ${WORKER_ULIMIT_NOFILE_SOFT:-65535}
+        hard: ${WORKER_ULIMIT_NOFILE_HARD:-65535}
     # Security options for sandbox isolation
     security_opt:
-      - seccomp:unconfined
-      - apparmor:unconfined
+      - seccomp:${WORKER_SECCOMP_PROFILE:-unconfined}
+      - apparmor:${WORKER_APPARMOR_PROFILE:-unconfined}
     cap_add:
       - SYS_ADMIN
       - SYS_PTRACE
@@ -113,6 +119,7 @@ services:
         limits:
           cpus: ${WORKER_CPU_LIMIT:-0.5}
           memory: ${WORKER_MEMORY_LIMIT:-512M}
+          pids: ${WORKER_PIDS_LIMIT:-4096}
         reservations:
           cpus: ${WORKER_CPU_RESERVATION:-0.1}
           memory: ${WORKER_MEMORY_RESERVATION:-256M}

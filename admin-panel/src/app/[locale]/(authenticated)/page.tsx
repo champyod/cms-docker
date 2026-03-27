@@ -15,64 +15,80 @@ import { PageContent, PageHeader, Grid, Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
 
 async function getStats() {
-  const [
-    usersCount,
-    contestsCount,
-    activeContestsCount,
-    submissionsCount,
-    pendingSubmissions
-  ] = await Promise.all([
-    prisma.users.count(),
-    prisma.contests.count(),
-    prisma.contests.count({
-      where: {
-        AND: [
-          { start: { lte: new Date() } },
-          { stop: { gte: new Date() } }
-        ]
-      }
-    }),
-    prisma.submissions.count(),
-    prisma.submissions.count({
-      where: {
-        submission_results: {
-          some: {
-            score: null
+  try {
+    const [
+      usersCount,
+      contestsCount,
+      activeContestsCount,
+      submissionsCount,
+      pendingSubmissions
+    ] = await Promise.all([
+      prisma.users.count(),
+      prisma.contests.count(),
+      prisma.contests.count({
+        where: {
+          AND: [
+            { start: { lte: new Date() } },
+            { stop: { gte: new Date() } }
+          ]
+        }
+      }),
+      prisma.submissions.count(),
+      prisma.submissions.count({
+        where: {
+          submission_results: {
+            some: {
+              score: null
+            }
           }
         }
-      }
-    })
-  ]);
+      })
+    ]);
 
-  return {
-    usersCount,
-    contestsCount,
-    activeContestsCount,
-    submissionsCount,
-    pendingSubmissions
-  };
+    return {
+      usersCount,
+      contestsCount,
+      activeContestsCount,
+      submissionsCount,
+      pendingSubmissions
+    };
+  } catch (error) {
+    console.error('[DashboardPage] Failed to load stats', error);
+    return {
+      usersCount: 0,
+      contestsCount: 0,
+      activeContestsCount: 0,
+      submissionsCount: 0,
+      pendingSubmissions: 0
+    };
+  }
 }
 
 async function getRecentActivity() {
-  const submissions = await prisma.submissions.findMany({
-    take: 10,
-    orderBy: { timestamp: 'desc' },
-    include: {
-      tasks: { select: { name: true } },
-      participations: {
-        include: {
-          users: { select: { username: true } }
+  try {
+    const submissions = await prisma.submissions.findMany({
+      take: 10,
+      orderBy: { timestamp: 'desc' },
+      include: {
+        tasks: { select: { name: true } },
+        participations: {
+          include: {
+            users: { select: { username: true } }
+          }
         }
       }
-    }
-  });
+    });
 
-  return submissions.map(s => ({
-    id: s.id,
-    timestamp: s.timestamp,
-    username: s.participations?.users?.username ?? 'Unknown',
-    taskName: s.tasks?.name ?? 'Unknown',
-  }));
+    return submissions.map(s => ({
+      id: s.id,
+      timestamp: s.timestamp,
+      username: s.participations?.users?.username ?? 'Unknown',
+      taskName: s.tasks?.name ?? 'Unknown',
+    }));
+  } catch (error) {
+    console.error('[DashboardPage] Failed to load recent activity', error);
+    return [];
+  }
 }
 
 export default async function DashboardPage({
