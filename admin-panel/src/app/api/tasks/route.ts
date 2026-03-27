@@ -16,12 +16,12 @@ export async function POST(req: NextRequest) {
     const min_submission_interval = (sanitize(data.min_submission_interval) !== null && sanitize(data.min_submission_interval) !== 0) ? `${data.min_submission_interval} seconds` : null;
     const min_user_test_interval = (sanitize(data.min_user_test_interval) !== null && sanitize(data.min_user_test_interval) !== 0) ? `${data.min_user_test_interval} seconds` : null;
 
-    const nullablePositive = (val: any) => {
-      const sanitized = sanitize(val);
+    const nullablePositive = (val: unknown) => {
+      const sanitized = sanitize(val as string | number | null | undefined);
       return (sanitized !== null && sanitized !== 0 && sanitized !== '0') ? sanitized : null;
     };
 
-    const cleanArray = (arr: any[]) => Array.isArray(arr) ? arr.filter(v => v !== null && v !== '') : [];
+    const cleanArray = (arr: unknown[]) => Array.isArray(arr) ? arr.filter(v => v !== null && v !== '') : [];
 
     await prisma.$executeRaw`
       INSERT INTO tasks (
@@ -45,8 +45,8 @@ export async function POST(req: NextRequest) {
     
     revalidatePath('/[locale]/tasks', 'page');
     return apiSuccess({ message: 'Task created successfully' });
-  } catch (error: any) {
-    if (error.message?.includes('unique constraint')) {
+  } catch (error) {
+    if ((error as { message?: string }).message?.includes('unique constraint')) {
       return apiError({ message: 'Task name already exists', status: 400 });
     }
     return apiError(error);

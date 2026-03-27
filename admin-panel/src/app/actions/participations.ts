@@ -152,7 +152,7 @@ export async function addTeamToContest(
 
 // Get participation with interval fields as seconds
 export async function getParticipationDetails(id: number) {
-  const result = await prisma.$queryRaw<any[]>`
+  const result = await prisma.$queryRaw<Record<string, unknown>[]>`
     SELECT 
       id, contest_id, user_id, team_id,
       hidden, unrestricted, password,

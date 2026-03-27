@@ -15,7 +15,7 @@ export async function PUT(
 
   try {
     const data = await req.json();
-    const toDate = (d: any) => d ? new Date(d) : null;
+    const toDate = (d: unknown) => d ? new Date(d as string) : null;
 
     const startDate = toDate(data.start);
     const stopDate = toDate(data.stop);
@@ -68,8 +68,8 @@ export async function PUT(
     revalidatePath('/[locale]/contests', 'page');
     revalidatePath(`/[locale]/contests/${id}`, 'page');
     return apiSuccess({ message: 'Contest updated successfully' });
-  } catch (error: any) {
-    if (error.code === 'P2002') return apiError({ message: 'Contest name already exists', status: 400 });
+  } catch (error) {
+    if ((error as { code?: string }).code === 'P2002') return apiError({ message: 'Contest name already exists', status: 400 });
     return apiError(error);
   }
 }
@@ -88,7 +88,7 @@ export async function DELETE(
     await prisma.contests.delete({ where: { id } });
     revalidatePath('/[locale]/contests', 'page');
     return apiSuccess({ message: 'Contest deleted successfully' });
-  } catch (error: any) {
+  } catch (error) {
     return apiError(error);
   }
 }

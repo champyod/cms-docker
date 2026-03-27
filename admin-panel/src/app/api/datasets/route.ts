@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     };
 
     return apiSuccess({ dataset: responseDataset });
-  } catch (error: any) {
+  } catch (error) {
     return apiError(error);
   }
 }

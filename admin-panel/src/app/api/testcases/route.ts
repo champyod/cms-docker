@@ -7,12 +7,12 @@ import crypto from 'crypto';
 async function storeFile(data: Buffer): Promise<string> {
   const digest = crypto.createHash('sha256').update(data).digest('hex');
 
-  const existing = await prisma.$queryRaw<any[]>`
+  const existing = await prisma.$queryRaw<Array<{ digest: string }>>`
     SELECT digest FROM fsobjects WHERE digest = ${digest}
   `;
 
   if (existing.length === 0) {
-    const result = await prisma.$queryRaw<any[]>`
+    const result = await prisma.$queryRaw<Array<{ lob_oid: number }>>`
       SELECT lo_from_bytea(0, ${data}::bytea) as lob_oid
     `;
     const lobOid = result[0].lob_oid;
@@ -52,8 +52,8 @@ export async function POST(req: NextRequest) {
                public: tc.isPublic,
              }
            });
-         } catch (e: any) {
-            console.warn(`Testcase ${tc.codename} already exists or error:`, e.message);
+         } catch (e) {
+            console.warn(`Testcase ${tc.codename} already exists or error:`, (e as Error).message);
          }
        }
     } else {
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
 
     revalidatePath('/[locale]/tasks', 'page');
     return apiSuccess({ message: 'Testcase(s) uploaded successfully' });
-  } catch (error: any) {
+  } catch (error) {
     return apiError(error);
   }
 }

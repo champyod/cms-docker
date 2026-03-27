@@ -7,11 +7,23 @@ import { createAdmin, updateAdmin } from '@/app/actions/admins';
 import { cn } from '@/lib/utils';
 import { PasswordFieldWithGenerator } from '@/components/core/PasswordFieldWithGenerator';
 
+interface AdminData {
+  id: number;
+  name: string;
+  username: string;
+  permission_all: boolean;
+  permission_messaging: boolean;
+  permission_tasks: boolean;
+  permission_users: boolean;
+  permission_contests: boolean;
+  enabled: boolean;
+}
+
 interface AdminModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  initialData?: any | null;
+  initialData?: AdminData | null;
 }
 
 export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminModalProps) {
@@ -30,34 +42,40 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    async function mount() {
+      setMounted(true);
+    }
+    mount();
   }, []);
 
   useEffect(() => {
-    if (initialData) {
-      setFormData({
-        name: initialData.name,
-        username: initialData.username,
-        password: '',
-        permission_all: initialData.permission_all,
-        permission_messaging: initialData.permission_messaging,
-        permission_tasks: initialData.permission_tasks,
-        permission_users: initialData.permission_users,
-        permission_contests: initialData.permission_contests,
-      });
-    } else {
-      setFormData({
-        name: '',
-        username: '',
-        password: '',
-        permission_all: false,
-        permission_messaging: true,
-        permission_tasks: false,
-        permission_users: false,
-        permission_contests: false,
-      });
+    async function init() {
+      if (initialData) {
+        setFormData({
+          name: initialData.name,
+          username: initialData.username,
+          password: '',
+          permission_all: initialData.permission_all,
+          permission_messaging: initialData.permission_messaging,
+          permission_tasks: initialData.permission_tasks,
+          permission_users: initialData.permission_users,
+          permission_contests: initialData.permission_contests,
+        });
+      } else {
+        setFormData({
+          name: '',
+          username: '',
+          password: '',
+          permission_all: false,
+          permission_messaging: true,
+          permission_tasks: false,
+          permission_users: false,
+          permission_contests: false,
+        });
+      }
+      setError('');
     }
-    setError('');
+    init();
   }, [initialData, isOpen]);
 
   if (!isOpen || !mounted) return null;

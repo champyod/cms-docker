@@ -15,7 +15,7 @@ export async function PUT(
 
   try {
     const data = await req.json();
-    const sanitizedData: any = {};
+    const sanitizedData: Record<string, unknown> = {};
     for (const key in data) sanitizedData[key] = sanitize(data[key]);
 
     // Handle "infinite" / "no limit" for max numbers where 0 implies infinite
@@ -29,24 +29,24 @@ export async function PUT(
 
     // Clean array fields to remove nulls created by sanitize
     if (Array.isArray(sanitizedData.submission_format)) {
-      sanitizedData.submission_format = sanitizedData.submission_format.filter((v: any) => v !== null);
+      sanitizedData.submission_format = sanitizedData.submission_format.filter((v: unknown) => v !== null);
 
       // Replace %s in submission_format with task name
-      const hasPlaceholder = sanitizedData.submission_format.some((fmt: string) => fmt.includes('%s'));
+      const hasPlaceholder = (sanitizedData.submission_format as string[]).some((fmt) => fmt.includes('%s'));
       if (hasPlaceholder) {
-        let taskName = sanitizedData.name;
+        let taskName = sanitizedData.name as string | undefined;
         if (!taskName) {
            const existingTask = await prisma.tasks.findUnique({ where: { id }, select: { name: true } });
            taskName = existingTask?.name;
         }
         if (taskName) {
-          sanitizedData.submission_format = sanitizedData.submission_format.map((fmt: string) => fmt.replace(/%s/g, taskName));
+          sanitizedData.submission_format = (sanitizedData.submission_format as string[]).map((fmt) => fmt.replace(/%s/g, taskName!));
         }
       }
     }
 
-    const standardFields: any = {};
-    const intervalFields: any = {};
+    const standardFields: Record<string, unknown> = {};
+    const intervalFields: Record<string, unknown> = {};
     const requiredIntervals = ['token_min_interval', 'token_gen_interval'];
     const optionalIntervals = ['min_submission_interval', 'min_user_test_interval'];
     const arrayFields = ['submission_format', 'primary_statements', 'allowed_languages'];
@@ -71,7 +71,7 @@ export async function PUT(
     }
 
     if (Object.keys(intervalFields).length > 0) {
-      const setClauses: string[] = [], qParams: any[] = [];
+      const setClauses: string[] = [], qParams: unknown[] = [];
       const addClause = (key: string, unit: string) => {
         if (intervalFields[key] !== undefined) {
           if (intervalFields[key] === null) setClauses.push(`${key} = NULL`);
@@ -110,8 +110,8 @@ export async function PUT(
 
     revalidatePath('/[locale]/tasks', 'page');
     return apiSuccess({ message: 'Task updated successfully' });
-  } catch (error: any) {
-    if (error.code === 'P2002') return apiError({ message: 'Task name already exists', status: 400 });
+  } catch (error) {
+    if ((error as { code?: string }).code === 'P2002') return apiError({ message: 'Task name already exists', status: 400 });
     return apiError(error);
   }
 }
@@ -130,7 +130,7 @@ export async function DELETE(
     await prisma.tasks.delete({ where: { id } });
     revalidatePath('/[locale]/tasks', 'page');
     return apiSuccess({ message: 'Task deleted successfully' });
-  } catch (error: any) {
+  } catch (error) {
     return apiError(error);
   }
 }

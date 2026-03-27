@@ -34,7 +34,7 @@ export async function PUT(
 
     revalidatePath('/[locale]/tasks', 'page');
     return apiSuccess({ message: 'Testcase updated successfully' });
-  } catch (error: any) {
+  } catch (error) {
     return apiError(error);
   }
 }
@@ -53,7 +53,7 @@ export async function DELETE(
     await prisma.testcases.delete({ where: { id } });
     revalidatePath('/[locale]/tasks', 'page');
     return apiSuccess({ message: 'Testcase deleted successfully' });
-  } catch (error: any) {
+  } catch (error) {
     return apiError(error);
   }
 }

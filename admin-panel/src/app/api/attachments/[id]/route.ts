@@ -17,7 +17,7 @@ export async function DELETE(
     await prisma.attachments.delete({ where: { id } });
     revalidatePath('/[locale]/tasks', 'page');
     return apiSuccess({ message: 'Attachment deleted successfully' });
-  } catch (error: any) {
+  } catch (error) {
     return apiError(error);
   }
 }

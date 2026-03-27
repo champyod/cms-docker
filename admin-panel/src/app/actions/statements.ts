@@ -18,14 +18,14 @@ async function storeFile(data: Buffer): Promise<string> {
   const digest = calculateDigest(data);
   
   // Check if file already exists
-  const existing = await prisma.$queryRaw<any[]>`
+  const existing = await prisma.$queryRaw<Array<{ digest: string }>>`
     SELECT digest FROM fsobjects WHERE digest = ${digest}
   `;
   
   if (existing.length === 0) {
     // Store the file using PostgreSQL Large Object
     // First create a large object and get the OID
-    const result = await prisma.$queryRaw<any[]>`
+    const result = await prisma.$queryRaw<Array<{ lob_oid: number }>>`
       SELECT lo_from_bytea(0, ${data}::bytea) as lob_oid
     `;
     const lobOid = result[0].lob_oid;
@@ -145,7 +145,7 @@ export async function deleteAttachment(attachmentId: number) {
 // Download file by digest
 export async function getFileByDigest(digest: string): Promise<{ data: string } | null> {
   try {
-    const result = await prisma.$queryRaw<any[]>`
+    const result = await prisma.$queryRaw<Array<{ data: Buffer }>>`
       SELECT lo_get(lob_oid) as data FROM fsobjects WHERE digest = ${digest}
     `;
     

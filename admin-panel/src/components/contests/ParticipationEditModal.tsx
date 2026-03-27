@@ -160,7 +160,7 @@ export function ParticipationEditModal({ isOpen, onClose, participation, adminId
                 <div className="flex items-center justify-between">
                   <div>
                     <label className="text-sm text-neutral-300">Hidden</label>
-                    <p className="text-xs text-neutral-500">User won't appear in ranking</p>
+                    <p className="text-xs text-neutral-500">User won&apos;t appear in ranking</p>
                   </div>
                   <input
                     type="checkbox"

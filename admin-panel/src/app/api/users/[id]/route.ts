@@ -18,7 +18,13 @@ export async function PUT(
     const data = await req.json();
     const { first_name, last_name, email, password, timezone } = data;
 
-    const updateData: any = {
+    const updateData: {
+      first_name?: string;
+      last_name?: string;
+      email?: string | null;
+      timezone?: string | null;
+      password?: string;
+    } = {
       first_name,
       last_name,
       email: email || null,
@@ -38,7 +44,7 @@ export async function PUT(
 
     revalidatePath('/[locale]/users', 'page');
     return apiSuccess({ user });
-  } catch (error: any) {
+  } catch (error) {
     return apiError(error);
   }
 }
@@ -57,7 +63,7 @@ export async function DELETE(
     await prisma.users.delete({ where: { id } });
     revalidatePath('/[locale]/users', 'page');
     return apiSuccess({ message: 'User deleted successfully' });
-  } catch (error: any) {
+  } catch (error) {
     return apiError(error);
   }
 }

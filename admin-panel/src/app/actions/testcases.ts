@@ -100,14 +100,14 @@ async function storeFile(data: Buffer): Promise<string> {
   const digest = crypto.createHash('sha256').update(data).digest('hex');
 
   // Check if file already exists
-  const existing = await prisma.$queryRaw<any[]>`
+  const existing = await prisma.$queryRaw<Array<{ digest: string }>>`
     SELECT digest FROM fsobjects WHERE digest = ${digest}
   `;
 
   if (existing.length === 0) {
     // Store the file using PostgreSQL Large Object
     // First create a large object and get the OID
-    const result = await prisma.$queryRaw<any[]>`
+    const result = await prisma.$queryRaw<Array<{ lob_oid: number }>>`
       SELECT lo_from_bytea(0, ${data}::bytea) as lob_oid
     `;
     const lobOid = result[0].lob_oid;
@@ -151,8 +151,8 @@ export async function batchUploadTestcases(datasetId: number, testcases: {
             public: tc.isPublic,
           }
         });
-      } catch (e: any) {
-        if (e.message?.includes('unique constraint')) {
+      } catch (e: unknown) {
+        if ((e as { message?: string }).message?.includes('unique constraint')) {
           // Skip duplicates or update? For now just skip logging error
           console.warn(`Testcase ${tc.codename} already exists, skipping.`);
         } else {

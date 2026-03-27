@@ -68,7 +68,10 @@ export function ContainersClient() {
   };
 
   useEffect(() => {
-    loadContainers();
+    async function init() {
+      await loadContainers();
+    }
+    init();
     const interval = setInterval(loadContainers, 10000);
     return () => clearInterval(interval);
   }, []);
@@ -85,7 +88,7 @@ export function ContainersClient() {
     setActionLoading(null);
   };
 
-  const handleCompose = async (action: 'up' | 'down' | 'restart' | 'build', type?: any) => {
+  const handleCompose = async (action: 'up' | 'down' | 'restart' | 'build', type?: string) => {
     setActionLoading('compose');
     const res = await runCompose(action, type);
     if (res.success) {
@@ -386,8 +389,15 @@ export function ContainersClient() {
   );
 }
 
-function StatsCard({ icon: Icon, label, value, color }: any) {
-    const colors: any = {
+interface StatsCardProps {
+    icon: React.ElementType;
+    label: string;
+    value: number | string;
+    color: string;
+}
+
+function StatsCard({ icon: Icon, label, value, color }: StatsCardProps) {
+    const colors: Record<string, string> = {
         indigo: 'text-indigo-400 bg-indigo-400/10',
         emerald: 'text-emerald-400 bg-emerald-400/10',
         red: 'text-red-400 bg-red-400/10',
@@ -406,7 +416,14 @@ function StatsCard({ icon: Icon, label, value, color }: any) {
     );
 }
 
-function StackActionBtn({ label, onRestart, onUp, onBuild }: any) {
+interface StackActionBtnProps {
+    label: string;
+    onRestart: () => void;
+    onUp: () => void;
+    onBuild: () => void;
+}
+
+function StackActionBtn({ label, onRestart, onUp, onBuild }: StackActionBtnProps) {
     return (
         <div className="bg-black/20 p-3 rounded-xl border border-white/5 space-y-2">
             <div className="text-xs font-bold text-neutral-400">{label}</div>

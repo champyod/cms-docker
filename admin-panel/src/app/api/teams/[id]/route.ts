@@ -25,7 +25,7 @@ export async function PUT(
 
     revalidatePath('/[locale]/teams', 'page');
     return apiSuccess({ message: 'Team updated successfully' });
-  } catch (error: any) {
+  } catch (error) {
     return apiError(error);
   }
 }
@@ -44,7 +44,7 @@ export async function DELETE(
     await prisma.teams.delete({ where: { id } });
     revalidatePath('/[locale]/teams', 'page');
     return apiSuccess({ message: 'Team deleted successfully' });
-  } catch (error: any) {
+  } catch (error) {
     return apiError(error);
   }
 }

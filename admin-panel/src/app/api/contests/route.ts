@@ -66,8 +66,8 @@ export async function POST(req: NextRequest) {
 
     revalidatePath('/[locale]/contests', 'page');
     return apiSuccess({ message: 'Contest created successfully' });
-  } catch (error: any) {
-    if (error.message?.includes('unique constraint')) {
+  } catch (error) {
+    if ((error as { message?: string }).message?.includes('unique constraint')) {
       return apiError({ message: 'Contest name already exists', status: 400 });
     }
     return apiError(error);

@@ -38,7 +38,16 @@ export async function getUsers({ page = 1, search = '' }: { page?: number; searc
 
 // ...
 
-export async function createUser(data: Omit<any, 'id' | 'password' | 'preferred_languages'> & { password?: string }) {
+interface UserInput {
+  first_name: string;
+  last_name: string;
+  username: string;
+  email?: string | null;
+  password?: string;
+  timezone?: string | null;
+}
+
+export async function createUser(data: UserInput) {
   await ensurePermission('users');
 
   const { first_name, last_name, username, email, password, timezone } = data;
@@ -75,12 +84,18 @@ export async function createUser(data: Omit<any, 'id' | 'password' | 'preferred_
   }
 }
 
-export async function updateUser(id: number, data: Partial<any> & { password?: string }) {
+export async function updateUser(id: number, data: Partial<UserInput>) {
   await ensurePermission('users');
 
   const { first_name, last_name, email, password, timezone } = data;
   
-  const updateData: Partial<any> = {
+  const updateData: {
+    first_name?: string;
+    last_name?: string;
+    email?: string | null;
+    timezone?: string | null;
+    password?: string;
+  } = {
     first_name,
     last_name,
     email: email || null,

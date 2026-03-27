@@ -1,0 +1,206 @@
+src/app/[locale]/(authenticated)/contests/[id]/page.tsx:79:29: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/[locale]/(authenticated)/docs/page.tsx:121:58: react/no-unescaped-entities: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.
+src/app/[locale]/(authenticated)/docs/page.tsx:121:67: react/no-unescaped-entities: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.
+src/app/[locale]/(authenticated)/docs/page.tsx:121:70: react/no-unescaped-entities: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.
+src/app/[locale]/(authenticated)/docs/page.tsx:121:76: react/no-unescaped-entities: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.
+src/app/[locale]/(authenticated)/docs/page.tsx:127:58: react/no-unescaped-entities: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.
+src/app/[locale]/(authenticated)/docs/page.tsx:127:72: react/no-unescaped-entities: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.
+src/app/[locale]/(authenticated)/docs/page.tsx:256:58: react/no-unescaped-entities: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.
+src/app/[locale]/(authenticated)/docs/page.tsx:256:63: react/no-unescaped-entities: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.
+src/app/[locale]/(authenticated)/docs/page.tsx:272:87: react/no-unescaped-entities: `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`.
+src/app/[locale]/(authenticated)/docs/page.tsx:307:43: react/no-unescaped-entities: `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`.
+src/app/[locale]/(authenticated)/maintenance/page.tsx:31:5: react-hooks/set-state-in-effect: Error: Calling setState synchronously within an effect can trigger cascading ren
+src/app/[locale]/(authenticated)/page.tsx:178:40: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/[locale]/(authenticated)/page.tsx:179:38: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/[locale]/(authenticated)/search/page.tsx:15:42: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/[locale]/(authenticated)/search/page.tsx:20:7: react-hooks/set-state-in-effect: Error: Calling setState synchronously within an effect can trigger cascading ren
+src/app/[locale]/(authenticated)/search/page.tsx:32:72: react/no-unescaped-entities: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.
+src/app/[locale]/(authenticated)/search/page.tsx:32:80: react/no-unescaped-entities: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.
+src/app/[locale]/(authenticated)/search/page.tsx:43:48: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/[locale]/(authenticated)/search/page.tsx:57:48: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/[locale]/(authenticated)/search/page.tsx:71:51: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/[locale]/(authenticated)/search/page.tsx:85:49: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/[locale]/(authenticated)/tasks/[id]/page.tsx:38:124: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/[locale]/(authenticated)/tasks/[id]/page.tsx:55:27: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/[locale]/(authenticated)/tasks/[id]/page.tsx:55:33: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/[locale]/(authenticated)/tasks/[id]/page.tsx:61:21: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/admins.ts:67:23: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/auth.ts:10:40: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/datasets.ts:73:64: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/datasets.ts:75:66: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/participations.ts:155:41: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/questions.ts:82:16: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/ranking.ts:44:42: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/ranking.ts:48:33: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/ranking.ts:53:31: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/ranking.ts:75:20: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/ranking.ts:75:28: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/ranking.ts:79:27: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/ranking.ts:83:15: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/statements.ts:21:43: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/statements.ts:28:43: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/statements.ts:148:43: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/submissions.ts:22:18: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/tasks.ts:48:52: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/tasks.ts:53:76: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/tasks.ts:129:58: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/tasks.ts:165:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/tasks.ts:175:26: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/tasks.ts:176:68: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/tasks.ts:178:27: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/tasks.ts:179:27: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/tasks.ts:194:48: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/tasks.ts:216:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/teams.ts:94:35: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/teams.ts:103:35: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/testcases.ts:103:43: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/testcases.ts:110:43: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/testcases.ts:154:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/users.ts:41:45: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/users.ts:78:60: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/actions/users.ts:83:29: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/attachments/[id]/route.ts:20:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/attachments/route.ts:10:43: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/attachments/route.ts:15:43: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/attachments/route.ts:50:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/contests/[id]/route.ts:18:24: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/contests/[id]/route.ts:71:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/contests/[id]/route.ts:91:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/contests/route.ts:69:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/datasets/[id]/clone/route.ts:32:64: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/datasets/[id]/clone/route.ts:34:66: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/datasets/[id]/clone/route.ts:63:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/datasets/[id]/managers/route.ts:9:43: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/datasets/[id]/managers/route.ts:14:43: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/datasets/[id]/managers/route.ts:45:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/datasets/[id]/managers/route.ts:80:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/datasets/[id]/route.ts:46:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/datasets/[id]/route.ts:74:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/datasets/route.ts:38:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/managers/[id]/route.ts:18:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/statements/[id]/route.ts:20:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/statements/route.ts:10:43: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/statements/route.ts:15:43: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/statements/route.ts:50:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/submissions/[id]/route.ts:40:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/tasks/[id]/diagnostics/route.ts:26:24: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/tasks/[id]/diagnostics/route.ts:51:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/tasks/[id]/route.ts:18:26: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/tasks/[id]/route.ts:32:84: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/tasks/[id]/route.ts:48:27: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/tasks/[id]/route.ts:49:27: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/tasks/[id]/route.ts:74:49: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/tasks/[id]/route.ts:113:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/tasks/[id]/route.ts:133:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/tasks/route.ts:19:36: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/tasks/route.ts:24:30: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/tasks/route.ts:48:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/teams/[id]/route.ts:28:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/teams/[id]/route.ts:47:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/teams/route.ts:20:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/testcases/[id]/route.ts:37:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/testcases/[id]/route.ts:56:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/testcases/route.ts:10:43: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/testcases/route.ts:15:43: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/testcases/route.ts:55:22: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/testcases/route.ts:75:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/users/[id]/route.ts:21:23: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/users/[id]/route.ts:41:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/users/[id]/route.ts:60:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/app/api/users/route.ts:35:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/admins/AdminList.tsx:10:63: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/admins/AdminList.tsx:13:52: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/admins/AdminList.tsx:26:45: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/admins/AdminList.tsx:31:29: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/admins/AdminModal.tsx:14:17: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/admins/AdminModal.tsx:33:5: react-hooks/set-state-in-effect: Error: Calling setState synchronously within an effect can trigger cascading ren
+src/components/admins/AdminModal.tsx:38:7: react-hooks/set-state-in-effect: Error: Calling setState synchronously within an effect can trigger cascading ren
+src/components/containers/ContainersClient.tsx:71:5: react-hooks/set-state-in-effect: Error: Calling setState synchronously within an effect can trigger cascading ren
+src/components/containers/ContainersClient.tsx:88:84: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/containers/ContainersClient.tsx:389:57: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/containers/ContainersClient.tsx:390:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/containers/ContainersClient.tsx:409:62: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/containers/LogViewerModal.tsx:28:5: react-hooks/set-state-in-effect: Error: Calling setState synchronously within an effect can trigger cascading ren
+src/components/containers/LogViewerModal.tsx:43:5: react-hooks/set-state-in-effect: Error: Calling setState synchronously within an effect can trigger cascading ren
+src/components/contests/ContestCommunications.tsx:20:54: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/contests/ContestCommunications.tsx:21:46: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/contests/ContestCommunications.tsx:22:53: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/contests/ContestCommunications.tsx:22:67: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/contests/ContestCommunications.tsx:304:50: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/contests/ContestDetailView.tsx:19:29: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/contests/ContestDetailView.tsx:23:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/contests/ContestDetailView.tsx:24:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/contests/ContestDetailView.tsx:25:10: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/contests/ContestDetailView.tsx:26:9: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/contests/ContestDetailView.tsx:109:69: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/contests/ContestDetailView.tsx:230:59: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/contests/ContestDetailView.tsx:307:41: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/contests/ContestDetailView.tsx:465:51: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/contests/ContestDetailView.tsx:465:84: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/contests/ContestList.tsx:14:20: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/contests/ContestList.tsx:31:58: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/contests/ContestModal.tsx:16:13: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/contests/ContestModal.tsx:28:29: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/contests/ContestModal.tsx:195:22: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/contests/ParticipantModal.tsx:14:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/contests/ParticipationEditModal.tsx:163:69: react/no-unescaped-entities: `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`.
+src/components/contests/ParticipationModal.tsx:14:10: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/contests/TaskSelectionModal.tsx:12:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/contests/TaskSelectionModal.tsx:33:51: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/contests/TaskSelectionModal.tsx:81:40: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/contests/TeamBulkAddModal.tsx:12:10: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/core/Portal.tsx:10:5: react-hooks/set-state-in-effect: Error: Calling setState synchronously within an effect can trigger cascading ren
+src/components/core/Typography.tsx:27:9: @typescript-eslint/ban-ts-comment: Use "@ts-expect-error" instead of "@ts-ignore", as "@ts-ignore" will do nothing 
+src/components/resources/CoreServicesStatus.tsx:9:44: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/resources/NetworkTrafficLogs.tsx:9:36: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/resources/ResourceView.tsx:12:50: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/resources/ResourceView.tsx:13:42: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/settings/WorkerNodesConfig.tsx:30:5: react-hooks/immutability: Error: Cannot access variable before it is declared
+
+`loadWorkers` is accessed b
+src/components/tasks/DatasetModal.tsx:18:13: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/tasks/DatasetModal.tsx:132:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/tasks/TaskDetailView.tsx:19:29: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/tasks/TaskDetailView.tsx:21:26: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/tasks/TaskDetailView.tsx:202:47: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/tasks/TaskDetailView.tsx:281:47: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/tasks/TaskDetailView.tsx:381:72: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/tasks/TaskDetailView.tsx:442:43: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/tasks/TaskDetailView.tsx:484:52: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/tasks/TaskList.tsx:12:26: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/tasks/TaskList.tsx:94:31: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/tasks/TaskList.tsx:95:59: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/tasks/TaskList.tsx:96:61: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/tasks/TaskList.tsx:108:55: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/tasks/TaskModal.tsx:16:10: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/tasks/TaskModal.tsx:66:31: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/tasks/TaskModal.tsx:111:52: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/tasks/TaskModal.tsx:112:52: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/tasks/TaskModal.tsx:112:127: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/tasks/TaskModal.tsx:113:57: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/tasks/TaskModal.tsx:114:56: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/tasks/TaskModal.tsx:147:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/teams/TeamModal.tsx:28:5: react-hooks/set-state-in-effect: Error: Calling setState synchronously within an effect can trigger cascading ren
+src/components/teams/TeamModal.tsx:33:7: react-hooks/set-state-in-effect: Error: Calling setState synchronously within an effect can trigger cascading ren
+src/components/users/UserList.tsx:13:17: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/users/UserList.tsx:27:52: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/users/UserList.tsx:34:29: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/users/UserList.tsx:95:35: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/components/users/UserModal.tsx:14:10: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/lib/api-utils.ts:6:58: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/lib/api-utils.ts:40:33: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/lib/api-utils.ts:47:35: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/lib/apiClient.ts:1:34: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/lib/apiClient.ts:5:18: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/lib/apiClient.ts:9:29: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/lib/apiClient.ts:32:19: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/lib/apiClient.ts:40:17: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/lib/apiClient.ts:44:18: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/lib/apiClient.ts:44:43: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/lib/apiClient.ts:52:17: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/lib/apiClient.ts:52:42: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/lib/apiClient.ts:60:20: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/lib/auth.ts:17:40: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/lib/auth.ts:25:55: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/lib/auth.ts:54:47: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.
+src/types/index.ts:1:39: @typescript-eslint/no-explicit-any: Unexpected any. Specify a different type.

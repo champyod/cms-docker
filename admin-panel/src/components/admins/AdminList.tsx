@@ -7,10 +7,22 @@ import { Edit2, Trash2, Plus, Shield, ShieldCheck } from 'lucide-react';
 import { updateAdmin, deleteAdmin } from '@/app/actions/admins';
 import { AdminModal } from './AdminModal';
 
-export function AdminList({ initialAdmins }: { initialAdmins: any[] }) {
+interface AdminData {
+  id: number;
+  name: string;
+  username: string;
+  permission_all: boolean;
+  permission_messaging: boolean;
+  permission_tasks: boolean;
+  permission_users: boolean;
+  permission_contests: boolean;
+  enabled: boolean;
+}
+
+export function AdminList({ initialAdmins }: { initialAdmins: AdminData[] }) {
   const [adminsList] = useState(initialAdmins);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingAdmin, setEditingAdmin] = useState<any | null>(null);
+  const [editingAdmin, setEditingAdmin] = useState<AdminData | null>(null);
 
   const handleDelete = async (id: number) => {
     if (confirm('Delete this admin?')) {
@@ -23,12 +35,12 @@ export function AdminList({ initialAdmins }: { initialAdmins: any[] }) {
     }
   };
 
-  const handleToggleEnabled = async (admin: any) => {
+  const handleToggleEnabled = async (admin: AdminData) => {
     await updateAdmin(admin.id, { enabled: !admin.enabled });
     window.location.reload();
   };
 
-  const startEdit = (admin: any) => {
+  const startEdit = (admin: AdminData) => {
     setEditingAdmin(admin);
     setIsModalOpen(true);
   };

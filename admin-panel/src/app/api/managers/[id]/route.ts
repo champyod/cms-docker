@@ -15,7 +15,7 @@ export async function DELETE(
   try {
     await prisma.managers.delete({ where: { id } });
     return apiSuccess({ message: 'Manager file deleted successfully' });
-  } catch (error: any) {
+  } catch (error) {
     return apiError(error);
   }
 }

@@ -25,7 +25,10 @@ export function LogViewerModal({ containerId, containerName, onClose }: LogViewe
   const logRef = useRef<HTMLPreElement>(null);
 
   useEffect(() => {
-    setMounted(true);
+    async function mount() {
+      setMounted(true);
+    }
+    mount();
   }, []);
 
   const fetchLogs = async () => {
@@ -40,7 +43,10 @@ export function LogViewerModal({ containerId, containerName, onClose }: LogViewe
   };
 
   useEffect(() => {
-    fetchLogs();
+    async function load() {
+      await fetchLogs();
+    }
+    load();
     const interval = setInterval(fetchLogs, 5000);
     return () => clearInterval(interval);
   }, [containerId, tail]);

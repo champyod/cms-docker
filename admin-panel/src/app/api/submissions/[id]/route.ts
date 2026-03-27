@@ -37,7 +37,7 @@ export async function PUT(
 
     revalidatePath('/[locale]/submissions', 'page');
     return apiSuccess({ message: 'Submission updated successfully' });
-  } catch (error: any) {
+  } catch (error) {
     return apiError(error);
   }
 }

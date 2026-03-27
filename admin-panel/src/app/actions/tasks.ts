@@ -45,12 +45,12 @@ export async function getTasks({ page = 1, search = '' }: { page?: number; searc
     prisma.tasks.count({ where }),
   ]);
 
-  const tasksWithDiagnostics = rawTasks.map((task: any) => {
+  const tasksWithDiagnostics = rawTasks.map((task) => {
     const diagnostics: TaskDiagnostic[] = [];
     if (!task.active_dataset_id) {
       diagnostics.push({ type: 'error', message: 'No active dataset selected.' });
     } else {
-      const activeDataset = task.datasets_datasets_task_idTotasks.find((d: any) => d.id === task.active_dataset_id);
+      const activeDataset = task.datasets_datasets_task_idTotasks.find((d) => d.id === task.active_dataset_id);
       if (!activeDataset) diagnostics.push({ type: 'error', message: 'Active dataset not found.' });
       else if (activeDataset._count.testcases === 0) diagnostics.push({ type: 'error', message: 'Active dataset has no test cases.' });
     }
@@ -126,7 +126,7 @@ export interface TaskData {
 }
 
 function sanitize<T>(value: T | undefined | null): T | null {
-  if (value === undefined || value === null || (value as any) === '$undefined') return null;
+  if (value === undefined || value === null || (value as unknown) === '$undefined') return null;
   if (typeof value === 'string' && value.trim() === '') return null;
   if (Array.isArray(value)) return value.map(v => (v === '$undefined' || v === '' ? null : v)) as unknown as T;
   return value;
@@ -162,9 +162,9 @@ export async function createTask(data: TaskData) {
     `;
     revalidatePath('/[locale]/tasks');
     return { success: true };
-  } catch (error: any) {
-    if (error.message?.includes('unique constraint')) return { success: false, error: 'Task name already exists' };
-    return { success: false, error: error.message };
+  } catch (error: unknown) {
+    if ((error as { message?: string }).message?.includes('unique constraint')) return { success: false, error: 'Task name already exists' };
+    return { success: false, error: (error as { message?: string }).message };
   }
 }
 
@@ -172,11 +172,11 @@ export async function updateTask(id: number, data: Partial<TaskData>) {
   await ensurePermission('tasks');
 
   try {
-    const sanitizedData: any = {};
-    for (const key in data) sanitizedData[key] = sanitize((data as any)[key]);
+    const sanitizedData: Record<string, unknown> = {};
+    for (const key in data) sanitizedData[key] = sanitize((data as Record<string, unknown>)[key]);
 
-    const standardFields: any = {};
-    const intervalFields: any = {};
+    const standardFields: Record<string, unknown> = {};
+    const intervalFields: Record<string, unknown> = {};
     const requiredIntervals = ['token_min_interval', 'token_gen_interval'];
     const optionalIntervals = ['min_submission_interval', 'min_user_test_interval'];
     const nullableKeys = ['contest_id', 'token_max_number', 'token_gen_max', 'max_submission_number', 'max_user_test_number', ...optionalIntervals];
@@ -191,7 +191,7 @@ export async function updateTask(id: number, data: Partial<TaskData>) {
     if (Object.keys(standardFields).length > 0) await prisma.tasks.update({ where: { id }, data: standardFields });
 
     if (Object.keys(intervalFields).length > 0) {
-      const setClauses: string[] = [], params: any[] = [];
+      const setClauses: string[] = [], params: unknown[] = [];
       const addClause = (key: string, unit: string) => {
         if (intervalFields[key] !== undefined) {
           if (intervalFields[key] === null) setClauses.push(`${key} = NULL`);
@@ -213,10 +213,10 @@ export async function updateTask(id: number, data: Partial<TaskData>) {
 
     revalidatePath('/[locale]/tasks', 'page');
     return { success: true };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Update Task Error:', error);
-    if (error.code === 'P2002') return { success: false, error: 'Task name already exists' };
-    return { success: false, error: error.message || 'An unexpected error occurred' };
+    if ((error as { code?: string }).code === 'P2002') return { success: false, error: 'Task name already exists' };
+    return { success: false, error: (error as { message?: string }).message || 'An unexpected error occurred' };
   }
 }
 

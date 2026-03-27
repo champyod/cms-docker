@@ -19,7 +19,10 @@ export async function getSubmissions({
 }) {
   const skip = (page - 1) * SUBMISSIONS_PER_PAGE;
   
-    const where: any = {};
+  const where: {
+    participations?: { contest_id?: number; user_id?: number };
+    task_id?: number;
+  } = {};
     if (contestId) {
         where.participations = { contest_id: contestId };
     }

@@ -32,8 +32,8 @@ export async function POST(req: NextRequest) {
 
     revalidatePath('/[locale]/users', 'page');
     return apiSuccess({ user });
-  } catch (error: any) {
-    if (error.code === 'P2002') return apiError({ message: 'Username already exists', status: 400 });
+  } catch (error) {
+    if ((error as { code?: string }).code === 'P2002') return apiError({ message: 'Username already exists', status: 400 });
     return apiError(error);
   }
 }

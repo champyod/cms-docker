@@ -60,7 +60,7 @@ export async function POST(
     
     revalidatePath('/[locale]/tasks', 'page');
     return apiSuccess({ dataset: newDataset });
-  } catch (error: any) {
+  } catch (error) {
     return apiError(error);
   }
 }

@@ -6,12 +6,12 @@ import crypto from 'crypto';
 async function storeFile(data: Buffer): Promise<string> {
   const digest = crypto.createHash('sha256').update(data).digest('hex');
 
-  const existing = await prisma.$queryRaw<any[]>`
+  const existing = await prisma.$queryRaw<Array<{ digest: string }>>`
     SELECT digest FROM fsobjects WHERE digest = ${digest}
   `;
 
   if (existing.length === 0) {
-    const result = await prisma.$queryRaw<any[]>`
+    const result = await prisma.$queryRaw<Array<{ lob_oid: number }>>`
       SELECT lo_from_bytea(0, ${data}::bytea) as lob_oid
     `;
     const lobOid = result[0].lob_oid;
@@ -42,7 +42,7 @@ export async function GET(
       orderBy: { filename: 'asc' }
     });
     return apiSuccess(managers);
-  } catch (error: any) {
+  } catch (error) {
     return apiError(error);
   }
 }
@@ -77,7 +77,7 @@ export async function POST(
     `;
 
     return apiSuccess({ digest });
-  } catch (error: any) {
+  } catch (error) {
     return apiError(error);
   }
 }

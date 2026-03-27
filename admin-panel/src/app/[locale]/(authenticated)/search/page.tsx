@@ -7,21 +7,30 @@ import { Users, Trophy, ClipboardList, Shield } from 'lucide-react';
 import Link from 'next/link';
 import { SearchResultCard, SectionHeader } from '@/components/search/SearchComponents';
 
+interface SearchResults {
+  users: Array<{ id: number; username: string; first_name: string; last_name: string }>;
+  tasks: Array<{ id: number; name: string; title: string }>;
+  contests: Array<{ id: number; name: string; description?: string | null }>;
+  admins: Array<{ id: number; username: string; name: string }>;
+}
+
 export default function SearchPage() {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
   const query = searchParams.get('q') || '';
-  const [results, setResults] = useState<any>(null);
+  const [results, setResults] = useState<SearchResults | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (query) {
-      setLoading(true);
-      searchAll(query).then(data => {
+      async function search() {
+        setLoading(true);
+        const data = await searchAll(query);
         setResults(data);
         setLoading(false);
-      });
+      }
+      search();
     }
   }, [query]);
 
@@ -29,7 +38,7 @@ export default function SearchPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-white">Search Results for "{query}"</h1>
+      <h1 className="text-2xl font-bold text-white">Search Results for &quot;{query}&quot;</h1>
       
       {loading && <div className="text-neutral-400">Searching...</div>}
       
@@ -40,7 +49,7 @@ export default function SearchPage() {
                 <section>
                     <SectionHeader title="Users" count={results.users.length} icon={Users} iconColor="text-blue-400" />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {results.users.map((u: any) => (
+                        {results.users.map((u) => (
                             <Link href={`/${locale}/users/${u.id}`} key={u.id}>
                                 <SearchResultCard title={u.username} subtitle={`${u.first_name} ${u.last_name}`} />
                             </Link>
@@ -54,7 +63,7 @@ export default function SearchPage() {
                 <section>
                     <SectionHeader title="Tasks" count={results.tasks.length} icon={ClipboardList} iconColor="text-emerald-400" />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {results.tasks.map((t: any) => (
+                        {results.tasks.map((t) => (
                             <Link href={`/${locale}/tasks/${t.id}`} key={t.id}>
                                 <SearchResultCard title={t.name} subtitle={t.title} />
                             </Link>
@@ -68,7 +77,7 @@ export default function SearchPage() {
                 <section>
                      <SectionHeader title="Contests" count={results.contests.length} icon={Trophy} iconColor="text-amber-400" />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {results.contests.map((c: any) => (
+                        {results.contests.map((c) => (
                             <Link href={`/${locale}/contests/${c.id}`} key={c.id}>
                                 <SearchResultCard title={c.name} subtitle={c.description} />
                             </Link>
@@ -82,7 +91,7 @@ export default function SearchPage() {
                 <section>
                     <SectionHeader title="Admins" count={results.admins.length} icon={Shield} iconColor="text-purple-400" />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {results.admins.map((a: any) => (
+                        {results.admins.map((a) => (
                             <div key={a.id} className="cursor-default">
                                 <SearchResultCard title={a.username} subtitle={a.name} className="cursor-default hover:bg-white/5" />
                             </div>

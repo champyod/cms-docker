@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import type { Permission } from './permissions';
 
 export function sanitize<T>(value: T | undefined | null): T | null {
-  if (value === undefined || value === null || (value as any) === '$undefined') return null;
+  if (value === undefined || value === null || (value as unknown) === '$undefined') return null;
   if (typeof value === 'string' && value.trim() === '') return null;
   if (Array.isArray(value)) return value.map(v => (v === '$undefined' || v === '' ? null : v)) as unknown as T;
   return value;
@@ -37,13 +37,13 @@ export async function verifyApiPermission(permission: Permission) {
   return { authorized: true as const, session };
 }
 
-export function apiError(error: any) {
+export function apiError(error: unknown) {
   console.error('API Error:', error);
-  const message = error.message || 'An unexpected error occurred';
-  const status = error.status || 500;
+  const message = error instanceof Error ? error.message : 'An unexpected error occurred';
+  const status = (error as { status?: number })?.status || 500;
   return NextResponse.json({ success: false, error: message }, { status });
 }
 
-export function apiSuccess(data?: any) {
+export function apiSuccess(data?: Record<string, unknown>) {
   return NextResponse.json({ success: true, ...data });
 }

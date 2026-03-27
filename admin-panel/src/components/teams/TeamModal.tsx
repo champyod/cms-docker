@@ -25,16 +25,22 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData }: TeamModal
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    async function mount() {
+      setMounted(true);
+    }
+    mount();
   }, []);
 
   useEffect(() => {
-    if (initialData) {
-      setFormData({ code: initialData.code, name: initialData.name });
-    } else {
-      setFormData({ code: '', name: '' });
+    async function init() {
+      if (initialData) {
+        setFormData({ code: initialData.code, name: initialData.name });
+      } else {
+        setFormData({ code: '', name: '' });
+      }
+      setError('');
     }
-    setError('');
+    init();
   }, [initialData, isOpen]);
 
   if (!isOpen || !mounted) return null;

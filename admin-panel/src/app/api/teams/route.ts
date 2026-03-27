@@ -17,8 +17,8 @@ export async function POST(req: NextRequest) {
     });
     revalidatePath('/[locale]/teams', 'page');
     return apiSuccess({ message: 'Team created successfully' });
-  } catch (error: any) {
-    if (error.message?.includes('unique constraint')) return apiError({ message: 'Team code already exists', status: 400 });
+  } catch (error) {
+    if ((error as { message?: string }).message?.includes('unique constraint')) return apiError({ message: 'Team code already exists', status: 400 });
     return apiError(error);
   }
 }

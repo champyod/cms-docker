@@ -7,7 +7,10 @@ export function Portal({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    async function mount() {
+      setMounted(true);
+    }
+    mount();
     return () => setMounted(false);
   }, []);
 

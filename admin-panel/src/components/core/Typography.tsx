@@ -24,7 +24,7 @@ export function Text({ as, variant = 'body', className, children, color, ...prop
     const defaultColor = color ? color : (variant === 'muted' ? '' : 'text-white');
 
     return (
-        // @ts-ignore
+        // @ts-expect-error – ElementType is flexible but TS can't verify all valid HTML elements at compile-time
         <Component className={cn(variants[variant], defaultColor, className)} {...props}>
             {children}
         </Component>

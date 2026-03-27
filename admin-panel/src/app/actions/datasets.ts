@@ -70,9 +70,9 @@ export async function cloneDataset(datasetId: number, newDescription: string) {
         time_limit: original.time_limit,
         memory_limit: original.memory_limit,
         task_type: original.task_type,
-        task_type_parameters: original.task_type_parameters as any,
+        task_type_parameters: original.task_type_parameters as unknown,
         score_type: original.score_type,
-        score_type_parameters: original.score_type_parameters as any,
+        score_type_parameters: original.score_type_parameters as unknown,
         autojudge: false,
       }
     });

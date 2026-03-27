@@ -28,7 +28,10 @@ export default function MaintenancePage() {
   };
 
   useEffect(() => {
-    loadData();
+    async function init() {
+      await loadData();
+    }
+    init();
   }, []);
 
   const handleChange = (key: string, val: string) => {

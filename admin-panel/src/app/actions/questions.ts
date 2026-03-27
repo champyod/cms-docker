@@ -79,7 +79,7 @@ export async function unignoreQuestion(questionId: number) {
 }
 
 export async function getUnansweredQuestions(contestId: number | null) {
-  const where: any = {
+  const where: { reply_timestamp: null; ignored: boolean; participation?: { contest_id: number } } = {
     reply_timestamp: null,
     ignored: false
   };

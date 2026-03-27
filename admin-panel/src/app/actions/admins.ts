@@ -64,7 +64,7 @@ export async function updateAdmin(adminId: number, data: {
 }) {
   await ensurePermission('all');
   try {
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
     if (data.name) updateData.name = data.name;
     if (data.enabled !== undefined) updateData.enabled = data.enabled;
     if (data.permission_all !== undefined) updateData.permission_all = data.permission_all;

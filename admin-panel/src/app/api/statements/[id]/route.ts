@@ -17,7 +17,7 @@ export async function DELETE(
     await prisma.statements.delete({ where: { id } });
     revalidatePath('/[locale]/tasks', 'page');
     return apiSuccess({ message: 'Statement deleted successfully' });
-  } catch (error: any) {
+  } catch (error) {
     return apiError(error);
   }
 }

@@ -26,10 +26,6 @@ export function WorkerNodesConfig() {
   const [newPort, setNewPort] = useState('26000');
   const [showAddForm, setShowAddForm] = useState(false);
 
-  useEffect(() => {
-    loadWorkers();
-  }, []);
-
   const loadWorkers = async () => {
     setLoading(true);
     const data = await getWorkers();
@@ -39,7 +35,6 @@ export function WorkerNodesConfig() {
     const statuses = await Promise.all(
       data.map(async (w) => {
         try {
-          const containerName = w.host.includes('cms-worker') ? w.host : `cms-worker-${w.host}`;
           const res = await fetch('/api/workers/status', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -65,6 +60,13 @@ export function WorkerNodesConfig() {
     setWorkerStatus(statuses);
     setLoading(false);
   };
+
+  useEffect(() => {
+    async function init() {
+      await loadWorkers();
+    }
+    init();
+  }, []);
 
   const handleRetryConnection = async (host: string) => {
     addToast({ title: 'Reconnecting...', message: `Attempting to reconnect ${host}`, type: 'info' });

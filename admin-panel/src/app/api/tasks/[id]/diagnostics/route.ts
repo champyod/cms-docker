@@ -23,7 +23,7 @@ export async function GET(
 
     if (!task) return apiError({ message: 'Task not found', status: 404 });
 
-    const diagnostics: any[] = [];
+    const diagnostics: Array<{ type: string; message: string }> = [];
     if (!task.active_dataset_id) {
       diagnostics.push({ type: 'error', message: 'No active dataset selected. Task cannot be judged.' });
     }
@@ -48,7 +48,7 @@ export async function GET(
     }
 
     return apiSuccess({ diagnostics });
-  } catch (error: any) {
+  } catch (error) {
     return apiError(error);
   }
 }

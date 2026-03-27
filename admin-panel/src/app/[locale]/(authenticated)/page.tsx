@@ -79,7 +79,7 @@ async function getRecentActivity() {
       }
     });
 
-    return submissions.map(s => ({
+    return submissions.map((s: typeof submissions[number]) => ({
       id: s.id,
       timestamp: s.timestamp,
       username: s.participations?.users?.username ?? 'Unknown',

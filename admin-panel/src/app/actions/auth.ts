@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
-export async function login(prevState: any, formData: FormData) {
+export async function login(prevState: Record<string, unknown>, formData: FormData) {
   const username = formData.get("username") as string;
   const password = formData.get("password") as string;
 
