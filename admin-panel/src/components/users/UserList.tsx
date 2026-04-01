@@ -195,6 +195,7 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
               <TableHead className="text-neutral-400">ID</TableHead>
               <TableHead className="text-neutral-400">Name</TableHead>
               <TableHead className="text-neutral-400">Username</TableHead>
+              <TableHead className="text-neutral-400">Team</TableHead>
               <TableHead className="text-neutral-400">Email</TableHead>
               <TableHead className="text-neutral-400 text-right">Actions</TableHead>
             </TableRow>
@@ -213,6 +214,9 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
                 <TableCell className="font-mono text-neutral-500 text-xs">#{(table.page - 1) * table.perPage + index + 1}</TableCell>
                 <TableCell className="font-medium text-white">{user.first_name} {user.last_name}</TableCell>
                 <TableCell className="text-neutral-300">{user.username}</TableCell>
+                <TableCell className="text-neutral-300">
+                  {Array.from(new Set((user.participations || []).map((participation: any) => participation?.teams?.code).filter(Boolean))).join(', ') || '-'}
+                </TableCell>
                 <TableCell className="text-neutral-400">{user.email || '-'}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-2">
@@ -242,14 +246,14 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
             ))}
             {!loadingList && usersList.length === 0 && (
                 <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12 text-neutral-500">
+                    <TableCell colSpan={7} className="text-center py-12 text-neutral-500">
                         No users found.
                     </TableCell>
                 </TableRow>
             )}
             {loadingList && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-12 text-neutral-500">
+                <TableCell colSpan={7} className="text-center py-12 text-neutral-500">
                   Loading users...
                 </TableCell>
               </TableRow>

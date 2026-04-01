@@ -25,6 +25,8 @@ export async function GET(req: NextRequest) {
             { last_name: { contains: search, mode: 'insensitive' as const } },
             { username: { contains: search, mode: 'insensitive' as const } },
             { email: { contains: search, mode: 'insensitive' as const } },
+            { participations: { some: { teams: { code: { contains: search, mode: 'insensitive' as const } } } } },
+            { participations: { some: { teams: { name: { contains: search, mode: 'insensitive' as const } } } } },
           ],
         }
       : {};
@@ -35,6 +37,18 @@ export async function GET(req: NextRequest) {
         skip,
         take: perPage,
         orderBy: { id: 'asc' },
+        include: {
+          participations: {
+            select: {
+              teams: {
+                select: {
+                  code: true,
+                  name: true,
+                },
+              },
+            },
+          },
+        },
       }),
       prisma.users.count({ where }),
     ]);

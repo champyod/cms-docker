@@ -20,6 +20,8 @@ export async function getUsers({ page = 1, search = '', perPage = USERS_PER_PAGE
           { last_name: { contains: search, mode: 'insensitive' as const } },
           { username: { contains: search, mode: 'insensitive' as const } },
           { email: { contains: search, mode: 'insensitive' as const } },
+          { participations: { some: { teams: { code: { contains: search, mode: 'insensitive' as const } } } } },
+          { participations: { some: { teams: { name: { contains: search, mode: 'insensitive' as const } } } } },
         ],
       }
     : {};
@@ -30,6 +32,18 @@ export async function getUsers({ page = 1, search = '', perPage = USERS_PER_PAGE
       skip,
       take: safePerPage,
       orderBy: { id: 'asc' },
+      include: {
+        participations: {
+          select: {
+            teams: {
+              select: {
+                code: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
     }),
     prisma.users.count({ where }),
   ]);
