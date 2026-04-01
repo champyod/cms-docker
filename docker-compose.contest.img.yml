@@ -1,3 +1,7 @@
 services:
+  evaluation-service:
+    image: ghcr.io/champyod/cms-docker-core:major-admin-panel
+  proxy-service:
+    image: ghcr.io/champyod/cms-docker-core:major-admin-panel
   contest-web-server:
     image: ghcr.io/champyod/cms-docker-core:major-admin-panel

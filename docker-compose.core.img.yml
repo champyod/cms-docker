@@ -11,14 +11,6 @@ services:
     image: ghcr.io/champyod/cms-docker-core:major-admin-panel
     volumes:
       - ./src/cms/db/types.py:/home/cmsuser/cms/lib/python3.12/site-packages/cms/db/types.py
-  evaluation-service:
-    image: ghcr.io/champyod/cms-docker-core:major-admin-panel
-    volumes:
-      - ./src/cms/db/types.py:/home/cmsuser/cms/lib/python3.12/site-packages/cms/db/types.py
-  proxy-service:
-    image: ghcr.io/champyod/cms-docker-core:major-admin-panel
-    volumes:
-      - ./src/cms/db/types.py:/home/cmsuser/cms/lib/python3.12/site-packages/cms/db/types.py
   checker-service:
     image: ghcr.io/champyod/cms-docker-core:major-admin-panel
     volumes:
