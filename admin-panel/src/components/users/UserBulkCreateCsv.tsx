@@ -201,11 +201,10 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess }: UserBulkCreate
     if (selectedRowIndices.size === 0) return;
 
     const selectedRows = previewRows.filter((row) => selectedRowIndices.has(row.rowIndex));
-    const lines = ['row_index,first_name,last_name,username,password,email,timezone,team'];
+    const lines = ['first_name,last_name,username,password,email,timezone,team'];
 
     selectedRows.forEach((row) => {
       const cells = [
-        row.rowIndex,
         `"${row.first_name.replace(/"/g, '""')}"`,
         `"${row.last_name.replace(/"/g, '""')}"`,
         `"${row.username.replace(/"/g, '""')}"`,
@@ -459,7 +458,6 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess }: UserBulkCreate
                         }}
                       />
                     </th>
-                    <th className="text-left px-2 py-2">Row</th>
                     <th className="text-left px-2 py-2">first_name</th>
                     <th className="text-left px-2 py-2">last_name</th>
                     <th className="text-left px-2 py-2">username</th>
@@ -473,7 +471,7 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess }: UserBulkCreate
                 <tbody>
                   {visibleRows.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="px-3 py-6 text-center text-neutral-500">
+                      <td colSpan={9} className="px-3 py-6 text-center text-neutral-500">
                         No preview rows yet
                       </td>
                     </tr>
@@ -496,7 +494,6 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess }: UserBulkCreate
                             }}
                           />
                         </td>
-                        <td className="px-2 py-2 text-neutral-400">{row.rowIndex}</td>
                         <td className="px-2 py-2 text-white">{row.first_name}</td>
                         <td className="px-2 py-2 text-white">{row.last_name}</td>
                         <td className="px-2 py-2 text-white">{row.username}</td>
