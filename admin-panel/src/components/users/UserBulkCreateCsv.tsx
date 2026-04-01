@@ -18,6 +18,7 @@ type PreviewRow = {
   timezone: string;
   team: string;
   issues: string[];
+  selected?: boolean;
 };
 
 const EXPECTED_FIELDS = ['first_name', 'last_name', 'username', 'password', 'email', 'timezone', 'team'];
@@ -94,9 +95,28 @@ function randomToken(length: number) {
   return token;
 }
 
-function makeUsername(firstName: string, lastName: string) {
-  const base = `${firstName}.${lastName}`.toLowerCase().replace(/[^a-z0-9._-]/g, '') || 'user';
-  return `${base}${randomToken(4).toLowerCase()}`;
+function makeUsername(firstName: string, lastName: string, usedUsernames?: Set<string>): string {
+  // Extract only ASCII characters from names for username generation
+  const firstAscii = firstName.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  const lastAscii = lastName.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  
+  // Build base from ASCII-only parts, fallback to "user" if empty
+  let base = `${firstAscii}${lastAscii}` || 'user';
+  if (base.length > 20) {
+    base = base.substring(0, 20);
+  }
+  
+  let username = `${base}${randomToken(4).toLowerCase()}`;
+  
+  // Ensure uniqueness within the batch
+  let attempts = 0;
+  while (usedUsernames?.has(username) && attempts < 100) {
+    username = `${base}${randomToken(4).toLowerCase()}`;
+    attempts += 1;
+  }
+  
+  usedUsernames?.add(username);
+  return username;
 }
 
 function makePassword() {
@@ -117,6 +137,7 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess }: UserBulkCreate
   const [generationMode, setGenerationMode] = useState<GenerationMode>('none');
   const [submitting, setSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState<any | null>(null);
+  const [selectedRowIndices, setSelectedRowIndices] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     setMounted(true);
@@ -139,7 +160,9 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess }: UserBulkCreate
   );
 
   const downloadCsv = (filename: string, content: string) => {
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    // Add UTF-8 BOM for proper Thai character encoding in Excel/LibreOffice
+    const bom = '\uFEFF';
+    const blob = new Blob([bom + content], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
@@ -174,11 +197,34 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess }: UserBulkCreate
     downloadCsv('users-created-credentials.csv', `${lines.join('\n')}\n`);
   };
 
-  const applyGeneration = (row: PreviewRow, mode: GenerationMode): PreviewRow => {
+  const handleExportSelectedPreview = () => {
+    if (selectedRowIndices.size === 0) return;
+
+    const selectedRows = previewRows.filter((row) => selectedRowIndices.has(row.rowIndex));
+    const lines = ['row_index,first_name,last_name,username,password,email,timezone,team'];
+
+    selectedRows.forEach((row) => {
+      const cells = [
+        row.rowIndex,
+        `"${row.first_name.replace(/"/g, '""')}"`,
+        `"${row.last_name.replace(/"/g, '""')}"`,
+        `"${row.username.replace(/"/g, '""')}"`,
+        `"${row.password.replace(/"/g, '""')}"`,
+        `"${row.email.replace(/"/g, '""')}"`,
+        `"${row.timezone.replace(/"/g, '""')}"`,
+        `"${row.team.replace(/"/g, '""')}"`,
+      ];
+      lines.push(cells.join(','));
+    });
+
+    downloadCsv('users-selected.csv', `${lines.join('\n')}\n`);
+  };
+
+  const applyGeneration = (row: PreviewRow, mode: GenerationMode, usedUsernames?: Set<string>): PreviewRow => {
     const next = { ...row };
 
     if (!next.username && (mode === 'username' || mode === 'both')) {
-      next.username = makeUsername(next.first_name, next.last_name);
+      next.username = makeUsername(next.first_name, next.last_name, usedUsernames);
     }
 
     if (!next.password && (mode === 'password' || mode === 'both')) {
@@ -208,6 +254,7 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess }: UserBulkCreate
       warnings.push(`Unknown columns ignored: ${unknownHeaders.join(', ')}`);
     }
 
+    const usedUsernames = new Set<string>();
     const rows = matrix.slice(1).map((cells, rowIndex) => {
       const mapped: PreviewRow = {
         rowIndex: rowIndex + 2,
@@ -219,14 +266,15 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess }: UserBulkCreate
         timezone: '',
         team: '',
         issues: [],
+        selected: false,
       };
 
       mappedHeaders.forEach((field, colIndex) => {
         if (!field) return;
-        mapped[field] = (cells[colIndex] ?? '').trim();
+        (mapped as any)[field] = (cells[colIndex] ?? '').trim();
       });
 
-      const withGenerated = applyGeneration(mapped, mode);
+      const withGenerated = applyGeneration(mapped, mode, usedUsernames);
 
       if (!withGenerated.first_name) withGenerated.issues.push('first_name missing');
       if (!withGenerated.last_name) withGenerated.issues.push('last_name missing');
@@ -238,6 +286,7 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess }: UserBulkCreate
 
     setHeaderWarnings(warnings);
     setPreviewRows(rows);
+    setSelectedRowIndices(new Set());
   };
 
   const handleUploadFile = (file: File | undefined) => {
@@ -259,12 +308,15 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess }: UserBulkCreate
 
   const fillEmptyInPreview = (mode: GenerationMode) => {
     setGenerationMode(mode);
+    const usedUsernames = new Set<string>();
     setPreviewRows((previousRows) =>
       previousRows.map((row) => {
         const next = { ...row };
 
         if (!next.username && (mode === 'username' || mode === 'both')) {
-          next.username = makeUsername(next.first_name, next.last_name);
+          next.username = makeUsername(next.first_name, next.last_name, usedUsernames);
+        } else if (next.username) {
+          usedUsernames.add(next.username);
         }
 
         if (!next.password && (mode === 'password' || mode === 'both')) {
@@ -336,10 +388,14 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess }: UserBulkCreate
               First row must be header. Supported columns: {EXPECTED_FIELDS.join(', ')}. Team column is preview-only on this page.
             </p>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" onClick={handleDownloadTemplate}>
-                <Table2 className="w-4 h-4 mr-2" /> Download CSV Template
-              </Button>
-              <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-neutral-200 cursor-pointer text-sm">
+              <button
+                onClick={handleDownloadTemplate}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-neutral-200 cursor-pointer text-sm transition-colors"
+              >
+                <Table2 className="w-4 h-4" />
+                Download CSV Template
+              </button>
+              <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-neutral-200 cursor-pointer text-sm transition-colors">
                 <Upload className="w-4 h-4" />
                 Upload CSV
                 <input
@@ -389,6 +445,20 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess }: UserBulkCreate
               <table className="w-full text-xs">
                 <thead className="bg-white/5 text-neutral-300 sticky top-0 z-10">
                   <tr>
+                    <th className="text-left px-2 py-2 w-8">
+                      <input
+                        type="checkbox"
+                        title="Select all rows"
+                        checked={selectedRowIndices.size > 0 && selectedRowIndices.size === previewRows.length}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedRowIndices(new Set(previewRows.map((r) => r.rowIndex)));
+                          } else {
+                            setSelectedRowIndices(new Set());
+                          }
+                        }}
+                      />
+                    </th>
                     <th className="text-left px-2 py-2">Row</th>
                     <th className="text-left px-2 py-2">first_name</th>
                     <th className="text-left px-2 py-2">last_name</th>
@@ -403,13 +473,29 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess }: UserBulkCreate
                 <tbody>
                   {visibleRows.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-3 py-6 text-center text-neutral-500">
+                      <td colSpan={10} className="px-3 py-6 text-center text-neutral-500">
                         No preview rows yet
                       </td>
                     </tr>
                   ) : (
                     visibleRows.map((row) => (
-                      <tr key={row.rowIndex} className="border-t border-white/5">
+                      <tr key={row.rowIndex} className={`border-t border-white/5 ${selectedRowIndices.has(row.rowIndex) ? 'bg-indigo-500/10' : ''}`}>
+                        <td className="px-2 py-2 text-center">
+                          <input
+                            type="checkbox"
+                            title={`Select row ${row.rowIndex}`}
+                            checked={selectedRowIndices.has(row.rowIndex)}
+                            onChange={(e) => {
+                              const newSet = new Set(selectedRowIndices);
+                              if (e.target.checked) {
+                                newSet.add(row.rowIndex);
+                              } else {
+                                newSet.delete(row.rowIndex);
+                              }
+                              setSelectedRowIndices(newSet);
+                            }}
+                          />
+                        </td>
                         <td className="px-2 py-2 text-neutral-400">{row.rowIndex}</td>
                         <td className="px-2 py-2 text-white">{row.first_name}</td>
                         <td className="px-2 py-2 text-white">{row.last_name}</td>
@@ -431,6 +517,19 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess }: UserBulkCreate
               </div>
             )}
           </div>
+
+          {selectedRowIndices.size > 0 && (
+            <div className="rounded-lg border border-indigo-500/30 bg-indigo-500/10 p-3 text-indigo-300 text-xs flex items-center justify-between">
+              <span>{selectedRowIndices.size} row(s) selected</span>
+              <button
+                onClick={handleExportSelectedPreview}
+                className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 transition-colors"
+              >
+                <FileSpreadsheet className="w-3 h-3" />
+                Export Selected
+              </button>
+            </div>
+          )}
 
           {submitResult && (
             <div className={`rounded-lg border p-3 text-xs ${submitResult.success ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-red-500/30 bg-red-500/10 text-red-300'}`}>
