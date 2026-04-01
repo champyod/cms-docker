@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { UserModal } from './UserModal';
 import { apiClient } from '@/lib/apiClient';
+import { UserBulkCreateCsv } from './UserBulkCreateCsv';
 
 interface UserListProps {
   initialUsers: any[];
@@ -24,6 +25,7 @@ interface UserListProps {
 export function UserList({ initialUsers, totalPages, permissions }: UserListProps) {
   const [usersList] = useState(initialUsers);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
@@ -69,14 +71,24 @@ export function UserList({ initialUsers, totalPages, permissions }: UserListProp
           </Link>
         </div>
         {canManageUsers && (
-          <Button 
-              variant="primary" 
-              className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white pl-3 pr-4"
-              onClick={handleCreate}
-          >
-            <Plus className="w-4 h-4" />
-            Create User
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              className="flex items-center gap-2"
+              onClick={() => setIsBulkModalOpen(true)}
+            >
+              <Plus className="w-4 h-4" />
+              Bulk Add Users
+            </Button>
+            <Button 
+                variant="primary" 
+                className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white pl-3 pr-4"
+                onClick={handleCreate}
+            >
+              <Plus className="w-4 h-4" />
+              Create User
+            </Button>
+          </div>
         )}
       </div>
 
@@ -141,6 +153,14 @@ export function UserList({ initialUsers, totalPages, permissions }: UserListProp
         user={selectedUser}
         onSuccess={handleSuccess}
       />
+
+      {canManageUsers && (
+        <UserBulkCreateCsv
+          isOpen={isBulkModalOpen}
+          onClose={() => setIsBulkModalOpen(false)}
+          onSuccess={handleSuccess}
+        />
+      )}
     </div>
   );
 }
