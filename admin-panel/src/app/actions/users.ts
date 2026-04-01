@@ -6,9 +6,12 @@ import bcrypt from 'bcryptjs';
 import { ensurePermission } from '@/lib/permissions';
 
 const USERS_PER_PAGE = 20;
+const MAX_USERS_PER_PAGE = 100;
 
-export async function getUsers({ page = 1, search = '' }: { page?: number; search?: string }) {
-  const skip = (page - 1) * USERS_PER_PAGE;
+export async function getUsers({ page = 1, search = '', perPage = USERS_PER_PAGE }: { page?: number; search?: string; perPage?: number }) {
+  const safePerPage = Math.min(Math.max(Number(perPage) || USERS_PER_PAGE, 1), MAX_USERS_PER_PAGE);
+  const safePage = Math.max(Number(page) || 1, 1);
+  const skip = (safePage - 1) * safePerPage;
   
   const where = search ? {
     OR: [
@@ -23,7 +26,7 @@ export async function getUsers({ page = 1, search = '' }: { page?: number; searc
     prisma.users.findMany({
       where,
       skip,
-      take: USERS_PER_PAGE,
+      take: safePerPage,
       orderBy: { id: 'desc' },
     }),
     prisma.users.count({ where }),
@@ -31,7 +34,9 @@ export async function getUsers({ page = 1, search = '' }: { page?: number; searc
 
   return {
     users,
-    totalPages: Math.ceil(total / USERS_PER_PAGE),
+    totalPages: Math.max(Math.ceil(total / safePerPage), 1),
+    currentPage: safePage,
+    perPage: safePerPage,
     total,
   };
 }
