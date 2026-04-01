@@ -33,6 +33,9 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
   const [statusMessage, setStatusMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [selectedContestId, setSelectedContestId] = useState<number>(contests[0]?.id ?? 0);
+  const [teamCode, setTeamCode] = useState('');
+  const [timezone, setTimezone] = useState('Asia/Bangkok');
+  const [emailDomain, setEmailDomain] = useState('');
   const [rows, setRows] = useState(selectedUsers);
 
   useEffect(() => {
@@ -61,7 +64,7 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
 
   if (!isOpen || !mounted) return null;
 
-  const runRegenerate = async (mode: 'username' | 'password' | 'both') => {
+  const runRegenerate = async (mode: 'username' | 'password') => {
     if (selectedUserIds.length === 0) return;
 
     setLoading(true);
@@ -132,6 +135,150 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
     onSuccess();
   };
 
+  const runTeamSet = async () => {
+    if (selectedUserIds.length === 0 || !selectedContestId) return;
+    if (!teamCode.trim()) {
+      setErrorMessage('Team code is required');
+      return;
+    }
+
+    setLoading(true);
+    setErrorMessage('');
+    setStatusMessage('');
+
+    const result = await apiClient.post('/api/users/batch', {
+      action: 'team',
+      mode: 'set',
+      contestId: selectedContestId,
+      teamCode: teamCode.trim(),
+      userIds: selectedUserIds,
+    });
+
+    if (!result.success) {
+      setErrorMessage(result.error || 'Failed to set team');
+      setLoading(false);
+      return;
+    }
+
+    setStatusMessage(`Assigned team ${teamCode.trim()} for ${result.updatedCount ?? 0} user(s)`);
+    setLoading(false);
+    onSuccess();
+  };
+
+  const runTeamRemoveAny = async () => {
+    if (selectedUserIds.length === 0) return;
+
+    setLoading(true);
+    setErrorMessage('');
+    setStatusMessage('');
+
+    const result = await apiClient.post('/api/users/batch', {
+      action: 'team',
+      mode: 'remove-any',
+      userIds: selectedUserIds,
+    });
+
+    if (!result.success) {
+      setErrorMessage(result.error || 'Failed to remove teams');
+      setLoading(false);
+      return;
+    }
+
+    setStatusMessage(`Removed team from ${result.updatedCount ?? 0} participation(s)`);
+    setLoading(false);
+    onSuccess();
+  };
+
+  const runTimezoneUpdate = async () => {
+    if (selectedUserIds.length === 0) return;
+    if (!timezone.trim()) {
+      setErrorMessage('Timezone is required');
+      return;
+    }
+
+    setLoading(true);
+    setErrorMessage('');
+    setStatusMessage('');
+
+    const result = await apiClient.post('/api/users/batch', {
+      action: 'profile',
+      mode: 'timezone',
+      timezone: timezone.trim(),
+      userIds: selectedUserIds,
+    });
+
+    if (!result.success) {
+      setErrorMessage(result.error || 'Failed to update timezone');
+      setLoading(false);
+      return;
+    }
+
+    setStatusMessage(`Updated timezone for ${result.updatedCount ?? 0} user(s)`);
+    setLoading(false);
+    onSuccess();
+  };
+
+  const runEmailDomainUpdate = async () => {
+    if (selectedUserIds.length === 0) return;
+    if (!emailDomain.trim()) {
+      setErrorMessage('Email domain is required');
+      return;
+    }
+
+    setLoading(true);
+    setErrorMessage('');
+    setStatusMessage('');
+
+    const result = await apiClient.post('/api/users/batch', {
+      action: 'profile',
+      mode: 'email-domain',
+      emailDomain: emailDomain.trim(),
+      userIds: selectedUserIds,
+    });
+
+    if (!result.success) {
+      setErrorMessage(result.error || 'Failed to update email domain');
+      setLoading(false);
+      return;
+    }
+
+    setRows((prev) =>
+      prev.map((user) => {
+        const localPart = (user.email?.split('@')[0] || user.username).trim();
+        return { ...user, email: `${localPart}@${emailDomain.trim().toLowerCase()}` };
+      })
+    );
+
+    setStatusMessage(`Updated email domain for ${result.updatedCount ?? 0} user(s)`);
+    setLoading(false);
+    onSuccess();
+  };
+
+  const runEmailClear = async () => {
+    if (selectedUserIds.length === 0) return;
+
+    setLoading(true);
+    setErrorMessage('');
+    setStatusMessage('');
+
+    const result = await apiClient.post('/api/users/batch', {
+      action: 'profile',
+      mode: 'clear-email',
+      userIds: selectedUserIds,
+    });
+
+    if (!result.success) {
+      setErrorMessage(result.error || 'Failed to clear emails');
+      setLoading(false);
+      return;
+    }
+
+    setRows((prev) => prev.map((user) => ({ ...user, email: null })));
+    setStatusMessage(`Cleared email for ${result.updatedCount ?? 0} user(s)`);
+    setLoading(false);
+    onSuccess();
+  };
+
   return createPortal(
     <div className="fixed inset-0 z-100 flex items-center justify-center overflow-hidden bg-black/80 backdrop-blur-sm p-4" onClick={onClose}>
       <div className="relative z-10 w-full max-w-6xl max-h-[90vh] bg-neutral-900 border border-white/10 rounded-xl shadow-2xl flex flex-col" onClick={(event) => event.stopPropagation()}>
@@ -148,9 +295,6 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button variant="ghost" onClick={() => runRegenerate('both')} disabled={loading || rows.length === 0}>
-              <Wand2 className="w-4 h-4 mr-2" /> Regenerate Username + Password
-            </Button>
             <Button variant="ghost" onClick={() => runRegenerate('username')} disabled={loading || rows.length === 0}>
               <Wand2 className="w-4 h-4 mr-2" /> Regenerate Username
             </Button>
@@ -179,6 +323,71 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
               </Button>
               <Button variant="ghost" onClick={() => runContestMutation('remove')} disabled={loading || rows.length === 0 || !selectedContestId}>
                 Remove from contest
+              </Button>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-white/10 bg-black/20 p-3 space-y-3">
+            <div className="text-xs text-neutral-300">Team assignment</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={selectedContestId}
+                title="Select contest for team"
+                onChange={(event) => setSelectedContestId(Number(event.target.value) || 0)}
+                className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+              >
+                {contests.map((contest) => (
+                  <option key={contest.id} value={contest.id}>
+                    #{contest.id} - {contest.name}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={teamCode}
+                onChange={(event) => setTeamCode(event.target.value)}
+                placeholder="Team code"
+                title="Team code"
+                className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white font-mono"
+              />
+              <Button variant="ghost" onClick={runTeamSet} disabled={loading || rows.length === 0 || !selectedContestId}>
+                Add to team
+              </Button>
+              <Button variant="ghost" onClick={runTeamRemoveAny} disabled={loading || rows.length === 0}>
+                Remove from any team
+              </Button>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-white/10 bg-black/20 p-3 space-y-3">
+            <div className="text-xs text-neutral-300">Profile fields</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                value={timezone}
+                onChange={(event) => setTimezone(event.target.value)}
+                placeholder="Timezone"
+                title="Timezone"
+                className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+              />
+              <Button variant="ghost" onClick={runTimezoneUpdate} disabled={loading || rows.length === 0}>
+                Update timezone
+              </Button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                value={emailDomain}
+                onChange={(event) => setEmailDomain(event.target.value)}
+                placeholder="example.com"
+                title="Email domain"
+                className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+              />
+              <Button variant="ghost" onClick={runEmailDomainUpdate} disabled={loading || rows.length === 0}>
+                Set email domain
+              </Button>
+              <Button variant="ghost" onClick={runEmailClear} disabled={loading || rows.length === 0}>
+                Reset email
               </Button>
             </div>
           </div>

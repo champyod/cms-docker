@@ -4,9 +4,11 @@ import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { apiError, apiSuccess, verifyApiPermission } from '@/lib/api-utils';
 
-type BatchAction = 'regenerate' | 'contest';
-type RegenerateMode = 'username' | 'password' | 'both';
+type BatchAction = 'regenerate' | 'contest' | 'team' | 'profile';
+type RegenerateMode = 'username' | 'password';
 type ContestMode = 'add' | 'remove';
+type TeamMode = 'set' | 'remove-any';
+type ProfileMode = 'timezone' | 'email-domain' | 'clear-email';
 
 function randomToken(length: number) {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -64,7 +66,7 @@ export async function POST(req: NextRequest) {
 
     if (action === 'regenerate') {
       const mode: RegenerateMode = body?.mode;
-      if (!mode || !['username', 'password', 'both'].includes(mode)) {
+      if (!mode || !['username', 'password'].includes(mode)) {
         return apiError({ message: 'Invalid regenerate mode', status: 400 });
       }
 
@@ -80,13 +82,13 @@ export async function POST(req: NextRequest) {
         const updateData: { username?: string; password?: string } = {};
         const resultRow: { id: number; username?: string; password?: string } = { id: user.id };
 
-        if (mode === 'username' || mode === 'both') {
+        if (mode === 'username') {
           const username = await ensureUniqueUsername(user.first_name, user.last_name, localUsernames);
           updateData.username = username;
           resultRow.username = username;
         }
 
-        if (mode === 'password' || mode === 'both') {
+        if (mode === 'password') {
           const plainPassword = makePassword();
           const hash = await bcrypt.hash(plainPassword, 10);
           updateData.password = `bcrypt:${hash}`;
@@ -144,6 +146,121 @@ export async function POST(req: NextRequest) {
       revalidatePath('/[locale]/users', 'page');
       revalidatePath('/[locale]/contests', 'page');
       return apiSuccess({ success: true, addedCount: 0, removedCount: removed.count });
+    }
+
+    if (action === 'team') {
+      const mode: TeamMode = body?.mode;
+
+      if (!mode || !['set', 'remove-any'].includes(mode)) {
+        return apiError({ message: 'Invalid team mode', status: 400 });
+      }
+
+      if (mode === 'remove-any') {
+        const cleared = await prisma.participations.updateMany({
+          where: {
+            user_id: { in: userIds },
+            team_id: { not: null },
+          },
+          data: {
+            team_id: null,
+          },
+        });
+
+        revalidatePath('/[locale]/users', 'page');
+        revalidatePath('/[locale]/contests', 'page');
+        return apiSuccess({ success: true, updatedCount: cleared.count });
+      }
+
+      const contestId = Number(body?.contestId);
+      const teamCode = String(body?.teamCode || '').trim();
+
+      if (!Number.isInteger(contestId) || contestId <= 0) {
+        return apiError({ message: 'Invalid contestId', status: 400 });
+      }
+
+      if (!teamCode) {
+        return apiError({ message: 'teamCode is required', status: 400 });
+      }
+
+      const existingTeam = await prisma.teams.findUnique({
+        where: { code: teamCode },
+        select: { id: true },
+      });
+
+      const teamId = existingTeam
+        ? existingTeam.id
+        : (await prisma.teams.create({ data: { code: teamCode, name: teamCode }, select: { id: true } })).id;
+
+      let updatedCount = 0;
+      for (const userId of userIds) {
+        const affected = await prisma.$executeRaw`
+          INSERT INTO participations (contest_id, user_id, team_id, hidden, unrestricted, delay_time, extra_time)
+          VALUES (${contestId}, ${userId}, ${teamId}, false, false, '0 seconds'::interval, '0 seconds'::interval)
+          ON CONFLICT (contest_id, user_id) DO UPDATE
+          SET team_id = EXCLUDED.team_id
+        `;
+        if (affected > 0) updatedCount += 1;
+      }
+
+      revalidatePath('/[locale]/users', 'page');
+      revalidatePath('/[locale]/contests', 'page');
+      return apiSuccess({ success: true, updatedCount, teamId, teamCode });
+    }
+
+    if (action === 'profile') {
+      const mode: ProfileMode = body?.mode;
+      if (!mode || !['timezone', 'email-domain', 'clear-email'].includes(mode)) {
+        return apiError({ message: 'Invalid profile mode', status: 400 });
+      }
+
+      if (mode === 'timezone') {
+        const timezone = String(body?.timezone || '').trim();
+        if (!timezone) {
+          return apiError({ message: 'timezone is required', status: 400 });
+        }
+
+        const result = await prisma.users.updateMany({
+          where: { id: { in: userIds } },
+          data: { timezone },
+        });
+
+        revalidatePath('/[locale]/users', 'page');
+        return apiSuccess({ success: true, updatedCount: result.count });
+      }
+
+      if (mode === 'clear-email') {
+        const result = await prisma.users.updateMany({
+          where: { id: { in: userIds } },
+          data: { email: null },
+        });
+
+        revalidatePath('/[locale]/users', 'page');
+        return apiSuccess({ success: true, updatedCount: result.count });
+      }
+
+      const emailDomain = String(body?.emailDomain || '').trim().toLowerCase();
+      if (!emailDomain || !/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(emailDomain)) {
+        return apiError({ message: 'Valid emailDomain is required', status: 400 });
+      }
+
+      const users = await prisma.users.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, username: true, email: true },
+      });
+
+      let updatedCount = 0;
+      for (const user of users) {
+        const localPart = (user.email?.split('@')[0] || user.username).trim();
+        const nextEmail = `${localPart}@${emailDomain}`;
+        await prisma.users.update({
+          where: { id: user.id },
+          data: { email: nextEmail },
+        });
+        updatedCount += 1;
+      }
+
+      revalidatePath('/[locale]/users', 'page');
+      return apiSuccess({ success: true, updatedCount });
     }
 
     return apiError({ message: 'Invalid action', status: 400 });
