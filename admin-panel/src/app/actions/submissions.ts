@@ -134,18 +134,22 @@ export async function recalculateSubmission(submissionId: number, type: 'score' 
   await ensurePermission('contests');
 
   try {
-    // Get the submission
+    // Get the submission with dataset info
     const submission = await prisma.submissions.findUnique({
       where: { id: submissionId },
-      include: { tasks: { select: { active_dataset_id: true } } }
+      include: {
+        tasks: { select: { active_dataset_id: true } },
+        submission_results: { select: { dataset_id: true } }
+      }
     });
 
     if (!submission) {
       return { success: false, error: 'Submission not found' };
     }
 
-    // For now, we just mark evaluations for re-evaluation by clearing them
-    // The actual re-evaluation is done by the CMS EvaluationService
+    const datasetId = submission.submission_results?.[0]?.dataset_id || submission.tasks?.active_dataset_id;
+
+    // Clear database entries to mark for re-evaluation
     if (type === 'evaluation' || type === 'full') {
       await prisma.evaluations.deleteMany({
         where: { submission_id: submissionId }
@@ -156,6 +160,30 @@ export async function recalculateSubmission(submissionId: number, type: 'score' 
       await prisma.submission_results.deleteMany({
         where: { submission_id: submissionId }
       });
+    }
+
+    // Call EvaluationService RPC to trigger actual re-evaluation
+    const rpcLevel = type === 'full' ? 'compilation' : (type === 'evaluation' ? 'evaluation' : 'score');
+    
+    if (type === 'evaluation' || type === 'full') {
+      try {
+        const response = await fetch('http://cms-admin-web-server:25000/rpc/EvaluationService/0/invalidate_submission', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            level: rpcLevel,
+            submission_id: submissionId,
+            dataset_id: datasetId
+          })
+        });
+        
+        if (!response.ok) {
+          console.error('EvaluationService RPC failed:', await response.text());
+        }
+      } catch (rpcError) {
+        console.error('Failed to call EvaluationService RPC:', rpcError);
+        // Don't fail the entire operation if RPC fails, DB is already cleared
+      }
     }
 
     return { success: true, message: 'Submission queued for recalculation' };
