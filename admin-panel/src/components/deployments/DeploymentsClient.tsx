@@ -52,7 +52,9 @@ export function DeploymentsClient() {
       getLiveServiceConnections()
     ]);
 
-    if (result.success && result.config) {
+        let configWithoutWorkers: ContestDeployConfigItem[] = [];
+
+        if (result.success && result.config) {
       const deployConfig = result.config.CONTESTS_DEPLOY_CONFIG || '[]';
       setOriginalConfig(deployConfig);
 
@@ -64,7 +66,7 @@ export function DeploymentsClient() {
       try {
                 const parsedConfig = JSON.parse(deployConfig) as Array<ContestDeployConfigItem & { workers?: unknown }>;
         // Remove workers from config if they exist (backward compatibility)
-                const configWithoutWorkers = parsedConfig.map((item) => {
+                                configWithoutWorkers = parsedConfig.map((item) => {
                     const normalizedItem = { ...item };
                     delete normalizedItem.workers;
                     return normalizedItem;
@@ -75,13 +77,33 @@ export function DeploymentsClient() {
       }
     }
 
-    if (contestsResult.success) {
-      setAvailableContests(contestsResult.contests);
-    }
-
         if (servicesResult.success) {
             setLiveServices(servicesResult.services);
         }
+
+        const databaseContests = contestsResult.success ? contestsResult.contests : [];
+        const contestIdsFromConfig = configWithoutWorkers.map((item) => item.id);
+        const contestIdsFromLiveServices = (servicesResult.success ? servicesResult.services : [])
+            .filter((service) => service.name === 'ContestWebServer' && Number.isInteger(service.shard))
+            .map((service) => service.shard)
+            .filter((id) => id > 0);
+
+        const mergedContestMap = new Map<number, { id: number; name: string }>();
+
+        databaseContests.forEach((contest) => {
+            mergedContestMap.set(contest.id, contest);
+        });
+
+        [...contestIdsFromConfig, ...contestIdsFromLiveServices].forEach((id) => {
+            if (!mergedContestMap.has(id)) {
+                mergedContestMap.set(id, {
+                    id,
+                    name: `Contest #${id} (detected from deployment/runtime)`
+                });
+            }
+        });
+
+        setAvailableContests(Array.from(mergedContestMap.values()).sort((a, b) => a.id - b.id));
 
     // Load global workers
         const normalizedWorkers = Array.isArray(workersResult) ? workersResult : [];
