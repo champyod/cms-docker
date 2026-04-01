@@ -12,10 +12,11 @@ interface UserModalProps {
   isOpen: boolean;
   onClose: () => void;
   user?: any | null; // If present, edit mode
+  contests?: Array<{ id: number; name: string }>;
   onSuccess: () => void;
 }
 
-export function UserModal({ isOpen, onClose, user, onSuccess }: UserModalProps) {
+export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: UserModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [mounted, setMounted] = useState(false);
@@ -30,6 +31,8 @@ export function UserModal({ isOpen, onClose, user, onSuccess }: UserModalProps) 
     email: '',
     password: '',
     timezone: 'Asia/Bangkok', // Default timezone
+    contestId: '',
+    teamCode: '',
   });
 
   useEffect(() => {
@@ -41,6 +44,8 @@ export function UserModal({ isOpen, onClose, user, onSuccess }: UserModalProps) 
         email: user.email || '',
         password: '', // Don't fill password on edit
         timezone: user.timezone || 'Asia/Bangkok',
+        contestId: '',
+        teamCode: '',
       });
     } else {
       setFormData({
@@ -50,6 +55,8 @@ export function UserModal({ isOpen, onClose, user, onSuccess }: UserModalProps) 
         email: '',
         password: '',
         timezone: 'Asia/Bangkok',
+        contestId: '',
+        teamCode: '',
       });
     }
   }, [user, isOpen]);
@@ -64,7 +71,11 @@ export function UserModal({ isOpen, onClose, user, onSuccess }: UserModalProps) 
     try {
       const result = user
         ? await apiClient.put(`/api/users/${user.id}`, formData)
-        : await apiClient.post('/api/users', formData);
+        : await apiClient.post('/api/users', {
+            ...formData,
+            contestId: formData.contestId ? Number(formData.contestId) : undefined,
+            teamCode: formData.teamCode || undefined,
+          });
 
       if (result.success) {
         onSuccess();
@@ -80,10 +91,11 @@ export function UserModal({ isOpen, onClose, user, onSuccess }: UserModalProps) 
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-black/80 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-100 flex items-center justify-center overflow-hidden bg-black/80 backdrop-blur-sm p-4">
       <Card className="w-full max-w-md p-6 relative animate-in fade-in zoom-in-95 duration-200 bg-neutral-900/80 border-white/10 shadow-2xl">
         <button
           onClick={onClose}
+          title="Close"
           className="absolute top-4 right-4 text-neutral-400 hover:text-white transition-colors"
         >
           <X className="w-5 h-5" />
@@ -169,6 +181,37 @@ export function UserModal({ isOpen, onClose, user, onSuccess }: UserModalProps) 
             />
           </div>
 
+          {!user && (
+            <>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-neutral-400 uppercase tracking-wider">Contest (Optional)</label>
+                <select
+                  value={formData.contestId}
+                  onChange={(e) => setFormData({ ...formData, contestId: e.target.value })}
+                  className="w-full px-3 py-2 bg-black/80 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all"
+                  title="Contest"
+                >
+                  <option value="">No contest</option>
+                  {contests.map((contest) => (
+                    <option key={contest.id} value={contest.id}>#{contest.id} - {contest.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-neutral-400 uppercase tracking-wider">Team Code (Optional)</label>
+                <input
+                  type="text"
+                  value={formData.teamCode}
+                  onChange={(e) => setFormData({ ...formData, teamCode: e.target.value })}
+                  className="w-full px-3 py-2 bg-black/80 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all font-mono"
+                  placeholder="TEAM_A"
+                />
+                <p className="text-[11px] text-neutral-500">If team code is set, contest must be selected.</p>
+              </div>
+            </>
+          )}
+
           <div className="pt-6 flex justify-end gap-3">
             <Button
               type="button"
@@ -182,7 +225,7 @@ export function UserModal({ isOpen, onClose, user, onSuccess }: UserModalProps) 
             <Button 
               type="submit" 
               variant="primary" 
-              className="bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white shadow-lg shadow-indigo-500/20 px-6"
+              className="bg-linear-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white shadow-lg shadow-indigo-500/20 px-6"
               disabled={loading}
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (user ? 'Save Changes' : 'Create User')}

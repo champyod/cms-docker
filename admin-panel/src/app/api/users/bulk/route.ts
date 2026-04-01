@@ -62,6 +62,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const rows: BulkUserRow[] = Array.isArray(body?.rows) ? body.rows : [];
     const generationMode: GenerationMode = body?.generationMode ?? 'none';
+    const contestId = Number(body?.contestId || 0);
 
     if (rows.length === 0) {
       return apiError({ message: 'No rows provided', status: 400 });
@@ -81,6 +82,7 @@ export async function POST(req: NextRequest) {
       let plainPassword = (row.password ?? '').trim();
       const email = (row.email ?? '').trim();
       const timezone = (row.timezone ?? '').trim();
+      const teamCode = (row.team ?? '').trim();
 
       if (!firstName || !lastName) {
         failed.push({ rowIndex, reason: 'first_name and last_name are required' });
@@ -106,6 +108,11 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
+      if (teamCode && !contestId) {
+        failed.push({ rowIndex, reason: 'contestId is required when team is provided' });
+        continue;
+      }
+
       if (seenUsernames.has(username)) {
         failed.push({ rowIndex, reason: `duplicate username in CSV payload: ${username}` });
         continue;
@@ -116,7 +123,7 @@ export async function POST(req: NextRequest) {
         const salt = await bcrypt.genSalt(10);
         const hash = await bcrypt.hash(plainPassword, salt);
 
-        await prisma.users.create({
+        const user = await prisma.users.create({
           data: {
             first_name: firstName,
             last_name: lastName,
@@ -127,6 +134,36 @@ export async function POST(req: NextRequest) {
             preferred_languages: [],
           },
         });
+
+        if (contestId) {
+          let teamId: number | null = null;
+
+          if (teamCode) {
+            const existingTeam = await prisma.teams.findUnique({
+              where: { code: teamCode },
+              select: { id: true },
+            });
+
+            if (existingTeam) {
+              teamId = existingTeam.id;
+            } else {
+              const createdTeam = await prisma.teams.create({
+                data: {
+                  code: teamCode,
+                  name: teamCode,
+                },
+                select: { id: true },
+              });
+              teamId = createdTeam.id;
+            }
+          }
+
+          await prisma.$executeRaw`
+            INSERT INTO participations (contest_id, user_id, team_id, hidden, unrestricted, delay_time, extra_time)
+            VALUES (${contestId}, ${user.id}, ${teamId}, false, false, '0 seconds'::interval, '0 seconds'::interval)
+            ON CONFLICT (contest_id, user_id) DO NOTHING
+          `;
+        }
 
         created.push({
           rowIndex,
@@ -143,13 +180,15 @@ export async function POST(req: NextRequest) {
     }
 
     revalidatePath('/[locale]/users', 'page');
+    if (contestId) {
+      revalidatePath('/[locale]/contests', 'page');
+    }
 
     return apiSuccess({
       createdCount: created.length,
       failedCount: failed.length,
       created,
       failed,
-      note: 'team column is accepted for preview/mapping but not applied in user creation from this endpoint',
     });
   } catch (error: any) {
     return apiError(error);

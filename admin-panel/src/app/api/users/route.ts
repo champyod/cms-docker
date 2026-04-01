@@ -4,6 +4,54 @@ import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import bcrypt from 'bcryptjs';
 
+const DEFAULT_USERS_PER_PAGE = 20;
+const MAX_USERS_PER_PAGE = 100;
+
+export async function GET(req: NextRequest) {
+  const { authorized, response } = await verifyApiPermission('users');
+  if (!authorized) return response;
+
+  try {
+    const searchParams = req.nextUrl.searchParams;
+    const page = Math.max(Number(searchParams.get('page')) || 1, 1);
+    const perPage = Math.min(Math.max(Number(searchParams.get('perPage')) || DEFAULT_USERS_PER_PAGE, 1), MAX_USERS_PER_PAGE);
+    const search = (searchParams.get('search') || '').trim();
+    const skip = (page - 1) * perPage;
+
+    const where = search
+      ? {
+          OR: [
+            { first_name: { contains: search, mode: 'insensitive' as const } },
+            { last_name: { contains: search, mode: 'insensitive' as const } },
+            { username: { contains: search, mode: 'insensitive' as const } },
+            { email: { contains: search, mode: 'insensitive' as const } },
+          ],
+        }
+      : {};
+
+    const [users, total] = await Promise.all([
+      prisma.users.findMany({
+        where,
+        skip,
+        take: perPage,
+        orderBy: { id: 'asc' },
+      }),
+      prisma.users.count({ where }),
+    ]);
+
+    return apiSuccess({
+      users,
+      total,
+      totalPages: Math.max(Math.ceil(total / perPage), 1),
+      currentPage: page,
+      perPage,
+      search,
+    });
+  } catch (error: any) {
+    return apiError(error);
+  }
+}
+
 export async function POST(req: NextRequest) {
   const { authorized, response } = await verifyApiPermission('users');
   if (!authorized) return response;

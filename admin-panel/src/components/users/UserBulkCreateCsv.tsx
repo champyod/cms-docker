@@ -127,9 +127,10 @@ interface UserBulkCreateCsvProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  contests: Array<{ id: number; name: string }>;
 }
 
-export function UserBulkCreateCsv({ isOpen, onClose, onSuccess }: UserBulkCreateCsvProps) {
+export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests }: UserBulkCreateCsvProps) {
   const [mounted, setMounted] = useState(false);
   const [csvText, setCsvText] = useState('');
   const [headerWarnings, setHeaderWarnings] = useState<string[]>([]);
@@ -138,6 +139,7 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess }: UserBulkCreate
   const [submitting, setSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState<any | null>(null);
   const [selectedRowIndices, setSelectedRowIndices] = useState<Set<number>>(new Set());
+  const [contestId, setContestId] = useState<number>(0);
 
   useEffect(() => {
     setMounted(true);
@@ -357,6 +359,7 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess }: UserBulkCreate
       const result = await apiClient.post('/api/users/bulk', {
         rows: payloadRows,
         generationMode,
+        contestId: contestId || undefined,
       });
 
       setSubmitResult(result);
@@ -384,7 +387,7 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess }: UserBulkCreate
         <div className="p-4 space-y-4 overflow-auto">
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs text-neutral-400">
-              First row must be header. Supported columns: {EXPECTED_FIELDS.join(', ')}. Team column is preview-only on this page.
+              First row must be header. Supported columns: {EXPECTED_FIELDS.join(', ')}. Team column is applied when a contest is selected.
             </p>
             <div className="flex items-center gap-2">
               <button
@@ -405,6 +408,21 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess }: UserBulkCreate
                 />
               </label>
             </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-neutral-400">Contest for team mapping:</label>
+            <select
+              value={contestId}
+              onChange={(event) => setContestId(Number(event.target.value) || 0)}
+              className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+              title="Contest for team mapping"
+            >
+              <option value={0}>No contest</option>
+              {contests.map((contest) => (
+                <option key={contest.id} value={contest.id}>#{contest.id} - {contest.name}</option>
+              ))}
+            </select>
           </div>
 
           <textarea

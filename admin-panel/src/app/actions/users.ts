@@ -12,22 +12,24 @@ export async function getUsers({ page = 1, search = '', perPage = USERS_PER_PAGE
   const safePerPage = Math.min(Math.max(Number(perPage) || USERS_PER_PAGE, 1), MAX_USERS_PER_PAGE);
   const safePage = Math.max(Number(page) || 1, 1);
   const skip = (safePage - 1) * safePerPage;
-  
-  const where = search ? {
-    OR: [
-      { first_name: { contains: search, mode: 'insensitive' as const } },
-      { last_name: { contains: search, mode: 'insensitive' as const } },
-      { username: { contains: search, mode: 'insensitive' as const } },
-      { email: { contains: search, mode: 'insensitive' as const } },
-    ],
-  } : {};
+
+  const where = search
+    ? {
+        OR: [
+          { first_name: { contains: search, mode: 'insensitive' as const } },
+          { last_name: { contains: search, mode: 'insensitive' as const } },
+          { username: { contains: search, mode: 'insensitive' as const } },
+          { email: { contains: search, mode: 'insensitive' as const } },
+        ],
+      }
+    : {};
 
   const [users, total] = await Promise.all([
     prisma.users.findMany({
       where,
       skip,
       take: safePerPage,
-      orderBy: { id: 'desc' },
+      orderBy: { id: 'asc' },
     }),
     prisma.users.count({ where }),
   ]);
@@ -41,18 +43,15 @@ export async function getUsers({ page = 1, search = '', perPage = USERS_PER_PAGE
   };
 }
 
-// ...
-
 export async function createUser(data: Omit<any, 'id' | 'password' | 'preferred_languages'> & { password?: string }) {
   await ensurePermission('users');
 
   const { first_name, last_name, username, email, password, timezone } = data;
 
   if (!password) {
-      return { success: false, error: 'Password is required' };
+    return { success: false, error: 'Password is required' };
   }
-  
-  // Hash password compatible with CMS (bcrypt:<hash>)
+
   const salt = await bcrypt.genSalt(10);
   const hash = await bcrypt.hash(password, salt);
   const storedPassword = `bcrypt:${hash}`;
@@ -66,7 +65,7 @@ export async function createUser(data: Omit<any, 'id' | 'password' | 'preferred_
         email: email || null,
         password: storedPassword,
         timezone: timezone || null,
-        preferred_languages: [], // Default empty
+        preferred_languages: [],
       },
     });
     revalidatePath('/[locale]/users');
@@ -84,7 +83,7 @@ export async function updateUser(id: number, data: Partial<any> & { password?: s
   await ensurePermission('users');
 
   const { first_name, last_name, email, password, timezone } = data;
-  
+
   const updateData: Partial<any> = {
     first_name,
     last_name,
@@ -106,7 +105,7 @@ export async function updateUser(id: number, data: Partial<any> & { password?: s
     revalidatePath('/[locale]/users');
     return { success: true, user };
   } catch (error) {
-      const e = error as Error;
+    const e = error as Error;
     return { success: false, error: e.message };
   }
 }
