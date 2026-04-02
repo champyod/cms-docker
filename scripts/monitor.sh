@@ -237,6 +237,9 @@ listen_docker_events() {
     touch "$NOTIF_CACHE"
 
     docker events --filter 'event=start' --filter 'event=stop' --filter 'event=die' --filter 'event=restart' --format '{{.Status}} container {{.Actor.Attributes.name}}' | while read -r event; do
+        # Log the event immediately (keep this first)
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Docker Event: $event"
+
         # Cooldown Logic: Don't notify for the same container more than once every 60s
         CONT_NAME=$(echo "$event" | awk '{print $3}')
         EVENT_TYPE=$(echo "$event" | awk '{print $1}')
