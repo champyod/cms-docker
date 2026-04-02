@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
     const token_gen_interval = `${data.token_gen_interval || 30} minutes`;
     const min_submission_interval = `${data.min_submission_interval || 0} seconds`;
     const min_user_test_interval = `${data.min_user_test_interval || 0} seconds`;
+    const queue_fairness_penalty_seconds = Math.max(0, Number(data.queue_fairness_penalty_seconds ?? 0) || 0);
 
     await prisma.$executeRaw`
       INSERT INTO contests (
@@ -44,6 +45,7 @@ export async function POST(req: NextRequest) {
         token_gen_initial, token_gen_number, token_gen_interval, token_gen_max,
         max_submission_number, max_user_test_number,
         min_submission_interval, min_user_test_interval,
+        queue_fairness_penalty_seconds,
         start, stop,
         analysis_enabled, analysis_start, analysis_stop,
         score_precision, timezone
@@ -58,6 +60,7 @@ export async function POST(req: NextRequest) {
         ${data.token_gen_initial ?? 0}, ${data.token_gen_number ?? 0}, ${token_gen_interval}::interval, ${data.token_gen_max ?? null},
         ${data.max_submission_number ?? null}, ${data.max_user_test_number ?? null},
         ${min_submission_interval}::interval, ${min_user_test_interval}::interval,
+        ${queue_fairness_penalty_seconds},
         ${startDate}, ${stopDate},
         ${data.analysis_enabled ?? false}, ${analysisStart}, ${analysisStop},
         ${data.score_precision ?? 0}, ${data.timezone}

@@ -241,7 +241,7 @@ export function RankingClient() {
       <Card>
         <Stack direction="col" gap={4}>
           <h2 className="text-xl font-semibold text-white">Scoreboard</h2>
-          {loadingSnapshot && <Loading message="Loading ranking snapshot..." />}
+          {loadingSnapshot && <Loading text="Loading ranking snapshot..." />}
           {!loadingSnapshot && rows.length === 0 && (
             <div className="text-sm text-slate-400">No ranking data loaded yet.</div>
           )}

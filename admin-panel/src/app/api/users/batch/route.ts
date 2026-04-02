@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { apiError, apiSuccess, verifyApiPermission } from '@/lib/api-utils';
 
-type BatchAction = 'regenerate' | 'contest' | 'team' | 'profile';
+type BatchAction = 'regenerate' | 'contest' | 'team' | 'profile' | 'apply-credentials';
 type RegenerateMode = 'username' | 'password';
 type ContestMode = 'add' | 'remove';
 type TeamMode = 'set' | 'remove-any';

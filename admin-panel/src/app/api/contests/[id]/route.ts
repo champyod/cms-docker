@@ -26,6 +26,9 @@ export async function PUT(
     const token_gen_interval = data.token_gen_interval !== undefined ? `${data.token_gen_interval} minutes` : null;
     const min_submission_interval = data.min_submission_interval !== undefined ? `${data.min_submission_interval} seconds` : null;
     const min_user_test_interval = data.min_user_test_interval !== undefined ? `${data.min_user_test_interval} seconds` : null;
+    const queue_fairness_penalty_seconds = data.queue_fairness_penalty_seconds !== undefined
+      ? Math.max(0, Number(data.queue_fairness_penalty_seconds) || 0)
+      : null;
 
     await prisma.$executeRaw`
       UPDATE contests SET
@@ -54,6 +57,7 @@ export async function PUT(
 
         token_gen_initial = COALESCE(${data.token_gen_initial}, token_gen_initial),
         token_gen_number = COALESCE(${data.token_gen_number}, token_gen_number),
+        queue_fairness_penalty_seconds = COALESCE(${queue_fairness_penalty_seconds}, queue_fairness_penalty_seconds),
         score_precision = COALESCE(${data.score_precision}, score_precision),
         analysis_enabled = COALESCE(${data.analysis_enabled}, analysis_enabled),
         analysis_start = COALESCE(${analysisStart}, analysis_start),

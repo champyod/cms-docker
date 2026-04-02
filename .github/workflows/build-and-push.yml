@@ -39,6 +39,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Ensure ranking frontend assets
+        run: |
+          mkdir -p src/cmsranking/static/lib
+          curl -fsSL https://cdnjs.cloudflare.com/ajax/libs/raphael/2.3.0/raphael.min.js -o src/cmsranking/static/lib/raphael.js
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -83,6 +88,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Ensure ranking frontend assets
+        run: |
+          mkdir -p src/cmsranking/static/lib
+          curl -fsSL https://cdnjs.cloudflare.com/ajax/libs/raphael/2.3.0/raphael.min.js -o src/cmsranking/static/lib/raphael.js
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3

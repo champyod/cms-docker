@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { 
   Home, Users, Trophy, Settings, LogOut, ChevronRight,
   FileCode, Activity, Shield, Box, Rocket, Wrench, ChevronDown, Database, BookOpen
+  , Globe
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -155,6 +156,7 @@ export const Sidebar: React.FC<{
                 <SidebarItem icon={Shield} label="Admins" href={`/${locale}/admins`} collapsed={collapsed} />
                 <SidebarItem icon={Activity} label="Resources" href={`/${locale}/resources`} collapsed={collapsed} />
                 <SidebarItem icon={Box} label="Containers" href={`/${locale}/containers`} collapsed={collapsed} />
+              <SidebarItem icon={Globe} label="Ranking" href={`/${locale}/ranking`} collapsed={collapsed} />
                 <SidebarItem icon={Wrench} label="Maintenance" href={`/${locale}/maintenance`} collapsed={collapsed} />
                 <SidebarItem icon={Settings} label="Settings" href={`/${locale}/settings`} collapsed={collapsed} />
             </SidebarGroup>

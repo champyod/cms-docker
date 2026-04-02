@@ -90,6 +90,7 @@ model contests {
   min_submission_interval                          Unsupported("interval")?
   min_submission_interval_grace_period             Unsupported("interval")?
   min_user_test_interval                           Unsupported("interval")?
+  queue_fairness_penalty_seconds                   Int                      @default(0)
   score_precision                                  Int
   announcements                                    announcements[]
   participations                                   participations[]

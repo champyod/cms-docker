@@ -88,6 +88,7 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
     max_user_test_number: null as number | null,
     min_submission_interval: 0,
     min_user_test_interval: 0,
+    queue_fairness_penalty_seconds: 0,
     score_precision: 0,
     analysis_enabled: false,
     analysis_start: '',
@@ -124,6 +125,7 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
         max_user_test_number: contest.max_user_test_number,
         min_submission_interval: parseInterval(contest.min_submission_interval),
         min_user_test_interval: parseInterval(contest.min_user_test_interval),
+        queue_fairness_penalty_seconds: contest.queue_fairness_penalty_seconds ?? 0,
         score_precision: contest.score_precision,
         analysis_enabled: contest.analysis_enabled,
         analysis_start: formatDateForInput(contest.analysis_start),
@@ -163,6 +165,7 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
         max_user_test_number: null,
         min_submission_interval: 60, // 60s
         min_user_test_interval: 60,
+        queue_fairness_penalty_seconds: 0,
         score_precision: 2,
         analysis_enabled: false,
         analysis_start: formatDateForInput(analysisStart),
@@ -201,6 +204,7 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
             .map((s: string) => s.trim())
             .filter((s: string) => s.length > 0);
       }
+      payload.queue_fairness_penalty_seconds = Math.max(0, Number(payload.queue_fairness_penalty_seconds ?? 0) || 0);
 
       const result = contest
         ? await apiClient.put(`/api/contests/${contest.id}`, payload)
@@ -548,6 +552,19 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Min User Test Interval (sec)</label>
                       <input type="number" value={formData.min_user_test_interval} onChange={(e) => setFormData({ ...formData, min_user_test_interval: parseInt(e.target.value) || 0 })} className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Queue Fairness Penalty (sec)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        title="Queue Fairness Penalty (seconds)"
+                        placeholder="0"
+                        value={formData.queue_fairness_penalty_seconds}
+                        onChange={(e) => setFormData({ ...formData, queue_fairness_penalty_seconds: Math.max(0, parseInt(e.target.value) || 0) })}
+                        className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white"
+                      />
+                      <p className="text-[11px] text-neutral-500">0 disables fairness delay. Formula: submission time + n × seconds.</p>
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Score Precision (decimals)</label>

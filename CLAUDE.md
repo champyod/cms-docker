@@ -67,6 +67,14 @@
 
 12. **AFFECTED PART ANALYSIS**: Before finishing a task, search and fix ALL impacted files (not just the obvious ones).
 
+13. **SERVER-SIDE SECRET HANDLING ONLY**: Any credential for external systems (contest ranking, webhooks, internal APIs) MUST stay in Server Actions/API routes/httpOnly cookies. Never store these secrets in localStorage, URL params, or client-readable cookies.
+
+14. **PROXY SENSITIVE BACKENDS**: If a backend endpoint contains participant/team/score/internal contest data, access it through a server-side proxy route with permission checks. Browser clients must call internal API routes, not the backend directly.
+
+15. **FAIL-CLOSED AUTH CHECKS**: Protected routes must deny by default. If auth/session/proxy state is missing or invalid, return 401/403 and do not fall back to public behavior.
+
+16. **DEPENDENCY AVAILABILITY IS BUILD-TIME RESPONSIBILITY**: Required frontend runtime assets and libraries must be guaranteed by build/CI steps. Missing runtime assets must not silently break core views.
+
 ---
 
 ## ARCHITECTURE OVERVIEW

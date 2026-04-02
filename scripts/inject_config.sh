@@ -67,7 +67,7 @@ echo "  - DB User: $DB_USER"
 echo "  - DB Name: $DB_NAME"
 
 # Export variables for Python
-export DB_USER DB_PASS DB_NAME DB_HOST DB_PORT CMS_SECRET
+export DB_USER DB_PASS DB_NAME DB_HOST DB_PORT CMS_SECRET TAILSCALE_IP CORE_SERVICES_IP
 
 # Handle Ranking Scoreboard Auth
 # We check environment variables which are populated by 'make env'
@@ -121,10 +121,22 @@ if cms_secret:
 # Update Ranking credentials in ProxyService URL
 r_user = os.environ.get("R_USER", "usern4me")
 r_pass = os.environ.get("SAFE_R_PASS", "passw0rd")
-# match rankings = ["http://user:pass@..."]
-rank_url_pattern = r'rankings = \["http://[^:]+:[^@]+@'
-new_rank_start = f'rankings = ["http://{r_user}:{r_pass}@'
-text = re.sub(rank_url_pattern, new_rank_start, text)
+
+# Prefer the Tailscale IP when it exists so ProxyService can reach the ranking
+# server across the VPN. Otherwise keep the in-network service hostname.
+ranking_host = os.environ.get("TAILSCALE_IP", "").strip()
+if not ranking_host or ranking_host == "127.0.0.1":
+    ranking_host = "cms-ranking-web-server"
+
+updated_lines = []
+for line in text.splitlines():
+    if line.startswith('rankings = ["http://'):
+        match = re.match(r'^(rankings = \["http://)([^:\"]+):([^@\"]+)@([^/\"]+)(.*)$', line)
+        if match:
+            line = f'{match.group(1)}{r_user}:{r_pass}@{ranking_host}{match.group(5)}'
+    updated_lines.append(line)
+
+text = "\n".join(updated_lines) + ("\n" if text.endswith("\n") else "")
 
 # Global replacements
 text = text.replace('"127.0.0.1"', '"0.0.0.0"')

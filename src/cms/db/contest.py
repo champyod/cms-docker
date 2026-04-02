@@ -263,6 +263,15 @@ class Contest(Base):
         CheckConstraint("min_user_test_interval > '0 seconds'"),
         nullable=True)
 
+    # Per-participation queue fairness penalty in seconds.
+    # Effective scheduling timestamp: submission_time + n * queue_fairness_penalty_seconds,
+    # where n is the number of this participation's pending submissions.
+    queue_fairness_penalty_seconds: int = Column(
+        Integer,
+        CheckConstraint("queue_fairness_penalty_seconds >= 0"),
+        nullable=False,
+        default=0)
+
     # The scores for this contest will be rounded to this number of
     # decimal places.
     score_precision: int = Column(

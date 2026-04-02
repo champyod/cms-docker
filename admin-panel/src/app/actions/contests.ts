@@ -61,6 +61,7 @@ export interface ContestData {
   max_user_test_number?: number | null;
   min_submission_interval?: number;
   min_user_test_interval?: number;
+  queue_fairness_penalty_seconds?: number;
   score_precision?: number;
   analysis_enabled?: boolean;
   analysis_start?: string | Date;
@@ -84,6 +85,7 @@ export async function createContest(data: ContestData) {
     const token_gen_interval = `${data.token_gen_interval || 30} minutes`;
     const min_submission_interval = `${data.min_submission_interval || 0} seconds`;
     const min_user_test_interval = `${data.min_user_test_interval || 0} seconds`;
+    const queue_fairness_penalty_seconds = Math.max(0, Number(data.queue_fairness_penalty_seconds ?? 0) || 0);
 
     await prisma.$executeRaw`
       INSERT INTO contests (
@@ -97,6 +99,7 @@ export async function createContest(data: ContestData) {
         token_gen_initial, token_gen_number, token_gen_interval, token_gen_max,
         max_submission_number, max_user_test_number,
         min_submission_interval, min_user_test_interval,
+        queue_fairness_penalty_seconds,
         start, stop,
         analysis_enabled, analysis_start, analysis_stop,
         score_precision, timezone
@@ -111,6 +114,7 @@ export async function createContest(data: ContestData) {
         ${data.token_gen_initial ?? 0}, ${data.token_gen_number ?? 0}, ${token_gen_interval}::interval, ${data.token_gen_max ?? null},
         ${data.max_submission_number ?? null}, ${data.max_user_test_number ?? null},
         ${min_submission_interval}::interval, ${min_user_test_interval}::interval,
+        ${queue_fairness_penalty_seconds},
         ${startDate}, ${stopDate},
         ${data.analysis_enabled ?? false}, ${analysisStart}, ${analysisStop},
         ${data.score_precision ?? 0}, ${data.timezone}
@@ -143,6 +147,9 @@ export async function updateContest(id: number, data: Partial<ContestData>) {
     const token_gen_interval = data.token_gen_interval !== undefined ? `${data.token_gen_interval} minutes` : null;
     const min_submission_interval = data.min_submission_interval !== undefined ? `${data.min_submission_interval} seconds` : null;
     const min_user_test_interval = data.min_user_test_interval !== undefined ? `${data.min_user_test_interval} seconds` : null;
+    const queue_fairness_penalty_seconds = data.queue_fairness_penalty_seconds !== undefined
+      ? Math.max(0, Number(data.queue_fairness_penalty_seconds) || 0)
+      : null;
 
     // We use undefined checks to determine if we should update or keep existing.
     // However, for nullable fields, we need to distinguish between "undefined (do not update)" and "null (set to null)".
@@ -184,6 +191,7 @@ export async function updateContest(id: number, data: Partial<ContestData>) {
 
         token_gen_initial = COALESCE(${data.token_gen_initial}, token_gen_initial),
         token_gen_number = COALESCE(${data.token_gen_number}, token_gen_number),
+        queue_fairness_penalty_seconds = COALESCE(${queue_fairness_penalty_seconds}, queue_fairness_penalty_seconds),
         score_precision = COALESCE(${data.score_precision}, score_precision),
         analysis_enabled = COALESCE(${data.analysis_enabled}, analysis_enabled),
         analysis_start = COALESCE(${analysisStart}, analysis_start),
