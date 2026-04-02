@@ -3,12 +3,13 @@ import { cn } from '@/lib/utils';
 
 interface TableProps extends React.TableHTMLAttributes<HTMLTableElement> {
   children: React.ReactNode;
+  outerClassName?: string;
 }
 
 export const Table = React.forwardRef<HTMLTableElement, TableProps>(
-  ({ className, children, ...props }, ref) => {
+  ({ className, children, outerClassName, ...props }, ref) => {
     return (
-      <div className="w-full overflow-auto rounded-2xl border border-white/10 shadow-lg bg-black/5 backdrop-blur-sm">
+      <div className={cn("w-full overflow-auto rounded-2xl border border-white/10 shadow-lg bg-black/5 backdrop-blur-sm", outerClassName)}>
         <table
           ref={ref}
           className={cn("w-full caption-bottom text-sm text-left", className)}
