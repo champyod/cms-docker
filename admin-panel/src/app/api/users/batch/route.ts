@@ -104,6 +104,24 @@ export async function POST(req: NextRequest) {
       }
 
       revalidatePath('/[locale]/users', 'page');
+
+      // If export requested, return a CSV attachment containing the exact
+      // plaintext passwords/usernames that were applied so the exported file
+      // matches what was stored.
+      const doExport = Boolean(body?.export);
+      if (doExport) {
+        const rows = ['id,username,password'];
+        for (const r of updated) rows.push(`${r.id},${r.username ?? ''},${r.password ?? ''}`);
+        const csv = rows.join('\n');
+        return new Response(csv, {
+          status: 200,
+          headers: {
+            'Content-Type': 'text/csv; charset=utf-8',
+            'Content-Disposition': 'attachment; filename="users_regenerated.csv"',
+          },
+        });
+      }
+
       return apiSuccess({ success: true, updated });
     }
 
@@ -151,6 +169,22 @@ export async function POST(req: NextRequest) {
       }
 
       revalidatePath('/[locale]/users', 'page');
+      // Support exporting the exact plaintexts applied as a CSV so the
+      // exported file always matches what was saved.
+      const doExportApply = Boolean(body?.export);
+      if (doExportApply) {
+        const rows = ['id,username,password'];
+        for (const r of updated) rows.push(`${r.id},${r.username ?? ''},${r.password ?? ''}`);
+        const csv = rows.join('\n');
+        return new Response(csv, {
+          status: 200,
+          headers: {
+            'Content-Type': 'text/csv; charset=utf-8',
+            'Content-Disposition': 'attachment; filename="users_applied.csv"',
+          },
+        });
+      }
+
       return apiSuccess({ success: true, updated, failed });
     }
 
