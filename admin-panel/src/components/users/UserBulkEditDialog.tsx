@@ -554,11 +554,82 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
           </div>
         </div>
 
-        <div className="p-4 border-t border-white/10 flex items-center justify-end gap-2">
+          <div className="p-4 border-t border-white/10 flex items-center justify-end gap-2">
           <Button variant="ghost" onClick={onClose} disabled={loading}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={onClose} disabled={loading}>
+          <Button
+            variant="primary"
+            onClick={async () => {
+              // If there are generated credentials in preview, apply them to the server
+              const updates = rows.filter((r) => r.password || r.username).map((r) => ({ id: r.id, username: r.username, password: r.password }));
+
+              if (updates.length === 0) {
+                onClose();
+                return;
+              }
+
+              setLoading(true);
+              setErrorMessage('');
+              setStatusMessage('');
+
+              try {
+                // Use fetch directly to support CSV responses when export=true
+                const resp = await fetch('/api/users/batch', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ action: 'apply-credentials', updates, export: true }),
+                });
+
+                const contentType = resp.headers.get('content-type') || '';
+                if (!resp.ok) {
+                  // try parse json for error
+                  let data;
+                  try { data = await resp.json(); } catch (e) { data = null; }
+                  setErrorMessage((data && data.error) || `Server error: ${resp.status}`);
+                  setLoading(false);
+                  return;
+                }
+
+                if (contentType.includes('text/csv')) {
+                  const text = await resp.text();
+                  const blob = new Blob([text], { type: 'text/csv;charset=utf-8;' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.setAttribute('download', `users-applied-${Date.now()}.csv`);
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+
+                  setStatusMessage(`Applied and exported ${updates.length} credential(s)`);
+                  setLoading(false);
+                  onSuccess();
+                  onClose();
+                  return;
+                }
+
+                // Fallback: parse JSON response
+                const data = await resp.json();
+                if (!data.success) {
+                  setErrorMessage(data.error || 'Failed to apply credentials');
+                  setLoading(false);
+                  return;
+                }
+
+                const updatedCount = Array.isArray(data.updated) ? data.updated.length : 0;
+                setStatusMessage(`Applied credentials for ${updatedCount} user(s)`);
+                setLoading(false);
+                onSuccess();
+                onClose();
+              } catch (e: any) {
+                setErrorMessage(e?.message || 'Network error');
+                setLoading(false);
+              }
+            }}
+            disabled={loading}
+          >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Done'}
           </Button>
         </div>
