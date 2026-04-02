@@ -73,7 +73,7 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
   const toBase64 = (bytes: Uint8Array): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.readAsDataURL(new Blob([bytes]));
+      reader.readAsDataURL(new Blob([bytes.buffer as ArrayBuffer]));
       reader.onload = () => {
         if (typeof reader.result === 'string') {
           resolve(reader.result.split(',')[1]);
@@ -242,95 +242,97 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
 
   if (!isOpen) return null;
 
+  if (!isOpen) return null;
+
   return (
     <Portal>
       <>
         <div className="fixed inset-0 z-100 flex items-center justify-center overflow-hidden bg-black/80 backdrop-blur-sm p-4" onClick={onClose}>
-        <div className="relative z-10 w-full max-w-3xl h-[85vh] bg-neutral-900 border border-white/10 rounded-xl shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
-
-          {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-white/10 shrink-0">
-            <div className="flex items-center gap-2">
-              <Upload className="w-5 h-5 text-cyan-400" />
-              <h2 className="text-lg font-bold text-white">Upload Testcases</h2>
-            </div>
-            <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-lg transition-colors">
-              <X className="w-5 h-5 text-neutral-400" />
-            </button>
-          </div>
-
-          <div className="flex-1 overflow-hidden flex flex-col">
-            {step === 1 ? (
-              <div className="flex-1 flex flex-col items-center justify-center p-8 gap-6 animate-in fade-in zoom-in duration-300">
-                <h3 className="text-xl font-medium text-white">Select Upload Method</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-2xl">
-                  <button
-                    onClick={() => { setUploadType('files'); setStep(2); }}
-                    className="p-8 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-cyan-500/50 rounded-2xl flex flex-col items-center gap-4 transition-all group"
-                  >
-                    <div className="w-16 h-16 rounded-full bg-cyan-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
-                      <FileIcon className="w-8 h-8 text-cyan-400" />
-                    </div>
-                    <div className="text-center">
-                      <h4 className="font-bold text-white text-lg">Multiple Files</h4>
-                      <p className="text-neutral-400 text-sm mt-1">Select .in and .out files directly</p>
-                    </div>
-                  </button>
-
-                  <button
-                    onClick={() => { setUploadType('zip'); setStep(2); }}
-                    className="p-8 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-purple-500/50 rounded-2xl flex flex-col items-center gap-4 transition-all group"
-                  >
-                    <div className="w-16 h-16 rounded-full bg-purple-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
-                      <Archive className="w-8 h-8 text-purple-400" />
-                    </div>
-                    <div className="text-center">
-                      <h4 className="font-bold text-white text-lg">Zip Archive</h4>
-                      <p className="text-neutral-400 text-sm mt-1">Upload a single .zip file</p>
-                    </div>
-                  </button>
-                </div>
+          <div className="relative z-10 w-full max-w-3xl h-[85vh] bg-neutral-900 border border-white/10 rounded-xl shadow-2xl flex flex-col" onClick={event => event.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-white/10 shrink-0">
+              <div className="flex items-center gap-2">
+                <Upload className="w-5 h-5 text-cyan-400" />
+                <h2 className="text-lg font-bold text-white">Upload Testcases</h2>
               </div>
-            ) : (
-              <div className="flex-1 flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
-                {/* Config Bar */}
-                <div className="p-4 bg-black/20 border-b border-white/5 flex flex-wrap gap-4 items-end">
-                      <div className="flex-1 min-w-50">
-                    <label className="block text-xs font-bold text-neutral-500 uppercase mb-1.5 ">Input Pattern</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={inputPattern}
-                        onChange={(e) => setInputPattern(e.target.value)}
-                        className="w-full px-3 py-1.5 bg-black/40 border border-white/10 rounded text-sm text-white focus:outline-none focus:border-cyan-500/50"
-                        placeholder="e.g. *.in"
-                      />
-                    </div>
-                    <p className="text-[10px] text-neutral-500 mt-1">Use * for number, ** for 2-digit number</p>
-                  </div>
-                      <div className="flex-1 min-w-50">
-                    <label className="block text-xs font-bold text-neutral-500 uppercase mb-1.5">Output Pattern</label>
-                    <input
-                      type="text"
-                      value={outputPattern}
-                      onChange={(e) => setOutputPattern(e.target.value)}
-                      className="w-full px-3 py-1.5 bg-black/40 border border-white/10 rounded text-sm text-white focus:outline-none focus:border-cyan-500/50"
-                      placeholder="e.g. *.out"
-                    />
-                  </div>
-                  <div className="pb-0.5">
+              <button onClick={onClose} title="Close upload modal" aria-label="Close upload modal" className="p-1 hover:bg-white/10 rounded-lg transition-colors">
+                <X className="w-5 h-5 text-neutral-400" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-hidden flex flex-col">
+              {step === 1 ? (
+                <div className="flex-1 flex flex-col items-center justify-center p-8 gap-6 animate-in fade-in zoom-in duration-300">
+                  <h3 className="text-xl font-medium text-white">Select Upload Method</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-2xl">
                     <button
-                      onClick={() => setStep(1)}
-                      className="text-xs text-neutral-400 hover:text-white underline"
+                      onClick={() => {
+                        setUploadType('files');
+                        setStep(2);
+                      }}
+                      className="p-8 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-cyan-500/50 rounded-2xl flex flex-col items-center gap-4 transition-all group"
                     >
-                      Change Method
+                      <div className="w-16 h-16 rounded-full bg-cyan-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                        <FileIcon className="w-8 h-8 text-cyan-400" />
+                      </div>
+                      <div className="text-center">
+                        <h4 className="font-bold text-white text-lg">Multiple Files</h4>
+                        <p className="text-neutral-400 text-sm mt-1">Select .in and .out files directly</p>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setUploadType('zip');
+                        setStep(2);
+                      }}
+                      className="p-8 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-purple-500/50 rounded-2xl flex flex-col items-center gap-4 transition-all group"
+                    >
+                      <div className="w-16 h-16 rounded-full bg-purple-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                        <Archive className="w-8 h-8 text-purple-400" />
+                      </div>
+                      <div className="text-center">
+                        <h4 className="font-bold text-white text-lg">Zip Archive</h4>
+                        <p className="text-neutral-400 text-sm mt-1">Upload a single .zip file</p>
+                      </div>
                     </button>
                   </div>
                 </div>
+              ) : (
+                <div className="flex-1 flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
+                  <div className="p-4 bg-black/20 border-b border-white/5 flex flex-wrap gap-4 items-end">
+                    <div className="flex-1 min-w-50">
+                      <label className="block text-xs font-bold text-neutral-500 uppercase mb-1.5">Input Pattern</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={inputPattern}
+                          onChange={event => setInputPattern(event.target.value)}
+                          className="w-full px-3 py-1.5 bg-black/40 border border-white/10 rounded text-sm text-white focus:outline-none focus:border-cyan-500/50"
+                          placeholder="e.g. *.in"
+                        />
+                      </div>
+                      <p className="text-[10px] text-neutral-500 mt-1">Use * for number, ** for 2-digit number</p>
+                    </div>
 
-                {/* Main Area */}
+                    <div className="flex-1 min-w-50">
+                      <label className="block text-xs font-bold text-neutral-500 uppercase mb-1.5">Output Pattern</label>
+                      <input
+                        type="text"
+                        value={outputPattern}
+                        onChange={event => setOutputPattern(event.target.value)}
+                        className="w-full px-3 py-1.5 bg-black/40 border border-white/10 rounded text-sm text-white focus:outline-none focus:border-cyan-500/50"
+                        placeholder="e.g. *.out"
+                      />
+                    </div>
+
+                    <div className="pb-0.5">
+                      <button onClick={() => setStep(1)} className="text-xs text-neutral-400 hover:text-white underline">
+                        Change Method
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                    {/* Dropzone */}
                     <div
                       onClick={() => fileInputRef.current?.click()}
                       className="border-2 border-dashed border-white/10 rounded-xl p-6 flex flex-col items-center justify-center gap-2 hover:bg-white/5 hover:border-cyan-500/50 transition-all cursor-pointer group"
@@ -338,17 +340,19 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
                       {uploadType === 'zip' ? (
                         <Archive className="w-8 h-8 text-neutral-500 group-hover:text-purple-400 transition-colors" />
                       ) : (
-                          <Upload className="w-8 h-8 text-neutral-500 group-hover:text-cyan-400 transition-colors" />
+                        <Upload className="w-8 h-8 text-neutral-500 group-hover:text-cyan-400 transition-colors" />
                       )}
                       <p className="text-neutral-400 font-medium">
                         {uploadType === 'zip' ? 'Click to select Zip file' : 'Click to select Input/Output files'}
                       </p>
                       <input
                         ref={fileInputRef}
-                        type="file" 
+                        type="file"
                         multiple={uploadType === 'files'}
                         accept={uploadType === 'zip' ? '.zip' : '.in,.out,.inp,.sol'}
-                        className="hidden" 
+                        title="Select testcase files"
+                        aria-label="Select testcase files"
+                        className="hidden"
                         onChange={handleFileSelect}
                       />
                     </div>
@@ -367,19 +371,19 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
                           <span>Status</span>
                         </div>
 
-                        {pairs.map((pair) => (
+                        {pairs.map(pair => (
                           <div key={pair.id} className="flex items-center justify-between gap-4 p-3 bg-black/30 rounded-lg border border-white/5">
                             <div className="flex items-center gap-3 min-w-0 flex-1">
                               <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${pair.status === 'ready' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
-                               {pair.id}
-                             </div>
+                                {pair.id}
+                              </div>
                               <div className="flex flex-col gap-1 min-w-0 flex-1">
                                 <span className="text-xs text-neutral-400 truncate">
                                   In: <span className={pair.inputFile ? 'text-white' : 'text-red-400'}>{pair.inputFile?.name || 'Missing'}</span>
-                               </span>
+                                </span>
                                 <span className="text-xs text-neutral-400 truncate">
                                   Out: <span className={pair.outputFile ? 'text-white' : 'text-red-400'}>{pair.outputFile?.name || 'Missing'}</span>
-                               </span>
+                                </span>
                                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-neutral-500">
                                   {pair.inputFile && (
                                     <span>
@@ -394,8 +398,8 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
                                     </span>
                                   )}
                                 </div>
-                             </div>
-                           </div>
+                              </div>
+                            </div>
 
                             <div className="flex items-center gap-2 shrink-0">
                               <button
@@ -405,22 +409,21 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
                                 <Settings className="w-3.5 h-3.5" />
                                 Preview
                               </button>
-                             {pair.status === 'ready' && <Check className="w-4 h-4 text-emerald-400" />}
-                             {(pair.status === 'missing_input' || pair.status === 'missing_output') && <AlertCircle className="w-4 h-4 text-red-400" />}
-                           </div>
-                         </div>
-                       ))}
+                              {pair.status === 'ready' && <Check className="w-4 h-4 text-emerald-400" />}
+                              {(pair.status === 'missing_input' || pair.status === 'missing_output') && <AlertCircle className="w-4 h-4 text-red-400" />}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
 
-                  {/* Footer */}
                   <div className="p-4 border-t border-white/10 bg-black/40 flex justify-end gap-3 shrink-0">
                     <button
-                        onClick={() => {
-                          setPreviewPairId(null);
-                          onClose();
-                        }}
+                      onClick={() => {
+                        setPreviewPairId(null);
+                        onClose();
+                      }}
                       className="px-6 py-2 bg-transparent hover:bg-white/5 text-neutral-300 rounded-lg transition-colors"
                     >
                       Cancel
@@ -435,82 +438,84 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
                     </button>
                   </div>
                 </div>
-                {previewPair && (
-                <div className="fixed inset-0 z-120 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4" onClick={() => setPreviewPairId(null)}>
-                  <div className="w-full max-w-5xl h-[88vh] bg-neutral-950 border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden" onClick={event => event.stopPropagation()}>
-                    <div className="flex items-center justify-between p-4 border-b border-white/10 bg-black/40">
-                      <div className="flex items-center gap-2">
-                        <FileText className="w-5 h-5 text-cyan-400" />
-                        <div>
-                          <h3 className="text-lg font-bold text-white">Encoding Preview: {previewPair.id}</h3>
-                          <p className="text-xs text-neutral-400">Choose the detected format or override it before upload.</p>
-                        </div>
-                      </div>
-                      <button onClick={() => setPreviewPairId(null)} className="p-1 hover:bg-white/10 rounded-lg transition-colors">
-                        <X className="w-5 h-5 text-neutral-400" />
-                      </button>
-                    </div>
-
-                    <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-0 overflow-hidden">
-                      {[
-                        { label: 'Input', file: previewPair.inputFile, side: 'input' as const },
-                        { label: 'Output', file: previewPair.outputFile, side: 'output' as const },
-                      ].map(({ label, file, side }) => (
-                        <div key={label} className="flex flex-col min-h-0 border-b lg:border-b-0 lg:border-r border-white/10">
-                          <div className="p-4 border-b border-white/10 bg-black/20 flex items-center justify-between gap-3">
-                            <div>
-                              <h4 className="font-semibold text-white">{label}</h4>
-                              <p className="text-xs text-neutral-500 truncate max-w-xl">{file?.name || 'Missing file'}</p>
-                            </div>
-                            {file && (
-                              <div className="flex flex-col items-end gap-1">
-                                <span className="text-[11px] text-neutral-500">Detected {getEncodingLabel(file.detectedEncoding)}</span>
-                                <select
-                                  value={file.selectedEncoding}
-                                  onChange={event => updatePairEncoding(previewPair.id, side, event.target.value as FileEncoding)}
-                                  className="px-3 py-1.5 rounded-lg bg-black/50 border border-white/10 text-sm text-white focus:outline-none focus:border-cyan-500/50"
-                                >
-                                  {ENCODING_OPTIONS.map(option => (
-                                    <option key={option.value} value={option.value}>{option.label}</option>
-                                  ))}
-                                </select>
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="flex-1 min-h-0 overflow-auto p-4">
-                            {!file ? (
-                              <div className="h-full flex items-center justify-center text-neutral-500 text-sm">No file available.</div>
-                            ) : (
-                              <pre className="whitespace-pre-wrap wrap-break-word text-sm text-neutral-200 leading-6 font-mono bg-black/30 border border-white/5 rounded-xl p-4 min-h-full">
-                                {renderPreviewText(file)}
-                              </pre>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="p-4 border-t border-white/10 bg-black/40 flex items-center justify-between gap-3">
-                      <div className="text-xs text-neutral-500">
-                        Files are decoded for preview, then normalized to UTF-8 before upload.
-                      </div>
-                      <button
-                        onClick={() => setPreviewPairId(null)}
-                        className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm transition-colors"
-                      >
-                        Close Preview
-                      </button>
-                    </div>
-                  </div>
-                </div>
               )}
             </div>
-            )}
           </div>
         </div>
-      </div>
-    </>
+
+        {previewPair && (
+          <div className="fixed inset-0 z-120 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4" onClick={() => setPreviewPairId(null)}>
+            <div className="w-full max-w-5xl h-[88vh] bg-neutral-950 border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden" onClick={event => event.stopPropagation()}>
+              <div className="flex items-center justify-between p-4 border-b border-white/10 bg-black/40">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-cyan-400" />
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Encoding Preview: {previewPair.id}</h3>
+                    <p className="text-xs text-neutral-400">Choose the detected format or override it before upload.</p>
+                  </div>
+                </div>
+                <button onClick={() => setPreviewPairId(null)} title="Close preview" aria-label="Close preview" className="p-1 hover:bg-white/10 rounded-lg transition-colors">
+                  <X className="w-5 h-5 text-neutral-400" />
+                </button>
+              </div>
+
+              <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-0 overflow-hidden">
+                {[
+                  { label: 'Input', file: previewPair.inputFile, side: 'input' as const },
+                  { label: 'Output', file: previewPair.outputFile, side: 'output' as const },
+                ].map(({ label, file, side }) => (
+                  <div key={label} className="flex flex-col min-h-0 border-b lg:border-b-0 lg:border-r border-white/10">
+                    <div className="p-4 border-b border-white/10 bg-black/20 flex items-center justify-between gap-3">
+                      <div>
+                        <h4 className="font-semibold text-white">{label}</h4>
+                        <p className="text-xs text-neutral-500 truncate max-w-xl">{file?.name || 'Missing file'}</p>
+                      </div>
+                      {file && (
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="text-[11px] text-neutral-500">Detected {getEncodingLabel(file.detectedEncoding)}</span>
+                          <select
+                            value={file.selectedEncoding}
+                            onChange={event => updatePairEncoding(previewPair.id, side, event.target.value as FileEncoding)}
+                            aria-label={`${label} encoding selection`}
+                            title={`${label} encoding selection`}
+                            className="px-3 py-1.5 rounded-lg bg-black/50 border border-white/10 text-sm text-white focus:outline-none focus:border-cyan-500/50"
+                          >
+                            {ENCODING_OPTIONS.map(option => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex-1 min-h-0 overflow-auto p-4">
+                      {!file ? (
+                        <div className="h-full flex items-center justify-center text-neutral-500 text-sm">No file available.</div>
+                      ) : (
+                        <pre className="whitespace-pre-wrap wrap-break-word text-sm text-neutral-200 leading-6 font-mono bg-black/30 border border-white/5 rounded-xl p-4 min-h-full">
+                          {renderPreviewText(file)}
+                        </pre>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="p-4 border-t border-white/10 bg-black/40 flex items-center justify-between gap-3">
+                <div className="text-xs text-neutral-500">Files are decoded for preview, then normalized to UTF-8 before upload.</div>
+                <button
+                  onClick={() => setPreviewPairId(null)}
+                  className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm transition-colors"
+                >
+                  Close Preview
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
     </Portal>
   );
 }
