@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useSyncedState } from '@/hooks/useSyncedState';
 import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
@@ -24,7 +25,7 @@ interface ContestListProps {
 
 export function ContestList({ initialContests, totalPages, permissions }: ContestListProps) {
   const router = useRouter();
-  const [contests] = useState(initialContests);
+  const [contests] = useSyncedState(initialContests);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';

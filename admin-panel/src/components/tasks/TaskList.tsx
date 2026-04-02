@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useSyncedState } from '@/hooks/useSyncedState';
 import { useRouter, usePathname } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
@@ -27,7 +28,7 @@ export function TaskList({ initialTasks, totalPages, permissions }: TaskListProp
   const router = useRouter();
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
-  const [tasks] = useState(initialTasks);
+  const [tasks] = useSyncedState(initialTasks);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskWithRelations | null>(null);
 

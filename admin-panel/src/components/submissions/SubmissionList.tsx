@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useSyncedState } from '@/hooks/useSyncedState';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
 import { Eye, Clock, User as UserIcon, FileCode, Trophy, HelpCircle } from 'lucide-react';
@@ -12,7 +13,7 @@ import { useRouter } from 'next/navigation';
 import { SubmissionWithRelations } from '@/types';
 
 export function SubmissionList({ initialSubmissions, totalPages, currentPage }: { initialSubmissions: SubmissionWithRelations[], totalPages: number, currentPage: number }) {
-  const [submissions] = useState(initialSubmissions);
+  const [submissions] = useSyncedState(initialSubmissions);
   const [selectedSubmission, setSelectedSubmission] = useState<SubmissionWithRelations | null>(null);
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';

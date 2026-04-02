@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useSyncedState } from '@/hooks/useSyncedState';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
 import { Edit2, Trash2, Plus, Users, HelpCircle } from 'lucide-react';
@@ -28,7 +29,7 @@ interface TeamListProps {
 }
 
 export function TeamList({ initialTeams, permissions }: TeamListProps) {
-  const [teams] = useState(initialTeams);
+  const [teams] = useSyncedState(initialTeams);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<TeamWithCount | null>(null);
   const pathname = usePathname();

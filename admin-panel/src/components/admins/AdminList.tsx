@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useSyncedState } from '@/hooks/useSyncedState';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
 import { Edit2, Trash2, Plus, Shield, ShieldCheck } from 'lucide-react';
@@ -8,7 +9,7 @@ import { updateAdmin, deleteAdmin } from '@/app/actions/admins';
 import { AdminModal } from './AdminModal';
 
 export function AdminList({ initialAdmins }: { initialAdmins: any[] }) {
-  const [adminsList] = useState(initialAdmins);
+  const [adminsList] = useSyncedState(initialAdmins);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAdmin, setEditingAdmin] = useState<any | null>(null);
 
