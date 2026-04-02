@@ -39,6 +39,25 @@ YAML
 echo "Wrote $OVERRIDE_FILE (docker-compose override)."
 
 echo "Bringing up nginx-proxy with override (profile: nginx)..."
-docker compose --profile nginx up -d nginx-proxy
+
+# Prefer the contest compose file if present
+COMPOSE_FILE=docker-compose.contest.yml
+if [ ! -f "$COMPOSE_FILE" ]; then
+  echo "Warning: $COMPOSE_FILE not found in $(pwd). Trying default docker-compose.yml"
+  if [ ! -f docker-compose.yml ]; then
+    echo "Error: no docker-compose file found (looked for $COMPOSE_FILE and docker-compose.yml)." >&2
+    exit 2
+  else
+    COMPOSE_FILE=docker-compose.yml
+  fi
+fi
+
+# Use the override if present
+OVERRIDE_FILE=docker-compose.override.yml
+if [ -f "$OVERRIDE_FILE" ]; then
+  docker compose -f "$COMPOSE_FILE" -f "$OVERRIDE_FILE" --profile nginx up -d nginx-proxy
+else
+  docker compose -f "$COMPOSE_FILE" --profile nginx up -d nginx-proxy
+fi
 
 echo "Done. Test with: curl -i -u ${USERNAME} https://<host>/ranking/"
