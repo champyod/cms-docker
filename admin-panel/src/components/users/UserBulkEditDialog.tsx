@@ -63,6 +63,7 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
   const [statusMessage, setStatusMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [selectedContestId, setSelectedContestId] = useState<number>(contests[0]?.id ?? 0);
+  const [teamContestId, setTeamContestId] = useState<number>(contests[0]?.id ?? 0);
   const [teamCode, setTeamCode] = useState('');
   const [timezone, setTimezone] = useState('Asia/Bangkok');
   const [emailDomain, setEmailDomain] = useState('');
@@ -74,7 +75,10 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
   }, []);
 
   useEffect(() => {
-    setRows(selectedUsers);
+    // Ensure we don't carry stored password hashes into the editable preview.
+    // Clear any password field coming from the backend so only locally-generated
+    // plaintext appears in `rows`.
+    setRows(selectedUsers.map((u) => ({ ...u, password: null })));
   }, [selectedUsers]);
 
   useEffect(() => {
@@ -84,14 +88,20 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
   }, [contests, selectedContestId]);
 
   useEffect(() => {
-    // fetch teams for selected contest (if available) so we can show a selector
+    if (contests.length > 0 && !contests.find((contest) => contest.id === teamContestId)) {
+      setTeamContestId(contests[0].id);
+    }
+  }, [contests, teamContestId]);
+
+  useEffect(() => {
+    // fetch teams for the contest used by the TEAM assignment UI (teamContestId)
     const fetchTeams = async () => {
-      if (!selectedContestId) {
+      if (!teamContestId) {
         setTeamsOptions([]);
         return;
       }
       try {
-        const res = await apiClient.get(`/api/contests/${selectedContestId}/teams`);
+        const res = await apiClient.get(`/api/contests/${teamContestId}/teams`);
         if (res.success && Array.isArray(res.teams)) {
           setTeamsOptions(res.teams.map((t: any) => t.code).filter(Boolean));
         } else {
@@ -103,7 +113,7 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
     };
 
     fetchTeams();
-  }, [selectedContestId]);
+  }, [teamContestId]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -200,7 +210,7 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
   };
 
   const runTeamSet = async () => {
-    if (selectedUserIds.length === 0 || !selectedContestId) return;
+    if (selectedUserIds.length === 0 || !teamContestId) return;
     if (!teamCode.trim()) {
       setErrorMessage('Team code is required');
       return;
@@ -213,7 +223,7 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
     const result = await apiClient.post('/api/users/batch', {
       action: 'team',
       mode: 'set',
-      contestId: selectedContestId,
+      contestId: teamContestId,
       teamCode: teamCode.trim(),
       userIds: selectedUserIds,
     });
@@ -224,7 +234,8 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
       return;
     }
 
-    setStatusMessage(`Assigned team ${teamCode.trim()} for ${result.updatedCount ?? 0} user(s)`);
+    const contestName = contests.find((c) => c.id === teamContestId)?.name || `#${teamContestId}`;
+    setStatusMessage(`Assigned team ${teamCode.trim()} for ${result.updatedCount ?? 0} user(s) in contest ${contestName}`);
     setLoading(false);
     onSuccess();
   };
@@ -398,9 +409,9 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
             <div className="text-xs text-neutral-300">Team assignment</div>
             <div className="flex flex-wrap items-center gap-2">
               <select
-                value={selectedContestId}
+                value={teamContestId}
                 title="Select contest for team"
-                onChange={(event) => setSelectedContestId(Number(event.target.value) || 0)}
+                onChange={(event) => setTeamContestId(Number(event.target.value) || 0)}
                 className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
               >
                 {contests.map((contest) => (
