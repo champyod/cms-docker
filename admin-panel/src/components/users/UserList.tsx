@@ -33,6 +33,11 @@ interface UserListProps {
 
 export function UserList({ initialUsers, totalPages, currentPage, perPage, initialSearch, contests, permissions }: UserListProps) {
   const [usersList, setUsersList] = useState(initialUsers);
+  const [userCache, setUserCache] = useState<Record<number, any>>(() => {
+    const map: Record<number, any> = {};
+    initialUsers.forEach((u: any) => { map[u.id] = u; });
+    return map;
+  });
   const [totalPagesState, setTotalPagesState] = useState(totalPages);
   const [loadingList, setLoadingList] = useState(false);
   const [searchDraft, setSearchDraft] = useState(initialSearch);
@@ -66,21 +71,29 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
       if (!result.success) return;
 
       setUsersList(result.users || []);
+      // merge fetched users into local cache so we can remember selections
+      setUserCache((prev) => {
+        const next = { ...prev } as Record<number, any>;
+        (result.users || []).forEach((u: any) => {
+          next[u.id] = u;
+        });
+        return next;
+      });
       setTotalPagesState(result.totalPages || 1);
       table.setPage(result.currentPage || targetPage);
       table.setPerPage(result.perPage || targetPerPage);
       table.setSearch(result.search ?? targetSearch);
       setPageInput(String(result.currentPage || targetPage));
-      setSelectedIds(new Set());
+      // Preserve current selection across refreshes so bulk actions and
+      // local previews remain visible until the user explicitly clears them.
     } finally {
       setLoadingList(false);
     }
   }, [table]);
 
-  const selectedUsers = useMemo(
-    () => usersList.filter((user: any) => selectedIds.has(user.id)),
-    [usersList, selectedIds]
-  );
+  const selectedUsers = useMemo(() => {
+    return Array.from(selectedIds).map((id) => userCache[id]).filter(Boolean);
+  }, [selectedIds, userCache]);
 
   useTableAutoRefresh({
     enabled: true,
@@ -118,10 +131,19 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
 
   const toggleAll = (checked: boolean) => {
     if (!checked) {
-      setSelectedIds(new Set());
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        usersList.forEach((user: any) => next.delete(user.id));
+        return next;
+      });
       return;
     }
-    setSelectedIds(new Set(usersList.map((user: any) => user.id)));
+
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      usersList.forEach((user: any) => next.add(user.id));
+      return next;
+    });
   };
 
   const toggleOne = (userId: number, checked: boolean) => {

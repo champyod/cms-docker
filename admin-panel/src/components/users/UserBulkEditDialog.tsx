@@ -6,6 +6,34 @@ import { Loader2, Wand2, X } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { apiClient } from '@/lib/apiClient';
 
+function randomToken(length: number) {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let token = '';
+  for (let i = 0; i < length; i += 1) {
+    token += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return token;
+}
+
+function makePassword() {
+  return randomToken(14);
+}
+
+function makeUsername(firstName: string, lastName: string, used?: Set<string>) {
+  const firstAscii = String(firstName || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  const lastAscii = String(lastName || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  let base = `${firstAscii}${lastAscii}` || 'user';
+  if (base.length > 20) base = base.substring(0, 20);
+  let username = `${base}${randomToken(4).toLowerCase()}`;
+  let attempts = 0;
+  while (used && used.has(username) && attempts < 100) {
+    username = `${base}${randomToken(4).toLowerCase()}`;
+    attempts += 1;
+  }
+  used?.add(username);
+  return username;
+}
+
 interface ContestOption {
   id: number;
   name: string;
@@ -17,6 +45,8 @@ interface SelectedUser {
   last_name: string;
   username: string;
   email?: string | null;
+  // optional local preview password (not applied until explicitly sent)
+  password?: string | null;
 }
 
 interface UserBulkEditDialogProps {
@@ -37,6 +67,7 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
   const [timezone, setTimezone] = useState('Asia/Bangkok');
   const [emailDomain, setEmailDomain] = useState('');
   const [rows, setRows] = useState(selectedUsers);
+  const [teamsOptions, setTeamsOptions] = useState<string[]>([]);
 
   useEffect(() => {
     setMounted(true);
@@ -53,6 +84,28 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
   }, [contests, selectedContestId]);
 
   useEffect(() => {
+    // fetch teams for selected contest (if available) so we can show a selector
+    const fetchTeams = async () => {
+      if (!selectedContestId) {
+        setTeamsOptions([]);
+        return;
+      }
+      try {
+        const res = await apiClient.get(`/api/contests/${selectedContestId}/teams`);
+        if (res.success && Array.isArray(res.teams)) {
+          setTeamsOptions(res.teams.map((t: any) => t.code).filter(Boolean));
+        } else {
+          setTeamsOptions([]);
+        }
+      } catch (e) {
+        setTeamsOptions([]);
+      }
+    };
+
+    fetchTeams();
+  }, [selectedContestId]);
+
+  useEffect(() => {
     if (!isOpen) return;
     document.body.style.overflow = 'hidden';
     return () => {
@@ -67,41 +120,52 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
   const runRegenerate = async (mode: 'username' | 'password') => {
     if (selectedUserIds.length === 0) return;
 
+    // Perform local-only regeneration for preview/export. This won't apply
+    // changes to the server until an explicit server-side action is triggered.
     setLoading(true);
     setErrorMessage('');
     setStatusMessage('');
 
-    const result = await apiClient.post('/api/users/batch', {
-      action: 'regenerate',
-      mode,
-      userIds: selectedUserIds,
-    });
-
-    if (!result.success) {
-      setErrorMessage(result.error || 'Failed to regenerate credentials');
-      setLoading(false);
-      return;
-    }
-
-    const updatedById = new Map<number, { username?: string; password?: string }>();
-    (result.updated || []).forEach((row: { id: number; username?: string; password?: string }) => {
-      updatedById.set(row.id, row);
-    });
+    const used = new Set<string>();
 
     setRows((prev) =>
       prev.map((user) => {
-        const updated = updatedById.get(user.id);
-        if (!updated) return user;
-        return {
-          ...user,
-          username: updated.username ?? user.username,
-        };
+        if (!selectedUserIds.includes(user.id)) return user;
+        const next = { ...user } as SelectedUser;
+        if (mode === 'username') {
+          next.username = makeUsername(next.first_name || '', next.last_name || '', used);
+        }
+        if (mode === 'password') {
+          next.password = makePassword();
+        }
+        return next;
       })
     );
 
-    setStatusMessage(`Regenerated ${mode} for ${selectedUserIds.length} user(s)`);
+    setStatusMessage(`Locally regenerated ${mode} for ${selectedUserIds.length} user(s)`);
     setLoading(false);
-    onSuccess();
+    // Do NOT call onSuccess() here — we want the UI preview to keep generated values
+    // and let the user export them or apply other mutations explicitly.
+  };
+
+  const handleExportSelectedRows = () => {
+    if (rows.length === 0) return;
+    const lines = ['id,first_name,last_name,username,password,email'];
+    rows.forEach((row) => {
+      const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+      lines.push([row.id, esc(row.first_name), esc(row.last_name), esc(row.username), esc(row.password ?? ''), esc(row.email ?? '')].join(','));
+    });
+
+    const bom = '\uFEFF';
+    const blob = new Blob([bom + lines.join('\n') + '\n'], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.setAttribute('download', `users-selected-${Date.now()}.csv`);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const runContestMutation = async (mode: 'add' | 'remove') => {
@@ -301,6 +365,9 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
             <Button variant="ghost" onClick={() => runRegenerate('password')} disabled={loading || rows.length === 0}>
               <Wand2 className="w-4 h-4 mr-2" /> Regenerate Password
             </Button>
+            <Button variant="ghost" onClick={handleExportSelectedRows} disabled={rows.length === 0}>
+              <Wand2 className="w-4 h-4 mr-2" /> Export Current Preview
+            </Button>
           </div>
 
           <div className="rounded-lg border border-white/10 bg-black/20 p-3 space-y-3">
@@ -342,14 +409,28 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
                   </option>
                 ))}
               </select>
-              <input
-                type="text"
-                value={teamCode}
-                onChange={(event) => setTeamCode(event.target.value)}
-                placeholder="Team code"
-                title="Team code"
-                className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white font-mono"
-              />
+              {teamsOptions.length > 0 ? (
+                <select
+                  value={teamCode}
+                  onChange={(e) => setTeamCode(e.target.value)}
+                  className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                  title="Select team"
+                >
+                  <option value="">Select team</option>
+                  {teamsOptions.map((code) => (
+                    <option key={code} value={code}>{code}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={teamCode}
+                  onChange={(event) => setTeamCode(event.target.value)}
+                  placeholder="Team code"
+                  title="Team code"
+                  className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white font-mono"
+                />
+              )}
               <Button variant="ghost" onClick={runTeamSet} disabled={loading || rows.length === 0 || !selectedContestId}>
                 Add to team
               </Button>
