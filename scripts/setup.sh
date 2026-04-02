@@ -155,6 +155,28 @@ if [ "$UPDATE_ONLY" = "true" ]; then
     run_update_mode
 fi
 
+ensure_worker_cgroup_setup() {
+    # Check if we need to setup cgroups for worker
+    if [ ! -d "/sys/fs/cgroup/cms-isolate" ]; then
+        echo ""
+        print_warning "Worker sandbox cgroups not found (/sys/fs/cgroup/cms-isolate)."
+        read -p "Would you like to automatically configure worker cgroups now? (Requires sudo) (y/n) [y]: " AUTO_CGROUP
+        AUTO_CGROUP=${AUTO_CGROUP:-y}
+        if [ "$AUTO_CGROUP" = "y" ]; then
+            print_info "Running setup-worker-cgroup.sh..."
+            chmod +x ./scripts/setup-worker-cgroup.sh
+            sudo ./scripts/setup-worker-cgroup.sh
+            if [ $? -ne 0 ]; then
+                print_error "Failed to configure cgroups. Worker might not start correctly."
+            else
+                print_success "Worker cgroups configured successfully."
+            fi
+        else
+            print_warning "Cgroup setup skipped. You may need to run scripts/setup-worker-cgroup.sh manually."
+        fi
+    fi
+}
+
 # Banner
 clear
 echo -e "${CYAN}"
@@ -924,6 +946,7 @@ if [ "$SETUP_TYPE" = "main" ]; then
     echo ""
     read -p "Do you want to deploy a local worker on this machine? (y/n) [n]: " DEPLOY_LOCAL_WORKER
     if [ "$DEPLOY_LOCAL_WORKER" = "y" ]; then
+        ensure_worker_cgroup_setup
         if [ "$DEPLOY_TYPE" = "img" ]; then
             make pull
             make worker-img
@@ -933,6 +956,7 @@ if [ "$SETUP_TYPE" = "main" ]; then
     fi
 else
     print_step "Deploying Remote Worker..."
+    ensure_worker_cgroup_setup
     if [ "$DEPLOY_TYPE" = "img" ]; then
         print_info "Pulling latest images..."
         make pull
