@@ -60,11 +60,10 @@ export async function POST(req: NextRequest) {
       ? body.userIds.map((id: unknown) => Number(id)).filter((id: number) => Number.isInteger(id) && id > 0)
       : [];
 
-    if (userIds.length === 0) {
-      return apiError({ message: 'userIds is required', status: 400 });
-    }
-
     if (action === 'regenerate') {
+      if (userIds.length === 0) {
+        return apiError({ message: 'userIds is required', status: 400 });
+      }
       const mode: RegenerateMode = body?.mode;
       if (!mode || !['username', 'password'].includes(mode)) {
         return apiError({ message: 'Invalid regenerate mode', status: 400 });
@@ -189,6 +188,9 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'contest') {
+      if (userIds.length === 0) {
+        return apiError({ message: 'userIds is required', status: 400 });
+      }
       const mode: ContestMode = body?.mode;
       const contestId = Number(body?.contestId);
 
@@ -230,6 +232,9 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'team') {
+      if (userIds.length === 0) {
+        return apiError({ message: 'userIds is required', status: 400 });
+      }
       const mode: TeamMode = body?.mode;
 
       if (!mode || !['set', 'remove-any'].includes(mode)) {
@@ -289,6 +294,9 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'profile') {
+      if (userIds.length === 0) {
+        return apiError({ message: 'userIds is required', status: 400 });
+      }
       const mode: ProfileMode = body?.mode;
       if (!mode || !['timezone', 'email-domain', 'clear-email'].includes(mode)) {
         return apiError({ message: 'Invalid profile mode', status: 400 });
