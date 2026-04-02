@@ -485,6 +485,7 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
                     <th className="text-left px-2 py-2">first_name</th>
                     <th className="text-left px-2 py-2">last_name</th>
                     <th className="text-left px-2 py-2">username</th>
+                    <th className="text-left px-2 py-2">password</th>
                     <th className="text-left px-2 py-2">email</th>
                   </tr>
                 </thead>
@@ -496,12 +497,13 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
                       </td>
                     </tr>
                   ) : (
-                    rows.map((row) => (
+                      rows.map((row) => (
                       <tr key={row.id} className="border-t border-white/5">
                         <td className="px-2 py-2 text-neutral-400">#{row.id}</td>
                         <td className="px-2 py-2 text-white">{row.first_name}</td>
                         <td className="px-2 py-2 text-white">{row.last_name}</td>
                         <td className="px-2 py-2 text-white">{row.username}</td>
+                        <td className="px-2 py-2 text-white font-mono">{row.password || '-'}</td>
                         <td className="px-2 py-2 text-white">{row.email || '-'}</td>
                       </tr>
                     ))
@@ -509,6 +511,46 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
                 </tbody>
               </table>
             </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="ghost"
+              onClick={async () => {
+                // Prepare updates with credentials present in preview rows
+                const updates = rows
+                  .filter((r) => r.password || r.username)
+                  .map((r) => ({ id: r.id, username: r.username, password: r.password }));
+
+                if (updates.length === 0) {
+                  setErrorMessage('No generated credentials to apply');
+                  return;
+                }
+
+                setLoading(true);
+                setErrorMessage('');
+                setStatusMessage('');
+
+                const result = await apiClient.post('/api/users/batch', {
+                  action: 'apply-credentials',
+                  updates,
+                });
+
+                if (!result.success) {
+                  setErrorMessage(result.error || 'Failed to apply credentials');
+                  setLoading(false);
+                  return;
+                }
+
+                const updatedCount = Array.isArray(result.updated) ? result.updated.length : 0;
+                setStatusMessage(`Applied credentials for ${updatedCount} user(s)`);
+                setLoading(false);
+                onSuccess();
+              }}
+              disabled={loading || rows.length === 0}
+            >
+              Apply Credentials
+            </Button>
           </div>
         </div>
 

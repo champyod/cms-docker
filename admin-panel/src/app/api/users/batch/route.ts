@@ -107,6 +107,53 @@ export async function POST(req: NextRequest) {
       return apiSuccess({ success: true, updated });
     }
 
+    if (action === 'apply-credentials') {
+      const updates: Array<{ id: number; username?: string; password?: string }> = Array.isArray(body?.updates)
+        ? body.updates
+        : [];
+
+      if (updates.length === 0) {
+        return apiError({ message: 'updates is required', status: 400 });
+      }
+
+      const updated: Array<{ id: number; username?: string; password?: string }> = [];
+      const failed: Array<{ id?: number; reason: string }> = [];
+
+      for (const u of updates) {
+        const userId = Number(u.id);
+        if (!Number.isInteger(userId) || userId <= 0) {
+          failed.push({ id: u.id, reason: 'invalid id' });
+          continue;
+        }
+
+        const data: any = {};
+        if (u.username) data.username = String(u.username).trim();
+        if (u.password) {
+          try {
+            const hash = await bcrypt.hash(String(u.password), 10);
+            data.password = `bcrypt:${hash}`;
+          } catch (e) {
+            failed.push({ id: userId, reason: 'password hash failed' });
+            continue;
+          }
+        }
+
+        try {
+          await prisma.users.update({ where: { id: userId }, data });
+          updated.push({ id: userId, username: data.username, password: u.password });
+        } catch (err: any) {
+          if (err?.code === 'P2002') {
+            failed.push({ id: userId, reason: 'username already exists' });
+          } else {
+            failed.push({ id: userId, reason: String(err?.message || err) });
+          }
+        }
+      }
+
+      revalidatePath('/[locale]/users', 'page');
+      return apiSuccess({ success: true, updated, failed });
+    }
+
     if (action === 'contest') {
       const mode: ContestMode = body?.mode;
       const contestId = Number(body?.contestId);
