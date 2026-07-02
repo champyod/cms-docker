@@ -78,8 +78,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     else
         echo "Building Isolate from Source (ARM64/Other)..."
         apt-get update
-        # Install build dependencies if missing (libcap-dev is already in list, need libsystemd-dev)
-        apt-get install -y libsystemd-dev asciidoc
+        # Install build dependencies (libcap-dev is already in list, need libsystemd-dev, libseccomp-dev for isolate)
+        apt-get install -y libsystemd-dev libseccomp-dev asciidoc
         
         git clone https://github.com/ioi/isolate.git /tmp/isolate
         pushd /tmp/isolate
