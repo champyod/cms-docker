@@ -118,8 +118,8 @@ core:
 	$(COMPOSE) -f docker-compose.core.yml build log-service
 	$(COMPOSE) -f docker-compose.core.yml build resource-service
 	$(COMPOSE) -f docker-compose.core.yml build scoring-service
-	$(COMPOSE) -f docker-compose.core.yml build evaluation-service
-	$(COMPOSE) -f docker-compose.core.yml build proxy-service
+	$(COMPOSE) -f docker-compose.contest.yml build evaluation-service
+	$(COMPOSE) -f docker-compose.contest.yml build proxy-service
 	$(COMPOSE) -f docker-compose.core.yml build checker-service
 	$(COMPOSE) -f docker-compose.core.yml up -d
 	@echo "Services started. Use 'make db-reset' for a first-time setup or 'make cms-init' to just initialize the database."
