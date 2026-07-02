@@ -189,7 +189,7 @@ export async function getWorkerStats() {
 
     // Group by shard
     const shardCounts: Record<number, number> = {};
-    activeEvaluations.forEach((ev) => {
+    activeEvaluations.forEach((ev: { evaluation_shard: number | null }) => {
       if (ev.evaluation_shard !== null) {
         shardCounts[ev.evaluation_shard] = (shardCounts[ev.evaluation_shard] || 0) + 1;
       }
@@ -202,7 +202,7 @@ export async function getWorkerStats() {
     const normalizeHost = (value: string) => value.trim().toLowerCase();
     const isWorkerServiceLive = (host: string, port: number, shard: number) => {
       const targetHost = normalizeHost(host);
-      return liveWorkerServices.some((service) => {
+      return liveWorkerServices.some((service: { address: string; port: number; shard: number }) => {
         if (service.shard === shard) return true;
 
         if (service.port !== port) return false;

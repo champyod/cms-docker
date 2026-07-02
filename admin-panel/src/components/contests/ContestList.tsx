@@ -7,9 +7,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/core/Button';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Trash2, Plus, Calendar, Clock, ExternalLink, HelpCircle } from 'lucide-react';
+import { Trash2, Plus, Calendar, Clock, ExternalLink, HelpCircle, Rocket, CheckCircle2 } from 'lucide-react';
 import { ContestModal } from './ContestModal';
 import { apiClient } from '@/lib/apiClient';
+import { activateContest } from '@/app/actions/contests';
+import { useToast } from '@/components/providers/ToastProvider';
 
 interface ContestListProps {
   initialContests: any[];
@@ -30,6 +32,7 @@ export function ContestList({ initialContests, totalPages, permissions }: Contes
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
   const [selectedContest, setSelectedContest] = useState<any | null>(null);
+  const { addToast } = useToast();
 
   const isSuperAdmin = permissions?.permission_all ?? false;
   const canManageContests = isSuperAdmin || (permissions?.permission_contests ?? false);
@@ -44,6 +47,17 @@ export function ContestList({ initialContests, totalPages, permissions }: Contes
       } else {
         alert('Failed to delete contest: ' + result.error);
       }
+    }
+  };
+
+  const handleSetActive = async (id: number) => {
+    if (!isSuperAdmin) return;
+    const result = await activateContest(id);
+    if (result.success) {
+      addToast({ type: 'success', title: 'Active Contest Updated', message: `Contest #${id} is now the active contest.` });
+      window.location.reload();
+    } else {
+      addToast({ type: 'error', title: 'Failed', message: result.error || 'Could not activate contest' });
     }
   };
 
@@ -106,13 +120,19 @@ export function ContestList({ initialContests, totalPages, permissions }: Contes
           <TableBody>
             {contests.map((contest) => {
               const status = getStatus(contest.start, contest.stop);
+              const isActive = contest.is_active === true;
               return (
-                <TableRow key={contest.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                    <TableCell className="font-mono text-neutral-500 text-xs">#{contest.id}</TableCell>
-                  <TableCell className="font-medium text-white max-w-[200px]">
+                <TableRow key={contest.id} className={`border-b border-white/5 transition-colors ${isActive ? 'bg-indigo-500/5 hover:bg-indigo-500/10' : 'hover:bg-white/5'}`}>
+                    <TableCell className="font-mono text-xs">
+                        <div className="flex items-center gap-2">
+                            <span className={isActive ? 'text-indigo-400' : 'text-neutral-500'}>#{contest.id}</span>
+                            {isActive && <CheckCircle2 className="w-3.5 h-3.5 text-indigo-400" />}
+                        </div>
+                    </TableCell>
+                  <TableCell className="font-medium max-w-[200px]">
                     <button
                       onClick={() => router.push(`/${locale}/contests/${contest.id}`)}
-                      className="flex items-center gap-2 hover:text-indigo-400 transition-colors truncate"
+                      className="flex items-center gap-2 text-white hover:text-indigo-400 transition-colors truncate"
                       title={contest.name}
                     >
                       {contest.name}
@@ -120,9 +140,16 @@ export function ContestList({ initialContests, totalPages, permissions }: Contes
                     </button>
                     </TableCell>
                     <TableCell>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium border ${status.color}`}>
-                            {status.label}
-                        </span>
+                        <div className="flex items-center gap-2">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium border ${status.color}`}>
+                                {status.label}
+                            </span>
+                            {isActive && (
+                                <span className="px-2 py-1 rounded-full text-xs font-medium border border-indigo-500/30 bg-indigo-500/10 text-indigo-400">
+                                    Deployed
+                                </span>
+                            )}
+                        </div>
                     </TableCell>
                     <TableCell>
                         <div className="flex flex-col gap-1 text-xs text-neutral-400">
@@ -138,6 +165,17 @@ export function ContestList({ initialContests, totalPages, permissions }: Contes
                     </TableCell>
                     <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
+                        {isSuperAdmin && !isActive && (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleSetActive(contest.id)}
+                                className="h-8 text-xs text-neutral-400 hover:text-indigo-400 gap-1"
+                            >
+                                <Rocket className="w-3 h-3" />
+                                Set Active
+                            </Button>
+                        )}
                         {canManageContests && (
                             <Button 
                                 variant="ghost" 

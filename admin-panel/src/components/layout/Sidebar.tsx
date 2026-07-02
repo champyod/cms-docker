@@ -152,7 +152,7 @@ export const Sidebar: React.FC<{
 
           {isSuperAdmin && (
             <SidebarGroup label="Infrastructure" icon={Database} collapsed={collapsed}>
-                <SidebarItem icon={Rocket} label="Deployments" href={`/${locale}/deployments`} collapsed={collapsed} />
+                <SidebarItem icon={Rocket} label="Active Contest" href={`/${locale}/deployments`} collapsed={collapsed} />
                 <SidebarItem icon={Shield} label="Admins" href={`/${locale}/admins`} collapsed={collapsed} />
                 <SidebarItem icon={Activity} label="Resources" href={`/${locale}/resources`} collapsed={collapsed} />
                 <SidebarItem icon={Box} label="Containers" href={`/${locale}/containers`} collapsed={collapsed} />

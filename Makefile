@@ -111,8 +111,6 @@ env:
 		echo "Updating config/cms_ranking.toml..."; \
 		sed -i 's/\"127.0.0.1\"/\"0.0.0.0\"/g' config/cms_ranking.toml; \
 	fi
-	@echo "Generating per-contest docker-compose configuration..."
-	@chmod +x scripts/generate_contest_compose.py && python3 scripts/generate_contest_compose.py
 	@echo ".env file generated. You can now run: ./scripts/setup.sh"
 
 core:
@@ -158,11 +156,7 @@ admin:
 	$(COMPOSE) -f docker-compose.admin.yml up -d --build
 
 contest:
-	@if [ -f docker-compose.contests.generated.yml ] && grep -q "cms-contest-web-server-" docker-compose.contests.generated.yml; then \
-		$(COMPOSE) -f docker-compose.contests.generated.yml up -d --build; \
-	else \
-		$(COMPOSE) -f docker-compose.contest.yml up -d --build; \
-	fi
+	$(COMPOSE) -f docker-compose.contest.yml up -d --build
 
 worker:
 	$(COMPOSE) -f docker-compose.worker.yml up -d --build
@@ -180,18 +174,10 @@ admin-clean:
 	$(COMPOSE) -f docker-compose.admin.yml down -v
 
 contest-stop:
-	@if [ -f docker-compose.contests.generated.yml ] && grep -q "cms-contest-web-server-" docker-compose.contests.generated.yml; then \
-		$(COMPOSE) -f docker-compose.contests.generated.yml stop; \
-	else \
-		$(COMPOSE) -f docker-compose.contest.yml stop; \
-	fi
+	$(COMPOSE) -f docker-compose.contest.yml stop
 
 contest-clean:
-	@if [ -f docker-compose.contests.generated.yml ] && grep -q "cms-contest-web-server-" docker-compose.contests.generated.yml; then \
-		$(COMPOSE) -f docker-compose.contests.generated.yml down -v; \
-	else \
-		$(COMPOSE) -f docker-compose.contest.yml down -v; \
-	fi
+	$(COMPOSE) -f docker-compose.contest.yml down -v
 
 worker-stop:
 	$(COMPOSE) -f docker-compose.worker.yml down
@@ -227,11 +213,7 @@ pull-admin:
 
 pull-contest:
 	@echo "Pulling contest images..."
-	@if [ -f docker-compose.contests.generated.yml ] && grep -q "cms-contest-web-server-" docker-compose.contests.generated.yml; then \
-		$(COMPOSE) -f docker-compose.contests.generated.yml pull || true; \
-	else \
-		$(COMPOSE) -f docker-compose.contest.yml -f docker-compose.contest.img.yml pull || true; \
-	fi
+	$(COMPOSE) -f docker-compose.contest.yml -f docker-compose.contest.img.yml pull || true
 
 pull-worker:
 	@echo "Pulling worker images..."
@@ -249,18 +231,10 @@ admin-img:
 	$(COMPOSE) -f docker-compose.admin.yml -f docker-compose.admin.img.yml up -d --no-build
 
 contest-img:
-	@if [ -f docker-compose.contests.generated.yml ] && grep -q "cms-contest-web-server-" docker-compose.contests.generated.yml; then \
-		$(COMPOSE) -f docker-compose.contests.generated.yml up -d --no-build; \
-	else \
-		$(COMPOSE) -f docker-compose.contest.yml -f docker-compose.contest.img.yml up -d --no-build; \
-	fi
+	$(COMPOSE) -f docker-compose.contest.yml -f docker-compose.contest.img.yml up -d --no-build
 
 contest-down:
-	@if [ -f docker-compose.contests.generated.yml ] && grep -q "cms-contest-web-server-" docker-compose.contests.generated.yml; then \
-		$(COMPOSE) -f docker-compose.contests.generated.yml down; \
-	else \
-		$(COMPOSE) -f docker-compose.contest.yml down; \
-	fi
+	$(COMPOSE) -f docker-compose.contest.yml down
 
 worker-img:
 	$(COMPOSE) -f docker-compose.worker.yml -f docker-compose.worker.img.yml up -d --no-build

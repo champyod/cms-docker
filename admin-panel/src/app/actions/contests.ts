@@ -308,3 +308,29 @@ export async function getAvailableContests() {
     return { success: false, contests: [], error: (error as Error).message };
   }
 }
+
+export async function activateContest(id: number) {
+  await ensurePermission('contests');
+  try {
+    await prisma.contests.updateMany({ where: { is_active: true }, data: { is_active: false } });
+    await prisma.contests.update({ where: { id }, data: { is_active: true } });
+    revalidatePath('/[locale]/contests');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+export async function getActiveContest() {
+  try {
+    const contest = await prisma.contests.findFirst({
+      where: { is_active: true },
+      include: {
+        _count: { select: { participations: true } },
+      },
+    });
+    return { success: true, contest };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+}

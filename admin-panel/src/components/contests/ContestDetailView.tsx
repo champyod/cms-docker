@@ -1,13 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { updateContestSettings, addParticipant, removeParticipant } from '@/app/actions/contests';
+import { updateContestSettings, addParticipant, removeParticipant, activateContest } from '@/app/actions/contests';
 import { setTestUser } from '@/app/actions/participations';
 import { Card } from '@/components/core/Card';
 import {
   Settings, Users, Trophy, Clock, Shield, Zap,
   Plus, Trash2, ExternalLink, Play, Square,
-  ChevronDown, ChevronUp, Save, ClipboardList, FlaskConical
+  ChevronDown, ChevronUp, Save, ClipboardList, FlaskConical, Rocket
 } from 'lucide-react';
 import { ParticipantModal } from './ParticipantModal';
 import { TaskSelectionModal } from './TaskSelectionModal';
@@ -64,6 +64,15 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, tea
   };
 
 
+  const handleSetActive = async () => {
+    const result = await activateContest(contest.id);
+    if (result.success) {
+      window.location.reload();
+    } else {
+      alert('Failed to set as active: ' + result.error);
+    }
+  };
+
   const [formData, setFormData] = useState({
     name: contest.name,
     description: contest.description,
@@ -114,17 +123,37 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, tea
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white">{contest.name}</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold text-white">{contest.name}</h1>
+            {contest.is_active && (
+              <span className="px-3 py-1 rounded-full text-xs font-medium border border-indigo-500/30 bg-indigo-500/10 text-indigo-400 flex items-center gap-1.5">
+                <Rocket className="w-3 h-3" />
+                Active Contest
+              </span>
+            )}
+          </div>
           <p className="text-neutral-400 mt-1">{contest.description}</p>
         </div>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors disabled:opacity-50"
-        >
-          <Save className="w-4 h-4" />
-          {saving ? 'Saving...' : 'Save Changes'}
-        </button>
+        <div className="flex items-center gap-3">
+          {!contest.is_active && (
+            <button
+              onClick={handleSetActive}
+              disabled={saving}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 rounded-lg transition-colors text-sm disabled:opacity-50"
+            >
+              <Rocket className="w-4 h-4" />
+              Set as Active Contest
+            </button>
+          )}
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors disabled:opacity-50"
+          >
+            <Save className="w-4 h-4" />
+            {saving ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
       </div>
 
       {/* Contest Status & Times */}
