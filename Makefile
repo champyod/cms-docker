@@ -155,6 +155,23 @@ db-reset: db-clean core-img
 admin:
 	$(COMPOSE) -f docker-compose.admin.yml up -d --build
 
+admin-dev:
+	@echo "Building admin panel (local)..."
+	cd admin-panel && bun run build
+	@echo "Starting admin panel on port ${ADMIN_NEXT_PORT_EXTERNAL:-8891}..."
+	cd admin-panel && PORT=${ADMIN_NEXT_PORT_EXTERNAL:-8891} nohup bun run start > /tmp/admin-panel.log 2>&1 & echo $$! > /tmp/admin-panel.pid
+	@sleep 2
+	@echo "Admin panel started (PID: $$(cat /tmp/admin-panel.pid), log: /tmp/admin-panel.log)"
+
+admin-dev-stop:
+	@if [ -f /tmp/admin-panel.pid ]; then \
+		echo "Stopping admin panel (PID: $$(cat /tmp/admin-panel.pid))..."; \
+		kill $$(cat /tmp/admin-panel.pid) 2>/dev/null && echo "Stopped." || echo "Process already exited."; \
+		rm -f /tmp/admin-panel.pid; \
+	else \
+		echo "No admin panel PID file found. Try: pkill -f 'next.*start'"; \
+	fi
+
 contest:
 	$(COMPOSE) -f docker-compose.contest.yml up -d --build
 
