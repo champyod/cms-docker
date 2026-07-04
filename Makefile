@@ -158,8 +158,8 @@ admin:
 admin-dev:
 	@echo "Building admin panel (local)..."
 	cd admin-panel && bun run build
-	@echo "Starting admin panel on port ${ADMIN_NEXT_PORT_EXTERNAL:-8891}..."
-	cd admin-panel && PORT=${ADMIN_NEXT_PORT_EXTERNAL:-8891} nohup bun run start > /tmp/admin-panel.log 2>&1 & echo $$! > /tmp/admin-panel.pid
+	@echo "Starting admin panel on port $${ADMIN_NEXT_PORT_EXTERNAL:-8891}..."
+	cd admin-panel && PORT=$${ADMIN_NEXT_PORT_EXTERNAL:-8891} nohup bun run start > /tmp/admin-panel.log 2>&1 & echo $$! > /tmp/admin-panel.pid
 	@sleep 2
 	@echo "Admin panel started (PID: $$(cat /tmp/admin-panel.pid), log: /tmp/admin-panel.log)"
 
