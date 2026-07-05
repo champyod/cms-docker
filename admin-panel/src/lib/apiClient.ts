@@ -25,6 +25,7 @@ class ApiClient {
         return {
           success: false,
           error: data.error || `HTTP error! status: ${resp.status}`,
+          errors: data.errors,
         };
       }
 
