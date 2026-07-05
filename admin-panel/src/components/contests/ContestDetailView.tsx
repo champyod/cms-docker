@@ -1,13 +1,16 @@
 'use client';
 
-import { useState } from 'react';
-import { updateContestSettings, addParticipant, removeParticipant, activateContest } from '@/app/actions/contests';
+import { useState, useEffect } from 'react';
+import { updateContestSettings, addParticipant, removeParticipant } from '@/app/actions/contests';
 import { setTestUser } from '@/app/actions/participations';
 import { Card } from '@/components/core/Card';
+import { Button } from '@/components/core/Button';
+import { useDeployContest } from '@/hooks/useDeployContest';
+import { Modal } from '@/components/core/Modal';
 import {
   Settings, Users, Trophy, Clock, Shield, Zap,
   Plus, Trash2, ExternalLink, Play, Square,
-  ChevronDown, ChevronUp, Save, ClipboardList, FlaskConical, Rocket
+  ChevronDown, ChevronUp, Save, ClipboardList, FlaskConical, Rocket, Loader2, CheckCircle2
 } from 'lucide-react';
 import { ParticipantModal } from './ParticipantModal';
 import { TaskSelectionModal } from './TaskSelectionModal';
@@ -39,6 +42,8 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, tea
     services: true,
   });
   const [saving, setSaving] = useState(false);
+  const { state: deployState, deploy: handleDeploy, reset: resetDeployState } = useDeployContest();
+  const [showDeployModal, setShowDeployModal] = useState(false);
 
   const handleOpenParticipationSettings = (participationId: number, username: string) => {
     setSelectedParticipation({ id: participationId, username });
@@ -64,14 +69,29 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, tea
   };
 
 
-  const handleSetActive = async () => {
-    const result = await activateContest(contest.id);
-    if (result.success) {
-      window.location.reload();
-    } else {
-      alert('Failed to set as active: ' + result.error);
-    }
+  const handleSetActive = () => {
+    setShowDeployModal(true);
   };
+
+  const confirmDeploy = () => {
+    handleDeploy(contest.id);
+  };
+
+  useEffect(() => {
+    if (deployState.phase === 'completed') {
+      setShowDeployModal(false);
+      resetDeployState();
+      window.location.reload();
+    } else if (deployState.phase === 'failed' || deployState.phase === 'timeout') {
+      setShowDeployModal(false);
+      resetDeployState();
+      alert('Deploy failed: ' + (deployState.error || 'Unknown error'));
+    } else if (deployState.phase === 'already_running') {
+      setShowDeployModal(false);
+      resetDeployState();
+      alert('Another deploy is already in progress.');
+    }
+  }, [deployState.phase]);
 
   const [formData, setFormData] = useState({
     name: contest.name,
@@ -516,6 +536,38 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, tea
         teams={teams}
         onSuccess={() => window.location.reload()}
       />
+
+      <Modal
+        isOpen={showDeployModal}
+        onClose={() => { if (deployState.phase !== 'deploying' && deployState.phase !== 'polling') { setShowDeployModal(false); resetDeployState(); } }}
+        title={deployState.phase === 'deploying' || deployState.phase === 'polling' ? 'Deploying Contest...' : 'Confirm Deploy'}
+      >
+        <div className="space-y-4">
+          {(deployState.phase === 'idle' || deployState.phase === 'already_running') && (
+            <>
+              <p className="text-neutral-300 text-sm">
+                This will mark <strong className="text-white">{contest.name}</strong> as the active contest,
+                update the .env file, and restart the contest stack.
+              </p>
+              <div className="flex justify-end gap-3 pt-2">
+                <Button variant="ghost" onClick={() => { setShowDeployModal(false); resetDeployState(); }}>Cancel</Button>
+                <Button variant="primary" onClick={confirmDeploy} className="flex items-center gap-2">
+                  <Rocket className="w-4 h-4" />
+                  Deploy
+                </Button>
+              </div>
+            </>
+          )}
+          {(deployState.phase === 'deploying' || deployState.phase === 'polling') && (
+            <div className="flex flex-col items-center gap-4 py-6">
+              <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
+              <p className="text-neutral-300 text-sm">
+                {deployState.phase === 'deploying' ? 'Starting deploy...' : 'Deploying contest stack...'}
+              </p>
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }
