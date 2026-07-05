@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
@@ -9,6 +9,8 @@ import type { ContestData } from '@/app/actions/contests';
 import { apiClient } from '@/lib/apiClient';
 import { PROGRAMMING_LANGUAGES } from '@/lib/constants';
 import { useToast } from '@/components/providers/ToastProvider';
+import { validateContestData, parseInterval } from '@/lib/contest-validation';
+import { cn } from '@/lib/utils';
 
 interface ContestModalProps {
   isOpen: boolean;
@@ -24,27 +26,39 @@ const formatDateForInput = (date: Date | string | undefined) => {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-// Helper to parse Postgres intervals returned by Prisma (returns seconds)
-const parseInterval = (val: any): number => {
-  if (!val) return 0;
-  if (typeof val === 'number') return val;
-  if (typeof val === 'string') {
-    if (/^\d+$/.test(val)) return parseInt(val);
-    const parts = val.split(':').map(Number);
-    if (parts.length === 3 && parts.every(n => !isNaN(n))) {
-      return parts[0] * 3600 + parts[1] * 60 + parts[2];
-    }
-    return 0;
-  }
-  if (typeof val === 'object') {
-    let total = 0;
-    if (val.days !== undefined) total += val.days * 24 * 3600;
-    if (val.hours !== undefined) total += val.hours * 3600;
-    if (val.minutes !== undefined) total += val.minutes * 60;
-    if (val.seconds !== undefined) total += val.seconds;
-    return total;
-  }
-  return 0;
+const FIELD_TO_TAB_MAP: Record<string, Tab> = {
+  name: 'general',
+  description: 'general',
+  start: 'general',
+  stop: 'general',
+  timezone: 'general',
+  allowed_localizations: 'general',
+  languages: 'general',
+  allow_registration: 'access',
+  allow_password_authentication: 'access',
+  ip_restriction: 'access',
+  ip_autologin: 'access',
+  submissions_download_allowed: 'access',
+  allow_questions: 'access',
+  block_hidden_participations: 'access',
+  token_mode: 'tokens',
+  token_max_number: 'tokens',
+  token_min_interval: 'tokens',
+  token_gen_initial: 'tokens',
+  token_gen_number: 'tokens',
+  token_gen_interval: 'tokens',
+  token_gen_max: 'tokens',
+  max_submission_number: 'limits',
+  max_user_test_number: 'limits',
+  min_submission_interval: 'limits',
+  min_user_test_interval: 'limits',
+  queue_fairness_penalty_seconds: 'limits',
+  score_precision: 'limits',
+  per_user_time: 'limits',
+  min_submission_interval_grace_period: 'limits',
+  analysis_enabled: 'analysis',
+  analysis_start: 'analysis',
+  analysis_stop: 'analysis',
 };
 
 type Tab = 'general' | 'access' | 'tokens' | 'limits' | 'analysis';
@@ -55,6 +69,8 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<Tab>('general');
   const [mounted, setMounted] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Map<string, string>>(new Map());
+  const analysisEditedRef = useRef(false);
 
   useEffect(() => {
     setMounted(true);
@@ -131,8 +147,10 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
         analysis_start: formatDateForInput(contest.analysis_start),
         analysis_stop: formatDateForInput(contest.analysis_stop),
       });
+      analysisEditedRef.current = false;
+      setValidationErrors(new Map());
     } else {
-        const now = new Date();
+      const now = new Date();
       const end = new Date(now.getTime() + 5 * 60 * 60 * 1000); // 5 hours
       const analysisStart = new Date(end.getTime() + 1000);
       const analysisStop = new Date(end.getTime() + 1000 * 60 * 60);
@@ -143,7 +161,7 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
         start: formatDateForInput(now),
         stop: formatDateForInput(end),
         timezone: 'Asia/Bangkok',
-        languages: PROGRAMMING_LANGUAGES.map(l => l.split(' / ')[0].trim()),
+        languages: [...PROGRAMMING_LANGUAGES],
         allowed_localizations: '',
         submissions_download_allowed: true,
         allow_questions: true,
@@ -171,26 +189,40 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
         analysis_start: formatDateForInput(analysisStart),
         analysis_stop: formatDateForInput(analysisStop),
       });
+      analysisEditedRef.current = false;
+      setValidationErrors(new Map());
     }
   }, [contest, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!formData.stop) return;
+    const stopDate = new Date(formData.stop);
+    if (isNaN(stopDate.getTime())) return;
+
+    if (!formData.analysis_enabled || !analysisEditedRef.current) {
+      const newStart = new Date(stopDate.getTime() + 1000);
+      const newStop = new Date(stopDate.getTime() + 3601000);
+      setFormData(prev => ({
+        ...prev,
+        analysis_start: formatDateForInput(newStart),
+        analysis_stop: formatDateForInput(newStop),
+      }));
+    }
+  }, [formData.stop, formData.analysis_enabled, isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setValidationErrors(new Map());
 
-    // Validate name format
+    const tempErrors = new Map<string, string>();
     const nameRegex = /^[A-Za-z0-9_-]+$/;
-    if (!nameRegex.test(formData.name)) {
-      const msg = 'Contest name must contain only letters, numbers, hyphens and underscores';
-      setError(msg);
-      addToast({
-        type: 'error',
-        title: 'Invalid Name',
-        message: msg
-      });
-      setLoading(false);
-      return;
+    if (!formData.name) {
+      tempErrors.set('name', 'Contest name is required');
+    } else if (!nameRegex.test(formData.name)) {
+      tempErrors.set('name', 'Contest name must contain only letters, numbers, hyphens and underscores');
     }
 
     try {
@@ -205,6 +237,32 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
             .filter((s: string) => s.length > 0);
       }
       payload.queue_fairness_penalty_seconds = Math.max(0, Number(payload.queue_fairness_penalty_seconds ?? 0) || 0);
+
+      // Client-side validation
+      const validation = validateContestData(payload);
+      if (!validation.valid || tempErrors.size > 0) {
+        const errorsMap = new Map<string, string>(tempErrors);
+        validation.errors.forEach(err => {
+          errorsMap.set(err.field, err.message);
+        });
+        setValidationErrors(errorsMap);
+
+        // Focus first tab with an error
+        const firstErrorField = Array.from(errorsMap.keys())[0];
+        const targetTab = FIELD_TO_TAB_MAP[firstErrorField];
+        if (targetTab) {
+          setActiveTab(targetTab);
+        }
+
+        setError('Please fix the validation errors before saving');
+        addToast({
+          type: 'error',
+          title: 'Validation Error',
+          message: 'Please fix the errors before saving'
+        });
+        setLoading(false);
+        return;
+      }
 
       const result = contest
         ? await apiClient.put(`/api/contests/${contest.id}`, payload)
@@ -221,6 +279,19 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
       } else {
         const msg = result.error || 'Operation failed';
         setError(msg);
+        if (result.errors && Array.isArray(result.errors)) {
+          const apiErrorsMap = new Map<string, string>();
+          result.errors.forEach((err: any) => {
+            apiErrorsMap.set(err.field, err.message);
+          });
+          setValidationErrors(apiErrorsMap);
+          // Focus first tab with an error
+          const firstErrorField = Array.from(apiErrorsMap.keys())[0];
+          const targetTab = FIELD_TO_TAB_MAP[firstErrorField];
+          if (targetTab) {
+            setActiveTab(targetTab);
+          }
+        }
         addToast({
           type: 'error',
           title: 'Error',
@@ -272,35 +343,62 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
         <div className="flex flex-1 overflow-hidden">
           {/* Sidebar Tabs */}
           <div className="w-64 bg-black/20 border-r border-white/10 p-4 space-y-2 overflow-y-auto">
-            {[
-              { id: 'general', label: 'General', icon: FileText },
-              { id: 'access', label: 'Access Control', icon: Shield },
-              { id: 'tokens', label: 'Tokens', icon: Cpu },
-              { id: 'limits', label: 'Limits', icon: Clock },
-              { id: 'analysis', label: 'Analysis Mode', icon: Calendar },
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as Tab)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === tab.id
-                  ? 'bg-indigo-500/20 text-indigo-400 ring-1 ring-indigo-500/50'
-                  : 'text-neutral-400 hover:bg-white/5 hover:text-white'
-                  }`}
-              >
-                <tab.icon className="w-4 h-4" />
-                {tab.label}
-              </button>
-            ))}
+            {(() => {
+              const tabHasError = (tabId: string) => {
+                return Array.from(validationErrors.entries()).some(([field]) => FIELD_TO_TAB_MAP[field] === tabId);
+              };
+              return [
+                { id: 'general', label: 'General', icon: FileText },
+                { id: 'access', label: 'Access Control', icon: Shield },
+                { id: 'tokens', label: 'Tokens', icon: Cpu },
+                { id: 'limits', label: 'Limits', icon: Clock },
+                { id: 'analysis', label: 'Analysis Mode', icon: Calendar },
+              ].map(tab => {
+                const hasError = tabHasError(tab.id);
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id as Tab)}
+                    className={cn(
+                      "w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all",
+                      activeTab === tab.id
+                        ? "bg-indigo-500/20 text-indigo-400 ring-1 ring-indigo-500/50"
+                        : "text-neutral-400 hover:bg-white/5 hover:text-white"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <tab.icon className="w-4 h-4" />
+                      {tab.label}
+                    </div>
+                    {hasError && (
+                      <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                    )}
+                  </button>
+                );
+              });
+            })()}
           </div>
 
           {/* Form Content */}
           <div className="flex-1 overflow-y-auto p-8 relative">
-            {error && (
+            {validationErrors.size > 0 ? (
+              <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm flex flex-col gap-2 sticky top-0 z-10 backdrop-blur-md">
+                <div className="flex items-center gap-3">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                  <span className="font-bold">Please fix the following {validationErrors.size} errors before saving:</span>
+                </div>
+                <ul className="list-disc pl-6 space-y-1 text-xs opacity-90">
+                  {Array.from(validationErrors.entries()).map(([field, msg]) => (
+                    <li key={field}>{msg}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : error ? (
               <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm flex items-center gap-3 sticky top-0 z-10 backdrop-blur-md">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
                 {error}
               </div>
-            )}
+            ) : null}
 
             <form id="contest-form" onSubmit={handleSubmit} className="space-y-8 pb-20">
               {/* GENERAL TAB */}
@@ -315,48 +413,115 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
                       type="text"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white focus:ring-1 focus:ring-indigo-500/50 transition-all font-sans"
+                      className={cn(
+                        "w-full px-4 py-3 bg-black/40 border rounded-xl text-white focus:ring-1 transition-all font-sans",
+                        validationErrors.has('name')
+                          ? "border-red-500 focus:ring-red-500/50"
+                          : "border-white/5 focus:ring-indigo-500/50"
+                      )}
                       placeholder="IOI 2025 Selection"
                     />
+                    {validationErrors.has('name') && (
+                      <p className="text-xs text-red-500">{validationErrors.get('name')}</p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Description</label>
                     <textarea
                       value={formData.description}
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white h-32 resize-none focus:ring-1 focus:ring-indigo-500/50"
+                      className={cn(
+                        "w-full px-4 py-3 bg-black/40 border rounded-xl text-white h-32 resize-none focus:ring-1",
+                        validationErrors.has('description')
+                          ? "border-red-500 focus:ring-red-500/50"
+                          : "border-white/5 focus:ring-indigo-500/50"
+                      )}
                     />
+                    {validationErrors.has('description') && (
+                      <p className="text-xs text-red-500">{validationErrors.get('description')}</p>
+                    )}
                   </div>
                   <div className="grid grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Start Time</label>
-                      <input required type="datetime-local" value={formData.start} onChange={(e) => setFormData({ ...formData, start: e.target.value })} className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white [color-scheme:dark]" />
+                      <input
+                        required
+                        type="datetime-local"
+                        value={formData.start}
+                        onChange={(e) => setFormData({ ...formData, start: e.target.value })}
+                        className={cn(
+                          "w-full px-4 py-3 bg-black/40 border rounded-xl text-white [color-scheme:dark]",
+                          validationErrors.has('start')
+                            ? "border-red-500 focus:ring-red-500/50"
+                            : "border-white/5 focus:ring-indigo-500/50"
+                        )}
+                      />
+                      {validationErrors.has('start') && (
+                        <p className="text-xs text-red-500">{validationErrors.get('start')}</p>
+                      )}
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Stop Time</label>
-                      <input required type="datetime-local" value={formData.stop} onChange={(e) => setFormData({ ...formData, stop: e.target.value })} className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white [color-scheme:dark]" />
+                      <input
+                        required
+                        type="datetime-local"
+                        value={formData.stop}
+                        onChange={(e) => setFormData({ ...formData, stop: e.target.value })}
+                        className={cn(
+                          "w-full px-4 py-3 bg-black/40 border rounded-xl text-white [color-scheme:dark]",
+                          validationErrors.has('stop')
+                            ? "border-red-500 focus:ring-red-500/50"
+                            : "border-white/5 focus:ring-indigo-500/50"
+                        )}
+                      />
+                      {validationErrors.has('stop') && (
+                        <p className="text-xs text-red-500">{validationErrors.get('stop')}</p>
+                      )}
                     </div>
                   </div>
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Timezone</label>
-                    <input required type="text" value={formData.timezone} onChange={(e) => setFormData({ ...formData, timezone: e.target.value })} className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white font-mono" />
+                    <input
+                      required
+                      type="text"
+                      value={formData.timezone}
+                      onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
+                      className={cn(
+                        "w-full px-4 py-3 bg-black/40 border rounded-xl text-white font-mono",
+                        validationErrors.has('timezone')
+                          ? "border-red-500 focus:ring-red-500/50"
+                          : "border-white/5 focus:ring-indigo-500/50"
+                      )}
+                    />
+                    {validationErrors.has('timezone') && (
+                      <p className="text-xs text-red-500">{validationErrors.get('timezone')}</p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Allowed Localizations</label>
                     <input 
-                        type="text" 
-                        value={formData.allowed_localizations} 
-                        onChange={(e) => setFormData({ ...formData, allowed_localizations: e.target.value })} 
-                        className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white font-mono placeholder-white/20" 
-                        placeholder="en, th, etc. (Comma separated)"
+                      type="text" 
+                      value={formData.allowed_localizations} 
+                      onChange={(e) => setFormData({ ...formData, allowed_localizations: e.target.value })} 
+                      className={cn(
+                        "w-full px-4 py-3 bg-black/40 border rounded-xl text-white font-mono placeholder-white/20",
+                        validationErrors.has('allowed_localizations')
+                          ? "border-red-500 focus:ring-red-500/50"
+                          : "border-white/5 focus:ring-indigo-500/50"
+                      )}
+                      placeholder="en, th, etc. (Comma separated)"
                     />
+                    {validationErrors.has('allowed_localizations') && (
+                      <p className="text-xs text-red-500">{validationErrors.get('allowed_localizations')}</p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Allowed Languages</label>
                     <div className="grid grid-cols-3 gap-2 p-4 bg-black/20 rounded-xl border border-white/5 max-h-48 overflow-y-auto">
                       {PROGRAMMING_LANGUAGES.map(langStr => {
-                        const lang = langStr.split(' / ')[0].trim(); // Simplified value
+                        const lang = langStr;
                         const isSelected = formData.languages.includes(lang);
+                        const displayName = langStr.split(' / ')[0].trim();
                         return (
                           <button
                             key={lang}
@@ -364,7 +529,7 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
                             onClick={() => handleLanguageToggle(lang)}
                             className={`px-3 py-2 rounded-lg text-xs font-mono text-left transition-all ${isSelected ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-white/5 text-neutral-400 hover:bg-white/10'}`}
                           >
-                            {lang}
+                            {displayName}
                           </button>
                         );
                       })}
@@ -436,7 +601,11 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
                                 disabled={formData.token_max_number === null}
                                 value={formData.token_max_number ?? ''} 
                                 onChange={(e) => setFormData({ ...formData, token_max_number: parseInt(e.target.value) || 0 })} 
-                                className={`w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white ${formData.token_max_number === null ? 'opacity-50' : ''}`} 
+                                className={cn(
+                                  "w-full px-4 py-3 bg-black/40 border rounded-xl text-white",
+                                  formData.token_max_number === null ? 'opacity-50' : '',
+                                  validationErrors.has('token_max_number') ? 'border-red-500 focus:ring-red-500/50' : 'border-white/5 focus:ring-indigo-500/50'
+                                )} 
                                 placeholder="Unlimited"
                             />
                             <button
@@ -448,11 +617,25 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
                                 <span className="text-xs font-bold">∞</span>
                             </button>
                         </div>
+                        {validationErrors.has('token_max_number') && (
+                          <p className="text-xs text-red-500">{validationErrors.get('token_max_number')}</p>
+                        )}
                       </div>
 
                       <div className="space-y-2">
                         <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Min Interval (sec)</label>
-                        <input type="number" value={formData.token_min_interval} onChange={(e) => setFormData({ ...formData, token_min_interval: parseInt(e.target.value) || 0 })} className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white" />
+                        <input
+                          type="number"
+                          value={formData.token_min_interval}
+                          onChange={(e) => setFormData({ ...formData, token_min_interval: parseInt(e.target.value) || 0 })}
+                          className={cn(
+                            "w-full px-4 py-3 bg-black/40 border rounded-xl text-white",
+                            validationErrors.has('token_min_interval') ? 'border-red-500 focus:ring-red-500/50' : 'border-white/5 focus:ring-indigo-500/50'
+                          )}
+                        />
+                        {validationErrors.has('token_min_interval') && (
+                          <p className="text-xs text-red-500">{validationErrors.get('token_min_interval')}</p>
+                        )}
                       </div>
 
                       {/* Finite-only fields */}
@@ -461,15 +644,48 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
                             <div className="col-span-2 border-t border-white/5 my-2"></div>
                             <div className="space-y-2">
                                 <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Initial Tokens</label>
-                                <input type="number" value={formData.token_gen_initial} onChange={(e) => setFormData({ ...formData, token_gen_initial: parseInt(e.target.value) || 0 })} className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white" />
+                                <input
+                                  type="number"
+                                  value={formData.token_gen_initial}
+                                  onChange={(e) => setFormData({ ...formData, token_gen_initial: parseInt(e.target.value) || 0 })}
+                                  className={cn(
+                                    "w-full px-4 py-3 bg-black/40 border rounded-xl text-white",
+                                    validationErrors.has('token_gen_initial') ? 'border-red-500 focus:ring-red-500/50' : 'border-white/5 focus:ring-indigo-500/50'
+                                  )}
+                                />
+                                {validationErrors.has('token_gen_initial') && (
+                                  <p className="text-xs text-red-500">{validationErrors.get('token_gen_initial')}</p>
+                                )}
                             </div>
                             <div className="space-y-2">
                                 <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Gen Amount</label>
-                                <input type="number" value={formData.token_gen_number} onChange={(e) => setFormData({ ...formData, token_gen_number: parseInt(e.target.value) || 0 })} className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white" />
+                                <input
+                                  type="number"
+                                  value={formData.token_gen_number}
+                                  onChange={(e) => setFormData({ ...formData, token_gen_number: parseInt(e.target.value) || 0 })}
+                                  className={cn(
+                                    "w-full px-4 py-3 bg-black/40 border rounded-xl text-white",
+                                    validationErrors.has('token_gen_number') ? 'border-red-500 focus:ring-red-500/50' : 'border-white/5 focus:ring-indigo-500/50'
+                                  )}
+                                />
+                                {validationErrors.has('token_gen_number') && (
+                                  <p className="text-xs text-red-500">{validationErrors.get('token_gen_number')}</p>
+                                )}
                             </div>
                             <div className="space-y-2">
                                 <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Gen Interval (min)</label>
-                                <input type="number" value={formData.token_gen_interval} onChange={(e) => setFormData({ ...formData, token_gen_interval: parseInt(e.target.value) || 0 })} className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white" />
+                                <input
+                                  type="number"
+                                  value={formData.token_gen_interval}
+                                  onChange={(e) => setFormData({ ...formData, token_gen_interval: parseInt(e.target.value) || 0 })}
+                                  className={cn(
+                                    "w-full px-4 py-3 bg-black/40 border rounded-xl text-white",
+                                    validationErrors.has('token_gen_interval') ? 'border-red-500 focus:ring-red-500/50' : 'border-white/5 focus:ring-indigo-500/50'
+                                  )}
+                                />
+                                {validationErrors.has('token_gen_interval') && (
+                                  <p className="text-xs text-red-500">{validationErrors.get('token_gen_interval')}</p>
+                                )}
                             </div>
                              <div className="space-y-2">
                                 <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Gen Max Cap</label>
@@ -479,7 +695,11 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
                                         disabled={formData.token_gen_max === null}
                                         value={formData.token_gen_max ?? ''} 
                                         onChange={(e) => setFormData({ ...formData, token_gen_max: parseInt(e.target.value) || 0 })} 
-                                        className={`w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white ${formData.token_gen_max === null ? 'opacity-50' : ''}`} 
+                                        className={cn(
+                                          "w-full px-4 py-3 bg-black/40 border rounded-xl text-white",
+                                          formData.token_gen_max === null ? 'opacity-50' : '',
+                                          validationErrors.has('token_gen_max') ? 'border-red-500 focus:ring-red-500/50' : 'border-white/5 focus:ring-indigo-500/50'
+                                        )} 
                                         placeholder="Unlimited"
                                     />
                                     <button
@@ -491,6 +711,9 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
                                         <span className="text-xs font-bold">∞</span>
                                     </button>
                                 </div>
+                                {validationErrors.has('token_gen_max') && (
+                                  <p className="text-xs text-red-500">{validationErrors.get('token_gen_max')}</p>
+                                )}
                             </div>
                         </>
                       )}
@@ -511,7 +734,11 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
                                 disabled={formData.max_submission_number === null}
                                 value={formData.max_submission_number ?? ''} 
                                 onChange={(e) => setFormData({ ...formData, max_submission_number: parseInt(e.target.value) || 0 })} 
-                                className={`w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white ${formData.max_submission_number === null ? 'opacity-50' : ''}`} 
+                                className={cn(
+                                  "w-full px-4 py-3 bg-black/40 border rounded-xl text-white",
+                                  formData.max_submission_number === null ? 'opacity-50' : '',
+                                  validationErrors.has('max_submission_number') ? 'border-red-500 focus:ring-red-500/50' : 'border-white/5 focus:ring-indigo-500/50'
+                                )} 
                                 placeholder="Unlimited"
                             />
                             <button
@@ -523,10 +750,24 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
                                 <span className="text-xs font-bold">∞</span>
                             </button>
                         </div>
+                        {validationErrors.has('max_submission_number') && (
+                          <p className="text-xs text-red-500">{validationErrors.get('max_submission_number')}</p>
+                        )}
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Min Interval (sec)</label>
-                      <input type="number" value={formData.min_submission_interval} onChange={(e) => setFormData({ ...formData, min_submission_interval: parseInt(e.target.value) || 0 })} className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white" />
+                      <input
+                        type="number"
+                        value={formData.min_submission_interval}
+                        onChange={(e) => setFormData({ ...formData, min_submission_interval: parseInt(e.target.value) || 0 })}
+                        className={cn(
+                          "w-full px-4 py-3 bg-black/40 border rounded-xl text-white",
+                          validationErrors.has('min_submission_interval') ? 'border-red-500 focus:ring-red-500/50' : 'border-white/5 focus:ring-indigo-500/50'
+                        )}
+                      />
+                      {validationErrors.has('min_submission_interval') && (
+                        <p className="text-xs text-red-500">{validationErrors.get('min_submission_interval')}</p>
+                      )}
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Max User Tests</label>
@@ -536,7 +777,11 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
                                 disabled={formData.max_user_test_number === null}
                                 value={formData.max_user_test_number ?? ''} 
                                 onChange={(e) => setFormData({ ...formData, max_user_test_number: parseInt(e.target.value) || 0 })} 
-                                className={`w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white ${formData.max_user_test_number === null ? 'opacity-50' : ''}`} 
+                                className={cn(
+                                  "w-full px-4 py-3 bg-black/40 border rounded-xl text-white",
+                                  formData.max_user_test_number === null ? 'opacity-50' : '',
+                                  validationErrors.has('max_user_test_number') ? 'border-red-500 focus:ring-red-500/50' : 'border-white/5 focus:ring-indigo-500/50'
+                                )} 
                                 placeholder="Unlimited"
                             />
                             <button
@@ -548,10 +793,24 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
                                 <span className="text-xs font-bold">∞</span>
                             </button>
                         </div>
+                        {validationErrors.has('max_user_test_number') && (
+                          <p className="text-xs text-red-500">{validationErrors.get('max_user_test_number')}</p>
+                        )}
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Min User Test Interval (sec)</label>
-                      <input type="number" value={formData.min_user_test_interval} onChange={(e) => setFormData({ ...formData, min_user_test_interval: parseInt(e.target.value) || 0 })} className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white" />
+                      <input
+                        type="number"
+                        value={formData.min_user_test_interval}
+                        onChange={(e) => setFormData({ ...formData, min_user_test_interval: parseInt(e.target.value) || 0 })}
+                        className={cn(
+                          "w-full px-4 py-3 bg-black/40 border rounded-xl text-white",
+                          validationErrors.has('min_user_test_interval') ? 'border-red-500 focus:ring-red-500/50' : 'border-white/5 focus:ring-indigo-500/50'
+                        )}
+                      />
+                      {validationErrors.has('min_user_test_interval') && (
+                        <p className="text-xs text-red-500">{validationErrors.get('min_user_test_interval')}</p>
+                      )}
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Queue Fairness Penalty (sec)</label>
@@ -562,13 +821,30 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
                         placeholder="0"
                         value={formData.queue_fairness_penalty_seconds}
                         onChange={(e) => setFormData({ ...formData, queue_fairness_penalty_seconds: Math.max(0, parseInt(e.target.value) || 0) })}
-                        className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white"
+                        className={cn(
+                          "w-full px-4 py-3 bg-black/40 border rounded-xl text-white",
+                          validationErrors.has('queue_fairness_penalty_seconds') ? 'border-red-500 focus:ring-red-500/50' : 'border-white/5 focus:ring-indigo-500/50'
+                        )}
                       />
                       <p className="text-[11px] text-neutral-500">0 disables fairness delay. Formula: submission time + n × seconds.</p>
+                      {validationErrors.has('queue_fairness_penalty_seconds') && (
+                        <p className="text-xs text-red-500">{validationErrors.get('queue_fairness_penalty_seconds')}</p>
+                      )}
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Score Precision (decimals)</label>
-                      <input type="number" value={formData.score_precision} onChange={(e) => setFormData({ ...formData, score_precision: parseInt(e.target.value) || 0 })} className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white" />
+                      <input
+                        type="number"
+                        value={formData.score_precision}
+                        onChange={(e) => setFormData({ ...formData, score_precision: parseInt(e.target.value) || 0 })}
+                        className={cn(
+                          "w-full px-4 py-3 bg-black/40 border rounded-xl text-white",
+                          validationErrors.has('score_precision') ? 'border-red-500 focus:ring-red-500/50' : 'border-white/5 focus:ring-indigo-500/50'
+                        )}
+                      />
+                      {validationErrors.has('score_precision') && (
+                        <p className="text-xs text-red-500">{validationErrors.get('score_precision')}</p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -590,11 +866,41 @@ export function ContestModal({ isOpen, onClose, contest, onSuccess }: ContestMod
                   <div className="grid grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Analysis Start</label>
-                      <input required type="datetime-local" value={formData.analysis_start} onChange={(e) => setFormData({ ...formData, analysis_start: e.target.value })} className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white [color-scheme:dark]" />
+                      <input
+                        required={formData.analysis_enabled}
+                        type="datetime-local"
+                        value={formData.analysis_start}
+                        onChange={(e) => {
+                          analysisEditedRef.current = true;
+                          setFormData({ ...formData, analysis_start: e.target.value });
+                        }}
+                        className={cn(
+                          "w-full px-4 py-3 bg-black/40 border rounded-xl text-white [color-scheme:dark]",
+                          validationErrors.has('analysis_start') ? 'border-red-500 focus:ring-red-500/50' : 'border-white/5 focus:ring-indigo-500/50'
+                        )}
+                      />
+                      {validationErrors.has('analysis_start') && (
+                        <p className="text-xs text-red-500">{validationErrors.get('analysis_start')}</p>
+                      )}
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Analysis Stop</label>
-                      <input required type="datetime-local" value={formData.analysis_stop} onChange={(e) => setFormData({ ...formData, analysis_stop: e.target.value })} className="w-full px-4 py-3 bg-black/40 border border-white/5 rounded-xl text-white [color-scheme:dark]" />
+                      <input
+                        required={formData.analysis_enabled}
+                        type="datetime-local"
+                        value={formData.analysis_stop}
+                        onChange={(e) => {
+                          analysisEditedRef.current = true;
+                          setFormData({ ...formData, analysis_stop: e.target.value });
+                        }}
+                        className={cn(
+                          "w-full px-4 py-3 bg-black/40 border rounded-xl text-white [color-scheme:dark]",
+                          validationErrors.has('analysis_stop') ? 'border-red-500 focus:ring-red-500/50' : 'border-white/5 focus:ring-indigo-500/50'
+                        )}
+                      />
+                      {validationErrors.has('analysis_stop') && (
+                        <p className="text-xs text-red-500">{validationErrors.get('analysis_stop')}</p>
+                      )}
                     </div>
                   </div>
                 </div>
