@@ -2,8 +2,9 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import util from 'util';
+import crypto from 'crypto';
 import { ensurePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 
@@ -57,6 +58,66 @@ async function getRestartPolicies(): Promise<RestartPolicies | null> {
 
 async function getContestComposeFile(): Promise<string> {
     return 'docker-compose.contest.yml';
+}
+
+// ---------------------------------------------------------------------------
+// Deploy infrastructure helpers
+// ---------------------------------------------------------------------------
+
+const getDeployLogsDir = () => path.join(getRepoRoot(), 'logs', 'deploy');
+
+async function ensureDeployLogsDir(): Promise<void> {
+  await fs.mkdir(getDeployLogsDir(), { recursive: true });
+}
+
+function generateOperationId(): string {
+  return crypto.randomBytes(8).toString('hex');
+}
+
+async function getActiveOperationId(): Promise<string | null> {
+  try {
+    const lockPath = path.join(getDeployLogsDir(), 'active.lock');
+    return await fs.readFile(lockPath, 'utf-8');
+  } catch {
+    return null;
+  }
+}
+
+async function setActiveOperationId(operationId: string): Promise<void> {
+  const lockPath = path.join(getDeployLogsDir(), 'active.lock');
+  await fs.writeFile(lockPath, operationId, 'utf-8');
+}
+
+async function clearActiveOperation(): Promise<void> {
+  const lockPath = path.join(getDeployLogsDir(), 'active.lock');
+  await fs.unlink(lockPath).catch(() => {});
+}
+
+async function cleanStaleOperations(): Promise<void> {
+  const dir = getDeployLogsDir();
+  const STALE_MS = 30 * 60 * 1000;
+  try {
+    const files = await fs.readdir(dir);
+    const jsonFiles = files.filter((f) => f.endsWith('.json'));
+    for (const jsonFile of jsonFiles) {
+      const filePath = path.join(dir, jsonFile);
+      const raw = await fs.readFile(filePath, 'utf-8').catch(() => null);
+      if (!raw) continue;
+      const meta = JSON.parse(raw) as { startedAt: string };
+      const age = Date.now() - new Date(meta.startedAt).getTime();
+      if (age > STALE_MS) {
+        const opId = jsonFile.replace('.json', '');
+        await fs.unlink(path.join(dir, `${opId}.json`)).catch(() => {});
+        await fs.unlink(path.join(dir, `${opId}.log`)).catch(() => {});
+        await fs.unlink(path.join(dir, `${opId}.done`)).catch(() => {});
+        await fs.unlink(path.join(dir, `${opId}.error`)).catch(() => {});
+        const active = await getActiveOperationId();
+        if (active === opId) await clearActiveOperation();
+      }
+    }
+  } catch {
+    // Non-fatal: stale cleanup is best-effort
+  }
 }
 
 export async function analyzeRestartRequirements(changedKeys: string[]) {
@@ -208,6 +269,7 @@ export async function restartServices(type: 'all' | 'core' | 'admin' | 'worker' 
   }
 }
 
+/** @deprecated Use deployContest() instead for async, non-blocking deploys. */
 export async function saveAndRestartContest(contestId: number) {
   await ensurePermission('all');
   try {
@@ -230,6 +292,171 @@ export async function saveAndRestartContest(contestId: number) {
   } catch (error) {
     return { success: false, error: (error as Error).message };
   }
+}
+
+export interface DeployContestResult {
+  success: boolean;
+  operationId?: string;
+  error?: string;
+  alreadyRunning?: boolean;
+}
+
+export async function deployContest(contestId: number): Promise<DeployContestResult> {
+  await ensurePermission('all');
+  try {
+    await ensureDeployLogsDir();
+    await cleanStaleOperations();
+
+    const existingOp = await getActiveOperationId();
+    if (existingOp !== null) {
+      return { success: false, alreadyRunning: true, error: 'A deploy is already in progress.' };
+    }
+
+    const { activateContest } = await import('./contests');
+    const activateResult = await activateContest(contestId);
+    if (!activateResult.success) {
+      return { success: false, error: activateResult.error };
+    }
+
+    const { writeActiveContestId } = await import('./env');
+    const envResult = await writeActiveContestId(contestId);
+    if (!envResult.success) {
+      return { success: false, error: 'Failed to write .env.contest: ' + envResult.error };
+    }
+
+    const operationId = generateOperationId();
+    const rootDir = getRepoRoot();
+    const logsDir = getDeployLogsDir();
+    const metaPath = path.join(logsDir, `${operationId}.json`);
+    const logPath = path.join(logsDir, `${operationId}.log`);
+    const donePath = path.join(logsDir, `${operationId}.done`);
+    const errorPath = path.join(logsDir, `${operationId}.error`);
+
+    await fs.writeFile(
+      metaPath,
+      JSON.stringify({ contestId, startedAt: new Date().toISOString(), status: 'running' }),
+      'utf-8'
+    );
+    await setActiveOperationId(operationId);
+
+    const shellCmd = [
+      `docker compose -f docker-compose.contest.yml up -d --build --force-recreate`,
+      `> "${logPath}" 2>&1`,
+      `&& echo "ok" > "${donePath}"`,
+      `|| echo "$?" > "${errorPath}"`,
+    ].join(' ');
+
+    const child = spawn('sh', ['-c', shellCmd], {
+      cwd: rootDir,
+      detached: true,
+      stdio: 'ignore',
+    });
+    child.unref();
+
+    await logToDiscord(
+      'Contest Deploy Started',
+      `Admin triggered async deploy for contest ID **${contestId}**. Operation: \`${operationId}\``,
+      16753920,
+      true
+    );
+
+    return { success: true, operationId };
+  } catch (error) {
+    await clearActiveOperation().catch(() => {});
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+export type DeployStatus = 'running' | 'completed' | 'failed' | 'not_found' | 'timeout';
+
+export interface DeployStatusResult {
+  success: boolean;
+  status: DeployStatus;
+  contestId?: number;
+  startedAt?: string;
+  log?: string;
+  error?: string;
+}
+
+const DEPLOY_TIMEOUT_MS = 120_000;
+
+export async function getDeployStatus(operationId: string): Promise<DeployStatusResult> {
+  await ensurePermission('all');
+
+  if (!/^[0-9a-f]{16}$/.test(operationId)) {
+    return { success: false, status: 'not_found', error: 'Invalid operation ID.' };
+  }
+
+  const logsDir = getDeployLogsDir();
+  const metaPath = path.join(logsDir, `${operationId}.json`);
+  const logPath = path.join(logsDir, `${operationId}.log`);
+  const donePath = path.join(logsDir, `${operationId}.done`);
+  const errorPath = path.join(logsDir, `${operationId}.error`);
+
+  const rawMeta = await fs.readFile(metaPath, 'utf-8').catch(() => null);
+  if (rawMeta === null) {
+    return { success: false, status: 'not_found', error: 'Operation not found.' };
+  }
+
+  const meta = JSON.parse(rawMeta) as { contestId: number; startedAt: string };
+  const elapsedMs = Date.now() - new Date(meta.startedAt).getTime();
+  const log = await fs.readFile(logPath, 'utf-8').catch(() => '');
+
+  if (elapsedMs > DEPLOY_TIMEOUT_MS) {
+    await clearActiveOperation();
+    return {
+      success: false,
+      status: 'timeout',
+      contestId: meta.contestId,
+      startedAt: meta.startedAt,
+      log,
+      error: 'Deploy timed out after 120 seconds.',
+    };
+  }
+
+  const isDone = await fs.access(donePath).then(() => true).catch(() => false);
+  if (isDone) {
+    await clearActiveOperation();
+    await logToDiscord(
+      'Contest Deploy Completed',
+      `Contest ID **${meta.contestId}** deployed successfully.`,
+      3066993
+    );
+    return {
+      success: true,
+      status: 'completed',
+      contestId: meta.contestId,
+      startedAt: meta.startedAt,
+      log,
+    };
+  }
+
+  const errorContent = await fs.readFile(errorPath, 'utf-8').catch(() => null);
+  if (errorContent !== null) {
+    await clearActiveOperation();
+    await logToDiscord(
+      'Contest Deploy Failed',
+      `Contest ID **${meta.contestId}** deploy failed. Exit code: ${errorContent.trim()}`,
+      15158332,
+      true
+    );
+    return {
+      success: false,
+      status: 'failed',
+      contestId: meta.contestId,
+      startedAt: meta.startedAt,
+      log,
+      error: `Docker process exited with code ${errorContent.trim()}.`,
+    };
+  }
+
+  return {
+    success: true,
+    status: 'running',
+    contestId: meta.contestId,
+    startedAt: meta.startedAt,
+    log,
+  };
 }
 
 export async function triggerManualBackup() {
