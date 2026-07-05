@@ -5,10 +5,9 @@ import { Card } from '@/components/core/Card';
 import { readEnvFile, updateEnvFile } from '@/app/actions/env';
 import { getAvailableContests } from '@/app/actions/contests';
 import { getWorkers, updateWorkers } from '@/app/actions/workerConfig';
-import { getLiveServiceConnections, restartServices, getServiceStatus } from '@/app/actions/services';
-import { saveAndRestartContest } from '@/app/actions/services';
-import { activateContest } from '@/app/actions/contests';
-import { Save, RefreshCw, AlertTriangle, Globe, Server, Rocket, Shield } from 'lucide-react';
+import { getLiveServiceConnections } from '@/app/actions/services';
+import { useDeployContest } from '@/hooks/useDeployContest';
+import { Save, RefreshCw, AlertTriangle, Server, Rocket, CheckCircle2, XCircle } from 'lucide-react';
 import { PageContent, PageHeader, Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
 import { Badge } from '@/components/core/Badge';
@@ -24,31 +23,31 @@ type LiveService = {
 
 export function DeploymentsClient() {
     const { addToast } = useToast();
+    const { state: deployState, deploy: handleDeploy, cancel: cancelDeploy, reset: resetDeploy } = useDeployContest();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [availableContests, setAvailableContests] = useState<{ id: number; name: string }[]>([]);
+    const [availableContests, setAvailableContests] = useState<{ id: number; name: string; is_active: boolean }[]>([]);
     const [activeContestId, setActiveContestId] = useState<number | null>(null);
     const [activeContestName, setActiveContestName] = useState<string | null>(null);
+    const [dbActiveContestId, setDbActiveContestId] = useState<number | null>(null);
     const [selectedContestId, setSelectedContestId] = useState<number | null>(null);
     const [globalSettings, setGlobalSettings] = useState<Record<string, string>>({});
     const [originalGlobal, setOriginalGlobal] = useState<string>('{}');
     const [workers, setWorkers] = useState<{ host: string; port: number }[]>([]);
     const [originalWorkers, setOriginalWorkers] = useState<string>('[]');
     const [liveServices, setLiveServices] = useState<LiveService[]>([]);
-    const [serviceStatus, setServiceStatus] = useState<{ status: string; running: number; total: number }>({ status: 'down', running: 0, total: 0 });
 
-    const isDirty = JSON.stringify(globalSettings) !== originalGlobal ||
-                    JSON.stringify(workers) !== originalWorkers;
+    const isDirty = JSON.stringify(globalSettings) !== originalGlobal;
+    const workersDirty = JSON.stringify(workers) !== originalWorkers;
     const hasChangedContest = selectedContestId !== null && selectedContestId !== activeContestId;
 
     const loadData = async () => {
         setLoading(true);
-        const [envResult, contestsResult, workersResult, servicesResult, statusResult] = await Promise.all([
+        const [envResult, contestsResult, workersResult, servicesResult] = await Promise.all([
             readEnvFile('.env.contest'),
             getAvailableContests(),
             getWorkers(),
-            getLiveServiceConnections(),
-            getServiceStatus()
+            getLiveServiceConnections()
         ]);
 
         if (envResult.success && envResult.config) {
@@ -67,8 +66,13 @@ export function DeploymentsClient() {
         const databaseContests = contestsResult.success ? contestsResult.contests : [];
         setAvailableContests(databaseContests);
 
-        if (activeContestId && databaseContests.length > 0) {
-            const match = databaseContests.find((c: { id: number; name: string }) => c.id === activeContestId);
+        const dbActive = databaseContests.find((c: { id: number; name: string; is_active: boolean }) => c.is_active === true);
+        const dbActiveId = dbActive ? dbActive.id : null;
+        setDbActiveContestId(dbActiveId);
+
+        const envActiveId = activeContestId;
+        if (envActiveId) {
+            const match = databaseContests.find((c: { id: number; name: string; is_active: boolean }) => c.id === envActiveId);
             if (match) setActiveContestName(match.name);
         }
 
@@ -77,51 +81,43 @@ export function DeploymentsClient() {
         setOriginalWorkers(JSON.stringify(normalizedWorkers));
 
         if (servicesResult.success) setLiveServices(servicesResult.services);
-        if (statusResult) setServiceStatus(statusResult);
 
         setLoading(false);
     };
 
     useEffect(() => { loadData(); }, []);
 
-    const handleActivateAndRestart = async () => {
+    const handleActivateAndRestart = () => {
         if (!selectedContestId || !hasChangedContest) return;
         setSaving(true);
-        try {
-            // 1. Activate in DB
-            const activateResult = await activateContest(selectedContestId);
-            if (!activateResult.success) {
-                addToast({ type: 'error', title: 'Failed', message: activateResult.error || 'Could not activate contest' });
-                setSaving(false);
-                return;
-            }
-            // 2. Update env and restart stack
-            const restartResult = await saveAndRestartContest(selectedContestId);
-            if (!restartResult.success) {
-                addToast({ type: 'error', title: 'Restart Failed', message: restartResult.error || 'Contest stack restart failed. You may need to restart manually.' });
-                setSaving(false);
-                return;
-            }
-            setActiveContestId(selectedContestId);
-            const match = availableContests.find(c => c.id === selectedContestId);
-            if (match) setActiveContestName(match.name);
-            addToast({ type: 'success', title: 'Contest Activated', message: `Contest #${selectedContestId} is now active and stack restarted.` });
-        } catch (error) {
-            addToast({ type: 'error', title: 'Unexpected Error', message: (error as Error).message });
-        } finally {
-            setSaving(false);
-        }
+        handleDeploy(selectedContestId);
     };
+
+    useEffect(() => {
+        if (deployState.phase === 'completed') {
+            setSaving(false);
+            const cId = deployState.contestId;
+            if (cId !== null) {
+                setActiveContestId(cId);
+                const match = availableContests.find(c => c.id === cId);
+                if (match) setActiveContestName(match.name);
+            }
+            addToast({ type: 'success', title: 'Contest Deployed', message: `Contest #${cId} is now active and stack restarted.` });
+            resetDeploy();
+        } else if (deployState.phase === 'failed' || deployState.phase === 'timeout') {
+            setSaving(false);
+            addToast({ type: 'error', title: 'Deploy Failed', message: deployState.error || 'Deploy did not complete successfully.' });
+            resetDeploy();
+        } else if (deployState.phase === 'already_running') {
+            setSaving(false);
+            addToast({ type: 'warning', title: 'Deploy Already Running', message: deployState.error || 'Another deploy is already in progress.' });
+            resetDeploy();
+        }
+    }, [deployState.phase]);
 
     const handleSaveSettings = async () => {
         setSaving(true);
         try {
-            const workerResult = await updateWorkers(workers);
-            if (!workerResult.success) {
-                addToast({ type: 'error', title: 'Worker Config Failed', message: workerResult.error || 'Could not save worker config' });
-                setSaving(false);
-                return;
-            }
             const result = await updateEnvFile('.env.contest', globalSettings);
             if (!result.success) {
                 addToast({ type: 'error', title: 'Save Failed', message: result.error || 'Could not update env file' });
@@ -129,8 +125,25 @@ export function DeploymentsClient() {
                 return;
             }
             setOriginalGlobal(JSON.stringify(globalSettings));
+            addToast({ type: 'success', title: 'Settings Saved', message: 'Contest settings updated.' });
+        } catch (error) {
+            addToast({ type: 'error', title: 'Unexpected Error', message: (error as Error).message });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleSaveWorkers = async () => {
+        setSaving(true);
+        try {
+            const result = await updateWorkers(workers);
+            if (!result.success) {
+                addToast({ type: 'error', title: 'Worker Sync Failed', message: result.error || 'Could not sync worker config' });
+                setSaving(false);
+                return;
+            }
             setOriginalWorkers(JSON.stringify(workers));
-            addToast({ type: 'success', title: 'Settings Saved', message: 'Global settings updated.' });
+            addToast({ type: 'success', title: 'Workers Synced', message: 'Worker configuration updated.' });
         } catch (error) {
             addToast({ type: 'error', title: 'Unexpected Error', message: (error as Error).message });
         } finally {
@@ -163,8 +176,7 @@ export function DeploymentsClient() {
              normalizeHost(worker.host) === 'localhost' && normalizeHost(service.address || '') === '127.0.0.1')
         );
 
-    const statusColor = serviceStatus.status === 'ok' ? 'emerald' : serviceStatus.status === 'degraded' ? 'amber' : 'red';
-    const statusLabel = serviceStatus.status === 'ok' ? 'Running' : serviceStatus.status === 'degraded' ? 'Degraded' : 'Down';
+    const hasMismatch = !deployState.phase.startsWith('deploy') && !deployState.phase.startsWith('poll') && activeContestId !== null && dbActiveContestId !== null && activeContestId !== dbActiveContestId;
 
     if (loading) return <Loading text="Loading contest deployment..." fullScreen />;
 
@@ -175,19 +187,29 @@ export function DeploymentsClient() {
                 description="Select, activate, and manage the currently deployed contest stack."
             />
 
+            {hasMismatch && (
+                <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-3">
+                    <XCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                    <div>
+                        <Text variant="h3" color="text-red-400">Configuration Mismatch</Text>
+                        <Text variant="small" color="text-neutral-300">
+                            The .env file points to contest <strong className="text-white">#{activeContestId}</strong>
+                            {activeContestName ? ` (${activeContestName})` : ''},
+                            but the database has contest <strong className="text-white">#{dbActiveContestId}</strong> marked as active.
+                            This can happen after a failed deploy or manual edits. Click "Activate & Restart Stack" to resolve.
+                        </Text>
+                    </div>
+                </div>
+            )}
+
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
                 <Stack gap={6} className="xl:col-span-2">
                     {/* Active Contest Card */}
                     <Card className="bg-white/2 p-6 border border-white/5">
                         <Stack gap={5}>
-                            <Stack direction="row" align="center" justify="between">
-                                <Stack direction="row" align="center" gap={3}>
-                                    <Rocket className="w-6 h-6 text-indigo-400" />
-                                    <Text variant="h2">Current Active Contest</Text>
-                                </Stack>
-                                <Badge variant={statusColor as 'indigo' | 'emerald' | 'amber' | 'red' | 'cyan' | 'neutral'}>
-                                    {serviceStatus.running}/{serviceStatus.total} {statusLabel}
-                                </Badge>
+                            <Stack direction="row" align="center" gap={3}>
+                                <Rocket className="w-6 h-6 text-indigo-400" />
+                                <Text variant="h2">Current Active Contest</Text>
                             </Stack>
 
                             {activeContestId && (
@@ -215,7 +237,7 @@ export function DeploymentsClient() {
                             )}
 
                             {/* Contest Selector */}
-                            <Stack gap={2}>
+                            <Stack gap={2} className="mt-6">
                                 <Text variant="label" className="flex items-center gap-2">
                                     <Rocket className="w-3 h-3" />
                                     Select Contest to Deploy
@@ -235,25 +257,30 @@ export function DeploymentsClient() {
                                     </select>
                                     <button
                                         onClick={handleActivateAndRestart}
-                                        disabled={saving || !hasChangedContest || !selectedContestId}
+                                        disabled={deployState.phase === 'deploying' || deployState.phase === 'polling' || !hasChangedContest || !selectedContestId}
                                         className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-neutral-800 disabled:text-neutral-500 text-white rounded-lg transition-colors font-medium shadow-lg shadow-indigo-900/20 disabled:shadow-none"
                                     >
-                                        <RefreshCw className={`w-4 h-4 ${saving ? 'animate-spin' : ''}`} />
-                                        {saving ? 'Deploying...' : 'Activate & Restart Stack'}
+                                        {deployState.phase === 'deploying' || deployState.phase === 'polling' ? (
+                                            <RefreshCw className="w-4 h-4 animate-spin" />
+                                        ) : (
+                                            <Rocket className="w-4 h-4" />
+                                        )}
+                                        {deployState.phase === 'deploying' ? 'Starting...'
+                                            : deployState.phase === 'polling' ? 'Deploying...'
+                                            : 'Activate & Restart Stack'}
                                     </button>
                                 </Stack>
-                                <Text variant="small" color="text-neutral-500">
+                                <Text variant="small" color="text-neutral-500" className="mb-4">
                                     This will update the env file, mark the contest as active in the database, and restart the contest stack.
                                 </Text>
                             </Stack>
                         </Stack>
                     </Card>
 
-                    {/* Global Settings (moved here from sidebar) */}
+                    {/* Contest Settings */}
                     <Stack gap={4}>
                         <Stack direction="row" align="center" gap={2} className="px-2">
-                            <Shield className="w-5 h-5 text-indigo-400" />
-                            <Text variant="h2">Global Settings</Text>
+                            <Text variant="h2">Contest Settings</Text>
                             {isDirty && (
                                 <button
                                     onClick={handleSaveSettings}
@@ -267,19 +294,6 @@ export function DeploymentsClient() {
                         </Stack>
 
                         <Card className="glass-card border-white/5 p-6 space-y-6">
-                            <Stack gap={1}>
-                                <Text variant="label">Security Secret Key</Text>
-                                <input
-                                    type="password"
-                                    value={globalSettings.SECRET_KEY || ''}
-                                    onChange={(e) => handleGlobalChange('SECRET_KEY', e.target.value)}
-                                    className="w-full bg-black/40 px-4 py-2 rounded-lg border border-white/10 text-white outline-none focus:border-indigo-500/50 font-mono text-xs"
-                                    placeholder="Generated automatically if empty"
-                                    autoComplete="off"
-                                    data-form-type="other"
-                                />
-                            </Stack>
-
                             <div className="grid grid-cols-2 gap-4">
                                 <Stack gap={1}>
                                     <Text variant="label">CPU Limit</Text>
@@ -343,9 +357,18 @@ export function DeploymentsClient() {
                 {/* Right Column: Worker Nodes */}
                 <Stack gap={6}>
                     <Stack direction="row" align="center" gap={2} className="px-2">
-                        <Server className="w-5 h-5 text-cyan-400" />
                         <Text variant="h2">Worker Nodes</Text>
-                        <Badge variant="cyan" className="ml-auto">{workers.length} Configured</Badge>
+                        {workersDirty && (
+                            <button
+                                onClick={handleSaveWorkers}
+                                disabled={saving}
+                                className="ml-auto flex items-center gap-2 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs transition-colors disabled:opacity-50"
+                            >
+                                <Save className="w-3 h-3" />
+                                Sync Workers
+                            </button>
+                        )}
+                        <Badge variant="cyan">{workers.length} Configured</Badge>
                     </Stack>
 
                     <Card className="glass-card border-white/5 p-6">
