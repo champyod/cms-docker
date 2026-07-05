@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block core %}
+<div class="core_title">
+  <h1>Users list</h1>
+</div>
+
+{% include "fragments/overload_warning.html" %}
+
+<form action="{{ url("contest", contest.id, "users", "add") }}" method="POST">
+  {{ xsrf_form_html|safe }}
+  Add a new user:
+  <select name="user_id">
+    <option value="null" selected>Select a new user</option>
+    {% for u in unassigned_users %}
+    <option value="{{ u.id }}">
+      {{ u.username }}
+    </option>
+    {% endfor %}
+  </select>
+    <select name="group_id">
+    {% for g in contest.groups %}
+    <option value="{{ g.id }}" {% if contest.main_group_id == g.id %}selected{% endif %}>
+      {{ g.name }}
+    </option>
+    {% endfor %}
+  </select>
+  <input type="submit"
+{% if not admin.permission_all and not admin.permission_users %}
+         disabled
+{% endif %}
+         value="Add user" />
+</form>
+
+<form action="{{ url("contest", contest.id, "users") }}" method="POST">
+  {{ xsrf_form_html|safe }}
+  Edit selected user:
+  <input type="submit"
+         name="operation"
+         value="Remove from contest"
+{% if not admin.permission_all and not admin.permission_users %}
+         disabled
+{% endif %}
+         />
+  <table class="bordered">
+    <thead>
+      <tr>
+        <th></th>
+        <th>Username</th>
+        <th>First name</th>
+        <th>Last name</th>
+        <th>Group</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in contest.participations|sort(attribute="user.username") %}
+      <tr>
+        <td>
+          <input type="radio" name="user_id" value="{{ u.user.id }}"/>
+        </td>
+        <td><a href="{{ url("contest", contest.id, "user", u.user.id, "edit") }}">{{ u.user.username }}</a></td>
+        <td>{{ u.user.first_name }}</td>
+        <td>{{ u.user.last_name }}</td>
+        <td>{{ u.group.name }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</form>
+
+{% endblock core %}

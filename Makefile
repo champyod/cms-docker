@@ -16,6 +16,13 @@ help:
 	@echo "  make pull-{service} - Pull only selected stack images"
 	@echo "  make db-clean       - Removes ALL services and volumes (Full Reset)"
 	@echo "  make clean          - Removes .env file"
+	@echo ""
+	@echo "Submodule management:"
+	@echo "  make submodule-init   - Init/update src/ submodule (upstream CMS)"
+	@echo "  make submodule-pull   - Pull latest upstream CMS commits into src/"
+	@echo "  make submodule-sync   - Sync .gitmodules with remote"
+	@echo "  make overlay-verify   - Verify cms-overlay files match src/"
+	@echo "  make overlay-apply    - Apply cms-overlay atop src/"
 
 
 env:
@@ -265,3 +272,29 @@ infra-img:
 
 clean:
 	rm -f .env
+
+# ── Submodule management ─────────────────────────────────────────────
+
+.PHONY: submodule-init submodule-pull submodule-sync overlay-verify overlay-apply
+
+submodule-init:
+	@echo "Initialising src/ submodule (upstream CMS)..."
+	git submodule update --init --recursive
+	@echo "Submodule initialised. Run 'make overlay-apply' to apply customisations."
+
+submodule-pull:
+	@echo "Pulling latest upstream CMS commits into src/..."
+	git submodule update --remote --merge src/
+	@echo "Upstream pulled. Run 'make overlay-apply' to re-apply customisations."
+
+submodule-sync:
+	@echo "Syncing submodule URLs with remote..."
+	git submodule sync
+
+overlay-verify:
+	@echo "Verifying cms-overlay matches src/..."
+	@bash cms-overlay/verify.sh
+
+overlay-apply:
+	@echo "Applying cms-overlay atop src/..."
+	@bash cms-overlay/apply.sh

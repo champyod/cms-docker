@@ -1,1 +1,0 @@
-correct-stdio.cpp

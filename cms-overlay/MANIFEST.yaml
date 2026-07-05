@@ -1,0 +1,180 @@
+# MANIFEST.yaml — cms-overlay for cms-docker
+#
+# This overlay contains customisations to the upstream CMS source
+# that enable granular admin permissions, queue-fairness delay,
+# Docker-event logging, and other cms-docker-specific features.
+#
+# Every file under src/ mirrors a file in the upstream CMS repository
+# (https://github.com/cms-dev/cms.git).  The overlay is applied on top
+# of a clean submodule checkout via apply.sh.
+
+version: 1
+project: cms-docker
+upstream_repo: https://github.com/cms-dev/cms.git
+
+# ── Purpose ──────────────────────────────────────────────────────────
+description: >
+  cms-docker customisations overlay.  Adds per-admin granular
+  permissions (tasks/users/contests), queue-fairness penalty delay
+  per contest, Docker-event logging to the evaluation service,
+  and relaxed UI constraints (no --always --constraints on install).
+
+# ── File inventory ───────────────────────────────────────────────────
+# Each entry explains WHY the file differs from upstream.
+
+files:
+
+  ######################################################################
+  #  Database layer  (2 files)
+  ######################################################################
+
+  - path: src/cms/db/admin.py
+    reason: >
+      Added `permission_tasks`, `permission_users`, and
+      `permission_contests` Boolean columns to the Admin model
+      for granular permission control (not just `permission_all`).
+
+  - path: src/cms/db/contest.py
+    reason: >
+      Added `queue_fairness_penalty_seconds` integer column for
+      per-contest submission fair-use delay.  (Merged into upstream's
+      restructured model; that commit is not yet in our base.)
+
+  ######################################################################
+  #  Admin handler  (1 file)
+  ######################################################################
+
+  - path: src/cms/server/admin/handlers/admin.py
+    reason: >
+      Reads the three new permission columns
+      (`permission_tasks/users/contests`) and exposes them in the
+      template context alongside the existing `permission_all`.
+
+  ######################################################################
+  #  Admin templates  (16 files — granular permission checks)
+  ######################################################################
+
+  # ── Base / navigation ──────────────────────────────────────────────
+  - path: src/cms/server/admin/templates/base.html
+    reason: >
+      Relaxed sidebar "create new" button visibility to respect
+      granular permissions:
+        contest  → permission_all OR permission_contests
+        task     → permission_all OR permission_tasks
+        user     → permission_all OR permission_users
+        team     → permission_all OR permission_users
+      (Base diff: 4 permission conditions changed.)
+
+  # ── Contest admin ──────────────────────────────────────────────────
+  - path: src/cms/server/admin/templates/contest.html
+    reason: >
+      "Update" and "Remove" buttons enabled for permission_contests
+      (previously permission_all only).
+
+  - path: src/cms/server/admin/templates/contests.html
+    reason: >
+      "Create new contest" button enabled for permission_contests.
+
+  - path: src/cms/server/admin/templates/contest_tasks.html
+    reason: >
+      "Add task", "Remove selected task" buttons enabled for
+      permission_tasks.
+
+  - path: src/cms/server/admin/templates/contest_users.html
+    reason: >
+      "Add user", "Remove from contest" buttons enabled for
+      permission_users.
+
+  # ── Task admin ─────────────────────────────────────────────────────
+  - path: src/cms/server/admin/templates/task.html
+    reason: >
+      "Update" and "Remove" buttons enabled for permission_tasks.
+
+  - path: src/cms/server/admin/templates/tasks.html
+    reason: >
+      "Create new task" button enabled for permission_tasks.
+
+  # ── Team admin ─────────────────────────────────────────────────────
+  - path: src/cms/server/admin/templates/team.html
+    reason: >
+      "Remove" button enabled for permission_users.
+
+  - path: src/cms/server/admin/templates/teams.html
+    reason: >
+      "Create new team" button enabled for permission_users.
+
+  # ── User admin ─────────────────────────────────────────────────────
+  - path: src/cms/server/admin/templates/user.html
+    reason: >
+      "Remove" button enabled for permission_users.
+
+  - path: src/cms/server/admin/templates/users.html
+    reason: >
+      "Create new user" button enabled for permission_users.
+
+  # ── Admin list ─────────────────────────────────────────────────────
+  - path: src/cms/server/admin/templates/admins.html
+    reason: >
+      Permission toggles rendered in the admin edit form
+      (only visible to permission_all).  No functional change
+      — purely UI to set the new granular permissions.
+
+  # ── Other templates (minor) ────────────────────────────────────────
+  - path: src/cms/server/admin/templates/fragments/admin_form.html
+    reason: >
+      Added checkbox fields for permission_tasks/users/contests
+      in the admin create/edit form.
+
+  - path: src/cms/server/admin/templates/macro/question.html
+    reason: >
+      Accept/ignore/reply buttons respect permission_tasks
+      (not just permission_all).
+
+  ######################################################################
+  #  Service layer  (1 file)
+  ######################################################################
+
+  - path: src/cms/service/EvaluationService.py
+    reason: >
+      Two additions:
+        1. Queue-fairness delay: before dequeuing a submission,
+           check `contest.queue_fairness_penalty_seconds` and
+           sleep if the user submitted too recently.
+        2. Docker-event logging: after processing a submission,
+           send a JSON event to the Docker socket for external
+           monitoring / logging.
+
+  ######################################################################
+  #  Install script  (1 file)
+  ######################################################################
+
+  - path: src/install.py
+    reason: >
+      Removed the `--always --constraints` flags from the pip
+      invocation so that the constraints.txt merge in the Dockerfile
+      works correctly and the build is not broken when constraints
+      change.
+
+  ######################################################################
+  #  Docker compose files  (not applied to src/ — repo root)
+  ######################################################################
+
+  - path: src/docker/docker-compose.dev.yml
+    reason: >
+      Removed `cgroup:host` that caused permission errors on some
+      Docker hosts.  (This file lives at repo-root docker/ — not
+      applied to src/.)
+
+  - path: src/docker/docker-compose.test.yml
+    reason: >
+      Mirrors the dev.yml change.  (Also at repo-root docker/ —
+      not applied to src/.)
+
+# ── Files EXCLUDED from overlay ──────────────────────────────────────
+# These were injection candidates that are handled differently:
+#
+#   src/cms/db/__init__.py
+#     — Version bump 47→48 is already absorbed by upstream (now at 48).
+#
+#   src/docker/{dev,test}.yml
+#     — Moved to repo-root docker/; removed from overlay entirely.

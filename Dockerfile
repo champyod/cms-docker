@@ -119,6 +119,9 @@ WORKDIR /home/cmsuser/src
 # Copy everything first so we can merge constraints
 COPY --chown=cmsuser:cmsuser . /home/cmsuser/src
 
+# Apply cms-overlay customisations on top of the submodule checkout
+RUN bash cms-overlay/apply.sh
+
 # Merge constraints: Root overrides take precedence over Submodule constraints
 RUN <<EOF
 #!/bin/bash -ex
