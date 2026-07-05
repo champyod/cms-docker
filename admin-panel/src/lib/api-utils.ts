@@ -41,7 +41,8 @@ export function apiError(error: any) {
   console.error('API Error:', error);
   const message = error.message || 'An unexpected error occurred';
   const status = error.status || 500;
-  return NextResponse.json({ success: false, error: message }, { status });
+  const extra = error.errors ? { errors: error.errors } : {};
+  return NextResponse.json({ success: false, error: message, ...extra }, { status });
 }
 
 export function apiSuccess(data?: any) {

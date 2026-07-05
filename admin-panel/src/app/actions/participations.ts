@@ -63,7 +63,7 @@ export async function updateParticipation(participationId: number, data: {
       WHERE id = $8
     `, teamId, hidden, unrestricted, extraTime.toString(), delayTime.toString(), password, startingTime, participationId);
 
-    revalidatePath('/[locale]/contests');
+    revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;
@@ -84,7 +84,7 @@ export async function setTestUser(participationId: number) {
         unrestricted: true,
       },
     });
-    revalidatePath('/[locale]/contests');
+    revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;
@@ -142,7 +142,7 @@ export async function addTeamToContest(
       `;
     }
     
-    revalidatePath('/[locale]/contests');
+    revalidatePath('/[locale]/contests', 'page');
     return { success: true, added: newUserIds.length };
   } catch (error) {
     const e = error as Error;
@@ -199,7 +199,7 @@ export async function sendMessage(participationId: number, adminId: number, data
         timestamp: new Date(),
       }
     });
-    revalidatePath('/[locale]/contests');
+    revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;

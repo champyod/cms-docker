@@ -5,23 +5,14 @@ import { Card } from '@/components/core/Card';
 import { readEnvFile, updateEnvFile } from '@/app/actions/env';
 import { getAvailableContests } from '@/app/actions/contests';
 import { getWorkers, updateWorkers } from '@/app/actions/workerConfig';
-import { getLiveServiceConnections, analyzeRestartRequirements, restartServices } from '@/app/actions/services';
-import { Save, RefreshCw, AlertTriangle, Trash2, Plus, Globe, Hash, Rocket, Shield, Lock, Network, Server } from 'lucide-react';
+import { getLiveServiceConnections } from '@/app/actions/services';
+import { useDeployContest } from '@/hooks/useDeployContest';
+import { Save, RefreshCw, AlertTriangle, Server, Rocket, CheckCircle2, XCircle } from 'lucide-react';
 import { PageContent, PageHeader, Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
 import { Badge } from '@/components/core/Badge';
 import { Loading } from '@/components/core/Loading';
-
-type ContestDeployConfigItem = {
-    id: number;
-    port: number;
-    domain?: string;
-    accessMethod?: 'public_ip' | 'domain' | 'tailscale';
-    protocol?: 'http' | 'https';
-    tlsCertPath?: string;
-    tlsKeyPath?: string;
-    tailscaleDomain?: string;
-};
+import { useToast } from '@/components/providers/ToastProvider';
 
 type LiveService = {
     name: string;
@@ -31,739 +22,417 @@ type LiveService = {
 };
 
 export function DeploymentsClient() {
-    const [config, setConfig] = useState<ContestDeployConfigItem[]>([]);
-  const [workers, setWorkers] = useState<{ host: string; port: number }[]>([]);
-  const [globalSettings, setGlobalSettings] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [requiredRestarts, setRequiredRestarts] = useState<string[]>([]);
-  const [originalConfig, setOriginalConfig] = useState<string>('[]');
-  const [originalWorkers, setOriginalWorkers] = useState<string>('[]');
-  const [originalGlobal, setOriginalGlobal] = useState<string>('{}');
-    const [availableContests, setAvailableContests] = useState<{ id: number; name: string }[]>([]);
+    const { addToast } = useToast();
+    const { state: deployState, deploy: handleDeploy, cancel: cancelDeploy, reset: resetDeploy } = useDeployContest();
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [availableContests, setAvailableContests] = useState<{ id: number; name: string; is_active: boolean }[]>([]);
+    const [activeContestId, setActiveContestId] = useState<number | null>(null);
+    const [activeContestName, setActiveContestName] = useState<string | null>(null);
+    const [dbActiveContestId, setDbActiveContestId] = useState<number | null>(null);
+    const [selectedContestId, setSelectedContestId] = useState<number | null>(null);
+    const [globalSettings, setGlobalSettings] = useState<Record<string, string>>({});
+    const [originalGlobal, setOriginalGlobal] = useState<string>('{}');
+    const [workers, setWorkers] = useState<{ host: string; port: number }[]>([]);
+    const [originalWorkers, setOriginalWorkers] = useState<string>('[]');
     const [liveServices, setLiveServices] = useState<LiveService[]>([]);
 
-  const loadData = async () => {
-    setLoading(true);
-    const [result, contestsResult, workersResult, servicesResult] = await Promise.all([
-      readEnvFile('.env.contest'),
-      getAvailableContests(),
-      getWorkers(),
-      getLiveServiceConnections()
-    ]);
+    const isDirty = JSON.stringify(globalSettings) !== originalGlobal;
+    const workersDirty = JSON.stringify(workers) !== originalWorkers;
+    const hasChangedContest = selectedContestId !== null && selectedContestId !== activeContestId;
 
-        let configWithoutWorkers: ContestDeployConfigItem[] = [];
+    const loadData = async () => {
+        setLoading(true);
+        const [envResult, contestsResult, workersResult, servicesResult] = await Promise.all([
+            readEnvFile('.env.contest'),
+            getAvailableContests(),
+            getWorkers(),
+            getLiveServiceConnections()
+        ]);
 
-        if (result.success && result.config) {
-      const deployConfig = result.config.CONTESTS_DEPLOY_CONFIG || '[]';
-      setOriginalConfig(deployConfig);
+        if (envResult.success && envResult.config) {
+            const activeId = parseInt(envResult.config.ACTIVE_CONTEST_ID || envResult.config.CONTEST_ID || '0');
+            const actualActiveId = activeId > 0 ? activeId : null;
+            setActiveContestId(actualActiveId);
+            setSelectedContestId(actualActiveId);
 
-      const globals = { ...result.config };
-      delete globals.CONTESTS_DEPLOY_CONFIG;
-      setGlobalSettings(globals);
-      setOriginalGlobal(JSON.stringify(globals));
-
-      try {
-                const parsedConfig = JSON.parse(deployConfig) as Array<ContestDeployConfigItem & { workers?: unknown }>;
-        // Remove workers from config if they exist (backward compatibility)
-                                configWithoutWorkers = parsedConfig.map((item) => {
-                    const normalizedItem = { ...item };
-                    delete normalizedItem.workers;
-                    return normalizedItem;
-                });
-        setConfig(configWithoutWorkers);
-            } catch {
-        setConfig([]);
-      }
-    }
-
-        if (servicesResult.success) {
-            setLiveServices(servicesResult.services);
+            const globals = { ...envResult.config };
+            delete globals.ACTIVE_CONTEST_ID;
+            delete globals.CONTEST_ID;
+            setGlobalSettings(globals);
+            setOriginalGlobal(JSON.stringify(globals));
         }
 
         const databaseContests = contestsResult.success ? contestsResult.contests : [];
-        const contestIdsFromConfig = configWithoutWorkers.map((item) => item.id);
-        const contestIdsFromLiveServices = (servicesResult.success ? servicesResult.services : [])
-            .filter((service) => service.name === 'ContestWebServer' && Number.isInteger(service.shard))
-            .map((service) => service.shard)
-            .filter((id) => id > 0);
+        setAvailableContests(databaseContests);
 
-        const mergedContestMap = new Map<number, { id: number; name: string }>();
+        const dbActive = databaseContests.find((c: { id: number; name: string; is_active: boolean }) => c.is_active === true);
+        const dbActiveId = dbActive ? dbActive.id : null;
+        setDbActiveContestId(dbActiveId);
 
-        databaseContests.forEach((contest) => {
-            mergedContestMap.set(contest.id, contest);
-        });
+        const envActiveId = activeContestId;
+        if (envActiveId) {
+            const match = databaseContests.find((c: { id: number; name: string; is_active: boolean }) => c.id === envActiveId);
+            if (match) setActiveContestName(match.name);
+        }
 
-        [...contestIdsFromConfig, ...contestIdsFromLiveServices].forEach((id) => {
-            if (!mergedContestMap.has(id)) {
-                mergedContestMap.set(id, {
-                    id,
-                    name: `Contest #${id} (detected from deployment/runtime)`
-                });
-            }
-        });
-
-        setAvailableContests(Array.from(mergedContestMap.values()).sort((a, b) => a.id - b.id));
-
-    // Load global workers
         const normalizedWorkers = Array.isArray(workersResult) ? workersResult : [];
         setWorkers(normalizedWorkers);
         setOriginalWorkers(JSON.stringify(normalizedWorkers));
 
-    setLoading(false);
-  };
+        if (servicesResult.success) setLiveServices(servicesResult.services);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+        setLoading(false);
+    };
 
-    const normalizedOriginalConfig = (() => {
-        try {
-            return JSON.stringify(JSON.parse(originalConfig));
-        } catch {
-            return '[]';
+    useEffect(() => { loadData(); }, []);
+
+    const handleActivateAndRestart = () => {
+        if (!selectedContestId || !hasChangedContest) return;
+        setSaving(true);
+        handleDeploy(selectedContestId);
+    };
+
+    useEffect(() => {
+        if (deployState.phase === 'completed') {
+            setSaving(false);
+            const cId = deployState.contestId;
+            if (cId !== null) {
+                setActiveContestId(cId);
+                const match = availableContests.find(c => c.id === cId);
+                if (match) setActiveContestName(match.name);
+            }
+            addToast({ type: 'success', title: 'Contest Deployed', message: `Contest #${cId} is now active and stack restarted.` });
+            resetDeploy();
+        } else if (deployState.phase === 'failed' || deployState.phase === 'timeout') {
+            setSaving(false);
+            addToast({ type: 'error', title: 'Deploy Failed', message: deployState.error || 'Deploy did not complete successfully.' });
+            resetDeploy();
+        } else if (deployState.phase === 'already_running') {
+            setSaving(false);
+            addToast({ type: 'warning', title: 'Deploy Already Running', message: deployState.error || 'Another deploy is already in progress.' });
+            resetDeploy();
         }
-    })();
+    }, [deployState.phase]);
 
-    const isDirty = JSON.stringify(config) !== normalizedOriginalConfig ||
-                  JSON.stringify(workers) !== originalWorkers ||
-                  JSON.stringify(globalSettings) !== originalGlobal;
+    const handleSaveSettings = async () => {
+        setSaving(true);
+        try {
+            const result = await updateEnvFile('.env.contest', globalSettings);
+            if (!result.success) {
+                addToast({ type: 'error', title: 'Save Failed', message: result.error || 'Could not update env file' });
+                setSaving(false);
+                return;
+            }
+            setOriginalGlobal(JSON.stringify(globalSettings));
+            addToast({ type: 'success', title: 'Settings Saved', message: 'Contest settings updated.' });
+        } catch (error) {
+            addToast({ type: 'error', title: 'Unexpected Error', message: (error as Error).message });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleSaveWorkers = async () => {
+        setSaving(true);
+        try {
+            const result = await updateWorkers(workers);
+            if (!result.success) {
+                addToast({ type: 'error', title: 'Worker Sync Failed', message: result.error || 'Could not sync worker config' });
+                setSaving(false);
+                return;
+            }
+            setOriginalWorkers(JSON.stringify(workers));
+            addToast({ type: 'success', title: 'Workers Synced', message: 'Worker configuration updated.' });
+        } catch (error) {
+            addToast({ type: 'error', title: 'Unexpected Error', message: (error as Error).message });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleGlobalChange = (key: string, val: string) => {
+        setGlobalSettings(prev => ({ ...prev, [key]: val }));
+    };
+
+    const addGlobalWorker = () => setWorkers([...workers, { host: '', port: 26000 }]);
+    const removeGlobalWorker = (index: number) => setWorkers(workers.filter((_, i) => i !== index));
+    const updateGlobalWorker = (index: number, field: 'host' | 'port', value: string) => {
+        const newWorkers = [...workers];
+        if (field === 'port') {
+            newWorkers[index].port = parseInt(value) || 26000;
+        } else {
+            newWorkers[index].host = value;
+        }
+        setWorkers(newWorkers);
+    };
 
     const normalizeHost = (value: string) => value.trim().toLowerCase();
+    const isWorkerLive = (worker: { host: string; port: number }) =>
+        liveServices.some(service =>
+            service.name === 'Worker' &&
+            service.port === worker.port &&
+            (normalizeHost(service.address || '') === normalizeHost(worker.host) ||
+             normalizeHost(worker.host) === 'localhost' && normalizeHost(service.address || '') === '127.0.0.1')
+        );
 
-    const isWorkerLive = (worker: { host: string; port: number }) => {
-        const workerHost = normalizeHost(worker.host);
+    const hasMismatch = !deployState.phase.startsWith('deploy') && !deployState.phase.startsWith('poll') && activeContestId !== null && dbActiveContestId !== null && activeContestId !== dbActiveContestId;
 
-        return liveServices.some((service) => {
-            if (service.name !== 'Worker') return false;
-            if (service.port !== worker.port) return false;
+    if (loading) return <Loading text="Loading contest deployment..." fullScreen />;
 
-            const serviceHost = normalizeHost(service.address || '');
-            if (!workerHost || !serviceHost) return true;
+    return (
+        <PageContent className="pb-20">
+            <PageHeader
+                title="Active Contest Deployment"
+                description="Select, activate, and manage the currently deployed contest stack."
+            />
 
-            return serviceHost === workerHost ||
-                serviceHost.includes(workerHost) ||
-                workerHost.includes(serviceHost) ||
-                (workerHost === 'localhost' && serviceHost === '127.0.0.1') ||
-                (workerHost === '127.0.0.1' && serviceHost === 'localhost');
-        });
-    };
+            {hasMismatch && (
+                <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-3">
+                    <XCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                    <div>
+                        <Text variant="h3" color="text-red-400">Configuration Mismatch</Text>
+                        <Text variant="small" color="text-neutral-300">
+                            The .env file points to contest <strong className="text-white">#{activeContestId}</strong>
+                            {activeContestName ? ` (${activeContestName})` : ''},
+                            but the database has contest <strong className="text-white">#{dbActiveContestId}</strong> marked as active.
+                            This can happen after a failed deploy or manual edits. Click "Activate & Restart Stack" to resolve.
+                        </Text>
+                    </div>
+                </div>
+            )}
 
-  useEffect(() => {
-    if (isDirty) {
-        analyzeRestartRequirements(['CONTESTS_DEPLOY_CONFIG', ...Object.keys(globalSettings)]).then(res => {
-            setRequiredRestarts(res.requiredRestarts);
-        });
-    } else {
-        setRequiredRestarts([]);
-    }
-  }, [config, globalSettings, isDirty]);
-
-  const handleSave = async (shouldRestart: boolean = false) => {
-    setSaving(true);
-    const configStr = JSON.stringify(config);
-    const workersStr = JSON.stringify(workers);
-    const updates = {
-        ...globalSettings,
-        CONTESTS_DEPLOY_CONFIG: configStr
-    };
-
-    try {
-        // Check if workers changed
-        const workersChanged = workersStr !== originalWorkers;
-
-        // Update global cms.toml with workers
-        const workerResult = await updateWorkers(workers);
-        if (!workerResult.success) {
-            alert('Failed to update worker configuration in cms.toml: ' + workerResult.error);
-            setSaving(false);
-            return;
-        }
-
-        const result = await updateEnvFile('.env.contest', updates);
-
-        if (!result.success) {
-            alert('Failed to save configuration: ' + result.error);
-            setSaving(false);
-            return;
-        }
-
-        if (shouldRestart) {
-            // Detect instance lifecycle changes
-            const originalInstances = JSON.parse(originalConfig) as ContestDeployConfigItem[];
-            const currentInstances = config;
-
-            const originalIds = new Set(originalInstances.map((instance) => instance.id));
-            const currentIds = new Set(currentInstances.map(i => i.id));
-
-            // Find new, edited, and removed instances
-            const newInstances = currentInstances.filter(i => !originalIds.has(i.id));
-            const removedInstances = originalInstances.filter((instance) => !currentIds.has(instance.id));
-            const editedInstances = currentInstances.filter(i => {
-                if (!originalIds.has(i.id)) return false;
-                const original = originalInstances.find((instance) => instance.id === i.id);
-                return JSON.stringify(original) !== JSON.stringify(i);
-            });
-
-            // Handle removed instances first (stop and remove)
-            if (removedInstances.length > 0) {
-                alert(`Removing ${removedInstances.length} instance(s): ${removedInstances.map((instance) => instance.id).join(', ')}`);
-            }
-
-            // Handle new and edited instances (restart/create)
-            const instancesToRestart = [...newInstances, ...editedInstances];
-            if (instancesToRestart.length > 0 || removedInstances.length > 0) {
-                // Regenerate and restart entire contest stack
-                const restartRes = await restartServices('custom', ['contest-stack']);
-                if (!restartRes.success) {
-                    alert('Configuration saved, but restart failed: ' + restartRes.error + '\n\nPlease restart manually via: make contest-img');
-                    setSaving(false);
-                    return;
-                }
-
-                const summary = [];
-                if (newInstances.length > 0) summary.push(`${newInstances.length} created`);
-                if (editedInstances.length > 0) summary.push(`${editedInstances.length} updated`);
-                if (removedInstances.length > 0) summary.push(`${removedInstances.length} removed`);
-
-                alert(`✓ Contest stack restarted successfully!\n${summary.join(', ')}`);
-            } else {
-                // No contest changes, check if workers changed
-                if (workersChanged) {
-                    const workerRes = await restartServices('worker');
-                    if (!workerRes.success) {
-                        alert('Configuration saved, but worker restart failed: ' + workerRes.error);
-                        setSaving(false);
-                        return;
-                    }
-                    alert('✓ Configuration saved and worker stack restarted successfully!');
-                } else {
-                    alert('✓ Configuration saved and contest stack restarted successfully!');
-                }
-            }
-        } else {
-            alert('✓ Configuration saved successfully! Use "Save & Restart Stack" to apply changes.');
-        }
-
-        setOriginalConfig(configStr);
-        setOriginalWorkers(workersStr);
-        setOriginalGlobal(JSON.stringify(globalSettings));
-    } catch (error) {
-        alert('Unexpected error: ' + (error as Error).message);
-    } finally {
-        setSaving(false);
-    }
-  };
-
-  const handleGlobalChange = (key: string, val: string) => {
-    setGlobalSettings(prev => ({ ...prev, [key]: val }));
-  };
-
-  const addItem = () => {
-    // Get contests that are not already deployed
-    const deployedIds = new Set(config.map(i => i.id));
-    const undeployedContests = availableContests.filter(c => !deployedIds.has(c.id));
-
-    if (undeployedContests.length === 0) {
-      alert('No available contests to deploy. All contests are already deployed or no contests exist.');
-      return;
-    }
-
-    // Use the first available undeployed contest
-    const firstAvailable = undeployedContests[0];
-    const nextPort = config.length > 0 ? Math.max(...config.map(i => i.port)) + 1 : 8888;
-
-    setConfig([...config, {
-      id: firstAvailable.id,
-      port: nextPort,
-      domain: `contest-${firstAvailable.id}.cms.local`,
-      accessMethod: 'public_ip',
-      protocol: 'http',
-      tlsCertPath: '',
-      tlsKeyPath: '',
-      tailscaleDomain: ''
-    }]);
-  };
-
-  const removeItem = (index: number) => {
-    setConfig(config.filter((_, i) => i !== index));
-  };
-
-  const handleRestartContest = async (contestId: number) => {
-    if (!confirm(`Restart all services for Contest ${contestId}?`)) return;
-
-    setSaving(true);
-    try {
-      const serviceName = `cms-contest-web-server-${contestId}`;
-      const res = await restartServices('custom', [serviceName]);
-
-      if (res.success) {
-        alert(`✓ Contest ${contestId} services restarted successfully!`);
-      } else {
-        alert(`Failed to restart Contest ${contestId}: ${res.error}`);
-      }
-    } catch (error) {
-      alert('Error: ' + (error as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const addGlobalWorker = () => {
-    setWorkers([...workers, { host: '', port: 26000 }]);
-  };
-
-  const removeGlobalWorker = (index: number) => {
-    setWorkers(workers.filter((_, i) => i !== index));
-  };
-
-  const updateGlobalWorker = (index: number, field: 'host' | 'port', value: string) => {
-    const newWorkers = [...workers];
-    if (field === 'port') {
-      newWorkers[index][field] = parseInt(value) || 26000;
-    } else {
-      newWorkers[index][field] = value;
-    }
-    setWorkers(newWorkers);
-  };
-
-  if (loading) return <Loading text="Loading deployments..." fullScreen />;
-
-  return (
-    <PageContent className="pb-20">
-      <PageHeader 
-        title="Contest Infrastructure"
-        description="Manage contest instances and global security settings."
-        actions={
-          <Stack direction="row" gap={3}>
-            <button
-                onClick={() => handleSave(false)}
-                disabled={saving || !isDirty}
-                className="flex items-center gap-2 px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-white rounded-lg transition-colors disabled:opacity-50"
-            >
-                <Save className="w-4 h-4" />
-                Save Only
-            </button>
-            <button
-                onClick={() => handleSave(true)}
-                disabled={saving || !isDirty}
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors disabled:opacity-50 font-medium shadow-lg shadow-indigo-900/20"
-            >
-                <RefreshCw className={`w-4 h-4 ${saving ? 'animate-spin' : ''}`} />
-                Save & Restart Stack
-            </button>
-          </Stack>
-        }
-      />
-
-      {requiredRestarts.length > 0 && (
-         <Stack direction="row" align="start" gap={3} className="p-4 bg-amber-500/10 border border-amber-500/50 rounded-xl animate-in fade-in slide-in-from-top-2">
-            <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-            <Stack gap={1}>
-                <Text variant="h4" color="text-amber-500">Restart Required</Text>
-                <Text variant="small" color="text-neutral-300">Applying these changes will recreate the entire contest container stack.</Text>
-            </Stack>
-         </Stack>
-      )}
-
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-        <Stack gap={6} className="xl:col-span-2">
-            <Stack direction="row" align="center" justify="between" className="px-2" gap={0}>
-                <Stack direction="row" align="center" gap={2}>
-                    <Rocket className="w-5 h-5 text-indigo-400" />
-                    <Text variant="h2">Contest Deployments</Text>
-                </Stack>
-                <Badge variant="indigo">{config.length} Active</Badge>
-            </Stack>
-            <Stack gap={3}>
-                {config.map((item, index) => (
-                    <Card key={index} className="bg-white/2 p-4 border border-white/5 group hover:border-indigo-500/30 transition-colors space-y-4">
-                        <Stack direction="row" align="start" gap={4}>
-                            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <Stack gap={1}>
-                                    <Text variant="label">Contest</Text>
-                                    <Stack direction="row" align="center" gap={2} className="bg-black/20 px-3 py-2 rounded-lg border border-white/5">
-                                        <Hash className="w-3 h-3 text-neutral-500" />
-                                        <select
-                                            value={item.id}
-                                            onChange={(e) => {
-                                                const selectedId = parseInt(e.target.value);
-                                                const newConfig = [...config];
-                                                newConfig[index] = { ...newConfig[index], id: selectedId };
-                                                setConfig(newConfig);
-                                            }}
-                                            title="Contest"
-                                            aria-label="Contest"
-                                            className="bg-transparent text-sm text-white w-full outline-none"
-                                        >
-                                            {availableContests.map((contest) => (
-                                                <option key={contest.id} value={contest.id} className="bg-neutral-900">
-                                                    #{contest.id} - {contest.name}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </Stack>
-                                </Stack>
-                                <Stack gap={1}>
-                                    <Text variant="label">External Port</Text>
-                                    <Stack direction="row" align="center" gap={2} className="bg-black/20 px-3 py-2 rounded-lg border border-white/5">
-                                        <Globe className="w-3 h-3 text-neutral-500" />
-                                        <input
-                                            type="number"
-                                            value={item.port}
-                                            onChange={(e) => {
-                                                const newConfig = [...config];
-                                                newConfig[index] = { ...newConfig[index], port: parseInt(e.target.value) || 0 };
-                                                setConfig(newConfig);
-                                            }}
-                                            title="External Port"
-                                            aria-label="External Port"
-                                            placeholder="8888"
-                                            className="bg-transparent text-sm text-white w-full outline-none"
-                                        />
-                                    </Stack>
-                                </Stack>
-                            </div>
-                            <button
-                                onClick={() => removeItem(index)}
-                                title="Remove contest deployment"
-                                aria-label="Remove contest deployment"
-                                className="p-2 text-neutral-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                            >
-                                <Trash2 className="w-5 h-5" />
-                            </button>
-                        </Stack>
-
-                        {/* Advanced Settings */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-4 border-l-2 border-white/5">
-                            <Stack gap={1}>
-                                <Text variant="label" className="flex items-center gap-1">
-                                    <Network className="w-3 h-3" />
-                                    Access Method
-                                </Text>
-                                <select
-                                    value={item.accessMethod || 'public_ip'}
-                                    onChange={(e) => {
-                                        const newConfig = [...config];
-                                        newConfig[index] = {
-                                            ...newConfig[index],
-                                            accessMethod: e.target.value as ContestDeployConfigItem['accessMethod']
-                                        };
-                                        setConfig(newConfig);
-                                    }}
-                                    title="Access Method"
-                                    aria-label="Access Method"
-                                    className="w-full bg-black/40 px-3 py-2 rounded-lg border border-white/10 text-white text-sm outline-none focus:border-indigo-500/50"
-                                >
-                                    <option value="public_ip">Public IP:Port</option>
-                                    <option value="domain">Domain Name</option>
-                                    <option value="tailscale">Tailscale Tunnel</option>
-                                </select>
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+                <Stack gap={6} className="xl:col-span-2">
+                    {/* Active Contest Card */}
+                    <Card className="bg-white/2 p-6 border border-white/5">
+                        <Stack gap={5}>
+                            <Stack direction="row" align="center" gap={3}>
+                                <Rocket className="w-6 h-6 text-indigo-400" />
+                                <Text variant="h2">Current Active Contest</Text>
                             </Stack>
 
-                            <Stack gap={1}>
-                                <Text variant="label" className="flex items-center gap-1">
-                                    <Lock className="w-3 h-3" />
-                                    Protocol
-                                </Text>
-                                <select
-                                    value={item.protocol || 'http'}
-                                    onChange={(e) => {
-                                        const newConfig = [...config];
-                                        newConfig[index] = {
-                                            ...newConfig[index],
-                                            protocol: e.target.value as ContestDeployConfigItem['protocol']
-                                        };
-                                        setConfig(newConfig);
-                                    }}
-                                    title="Protocol"
-                                    aria-label="Protocol"
-                                    className="w-full bg-black/40 px-3 py-2 rounded-lg border border-white/10 text-white text-sm outline-none focus:border-indigo-500/50"
-                                >
-                                    <option value="http">HTTP</option>
-                                    <option value="https">HTTPS (TLS)</option>
-                                </select>
-                            </Stack>
-
-                            {item.accessMethod === 'domain' && (
-                                <Stack gap={1} className="md:col-span-2">
-                                    <Text variant="label" className="flex items-center gap-1">
-                                        <Globe className="w-3 h-3" />
-                                        Domain Name
-                                    </Text>
-                                    <input
-                                        type="text"
-                                        value={item.domain || ''}
-                                        onChange={(e) => {
-                                            const newConfig = [...config];
-                                            newConfig[index] = { ...newConfig[index], domain: e.target.value };
-                                            setConfig(newConfig);
-                                        }}
-                                        className="w-full bg-black/40 px-3 py-2 rounded-lg border border-indigo-500/20 text-white text-sm outline-none focus:border-indigo-500/50"
-                                        placeholder="e.g. contest.example.com"
-                                    />
-                                    <Text variant="label" color="text-neutral-500" className="lowercase">
-                                        Contest accessible via reverse proxy only (no direct port binding)
-                                    </Text>
-                                </Stack>
-                            )}
-
-                            {item.accessMethod === 'public_ip' && (
-                                <div className="md:col-span-2">
-                                    <Text variant="label" color="text-neutral-500" className="lowercase">
-                                        Contest accessible at {item.protocol}://your-ip:{item.port}
-                                    </Text>
+                            {activeContestId && (
+                                <div className="flex items-center gap-4 p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
+                                    <div className="w-12 h-12 rounded-xl bg-indigo-600/20 flex items-center justify-center text-indigo-400 font-bold text-lg">
+                                        #{activeContestId}
+                                    </div>
+                                    <div>
+                                        <Text variant="h3" color="text-white">{activeContestName || `Contest #${activeContestId}`}</Text>
+                                        <Text variant="small" color="text-neutral-400">Currently deployed contest stack</Text>
+                                    </div>
                                 </div>
                             )}
 
-                            {(item.accessMethod === 'tailscale') && (
-                                <Stack gap={1} className="md:col-span-2">
-                                    <Text variant="label" className="flex items-center gap-1">
-                                        <Network className="w-3 h-3" />
-                                        Tailscale Domain
-                                    </Text>
-                                    <input
-                                        type="text"
-                                        value={item.tailscaleDomain || ''}
-                                        onChange={(e) => {
-                                            const newConfig = [...config];
-                                            newConfig[index] = { ...newConfig[index], tailscaleDomain: e.target.value };
-                                            setConfig(newConfig);
-                                        }}
-                                        className="w-full bg-black/40 px-3 py-2 rounded-lg border border-purple-500/20 text-white text-sm outline-none focus:border-purple-500/50"
-                                        placeholder="e.g. contest.tailnet-name.ts.net"
-                                    />
-                                    <Text variant="label" color="text-neutral-500" className="lowercase">
-                                        Contest bound to Tailscale IP, accessible via VPN only
-                                    </Text>
+                            {!activeContestId && (
+                                <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                                    <Stack direction="row" align="center" gap={3}>
+                                        <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+                                        <div>
+                                            <Text variant="h3" color="text-amber-400">No Active Contest</Text>
+                                            <Text variant="small" color="text-neutral-400">Select a contest below and activate it.</Text>
+                                        </div>
+                                    </Stack>
+                                </div>
+                            )}
+
+                            {/* Contest Selector */}
+                            <Stack gap={2} className="mt-6">
+                                <Text variant="label" className="flex items-center gap-2">
+                                    <Rocket className="w-3 h-3" />
+                                    Select Contest to Deploy
+                                </Text>
+                                <Stack direction="row" align="center" gap={3}>
+                                    <select
+                                        value={selectedContestId ?? ''}
+                                        onChange={(e) => setSelectedContestId(e.target.value ? parseInt(e.target.value) : null)}
+                                        className="flex-1 bg-black/40 px-4 py-2.5 rounded-lg border border-white/10 text-white text-sm outline-none focus:border-indigo-500/50 appearance-none cursor-pointer"
+                                    >
+                                        <option value="" className="bg-neutral-900">-- Select a contest --</option>
+                                        {availableContests.map((contest) => (
+                                            <option key={contest.id} value={contest.id} className="bg-neutral-900">
+                                                #{contest.id} - {contest.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        onClick={handleActivateAndRestart}
+                                        disabled={deployState.phase === 'deploying' || deployState.phase === 'polling' || !hasChangedContest || !selectedContestId}
+                                        className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-neutral-800 disabled:text-neutral-500 text-white rounded-lg transition-colors font-medium shadow-lg shadow-indigo-900/20 disabled:shadow-none"
+                                    >
+                                        {deployState.phase === 'deploying' || deployState.phase === 'polling' ? (
+                                            <RefreshCw className="w-4 h-4 animate-spin" />
+                                        ) : (
+                                            <Rocket className="w-4 h-4" />
+                                        )}
+                                        {deployState.phase === 'deploying' ? 'Starting...'
+                                            : deployState.phase === 'polling' ? 'Deploying...'
+                                            : 'Activate & Restart Stack'}
+                                    </button>
                                 </Stack>
+                                <Text variant="small" color="text-neutral-500" className="mb-4">
+                                    This will update the env file, mark the contest as active in the database, and restart the contest stack.
+                                </Text>
+                            </Stack>
+                        </Stack>
+                    </Card>
+
+                    {/* Contest Settings */}
+                    <Stack gap={4}>
+                        <Stack direction="row" align="center" gap={2} className="px-2">
+                            <Text variant="h2">Contest Settings</Text>
+                            {isDirty && (
+                                <button
+                                    onClick={handleSaveSettings}
+                                    disabled={saving}
+                                    className="ml-auto flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs transition-colors disabled:opacity-50"
+                                >
+                                    <Save className="w-3 h-3" />
+                                    Save Settings
+                                </button>
                             )}
-
-
-                            {(item.protocol === 'https') && (
-                                <>
-                                    <Stack gap={1}>
-                                        <Text variant="label">TLS Cert Path</Text>
-                                        <input
-                                            type="text"
-                                            value={item.tlsCertPath || ''}
-                                            onChange={(e) => {
-                                                const newConfig = [...config];
-                                                newConfig[index] = { ...newConfig[index], tlsCertPath: e.target.value };
-                                                setConfig(newConfig);
-                                            }}
-                                            className="w-full bg-black/40 px-3 py-2 rounded-lg border border-white/10 text-white text-xs outline-none focus:border-indigo-500/50 font-mono"
-                                            placeholder="/path/to/cert.pem"
-                                        />
-                                    </Stack>
-                                    <Stack gap={1}>
-                                        <Text variant="label">TLS Key Path</Text>
-                                        <input
-                                            type="text"
-                                            value={item.tlsKeyPath || ''}
-                                            onChange={(e) => {
-                                                const newConfig = [...config];
-                                                newConfig[index] = { ...newConfig[index], tlsKeyPath: e.target.value };
-                                                setConfig(newConfig);
-                                            }}
-                                            className="w-full bg-black/40 px-3 py-2 rounded-lg border border-white/10 text-white text-xs outline-none focus:border-indigo-500/50 font-mono"
-                                            placeholder="/path/to/key.pem"
-                                        />
-                                    </Stack>
-                                </>
-                            )}
-                        </div>
-
-                        {/* Instance Actions */}
-                        <Stack direction="row" align="center" gap={2} className="ml-6 pt-2 border-t border-white/5">
-                            <button
-                                onClick={() => handleRestartContest(item.id)}
-                                disabled={saving}
-                                className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 rounded-lg transition-colors text-xs font-medium disabled:opacity-50"
-                            >
-                                <RefreshCw className={`w-3 h-3 ${saving ? 'animate-spin' : ''}`} />
-                                Restart Contest Services
-                            </button>
-                            <Text variant="label" color="text-neutral-600" className="lowercase">
-                                Restarts contest-web-server-{item.id} and related services
-                            </Text>
                         </Stack>
 
-                    </Card>
-                ))}
-                
-                {config.length === 0 && (
-                    <Stack align="center" justify="center" className="p-12 border-2 border-dashed border-white/5 rounded-2xl bg-white/1">
-                        <Rocket className="w-12 h-12 text-neutral-700 mb-4" />
-                        <Text variant="muted">No contest deployments configured.</Text>
-                    </Stack>
-                )}
+                        <Card className="glass-card border-white/5 p-6 space-y-6">
+                            <div className="grid grid-cols-2 gap-4">
+                                <Stack gap={1}>
+                                    <Text variant="label">CPU Limit</Text>
+                                    <input
+                                        type="text"
+                                        value={globalSettings.CONTEST_WEB_CPU_LIMIT || ''}
+                                        onChange={(e) => handleGlobalChange('CONTEST_WEB_CPU_LIMIT', e.target.value)}
+                                        className="w-full bg-black/40 px-4 py-2 rounded-lg border border-white/10 text-white outline-none focus:border-indigo-500/50 text-sm"
+                                        placeholder="e.g. 2"
+                                    />
+                                </Stack>
+                                <Stack gap={1}>
+                                    <Text variant="label">Mem Limit</Text>
+                                    <input
+                                        type="text"
+                                        value={globalSettings.CONTEST_WEB_MEMORY_LIMIT || ''}
+                                        onChange={(e) => handleGlobalChange('CONTEST_WEB_MEMORY_LIMIT', e.target.value)}
+                                        className="w-full bg-black/40 px-4 py-2 rounded-lg border border-white/10 text-white outline-none focus:border-indigo-500/50 text-sm"
+                                        placeholder="e.g. 2G"
+                                    />
+                                </Stack>
+                            </div>
 
-                <button 
-                    onClick={addItem}
-                    className="flex items-center gap-2 px-4 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl transition-all w-full justify-center border border-white/5 mt-2 font-medium"
-                >
-                    <Plus className="w-4 h-4" />
-                    Add Contest Deployment
-                </button>
-            </Stack>
-        </Stack>
+                            <Stack gap={1}>
+                                <Text variant="label">Cookie Duration (s)</Text>
+                                <input
+                                    type="number"
+                                    value={globalSettings.COOKIE_DURATION || ''}
+                                    onChange={(e) => handleGlobalChange('COOKIE_DURATION', e.target.value)}
+                                    className="w-full bg-black/40 px-4 py-2 rounded-lg border border-white/10 text-white outline-none focus:border-indigo-500/50 text-sm"
+                                    placeholder="10800"
+                                />
+                            </Stack>
 
-        <Stack gap={6}>
-            <Stack direction="row" align="center" className="px-2" gap={2}>
-                <Shield className="w-5 h-5 text-indigo-400" />
-                <Text variant="h2">Global Settings</Text>
-            </Stack>
-            
-            <Card className="glass-card border-white/5 p-6 space-y-6">
-                <Stack gap={1}>
-                    <Text variant="label">Security Secret Key</Text>
-                    <input
-                        type="password"
-                        value={globalSettings.SECRET_KEY || ''}
-                        onChange={(e) => handleGlobalChange('SECRET_KEY', e.target.value)}
-                        className="w-full bg-black/40 px-4 py-2 rounded-lg border border-white/10 text-white outline-none focus:border-indigo-500/50 font-mono text-xs"
-                        title="Security Secret Key"
-                        aria-label="Security Secret Key"
-                        placeholder="Generated automatically if empty"
-                        autoComplete="off"
-                        data-form-type="other"
-                    />
-                </Stack>
-
-                <div className="grid grid-cols-2 gap-4">
-                    <Stack gap={1}>
-                        <Text variant="label">CPU Limit</Text>
-                        <input 
-                            type="text" 
-                            value={globalSettings.CONTEST_WEB_CPU_LIMIT || ''} 
-                            onChange={(e) => handleGlobalChange('CONTEST_WEB_CPU_LIMIT', e.target.value)}
-                            className="w-full bg-black/40 px-4 py-2 rounded-lg border border-white/10 text-white outline-none focus:border-indigo-500/50 text-sm"
-                            placeholder="e.g. 2"
-                        />
-                    </Stack>
-                    <Stack gap={1}>
-                        <Text variant="label">Mem Limit</Text>
-                        <input 
-                            type="text" 
-                            value={globalSettings.CONTEST_WEB_MEMORY_LIMIT || ''} 
-                            onChange={(e) => handleGlobalChange('CONTEST_WEB_MEMORY_LIMIT', e.target.value)}
-                            className="w-full bg-black/40 px-4 py-2 rounded-lg border border-white/10 text-white outline-none focus:border-indigo-500/50 text-sm"
-                            placeholder="e.g. 2G"
-                        />
-                    </Stack>
-                </div>
-
-                <Stack gap={1}>
-                    <Text variant="label">Cookie Duration (s)</Text>
-                    <input 
-                        type="number" 
-                        value={globalSettings.COOKIE_DURATION || ''} 
-                        onChange={(e) => handleGlobalChange('COOKIE_DURATION', e.target.value)}
-                        className="w-full bg-black/40 px-4 py-2 rounded-lg border border-white/10 text-white outline-none focus:border-indigo-500/50 text-sm"
-                        placeholder="10800"
-                    />
-                </Stack>
-
-                <Stack gap={4} className="pt-4 border-t border-white/5">
-                    <Stack direction="row" align="center" gap={2}>
-                        <input 
-                            type="checkbox" 
-                            id="tls"
-                            checked={globalSettings.ENABLE_TLS === 'true'} 
-                            onChange={(e) => handleGlobalChange('ENABLE_TLS', e.target.checked ? 'true' : 'false')}
-                            className="rounded border-white/10 bg-black/40 text-indigo-600 focus:ring-indigo-500"
-                        />
-                        <label htmlFor="tls" className="text-xs text-neutral-300">Enable HTTPS (Traefik)</label>
-                    </Stack>
-                    <Stack direction="row" align="center" gap={2}>
-                        <input 
-                            type="checkbox" 
-                            id="localCopy"
-                            checked={globalSettings.SUBMIT_LOCAL_COPY === 'true'} 
-                            onChange={(e) => handleGlobalChange('SUBMIT_LOCAL_COPY', e.target.checked ? 'true' : 'false')}
-                            className="rounded border-white/10 bg-black/40 text-indigo-600 focus:ring-indigo-500"
-                        />
-                        <label htmlFor="localCopy" className="text-xs text-neutral-300">Store Local Copy of Submissions</label>
-                    </Stack>
-                </Stack>
-            </Card>
-
-            <Card className="glass-card border-white/5 p-6">
-                <Stack direction="row" align="center" justify="between" className="mb-4" gap={0}>
-                    <Stack direction="row" align="center" gap={2}>
-                        <Server className="w-5 h-5 text-cyan-400" />
-                        <Text variant="h3">Worker Nodes</Text>
-                    </Stack>
-                    <Badge variant="cyan">{workers.length} Configured</Badge>
-                </Stack>
-
-                <Text variant="muted" className="mb-4">
-                    Workers are shared across all contests and connect to the EvaluationService
-                </Text>
-
-                <Stack gap={2} className="mb-3">
-                    {workers.map((worker, index) => {
-                        const isLive = isWorkerLive(worker);
-                        
-                        return (
-                            <Stack key={index} gap={1} className="bg-black/20 p-3 rounded-lg border border-white/5 relative group">
-                                <Stack direction="row" align="center" justify="between" className="mb-1">
-                                    <Stack direction="row" align="center" gap={1.5}>
-                                        <div className={`w-2 h-2 rounded-full ${isLive ? 'bg-cyan-500 animate-pulse' : 'bg-neutral-700'}`} />
-                                        <Text variant="label" className="text-[10px] uppercase font-bold tracking-widest" color={isLive ? 'text-cyan-400' : 'text-neutral-500'}>
-                                            {isLive ? 'Live' : 'Offline'}
-                                        </Text>
-                                    </Stack>
-                                    <button
-                                        onClick={() => removeGlobalWorker(index)}
-                                        title="Remove worker node"
-                                        aria-label="Remove worker node"
-                                        className="p-1 text-neutral-600 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors opacity-0 group-hover:opacity-100"
-                                    >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
+                            <Stack gap={4} className="pt-4 border-t border-white/5">
+                                <Stack direction="row" align="center" gap={2}>
+                                    <input
+                                        type="checkbox"
+                                        id="tls"
+                                        checked={globalSettings.ENABLE_TLS === 'true'}
+                                        onChange={(e) => handleGlobalChange('ENABLE_TLS', e.target.checked ? 'true' : 'false')}
+                                        className="rounded border-white/10 bg-black/40 text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                    <label htmlFor="tls" className="text-xs text-neutral-300">Enable HTTPS (Traefik)</label>
                                 </Stack>
                                 <Stack direction="row" align="center" gap={2}>
                                     <input
-                                        type="text"
-                                        value={worker.host}
-                                        onChange={(e) => updateGlobalWorker(index, 'host', e.target.value)}
-                                        placeholder="Host (e.g., cms-worker-0)"
-                                        className="flex-1 bg-black/40 px-3 py-2 rounded text-sm text-white border border-white/10 outline-none focus:border-cyan-500/50 font-mono"
+                                        type="checkbox"
+                                        id="localCopy"
+                                        checked={globalSettings.SUBMIT_LOCAL_COPY === 'true'}
+                                        onChange={(e) => handleGlobalChange('SUBMIT_LOCAL_COPY', e.target.checked ? 'true' : 'false')}
+                                        className="rounded border-white/10 bg-black/40 text-indigo-600 focus:ring-indigo-500"
                                     />
-                                    <input
-                                        type="number"
-                                        value={worker.port}
-                                        onChange={(e) => updateGlobalWorker(index, 'port', e.target.value)}
-                                        title="Worker Port"
-                                        aria-label="Worker Port"
-                                        placeholder="26000"
-                                        className="w-24 bg-black/40 px-3 py-2 rounded text-sm text-white border border-white/10 outline-none focus:border-cyan-500/50 font-mono"
-                                    />
+                                    <label htmlFor="localCopy" className="text-xs text-neutral-300">Store Local Copy of Submissions</label>
                                 </Stack>
                             </Stack>
-                        );
-                    })}
-
-                    {workers.length === 0 && (
-                        <Stack align="center" justify="center" className="p-6 bg-black/20 rounded-lg border border-white/5">
-                            <Server className="w-8 h-8 text-neutral-700 mx-auto mb-2" />
-                            <Text variant="label" color="text-neutral-500">No workers configured</Text>
-                        </Stack>
-                    )}
+                        </Card>
+                    </Stack>
                 </Stack>
 
-                <button
-                    onClick={addGlobalWorker}
-                    className="flex items-center gap-2 px-3 py-2 bg-cyan-600/10 hover:bg-cyan-600/20 text-cyan-400 rounded-lg text-sm transition-colors w-full justify-center font-medium border border-cyan-500/20"
-                >
-                    <Plus className="w-4 h-4" />
-                    Add Worker Node
-                </button>
-            </Card>
-        </Stack>
-      </div>
-    </PageContent>
-  );
+                {/* Right Column: Worker Nodes */}
+                <Stack gap={6}>
+                    <Stack direction="row" align="center" gap={2} className="px-2">
+                        <Text variant="h2">Worker Nodes</Text>
+                        {workersDirty && (
+                            <button
+                                onClick={handleSaveWorkers}
+                                disabled={saving}
+                                className="ml-auto flex items-center gap-2 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs transition-colors disabled:opacity-50"
+                            >
+                                <Save className="w-3 h-3" />
+                                Sync Workers
+                            </button>
+                        )}
+                        <Badge variant="cyan">{workers.length} Configured</Badge>
+                    </Stack>
+
+                    <Card className="glass-card border-white/5 p-6">
+                        <Text variant="muted" className="mb-4">
+                            Workers connect to the EvaluationService and are shared across the active contest.
+                        </Text>
+
+                        <Stack gap={2} className="mb-3">
+                            {workers.map((worker, index) => {
+                                const live = isWorkerLive(worker);
+                                return (
+                                    <Stack key={index} gap={1} className="bg-black/20 p-3 rounded-lg border border-white/5 relative group">
+                                        <Stack direction="row" align="center" justify="between" className="mb-1">
+                                            <Stack direction="row" align="center" gap={1.5}>
+                                                <div className={`w-2 h-2 rounded-full ${live ? 'bg-cyan-500 animate-pulse' : 'bg-neutral-700'}`} />
+                                                <Text variant="label" className="text-[10px] uppercase font-bold tracking-widest" color={live ? 'text-cyan-400' : 'text-neutral-500'}>
+                                                    {live ? 'Live' : 'Offline'}
+                                                </Text>
+                                            </Stack>
+                                            <button
+                                                onClick={() => removeGlobalWorker(index)}
+                                                className="p-1 text-neutral-600 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors opacity-0 group-hover:opacity-100"
+                                            >
+                                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                            </button>
+                                        </Stack>
+                                        <Stack direction="row" align="center" gap={2}>
+                                            <input
+                                                type="text"
+                                                value={worker.host}
+                                                onChange={(e) => updateGlobalWorker(index, 'host', e.target.value)}
+                                                placeholder="Host (e.g., cms-worker-0)"
+                                                className="flex-1 bg-black/40 px-3 py-2 rounded text-sm text-white border border-white/10 outline-none focus:border-cyan-500/50 font-mono"
+                                            />
+                                            <input
+                                                type="number"
+                                                value={worker.port}
+                                                onChange={(e) => updateGlobalWorker(index, 'port', e.target.value)}
+                                                placeholder="26000"
+                                                className="w-24 bg-black/40 px-3 py-2 rounded text-sm text-white border border-white/10 outline-none focus:border-cyan-500/50 font-mono"
+                                            />
+                                        </Stack>
+                                    </Stack>
+                                );
+                            })}
+
+                            {workers.length === 0 && (
+                                <Stack align="center" justify="center" className="p-6 bg-black/20 rounded-lg border border-white/5">
+                                    <Server className="w-8 h-8 text-neutral-700 mx-auto mb-2" />
+                                    <Text variant="label" color="text-neutral-500">No workers configured</Text>
+                                </Stack>
+                            )}
+                        </Stack>
+
+                        <button
+                            onClick={addGlobalWorker}
+                            className="flex items-center gap-2 px-3 py-2 bg-cyan-600/10 hover:bg-cyan-600/20 text-cyan-400 rounded-lg text-sm transition-colors w-full justify-center font-medium border border-cyan-500/20"
+                        >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+                            Add Worker Node
+                        </button>
+                    </Card>
+                </Stack>
+            </div>
+        </PageContent>
+    );
 }

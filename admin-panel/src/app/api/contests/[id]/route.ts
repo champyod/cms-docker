@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
+import { validateContestData, intervalToString, CONSTRAINT_TO_FIELD_MAP, getConstraintErrorMessage } from '@/lib/contest-validation';
 
 export async function PUT(
   req: NextRequest,
@@ -15,6 +16,17 @@ export async function PUT(
 
   try {
     const data = await req.json();
+
+    // Call validation library
+    const validation = validateContestData(data, true);
+    if (!validation.valid) {
+      return apiError({
+        message: 'Validation failed',
+        errors: validation.errors,
+        status: 400
+      });
+    }
+
     const toDate = (d: any) => d ? new Date(d) : null;
 
     const startDate = toDate(data.start);
@@ -22,10 +34,24 @@ export async function PUT(
     const analysisStart = toDate(data.analysis_start);
     const analysisStop = toDate(data.analysis_stop);
 
-    const token_min_interval = data.token_min_interval !== undefined ? `${data.token_min_interval} seconds` : null;
-    const token_gen_interval = data.token_gen_interval !== undefined ? `${data.token_gen_interval} minutes` : null;
-    const min_submission_interval = data.min_submission_interval !== undefined ? `${data.min_submission_interval} seconds` : null;
-    const min_user_test_interval = data.min_user_test_interval !== undefined ? `${data.min_user_test_interval} seconds` : null;
+    const token_min_interval = data.token_min_interval !== undefined && data.token_min_interval !== null
+      ? intervalToString(data.token_min_interval, 'seconds')
+      : null;
+    const token_gen_interval = data.token_gen_interval !== undefined && data.token_gen_interval !== null
+      ? intervalToString(data.token_gen_interval, 'minutes')
+      : null;
+    const min_submission_interval = data.min_submission_interval !== undefined && data.min_submission_interval !== null
+      ? intervalToString(data.min_submission_interval, 'seconds')
+      : null;
+    const min_user_test_interval = data.min_user_test_interval !== undefined && data.min_user_test_interval !== null
+      ? intervalToString(data.min_user_test_interval, 'seconds')
+      : null;
+    const per_user_time = data.per_user_time !== undefined && data.per_user_time !== null
+      ? intervalToString(data.per_user_time, 'seconds')
+      : null;
+    const min_submission_interval_grace_period = data.min_submission_interval_grace_period !== undefined && data.min_submission_interval_grace_period !== null
+      ? intervalToString(data.min_submission_interval_grace_period, 'seconds')
+      : null;
     const queue_fairness_penalty_seconds = data.queue_fairness_penalty_seconds !== undefined
       ? Math.max(0, Number(data.queue_fairness_penalty_seconds) || 0)
       : null;
@@ -62,10 +88,14 @@ export async function PUT(
         analysis_enabled = COALESCE(${data.analysis_enabled}, analysis_enabled),
         analysis_start = COALESCE(${analysisStart}, analysis_start),
         analysis_stop = COALESCE(${analysisStop}, analysis_stop),
+        
+        -- Intervals
         token_min_interval = CASE WHEN ${token_min_interval}::text IS NOT NULL THEN ${token_min_interval}::interval ELSE token_min_interval END,
         token_gen_interval = CASE WHEN ${token_gen_interval}::text IS NOT NULL THEN ${token_gen_interval}::interval ELSE token_gen_interval END,
         min_submission_interval = CASE WHEN ${min_submission_interval}::text IS NOT NULL THEN ${min_submission_interval}::interval ELSE min_submission_interval END,
-        min_user_test_interval = CASE WHEN ${min_user_test_interval}::text IS NOT NULL THEN ${min_user_test_interval}::interval ELSE min_user_test_interval END
+        min_user_test_interval = CASE WHEN ${min_user_test_interval}::text IS NOT NULL THEN ${min_user_test_interval}::interval ELSE min_user_test_interval END,
+        per_user_time = CASE WHEN ${per_user_time}::text IS NOT NULL THEN ${per_user_time}::interval ELSE per_user_time END,
+        min_submission_interval_grace_period = CASE WHEN ${min_submission_interval_grace_period}::text IS NOT NULL THEN ${min_submission_interval_grace_period}::interval ELSE min_submission_interval_grace_period END
       WHERE id = ${id}
     `;
 
@@ -73,10 +103,24 @@ export async function PUT(
     revalidatePath(`/[locale]/contests/${id}`, 'page');
     return apiSuccess({ message: 'Contest updated successfully' });
   } catch (error: any) {
-    if (error.code === 'P2002') return apiError({ message: 'Contest name already exists', status: 400 });
+    // Check for DB check constraints
+    for (const [constraint, field] of Object.entries(CONSTRAINT_TO_FIELD_MAP)) {
+      if (error.message?.includes(constraint)) {
+        return apiError({
+          message: getConstraintErrorMessage(constraint),
+          errors: [{ field, message: getConstraintErrorMessage(constraint), code: constraint }],
+          status: 400
+        });
+      }
+    }
+
+    if (error.code === 'P2002' || error.message?.includes('unique constraint')) {
+      return apiError({ message: 'Contest name already exists', status: 400 });
+    }
     return apiError(error);
   }
 }
+
 
 export async function DELETE(
   req: NextRequest,

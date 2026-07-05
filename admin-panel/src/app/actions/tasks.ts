@@ -160,7 +160,7 @@ export async function createTask(data: TaskData) {
         ${data.feedback_level || 'restricted'}::feedback_level, ${data.score_precision || 0}, ${data.score_mode || 'max'}::score_mode
       )
     `;
-    revalidatePath('/[locale]/tasks');
+    revalidatePath('/[locale]/tasks', 'page');
     return { success: true };
   } catch (error: any) {
     if (error.message?.includes('unique constraint')) return { success: false, error: 'Task name already exists' };
@@ -225,7 +225,7 @@ export async function deleteTask(id: number) {
 
   try {
     await prisma.tasks.delete({ where: { id } });
-    revalidatePath('/[locale]/tasks');
+    revalidatePath('/[locale]/tasks', 'page');
     return { success: true };
   } catch (error) {
     return { success: false, error: (error as Error).message };
@@ -242,8 +242,8 @@ export async function assignTaskToContest(taskId: number, contestId: number | nu
       num = (maxNum._max.num || 0) + 1;
     }
     await prisma.tasks.update({ where: { id: taskId }, data: { contest_id: contestId, num } });
-    revalidatePath('/[locale]/tasks');
-    revalidatePath('/[locale]/contests');
+    revalidatePath('/[locale]/tasks', 'page');
+    revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {
     return { success: false, error: (error as Error).message };

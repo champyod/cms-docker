@@ -53,7 +53,7 @@ async function getStats() {
   };
 }
 
-async function getRecentActivity() {
+async function getRecentActivity(): Promise<{ id: number; timestamp: Date; username: string; taskName: string }[]> {
   const submissions = await prisma.submissions.findMany({
     take: 10,
     orderBy: { timestamp: 'desc' },
@@ -67,7 +67,14 @@ async function getRecentActivity() {
     }
   });
 
-  return submissions.map(s => ({
+  type SubmissionRow = {
+    participations?: { users?: { username: string } | null } | null;
+    tasks?: { name: string } | null;
+  } & {
+    id: number; timestamp: Date;
+  };
+
+  return submissions.map((s: SubmissionRow): { id: number; timestamp: Date; username: string; taskName: string } => ({
     id: s.id,
     timestamp: s.timestamp,
     username: s.participations?.users?.username ?? 'Unknown',

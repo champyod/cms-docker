@@ -40,7 +40,7 @@ export async function createAdmin(data: {
         permission_contests: data.permission_contests ?? false,
       }
     });
-    revalidatePath('/[locale]/admins');
+    revalidatePath('/[locale]/admins', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;
@@ -81,7 +81,7 @@ export async function updateAdmin(adminId: number, data: {
       where: { id: adminId },
       data: updateData
     });
-    revalidatePath('/[locale]/admins');
+    revalidatePath('/[locale]/admins', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;
@@ -94,7 +94,7 @@ export async function deleteAdmin(adminId: number) {
   await ensurePermission('all');
   try {
     await prisma.admins.delete({ where: { id: adminId } });
-    revalidatePath('/[locale]/admins');
+    revalidatePath('/[locale]/admins', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;

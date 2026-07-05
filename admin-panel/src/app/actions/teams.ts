@@ -25,7 +25,7 @@ export async function createTeam(data: { code: string; name: string }) {
         name: data.name,
       }
     });
-    revalidatePath('/[locale]/teams');
+    revalidatePath('/[locale]/teams', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;
@@ -48,7 +48,7 @@ export async function updateTeam(teamId: number, data: { code?: string; name?: s
         ...(data.name && { name: data.name }),
       }
     });
-    revalidatePath('/[locale]/teams');
+    revalidatePath('/[locale]/teams', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;
@@ -62,7 +62,7 @@ export async function deleteTeam(teamId: number) {
 
   try {
     await prisma.teams.delete({ where: { id: teamId } });
-    revalidatePath('/[locale]/teams');
+    revalidatePath('/[locale]/teams', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;

@@ -40,7 +40,7 @@ export async function createDataset(taskId: number, data: {
         autojudge: false,
       }
     });
-    revalidatePath('/[locale]/tasks');
+    revalidatePath('/[locale]/tasks', 'page');
     return { success: true, dataset };
   } catch (error) {
     const e = error as Error;
@@ -101,7 +101,7 @@ export async function cloneDataset(datasetId: number, newDescription: string) {
       });
     }
     
-    revalidatePath('/[locale]/tasks');
+    revalidatePath('/[locale]/tasks', 'page');
     return { success: true, dataset: newDataset };
   } catch (error) {
     const e = error as Error;
@@ -118,7 +118,7 @@ export async function renameDataset(datasetId: number, description: string) {
       where: { id: datasetId },
       data: { description }
     });
-    revalidatePath('/[locale]/tasks');
+    revalidatePath('/[locale]/tasks', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;
@@ -142,7 +142,7 @@ export async function deleteDataset(datasetId: number) {
     }
     
     await prisma.datasets.delete({ where: { id: datasetId } });
-    revalidatePath('/[locale]/tasks');
+    revalidatePath('/[locale]/tasks', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;
@@ -168,7 +168,7 @@ export async function activateDataset(datasetId: number) {
       data: { active_dataset_id: datasetId }
     });
     
-    revalidatePath('/[locale]/tasks');
+    revalidatePath('/[locale]/tasks', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;
@@ -194,7 +194,7 @@ export async function toggleAutojudge(datasetId: number) {
       data: { autojudge: !dataset.autojudge }
     });
     
-    revalidatePath('/[locale]/tasks');
+    revalidatePath('/[locale]/tasks', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;
@@ -223,7 +223,7 @@ export async function updateDataset(datasetId: number, data: {
         ...(data.score_type && { score_type: data.score_type }),
       }
     });
-    revalidatePath('/[locale]/tasks');
+    revalidatePath('/[locale]/tasks', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;

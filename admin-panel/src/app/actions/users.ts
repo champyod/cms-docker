@@ -82,7 +82,7 @@ export async function createUser(data: Omit<any, 'id' | 'password' | 'preferred_
         preferred_languages: [],
       },
     });
-    revalidatePath('/[locale]/users');
+    revalidatePath('/[locale]/users', 'page');
     return { success: true, user };
   } catch (error) {
     const e = error as Error & { code?: string };
@@ -116,7 +116,7 @@ export async function updateUser(id: number, data: Partial<any> & { password?: s
       where: { id },
       data: updateData,
     });
-    revalidatePath('/[locale]/users');
+    revalidatePath('/[locale]/users', 'page');
     return { success: true, user };
   } catch (error) {
     const e = error as Error;
@@ -131,7 +131,7 @@ export async function deleteUser(id: number) {
     await prisma.users.delete({
       where: { id },
     });
-    revalidatePath('/[locale]/users');
+    revalidatePath('/[locale]/users', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;

@@ -77,7 +77,7 @@ env:
 		echo "" >> .env; \
 		echo "WARNING: Using .env.infra.example template"; \
 	fi
-	@# Generate admin-panel/.env for Prisma
+	@# Generate admin-panel/.env for Prisma and Next.js
 	@echo "Generating admin-panel/.env..."
 	@if [ -f .env.core ]; then \
 		DB_USER=$$(grep "^POSTGRES_USER=" .env.core | cut -d '=' -f2-); \
@@ -86,6 +86,10 @@ env:
 		DB_HOST=$$(grep "^POSTGRES_HOST=" .env.core | cut -d '=' -f2-); \
 		DB_PORT=$$(grep "^POSTGRES_PORT=" .env.core | cut -d '=' -f2-); \
 		echo "DATABASE_URL=\"postgresql://$$DB_USER:$$DB_PASS@localhost:$$DB_PORT/$$DB_NAME\"" > admin-panel/.env; \
+		if [ -f .env.admin ]; then \
+			AUTH_SECRET=$$(grep "^AUTH_SECRET=" .env.admin | cut -d '=' -f2-); \
+			[ -n "$$AUTH_SECRET" ] && echo "AUTH_SECRET=$$AUTH_SECRET" >> admin-panel/.env; \
+		fi \
 	else \
 		echo "# Please configure .env.core first" > admin-panel/.env; \
 	fi
@@ -111,8 +115,6 @@ env:
 		echo "Updating config/cms_ranking.toml..."; \
 		sed -i 's/\"127.0.0.1\"/\"0.0.0.0\"/g' config/cms_ranking.toml; \
 	fi
-	@echo "Generating per-contest docker-compose configuration..."
-	@chmod +x scripts/generate_contest_compose.py && python3 scripts/generate_contest_compose.py
 	@echo ".env file generated. You can now run: ./scripts/setup.sh"
 
 core:
@@ -120,8 +122,8 @@ core:
 	$(COMPOSE) -f docker-compose.core.yml build log-service
 	$(COMPOSE) -f docker-compose.core.yml build resource-service
 	$(COMPOSE) -f docker-compose.core.yml build scoring-service
-	$(COMPOSE) -f docker-compose.core.yml build evaluation-service
-	$(COMPOSE) -f docker-compose.core.yml build proxy-service
+	$(COMPOSE) -f docker-compose.contest.yml build evaluation-service
+	$(COMPOSE) -f docker-compose.contest.yml build proxy-service
 	$(COMPOSE) -f docker-compose.core.yml build checker-service
 	$(COMPOSE) -f docker-compose.core.yml up -d
 	@echo "Services started. Use 'make db-reset' for a first-time setup or 'make cms-init' to just initialize the database."
@@ -157,12 +159,25 @@ db-reset: db-clean core-img
 admin:
 	$(COMPOSE) -f docker-compose.admin.yml up -d --build
 
-contest:
-	@if [ -f docker-compose.contests.generated.yml ] && grep -q "cms-contest-web-server-" docker-compose.contests.generated.yml; then \
-		$(COMPOSE) -f docker-compose.contests.generated.yml up -d --build; \
+admin-dev:
+	@echo "Building admin panel (local)..."
+	cd admin-panel && bun run build
+	@echo "Starting admin panel on port $${ADMIN_NEXT_PORT_EXTERNAL:-8891}..."
+	cd admin-panel && PORT=$${ADMIN_NEXT_PORT_EXTERNAL:-8891} nohup bun run start > /tmp/admin-panel.log 2>&1 & echo $$! > /tmp/admin-panel.pid
+	@sleep 2
+	@echo "Admin panel started (PID: $$(cat /tmp/admin-panel.pid), log: /tmp/admin-panel.log)"
+
+admin-dev-stop:
+	@if [ -f /tmp/admin-panel.pid ]; then \
+		echo "Stopping admin panel (PID: $$(cat /tmp/admin-panel.pid))..."; \
+		kill $$(cat /tmp/admin-panel.pid) 2>/dev/null && echo "Stopped." || echo "Process already exited."; \
+		rm -f /tmp/admin-panel.pid; \
 	else \
-		$(COMPOSE) -f docker-compose.contest.yml up -d --build; \
+		echo "No admin panel PID file found. Try: pkill -f 'next.*start'"; \
 	fi
+
+contest:
+	$(COMPOSE) -f docker-compose.contest.yml up -d --build
 
 worker:
 	$(COMPOSE) -f docker-compose.worker.yml up -d --build
@@ -180,18 +195,10 @@ admin-clean:
 	$(COMPOSE) -f docker-compose.admin.yml down -v
 
 contest-stop:
-	@if [ -f docker-compose.contests.generated.yml ] && grep -q "cms-contest-web-server-" docker-compose.contests.generated.yml; then \
-		$(COMPOSE) -f docker-compose.contests.generated.yml stop; \
-	else \
-		$(COMPOSE) -f docker-compose.contest.yml stop; \
-	fi
+	$(COMPOSE) -f docker-compose.contest.yml stop
 
 contest-clean:
-	@if [ -f docker-compose.contests.generated.yml ] && grep -q "cms-contest-web-server-" docker-compose.contests.generated.yml; then \
-		$(COMPOSE) -f docker-compose.contests.generated.yml down -v; \
-	else \
-		$(COMPOSE) -f docker-compose.contest.yml down -v; \
-	fi
+	$(COMPOSE) -f docker-compose.contest.yml down -v
 
 worker-stop:
 	$(COMPOSE) -f docker-compose.worker.yml down
@@ -227,11 +234,7 @@ pull-admin:
 
 pull-contest:
 	@echo "Pulling contest images..."
-	@if [ -f docker-compose.contests.generated.yml ] && grep -q "cms-contest-web-server-" docker-compose.contests.generated.yml; then \
-		$(COMPOSE) -f docker-compose.contests.generated.yml pull || true; \
-	else \
-		$(COMPOSE) -f docker-compose.contest.yml -f docker-compose.contest.img.yml pull || true; \
-	fi
+	$(COMPOSE) -f docker-compose.contest.yml -f docker-compose.contest.img.yml pull || true
 
 pull-worker:
 	@echo "Pulling worker images..."
@@ -249,18 +252,10 @@ admin-img:
 	$(COMPOSE) -f docker-compose.admin.yml -f docker-compose.admin.img.yml up -d --no-build
 
 contest-img:
-	@if [ -f docker-compose.contests.generated.yml ] && grep -q "cms-contest-web-server-" docker-compose.contests.generated.yml; then \
-		$(COMPOSE) -f docker-compose.contests.generated.yml up -d --no-build; \
-	else \
-		$(COMPOSE) -f docker-compose.contest.yml -f docker-compose.contest.img.yml up -d --no-build; \
-	fi
+	$(COMPOSE) -f docker-compose.contest.yml -f docker-compose.contest.img.yml up -d --no-build
 
 contest-down:
-	@if [ -f docker-compose.contests.generated.yml ] && grep -q "cms-contest-web-server-" docker-compose.contests.generated.yml; then \
-		$(COMPOSE) -f docker-compose.contests.generated.yml down; \
-	else \
-		$(COMPOSE) -f docker-compose.contest.yml down; \
-	fi
+	$(COMPOSE) -f docker-compose.contest.yml down
 
 worker-img:
 	$(COMPOSE) -f docker-compose.worker.yml -f docker-compose.worker.img.yml up -d --no-build

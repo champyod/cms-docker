@@ -1,15 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSyncedState } from '@/hooks/useSyncedState';
 import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Trash2, Plus, Calendar, Clock, ExternalLink, HelpCircle } from 'lucide-react';
+import { Trash2, Plus, Calendar, Clock, ExternalLink, HelpCircle, Rocket, CheckCircle2, Loader2 } from 'lucide-react';
 import { ContestModal } from './ContestModal';
 import { apiClient } from '@/lib/apiClient';
+import { useDeployContest } from '@/hooks/useDeployContest';
+import { useToast } from '@/components/providers/ToastProvider';
+import { Modal } from '@/components/core/Modal';
 
 interface ContestListProps {
   initialContests: any[];
@@ -30,10 +33,12 @@ export function ContestList({ initialContests, totalPages, permissions }: Contes
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
   const [selectedContest, setSelectedContest] = useState<any | null>(null);
+  const { addToast } = useToast();
+  const { state: deployState, deploy: handleDeploy, reset: resetDeployState } = useDeployContest();
+  const [deployTarget, setDeployTarget] = useState<number | null>(null);
 
   const isSuperAdmin = permissions?.permission_all ?? false;
   const canManageContests = isSuperAdmin || (permissions?.permission_contests ?? false);
-
 
   const handleDelete = async (id: number) => {
     if (!canManageContests) return;
@@ -46,6 +51,38 @@ export function ContestList({ initialContests, totalPages, permissions }: Contes
       }
     }
   };
+
+  const handleSetActive = (id: number) => {
+    if (!isSuperAdmin) return;
+    setDeployTarget(id);
+  };
+
+  const confirmDeploy = () => {
+    if (deployTarget === null) return;
+    handleDeploy(deployTarget);
+  };
+
+  const closeDeployModal = () => {
+    setDeployTarget(null);
+    resetDeployState();
+  };
+
+  useEffect(() => {
+    if (deployState.phase === 'completed') {
+      addToast({ type: 'success', title: 'Contest Deployed', message: `Contest #${deployState.contestId} is now active.` });
+      setDeployTarget(null);
+      resetDeployState();
+      window.location.reload();
+    } else if (deployState.phase === 'failed' || deployState.phase === 'timeout') {
+      addToast({ type: 'error', title: 'Deploy Failed', message: deployState.error || 'Deploy did not complete.' });
+      setDeployTarget(null);
+      resetDeployState();
+    } else if (deployState.phase === 'already_running') {
+      addToast({ type: 'warning', title: 'Deploy Already Running', message: deployState.error || 'Another deploy is in progress.' });
+      setDeployTarget(null);
+      resetDeployState();
+    }
+  }, [deployState.phase]);
 
   const handleCreate = () => {
     if (!canManageContests) return;
@@ -106,13 +143,19 @@ export function ContestList({ initialContests, totalPages, permissions }: Contes
           <TableBody>
             {contests.map((contest) => {
               const status = getStatus(contest.start, contest.stop);
+              const isActive = contest.is_active === true;
               return (
-                <TableRow key={contest.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                    <TableCell className="font-mono text-neutral-500 text-xs">#{contest.id}</TableCell>
-                  <TableCell className="font-medium text-white max-w-[200px]">
+                <TableRow key={contest.id} className={`border-b border-white/5 transition-colors ${isActive ? 'bg-indigo-500/5 hover:bg-indigo-500/10' : 'hover:bg-white/5'}`}>
+                    <TableCell className="font-mono text-xs">
+                        <div className="flex items-center gap-2">
+                            <span className={isActive ? 'text-indigo-400' : 'text-neutral-500'}>#{contest.id}</span>
+                            {isActive && <CheckCircle2 className="w-3.5 h-3.5 text-indigo-400" />}
+                        </div>
+                    </TableCell>
+                  <TableCell className="font-medium max-w-[200px]">
                     <button
                       onClick={() => router.push(`/${locale}/contests/${contest.id}`)}
-                      className="flex items-center gap-2 hover:text-indigo-400 transition-colors truncate"
+                      className="flex items-center gap-2 text-white hover:text-indigo-400 transition-colors truncate"
                       title={contest.name}
                     >
                       {contest.name}
@@ -120,9 +163,16 @@ export function ContestList({ initialContests, totalPages, permissions }: Contes
                     </button>
                     </TableCell>
                     <TableCell>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium border ${status.color}`}>
-                            {status.label}
-                        </span>
+                        <div className="flex items-center gap-2">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium border ${status.color}`}>
+                                {status.label}
+                            </span>
+                            {isActive && (
+                                <span className="px-2 py-1 rounded-full text-xs font-medium border border-indigo-500/30 bg-indigo-500/10 text-indigo-400">
+                                    Deployed
+                                </span>
+                            )}
+                        </div>
                     </TableCell>
                     <TableCell>
                         <div className="flex flex-col gap-1 text-xs text-neutral-400">
@@ -138,6 +188,17 @@ export function ContestList({ initialContests, totalPages, permissions }: Contes
                     </TableCell>
                     <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
+                        {isSuperAdmin && !isActive && (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleSetActive(contest.id)}
+                                className="h-8 text-xs text-neutral-400 hover:text-indigo-400 gap-1"
+                            >
+                                <Rocket className="w-3 h-3" />
+                                Set Active
+                            </Button>
+                        )}
                         {canManageContests && (
                             <Button 
                                 variant="ghost" 
@@ -170,6 +231,44 @@ export function ContestList({ initialContests, totalPages, permissions }: Contes
         contest={selectedContest}
         onSuccess={handleSuccess}
       />
+
+      <Modal
+        isOpen={deployTarget !== null}
+        onClose={closeDeployModal}
+        title={deployState.phase === 'deploying' || deployState.phase === 'polling' ? 'Deploying Contest...' : 'Confirm Deploy'}
+      >
+        <div className="space-y-4">
+          {deployTarget !== null && (deployState.phase === 'idle' || deployState.phase === 'already_running') && (
+            <>
+              <p className="text-neutral-300 text-sm">
+                This will mark contest <strong className="text-white">#{deployTarget}</strong> as active,
+                update the .env file, and restart the contest stack. The previous active contest will be deactivated.
+              </p>
+              <div className="flex justify-end gap-3 pt-2">
+                <Button variant="ghost" onClick={closeDeployModal}>Cancel</Button>
+                <Button variant="primary" onClick={confirmDeploy} className="flex items-center gap-2">
+                  <Rocket className="w-4 h-4" />
+                  Deploy
+                </Button>
+              </div>
+            </>
+          )}
+          {(deployState.phase === 'deploying' || deployState.phase === 'polling') && (
+            <div className="flex flex-col items-center gap-4 py-6">
+              <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
+              <p className="text-neutral-300 text-sm">
+                {deployState.phase === 'deploying' ? 'Starting deploy...' : 'Deploying contest stack...'}
+              </p>
+            </div>
+          )}
+          {deployState.phase === 'completed' && (
+            <div className="flex flex-col items-center gap-4 py-6">
+              <CheckCircle2 className="w-8 h-8 text-green-400" />
+              <p className="text-green-300 text-sm font-medium">Contest deployed successfully!</p>
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

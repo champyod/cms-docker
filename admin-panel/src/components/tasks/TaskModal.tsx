@@ -473,19 +473,22 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
                   <div>
                     <label className="block text-xs font-bold text-neutral-500 uppercase mb-4">Allowed Languages</label>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {PROGRAMMING_LANGUAGES.map(lang => (
-                        <button
-                          key={lang}
-                          type="button"
-                          onClick={() => handleLanguageToggle(lang)}
-                          className={`px-3 py-2 rounded-lg text-xs font-medium transition-all text-left truncate ${(formData.allowed_languages || []).includes(lang)
-                              ? 'bg-emerald-600/20 text-emerald-400 ring-1 ring-emerald-500/50'
-                              : 'bg-black/30 text-neutral-400 hover:bg-white/5'
-                            }`}
-                        >
-                          {lang}
-                        </button>
-                      ))}
+                      {PROGRAMMING_LANGUAGES.map(lang => {
+                        const displayName = lang.split(' / ')[0].trim();
+                        return (
+                          <button
+                            key={lang}
+                            type="button"
+                            onClick={() => handleLanguageToggle(lang)}
+                            className={`px-3 py-2 rounded-lg text-xs font-medium transition-all text-left truncate ${(formData.allowed_languages || []).includes(lang)
+                                ? 'bg-emerald-600/20 text-emerald-400 ring-1 ring-emerald-500/50'
+                                : 'bg-black/30 text-neutral-400 hover:bg-white/5'
+                              }`}
+                          >
+                            {displayName}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>

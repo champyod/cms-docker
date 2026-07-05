@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { ensurePermission } from '@/lib/permissions';
+import { validateContestData, intervalToString, CONSTRAINT_TO_FIELD_MAP, getConstraintErrorMessage } from '@/lib/contest-validation';
 
 const CONTESTS_PER_PAGE = 20;
 
@@ -66,10 +67,17 @@ export interface ContestData {
   analysis_enabled?: boolean;
   analysis_start?: string | Date;
   analysis_stop?: string | Date;
+  per_user_time?: number | null;
+  min_submission_interval_grace_period?: number | null;
 }
 
 export async function createContest(data: ContestData) {
   await ensurePermission('contests');
+
+  const validation = validateContestData(data);
+  if (!validation.valid) {
+    return { success: false, errors: validation.errors, error: 'Validation failed' };
+  }
 
   try {
     const startDate = new Date(data.start);
@@ -81,10 +89,16 @@ export async function createContest(data: ContestData) {
     const languages = data.languages || [];
     const allowed_localizations = data.allowed_localizations || [];
     const token_mode = data.token_mode || 'disabled';
-    const token_min_interval = `${data.token_min_interval || 0} seconds`;
-    const token_gen_interval = `${data.token_gen_interval || 30} minutes`;
-    const min_submission_interval = `${data.min_submission_interval || 0} seconds`;
-    const min_user_test_interval = `${data.min_user_test_interval || 0} seconds`;
+    const token_min_interval = intervalToString(data.token_min_interval || 0, 'seconds');
+    const token_gen_interval = intervalToString(data.token_gen_interval || 30, 'minutes');
+    const min_submission_interval = intervalToString(data.min_submission_interval || 0, 'seconds');
+    const min_user_test_interval = intervalToString(data.min_user_test_interval || 0, 'seconds');
+    const per_user_time = data.per_user_time !== undefined && data.per_user_time !== null
+      ? intervalToString(data.per_user_time, 'seconds')
+      : null;
+    const min_submission_interval_grace_period = data.min_submission_interval_grace_period !== undefined && data.min_submission_interval_grace_period !== null
+      ? intervalToString(data.min_submission_interval_grace_period, 'seconds')
+      : null;
     const queue_fairness_penalty_seconds = Math.max(0, Number(data.queue_fairness_penalty_seconds ?? 0) || 0);
 
     await prisma.$executeRaw`
@@ -102,7 +116,8 @@ export async function createContest(data: ContestData) {
         queue_fairness_penalty_seconds,
         start, stop,
         analysis_enabled, analysis_start, analysis_stop,
-        score_precision, timezone
+        score_precision, timezone,
+        per_user_time, min_submission_interval_grace_period
       ) VALUES (
         ${data.name}, ${data.description},
         ${allowed_localizations}, ${languages},
@@ -117,14 +132,27 @@ export async function createContest(data: ContestData) {
         ${queue_fairness_penalty_seconds},
         ${startDate}, ${stopDate},
         ${data.analysis_enabled ?? false}, ${analysisStart}, ${analysisStop},
-        ${data.score_precision ?? 0}, ${data.timezone}
+        ${data.score_precision ?? 0}, ${data.timezone},
+        ${per_user_time}::interval, ${min_submission_interval_grace_period}::interval
       )
     `;
 
-    revalidatePath('/[locale]/contests');
+    revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error & { code?: string };
+    
+    // Check for DB check constraints
+    for (const [constraint, field] of Object.entries(CONSTRAINT_TO_FIELD_MAP)) {
+      if (e.message?.includes(constraint)) {
+        return {
+          success: false,
+          errors: [{ field, message: getConstraintErrorMessage(constraint), code: constraint }],
+          error: getConstraintErrorMessage(constraint)
+        };
+      }
+    }
+
     if (e.code === 'P2002' || e.message?.includes('unique constraint')) {
       return { success: false, error: 'Contest name already exists' };
     }
@@ -135,6 +163,11 @@ export async function createContest(data: ContestData) {
 export async function updateContest(id: number, data: Partial<ContestData>) {
   await ensurePermission('contests');
 
+  const validation = validateContestData(data as ContestData, true);
+  if (!validation.valid) {
+    return { success: false, errors: validation.errors, error: 'Validation failed' };
+  }
+
   try {
     const toDate = (d: string | Date | undefined) => d ? new Date(d) : undefined;
 
@@ -143,17 +176,27 @@ export async function updateContest(id: number, data: Partial<ContestData>) {
     const analysisStart = toDate(data.analysis_start);
     const analysisStop = toDate(data.analysis_stop);
 
-    const token_min_interval = data.token_min_interval !== undefined ? `${data.token_min_interval} seconds` : null;
-    const token_gen_interval = data.token_gen_interval !== undefined ? `${data.token_gen_interval} minutes` : null;
-    const min_submission_interval = data.min_submission_interval !== undefined ? `${data.min_submission_interval} seconds` : null;
-    const min_user_test_interval = data.min_user_test_interval !== undefined ? `${data.min_user_test_interval} seconds` : null;
+    const token_min_interval = data.token_min_interval !== undefined && data.token_min_interval !== null
+      ? intervalToString(data.token_min_interval, 'seconds')
+      : null;
+    const token_gen_interval = data.token_gen_interval !== undefined && data.token_gen_interval !== null
+      ? intervalToString(data.token_gen_interval, 'minutes')
+      : null;
+    const min_submission_interval = data.min_submission_interval !== undefined && data.min_submission_interval !== null
+      ? intervalToString(data.min_submission_interval, 'seconds')
+      : null;
+    const min_user_test_interval = data.min_user_test_interval !== undefined && data.min_user_test_interval !== null
+      ? intervalToString(data.min_user_test_interval, 'seconds')
+      : null;
+    const per_user_time = data.per_user_time !== undefined && data.per_user_time !== null
+      ? intervalToString(data.per_user_time, 'seconds')
+      : null;
+    const min_submission_interval_grace_period = data.min_submission_interval_grace_period !== undefined && data.min_submission_interval_grace_period !== null
+      ? intervalToString(data.min_submission_interval_grace_period, 'seconds')
+      : null;
     const queue_fairness_penalty_seconds = data.queue_fairness_penalty_seconds !== undefined
       ? Math.max(0, Number(data.queue_fairness_penalty_seconds) || 0)
       : null;
-
-    // We use undefined checks to determine if we should update or keep existing.
-    // However, for nullable fields, we need to distinguish between "undefined (do not update)" and "null (set to null)".
-    // The modal should send `null` when it wants to unset.
 
     await prisma.$executeRaw`
       UPDATE contests SET
@@ -175,15 +218,6 @@ export async function updateContest(id: number, data: Partial<ContestData>) {
         ip_autologin = COALESCE(${data.ip_autologin}, ip_autologin),
         token_mode = COALESCE(${data.token_mode}::token_mode, token_mode),
         
-        -- Nullable fields: If data provides a value (including null), use it. If undefined, keep existing.
-        -- But COALESCE(null, existing) returns existing. We need to be able to set NULL.
-        -- We can use a CASE statement checking if the parameter itself is provided in the object.
-        -- But prisma raw variables don't work like that easily. 
-        -- Instead, we can assume the modal ALWAYS sends the full object for these critical sections or we rely on the fact 
-        -- that we are passing values directly.
-        
-        -- Simplified approach: The modal sends the FULL state for update. 
-        -- So we can just set the value.
         token_max_number = ${data.token_max_number},
         token_gen_max = ${data.token_gen_max},
         max_submission_number = ${data.max_submission_number},
@@ -201,14 +235,31 @@ export async function updateContest(id: number, data: Partial<ContestData>) {
         token_min_interval = CASE WHEN ${token_min_interval}::text IS NOT NULL THEN ${token_min_interval}::interval ELSE token_min_interval END,
         token_gen_interval = CASE WHEN ${token_gen_interval}::text IS NOT NULL THEN ${token_gen_interval}::interval ELSE token_gen_interval END,
         min_submission_interval = CASE WHEN ${min_submission_interval}::text IS NOT NULL THEN ${min_submission_interval}::interval ELSE min_submission_interval END,
-        min_user_test_interval = CASE WHEN ${min_user_test_interval}::text IS NOT NULL THEN ${min_user_test_interval}::interval ELSE min_user_test_interval END
+        min_user_test_interval = CASE WHEN ${min_user_test_interval}::text IS NOT NULL THEN ${min_user_test_interval}::interval ELSE min_user_test_interval END,
+        per_user_time = CASE WHEN ${per_user_time}::text IS NOT NULL THEN ${per_user_time}::interval ELSE per_user_time END,
+        min_submission_interval_grace_period = CASE WHEN ${min_submission_interval_grace_period}::text IS NOT NULL THEN ${min_submission_interval_grace_period}::interval ELSE min_submission_interval_grace_period END
       WHERE id = ${id}
     `;
 
-    revalidatePath('/[locale]/contests');
+    revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {
-    const e = error as Error;
+    const e = error as Error & { code?: string };
+
+    // Check for DB check constraints
+    for (const [constraint, field] of Object.entries(CONSTRAINT_TO_FIELD_MAP)) {
+      if (e.message?.includes(constraint)) {
+        return {
+          success: false,
+          errors: [{ field, message: getConstraintErrorMessage(constraint), code: constraint }],
+          error: getConstraintErrorMessage(constraint)
+        };
+      }
+    }
+
+    if (e.code === 'P2002' || e.message?.includes('unique constraint')) {
+      return { success: false, error: 'Contest name already exists' };
+    }
     return { success: false, error: e.message };
   }
 }
@@ -220,7 +271,7 @@ export async function deleteContest(id: number) {
     await prisma.contests.delete({
       where: { id },
     });
-    revalidatePath('/[locale]/contests');
+    revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;
@@ -237,7 +288,7 @@ export async function addParticipant(contestId: number, userId: number) {
       INSERT INTO participations (contest_id, user_id, hidden, unrestricted, delay_time, extra_time)
       VALUES (${contestId}, ${userId}, false, false, '0 seconds'::interval, '0 seconds'::interval)
     `;
-    revalidatePath('/[locale]/contests');
+    revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;
@@ -252,7 +303,7 @@ export async function removeParticipant(participationId: number) {
     await prisma.participations.delete({
       where: { id: participationId },
     });
-    revalidatePath('/[locale]/contests');
+    revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;
@@ -268,7 +319,7 @@ export async function addTaskToContest(contestId: number, taskId: number) {
       where: { id: taskId },
       data: { contest_id: contestId }
     });
-    revalidatePath('/[locale]/contests');
+    revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {
     return { success: false, error: (error as Error).message };
@@ -283,7 +334,7 @@ export async function removeTaskFromContest(taskId: number) {
       where: { id: taskId },
       data: { contest_id: null }
     });
-    revalidatePath('/[locale]/contests');
+    revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {
     return { success: false, error: (error as Error).message };
@@ -300,11 +351,41 @@ export async function getAvailableContests() {
       select: {
         id: true,
         name: true,
+        is_active: true,
       },
       orderBy: { id: 'asc' },
     });
     return { success: true, contests };
   } catch (error) {
     return { success: false, contests: [], error: (error as Error).message };
+  }
+}
+
+export async function activateContest(id: number) {
+  await ensurePermission('contests');
+  try {
+    // Single atomic statement: sets is_active=true for the given id,
+    // false for all others. No race window between clearing and setting.
+    await prisma.$executeRaw`
+      UPDATE contests SET is_active = (id = ${id})
+    `;
+    revalidatePath('/[locale]/contests', 'page');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+export async function getActiveContest() {
+  try {
+    const contest = await prisma.contests.findFirst({
+      where: { is_active: true },
+      include: {
+        _count: { select: { participations: true } },
+      },
+    });
+    return { success: true, contest };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 }
