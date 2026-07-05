@@ -27,7 +27,7 @@ export async function createAnnouncement(contestId: number, adminId: number, dat
         timestamp: new Date(),
       }
     });
-    revalidatePath('/[locale]/contests');
+    revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;
@@ -48,7 +48,7 @@ export async function updateAnnouncement(announcementId: number, data: {
         ...(data.text && { text: data.text }),
       }
     });
-    revalidatePath('/[locale]/contests');
+    revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;
@@ -62,7 +62,7 @@ export async function deleteAnnouncement(announcementId: number) {
     await prisma.announcements.delete({
       where: { id: announcementId }
     });
-    revalidatePath('/[locale]/contests');
+    revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;

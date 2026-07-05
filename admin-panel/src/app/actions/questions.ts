@@ -36,7 +36,7 @@ export async function replyToQuestion(questionId: number, adminId: number, data:
         ignored: false,
       }
     });
-    revalidatePath('/[locale]/contests');
+    revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;
@@ -53,7 +53,7 @@ export async function ignoreQuestion(questionId: number) {
       where: { id: questionId },
       data: { ignored: true }
     });
-    revalidatePath('/[locale]/contests');
+    revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;
@@ -70,7 +70,7 @@ export async function unignoreQuestion(questionId: number) {
       where: { id: questionId },
       data: { ignored: false }
     });
-    revalidatePath('/[locale]/contests');
+    revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;

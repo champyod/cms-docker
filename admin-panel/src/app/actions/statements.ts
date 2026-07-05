@@ -67,7 +67,7 @@ export async function addStatement(taskId: number, language: string, fileData: s
       DO UPDATE SET digest = ${digest}
     `;
     
-    revalidatePath('/[locale]/tasks');
+    revalidatePath('/[locale]/tasks', 'page');
     return { success: true, digest };
   } catch (error) {
     const e = error as Error;
@@ -83,7 +83,7 @@ export async function deleteStatement(statementId: number) {
     await prisma.statements.delete({
       where: { id: statementId }
     });
-    revalidatePath('/[locale]/tasks');
+    revalidatePath('/[locale]/tasks', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;
@@ -118,7 +118,7 @@ export async function addAttachment(taskId: number, filename: string, fileData: 
       DO UPDATE SET digest = ${digest}
     `;
     
-    revalidatePath('/[locale]/tasks');
+    revalidatePath('/[locale]/tasks', 'page');
     return { success: true, digest };
   } catch (error) {
     const e = error as Error;
@@ -134,7 +134,7 @@ export async function deleteAttachment(attachmentId: number) {
     await prisma.attachments.delete({
       where: { id: attachmentId }
     });
-    revalidatePath('/[locale]/tasks');
+    revalidatePath('/[locale]/tasks', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;
