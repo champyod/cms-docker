@@ -174,7 +174,7 @@ export async function getParticipationDetails(id: number) {
   const result = await prisma.$queryRaw<any[]>`
     SELECT 
       id, contest_id, user_id, team_id,
-      hidden, unrestricted, password,
+      hidden, unrestricted,
       EXTRACT(EPOCH FROM delay_time)::int as delay_time_seconds,
       EXTRACT(EPOCH FROM extra_time)::int as extra_time_seconds,
       starting_time,
@@ -193,12 +193,26 @@ export async function getParticipationDetails(id: number) {
     team_id: p.team_id,
     hidden: p.hidden,
     unrestricted: p.unrestricted,
-    password: p.password,
     delay_time_seconds: p.delay_time_seconds || 0,
     extra_time_seconds: p.extra_time_seconds || 0,
     starting_time: p.starting_time ? new Date(p.starting_time).toISOString().slice(0, 16) : '',
     ip_string: p.ip_string || '',
   };
+}
+
+export async function revealParticipationPassword(participationId: number): Promise<
+  { success: true; kind: 'plaintext'; value: string } | { success: true; kind: 'bcrypt' } | { success: false; error: string }
+> {
+  await ensurePermission('contests');
+  try {
+    const row = await prisma.participations.findUnique({ where: { id: participationId }, select: { password: true } });
+    const stored = row?.password;
+    if (!stored) return { success: true, kind: 'plaintext', value: '' };
+    if (stored.startsWith('plaintext:')) return { success: true, kind: 'plaintext', value: stored.slice('plaintext:'.length) };
+    return { success: true, kind: 'bcrypt' };
+  } catch {
+    return { success: false, error: 'Unable to load password' };
+  }
 }
 
 // Send a message to a participant
