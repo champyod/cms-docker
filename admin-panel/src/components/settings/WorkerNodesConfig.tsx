@@ -5,6 +5,7 @@ import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
 import { Plus, Trash2, Save, Server, Edit, RefreshCw, Wifi, WifiOff, Activity } from 'lucide-react';
 import { getWorkers, updateWorkers } from '@/app/actions/workerConfig';
+import { getWorkerStatus } from '@/app/actions/workers';
 import { useToast } from '@/components/providers/ToastProvider';
 
 interface WorkerStatus {
@@ -39,18 +40,12 @@ export function WorkerNodesConfig() {
     const statuses = await Promise.all(
       data.map(async (w) => {
         try {
-          const containerName = w.host.includes('cms-worker') ? w.host : `cms-worker-${w.host}`;
-          const res = await fetch('/api/workers/status', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ host: w.host, port: w.port })
-          });
-          const status = await res.json();
+          const res = await getWorkerStatus(w.host, w.port);
           return {
             host: w.host,
             port: w.port,
-            status: status.status || 'unknown',
-            containerRunning: status.containerRunning || false
+            status: (res.status || 'unknown') as WorkerStatus['status'],
+            containerRunning: res.containerRunning || false
           };
         } catch {
           return {
