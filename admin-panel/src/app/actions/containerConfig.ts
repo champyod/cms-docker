@@ -8,6 +8,8 @@ import path from 'path';
 
 const execPromise = util.promisify(exec);
 
+const CONTAINER_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/;
+
 const getRepoRoot = () => process.env.IS_DOCKER === 'true' ? '/repo-root' : path.resolve(process.cwd(), '..');
 
 const CONFIG_PATH = () => path.join(getRepoRoot(), 'config', 'container-restart.json');
@@ -82,11 +84,23 @@ export async function resetRestartCount(containerId: string) {
 }
 
 async function updateDockerRestartPolicy(containerId: string, autoRestart: boolean, maxRestarts: number) {
+  if (!CONTAINER_ID_RE.test(containerId)) {
+    throw new Error('Invalid container id or action');
+  }
   try {
-    let policy = 'no';
-
+    let policy: string;
     if (autoRestart) {
-      policy = `on-failure:${maxRestarts}`;
+      const validatedRestarts = Number.isInteger(maxRestarts) && maxRestarts >= 0 && maxRestarts <= 20 ? maxRestarts : 5;
+      policy = `on-failure:${validatedRestarts}`;
+      if (!/^on-failure:\d+$/.test(policy)) {
+        throw new Error('Invalid container id or action');
+      }
+    } else {
+      policy = 'no';
+    }
+    const allowedPolicies = ['no', 'always', 'unless-stopped'];
+    if (!allowedPolicies.includes(policy) && !/^on-failure:(?:[0-9]|1[0-9]|20)$/.test(policy)) {
+      throw new Error('Invalid container id or action');
     }
 
     await execPromise(`docker update --restart=${policy} ${containerId}`);
@@ -98,6 +112,9 @@ async function updateDockerRestartPolicy(containerId: string, autoRestart: boole
 
 export async function getContainerRestartCount(containerId: string): Promise<number> {
   await ensurePermission('all');
+  if (!CONTAINER_ID_RE.test(containerId)) {
+    return 0;
+  }
   try {
     const { stdout } = await execPromise(`docker inspect ${containerId} --format='{{.RestartCount}}'`);
     return parseInt(stdout.trim()) || 0;
@@ -108,6 +125,9 @@ export async function getContainerRestartCount(containerId: string): Promise<num
 
 export async function syncContainerConfigWithDocker(containerId: string) {
   await ensurePermission('all');
+  if (!CONTAINER_ID_RE.test(containerId)) {
+    return { success: false, error: 'Invalid container id or action' };
+  }
   try {
     // Get Docker restart policy
     const { stdout } = await execPromise(`docker inspect ${containerId} --format='{{.HostConfig.RestartPolicy.Name}}:{{.HostConfig.RestartPolicy.MaximumRetryCount}}'`);

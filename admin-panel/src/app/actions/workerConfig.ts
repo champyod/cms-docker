@@ -4,6 +4,8 @@ import fs from 'fs/promises';
 import path from 'path';
 import { ensurePermission } from '@/lib/permissions';
 
+const HOST_RE = /^[a-zA-Z0-9]([a-zA-Z0-9_.-]{0,62}[a-zA-Z0-9])?$/;
+
 // Helper to find cms.toml
 async function getCmsConfigPath() {
   const repoRoot = process.env.IS_DOCKER === 'true' ? '/repo-root' : path.resolve(process.cwd(), '..');
@@ -110,12 +112,24 @@ export async function getWorkers() {
 export async function updateWorkers(workers: { host: string; port: number }[]) {
   await ensurePermission('all');
 
+  const invalidEntries: string[] = [];
+  for (const w of workers) {
+    const validHost = typeof w.host === 'string' && HOST_RE.test(w.host);
+    const validPort = Number.isInteger(w.port) && w.port >= 1 && w.port <= 65535;
+    if (!validHost || !validPort) {
+      invalidEntries.push(`${w.host}:${w.port}`);
+    }
+  }
+  if (invalidEntries.length > 0) {
+    return { success: false, error: `Invalid hostnames or ports: ${invalidEntries.join(', ')}` };
+  }
+
   const configPath = await getCmsConfigPath();
   if (!configPath) return { success: false, error: 'cms.toml not found' };
 
   try {
     let content = await fs.readFile(configPath, 'utf-8');
-    
+
     // Construct new Worker array string
     const workerString = 'Worker = [\n' + workers.map(w => `    ["${w.host}", ${w.port}],`).join('\n') + '\n]';
     

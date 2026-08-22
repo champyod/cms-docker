@@ -58,6 +58,7 @@ export async function rebuildImages(stack: 'core' | 'admin' | 'worker' | 'all') 
 }
 
 export async function getCoreServicesStatus() {
+  await ensurePermission('all');
   try {
     const services = [
       'cms-database',
@@ -91,10 +92,12 @@ export async function getCoreServicesStatus() {
 }
 
 export async function getNetworkTrafficLogs(limit: number = 50) {
+  await ensurePermission('all');
   try {
+    const coercedLimit = Number.isInteger(Number(limit)) && Number(limit) >= 1 && Number(limit) <= 500 ? Number(limit) : 50;
     // Read network traffic from docker stats
     const { stdout } = await execPromise(
-      `docker stats --no-stream --format "{{.Name}}\t{{.NetIO}}" | head -n ${limit}`
+      `docker stats --no-stream --format "{{.Name}}\t{{.NetIO}}" | head -n ${coercedLimit}`
     );
 
     const logs = stdout.trim().split('\n').map((line, index) => {

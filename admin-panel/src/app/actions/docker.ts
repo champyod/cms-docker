@@ -7,6 +7,9 @@ import { ensurePermission } from '@/lib/permissions';
 
 const execPromise = util.promisify(exec);
 
+const CONTAINER_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/;
+const CONTAINER_ACTIONS = ['start', 'stop', 'restart', 'pause', 'unpause'] as const;
+
 const getRepoRoot = () => process.env.IS_DOCKER === 'true' ? '/repo-root' : path.resolve(process.cwd(), '..');
 
 export interface ContainerInfo {
@@ -47,8 +50,11 @@ export async function getContainers() {
   }
 }
 
-export async function controlContainer(id: string, action: 'start' | 'stop' | 'restart') {
+export async function controlContainer(id: string, action: 'start' | 'stop' | 'restart' | 'pause' | 'unpause') {
   await ensurePermission('all');
+  if (!(CONTAINER_ACTIONS as readonly string[]).includes(action) || !CONTAINER_ID_RE.test(id)) {
+    return { success: false, error: 'Invalid container id or action' };
+  }
   try {
     const { stdout, stderr } = await execPromise(`docker ${action} ${id}`);
     if (stderr && !stdout) throw new Error(stderr);
@@ -61,8 +67,12 @@ export async function controlContainer(id: string, action: 'start' | 'stop' | 'r
 
 export async function getContainerLogs(id: string, tail: number = 100) {
   await ensurePermission('all');
+  const coercedTail = Number.isInteger(Number(tail)) && Number(tail) >= 1 && Number(tail) <= 1000 ? Number(tail) : 100;
+  if (!CONTAINER_ID_RE.test(id)) {
+    return { success: false, error: 'Invalid container id or action' };
+  }
   try {
-    const { stdout, stderr } = await execPromise(`docker logs --tail ${tail} ${id}`);
+    const { stdout, stderr } = await execPromise(`docker logs --tail ${coercedTail} ${id}`);
     return { success: true, logs: stdout || stderr };
   } catch (error) {
     console.error(`Failed to get logs for container ${id}:`, error);
