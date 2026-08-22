@@ -58,7 +58,7 @@ export function ParticipationModal({
           delay_time_seconds: data.delay_time_seconds,
           ip: data.ip_string,
           starting_time: data.starting_time,
-          password: data.password || '',
+          password: '',
         });
       }
     } catch (e) {
@@ -87,7 +87,7 @@ export function ParticipationModal({
     setSaving(true);
 
     try {
-      const result = await updateParticipation(participationId, {
+      const payload: Parameters<typeof updateParticipation>[1] = {
         team_id: formData.team_id,
         hidden: formData.hidden,
         unrestricted: formData.unrestricted,
@@ -95,8 +95,11 @@ export function ParticipationModal({
         delay_time_seconds: formData.delay_time_seconds,
         ip: formData.ip,
         starting_time: formData.starting_time || null,
-        password: formData.password || null,
-      });
+      };
+      if (formData.password.trim().length > 0) {
+        payload.password = formData.password;
+      }
+      const result = await updateParticipation(participationId, payload);
 
       if (result.success) {
         onSuccess();
@@ -252,8 +255,8 @@ export function ParticipationModal({
                 label=""
                 value={formData.password}
                 onChange={(password) => setFormData({ ...formData, password })}
-                placeholder="Leave empty to use main password"
-                hint="Leave empty to use main password"
+                placeholder="Leave blank to keep current password"
+                hint="Leave blank to keep current password"
               />
             </div>
 
