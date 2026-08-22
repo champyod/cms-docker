@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # Source shared helpers if present — guard for absence per contract.
-if [[ -f "scripts/lib/common.sh" ]]; then
+if [[ -f "__lib/common.sh" ]]; then
   # shellcheck source=/dev/null
-  source "scripts/lib/common.sh"
+  source "__lib/common.sh"
 elif [[ -f "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh" ]]; then
   # shellcheck source=/dev/null
   source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
@@ -108,14 +108,22 @@ if not config_path.exists():
 
 text = config_path.read_text()
 
+def toml_escape(v): return v.replace("\\", "\\\\").replace('"', '\\"')
+
 user = os.environ.get("DB_USER", "cmsuser")
 pw = os.environ.get("DB_PASS", "your_password_here")
 host = os.environ.get("DB_HOST", "database")
 port = os.environ.get("DB_PORT", "5432")
 db = os.environ.get("DB_NAME", "cmsdb")
 
+# URL-encode user/pw for DB URL, TOML-escape host/db
+import urllib.parse as _up
+user_q = _up.quote(user, safe='')
+pw_q = _up.quote(pw, safe='')
+host_e = toml_escape(host)
+db_e = toml_escape(db)
 db_url_pattern = r'^url = "postgresql\+psycopg2://.*"'
-new_url = f'url = "postgresql+psycopg2://{user}:{pw}@{host}:{port}/{db}"'
+new_url = f'url = "postgresql+psycopg2://{user_q}:{pw_q}@{host_e}:{port}/{db_e}"'
 
 if re.search(db_url_pattern, text, re.MULTILINE):
     text = re.sub(db_url_pattern, lambda m: new_url, text, flags=re.MULTILINE)
@@ -124,7 +132,7 @@ else:
 
 cms_secret = os.environ.get("CMS_SECRET", "")
 if cms_secret:
-    text = re.sub(r'^secret_key = ".*"', lambda m: f'secret_key = "{cms_secret}"', text, flags=re.MULTILINE)
+    text = re.sub(r'^secret_key = ".*"', lambda m: f'secret_key = "{toml_escape(cms_secret)}"', text, flags=re.MULTILINE)
 
 r_user = os.environ.get("R_USER", "usern4me")
 r_pass = os.environ.get("R_PASS", "passw0rd")
@@ -138,7 +146,9 @@ for line in text.splitlines():
     if line.startswith('rankings = ["http://'):
         m = re.match(r'^(rankings = \["http://)([^:"]+):([^@"]+)@([^/"]+)(.*)$', line)
         if m:
-            line = f'{m.group(1)}{r_user}:{r_pass}@{ranking_host}{m.group(5)}'
+            r_user_q = _up.quote(r_user, safe='')
+            r_pass_q = _up.quote(r_pass, safe='')
+            line = f'{m.group(1)}{r_user_q}:{r_pass_q}@{ranking_host}{m.group(5)}'
     updated_lines.append(line)
 
 text = "\n".join(updated_lines) + ("\n" if text.endswith("\n") else "")
@@ -169,9 +179,9 @@ if p.exists():
     t = p.read_text()
     u = os.environ.get("R_USER", "")
     pw = os.environ.get("R_PASS", "")
-    # Replace keyed lines exactly once (idempotent).
-    t = re.sub(r'^username = ".*"', lambda m: f'username = "{u}"', t, flags=re.MULTILINE)
-    t = re.sub(r'^password = ".*"', lambda m: f'password = "{pw}"', t, flags=re.MULTILINE)
+    def toml_escape(v): return v.replace("\\", "\\\\").replace('"', '\\"')
+    t = re.sub(r'^username = ".*"', lambda m: f'username = "{toml_escape(u)}"', t, flags=re.MULTILINE)
+    t = re.sub(r'^password = ".*"', lambda m: f'password = "{toml_escape(pw)}"', t, flags=re.MULTILINE)
     p.write_text(t)
 PY
 fi

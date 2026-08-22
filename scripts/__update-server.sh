@@ -80,12 +80,12 @@ log "Running preflight checks..."
 # ---------------------------------------------------------------------------
 # (d) Safety backup before mutating anything
 # ---------------------------------------------------------------------------
-BACKUP_SCRIPT="scripts/cms-backup.sh"
+BACKUP_SCRIPT="__backup.sh"
 if [ -x "$BACKUP_SCRIPT" ]; then
     log "Running safety backup..."
     "$BACKUP_SCRIPT" || die "Backup failed; aborting update."
 else
-    warn "scripts/cms-backup.sh missing or not executable — SKIPPING SAFETY BACKUP."
+    warn "__backup.sh missing or not executable — SKIPPING SAFETY BACKUP."
     warn "Continuing WITHOUT a fresh backup. Consider Ctrl+C now."
 fi
 

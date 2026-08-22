@@ -106,10 +106,10 @@ check_connection() {
 
 run_update_mode() {
     print_step "Update Mode"
-    print_info "Using automated shard-aware update script (scripts/update-server.sh)..."
+    print_info "Using automated shard-aware update script (scripts/__update-server.sh)..."
     
-    chmod +x scripts/update-server.sh
-    ./scripts/update-server.sh
+    chmod +x scripts/__update-server.sh
+    ./scripts/__update-server.sh
     
     print_success "Update completed via update-server.sh."
     exit 0
@@ -140,14 +140,14 @@ configure_ranking_auth() {
         echo "DRY-RUN: Would update .env.contest: RANKING_USERNAME=$RANKING_USERNAME_INPUT"
         echo "DRY-RUN: Would update .env.contest: RANKING_PASSWORD=<hidden>"
         echo "DRY-RUN: Would run: make env"
-        echo "DRY-RUN: Would run: ./scripts/inject_config.sh"
+        echo "DRY-RUN: Would run: ./scripts/__inject_config.sh"
         return
     fi
 
     update_env_var .env.contest "RANKING_USERNAME" "$RANKING_USERNAME_INPUT"
     update_env_var .env.contest "RANKING_PASSWORD" "$RANKING_PASSWORD_INPUT"
     make env
-    ./scripts/inject_config.sh
+    ./scripts/__inject_config.sh
     print_success "Ranking credentials updated in .env.contest, .env, config/cms.toml, and config/cms_ranking.toml"
 }
 

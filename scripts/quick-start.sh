@@ -4,9 +4,9 @@ set -euo pipefail
 # quick-start.sh — thin delegator to the canonical Makefile workflow.
 # Uses docker compose plugin only; legacy compose binary and stale cms.conf not used.
 
-if [[ -f "scripts/lib/common.sh" ]]; then
+if [[ -f "__lib/common.sh" ]]; then
   # shellcheck source=/dev/null
-  source "scripts/lib/common.sh"
+  source "__lib/common.sh"
 elif [[ -f "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh" ]]; then
   # shellcheck source=/dev/null
   source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"

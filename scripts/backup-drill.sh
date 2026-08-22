@@ -201,11 +201,12 @@ log_info "Expected from manifest: db_bytes=$EXPECTED_DB_BYTES vol_bytes=$EXPECTE
 # ---------------------------------------------------------------------------
 log_info "Running cms-restore.sh into scratch container..."
 
-# Capture the restore output
-RESTORE_OUTPUT="$(bash "${SCRIPT_DIR}/cms-restore.sh" "$DUMP_FILE" 2>&1)" || true
-
-# Check exit code
-RESTORE_EXIT=$?
+# Capture the restore output without masking failure
+if ! RESTORE_OUTPUT="$(bash "${SCRIPT_DIR}/cms-restore.sh" "$DUMP_FILE" 2>&1)"; then
+  RESTORE_EXIT=$?
+else
+  RESTORE_EXIT=0
+fi
 
 # Get the verification counts from the restore output
 ACTUAL_SUB_COUNT="0"

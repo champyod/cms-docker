@@ -6,9 +6,9 @@ set -euo pipefail
 ###############################################################################
 
 # Source shared helpers if present — guard for absence.
-if [[ -f "scripts/lib/common.sh" ]]; then
+if [[ -f "__lib/common.sh" ]]; then
   # shellcheck source=/dev/null
-  source "scripts/lib/common.sh"
+  source "__lib/common.sh"
 elif [[ -f "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh" ]]; then
   # shellcheck source=/dev/null
   source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
@@ -52,8 +52,7 @@ log_info "Checking database connectivity..."
 
 if ! docker exec -i -e PGPASSWORD="$DB_PASS" cms-database psql -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1" >/dev/null 2>&1; then
   log_warn "Authentication failed or DB unreachable. Attempting password sync..."
-  # Use psql variable binding so ' in passwords cannot break SQL.
-  if ! docker exec -i cms-database psql -v pwd="$DB_PASS" -U "$DB_USER" -d postgres -c "ALTER USER \"$DB_USER\" WITH PASSWORD :'pwd';" >/dev/null 2>&1; then
+  if ! docker exec -i -e PGPASSWORD="$DB_PASS" -e CMS_DB_PWD="$DB_PASS" -e CMS_DB_USER="$DB_USER" cms-database bash -c "psql -v pwd=\"\$CMS_DB_PWD\" -v dbuser=\"\$CMS_DB_USER\" -U \"\$CMS_DB_USER\" -d postgres -c \"ALTER USER :\\\"dbuser\\\" WITH PASSWORD :'pwd';\"" >/dev/null 2>&1; then
     log_warn "Automatic password sync failed. If this is a fresh install, this is normal. Continuing to schema check."
   fi
 else
@@ -70,8 +69,8 @@ else
 fi
 
 log_info "Applying Admin UI schema patches..."
-if ! docker exec -i -e PGPASSWORD="$DB_PASS" cms-database psql -U "$DB_USER" -d "$DB_NAME" < "scripts/fix_db_schema.sql"; then
-  log_die "Failed to apply fix_db_schema.sql" 1
+if ! docker exec -i -e PGPASSWORD="$DB_PASS" cms-database psql -U "$DB_USER" -d "$DB_NAME" < "scripts/__fix_db_schema.sql"; then
+  log_die "Failed to apply __fix_db_schema.sql" 1
 fi
 
 log_info "Database Maintenance: Complete."
