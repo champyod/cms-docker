@@ -42,6 +42,8 @@ async function storeFile(data: Buffer): Promise<string> {
 
 // Get statements for a task
 export async function getStatements(taskId: number) {
+  await ensurePermission('tasks');
+
   return prisma.statements.findMany({
     where: { task_id: taskId },
     orderBy: { language: 'asc' }
@@ -93,6 +95,8 @@ export async function deleteStatement(statementId: number) {
 
 // Get attachments for a task
 export async function getAttachments(taskId: number) {
+  await ensurePermission('tasks');
+
   return prisma.attachments.findMany({
     where: { task_id: taskId },
     orderBy: { filename: 'asc' }

@@ -1,9 +1,12 @@
 'use server'
 
 import { prisma } from '@/lib/prisma';
+import { ensurePermission } from '@/lib/permissions';
 
 // Get ranking data for a contest
 export async function getRanking(contestId: number) {
+  await ensurePermission('contests');
+
   // Get all participations with their submissions
   const participations = await prisma.participations.findMany({
     where: { 
