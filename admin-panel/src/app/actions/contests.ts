@@ -24,6 +24,9 @@ export async function getContests({ page = 1, search = '' }: { page?: number; se
       skip,
       take: CONTESTS_PER_PAGE,
       orderBy: { id: 'desc' },
+      include: {
+        _count: { select: { participations: true, tasks: true } },
+      },
     }),
     prisma.contests.count({ where }),
   ]);

@@ -88,6 +88,7 @@ export function TaskList({ initialTasks, totalPages, permissions }: TaskListProp
               <TableHead className="text-neutral-400">Title</TableHead>
               <TableHead className="text-neutral-400">Contest</TableHead>
               <TableHead className="text-neutral-400">Resources</TableHead>
+              <TableHead className="text-neutral-400">Submissions</TableHead>
               <TableHead className="text-neutral-400 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -143,12 +144,15 @@ export function TaskList({ initialTasks, totalPages, permissions }: TaskListProp
                         <span>{task.statements.length}</span>
                       </div>
                       <div className="flex items-center gap-1" title="Datasets">
-                        <Database className="w-3 h-3" />
-                        <span>{task.datasets_datasets_task_idTotasks.length}</span>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
+                         <Database className="w-3 h-3" />
+                         <span>{task.datasets_datasets_task_idTotasks.length}</span>
+                       </div>
+                     </div>
+                   </TableCell>
+                   <TableCell className="text-xs text-neutral-400">
+                     {task._count?.submissions ?? 0}
+                   </TableCell>
+                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
                       {canManageTasks && (
                         <>
@@ -177,7 +181,7 @@ export function TaskList({ initialTasks, totalPages, permissions }: TaskListProp
             })}
             {tasks.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-12 text-neutral-500">
+                <TableCell colSpan={7} className="text-center py-12 text-neutral-500">
                   No tasks found.
                 </TableCell>
               </TableRow>

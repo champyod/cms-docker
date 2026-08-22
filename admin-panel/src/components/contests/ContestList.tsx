@@ -137,6 +137,8 @@ export function ContestList({ initialContests, totalPages, permissions }: Contes
               <TableHead className="text-neutral-400">Name</TableHead>
               <TableHead className="text-neutral-400">Status</TableHead>
               <TableHead className="text-neutral-400">Timeline</TableHead>
+              <TableHead className="text-neutral-400">Tasks</TableHead>
+              <TableHead className="text-neutral-400">Participants</TableHead>
               <TableHead className="text-neutral-400 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -181,12 +183,18 @@ export function ContestList({ initialContests, totalPages, permissions }: Contes
                                 <span>{formatDate(contest.start)}</span>
                             </div>
                              <div className="flex items-center gap-2">
-                                <Clock className="w-3 h-3" />
-                                <span>{formatDate(contest.stop)}</span>
-                            </div>
-                        </div>
-                    </TableCell>
-                    <TableCell className="text-right">
+                                 <Clock className="w-3 h-3" />
+                                 <span>{formatDate(contest.stop)}</span>
+                             </div>
+                         </div>
+                     </TableCell>
+                     <TableCell className="text-xs text-neutral-400">
+                         {contest._count?.tasks ?? 0}
+                     </TableCell>
+                     <TableCell className="text-xs text-neutral-400">
+                         {contest._count?.participations ?? 0}
+                     </TableCell>
+                     <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
                         {isSuperAdmin && !isActive && (
                             <Button
@@ -216,7 +224,7 @@ export function ContestList({ initialContests, totalPages, permissions }: Contes
             })}
             {contests.length === 0 && (
                 <TableRow>
-                    <TableCell colSpan={5} className="text-center py-12 text-neutral-500">
+                    <TableCell colSpan={7} className="text-center py-12 text-neutral-500">
                         No contests found.
                     </TableCell>
                 </TableRow>
