@@ -3,13 +3,15 @@
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { ensurePermission } from '@/lib/permissions';
+import { safeUserSelect } from '@/lib/prisma-selects';
 
 // Get participation details
 export async function getParticipation(participationId: number) {
+  await ensurePermission('contests');
   return prisma.participations.findUnique({
     where: { id: participationId },
     include: {
-      users: true,
+      users: { select: safeUserSelect },
       contests: true,
       submissions: { orderBy: { timestamp: 'desc' }, take: 10 },
       messages: { orderBy: { timestamp: 'desc' } },
@@ -40,15 +42,31 @@ export async function updateParticipation(participationId: number, data: {
     const password = data.password ?? null;
     const startingTime = data.starting_time ? new Date(data.starting_time) : null;
 
-    // Parse IP addresses - handle comma-separated list
     const ipArray = data.ip
       ? data.ip.split(',').map(ip => ip.trim()).filter(ip => ip.length > 0)
       : [];
 
-    // Build the IP array literal safely
-    const ipArrayLiteral = ipArray.length > 0
-      ? `ARRAY[${ipArray.map(ip => `'${ip}'::cidr`).join(',')}]`
-      : 'ARRAY[]::_cidr';
+    if (ipArray.length > 50) {
+      return { success: false, error: 'Too many IP entries (max 50)' };
+    }
+
+    const cidrRegex = /^(\d{1,3}\.){3}\d{1,3}(\/(3[0-2]|[12]?\d))?$/;
+    const validIps = ipArray.filter(ip => {
+      if (!cidrRegex.test(ip)) return false;
+      const addr = ip.split('/')[0] ?? '';
+      const octets = addr.split('.');
+      return octets.every(octet => Number(octet) <= 255);
+    });
+
+    if (validIps.length > 50) {
+      return { success: false, error: 'Too many IP entries (max 50)' };
+    }
+
+    const ipClause = validIps.length > 0
+      ? `ARRAY[${validIps.map((_, idx) => `$${idx + 9}::cidr`).join(',')}]`
+      : 'NULL';
+
+    const params: unknown[] = [teamId, hidden, unrestricted, extraTime.toString(), delayTime.toString(), password, startingTime, participationId, ...validIps];
 
     await prisma.$executeRawUnsafe(`
       UPDATE participations SET
@@ -59,9 +77,9 @@ export async function updateParticipation(participationId: number, data: {
         delay_time = ($5 || ' seconds')::interval,
         password = $6,
         starting_time = $7,
-        ip = ${ipArrayLiteral}
+        ip = ${ipClause}
       WHERE id = $8
-    `, teamId, hidden, unrestricted, extraTime.toString(), delayTime.toString(), password, startingTime, participationId);
+    `, ...params);
 
     revalidatePath('/[locale]/contests', 'page');
     return { success: true };
@@ -152,6 +170,7 @@ export async function addTeamToContest(
 
 // Get participation with interval fields as seconds
 export async function getParticipationDetails(id: number) {
+  await ensurePermission('contests');
   const result = await prisma.$queryRaw<any[]>`
     SELECT 
       id, contest_id, user_id, team_id,
@@ -209,6 +228,7 @@ export async function sendMessage(participationId: number, adminId: number, data
 
 // Get messages for a participation
 export async function getMessages(participationId: number) {
+  await ensurePermission('contests');
   return prisma.messages.findMany({
     where: { participation_id: participationId },
     include: { admins: { select: { username: true } } },
