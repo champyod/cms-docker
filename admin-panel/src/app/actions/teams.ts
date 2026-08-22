@@ -3,9 +3,12 @@
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { ensurePermission } from '@/lib/permissions';
+import { safeUserSelect } from '@/lib/prisma-selects';
 
 // Get all teams
 export async function getTeams() {
+  await ensurePermission('users');
+
   return prisma.teams.findMany({
     include: {
       _count: { select: { participations: true } }
@@ -72,12 +75,14 @@ export async function deleteTeam(teamId: number) {
 
 // Get a single team with members and contests
 export async function getTeamWithDetails(teamId: number) {
+  await ensurePermission('users');
+
   const team = await prisma.teams.findUnique({
     where: { id: teamId },
     include: {
       participations: {
         include: {
-          users: true,
+          users: { select: safeUserSelect },
           contests: {
             select: { id: true, name: true, description: true, start: true, stop: true }
           }
