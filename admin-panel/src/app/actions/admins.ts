@@ -3,7 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import bcrypt from 'bcryptjs';
-import { ensurePermission } from '@/lib/permissions';
+import { ensurePermission, invalidateAccessCache } from '@/lib/permissions';
 import { getSession } from '@/lib/auth';
 import { safeAdminSelect } from '@/lib/prisma-selects';
 
@@ -111,6 +111,7 @@ export async function updateAdmin(adminId: number, data: {
       where: { id: adminId },
       data: updateData
     });
+    invalidateAccessCache(String(adminId));
     revalidatePath('/[locale]/admins', 'page');
     return { success: true };
   } catch (error) {
@@ -148,6 +149,7 @@ export async function deleteAdmin(adminId: number) {
 
   try {
     await prisma.admins.delete({ where: { id: adminId } });
+    invalidateAccessCache(String(adminId));
     revalidatePath('/[locale]/admins', 'page');
     return { success: true };
   } catch (error) {

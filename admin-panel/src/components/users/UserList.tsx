@@ -214,7 +214,7 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
                   onChange={(event) => toggleAll(event.target.checked)}
                 />
               </TableHead>
-              <TableHead className="text-neutral-400">ID</TableHead>
+              <TableHead className="text-neutral-400">#</TableHead>
               <TableHead className="text-neutral-400">Name</TableHead>
               <TableHead className="text-neutral-400">Username</TableHead>
               <TableHead className="text-neutral-400">Team</TableHead>

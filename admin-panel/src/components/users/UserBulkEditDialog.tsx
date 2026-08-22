@@ -500,7 +500,7 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
                 <tbody>
                   {rows.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-3 py-6 text-center text-neutral-500">
+                      <td colSpan={6} className="px-3 py-6 text-center text-neutral-500">
                         No selected users
                       </td>
                     </tr>

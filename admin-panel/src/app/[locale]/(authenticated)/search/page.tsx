@@ -10,7 +10,7 @@ export default async function SearchPage({
 }) {
   const { locale } = await params;
   const dict = await getDictionary(locale);
-  const hasPermission = await checkPermission('users', false);
+  const hasPermission = await checkPermission('all', false);
 
   if (!hasPermission) {
     return <PermissionDenied permission="permission_users" locale={locale} dict={dict} />;
