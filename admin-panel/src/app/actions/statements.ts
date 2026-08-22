@@ -144,6 +144,8 @@ export async function deleteAttachment(attachmentId: number) {
 
 // Download file by digest
 export async function getFileByDigest(digest: string): Promise<{ data: string } | null> {
+  await ensurePermission('tasks');
+
   try {
     const result = await prisma.$queryRaw<any[]>`
       SELECT lo_get(lob_oid) as data FROM fsobjects WHERE digest = ${digest}

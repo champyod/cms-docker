@@ -1,8 +1,11 @@
 'use server';
 
 import { prisma } from '@/lib/prisma';
+import { ensurePermission } from '@/lib/permissions';
+import { safeUserSelect, safeAdminSelect } from '@/lib/prisma-selects';
 
 export async function searchAll(query: string) {
+  await ensurePermission('all');
   if (!query) return { users: [], tasks: [], contests: [], admins: [] };
 
   const [users, tasks, contests, admins] = await Promise.all([
@@ -14,6 +17,7 @@ export async function searchAll(query: string) {
           { last_name: { contains: query, mode: 'insensitive' } },
         ]
       },
+      select: safeUserSelect,
       take: 10
     }),
     prisma.tasks.findMany({
@@ -38,11 +42,12 @@ export async function searchAll(query: string) {
         where: {
              OR: [
                 { username: { contains: query, mode: 'insensitive' } },
-                { name: { contains: query, mode: 'insensitive' } },
-             ]
-        },
-        take: 10
-    })
+                 { name: { contains: query, mode: 'insensitive' } },
+              ]
+          },
+          select: safeAdminSelect,
+          take: 10
+      })
   ]);
 
   return { users, tasks, contests, admins };
