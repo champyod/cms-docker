@@ -1,4 +1,6 @@
+import { checkPermission } from '@/lib/permissions';
 import { getDictionary } from '@/i18n';
+import { PermissionDenied } from '@/components/PermissionDenied';
 import { Card } from '@/components/core/Card';
 import {
   Users,
@@ -89,6 +91,12 @@ export default async function DashboardPage({
 }) {
   const { locale } = await paramsPromise;
   const dict = await getDictionary(locale);
+  const hasPermission = await checkPermission('all', false);
+
+  if (!hasPermission) {
+    return <PermissionDenied permission="permission_all" locale={locale} dict={dict} />;
+  }
+
   const [stats, serviceStatus, recentActivity] = await Promise.all([
     getStats(),
     getServiceStatus(),
