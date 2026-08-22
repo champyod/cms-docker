@@ -4,11 +4,14 @@ import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import bcrypt from 'bcryptjs';
 import { ensurePermission } from '@/lib/permissions';
+import { getSession } from '@/lib/auth';
+import { safeAdminSelect } from '@/lib/prisma-selects';
 
 // Get all admins
 export async function getAdmins() {
   await ensurePermission('all');
   return prisma.admins.findMany({
+    select: safeAdminSelect,
     orderBy: { username: 'asc' }
   });
 }
@@ -34,7 +37,7 @@ export async function createAdmin(data: {
         authentication: `bcrypt:${hashedPassword}`,
         enabled: true,
         permission_all: data.permission_all ?? false,
-        permission_messaging: data.permission_messaging ?? true,
+        permission_messaging: data.permission_messaging ?? false,
         permission_tasks: data.permission_tasks ?? false,
         permission_users: data.permission_users ?? false,
         permission_contests: data.permission_contests ?? false,
@@ -63,6 +66,33 @@ export async function updateAdmin(adminId: number, data: {
   password?: string;
 }) {
   await ensurePermission('all');
+
+  const session = await getSession();
+  if (!session) {
+    return { success: false, error: 'Not authenticated' };
+  }
+
+  const target = await prisma.admins.findUnique({
+    where: { id: adminId },
+    select: { permission_all: true, enabled: true },
+  });
+
+  if (session.userId === String(adminId)
+    && target?.permission_all === true
+    && data.permission_all === false) {
+    return { success: false, error: 'Cannot demote your own superadmin account' };
+  }
+
+  if (target?.permission_all === true
+    && ((data.permission_all !== undefined && !data.permission_all) || data.enabled === false)) {
+    const otherSupers = await prisma.admins.count({
+      where: { permission_all: true, enabled: true, NOT: { id: adminId } },
+    });
+    if (otherSupers === 0) {
+      return { success: false, error: 'Cannot remove the last superadmin' };
+    }
+  }
+
   try {
     const updateData: any = {};
     if (data.name) updateData.name = data.name;
@@ -92,6 +122,30 @@ export async function updateAdmin(adminId: number, data: {
 // Delete an admin
 export async function deleteAdmin(adminId: number) {
   await ensurePermission('all');
+
+  const session = await getSession();
+  if (!session) {
+    return { success: false, error: 'Not authenticated' };
+  }
+
+  if (session.userId === String(adminId)) {
+    return { success: false, error: 'Cannot delete your own account' };
+  }
+
+  const target = await prisma.admins.findUnique({
+    where: { id: adminId },
+    select: { permission_all: true },
+  });
+
+  if (target?.permission_all) {
+    const otherSupers = await prisma.admins.count({
+      where: { permission_all: true, enabled: true, NOT: { id: adminId } },
+    });
+    if (otherSupers === 0) {
+      return { success: false, error: 'Cannot remove the last superadmin' };
+    }
+  }
+
   try {
     await prisma.admins.delete({ where: { id: adminId } });
     revalidatePath('/[locale]/admins', 'page');
