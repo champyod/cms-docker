@@ -121,6 +121,7 @@ async function cleanStaleOperations(): Promise<void> {
 }
 
 export async function analyzeRestartRequirements(changedKeys: string[]) {
+    await ensurePermission('all');
     const policies = await getRestartPolicies();
     if (!policies) return { requiredRestarts: [] };
 
@@ -473,6 +474,7 @@ export async function triggerManualBackup() {
 }
 
 export async function getServiceStatus() {
+    await ensurePermission('all');
     try {
         const { stdout } = await execPromise('docker ps -a --format "{{json .}}"');
         if (!stdout.trim()) return { status: 'down' as const, running: 0, total: 0 };
