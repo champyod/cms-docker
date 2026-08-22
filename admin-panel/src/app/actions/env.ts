@@ -6,11 +6,20 @@ import { ensurePermission } from '@/lib/permissions';
 
 const getRepoRoot = () => process.env.IS_DOCKER === 'true' ? '/repo-root' : path.resolve(process.cwd(), '..');
 
+const ALLOWED_ENV_FILES = new Set(['.env', '.env.contest', '.env.example', '.env.production']);
+
+function resolveEnvPath(repoRoot: string, filename: string): string {
+  if (!ALLOWED_ENV_FILES.has(filename)) {
+    throw new Error(`File not allowed: ${filename}`);
+  }
+  return path.join(repoRoot, filename);
+}
+
 export async function readEnvFile(filename: string) {
   await ensurePermission('all');
   try {
     const repoRoot = getRepoRoot();
-    const envPath = path.join(repoRoot, filename);
+    const envPath = resolveEnvPath(repoRoot, filename);
     const content = await fs.readFile(envPath, 'utf-8');
     
     // Parse into key-value pairs
@@ -35,16 +44,21 @@ export async function updateEnvFile(filename: string, updates: Record<string, st
   await ensurePermission('all');
   try {
     const repoRoot = getRepoRoot();
-    const envPath = path.join(repoRoot, filename);
+    const envPath = resolveEnvPath(repoRoot, filename);
     let content = await fs.readFile(envPath, 'utf-8');
     
     // Update or append
     Object.entries(updates).forEach(([key, value]) => {
-      const regex = new RegExp(`^${key}=.*`, 'm');
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+        return;
+      }
+      const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const sanitizedValue = value.replace(/[\r\n]+/g, ' ');
+      const regex = new RegExp(`^${escapedKey}=.*`, 'm');
       if (regex.test(content)) {
-        content = content.replace(regex, `${key}=${value}`);
+        content = content.replace(regex, `${key}=${sanitizedValue}`);
       } else {
-        content += `\n${key}=${value}`;
+        content += `\n${key}=${sanitizedValue}`;
       }
     });
 
@@ -123,12 +137,11 @@ export async function migrateFromMultiContest(): Promise<{ success: true; contes
           content = content.replace(/^CONTESTS_DEPLOY_CONFIG=.*\n?/m, '');
           content += `\n# Migrated from multi-contest format\nACTIVE_CONTEST_ID=${firstContestId}\nCONTEST_ID=${firstContestId}\n`;
           await fs.writeFile(envPath, content);
-          console.log(`Migrated from multi-contest format. Active contest set to ID ${firstContestId}`);
           return { success: true, contestId: firstContestId, migrated: true };
         }
       }
-    } catch (parseError) {
-      console.error('Failed to parse CONTESTS_DEPLOY_CONFIG:', parseError);
+    } catch {
+      // Fall through to the not-migrated result below
     }
     
     return { success: true, contestId: null, migrated: false };
