@@ -4,6 +4,9 @@ import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import fs from 'fs/promises';
+import path from 'path';
+import os from 'os';
 
 type GenerationMode = 'none' | 'username' | 'password' | 'both';
 
@@ -54,9 +57,52 @@ function shouldGeneratePassword(mode: GenerationMode) {
   return mode === 'password' || mode === 'both';
 }
 
+async function cleanupExpiredCreds(): Promise<void> {
+  try {
+    const dir = os.tmpdir();
+    const files = await fs.readdir(dir);
+    const now = Date.now();
+    const maxAgeMs = 15 * 60 * 1000;
+    await Promise.all(
+      files
+        .filter((f) => f.startsWith('cms-creds-') && f.endsWith('.csv'))
+        .map(async (f) => {
+          try {
+            const full = path.join(dir, f);
+            const stat = await fs.stat(full);
+            if (now - stat.mtimeMs > maxAgeMs) {
+              await fs.unlink(full);
+            }
+          } catch {
+            // ignore per-file errors
+          }
+        })
+    );
+  } catch {
+    // ignore cleanup errors
+  }
+}
+
+function csvEscape(value: string): string {
+  const str = String(value ?? '');
+  if (str.includes('"') || str.includes(',') || str.includes('\n') || str.includes('\r')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+async function writeCredsCsv(content: string): Promise<{ token: string; downloadUrl: string }> {
+  const token = crypto.randomBytes(24).toString('hex');
+  const filePath = path.join(os.tmpdir(), `cms-creds-${token}.csv`);
+  await fs.writeFile(filePath, content, { mode: 0o600 });
+  return { token, downloadUrl: `/api/users/credentials/${token}` };
+}
+
 export async function POST(req: NextRequest) {
   const { authorized, response } = await verifyApiPermission('users');
   if (!authorized) return response;
+
+  await cleanupExpiredCreds();
 
   try {
     const body = await req.json();
@@ -68,7 +114,7 @@ export async function POST(req: NextRequest) {
       return apiError({ message: 'No rows provided', status: 400 });
     }
 
-    const created: Array<{ rowIndex: number; username: string; password?: string }> = [];
+    const created: Array<{ rowIndex: number; username: string; plainPassword?: string }> = [];
     const failed: Array<{ rowIndex: number; reason: string }> = [];
     const seenUsernames = new Set<string>();
 
@@ -165,10 +211,11 @@ export async function POST(req: NextRequest) {
           `;
         }
 
+        const shouldExposePassword = shouldGeneratePassword(generationMode) && !(row.password ?? '').trim();
         created.push({
           rowIndex,
           username,
-          password: shouldGeneratePassword(generationMode) && !(row.password ?? '').trim() ? plainPassword : undefined,
+          plainPassword: shouldExposePassword ? plainPassword : undefined,
         });
       } catch (error: any) {
         if (error.code === 'P2002') {
@@ -184,10 +231,26 @@ export async function POST(req: NextRequest) {
       revalidatePath('/[locale]/contests', 'page');
     }
 
+    const credsRows = created.filter((c) => c.plainPassword);
+    if (credsRows.length > 0) {
+      const lines = ['row_index,username,password'];
+      for (const c of credsRows) {
+        lines.push(`${c.rowIndex},${csvEscape(c.username)},${csvEscape(c.plainPassword ?? '')}`);
+      }
+      const csv = lines.join('\n') + '\n';
+      const { downloadUrl } = await writeCredsCsv(csv);
+      return apiSuccess({
+        createdCount: created.length,
+        failedCount: failed.length,
+        downloadUrl,
+        count: credsRows.length,
+        failed,
+      });
+    }
+
     return apiSuccess({
       createdCount: created.length,
       failedCount: failed.length,
-      created,
       failed,
     });
   } catch (error: any) {

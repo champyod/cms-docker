@@ -1,5 +1,9 @@
 import { NextRequest } from 'next/server';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
+import fs from 'fs/promises';
+import path from 'path';
+import os from 'os';
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { apiError, apiSuccess, verifyApiPermission } from '@/lib/api-utils';
@@ -11,12 +15,7 @@ type TeamMode = 'set' | 'remove-any';
 type ProfileMode = 'timezone' | 'email-domain' | 'clear-email';
 
 function randomToken(length: number) {
-  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let token = '';
-  for (let i = 0; i < length; i += 1) {
-    token += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return token;
+  return crypto.randomBytes(Math.ceil(length / 2)).toString('hex').slice(0, length);
 }
 
 function makeUsername(firstName: string, lastName: string) {
@@ -49,9 +48,52 @@ async function ensureUniqueUsername(firstName: string, lastName: string, localSe
   throw new Error('Unable to generate unique username');
 }
 
+async function cleanupExpiredCreds(): Promise<void> {
+  try {
+    const dir = os.tmpdir();
+    const files = await fs.readdir(dir);
+    const now = Date.now();
+    const maxAgeMs = 15 * 60 * 1000;
+    await Promise.all(
+      files
+        .filter((f) => f.startsWith('cms-creds-') && f.endsWith('.csv'))
+        .map(async (f) => {
+          try {
+            const full = path.join(dir, f);
+            const stat = await fs.stat(full);
+            if (now - stat.mtimeMs > maxAgeMs) {
+              await fs.unlink(full);
+            }
+          } catch {
+            // ignore per-file errors
+          }
+        })
+    );
+  } catch {
+    // ignore cleanup errors
+  }
+}
+
+function csvEscape(value: string): string {
+  const str = String(value ?? '');
+  if (str.includes('"') || str.includes(',') || str.includes('\n') || str.includes('\r')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+async function writeCredsCsv(content: string): Promise<{ token: string; downloadUrl: string }> {
+  const token = crypto.randomBytes(24).toString('hex');
+  const filePath = path.join(os.tmpdir(), `cms-creds-${token}.csv`);
+  await fs.writeFile(filePath, content, { mode: 0o600 });
+  return { token, downloadUrl: `/api/users/credentials/${token}` };
+}
+
 export async function POST(req: NextRequest) {
   const { authorized, response } = await verifyApiPermission('users');
   if (!authorized) return response;
+
+  await cleanupExpiredCreds();
 
   try {
     const body = await req.json();
@@ -104,24 +146,27 @@ export async function POST(req: NextRequest) {
 
       revalidatePath('/[locale]/users', 'page');
 
-      // If export requested, return a CSV attachment containing the exact
-      // plaintext passwords/usernames that were applied so the exported file
-      // matches what was stored.
-      const doExport = Boolean(body?.export);
-      if (doExport) {
+      if (mode === 'password') {
         const rows = ['id,username,password'];
-        for (const r of updated) rows.push(`${r.id},${r.username ?? ''},${r.password ?? ''}`);
-        const csv = rows.join('\n');
-        return new Response(csv, {
-          status: 200,
-          headers: {
-            'Content-Type': 'text/csv; charset=utf-8',
-            'Content-Disposition': 'attachment; filename="users_regenerated.csv"',
-          },
-        });
+        for (const r of updated) rows.push(`${r.id},${csvEscape(r.username ?? '')},${csvEscape(r.password ?? '')}`);
+        const csv = rows.join('\n') + '\n';
+        const { downloadUrl } = await writeCredsCsv(csv);
+        return apiSuccess({ success: true, downloadUrl, count: updated.length });
       }
 
-      return apiSuccess({ success: true, updated });
+      if (mode === 'username') {
+        const hasExport = Boolean(body?.export);
+        if (hasExport) {
+          const rows = ['id,username,password'];
+          for (const r of updated) rows.push(`${r.id},${csvEscape(r.username ?? '')},${csvEscape(r.password ?? '')}`);
+          const csv = rows.join('\n') + '\n';
+          const { downloadUrl } = await writeCredsCsv(csv);
+          return apiSuccess({ success: true, downloadUrl, count: updated.length });
+        }
+        return apiSuccess({ success: true, count: updated.length });
+      }
+
+      return apiSuccess({ success: true, count: updated.length });
     }
 
     if (action === 'apply-credentials') {
@@ -168,23 +213,12 @@ export async function POST(req: NextRequest) {
       }
 
       revalidatePath('/[locale]/users', 'page');
-      // Support exporting the exact plaintexts applied as a CSV so the
-      // exported file always matches what was saved.
-      const doExportApply = Boolean(body?.export);
-      if (doExportApply) {
-        const rows = ['id,username,password'];
-        for (const r of updated) rows.push(`${r.id},${r.username ?? ''},${r.password ?? ''}`);
-        const csv = rows.join('\n');
-        return new Response(csv, {
-          status: 200,
-          headers: {
-            'Content-Type': 'text/csv; charset=utf-8',
-            'Content-Disposition': 'attachment; filename="users_applied.csv"',
-          },
-        });
-      }
 
-      return apiSuccess({ success: true, updated, failed });
+      const rows = ['id,username,password'];
+      for (const r of updated) rows.push(`${r.id},${csvEscape(r.username ?? '')},${csvEscape(r.password ?? '')}`);
+      const csv = rows.join('\n') + '\n';
+      const { downloadUrl } = await writeCredsCsv(csv);
+      return apiSuccess({ success: true, downloadUrl, count: updated.length, failed });
     }
 
     if (action === 'contest') {

@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
+import { safeUserSelect } from '@/lib/prisma-selects';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import bcrypt from 'bcryptjs';
@@ -37,7 +38,8 @@ export async function GET(req: NextRequest) {
         skip,
         take: perPage,
         orderBy: { id: 'asc' },
-        include: {
+        select: {
+          ...safeUserSelect,
           participations: {
             select: {
               teams: {
@@ -80,7 +82,7 @@ export async function POST(req: NextRequest) {
     const hash = await bcrypt.hash(password, salt);
     const storedPassword = `bcrypt:${hash}`;
 
-    const user = await prisma.users.create({
+    const created = await prisma.users.create({
       data: {
         first_name,
         last_name,
@@ -91,6 +93,8 @@ export async function POST(req: NextRequest) {
         preferred_languages: [],
       },
     });
+
+    const user = await prisma.users.findUnique({ where: { id: created.id }, select: safeUserSelect });
 
     revalidatePath('/[locale]/users', 'page');
     return apiSuccess({ user });

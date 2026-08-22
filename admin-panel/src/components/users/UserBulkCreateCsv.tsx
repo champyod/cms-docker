@@ -185,18 +185,15 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests }: User
   };
 
   const handleExportCreatedCredentials = () => {
-    if (!submitResult?.success || !Array.isArray(submitResult.created) || submitResult.created.length === 0) {
+    if (!submitResult?.success || !submitResult.downloadUrl) {
       return;
     }
-
-    const lines = ['row_index,username,password'];
-    submitResult.created.forEach((entry: { rowIndex: number; username: string; password?: string }) => {
-      const escapedUsername = `"${String(entry.username ?? '').replace(/"/g, '""')}"`;
-      const escapedPassword = `"${String(entry.password ?? '').replace(/"/g, '""')}"`;
-      lines.push(`${entry.rowIndex},${escapedUsername},${escapedPassword}`);
-    });
-
-    downloadCsv('users-created-credentials.csv', `${lines.join('\n')}\n`);
+    const anchor = document.createElement('a');
+    anchor.href = submitResult.downloadUrl;
+    anchor.setAttribute('download', `users-created-credentials-${Date.now()}.csv`);
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
   };
 
   const handleExportSelectedPreview = () => {
@@ -551,10 +548,10 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests }: User
               {submitResult.success ? (
                 <div className="space-y-1">
                   <div>Created: {submitResult.createdCount} | Failed: {submitResult.failedCount}</div>
-                  {Array.isArray(submitResult.created) && submitResult.created.length > 0 && (
+                  {submitResult.downloadUrl && (
                     <div className="pt-2">
                       <Button variant="ghost" onClick={handleExportCreatedCredentials}>
-                        <FileSpreadsheet className="w-4 h-4 mr-2" /> Export Created Credentials CSV
+                        <FileSpreadsheet className="w-4 h-4 mr-2" /> Download Credentials CSV
                       </Button>
                     </div>
                   )}

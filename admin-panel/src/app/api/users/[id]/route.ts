@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
+import { safeUserSelect } from '@/lib/prisma-selects';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import bcrypt from 'bcryptjs';
@@ -31,10 +32,12 @@ export async function PUT(
       updateData.password = `bcrypt:${hash}`;
     }
 
-    const user = await prisma.users.update({
+    await prisma.users.update({
       where: { id },
       data: updateData,
     });
+
+    const user = await prisma.users.findUnique({ where: { id }, select: safeUserSelect });
 
     revalidatePath('/[locale]/users', 'page');
     return apiSuccess({ user });
