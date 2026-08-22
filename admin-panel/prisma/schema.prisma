@@ -20,6 +20,7 @@ model admins {
   username             String          @unique @db.VarChar
   authentication       String          @db.VarChar
   enabled              Boolean
+  last_login_at        DateTime?
   permission_all       Boolean
   permission_messaging Boolean
   permission_tasks     Boolean         @default(false)
@@ -355,6 +356,9 @@ model teams {
   id             Int              @id @default(autoincrement())
   code           String           @unique @db.VarChar
   name           String           @db.VarChar
+  organization   String?
+  leader_id      Int?
+  leader         users?           @relation("team_leader", fields: [leader_id], references: [id])
   participations participations[]
 }
 
@@ -476,7 +480,12 @@ model users {
   email               String?          @db.VarChar
   timezone            String?          @db.VarChar
   preferred_languages String[]         @db.VarChar
+  last_login_at       DateTime?
+  status              String?
+  organization        String?
+  country             String?
   participations      participations[]
+  led_teams           teams[]          @relation("team_leader")
 }
 
 enum compilation_outcome {
