@@ -1,6 +1,7 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import crypto from "crypto";
+import { prisma } from "@/lib/prisma";
 
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -18,7 +19,7 @@ export async function encrypt(payload: any) {
   return await new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("7d")
+    .setExpirationTime("2h")
     .sign(key);
 }
 
@@ -52,14 +53,54 @@ export async function createSession(userId: string, username: string, permission
 }
 
 export async function refreshSession(payload: any) {
+  let admin;
+  try {
+    admin = await prisma.admins.findUnique({
+      where: { id: parseInt(payload.userId) },
+      select: {
+        username: true,
+        enabled: true,
+        permission_all: true,
+        permission_messaging: true,
+        permission_tasks: true,
+        permission_users: true,
+        permission_contests: true,
+      },
+    });
+  } catch {
+    // DB unavailable — fail closed, keep existing cookie untouched
+    return null;
+  }
+
+  if (!admin || !admin.enabled) {
+    try {
+      (await cookies()).delete("session");
+    } catch {
+      // cookies() may throw in read-only render contexts — safe to ignore
+    }
+    return null;
+  }
+
   const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
-  const { userId, username, permissions } = payload;
-  const session = await encrypt({ userId, username, permissions, expiresAt });
+  const session = await encrypt({
+    userId: payload.userId,
+    username: admin.username,
+    permissions: {
+      permission_all: admin.permission_all,
+      permission_messaging: admin.permission_messaging,
+      permission_tasks: admin.permission_tasks,
+      permission_users: admin.permission_users,
+      permission_contests: admin.permission_contests,
+    },
+    expiresAt,
+  });
+
   try {
     (await cookies()).set("session", session, buildCookieOptions(expiresAt));
   } catch {
     // cookies() may throw in read-only render contexts — safe to ignore
   }
+  return session;
 }
 
 export async function deleteSession() {
