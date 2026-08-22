@@ -219,6 +219,11 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
               <TableHead className="text-neutral-400">Username</TableHead>
               <TableHead className="text-neutral-400">Team</TableHead>
               <TableHead className="text-neutral-400">Email</TableHead>
+              <TableHead className="text-neutral-400">ID</TableHead>
+              <TableHead className="text-neutral-400">Status</TableHead>
+              <TableHead className="text-neutral-400">Organization</TableHead>
+              <TableHead className="text-neutral-400">Country</TableHead>
+              <TableHead className="text-neutral-400">Contests</TableHead>
               <TableHead className="text-neutral-400 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -240,6 +245,25 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
                   {Array.from(new Set((user.participations || []).map((participation: any) => participation?.teams?.code).filter(Boolean))).join(', ') || '-'}
                 </TableCell>
                 <TableCell className="text-neutral-400">{user.email || '-'}</TableCell>
+                <TableCell className="font-mono text-neutral-500 text-xs">#{user.id}</TableCell>
+                <TableCell>
+                  {user.status ? (
+                    <span
+                      className={
+                        user.status === 'active'
+                          ? 'px-2 py-0.5 rounded-full text-xs bg-emerald-500/20 text-emerald-400'
+                          : 'px-2 py-0.5 rounded-full text-xs bg-amber-500/20 text-amber-400'
+                      }
+                    >
+                      {user.status}
+                    </span>
+                  ) : (
+                    '—'
+                  )}
+                </TableCell>
+                <TableCell className="text-neutral-300">{user.organization ?? '—'}</TableCell>
+                <TableCell className="text-neutral-300">{user.country ?? '—'}</TableCell>
+                <TableCell className="text-neutral-300">{user._count?.participations ?? 0}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-2">
                     {canManageUsers && (
@@ -268,14 +292,14 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
             ))}
             {!loadingList && usersList.length === 0 && (
                 <TableRow>
-                    <TableCell colSpan={7} className="text-center py-12 text-neutral-500">
+                    <TableCell colSpan={12} className="text-center py-12 text-neutral-500">
                         No users found.
                     </TableCell>
                 </TableRow>
             )}
             {loadingList && (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-12 text-neutral-500">
+                <TableCell colSpan={12} className="text-center py-12 text-neutral-500">
                   Loading users...
                 </TableCell>
               </TableRow>

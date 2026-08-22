@@ -35,6 +35,10 @@ export async function getUsers({ page = 1, search = '', perPage = USERS_PER_PAGE
       orderBy: { id: 'asc' },
       select: {
         ...safeUserSelect,
+        status: true,
+        organization: true,
+        country: true,
+        _count: { select: { participations: true } },
         participations: { select: { teams: { select: { code: true, name: true } } } },
       },
     }),
