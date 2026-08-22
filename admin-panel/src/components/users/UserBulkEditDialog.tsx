@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { Loader2, Wand2, X } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { apiClient } from '@/lib/apiClient';
+import { getTeams } from '@/app/actions/teams';
 
 function randomToken(length: number) {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -101,12 +102,8 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
         return;
       }
       try {
-        const res = await apiClient.get(`/api/contests/${teamContestId}/teams`);
-        if (res.success && Array.isArray(res.teams)) {
-          setTeamsOptions(res.teams.map((t: any) => t.code).filter(Boolean));
-        } else {
-          setTeamsOptions([]);
-        }
+        const teams = await getTeams();
+        setTeamsOptions(teams.map((t: { code: string }) => t.code).filter(Boolean));
       } catch (e) {
         setTeamsOptions([]);
       }
@@ -528,7 +525,6 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
             <Button
               variant="ghost"
               onClick={async () => {
-                // Prepare updates with credentials present in preview rows
                 const updates = rows
                   .filter((r) => r.password || r.username)
                   .map((r) => ({ id: r.id, username: r.username, password: r.password }));
@@ -553,8 +549,16 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
                   return;
                 }
 
-                const updatedCount = Array.isArray(result.updated) ? result.updated.length : 0;
-                setStatusMessage(`Applied credentials for ${updatedCount} user(s)`);
+                const count = typeof result.count === 'number' ? result.count : updates.length;
+                if (result.downloadUrl) {
+                  const anchor = document.createElement('a');
+                  anchor.href = result.downloadUrl;
+                  anchor.setAttribute('download', `users-applied-${Date.now()}.csv`);
+                  document.body.appendChild(anchor);
+                  anchor.click();
+                  document.body.removeChild(anchor);
+                }
+                setStatusMessage(`Applied credentials for ${count} user(s)`);
                 setLoading(false);
                 onSuccess();
               }}
@@ -572,7 +576,6 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
           <Button
             variant="primary"
             onClick={async () => {
-              // If there are generated credentials in preview, apply them to the server
               const updates = rows.filter((r) => r.password || r.username).map((r) => ({ id: r.id, username: r.username, password: r.password }));
 
               if (updates.length === 0) {
@@ -585,52 +588,28 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
               setStatusMessage('');
 
               try {
-                // Use fetch directly to support CSV responses when export=true
-                const resp = await fetch('/api/users/batch', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ action: 'apply-credentials', updates, export: true }),
+                const result = await apiClient.post('/api/users/batch', {
+                  action: 'apply-credentials',
+                  updates,
                 });
 
-                const contentType = resp.headers.get('content-type') || '';
-                if (!resp.ok) {
-                  // try parse json for error
-                  let data;
-                  try { data = await resp.json(); } catch (e) { data = null; }
-                  setErrorMessage((data && data.error) || `Server error: ${resp.status}`);
+                if (!result.success) {
+                  setErrorMessage(result.error || 'Failed to apply credentials');
                   setLoading(false);
                   return;
                 }
 
-                if (contentType.includes('text/csv')) {
-                  const text = await resp.text();
-                  const blob = new Blob([text], { type: 'text/csv;charset=utf-8;' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.setAttribute('download', `users-applied-${Date.now()}.csv`);
-                  document.body.appendChild(a);
-                  a.click();
-                  document.body.removeChild(a);
-                  URL.revokeObjectURL(url);
-
-                  setStatusMessage(`Applied and exported ${updates.length} credential(s)`);
-                  setLoading(false);
-                  onSuccess();
-                  onClose();
-                  return;
+                const count = typeof result.count === 'number' ? result.count : updates.length;
+                if (result.downloadUrl) {
+                  const anchor = document.createElement('a');
+                  anchor.href = result.downloadUrl;
+                  anchor.setAttribute('download', `users-applied-${Date.now()}.csv`);
+                  document.body.appendChild(anchor);
+                  anchor.click();
+                  document.body.removeChild(anchor);
                 }
 
-                // Fallback: parse JSON response
-                const data = await resp.json();
-                if (!data.success) {
-                  setErrorMessage(data.error || 'Failed to apply credentials');
-                  setLoading(false);
-                  return;
-                }
-
-                const updatedCount = Array.isArray(data.updated) ? data.updated.length : 0;
-                setStatusMessage(`Applied credentials for ${updatedCount} user(s)`);
+                setStatusMessage(`Applied and exported ${count} credential(s)`);
                 setLoading(false);
                 onSuccess();
                 onClose();

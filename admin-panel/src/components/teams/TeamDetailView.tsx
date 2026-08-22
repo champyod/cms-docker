@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { updateTeam, deleteTeam } from '@/app/actions/teams';
 import { Card } from '@/components/core/Card';
 import { 
@@ -39,6 +39,8 @@ interface TeamDetailViewProps {
 
 export function TeamDetailView({ team }: TeamDetailViewProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const locale = pathname.split('/')[1] || 'en';
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
     code: team.code,
@@ -72,7 +74,7 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
     if (confirm('Are you sure you want to delete this team? This cannot be undone.')) {
       const result = await deleteTeam(team.id);
       if (result.success) {
-        router.push('/teams');
+        router.push(`/${locale}/teams`);
       } else {
         alert('Failed: ' + result.error);
       }
@@ -179,7 +181,7 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
                     <span className="text-xs text-neutral-500">+{member.contests.length - 3} more</span>
                   )}
                   <a
-                    href={`/users/${member.user.id}`}
+                    href={`/${locale}/users/${member.user.id}`}
                     className="p-1.5 text-neutral-500 hover:text-indigo-400 transition-colors"
                   >
                     <ExternalLink className="w-4 h-4" />
@@ -223,7 +225,7 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
                   </div>
                 </div>
                 <a
-                  href={`/contests/${contest.id}`}
+                  href={`/${locale}/contests/${contest.id}`}
                   className="p-1.5 text-neutral-500 hover:text-indigo-400 transition-colors"
                 >
                   <ExternalLink className="w-4 h-4" />

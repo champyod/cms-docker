@@ -99,7 +99,7 @@ export function TeamList({ initialTeams, permissions }: TeamListProps) {
                 <TableCell className="text-neutral-400 text-sm">{team._count.participations}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-2">
-                    <a href={`/teams/${team.id}`}>
+                    <a href={`/${locale}/teams/${team.id}`}>
                       <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-neutral-400 hover:text-emerald-400">
                         <Users className="w-4 h-4" />
                       </Button>

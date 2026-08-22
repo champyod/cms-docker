@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { updateContestSettings, addParticipant, removeParticipant } from '@/app/actions/contests';
 import { setTestUser } from '@/app/actions/participations';
 import { Card } from '@/components/core/Card';
@@ -30,6 +31,8 @@ interface ContestDetailViewProps {
 }
 
 export function ContestDetailView({ contest, availableUsers, availableTasks, teams, user }: ContestDetailViewProps) {
+  const pathname = usePathname();
+  const locale = pathname.split('/')[1] || 'en';
   const [isParticipantModalOpen, setIsParticipantModalOpen] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isParticipationModalOpen, setIsParticipationModalOpen] = useState(false);
@@ -365,7 +368,7 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, tea
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <a href={`/tasks/${task.id}`} className="p-1.5 text-neutral-500 hover:text-indigo-400 transition-colors">
+                    <a href={`/${locale}/tasks/${task.id}`} className="p-1.5 text-neutral-500 hover:text-indigo-400 transition-colors">
                       <Settings className="w-4 h-4" />
                     </a>
                     <button
