@@ -25,11 +25,3 @@ export function Loading({ text = "Loading...", className, fullScreen = false }: 
         </div>
     );
 }
-
-export function LoadingOverlay({ text }: { text?: string }) {
-     return (
-        <div className="absolute inset-0 bg-black/50 backdrop-blur-[1px] flex items-center justify-center z-10 rounded-xl">
-            <Loading text={text} className="text-white" />
-        </div>
-    );
-}
