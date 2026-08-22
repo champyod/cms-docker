@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { createSession, deleteSession, getSession } from "@/lib/auth";
 import { redirect } from "@/lib/redirect";
+import { safeAdminSelect } from "@/lib/prisma-selects";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import bcrypt from "bcryptjs";
@@ -11,6 +12,20 @@ import crypto from "crypto";
 const DUMMY_BCRYPT_HASH = '$2a$10$C6UzMDM.H6dfI/f/IKcEeO7ZBpQz0l8Dp5uJHnKzTKmPqR3sWbGyq';
 
 const loginBuckets = new Map<string, { count: number; resetAt: number }>();
+
+function evictOldestLoginBucket(): void {
+  let oldestKey: string | null = null;
+  let oldestResetAt = Infinity;
+  for (const [key, entry] of loginBuckets) {
+    if (entry.resetAt < oldestResetAt) {
+      oldestResetAt = entry.resetAt;
+      oldestKey = key;
+    }
+  }
+  if (oldestKey !== null) {
+    loginBuckets.delete(oldestKey);
+  }
+}
 
 export async function login(prevState: any, formData: FormData) {
   const username = formData.get("username") as string;
@@ -66,8 +81,8 @@ export async function login(prevState: any, formData: FormData) {
       failed.count += 1;
       failed.resetAt = Date.now() + 15 * 60 * 1000;
       loginBuckets.set(bucketKey, failed);
-      if (loginBuckets.size > 1000) {
-        loginBuckets.clear();
+      if (loginBuckets.size >= 1000) {
+        evictOldestLoginBucket();
       }
       return { error: "Invalid credentials" };
     }
@@ -86,8 +101,8 @@ export async function login(prevState: any, formData: FormData) {
     }
 
     loginBuckets.delete(bucketKey);
-    if (loginBuckets.size > 1000) {
-      loginBuckets.clear();
+    if (loginBuckets.size >= 1000) {
+      evictOldestLoginBucket();
     }
 
   } catch (error) {
@@ -113,7 +128,8 @@ export async function getCurrentUser() {
   if (isNaN(id)) return null;
 
   const admin = await prisma.admins.findUnique({
-    where: { id }
+    where: { id },
+    select: { ...safeAdminSelect },
   });
   return admin;
 }
