@@ -16,13 +16,15 @@ export default function SearchClient() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (query) {
-      setLoading(true);
-      searchAll(query).then(data => {
-        setResults(data);
-        setLoading(false);
-      });
+    if (!query) {
+      setResults(null);
+      return;
     }
+    setLoading(true);
+    searchAll(query).then(data => {
+      setResults(data);
+      setLoading(false);
+    });
   }, [query]);
 
   if (!query) return <div className="text-white">Please enter a search term.</div>;

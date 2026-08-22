@@ -48,15 +48,18 @@ async function ensureUniqueUsername(firstName: string, lastName: string, localSe
   throw new Error('Unable to generate unique username');
 }
 
+const MAX_CLEANUP_SCAN_FILES = 500;
+
 async function cleanupExpiredCreds(): Promise<void> {
   try {
     const dir = os.tmpdir();
     const files = await fs.readdir(dir);
+    if (files.length > MAX_CLEANUP_SCAN_FILES) return;
     const now = Date.now();
     const maxAgeMs = 15 * 60 * 1000;
     await Promise.all(
       files
-        .filter((f) => f.startsWith('cms-creds-') && f.endsWith('.csv'))
+        .filter((f) => f.startsWith('cms-creds-') && (f.endsWith('.csv') || f.endsWith('.csv.used')))
         .map(async (f) => {
           try {
             const full = path.join(dir, f);
@@ -146,6 +149,10 @@ export async function POST(req: NextRequest) {
 
       revalidatePath('/[locale]/users', 'page');
 
+      if (updated.length === 0) {
+        return apiSuccess({ success: true, count: 0, failed: [] });
+      }
+
       if (mode === 'password') {
         const rows = ['id,username,password'];
         for (const r of updated) rows.push(`${r.id},${csvEscape(r.username ?? '')},${csvEscape(r.password ?? '')}`);
@@ -213,6 +220,10 @@ export async function POST(req: NextRequest) {
       }
 
       revalidatePath('/[locale]/users', 'page');
+
+      if (updated.length === 0) {
+        return apiSuccess({ success: true, count: 0, failed });
+      }
 
       const rows = ['id,username,password'];
       for (const r of updated) rows.push(`${r.id},${csvEscape(r.username ?? '')},${csvEscape(r.password ?? '')}`);

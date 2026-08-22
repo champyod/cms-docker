@@ -57,15 +57,18 @@ function shouldGeneratePassword(mode: GenerationMode) {
   return mode === 'password' || mode === 'both';
 }
 
+const MAX_CLEANUP_SCAN_FILES = 500;
+
 async function cleanupExpiredCreds(): Promise<void> {
   try {
     const dir = os.tmpdir();
     const files = await fs.readdir(dir);
+    if (files.length > MAX_CLEANUP_SCAN_FILES) return;
     const now = Date.now();
     const maxAgeMs = 15 * 60 * 1000;
     await Promise.all(
       files
-        .filter((f) => f.startsWith('cms-creds-') && f.endsWith('.csv'))
+        .filter((f) => f.startsWith('cms-creds-') && (f.endsWith('.csv') || f.endsWith('.csv.used')))
         .map(async (f) => {
           try {
             const full = path.join(dir, f);
@@ -229,6 +232,10 @@ export async function POST(req: NextRequest) {
     revalidatePath('/[locale]/users', 'page');
     if (contestId) {
       revalidatePath('/[locale]/contests', 'page');
+    }
+
+    if (created.length === 0) {
+      return apiSuccess({ success: true, count: 0, failed });
     }
 
     const credsRows = created.filter((c) => c.plainPassword);

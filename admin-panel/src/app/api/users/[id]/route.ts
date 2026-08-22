@@ -22,9 +22,10 @@ export async function PUT(
     const updateData: any = {
       first_name,
       last_name,
-      email: email || null,
-      timezone: timezone || null,
     };
+
+    if (email !== undefined) updateData.email = email || null;
+    if (timezone !== undefined) updateData.timezone = timezone || null;
 
     if (password) {
       const salt = await bcrypt.genSalt(10);

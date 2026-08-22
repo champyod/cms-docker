@@ -24,18 +24,20 @@ export async function GET(
   const filePath = path.join(tmpdir, fileName);
   const resolved = path.resolve(filePath);
 
-  if (!resolved.startsWith(path.resolve(tmpdir) + path.sep) && resolved !== path.resolve(path.join(tmpdir, fileName))) {
+  if (!resolved.startsWith(path.resolve(tmpdir) + path.sep)) {
     return NextResponse.json({ success: false, error: 'Invalid token' }, { status: 404 });
   }
 
-  try {
-    const content = await fs.readFile(resolved, 'utf-8');
+  const usedPath = `${resolved}.used`;
 
-    try {
-      await fs.unlink(resolved);
-    } catch {
-      // ignore delete error
-    }
+  try {
+    await fs.rename(resolved, usedPath);
+  } catch {
+    return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
+  }
+
+  try {
+    const content = await fs.readFile(usedPath, 'utf-8');
 
     const timestamp = Date.now();
     return new NextResponse(content, {
@@ -45,7 +47,11 @@ export async function GET(
         'Content-Disposition': `attachment; filename="credentials-${timestamp}.csv"`,
       },
     });
-  } catch {
-    return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
+  } finally {
+    try {
+      await fs.unlink(usedPath);
+    } catch {
+      // ignore delete error
+    }
   }
 }
