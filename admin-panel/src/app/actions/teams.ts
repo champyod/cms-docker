@@ -10,8 +10,13 @@ export async function getTeams() {
   await ensurePermission('users');
 
   return prisma.teams.findMany({
-    include: {
-      _count: { select: { participations: true } }
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      organization: true,
+      leader: { select: { username: true, first_name: true, last_name: true } },
+      _count: { select: { participations: true } },
     },
     orderBy: { name: 'asc' }
   });

@@ -14,7 +14,9 @@ interface TeamWithCount {
   id: number;
   code: string;
   name: string;
-  _count: { participations: number };
+  organization?: string | null;
+  leader?: { username: string; first_name: string; last_name: string } | null;
+  _count?: { participations: number };
 }
 
 interface TeamListProps {
@@ -87,6 +89,8 @@ export function TeamList({ initialTeams, permissions }: TeamListProps) {
               <TableHead className="text-neutral-400">Code</TableHead>
               <TableHead className="text-neutral-400">Name</TableHead>
               <TableHead className="text-neutral-400">Members</TableHead>
+              <TableHead className="text-neutral-400">Organization</TableHead>
+              <TableHead className="text-neutral-400">Leader</TableHead>
               <TableHead className="text-neutral-400 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -96,7 +100,9 @@ export function TeamList({ initialTeams, permissions }: TeamListProps) {
                 <TableCell className="font-mono text-neutral-500 text-xs">#{team.id}</TableCell>
                 <TableCell className="font-mono text-indigo-400 text-sm">{team.code}</TableCell>
                 <TableCell className="font-medium text-white">{team.name}</TableCell>
-                <TableCell className="text-neutral-400 text-sm">{team._count.participations}</TableCell>
+                <TableCell className="text-neutral-400 text-sm">{team._count?.participations ?? 0}</TableCell>
+                <TableCell className="text-neutral-400 text-sm">{team.organization ?? '—'}</TableCell>
+                <TableCell className="text-neutral-400 text-sm">{team.leader ? `${team.leader.first_name} ${team.leader.last_name}`.trim() || team.leader.username : '—'}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-2">
                     <a href={`/${locale}/teams/${team.id}`}>
@@ -120,7 +126,7 @@ export function TeamList({ initialTeams, permissions }: TeamListProps) {
             ))}
             {teams.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-12 text-neutral-500">
+                <TableCell colSpan={7} className="text-center py-12 text-neutral-500">
                   No teams found.
                 </TableCell>
               </TableRow>
