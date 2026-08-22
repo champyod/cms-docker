@@ -1,4 +1,5 @@
 import { getSession } from './auth';
+import { getFreshPermissions } from '@/lib/permissions';
 import { NextResponse } from 'next/server';
 import type { Permission } from './permissions';
 
@@ -23,12 +24,17 @@ export async function verifyApiPermission(permission: Permission) {
     return { authorized: false as const, response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
 
-  const { permissions } = session;
-  const hasPermission = permissions?.permission_all ||
-    (permission === 'contests' && permissions?.permission_contests) ||
-    (permission === 'tasks' && permissions?.permission_tasks) ||
-    (permission === 'users' && permissions?.permission_users) ||
-    (permission === 'messaging' && permissions?.permission_messaging);
+  const fresh = await getFreshPermissions(session.userId);
+  if (!fresh) {
+    return { authorized: false as const, response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+  }
+
+  const hasPermission =
+    fresh.all ||
+    (permission === 'contests' && fresh.contests) ||
+    (permission === 'tasks' && fresh.tasks) ||
+    (permission === 'users' && fresh.users) ||
+    (permission === 'messaging' && fresh.messaging);
 
   if (!hasPermission) {
     return { authorized: false as const, response: NextResponse.json({ error: `Forbidden: Missing ${permission} permission` }, { status: 403 }) };
@@ -39,7 +45,17 @@ export async function verifyApiPermission(permission: Permission) {
 
 export function apiError(error: any) {
   console.error('API Error:', error);
-  const message = error.message || 'An unexpected error occurred';
+  const code = (error as { code?: string }).code;
+  let message: string;
+  if (code === 'P2002') {
+    message = 'A record with these details already exists';
+  } else if (code === 'P2025') {
+    message = 'Record not found';
+  } else if (error.status != null && error.status < 500) {
+    message = error.message || 'An unexpected error occurred';
+  } else {
+    message = 'An unexpected error occurred';
+  }
   const status = error.status || 500;
   const extra = error.errors ? { errors: error.errors } : {};
   return NextResponse.json({ success: false, error: message, ...extra }, { status });
