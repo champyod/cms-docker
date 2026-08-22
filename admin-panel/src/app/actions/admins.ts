@@ -11,7 +11,7 @@ import { safeAdminSelect } from '@/lib/prisma-selects';
 export async function getAdmins() {
   await ensurePermission('all');
   return prisma.admins.findMany({
-    select: safeAdminSelect,
+    select: { ...safeAdminSelect, last_login_at: true },
     orderBy: { username: 'asc' }
   });
 }

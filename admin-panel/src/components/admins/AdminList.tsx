@@ -60,6 +60,7 @@ export function AdminList({ initialAdmins }: { initialAdmins: any[] }) {
               <TableHead className="text-neutral-400">ID</TableHead>
               <TableHead className="text-neutral-400">Username</TableHead>
               <TableHead className="text-neutral-400">Name</TableHead>
+              <TableHead className="text-neutral-400">Last Login</TableHead>
               <TableHead className="text-neutral-400">Permissions</TableHead>
               <TableHead className="text-neutral-400">Status</TableHead>
               <TableHead className="text-neutral-400 text-right">Actions</TableHead>
@@ -71,6 +72,9 @@ export function AdminList({ initialAdmins }: { initialAdmins: any[] }) {
                 <TableCell className="font-mono text-neutral-500 text-xs">#{admin.id}</TableCell>
                 <TableCell className="font-mono text-indigo-400 text-sm">{admin.username}</TableCell>
                 <TableCell className="font-medium text-white">{admin.name}</TableCell>
+                <TableCell className="text-xs text-neutral-400">
+                  {admin.last_login_at ? new Date(admin.last_login_at).toLocaleString() : '—'}
+                </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
                     {admin.permission_all && (
@@ -113,7 +117,7 @@ export function AdminList({ initialAdmins }: { initialAdmins: any[] }) {
             ))}
             {adminsList.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-12 text-neutral-500">
+                <TableCell colSpan={7} className="text-center py-12 text-neutral-500">
                   No administrators found.
                 </TableCell>
               </TableRow>
