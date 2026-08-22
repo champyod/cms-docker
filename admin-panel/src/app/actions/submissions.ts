@@ -2,6 +2,8 @@
 
 import { prisma } from '@/lib/prisma';
 import { ensurePermission } from '@/lib/permissions';
+import { safeUserSelect } from '@/lib/prisma-selects';
+import { revalidatePath } from 'next/cache';
 
 const SUBMISSIONS_PER_PAGE = 20;
 
@@ -17,6 +19,8 @@ export async function getSubmissions({
   taskId?: number;
   userId?: number;
 }) {
+  await ensurePermission('contests');
+
   const skip = (page - 1) * SUBMISSIONS_PER_PAGE;
   
     const where: any = {};
@@ -72,13 +76,15 @@ export async function getSubmissions({
 
 // Get a single submission with full details
 export async function getSubmission(submissionId: number) {
+  await ensurePermission('contests');
+
     return prisma.submissions.findUnique({
         where: { id: submissionId },
         include: {
             tasks: true,
             participations: {
                 include: {
-                    users: true,
+                    users: { select: safeUserSelect },
                     contests: true
         }
         },
@@ -103,6 +109,7 @@ export async function updateSubmissionComment(submissionId: number, comment: str
             where: { id: submissionId },
             data: { comment }
         });
+        revalidatePath('/[locale]/submissions');
       return { success: true };
   } catch (error) {
       const e = error as Error;
@@ -122,6 +129,7 @@ export async function toggleSubmissionOfficial(submissionId: number) {
             where: { id: submissionId },
             data: { official: !sub.official }
         });
+        revalidatePath('/[locale]/submissions');
         return { success: true };
   } catch (error) {
       const e = error as Error;
@@ -149,7 +157,29 @@ export async function recalculateSubmission(submissionId: number, type: 'score' 
 
     const datasetId = submission.submission_results?.[0]?.dataset_id || submission.tasks?.active_dataset_id;
 
-    // Clear database entries to mark for re-evaluation
+    // Determine RPC level (same mapping as before)
+    const rpcLevel = type === 'full' ? 'compilation' : (type === 'evaluation' ? 'evaluation' : 'score');
+
+    // RPC-FIRST: call EvaluationService before touching DB
+    try {
+      const response = await fetch('http://cms-admin-web-server:25000/rpc/EvaluationService/0/invalidate_submission', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          level: rpcLevel,
+          submission_id: submissionId,
+          dataset_id: datasetId
+        })
+      });
+
+      if (!response.ok) {
+        return { success: false, error: 'Resubmission failed: evaluation service did not accept the request' };
+      }
+    } catch (rpcError) {
+      return { success: false, error: 'Resubmission failed: evaluation service did not accept the request' };
+    }
+
+    // ONLY if RPC succeeded: clear DB entries to mark for re-evaluation
     if (type === 'evaluation' || type === 'full') {
       await prisma.evaluations.deleteMany({
         where: { submission_id: submissionId }
@@ -162,30 +192,7 @@ export async function recalculateSubmission(submissionId: number, type: 'score' 
       });
     }
 
-    // Call EvaluationService RPC to trigger actual re-evaluation
-    const rpcLevel = type === 'full' ? 'compilation' : (type === 'evaluation' ? 'evaluation' : 'score');
-    
-    if (type === 'evaluation' || type === 'full') {
-      try {
-        const response = await fetch('http://cms-admin-web-server:25000/rpc/EvaluationService/0/invalidate_submission', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            level: rpcLevel,
-            submission_id: submissionId,
-            dataset_id: datasetId
-          })
-        });
-        
-        if (!response.ok) {
-          console.error('EvaluationService RPC failed:', await response.text());
-        }
-      } catch (rpcError) {
-        console.error('Failed to call EvaluationService RPC:', rpcError);
-        // Don't fail the entire operation if RPC fails, DB is already cleared
-      }
-    }
-
+    revalidatePath('/[locale]/submissions');
     return { success: true, message: 'Submission queued for recalculation' };
   } catch (error) {
     const e = error as Error;
