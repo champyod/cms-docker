@@ -6,3 +6,16 @@ codecov/
 .venv/
 .git/
 .jj/
+node_modules/
+**node_modules/
+.ruff_cache/
+.vscode/
+.idea/
+docs/
+examples/
+*.md
+backups/
+drills/
+# Preserve src submodule completeness despite docs/md exclusions above
+!src/
+!src/**

@@ -1,0 +1,34 @@
+# yamllint configuration for CMS Docker.
+# Relaxed enough for GitHub Actions expressions (${{ ... }}) and compose files,
+# strict enough to catch real structural mistakes.
+extends: default
+
+rules:
+  line-length:
+    max: 150
+    level: warning
+
+  # GitHub Actions uses `on:` as a trigger key; YAML 1.1 would parse it as
+  # boolean true. Disable key checking (values like `true`/`off` stay flagged).
+  truthy:
+    check-keys: false
+
+  # Allow `${{ ... }}` expressions and inline flow mappings with one space
+  # inside the braces/brackets.
+  braces:
+    max-spaces-inside: 1
+
+  brackets:
+    max-spaces-inside: 1
+
+  comments:
+    min-spaces-from-content: 1
+
+  comments-indentation: disable
+
+  document-start:
+    present: false
+
+  indentation:
+    spaces: consistent
+    indent-sequences: consistent

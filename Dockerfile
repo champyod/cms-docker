@@ -1,5 +1,10 @@
 # syntax=docker/dockerfile:1
 # Supported combinations: ubuntu:noble, debian:bookworm.
+#
+# Base-image policy: digests are bumped manually (dependabot-style PRs), never
+# via in-build `apt-get upgrade`. To pin an immutable base, resolve the digest
+# (`docker buildx imagetools inspect ubuntu:noble`) and set:
+#   ARG BASE_IMAGE=ubuntu:noble@sha256:<digest>
 ARG BASE_IMAGE=ubuntu:noble
 FROM ${BASE_IMAGE}
 
@@ -24,11 +29,14 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 
     apt-get update
-    apt-get upgrade -y
+    # No `apt-get upgrade` on purpose: package drift is handled by bumping the
+    # pinned BASE_IMAGE digest instead (see base-image policy at top of file).
     ARCH=$(dpkg --print-architecture)
     PACKAGES=(
         build-essential
-        cppreference-doc-en-html
+        # cppreference-doc-en-html removed: ~500MB of offline C/C++ docs,
+        # documentation-only, never used at runtime or during grading;
+        # grading languages are unaffected.
         curl
         default-jdk-headless
         fp-compiler
@@ -38,6 +46,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         libffi-dev
         libpq-dev
         libyaml-dev
+        cgroup-tools
         mono-mcs
         php-cli
         postgresql-client
@@ -97,16 +106,29 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     fi
 EOF
 
-# Create cmsuser user with sudo privileges and access to isolate
+# Create cmsuser user with least-privilege sudo and access to isolate
 RUN <<EOF
 #!/bin/bash -ex
     # Need to set user ID manually: otherwise it'd be 1000 on debian
     # and 1001 on ubuntu.
     useradd -ms /bin/bash -u 1001 cmsuser
-    usermod -aG sudo cmsuser
     usermod -aG isolate cmsuser
-    # Disable sudo password
-    echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+    # Exact-command sudo whitelist (replaces broad '%sudo ALL=(ALL)
+    # NOPASSWD:ALL'): only what runtime compose commands need after the
+    # parallel compose consolidation — log/cache dir setup, permission fixes,
+    # config writes via tee, isolate cgroup cleanup. Paths verified against
+    # ubuntu:noble (usrmerge: /bin -> /usr/bin, /sbin -> /usr/sbin);
+    # cgdelete ships at /usr/bin/cgdelete on noble; /usr/sbin/cgdelete
+    # included for compatibility with pre-usrmerge layouts and task whitelist.
+    {
+        echo 'Cmnd_Alias CMS_MKDIR = /usr/bin/mkdir, /bin/mkdir'
+        echo 'Cmnd_Alias CMS_CHOWN = /usr/bin/chown, /bin/chown'
+        echo 'Cmnd_Alias CMS_CHMOD = /usr/bin/chmod, /bin/chmod'
+        echo 'Cmnd_Alias CMS_TEE = /usr/bin/tee, /bin/tee'
+        echo 'Cmnd_Alias CMS_CGDELETE = /usr/bin/cgdelete, /usr/sbin/cgdelete'
+        echo 'cmsuser ALL=(root) NOPASSWD: CMS_MKDIR, CMS_CHOWN, CMS_CHMOD, CMS_TEE, CMS_CGDELETE'
+    } >> /etc/sudoers
+    visudo -cf /etc/sudoers
 EOF
 
 # Set cmsuser as default user
