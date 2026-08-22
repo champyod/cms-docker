@@ -12,6 +12,7 @@ export interface TaskDiagnostic {
 }
 
 export async function getTasks({ page = 1, search = '' }: { page?: number; search?: string }) {
+  await ensurePermission('tasks');
   const skip = (page - 1) * TASKS_PER_PAGE;
   
   const where = search ? {
@@ -67,6 +68,7 @@ export async function getTasks({ page = 1, search = '' }: { page?: number; searc
 }
 
 export async function getTask(id: number) {
+  await ensurePermission('tasks');
   return prisma.tasks.findUnique({
     where: { id },
     include: {
@@ -85,6 +87,7 @@ export async function getTask(id: number) {
 }
 
 export async function getTaskDiagnostics(taskId: number): Promise<TaskDiagnostic[]> {
+  await ensurePermission('tasks');
   if (!taskId || isNaN(taskId)) return [];
   const task = await prisma.tasks.findUnique({
     where: { id: taskId },

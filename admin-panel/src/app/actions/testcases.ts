@@ -171,6 +171,7 @@ export async function batchUploadTestcases(datasetId: number, testcases: {
 
 // Get all testcases for a dataset
 export async function getTestcases(datasetId: number) {
+  await ensurePermission('tasks');
   return prisma.testcases.findMany({
     where: { dataset_id: datasetId },
     orderBy: { codename: 'asc' }

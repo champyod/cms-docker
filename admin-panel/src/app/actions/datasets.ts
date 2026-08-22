@@ -6,6 +6,7 @@ import { ensurePermission } from '@/lib/permissions';
 
 // Get a single dataset with testcases
 export async function getDataset(id: number) {
+  await ensurePermission('tasks');
   return prisma.datasets.findUnique({
     where: { id },
     include: {
