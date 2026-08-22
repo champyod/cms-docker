@@ -6,6 +6,7 @@ import { ensurePermission } from '@/lib/permissions';
 
 // Get questions for a contest
 export async function getQuestions(contestId: number) {
+  await ensurePermission('contests');
   return prisma.questions.findMany({
     where: { 
       participations: { contest_id: contestId }
@@ -23,7 +24,7 @@ export async function replyToQuestion(questionId: number, adminId: number, data:
   reply_subject: string;
   reply_text: string;
 }) {
-  await ensurePermission('messaging');
+  await ensurePermission('contests');
 
   try {
     await prisma.questions.update({
@@ -46,7 +47,7 @@ export async function replyToQuestion(questionId: number, adminId: number, data:
 
 // Ignore a question
 export async function ignoreQuestion(questionId: number) {
-  await ensurePermission('messaging');
+  await ensurePermission('contests');
 
   try {
     await prisma.questions.update({
@@ -63,7 +64,7 @@ export async function ignoreQuestion(questionId: number) {
 
 // Unignore a question
 export async function unignoreQuestion(questionId: number) {
-  await ensurePermission('messaging');
+  await ensurePermission('contests');
 
   try {
     await prisma.questions.update({
@@ -79,6 +80,7 @@ export async function unignoreQuestion(questionId: number) {
 }
 
 export async function getUnansweredQuestions(contestId: number | null) {
+  await ensurePermission('contests');
   const where: any = {
     reply_timestamp: null,
     ignored: false

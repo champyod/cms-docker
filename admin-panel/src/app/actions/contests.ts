@@ -8,6 +8,7 @@ import { validateContestData, intervalToString, CONSTRAINT_TO_FIELD_MAP, getCons
 const CONTESTS_PER_PAGE = 20;
 
 export async function getContests({ page = 1, search = '' }: { page?: number; search?: string }) {
+  await ensurePermission('contests');
   const skip = (page - 1) * CONTESTS_PER_PAGE;
   
   const where = search ? {
@@ -346,6 +347,7 @@ export async function updateContestSettings(id: number, data: Partial<ContestDat
 }
 
 export async function getAvailableContests() {
+  await ensurePermission('contests');
   try {
     const contests = await prisma.contests.findMany({
       select: {
@@ -377,6 +379,7 @@ export async function activateContest(id: number) {
 }
 
 export async function getActiveContest() {
+  await ensurePermission('contests');
   try {
     const contest = await prisma.contests.findFirst({
       where: { is_active: true },

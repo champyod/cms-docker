@@ -2,9 +2,11 @@
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
+import { ensurePermission } from '@/lib/permissions';
 
 // Get announcements for a contest
 export async function getAnnouncements(contestId: number) {
+  await ensurePermission('messaging');
   return prisma.announcements.findMany({
     where: { contest_id: contestId },
     include: { admins: { select: { username: true } } },
@@ -17,6 +19,7 @@ export async function createAnnouncement(contestId: number, adminId: number, dat
   subject: string;
   text: string;
 }) {
+  await ensurePermission('messaging');
   try {
     await prisma.announcements.create({
       data: {
@@ -40,6 +43,7 @@ export async function updateAnnouncement(announcementId: number, data: {
   subject?: string;
   text?: string;
 }) {
+  await ensurePermission('messaging');
   try {
     await prisma.announcements.update({
       where: { id: announcementId },
@@ -58,6 +62,7 @@ export async function updateAnnouncement(announcementId: number, data: {
 
 // Delete an announcement
 export async function deleteAnnouncement(announcementId: number) {
+  await ensurePermission('messaging');
   try {
     await prisma.announcements.delete({
       where: { id: announcementId }
