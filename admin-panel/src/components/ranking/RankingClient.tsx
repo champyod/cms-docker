@@ -23,6 +23,7 @@ type RankRow = {
   lastName: string;
   team: string;
   totalScore: number;
+  solved: number;
 };
 
 export function RankingClient() {
@@ -42,6 +43,7 @@ export function RankingClient() {
     const computedRows = Object.entries(snapshot.users).map(([userId, user]) => {
       const userScores = snapshot.scores[userId] || {};
       const totalScore = taskKeys.reduce((sum, taskId) => sum + Number(userScores[taskId] || 0), 0);
+      const solved = taskKeys.filter(taskId => Number(userScores[taskId] || 0) > 0).length;
       const teamName = user.team ? (snapshot.teams[user.team]?.name || user.team) : '-';
 
       return {
@@ -51,6 +53,7 @@ export function RankingClient() {
         lastName: user.l_name,
         team: teamName,
         totalScore,
+        solved,
       };
     });
 
@@ -253,6 +256,7 @@ export function RankingClient() {
                   <TableHead>First Name</TableHead>
                   <TableHead>Last Name</TableHead>
                   <TableHead className="w-40">Team</TableHead>
+                  <TableHead className="w-16 text-right">Solved</TableHead>
                   <TableHead className="w-40 text-right">Total Score</TableHead>
                 </TableRow>
               </TableHeader>
@@ -263,6 +267,7 @@ export function RankingClient() {
                     <TableCell className="max-w-[200px] truncate">{row.firstName}</TableCell>
                     <TableCell className="max-w-[200px] truncate">{row.lastName}</TableCell>
                     <TableCell className="text-sm font-mono">{row.team}</TableCell>
+                    <TableCell className="text-right font-mono">{row.solved}</TableCell>
                     <TableCell className="text-right font-mono">{row.totalScore.toFixed(2).replace(/\.00$/, '')}</TableCell>
                   </TableRow>
                 ))}

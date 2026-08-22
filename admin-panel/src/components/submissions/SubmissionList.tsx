@@ -58,7 +58,9 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage }: 
               <TableHead className="text-neutral-400">Time</TableHead>
               <TableHead className="text-neutral-400">User</TableHead>
               <TableHead className="text-neutral-400">Task</TableHead>
+              <TableHead className="text-neutral-400">Language</TableHead>
               <TableHead className="text-neutral-400">Status</TableHead>
+              <TableHead className="text-neutral-400 text-right">Score</TableHead>
               <TableHead className="text-neutral-400 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -96,6 +98,9 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage }: 
                             {submission.tasks.name}
                         </div>
                     </TableCell>
+                    <TableCell className="font-mono text-sm text-neutral-300">
+                        {submission.language ?? '—'}
+                    </TableCell>
                     <TableCell>
                       {compilationFailed ? (
                         <span className="text-xs px-2 py-1 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">Compilation Failed</span>
@@ -113,6 +118,13 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage }: 
                             <span className="text-xs px-2 py-1 rounded-full bg-neutral-500/10 text-neutral-400 border border-neutral-500/20">Pending</span>
                         )}
                     </TableCell>
+                    <TableCell className="text-right font-mono text-sm">
+                        {score !== null && score !== undefined ? (
+                            <span className={score > 0 ? 'text-green-400' : 'text-red-400'}>{score.toFixed(0)}</span>
+                        ) : (
+                            <span className="text-neutral-500">—</span>
+                        )}
+                    </TableCell>
                     <TableCell className="text-right">
                         <Button 
                             variant="ghost" 
@@ -127,7 +139,7 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage }: 
             })}
             {submissions.length === 0 && (
                 <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12 text-neutral-500">
+                    <TableCell colSpan={8} className="text-center py-12 text-neutral-500">
                         No submissions found.
                     </TableCell>
                 </TableRow>
