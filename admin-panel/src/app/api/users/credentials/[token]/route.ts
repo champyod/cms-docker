@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyApiPermission } from '@/lib/api-utils';
+import { CREDS_FILE_PREFIX } from '@/lib/creds-file';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
@@ -20,7 +21,7 @@ export async function GET(
   }
 
   const tmpdir = os.tmpdir();
-  const fileName = `cms-creds-${token}.csv`;
+  const fileName = `${CREDS_FILE_PREFIX}${token}.csv`;
   const filePath = path.join(tmpdir, fileName);
   const resolved = path.resolve(filePath);
 

@@ -5,7 +5,9 @@ import os from 'os';
 
 const MAX_CLEANUP_SCAN_FILES = 500;
 const CREDS_FILE_MAX_AGE_MS = 15 * 60 * 1000;
-const CREDS_FILE_PREFIX = 'cms-creds-';
+
+/** Filename prefix shared by the writer (batch/bulk routes) and reader (credentials download route). */
+export const CREDS_FILE_PREFIX = 'cms-creds-';
 
 export function randomToken(length: number): string {
   return crypto.randomBytes(Math.ceil(length / 2)).toString('hex').slice(0, length);

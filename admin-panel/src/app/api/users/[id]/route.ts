@@ -5,6 +5,17 @@ import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import bcrypt from 'bcryptjs';
 
+const BCRYPT_SALT_ROUNDS = 10;
+const BCRYPT_PREFIX = 'bcrypt:';
+
+interface UserUpdateData {
+  first_name: string;
+  last_name: string;
+  email?: string | null;
+  timezone?: string | null;
+  password?: string;
+}
+
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -19,7 +30,7 @@ export async function PUT(
     const data = await req.json();
     const { first_name, last_name, email, password, timezone } = data;
 
-    const updateData: any = {
+    const updateData: UserUpdateData = {
       first_name,
       last_name,
     };
@@ -28,9 +39,9 @@ export async function PUT(
     if (timezone !== undefined) updateData.timezone = timezone || null;
 
     if (password) {
-      const salt = await bcrypt.genSalt(10);
+      const salt = await bcrypt.genSalt(BCRYPT_SALT_ROUNDS);
       const hash = await bcrypt.hash(password, salt);
-      updateData.password = `bcrypt:${hash}`;
+      updateData.password = `${BCRYPT_PREFIX}${hash}`;
     }
 
     await prisma.users.update({
@@ -42,7 +53,7 @@ export async function PUT(
 
     revalidatePath('/[locale]/users', 'page');
     return apiSuccess({ user });
-  } catch (error: any) {
+  } catch (error) {
     return apiError(error);
   }
 }
@@ -61,7 +72,7 @@ export async function DELETE(
     await prisma.users.delete({ where: { id } });
     revalidatePath('/[locale]/users', 'page');
     return apiSuccess({ message: 'User deleted successfully' });
-  } catch (error: any) {
+  } catch (error) {
     return apiError(error);
   }
 }

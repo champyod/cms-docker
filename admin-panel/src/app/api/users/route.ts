@@ -7,6 +7,7 @@ import bcrypt from 'bcryptjs';
 
 const DEFAULT_USERS_PER_PAGE = 20;
 const MAX_USERS_PER_PAGE = 100;
+const BCRYPT_SALT_ROUNDS = 10;
 
 export async function GET(req: NextRequest) {
   const { authorized, response } = await verifyApiPermission('users');
@@ -63,7 +64,7 @@ export async function GET(req: NextRequest) {
       perPage,
       search,
     });
-  } catch (error: any) {
+  } catch (error) {
     return apiError(error);
   }
 }
@@ -78,7 +79,7 @@ export async function POST(req: NextRequest) {
 
     if (!password) return apiError({ message: 'Password is required', status: 400 });
 
-    const salt = await bcrypt.genSalt(10);
+    const salt = await bcrypt.genSalt(BCRYPT_SALT_ROUNDS);
     const hash = await bcrypt.hash(password, salt);
     const storedPassword = `bcrypt:${hash}`;
 
@@ -98,8 +99,9 @@ export async function POST(req: NextRequest) {
 
     revalidatePath('/[locale]/users', 'page');
     return apiSuccess({ user });
-  } catch (error: any) {
-    if (error.code === 'P2002') return apiError({ message: 'Username already exists', status: 400 });
+  } catch (error) {
+    const e = error as { code?: string };
+    if (e.code === 'P2002') return apiError({ message: 'Username already exists', status: 400 });
     return apiError(error);
   }
 }
