@@ -304,21 +304,27 @@ core-stop:
 core-clean:
 	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile core down -v
 
+# Teardown targets pass dependency profiles plus an explicit service list:
+# the core profile is required for project-graph validation, while the
+# service list keeps the operation scoped so dependencies are never touched.
+ADMIN_SERVICES := admin-panel-next admin-web-server ranking-web-server printing-service
+CONTEST_SERVICES := evaluation-service proxy-service contest-web-server nginx-proxy
+
 admin-stop:
-	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile admin down
+	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile core --profile admin down $(ADMIN_SERVICES)
 
 admin-clean:
-	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile admin down -v
+	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile core --profile admin down -v $(ADMIN_SERVICES)
 
 contest-stop:
-	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile contest stop
+	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile core --profile contest stop $(CONTEST_SERVICES)
 
 contest-down:
-	@echo "[deprecated] use 'make contest-stop' for stop or 'docker compose --profile contest down' for down — contest-down runs down" >&2
-	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile contest down
+	@echo "[deprecated] use 'make contest-stop' for stop or 'docker compose --profile core --profile contest down <services>' for down — contest-down runs a scoped down" >&2
+	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile core --profile contest down $(CONTEST_SERVICES)
 
 contest-clean:
-	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile contest down -v
+	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile core --profile contest down -v $(CONTEST_SERVICES)
 
 worker-stop:
 	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile worker down
@@ -381,15 +387,15 @@ pull-core:
 	if [ "$$pull_failed" -eq 0 ]; then echo "Pull complete."; else echo "Pull finished WITH FAILURES (see above)" >&2; fi
 
 pull-admin:
-	@echo "[deprecated] use 'docker compose --profile admin pull'" >&2
+	@echo "[deprecated] use 'make pull-admin' (adds core profile for graph validation)" >&2
 	@pull_failed=0; \
-	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile admin pull || { echo "[WARN] pull failed for admin — continuing with local images (may be stale)" >&2; pull_failed=1; }; \
+	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile core --profile admin pull || { echo "[WARN] pull failed for admin — continuing with local images (may be stale)" >&2; pull_failed=1; }; \
 	if [ "$$pull_failed" -eq 0 ]; then echo "Pull complete."; else echo "Pull finished WITH FAILURES (see above)" >&2; fi
 
 pull-contest:
-	@echo "[deprecated] use 'docker compose --profile contest pull'" >&2
+	@echo "[deprecated] use 'make pull-contest' (adds core profile for graph validation)" >&2
 	@pull_failed=0; \
-	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile contest pull || { echo "[WARN] pull failed for contest — continuing with local images (may be stale)" >&2; pull_failed=1; }; \
+	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile core --profile contest pull || { echo "[WARN] pull failed for contest — continuing with local images (may be stale)" >&2; pull_failed=1; }; \
 	if [ "$$pull_failed" -eq 0 ]; then echo "Pull complete."; else echo "Pull finished WITH FAILURES (see above)" >&2; fi
 
 pull-worker:

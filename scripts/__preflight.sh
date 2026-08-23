@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/preflight.sh — pre-flight validation before bringing up CMS stacks.
+# scripts/__preflight.sh — pre-flight validation before bringing up CMS stacks.
 # Usage: preflight.sh [--stack core|admin|contest|worker|monitor|all]
 # Checks run in order; hard failures accumulate and produce exit 2 at the end.
 # Warnings never block the run.

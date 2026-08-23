@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# scripts/smoke-test.sh — smoke test for CMS Docker unified compose.
+# scripts/__smoke-test.sh — smoke test for CMS Docker unified compose.
 # See header usage for contract.
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
