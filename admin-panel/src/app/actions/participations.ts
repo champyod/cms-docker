@@ -4,8 +4,21 @@ import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { ensurePermission } from '@/lib/permissions';
 import { safeUserSelect } from '@/lib/prisma-selects';
+import {
+  executeParticipationUpdate,
+  parseIpAllowlist,
+  queryParticipationDetails,
+  type ParticipationDetails,
+  type UpdateParticipationInput,
+} from './participation-sql';
 
-// Get participation details
+const PLAINTEXT_PREFIX = 'plaintext:';
+
+interface ActionResult {
+  success: boolean;
+  error?: string;
+}
+
 export async function getParticipation(participationId: number) {
   await ensurePermission('contests');
   return prisma.participations.findUnique({
@@ -20,66 +33,17 @@ export async function getParticipation(participationId: number) {
   });
 }
 
-// Update participation settings (uses raw SQL for interval and IP fields)
-export async function updateParticipation(participationId: number, data: {
-  team_id?: number | null;
-  hidden?: boolean;
-  unrestricted?: boolean;
-  password?: string | null;
-  extra_time_seconds?: number;
-  delay_time_seconds?: number;
-  ip?: string;
-  starting_time?: string | null;
-}) {
+export async function updateParticipation(
+  participationId: number,
+  data: UpdateParticipationInput
+): Promise<ActionResult> {
   await ensurePermission('contests');
 
   try {
-    const extraTime = data.extra_time_seconds ?? 0;
-    const delayTime = data.delay_time_seconds ?? 0;
-    const hidden = data.hidden ?? false;
-    const unrestricted = data.unrestricted ?? false;
-    const teamId = data.team_id ?? null;
-    const password = data.password ?? null;
-    const startingTime = data.starting_time ? new Date(data.starting_time) : null;
+    const { validIps, error } = parseIpAllowlist(data.ip);
+    if (error) return { success: false, error };
 
-    const ipArray = data.ip
-      ? data.ip.split(',').map(ip => ip.trim()).filter(ip => ip.length > 0)
-      : [];
-
-    if (ipArray.length > 50) {
-      return { success: false, error: 'Too many IP entries (max 50)' };
-    }
-
-    const cidrRegex = /^(\d{1,3}\.){3}\d{1,3}(\/(3[0-2]|[12]?\d))?$/;
-    const validIps = ipArray.filter(ip => {
-      if (!cidrRegex.test(ip)) return false;
-      const addr = ip.split('/')[0] ?? '';
-      const octets = addr.split('.');
-      return octets.every(octet => Number(octet) <= 255);
-    });
-
-    if (validIps.length > 50) {
-      return { success: false, error: 'Too many IP entries (max 50)' };
-    }
-
-    const ipClause = validIps.length > 0
-      ? `ARRAY[${validIps.map((_, idx) => `$${idx + 9}::cidr`).join(',')}]`
-      : 'NULL';
-
-    const params: unknown[] = [teamId, hidden, unrestricted, extraTime.toString(), delayTime.toString(), password, startingTime, participationId, ...validIps];
-
-    await prisma.$executeRawUnsafe(`
-      UPDATE participations SET
-        team_id = $1,
-        hidden = $2,
-        unrestricted = $3,
-        extra_time = ($4 || ' seconds')::interval,
-        delay_time = ($5 || ' seconds')::interval,
-        password = $6,
-        starting_time = $7,
-        ip = ${ipClause}
-      WHERE id = $8
-    `, ...params);
+    await executeParticipationUpdate(participationId, data, validIps);
 
     revalidatePath('/[locale]/contests', 'page');
     return { success: true };
@@ -90,8 +54,7 @@ export async function updateParticipation(participationId: number, data: {
   }
 }
 
-// Mark user as test user (hidden + unrestricted)
-export async function setTestUser(participationId: number) {
+export async function setTestUser(participationId: number): Promise<ActionResult> {
   await ensurePermission('contests');
 
   try {
@@ -105,87 +68,64 @@ export async function setTestUser(participationId: number) {
     revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {
-    const e = error as Error;
-    return { success: false, error: e.message };
+    return { success: false, error: (error as Error).message };
   }
 }
 
-// Add all team members to a contest
+async function resolveNewTeamUserIds(contestId: number, teamId: number): Promise<{ allUserIds: number[]; newIds: number[] }> {
+  const teamParticipations = await prisma.participations.findMany({
+    where: { team_id: teamId },
+    select: { user_id: true },
+  });
+  const allUserIds = [...new Set(teamParticipations.map((p) => p.user_id))];
+
+  const existingParticipations = await prisma.participations.findMany({
+    where: { contest_id: contestId, user_id: { in: allUserIds } },
+    select: { user_id: true },
+  });
+  const existingUserIds = new Set(existingParticipations.map((p) => p.user_id));
+
+  return { allUserIds, newIds: allUserIds.filter(id => !existingUserIds.has(id)) };
+}
+
 export async function addTeamToContest(
   contestId: number,
   teamId: number,
   options: { hidden?: boolean; unrestricted?: boolean } = {}
-) {
+): Promise<ActionResult & { added?: number }> {
   await ensurePermission('contests');
 
   try {
-    // Get all users that have participations with this team in any contest
-    const teamParticipations = await prisma.participations.findMany({
-      where: { team_id: teamId },
-      select: { user_id: true },
-    });
-
-    // Get unique user IDs
-    const userIds = [...new Set(teamParticipations.map((p: { user_id: number }) => p.user_id))];
-
-    if (userIds.length === 0) {
+    const { allUserIds, newIds } = await resolveNewTeamUserIds(contestId, teamId);
+    if (allUserIds.length === 0) {
       return { success: false, error: 'No users are associated with this team' };
     }
-
-    // Check which users are already in this contest
-    const existingParticipations = await prisma.participations.findMany({
-      where: {
-        contest_id: contestId,
-        user_id: { in: userIds },
-      },
-      select: { user_id: true },
-    });
-    const existingUserIds = new Set(existingParticipations.map((p: { user_id: number }) => p.user_id));
-
-    // Filter to users not already in contest
-    const newUserIds = userIds.filter(id => !existingUserIds.has(id));
-
-    if (newUserIds.length === 0) {
+    if (newIds.length === 0) {
       return { success: false, error: 'All team members are already in this contest' };
     }
 
     const hidden = options.hidden ?? false;
     const unrestricted = options.unrestricted ?? false;
 
-    // Add each new user with raw SQL for interval fields
-    for (const userId of newUserIds) {
+    for (const userId of newIds) {
       await prisma.$executeRaw`
         INSERT INTO participations (contest_id, user_id, team_id, hidden, unrestricted, delay_time, extra_time)
         VALUES (${contestId}, ${userId}, ${teamId}, ${hidden}, ${unrestricted}, '0 seconds'::interval, '0 seconds'::interval)
       `;
     }
-    
+
     revalidatePath('/[locale]/contests', 'page');
-    return { success: true, added: newUserIds.length };
+    return { success: true, added: newIds.length };
   } catch (error) {
-    const e = error as Error;
-    return { success: false, error: e.message };
+    return { success: false, error: (error as Error).message };
   }
 }
 
-// Get participation with interval fields as seconds
-export async function getParticipationDetails(id: number) {
+export async function getParticipationDetails(id: number): Promise<ParticipationDetails | null> {
   await ensurePermission('contests');
-  const result = await prisma.$queryRaw<any[]>`
-    SELECT 
-      id, contest_id, user_id, team_id,
-      hidden, unrestricted,
-      EXTRACT(EPOCH FROM delay_time)::int as delay_time_seconds,
-      EXTRACT(EPOCH FROM extra_time)::int as extra_time_seconds,
-      starting_time,
-      array_to_string(ip, ', ') as ip_string
-    FROM participations
-    WHERE id = ${id}
-  `;
+  const p = await queryParticipationDetails(id);
+  if (!p) return null;
 
-  if (result.length === 0) return null;
-
-  const p = result[0];
   return {
     id: p.id,
     contest_id: p.contest_id,
@@ -208,18 +148,17 @@ export async function revealParticipationPassword(participationId: number): Prom
     const row = await prisma.participations.findUnique({ where: { id: participationId }, select: { password: true } });
     const stored = row?.password;
     if (!stored) return { success: true, kind: 'plaintext', value: '' };
-    if (stored.startsWith('plaintext:')) return { success: true, kind: 'plaintext', value: stored.slice('plaintext:'.length) };
+    if (stored.startsWith(PLAINTEXT_PREFIX)) return { success: true, kind: 'plaintext', value: stored.slice(PLAINTEXT_PREFIX.length) };
     return { success: true, kind: 'bcrypt' };
   } catch {
     return { success: false, error: 'Unable to load password' };
   }
 }
 
-// Send a message to a participant
 export async function sendMessage(participationId: number, adminId: number, data: {
   subject: string;
   text: string;
-}) {
+}): Promise<ActionResult> {
   await ensurePermission('messaging');
 
   try {
@@ -235,12 +174,10 @@ export async function sendMessage(participationId: number, adminId: number, data
     revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {
-    const e = error as Error;
-    return { success: false, error: e.message };
+    return { success: false, error: (error as Error).message };
   }
 }
 
-// Get messages for a participation
 export async function getMessages(participationId: number) {
   await ensurePermission('contests');
   return prisma.messages.findMany({
