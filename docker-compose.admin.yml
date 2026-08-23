@@ -119,7 +119,7 @@ services:
     profiles:
       - printing
     command: >
-      sh -c "if [ \"$PRINTING_ENABLED\" = \"true\" ]; then sleep 10 && cmsPrintingService ${PRINTING_SERVICE_SHARD:-0}; else echo 'Printing service disabled'; sleep infinity; fi"
+      sh -c "if [ \"$${PRINTING_ENABLED}\" = \"true\" ]; then sleep 10 && cmsPrintingService $${PRINTING_SERVICE_SHARD:-0}; else echo 'Printing service disabled'; sleep infinity; fi"
 
 networks:
   cms-network:

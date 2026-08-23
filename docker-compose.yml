@@ -540,7 +540,7 @@ services:
       - cms-network
     privileged: true
     command: >
-      sh -c "if [ \"$PRINTING_ENABLED\" = \"true\" ]; then cmsPrintingService $${PRINTING_SERVICE_SHARD:-0}; else echo 'Printing service disabled'; sleep infinity; fi"
+      sh -c "if [ \"$${PRINTING_ENABLED}\" = \"true\" ]; then cmsPrintingService $${PRINTING_SERVICE_SHARD:-0}; else echo 'Printing service disabled'; sleep infinity; fi"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.cms-printing.rule=Host(`${PRINTING_DOMAIN:-printing.cms.local}`)"

@@ -69,12 +69,19 @@ handle_subcommand() {
       stack="${2:-}"
       [[ -z "$stack" ]] && { echo "usage: cms deploy <core|admin|contest|worker|infra|all> [--img]" >&2; exit 2; }
       img=""
-      [[ "${3:-}" == "--img" ]] && img="-img"
+      [[ "${3:-}" == "--img" ]] && img=1
+      run_stack() {
+        if [[ -n "$img" ]]; then
+          DEPLOYMENT_TYPE_OVERRIDE=img make "$1"
+        else
+          make "$1"
+        fi
+      }
       case "$stack" in
-        core|admin|contest|worker|infra) exec make "${stack}${img}" ;;
+        core|admin|contest|worker|infra) run_stack "$stack"; exit "$?" ;;
         all)
           rc=0
-          for s in core infra admin contest worker; do make "${s}${img}" || rc=1; done
+          for s in core infra admin contest worker; do run_stack "$s" || rc=1; done
           exit "$rc" ;;
         *) echo "unknown stack: $stack" >&2; exit 2 ;;
       esac ;;
