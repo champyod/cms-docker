@@ -1,6 +1,6 @@
 ---
 # Sample Batch Contest Configuration
-# Use this file with: ./scripts/create-contests.sh -f examples/contests.yaml
+# Use this file with: ./scripts/__create_contests.sh -f examples/contests.yaml
 
 contests:
   # Practice Contest for Beginners
