@@ -3,6 +3,11 @@ SHELL := /bin/bash
 # Detect Docker Compose version (keep fallback)
 COMPOSE_CMD := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
 COMPOSE_FILE := docker-compose.yml
+# Compose v5 does not auto-activate the profiles of depends_on targets, so
+# stack bring-up must request dependency profiles explicitly. Stop/clean
+# targets keep the stack's own profile so teardown never removes dependencies.
+ADMIN_UP_PROFILES   := --profile core --profile admin
+CONTEST_UP_PROFILES := --profile core --profile contest
 
 .PHONY: setup help env core admin contest worker infra core-stop admin-stop contest-stop contest-down worker-stop infra-stop core-clean admin-clean contest-clean worker-clean infra-clean db-clean clean pull pull-core pull-admin pull-contest pull-worker pull-infra core-img admin-img contest-img worker-img infra-img admin-dev admin-dev-stop contest-down cms-init admin-create prisma-sync lint smoke-test preflight backup db-reset
 
@@ -237,11 +242,11 @@ admin:
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
 	if [ "$$DEPLOY_TYPE" = "img" ]; then \
 		echo "DEPLOYMENT_TYPE=img → pulling admin images..."; \
-		$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile admin pull || true; \
-		$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile admin up -d --no-build; \
+		$(COMPOSE_CMD) -f $(COMPOSE_FILE) $(ADMIN_UP_PROFILES) pull || true; \
+		$(COMPOSE_CMD) -f $(COMPOSE_FILE) $(ADMIN_UP_PROFILES) up -d --no-build; \
 	else \
 		echo "DEPLOYMENT_TYPE=src → building admin images..."; \
-		$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile admin up -d --build; \
+		$(COMPOSE_CMD) -f $(COMPOSE_FILE) $(ADMIN_UP_PROFILES) up -d --build; \
 	fi
 	@echo "Admin profile started."
 
@@ -252,11 +257,11 @@ contest:
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
 	if [ "$$DEPLOY_TYPE" = "img" ]; then \
 		echo "DEPLOYMENT_TYPE=img → pulling contest images..."; \
-		$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile contest pull || true; \
-		$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile contest up -d --no-build; \
+		$(COMPOSE_CMD) -f $(COMPOSE_FILE) $(CONTEST_UP_PROFILES) pull || true; \
+		$(COMPOSE_CMD) -f $(COMPOSE_FILE) $(CONTEST_UP_PROFILES) up -d --no-build; \
 	else \
 		echo "DEPLOYMENT_TYPE=src → building contest images..."; \
-		$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile contest up -d --build; \
+		$(COMPOSE_CMD) -f $(COMPOSE_FILE) $(CONTEST_UP_PROFILES) up -d --build; \
 	fi
 	@echo "Contest profile started (CONTEST_ID canonical)."
 

@@ -70,9 +70,9 @@ log "Detected deployment type: ${DEPLOY_TYPE}"
 # ---------------------------------------------------------------------------
 # (c) Preflight checks — abort cleanly before touching running services
 # ---------------------------------------------------------------------------
-PREFLIGHT_SCRIPT="scripts/preflight.sh"
+PREFLIGHT_SCRIPT="scripts/__preflight.sh"
 if [ ! -x "$PREFLIGHT_SCRIPT" ]; then
-    die "scripts/preflight.sh not found or not executable; refusing to update."
+    die "scripts/__preflight.sh not found or not executable; refusing to update."
 fi
 log "Running preflight checks..."
 "$PREFLIGHT_SCRIPT" all || die "Preflight failed; aborting update cleanly."
@@ -274,7 +274,7 @@ Manual rollback steps:
      "image:" entries (or check out the old commit and rebuild).
   4. Bring stacks back up for every detected stack:
        make core-img infra-img admin-img contest-img worker-img
-  5. Re-run scripts/update-server.sh once the cause is fixed.
+  5. Re-run ./cms update-server once the cause is fixed.
 ================================================================
 EOF
     exit 1

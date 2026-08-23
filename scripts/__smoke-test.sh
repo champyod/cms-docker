@@ -503,7 +503,7 @@ fi
 if printf '%s\n' "${STACKS_NORM[@]}" | grep -qx "admin"; then
   log_info "up: admin profile"
   # shellcheck disable=SC2086
-  docker compose -f "$COMPOSE_FILE" --profile admin up -d 2>&1 || fail_mid_flow "compose up admin failed"
+  docker compose -f "$COMPOSE_FILE" --profile core --profile admin up -d 2>&1 || fail_mid_flow "compose up admin failed"
   ADMIN_NEXT_PORT="${ADMIN_NEXT_PORT_EXTERNAL:-8891}"
   ADMIN_PORT="${ADMIN_PORT_EXTERNAL:-8889}"
   RANKING_PORT="${RANKING_PORT_EXTERNAL:-8890}"
@@ -523,7 +523,7 @@ fi
 if printf '%s\n' "${STACKS_NORM[@]}" | grep -qx "contest"; then
   log_info "up: contest profile"
   # shellcheck disable=SC2086
-  docker compose -f "$COMPOSE_FILE" --profile contest up -d 2>&1 || fail_mid_flow "compose up contest failed"
+  docker compose -f "$COMPOSE_FILE" --profile core --profile contest up -d 2>&1 || fail_mid_flow "compose up contest failed"
   CONTEST_PORT_VAL=$(resolve_contest_port)
   # Documented: read docker-compose.yml at runtime to discover env name — already done via resolve_contest_port
   run_curl_wait "contest" "http://127.0.0.1:${CONTEST_PORT_VAL}/" 120 || true
