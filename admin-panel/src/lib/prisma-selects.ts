@@ -29,3 +29,31 @@ export type SafeAdmin = Prisma.adminsGetPayload<{ select: typeof safeAdminSelect
 export type AdminWithLogin = Prisma.adminsGetPayload<{
   select: typeof safeAdminSelect & { last_login_at: true };
 }>;
+
+/** Case-insensitive search across user names, credentials, and enrolled team codes/names. */
+export function buildUserSearchWhere(search: string): Prisma.usersWhereInput {
+  if (!search) return {};
+
+  const contains = { contains: search, mode: 'insensitive' as const };
+  return {
+    OR: [
+      { first_name: contains },
+      { last_name: contains },
+      { username: contains },
+      { email: contains },
+      { participations: { some: { teams: { code: contains } } } },
+      { participations: { some: { teams: { name: contains } } } },
+    ],
+  };
+}
+
+export const usersPageSelect = {
+  ...safeUserSelect,
+  status: true,
+  organization: true,
+  country: true,
+  _count: { select: { participations: true } },
+  participations: { select: { teams: { select: { code: true, name: true } } } },
+} satisfies Prisma.usersSelect;
+
+export type UsersPageRow = Prisma.usersGetPayload<{ select: typeof usersPageSelect }>;

@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
-import { safeUserSelect } from '@/lib/prisma-selects';
+import { buildUserSearchWhere, safeUserSelect } from '@/lib/prisma-selects';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import bcrypt from 'bcryptjs';
@@ -20,18 +20,7 @@ export async function GET(req: NextRequest) {
     const search = (searchParams.get('search') || '').trim();
     const skip = (page - 1) * perPage;
 
-    const where = search
-      ? {
-          OR: [
-            { first_name: { contains: search, mode: 'insensitive' as const } },
-            { last_name: { contains: search, mode: 'insensitive' as const } },
-            { username: { contains: search, mode: 'insensitive' as const } },
-            { email: { contains: search, mode: 'insensitive' as const } },
-            { participations: { some: { teams: { code: { contains: search, mode: 'insensitive' as const } } } } },
-            { participations: { some: { teams: { name: { contains: search, mode: 'insensitive' as const } } } } },
-          ],
-        }
-      : {};
+    const where = buildUserSearchWhere(search);
 
     const [users, total] = await Promise.all([
       prisma.users.findMany({
