@@ -2,7 +2,8 @@
 
 import { AlertTriangle, FileSpreadsheet, Table2, Upload, Wand2 } from 'lucide-react';
 import { Button } from '@/components/core/Button';
-import { EXPECTED_FIELDS, type GenerationMode, type PreviewRow } from './csvPreview';
+import { EXPECTED_FIELDS } from './csvTemplate';
+import type { GenerationMode, PreviewRow } from './csvPreview';
 
 export interface BulkSubmitFailure {
   rowIndex: number;

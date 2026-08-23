@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { apiError, verifyApiPermission } from '@/lib/api-utils';
-import { cleanupExpiredCreds, handleApplyCredentials, handleRegenerate } from './credentialActions';
+import { cleanupExpiredCreds } from '@/lib/creds-file';
+import { handleApplyCredentials, handleRegenerate } from './credentialActions';
 import { handleContest, handleTeam } from './enrollmentActions';
 import { handleProfile } from './profileActions';
 
