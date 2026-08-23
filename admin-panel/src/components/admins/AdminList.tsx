@@ -7,11 +7,25 @@ import { Button } from '@/components/core/Button';
 import { Edit2, Trash2, Plus, Shield, ShieldCheck } from 'lucide-react';
 import { updateAdmin, deleteAdmin } from '@/app/actions/admins';
 import { AdminModal } from './AdminModal';
+import { cn } from '@/lib/utils';
+import type { AdminWithLogin } from '@/lib/prisma-selects';
 
-export function AdminList({ initialAdmins }: { initialAdmins: any[] }) {
+const PERMISSION_BADGES = [
+  { key: 'permission_all', label: 'Full', className: 'bg-purple-500/20 text-purple-400' },
+  { key: 'permission_messaging', label: 'Messaging', className: 'bg-blue-500/20 text-blue-400' },
+  { key: 'permission_tasks', label: 'Tasks', className: 'bg-orange-500/20 text-orange-400' },
+  { key: 'permission_users', label: 'Users', className: 'bg-teal-500/20 text-teal-400' },
+  { key: 'permission_contests', label: 'Contests', className: 'bg-indigo-500/20 text-indigo-400' },
+] as const satisfies ReadonlyArray<{ key: keyof AdminWithLogin; label: string; className: string }>;
+
+interface AdminListProps {
+  initialAdmins: AdminWithLogin[];
+}
+
+export function AdminList({ initialAdmins }: AdminListProps) {
   const [adminsList] = useSyncedState(initialAdmins);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingAdmin, setEditingAdmin] = useState<any | null>(null);
+  const [editingAdmin, setEditingAdmin] = useState<AdminWithLogin | null>(null);
 
   const handleDelete = async (id: number) => {
     if (confirm('Delete this admin?')) {
@@ -32,7 +46,7 @@ export function AdminList({ initialAdmins }: { initialAdmins: any[] }) {
     window.location.reload();
   };
 
-  const startEdit = (admin: any) => {
+  const startEdit = (admin: AdminWithLogin) => {
     setEditingAdmin(admin);
     setIsModalOpen(true);
   };
@@ -80,21 +94,11 @@ export function AdminList({ initialAdmins }: { initialAdmins: any[] }) {
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
-                    {admin.permission_all && (
-                      <span className="px-2 py-0.5 text-xs bg-purple-500/20 text-purple-400 rounded-full">Full</span>
-                    )}
-                    {admin.permission_messaging && (
-                      <span className="px-2 py-0.5 text-xs bg-blue-500/20 text-blue-400 rounded-full">Messaging</span>
-                    )}
-                    {admin.permission_tasks && (
-                      <span className="px-2 py-0.5 text-xs bg-orange-500/20 text-orange-400 rounded-full">Tasks</span>
-                    )}
-                    {admin.permission_users && (
-                      <span className="px-2 py-0.5 text-xs bg-teal-500/20 text-teal-400 rounded-full">Users</span>
-                    )}
-                    {admin.permission_contests && (
-                      <span className="px-2 py-0.5 text-xs bg-indigo-500/20 text-indigo-400 rounded-full">Contests</span>
-                    )}
+                    {PERMISSION_BADGES.filter((badge) => admin[badge.key]).map((badge) => (
+                      <span key={badge.key} className={cn('px-2 py-0.5 text-xs rounded-full', badge.className)}>
+                        {badge.label}
+                      </span>
+                    ))}
                   </div>
                 </TableCell>
                 <TableCell>

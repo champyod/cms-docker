@@ -25,3 +25,7 @@ export const safeAdminSelect = {
 export type SafeUser = Prisma.usersGetPayload<{ select: typeof safeUserSelect }>;
 
 export type SafeAdmin = Prisma.adminsGetPayload<{ select: typeof safeAdminSelect }>;
+
+export type AdminWithLogin = Prisma.adminsGetPayload<{
+  select: typeof safeAdminSelect & { last_login_at: true };
+}>;
