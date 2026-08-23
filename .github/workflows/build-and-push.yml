@@ -1,8 +1,8 @@
-name: CI
+name: Build and Push Docker Images
 
-# Single combined pipeline (lint + image build) so each push produces ONE
-# workflow run instead of two, and rapid commit bursts collapse via
-# cancel-in-progress — this exists to keep Discord run-notifications low.
+# One workflow run per qualifying push; each image builds as its own PARALLEL
+# job (kept separate on purpose — the images are large and serialising them
+# would multiply wall-clock time). Skipped areas show as skipped, not failed.
 on:
   push:
     branches: ["main", "major/admin-panel"]
@@ -23,7 +23,7 @@ on:
         default: false
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -59,114 +59,6 @@ jobs:
               - 'docker/monitor/**'
               - 'scripts/__monitor.sh'
 
-  # ------------------------------------------------------------------
-  # Lint
-  # ------------------------------------------------------------------
-  shell:
-    name: ShellCheck
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install shellcheck if missing
-        run: |
-          if ! command -v shellcheck >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends shellcheck
-          fi
-          shellcheck --version
-
-      - name: Run shellcheck
-        run: |
-          files=()
-          for pattern in 'scripts/*.sh' 'tools/*.sh' 'src/tools/*.sh' 'docker/*.sh' 'src/docker/*.sh'; do
-            for f in ${pattern}; do
-              [ -f "$f" ] && files+=("$f")
-            done
-          done
-          if [ "${#files[@]}" -eq 0 ]; then
-            echo "No shell scripts found to lint."
-            exit 0
-          fi
-          printf 'Linting:\n'
-          printf '  %s\n' "${files[@]}"
-          shellcheck -S error -x "${files[@]}"
-
-  dockerfiles:
-    name: hadolint
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install hadolint v2.12.0
-        run: |
-          curl -fsSL -o /tmp/hadolint \
-            https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
-          sudo install -m 0755 /tmp/hadolint /usr/local/bin/hadolint
-          hadolint --version
-
-      # admin-panel/Dockerfile is intentionally skipped here:
-      # it is owned by the admin-panel session and linted in its own pipeline.
-      - name: Run hadolint
-        run: |
-          hadolint Dockerfile docker/monitor/Dockerfile
-
-  yaml:
-    name: yamllint
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install yamllint
-        run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install yamllint
-
-      - name: Run yamllint
-        run: |
-          set -- \
-            .yamllint.yml \
-            .github/workflows/ \
-            .github/dependabot.yml \
-            docker-compose*.yml \
-            docker/ \
-            examples/ \
-            src/.readthedocs.yml
-          yamllint -c .yamllint.yml "$@"
-
-  compose:
-    name: Compose config validation
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Validate compose files
-        run: |
-          if [ -f .env.core.example ]; then
-            ENV_ARGS=(--env-file .env.core.example)
-          else
-            echo ".env.core.example not found; using dummy env vars"
-            export POSTGRES_PASSWORD=x AUTH_SECRET=x SECRET_KEY=x CONTEST_ID=1
-            ENV_ARGS=()
-          fi
-          for f in docker-compose*.yml docker/docker-compose*.yml; do
-            [ -f "$f" ] || continue
-            echo "::group::docker compose config -q -- $f"
-            if [ "${#ENV_ARGS[@]}" -gt 0 ]; then
-              docker compose "${ENV_ARGS[@]}" -f "$f" config -q
-            else
-              docker compose -f "$f" config -q
-            fi
-            echo "::endgroup::"
-          done
-
-  # ------------------------------------------------------------------
-  # Image build & push — each job skips when its area did not change
-  # ------------------------------------------------------------------
   build-and-push-core:
     needs: changes
     if: needs.changes.outputs.core == 'true' || github.event_name == 'workflow_dispatch'
@@ -223,7 +115,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=core
 
   build-and-push-worker:
-    needs: changes
+    needs: [changes]
     if: needs.changes.outputs.worker == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:

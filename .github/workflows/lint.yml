@@ -1,0 +1,94 @@
+name: Lint
+
+on:
+  push:
+    branches: ["main", "major/admin-panel"]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'examples/**'
+      - '.gitignore'
+      - 'admin-panel/**' # owned by the admin-panel session and linted in its own pipeline
+  pull_request:
+    branches: ["main", "major/admin-panel"]
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# All four linters run in ONE job so a push produces a single check run.
+# They are fast (<90s combined), so sequential execution costs little and
+# keeps the notification surface at one entry per push.
+jobs:
+  lint:
+    name: Lint (shell, dockerfile, yaml, compose)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install linters
+        run: |
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends shellcheck
+          fi
+          curl -fsSL -o /tmp/hadolint \
+            https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
+          sudo install -m 0755 /tmp/hadolint /usr/local/bin/hadolint
+          python3 -m pip install --upgrade pip
+          python3 -m pip install yamllint
+          shellcheck --version && hadolint --version
+
+      # admin-panel/Dockerfile is intentionally skipped here:
+      # it is owned by the admin-panel session and linted in its own pipeline.
+      - name: ShellCheck
+        run: |
+          files=()
+          for pattern in 'scripts/*.sh' 'tools/*.sh' 'src/tools/*.sh' 'docker/*.sh' 'src/docker/*.sh'; do
+            for f in ${pattern}; do
+              [ -f "$f" ] && files+=("$f")
+            done
+          done
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No shell scripts found to lint."
+          else
+            printf 'Linting:\n'; printf '  %s\n' "${files[@]}"
+            shellcheck -S error -x "${files[@]}"
+          fi
+
+      - name: hadolint
+        run: hadolint Dockerfile docker/monitor/Dockerfile
+
+      - name: yamllint
+        run: |
+          set -- \
+            .yamllint.yml \
+            .github/workflows/ \
+            .github/dependabot.yml \
+            docker-compose*.yml \
+            docker/ \
+            examples/ \
+            src/.readthedocs.yml
+          yamllint -c .yamllint.yml "$@"
+
+      - name: Compose config validation
+        run: |
+          if [ -f .env.core.example ]; then
+            ENV_ARGS=(--env-file .env.core.example)
+          else
+            echo ".env.core.example not found; using dummy env vars"
+            export POSTGRES_PASSWORD=x AUTH_SECRET=x SECRET_KEY=x CONTEST_ID=1
+            ENV_ARGS=()
+          fi
+          for f in docker-compose*.yml docker/docker-compose*.yml; do
+            [ -f "$f" ] || continue
+            echo "::group::docker compose config -q -- $f"
+            if [ "${#ENV_ARGS[@]}" -gt 0 ]; then
+              docker compose "${ENV_ARGS[@]}" -f "$f" config -q
+            else
+              docker compose -f "$f" config -q
+            fi
+            echo "::endgroup::"
+          done
