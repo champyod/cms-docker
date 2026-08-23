@@ -88,95 +88,78 @@ export function RankingClient() {
     });
   }, [snapshot]);
 
-  const loadSession = async () => {
-    setLoadingSession(true);
+  const requestRankingApi = async (
+    path: string,
+    init: RequestInit | undefined,
+    fallbackError: string
+  ): Promise<Record<string, unknown>> => {
+    const options: RequestInit = { ...(init ?? {}) };
+    if (!options.method || options.method === 'GET') {
+      options.cache = 'no-store';
+    }
+
+    const res = await fetch(`/api/ranking${path}`, options);
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || fallbackError);
+    }
+    return data;
+  };
+
+  const runWithLoading = async (
+    setLoading: (value: boolean) => void,
+    action: () => Promise<void>
+  ): Promise<void> => {
+    setLoading(true);
     setErrorMessage('');
-
     try {
-      const res = await fetch('/api/ranking/auth', { cache: 'no-store' });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to load ranking session');
-      }
-
-      if (data.connected) {
-        setConnected(true);
-        setBaseUrl(data.baseUrl || '');
-        setUsername(data.username || '');
-      }
+      await action();
     } catch (error) {
       setErrorMessage((error as Error).message);
     } finally {
-      setLoadingSession(false);
+      setLoading(false);
     }
   };
 
-  const connect = async () => {
-    setLoadingSession(true);
-    setErrorMessage('');
-
-    try {
-      const res = await fetch('/api/ranking/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ baseUrl, username, password }),
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to connect ranking');
+  const loadSession = () =>
+    runWithLoading(setLoadingSession, async () => {
+      const data = await requestRankingApi('/auth', undefined, 'Failed to load ranking session');
+      if (data.connected) {
+        setConnected(true);
+        setBaseUrl((data.baseUrl as string) || '');
+        setUsername((data.username as string) || '');
       }
+    });
 
+  const connect = () =>
+    runWithLoading(setLoadingSession, async () => {
+      await requestRankingApi(
+        '/auth',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ baseUrl, username, password }),
+        },
+        'Failed to connect ranking'
+      );
       setConnected(true);
       setPassword('');
       await fetchSnapshot();
-    } catch (error) {
-      setErrorMessage((error as Error).message);
-    } finally {
-      setLoadingSession(false);
-    }
-  };
+    });
 
-  const disconnect = async () => {
-    setLoadingSession(true);
-    setErrorMessage('');
-
-    try {
-      const res = await fetch('/api/ranking/auth', { method: 'DELETE' });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to disconnect ranking');
-      }
-
+  const disconnect = () =>
+    runWithLoading(setLoadingSession, async () => {
+      await requestRankingApi('/auth', { method: 'DELETE' }, 'Failed to disconnect ranking');
       setConnected(false);
       setSnapshot(null);
       setPassword('');
-    } catch (error) {
-      setErrorMessage((error as Error).message);
-    } finally {
-      setLoadingSession(false);
-    }
-  };
+    });
 
-  const fetchSnapshot = async () => {
-    setLoadingSnapshot(true);
-    setErrorMessage('');
-
-    try {
-      const res = await fetch('/api/ranking/snapshot', { cache: 'no-store' });
-      const data = await res.json();
-
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to fetch ranking snapshot');
-      }
-
-      setSnapshot(data.snapshot);
-    } catch (error) {
-      setErrorMessage((error as Error).message);
-    } finally {
-      setLoadingSnapshot(false);
-    }
-  };
+  const fetchSnapshot = () =>
+    runWithLoading(setLoadingSnapshot, async () => {
+      const data = await requestRankingApi('/snapshot', undefined, 'Failed to fetch ranking snapshot');
+      setSnapshot(data.snapshot as RankingSnapshot);
+    });
 
   useEffect(() => {
     void loadSession();
