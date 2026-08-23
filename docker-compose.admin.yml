@@ -16,13 +16,13 @@ services:
       VITE_API_URL: ${VITE_API_URL:-http://localhost:8889}
       SERVER_BASE_URL: ${SERVER_BASE_URL:-http://localhost}
       PUBLIC_IP: ${PUBLIC_IP:-0.0.0.0}
-      
+
       # Database
       DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
-      
+
       # Authentication
       AUTH_SECRET: ${AUTH_SECRET}
-      
+
       # Infrastructure Management
       REPO_ROOT: /repo-root
       DEPLOYMENT_TYPE: ${DEPLOYMENT_TYPE:-img}  # 'img' for pre-built images, 'src' for source builds

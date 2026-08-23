@@ -26,7 +26,7 @@ services:
     networks:
       - cms-network
     command: >
-      sh -c "sudo mkdir -p /var/local/log/cms/EvaluationService-${EVALUATION_SERVICE_SHARD:-0} && 
+      sh -c "sudo mkdir -p /var/local/log/cms/EvaluationService-${EVALUATION_SERVICE_SHARD:-0} &&
              sudo chmod -R 777 /var/local/log/cms &&
              sleep 5 && cmsEvaluationService ${EVALUATION_SERVICE_SHARD:-0} -c ${CONTEST_ID:-1}"
     healthcheck:
@@ -57,7 +57,7 @@ services:
     networks:
       - cms-network
     command: >
-      sh -c "sudo mkdir -p /var/local/log/cms/ProxyService-${PROXY_SERVICE_SHARD:-0} && 
+      sh -c "sudo mkdir -p /var/local/log/cms/ProxyService-${PROXY_SERVICE_SHARD:-0} &&
              sudo chmod -R 777 /var/local/log/cms &&
              sleep 5 && cmsProxyService ${PROXY_SERVICE_SHARD:-0} -c ${CONTEST_ID:-1}"
     healthcheck:
@@ -102,7 +102,7 @@ services:
       - "${CONTEST_BIND_IP:-0.0.0.0}:${CONTEST_PORT_EXTERNAL:-8888}:${CONTEST_LISTEN_PORT:-8888}"
     privileged: true
     command: >
-      sh -c "sudo mkdir -p /var/local/log/cms/ContestWebServer-${CONTEST_WEB_SERVER_SHARD:-0} /var/local/cache/cms /var/local/lib/cms && 
+      sh -c "sudo mkdir -p /var/local/log/cms/ContestWebServer-${CONTEST_WEB_SERVER_SHARD:-0} /var/local/cache/cms /var/local/lib/cms &&
              sudo chmod -R 777 /var/local/log/cms /var/local/cache/cms /var/local/lib/cms &&
              sleep 10 && cmsContestWebServer ${CONTEST_WEB_SERVER_SHARD:-0} -c ${CONTEST_ID:-1}"
     labels:

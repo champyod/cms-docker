@@ -51,7 +51,7 @@ services:
     networks:
       - cms-network
     command: >
-      sh -c "sudo mkdir -p /var/local/log/cms/LogService-${LOG_SERVICE_SHARD:-0} && 
+      sh -c "sudo mkdir -p /var/local/log/cms/LogService-${LOG_SERVICE_SHARD:-0} &&
              sudo chmod -R 777 /var/local/log/cms &&
              wait-for-it database:5432 -t 60 -- cmsLogService ${LOG_SERVICE_SHARD:-0}"
     healthcheck:
@@ -89,7 +89,7 @@ services:
       - cms-network
     privileged: true
     command: >
-      sh -c "sudo mkdir -p /var/local/log/cms/ResourceService-${RESOURCE_SERVICE_SHARD:-0} && 
+      sh -c "sudo mkdir -p /var/local/log/cms/ResourceService-${RESOURCE_SERVICE_SHARD:-0} &&
              sudo chmod -R 777 /var/local/log/cms &&
              sleep 5 && cmsResourceService ${RESOURCE_SERVICE_SHARD:-0}"
     healthcheck:
@@ -127,7 +127,7 @@ services:
     networks:
       - cms-network
     command: >
-      sh -c "sudo mkdir -p /var/local/log/cms/ScoringService-${SCORING_SERVICE_SHARD:-0} && 
+      sh -c "sudo mkdir -p /var/local/log/cms/ScoringService-${SCORING_SERVICE_SHARD:-0} &&
              sudo chmod -R 777 /var/local/log/cms &&
              sleep 5 && cmsScoringService ${SCORING_SERVICE_SHARD:-0}"
     healthcheck:
@@ -166,7 +166,7 @@ services:
       - cms-network
     privileged: true
     command: >
-      sh -c "sudo mkdir -p /var/local/log/cms/Checker-${CHECKER_SERVICE_SHARD:-0} && 
+      sh -c "sudo mkdir -p /var/local/log/cms/Checker-${CHECKER_SERVICE_SHARD:-0} &&
              sudo chmod -R 777 /var/local/log/cms &&
              sleep 5 && cmsChecker ${CHECKER_SERVICE_SHARD:-0}"
     healthcheck:

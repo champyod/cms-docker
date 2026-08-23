@@ -11,7 +11,7 @@ contests:
     token_mode: "disabled"
     max_submission_number: 50
     min_submission_interval: 60
-    
+
   # Weekly Programming Challenge
   - name: "Weekly_Challenge_1"
     description: "Weekly programming challenge - Easy to Medium problems"
@@ -23,7 +23,7 @@ contests:
     token_gen_number: 2
     max_submission_number: 100
     min_submission_interval: 30
-    
+
   # Advanced Competition
   - name: "Advanced_Competition_2024"
     description: "Expert level algorithmic problems"
@@ -32,7 +32,7 @@ contests:
     token_mode: "infinite"
     max_submission_number: 200
     min_submission_interval: 20
-    
+
   # School Championship
   - name: "School Programming Championship"
     description: "Annual school-wide programming competition"
