@@ -57,3 +57,29 @@ export const usersPageSelect = {
 } satisfies Prisma.usersSelect;
 
 export type UsersPageRow = Prisma.usersGetPayload<{ select: typeof usersPageSelect }>;
+
+export const submissionsListInclude = {
+  tasks: { select: { id: true, name: true, title: true } },
+  participations: {
+    include: {
+      users: { select: { username: true } },
+      contests: { select: { name: true } }
+    }
+  },
+  submission_results: {
+    select: {
+      score: true,
+      dataset_id: true,
+      compilation_outcome: true,
+      evaluation_outcome: true,
+      compilation_time: true,
+      compilation_memory: true,
+      compilation_text: true,
+      compilation_stdout: true,
+      compilation_stderr: true
+    }
+  },
+  files: { select: { filename: true, digest: true } }
+} satisfies Prisma.submissionsInclude;
+
+export type SubmissionsListRow = Prisma.submissionsGetPayload<{ include: typeof submissionsListInclude }>;
