@@ -164,15 +164,15 @@ ensure_worker_cgroup_setup() {
         AUTO_CGROUP=${AUTO_CGROUP:-y}
         if [ "$AUTO_CGROUP" = "y" ]; then
             print_info "Running setup-worker-cgroup.sh..."
-            chmod +x ./scripts/setup-worker-cgroup.sh
-            sudo ./scripts/setup-worker-cgroup.sh
+            chmod +x ./scripts/__worker_cgroup_setup.sh
+            sudo ./scripts/__worker_cgroup_setup.sh
             if [ $? -ne 0 ]; then
                 print_error "Failed to configure cgroups. Worker might not start correctly."
             else
                 print_success "Worker cgroups configured successfully."
             fi
         else
-            print_warning "Cgroup setup skipped. You may need to run scripts/setup-worker-cgroup.sh manually."
+            print_warning "Cgroup setup skipped. You may need to run scripts/__worker_cgroup_setup.sh manually."
         fi
     fi
 }
@@ -735,7 +735,7 @@ if [ "$SETUP_TYPE" = "main" ]; then
         read -p "Worker host/IP for new entries [RESERVED]: " MAIN_WORKER_HOST
         MAIN_WORKER_HOST=${MAIN_WORKER_HOST:-RESERVED}
 
-        run_or_print "./scripts/manage-workers.sh bulk-add '$MAIN_WORKER_HOST' '$MAIN_WORKER_BASE_PORT' '$MAIN_WORKER_COUNT'"
+        run_or_print "./scripts/__manage_workers.sh bulk-add '$MAIN_WORKER_HOST' '$MAIN_WORKER_BASE_PORT' '$MAIN_WORKER_COUNT'"
     fi
 fi
 
@@ -838,7 +838,7 @@ EOF
     # Detect local VPN IP for help message
     LOCAL_VPN_IP=$(ip addr show tailscale0 2>/dev/null | grep -Po 'inet \K[\d.]+' || hostname -I | awk '{print $1}')
     echo "Register these workers on the main server (.env.core) with:"
-    echo "  ./scripts/manage-workers.sh bulk-add '$LOCAL_VPN_IP' '$WORKER_BASE_PORT' '$WORKER_INSTANCE_COUNT'"
+    echo "  ./scripts/__manage_workers.sh bulk-add '$LOCAL_VPN_IP' '$WORKER_BASE_PORT' '$WORKER_INSTANCE_COUNT'"
     echo "  make env && make core-img"
     echo ""
     exit 0
@@ -869,7 +869,7 @@ if [ "$SETUP_TYPE" = "worker" ] && [ "$WORKER_SETUP_MODE" = "mounting" ]; then
             if [ "$CONTINUE_MOUNT" != "y" ]; then exit 1; fi
         fi
     fi
-    run_or_print "./scripts/manage-workers.sh bulk-add '$WORKER_REGISTER_HOST' '$WORKER_BASE_PORT' '$WORKER_INSTANCE_COUNT'"
+    run_or_print "./scripts/__manage_workers.sh bulk-add '$WORKER_REGISTER_HOST' '$WORKER_BASE_PORT' '$WORKER_INSTANCE_COUNT'"
 fi
 
 if [ "$DRY_RUN" = "true" ]; then
@@ -900,7 +900,7 @@ if [ "$SETUP_TYPE" = "worker" ] && [ "$WORKER_SETUP_MODE" = "mounting" ]; then
     echo "  Host       : $WORKER_REGISTER_HOST"
     echo ""
     echo "Update slot IPs when workers are provisioned:"
-    echo "  ./scripts/manage-workers.sh update <index> <real-ip> <port>"
+    echo "  ./scripts/__manage_workers.sh update <index> <real-ip> <port>"
     echo "  make env && make core-img"
     echo ""
     exit 0

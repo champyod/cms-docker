@@ -226,7 +226,7 @@ On the worker host, prepare a delegated cgroup path before starting the worker.
 
 ```bash
 # From repository root
-sudo ./scripts/setup-worker-cgroup.sh /sys/fs/cgroup/cms-isolate
+sudo ./scripts/__worker_cgroup_setup.sh /sys/fs/cgroup/cms-isolate
 ```
 
 If you don't have the script yet, use manual commands:
@@ -364,7 +364,7 @@ for i in "${!WORKERS[@]}"; do
   
   echo "Deploying worker $SHARD on $WORKER_IP..."
   
-  ssh root@$WORKER_IP "curl -fsSL http://$MAIN_SERVER_IP/scripts/worker-connect.sh | \
+  ssh root@$WORKER_IP "curl -fsSL http://$MAIN_SERVER_IP/scripts/__worker_connect.sh | \
     WORKER_SHARD=$SHARD \
     MAIN_SERVER_IP=$MAIN_SERVER_IP \
     bash"
@@ -406,7 +406,7 @@ aws ec2 run-instances \
   --key-name your-key \
   --security-group-ids sg-workers \
   --user-data '#!/bin/bash
-curl -fsSL http://YOUR_SERVER_IP/scripts/worker-connect.sh | bash'
+curl -fsSL http://YOUR_SERVER_IP/scripts/__worker_connect.sh | bash'
 
 # Or use EC2 launch template
 ```
@@ -420,7 +420,7 @@ gcloud compute instances create cms-worker-1 \
   --image-family ubuntu-2004-lts \
   --image-project ubuntu-os-cloud \
   --metadata startup-script='#!/bin/bash
-curl -fsSL http://YOUR_SERVER_IP/scripts/worker-connect.sh | bash'
+curl -fsSL http://YOUR_SERVER_IP/scripts/__worker_connect.sh | bash'
 ```
 
 ### Azure VM
@@ -443,7 +443,7 @@ Via Web Console:
 3. Add User Data:
    ```bash
    #!/bin/bash
-   curl -fsSL http://YOUR_SERVER_IP/scripts/worker-connect.sh | bash
+   curl -fsSL http://YOUR_SERVER_IP/scripts/__worker_connect.sh | bash
    ```
 
 ---

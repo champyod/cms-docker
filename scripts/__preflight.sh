@@ -439,7 +439,7 @@ check_worker_cgroup() {
   fi
 
   printf '[FAIL] worker cgroup path missing: %s (ISOLATE_CGROUP_CONTROL=1)\n' "$cgroup_path" >&2
-  printf '       Hint: run scripts/setup-worker-cgroup.sh on the worker host (as root) to create it\n' >&2
+  printf '       Hint: run scripts/__worker_cgroup_setup.sh on the worker host (as root) to create it\n' >&2
   record_result "worker cgroup" "FAIL" "${cgroup_path} missing — run setup-worker-cgroup.sh"
 }
 

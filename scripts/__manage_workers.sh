@@ -1,6 +1,6 @@
 #!/bin/bash
 # Helper script for Admin UI to manage worker configuration
-# Usage: ./manage-workers.sh <action> [args]
+# Usage: ./__manage_workers.sh <action> [args]
 
 set -e
 

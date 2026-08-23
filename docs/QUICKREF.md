@@ -65,18 +65,18 @@ make env
 make core-img
 
 # Helper script
-./scripts/manage-workers.sh add "hostname" 26001
-./scripts/manage-workers.sh list
-./scripts/manage-workers.sh remove 1
+./scripts/__manage_workers.sh add "hostname" 26001
+./scripts/__manage_workers.sh list
+./scripts/__manage_workers.sh remove 1
 ```
 
 ## Batch Contest Creation
 ```bash
 # Create multiple contests
-./scripts/create-contests.sh -f examples/contests.yaml
+./scripts/__create_contests.sh -f examples/contests.yaml
 
 # Preview without creating
-./scripts/create-contests.sh -f contests.yaml --dry-run
+./scripts/__create_contests.sh -f contests.yaml --dry-run
 ```
 
 ## Monitoring & Logs

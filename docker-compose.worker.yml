@@ -16,7 +16,7 @@ services:
       SERVICE_TYPE: Worker
       # Required for isolate inside docker
       ISOLATE_CGROUP_CONTROL: ${ISOLATE_CGROUP_CONTROL:-1}
-      # Delegated host cgroup path prepared by scripts/setup-worker-cgroup.sh
+      # Delegated host cgroup path prepared by scripts/__worker_cgroup_setup.sh
       ISOLATE_CGROUP_PATH: ${ISOLATE_CGROUP_PATH:-/sys/fs/cgroup/cms-isolate}
       # Worker shard - Each worker needs a unique shard number
       WORKER_SHARD: ${WORKER_SHARD:-0}
@@ -76,7 +76,7 @@ services:
 
           if [ ! -d "$$CGROUP_BASE" ]; then
             echo "ERROR: ISOLATE_CGROUP_PATH does not exist: $$CGROUP_BASE"
-            echo "Run scripts/setup-worker-cgroup.sh on the worker host first."
+            echo "Run scripts/__worker_cgroup_setup.sh on the worker host first."
             exit 1
           fi
 

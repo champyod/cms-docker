@@ -311,7 +311,7 @@ Steps:
      b. remaining core: up log/resource/scoring/checker -> wait_healthy each 120
      c. admin: up admin profile (if in stacks) -> curl_wait 127.0.0.1:\${ADMIN_NEXT_PORT_EXTERNAL:-8891}, :\${ADMIN_PORT_EXTERNAL:-8889}, ranking :\${RANKING_PORT_EXTERNAL:-8890} (120s each)
      d. contest: up contest profile (if in stacks) -> curl_wait :\$(resolve_contest_port) via compose-discovered env var (120s)
-     Note: worker/monitor never run by default; --stacks worker includes ISOLATE_CGROUP_CONTROL=0 override (real isolate needs host cgroup setup via scripts/setup-worker-cgroup.sh)
+     Note: worker/monitor never run by default; --stacks worker includes ISOLATE_CGROUP_CONTROL=0 override (real isolate needs host cgroup setup via scripts/__worker_cgroup_setup.sh)
   5. Result matrix: service | check type | result | duration
   6. Teardown: compose down for requested profiles WITHOUT -v (preserve volumes); on failure dump docker logs --tail 100 to /tmp/cms-smoke-<ts>/; keep up only if SMOKE_KEEP_UP=1
   7. Exit: 0 all-green, 1 failures, 2 preconditions
@@ -537,7 +537,7 @@ fi
 
 # Worker/monitor explicit support
 if printf '%s\n' "${STACKS_NORM[@]}" | grep -qx "worker"; then
-  log_info "up: worker profile (ISOLATE_CGROUP_CONTROL=0 override; real isolate needs host cgroup setup via scripts/setup-worker-cgroup.sh)"
+  log_info "up: worker profile (ISOLATE_CGROUP_CONTROL=0 override; real isolate needs host cgroup setup via scripts/__worker_cgroup_setup.sh)"
   ISOLATE_CGROUP_CONTROL=0 docker compose -f "$COMPOSE_FILE" --profile worker up -d 2>&1 || fail_mid_flow "compose up worker failed"
   # Health check for worker container(s) — name is cms-worker-${WORKER_SHARD:-0}
   WORKER_SHARD_VAL="${WORKER_SHARD:-0}"

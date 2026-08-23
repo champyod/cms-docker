@@ -250,12 +250,12 @@ Continue as needed.
    
    Download and run the worker connection script:
    ```bash
-   curl -fsSL http://YOUR-MAIN-SERVER/scripts/worker-connect.sh | sudo bash
+   curl -fsSL http://YOUR-MAIN-SERVER/scripts/__worker_connect.sh | sudo bash
    ```
    
    Or manually:
    ```bash
-   wget http://YOUR-MAIN-SERVER/scripts/worker-connect.sh
+   wget http://YOUR-MAIN-SERVER/scripts/__worker_connect.sh
    chmod +x worker-connect.sh
    sudo ./worker-connect.sh
    ```

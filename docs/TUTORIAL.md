@@ -81,7 +81,7 @@ Create multiple contests at once:
 
 ```bash
 # Create a contest definition file
-./scripts/create-contests.sh --batch contests.yaml
+./scripts/__create_contests.sh --batch contests.yaml
 ```
 
 See "Batch Contest Creation" section below for details.

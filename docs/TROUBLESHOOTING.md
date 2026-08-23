@@ -308,7 +308,7 @@ docker exec cms-log-service cmsInitDB
 **D. Database corrupted:**
 ```bash
 # Stop all services
-./scripts/stop-all.sh
+./scripts/__stop_all.sh
 
 # Remove database volume
 docker volume rm cms-db-data

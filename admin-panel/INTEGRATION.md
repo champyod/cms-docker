@@ -6,25 +6,25 @@ The Admin Panel can manage workers through environment variables that persist ac
 
 ### Available Scripts
 
-#### 1. `scripts/manage-workers.sh`
+#### 1. `scripts/__manage_workers.sh`
 Manages worker configuration in `.env.core`.
 
 **Commands:**
 ```bash
 # List all workers
-./scripts/manage-workers.sh list
+./scripts/__manage_workers.sh list
 
 # Add a worker
-./scripts/manage-workers.sh add <hostname> <port>
-# Example: ./scripts/manage-workers.sh add "cms-worker-1" 26001
+./scripts/__manage_workers.sh add <hostname> <port>
+# Example: ./scripts/__manage_workers.sh add "cms-worker-1" 26001
 
 # Remove a worker by index
-./scripts/manage-workers.sh remove <index>
-# Example: ./scripts/manage-workers.sh remove 1
+./scripts/__manage_workers.sh remove <index>
+# Example: ./scripts/__manage_workers.sh remove 1
 
 # Update an existing worker
-./scripts/manage-workers.sh update <index> <hostname> <port>
-# Example: ./scripts/manage-workers.sh update 0 "new-hostname" 26000
+./scripts/__manage_workers.sh update <index> <hostname> <port>
+# Example: ./scripts/__manage_workers.sh update 0 "new-hostname" 26000
 ```
 
 **Docker Execution:**
@@ -33,7 +33,7 @@ Since the Admin UI runs in Docker with `/repo-root` mounted:
 import { exec } from 'child_process';
 
 // Add worker
-exec('cd /repo-root && ./scripts/manage-workers.sh add cms-worker-1 26001', 
+exec('cd /repo-root && ./scripts/__manage_workers.sh add cms-worker-1 26001', 
   (error, stdout, stderr) => {
     if (error) {
       console.error(`Error: ${error.message}`);
@@ -104,7 +104,7 @@ const execAsync = promisify(exec);
 export async function addWorker(hostname: string, port: number) {
   try {
     const { stdout, stderr } = await execAsync(
-      `cd /repo-root && ./scripts/manage-workers.sh add "${hostname}" ${port}`
+      `cd /repo-root && ./scripts/__manage_workers.sh add "${hostname}" ${port}`
     );
     
     if (stderr) {
@@ -140,7 +140,7 @@ export async function regenerateConfig() {
 export async function listWorkers(): Promise<Worker[]> {
   try {
     const { stdout } = await execAsync(
-      'cd /repo-root && ./scripts/manage-workers.sh list'
+      'cd /repo-root && ./scripts/__manage_workers.sh list'
     );
     
     // Parse output
@@ -165,7 +165,7 @@ export async function listWorkers(): Promise<Worker[]> {
 export async function removeWorker(index: number) {
   try {
     await execAsync(
-      `cd /repo-root && ./scripts/manage-workers.sh remove ${index}`
+      `cd /repo-root && ./scripts/__manage_workers.sh remove ${index}`
     );
     return { success: true };
   } catch (error) {
@@ -245,7 +245,7 @@ Test the integration locally:
 
 ```bash
 # 1. Add a worker manually
-./scripts/manage-workers.sh add "test-worker" 26099
+./scripts/__manage_workers.sh add "test-worker" 26099
 
 # 2. Verify it's in .env.core
 grep WORKER_ .env.core
@@ -257,5 +257,5 @@ make env
 grep -A 5 "^Worker = " config/cms.toml
 
 # 5. Clean up
-./scripts/manage-workers.sh remove 99
+./scripts/__manage_workers.sh remove 99
 ```

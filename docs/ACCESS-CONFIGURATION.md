@@ -379,7 +379,7 @@ Edit worker configuration or use the connect script:
 
 ```bash
 # Download and run worker connect script
-curl -fsSL http://203.0.113.45:8889/scripts/worker-connect.sh -o worker-connect.sh
+curl -fsSL http://203.0.113.45:8889/scripts/__worker_connect.sh -o worker-connect.sh
 chmod +x worker-connect.sh
 sudo ./worker-connect.sh
 ```
@@ -463,7 +463,7 @@ sudo ufw allow 29000/tcp
 **Check 1: Verify services are running**
 ```bash
 docker ps
-./scripts/status.sh
+./scripts/__status.sh
 ```
 
 **Check 2: Verify ports are listening**
