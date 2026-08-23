@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
-import { buildUserSearchWhere, safeUserSelect } from '@/lib/prisma-selects';
+import { buildUserSearchWhere, safeUserSelect, usersPageSelect } from '@/lib/prisma-selects';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import bcrypt from 'bcryptjs';
@@ -28,19 +28,7 @@ export async function GET(req: NextRequest) {
         skip,
         take: perPage,
         orderBy: { id: 'asc' },
-        select: {
-          ...safeUserSelect,
-          participations: {
-            select: {
-              teams: {
-                select: {
-                  code: true,
-                  name: true,
-                },
-              },
-            },
-          },
-        },
+        select: usersPageSelect,
       }),
       prisma.users.count({ where }),
     ]);
