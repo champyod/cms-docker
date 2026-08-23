@@ -1,53 +1,25 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { Loader2, Wand2, X } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { apiClient } from '@/lib/apiClient';
 import { getTeams } from '@/app/actions/teams';
+import { Portal } from '@/components/core/Portal';
+import { makePassword, makeUsername } from './csvPreview';
+import { BulkEditPreviewTable, ContestSection, ProfileSection, TeamSection } from './bulkEditSections';
+import { buildEditExportCsv, downloadTextFile, type ContestOption, type SelectedUser } from './bulkEditActions';
 
-function randomToken(length: number) {
-  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let token = '';
-  for (let i = 0; i < length; i += 1) {
-    token += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return token;
-}
+const DEFAULT_TIMEZONE = 'Asia/Bangkok';
 
-function makePassword() {
-  return randomToken(14);
-}
-
-function makeUsername(firstName: string, lastName: string, used?: Set<string>) {
-  const firstAscii = String(firstName || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-  const lastAscii = String(lastName || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-  let base = `${firstAscii}${lastAscii}` || 'user';
-  if (base.length > 20) base = base.substring(0, 20);
-  let username = `${base}${randomToken(4).toLowerCase()}`;
-  let attempts = 0;
-  while (used && used.has(username) && attempts < 100) {
-    username = `${base}${randomToken(4).toLowerCase()}`;
-    attempts += 1;
-  }
-  used?.add(username);
-  return username;
-}
-
-interface ContestOption {
-  id: number;
-  name: string;
-}
-
-interface SelectedUser {
-  id: number;
-  first_name: string;
-  last_name: string;
-  username: string;
-  email?: string | null;
-  // optional local preview password (not applied until explicitly sent)
-  password?: string | null;
+interface BatchActionResult {
+  success?: boolean;
+  error?: string;
+  addedCount?: number;
+  removedCount?: number;
+  updatedCount?: number;
+  count?: number;
+  downloadUrl?: string;
 }
 
 interface UserBulkEditDialogProps {
@@ -59,26 +31,19 @@ interface UserBulkEditDialogProps {
 }
 
 export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, onSuccess }: UserBulkEditDialogProps) {
-  const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [selectedContestId, setSelectedContestId] = useState<number>(contests[0]?.id ?? 0);
   const [teamContestId, setTeamContestId] = useState<number>(contests[0]?.id ?? 0);
   const [teamCode, setTeamCode] = useState('');
-  const [timezone, setTimezone] = useState('Asia/Bangkok');
+  const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
   const [emailDomain, setEmailDomain] = useState('');
   const [rows, setRows] = useState(selectedUsers);
   const [teamsOptions, setTeamsOptions] = useState<string[]>([]);
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    // Ensure we don't carry stored password hashes into the editable preview.
-    // Clear any password field coming from the backend so only locally-generated
-    // plaintext appears in `rows`.
+    // Stored password hashes must never reach the editable preview — only locally generated plaintext appears here.
     setRows(selectedUsers.map((u) => ({ ...u, password: null })));
   }, [selectedUsers]);
 
@@ -95,8 +60,7 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
   }, [contests, teamContestId]);
 
   useEffect(() => {
-    // fetch teams for the contest used by the TEAM assignment UI (teamContestId)
-    const fetchTeams = async () => {
+    const fetchTeams = async (): Promise<void> => {
       if (!teamContestId) {
         setTeamsOptions([]);
         return;
@@ -104,7 +68,7 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
       try {
         const teams = await getTeams();
         setTeamsOptions(teams.map((t: { code: string }) => t.code).filter(Boolean));
-      } catch (e) {
+      } catch {
         setTeamsOptions([]);
       }
     };
@@ -122,13 +86,46 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
 
   const selectedUserIds = useMemo(() => rows.map((row) => row.id), [rows]);
 
-  if (!isOpen || !mounted) return null;
+  if (!isOpen) return null;
 
-  const runRegenerate = async (mode: 'username' | 'password') => {
+  const requireValue = (value: string, label: string): boolean => {
+    if (!value.trim()) {
+      setErrorMessage(`${label} is required`);
+      return false;
+    }
+    return true;
+  };
+
+  const runBatchAction = async (
+    payload: Record<string, unknown>,
+    buildStatus: (result: BatchActionResult) => string,
+    options: { applyLocal?: (rows: SelectedUser[]) => SelectedUser[]; fallbackError?: string } = {}
+  ): Promise<void> => {
+    setLoading(true);
+    setErrorMessage('');
+    setStatusMessage('');
+
+    const result = await apiClient.post('/api/users/batch', payload) as BatchActionResult;
+
+    if (!result.success) {
+      setErrorMessage(result.error || options.fallbackError || 'Failed to update users');
+      setLoading(false);
+      return;
+    }
+
+    if (options.applyLocal) {
+      setRows(options.applyLocal);
+    }
+
+    setStatusMessage(buildStatus(result));
+    setLoading(false);
+    onSuccess();
+  };
+
+  const runRegenerate = (mode: 'username' | 'password'): void => {
     if (selectedUserIds.length === 0) return;
 
-    // Perform local-only regeneration for preview/export. This won't apply
-    // changes to the server until an explicit server-side action is triggered.
+    // Local-only preview regeneration — nothing reaches the server until Apply Credentials.
     setLoading(true);
     setErrorMessage('');
     setStatusMessage('');
@@ -138,7 +135,7 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
     setRows((prev) =>
       prev.map((user) => {
         if (!selectedUserIds.includes(user.id)) return user;
-        const next = { ...user } as SelectedUser;
+        const next = { ...user };
         if (mode === 'username') {
           next.username = makeUsername(next.first_name || '', next.last_name || '', used);
         }
@@ -151,480 +148,232 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
 
     setStatusMessage(`Locally regenerated ${mode} for ${selectedUserIds.length} user(s)`);
     setLoading(false);
-    // Do NOT call onSuccess() here — we want the UI preview to keep generated values
-    // and let the user export them or apply other mutations explicitly.
+    // No onSuccess() — the preview must keep generated values for export or explicit apply.
   };
 
-  const handleExportSelectedRows = () => {
+  const handleExportSelectedRows = (): void => {
     if (rows.length === 0) return;
-    const lines = ['id,first_name,last_name,username,password,email'];
-    rows.forEach((row) => {
-      const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-      lines.push([row.id, esc(row.first_name), esc(row.last_name), esc(row.username), esc(row.password ?? ''), esc(row.email ?? '')].join(','));
-    });
-
-    const bom = '\uFEFF';
-    const blob = new Blob([bom + lines.join('\n') + '\n'], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.setAttribute('download', `users-selected-${Date.now()}.csv`);
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    downloadTextFile(buildEditExportCsv(rows), `users-selected-${Date.now()}.csv`);
   };
 
-  const runContestMutation = async (mode: 'add' | 'remove') => {
+  const runContestMutation = (mode: 'add' | 'remove'): void => {
     if (selectedUserIds.length === 0 || !selectedContestId) return;
-
-    setLoading(true);
-    setErrorMessage('');
-    setStatusMessage('');
-
-    const result = await apiClient.post('/api/users/batch', {
-      action: 'contest',
-      mode,
-      contestId: selectedContestId,
-      userIds: selectedUserIds,
-    });
-
-    if (!result.success) {
-      setErrorMessage(result.error || 'Failed to update contest participation');
-      setLoading(false);
-      return;
-    }
-
-    const contestName = contests.find((contest) => contest.id === selectedContestId)?.name || `#${selectedContestId}`;
-    if (mode === 'add') {
-      setStatusMessage(`Added ${result.addedCount ?? 0} user(s) to contest ${contestName}`);
-    } else {
-      setStatusMessage(`Removed ${result.removedCount ?? 0} user(s) from contest ${contestName}`);
-    }
-
-    setLoading(false);
-    onSuccess();
-  };
-
-  const runTeamSet = async () => {
-    if (selectedUserIds.length === 0 || !teamContestId) return;
-    if (!teamCode.trim()) {
-      setErrorMessage('Team code is required');
-      return;
-    }
-
-    setLoading(true);
-    setErrorMessage('');
-    setStatusMessage('');
-
-    const result = await apiClient.post('/api/users/batch', {
-      action: 'team',
-      mode: 'set',
-      contestId: teamContestId,
-      teamCode: teamCode.trim(),
-      userIds: selectedUserIds,
-    });
-
-    if (!result.success) {
-      setErrorMessage(result.error || 'Failed to set team');
-      setLoading(false);
-      return;
-    }
-
-    const contestName = contests.find((c) => c.id === teamContestId)?.name || `#${teamContestId}`;
-    setStatusMessage(`Assigned team ${teamCode.trim()} for ${result.updatedCount ?? 0} user(s) in contest ${contestName}`);
-    setLoading(false);
-    onSuccess();
-  };
-
-  const runTeamRemoveAny = async () => {
-    if (selectedUserIds.length === 0) return;
-
-    setLoading(true);
-    setErrorMessage('');
-    setStatusMessage('');
-
-    const result = await apiClient.post('/api/users/batch', {
-      action: 'team',
-      mode: 'remove-any',
-      userIds: selectedUserIds,
-    });
-
-    if (!result.success) {
-      setErrorMessage(result.error || 'Failed to remove teams');
-      setLoading(false);
-      return;
-    }
-
-    setStatusMessage(`Removed team from ${result.updatedCount ?? 0} participation(s)`);
-    setLoading(false);
-    onSuccess();
-  };
-
-  const runTimezoneUpdate = async () => {
-    if (selectedUserIds.length === 0) return;
-    if (!timezone.trim()) {
-      setErrorMessage('Timezone is required');
-      return;
-    }
-
-    setLoading(true);
-    setErrorMessage('');
-    setStatusMessage('');
-
-    const result = await apiClient.post('/api/users/batch', {
-      action: 'profile',
-      mode: 'timezone',
-      timezone: timezone.trim(),
-      userIds: selectedUserIds,
-    });
-
-    if (!result.success) {
-      setErrorMessage(result.error || 'Failed to update timezone');
-      setLoading(false);
-      return;
-    }
-
-    setStatusMessage(`Updated timezone for ${result.updatedCount ?? 0} user(s)`);
-    setLoading(false);
-    onSuccess();
-  };
-
-  const runEmailDomainUpdate = async () => {
-    if (selectedUserIds.length === 0) return;
-    if (!emailDomain.trim()) {
-      setErrorMessage('Email domain is required');
-      return;
-    }
-
-    setLoading(true);
-    setErrorMessage('');
-    setStatusMessage('');
-
-    const result = await apiClient.post('/api/users/batch', {
-      action: 'profile',
-      mode: 'email-domain',
-      emailDomain: emailDomain.trim(),
-      userIds: selectedUserIds,
-    });
-
-    if (!result.success) {
-      setErrorMessage(result.error || 'Failed to update email domain');
-      setLoading(false);
-      return;
-    }
-
-    setRows((prev) =>
-      prev.map((user) => {
-        const localPart = (user.email?.split('@')[0] || user.username).trim();
-        return { ...user, email: `${localPart}@${emailDomain.trim().toLowerCase()}` };
-      })
+    void runBatchAction(
+      { action: 'contest', mode, contestId: selectedContestId, userIds: selectedUserIds },
+      (result) => {
+        const contestName = contests.find((contest) => contest.id === selectedContestId)?.name || `#${selectedContestId}`;
+        return mode === 'add'
+          ? `Added ${result.addedCount ?? 0} user(s) to contest ${contestName}`
+          : `Removed ${result.removedCount ?? 0} user(s) from contest ${contestName}`;
+      },
+      { fallbackError: 'Failed to update contest participation' }
     );
-
-    setStatusMessage(`Updated email domain for ${result.updatedCount ?? 0} user(s)`);
-    setLoading(false);
-    onSuccess();
   };
 
-  const runEmailClear = async () => {
+  const runTeamSet = (): void => {
+    if (selectedUserIds.length === 0 || !teamContestId) return;
+    if (!requireValue(teamCode, 'Team code')) return;
+    void runBatchAction(
+      { action: 'team', mode: 'set', contestId: teamContestId, teamCode: teamCode.trim(), userIds: selectedUserIds },
+      (result) => {
+        const contestName = contests.find((c) => c.id === teamContestId)?.name || `#${teamContestId}`;
+        return `Assigned team ${teamCode.trim()} for ${result.updatedCount ?? 0} user(s) in contest ${contestName}`;
+      },
+      { fallbackError: 'Failed to set team' }
+    );
+  };
+
+  const runTeamRemoveAny = (): void => {
     if (selectedUserIds.length === 0) return;
+    void runBatchAction(
+      { action: 'team', mode: 'remove-any', userIds: selectedUserIds },
+      (result) => `Removed team from ${result.updatedCount ?? 0} participation(s)`,
+      { fallbackError: 'Failed to remove teams' }
+    );
+  };
+
+  const runTimezoneUpdate = (): void => {
+    if (selectedUserIds.length === 0) return;
+    if (!requireValue(timezone, 'Timezone')) return;
+    void runBatchAction(
+      { action: 'profile', mode: 'timezone', timezone: timezone.trim(), userIds: selectedUserIds },
+      (result) => `Updated timezone for ${result.updatedCount ?? 0} user(s)`,
+      { fallbackError: 'Failed to update timezone' }
+    );
+  };
+
+  const runEmailDomainUpdate = (): void => {
+    if (selectedUserIds.length === 0) return;
+    if (!requireValue(emailDomain, 'Email domain')) return;
+    void runBatchAction(
+      { action: 'profile', mode: 'email-domain', emailDomain: emailDomain.trim(), userIds: selectedUserIds },
+      (result) => `Updated email domain for ${result.updatedCount ?? 0} user(s)`,
+      {
+        fallbackError: 'Failed to update email domain',
+        applyLocal: (prev) => prev.map((user) => {
+          const localPart = (user.email?.split('@')[0] || user.username).trim();
+          return { ...user, email: `${localPart}@${emailDomain.trim().toLowerCase()}` };
+        }),
+      }
+    );
+  };
+
+  const runEmailClear = (): void => {
+    if (selectedUserIds.length === 0) return;
+    void runBatchAction(
+      { action: 'profile', mode: 'clear-email', userIds: selectedUserIds },
+      (result) => `Cleared email for ${result.updatedCount ?? 0} user(s)`,
+      {
+        fallbackError: 'Failed to clear emails',
+        applyLocal: (prev) => prev.map((user) => ({ ...user, email: null })),
+      }
+    );
+  };
+
+  const collectCredentialUpdates = () =>
+    rows
+      .filter((r) => r.password || r.username)
+      .map((r) => ({ id: r.id, username: r.username, password: r.password }));
+
+  const openServerDownload = (downloadUrl: string): void => {
+    const anchor = document.createElement('a');
+    anchor.href = downloadUrl;
+    anchor.setAttribute('download', `users-applied-${Date.now()}.csv`);
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+  };
+
+  const applyCredentials = async (closeAfter: boolean): Promise<void> => {
+    const updates = collectCredentialUpdates();
+
+    if (updates.length === 0) {
+      if (closeAfter) {
+        onClose();
+        return;
+      }
+      setErrorMessage('No generated credentials to apply');
+      return;
+    }
 
     setLoading(true);
     setErrorMessage('');
     setStatusMessage('');
 
-    const result = await apiClient.post('/api/users/batch', {
-      action: 'profile',
-      mode: 'clear-email',
-      userIds: selectedUserIds,
-    });
+    try {
+      const result = await apiClient.post('/api/users/batch', { action: 'apply-credentials', updates }) as BatchActionResult;
 
-    if (!result.success) {
-      setErrorMessage(result.error || 'Failed to clear emails');
+      if (!result.success) {
+        setErrorMessage(result.error || 'Failed to apply credentials');
+        setLoading(false);
+        return;
+      }
+
+      const count = typeof result.count === 'number' ? result.count : updates.length;
+      if (result.downloadUrl) {
+        openServerDownload(result.downloadUrl);
+      }
+
+      setStatusMessage(closeAfter ? `Applied and exported ${count} credential(s)` : `Applied credentials for ${count} user(s)`);
       setLoading(false);
-      return;
+      onSuccess();
+      if (closeAfter) onClose();
+    } catch (e) {
+      setErrorMessage((e as Error)?.message || 'Network error');
+      setLoading(false);
     }
-
-    setRows((prev) => prev.map((user) => ({ ...user, email: null })));
-    setStatusMessage(`Cleared email for ${result.updatedCount ?? 0} user(s)`);
-    setLoading(false);
-    onSuccess();
   };
 
-  return createPortal(
-    <div className="fixed inset-0 z-100 flex items-center justify-center overflow-hidden bg-black/80 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="relative z-10 w-full max-w-6xl max-h-[90vh] bg-neutral-900 border border-white/10 rounded-xl shadow-2xl flex flex-col" onClick={(event) => event.stopPropagation()}>
-        <div className="flex items-center justify-between p-4 border-b border-white/10">
-          <h2 className="text-xl font-bold text-white">Edit Selected Users</h2>
-          <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-lg transition-colors" title="Close" aria-label="Close">
-            <X className="w-5 h-5 text-neutral-400" />
-          </button>
-        </div>
-
-        <div className="p-4 space-y-4 overflow-auto">
-          <div className="rounded-lg border border-white/10 bg-black/20 p-3 text-xs text-neutral-300">
-            Selected: {rows.length} user(s)
+  return (
+    <Portal>
+      <div className="fixed inset-0 z-100 flex items-center justify-center overflow-hidden bg-black/80 backdrop-blur-sm p-4" onClick={onClose}>
+        <div className="relative z-10 w-full max-w-6xl max-h-[90vh] bg-neutral-900 border border-white/10 rounded-xl shadow-2xl flex flex-col" onClick={(event) => event.stopPropagation()}>
+          <div className="flex items-center justify-between p-4 border-b border-white/10">
+            <h2 className="text-xl font-bold text-white">Edit Selected Users</h2>
+            <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-lg transition-colors" title="Close" aria-label="Close">
+              <X className="w-5 h-5 text-neutral-400" />
+            </button>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <Button variant="ghost" onClick={() => runRegenerate('username')} disabled={loading || rows.length === 0}>
-              <Wand2 className="w-4 h-4 mr-2" /> Regenerate Username
-            </Button>
-            <Button variant="ghost" onClick={() => runRegenerate('password')} disabled={loading || rows.length === 0}>
-              <Wand2 className="w-4 h-4 mr-2" /> Regenerate Password
-            </Button>
-            <Button variant="ghost" onClick={handleExportSelectedRows} disabled={rows.length === 0}>
-              <Wand2 className="w-4 h-4 mr-2" /> Export Current Preview
-            </Button>
-          </div>
+          {/* CONTROLS */}
+          <div className="p-4 space-y-4 overflow-auto">
+            <div className="rounded-lg border border-white/10 bg-black/20 p-3 text-xs text-neutral-300">
+              Selected: {rows.length} user(s)
+            </div>
 
-          <div className="rounded-lg border border-white/10 bg-black/20 p-3 space-y-3">
-            <div className="text-xs text-neutral-300">Contest membership</div>
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                value={selectedContestId}
-                title="Select contest"
-                onChange={(event) => setSelectedContestId(Number(event.target.value) || 0)}
-                className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
-              >
-                {contests.map((contest) => (
-                  <option key={contest.id} value={contest.id}>
-                    #{contest.id} - {contest.name}
-                  </option>
-                ))}
-              </select>
-              <Button variant="ghost" onClick={() => runContestMutation('add')} disabled={loading || rows.length === 0 || !selectedContestId}>
-                Add to contest
+            <div className="flex flex-wrap gap-2">
+              <Button variant="ghost" onClick={() => runRegenerate('username')} disabled={loading || rows.length === 0}>
+                <Wand2 className="w-4 h-4 mr-2" /> Regenerate Username
               </Button>
-              <Button variant="ghost" onClick={() => runContestMutation('remove')} disabled={loading || rows.length === 0 || !selectedContestId}>
-                Remove from contest
+              <Button variant="ghost" onClick={() => runRegenerate('password')} disabled={loading || rows.length === 0}>
+                <Wand2 className="w-4 h-4 mr-2" /> Regenerate Password
+              </Button>
+              <Button variant="ghost" onClick={handleExportSelectedRows} disabled={rows.length === 0}>
+                <Wand2 className="w-4 h-4 mr-2" /> Export Current Preview
+              </Button>
+            </div>
+
+            <ContestSection
+              contests={contests}
+              selectedContestId={selectedContestId}
+              loading={loading}
+              hasRows={rows.length > 0}
+              onContestIdChange={setSelectedContestId}
+              onRunContestMutation={runContestMutation}
+            />
+
+            <TeamSection
+              contests={contests}
+              teamContestId={teamContestId}
+              teamCode={teamCode}
+              teamsOptions={teamsOptions}
+              loading={loading}
+              hasRows={rows.length > 0}
+              onTeamContestIdChange={setTeamContestId}
+              onTeamCodeChange={setTeamCode}
+              onRunTeamSet={runTeamSet}
+              onRunTeamRemoveAny={runTeamRemoveAny}
+            />
+
+            <ProfileSection
+              timezone={timezone}
+              emailDomain={emailDomain}
+              loading={loading}
+              hasRows={rows.length > 0}
+              onTimezoneChange={setTimezone}
+              onEmailDomainChange={setEmailDomain}
+              onRunTimezoneUpdate={runTimezoneUpdate}
+              onRunEmailDomainUpdate={runEmailDomainUpdate}
+              onRunEmailClear={runEmailClear}
+            />
+
+            {statusMessage && <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300">{statusMessage}</div>}
+            {errorMessage && <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">{errorMessage}</div>}
+
+            <BulkEditPreviewTable rows={rows} />
+
+            <div className="flex items-center justify-end gap-2">
+              <Button variant="ghost" onClick={() => applyCredentials(false)} disabled={loading || rows.length === 0}>
+                Apply Credentials
               </Button>
             </div>
           </div>
 
-          <div className="rounded-lg border border-white/10 bg-black/20 p-3 space-y-3">
-            <div className="text-xs text-neutral-300">Team assignment</div>
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                value={teamContestId}
-                title="Select contest for team"
-                onChange={(event) => setTeamContestId(Number(event.target.value) || 0)}
-                className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
-              >
-                {contests.map((contest) => (
-                  <option key={contest.id} value={contest.id}>
-                    #{contest.id} - {contest.name}
-                  </option>
-                ))}
-              </select>
-              {teamsOptions.length > 0 ? (
-                <select
-                  value={teamCode}
-                  onChange={(e) => setTeamCode(e.target.value)}
-                  className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
-                  title="Select team"
-                >
-                  <option value="">Select team</option>
-                  {teamsOptions.map((code) => (
-                    <option key={code} value={code}>{code}</option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  type="text"
-                  value={teamCode}
-                  onChange={(event) => setTeamCode(event.target.value)}
-                  placeholder="Team code"
-                  title="Team code"
-                  className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white font-mono"
-                />
-              )}
-              <Button variant="ghost" onClick={runTeamSet} disabled={loading || rows.length === 0 || !selectedContestId}>
-                Add to team
-              </Button>
-              <Button variant="ghost" onClick={runTeamRemoveAny} disabled={loading || rows.length === 0}>
-                Remove from any team
-              </Button>
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-white/10 bg-black/20 p-3 space-y-3">
-            <div className="text-xs text-neutral-300">Profile fields</div>
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                type="text"
-                value={timezone}
-                onChange={(event) => setTimezone(event.target.value)}
-                placeholder="Timezone"
-                title="Timezone"
-                className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
-              />
-              <Button variant="ghost" onClick={runTimezoneUpdate} disabled={loading || rows.length === 0}>
-                Update timezone
-              </Button>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                type="text"
-                value={emailDomain}
-                onChange={(event) => setEmailDomain(event.target.value)}
-                placeholder="example.com"
-                title="Email domain"
-                className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
-              />
-              <Button variant="ghost" onClick={runEmailDomainUpdate} disabled={loading || rows.length === 0}>
-                Set email domain
-              </Button>
-              <Button variant="ghost" onClick={runEmailClear} disabled={loading || rows.length === 0}>
-                Reset email
-              </Button>
-            </div>
-          </div>
-
-          {statusMessage && <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300">{statusMessage}</div>}
-          {errorMessage && <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">{errorMessage}</div>}
-
-          <div className="border border-white/10 rounded-lg overflow-hidden">
-            <div className="max-h-80 overflow-auto">
-              <table className="w-full text-xs">
-                <thead className="bg-white/5 text-neutral-300 sticky top-0 z-10">
-                  <tr>
-                    <th className="text-left px-2 py-2">ID</th>
-                    <th className="text-left px-2 py-2">first_name</th>
-                    <th className="text-left px-2 py-2">last_name</th>
-                    <th className="text-left px-2 py-2">username</th>
-                    <th className="text-left px-2 py-2">password</th>
-                    <th className="text-left px-2 py-2">email</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="px-3 py-6 text-center text-neutral-500">
-                        No selected users
-                      </td>
-                    </tr>
-                  ) : (
-                      rows.map((row) => (
-                      <tr key={row.id} className="border-t border-white/5">
-                        <td className="px-2 py-2 text-neutral-400">#{row.id}</td>
-                        <td className="px-2 py-2 text-white">{row.first_name}</td>
-                        <td className="px-2 py-2 text-white">{row.last_name}</td>
-                        <td className="px-2 py-2 text-white">{row.username}</td>
-                        <td className="px-2 py-2 text-white font-mono">{row.password || '-'}</td>
-                        <td className="px-2 py-2 text-white">{row.email || '-'}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-end gap-2">
-            <Button
-              variant="ghost"
-              onClick={async () => {
-                const updates = rows
-                  .filter((r) => r.password || r.username)
-                  .map((r) => ({ id: r.id, username: r.username, password: r.password }));
-
-                if (updates.length === 0) {
-                  setErrorMessage('No generated credentials to apply');
-                  return;
-                }
-
-                setLoading(true);
-                setErrorMessage('');
-                setStatusMessage('');
-
-                const result = await apiClient.post('/api/users/batch', {
-                  action: 'apply-credentials',
-                  updates,
-                });
-
-                if (!result.success) {
-                  setErrorMessage(result.error || 'Failed to apply credentials');
-                  setLoading(false);
-                  return;
-                }
-
-                const count = typeof result.count === 'number' ? result.count : updates.length;
-                if (result.downloadUrl) {
-                  const anchor = document.createElement('a');
-                  anchor.href = result.downloadUrl;
-                  anchor.setAttribute('download', `users-applied-${Date.now()}.csv`);
-                  document.body.appendChild(anchor);
-                  anchor.click();
-                  document.body.removeChild(anchor);
-                }
-                setStatusMessage(`Applied credentials for ${count} user(s)`);
-                setLoading(false);
-                onSuccess();
-              }}
-              disabled={loading || rows.length === 0}
-            >
-              Apply Credentials
-            </Button>
-          </div>
-        </div>
-
+          {/* FOOTER */}
           <div className="p-4 border-t border-white/10 flex items-center justify-end gap-2">
-          <Button variant="ghost" onClick={onClose} disabled={loading}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            onClick={async () => {
-              const updates = rows.filter((r) => r.password || r.username).map((r) => ({ id: r.id, username: r.username, password: r.password }));
-
-              if (updates.length === 0) {
-                onClose();
-                return;
-              }
-
-              setLoading(true);
-              setErrorMessage('');
-              setStatusMessage('');
-
-              try {
-                const result = await apiClient.post('/api/users/batch', {
-                  action: 'apply-credentials',
-                  updates,
-                });
-
-                if (!result.success) {
-                  setErrorMessage(result.error || 'Failed to apply credentials');
-                  setLoading(false);
-                  return;
-                }
-
-                const count = typeof result.count === 'number' ? result.count : updates.length;
-                if (result.downloadUrl) {
-                  const anchor = document.createElement('a');
-                  anchor.href = result.downloadUrl;
-                  anchor.setAttribute('download', `users-applied-${Date.now()}.csv`);
-                  document.body.appendChild(anchor);
-                  anchor.click();
-                  document.body.removeChild(anchor);
-                }
-
-                setStatusMessage(`Applied and exported ${count} credential(s)`);
-                setLoading(false);
-                onSuccess();
-                onClose();
-              } catch (e: any) {
-                setErrorMessage(e?.message || 'Network error');
-                setLoading(false);
-              }
-            }}
-            disabled={loading}
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Done'}
-          </Button>
+            <Button variant="ghost" onClick={onClose} disabled={loading}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => applyCredentials(true)}
+              disabled={loading}
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Done'}
+            </Button>
+          </div>
         </div>
       </div>
-    </div>,
-    document.body
+    </Portal>
   );
 }
