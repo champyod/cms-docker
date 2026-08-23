@@ -194,6 +194,7 @@ below map 1:1 onto the Makefile and helper scripts.
 | `./cms test` | Smoke-test: boot stacks headless, verify healthchecks, teardown |
 | `./cms worker` / `edit` | Fleet TUI: list/add/edit/delete workers, live status, batch deploy |
 | `./cms worker deploy [shard]` / `stop` | Deploy all/some fleet entries non-interactively / stop them |
+| `./cms worker server` | TUI: choose which main server this worker connects to |
 | `./cms worker connect\|cgroup` | Attach to a worker / prepare host cgroups (root) |
 | `./cms contest create <yaml...>` | Batch-create contests from YAML/JSON |
 | `./cms update-server` | Safe server update: preflight → backup → rolling recreate → verify |
@@ -283,6 +284,18 @@ on another node uses its own cert; even on this node extra `serve` entries
 are free. No 3-service cap exists.
 
 Traffic inside the tailnet is WireGuard-encrypted end-to-end regardless.
+
+### Remote worker machines
+
+On each worker host (after its own `./cms` bootstrap), pick the main server
+it talks to:
+
+```bash
+./cms worker server     # TUI: add/select main servers; Enter sets CORE_SERVICES_HOST
+./cms worker deploy all # deploy local shards against the selected main
+```
+
+Candidates persist as `WORKER_MAIN_<n>=label|host` in `.env.worker`.
 
 Contest web stays public through `cms-nginx-contest` (enable TLS there via
 `ENABLE_TLS=true` when a public domain + certs are available).

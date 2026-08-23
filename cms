@@ -41,6 +41,7 @@ Commands:
   doctor                    preflight environment checks
   test                      smoke-test the deployment
   worker [edit|deploy|stop|list]  fleet TUI / deploy all shards / stop / show
+  worker server             TUI: pick which main server this worker connects to
   worker connect|cgroup     attach to a worker / set up sandbox cgroups
   tailscale setup|status|remove
                             tailnet HTTPS front for admin/ranking UIs
@@ -141,6 +142,7 @@ handle_subcommand() {
         deploy)   shift 2; exec bash scripts/__worker_tui.sh deploy "${@:2}" ;;
         stop)     shift 2; exec bash scripts/__worker_tui.sh stop "${2:-all}" ;;
         list)     exec bash scripts/__worker_tui.sh list ;;
+        server)  shift 2; exec bash scripts/__worker_server_tui.sh "${@:2}" ;;
         connect) shift 2; exec bash scripts/__worker_connect.sh "$@" ;;
         cgroup)  shift 2; exec bash scripts/__worker_cgroup_setup.sh "$@" ;;
         *) echo "usage: cms worker <edit|deploy [shard]|stop|list|connect|cgroup>" >&2; exit 2 ;;
