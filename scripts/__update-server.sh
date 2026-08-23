@@ -75,12 +75,12 @@ if [ ! -x "$PREFLIGHT_SCRIPT" ]; then
     die "scripts/__preflight.sh not found or not executable; refusing to update."
 fi
 log "Running preflight checks..."
-"$PREFLIGHT_SCRIPT" all || die "Preflight failed; aborting update cleanly."
+"$PREFLIGHT_SCRIPT" --stack all || die "Preflight failed; aborting update cleanly."
 
 # ---------------------------------------------------------------------------
 # (d) Safety backup before mutating anything
 # ---------------------------------------------------------------------------
-BACKUP_SCRIPT="__backup.sh"
+BACKUP_SCRIPT="scripts/__backup.sh"
 if [ -x "$BACKUP_SCRIPT" ]; then
     log "Running safety backup..."
     "$BACKUP_SCRIPT" || die "Backup failed; aborting update."
