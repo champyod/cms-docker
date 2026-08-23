@@ -14,9 +14,9 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # ---------------------------------------------------------------------------
 # lib/common.sh contract: log_info/log_warn/log_die
 # ---------------------------------------------------------------------------
-if [[ -f "${SCRIPT_DIR}/lib/common.sh" ]]; then
+if [[ -f "${SCRIPT_DIR}/__lib/common.sh" ]]; then
   # shellcheck disable=SC1091
-  source "${SCRIPT_DIR}/lib/common.sh"
+  source "${SCRIPT_DIR}/__lib/common.sh"
 else
   log_info()  { printf '[INFO] %s\n' "$*"; }
   log_warn()  { printf '[WARN] %s\n' "$*" >&2; }

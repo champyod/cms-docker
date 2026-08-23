@@ -36,3 +36,4 @@ admin-panel/.env
 
 # Agent tools
 .claude/
+/CMS-ENTRYPOINT-NOTES.md

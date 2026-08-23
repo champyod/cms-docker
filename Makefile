@@ -33,8 +33,8 @@ help:
 	@echo "  make admin-create   - Create first superadmin account"
 	@echo "  make prisma-sync    - Sync Prisma schema to DB (fail+instruct on missing deps)"
 	@echo "  make lint           - Run shellcheck/hadolint/yamllint + compose config validation"
-	@echo "  make smoke-test     - Run scripts/smoke-test.sh"
-	@echo "  make preflight      - Run scripts/preflight.sh"
+	@echo "  make smoke-test     - Run scripts/__smoke-test.sh"
+	@echo "  make preflight      - Run scripts/__preflight.sh"
 	@echo "  make backup         - Run cms-monitor backup"
 	@echo ""
 	@echo "Deprecated aliases (print warning, still work):"
@@ -182,7 +182,7 @@ env:
 		cp config/cms.sample.toml config/cms.toml; \
 	fi
 	@echo "Injecting database configuration and service addresses into config/cms.toml..."; \
-	chmod +x scripts/inject_config.sh && ./scripts/inject_config.sh;
+	chmod +x scripts/__inject_config.sh && ./scripts/__inject_config.sh;
 	@if [ -f config/cms_ranking.toml ]; then \
 		echo "Updating config/cms_ranking.toml..."; \
 		sed -i 's/"127.0.0.1"/"0.0.0.0"/g' config/cms_ranking.toml; \
@@ -191,12 +191,12 @@ env:
 	@echo "Ensured backups/.gitkeep exists (monitor mount needs host dir)"
 	@echo "Hint: if running monitor non-root, ensure ownership: chown 1000:1000 backups (or match container UID)"
 	@echo ".env file generated. You can now run: ./scripts/setup.sh"
-	@if [ -x scripts/preflight.sh ]; then \
+	@if [ -x scripts/__preflight.sh ]; then \
 		echo "Running preflight checks..."; \
-		./scripts/preflight.sh; \
-	elif [ -f scripts/preflight.sh ]; then \
+		./scripts/__preflight.sh; \
+	elif [ -f scripts/__preflight.sh ]; then \
 		echo "Running preflight checks..."; \
-		bash scripts/preflight.sh; \
+		bash scripts/__preflight.sh; \
 	else \
 		echo "preflight.sh missing — skipping preflight checks"; \
 	fi
@@ -401,7 +401,7 @@ admin-dev-stop:
 # Infra / DB / admin helpers (unchanged contract)
 # ---------------------------------------------------------------------------
 cms-init:
-	@chmod +x scripts/cms-db-init.sh && ./scripts/cms-db-init.sh
+	@chmod +x scripts/__cms-db-init.sh && ./scripts/__cms-db-init.sh
 
 prisma-sync:
 	@echo "Synchronizing Admin Panel schema (forcing Prisma v6)..."
@@ -456,33 +456,33 @@ lint:
 	fi
 
 smoke-test:
-	@if [ -x scripts/smoke-test.sh ]; then \
-		./scripts/smoke-test.sh; \
-	elif [ -f scripts/smoke-test.sh ]; then \
-		bash scripts/smoke-test.sh; \
+	@if [ -x scripts/__smoke-test.sh ]; then \
+		./scripts/__smoke-test.sh; \
+	elif [ -f scripts/__smoke-test.sh ]; then \
+		bash scripts/__smoke-test.sh; \
 	else \
-		echo "ERROR: scripts/smoke-test.sh not found. Run 'make setup-tools' or create the script first." >&2; \
+		echo "ERROR: scripts/__smoke-test.sh not found. Run 'make setup-tools' or create the script first." >&2; \
 		exit 1; \
 	fi
 
 preflight:
-	@if [ -x scripts/preflight.sh ]; then \
-		./scripts/preflight.sh; \
-	elif [ -f scripts/preflight.sh ]; then \
-		bash scripts/preflight.sh; \
+	@if [ -x scripts/__preflight.sh ]; then \
+		./scripts/__preflight.sh; \
+	elif [ -f scripts/__preflight.sh ]; then \
+		bash scripts/__preflight.sh; \
 	else \
-		echo "ERROR: scripts/preflight.sh not found." >&2; \
+		echo "ERROR: scripts/__preflight.sh not found." >&2; \
 		exit 1; \
 	fi
 
 backup:
 	@if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^cms-monitor$$"; then \
 		docker exec cms-monitor /usr/local/bin/cms-backup.sh; \
-	elif [ -x scripts/cms-backup.sh ]; then \
+	elif [ -x scripts/__backup.sh ]; then \
 		echo "cms-monitor not running, running backup script directly..."; \
-		./scripts/cms-backup.sh; \
+		./scripts/__backup.sh; \
 	else \
-		echo "ERROR: cms-monitor not running and scripts/cms-backup.sh not found or not executable." >&2; \
+		echo "ERROR: cms-monitor not running and scripts/__backup.sh not found or not executable." >&2; \
 		exit 1; \
 	fi
 

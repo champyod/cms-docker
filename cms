@@ -1,0 +1,188 @@
+#!/usr/bin/env bash
+# cms — one-stop bootstrap orchestrator for the CMS Docker platform.
+#
+# Zero-argument invocation walks the full lifecycle:
+#   prereqs -> env -> core -> cms-init -> prisma-sync -> admin -> contest
+#   -> worker -> monitor -> superadmin -> health verification
+#
+# docker-compose.yml owns service dependencies/ordering; this script owns the
+# cross-stack sequence and human-facing decisions. Minor/update utilities live
+# under scripts/__*.sh and are invoked from here — never run them directly.
+#
+# Usage: ./cms.sh [--no-sample] [--skip step1,step2] [--yes] [-h]
+set -euo pipefail
+
+cd "$(dirname "$0")"
+
+NO_SAMPLE=0
+ASSUME_YES=0
+SKIPS=""
+
+usage() {
+  cat <<'USAGE'
+cms — one-stop CMS platform bootstrap
+
+Usage: ./cms.sh [options]
+
+Options:
+  --no-sample        Do not import examples/contests.yaml into an empty DB
+  --skip <a,b,...>   Skip steps: env,core,cms-init,prisma-sync,admin,
+                     contest,worker,monitor,admin-create,verify
+  --yes              Non-interactive mode: skips tty-only prompts,
+                     prints their manual commands instead
+  -h, --help         This help
+
+Everything is idempotent — safe to re-run after partial failures.
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --no-sample) NO_SAMPLE=1 ;;
+    --yes|-y)    ASSUME_YES=1 ;;
+    --skip)      shift; SKIPS="${1:-}" ;;
+    -h|--help)   usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+  esac
+  shift
+done
+
+is_skipped() { [[ ",$SKIPS," == *",$1,"* ]]; }
+
+source scripts/__lib/common.sh 2>/dev/null || true
+declare -F log_info >/dev/null || log_info() { echo "[INFO] $*"; }
+declare -F log_warn >/dev/null || log_warn() { echo "[WARN] $*" >&2; }
+declare -F log_die  >/dev/null || log_die()  { echo "[FAIL] $*" >&2; exit "${2:-1}"; }
+
+RESULTS=()
+record() { RESULTS+=("$1|$2"); printf '  %-14s %s\n' "$1:" "$2"; }
+run_step() {
+  local name="$1" softfail="${2:-}" cmd="$3"
+  printf '\n== [%s] ==\n' "$name"
+  if is_skipped "$name"; then record "$name" "SKIPPED (--skip)"; return 0; fi
+  local rc=0
+  bash -c "$cmd" || rc=$?
+  if [[ $rc -eq 0 ]]; then
+    record "$name" "OK"
+  elif [[ "$softfail" == "soft" ]]; then
+    record "$name" "WARN (see above)"
+  else
+    record "$name" "FAILED"
+    return 1
+  fi
+}
+
+wait_container() {
+  local name="$1" timeout="${2:-180}" elapsed=0 state
+  while :; do
+    state=$(docker inspect -f '{{.State.Health.Status}}' "$name" 2>/dev/null || echo missing)
+    [[ "$state" == "healthy" ]] && return 0
+    [[ "$state" == "exited" || "$state" == "dead" ]] && {
+      log_warn "$name is $state — last logs:"; docker logs --tail 20 "$name" 2>&1 | sed 's/^/    /'; return 1; }
+    (( elapsed >= timeout )) && { log_warn "timeout waiting for $name ($state)"; return 1; }
+    sleep 5; elapsed=$((elapsed+5))
+  done
+}
+
+curl_up() { curl -fsS -o /dev/null --max-time 5 "$1" >/dev/null 2>&1; }
+
+echo "==============================================="
+echo " CMS one-stop bootstrap"
+echo "==============================================="
+[[ -t 0 ]] || ASSUME_YES=1
+
+run_step prereqs "" '
+  command -v docker >/dev/null || exit 1
+  docker info >/dev/null 2>&1 || { echo "docker daemon unreachable"; exit 1; }
+'
+
+run_step env "" 'make env'
+
+if ! is_skipped core; then
+  run_step core "" 'make core'
+  echo "-- waiting for core services --"
+  wait_container cms-database 180    || record "core-wait" "WARN database"
+  wait_container cms-log-service 240 || record "core-wait" "WARN log-service"
+fi
+
+is_skipped cms-init    || run_step cms-init    ""    'make cms-init'
+is_skipped prisma-sync || run_step prisma-sync ""    'make prisma-sync'
+
+run_step admin "" 'make admin'
+
+if ! is_skipped contest; then
+  run_step contest "" 'make contest'
+  if [[ $NO_SAMPLE -eq 0 ]]; then
+    cnt=$(docker exec cms-database psql -U "${POSTGRES_USER:-cmsuser}" -d "${POSTGRES_DB:-cmsdb}" -tAc \
+          "SELECT count(*) FROM information_schema.tables WHERE table_name='contests'" 2>/dev/null | tr -d "[:space:]") || cnt=""
+    if [[ "$cnt" == "1" ]]; then
+      have=$(docker exec cms-database psql -U "${POSTGRES_USER:-cmsuser}" -d "${POSTGRES_DB:-cmsdb}" -tAc \
+             "SELECT count(*) FROM contests" 2>/dev/null | tr -d "[:space:]") || have="?"
+      if [[ "$have" == "0" ]]; then
+        log_info "DB has no contests — importing sample (examples/contests.yaml)"
+        run_step sample-contest soft './scripts/create-contests.sh -f examples/contests.yaml'
+        log_info "Set CONTEST_ID in .env.contest to the desired sample id, then: make env && make contest"
+      else
+        record "sample-contest" "SKIPPED (contests exist: $have)"
+      fi
+    fi
+  fi
+fi
+
+run_step worker soft '
+  if ! make worker; then
+    # shellcheck disable=SC2120
+    echo "Worker failed — most likely isolate cgroup path missing on host."
+    echo "Fix: sudo ./scripts/setup-worker-cgroup.sh   (then re-run: make worker)"
+    exit 1
+  fi
+'
+
+run_step monitor soft '
+  mkdir -p backups
+  if ! make infra; then
+    echo "Monitor failed — if permission denied on docker.sock set DOCKER_GID:"
+    echo "  stat -c %g /var/run/docker.sock   # put value in .env.infra as DOCKER_GID=<n>"
+    exit 1
+  fi
+'
+
+if ! is_skipped admin-create; then
+  echo ""
+  if [[ $ASSUME_YES -eq 1 ]]; then
+    record "admin-create" "SKIPPED (non-interactive) — run: make admin-create"
+  else
+    read -r -p "Create first superadmin now? [Y/n] " yn || yn="n"
+    if [[ ! "$yn" =~ ^[Nn] ]]; then
+      run_step admin-create "" 'make admin-create' || record "admin-create" "FAILED"
+    else
+      record "admin-create" "SKIPPED — run later: make admin-create"
+    fi
+  fi
+fi
+
+echo ""
+echo "== Health verification =="
+VFAIL=0
+for svc in cms-database cms-log-service cms-resource-service cms-scoring-service cms-checker-service; do
+  s=$(docker inspect -f '{{.State.Health.Status}}' "$svc" 2>/dev/null || echo absent)
+  printf '  %-24s %s\n' "$svc" "$s"
+  [[ "$s" == "healthy" ]] || VFAIL=1
+done
+for probe in "contest-web http://127.0.0.1:${ACTIVE_CONTEST_PORT:-8888}/" \
+             "admin-panel http://127.0.0.1:${ADMIN_NEXT_PORT_EXTERNAL:-8891}/" \
+             "legacy-admin http://127.0.0.1:${ADMIN_PORT_EXTERNAL:-8889}/" \
+             "ranking http://127.0.0.1:${RANKING_PORT_EXTERNAL:-8890}/"; do
+  n=${probe%% *}; u=${probe#* }
+  if curl_up "$u"; then printf '  %-24s UP\n' "$n"; else printf '  %-24s DOWN\n' "$n"; VFAIL=1; fi
+done
+
+echo ""
+echo "================= SUMMARY ================="
+for r in "${RESULTS[@]}"; do printf '  %-38s %s\n' "${r%%|*}" "${r#*|}"; done
+echo "==========================================="
+if [[ $VFAIL -eq 1 ]]; then
+  log_warn "Some services are not fully up yet — inspect logs above (first boot can take minutes)."
+  exit 1
+fi
+log_info "Platform is up."

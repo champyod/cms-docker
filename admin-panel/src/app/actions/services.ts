@@ -510,7 +510,7 @@ export async function updateServer() {
         await logToDiscord('Server Update', 'Admin triggered a server update.', 16753920, true);
         
         // Run update in background to avoid timeout
-        const scriptPath = path.join(rootDir, 'scripts/update-server.sh');
+        const scriptPath = path.join(rootDir, 'scripts/__update-server.sh');
         // We use spawn to let it run detached if needed, but here we want some feedback.
         // Given Next.js server limits, a long running process might time out the request.
         // We'll start it and return immediately.

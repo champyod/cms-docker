@@ -4,7 +4,7 @@
 
 contests:
   # Practice Contest for Beginners
-  - name: "Practice Contest 2024"
+  - name: "Practice_Contest_2024"
     description: "A warm-up contest for new participants"
     start_time: "2024-03-01T10:00:00"
     end_time: "2024-03-01T12:00:00"
@@ -13,7 +13,7 @@ contests:
     min_submission_interval: 60
     
   # Weekly Programming Challenge
-  - name: "Weekly Challenge #1"
+  - name: "Weekly_Challenge_1"
     description: "Weekly programming challenge - Easy to Medium problems"
     start_time: "2024-03-08T14:00:00"
     end_time: "2024-03-08T17:00:00"
@@ -25,7 +25,7 @@ contests:
     min_submission_interval: 30
     
   # Advanced Competition
-  - name: "Advanced Contest 2024"
+  - name: "Advanced_Competition_2024"
     description: "Expert level algorithmic problems"
     start_time: "2024-03-15T09:00:00"
     end_time: "2024-03-15T14:00:00"

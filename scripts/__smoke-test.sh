@@ -8,9 +8,9 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
 
 # --- defensive source of common.sh (optional) ---
-if [[ -f "${SCRIPT_DIR}/lib/common.sh" ]]; then
+if [[ -f "${SCRIPT_DIR}/__lib/common.sh" ]]; then
   # shellcheck source=lib/common.sh
-  source "${SCRIPT_DIR}/lib/common.sh"
+  source "${SCRIPT_DIR}/__lib/common.sh"
 else
   # Fallback definitions when lib absent
   DISK_FLOOR_GB=3

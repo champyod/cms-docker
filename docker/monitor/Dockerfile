@@ -12,7 +12,7 @@ RUN apk add --no-cache bash curl docker-cli procps postgresql-client bc jq
 
 # We copy the script from the context (repo root)
 COPY scripts/monitor.sh /usr/local/bin/monitor.sh
-COPY scripts/cms-backup.sh /usr/local/bin/cms-backup.sh
+COPY scripts/__backup.sh /usr/local/bin/cms-backup.sh
 
 RUN chmod +x /usr/local/bin/monitor.sh /usr/local/bin/cms-backup.sh
 

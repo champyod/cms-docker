@@ -14,7 +14,7 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
 # Source common.sh via absolute path so it works regardless of cwd.
 # shellcheck source=lib/common.sh
-source "${SCRIPT_DIR}/lib/common.sh"
+source "${SCRIPT_DIR}/__lib/common.sh"
 
 # ---------------------------------------------------------------------------
 # Argument parsing
@@ -321,6 +321,14 @@ check_cms_toml() {
 check_secret_perms() {
   local files=("${REPO_ROOT}/.env" "${REPO_ROOT}/config/cms.toml")
   local warn_msgs=()
+
+  # chmod is a no-op on non-POSIX filesystems (ntfs/fuseblk) — check is meaningless there.
+  local fstype
+  fstype=$(stat -f -c %T "${REPO_ROOT}" 2>/dev/null || echo "unknown")
+  if [[ "$fstype" == "fuseblk" || "$fstype" == fuse* || "$fstype" == *ntfs* ]]; then
+    record_result "secret perms" "PASS" "skipped (${fstype} mount ignores chmod)"
+    return 0
+  fi
 
   for f in "${files[@]}"; do
     if [[ -f "$f" ]]; then

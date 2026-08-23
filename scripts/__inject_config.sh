@@ -79,7 +79,10 @@ DB_PORT="${DB_PORT:-$(get_worker_env_val "POSTGRES_PORT")}"
 DB_USER="${DB_USER:-cmsuser}"
 DB_PASS="${DB_PASS:-your_password_here}"
 DB_NAME="${DB_NAME:-cmsdb}"
-DB_HOST="${DB_HOST:-database}"
+# cms.toml is consumed ONLY by this host's containers, which must reach Postgres
+# through the compose network service name — never a routable IP (Tailscale/public),
+# which is unreachable from inside the docker bridge and breaks every RPC service.
+DB_HOST="database"
 DB_PORT="${DB_PORT:-5432}"
 
 echo "Injecting configuration:"

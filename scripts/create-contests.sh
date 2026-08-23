@@ -149,19 +149,21 @@ from cms.db.filecacher import FileCacher
 
 with SessionGen() as session:
     contest = Contest(
-        name="$name",
+        # contest.name is stored in a codename-domain column ([A-Za-z0-9_-]+):
+        # spaces/other chars are rejected by the DB regardless of UI leniency.
+        name="$(printf '%s' "$name" | tr -c 'A-Za-z0-9_-' '_' )",
         description="$description",
-        start="${start_time}",
-        stop="${end_time}",
+        start=datetime.datetime.fromisoformat("${start_time}"),
+        stop=datetime.datetime.fromisoformat("${end_time}"),
         token_mode="$token_mode",
         token_max_number=$token_max,
-        token_min_interval=0,
-        token_gen_time=$token_gen,
+        token_min_interval=datetime.timedelta(seconds=0),
+        token_gen_interval=datetime.timedelta(minutes=$token_gen),
         token_gen_number=0,
         max_submission_number=$max_sub,
         max_user_test_number=$max_sub,
-        min_submission_interval=$min_interval,
-        min_user_test_interval=$min_interval,
+        min_submission_interval=datetime.timedelta(seconds=$min_interval),
+        min_user_test_interval=datetime.timedelta(seconds=$min_interval),
         score_precision=2
     )
     session.add(contest)
