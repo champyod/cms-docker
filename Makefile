@@ -2,7 +2,10 @@ SHELL := /bin/bash
 
 # Detect Docker Compose version (keep fallback)
 COMPOSE_CMD := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
-COMPOSE_FILE := docker-compose.yml
+# Explicit -f list (auto-merge of docker-compose.override.yml is disabled
+# whenever -f is passed, so the override must be included here when present)
+COMPOSE_FILES := $(wildcard docker-compose.yml docker-compose.override.yml)
+COMPOSE_FLAGS := $(foreach f,$(COMPOSE_FILES),-f $(f))
 # Compose v5 does not auto-activate the profiles of depends_on targets, so
 # stack bring-up must request dependency profiles explicitly. Stop/clean
 # targets keep the stack's own profile so teardown never removes dependencies.
@@ -227,11 +230,11 @@ core:
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
 	if [ "$$DEPLOY_TYPE" = "img" ]; then \
 		echo "DEPLOYMENT_TYPE=img → pulling core images..."; \
-		$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile core pull || true; \
-		$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile core up -d --no-build; \
+		$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core pull || true; \
+		$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core up -d --no-build; \
 	else \
 		echo "DEPLOYMENT_TYPE=src → building core images..."; \
-		$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile core up -d --build; \
+		$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core up -d --build; \
 	fi
 	@echo "Core profile started."
 
@@ -242,11 +245,11 @@ admin:
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
 	if [ "$$DEPLOY_TYPE" = "img" ]; then \
 		echo "DEPLOYMENT_TYPE=img → pulling admin images..."; \
-		$(COMPOSE_CMD) -f $(COMPOSE_FILE) $(ADMIN_UP_PROFILES) pull || true; \
-		$(COMPOSE_CMD) -f $(COMPOSE_FILE) $(ADMIN_UP_PROFILES) up -d --no-build; \
+		$(COMPOSE_CMD) $(COMPOSE_FLAGS) $(ADMIN_UP_PROFILES) pull || true; \
+		$(COMPOSE_CMD) $(COMPOSE_FLAGS) $(ADMIN_UP_PROFILES) up -d --no-build; \
 	else \
 		echo "DEPLOYMENT_TYPE=src → building admin images..."; \
-		$(COMPOSE_CMD) -f $(COMPOSE_FILE) $(ADMIN_UP_PROFILES) up -d --build; \
+		$(COMPOSE_CMD) $(COMPOSE_FLAGS) $(ADMIN_UP_PROFILES) up -d --build; \
 	fi
 	@echo "Admin profile started."
 
@@ -257,11 +260,11 @@ contest:
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
 	if [ "$$DEPLOY_TYPE" = "img" ]; then \
 		echo "DEPLOYMENT_TYPE=img → pulling contest images..."; \
-		$(COMPOSE_CMD) -f $(COMPOSE_FILE) $(CONTEST_UP_PROFILES) pull || true; \
-		$(COMPOSE_CMD) -f $(COMPOSE_FILE) $(CONTEST_UP_PROFILES) up -d --no-build; \
+		$(COMPOSE_CMD) $(COMPOSE_FLAGS) $(CONTEST_UP_PROFILES) pull || true; \
+		$(COMPOSE_CMD) $(COMPOSE_FLAGS) $(CONTEST_UP_PROFILES) up -d --no-build; \
 	else \
 		echo "DEPLOYMENT_TYPE=src → building contest images..."; \
-		$(COMPOSE_CMD) -f $(COMPOSE_FILE) $(CONTEST_UP_PROFILES) up -d --build; \
+		$(COMPOSE_CMD) $(COMPOSE_FLAGS) $(CONTEST_UP_PROFILES) up -d --build; \
 	fi
 	@echo "Contest profile started (CONTEST_ID canonical)."
 
@@ -272,11 +275,11 @@ worker:
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
 	if [ "$$DEPLOY_TYPE" = "img" ]; then \
 		echo "DEPLOYMENT_TYPE=img → pulling worker images..."; \
-		$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile worker pull || true; \
-		$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile worker up -d --no-build; \
+		$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile worker pull || true; \
+		$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile worker up -d --no-build; \
 	else \
 		echo "DEPLOYMENT_TYPE=src → building worker images..."; \
-		$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile worker up -d --build; \
+		$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile worker up -d --build; \
 	fi
 	@echo "Worker profile started."
 
@@ -287,11 +290,11 @@ infra:
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
 	if [ "$$DEPLOY_TYPE" = "img" ]; then \
 		echo "DEPLOYMENT_TYPE=img → pulling monitor images..."; \
-		$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile monitor pull || true; \
-		$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile monitor up -d --no-build; \
+		$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile monitor pull || true; \
+		$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile monitor up -d --no-build; \
 	else \
 		echo "DEPLOYMENT_TYPE=src → building monitor images..."; \
-		$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile monitor up -d --build; \
+		$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile monitor up -d --build; \
 	fi
 	@echo "Infra (monitor) profile started."
 
@@ -299,10 +302,10 @@ infra:
 # Stop / clean / down variants per stack
 # ---------------------------------------------------------------------------
 core-stop:
-	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile core down
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core down
 
 core-clean:
-	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile core down -v
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core down -v
 
 # Teardown targets pass dependency profiles plus an explicit service list:
 # the core profile is required for project-graph validation, while the
@@ -311,36 +314,36 @@ ADMIN_SERVICES := admin-panel-next admin-web-server ranking-web-server printing-
 CONTEST_SERVICES := evaluation-service proxy-service contest-web-server nginx-proxy
 
 admin-stop:
-	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile core --profile admin down $(ADMIN_SERVICES)
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile admin down $(ADMIN_SERVICES)
 
 admin-clean:
-	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile core --profile admin down -v $(ADMIN_SERVICES)
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile admin down -v $(ADMIN_SERVICES)
 
 contest-stop:
-	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile core --profile contest stop $(CONTEST_SERVICES)
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile contest stop $(CONTEST_SERVICES)
 
 contest-down:
 	@echo "[deprecated] use 'make contest-stop' for stop or 'docker compose --profile core --profile contest down <services>' for down — contest-down runs a scoped down" >&2
-	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile core --profile contest down $(CONTEST_SERVICES)
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile contest down $(CONTEST_SERVICES)
 
 contest-clean:
-	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile core --profile contest down -v $(CONTEST_SERVICES)
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile contest down -v $(CONTEST_SERVICES)
 
 worker-stop:
-	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile worker down
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile worker down
 
 worker-clean:
-	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile worker down -v
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile worker down -v
 
 infra-stop:
-	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile monitor down
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile monitor down
 
 infra-clean:
-	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile monitor down -v
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile monitor down -v
 
 db-clean:
 	@echo "WARNING: This will delete all database data and reset everything."
-	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile core --profile admin --profile contest --profile worker --profile monitor down -v --remove-orphans
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile admin --profile contest --profile worker --profile monitor down -v --remove-orphans
 
 db-reset: db-clean
 	@$(MAKE) -e DEPLOYMENT_TYPE_OVERRIDE=img core
@@ -353,7 +356,7 @@ db-reset: db-clean
 pull:
 	@echo "Pulling images for all profiles..."
 	@pull_failed=0; \
-	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile core --profile admin --profile contest --profile worker --profile monitor pull || { echo "[WARN] pull failed — continuing with local images (may be stale)" >&2; pull_failed=1; }; \
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile admin --profile contest --profile worker --profile monitor pull || { echo "[WARN] pull failed — continuing with local images (may be stale)" >&2; pull_failed=1; }; \
 	if [ "$$pull_failed" -eq 0 ]; then echo "Pull complete."; else echo "Pull finished WITH FAILURES (see above)" >&2; fi
 
 # ---------------------------------------------------------------------------
@@ -383,31 +386,31 @@ infra-img:
 pull-core:
 	@echo "[deprecated] use 'docker compose --profile core pull'" >&2
 	@pull_failed=0; \
-	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile core pull || { echo "[WARN] pull failed for core — continuing with local images (may be stale)" >&2; pull_failed=1; }; \
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core pull || { echo "[WARN] pull failed for core — continuing with local images (may be stale)" >&2; pull_failed=1; }; \
 	if [ "$$pull_failed" -eq 0 ]; then echo "Pull complete."; else echo "Pull finished WITH FAILURES (see above)" >&2; fi
 
 pull-admin:
 	@echo "[deprecated] use 'make pull-admin' (adds core profile for graph validation)" >&2
 	@pull_failed=0; \
-	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile core --profile admin pull || { echo "[WARN] pull failed for admin — continuing with local images (may be stale)" >&2; pull_failed=1; }; \
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile admin pull || { echo "[WARN] pull failed for admin — continuing with local images (may be stale)" >&2; pull_failed=1; }; \
 	if [ "$$pull_failed" -eq 0 ]; then echo "Pull complete."; else echo "Pull finished WITH FAILURES (see above)" >&2; fi
 
 pull-contest:
 	@echo "[deprecated] use 'make pull-contest' (adds core profile for graph validation)" >&2
 	@pull_failed=0; \
-	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile core --profile contest pull || { echo "[WARN] pull failed for contest — continuing with local images (may be stale)" >&2; pull_failed=1; }; \
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile contest pull || { echo "[WARN] pull failed for contest — continuing with local images (may be stale)" >&2; pull_failed=1; }; \
 	if [ "$$pull_failed" -eq 0 ]; then echo "Pull complete."; else echo "Pull finished WITH FAILURES (see above)" >&2; fi
 
 pull-worker:
 	@echo "[deprecated] use 'docker compose --profile worker pull'" >&2
 	@pull_failed=0; \
-	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile worker pull || { echo "[WARN] pull failed for worker — continuing with local images (may be stale)" >&2; pull_failed=1; }; \
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile worker pull || { echo "[WARN] pull failed for worker — continuing with local images (may be stale)" >&2; pull_failed=1; }; \
 	if [ "$$pull_failed" -eq 0 ]; then echo "Pull complete."; else echo "Pull finished WITH FAILURES (see above)" >&2; fi
 
 pull-infra:
 	@echo "[deprecated] use 'docker compose --profile monitor pull'" >&2
 	@pull_failed=0; \
-	$(COMPOSE_CMD) -f $(COMPOSE_FILE) --profile monitor pull || { echo "[WARN] pull failed for monitor — continuing with local images (may be stale)" >&2; pull_failed=1; }; \
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile monitor pull || { echo "[WARN] pull failed for monitor — continuing with local images (may be stale)" >&2; pull_failed=1; }; \
 	if [ "$$pull_failed" -eq 0 ]; then echo "Pull complete."; else echo "Pull finished WITH FAILURES (see above)" >&2; fi
 
 admin-dev:
@@ -427,13 +430,22 @@ cms-init:
 prisma-sync:
 	@echo "Synchronizing Admin Panel schema (forcing Prisma v6)..."
 	@export PATH="$(HOME)/.bun/bin:$(PATH)"; \
-	if [ ! -d "admin-panel" ]; then \
+	DEPLOY_TYPE="$${DEPLOYMENT_TYPE_OVERRIDE:-}"; \
+	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env.admin 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
+	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
+	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
+	if [ "$$DEPLOY_TYPE" = "img" ] && docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-admin-panel-next$$'; then \
+		echo "img mode -> running prisma db push inside cms-admin-panel-next (no host toolchain needed)"; \
+		docker exec cms-admin-panel-next sh -lc "cd /repo-root/admin-panel && { ./node_modules/.bin/prisma db push $${PRISMA_ARGS:-} || npx --yes prisma@6 db push $${PRISMA_ARGS:-}; }"; \
+		st=$$?; \
+		if [ $$st -ne 0 ]; then echo "Schema sync needs confirmation? Re-run with: make prisma-sync PRISMA_ARGS=--accept-data-loss" >&2; fi; \
+	elif [ ! -d "admin-panel" ]; then \
 		echo "ERROR: admin-panel directory not found. Clone the repository with admin-panel/ or check your working directory." >&2; \
 		exit 1; \
 	elif command -v bun >/dev/null 2>&1; then \
-		cd admin-panel && bun x prisma@6 db push; \
+		cd admin-panel && bun x prisma@6 db push $${PRISMA_ARGS:-}; \
 	elif command -v npm >/dev/null 2>&1; then \
-		cd admin-panel && npx prisma@6 db push; \
+		cd admin-panel && npx prisma@6 db push $${PRISMA_ARGS:-}; \
 	else \
 		echo "ERROR: Neither 'bun' nor 'npm' found in PATH. Install Bun (https://bun.sh) or Node.js/npm, then run: make prisma-sync" >&2; \
 		echo "  Fix: curl -fsSL https://bun.sh/install | bash && export PATH=\"\$$HOME/.bun/bin:\$$PATH\"" >&2; \
