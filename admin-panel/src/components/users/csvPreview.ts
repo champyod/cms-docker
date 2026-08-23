@@ -15,13 +15,6 @@ export interface PreviewRow {
 
 export type PreviewFieldKey = keyof Omit<PreviewRow, 'rowIndex' | 'issues' | 'selected'>;
 
-export const EXPECTED_FIELDS: PreviewFieldKey[] = ['first_name', 'last_name', 'username', 'password', 'email', 'timezone', 'team'];
-
-export const TEMPLATE_CSV =
-  'first_name,last_name,username,password,email,timezone,team\n' +
-  'John,Doe,johndoe,mySecret123,john@example.com,Asia/Bangkok,Team Alpha\n' +
-  'Jane,Smith,,,jane@example.com,Asia/Bangkok,Team Beta';
-
 export const HEADER_ALIASES: Record<string, PreviewFieldKey> = {
   firstname: 'first_name',
   first_name: 'first_name',
@@ -41,46 +34,57 @@ export const HEADER_ALIASES: Record<string, PreviewFieldKey> = {
   teamname: 'team',
 };
 
-export function parseCsv(text: string): string[][] {
-  const rows: string[][] = [];
-  let current = '';
-  let row: string[] = [];
-  let inQuotes = false;
+interface CsvScannerState {
+  current: string;
+  row: string[];
+  inQuotes: boolean;
+}
 
-  for (let i = 0; i < text.length; i += 1) {
-    const char = text[i];
-    const next = text[i + 1];
+function appendCell(state: CsvScannerState): void {
+  state.row.push(state.current.trim());
+  state.current = '';
+}
 
-    if (char === '"') {
-      if (inQuotes && next === '"') {
-        current += '"';
-        i += 1;
-      } else {
-        inQuotes = !inQuotes;
-      }
-      continue;
+function closeRecord(state: CsvScannerState, rows: string[][], consumeNext: boolean): boolean {
+  appendCell(state);
+  if (state.row.some((cell) => cell !== '')) rows.push(state.row);
+  state.row = [];
+  return consumeNext;
+}
+
+function processChar(char: string, next: string | undefined, state: CsvScannerState, rows: string[][]): boolean {
+  if (char === '"') {
+    if (state.inQuotes && next === '"') {
+      state.current += '"';
+      return true;
     }
-
-    if (char === ',' && !inQuotes) {
-      row.push(current.trim());
-      current = '';
-      continue;
-    }
-
-    if ((char === '\n' || char === '\r') && !inQuotes) {
-      if (char === '\r' && next === '\n') i += 1;
-      row.push(current.trim());
-      if (row.some((cell) => cell !== '')) rows.push(row);
-      row = [];
-      current = '';
-      continue;
-    }
-
-    current += char;
+    state.inQuotes = !state.inQuotes;
+    return false;
   }
 
-  row.push(current.trim());
-  if (row.some((cell) => cell !== '')) rows.push(row);
+  if (char === ',' && !state.inQuotes) {
+    appendCell(state);
+    return false;
+  }
+
+  if ((char === '\n' || char === '\r') && !state.inQuotes) {
+    return closeRecord(state, rows, char === '\r' && next === '\n');
+  }
+
+  state.current += char;
+  return false;
+}
+
+export function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  const state: CsvScannerState = { current: '', row: [], inQuotes: false };
+
+  for (let i = 0; i < text.length; i += 1) {
+    if (processChar(text[i], text[i + 1], state, rows)) i += 1;
+  }
+
+  appendCell(state);
+  if (state.row.some((cell) => cell !== '')) rows.push(state.row);
 
   return rows;
 }
@@ -95,7 +99,7 @@ function randomToken(length: number): string {
   return token;
 }
 
-function makeUsername(firstName: string, lastName: string, usedUsernames?: Set<string>): string {
+export function makeUsername(firstName: string, lastName: string, usedUsernames?: Set<string>): string {
   const firstAscii = firstName.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
   const lastAscii = lastName.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -116,7 +120,7 @@ function makeUsername(firstName: string, lastName: string, usedUsernames?: Set<s
   return username;
 }
 
-function makePassword(): string {
+export function makePassword(): string {
   return randomToken(14);
 }
 
@@ -173,14 +177,53 @@ export function fillRowCredentials(row: PreviewRow, mode: GenerationMode, usedUs
   return next;
 }
 
-export function buildSelectedCsv(rows: PreviewRow[]): string {
-  const lines = ['first_name,last_name,username,password,email,timezone,team'];
-  rows.forEach((row) => {
-    const cells = [row.first_name, row.last_name, row.username, row.password, row.email, row.timezone, row.team]
-      .map((value) => `"${value.replace(/"/g, '""')}"`);
-    lines.push(cells.join(','));
+
+function collectHeaderWarnings(rawHeaders: string[], mappedHeaders: (PreviewFieldKey | null)[]): string[] {
+  const warnings: string[] = [];
+  if (!mappedHeaders.includes('first_name')) warnings.push('Missing column: first_name (or alias firstname/first)');
+  if (!mappedHeaders.includes('last_name')) warnings.push('Missing column: last_name (or alias lastname/last)');
+
+  const unknownHeaders = rawHeaders.filter((header, index) => header && !mappedHeaders[index]);
+  if (unknownHeaders.length > 0) {
+    warnings.push(`Unknown columns ignored: ${unknownHeaders.join(', ')}`);
+  }
+
+  return warnings;
+}
+
+function emptyPreviewRow(rowIndex: number): PreviewRow {
+  return {
+    rowIndex,
+    first_name: '',
+    last_name: '',
+    username: '',
+    password: '',
+    email: '',
+    timezone: '',
+    team: '',
+    issues: [],
+    selected: false,
+  };
+}
+
+function mapMatrixRow(
+  cells: string[],
+  mappedHeaders: (PreviewFieldKey | null)[],
+  rowIndex: number,
+  mode: GenerationMode,
+  usedUsernames: Set<string>
+): PreviewRow {
+  const mapped = emptyPreviewRow(rowIndex);
+
+  mappedHeaders.forEach((field, colIndex) => {
+    if (!field) return;
+    assignField(mapped, field, (cells[colIndex] ?? '').trim());
   });
-  return `${lines.join('\n')}\n`;
+
+  const withGenerated = applyGeneration(mapped, mode, usedUsernames);
+  withGenerated.issues = collectIssues(withGenerated);
+
+  return withGenerated;
 }
 
 export function buildPreviewRows(
@@ -194,41 +237,11 @@ export function buildPreviewRows(
 
   const rawHeaders = matrix[0].map((header) => header.trim());
   const mappedHeaders = rawHeaders.map((header) => HEADER_ALIASES[header.toLowerCase()] || null);
-
-  const warnings: string[] = [];
-  if (!mappedHeaders.includes('first_name')) warnings.push('Missing column: first_name (or alias firstname/first)');
-  if (!mappedHeaders.includes('last_name')) warnings.push('Missing column: last_name (or alias lastname/last)');
-
-  const unknownHeaders = rawHeaders.filter((header, index) => header && !mappedHeaders[index]);
-  if (unknownHeaders.length > 0) {
-    warnings.push(`Unknown columns ignored: ${unknownHeaders.join(', ')}`);
-  }
-
   const usedUsernames = new Set<string>();
-  const rows = matrix.slice(1).map((cells, rowIndex) => {
-    const mapped: PreviewRow = {
-      rowIndex: rowIndex + 2,
-      first_name: '',
-      last_name: '',
-      username: '',
-      password: '',
-      email: '',
-      timezone: '',
-      team: '',
-      issues: [],
-      selected: false,
-    };
 
-    mappedHeaders.forEach((field, colIndex) => {
-      if (!field) return;
-      assignField(mapped, field, (cells[colIndex] ?? '').trim());
-    });
+  const rows = matrix.slice(1).map((cells, rowIndex) =>
+    mapMatrixRow(cells, mappedHeaders, rowIndex + 2, mode, usedUsernames)
+  );
 
-    const withGenerated = applyGeneration(mapped, mode, usedUsernames);
-    withGenerated.issues = collectIssues(withGenerated);
-
-    return withGenerated;
-  });
-
-  return { warnings, rows };
+  return { warnings: collectHeaderWarnings(rawHeaders, mappedHeaders), rows };
 }

@@ -1,19 +1,13 @@
-import crypto from 'crypto';
-import fs from 'fs/promises';
-import path from 'path';
-import os from 'os';
 import { revalidatePath } from 'next/cache';
 import type { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 import { apiError, apiSuccess } from '@/lib/api-utils';
+import { cleanupExpiredCreds, csvEscape, randomToken, writeCredsCsv } from '@/lib/creds-file';
 
 const BCRYPT_SALT_ROUNDS = 10;
 const BCRYPT_PREFIX = 'bcrypt:';
 const CREDS_CSV_HEADER = 'id,username,password';
-const MAX_CLEANUP_SCAN_FILES = 500;
-const CREDS_FILE_MAX_AGE_MS = 15 * 60 * 1000;
-const CREDS_FILE_PREFIX = 'cms-creds-';
 const USERNAME_RANDOM_SUFFIX_LENGTH = 4;
 const MAX_USERNAME_GENERATION_ATTEMPTS = 100;
 
@@ -28,10 +22,6 @@ interface CredentialRow {
   password?: string;
 }
 
-function randomToken(length: number): string {
-  return crypto.randomBytes(Math.ceil(length / 2)).toString('hex').slice(0, length);
-}
-
 function makeUsername(firstName: string, lastName: string): string {
   const firstAscii = firstName.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
   const lastAscii = lastName.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -41,6 +31,35 @@ function makeUsername(firstName: string, lastName: string): string {
 
 function makePassword(): string {
   return randomToken(14);
+}
+
+async function regenerateUser(
+  user: { id: number; first_name: string; last_name: string },
+  mode: 'username' | 'password',
+  localUsernames: Set<string>
+): Promise<CredentialRow> {
+  const updateData: { username?: string; password?: string } = {};
+  const resultRow: CredentialRow = { id: user.id };
+
+  if (mode === 'username') {
+    const username = await ensureUniqueUsername(user.first_name, user.last_name, localUsernames);
+    updateData.username = username;
+    resultRow.username = username;
+  }
+
+  if (mode === 'password') {
+    const plainPassword = makePassword();
+    const hash = await bcrypt.hash(plainPassword, BCRYPT_SALT_ROUNDS);
+    updateData.password = `${BCRYPT_PREFIX}${hash}`;
+    resultRow.password = plainPassword;
+  }
+
+  await prisma.users.update({
+    where: { id: user.id },
+    data: updateData,
+  });
+
+  return resultRow;
 }
 
 async function ensureUniqueUsername(firstName: string, lastName: string, localSet: Set<string>): Promise<string> {
@@ -60,47 +79,6 @@ async function ensureUniqueUsername(firstName: string, lastName: string, localSe
   }
 
   throw new Error('Unable to generate unique username');
-}
-
-export async function cleanupExpiredCreds(): Promise<void> {
-  try {
-    const dir = os.tmpdir();
-    const files = await fs.readdir(dir);
-    if (files.length > MAX_CLEANUP_SCAN_FILES) return;
-    const now = Date.now();
-    await Promise.all(
-      files
-        .filter((f) => f.startsWith(CREDS_FILE_PREFIX) && (f.endsWith('.csv') || f.endsWith('.csv.used')))
-        .map(async (f) => {
-          try {
-            const full = path.join(dir, f);
-            const stat = await fs.stat(full);
-            if (now - stat.mtimeMs > CREDS_FILE_MAX_AGE_MS) {
-              await fs.unlink(full);
-            }
-          } catch {
-            // ignore per-file errors
-          }
-        })
-    );
-  } catch {
-    // ignore cleanup errors
-  }
-}
-
-function csvEscape(value: string): string {
-  const str = String(value ?? '');
-  if (str.includes('"') || str.includes(',') || str.includes('\n') || str.includes('\r')) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-}
-
-async function writeCredsCsv(content: string): Promise<{ token: string; downloadUrl: string }> {
-  const token = crypto.randomBytes(24).toString('hex');
-  const filePath = path.join(os.tmpdir(), `${CREDS_FILE_PREFIX}${token}.csv`);
-  await fs.writeFile(filePath, content, { mode: 0o600 });
-  return { token, downloadUrl: `/api/users/credentials/${token}` };
 }
 
 function buildCredsCsv(rows: CredentialRow[]): string {
@@ -134,30 +112,8 @@ export async function handleRegenerate({ body, userIds }: BatchActionRequest): P
 
   const localUsernames = new Set<string>();
   const updated: CredentialRow[] = [];
-
   for (const user of users) {
-    const updateData: { username?: string; password?: string } = {};
-    const resultRow: CredentialRow = { id: user.id };
-
-    if (mode === 'username') {
-      const username = await ensureUniqueUsername(user.first_name, user.last_name, localUsernames);
-      updateData.username = username;
-      resultRow.username = username;
-    }
-
-    if (mode === 'password') {
-      const plainPassword = makePassword();
-      const hash = await bcrypt.hash(plainPassword, BCRYPT_SALT_ROUNDS);
-      updateData.password = `${BCRYPT_PREFIX}${hash}`;
-      resultRow.password = plainPassword;
-    }
-
-    await prisma.users.update({
-      where: { id: user.id },
-      data: updateData,
-    });
-
-    updated.push(resultRow);
+    updated.push(await regenerateUser(user, mode, localUsernames));
   }
 
   revalidatePath('/[locale]/users', 'page');
@@ -165,16 +121,56 @@ export async function handleRegenerate({ body, userIds }: BatchActionRequest): P
   if (updated.length === 0) {
     return apiSuccess({ success: true, count: 0, failed: [] });
   }
-
   if (mode === 'password') {
     return issueCredentialsCsv(updated);
   }
-
   if (Boolean(body.export)) {
     return issueCredentialsCsv(updated);
   }
-
   return apiSuccess({ success: true, count: updated.length });
+}
+
+async function hashCredentialPassword(password: string): Promise<string | null> {
+  try {
+    return `${BCRYPT_PREFIX}${await bcrypt.hash(String(password), BCRYPT_SALT_ROUNDS)}`;
+  } catch {
+    return null;
+  }
+}
+
+async function applyCredentialUpdate(
+  u: { id?: number; username?: string; password?: string },
+  updated: CredentialRow[],
+  failed: Array<{ id?: number; reason: string }>
+): Promise<void> {
+  const userId = Number(u.id);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    failed.push({ id: u.id, reason: 'invalid id' });
+    return;
+  }
+
+  const data: { username?: string; password?: string } = {};
+  if (u.username) data.username = String(u.username).trim();
+  if (u.password) {
+    const hashed = await hashCredentialPassword(u.password);
+    if (hashed === null) {
+      failed.push({ id: userId, reason: 'password hash failed' });
+      return;
+    }
+    data.password = hashed;
+  }
+
+  try {
+    await prisma.users.update({ where: { id: userId }, data });
+    updated.push({ id: userId, username: data.username, password: u.password });
+  } catch (err) {
+    const e = err as { code?: string; message?: string };
+    if (e.code === 'P2002') {
+      failed.push({ id: userId, reason: 'username already exists' });
+    } else {
+      failed.push({ id: userId, reason: String(e.message || err) });
+    }
+  }
 }
 
 export async function handleApplyCredentials({ body }: BatchActionRequest): Promise<NextResponse> {
@@ -190,35 +186,7 @@ export async function handleApplyCredentials({ body }: BatchActionRequest): Prom
   const failed: Array<{ id?: number; reason: string }> = [];
 
   for (const u of updates) {
-    const userId = Number(u.id);
-    if (!Number.isInteger(userId) || userId <= 0) {
-      failed.push({ id: u.id, reason: 'invalid id' });
-      continue;
-    }
-
-    const data: { username?: string; password?: string } = {};
-    if (u.username) data.username = String(u.username).trim();
-    if (u.password) {
-      try {
-        const hash = await bcrypt.hash(String(u.password), BCRYPT_SALT_ROUNDS);
-        data.password = `${BCRYPT_PREFIX}${hash}`;
-      } catch {
-        failed.push({ id: userId, reason: 'password hash failed' });
-        continue;
-      }
-    }
-
-    try {
-      await prisma.users.update({ where: { id: userId }, data });
-      updated.push({ id: userId, username: data.username, password: u.password });
-    } catch (err) {
-      const e = err as { code?: string; message?: string };
-      if (e.code === 'P2002') {
-        failed.push({ id: userId, reason: 'username already exists' });
-      } else {
-        failed.push({ id: userId, reason: String(e.message || err) });
-      }
-    }
+    await applyCredentialUpdate(u, updated, failed);
   }
 
   revalidatePath('/[locale]/users', 'page');
