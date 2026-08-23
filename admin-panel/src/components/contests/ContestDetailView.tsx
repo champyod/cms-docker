@@ -7,13 +7,13 @@ import { setTestUser } from '@/app/actions/participations';
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
 import { useDeployContest } from '@/hooks/useDeployContest';
-import { Modal } from '@/components/core/Modal';
 import {
   Settings, Users, Zap,
   Plus, Trash2,
-  ChevronDown, ChevronUp, Save, ClipboardList, FlaskConical, Rocket, Loader2
+  ChevronDown, ChevronUp, Save, ClipboardList, FlaskConical, Rocket
 } from 'lucide-react';
 import { ParticipantModal } from './ParticipantModal';
+import { DeployConfirmModal } from './DeployConfirmModal';
 import { TaskSelectionModal } from './TaskSelectionModal';
 import { ContestCommunications } from './ContestCommunications';
 import { ParticipationModal } from './ParticipationModal';
@@ -540,37 +540,13 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, tea
         onSuccess={() => window.location.reload()}
       />
 
-      <Modal
+      <DeployConfirmModal
         isOpen={showDeployModal}
-        onClose={() => { if (deployState.phase !== 'deploying' && deployState.phase !== 'polling') { setShowDeployModal(false); resetDeployState(); } }}
-        title={deployState.phase === 'deploying' || deployState.phase === 'polling' ? 'Deploying Contest...' : 'Confirm Deploy'}
-      >
-        <div className="space-y-4">
-          {(deployState.phase === 'idle' || deployState.phase === 'already_running') && (
-            <>
-              <p className="text-neutral-300 text-sm">
-                This will mark <strong className="text-white">{contest.name}</strong> as the active contest,
-                update the .env file, and restart the contest stack.
-              </p>
-              <div className="flex justify-end gap-3 pt-2">
-                <Button variant="ghost" onClick={() => { setShowDeployModal(false); resetDeployState(); }}>Cancel</Button>
-                <Button variant="primary" onClick={confirmDeploy} className="flex items-center gap-2">
-                  <Rocket className="w-4 h-4" />
-                  Deploy
-                </Button>
-              </div>
-            </>
-          )}
-          {(deployState.phase === 'deploying' || deployState.phase === 'polling') && (
-            <div className="flex flex-col items-center gap-4 py-6">
-              <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
-              <p className="text-neutral-300 text-sm">
-                {deployState.phase === 'deploying' ? 'Starting deploy...' : 'Deploying contest stack...'}
-              </p>
-            </div>
-          )}
-        </div>
-      </Modal>
+        phase={deployState.phase}
+        targetLabel={contest.name}
+        onClose={() => { setShowDeployModal(false); resetDeployState(); }}
+        onConfirm={confirmDeploy}
+      />
     </div>
   );
 }

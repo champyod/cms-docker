@@ -7,12 +7,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/core/Button';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Trash2, Plus, Calendar, Clock, ExternalLink, HelpCircle, Rocket, CheckCircle2, Loader2 } from 'lucide-react';
+import { Trash2, Plus, Calendar, Clock, ExternalLink, HelpCircle, Rocket, CheckCircle2 } from 'lucide-react';
 import { ContestModal } from './ContestModal';
+import { DeployConfirmModal } from './DeployConfirmModal';
 import { apiClient } from '@/lib/apiClient';
 import { useDeployContest } from '@/hooks/useDeployContest';
 import { useToast } from '@/components/providers/ToastProvider';
-import { Modal } from '@/components/core/Modal';
 
 interface ContestListProps {
   initialContests: any[];
@@ -240,43 +240,14 @@ export function ContestList({ initialContests, totalPages, permissions }: Contes
         onSuccess={handleSuccess}
       />
 
-      <Modal
+      <DeployConfirmModal
         isOpen={deployTarget !== null}
+        phase={deployState.phase}
+        targetLabel={`#${deployTarget}`}
+        extraNote="The previous active contest will be deactivated."
         onClose={closeDeployModal}
-        title={deployState.phase === 'deploying' || deployState.phase === 'polling' ? 'Deploying Contest...' : 'Confirm Deploy'}
-      >
-        <div className="space-y-4">
-          {deployTarget !== null && (deployState.phase === 'idle' || deployState.phase === 'already_running') && (
-            <>
-              <p className="text-neutral-300 text-sm">
-                This will mark contest <strong className="text-white">#{deployTarget}</strong> as active,
-                update the .env file, and restart the contest stack. The previous active contest will be deactivated.
-              </p>
-              <div className="flex justify-end gap-3 pt-2">
-                <Button variant="ghost" onClick={closeDeployModal}>Cancel</Button>
-                <Button variant="primary" onClick={confirmDeploy} className="flex items-center gap-2">
-                  <Rocket className="w-4 h-4" />
-                  Deploy
-                </Button>
-              </div>
-            </>
-          )}
-          {(deployState.phase === 'deploying' || deployState.phase === 'polling') && (
-            <div className="flex flex-col items-center gap-4 py-6">
-              <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
-              <p className="text-neutral-300 text-sm">
-                {deployState.phase === 'deploying' ? 'Starting deploy...' : 'Deploying contest stack...'}
-              </p>
-            </div>
-          )}
-          {deployState.phase === 'completed' && (
-            <div className="flex flex-col items-center gap-4 py-6">
-              <CheckCircle2 className="w-8 h-8 text-green-400" />
-              <p className="text-green-300 text-sm font-medium">Contest deployed successfully!</p>
-            </div>
-          )}
-        </div>
-      </Modal>
+        onConfirm={confirmDeploy}
+      />
     </div>
   );
 }
