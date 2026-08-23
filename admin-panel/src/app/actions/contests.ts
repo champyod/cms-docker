@@ -75,6 +75,25 @@ export interface ContestData {
   min_submission_interval_grace_period?: number | null;
 }
 
+function mapContestDbError(error: unknown) {
+  const e = error as Error & { code?: string };
+
+  for (const [constraint, field] of Object.entries(CONSTRAINT_TO_FIELD_MAP)) {
+    if (e.message?.includes(constraint)) {
+      return {
+        success: false,
+        errors: [{ field, message: getConstraintErrorMessage(constraint), code: constraint }],
+        error: getConstraintErrorMessage(constraint)
+      };
+    }
+  }
+
+  if (e.code === 'P2002' || e.message?.includes('unique constraint')) {
+    return { success: false, error: 'Contest name already exists' };
+  }
+  return { success: false, error: e.message };
+}
+
 export async function createContest(data: ContestData) {
   await ensurePermission('contests');
 
@@ -144,23 +163,7 @@ export async function createContest(data: ContestData) {
     revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {
-    const e = error as Error & { code?: string };
-    
-    // Check for DB check constraints
-    for (const [constraint, field] of Object.entries(CONSTRAINT_TO_FIELD_MAP)) {
-      if (e.message?.includes(constraint)) {
-        return {
-          success: false,
-          errors: [{ field, message: getConstraintErrorMessage(constraint), code: constraint }],
-          error: getConstraintErrorMessage(constraint)
-        };
-      }
-    }
-
-    if (e.code === 'P2002' || e.message?.includes('unique constraint')) {
-      return { success: false, error: 'Contest name already exists' };
-    }
-    return { success: false, error: e.message };
+    return mapContestDbError(error);
   }
 }
 
