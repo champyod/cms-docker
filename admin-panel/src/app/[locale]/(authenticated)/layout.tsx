@@ -18,7 +18,6 @@ export default async function AuthenticatedLayout({
   const session = await getSession();
 
   if (!session) {
-    console.log(`[AuthGuard] No session found, redirecting to login`);
     redirect(`/${locale}/auth/login`);
   }
 
