@@ -1,7 +1,32 @@
-import { prisma } from '@/lib/prisma';
 import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
+import {
+  updateSubmissionComment,
+  toggleSubmissionOfficial,
+  recalculateSubmission,
+} from '@/app/actions/submissions';
+
+interface ActionResult {
+  success: boolean;
+  error?: string;
+}
+
+async function dispatchSubmissionAction(
+  id: number,
+  data: { action?: string; comment?: string; type?: string }
+): Promise<ActionResult> {
+  switch (data.action) {
+    case 'comment':
+      return updateSubmissionComment(id, String(data.comment ?? ''));
+    case 'toggle-official':
+      return toggleSubmissionOfficial(id);
+    case 'recalculate':
+      return recalculateSubmission(id, (data.type as 'score' | 'evaluation' | 'full') ?? 'score');
+    default:
+      return { success: false, error: 'Invalid action' };
+  }
+}
 
 export async function PUT(
   req: NextRequest,
@@ -13,31 +38,14 @@ export async function PUT(
   const id = parseInt((await params).id);
   if (isNaN(id)) return apiError({ message: 'Invalid ID', status: 400 });
 
-  try {
-    const data = await req.json();
-    const { action } = data;
+  const data = await req.json();
+  const result = await dispatchSubmissionAction(id, data);
 
-    if (action === 'comment') {
-       await prisma.submissions.update({ where: { id }, data: { comment: data.comment } });
-    } else if (action === 'toggle-official') {
-       const sub = await prisma.submissions.findUnique({ where: { id } });
-       if (!sub) return apiError({ message: 'Submission not found', status: 404 });
-       await prisma.submissions.update({ where: { id }, data: { official: !sub.official } });
-    } else if (action === 'recalculate') {
-       const type = data.type || 'score';
-       if (type === 'evaluation' || type === 'full') {
-         await prisma.evaluations.deleteMany({ where: { submission_id: id } });
-       }
-       if (type === 'score' || type === 'full') {
-         await prisma.submission_results.deleteMany({ where: { submission_id: id } });
-       }
-    } else {
-       return apiError({ message: 'Invalid action', status: 400 });
-    }
-
-    revalidatePath('/[locale]/submissions', 'page');
-    return apiSuccess({ message: 'Submission updated successfully' });
-  } catch (error: any) {
-    return apiError(error);
+  if (!result.success) {
+    const status = result.error === 'Submission not found' ? 404 : 400;
+    return apiError({ message: result.error ?? 'Update failed', status });
   }
+
+  revalidatePath('/[locale]/submissions', 'page');
+  return apiSuccess({ message: 'Submission updated successfully' });
 }
