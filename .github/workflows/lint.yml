@@ -39,7 +39,7 @@ jobs:
           fi
           printf 'Linting:\n'
           printf '  %s\n' "${files[@]}"
-          shellcheck -S warning -x "${files[@]}"
+          shellcheck -S error -x "${files[@]}"
 
   dockerfiles:
     name: hadolint
