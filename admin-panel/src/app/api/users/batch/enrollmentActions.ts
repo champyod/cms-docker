@@ -98,6 +98,28 @@ async function removeUsersFromAnyTeam(userIds: number[]): Promise<number> {
   return cleared.count;
 }
 
+async function assignTeamByCode(
+  body: Record<string, unknown>,
+  userIds: number[]
+): Promise<NextResponse> {
+  const contestId = coerceNumber(body.contestId);
+  const teamCode = String(body.teamCode || '').trim();
+
+  if (!isValidId(contestId)) {
+    return apiError({ message: 'Invalid contestId', status: 400 });
+  }
+
+  if (!teamCode) {
+    return apiError({ message: 'teamCode is required', status: 400 });
+  }
+
+  const teamId = await resolveTeamIdByCode(teamCode);
+  const updatedCount = await assignTeamToUsers(contestId, teamId, userIds);
+
+  revalidateUserContestPages();
+  return apiSuccess({ success: true, updatedCount, teamId, teamCode });
+}
+
 export async function handleTeam({ body, userIds }: BatchActionRequest): Promise<NextResponse> {
   if (userIds.length === 0) {
     return apiError({ message: 'userIds is required', status: 400 });
@@ -115,20 +137,5 @@ export async function handleTeam({ body, userIds }: BatchActionRequest): Promise
     return apiSuccess({ success: true, updatedCount });
   }
 
-  const contestId = coerceNumber(body.contestId);
-  const teamCode = String(body.teamCode || '').trim();
-
-  if (!isValidId(contestId)) {
-    return apiError({ message: 'Invalid contestId', status: 400 });
-  }
-
-  if (!teamCode) {
-    return apiError({ message: 'teamCode is required', status: 400 });
-  }
-
-  const teamId = await resolveTeamIdByCode(teamCode);
-  const updatedCount = await assignTeamToUsers(contestId, teamId, userIds);
-
-  revalidateUserContestPages();
-  return apiSuccess({ success: true, updatedCount, teamId, teamCode });
+  return assignTeamByCode(body, userIds);
 }
