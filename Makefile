@@ -4,7 +4,7 @@ SHELL := /bin/bash
 COMPOSE_CMD := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
 COMPOSE_FILE := docker-compose.yml
 
-.PHONY: help env core admin contest worker infra core-stop admin-stop contest-stop contest-down worker-stop infra-stop core-clean admin-clean contest-clean worker-clean infra-clean db-clean clean pull pull-core pull-admin pull-contest pull-worker pull-infra core-img admin-img contest-img worker-img infra-img admin-dev admin-dev-stop contest-down cms-init admin-create prisma-sync lint smoke-test preflight backup db-reset
+.PHONY: setup help env core admin contest worker infra core-stop admin-stop contest-stop contest-down worker-stop infra-stop core-clean admin-clean contest-clean worker-clean infra-clean db-clean clean pull pull-core pull-admin pull-contest pull-worker pull-infra core-img admin-img contest-img worker-img infra-img admin-dev admin-dev-stop contest-down cms-init admin-create prisma-sync lint smoke-test preflight backup db-reset
 
 help:
 	@echo "Available commands:"
@@ -190,7 +190,7 @@ env:
 	@mkdir -p backups && touch backups/.gitkeep
 	@echo "Ensured backups/.gitkeep exists (monitor mount needs host dir)"
 	@echo "Hint: if running monitor non-root, ensure ownership: chown 1000:1000 backups (or match container UID)"
-	@echo ".env file generated. You can now run: ./scripts/setup.sh"
+	@echo ".env file generated. You can now run: ./cms   (one-stop bootstrap)"
 	@if [ -x scripts/__preflight.sh ]; then \
 		echo "Running preflight checks..."; \
 		./scripts/__preflight.sh; \
@@ -205,6 +205,11 @@ env:
 # Canonical profile targets — DEPLOYMENT_TYPE=img → pull + up --no-build, src → up --build
 # DEPLOYMENT_TYPE_OVERRIDE env var (set by *-img aliases) takes precedence over files.
 # ---------------------------------------------------------------------------
+# One-stop orchestrator — see ./cms --help  (env -> core -> init -> admin -> contest -> worker -> monitor -> verify)
+.PHONY: setup
+setup:
+	@./cms $(CMS_ARGS)
+
 core:
 	@DEPLOY_TYPE="$${DEPLOYMENT_TYPE_OVERRIDE:-}"; \
 	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env.admin 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \

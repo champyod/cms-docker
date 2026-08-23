@@ -14,6 +14,131 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+# ---- subcommand dispatch ----
+cmd_usage() {
+  cat <<'CMDS'
+cms — CMS platform control plane
+
+Usage:
+  ./cms                     full bootstrap lifecycle (options below)
+  ./cms <command> [args]
+
+Commands:
+  help                      this help
+  setup                     first-time guided setup (fresh or update wizard)
+  update                    interactive configuration update wizard
+  fix                       non-interactive repair of missing/insecure config
+  deploy <stack> [--img]    make core|admin|contest|worker|infra [-img]; stack=all loops
+  stop [stack]              stop one stack or all
+  clean [stack]             clean one stack or all
+  pull [stack]              pull images for one stack or all
+  db <init|reset|clean|sync> database lifecycle shortcuts
+  admin-create              create superadmin account
+  status                    live service status dashboard
+  monitor                   monitoring/backup operations UI
+  backup [drill]            run backup now; 'drill' tests the restore path
+  restore <archive>         restore a backup archive
+  doctor                    preflight environment checks
+  test                      smoke-test the deployment
+  worker connect|cgroup     attach to a worker / set up sandbox cgroups
+  contest create            create contests from YAML
+  update-server             shard-aware server update flow
+
+Examples:
+  ./cms setup
+  ./cms deploy core --img
+  ./cms db reset
+  ./cms backup drill
+CMDS
+}
+
+handle_subcommand() {
+  case "$1" in
+    help|-h) cmd_usage; exit 0 ;;
+    setup)
+      mode_args=(--fresh)
+      if [[ -f .env.core ]]; then
+        read -r -p "Existing install detected — run the interactive update wizard instead? [Y/n] " yn || yn="n"
+        if [[ ! "$yn" =~ ^[Nn] ]]; then mode_args=(); fi
+      fi
+      exec bash scripts/__update_engine.sh ${mode_args[@]+"${mode_args[@]}"} "${@:2}"
+      ;;
+    update) shift; exec bash scripts/__update_engine.sh "$@" ;;
+    fix)    exec bash scripts/__update_engine.sh --fix ;;
+    deploy)
+      stack="${2:-}"
+      [[ -z "$stack" ]] && { echo "usage: cms deploy <core|admin|contest|worker|infra|all> [--img]" >&2; exit 2; }
+      img=""
+      [[ "${3:-}" == "--img" ]] && img="-img"
+      case "$stack" in
+        core|admin|contest|worker|infra) exec make "${stack}${img}" ;;
+        all)
+          rc=0
+          for s in core infra admin contest worker; do make "${s}${img}" || rc=1; done
+          exit "$rc" ;;
+        *) echo "unknown stack: $stack" >&2; exit 2 ;;
+      esac ;;
+    stop|clean)
+      action="$1"
+      stack="${2:-all}"
+      case "$stack" in
+        all)
+          if [[ "$action" == "clean" ]]; then exec make clean; fi
+          rc=0
+          for s in core admin contest worker infra; do make "${s}-stop" || rc=1; done
+          exit "$rc" ;;
+        core|admin|contest|worker|infra) exec make "${stack}-${action}" ;;
+        *) echo "unknown stack: $stack" >&2; exit 2 ;;
+      esac ;;
+    pull)
+      stack="${2:-all}"
+      case "$stack" in
+        all) exec make pull ;;
+        core|admin|contest|worker|infra) exec make "pull-${stack}" ;;
+        *) echo "unknown stack: $stack" >&2; exit 2 ;;
+      esac ;;
+    db)
+      sub="${2:-}"
+      case "$sub" in
+        init)  exec make cms-init ;;
+        reset) exec make db-reset ;;
+        clean) exec make db-clean ;;
+        sync)  exec make prisma-sync ;;
+        *) echo "usage: cms db <init|reset|clean|sync>" >&2; exit 2 ;;
+      esac ;;
+    admin-create) exec make admin-create ;;
+    status)  shift; exec bash scripts/__status.sh "$@" ;;
+    monitor) shift; exec bash scripts/__monitor.sh "$@" ;;
+    backup)
+      if [[ "${2:-}" == "drill" ]]; then shift 2; exec bash scripts/__backup_drill.sh "$@"; fi
+      exec make backup ;;
+    restore) shift; exec bash scripts/__restore.sh "$@" ;;
+    doctor)  exec bash scripts/__preflight.sh ;;
+    test)    shift; exec bash scripts/__smoke-test.sh "$@" ;;
+    worker)
+      sub="${2:-}"
+      case "$sub" in
+        connect) shift 2; exec bash scripts/__worker_connect.sh "$@" ;;
+        cgroup)  shift 2; exec bash scripts/__worker_cgroup_setup.sh "$@" ;;
+        *) echo "usage: cms worker <connect|cgroup>" >&2; exit 2 ;;
+      esac ;;
+    contest)
+      sub="${2:-}"
+      [[ "$sub" == "create" ]] || { echo "usage: cms contest create <yaml...>" >&2; exit 2; }
+      shift 2; exec bash scripts/__create_contests.sh "$@" ;;
+    update-server) shift; exec bash scripts/__update-server.sh "$@" ;;
+    *) return 1 ;;
+  esac
+}
+
+if [[ $# -gt 0 ]]; then
+  if ! handle_subcommand "$@"; then
+    echo "Unknown command: $1" >&2
+    cmd_usage >&2
+    exit 2
+  fi
+fi
+
 NO_SAMPLE=0
 ASSUME_YES=0
 SKIPS=""
@@ -120,7 +245,7 @@ if ! is_skipped contest; then
              "SELECT count(*) FROM contests" 2>/dev/null | tr -d "[:space:]") || have="?"
       if [[ "$have" == "0" ]]; then
         log_info "DB has no contests — importing sample (examples/contests.yaml)"
-        run_step sample-contest soft './scripts/create-contests.sh -f examples/contests.yaml'
+        run_step sample-contest soft './scripts/__create_contests.sh -f examples/contests.yaml'
         log_info "Set CONTEST_ID in .env.contest to the desired sample id, then: make env && make contest"
       else
         record "sample-contest" "SKIPPED (contests exist: $have)"
@@ -133,7 +258,7 @@ run_step worker soft '
   if ! make worker; then
     # shellcheck disable=SC2120
     echo "Worker failed — most likely isolate cgroup path missing on host."
-    echo "Fix: sudo ./scripts/setup-worker-cgroup.sh   (then re-run: make worker)"
+    echo "Fix: sudo ./scripts/__worker_cgroup_setup.sh   (then re-run: make worker)"
     exit 1
   fi
 '
