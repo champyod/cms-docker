@@ -49,11 +49,16 @@ env:
 	@echo "Generating .env file..."
 	@# --- Template missing env files from examples with secret generation (only NEW files) ---
 	@if [ ! -f .env.core ] && [ -f .env.core.example ]; then \
-		cp .env.core.example .env.core; \
-		echo "Templated .env.core from .env.core.example"; \
+		CORE_PW=$$(openssl rand -base64 24 2>/dev/null | tr -d "/+= " | cut -c1-24); \
+		CORE_PW=$${CORE_PW:-cms$$(date +%s)}; \
+		sed "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$$CORE_PW|" .env.core.example > .env.core; \
+		echo "Templated .env.core from .env.core.example (generated POSTGRES_PASSWORD)"; \
 	fi
 	@if [ ! -f .env.admin ] && [ -f .env.admin.example ]; then \
-		cp .env.admin.example .env.admin; \
+		RANK_PW=$$(openssl rand -base64 18 2>/dev/null | tr -d "/+= " | cut -c1-18); \
+		RANK_PW=$${RANK_PW:-rank$$(date +%s)}; \
+		sed "s|^RANKING_PASSWORD=.*|RANKING_PASSWORD=cms_ranking_$$RANK_PW|" .env.admin.example > .env.admin.tmp_rank && mv .env.admin.tmp_rank .env.admin; \
+		echo "Templated .env.admin (generated RANKING_PASSWORD)"; \
 		if grep -q "CHANGE_ME_GENERATE" .env.admin 2>/dev/null; then \
 			NEW_SECRET=$$(openssl rand -hex 32 2>/dev/null || echo "CHANGE_ME_GENERATE_FAILED"); \
 			if [ "$$NEW_SECRET" != "CHANGE_ME_GENERATE_FAILED" ]; then \
