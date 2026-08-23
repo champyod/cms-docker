@@ -296,7 +296,9 @@ services:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
     container_name: cms-contest-web-server
-    restart: "no"
+    # survive daemon/host restarts like every other service; admin-panel
+    # lifecycle actions still work (stop/start overrides policy at runtime)
+    restart: on-failure:5
     profiles:
       - contest
     depends_on:
@@ -354,23 +356,26 @@ services:
       retries: 3
       start_period: 40s
 
-  # Optional: Nginx reverse proxy for contest web server
+  # Optional: Nginx reverse proxy for contest web server (TLS via ENABLE_TLS=true)
   nginx-proxy:
     image: nginx:alpine
     container_name: cms-nginx-contest
     restart: on-failure:5
     profiles:
       - contest
-      - nginx
     depends_on:
       contest-web-server:
         condition: service_healthy
+      proxy-service:
+        condition: service_healthy
     environment:
       NGINX_HOST: ${CONTEST_DOMAIN:-contest.cms.local}
-      NGINX_PORT: ${NGINX_EXTERNAL_PORT:-80}
+      CONTEST_LISTEN_PORT: ${CONTEST_LISTEN_PORT:-8888}
       RANKING_AUTH_DIRECTIVES: ${RANKING_AUTH_DIRECTIVES:-}
+      ENABLE_TLS: ${ENABLE_TLS:-false}
     volumes:
       - ./config/nginx-contest.conf:/etc/nginx/templates/default.conf.template:ro
+      - ./scripts/__nginx-proxy-render.sh:/usr/local/bin/render.sh:ro
       - nginx-cache:/var/cache/nginx
       - nginx-logs:/var/log/nginx
     networks:
@@ -378,14 +383,9 @@ services:
     ports:
       - "${NGINX_BIND_IP:-0.0.0.0}:${NGINX_HTTP_PORT:-80}:80"
       - "${NGINX_BIND_IP:-0.0.0.0}:${NGINX_HTTPS_PORT:-443}:443"
-    command: >
-      sh -c "envsubst '$$NGINX_HOST $$CONTEST_LISTEN_PORT $$RANKING_AUTH_DIRECTIVES' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"
+    command: ["/usr/local/bin/render.sh"]
 
-  # ============================================================
-  # ADMIN SERVICES (profiles: admin)
-  # ============================================================
 
-  # CMS Admin Panel (Next.js Version)
   admin-panel-next:
     build:
       context: ./admin-panel
@@ -615,7 +615,7 @@ services:
 
           if [ ! -d "$$CGROUP_BASE" ]; then
             echo "ERROR: ISOLATE_CGROUP_PATH does not exist: $$CGROUP_BASE"
-            echo "Run scripts/setup-worker-cgroup.sh on the worker host first."
+            echo "Run scripts/__worker_cgroup_setup.sh on the worker host first."
             exit 1
           fi
 
