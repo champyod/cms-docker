@@ -1,4 +1,4 @@
-import { SignJWT, jwtVerify } from "jose";
+import { SignJWT, jwtVerify, type JWTPayload } from "jose";
 import { cookies } from "next/headers";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
@@ -15,7 +15,23 @@ const key = new TextEncoder().encode(secretKey);
 // COOKIE_SECURE=true only if explicitly set — defaults false so HTTP access works
 const isSecureCookie = process.env.COOKIE_SECURE === 'true';
 
-export async function encrypt(payload: any) {
+export interface AdminPermissions {
+  permission_all: boolean;
+  permission_tasks: boolean;
+  permission_users: boolean;
+  permission_contests: boolean;
+  permission_messaging: boolean;
+}
+
+export interface SessionPayload {
+  userId: string;
+  username: string;
+  expiresAt: string | Date;
+  permissions: AdminPermissions;
+}
+
+/** Signs a payload as an HS256 JWT with a fixed 2h expiry (short-lived by design; sessions refresh via refreshSession). */
+export async function encrypt<T extends JWTPayload>(payload: T): Promise<string> {
   return await new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -23,11 +39,12 @@ export async function encrypt(payload: any) {
     .sign(key);
 }
 
-export async function decrypt(input: string): Promise<any> {
+/** Verifies signature/expiry and returns the decoded payload; callers re-validate shape before trusting fields. */
+export async function decrypt<T = unknown>(input: string): Promise<T> {
   const { payload } = await jwtVerify(input, key, {
     algorithms: ["HS256"],
   });
-  return payload;
+  return payload as T;
 }
 
 function buildCookieOptions(expiresAt: Date) {
@@ -40,19 +57,13 @@ function buildCookieOptions(expiresAt: Date) {
   };
 }
 
-export async function createSession(userId: string, username: string, permissions: {
-  permission_all: boolean;
-  permission_tasks: boolean;
-  permission_users: boolean;
-  permission_contests: boolean;
-  permission_messaging: boolean;
-}) {
+export async function createSession(userId: string, username: string, permissions: AdminPermissions) {
   const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
   const session = await encrypt({ userId, username, permissions, expiresAt });
   (await cookies()).set("session", session, buildCookieOptions(expiresAt));
 }
 
-export async function refreshSession(payload: any) {
+export async function refreshSession(payload: SessionPayload) {
   let admin;
   try {
     admin = await prisma.admins.findUnique({
@@ -107,11 +118,11 @@ export async function deleteSession() {
   (await cookies()).delete("session");
 }
 
-export async function getSession() {
+export async function getSession(): Promise<SessionPayload | null> {
   const session = (await cookies()).get("session")?.value;
   if (!session) return null;
   try {
-    return await decrypt(session);
+    return await decrypt<SessionPayload>(session);
   } catch {
     return null;
   }

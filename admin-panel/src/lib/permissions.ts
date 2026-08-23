@@ -4,7 +4,24 @@ import { redirect } from "@/lib/redirect";
 
 export type Permission = 'all' | 'tasks' | 'users' | 'contests' | 'messaging';
 
-type FreshPermissions = { all: boolean; tasks: boolean; users: boolean; contests: boolean; messaging: boolean };
+export type FreshPermissions = { all: boolean; tasks: boolean; users: boolean; contests: boolean; messaging: boolean };
+
+/** Superadmin (`all`) bypasses every check; the literal permission 'all' itself is never grantable below superadmin. */
+export function hasPermission(fresh: FreshPermissions, permission: Permission): boolean {
+  if (fresh.all) return true;
+  switch (permission) {
+    case 'tasks':
+      return fresh.tasks;
+    case 'users':
+      return fresh.users;
+    case 'contests':
+      return fresh.contests;
+    case 'messaging':
+      return fresh.messaging;
+    default:
+      return false;
+  }
+}
 const accessCache = new Map<string, { value: FreshPermissions; expires: number }>();
 const ACCESS_TTL_MS = 60_000;
 
@@ -43,23 +60,7 @@ export async function checkPermission(permission: Permission, redirectToLogin = 
     return false;
   }
 
-  // Superadmin has all permissions
-  if (fresh.all) return true;
-
-  switch (permission) {
-    case 'tasks':
-      return fresh.tasks;
-    case 'users':
-      return fresh.users;
-    case 'contests':
-      return fresh.contests;
-    case 'messaging':
-      return fresh.messaging;
-    case 'all':
-      return false; // Only superadmin has 'all'
-    default:
-      return false;
-  }
+  return hasPermission(fresh, permission);
 }
 
 export async function ensurePermission(permission: Permission) {
@@ -69,37 +70,33 @@ export async function ensurePermission(permission: Permission) {
   }
 }
 
-export async function getPermissions() {
-  const session = await getSession();
-  if (!session?.userId) {
-    return {
-      permission_all: false,
-      permission_tasks: false,
-      permission_users: false,
-      permission_contests: false,
-      permission_messaging: false,
-      all: false,
-      tasks: false,
-      users: false,
-      contests: false,
-      messaging: false,
-    };
-  }
-  const fresh = await getFreshPermissions(session.userId);
-  if (!fresh) {
-    return {
-      permission_all: false,
-      permission_tasks: false,
-      permission_users: false,
-      permission_contests: false,
-      permission_messaging: false,
-      all: false,
-      tasks: false,
-      users: false,
-      contests: false,
-      messaging: false,
-    };
-  }
+export interface PermissionsSnapshot {
+  permission_all: boolean;
+  permission_tasks: boolean;
+  permission_users: boolean;
+  permission_contests: boolean;
+  permission_messaging: boolean;
+  all: boolean;
+  tasks: boolean;
+  users: boolean;
+  contests: boolean;
+  messaging: boolean;
+}
+
+const EMPTY_PERMISSIONS: PermissionsSnapshot = {
+  permission_all: false,
+  permission_tasks: false,
+  permission_users: false,
+  permission_contests: false,
+  permission_messaging: false,
+  all: false,
+  tasks: false,
+  users: false,
+  contests: false,
+  messaging: false,
+};
+
+function toSnapshot(fresh: FreshPermissions): PermissionsSnapshot {
   return {
     permission_all: fresh.all,
     permission_tasks: fresh.tasks,
@@ -112,4 +109,14 @@ export async function getPermissions() {
     contests: fresh.contests,
     messaging: fresh.messaging,
   };
+}
+
+export async function getPermissions(): Promise<PermissionsSnapshot> {
+  const session = await getSession();
+  if (!session?.userId) return EMPTY_PERMISSIONS;
+
+  const fresh = await getFreshPermissions(session.userId);
+  if (!fresh) return EMPTY_PERMISSIONS;
+
+  return toSnapshot(fresh);
 }

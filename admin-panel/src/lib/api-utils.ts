@@ -1,12 +1,12 @@
 import { getSession } from './auth';
-import { getFreshPermissions } from '@/lib/permissions';
+import { getFreshPermissions, hasPermission } from '@/lib/permissions';
 import { NextResponse } from 'next/server';
 import type { Permission } from './permissions';
 
 export function sanitize<T>(value: T | undefined | null): T | null {
-  if (value === undefined || value === null || (value as any) === '$undefined') return null;
+  if (value === undefined || value === null || value === '$undefined') return null;
   if (typeof value === 'string' && value.trim() === '') return null;
-  if (Array.isArray(value)) return value.map(v => (v === '$undefined' || v === '' ? null : v)) as unknown as T;
+  if (Array.isArray(value)) return value.map((item) => (item === '$undefined' || item === '' ? null : item)) as unknown as T;
   return value;
 }
 
@@ -29,14 +29,7 @@ export async function verifyApiPermission(permission: Permission) {
     return { authorized: false as const, response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
 
-  const hasPermission =
-    fresh.all ||
-    (permission === 'contests' && fresh.contests) ||
-    (permission === 'tasks' && fresh.tasks) ||
-    (permission === 'users' && fresh.users) ||
-    (permission === 'messaging' && fresh.messaging);
-
-  if (!hasPermission) {
+  if (!hasPermission(fresh, permission)) {
     return { authorized: false as const, response: NextResponse.json({ error: `Forbidden: Missing ${permission} permission` }, { status: 403 }) };
   }
 

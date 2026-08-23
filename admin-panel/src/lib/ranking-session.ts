@@ -12,6 +12,8 @@ type RankingSessionPayload = {
   expiresAt: string;
 };
 
+type RankingSessionToken = Partial<RankingSessionPayload> & { type?: string };
+
 export function normalizeRankingBaseUrl(rawUrl: string): string {
   const parsed = new URL(rawUrl.trim());
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
@@ -51,7 +53,7 @@ export async function getRankingSession(): Promise<RankingSessionPayload | null>
   if (!token) return null;
 
   try {
-    const payload = await decrypt(token);
+    const payload = await decrypt<RankingSessionToken>(token);
     if (payload?.type !== 'ranking-session') return null;
     if (!payload.baseUrl || !payload.username || !payload.password || !payload.expiresAt) return null;
 
