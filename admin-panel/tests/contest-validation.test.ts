@@ -5,7 +5,16 @@ import {
   intervalToString,
   parseInterval,
   validateContestData,
+  type ContestData,
 } from '@/lib/contest-validation';
+
+/**
+ * Runtime accepts partial and null-carrying inputs (every check gates on field
+ * presence) — broader than ContestData declares. Tests characterize that
+ * runtime contract through this single widening point.
+ */
+const validateRawContest = (data: Record<string, unknown>, isUpdate = false) =>
+  validateContestData(data as unknown as ContestData, isUpdate);
 
 describe('parseInterval', () => {
   it.each([
@@ -65,7 +74,7 @@ describe('validateContestData', () => {
   const baseFuture = { start: '2026-01-01T00:00:00Z', stop: '2026-01-02T00:00:00Z' };
 
   it('accepts a fully valid contest', () => {
-    const result = validateContestData({
+    const result = validateRawContest({
       ...baseFuture,
       timezone: 'UTC',
       score_precision: 2,
@@ -79,7 +88,7 @@ describe('validateContestData', () => {
   });
 
   it('rejects start after stop', () => {
-    const result = validateContestData({ start: '2026-01-03T00:00:00Z', stop: '2026-01-02T00:00:00Z' });
+    const result = validateRawContest({ start: '2026-01-03T00:00:00Z', stop: '2026-01-02T00:00:00Z' });
     expect(result.valid).toBe(false);
     expect(result.errors).toEqual([
       { field: 'stop', message: 'Start time must be before or equal to stop time', code: 'contests_check' },
@@ -87,7 +96,7 @@ describe('validateContestData', () => {
   });
 
   it('rejects stop after analysis_start', () => {
-    const result = validateContestData({
+    const result = validateRawContest({
       ...baseFuture,
       analysis_start: '2026-01-01T00:00:00Z',
     });
@@ -96,7 +105,7 @@ describe('validateContestData', () => {
   });
 
   it('rejects analysis_start after analysis_stop', () => {
-    const result = validateContestData({
+    const result = validateRawContest({
       ...baseFuture,
       analysis_start: '2026-01-05T00:00:00Z',
       analysis_stop: '2026-01-04T00:00:00Z',
@@ -106,40 +115,40 @@ describe('validateContestData', () => {
   });
 
   it('ignores unparseable dates rather than crashing', () => {
-    const result = validateContestData({ start: 'garbage', stop: 'also-garbage' });
+    const result = validateRawContest({ start: 'garbage', stop: 'also-garbage' });
     expect(result.valid).toBe(true);
   });
 
   it('rejects negative score_precision', () => {
-    const result = validateContestData({ ...baseFuture, score_precision: -1 });
+    const result = validateRawContest({ ...baseFuture, score_precision: -1 });
     expect(result.valid).toBe(false);
     expect(result.errors[0].code).toBe('contests_score_precision_check');
   });
 
   it('allows null numeric fields to skip validation', () => {
-    const result = validateContestData({ ...baseFuture, score_precision: null, per_user_time: null });
+    const result = validateRawContest({ ...baseFuture, score_precision: null, per_user_time: null });
     expect(result.valid).toBe(true);
   });
 
   it('rejects initial tokens above the generation cap', () => {
-    const result = validateContestData({ ...baseFuture, token_gen_initial: 50, token_gen_max: 10 });
+    const result = validateRawContest({ ...baseFuture, token_gen_initial: 50, token_gen_max: 10 });
     expect(result.valid).toBe(false);
     expect(result.errors[0].code).toBe('contests_check3');
   });
 
   it('rejects non-positive token_gen_interval only in finite mode', () => {
-    const finite = validateContestData({ ...baseFuture, token_mode: 'finite', token_gen_interval: 0 });
+    const finite = validateRawContest({ ...baseFuture, token_mode: 'finite', token_gen_interval: 0 });
     expect(finite.valid).toBe(false);
 
-    const infinite = validateContestData({ ...baseFuture, token_mode: 'infinite', token_gen_interval: 0 });
+    const infinite = validateRawContest({ ...baseFuture, token_mode: 'infinite', token_gen_interval: 0 });
     expect(infinite.valid).toBe(true);
   });
 
   it('rejects non-positive token_max_number unless mode is disabled', () => {
-    const enabled = validateContestData({ ...baseFuture, token_mode: 'finite', token_max_number: 0 });
+    const enabled = validateRawContest({ ...baseFuture, token_mode: 'finite', token_max_number: 0 });
     expect(enabled.valid).toBe(false);
 
-    const disabled = validateContestData({ ...baseFuture, token_mode: 'disabled', token_max_number: 0 });
+    const disabled = validateRawContest({ ...baseFuture, token_mode: 'disabled', token_max_number: 0 });
     expect(disabled.valid).toBe(true);
   });
 
@@ -152,22 +161,22 @@ describe('validateContestData', () => {
       [{ token_gen_max: 0 }, 'contests_token_gen_max_check'],
     ];
     for (const [fields, code] of cases) {
-      const result = validateContestData({ ...baseFuture, ...fields });
+      const result = validateRawContest({ ...baseFuture, ...fields });
       expect(result.valid).toBe(false);
       expect(result.errors[0].code).toBe(code);
     }
   });
 
   it('rejects negative per_user_time and grace period', () => {
-    const perUser = validateContestData({ ...baseFuture, per_user_time: -5 });
+    const perUser = validateRawContest({ ...baseFuture, per_user_time: -5 });
     expect(perUser.errors[0].code).toBe('contests_per_user_time_check');
 
-    const grace = validateContestData({ ...baseFuture, min_submission_interval_grace_period: -5 });
+    const grace = validateRawContest({ ...baseFuture, min_submission_interval_grace_period: -5 });
     expect(grace.errors[0].code).toBe('contests_min_submission_interval_grace_period_check');
   });
 
   it('collects multiple errors at once', () => {
-    const result = validateContestData({
+    const result = validateRawContest({
       start: '2026-01-03T00:00:00Z',
       stop: '2026-01-02T00:00:00Z',
       score_precision: -1,
@@ -176,8 +185,8 @@ describe('validateContestData', () => {
   });
 
   it('accepts an isUpdate flag without changing validation', () => {
-    const create = validateContestData({ ...baseFuture, score_precision: -1 });
-    const update = validateContestData({ ...baseFuture, score_precision: -1 }, true);
+    const create = validateRawContest({ ...baseFuture, score_precision: -1 });
+    const update = validateRawContest({ ...baseFuture, score_precision: -1 }, true);
     expect(update).toEqual(create);
   });
 });

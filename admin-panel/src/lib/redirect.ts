@@ -2,10 +2,7 @@
 
 import { headers } from 'next/headers';
 import { redirect as nextRedirect } from 'next/navigation';
-
-const SUPPORTED_LOCALES = ['en', 'th'] as const;
-type Locale = (typeof SUPPORTED_LOCALES)[number];
-const DEFAULT_LOCALE: Locale = 'en';
+import { DEFAULT_LOCALE, SUPPORTED_LOCALES, type Locale } from '@/lib/locales';
 
 /**
  * Locale-aware redirect helper.
@@ -20,16 +17,14 @@ const DEFAULT_LOCALE: Locale = 'en';
 export async function redirect(path: string): Promise<never> {
   const headersList = await headers();
 
-  // Try to detect current locale from the referer URL, or fallback to default
   let locale: Locale = DEFAULT_LOCALE;
   try {
     const referer = headersList.get('referer') ?? '';
-    const match = referer.match(/\/(en|th)(\/|$)/);
-    if (match?.[1] === 'en' || match?.[1] === 'th') {
-      locale = match[1];
+    const match = referer.match(new RegExp(`/(${SUPPORTED_LOCALES.join('|')})(/|$)`));
+    if (match?.[1] && SUPPORTED_LOCALES.includes(match[1] as Locale)) {
+      locale = match[1] as Locale;
     }
   } catch {
-    // If header reading fails, use default locale
     locale = DEFAULT_LOCALE;
   }
 

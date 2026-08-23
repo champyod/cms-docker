@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from "@/lib/locales";
 
 export function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
-  
+
   // Skip assets
   if (
     pathname.includes("_next") ||
@@ -14,16 +15,13 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check if pathname starts with a locale
-  const pathnameIsMissingLocale = ["/en", "/th"].every(
-    (locale) => !pathname.startsWith(locale) && pathname !== locale
+  const pathnameIsMissingLocale = SUPPORTED_LOCALES.every(
+    (locale) => !pathname.startsWith(`/${locale}`) && pathname !== `/${locale}`
   );
 
-  // Redirect if there is no locale
   if (pathnameIsMissingLocale) {
-    const locale = "en"; // Default locale
     return NextResponse.redirect(
-      new URL(`/${locale}${pathname === "/" ? "" : pathname}`, request.url)
+      new URL(`/${DEFAULT_LOCALE}${pathname === "/" ? "" : pathname}`, request.url)
     );
   }
 }
