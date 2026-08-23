@@ -107,6 +107,7 @@ export function UserTable({
                       <Button
                           variant="ghost"
                           size="sm"
+                          aria-label={`Edit user ${user.username}`}
                           onClick={() => onEdit(user)}
                           className="h-8 w-8 p-0 text-neutral-400 hover:text-indigo-400"
                       >
@@ -115,6 +116,7 @@ export function UserTable({
                       <Button
                           variant="ghost"
                           size="sm"
+                          aria-label={`Delete user ${user.username}`}
                           onClick={() => onDelete(user.id)}
                           className="h-8 w-8 p-0 text-neutral-400 hover:text-red-400"
                       >

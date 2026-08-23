@@ -116,6 +116,7 @@ export function PasswordFieldWithGenerator({
         <input
           required={required}
           type={showPassword ? 'text' : 'password'}
+          autoComplete="new-password"
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}

@@ -5,6 +5,7 @@ import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
 import { X, Loader2 } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
+import { useToast } from '@/components/providers/ToastProvider';
 import { PasswordFieldWithGenerator } from '@/components/core/PasswordFieldWithGenerator';
 import { Portal } from '@/components/core/Portal';
 import { cn } from '@/lib/utils';
@@ -56,6 +57,7 @@ interface UserModalProps {
 export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: UserModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const { addToast } = useToast();
   const [formData, setFormData] = useState<UserFormState>(EMPTY_USER_FORM);
 
   useEffect(() => {
@@ -81,13 +83,23 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: U
           });
 
       if (result.success) {
+        addToast({
+          type: 'success',
+          title: user ? 'User updated' : 'User created',
+          message: formData.password
+            ? `${formData.username} saved — new password is active immediately.`
+            : `${formData.username} saved.`,
+        });
         onSuccess();
         onClose();
       } else {
-        setError(result.error || 'Operation failed');
+        const msg = result.error || 'Operation failed';
+        setError(msg);
+        addToast({ type: 'error', title: 'Save failed', message: msg });
       }
     } catch {
       setError('An unexpected error occurred');
+      addToast({ type: 'error', title: 'Save failed', message: 'An unexpected error occurred' });
     } finally {
       setLoading(false);
     }

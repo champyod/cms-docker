@@ -32,14 +32,19 @@ export async function POST(req: NextRequest) {
       return apiError({ status: 400, message: 'Username and password are required' });
     }
 
-    const res = await fetch(`${baseUrl}/config`, {
-      method: 'GET',
-      headers: {
-        Authorization: buildRankingAuthHeader(username, password),
-        Accept: 'application/json',
-      },
-      cache: 'no-store',
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${baseUrl}/config`, {
+        method: 'GET',
+        headers: {
+          Authorization: buildRankingAuthHeader(username, password),
+          Accept: 'application/json',
+        },
+        cache: 'no-store',
+      });
+    } catch {
+      return apiError({ status: 502, message: 'Could not reach ranking service — check the Base URL' });
+    }
 
     if (!res.ok) {
       return apiError({ status: 401, message: `Ranking auth failed (${res.status})` });
