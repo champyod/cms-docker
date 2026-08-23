@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { createSession, deleteSession, getSession } from "@/lib/auth";
 import { redirect } from "@/lib/redirect";
-import { safeAdminSelect } from "@/lib/prisma-selects";
+import { safeAdminSelect, type SafeAdmin } from "@/lib/prisma-selects";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import bcrypt from "bcryptjs";
@@ -112,6 +112,19 @@ async function startAdminSession(admin: AuthenticatedAdmin): Promise<void> {
   });
 }
 
+async function completeLogin(admin: AuthenticatedAdmin, bucketKey: string): Promise<void> {
+  await startAdminSession(admin);
+
+  // last_login_at is best-effort telemetry — a failed write must never block an authenticated login
+  try {
+    await prisma.admins.update({ where: { id: admin.id }, data: { last_login_at: new Date() } });
+  } catch {
+  }
+
+  loginBuckets.delete(bucketKey);
+  enforceBucketLimit();
+}
+
 export async function login(_prevState: LoginActionState | null, formData: FormData): Promise<LoginActionState> {
   const username = String(formData.get("username") ?? '');
   const password = String(formData.get("password") ?? '');
@@ -138,16 +151,7 @@ export async function login(_prevState: LoginActionState | null, formData: FormD
       return { error: "Invalid credentials" };
     }
 
-    await startAdminSession(admin);
-
-    // last_login_at is best-effort telemetry — a failed write must never block an authenticated login
-    try {
-      await prisma.admins.update({ where: { id: admin.id }, data: { last_login_at: new Date() } });
-    } catch {
-    }
-
-    loginBuckets.delete(bucketKey);
-    enforceBucketLimit();
+    await completeLogin(admin, bucketKey);
   } catch (error) {
     console.error("Login error:", error);
     return { error: "An unexpected error occurred" };
@@ -157,12 +161,12 @@ export async function login(_prevState: LoginActionState | null, formData: FormD
   return redirect("/");
 }
 
-export async function logout() {
+export async function logout(): Promise<void> {
   await deleteSession();
   await redirect("/auth/login");
 }
 
-export async function getCurrentUser() {
+export async function getCurrentUser(): Promise<SafeAdmin | null> {
   const session = await getSession();
   if (!session?.userId) return null;
 

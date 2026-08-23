@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from "@/lib/locales";
 
-export function proxy(request: NextRequest) {
+export function proxy(request: NextRequest): NextResponse | undefined {
   const pathname = request.nextUrl.pathname;
 
   // Skip assets
