@@ -130,6 +130,47 @@ Image-vs-source is controlled by `IMG_TAG` + each service's
 
 ---
 
+## Updating an Existing Deployment
+
+Pick by scenario:
+
+### Config changes only (passwords, ports, contest ID, limits)
+```bash
+./cms update        # interactive wizard over every managed variable
+# or edit .env.* directly, then:
+./cms               # idempotent re-run: regenerates configs, recreates changed containers
+```
+
+### Repair broken/missing config non-interactively
+```bash
+./cms fix           # restores missing secrets, fixes insecure defaults
+```
+
+### Platform update (new code / new images)
+```bash
+git pull && git submodule update --init --recursive
+./cms update-server     # safe path: preflight -> auto-backup -> rolling recreate -> health verify
+                        # records old image digests + git HEAD to /tmp/cms-update-*.txt for manual rollback
+./cms doctor            # post-check if you skipped it inside update-server
+```
+
+### Rollback
+`update-server` never auto-reverts. On failed health checks it prints the
+recorded digests; restore with:
+```bash
+git checkout <recorded_git_head>
+docker compose -f docker-compose.yml --profile <stack> pull   # or retag digests
+docker compose -f docker-compose.yml --profile core --profile <stack> up -d --no-build --force-recreate
+# database rollback: scripts/__backup.sh output + scripts/__restore.sh <dump>
+```
+
+### Data safety
+Schema-affecting updates are covered by the automatic backup taken before
+any container is recreated (`make backup` equivalent). Test restorability
+anytime with `./cms backup drill`.
+
+---
+
 ## Access Points
 
 | Service | URL | Notes |
