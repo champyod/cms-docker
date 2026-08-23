@@ -50,9 +50,10 @@ export function DeploymentsClient() {
             getLiveServiceConnections()
         ]);
 
+        let actualActiveId: number | null = null;
         if (envResult.success && envResult.config) {
             const activeId = parseInt(envResult.config.ACTIVE_CONTEST_ID || envResult.config.CONTEST_ID || '0');
-            const actualActiveId = activeId > 0 ? activeId : null;
+            actualActiveId = activeId > 0 ? activeId : null;
             setActiveContestId(actualActiveId);
             setSelectedContestId(actualActiveId);
 
@@ -70,7 +71,8 @@ export function DeploymentsClient() {
         const dbActiveId = dbActive ? dbActive.id : null;
         setDbActiveContestId(dbActiveId);
 
-        const envActiveId = activeContestId;
+        // Read the freshly parsed id, not the state binding — setState in this same tick leaves the closure stale.
+        const envActiveId = actualActiveId;
         if (envActiveId) {
             const match = databaseContests.find((c: { id: number; name: string; is_active: boolean }) => c.id === envActiveId);
             if (match) setActiveContestName(match.name);
