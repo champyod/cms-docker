@@ -2,11 +2,10 @@
 
 import { exec } from 'child_process';
 import util from 'util';
-import path from 'path';
 import { ensurePermission } from '@/lib/permissions';
+import { getRepoRoot } from '@/lib/repo-root';
 
 const execPromise = util.promisify(exec);
-const getRepoRoot = () => process.env.IS_DOCKER === 'true' ? '/repo-root' : path.resolve(process.cwd(), '..');
 
 export async function pullLatestImages() {
   await ensurePermission('all');

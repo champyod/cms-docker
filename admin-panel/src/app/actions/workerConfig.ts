@@ -3,14 +3,14 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { ensurePermission } from '@/lib/permissions';
+import { getRepoRoot } from '@/lib/repo-root';
 
 const HOST_RE = /^[a-zA-Z0-9]([a-zA-Z0-9_.-]{0,62}[a-zA-Z0-9])?$/;
 
 // Helper to find cms.toml
 async function getCmsConfigPath() {
-  const repoRoot = process.env.IS_DOCKER === 'true' ? '/repo-root' : path.resolve(process.cwd(), '..');
   const possiblePaths = [
-    path.join(repoRoot, 'config/cms.toml'),
+    path.join(getRepoRoot(), 'config/cms.toml'),
     path.join(process.cwd(), 'config', 'cms.toml'),
     '/usr/local/etc/cms.toml'
   ];
@@ -19,13 +19,11 @@ async function getCmsConfigPath() {
     try {
       await fs.access(p);
       return p;
-    } catch {}
+    } catch {
+      // Probing candidate paths: absence of one location is expected, keep scanning
+    }
   }
   return null;
-}
-
-async function getRepoRootPath() {
-  return process.env.IS_DOCKER === 'true' ? '/repo-root' : path.resolve(process.cwd(), '..');
 }
 
 function extractWorkerBlock(content: string): string | null {
@@ -99,8 +97,7 @@ export async function getWorkers() {
       }
     }
 
-    const repoRoot = await getRepoRootPath();
-    const envCorePath = path.join(repoRoot, '.env.core');
+    const envCorePath = path.join(getRepoRoot(), '.env.core');
     const envCoreContent = await fs.readFile(envCorePath, 'utf-8');
     return parseWorkersFromEnvCore(envCoreContent);
   } catch (error) {
@@ -109,10 +106,11 @@ export async function getWorkers() {
   return [];
 }
 
-export async function updateWorkers(workers: { host: string; port: number }[]) {
-  await ensurePermission('all');
+type WorkerEntry = { host: string; port: number };
 
+function findInvalidWorkerEntries(workers: WorkerEntry[]): string[] {
   const invalidEntries: string[] = [];
+
   for (const w of workers) {
     const validHost = typeof w.host === 'string' && HOST_RE.test(w.host);
     const validPort = Number.isInteger(w.port) && w.port >= 1 && w.port <= 65535;
@@ -120,6 +118,21 @@ export async function updateWorkers(workers: { host: string; port: number }[]) {
       invalidEntries.push(`${w.host}:${w.port}`);
     }
   }
+
+  return invalidEntries;
+}
+
+function applyWorkerBlock(content: string, workers: WorkerEntry[]): string | null {
+  if (!/Worker\s*=\s*\[[\s\S]*?\]/.test(content)) return null;
+
+  const workerString = 'Worker = [\n' + workers.map(w => `    ["${w.host}", ${w.port}],`).join('\n') + '\n]';
+  return content.replace(/Worker\s*=\s*\[[\s\S]*?\]/, workerString);
+}
+
+export async function updateWorkers(workers: { host: string; port: number }[]) {
+  await ensurePermission('all');
+
+  const invalidEntries = findInvalidWorkerEntries(workers);
   if (invalidEntries.length > 0) {
     return { success: false, error: `Invalid hostnames or ports: ${invalidEntries.join(', ')}` };
   }
@@ -128,22 +141,14 @@ export async function updateWorkers(workers: { host: string; port: number }[]) {
   if (!configPath) return { success: false, error: 'cms.toml not found' };
 
   try {
-    let content = await fs.readFile(configPath, 'utf-8');
+    const content = await fs.readFile(configPath, 'utf-8');
 
-    // Construct new Worker array string
-    const workerString = 'Worker = [\n' + workers.map(w => `    ["${w.host}", ${w.port}],`).join('\n') + '\n]';
-    
-    // Replace existing block
-    // We assume 'Worker = [...]' exists.
-    if (/Worker\s*=\s*\[[\s\S]*?\]/.test(content)) {
-        content = content.replace(/Worker\s*=\s*\[[\s\S]*?\]/, workerString);
-    } else {
-        // Append if not found? Or insert in [core]?
-        // If not found, it's safer to append to top or after known keys, but let's assume it exists as we verified.
-        return { success: false, error: 'Worker configuration block not found in cms.toml' };
+    const updated = applyWorkerBlock(content, workers);
+    if (updated === null) {
+      return { success: false, error: 'Worker configuration block not found in cms.toml' };
     }
-    
-    await fs.writeFile(configPath, content);
+
+    await fs.writeFile(configPath, updated);
     return { success: true };
   } catch (error) {
     console.error('Failed to update workers', error);

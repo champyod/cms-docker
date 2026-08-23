@@ -1,6 +1,7 @@
 'use server';
 
 import { ensurePermission } from '@/lib/permissions';
+import { getRepoRoot } from '@/lib/repo-root';
 import { readFile, writeFile } from 'fs/promises';
 import { exec } from 'child_process';
 import util from 'util';
@@ -9,8 +10,7 @@ import path from 'path';
 const execPromise = util.promisify(exec);
 
 const CONTAINER_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/;
-
-const getRepoRoot = () => process.env.IS_DOCKER === 'true' ? '/repo-root' : path.resolve(process.cwd(), '..');
+const RESTART_POLICY_RE = /^(?:no|always|unless-stopped|on-failure:(?:[0-9]|1[0-9]|20))$/;
 
 const CONFIG_PATH = () => path.join(getRepoRoot(), 'config', 'container-restart.json');
 
@@ -87,22 +87,20 @@ async function updateDockerRestartPolicy(containerId: string, autoRestart: boole
   if (!CONTAINER_ID_RE.test(containerId)) {
     throw new Error('Invalid container id or action');
   }
-  try {
-    let policy: string;
-    if (autoRestart) {
-      const validatedRestarts = Number.isInteger(maxRestarts) && maxRestarts >= 0 && maxRestarts <= 20 ? maxRestarts : 5;
-      policy = `on-failure:${validatedRestarts}`;
-      if (!/^on-failure:\d+$/.test(policy)) {
-        throw new Error('Invalid container id or action');
-      }
-    } else {
-      policy = 'no';
-    }
-    const allowedPolicies = ['no', 'always', 'unless-stopped'];
-    if (!allowedPolicies.includes(policy) && !/^on-failure:(?:[0-9]|1[0-9]|20)$/.test(policy)) {
-      throw new Error('Invalid container id or action');
-    }
 
+  let policy: string;
+  if (autoRestart) {
+    const validatedRestarts = Number.isInteger(maxRestarts) && maxRestarts >= 0 && maxRestarts <= 20 ? maxRestarts : 5;
+    policy = `on-failure:${validatedRestarts}`;
+  } else {
+    policy = 'no';
+  }
+
+  if (!RESTART_POLICY_RE.test(policy)) {
+    throw new Error('Invalid restart policy');
+  }
+
+  try {
     await execPromise(`docker update --restart=${policy} ${containerId}`);
   } catch (error) {
     console.error('Failed to update Docker restart policy:', error);
@@ -154,7 +152,7 @@ export async function syncContainerConfigWithDocker(containerId: string) {
   }
 }
 
-export async function initializeContainerConfig(containerId: string, containerName: string) {
+export async function initializeContainerConfig(containerId: string) {
   await ensurePermission('all');
   const config = await getContainerConfig();
 

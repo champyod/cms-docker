@@ -3,8 +3,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { ensurePermission } from '@/lib/permissions';
-
-const getRepoRoot = () => process.env.IS_DOCKER === 'true' ? '/repo-root' : path.resolve(process.cwd(), '..');
+import { getRepoRoot } from '@/lib/repo-root';
 
 const ALLOWED_ENV_FILES = new Set(['.env', '.env.contest', '.env.example', '.env.production', '.env.infra']);
 

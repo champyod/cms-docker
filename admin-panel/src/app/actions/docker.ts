@@ -2,15 +2,13 @@
 
 import { exec } from 'child_process';
 import util from 'util';
-import path from 'path';
 import { ensurePermission } from '@/lib/permissions';
+import { getRepoRoot } from '@/lib/repo-root';
 
 const execPromise = util.promisify(exec);
 
 const CONTAINER_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/;
 const CONTAINER_ACTIONS = ['start', 'stop', 'restart', 'pause', 'unpause'] as const;
-
-const getRepoRoot = () => process.env.IS_DOCKER === 'true' ? '/repo-root' : path.resolve(process.cwd(), '..');
 
 export interface ContainerInfo {
   id: string;
