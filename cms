@@ -45,6 +45,8 @@ Commands:
   tailscale setup|status|remove
                             tailnet HTTPS front for admin/ranking UIs
   expose                    TUI: pick local/public/tailscale wiring per UI
+  funnel setup|passwd|remove|status
+                            public ts.net access behind basic auth (no tailnet)
   contest create            create contests from YAML
   update-server             shard-aware server update flow
 
@@ -148,6 +150,8 @@ handle_subcommand() {
       exec bash scripts/__tailscale_serve.sh "${@:-setup}" ;;
     expose)
       exec bash scripts/__exposure_tui.sh ;;
+    funnel)
+      shift; exec bash scripts/__funnel.sh "${@:-status}" ;;
     contest)
       sub="${2:-}"
       [[ "$sub" == "create" ]] || { echo "usage: cms contest create <yaml...>" >&2; exit 2; }

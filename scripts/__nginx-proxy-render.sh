@@ -21,6 +21,34 @@ PROXY_COMMON='
 
 RANKING_AUTH="${RANKING_AUTH_DIRECTIVES:-}"
 
+FUNNEL_SERVERS=""
+if [ "${FUNNEL_ENABLED:-false}" = "true" ]; then
+  FUNNEL_SERVERS="
+# Funnel gateways - public ts.net traffic lands here behind basic auth.
+server {
+    listen 8892;
+    server_name _;
+    auth_basic           \"@FUNNEL_REALM@\";
+    auth_basic_user_file /etc/nginx/funnel.htpasswd;
+$PROXY_COMMON
+    location / {
+        proxy_pass http://admin_panel_next;
+        proxy_redirect off;
+    }
+}
+server {
+    listen 8893;
+    server_name _;
+    auth_basic           \"@FUNNEL_REALM@\";
+    auth_basic_user_file /etc/nginx/funnel.htpasswd;
+$PROXY_COMMON
+    location / {
+        proxy_pass http://cms-ranking-web-server:8890;
+        proxy_redirect off;
+    }
+}"
+fi
+
 if [ "${ENABLE_TLS:-false}" = "true" ]; then
   HTTP_SERVER="
 server {
@@ -113,6 +141,8 @@ $PROXY_COMMON
 }"
 fi
 
-export PROXY_COMMON HTTP_SERVER
-envsubst '${CONTEST_LISTEN_PORT} ${PROXY_COMMON} ${HTTP_SERVER}' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf
+export PROXY_COMMON HTTP_SERVER FUNNEL_SERVERS
+REALM="${FUNNEL_REALM:-CMS restricted}"
+REALM_SAFE=$(printf '%s' "$REALM" | sed 's/[&|/]/\\&/g')
+envsubst '${CONTEST_LISTEN_PORT} ${PROXY_COMMON} ${HTTP_SERVER} ${FUNNEL_SERVERS}' < /etc/nginx/templates/default.conf.template | sed "s|@FUNNEL_REALM@|$REALM_SAFE|g" > /etc/nginx/conf.d/default.conf
 exec nginx -g 'daemon off;'
