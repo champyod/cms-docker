@@ -214,6 +214,46 @@ Global bootstrap flags: `--yes` (non-interactive), `--skip <a,b>`,
 
 ---
 
+## Tailscale-Only Admin & Ranking Access (HTTPS)
+
+Recommended exposure for admin/classic/ranking UIs: hide their raw ports
+and reach them through your tailnet with automatic TLS.
+
+### 1. Stop exposing raw ports
+In `.env.admin` bind all three services to loopback only:
+
+```
+ADMIN_NEXT_BIND_IP=127.0.0.1   # admin panel  :8891
+ADMIN_BIND_IP=127.0.0.1        # classic admin :8889
+RANKING_BIND_IP=127.0.0.1      # ranking      :8890
+```
+Then `./cms deploy admin --img` (recreates with new binds).
+
+### 2. Front them with Tailscale HTTPS (free plan OK)
+On the server host:
+
+```bash
+sudo tailscale serve --bg --https=8843 http://127.0.0.1:8891   # admin panel
+sudo tailscale serve --bg --https=8844 http://127.0.0.1:8889   # classic admin
+sudo tailscale serve --bg --https=8845 http://127.0.0.1:8890   # ranking
+tailscale serve status
+```
+
+Browse to `https://<machine>.<tailnet>.ts.net:8843/` etc.
+Certificates issue and renew automatically per machine.
+
+**Free-plan limit?** The TLS certificate is issued **per machine**, not per
+service — one node cert covers unlimited HTTPS listeners/ports. Portainer
+on another node uses its own cert; even on this node extra `serve` entries
+are free. No 3-service cap exists.
+
+Traffic inside the tailnet is WireGuard-encrypted end-to-end regardless.
+
+Contest web stays public through `cms-nginx-contest` (enable TLS there via
+`ENABLE_TLS=true` when a public domain + certs are available).
+
+---
+
 ## Validation & Operations
 
 ```bash
