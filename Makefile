@@ -9,7 +9,7 @@ COMPOSE_FILE := docker-compose.yml
 ADMIN_UP_PROFILES   := --profile core --profile admin
 CONTEST_UP_PROFILES := --profile core --profile contest
 
-.PHONY: setup help env core admin contest worker infra core-stop admin-stop contest-stop contest-down worker-stop infra-stop core-clean admin-clean contest-clean worker-clean infra-clean db-clean clean pull pull-core pull-admin pull-contest pull-worker pull-infra core-img admin-img contest-img worker-img infra-img admin-dev admin-dev-stop contest-down cms-init admin-create prisma-sync lint smoke-test preflight backup db-reset
+.PHONY: setup audit help env core admin contest worker infra core-stop admin-stop contest-stop contest-down worker-stop infra-stop core-clean admin-clean contest-clean worker-clean infra-clean db-clean clean pull pull-core pull-admin pull-contest pull-worker pull-infra core-img admin-img contest-img worker-img infra-img admin-dev admin-dev-stop contest-down cms-init admin-create prisma-sync lint smoke-test preflight backup db-reset
 
 help:
 	@echo "Available commands:"
@@ -216,7 +216,7 @@ env:
 # DEPLOYMENT_TYPE_OVERRIDE env var (set by *-img aliases) takes precedence over files.
 # ---------------------------------------------------------------------------
 # One-stop orchestrator — see ./cms --help  (env -> core -> init -> admin -> contest -> worker -> monitor -> verify)
-.PHONY: setup
+.PHONY: setup audit
 setup:
 	@./cms $(CMS_ARGS)
 
@@ -509,3 +509,12 @@ backup:
 
 clean:
 	rm -f .env
+
+# ---------------------------------------------------------------------------
+# Regression audit — catches stale paths, exec-bit loss, bind-mount perms,
+# invalid compose profile graphs, and CLI-contract drift (P1-P5 class bugs).
+# ---------------------------------------------------------------------------
+.PHONY: audit
+audit:
+	@python3 scripts/__regression_audit.py
+.PHONY: audit
