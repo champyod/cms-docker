@@ -40,6 +40,7 @@ Commands:
   restore <archive>         restore a backup archive
   doctor                    preflight environment checks
   test                      smoke-test the deployment
+  worker [edit|deploy|stop|list]  fleet TUI / deploy all shards / stop / show
   worker connect|cgroup     attach to a worker / set up sandbox cgroups
   contest create            create contests from YAML
   update-server             shard-aware server update flow
@@ -78,7 +79,13 @@ handle_subcommand() {
         fi
       }
       case "$stack" in
-        core|admin|contest|worker|infra) run_stack "$stack"; exit "$?" ;;
+        worker)
+          # Interactive terminal -> fleet TUI (pick/edit/deploy workers).
+          if [[ -t 0 && -z "$img" && -f .env.core && -f .env.worker ]]; then
+            exec bash scripts/__worker_tui.sh tui
+          fi
+          run_stack worker; exit "$?" ;;
+        core|admin|contest|infra) run_stack "$stack"; exit "$?" ;;
         all)
           rc=0
           for s in core infra admin contest worker; do run_stack "$s" || rc=1; done
@@ -125,9 +132,13 @@ handle_subcommand() {
     worker)
       sub="${2:-}"
       case "$sub" in
+        edit|tui) shift; exec bash scripts/__worker_tui.sh "${@:2}" ;;
+        deploy)   shift 2; exec bash scripts/__worker_tui.sh deploy "${@:2}" ;;
+        stop)     shift 2; exec bash scripts/__worker_tui.sh stop "${2:-all}" ;;
+        list)     exec bash scripts/__worker_tui.sh list ;;
         connect) shift 2; exec bash scripts/__worker_connect.sh "$@" ;;
         cgroup)  shift 2; exec bash scripts/__worker_cgroup_setup.sh "$@" ;;
-        *) echo "usage: cms worker <connect|cgroup>" >&2; exit 2 ;;
+        *) echo "usage: cms worker <edit|deploy [shard]|stop|list|connect|cgroup>" >&2; exit 2 ;;
       esac ;;
     contest)
       sub="${2:-}"
@@ -262,10 +273,12 @@ if ! is_skipped contest; then
 fi
 
 run_step worker soft '
-  if ! make worker; then
-    # shellcheck disable=SC2120
+  # Fleet model: deploy every WORKER_N registry entry (seeded from the
+  # legacy single-worker config on first run). Registry-only (remote)
+  # entries are skipped automatically.
+  if ! bash scripts/__worker_tui.sh deploy all; then
     echo "Worker failed — most likely isolate cgroup path missing on host."
-    echo "Fix: sudo ./scripts/__worker_cgroup_setup.sh   (then re-run: make worker)"
+    echo "Fix: sudo ./scripts/__worker_cgroup_setup.sh   (then re-run: ./cms worker deploy)"
     exit 1
   fi
 '

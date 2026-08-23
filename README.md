@@ -192,6 +192,8 @@ below map 1:1 onto the Makefile and helper scripts.
 | `./cms restore <archive>` | Restore a backup archive into a scratch container |
 | `./cms doctor` | Preflight checks only (disk, secrets, ports, cgroup) |
 | `./cms test` | Smoke-test: boot stacks headless, verify healthchecks, teardown |
+| `./cms worker` / `edit` | Fleet TUI: list/add/edit/delete workers, live status, batch deploy |
+| `./cms worker deploy [shard]` / `stop` | Deploy all/some fleet entries non-interactively / stop them |
 | `./cms worker connect\|cgroup` | Attach to a worker / prepare host cgroups (root) |
 | `./cms contest create <yaml...>` | Batch-create contests from YAML/JSON |
 | `./cms update-server` | Safe server update: preflight → backup → rolling recreate → verify |
