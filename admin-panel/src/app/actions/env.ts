@@ -6,7 +6,7 @@ import { ensurePermission } from '@/lib/permissions';
 
 const getRepoRoot = () => process.env.IS_DOCKER === 'true' ? '/repo-root' : path.resolve(process.cwd(), '..');
 
-const ALLOWED_ENV_FILES = new Set(['.env', '.env.contest', '.env.example', '.env.production']);
+const ALLOWED_ENV_FILES = new Set(['.env', '.env.contest', '.env.example', '.env.production', '.env.infra']);
 
 function resolveEnvPath(repoRoot: string, filename: string): string {
   if (!ALLOWED_ENV_FILES.has(filename)) {
