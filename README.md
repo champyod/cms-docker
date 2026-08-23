@@ -229,7 +229,29 @@ RANKING_BIND_IP=127.0.0.1      # ranking      :8890
 ```
 Then `./cms deploy admin --img` (recreates with new binds).
 
-### 2. Front them with Tailscale HTTPS (free plan OK)
+### 2. Pick exposure per UI with one TUI
+
+`./cms expose` opens an interactive matrix over all five UIs
+(contest-web, nginx-front, classic-admin, ranking, admin-panel):
+
+```
+ sel  service         wiring (sel → active)        port    url hint
+ >    contest-web     local      → public          8888   http://<host>: 8888
+      classic-admin   ts-https   → local           8889   https://<node>.ts.net:8844
+ ...
+```
+
+Cycle each row through **local** (127.0.0.1) · **public** (0.0.0.0) ·
+**ts-http** (bound to your tailscale IP — WireGuard-encrypted plain HTTP)
+· **ts-https** (loopback + automatic browser TLS via tailscale serve),
+then ⏎ applies it and offers stack recreation.
+
+> **Does ts-https need the tailscale IP?** No. The backend stays on
+> loopback; `tailscale serve` publishes it at
+> `https://<node>.<tailnet>.ts.net:<port>` with the node's auto-renewed
+> certificate. The IP form is only used by the separate *ts-http* mode.
+
+### 3. Or front them with Tailscale HTTPS directly (free plan OK)
 
 One command registers all three listeners and can hide the raw ports:
 

@@ -44,6 +44,7 @@ Commands:
   worker connect|cgroup     attach to a worker / set up sandbox cgroups
   tailscale setup|status|remove
                             tailnet HTTPS front for admin/ranking UIs
+  expose                    TUI: pick local/public/tailscale wiring per UI
   contest create            create contests from YAML
   update-server             shard-aware server update flow
 
@@ -145,6 +146,8 @@ handle_subcommand() {
     tailscale)
       shift
       exec bash scripts/__tailscale_serve.sh "${@:-setup}" ;;
+    expose)
+      exec bash scripts/__exposure_tui.sh ;;
     contest)
       sub="${2:-}"
       [[ "$sub" == "create" ]] || { echo "usage: cms contest create <yaml...>" >&2; exit 2; }
