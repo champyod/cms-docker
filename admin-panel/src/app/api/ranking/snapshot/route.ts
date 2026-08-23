@@ -1,11 +1,12 @@
 import { apiError, apiSuccess, verifyApiPermission } from '@/lib/api-utils';
 import { buildRankingAuthHeader, getRankingSession } from '@/lib/ranking-session';
 
+/** Raw payloads proxied from the external CMS ranking service — schema-owned by that service, not us. */
 type SnapshotPayload = {
-  contests: Record<string, any>;
-  tasks: Record<string, any>;
-  teams: Record<string, any>;
-  users: Record<string, any>;
+  contests: unknown;
+  tasks: unknown;
+  teams: unknown;
+  users: unknown;
   scores: Record<string, Record<string, number>>;
 };
 
