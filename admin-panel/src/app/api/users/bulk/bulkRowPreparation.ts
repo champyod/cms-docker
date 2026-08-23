@@ -75,6 +75,23 @@ function readRowFields(row: BulkUserRow, fallbackIndex: number) {
   };
 }
 
+async function generateMissingCredentials(
+  fields: ReturnType<typeof readRowFields>,
+  generationMode: GenerationMode
+): Promise<{ username: string; plainPassword: string }> {
+  let username = fields.username;
+  if (!username && shouldGenerateUsername(generationMode)) {
+    username = await ensureUniqueUsername(normalizeUsernameBase(fields.firstName, fields.lastName));
+  }
+
+  let plainPassword = fields.plainPassword;
+  if (!plainPassword && shouldGeneratePassword(generationMode)) {
+    plainPassword = randomToken(14);
+  }
+
+  return { username, plainPassword };
+}
+
 export async function prepareRow(
   row: BulkUserRow,
   fallbackIndex: number,
@@ -88,15 +105,7 @@ export async function prepareRow(
     return { rowIndex: fields.rowIndex, reason: 'first_name and last_name are required' };
   }
 
-  let username = fields.username;
-  if (!username && shouldGenerateUsername(generationMode)) {
-    username = await ensureUniqueUsername(normalizeUsernameBase(fields.firstName, fields.lastName));
-  }
-
-  let plainPassword = fields.plainPassword;
-  if (!plainPassword && shouldGeneratePassword(generationMode)) {
-    plainPassword = randomToken(14);
-  }
+  const { username, plainPassword } = await generateMissingCredentials(fields, generationMode);
 
   if (!username) {
     return { rowIndex: fields.rowIndex, reason: 'username is required (or enable username generation)' };

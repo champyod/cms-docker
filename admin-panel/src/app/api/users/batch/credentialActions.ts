@@ -3,7 +3,7 @@ import type { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 import { apiError, apiSuccess } from '@/lib/api-utils';
-import { cleanupExpiredCreds, csvEscape, randomToken, writeCredsCsv } from '@/lib/creds-file';
+import { csvEscape, randomToken, writeCredsCsv } from '@/lib/creds-file';
 
 const BCRYPT_SALT_ROUNDS = 10;
 const BCRYPT_PREFIX = 'bcrypt:';

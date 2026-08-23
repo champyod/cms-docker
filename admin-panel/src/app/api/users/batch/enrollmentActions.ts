@@ -84,6 +84,20 @@ async function assignTeamToUsers(contestId: number, teamId: number, userIds: num
   return updatedCount;
 }
 
+async function removeUsersFromAnyTeam(userIds: number[]): Promise<number> {
+  const cleared = await prisma.participations.updateMany({
+    where: {
+      user_id: { in: userIds },
+      team_id: { not: null },
+    },
+    data: {
+      team_id: null,
+    },
+  });
+
+  return cleared.count;
+}
+
 export async function handleTeam({ body, userIds }: BatchActionRequest): Promise<NextResponse> {
   if (userIds.length === 0) {
     return apiError({ message: 'userIds is required', status: 400 });
@@ -96,18 +110,9 @@ export async function handleTeam({ body, userIds }: BatchActionRequest): Promise
   }
 
   if (mode === 'remove-any') {
-    const cleared = await prisma.participations.updateMany({
-      where: {
-        user_id: { in: userIds },
-        team_id: { not: null },
-      },
-      data: {
-        team_id: null,
-      },
-    });
-
+    const updatedCount = await removeUsersFromAnyTeam(userIds);
     revalidateUserContestPages();
-    return apiSuccess({ success: true, updatedCount: cleared.count });
+    return apiSuccess({ success: true, updatedCount });
   }
 
   const contestId = coerceNumber(body.contestId);

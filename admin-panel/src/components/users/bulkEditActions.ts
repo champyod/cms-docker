@@ -31,6 +31,12 @@ export interface CredentialSetter {
   setStatusMessage: (value: string) => void;
 }
 
+function collectCredentialUpdates(rows: SelectedUser[]): Array<{ id: number; username: string; password?: string | null }> {
+  return rows
+    .filter((r) => r.password || r.username)
+    .map((r) => ({ id: r.id, username: r.username, password: r.password }));
+}
+
 export async function submitCredentialUpdates(
   rows: SelectedUser[],
   closeAfter: boolean,
@@ -39,9 +45,7 @@ export async function submitCredentialUpdates(
   setters: CredentialSetter
 ): Promise<void> {
   const { setLoading, setErrorMessage, setStatusMessage } = setters;
-  const updates = rows
-    .filter((r) => r.password || r.username)
-    .map((r) => ({ id: r.id, username: r.username, password: r.password }));
+  const updates = collectCredentialUpdates(rows);
 
   if (updates.length === 0) {
     if (closeAfter) {
@@ -55,6 +59,18 @@ export async function submitCredentialUpdates(
   setLoading(true);
   setErrorMessage('');
   setStatusMessage('');
+
+  await postCredentialUpdates(updates, closeAfter, onClose, onSuccess, setters);
+}
+
+async function postCredentialUpdates(
+  updates: Array<{ id: number; username: string; password?: string | null }>,
+  closeAfter: boolean,
+  onClose: () => void,
+  onSuccess: () => void,
+  setters: CredentialSetter
+): Promise<void> {
+  const { setLoading, setErrorMessage, setStatusMessage } = setters;
 
   try {
     const result = await apiClient.post('/api/users/batch', { action: 'apply-credentials', updates }) as BatchActionResult;
@@ -106,17 +122,4 @@ export function buildEditExportCsv(rows: SelectedUser[]): string {
     ].join(','));
   });
   return `${lines.join('\n')}\n`;
-}
-
-export function downloadTextFile(content: string, filename: string): void {
-  const bom = '\uFEFF';
-  const blob = new Blob([bom + content], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.setAttribute('download', filename);
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  URL.revokeObjectURL(url);
 }
