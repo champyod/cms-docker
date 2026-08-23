@@ -42,6 +42,8 @@ Commands:
   test                      smoke-test the deployment
   worker [edit|deploy|stop|list]  fleet TUI / deploy all shards / stop / show
   worker connect|cgroup     attach to a worker / set up sandbox cgroups
+  tailscale setup|status|remove
+                            tailnet HTTPS front for admin/ranking UIs
   contest create            create contests from YAML
   update-server             shard-aware server update flow
 
@@ -140,6 +142,9 @@ handle_subcommand() {
         cgroup)  shift 2; exec bash scripts/__worker_cgroup_setup.sh "$@" ;;
         *) echo "usage: cms worker <edit|deploy [shard]|stop|list|connect|cgroup>" >&2; exit 2 ;;
       esac ;;
+    tailscale)
+      shift
+      exec bash scripts/__tailscale_serve.sh "${@:-setup}" ;;
     contest)
       sub="${2:-}"
       [[ "$sub" == "create" ]] || { echo "usage: cms contest create <yaml...>" >&2; exit 2; }
@@ -252,6 +257,15 @@ is_skipped cms-init    || run_step cms-init    ""    'make cms-init'
 is_skipped prisma-sync || run_step prisma-sync ""    'make prisma-sync'
 
 run_step admin "" 'make admin'
+
+# Optional tailnet HTTPS front (opt-in via TAILSCALE_SERVE=1 in .env.admin)
+if [[ "$(awk -F= '$1=="TAILSCALE_SERVE"{gsub(/[ \r]/,"",$2);print $2}' .env.admin 2>/dev/null || true)" == 1* ]]; then
+  if command -v tailscale >/dev/null 2>&1; then
+    run_step tailscale-serve soft 'bash scripts/__tailscale_serve.sh setup'
+  else
+    record "tailscale-serve" "SKIPPED — tailscale CLI not found"
+  fi
+fi
 
 if ! is_skipped contest; then
   run_step contest "" 'make contest'

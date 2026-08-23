@@ -230,7 +230,17 @@ RANKING_BIND_IP=127.0.0.1      # ranking      :8890
 Then `./cms deploy admin --img` (recreates with new binds).
 
 ### 2. Front them with Tailscale HTTPS (free plan OK)
-On the server host:
+
+One command registers all three listeners and can hide the raw ports:
+
+```bash
+./cms tailscale setup --hide-ports   # serves + rebinds .env.admin to loopback
+./cms deploy admin --img             # apply the new binds
+./cms tailscale status               # inspect listeners + mapping
+./cms tailscale remove               # undo
+```
+
+Manual equivalent, if you prefer:
 
 ```bash
 sudo tailscale serve --bg --https=8843 http://127.0.0.1:8891   # admin panel
@@ -239,6 +249,9 @@ sudo tailscale serve --bg --https=8845 http://127.0.0.1:8890   # ranking
 tailscale serve status
 ```
 
+Bootstrap automation: set `TAILSCALE_SERVE=1` in `.env.admin` and every
+`./cms` run re-registers the listeners automatically after the admin stack
+is healthy.
 Browse to `https://<machine>.<tailnet>.ts.net:8843/` etc.
 Certificates issue and renew automatically per machine.
 
