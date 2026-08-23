@@ -7,6 +7,7 @@ import { Button } from '@/components/core/Button';
 import { Edit2, Trash2, Plus, Shield, ShieldCheck } from 'lucide-react';
 import { updateAdmin, deleteAdmin } from '@/app/actions/admins';
 import { AdminModal } from './AdminModal';
+import type { PermissionFlagKey } from './adminFormConfig';
 import { cn } from '@/lib/utils';
 import type { AdminWithLogin } from '@/lib/prisma-selects';
 
@@ -16,7 +17,7 @@ const PERMISSION_BADGES = [
   { key: 'permission_tasks', label: 'Tasks', className: 'bg-orange-500/20 text-orange-400' },
   { key: 'permission_users', label: 'Users', className: 'bg-teal-500/20 text-teal-400' },
   { key: 'permission_contests', label: 'Contests', className: 'bg-indigo-500/20 text-indigo-400' },
-] as const satisfies ReadonlyArray<{ key: keyof AdminWithLogin; label: string; className: string }>;
+] as const satisfies ReadonlyArray<{ key: PermissionFlagKey; label: string; className: string }>;
 
 interface AdminListProps {
   initialAdmins: AdminWithLogin[];
