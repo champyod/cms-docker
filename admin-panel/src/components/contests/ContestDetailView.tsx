@@ -19,15 +19,19 @@ import { ContestCommunications } from './ContestCommunications';
 import { ParticipationModal } from './ParticipationModal';
 import { TeamBulkAddModal } from './TeamBulkAddModal';
 import { removeTaskFromContest } from '@/app/actions/contests';
+import type { Prisma } from '@prisma/client';
+import type { ContestDetailRow, SafeAdmin } from '@/lib/prisma-selects';
 
-type ContestWithRelations = any;
+type AvailableUserRow = Prisma.usersGetPayload<Record<string, never>>;
+type AvailableTaskRow = Prisma.tasksGetPayload<Record<string, never>>;
+type TeamRow = Prisma.teamsGetPayload<Record<string, never>>;
 
 interface ContestDetailViewProps {
-  contest: ContestWithRelations;
-  availableUsers: any[];
-  availableTasks: any[];
-  teams: any[];
-  user: any;
+  contest: ContestDetailRow;
+  availableUsers: AvailableUserRow[];
+  availableTasks: AvailableTaskRow[];
+  teams: TeamRow[];
+  user: SafeAdmin;
 }
 
 export function ContestDetailView({ contest, availableUsers, availableTasks, teams, user }: ContestDetailViewProps) {
@@ -138,7 +142,7 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, tea
   };
 
   // Non-participants (users not in this contest)
-  const participantUserIds = new Set(contest.participations.map((p: any) => p.user_id));
+  const participantUserIds = new Set(contest.participations.map((p) => p.user_id));
   const nonParticipants = availableUsers.filter(u => !participantUserIds.has(u.id));
 
   return (
@@ -279,7 +283,7 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, tea
               </button>
             </div>
             <div className="divide-y divide-white/5">
-              {contest.participations.map((participation: any) => (
+              {contest.participations.map((participation) => (
                 <div key={participation.id} className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors group">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-green-500 to-emerald-500 flex items-center justify-center text-xs font-bold text-white">
@@ -356,7 +360,7 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, tea
               </button>
             </div>
             <div className="divide-y divide-white/5">
-              {contest.tasks.map((task: any) => (
+              {contest.tasks.map((task) => (
                 <div key={task.id} className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors group">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg bg-amber-600/20 flex items-center justify-center text-amber-400 font-bold text-sm">
@@ -514,7 +518,7 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, tea
         isOpen={isTaskModalOpen}
         onClose={() => setIsTaskModalOpen(false)}
         contestId={contest.id}
-        availableTasks={availableTasks.filter((t: any) => !contest.tasks.find((ct: any) => ct.id === t.id))}
+        availableTasks={availableTasks.filter((t) => !contest.tasks.find((ct) => ct.id === t.id))}
         onSuccess={() => window.location.reload()}
       />
 

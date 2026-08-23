@@ -3,23 +3,13 @@ import { notFound, redirect } from 'next/navigation';
 import { ContestDetailView } from '@/components/contests/ContestDetailView';
 import { getCurrentUser } from '@/app/actions/auth';
 import { checkPermission } from '@/lib/permissions';
+import { contestDetailInclude } from '@/lib/prisma-selects';
 
 async function getContest(id: number) {
-  const contest = await prisma.contests.findUnique({
+  return prisma.contests.findUnique({
     where: { id },
-    include: {
-      tasks: {
-        orderBy: { num: 'asc' }
-      },
-      participations: {
-        include: {
-          users: true,
-          teams: true,
-        }
-      }
-    }
+    include: contestDetailInclude,
   });
-  return contest;
 }
 
 async function getAvailableUsers() {
@@ -29,7 +19,6 @@ async function getAvailableUsers() {
 }
 
 async function getAvailableTasks() {
-  // Tasks not yet assigned to any contest
   return prisma.tasks.findMany({
     where: { contest_id: null },
     orderBy: { name: 'asc' }
@@ -69,14 +58,14 @@ export default async function ContestDetailPage({
   }
 
   if (!user) {
-    // Should be handled by middleware/layout generally but for type safety:
-    return null; // or redirect
+    // Layout guard normally covers this; kept for the type-narrowing the render below relies on.
+    return null;
   }
 
   return (
     <div className="space-y-8">
-      <ContestDetailView 
-        contest={contest as any} 
+      <ContestDetailView
+        contest={contest}
         availableUsers={availableUsers}
         availableTasks={availableTasks}
         teams={teams}
