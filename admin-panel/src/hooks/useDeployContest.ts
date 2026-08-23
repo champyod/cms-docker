@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { deployContest, getDeployStatus } from '@/app/actions/services';
-import type { DeployStatus } from '@/app/actions/services';
+import type { DeployStatus } from '@/lib/deploy-operations';
 
 export type DeployPhase = 'idle' | 'deploying' | 'polling' | 'completed' | 'failed' | 'timeout' | 'already_running';
 

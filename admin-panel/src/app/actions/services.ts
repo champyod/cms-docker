@@ -19,8 +19,6 @@ import type {
   DeployStatusResult,
 } from '@/lib/deploy-operations';
 
-export type { DeployContestResult, DeployStatus, DeployStatusResult };
-
 const execPromise = util.promisify(exec);
 
 async function getContestComposeFile(): Promise<string> {
