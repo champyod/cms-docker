@@ -24,8 +24,11 @@ export function AdminList({ initialAdmins }: { initialAdmins: any[] }) {
     }
   };
 
-  const handleToggleEnabled = async (admin: any) => {
-    await updateAdmin(admin.id, { enabled: !admin.enabled });
+  const handleToggleEnabled = async (admin: { id: number; enabled: boolean }) => {
+    const result = await updateAdmin(admin.id, { enabled: !admin.enabled });
+    if (!result.success) {
+      alert(result.error ?? 'Failed to update admin');
+    }
     window.location.reload();
   };
 
