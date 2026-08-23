@@ -6,13 +6,12 @@ import { X, Loader2, FileSpreadsheet } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
 import { Portal } from '@/components/core/Portal';
 import {
-  TEMPLATE_CSV,
   buildPreviewRows,
-  buildSelectedCsv,
   fillRowCredentials,
   type GenerationMode,
   type PreviewRow,
 } from './csvPreview';
+import { buildSelectedCsv, TEMPLATE_CSV } from './csvTemplate';
 import {
   BulkCreateInputSection,
   HeaderWarnings,
