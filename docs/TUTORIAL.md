@@ -19,7 +19,7 @@ cd cms-docker
 git submodule update --init --recursive
 
 # Run the interactive configuration tool
-./scripts/configure-env.sh
+./cms setup
 ```
 
 The configuration script will guide you through setting up credentials, public IPs, and security keys. You can press Enter to use defaults or choose to generate random secure passwords.
@@ -29,7 +29,7 @@ The configuration script will guide you through setting up credentials, public I
 Run the automated setup script:
 
 ```bash
-./scripts/setup.sh
+./cms
 ```
 
 1.  **Select Strategy**: Choose `1) PRE-BUILT IMAGES` for the fastest setup.

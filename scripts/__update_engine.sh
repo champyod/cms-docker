@@ -7,7 +7,7 @@
 #   --fresh  Full first-time walk: every var written, defaults offered instead
 #            of keeping current values.
 #
-# Helpers are ported from scripts/setup.sh (which stays untouched).
+# Helpers ported from the legacy setup.sh (absorbed into this engine).
 set -euo pipefail
 
 CMS_ROOT="${CMS_DOCKER_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"

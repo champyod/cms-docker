@@ -68,7 +68,7 @@ The modern Admin Panel (port 8891) provides a unified interface to manage all wo
 
 ### Security: Tailscale & VPNs
 By default, RPC ports are restricted to `127.0.0.1` for security. To enable remote workers:
-1.  **Tailscale (Recommended)**: Run `./scripts/setup.sh` and provide your Tailscale IP when prompted. This binds services only to the Tailscale interface.
+1.  **Tailscale (Recommended)**: Run `./cms setup` and provide your Tailscale IP when prompted. This binds services only to the Tailscale interface.
 2.  **Other VPNs**: Follow the same process but provide your VPN interface IP.
 3.  **Public Access (Dangerous)**: Set `TAILSCALE_IP=0.0.0.0` in `.env.core` and run `make env && make core-img`. This exposes evaluation ports to the entire internet.
 

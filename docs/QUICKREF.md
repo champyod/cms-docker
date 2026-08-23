@@ -6,8 +6,8 @@ git clone https://github.com/champyod/cms-docker.git
 cd cms-docker
 git submodule update --init --recursive
 
-./scripts/configure-env.sh   # Interactive .env setup
-./scripts/setup.sh           # Comprehensive deployment/update
+./cms setup                    # Interactive .env + deployment wizard
+./cms deploy all --img         # One-command full deployment
 ```
 
 ## Advanced Manual Setup
