@@ -2,16 +2,16 @@
 
 import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { updateContestSettings, addParticipant, removeParticipant } from '@/app/actions/contests';
+import { updateContestSettings, removeParticipant } from '@/app/actions/contests';
 import { setTestUser } from '@/app/actions/participations';
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
 import { useDeployContest } from '@/hooks/useDeployContest';
 import { Modal } from '@/components/core/Modal';
 import {
-  Settings, Users, Trophy, Clock, Shield, Zap,
-  Plus, Trash2, ExternalLink, Play, Square,
-  ChevronDown, ChevronUp, Save, ClipboardList, FlaskConical, Rocket, Loader2, CheckCircle2
+  Settings, Users, Zap,
+  Plus, Trash2,
+  ChevronDown, ChevronUp, Save, ClipboardList, FlaskConical, Rocket, Loader2
 } from 'lucide-react';
 import { ParticipantModal } from './ParticipantModal';
 import { TaskSelectionModal } from './TaskSelectionModal';

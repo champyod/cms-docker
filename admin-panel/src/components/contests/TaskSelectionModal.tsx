@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Plus, Search, ClipboardList } from 'lucide-react';
+import { X, Search, ClipboardList } from 'lucide-react';
 import { Portal } from '../core/Portal';
 import { addTaskToContest } from '@/app/actions/contests';
 

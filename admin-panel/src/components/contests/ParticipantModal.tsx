@@ -1,9 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Button } from '@/components/core/Button';
-import { Card } from '@/components/core/Card';
-import { Search, Plus, UserPlus, X, Loader2 } from 'lucide-react';
+import { Search, UserPlus, X } from 'lucide-react';
 import { addParticipant } from '@/app/actions/contests';
 import { Portal } from '../core/Portal';
 

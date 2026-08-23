@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, User, Clock, Shield, Mail, Eye, EyeOff } from 'lucide-react';
+import { X, User, Shield, Mail, Eye } from 'lucide-react';
 import { Portal } from '../core/Portal';
 import { updateParticipation, sendMessage, revealParticipationPassword } from '@/app/actions/participations';
 import { PasswordFieldWithGenerator } from '@/components/core/PasswordFieldWithGenerator';

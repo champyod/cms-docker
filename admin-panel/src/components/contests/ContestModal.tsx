@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
-import { X, Loader2, Calendar, Shield, Cpu, Clock, Settings, FileText, CheckSquare, Square } from 'lucide-react';
+import { X, Loader2, Calendar, Shield, Cpu, Clock, Settings, FileText } from 'lucide-react';
 import type { ContestData } from '@/app/actions/contests';
 import { apiClient } from '@/lib/apiClient';
 import { PROGRAMMING_LANGUAGES } from '@/lib/constants';

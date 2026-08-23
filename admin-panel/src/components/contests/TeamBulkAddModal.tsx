@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Users, UsersRound } from 'lucide-react';
+import { X, UsersRound } from 'lucide-react';
 import { Portal } from '../core/Portal';
 import { addTeamToContest } from '@/app/actions/participations';
 

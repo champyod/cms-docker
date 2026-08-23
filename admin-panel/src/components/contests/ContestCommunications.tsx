@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { Card } from '@/components/core/Card';
-import { 
-  Megaphone, MessageSquare, Trophy, Plus, Send, X, 
-  ChevronDown, ChevronUp, Eye, EyeOff, Reply, Trash2
+import {
+  Megaphone, MessageSquare, Trophy, Plus, Send,
+  Eye, EyeOff, Reply, Trash2
 } from 'lucide-react';
 import { getAnnouncements, createAnnouncement, deleteAnnouncement } from '@/app/actions/announcements';
 import { getQuestions, replyToQuestion, ignoreQuestion, unignoreQuestion } from '@/app/actions/questions';
