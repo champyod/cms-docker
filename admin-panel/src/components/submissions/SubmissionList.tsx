@@ -4,22 +4,21 @@ import { useState } from 'react';
 import { useSyncedState } from '@/hooks/useSyncedState';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
-import { Eye, Clock, User as UserIcon, FileCode, Trophy, HelpCircle } from 'lucide-react';
+import { Eye, Clock, User as UserIcon, FileCode, HelpCircle } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { SubmissionModal } from './SubmissionModal';
-import { useRouter } from 'next/navigation';
 
-import { SubmissionWithRelations } from '@/types';
+import { SubmissionListItem } from '@/types';
 
-export function SubmissionList({ initialSubmissions, totalPages, currentPage }: { initialSubmissions: SubmissionWithRelations[], totalPages: number, currentPage: number }) {
+export function SubmissionList({ initialSubmissions, totalPages, currentPage }: { initialSubmissions: SubmissionListItem[], totalPages: number, currentPage: number }) {
   const [submissions] = useSyncedState(initialSubmissions);
-  const [selectedSubmission, setSelectedSubmission] = useState<SubmissionWithRelations | null>(null);
+  const [selectedSubmission, setSelectedSubmission] = useState<SubmissionListItem | null>(null);
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
   const router = useRouter();
 
-  const handleView = (submission: SubmissionWithRelations) => {
+  const handleView = (submission: SubmissionListItem) => {
     setSelectedSubmission(submission);
   };
 
