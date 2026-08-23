@@ -4,10 +4,7 @@ import { useState, useEffect } from 'react';
 import { Card } from '@/components/core/Card';
 import { readEnvFile, updateEnvFile } from '@/app/actions/env';
 import { triggerManualBackup } from '@/app/actions/services';
-import { 
-  Save, RefreshCw, Loader, AlertTriangle, 
-  Database, Bell, Clock, Shield, Trash2, Zap
-} from 'lucide-react';
+import { Save, Loader, Database, Bell, Shield, Zap } from 'lucide-react';
 import { PageContent, PageHeader, Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
 import { Loading } from '@/components/core/Loading';

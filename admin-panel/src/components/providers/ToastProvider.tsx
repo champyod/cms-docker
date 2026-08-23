@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
 import { X, AlertCircle, CheckCircle, Info, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -31,60 +31,79 @@ export function useToast() {
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  useEffect(() => {
+    const timers = timersRef.current;
+    return () => {
+      timers.forEach((timer) => clearTimeout(timer));
+      timers.clear();
+    };
+  }, []);
 
   const removeToast = useCallback((id: string) => {
+    const timer = timersRef.current.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      timersRef.current.delete(id);
+    }
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
   const addToast = useCallback(({ type, title, message, duration = 5000 }: Omit<Toast, 'id'>) => {
     const id = Math.random().toString(36).substring(2, 9);
     const newToast: Toast = { id, type, title, message, duration };
-    
+
     setToasts((prev) => [...prev, newToast]);
 
     if (duration !== Infinity && duration > 0) {
-      setTimeout(() => {
-        removeToast(id);
-      }, duration);
+      const timer = setTimeout(() => removeToast(id), duration);
+      timersRef.current.set(id, timer);
     }
   }, [removeToast]);
 
   return (
     <ToastContext.Provider value={{ addToast, removeToast }}>
       {children}
-      <div className="fixed top-4 right-4 z-9999 flex flex-col gap-2 w-full max-w-sm pointer-events-none">
-        {toasts.map((toast) => (
-          <div
-            key={toast.id}
-            className={cn(
-              "pointer-events-auto flex items-start gap-3 p-4 rounded-xl shadow-lg border backdrop-blur-md transition-all animate-in slide-in-from-right-full",
-              toast.type === 'success' && "bg-emerald-900/90 border-emerald-500/20 text-emerald-100",
-              toast.type === 'error' && "bg-red-900/90 border-red-500/20 text-red-100",
-              toast.type === 'warning' && "bg-amber-900/90 border-amber-500/20 text-amber-100",
-              toast.type === 'info' && "bg-blue-900/90 border-blue-500/20 text-blue-100",
-            )}
-          >
-            <div className="mt-0.5">
-              {toast.type === 'success' && <CheckCircle className="w-5 h-5 text-emerald-400" />}
-              {toast.type === 'error' && <AlertCircle className="w-5 h-5 text-red-400" />}
-              {toast.type === 'warning' && <AlertTriangle className="w-5 h-5 text-amber-400" />}
-              {toast.type === 'info' && <Info className="w-5 h-5 text-blue-400" />}
-            </div>
-            <div className="flex-1">
-              <h3 className="font-semibold text-sm">{toast.title}</h3>
-              {toast.message && <p className="text-xs opacity-90 mt-1">{toast.message}</p>}
-            </div>
-            <button
-              onClick={() => removeToast(toast.id)}
-              className="opacity-70 hover:opacity-100 transition-opacity"
-              title="Close notification"
-              aria-label="Close notification"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        ))}
-      </div>
+      <ToastStack toasts={toasts} onRemove={removeToast} />
     </ToastContext.Provider>
+  );
+}
+
+function ToastStack({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: string) => void }) {
+  return (
+    <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 w-full max-w-sm pointer-events-none">
+      {toasts.map((toast) => (
+        <div
+          key={toast.id}
+          className={cn(
+            "pointer-events-auto flex items-start gap-3 p-4 rounded-xl shadow-lg border backdrop-blur-md transition-all animate-in slide-in-from-right-full",
+            toast.type === 'success' && "bg-emerald-900/90 border-emerald-500/20 text-emerald-100",
+            toast.type === 'error' && "bg-red-900/90 border-red-500/20 text-red-100",
+            toast.type === 'warning' && "bg-amber-900/90 border-amber-500/20 text-amber-100",
+            toast.type === 'info' && "bg-blue-900/90 border-blue-500/20 text-blue-100",
+          )}
+        >
+          <div className="mt-0.5">
+            {toast.type === 'success' && <CheckCircle className="w-5 h-5 text-emerald-400" />}
+            {toast.type === 'error' && <AlertCircle className="w-5 h-5 text-red-400" />}
+            {toast.type === 'warning' && <AlertTriangle className="w-5 h-5 text-amber-400" />}
+            {toast.type === 'info' && <Info className="w-5 h-5 text-blue-400" />}
+          </div>
+          <div className="flex-1">
+            <h3 className="font-semibold text-sm">{toast.title}</h3>
+            {toast.message && <p className="text-xs opacity-90 mt-1">{toast.message}</p>}
+          </div>
+          <button
+            onClick={() => onRemove(toast.id)}
+            className="opacity-70 hover:opacity-100 transition-opacity"
+            title="Close notification"
+            aria-label="Close notification"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      ))}
+    </div>
   );
 }

@@ -5,8 +5,16 @@ import { getNetworkTrafficLogs } from '@/app/actions/docker-ops';
 import { Card } from '@/components/core/Card';
 import { Network, Filter } from 'lucide-react';
 
+interface TrafficLog {
+  id: number;
+  timestamp: string;
+  container: string;
+  rx: string;
+  tx: string;
+}
+
 export function NetworkTrafficLogs() {
-  const [logs, setLogs] = useState<any[]>([]);
+  const [logs, setLogs] = useState<TrafficLog[]>([]);
   const [limit, setLimit] = useState(20);
   const [loading, setLoading] = useState(true);
 

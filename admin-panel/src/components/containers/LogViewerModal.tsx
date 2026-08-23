@@ -1,12 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { Button } from '@/components/core/Button';
-import { 
-  X, RefreshCw, Terminal, Download, 
-  ChevronDown, ChevronUp, Search
-} from 'lucide-react';
+import { Portal } from '@/components/core/Portal';
+import { X, RefreshCw, Terminal, Download, Search } from 'lucide-react';
 import { getContainerLogs } from '@/app/actions/docker';
 
 interface LogViewerModalProps {
@@ -21,12 +18,7 @@ export function LogViewerModal({ containerId, containerName, onClose }: LogViewe
   const [autoScroll, setAutoScroll] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [tail, setTail] = useState(100);
-  const [mounted, setMounted] = useState(false);
   const logRef = useRef<HTMLPreElement>(null);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -69,13 +61,12 @@ export function LogViewerModal({ containerId, containerName, onClose }: LogViewe
     URL.revokeObjectURL(url);
   };
 
-  const filteredLogs = logs.split('\n').filter(line => 
+  const filteredLogs = logs.split('\n').filter(line =>
     line.toLowerCase().includes(searchTerm.toLowerCase())
   ).join('\n');
 
-  if (!mounted) return null;
-
-  return createPortal(
+  return (
+    <Portal>
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ touchAction: 'none' }}>
       {/* Full screen backdrop - prevents interaction with background */}
       <div
@@ -165,7 +156,7 @@ export function LogViewerModal({ containerId, containerName, onClose }: LogViewe
           </div>
         </div>
       </div>
-    </div>,
-    document.body
+    </div>
+    </Portal>
   );
 }

@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { ElementType } from 'react';
+import { createElement, ElementType } from 'react';
 
 interface TextProps extends React.HTMLAttributes<HTMLElement> {
     as?: ElementType;
@@ -23,10 +23,9 @@ export function Text({ as, variant = 'body', className, children, color, ...prop
 
     const defaultColor = color ? color : (variant === 'muted' ? '' : 'text-white');
 
-    return (
-        // @ts-ignore
-        <Component className={cn(variants[variant], defaultColor, className)} {...props}>
-            {children}
-        </Component>
+    return createElement(
+        Component,
+        { className: cn(variants[variant], defaultColor, className), ...props },
+        children
     );
 }

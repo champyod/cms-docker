@@ -9,8 +9,8 @@ import { Activity, Server, ShieldCheck, Clock, Cpu, Database, Network } from 'lu
 import { Card } from '@/components/core/Card';
 
 export function ResourceView() {
-  const [serverStats, setServerStats] = useState<any>(null);
-  const [workers, setWorkers] = useState<any[]>([]);
+  const [serverStats, setServerStats] = useState<Awaited<ReturnType<typeof getServerStats>> | null>(null);
+  const [workers, setWorkers] = useState<Awaited<ReturnType<typeof getWorkerStats>>>([]);
   const [loading, setLoading] = useState(true);
   const serverInFlightRef = useRef(false);
   const workersInFlightRef = useRef(false);

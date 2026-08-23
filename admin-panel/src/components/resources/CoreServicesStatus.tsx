@@ -5,8 +5,13 @@ import { getCoreServicesStatus } from '@/app/actions/docker-ops';
 import { Card } from '@/components/core/Card';
 import { ShieldCheck, Circle } from 'lucide-react';
 
+interface ServiceStatus {
+  name: string;
+  status: string;
+}
+
 export function CoreServicesStatus() {
-  const [services, setServices] = useState<any[]>([]);
+  const [services, setServices] = useState<ServiceStatus[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchStatus = async () => {

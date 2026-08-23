@@ -1,12 +1,16 @@
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean;
   error?: string;
   data?: T;
-  [key: string]: any;
+  [key: string]: unknown;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : '';
 }
 
 class ApiClient {
-  private async request<T = any>(
+  private async request<T = unknown>(
     path: string,
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
@@ -19,30 +23,36 @@ class ApiClient {
         },
       });
 
-      const data = await resp.json();
+      const data: unknown = await resp.json();
 
       if (!resp.ok) {
+        const payload =
+          typeof data === 'object' && data !== null
+            ? (data as Record<string, unknown>)
+            : {};
+        const serverMessage =
+          typeof payload.error === 'string' ? payload.error : undefined;
         return {
           success: false,
-          error: data.error || `HTTP error! status: ${resp.status}`,
-          errors: data.errors,
+          error: serverMessage || `HTTP error! status: ${resp.status}`,
+          errors: payload.errors,
         };
       }
 
-      return data;
-    } catch (err: any) {
+      return data as ApiResponse<T>;
+    } catch (err: unknown) {
       return {
         success: false,
-        error: err.message || 'Network error occurred',
+        error: getErrorMessage(err) || 'Network error occurred',
       };
     }
   }
 
-  async get<T = any>(path: string, options?: RequestInit) {
+  async get<T = unknown>(path: string, options?: RequestInit) {
     return this.request<T>(path, { ...options, method: 'GET' });
   }
 
-  async post<T = any>(path: string, body: any, options?: RequestInit) {
+  async post<T = unknown>(path: string, body: unknown, options?: RequestInit) {
     return this.request<T>(path, {
       ...options,
       method: 'POST',
@@ -50,7 +60,7 @@ class ApiClient {
     });
   }
 
-  async put<T = any>(path: string, body: any, options?: RequestInit) {
+  async put<T = unknown>(path: string, body: unknown, options?: RequestInit) {
     return this.request<T>(path, {
       ...options,
       method: 'PUT',
@@ -58,7 +68,7 @@ class ApiClient {
     });
   }
 
-  async delete<T = any>(path: string, options?: RequestInit) {
+  async delete<T = unknown>(path: string, options?: RequestInit) {
     return this.request<T>(path, { ...options, method: 'DELETE' });
   }
 }

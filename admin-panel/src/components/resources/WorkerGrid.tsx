@@ -11,7 +11,7 @@ import { Card } from '@/components/core/Card';
 interface WorkerStats {
   id: string;
   name: string;
-  status: 'online' | 'busy' | 'offline';
+  status: string;
   load: number;
   tasks: number;
 }

@@ -6,7 +6,7 @@ import { Plus, HelpCircle } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { UserModal } from './UserModal';
-import { apiClient } from '@/lib/apiClient';
+import { apiClient, type ApiResponse } from '@/lib/apiClient';
 import { UserBulkCreateCsv } from './UserBulkCreateCsv';
 import { UserBulkEditDialog } from './UserBulkEditDialog';
 import { UserTable } from './UserTable';
@@ -70,7 +70,7 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
         search: targetSearch,
       });
 
-      const result = await apiClient.get(`/api/users?${query.toString()}`);
+      const result = (await apiClient.get(`/api/users?${query.toString()}`)) as ApiResponse & { users?: UsersPageRow[]; totalPages?: number; currentPage?: number; perPage?: number; search?: string };
       if (!result.success) return;
 
       setUsersList(result.users || []);

@@ -1,11 +1,10 @@
 'use client';
-
 import { useState, useEffect } from 'react';
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
 import {
-  Play, Square, RotateCcw, Box, RefreshCw,
-  CheckCircle2, AlertCircle, Layers, Terminal, HelpCircle, Settings, Bell, BellOff
+  Box, RefreshCw, RotateCcw, CheckCircle2, AlertCircle,
+  Layers, HelpCircle
 } from 'lucide-react';
 import Link from 'next/link';
 import { getContainers, controlContainer, runCompose, ContainerInfo } from '@/app/actions/docker';
@@ -20,6 +19,10 @@ import {
 import { useToast } from '@/components/providers/ToastProvider';
 import { LogViewerModal } from '@/components/containers/LogViewerModal';
 import { ContainerSettingsModal } from '@/components/containers/ContainerSettingsModal';
+import { StatsCard } from '@/components/containers/StatsCard';
+import { StackActionBtn } from '@/components/containers/StackActionBtn';
+import { SystemLogsPanel } from '@/components/containers/SystemLogsPanel';
+import { ContainerRow } from '@/components/containers/ContainerRow';
 import { usePathname } from 'next/navigation';
 
 export function ContainersClient() {
@@ -72,7 +75,6 @@ export function ContainersClient() {
     const interval = setInterval(loadContainers, 10000);
     return () => clearInterval(interval);
   }, []);
-
   const handleControl = async (id: string, action: 'start' | 'stop' | 'restart') => {
     setActionLoading(id);
     const res = await controlContainer(id, action);
@@ -85,9 +87,12 @@ export function ContainersClient() {
     setActionLoading(null);
   };
 
-  const handleCompose = async (action: 'up' | 'down' | 'restart' | 'build', type?: any) => {
+  const handleCompose = async (
+    action: 'up' | 'down' | 'restart' | 'build',
+    serviceType?: 'core' | 'admin' | 'contest' | 'worker'
+  ) => {
     setActionLoading('compose');
-    const res = await runCompose(action, type);
+    const res = await runCompose(action, serviceType);
     if (res.success) {
       addToast({ title: 'Success', message: `Compose ${action} completed`, type: 'success' });
       loadContainers();
@@ -95,15 +100,6 @@ export function ContainersClient() {
       addToast({ title: 'Error', message: res.error, type: 'error' });
     }
     setActionLoading(null);
-  };
-
-  const getStatusColor = (state: string) => {
-    switch (state.toLowerCase()) {
-      case 'running': return 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20';
-      case 'exited': return 'text-red-400 bg-red-400/10 border-red-400/20';
-      case 'paused': return 'text-amber-400 bg-amber-400/10 border-amber-400/20';
-      default: return 'text-neutral-400 bg-neutral-400/10 border-neutral-400/20';
-    }
   };
 
   const handleToggleAutoRestart = async (containerId: string, currentValue: boolean) => {
@@ -210,144 +206,21 @@ export function ContainersClient() {
             </h2>
         </div>
         <div className="divide-y divide-white/5">
-          {containers.map((container) => {
-            const config = containerConfig[container.id] || { autoRestart: false, maxRestarts: 5, currentRestarts: 0, discordNotifications: true };
-            const restartCount = restartCounts[container.id] || 0;
-            const autoRestartEnabled = config.autoRestart;
-            const maxRestartsReached = restartCount >= config.maxRestarts;
-            const discordEnabled = config.discordNotifications ?? true;
-
-            return (
-              <div key={container.id} className="p-4 hover:bg-white/[0.02] transition-colors group">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-4">
-                    <div className={`w-2 h-2 rounded-full ${container.state === 'running' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
-                    <div>
-                      <div className="font-bold text-white text-sm group-hover:text-indigo-400 transition-colors flex items-center gap-2">
-                        {container.name}
-                        {!container.isCmsContainer && (
-                          <span className="px-1.5 py-0.5 bg-neutral-700 text-neutral-400 text-[9px] rounded uppercase font-bold">External</span>
-                        )}
-                      </div>
-                      <div className="text-[10px] text-neutral-500 font-mono mt-0.5">{container.image} • {container.id.substring(0, 12)}</div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-6">
-                    <div className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getStatusColor(container.state)}`}>
-                      {container.state.toUpperCase()}
-                    </div>
-
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button
-                        size="sm"
-                        onClick={() => setSelectedContainer({ id: container.id, name: container.name })}
-                        className="p-2 bg-indigo-600/10 text-indigo-400 hover:bg-indigo-600/20 border-0"
-                        title="View Logs"
-                      >
-                        <Terminal className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => setSettingsContainer({ id: container.id, name: container.name })}
-                        className="p-2 bg-purple-600/10 text-purple-400 hover:bg-purple-600/20 border-0"
-                        title="Container Settings"
-                      >
-                        <Settings className="w-3.5 h-3.5" />
-                      </Button>
-                      {container.state !== 'running' ? (
-                        <Button
-                          size="sm"
-                          onClick={() => handleControl(container.id, 'start')}
-                          disabled={actionLoading === container.id}
-                          className="p-2 bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 border-0"
-                        >
-                          <Play className="w-3.5 h-3.5" />
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          onClick={() => handleControl(container.id, 'stop')}
-                          disabled={actionLoading === container.id}
-                          className="p-2 bg-red-600/20 text-red-400 hover:bg-red-600/30 border-0"
-                        >
-                          <Square className="w-3.5 h-3.5" />
-                        </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        onClick={() => handleControl(container.id, 'restart')}
-                        disabled={actionLoading === container.id}
-                        className="p-2 bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30 border-0"
-                      >
-                        <RotateCcw className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-
-                {container.isCmsContainer && (
-                  <div className="flex items-center gap-3 ml-6 text-xs">
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleToggleAutoRestart(container.id, autoRestartEnabled)}
-                        className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
-                          autoRestartEnabled ? 'bg-emerald-600' : 'bg-neutral-700'
-                        }`}
-                        title={`Auto-restart: ${autoRestartEnabled ? 'Enabled' : 'Disabled'}`}
-                      >
-                        <span
-                          className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
-                            autoRestartEnabled ? 'translate-x-3.5' : 'translate-x-0.5'
-                          }`}
-                        />
-                      </button>
-                      <span className="text-neutral-400">
-                        Auto-restart: <span className={autoRestartEnabled ? 'text-emerald-400' : 'text-neutral-500'}>
-                          {autoRestartEnabled ? 'ON' : 'OFF'}
-                        </span>
-                      </span>
-                    </div>
-
-                    <div className="text-neutral-500">•</div>
-
-                    <div className={`${maxRestartsReached ? 'text-red-400' : 'text-neutral-400'}`}>
-                      Restarts: {restartCount} / {config.maxRestarts}
-                    </div>
-
-                    {maxRestartsReached && (
-                      <>
-                        <div className="text-red-500">• Limit reached!</div>
-                        <button
-                          onClick={() => handleResetRestartCount(container.id)}
-                          className="text-indigo-400 hover:text-indigo-300 underline"
-                        >
-                          Reset
-                        </button>
-                      </>
-                    )}
-
-                    <div className="text-neutral-500">•</div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleToggleDiscordNotifications(container.id, discordEnabled)}
-                        className={`flex items-center gap-1 px-2 py-1 rounded transition-colors ${
-                          discordEnabled
-                            ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30'
-                            : 'bg-neutral-700 text-neutral-500 hover:bg-neutral-600'
-                        }`}
-                        title={`Discord notifications: ${discordEnabled ? 'Enabled' : 'Disabled'}`}
-                      >
-                        {discordEnabled ? <Bell className="w-3 h-3" /> : <BellOff className="w-3 h-3" />}
-                        <span className="text-[10px] font-bold">Discord</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {containers.map((container) => (
+            <ContainerRow
+              key={container.id}
+              container={container}
+              config={containerConfig[container.id] || { autoRestart: false, maxRestarts: 5, currentRestarts: 0, discordNotifications: true }}
+              restartCount={restartCounts[container.id] || 0}
+              actionLoading={actionLoading}
+              onViewLogs={setSelectedContainer}
+              onOpenSettings={setSettingsContainer}
+              onControl={handleControl}
+              onToggleAutoRestart={handleToggleAutoRestart}
+              onResetRestartCount={handleResetRestartCount}
+              onToggleDiscordNotifications={handleToggleDiscordNotifications}
+            />
+          ))}
 
           {containers.length === 0 && !loading && (
             <div className="p-20 text-center text-neutral-500">
@@ -370,51 +243,8 @@ export function ContainersClient() {
               </div>
           </Card>
 
-          <Card className="p-6 glass-card border-white/5 space-y-4">
-              <h3 className="font-bold text-white font-mono text-sm tracking-wider uppercase text-neutral-500">System Logs</h3>
-              <div className="bg-black/40 rounded-xl p-4 h-40 font-mono text-xs overflow-y-auto text-neutral-400 border border-white/5">
-                  <div className="text-indigo-400">[SYSTEM] Docker Control initialized...</div>
-                  <div>[INFO] Monitoring {containers.length} containers</div>
-                  {containers.filter(c => c.state !== 'running').map(c => (
-                      <div key={c.id} className="text-amber-500/80">[WARN] Container {c.name} is {c.state}</div>
-                  ))}
-                  <div className="mt-2 text-neutral-600">Waiting for events...</div>
-              </div>
-          </Card>
+          <SystemLogsPanel containers={containers} />
       </div>
     </div>
   );
-}
-
-function StatsCard({ icon: Icon, label, value, color }: any) {
-    const colors: any = {
-        indigo: 'text-indigo-400 bg-indigo-400/10',
-        emerald: 'text-emerald-400 bg-emerald-400/10',
-        red: 'text-red-400 bg-red-400/10',
-        blue: 'text-blue-400 bg-blue-400/10'
-    };
-    return (
-        <Card className="p-4 bg-white/[0.02] border-white/5 flex items-center gap-4">
-            <div className={`p-3 rounded-xl ${colors[color]}`}>
-                <Icon className="w-5 h-5" />
-            </div>
-            <div>
-                <div className="text-2xl font-bold text-white">{value}</div>
-                <div className="text-xs text-neutral-500 font-bold uppercase tracking-wider">{label}</div>
-            </div>
-        </Card>
-    );
-}
-
-function StackActionBtn({ label, onRestart, onUp, onBuild }: any) {
-    return (
-        <div className="bg-black/20 p-3 rounded-xl border border-white/5 space-y-2">
-            <div className="text-xs font-bold text-neutral-400">{label}</div>
-            <div className="flex gap-1">
-                <button onClick={onRestart} className="flex-1 p-1 bg-white/5 hover:bg-white/10 rounded text-[10px] text-white transition-colors">Restart</button>
-                <button onClick={onUp} className="flex-1 p-1 bg-white/5 hover:bg-white/10 rounded text-[10px] text-white transition-colors">Up</button>
-                <button onClick={onBuild} className="flex-1 p-1 bg-indigo-600/20 hover:bg-indigo-600/40 rounded text-[10px] text-indigo-400 transition-colors">Build</button>
-            </div>
-        </div>
-    );
 }
