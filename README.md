@@ -171,6 +171,36 @@ anytime with `./cms backup drill`.
 
 ---
 
+## `./cms` Command Reference
+
+One control plane for everything. Zero-arg = full bootstrap; subcommands
+below map 1:1 onto the Makefile and helper scripts.
+
+| Command | Purpose |
+|---------|---------|
+| `./cms` | Full bootstrap lifecycle (idempotent, resumable) |
+| `./cms setup` | First-time guided setup — fresh install **or** update wizard on existing installs |
+| `./cms update` | Interactive configuration wizard (any managed variable) |
+| `./cms fix` | Non-interactive repair of missing/insecure config |
+| `./cms deploy <stack> [--img]` | Start one stack (`core/admin/contest/worker/infra`) or `all`; `--img` forces registry images |
+| `./cms stop [stack]` / `clean [stack]` / `pull [stack]` | Lifecycle per stack or all |
+| `./cms db init\|reset\|clean\|sync` | Database shortcuts (init schema, full reset, wipe, Prisma sync) |
+| `./cms admin-create` | Create a superadmin interactively |
+| `./cms status` | Live service status dashboard |
+| `./cms monitor` | Monitoring/backup operations UI |
+| `./cms backup [drill]` | Full backup now; `drill` proves the restore path |
+| `./cms restore <archive>` | Restore a backup archive into a scratch container |
+| `./cms doctor` | Preflight checks only (disk, secrets, ports, cgroup) |
+| `./cms test` | Smoke-test: boot stacks headless, verify healthchecks, teardown |
+| `./cms worker connect\|cgroup` | Attach to a worker / prepare host cgroups (root) |
+| `./cms contest create <yaml...>` | Batch-create contests from YAML/JSON |
+| `./cms update-server` | Safe server update: preflight → backup → rolling recreate → verify |
+
+Global bootstrap flags: `--yes` (non-interactive), `--skip <a,b>`,
+`--no-sample`.
+
+---
+
 ## Access Points
 
 | Service | URL | Notes |
