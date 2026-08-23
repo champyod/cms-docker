@@ -303,6 +303,7 @@ prompt_var() {
     local label
     label=$(mask_show "$key" "$current")
     local ans chosen gen_out eof=0
+    pwarn() { print_warning "$1" >&2; }
 
     while :; do
         if is_secret_key "$key"; then
@@ -320,7 +321,7 @@ prompt_var() {
                     return ;;
                 g|G) gen_out=$(generate_for "$key" "$default"); echo "${gen_out:-$default}"; return ;;
                 t|T) read -r -s -p "  value: " typed; echo ""; echo "$typed" ;;
-                *) print_warning "invalid choice"; continue ;;
+                *) pwarn "invalid choice"; continue ;;
             esac
             return
         fi
@@ -333,7 +334,7 @@ prompt_var() {
         local chosen="${ans:-$current}"
         if [ "$fresh" = "1" ] && [ -z "$ans" ]; then chosen="$default"; fi
         if [ -z "$chosen" ] && [ "$required" = "R" ]; then
-            print_warning "$key is required — cannot be empty."
+            pwarn "$key is required — cannot be empty."
             if [ -n "$default" ]; then
                 gen_out=$(generate_for "$key" "$default")
                 chosen="${gen_out:-$default}"
@@ -344,7 +345,7 @@ prompt_var() {
             fi
         fi
         if [ -n "$chosen" ] && ! validate_value "$type" "$chosen"; then
-            print_warning "invalid value for $type: $chosen"
+            pwarn "invalid value for $type: $chosen"
             if [ "$eof" = "1" ]; then break; fi
             continue
         fi
