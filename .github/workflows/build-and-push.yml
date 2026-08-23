@@ -10,7 +10,7 @@ on:
       - 'src/**'
       - 'admin-panel/**'
       - 'docker/monitor/**'
-      - 'scripts/monitor.sh'
+      - 'scripts/__monitor.sh'
       - '.github/workflows/build-and-push.yml'
   pull_request:
     types: [opened, synchronize, reopened]

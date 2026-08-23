@@ -223,7 +223,7 @@ ensure_env_file() {
 
 get_var() {
     local file=$1 key=$2
-    awk -F= -v k="$key" '$1==k { v=$0; sub(/^[^=]*=/, "", v); print v; exit }' "$file" 2>/dev/null | tr -d '\r' || true
+    awk -F= -v k="$key" '$1==k { v=$0; sub(/^[^=]*=/, "", v); sub(/[[:space:]]*#.*$/, "", v); print v; exit }' "$file" 2>/dev/null | tr -d '\r' || true
 }
 
 gen_hex32()  { openssl rand -hex 32 2>/dev/null || python3 -c 'import secrets; print(secrets.token_hex(16))'; }
