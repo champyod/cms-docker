@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import { X, Users, Loader } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
+import { Portal } from '@/components/core/Portal';
 
 interface TeamData {
   id?: number;
@@ -22,11 +22,6 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData }: TeamModal
   const [formData, setFormData] = useState({ code: '', name: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   useEffect(() => {
     if (initialData) {
@@ -37,7 +32,7 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData }: TeamModal
     setError('');
   }, [initialData, isOpen]);
 
-  if (!isOpen || !mounted) return null;
+  if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,7 +57,8 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData }: TeamModal
     setLoading(false);
   };
 
-  return createPortal(
+  return (
+    <Portal>
     <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden">
       <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
       
@@ -128,7 +124,7 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData }: TeamModal
           </div>
         </form>
       </div>
-    </div>,
-    document.body
+    </div>
+    </Portal>
   );
 }
