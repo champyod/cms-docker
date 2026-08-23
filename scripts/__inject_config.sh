@@ -140,9 +140,16 @@ if cms_secret:
 r_user = os.environ.get("R_USER", "usern4me")
 r_pass = os.environ.get("R_PASS", "passw0rd")
 
-ranking_host = os.environ.get("TAILSCALE_IP", "").strip()
-if not ranking_host or ranking_host == "127.0.0.1":
+# Push target for score feed: same-network service by default. A remote
+# ranking node is only assumed when RANKING_REMOTE=1 (then RANKING_PUSH_HOST
+# or legacy TAILSCALE_IP supplies the address). Port 8890 is always enforced.
+ranking_host = os.environ.get("RANKING_PUSH_HOST", "").strip()
+if os.environ.get("RANKING_REMOTE", "").strip() == "1" and not ranking_host:
+    ranking_host = os.environ.get("TAILSCALE_IP", "").strip()
+if not ranking_host:
     ranking_host = "cms-ranking-web-server"
+if ":" not in ranking_host.split("/")[-1]:
+    ranking_host += ":8890"
 
 updated_lines = []
 for line in text.splitlines():
