@@ -1,4 +1,4 @@
-export const PROGRAMMING_LANGUAGES = [
+export const PROGRAMMING_LANGUAGES: string[] = [
   "C# / Mono",
   "C++11 / g++",
   "C++14 / g++",

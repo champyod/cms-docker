@@ -1,4 +1,9 @@
-export const STATEMENT_LANGUAGES = [
+export interface StatementLanguage {
+  code: string;
+  name: string;
+}
+
+export const STATEMENT_LANGUAGES: StatementLanguage[] = [
   {
     "code": "ab",
     "name": "Abkhazian"
