@@ -3,14 +3,28 @@
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { ensurePermission } from '@/lib/permissions';
+import { storeFile } from '@/lib/fsobjects';
 
-// Add a single testcase
+interface TestcaseInput {
+  codename: string;
+  inputBase64: string;
+  outputBase64: string;
+  isPublic: boolean;
+}
+
+interface ActionResult {
+  success: boolean;
+  error?: string;
+}
+
+type TestcaseRow = Awaited<ReturnType<typeof prisma.testcases.findMany>>[number];
+
 export async function addTestcase(datasetId: number, data: {
   codename: string;
   inputDigest: string;
   outputDigest: string;
   isPublic: boolean;
-}) {
+}): Promise<ActionResult> {
   await ensurePermission('tasks');
 
   try {
@@ -34,8 +48,7 @@ export async function addTestcase(datasetId: number, data: {
   }
 }
 
-// Delete a testcase
-export async function deleteTestcase(testcaseId: number) {
+export async function deleteTestcase(testcaseId: number): Promise<ActionResult> {
   await ensurePermission('tasks');
 
   try {
@@ -50,24 +63,23 @@ export async function deleteTestcase(testcaseId: number) {
   }
 }
 
-// Toggle testcase public flag
-export async function toggleTestcasePublic(testcaseId: number) {
+export async function toggleTestcasePublic(testcaseId: number): Promise<ActionResult> {
   await ensurePermission('tasks');
 
   try {
     const tc = await prisma.testcases.findUnique({
       where: { id: testcaseId }
     });
-    
+
     if (!tc) {
       return { success: false, error: 'Testcase not found' };
     }
-    
+
     await prisma.testcases.update({
       where: { id: testcaseId },
       data: { public: !tc.public }
     });
-    
+
     revalidatePath('/[locale]/tasks');
     return { success: true };
   } catch (error) {
@@ -76,8 +88,7 @@ export async function toggleTestcasePublic(testcaseId: number) {
   }
 }
 
-// Update testcase public status in bulk
-export async function updateTestcasesPublic(testcaseIds: number[], isPublic: boolean) {
+export async function updateTestcasesPublic(testcaseIds: number[], isPublic: boolean): Promise<ActionResult> {
   await ensurePermission('tasks');
 
   try {
@@ -93,74 +104,34 @@ export async function updateTestcasesPublic(testcaseIds: number[], isPublic: boo
   }
 }
 
-// Store file in fsobjects table (CMS file storage system)
-import crypto from 'crypto';
+async function createTestcaseSafely(datasetId: number, tc: TestcaseInput): Promise<void> {
+  const inputDigest = await storeFile(Buffer.from(tc.inputBase64, 'base64'));
+  const outputDigest = await storeFile(Buffer.from(tc.outputBase64, 'base64'));
 
-async function storeFile(data: Buffer): Promise<string> {
-  const digest = crypto.createHash('sha256').update(data).digest('hex');
-
-  // Check if file already exists
-  const existing = await prisma.$queryRaw<any[]>`
-    SELECT digest FROM fsobjects WHERE digest = ${digest}
-  `;
-
-  if (existing.length === 0) {
-    // Store the file using PostgreSQL Large Object
-    // First create a large object and get the OID
-    const result = await prisma.$queryRaw<any[]>`
-      SELECT lo_from_bytea(0, ${data}::bytea) as lob_oid
-    `;
-    const lobOid = result[0].lob_oid;
-
-    // Insert into fsobjects table
-    await prisma.$executeRaw`
-      INSERT INTO fsobjects (digest, lob_oid, description)
-      VALUES (${digest}, ${lobOid}, 'Uploaded via Admin Panel')
-    `;
+  try {
+    await prisma.testcases.create({
+      data: {
+        dataset_id: datasetId,
+        codename: tc.codename,
+        input: inputDigest,
+        output: outputDigest,
+        public: tc.isPublic,
+      }
+    });
+  } catch (error) {
+    const e = error as { message?: string };
+    if (!e.message?.includes('unique constraint')) throw error;
+    console.warn(`Testcase ${tc.codename} already exists, skipping.`);
   }
-
-  return digest;
 }
 
-// Batch upload testcases
-export async function batchUploadTestcases(datasetId: number, testcases: {
-  codename: string;
-  inputBase64: string;
-  outputBase64: string;
-  isPublic: boolean;
-}[]) {
+export async function batchUploadTestcases(datasetId: number, testcases: TestcaseInput[]): Promise<ActionResult> {
   await ensurePermission('tasks');
 
   try {
     for (const tc of testcases) {
-      // Decode and store input
-      const inputBuffer = Buffer.from(tc.inputBase64, 'base64');
-      const inputDigest = await storeFile(inputBuffer);
-
-      // Decode and store output
-      const outputBuffer = Buffer.from(tc.outputBase64, 'base64');
-      const outputDigest = await storeFile(outputBuffer);
-
-      try {
-        await prisma.testcases.create({
-          data: {
-            dataset_id: datasetId,
-            codename: tc.codename,
-            input: inputDigest,
-            output: outputDigest,
-            public: tc.isPublic,
-          }
-        });
-      } catch (e: any) {
-        if (e.message?.includes('unique constraint')) {
-          // Skip duplicates or update? For now just skip logging error
-          console.warn(`Testcase ${tc.codename} already exists, skipping.`);
-        } else {
-          throw e;
-        }
-      }
+      await createTestcaseSafely(datasetId, tc);
     }
-
     revalidatePath('/[locale]/tasks');
     return { success: true };
   } catch (error) {
@@ -169,8 +140,7 @@ export async function batchUploadTestcases(datasetId: number, testcases: {
   }
 }
 
-// Get all testcases for a dataset
-export async function getTestcases(datasetId: number) {
+export async function getTestcases(datasetId: number): Promise<TestcaseRow[]> {
   await ensurePermission('tasks');
   return prisma.testcases.findMany({
     where: { dataset_id: datasetId },

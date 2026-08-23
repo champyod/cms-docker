@@ -8,12 +8,21 @@ import { Button } from '@/components/core/Button';
 import { Edit2, Trash2, Plus, FileText, Database, ExternalLink, AlertTriangle } from 'lucide-react';
 import { TaskModal } from './TaskModal';
 import { apiClient } from '@/lib/apiClient';
-import { TaskDiagnostic } from '@/app/actions/tasks';
+import type { TaskDiagnostic } from '@/lib/task-diagnostics';
 
-type TaskWithRelations = any;
+interface TaskRow {
+  id: number;
+  name: string;
+  title: string;
+  contests: { name: string } | null;
+  statements: Array<{ id: number }>;
+  datasets_datasets_task_idTotasks: Array<{ id: number }>;
+  _count: { submissions: number };
+  diagnostics: TaskDiagnostic[];
+}
 
 interface TaskListProps {
-  initialTasks: TaskWithRelations[];
+  initialTasks: TaskRow[];
   totalPages: number;
   permissions: {
     permission_all: boolean;
@@ -24,42 +33,39 @@ interface TaskListProps {
   };
 }
 
-export function TaskList({ initialTasks, totalPages, permissions }: TaskListProps) {
+export function TaskList({ initialTasks, totalPages: _totalPages, permissions }: TaskListProps): React.JSX.Element {
   const router = useRouter();
   const pathname = usePathname();
-  const locale = pathname.split('/')[1] || 'en';
+  const locale = pathname.split('/')[1] ?? 'en';
   const [tasks] = useSyncedState(initialTasks);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedTask, setSelectedTask] = useState<TaskWithRelations | null>(null);
+  const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
 
   const isSuperAdmin = permissions?.permission_all ?? false;
   const canManageTasks = isSuperAdmin || (permissions?.permission_tasks ?? false);
 
-  const handleEdit = (task: TaskWithRelations) => {
+  const handleEdit = (task: TaskRow): void => {
     if (!canManageTasks) return;
     setSelectedTask(task);
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: number): Promise<void> => {
     if (!canManageTasks) return;
     if (confirm('Are you sure you want to delete this task? This is IRREVERSIBLE.')) {
       const result = await apiClient.delete(`/api/tasks/${id}`);
-      if (result.success) {
-        window.location.reload();
-      } else {
-        alert('Failed to delete task: ' + result.error);
-      }
+      if (result.success) window.location.reload();
+      else alert(`Failed to delete task: ${result.error}`);
     }
   };
 
-  const handleCreate = () => {
+  const handleCreate = (): void => {
     if (!canManageTasks) return;
     setSelectedTask(null);
     setIsModalOpen(true);
   };
 
-  const handleSuccess = () => {
+  const handleSuccess = (): void => {
     window.location.reload();
   };
 
@@ -68,11 +74,7 @@ export function TaskList({ initialTasks, totalPages, permissions }: TaskListProp
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-bold text-white">All Tasks</h2>
         {canManageTasks && (
-          <Button 
-            variant="primary" 
-            className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white pl-3 pr-4"
-            onClick={handleCreate}
-          >
+          <Button variant="primary" className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white pl-3 pr-4" onClick={handleCreate}>
             <Plus className="w-4 h-4" />
             Create Task
           </Button>
@@ -93,10 +95,8 @@ export function TaskList({ initialTasks, totalPages, permissions }: TaskListProp
             </TableRow>
           </TableHeader>
           <TableBody>
-            {tasks.map((task: any) => {
-              const hasErrors = task.diagnostics.some((d: any) => d.type === 'error');
-              const hasWarnings = task.diagnostics.some((d: any) => d.type === 'warning');
-
+            {tasks.map((task) => {
+              const hasErrors = task.diagnostics.some((d) => d.type === 'error');
               return (
                 <TableRow key={task.id} className={`border-b border-white/5 hover:bg-white/5 transition-colors ${hasErrors ? 'opacity-60' : ''}`}>
                   <TableCell className="font-mono text-neutral-500 text-xs text-nowrap">#{task.id}</TableCell>
@@ -107,7 +107,7 @@ export function TaskList({ initialTasks, totalPages, permissions }: TaskListProp
                           <AlertTriangle className={`w-4 h-4 cursor-help shrink-0 ${hasErrors ? 'text-red-500' : 'text-amber-500'}`} />
                           <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block z-50 min-w-[200px] p-2 bg-neutral-800 border border-white/10 rounded-lg shadow-xl text-xs space-y-1">
                             <p className="font-bold border-b border-white/5 pb-1 mb-1">Task Issues</p>
-                            {task.diagnostics.map((d: any, i: number) => (
+                            {task.diagnostics.map((d, i) => (
                               <div key={i} className={`flex gap-1.5 ${d.type === 'error' ? 'text-red-400' : 'text-amber-400'}`}>
                                 <span>•</span>
                                 <span>{d.message}</span>
@@ -116,10 +116,7 @@ export function TaskList({ initialTasks, totalPages, permissions }: TaskListProp
                           </div>
                         </div>
                       )}
-                      <button
-                        onClick={() => router.push(`/${locale}/tasks/${task.id}`)}
-                        className={`flex items-center gap-2 hover:text-indigo-400 transition-colors truncate ${hasErrors ? 'text-neutral-400' : ''}`}
-                      >
+                      <button onClick={() => router.push(`/${locale}/tasks/${task.id}`)} className={`flex items-center gap-2 hover:text-indigo-400 transition-colors truncate ${hasErrors ? 'text-neutral-400' : ''}`}>
                         {task.name}
                         <ExternalLink className="w-3 h-3 opacity-50" />
                       </button>
@@ -130,11 +127,9 @@ export function TaskList({ initialTasks, totalPages, permissions }: TaskListProp
                   </TableCell>
                   <TableCell>
                     {task.contests ? (
-                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                        {task.contests.name}
-                      </span>
+                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">{task.contests.name}</span>
                     ) : (
-                        <span className="text-neutral-500 text-xs italic">Unassigned</span>
+                      <span className="text-neutral-500 text-xs italic">Unassigned</span>
                     )}
                   </TableCell>
                   <TableCell>
@@ -144,32 +139,20 @@ export function TaskList({ initialTasks, totalPages, permissions }: TaskListProp
                         <span>{task.statements.length}</span>
                       </div>
                       <div className="flex items-center gap-1" title="Datasets">
-                         <Database className="w-3 h-3" />
-                         <span>{task.datasets_datasets_task_idTotasks.length}</span>
-                       </div>
-                     </div>
-                   </TableCell>
-                   <TableCell className="text-xs text-neutral-400">
-                     {task._count?.submissions ?? 0}
-                   </TableCell>
-                   <TableCell className="text-right">
+                        <Database className="w-3 h-3" />
+                        <span>{task.datasets_datasets_task_idTotasks.length}</span>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-xs text-neutral-400">{task._count?.submissions ?? 0}</TableCell>
+                  <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
                       {canManageTasks && (
                         <>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEdit(task)}
-                            className="h-8 w-8 p-0 text-neutral-400 hover:text-indigo-400"
-                          >
+                          <Button variant="ghost" size="sm" onClick={() => handleEdit(task)} className="h-8 w-8 p-0 text-neutral-400 hover:text-indigo-400">
                             <Edit2 className="w-4 h-4" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDelete(task.id)}
-                            className="h-8 w-8 p-0 text-neutral-400 hover:text-red-400"
-                          >
+                          <Button variant="ghost" size="sm" onClick={() => handleDelete(task.id)} className="h-8 w-8 p-0 text-neutral-400 hover:text-red-400">
                             <Trash2 className="w-4 h-4" />
                           </Button>
                         </>
@@ -189,13 +172,8 @@ export function TaskList({ initialTasks, totalPages, permissions }: TaskListProp
           </TableBody>
         </Table>
       </div>
-      
-      <TaskModal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        task={selectedTask}
-        onSuccess={handleSuccess}
-      />
+
+      <TaskModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} task={selectedTask as unknown as Parameters<typeof TaskModal>[0]['task']} onSuccess={handleSuccess} />
     </div>
   );
 }

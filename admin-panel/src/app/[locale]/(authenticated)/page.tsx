@@ -172,11 +172,7 @@ export default async function DashboardPage({
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
             <Activity className="w-24 h-24" />
           </div>
-          <StatusBadge 
-            status={serviceStatus.status as StatusType} 
-            running={(serviceStatus as any).running} 
-            total={(serviceStatus as any).total} 
-          />
+          <StatusBadge status={serviceStatus.status as StatusType} running={serviceStatus.running} total={serviceStatus.total} />
         </Card>
       </Grid>
 

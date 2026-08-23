@@ -3,12 +3,12 @@ import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<Response> {
   const { authorized, response } = await verifyApiPermission('tasks');
   if (!authorized) return response;
 
   try {
-    const data = await req.json();
+    const data = (await req.json()) as { taskId: number; description: string; time_limit?: number; memory_limit?: number; task_type?: string; score_type?: string };
     const { taskId, ...datasetData } = data;
 
     const dataset = await prisma.datasets.create({
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     };
 
     return apiSuccess({ dataset: responseDataset });
-  } catch (error: any) {
+  } catch (error) {
     return apiError(error);
   }
 }

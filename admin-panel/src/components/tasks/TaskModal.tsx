@@ -1,138 +1,125 @@
 'use client';
-import { createPortal } from 'react-dom';
 
 import { useState, useEffect } from 'react';
-import { X, FileCode, Settings, Clock, Cpu, FileType, CheckSquare, Info } from 'lucide-react';
+import { X, FileCode, Settings, Clock, Cpu, FileType, CheckSquare } from 'lucide-react';
 import type { TaskData } from '@/app/actions/tasks';
 import { apiClient } from '@/lib/apiClient';
-
-import { PROGRAMMING_LANGUAGES } from '@/lib/constants';
 import { useToast } from '@/components/providers/ToastProvider';
-import { AlertTriangle, AlertCircle } from 'lucide-react';
+import { Portal } from '@/components/core/Portal';
+import { parseIntervalToSeconds } from '@/lib/task-intervals';
+import { GeneralTab, GradingTab, LimitsTab, TokensTab, LanguagesTab } from './task-modal-sections';
+
+interface TaskRecord {
+  id: number;
+  name: string;
+  title: string;
+  score_mode: string;
+  feedback_level: string;
+  score_precision: number | null;
+  allowed_languages: string[];
+  submission_format: string[];
+  token_mode: string;
+  token_max_number: number | null;
+  token_min_interval: unknown;
+  token_gen_initial: number | null;
+  token_gen_number: number | null;
+  token_gen_interval: unknown;
+  token_gen_max: number | null;
+  max_submission_number: number | null;
+  max_user_test_number: number | null;
+  min_submission_interval: unknown;
+  min_user_test_interval: unknown;
+}
 
 interface TaskModalProps {
   isOpen: boolean;
   onClose: () => void;
-  task?: any | null;
+  task?: TaskRecord | null;
   onSuccess: () => void;
 }
 
 type Tab = 'general' | 'grading' | 'limits' | 'tokens' | 'languages';
 
-const SUBMISSION_FORMATS = ['%s.%l', '%s.zip'];
-const InfoButton = ({ text }: { text: string }) => (
-  <div className="group relative inline-block ml-1.5 align-middle">
-    <Info className="w-3.5 h-3.5 text-neutral-500 hover:text-indigo-400 cursor-help transition-colors" />
-    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-neutral-800 border border-white/10 rounded-lg text-[11px] font-medium text-neutral-300 w-48 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none shadow-xl">
-      {text}
-      <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-neutral-800" />
-    </div>
-  </div>
-);
+const TAB_CONFIG: Array<{ id: Tab; label: string; icon: typeof FileCode }> = [
+  { id: 'general', label: 'General', icon: FileCode },
+  { id: 'grading', label: 'Grading', icon: CheckSquare },
+  { id: 'limits', label: 'Limits', icon: Clock },
+  { id: 'tokens', label: 'Tokens', icon: Cpu },
+  { id: 'languages', label: 'Files & Languages', icon: FileType },
+];
 
+const EMPTY_FORM: TaskData = {
+  name: '',
+  title: '',
+  score_mode: 'max',
+  feedback_level: 'restricted',
+  score_precision: 0,
+  allowed_languages: [],
+  submission_format: [],
+  token_mode: 'disabled',
+  token_max_number: null,
+  token_min_interval: null,
+  token_gen_initial: null,
+  token_gen_number: null,
+  token_gen_interval: null,
+  token_gen_max: null,
+  max_submission_number: null,
+  max_user_test_number: null,
+  min_submission_interval: null,
+  min_user_test_interval: null,
+};
 
-export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) {
+function mapTaskToForm(task: TaskRecord): TaskData {
+  const name = task.name;
+  const formats = (task.submission_format ?? []).map((fmt: string) =>
+    name ? fmt.replace(new RegExp(`^${name}(\\.|$)`), '%s$1') : fmt
+  );
+  return {
+    name: task.name,
+    title: task.title,
+    score_mode: task.score_mode,
+    feedback_level: task.feedback_level,
+    score_precision: task.score_precision,
+    allowed_languages: task.allowed_languages,
+    submission_format: formats,
+    token_mode: task.token_mode,
+    token_max_number: task.token_max_number,
+    token_gen_initial: task.token_gen_initial,
+    token_gen_number: task.token_gen_number,
+    token_gen_max: task.token_gen_max,
+    max_submission_number: task.max_submission_number,
+    max_user_test_number: task.max_user_test_number,
+    token_min_interval: parseIntervalToSeconds(task.token_min_interval) ?? null,
+    token_gen_interval:
+      parseIntervalToSeconds(task.token_gen_interval) !== undefined
+        ? Math.floor(parseIntervalToSeconds(task.token_gen_interval)! / 60)
+        : null,
+    min_submission_interval: parseIntervalToSeconds(task.min_submission_interval) ?? null,
+    min_user_test_interval: parseIntervalToSeconds(task.min_user_test_interval) ?? null,
+  };
+}
+
+export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps): React.JSX.Element | null {
   const { addToast } = useToast();
   const [activeTab, setActiveTab] = useState<Tab>('general');
-  const [formData, setFormData] = useState<TaskData>({
-    name: '',
-    title: '',
-    score_mode: 'max',
-    feedback_level: 'restricted',
-    score_precision: 0,
-    allowed_languages: [],
-    submission_format: [],
-    token_mode: 'disabled',
-    token_max_number: undefined,
-    token_min_interval: undefined,
-    token_gen_initial: undefined,
-    token_gen_number: undefined,
-    token_gen_interval: undefined,
-    token_gen_max: undefined,
-    max_submission_number: undefined,
-    max_user_test_number: undefined,
-    min_submission_interval: undefined,
-    min_user_test_interval: undefined,
-  });
+  const [formData, setFormData] = useState<TaskData>(EMPTY_FORM);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // Helper to parse Postgres intervals returned by Prisma
-  const parseInterval = (val: any) => {
-    if (!val) return undefined;
-    if (typeof val === 'string') {
-      // Try parsing "HH:MM:SS" or simple number strings
-      if (/^\d+$/.test(val)) return parseInt(val);
-      const parts = val.split(':').map(Number);
-      if (parts.length === 3 && parts.every(n => !isNaN(n))) {
-        return parts[0] * 3600 + parts[1] * 60 + parts[2];
-      }
-      return undefined;
-    }
-    // Typical Postgres interval object: { days, hours, minutes, seconds, milliseconds }
-    if (typeof val === 'object') {
-      let total = 0;
-      if (val.days !== undefined) total += val.days * 24 * 3600;
-      if (val.hours !== undefined) total += val.hours * 3600;
-      if (val.minutes !== undefined) total += val.minutes * 60;
-      if (val.seconds !== undefined) total += val.seconds;
-      return total;
-    }
-    return undefined;
-  };
-
-  useEffect(() => {
-    if (task) {
-      const name = task.name;
-      const formats = (task.submission_format || []).map((fmt: string) =>
-        name ? fmt.replace(new RegExp(`^${name}(\\.|$)`), '%s$1') : fmt
-      );
-
-      setFormData({
-        name: task.name,
-        title: task.title,
-        score_mode: task.score_mode,
-        feedback_level: task.feedback_level,
-        score_precision: task.score_precision,
-        allowed_languages: task.allowed_languages,
-        submission_format: formats,
-        token_mode: task.token_mode,
-        token_max_number: task.token_max_number ?? null,
-        token_gen_initial: task.token_gen_initial ?? null,
-        token_gen_number: task.token_gen_number ?? null,
-        token_gen_max: task.token_gen_max ?? null,
-        max_submission_number: task.max_submission_number ?? null,
-        max_user_test_number: task.max_user_test_number ?? null,
-        token_min_interval: parseInterval((task as any).token_min_interval) ?? null,
-        token_gen_interval: parseInterval((task as any).token_gen_interval) !== undefined ? Math.floor(parseInterval((task as any).token_gen_interval)! / 60) : null,
-        min_submission_interval: parseInterval((task as any).min_submission_interval) ?? null,
-        min_user_test_interval: parseInterval((task as any).min_user_test_interval) ?? null,
-      });
-    } else {
-      setFormData({
-        name: '', title: '', score_mode: 'max', feedback_level: 'restricted', score_precision: undefined,
-        allowed_languages: [], submission_format: [], token_mode: 'disabled',
-        token_gen_initial: undefined, token_gen_number: undefined, token_gen_interval: undefined
-      });
-    }
+    if (task) setFormData(mapTaskToForm(task));
+    else setFormData(EMPTY_FORM);
     setError('');
   }, [task, isOpen]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
     setError('');
     setLoading(true);
-
     try {
       const result = task
         ? await apiClient.put(`/api/tasks/${task.id}`, formData)
         : await apiClient.post('/api/tasks', formData);
-
       if (result.success) {
         addToast({
           type: 'success',
@@ -142,380 +129,83 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps) 
         onSuccess();
         onClose();
       } else {
-        setError(result.error || 'An error occurred');
+        setError(result.error ?? 'An error occurred');
       }
-    } catch (err: any) {
-      setError(err?.message || 'An unexpected error occurred');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'An unexpected error occurred';
+      setError(message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleLanguageToggle = (lang: string) => {
-    const current = formData.allowed_languages || [];
-    const updated = current.includes(lang)
-      ? current.filter((l: string) => l !== lang)
-      : [...current, lang];
+  const handleLanguageToggle = (lang: string): void => {
+    const current = formData.allowed_languages ?? [];
+    const updated = current.includes(lang) ? current.filter((l) => l !== lang) : [...current, lang];
     setFormData({ ...formData, allowed_languages: updated });
   };
 
-  const handleFormatToggle = (fmt: string) => {
-    const current = formData.submission_format || [];
-    const updated = current.includes(fmt)
-      ? current.filter((f: string) => f !== fmt)
-      : [...current, fmt];
+  const handleFormatToggle = (fmt: string): void => {
+    const current = formData.submission_format ?? [];
+    const updated = current.includes(fmt) ? current.filter((f) => f !== fmt) : [...current, fmt];
     setFormData({ ...formData, submission_format: updated });
   };
 
-  if (!isOpen || !mounted) return null;
+  if (!isOpen) return null;
 
-  return createPortal(
-    <div className="fixed inset-0 z-100 flex items-center justify-center overflow-hidden">
-      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-      
-      <div className="relative z-10 w-full max-w-4xl h-[80vh] bg-neutral-900 border border-white/10 rounded-xl shadow-2xl flex flex-col">
-        <div className="flex items-center justify-between p-4 border-b border-white/10 shrink-0">
-          <div className="flex items-center gap-2">
-            <FileCode className="w-5 h-5 text-indigo-400" />
-            <h2 className="text-lg font-bold text-white">
-              {task ? 'Edit Task' : 'Create New Task'}
-            </h2>
-          </div>
-          <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-lg transition-colors" title="Close modal">
-            <X className="w-5 h-5 text-neutral-400" />
-          </button>
-        </div>
-        
-        <div className="flex flex-1 overflow-hidden">
-          {/* Sidebar Tabs */}
-          <div className="w-64 bg-black/20 border-r border-white/10 p-4 space-y-2 overflow-y-auto">
-            {[
-              { id: 'general', label: 'General', icon: FileCode },
-              { id: 'grading', label: 'Grading', icon: CheckSquare },
-              { id: 'limits', label: 'Limits', icon: Clock },
-              { id: 'tokens', label: 'Tokens', icon: Cpu },
-              { id: 'languages', label: 'Files & Languages', icon: FileType },
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as Tab)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === tab.id
-                    ? 'bg-indigo-500/20 text-indigo-400 ring-1 ring-indigo-500/50'
-                    : 'text-neutral-400 hover:bg-white/5 hover:text-white'
-                  }`}
-              >
-                <tab.icon className="w-4 h-4" />
-                {tab.label}
-              </button>
-            ))}
+  return (
+    <Portal>
+      <div className="fixed inset-0 z-100 flex items-center justify-center overflow-hidden">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative z-10 w-full max-w-4xl h-[80vh] bg-neutral-900 border border-white/10 rounded-xl shadow-2xl flex flex-col">
+          <div className="flex items-center justify-between p-4 border-b border-white/10 shrink-0">
+            <div className="flex items-center gap-2">
+              <FileCode className="w-5 h-5 text-indigo-400" />
+              <h2 className="text-lg font-bold text-white">{task ? 'Edit Task' : 'Create New Task'}</h2>
+            </div>
+            <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-lg transition-colors" title="Close modal">
+              <X className="w-5 h-5 text-neutral-400" />
+            </button>
           </div>
 
-          {/* Form Content */}
-          <div className="flex-1 overflow-y-auto p-8 relative">
-            <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
-              {error && (
-                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
-                  {error}
-                </div>
-              )}
+          <div className="flex flex-1 overflow-hidden">
+            <div className="w-64 bg-black/20 border-r border-white/10 p-4 space-y-2 overflow-y-auto">
+              {TAB_CONFIG.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === tab.id ? 'bg-indigo-500/20 text-indigo-400 ring-1 ring-indigo-500/50' : 'text-neutral-400 hover:bg-white/5 hover:text-white'}`}
+                >
+                  <tab.icon className="w-4 h-4" />
+                  {tab.label}
+                </button>
+              ))}
+            </div>
 
-              {/* General Tab */}
-              {activeTab === 'general' && (
-                <div className="space-y-6">
-                  <div>
-                    <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">
-                      Task Name (Short ID)
-                      <InfoButton text="Unique identifier (e.g., 'aplusb'). Only letters, numbers, underscores and dashes allowed." />
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="e.g., aplusb"
-                      required
-                      className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-indigo-500/50 transition-colors"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Title</label>
-                    <input
-                      type="text"
-                      value={formData.title}
-                      onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                      placeholder="e.g., A Plus B Problem"
-                      required
-                      className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-indigo-500/50 transition-colors"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Grading Tab */}
-              {activeTab === 'grading' && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">
-                        Score Mode
-                        <InfoButton text="Defines how the final score is calculated from multiple datasets/submissions." />
-                      </label>
-                      <select
-                        value={formData.score_mode}
-                        onChange={(e) => setFormData({ ...formData, score_mode: e.target.value })}
-                        className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-indigo-500/50"
-                      >
-                        <option value="max">Max</option>
-                        <option value="max_subtask">Max Subtask</option>
-                        <option value="max_tokened_last">Max Tokened Last</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">
-                        Feedback Level
-                        <InfoButton text="Determines how much information is shown to the participant after a submission." />
-                      </label>
-                      <select
-                        value={formData.feedback_level}
-                        onChange={(e) => setFormData({ ...formData, feedback_level: e.target.value })}
-                        className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-indigo-500/50"
-                      >
-                        <option value="restricted">Restricted</option>
-                        <option value="oi_restricted">OI Restricted</option>
-                        <option value="full">Full</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Score Precision</label>
-                    <input
-                      type="number"
-                      value={(formData.score_precision === undefined || formData.score_precision === null) ? '' : formData.score_precision}
-                      onChange={(e) => setFormData({ ...formData, score_precision: e.target.value ? parseInt(e.target.value) : null })}
-                      placeholder="0"
-                      className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-indigo-500/50"
-                    />
-                    <p className="text-xs text-neutral-500 mt-1">Number of decimal places for score.</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Limits Tab */}
-              {activeTab === 'limits' && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">
-                        Max Submissions
-                        <InfoButton text="Maximum submissions per user. Enter 0 or leave empty for unlimited." />
-                      </label>
-                      <input
-                        type="number"
-                        value={(formData.max_submission_number === undefined || formData.max_submission_number === null) ? '' : formData.max_submission_number}
-                        onChange={(e) => setFormData({ ...formData, max_submission_number: e.target.value ? parseInt(e.target.value) : null })}
-                        placeholder="Unlimited"
-                        className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-indigo-500/50"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">
-                        Max User Tests
-                        <InfoButton text="Maximum user tests per user. Enter 0 or leave empty for unlimited." />
-                      </label>
-                      <input
-                        type="number"
-                        value={(formData.max_user_test_number === undefined || formData.max_user_test_number === null) ? '' : formData.max_user_test_number}
-                        onChange={(e) => setFormData({ ...formData, max_user_test_number: e.target.value ? parseInt(e.target.value) : null })}
-                        placeholder="Unlimited"
-                        className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-indigo-500/50"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Min Submission Interval (s)</label>
-                      <input
-                        type="number"
-                        value={(formData.min_submission_interval === undefined || formData.min_submission_interval === null) ? '' : formData.min_submission_interval}
-                        onChange={(e) => setFormData({ ...formData, min_submission_interval: e.target.value ? parseInt(e.target.value) : null })}
-                        placeholder="0"
-                        className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-indigo-500/50"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Min User Test Interval (s)</label>
-                      <input
-                        type="number"
-                        value={(formData.min_user_test_interval === undefined || formData.min_user_test_interval === null) ? '' : formData.min_user_test_interval}
-                        onChange={(e) => setFormData({ ...formData, min_user_test_interval: e.target.value ? parseInt(e.target.value) : null })}
-                        placeholder="0"
-                        className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-indigo-500/50"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Tokens Tab */}
-              {activeTab === 'tokens' && (
-                <div className="space-y-6">
-                  <div>
-                    <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">
-                      Token Mode
-                      <InfoButton text="Tokens control how often participants can request feedback on their submissions." />
-                    </label>
-                    <select
-                      value={formData.token_mode}
-                      onChange={(e) => setFormData({ ...formData, token_mode: e.target.value })}
-                      className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-indigo-500/50"
-                    >
-                      <option value="disabled">Disabled</option>
-                      <option value="finite">Finite</option>
-                      <option value="infinite">Infinite</option>
-                    </select>
-                  </div>
-
-                  {formData.token_mode === 'finite' && (
-                    <div className="grid grid-cols-2 gap-6 p-4 bg-white/5 rounded-xl">
-                      {formData.token_mode === 'finite' && (
-                        <div>
-                          <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Max Tokens</label>
-                          <input
-                            type="number"
-                            value={(formData.token_max_number === undefined || formData.token_max_number === null) ? '' : formData.token_max_number}
-                            onChange={(e) => setFormData({ ...formData, token_max_number: e.target.value ? parseInt(e.target.value) : null })}
-                            className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-indigo-500/50"
-                          />
-                        </div>
-                      )}
-                      <div>
-                        <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Min Interval (s)</label>
-                        <input
-                          type="number"
-                          value={(formData.token_min_interval === undefined || formData.token_min_interval === null) ? '' : formData.token_min_interval}
-                          onChange={(e) => setFormData({ ...formData, token_min_interval: e.target.value ? parseInt(e.target.value) : null })}
-                          className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-indigo-500/50"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-indigo-400 uppercase mb-2">Initial Tokens</label>
-                        <input
-                          type="number"
-                          value={(formData.token_gen_initial === undefined || formData.token_gen_initial === null) ? '' : formData.token_gen_initial}
-                          onChange={(e) => setFormData({ ...formData, token_gen_initial: e.target.value ? parseInt(e.target.value) : null })}
-                          placeholder="2"
-                          className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-indigo-500/50"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Gen Amount</label>
-                        <input
-                          type="number"
-                          value={(formData.token_gen_number === undefined || formData.token_gen_number === null) ? '' : formData.token_gen_number}
-                          onChange={(e) => setFormData({ ...formData, token_gen_number: e.target.value ? parseInt(e.target.value) : null })}
-                          placeholder="2"
-                          className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-indigo-500/50"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-indigo-400 uppercase mb-2">Gen Interval (min)</label>
-                        <input
-                          type="number"
-                          value={(formData.token_gen_interval === undefined || formData.token_gen_interval === null) ? '' : formData.token_gen_interval}
-                          onChange={(e) => setFormData({ ...formData, token_gen_interval: e.target.value ? parseInt(e.target.value) : null })}
-                          placeholder="30"
-                          className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-indigo-500/50"
-                        />
-                      </div>
-                      {formData.token_mode === 'finite' && (
-                        <div>
-                          <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Max Gen Count</label>
-                          <input
-                            type="number"
-                            value={(formData.token_gen_max === undefined || formData.token_gen_max === null) ? '' : formData.token_gen_max}
-                            onChange={(e) => setFormData({ ...formData, token_gen_max: e.target.value ? parseInt(e.target.value) : null })}
-                            placeholder="Unlimited"
-                            className="w-full px-4 py-3 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-indigo-500/50"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Languages Tab */}
-              {activeTab === 'languages' && (
-                <div className="space-y-8">
-                  <div>
-                    <label className="block text-xs font-bold text-neutral-500 uppercase mb-4">
-                      Submission Formats
-                      <InfoButton text="Required filenames. %s = Task Name, %l = Language extension." />
-                    </label>
-                    <div className="grid grid-cols-2 gap-3">
-                      {SUBMISSION_FORMATS.map(fmt => (
-                        <button
-                          key={fmt}
-                          type="button"
-                          onClick={() => handleFormatToggle(fmt)}
-                          className={`flex items-center gap-3 p-3 rounded-lg border transition-all text-left ${(formData.submission_format || []).includes(fmt)
-                              ? 'bg-indigo-600/20 border-indigo-500/50 text-white'
-                              : 'bg-black/30 border-white/5 text-neutral-400 hover:bg-white/5'
-                            }`}
-                        >
-                          <div className={`w-4 h-4 rounded border flex items-center justify-center ${(formData.submission_format || []).includes(fmt) ? 'bg-indigo-500 border-indigo-500' : 'border-neutral-500'
-                            }`}>
-                            {(formData.submission_format || []).includes(fmt) && <div className="w-2 h-2 bg-white rounded-sm" />}
-                          </div>
-                          <span>{fmt}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-neutral-500 uppercase mb-4">Allowed Languages</label>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {PROGRAMMING_LANGUAGES.map(lang => {
-                        const displayName = lang.split(' / ')[0].trim();
-                        return (
-                          <button
-                            key={lang}
-                            type="button"
-                            onClick={() => handleLanguageToggle(lang)}
-                            className={`px-3 py-2 rounded-lg text-xs font-medium transition-all text-left truncate ${(formData.allowed_languages || []).includes(lang)
-                                ? 'bg-emerald-600/20 text-emerald-400 ring-1 ring-emerald-500/50'
-                                : 'bg-black/30 text-neutral-400 hover:bg-white/5'
-                              }`}
-                          >
-                            {displayName}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </form>
+            <div className="flex-1 overflow-y-auto p-8 relative">
+              <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
+                {error && <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">{error}</div>}
+                {activeTab === 'general' && <GeneralTab formData={formData} onChange={setFormData} />}
+                {activeTab === 'grading' && <GradingTab formData={formData} onChange={setFormData} />}
+                {activeTab === 'limits' && <LimitsTab formData={formData} onChange={setFormData} />}
+                {activeTab === 'tokens' && <TokensTab formData={formData} onChange={setFormData} />}
+                {activeTab === 'languages' && (
+                  <LanguagesTab formData={formData} onChange={setFormData} onToggleLanguage={handleLanguageToggle} onToggleFormat={handleFormatToggle} />
+                )}
+              </form>
+            </div>
           </div>
-        </div>
 
-        {/* Footer Actions */}
-        <div className="p-4 border-t border-white/10 bg-black/40 flex justify-end gap-3 shrink-0">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-6 py-2 bg-transparent hover:bg-white/5 text-neutral-300 rounded-lg transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={loading}
-            className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors disabled:opacity-50 font-medium"
-          >
-            {loading ? 'Saving...' : (task ? 'Save Changes' : 'Create Task')}
-          </button>
+          <div className="p-4 border-t border-white/10 bg-black/40 flex justify-end gap-3 shrink-0">
+            <button type="button" onClick={onClose} className="px-6 py-2 bg-transparent hover:bg-white/5 text-neutral-300 rounded-lg transition-colors">
+              Cancel
+            </button>
+            <button onClick={handleSubmit} disabled={loading} className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors disabled:opacity-50 font-medium">
+              {loading ? 'Saving...' : task ? 'Save Changes' : 'Create Task'}
+            </button>
+          </div>
         </div>
       </div>
-    </div>,
-    document.body
+    </Portal>
   );
 }
