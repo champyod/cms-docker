@@ -35,13 +35,21 @@ server {
     ssl_certificate_key /etc/nginx/ssl/key.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
 $PROXY_COMMON
+    location = /login {
+        limit_req zone=cms_login burst=20 nodelay;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_pass http://cms_contest;
+        proxy_redirect off;
+    }
     location / {
         proxy_pass http://cms_contest;
         proxy_redirect off;
     }
     location /ranking/ {
         $RANKING_AUTH
-        proxy_pass http://cms-proxy-service:28600/;
+        proxy_pass http://cms-ranking-web-server:8890/;
         proxy_redirect off;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
@@ -68,13 +76,21 @@ server {
     listen 80 default_server;
     server_name ${NGINX_HOST};
 $PROXY_COMMON
+    location = /login {
+        limit_req zone=cms_login burst=20 nodelay;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_pass http://cms_contest;
+        proxy_redirect off;
+    }
     location / {
         proxy_pass http://cms_contest;
         proxy_redirect off;
     }
     location /ranking/ {
         $RANKING_AUTH
-        proxy_pass http://cms-proxy-service:28600/;
+        proxy_pass http://cms-ranking-web-server:8890/;
         proxy_redirect off;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
