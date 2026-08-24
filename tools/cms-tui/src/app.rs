@@ -32,6 +32,7 @@ pub struct App {
     pub snapshot: Snapshot,
     pub fleet: crate::ui::fleet::FleetScreen,
     pub wizard: crate::wizards::WizardScreen,
+    pub help_open: bool,
     pub toasts: Vec<(String, std::time::Instant)>,
 }
 
@@ -45,6 +46,7 @@ impl App {
             snapshot: Snapshot::empty(),
             fleet: Default::default(),
             wizard: Default::default(),
+            help_open: false,
             toasts: Vec::new(),
         }
     }
@@ -90,11 +92,15 @@ impl App {
     }
 
     fn dispatch(&mut self, action: Action) {
+        if self.help_open {
+            self.help_open = false;
+            return;
+        }
         match action {
             Action::Quit => self.should_quit = true,
+            Action::Help => self.help_open = true,
             Action::NextTab => self.tab = self.tab.next(),
             Action::Refresh => self.needs_collect = true,
-            Action::Help => {},
             Action::Key(code) => match self.tab {
                 Tab::Fleet => {
                     self.fleet.handle_key(code);

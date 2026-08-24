@@ -171,3 +171,25 @@ pub fn render_logs(
     );
 }
 
+
+pub fn render_help(frame: &mut ratatui::Frame, theme: &crate::style::Theme) {
+    let area = centered(frame.size(), 56, 14);
+    let text = vec![
+        Line::from(Span::styled("CMS TUI", Style::new().fg(theme.accent).add_modifier(Modifier::BOLD))),
+        Line::from(""),
+        Line::from("Tab / w   cycle tabs (dashboard · fleet · wizards)"),
+        Line::from("↑↓ j k    move selection"),
+        Line::from("Enter     confirm / submit"),
+        Line::from("r         force refresh now"),
+        Line::from("e         edit worker (fleet)"),
+        Line::from("d         deploy worker (preview first)"),
+        Line::from("K         stop worker (confirm)"),
+        Line::from("L         stream worker logs"),
+        Line::from("?         this help"),
+        Line::from("q         quit"),
+        Line::from(""),
+        Line::from(Span::styled("[any key] close", Style::new().fg(theme.dim))),
+    ];
+    frame.render_widget(Clear, area);
+    frame.render_widget(Paragraph::new(text).block(widgets_panel(" HELP ", theme)), area);
+}
