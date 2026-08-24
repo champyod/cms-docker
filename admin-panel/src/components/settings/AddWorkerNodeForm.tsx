@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactElement } from 'react';
+import { X } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import type { WorkerNodeAddFormState } from './useWorkerNodeAddForm';
 
@@ -10,31 +11,37 @@ interface AddWorkerNodeFormProps {
 
 export function AddWorkerNodeForm({ form }: AddWorkerNodeFormProps): ReactElement {
   return (
-    <div className="mb-6 bg-indigo-500/5 p-4 rounded-xl border border-indigo-500/20 animate-in fade-in slide-in-from-top-2 duration-300">
-      <div className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-4 flex items-center justify-between">
+    <div className="mb-6 bg-primary/5 p-4 rounded-xl border border-primary/25 animate-in fade-in slide-in-from-top-2 duration-300">
+      <div className="text-xs font-bold text-primary uppercase tracking-wider mb-4 flex items-center justify-between">
         Add New Worker Node
-        <button onClick={() => form.setShowAddForm(false)} className="text-neutral-500 hover:text-white">✕</button>
+        <button
+          onClick={() => form.setShowAddForm(false)}
+          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          aria-label="Close add worker node form"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
       </div>
       <div className="flex gap-4 items-end">
         <div className="flex-1">
-          <label className="block text-[10px] uppercase text-neutral-500 font-bold mb-1.5">Hostname or IP Address</label>
+          <label className="block text-[10px] uppercase text-muted-foreground font-bold mb-1.5">Hostname or IP Address</label>
           <input
             value={form.newHost} onChange={e => form.setNewHost(e.target.value)} autoFocus
             placeholder="e.g., cms-worker-0 or 192.168.1.50"
-            className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2 text-white text-sm font-mono focus:outline-none focus:border-indigo-500/50"
+            className="w-full bg-background/80 border border-border rounded-lg px-4 py-2 text-foreground text-sm font-mono focus:outline-none focus:border-ring/60"
           />
-          <p className="text-[9px] text-neutral-600 mt-1 italic">Supports local container names or remote server IPs.</p>
+          <p className="text-[9px] text-muted-foreground/70 mt-1 italic">Supports local container names or remote server IPs.</p>
         </div>
         <div className="w-32">
-          <label className="block text-[10px] uppercase text-neutral-500 font-bold mb-1.5">Port</label>
+          <label className="block text-[10px] uppercase text-muted-foreground font-bold mb-1.5">Port</label>
           <input
             value={form.newPort}
             onChange={e => form.setNewPort(e.target.value)}
             type="number"
-            className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2 text-white text-sm font-mono focus:outline-none focus:border-indigo-500/50"
+            className="w-full bg-background/80 border border-border rounded-lg px-4 py-2 text-foreground text-sm font-mono focus:outline-none focus:border-ring/60"
           />
         </div>
-        <Button onClick={form.handleAdd} size="sm" className="bg-indigo-500 hover:bg-indigo-400 text-white px-4 h-9">
+        <Button onClick={form.handleAdd} size="sm">
           Add Node
         </Button>
       </div>

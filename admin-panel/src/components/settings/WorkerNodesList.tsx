@@ -1,6 +1,9 @@
 'use client';
 
 import type { ReactElement } from 'react';
+import { Server } from 'lucide-react';
+import { Skeleton } from '@/components/core/Skeleton';
+import { EmptyState } from '@/components/core/EmptyState';
 import type { WorkerNodesCollection } from './useWorkerNodesCollection';
 import type { WorkerNodeRowEditor } from './useWorkerNodeRowEditor';
 import { WorkerNodeRow } from './WorkerNodeRow';
@@ -14,9 +17,10 @@ interface WorkerNodesListProps {
 export function WorkerNodesList({ collection, editor, onRetry }: WorkerNodesListProps): ReactElement {
   if (collection.loading) {
     return (
-      <div className="flex items-center justify-center py-10 text-neutral-500 gap-3">
-        <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-        Loading configuration...
+      <div className="space-y-3">
+        {[0, 1, 2].map((i) => (
+          <Skeleton key={i} className="h-16 w-full rounded-xl" />
+        ))}
       </div>
     );
   }
@@ -40,9 +44,11 @@ export function WorkerNodesList({ collection, editor, onRetry }: WorkerNodesList
       })}
 
       {collection.workers.length === 0 && (
-        <div className="text-center py-10 bg-black/20 rounded-xl border border-dashed border-white/5 text-neutral-500">
-          No worker nodes defined in configuration.
-        </div>
+        <EmptyState
+          icon={Server}
+          title="No worker nodes defined in configuration."
+          border-none
+        />
       )}
     </div>
   );

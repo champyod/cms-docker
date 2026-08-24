@@ -17,12 +17,15 @@ import {
   ContainerRestartConfig
 } from '@/app/actions/containerConfig';
 import { useToast } from '@/components/providers/ToastProvider';
+import { cn } from '@/lib/utils';
 import { LogViewerModal } from '@/components/containers/LogViewerModal';
 import { ContainerSettingsModal } from '@/components/containers/ContainerSettingsModal';
 import { StatsCard } from '@/components/containers/StatsCard';
 import { StackActionBtn } from '@/components/containers/StackActionBtn';
 import { SystemLogsPanel } from '@/components/containers/SystemLogsPanel';
 import { ContainerRow } from '@/components/containers/ContainerRow';
+import { EmptyState } from '@/components/core/EmptyState';
+import { SkeletonTable } from '@/components/core/Skeleton';
 import { usePathname } from 'next/navigation';
 
 export function ContainersClient() {
@@ -60,7 +63,7 @@ export function ContainersClient() {
         counts[container.id] = count;
       }
       setRestartCounts(counts);
-    } catch (error) {
+    } catch {
       addToast({
         title: 'Error',
         message: 'Permission denied. Requires superadmin access.',
@@ -165,18 +168,17 @@ export function ContainersClient() {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold text-white tracking-tight">Container Control Center</h1>
-            <Link href={`/${locale}/docs#services`} className="p-1 hover:bg-white/10 rounded-full transition-colors text-neutral-400 hover:text-white" title="View Documentation">
+            <h1 className="text-3xl font-bold text-foreground tracking-tight">Container Control Center</h1>
+            <Link href={`/${locale}/docs#services`} className="p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground" title="View Documentation">
               <HelpCircle className="w-5 h-5" />
             </Link>
           </div>
-          <p className="text-neutral-400 mt-1">Manage and monitor Docker services in real-time.</p>
+          <p className="text-muted-foreground mt-1">Manage and monitor Docker services in real-time.</p>
         </div>
         <div className="flex gap-3">
           <Button
             onClick={() => handleCompose('up')}
             disabled={actionLoading === 'compose'}
-            className="bg-indigo-600 hover:bg-indigo-500 text-white"
           >
             <Layers className="w-4 h-4 mr-2" /> Up All
           </Button>
@@ -184,28 +186,27 @@ export function ContainersClient() {
             variant="secondary"
             onClick={loadContainers}
             disabled={loading}
-            className="border-white/10 text-white hover:bg-white/5"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={cn('w-4 h-4', loading && 'animate-spin')} />
           </Button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard icon={Box} label="Total" value={containers.length} color="indigo" />
-        <StatsCard icon={CheckCircle2} label="Running" value={containers.filter(c => c.state === 'running').length} color="emerald" />
-        <StatsCard icon={AlertCircle} label="Stopped" value={containers.filter(c => c.state !== 'running').length} color="red" />
-        <StatsCard icon={RotateCcw} label="Uptime" value="99.9%" color="blue" />
+        <StatsCard icon={Box} label="Total" value={containers.length} color="primary" />
+        <StatsCard icon={CheckCircle2} label="Running" value={containers.filter(c => c.state === 'running').length} color="success" />
+        <StatsCard icon={AlertCircle} label="Stopped" value={containers.filter(c => c.state !== 'running').length} color="destructive" />
+        <StatsCard icon={RotateCcw} label="Uptime" value="99.9%" color="info" />
       </div>
 
-      <Card className="glass-card border-white/5 overflow-hidden">
-        <div className="p-4 border-b border-white/5 bg-white/[0.02] flex items-center justify-between">
-            <h2 className="font-bold text-white flex items-center gap-2">
-                <Layers className="w-4 h-4 text-indigo-400" />
+      <Card className="overflow-hidden">
+        <div className="p-4 border-b border-border bg-muted/50 flex items-center justify-between">
+            <h2 className="font-bold text-foreground flex items-center gap-2">
+                <Layers className="w-4 h-4 text-primary" />
                 Active Containers
             </h2>
         </div>
-        <div className="divide-y divide-white/5">
+        <div className="divide-y divide-border">
           {containers.map((container) => (
             <ContainerRow
               key={container.id}
@@ -222,19 +223,26 @@ export function ContainersClient() {
             />
           ))}
 
-          {containers.length === 0 && !loading && (
-            <div className="p-20 text-center text-neutral-500">
-                <Box className="w-10 h-10 mx-auto mb-3 opacity-20" />
-                No Docker containers found on this host.
+          {containers.length === 0 && loading && (
+            <div className="p-6">
+              <SkeletonTable rows={4} cols={1} />
             </div>
+          )}
+
+          {containers.length === 0 && !loading && (
+            <EmptyState
+              icon={Box}
+              title="No Docker containers found on this host."
+              className="border-none"
+            />
           )}
         </div>
       </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card className="p-6 glass-card border-white/5 space-y-4">
-              <h3 className="font-bold text-white">Stack Controls</h3>
-              <p className="text-sm text-neutral-400">Manage complete service groups via Docker Compose.</p>
+          <Card className="p-6 space-y-4">
+              <h3 className="font-bold text-foreground">Stack Controls</h3>
+              <p className="text-sm text-muted-foreground">Manage complete service groups via Docker Compose.</p>
               <div className="grid grid-cols-2 gap-3">
                   <StackActionBtn label="All Services" onRestart={() => handleCompose('restart')} onUp={() => handleCompose('up')} onBuild={() => handleCompose('build')} />
                   <StackActionBtn label="Core Stack" onRestart={() => handleCompose('restart', 'core')} onUp={() => handleCompose('up', 'core')} onBuild={() => handleCompose('build', 'core')} />

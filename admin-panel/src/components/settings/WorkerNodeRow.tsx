@@ -15,7 +15,7 @@ interface WorkerDisplayInfoProps {
 function WorkerDisplayInfo({ worker, status }: WorkerDisplayInfoProps): ReactElement {
   return (
     <div className="flex-1">
-      <div className="font-mono text-sm text-neutral-200">{worker.host}:{worker.port}</div>
+      <div className="font-mono text-sm text-foreground">{worker.host}:{worker.port}</div>
       <div className="flex items-center gap-2 mt-1">
         {status && (
           <>
@@ -24,7 +24,7 @@ function WorkerDisplayInfo({ worker, status }: WorkerDisplayInfoProps): ReactEle
               {status.status.toUpperCase()}
             </span>
             {!status.containerRunning && status.status !== 'connected' && (
-              <span className="text-[10px] text-neutral-500">(container offline)</span>
+              <span className="text-[10px] text-muted-foreground">(container offline)</span>
             )}
           </>
         )}
@@ -45,15 +45,15 @@ function WorkerEditFields({ editData, setEditData, onSave }: WorkerEditFieldsPro
       <input
         value={editData.host}
         onChange={e => setEditData({ ...editData, host: e.target.value })}
-        className="flex-1 bg-black/50 border border-white/10 rounded-lg px-3 py-1.5 text-white text-sm font-mono focus:outline-none focus:border-indigo-500/50"
+        className="flex-1 bg-background/80 border border-border rounded-lg px-3 py-1.5 text-foreground text-sm font-mono focus:outline-none focus:border-ring/60"
       />
       <input
         value={editData.port}
         onChange={e => setEditData({ ...editData, port: e.target.value })}
         type="number"
-        className="w-24 bg-black/50 border border-white/10 rounded-lg px-3 py-1.5 text-white text-sm font-mono focus:outline-none focus:border-indigo-500/50"
+        className="w-24 bg-background/80 border border-border rounded-lg px-3 py-1.5 text-foreground text-sm font-mono focus:outline-none focus:border-ring/60"
       />
-      <Button size="sm" onClick={onSave} className="bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30">Done</Button>
+      <Button size="sm" onClick={onSave}>Done</Button>
     </div>
   );
 }
@@ -69,14 +69,14 @@ function WorkerRowActions({ canRetry, onRetry, onStartEdit, onRemove }: WorkerRo
   return (
     <div className="flex items-center gap-1">
       {canRetry && (
-        <Button variant="ghost" size="sm" onClick={onRetry} className="text-blue-400 hover:text-blue-300 opacity-100">
+        <Button variant="ghost" size="sm" onClick={onRetry} className="text-info hover:text-info/80 opacity-100">
           <RefreshCw className="w-4 h-4" />
         </Button>
       )}
-      <Button variant="ghost" size="sm" onClick={onStartEdit} className="text-neutral-400 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity">
+      <Button variant="ghost" size="sm" onClick={onStartEdit} className="text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity">
         <Edit className="w-4 h-4" />
       </Button>
-      <Button variant="ghost" size="sm" onClick={onRemove} className="text-red-400/60 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+      <Button variant="ghost" size="sm" onClick={onRemove} className="text-destructive/70 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity">
         <Trash2 className="w-4 h-4" />
       </Button>
     </div>
@@ -95,9 +95,12 @@ interface WorkerNodeRowProps {
 
 export function WorkerNodeRow({ index, worker, status, editing, editor, onRetry, onRemove }: WorkerNodeRowProps): ReactElement {
   return (
-    <div className="group bg-white/[0.03] p-4 rounded-xl border border-white/5 hover:border-white/10 transition-all hover:bg-white/[0.05]">
+    <div
+      data-shortcut-row=""
+      className="group bg-muted/30 p-4 rounded-xl border border-border hover:border-ring/40 hover:bg-muted/50 transition-all"
+    >
       <div className="flex gap-4 items-center">
-        <div className="w-8 h-8 rounded-lg bg-black/20 flex items-center justify-center text-xs font-bold text-neutral-500 group-hover:text-indigo-400 transition-colors">
+        <div className="w-8 h-8 rounded-lg bg-background/60 flex items-center justify-center text-xs font-bold text-muted-foreground group-hover:text-primary transition-colors">
           {index + 1}
         </div>
 

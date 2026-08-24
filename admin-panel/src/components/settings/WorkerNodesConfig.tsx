@@ -22,7 +22,7 @@ export function WorkerNodesConfig(): ReactElement | null {
   }
 
   return (
-    <Card className="glass-card border-white/5 overflow-hidden">
+    <Card className="overflow-hidden">
       <WorkerNodesHeader
         onToggleAddForm={addForm.toggleForm}
         onSave={() => { void actions.saveWorkers(); }}

@@ -1,3 +1,5 @@
+import { Button } from '@/components/core/Button';
+
 interface StackActionBtnProps {
   label: string;
   onRestart: () => void;
@@ -7,12 +9,12 @@ interface StackActionBtnProps {
 
 export function StackActionBtn({ label, onRestart, onUp, onBuild }: StackActionBtnProps) {
     return (
-        <div className="bg-black/20 p-3 rounded-xl border border-white/5 space-y-2">
-            <div className="text-xs font-bold text-neutral-400">{label}</div>
+        <div className="bg-muted/30 p-3 rounded-xl border border-border space-y-2">
+            <div className="text-xs font-bold text-muted-foreground">{label}</div>
             <div className="flex gap-1">
-                <button onClick={onRestart} className="flex-1 p-1 bg-white/5 hover:bg-white/10 rounded text-[10px] text-white transition-colors">Restart</button>
-                <button onClick={onUp} className="flex-1 p-1 bg-white/5 hover:bg-white/10 rounded text-[10px] text-white transition-colors">Up</button>
-                <button onClick={onBuild} className="flex-1 p-1 bg-indigo-600/20 hover:bg-indigo-600/40 rounded text-[10px] text-indigo-400 transition-colors">Build</button>
+                <Button variant="positiveOutline" size="sm" onClick={onRestart} className="flex-1">Restart</Button>
+                <Button variant="positiveOutline" size="sm" onClick={onUp} className="flex-1">Up</Button>
+                <Button variant="secondary" size="sm" onClick={onBuild} className="flex-1">Build</Button>
             </div>
         </div>
     );

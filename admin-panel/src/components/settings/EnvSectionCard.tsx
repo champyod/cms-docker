@@ -2,6 +2,7 @@
 
 import type { ReactElement } from 'react';
 import { Card } from '@/components/core/Card';
+import { Button } from '@/components/core/Button';
 import { Save, RefreshCw } from 'lucide-react';
 import {
   EnvConfigField,
@@ -32,23 +33,25 @@ function SectionActions({
 
   return (
     <div className="flex gap-2">
-      <button
+      <Button
+        variant="secondary"
+        size="sm"
         onClick={() => void onPersist(section.filename, false)}
         disabled={saving}
-        className="flex items-center gap-2 px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-white rounded-lg transition-colors disabled:opacity-50 text-sm"
+        icon={Save}
       >
-        <Save className="w-4 h-4" />
         Save Only
-      </button>
+      </Button>
       {showRestartButton && (
-        <button
+        <Button
+          size="sm"
           onClick={() => void onPersist(section.filename, true)}
           disabled={saving}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors disabled:opacity-50 text-sm font-medium shadow-lg shadow-indigo-900/20"
+          loading={saving}
+          icon={RefreshCw}
         >
-          <RefreshCw className={`w-4 h-4 ${saving ? 'animate-spin' : ''}`} />
           Save & Restart
-        </button>
+        </Button>
       )}
     </div>
   );
@@ -62,12 +65,12 @@ interface FieldRowProps {
 
 function ConfigFieldRow({ field, value, onChange }: FieldRowProps): ReactElement {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start border-b border-white/5 pb-4 last:border-0">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start border-b border-border pb-4 last:border-0">
       <div>
-        <label className="block text-sm font-medium text-white">{field.label}</label>
-        <code className="text-xs text-indigo-400 mt-1 block">{field.key}</code>
+        <label className="block text-sm font-medium text-foreground">{field.label}</label>
+        <code className="text-xs text-primary mt-1 block">{field.key}</code>
         {field.description && (
-          <p className="text-xs text-neutral-500 mt-1">{field.description}</p>
+          <p className="text-xs text-muted-foreground mt-1">{field.description}</p>
         )}
       </div>
       <div className="md:col-span-2">
@@ -76,7 +79,7 @@ function ConfigFieldRow({ field, value, onChange }: FieldRowProps): ReactElement
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={field.placeholder}
-          className="w-full px-4 py-2 bg-black/40 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50"
+          className="w-full px-4 py-2 bg-card/50 border border-input rounded-lg text-foreground text-sm focus:outline-none focus:border-ring/60"
         />
       </div>
     </div>
@@ -103,11 +106,11 @@ export function EnvSectionCard({
   onChange,
 }: EnvSectionCardProps): ReactElement {
   return (
-    <Card className="glass-card border-white/5 p-6">
+    <Card className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-xl font-bold text-white">{section.title}</h2>
-          <p className="text-neutral-400 text-sm mt-1">Editing {section.filename}</p>
+          <h2 className="text-xl font-bold text-foreground">{section.title}</h2>
+          <p className="text-muted-foreground text-sm mt-1">Editing {section.filename}</p>
         </div>
         <SectionActions
           section={section}
