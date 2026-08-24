@@ -1,9 +1,11 @@
 'use client';
 
+import { Trophy } from 'lucide-react';
 import { Card } from '@/components/core/Card';
-import { Loading } from '@/components/core/Loading';
 import { Stack } from '@/components/core/Layout';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
+import { SkeletonTable } from '@/components/core/Skeleton';
+import { EmptyState } from '@/components/core/EmptyState';
 import type { RankRow } from './useRankingRows';
 
 interface Props {
@@ -15,9 +17,9 @@ export function RankingScoreboard({ rows, loadingSnapshot }: Props) {
   return (
     <Card>
       <Stack direction="col" gap={4}>
-        <h2 className="text-xl font-semibold text-white">Scoreboard</h2>
-        {loadingSnapshot && <Loading text="Loading ranking snapshot..." />}
-        {!loadingSnapshot && rows.length === 0 && <div className="text-sm text-slate-400">No ranking data loaded yet.</div>}
+        <h2 className="text-xl font-semibold text-foreground">Scoreboard</h2>
+        {loadingSnapshot && <SkeletonTable rows={8} cols={6} />}
+        {!loadingSnapshot && rows.length === 0 && <EmptyState icon={Trophy} title="No ranking data loaded yet." />}
         {!loadingSnapshot && rows.length > 0 && (
           <Table outerClassName="overflow-x-auto" className="w-max table-auto">
             <TableHeader>

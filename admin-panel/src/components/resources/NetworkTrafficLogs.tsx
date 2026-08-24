@@ -3,7 +3,9 @@
 import { useState, useEffect } from 'react';
 import { getNetworkTrafficLogs } from '@/app/actions/docker-ops';
 import { Card } from '@/components/core/Card';
-import { Network, Filter } from 'lucide-react';
+import { SkeletonText } from '@/components/core/Skeleton';
+import { EmptyState } from '@/components/core/EmptyState';
+import { Network, Filter, Activity } from 'lucide-react';
 
 interface TrafficLog {
   id: number;
@@ -38,23 +40,23 @@ export function NetworkTrafficLogs() {
   }, [limit]);
 
   return (
-    <Card className="glass-card border-white/5 p-6">
+    <Card className="p-6">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-cyan-500/10">
             <Network className="w-5 h-5 text-cyan-400" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white">Network Traffic</h2>
-            <p className="text-xs text-neutral-500">Real-time container network I/O</p>
+            <h2 className="text-lg font-bold text-foreground">Network Traffic</h2>
+            <p className="text-xs text-muted-foreground">Real-time container network I/O</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-neutral-500" />
+          <Filter className="w-4 h-4 text-muted-foreground" />
           <select
             value={limit}
             onChange={(e) => setLimit(parseInt(e.target.value))}
-            className="px-3 py-1.5 bg-black/40 border border-white/10 rounded-lg text-white text-xs outline-none focus:border-cyan-500/50"
+            className="px-3 py-1.5 bg-muted border border-border rounded-lg text-foreground text-xs outline-none focus:border-cyan-500/50"
           >
             <option value={10}>Last 10</option>
             <option value={20}>Last 20</option>
@@ -67,7 +69,7 @@ export function NetworkTrafficLogs() {
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-white/5 text-neutral-500 text-xs">
+            <tr className="border-b border-border text-muted-foreground text-xs">
               <th className="text-left py-2 px-3 font-medium">Container</th>
               <th className="text-right py-2 px-3 font-medium">RX (Download)</th>
               <th className="text-right py-2 px-3 font-medium">TX (Upload)</th>
@@ -76,20 +78,20 @@ export function NetworkTrafficLogs() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={3} className="text-center py-8 text-neutral-500">
-                  Loading traffic data...
+                <td colSpan={3} className="py-6 px-3">
+                  <SkeletonText lines={2} />
                 </td>
               </tr>
             ) : logs.length === 0 ? (
               <tr>
-                <td colSpan={3} className="text-center py-8 text-neutral-500">
-                  No traffic data available
+                <td colSpan={3} className="py-8">
+                  <EmptyState icon={Activity} title="No traffic data available" />
                 </td>
               </tr>
             ) : (
               logs.map((log) => (
-                <tr key={log.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
-                  <td className="py-2 px-3 font-mono text-xs text-neutral-300">{log.container}</td>
+                <tr key={log.id} className="border-b border-border hover:bg-muted/50 transition-colors">
+                  <td className="py-2 px-3 font-mono text-xs text-foreground">{log.container}</td>
                   <td className="py-2 px-3 text-right font-mono text-xs text-emerald-400">{log.rx}</td>
                   <td className="py-2 px-3 text-right font-mono text-xs text-indigo-400">{log.tx}</td>
                 </tr>

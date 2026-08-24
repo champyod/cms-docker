@@ -86,7 +86,7 @@ export function RankingClient() {
             <Button variant="secondary" onClick={fetchSnapshot} loading={loadingSnapshot} disabled={!connected}>
               Refresh Snapshot
             </Button>
-            <Button variant="danger" onClick={disconnect} loading={loadingSession} disabled={!connected}>
+            <Button variant="negative" onClick={disconnect} loading={loadingSession} disabled={!connected}>
               Disconnect
             </Button>
           </Stack>

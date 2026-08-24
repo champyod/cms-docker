@@ -42,11 +42,11 @@ export function RankingConnectionCard({
           <Button onClick={onConnect} loading={loadingSession} disabled={connected || !baseUrl || !username || !password}>
             Connect
           </Button>
-          <span className="text-sm text-slate-400">
+          <span className="text-sm text-muted-foreground">
             Status: <span className={connected ? 'text-emerald-400' : 'text-amber-400'}>{connected ? 'Connected' : 'Disconnected'}</span>
           </span>
         </Stack>
-        {errorMessage && <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">{errorMessage}</div>}
+        {errorMessage && <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">{errorMessage}</div>}
       </Stack>
     </Card>
   );

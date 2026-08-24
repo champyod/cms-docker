@@ -4,7 +4,7 @@ import { Card } from '@/components/core/Card';
 
 export default function DocsPage() {
   return (
-    <div className="flex min-h-screen overflow-hidden bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-neutral-900 via-black to-neutral-950">
+    <div className="flex min-h-screen overflow-hidden bg-background">
       <main className="flex-1 flex flex-col relative overflow-hidden">
         {/* Background effects */}
         <div className="absolute top-0 left-0 w-full h-[500px] bg-indigo-600/10 blur-[120px] rounded-full pointer-events-none -translate-y-1/2 translate-x-1/2" />
@@ -12,16 +12,16 @@ export default function DocsPage() {
 
         <div className="flex-1 overflow-y-auto p-8 z-10 scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20">
           <div className="max-w-5xl mx-auto space-y-12">
-            <div className="flex items-center justify-between border-b border-white/10 pb-6">
+            <div className="flex items-center justify-between border-b border-border pb-6">
               <div>
-                <h1 className="text-3xl font-bold text-white mb-2">CMS Documentation</h1>
-                <p className="text-neutral-400">Comprehensive guide to the Contest Management System.</p>
+                <h1 className="text-3xl font-bold text-foreground mb-2">CMS Documentation</h1>
+                <p className="text-muted-foreground">Comprehensive guide to the Contest Management System.</p>
               </div>
               <a
                 href="https://cms-dev.github.io/cms/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors border border-white/5"
+                className="flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 text-foreground rounded-lg transition-colors border border-border"
               >
                 <Book className="w-4 h-4" />
                 CMS Official Docs
@@ -30,65 +30,65 @@ export default function DocsPage() {
 
             {/* Navigation Grid */}
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <Link href="#contests" className="p-4 bg-white/5 hover:bg-white/10 rounded-xl border border-white/5 transition-colors group">
+              <Link href="#contests" className="p-4 bg-card hover:bg-accent rounded-xl border border-border transition-colors group">
                 <Trophy className="w-6 h-6 text-amber-400 mb-2 group-hover:scale-110 transition-transform" />
-                <span className="font-medium text-white block">Contests</span>
-                <span className="text-xs text-neutral-500">Configuration & Timing</span>
+                <span className="font-medium text-foreground block">Contests</span>
+                <span className="text-xs text-muted-foreground">Configuration & Timing</span>
               </Link>
-              <Link href="#users" className="p-4 bg-white/5 hover:bg-white/10 rounded-xl border border-white/5 transition-colors group">
+              <Link href="#users" className="p-4 bg-card hover:bg-accent rounded-xl border border-border transition-colors group">
                 <Users className="w-6 h-6 text-cyan-400 mb-2 group-hover:scale-110 transition-transform" />
-                <span className="font-medium text-white block">Users & Teams</span>
-                <span className="text-xs text-neutral-500">Authentication & Groups</span>
+                <span className="font-medium text-foreground block">Users & Teams</span>
+                <span className="text-xs text-muted-foreground">Authentication & Groups</span>
               </Link>
-              <Link href="#tasks" className="p-4 bg-white/5 hover:bg-white/10 rounded-xl border border-white/5 transition-colors group">
+              <Link href="#tasks" className="p-4 bg-card hover:bg-accent rounded-xl border border-border transition-colors group">
                 <Code className="w-6 h-6 text-indigo-400 mb-2 group-hover:scale-110 transition-transform" />
-                <span className="font-medium text-white block">Tasks</span>
-                <span className="text-xs text-neutral-500">Problems, Datasets, Tests</span>
+                <span className="font-medium text-foreground block">Tasks</span>
+                <span className="text-xs text-muted-foreground">Problems, Datasets, Tests</span>
               </Link>
-              <Link href="#submissions" className="p-4 bg-white/5 hover:bg-white/10 rounded-xl border border-white/5 transition-colors group">
+              <Link href="#submissions" className="p-4 bg-card hover:bg-accent rounded-xl border border-border transition-colors group">
                 <Activity className="w-6 h-6 text-emerald-400 mb-2 group-hover:scale-110 transition-transform" />
-                <span className="font-medium text-white block">Submissions</span>
-                <span className="text-xs text-neutral-500">Monitoring & Rejudging</span>
+                <span className="font-medium text-foreground block">Submissions</span>
+                <span className="text-xs text-muted-foreground">Monitoring & Rejudging</span>
               </Link>
-              <Link href="#services" className="p-4 bg-white/5 hover:bg-white/10 rounded-xl border border-white/5 transition-colors group">
+              <Link href="#services" className="p-4 bg-card hover:bg-accent rounded-xl border border-border transition-colors group">
                 <Server className="w-6 h-6 text-purple-400 mb-2 group-hover:scale-110 transition-transform" />
-                <span className="font-medium text-white block">Services</span>
-                <span className="text-xs text-neutral-500">Status & Logs</span>
+                <span className="font-medium text-foreground block">Services</span>
+                <span className="text-xs text-muted-foreground">Status & Logs</span>
               </Link>
             </div>
 
             {/* Contests */}
             <section id="contests" className="scroll-mt-24 space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                <h2 className="text-2xl font-bold text-foreground flex items-center gap-3">
                   <Trophy className="w-6 h-6 text-amber-400" />
                   Contests
                 </h2>
                 <a href="https://cms-dev.github.io/cms/Contest%20Definition.html" target="_blank" className="text-xs text-indigo-400 hover:text-indigo-300">Official Docs →</a>
               </div>
-              <Card className="glass-card p-6 border-white/10">
-                <p className="text-neutral-300 mb-4">
+              <Card className="p-6">
+                <p className="text-foreground mb-4">
                   A contest is the main container for tasks and users. You can define start/stop times, allowed languages, and participation rules.
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <h3 className="font-medium text-white mb-2 underline decoration-indigo-500/30">Contest Timing</h3>
-                    <ul className="text-sm text-neutral-400 space-y-3">
+                    <h3 className="font-medium text-foreground mb-2 underline decoration-indigo-500/30">Contest Timing</h3>
+                    <ul className="text-sm text-muted-foreground space-y-3">
                       <li>
-                        <strong className="text-neutral-300">Start / Stop Time:</strong>
+                        <strong className="text-foreground">Start / Stop Time:</strong>
                         <p className="text-xs mt-1">The UTC interval when the contest is active. Submissions outside this window are rejected.</p>
                       </li>
                       <li>
-                        <strong className="text-neutral-300">Analysis Mode:</strong>
+                        <strong className="text-foreground">Analysis Mode:</strong>
                         <p className="text-xs mt-1">An optional period (usually after Stop Time) where contestants can view their detailed results and submit unofficial solutions if enabled.</p>
                       </li>
                     </ul>
                   </div>
                   <div>
-                    <h3 className="font-medium text-white mb-2 underline decoration-indigo-500/30">Submission Limits</h3>
-                    <ul className="text-sm text-neutral-400 space-y-3">
+                    <h3 className="font-medium text-foreground mb-2 underline decoration-indigo-500/30">Submission Limits</h3>
+                    <ul className="text-sm text-muted-foreground space-y-3">
                       <li>
-                        <strong className="text-neutral-300">Token Mode:</strong>
+                        <strong className="text-foreground">Token Mode:</strong>
                         <p className="text-xs mt-1">
                           <span className="text-indigo-400">• Disabled:</span> No tokens used.<br />
                           <span className="text-indigo-400">• Infinite:</span> Unlimited tokens available.<br />
@@ -96,7 +96,7 @@ export default function DocsPage() {
                         </p>
                       </li>
                       <li>
-                        <strong className="text-neutral-300">Minimum Interval:</strong>
+                        <strong className="text-foreground">Minimum Interval:</strong>
                         <p className="text-xs mt-1">Forces a wait time (in seconds) between two consecutive submissions from the same user.</p>
                       </li>
                     </ul>
@@ -108,37 +108,37 @@ export default function DocsPage() {
             {/* Users & Teams */}
             <section id="users" className="scroll-mt-24 space-y-4">
               <div className="flex items-center justify-between">
-                 <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                 <h2 className="text-2xl font-bold text-foreground flex items-center gap-3">
                   <Users className="w-6 h-6 text-cyan-400" />
                   Users & Teams
                 </h2>
                 <a href="https://cms-dev.github.io/cms/Users.html" target="_blank" className="text-xs text-indigo-400 hover:text-indigo-300">Official Docs →</a>
               </div>
-              <Card className="glass-card p-6 border-white/10 space-y-4">
+              <Card className="p-6 space-y-4">
                 <div>
-                   <h3 className="font-bold text-white mb-2">Teams</h3>
-                   <p className="text-sm text-neutral-400">
+                   <h3 className="font-bold text-foreground mb-2">Teams</h3>
+                   <p className="text-sm text-muted-foreground">
                      Users are grouped into Teams (e.g., "IOI 2024", "Guest"). You can use teams to bulk-add users or filter scoreboards.
                    </p>
                 </div>
-                <div className="pt-4 border-t border-white/5">
-                  <h3 className="font-bold text-white mb-2">Participation Settings</h3>
-                  <p className="text-sm text-neutral-400 mb-4">
+                <div className="pt-4 border-t border-border">
+                  <h3 className="font-bold text-foreground mb-2">Participation Settings</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
                     When a user is added to a contest, a "Participation" object is created to track their specific constraints.
                    </p>
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-black/30 p-4 rounded-lg border border-white/5">
-                      <span className="text-xs font-bold text-neutral-500 uppercase tracking-wider">Time Adjustments</span>
-                      <ul className="text-xs text-neutral-400 mt-2 space-y-2">
-                        <li><strong className="text-neutral-300">Extra Time:</strong> Minutes added to the contest duration for this specific user.</li>
-                        <li><strong className="text-neutral-300">Delay Time:</strong> Minutes this user must wait after the contest start before they can log in.</li>
+                    <div className="bg-muted/50 p-4 rounded-lg border border-border">
+                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Time Adjustments</span>
+                      <ul className="text-xs text-muted-foreground mt-2 space-y-2">
+                        <li><strong className="text-foreground">Extra Time:</strong> Minutes added to the contest duration for this specific user.</li>
+                        <li><strong className="text-foreground">Delay Time:</strong> Minutes this user must wait after the contest start before they can log in.</li>
                       </ul>
                      </div>
-                    <div className="bg-black/30 p-4 rounded-lg border border-white/5">
-                      <span className="text-xs font-bold text-neutral-500 uppercase tracking-wider">Security Flags</span>
-                      <ul className="text-xs text-neutral-400 mt-2 space-y-2">
-                        <li><strong className="text-neutral-300">Unrestricted:</strong> Bypasses IP restrictions and submission rate limits.</li>
-                        <li><strong className="text-neutral-300">Hidden:</strong> The user participates but is excluded from the public scoreboard and rankings.</li>
+                    <div className="bg-muted/50 p-4 rounded-lg border border-border">
+                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Security Flags</span>
+                      <ul className="text-xs text-muted-foreground mt-2 space-y-2">
+                        <li><strong className="text-foreground">Unrestricted:</strong> Bypasses IP restrictions and submission rate limits.</li>
+                        <li><strong className="text-foreground">Hidden:</strong> The user participates but is excluded from the public scoreboard and rankings.</li>
                       </ul>
                      </div>
                    </div>
@@ -149,7 +149,7 @@ export default function DocsPage() {
              {/* Tasks (Existing content + expansion) */}
             <section id="tasks" className="scroll-mt-24 space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                <h2 className="text-2xl font-bold text-foreground flex items-center gap-3">
                   <Code className="w-6 h-6 text-indigo-400" />
                   Tasks & Datasets
                 </h2>
@@ -157,13 +157,13 @@ export default function DocsPage() {
               </div>
               
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card className="glass-card p-6 border-white/10">
-                  <h3 className="font-bold text-white mb-2 underline decoration-indigo-500/30">Task Types</h3>
-                   <ul className="text-sm text-neutral-400 space-y-2 list-disc list-inside">
-                    <li><strong className="text-white">Batch:</strong> Standard mode where a program reads input and produces output.</li>
-                    <li><strong className="text-white">Communication:</strong> Two programs communicating with each other through a manager.</li>
-                    <li><strong className="text-white">OutputOnly:</strong> No code submission; users upload pre-computed output files.</li>
-                    <li><strong className="text-white">TwoSteps:</strong> Program is run twice (e.g., for header/library problems).</li>
+                <Card className="p-6">
+                  <h3 className="font-bold text-foreground mb-2 underline decoration-indigo-500/30">Task Types</h3>
+                   <ul className="text-sm text-muted-foreground space-y-2 list-disc list-inside">
+                    <li><strong className="text-foreground">Batch:</strong> Standard mode where a program reads input and produces output.</li>
+                    <li><strong className="text-foreground">Communication:</strong> Two programs communicating with each other through a manager.</li>
+                    <li><strong className="text-foreground">OutputOnly:</strong> No code submission; users upload pre-computed output files.</li>
+                    <li><strong className="text-foreground">TwoSteps:</strong> Program is run twice (e.g., for header/library problems).</li>
                   </ul>
 
                   <div className="mt-4 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-lg">
@@ -173,102 +173,102 @@ export default function DocsPage() {
                     </h4>
                     <div className="space-y-3">
                       <div>
-                        <code className="text-xs bg-black/30 px-1 py-0.5 rounded text-amber-200">checker</code>
-                        <p className="text-[10px] text-neutral-400 mt-1">
+                        <code className="text-xs bg-muted px-1 py-0.5 rounded text-amber-200">checker</code>
+                        <p className="text-[10px] text-muted-foreground mt-1">
                           Source file (cpp/py) that validates output. <br />
                           Signature: <code>check(input, output, answer)</code>
                         </p>
                       </div>
                       <div>
-                        <code className="text-xs bg-black/30 px-1 py-0.5 rounded text-amber-200">grader / stub</code>
-                        <p className="text-[10px] text-neutral-400 mt-1">
+                        <code className="text-xs bg-muted px-1 py-0.5 rounded text-amber-200">grader / stub</code>
+                        <p className="text-[10px] text-muted-foreground mt-1">
                           Driver program for communication tasks. Compiles with user code.
                         </p>
                       </div>
                       <div>
-                        <code className="text-xs bg-black/30 px-1 py-0.5 rounded text-amber-200">*.lib.h / *.h</code>
-                        <p className="text-[10px] text-neutral-400 mt-1">
+                        <code className="text-xs bg-muted px-1 py-0.5 rounded text-amber-200">*.lib.h / *.h</code>
+                        <p className="text-[10px] text-muted-foreground mt-1">
                           Header files required for compilation.
                         </p>
                       </div>
                     </div>
                   </div>
                 </Card>
-                 <Card className="glass-card p-6 border-white/10">
-                  <h3 className="font-bold text-white mb-2 underline decoration-indigo-500/30">Datasets</h3>
-                  <p className="text-sm text-neutral-400 mb-2">
+                 <Card className="p-6">
+                  <h3 className="font-bold text-foreground mb-2 underline decoration-indigo-500/30">Datasets</h3>
+                  <p className="text-sm text-muted-foreground mb-2">
                     A task can have multiple datasets, but only one is <strong>Active</strong>.
                   </p>
-                  <p className="text-sm text-neutral-400">
+                  <p className="text-sm text-muted-foreground">
                     <strong>Testcases:</strong> Input/Output pairs.<br/>
                     <strong>Managers:</strong> Custom checker/manager programs.<br/>
                     <strong>Limits:</strong> Time/Memory limits per dataset.
                   </p>
 
-                  <div className="mt-4 pt-4 border-t border-white/5 space-y-3">
-                    <h4 className="font-bold text-white text-xs uppercase tracking-wider">Common Fields</h4>
-                    <ul className="text-xs text-neutral-400 space-y-2">
-                      <li><strong className="text-neutral-300">Time Limit:</strong> Maximum CPU time allowed per testcase (seconds).</li>
-                      <li><strong className="text-neutral-300">Memory Limit:</strong> Maximum address space allowed (MiB). </li>
+                  <div className="mt-4 pt-4 border-t border-border space-y-3">
+                    <h4 className="font-bold text-foreground text-xs uppercase tracking-wider">Common Fields</h4>
+                    <ul className="text-xs text-muted-foreground space-y-2">
+                      <li><strong className="text-foreground">Time Limit:</strong> Maximum CPU time allowed per testcase (seconds).</li>
+                      <li><strong className="text-foreground">Memory Limit:</strong> Maximum address space allowed (MiB). </li>
                     </ul>
                   </div>
                 </Card>
               </div>
 
-              <Card className="glass-card p-6 border-white/10">
+              <Card className="p-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="space-y-3">
                     <h3 className="font-bold text-indigo-400 text-sm uppercase tracking-wider">Score Modes</h3>
-                    <ul className="text-xs text-neutral-400 space-y-2">
-                      <li><strong className="text-neutral-300">Max:</strong> Best score across all submissions.</li>
-                      <li><strong className="text-neutral-300">Max_subtask:</strong> Best score per subtask across different submissions (mixed).</li>
-                      <li><strong className="text-neutral-300">Max_tokened_last:</strong> Only the score of the last submission using a token counts.</li>
+                    <ul className="text-xs text-muted-foreground space-y-2">
+                      <li><strong className="text-foreground">Max:</strong> Best score across all submissions.</li>
+                      <li><strong className="text-foreground">Max_subtask:</strong> Best score per subtask across different submissions (mixed).</li>
+                      <li><strong className="text-foreground">Max_tokened_last:</strong> Only the score of the last submission using a token counts.</li>
                     </ul>
                   </div>
                   <div className="space-y-3">
                     <h3 className="font-bold text-indigo-400 text-sm uppercase tracking-wider">Feedback Levels</h3>
-                    <ul className="text-xs text-neutral-400 space-y-2">
-                      <li><strong className="text-neutral-300">Restricted:</strong> User only sees the total score.</li>
-                      <li><strong className="text-neutral-300">OI Restricted:</strong> User sees whether subtasks were correct/incorrect (no details).</li>
-                      <li><strong className="text-neutral-300">Full:</strong> Detailed testcase feedback, execution time, and memory usage.</li>
+                    <ul className="text-xs text-muted-foreground space-y-2">
+                      <li><strong className="text-foreground">Restricted:</strong> User only sees the total score.</li>
+                      <li><strong className="text-foreground">OI Restricted:</strong> User sees whether subtasks were correct/incorrect (no details).</li>
+                      <li><strong className="text-foreground">Full:</strong> Detailed testcase feedback, execution time, and memory usage.</li>
                     </ul>
                   </div>
                   <div className="space-y-3">
                     <h3 className="font-bold text-indigo-400 text-sm uppercase tracking-wider">Score Types (Dataset)</h3>
-                    <ul className="text-xs text-neutral-400 space-y-2">
-                      <li><strong className="text-neutral-300">Sum:</strong> Final score is the sum of subtask scores.</li>
-                      <li><strong className="text-neutral-300">GroupMin:</strong> All testcases in a group must pass to get the group points.</li>
-                      <li><strong className="text-neutral-300">GroupMul:</strong> Scores from different groups are multiplied (rare).</li>
-                      <li><strong className="text-neutral-300">GroupThreshold:</strong> Points awarded if group score exceeds a specific threshold.</li>
+                    <ul className="text-xs text-muted-foreground space-y-2">
+                      <li><strong className="text-foreground">Sum:</strong> Final score is the sum of subtask scores.</li>
+                      <li><strong className="text-foreground">GroupMin:</strong> All testcases in a group must pass to get the group points.</li>
+                      <li><strong className="text-foreground">GroupMul:</strong> Scores from different groups are multiplied (rare).</li>
+                      <li><strong className="text-foreground">GroupThreshold:</strong> Points awarded if group score exceeds a specific threshold.</li>
                     </ul>
                   </div>
                 </div>
               </Card>
 
-              <Card className="glass-card p-6 border-white/10">
+              <Card className="p-6">
                 <div className="flex flex-col md:flex-row gap-8">
                     <div className="flex-1">
-                    <h3 className="font-bold text-white mb-3 flex items-center gap-2">
+                    <h3 className="font-bold text-foreground mb-3 flex items-center gap-2">
                       <Cpu className="w-4 h-4 text-indigo-400" />
                       The Token Generation System
                     </h3>
-                    <p className="text-sm text-neutral-400 leading-relaxed">
+                    <p className="text-sm text-muted-foreground leading-relaxed">
                       Tokens control how often users can "test" their solutions against the full judge.
-                      A bucket starts with <span className="text-white">Gen Initial</span> tokens.
-                      Every <span className="text-white">Gen Interval</span> (minutes),
-                      the user receives <span className="text-white">Gen Number</span> more tokens,
-                      up to the <span className="text-white">Gen Max</span>.
+                      A bucket starts with <span className="text-foreground">Gen Initial</span> tokens.
+                      Every <span className="text-foreground">Gen Interval</span> (minutes),
+                      the user receives <span className="text-foreground">Gen Number</span> more tokens,
+                      up to the <span className="text-foreground">Gen Max</span>.
                       </p>
                     </div>
-                  <div className="flex-1 bg-black/40 p-4 rounded-xl border border-white/5">
-                    <h4 className="text-xs font-bold text-neutral-500 uppercase mb-2">Example Config</h4>
+                  <div className="flex-1 bg-muted/50 p-4 rounded-xl border border-border">
+                    <h4 className="text-xs font-bold text-muted-foreground uppercase mb-2">Example Config</h4>
                     <div className="text-xs font-mono text-indigo-300 space-y-1">
                       <div>Initial: 2</div>
                       <div>Gen Number: 1</div>
                       <div>Interval: 30 min</div>
                       <div>Max: 5</div>
                     </div>
-                    <p className="text-[10px] text-neutral-500 mt-2 italic">
+                    <p className="text-[10px] text-muted-foreground mt-2 italic">
                       User starts with 2 tries. Every 30 mins they get 1 more, but can't hold more than 5 at once.
                       </p>
                     </div>
@@ -279,13 +279,13 @@ export default function DocsPage() {
              {/* Submissions */}
             <section id="submissions" className="scroll-mt-24 space-y-4">
                <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                <h2 className="text-2xl font-bold text-foreground flex items-center gap-3">
                   <Activity className="w-6 h-6 text-emerald-400" />
                   Submissions
                 </h2>
               </div>
-              <Card className="glass-card p-6 border-white/10">
-                <p className="text-neutral-300 mb-6">
+              <Card className="p-6">
+                <p className="text-foreground mb-6">
                   View centralized submission logs. You can filter by contest, task, or user to monitor real-time judge performance.
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -314,29 +314,29 @@ export default function DocsPage() {
              {/* Services */}
             <section id="services" className="scroll-mt-24 space-y-4">
                <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                <h2 className="text-2xl font-bold text-foreground flex items-center gap-3">
                   <Server className="w-6 h-6 text-purple-400" />
                   Services (Containers)
                 </h2>
                  <a href="https://cms-dev.github.io/cms/Internals.html" target="_blank" className="text-xs text-indigo-400 hover:text-indigo-300">Official Docs →</a>
               </div>
-              <Card className="glass-card p-6 border-white/10">
+              <Card className="p-6">
                 <div className="space-y-4">
                   <div>
-                    <h3 className="text-white font-medium">LogService</h3>
-                     <p className="text-sm text-neutral-400">Central logging facility. Collects logs from all other services.</p>
+                    <h3 className="text-foreground font-medium">LogService</h3>
+                     <p className="text-sm text-muted-foreground">Central logging facility. Collects logs from all other services.</p>
                   </div>
                    <div>
-                    <h3 className="text-white font-medium">ResourceService</h3>
-                     <p className="text-sm text-neutral-400">Manages resources (files) and distributes them to workers.</p>
+                    <h3 className="text-foreground font-medium">ResourceService</h3>
+                     <p className="text-sm text-muted-foreground">Manages resources (files) and distributes them to workers.</p>
                   </div>
                    <div>
-                    <h3 className="text-white font-medium">EvaluationService / Worker</h3>
-                     <p className="text-sm text-neutral-400">Handles the compilation and execution of user submissions.</p>
+                    <h3 className="text-foreground font-medium">EvaluationService / Worker</h3>
+                     <p className="text-sm text-muted-foreground">Handles the compilation and execution of user submissions.</p>
                   </div>
                    <div>
-                    <h3 className="text-white font-medium">ContestWebServer (CWS) / AdminWebServer (AWS)</h3>
-                     <p className="text-sm text-neutral-400">The frontend interfaces for participants and admins.</p>
+                    <h3 className="text-foreground font-medium">ContestWebServer (CWS) / AdminWebServer (AWS)</h3>
+                     <p className="text-sm text-muted-foreground">The frontend interfaces for participants and admins.</p>
                   </div>
                 </div>
               </Card>

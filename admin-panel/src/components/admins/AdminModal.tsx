@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Shield } from 'lucide-react';
+import { Shield } from 'lucide-react';
 import { createAdmin, updateAdmin, revealAdminPassword } from '@/app/actions/admins';
-import { Portal } from '@/components/core/Portal';
+import { Dialog } from '@/components/core/Dialog';
 import type { PasswordRevealState } from '@/components/core/PasswordFieldWithKind';
 import type { PasswordKind } from '@/lib/password-format';
 import type { AdminWithLogin } from '@/lib/prisma-selects';
@@ -104,66 +104,55 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
   };
 
   return (
-    <Portal>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden">
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => { if (!open) onClose(); }}
+      title={initialData ? 'Edit Administrator' : 'Add Administrator'}
+      className="max-w-md"
+    >
+      {error && (
+        <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive text-sm">
+          {error}
+        </div>
+      )}
 
-        <div className="relative z-10 w-full max-w-md bg-neutral-900 border border-white/10 rounded-xl shadow-2xl">
-          <div className="flex items-center justify-between p-4 border-b border-white/10">
-            <div className="flex items-center gap-2">
-              <Shield className="w-5 h-5 text-purple-400" />
-              <h2 className="text-lg font-bold text-white">{initialData ? 'Edit Administrator' : 'Add Administrator'}</h2>
-            </div>
-            <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-lg transition-colors">
-              <X className="w-5 h-5 text-neutral-400" />
-            </button>
-          </div>
+      {/* FORM */}
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <AdminFormFields
+          formData={formData}
+          isEdit={!!initialData}
+          onChange={updateForm}
+          passwordKind={passwordKind}
+          onPasswordKind={setPasswordKind}
+          reveal={{ ...reveal, onReveal: () => undefined }}
+        />
 
-          {error && (
-            <div className="mx-4 mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
-              {error}
+        {/* ROLE */}
+        <AdminRoleSelector
+          isSuperadmin={formData.permission_all}
+          onSelectRole={(role) => updateForm(ROLE_PRESETS[role])}
+        />
+
+        {/* PERMISSIONS */}
+        <div className="space-y-3 pt-2">
+          {!formData.permission_all ? (
+            <AdminPermissionCheckboxes formData={formData} onChange={updateForm} />
+          ) : (
+            <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-lg">
+              <div className="flex items-center gap-2 mb-1">
+                <Shield className="w-4 h-4 text-indigo-400" />
+                <span className="text-sm font-bold text-indigo-400">Full Access Granted</span>
+              </div>
+              <p className="text-xs text-muted-foreground italic">
+                Superadmins have full control over the system, including infrastructure, settings, and other administrators.
+              </p>
             </div>
           )}
-
-          {/* FORM */}
-          <form onSubmit={handleSubmit} className="p-4 space-y-4">
-            <AdminFormFields
-              formData={formData}
-              isEdit={!!initialData}
-              onChange={updateForm}
-              passwordKind={passwordKind}
-              onPasswordKind={setPasswordKind}
-              reveal={{ ...reveal, onReveal: () => undefined }}
-            />
-
-            {/* ROLE */}
-            <AdminRoleSelector
-              isSuperadmin={formData.permission_all}
-              onSelectRole={(role) => updateForm(ROLE_PRESETS[role])}
-            />
-
-            {/* PERMISSIONS */}
-            <div className="space-y-3 pt-2">
-              {!formData.permission_all ? (
-                <AdminPermissionCheckboxes formData={formData} onChange={updateForm} />
-              ) : (
-                <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-lg">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Shield className="w-4 h-4 text-indigo-400" />
-                    <span className="text-sm font-bold text-indigo-400">Full Access Granted</span>
-                  </div>
-                  <p className="text-xs text-neutral-400 italic">
-                    Superadmins have full control over the system, including infrastructure, settings, and other administrators.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* FOOTER */}
-            <AdminModalFooter loading={loading} isEdit={!!initialData} onClose={onClose} />
-          </form>
         </div>
-      </div>
-    </Portal>
+
+        {/* FOOTER */}
+        <AdminModalFooter loading={loading} isEdit={!!initialData} onClose={onClose} />
+      </form>
+    </Dialog>
   );
 }

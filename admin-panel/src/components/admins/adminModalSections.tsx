@@ -1,8 +1,9 @@
 'use client';
 
-import { Loader } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PasswordFieldWithKind, type RevealProps } from '@/components/core/PasswordFieldWithKind';
+import { Input } from '@/components/core/Input';
+import { Button } from '@/components/core/Button';
 import type { PasswordKind } from '@/lib/password-format';
 import { PERMISSION_CHECKBOXES, type AdminFormState } from './adminFormConfig';
 
@@ -14,8 +15,8 @@ export interface RoleSelectorProps {
 export function AdminRoleSelector({ isSuperadmin, onSelectRole }: RoleSelectorProps) {
   return (
     <div>
-      <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Role</label>
-      <div className="flex gap-2 p-1 bg-black/80 rounded-lg border border-white/10">
+      <label className="block text-xs font-bold text-muted-foreground uppercase mb-2">Role</label>
+      <div className="flex gap-2 p-1 bg-muted rounded-lg border border-border">
         <button
           type="button"
           onClick={() => onSelectRole('superadmin')}
@@ -23,7 +24,7 @@ export function AdminRoleSelector({ isSuperadmin, onSelectRole }: RoleSelectorPr
             "flex-1 py-1.5 px-3 rounded text-xs font-medium transition-all",
             isSuperadmin
               ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/20"
-              : "text-neutral-500 hover:text-white"
+              : "text-muted-foreground hover:text-foreground"
           )}
         >
           Superadmin
@@ -35,7 +36,7 @@ export function AdminRoleSelector({ isSuperadmin, onSelectRole }: RoleSelectorPr
             "flex-1 py-1.5 px-3 rounded text-xs font-medium transition-all",
             (!isSuperadmin)
               ? "bg-purple-600 text-white shadow-lg shadow-purple-500/20"
-              : "text-neutral-500 hover:text-white"
+              : "text-muted-foreground hover:text-foreground"
           )}
         >
           Committee
@@ -54,16 +55,16 @@ export function AdminPermissionCheckboxes({ formData, onChange }: PermissionChec
   return (
     <>
       {PERMISSION_CHECKBOXES.map(({ key, label, description }) => (
-        <div key={key} className="flex items-center justify-between p-3 bg-black/30 rounded-lg border border-white/5">
+        <div key={key} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border border-border">
           <div>
-            <label className="text-sm text-neutral-300 font-medium">{label}</label>
-            <p className="text-xs text-neutral-500">{description}</p>
+            <label className="text-sm text-foreground font-medium">{label}</label>
+            <p className="text-xs text-muted-foreground">{description}</p>
           </div>
           <input
             type="checkbox"
             checked={formData[key]}
             onChange={(e) => onChange({ [key]: e.target.checked })}
-            className="w-5 h-5 rounded accent-purple-500"
+            className="w-5 h-5 rounded accent-primary"
           />
         </div>
       ))}
@@ -80,21 +81,12 @@ export interface ModalFooterProps {
 export function AdminModalFooter({ loading, isEdit, onClose }: ModalFooterProps) {
   return (
     <div className="flex gap-3 pt-4">
-      <button
-        type="button"
-        onClick={onClose}
-        className="flex-1 px-4 py-3 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg transition-colors"
-      >
+      <Button type="button" variant="secondary" className="flex-1" onClick={onClose} disabled={loading}>
         Cancel
-      </button>
-      <button
-        type="submit"
-        disabled={loading}
-        className="flex-1 px-4 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-      >
-        {loading ? <Loader className="w-4 h-4 animate-spin" /> : null}
+      </Button>
+      <Button type="submit" variant="positive" className="flex-1" loading={loading}>
         {loading ? (isEdit ? 'Updating...' : 'Creating...') : (isEdit ? 'Update Admin' : 'Create Admin')}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -111,28 +103,20 @@ export interface FormFieldsProps {
 export function AdminFormFields({ formData, isEdit, onChange, passwordKind, onPasswordKind, reveal }: FormFieldsProps) {
   return (
     <>
-      <div>
-        <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Display Name</label>
-        <input
-          type="text"
-          value={formData.name}
-          onChange={(e) => onChange({ name: e.target.value })}
-          placeholder="e.g., John Doe"
-          className="w-full px-4 py-3 bg-black/80 border border-white/10 rounded-lg text-white focus:outline-none focus:border-indigo-500/50"
-        />
-      </div>
+      <Input
+        label="Display Name"
+        value={formData.name}
+        onChange={(e) => onChange({ name: e.target.value })}
+        placeholder="e.g., John Doe"
+      />
 
-      <div>
-        <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Username</label>
-        <input
-          type="text"
-          value={formData.username}
-          onChange={(e) => onChange({ username: e.target.value })}
-          placeholder="e.g., johnd"
-          disabled={isEdit}
-          className="w-full px-4 py-3 bg-black/80 border border-white/10 rounded-lg text-white focus:outline-none focus:border-indigo-500/50 disabled:opacity-50"
-        />
-      </div>
+      <Input
+        label="Username"
+        value={formData.username}
+        onChange={(e) => onChange({ username: e.target.value })}
+        placeholder="e.g., johnd"
+        disabled={isEdit}
+      />
 
       <PasswordFieldWithKind
         label={`Password ${isEdit ? '(Leave empty to keep current)' : ''}`}

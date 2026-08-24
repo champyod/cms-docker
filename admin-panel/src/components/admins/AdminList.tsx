@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useSyncedState } from '@/hooks/useSyncedState';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
+import { EmptyState } from '@/components/core/EmptyState';
 import { Edit2, Trash2, Plus, Shield, ShieldCheck } from 'lucide-react';
 import { updateAdmin, deleteAdmin } from '@/app/actions/admins';
 import { AdminModal } from './AdminModal';
@@ -21,9 +22,10 @@ const PERMISSION_BADGES = [
 
 interface AdminListProps {
   initialAdmins: AdminWithLogin[];
+  actionLabels: { edit: string; delete: string };
 }
 
-export function AdminList({ initialAdmins }: AdminListProps) {
+export function AdminList({ initialAdmins, actionLabels }: AdminListProps) {
   const [adminsList] = useSyncedState(initialAdmins);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAdmin, setEditingAdmin] = useState<AdminWithLogin | null>(null);
@@ -60,10 +62,9 @@ export function AdminList({ initialAdmins }: AdminListProps) {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-xl font-bold text-white">All Administrators</h2>
-        <Button 
-          variant="primary" 
-          className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white pl-3 pr-4"
+        <h2 className="text-xl font-bold text-foreground">All Administrators</h2>
+        <Button
+          variant="positive"
           onClick={() => { setEditingAdmin(null); setIsModalOpen(true); }}
         >
           <Plus className="w-4 h-4" />
@@ -71,26 +72,26 @@ export function AdminList({ initialAdmins }: AdminListProps) {
         </Button>
       </div>
 
-      <div className="border border-white/5 rounded-xl overflow-hidden bg-neutral-900/40">
+      <div className="border border-border rounded-xl overflow-hidden bg-card/50">
         <Table>
           <TableHeader>
-            <TableRow className="border-b border-white/5 hover:bg-white/5">
-              <TableHead className="text-neutral-400">ID</TableHead>
-              <TableHead className="text-neutral-400">Username</TableHead>
-              <TableHead className="text-neutral-400">Name</TableHead>
-              <TableHead className="text-neutral-400">Last Login</TableHead>
-              <TableHead className="text-neutral-400">Permissions</TableHead>
-              <TableHead className="text-neutral-400">Status</TableHead>
-              <TableHead className="text-neutral-400 text-right">Actions</TableHead>
+            <TableRow className="border-b border-border">
+              <TableHead className="text-muted-foreground">ID</TableHead>
+              <TableHead className="text-muted-foreground">Username</TableHead>
+              <TableHead className="text-muted-foreground">Name</TableHead>
+              <TableHead className="text-muted-foreground">Last Login</TableHead>
+              <TableHead className="text-muted-foreground">Permissions</TableHead>
+              <TableHead className="text-muted-foreground">Status</TableHead>
+              <TableHead className="text-muted-foreground text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {adminsList.map((admin) => (
-              <TableRow key={admin.id} className="border-b border-white/5 hover:bg-white/5">
-                <TableCell className="font-mono text-neutral-500 text-xs">#{admin.id}</TableCell>
+              <TableRow key={admin.id} data-shortcut-row={admin.id} className="border-b border-border hover:bg-muted/50 transition-colors">
+                <TableCell className="font-mono text-muted-foreground text-xs">#{admin.id}</TableCell>
                 <TableCell className="font-mono text-indigo-400 text-sm">{admin.username}</TableCell>
-                <TableCell className="font-medium text-white">{admin.name}</TableCell>
-                <TableCell className="text-xs text-neutral-400">
+                <TableCell className="font-medium text-foreground">{admin.name}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">
                   {admin.last_login_at ? new Date(admin.last_login_at).toLocaleString() : '—'}
                 </TableCell>
                 <TableCell>
@@ -103,20 +104,34 @@ export function AdminList({ initialAdmins }: AdminListProps) {
                   </div>
                 </TableCell>
                 <TableCell>
-                  <button onClick={() => handleToggleEnabled(admin)}>
+                  <Button variant="ghost" size="sm" onClick={() => handleToggleEnabled(admin)} className="h-auto p-1">
                     {admin.enabled ? (
                       <span className="px-2 py-0.5 text-xs bg-emerald-500/20 text-emerald-400 rounded-full">Enabled</span>
                     ) : (
                       <span className="px-2 py-0.5 text-xs bg-red-500/20 text-red-400 rounded-full">Disabled</span>
                     )}
-                  </button>
+                  </Button>
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => startEdit(admin)} className="h-8 w-8 p-0 text-neutral-400 hover:text-indigo-400">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      iconOnly
+                      tooltip={actionLabels.edit}
+                      onClick={() => startEdit(admin)}
+                      className="text-muted-foreground hover:text-primary"
+                    >
                       <Edit2 className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(admin.id)} className="h-8 w-8 p-0 text-neutral-400 hover:text-red-400">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      iconOnly
+                      tooltip={actionLabels.delete}
+                      onClick={() => handleDelete(admin.id)}
+                      className="text-muted-foreground hover:text-destructive"
+                    >
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
@@ -125,8 +140,8 @@ export function AdminList({ initialAdmins }: AdminListProps) {
             ))}
             {adminsList.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-12 text-neutral-500">
-                  No administrators found.
+                <TableCell colSpan={7} className="py-12">
+                  <EmptyState icon={ShieldCheck} title="No administrators found." />
                 </TableCell>
               </TableRow>
             )}

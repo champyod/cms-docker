@@ -11,9 +11,9 @@ interface SearchResultCardProps {
 
 export function SearchResultCard({ title, subtitle, className }: SearchResultCardProps) {
   return (
-    <Card className={cn("p-4 hover:bg-white/5 transition-colors cursor-pointer", className)}>
-      <div className="font-bold text-white">{title}</div>
-      {subtitle && <div className="text-sm text-neutral-400">{subtitle}</div>}
+    <Card className={cn("p-4 hover:bg-accent/50 transition-colors cursor-pointer", className)}>
+      <div className="font-bold text-foreground">{title}</div>
+      {subtitle && <div className="text-sm text-muted-foreground">{subtitle}</div>}
     </Card>
   );
 }
@@ -27,10 +27,10 @@ interface SectionHeaderProps {
 
 export function SectionHeader({ title, count, icon: Icon, iconColor }: SectionHeaderProps) {
   return (
-    <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+    <h2 className="text-xl font-semibold text-foreground mb-4 flex items-center gap-2">
       {Icon && <Icon className={cn("w-5 h-5", iconColor)} />}
       {title}
-      {count !== undefined && <span className="text-neutral-500 text-base font-normal">({count})</span>}
+      {count !== undefined && <span className="text-muted-foreground text-base font-normal">({count})</span>}
     </h2>
   );
 }

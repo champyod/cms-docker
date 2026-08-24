@@ -15,7 +15,7 @@ export default function LoginPage() {
 
   return (
     <AuthBackground>
-      <Card className="w-full max-w-md p-8 backdrop-blur-2xl bg-black/40 border-white/10">
+      <Card className="w-full max-w-md p-8">
         <Stack align="center" gap={8} className="mb-8">
           <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
              <Lock className="w-6 h-6 text-white" />
@@ -51,7 +51,7 @@ export default function LoginPage() {
               required
             />
             
-            <Button type="submit" className="w-full" size="lg" disabled={pending}>
+            <Button type="submit" variant="positive" className="w-full" size="lg" loading={pending}>
               {pending ? "Signing In..." : "Sign In"}
             </Button>
           </Stack>

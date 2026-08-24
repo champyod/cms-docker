@@ -15,6 +15,7 @@ import { getServiceStatus } from '@/app/actions/services';
 import { StatusBadge, StatusType } from '@/components/core/StatusBadge';
 import { PageContent, PageHeader, Grid, Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
+import { EmptyState } from '@/components/core/EmptyState';
 
 async function getStats() {
   const [
@@ -182,7 +183,7 @@ export default async function DashboardPage({
           {recentActivity.length > 0 ? (
             <Stack gap={3}>
               {recentActivity.map((item) => (
-                <Stack key={item.id} direction="row" align="center" gap={4} className="p-3 rounded-lg bg-white/5 border border-white/5">
+                <Stack key={item.id} direction="row" align="center" gap={4} className="p-3 rounded-lg bg-muted/50 border border-border">
                   <div className="p-2 bg-cyan-500/10 rounded-lg text-cyan-400">
                     <FileCode className="w-4 h-4" />
                   </div>
@@ -200,9 +201,7 @@ export default async function DashboardPage({
               ))}
             </Stack>
           ) : (
-            <Stack align="center" justify="center" className="py-12">
-              <Text variant="muted">No recent activity to display</Text>
-            </Stack>
+            <EmptyState icon={FileCode} title="No recent activity to display" />
           )}
         </Card>
       </Stack>
