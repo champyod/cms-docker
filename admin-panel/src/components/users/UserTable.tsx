@@ -1,8 +1,14 @@
 'use client';
 
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
+import { Edit2, Trash2, Users } from 'lucide-react';
+
+import { Badge } from '@/components/core/Badge';
 import { Button } from '@/components/core/Button';
-import { Edit2, Trash2 } from 'lucide-react';
+import { EmptyState } from '@/components/core/EmptyState';
+import { Skeleton } from '@/components/core/Skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
+import { ROW_SELECTED_CLASSES } from '@/hooks/useShortcuts';
+import { cn } from '@/lib/utils';
 import type { UsersPageRow } from '@/lib/prisma-selects';
 
 interface UserTableProps {
@@ -25,6 +31,8 @@ function teamCodes(user: UsersPageRow): string {
   return Array.from(new Set(codes)).join(', ') || '-';
 }
 
+const CHECKBOX_CLASS = 'size-4 accent-primary cursor-pointer';
+
 export function UserTable({
   users,
   loading,
@@ -40,110 +48,109 @@ export function UserTable({
   const allSelected = users.length > 0 && users.every((user) => selectedIds.has(user.id));
 
   return (
-    <div className="border border-white/5 rounded-xl overflow-hidden bg-neutral-900/40 backdrop-blur-sm">
-      <Table>
-        <TableHeader>
-          <TableRow className="border-b border-white/5 hover:bg-white/5">
-            <TableHead className="text-neutral-400 w-10">
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead className="w-10">
+            <input
+              type="checkbox"
+              title="Select all users"
+              className={CHECKBOX_CLASS}
+              checked={allSelected}
+              onChange={(event) => onToggleAll(event.target.checked)}
+            />
+          </TableHead>
+          <TableHead>#</TableHead>
+          <TableHead>Name</TableHead>
+          <TableHead>Username</TableHead>
+          <TableHead>Team</TableHead>
+          <TableHead>Email</TableHead>
+          <TableHead>ID</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead>Organization</TableHead>
+          <TableHead>Country</TableHead>
+          <TableHead>Contests</TableHead>
+          <TableHead className="text-right">Actions</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {users.map((user, index) => (
+          <TableRow
+            key={user.id}
+            data-shortcut-row={user.id}
+            className={cn('cursor-pointer', selectedIds.has(user.id) && ROW_SELECTED_CLASSES.join(' '))}
+          >
+            <TableCell>
               <input
                 type="checkbox"
-                title="Select all users"
-                checked={allSelected}
-                onChange={(event) => onToggleAll(event.target.checked)}
+                title={`Select user ${user.id}`}
+                className={CHECKBOX_CLASS}
+                checked={selectedIds.has(user.id)}
+                onChange={(event) => onToggleOne(user.id, event.target.checked)}
               />
-            </TableHead>
-            <TableHead className="text-neutral-400">#</TableHead>
-            <TableHead className="text-neutral-400">Name</TableHead>
-            <TableHead className="text-neutral-400">Username</TableHead>
-            <TableHead className="text-neutral-400">Team</TableHead>
-            <TableHead className="text-neutral-400">Email</TableHead>
-            <TableHead className="text-neutral-400">ID</TableHead>
-            <TableHead className="text-neutral-400">Status</TableHead>
-            <TableHead className="text-neutral-400">Organization</TableHead>
-            <TableHead className="text-neutral-400">Country</TableHead>
-            <TableHead className="text-neutral-400">Contests</TableHead>
-            <TableHead className="text-neutral-400 text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {users.map((user, index) => (
-            <TableRow key={user.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-              <TableCell>
-                <input
-                  type="checkbox"
-                  title={`Select user ${user.id}`}
-                  checked={selectedIds.has(user.id)}
-                  onChange={(event) => onToggleOne(user.id, event.target.checked)}
-                />
-              </TableCell>
-              <TableCell className="font-mono text-neutral-500 text-xs">#{(pageNumber - 1) * perPage + index + 1}</TableCell>
-              <TableCell className="font-medium text-white">{user.first_name} {user.last_name}</TableCell>
-              <TableCell className="text-neutral-300">{user.username}</TableCell>
-              <TableCell className="text-neutral-300">{teamCodes(user)}</TableCell>
-              <TableCell className="text-neutral-400">{user.email || '-'}</TableCell>
-              <TableCell className="font-mono text-neutral-500 text-xs">#{user.id}</TableCell>
-              <TableCell>
-                {user.status ? (
-                  <span
-                    className={
-                      user.status === 'active'
-                        ? 'px-2 py-0.5 rounded-full text-xs bg-emerald-500/20 text-emerald-400'
-                        : 'px-2 py-0.5 rounded-full text-xs bg-amber-500/20 text-amber-400'
-                    }
-                  >
-                    {user.status}
-                  </span>
-                ) : (
-                  '—'
+            </TableCell>
+            <TableCell className="font-mono text-muted-foreground text-xs">#{(pageNumber - 1) * perPage + index + 1}</TableCell>
+            <TableCell className="font-medium">{user.first_name} {user.last_name}</TableCell>
+            <TableCell>{user.username}</TableCell>
+            <TableCell>{teamCodes(user)}</TableCell>
+            <TableCell className="text-muted-foreground">{user.email || '-'}</TableCell>
+            <TableCell className="font-mono text-muted-foreground text-xs">#{user.id}</TableCell>
+            <TableCell>
+              {user.status ? (
+                <Badge variant={user.status === 'active' ? 'success' : 'warning'}>{user.status}</Badge>
+              ) : (
+                '—'
+              )}
+            </TableCell>
+            <TableCell>{user.organization ?? '—'}</TableCell>
+            <TableCell>{user.country ?? '—'}</TableCell>
+            <TableCell>{user._count?.participations ?? 0}</TableCell>
+            <TableCell className="text-right">
+              <div className="flex items-center justify-end gap-2">
+                {canManageUsers && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon={Edit2}
+                      iconOnly
+                      tooltip={`Edit user ${user.username}`}
+                      data-shortcut-primary
+                      onClick={() => onEdit(user)}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon={Trash2}
+                      iconOnly
+                      tooltip={`Delete user ${user.username}`}
+                      onClick={() => onDelete(user.id)}
+                    />
+                  </>
                 )}
-              </TableCell>
-              <TableCell className="text-neutral-300">{user.organization ?? '—'}</TableCell>
-              <TableCell className="text-neutral-300">{user.country ?? '—'}</TableCell>
-              <TableCell className="text-neutral-300">{user._count?.participations ?? 0}</TableCell>
-              <TableCell className="text-right">
-                <div className="flex items-center justify-end gap-2">
-                  {canManageUsers && (
-                    <>
-                      <Button
-                          variant="ghost"
-                          size="sm"
-                          aria-label={`Edit user ${user.username}`}
-                          onClick={() => onEdit(user)}
-                          className="h-8 w-8 p-0 text-neutral-400 hover:text-indigo-400"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
-                      <Button
-                          variant="ghost"
-                          size="sm"
-                          aria-label={`Delete user ${user.username}`}
-                          onClick={() => onDelete(user.id)}
-                          className="h-8 w-8 p-0 text-neutral-400 hover:text-red-400"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-          {!loading && users.length === 0 && (
-              <TableRow>
-                  <TableCell colSpan={12} className="text-center py-12 text-neutral-500">
-                      No users found.
-                  </TableCell>
+              </div>
+            </TableCell>
+          </TableRow>
+        ))}
+        {!loading && users.length === 0 && (
+          <TableRow>
+            <TableCell colSpan={12} className="py-12">
+              <EmptyState icon={Users} title="No users found." description="Adjust your search or create a new user to get started." />
+            </TableCell>
+          </TableRow>
+        )}
+        {loading && (
+          <>
+            {[0, 1, 2, 3, 4].map((rowIndex) => (
+              <TableRow key={`skeleton-${rowIndex}`}>
+                <TableCell colSpan={12}>
+                  <Skeleton className="h-5 w-full" />
+                </TableCell>
               </TableRow>
-          )}
-          {loading && (
-            <TableRow>
-              <TableCell colSpan={12} className="text-center py-12 text-neutral-500">
-                Loading users...
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
-    </div>
+            ))}
+          </>
+        )}
+      </TableBody>
+    </Table>
   );
 }

@@ -2,12 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/core/Button';
-import { Card } from '@/components/core/Card';
-import { X, Loader2 } from 'lucide-react';
+import { Dialog, DialogFooter } from '@/components/core/Dialog';
 import { apiClient } from '@/lib/apiClient';
 import { useToast } from '@/components/providers/ToastProvider';
 import { PasswordFieldWithKind, type PasswordRevealState } from '@/components/core/PasswordFieldWithKind';
-import { Portal } from '@/components/core/Portal';
 import { cn } from '@/lib/utils';
 import { revealUserPassword } from '@/app/actions/users';
 import type { PasswordKind } from '@/lib/password-format';
@@ -89,8 +87,6 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: U
     };
   }, [user, isOpen]);
 
-  if (!isOpen) return null;
-
   const updateForm = (updates: Partial<UserFormState>) => setFormData({ ...formData, ...updates });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -133,161 +129,151 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: U
     }
   };
 
-  const inputClassName = 'w-full px-3 py-2 bg-black/80 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all';
+  const inputClassName = 'w-full px-3 py-2 bg-background/60 border border-border rounded-lg text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30 transition-colors';
+  const labelClassName = 'text-xs font-medium text-muted-foreground uppercase tracking-wider';
 
   return (
-    <Portal>
-      <div className="fixed inset-0 z-100 flex items-center justify-center overflow-hidden bg-black/80 backdrop-blur-sm p-4">
-        <Card className="w-full max-w-md p-6 relative animate-in fade-in zoom-in-95 duration-200 bg-neutral-900/80 border-white/10 shadow-2xl">
-          <button
-            onClick={onClose}
-            title="Close"
-            className="absolute top-4 right-4 text-neutral-400 hover:text-white transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      title={user ? 'Edit User' : 'Create New User'}
+      className="sm:max-w-md"
+    >
+      {error && (
+        <div className="mb-4 p-3 border border-destructive/30 bg-destructive/10 rounded-lg text-destructive text-sm">
+          {error}
+        </div>
+      )}
 
-          <h2 className="text-xl font-bold text-white mb-6">
-            {user ? 'Edit User' : 'Create New User'}
-          </h2>
+      {/* FORM */}
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className={labelClassName}>First Name</label>
+            <input
+              required
+              type="text"
+              value={formData.first_name}
+              onChange={(e) => updateForm({ first_name: e.target.value })}
+              className={cn(inputClassName, 'font-sans')}
+              placeholder="John"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className={labelClassName}>Last Name</label>
+            <input
+              required
+              type="text"
+              value={formData.last_name}
+              onChange={(e) => updateForm({ last_name: e.target.value })}
+              className={cn(inputClassName, 'font-sans')}
+              placeholder="Doe"
+            />
+          </div>
+        </div>
 
-          {error && (
-            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
-              {error}
-            </div>
-          )}
+        {/* ACCOUNT */}
+        <div className="space-y-1.5">
+          <label className={labelClassName}>Username</label>
+          <input
+            required
+            type="text"
+            value={formData.username}
+            onChange={(e) => updateForm({ username: e.target.value })}
+            className={cn(inputClassName, 'font-mono')}
+            placeholder="johndoe"
+          />
+        </div>
 
-          {/* FORM */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-neutral-400 uppercase tracking-wider">First Name</label>
-                <input
-                  required
-                  type="text"
-                  value={formData.first_name}
-                  onChange={(e) => updateForm({ first_name: e.target.value })}
-                  className={cn(inputClassName, 'font-sans')}
-                  placeholder="John"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-neutral-400 uppercase tracking-wider">Last Name</label>
-                <input
-                  required
-                  type="text"
-                  value={formData.last_name}
-                  onChange={(e) => updateForm({ last_name: e.target.value })}
-                  className={cn(inputClassName, 'font-sans')}
-                  placeholder="Doe"
-                />
-              </div>
-            </div>
+        <div className="space-y-1.5">
+          <label className={labelClassName}>Email (Optional)</label>
+          <input
+            type="email"
+            value={formData.email}
+            onChange={(e) => updateForm({ email: e.target.value })}
+            className={cn(inputClassName, 'font-sans')}
+            placeholder="john@example.com"
+          />
+        </div>
 
-            {/* ACCOUNT */}
+        <div className="space-y-1.5">
+          <PasswordFieldWithKind
+            label={user ? 'New Password (Optional)' : 'Password'}
+            value={formData.password}
+            onChange={(password) => updateForm({ password })}
+            required={!user}
+            placeholder="••••••••"
+            kind={passwordKind}
+            onKind={setPasswordKind}
+            reveal={{ ...reveal, onReveal: () => undefined }}
+          />
+        </div>
+
+        {/* PREFERENCES */}
+        <div className="space-y-1.5">
+          <label className={labelClassName}>Timezone</label>
+          <input
+            type="text"
+            value={formData.timezone}
+            onChange={(e) => updateForm({ timezone: e.target.value })}
+            className={inputClassName}
+            placeholder="Asia/Bangkok"
+          />
+        </div>
+
+        {/* ENROLLMENT */}
+        {!user && (
+          <>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-neutral-400 uppercase tracking-wider">Username</label>
-              <input
-                required
-                type="text"
-                value={formData.username}
-                onChange={(e) => updateForm({ username: e.target.value })}
-                className={cn(inputClassName, 'font-mono')}
-                placeholder="johndoe"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-neutral-400 uppercase tracking-wider">Email (Optional)</label>
-              <input
-                type="email"
-                value={formData.email}
-                onChange={(e) => updateForm({ email: e.target.value })}
-                className={cn(inputClassName, 'font-sans')}
-                placeholder="john@example.com"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <PasswordFieldWithKind
-                label={user ? 'New Password (Optional)' : 'Password'}
-                value={formData.password}
-                onChange={(password) => updateForm({ password })}
-                required={!user}
-                placeholder="••••••••"
-                kind={passwordKind}
-                onKind={setPasswordKind}
-                reveal={{ ...reveal, onReveal: () => undefined }}
-              />
-            </div>
-
-            {/* PREFERENCES */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-neutral-400 uppercase tracking-wider">Timezone</label>
-              <input
-                type="text"
-                value={formData.timezone}
-                onChange={(e) => updateForm({ timezone: e.target.value })}
+              <label className={labelClassName}>Contest (Optional)</label>
+              <select
+                value={formData.contestId}
+                onChange={(e) => updateForm({ contestId: e.target.value })}
                 className={inputClassName}
-                placeholder="Asia/Bangkok"
+                title="Contest"
+              >
+                <option value="">No contest</option>
+                {contests.map((contest) => (
+                  <option key={contest.id} value={contest.id}>#{contest.id} - {contest.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className={labelClassName}>Team Code (Optional)</label>
+              <input
+                type="text"
+                value={formData.teamCode}
+                onChange={(e) => updateForm({ teamCode: e.target.value })}
+                className={cn(inputClassName, 'font-mono')}
+                placeholder="TEAM_A"
               />
+              <p className="text-[11px] text-muted-foreground">If team code is set, contest must be selected.</p>
             </div>
+          </>
+        )}
 
-            {/* ENROLLMENT */}
-            {!user && (
-              <>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-neutral-400 uppercase tracking-wider">Contest (Optional)</label>
-                  <select
-                    value={formData.contestId}
-                    onChange={(e) => updateForm({ contestId: e.target.value })}
-                    className={inputClassName}
-                    title="Contest"
-                  >
-                    <option value="">No contest</option>
-                    {contests.map((contest) => (
-                      <option key={contest.id} value={contest.id}>#{contest.id} - {contest.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-neutral-400 uppercase tracking-wider">Team Code (Optional)</label>
-                  <input
-                    type="text"
-                    value={formData.teamCode}
-                    onChange={(e) => updateForm({ teamCode: e.target.value })}
-                    className={cn(inputClassName, 'font-mono')}
-                    placeholder="TEAM_A"
-                  />
-                  <p className="text-[11px] text-neutral-500">If team code is set, contest must be selected.</p>
-                </div>
-              </>
-            )}
-
-            {/* FOOTER */}
-            <div className="pt-6 flex justify-end gap-3">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={onClose}
-                disabled={loading}
-                className="text-neutral-400 hover:text-white"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                variant="primary"
-                className="bg-linear-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white shadow-lg shadow-indigo-500/20 px-6"
-                disabled={loading}
-              >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (user ? 'Save Changes' : 'Create User')}
-              </Button>
-            </div>
-          </form>
-        </Card>
-      </div>
-    </Portal>
+        {/* FOOTER */}
+        <DialogFooter className="pt-6">
+          <Button
+            variant="negativeOutline"
+            onClick={onClose}
+            disabled={loading}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            variant="positive"
+            loading={loading}
+            disabled={loading}
+          >
+            {user ? 'Save Changes' : 'Create User'}
+          </Button>
+        </DialogFooter>
+      </form>
+    </Dialog>
   );
 }

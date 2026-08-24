@@ -2,6 +2,7 @@
 
 import { AlertTriangle, FileSpreadsheet, Table2, Upload, Wand2 } from 'lucide-react';
 import { Button } from '@/components/core/Button';
+import { cn } from '@/lib/utils';
 import { EXPECTED_FIELDS } from './csvTemplate';
 import type { GenerationMode, PreviewRow } from './csvPreview';
 
@@ -27,7 +28,7 @@ export function HeaderWarnings({ warnings }: HeaderWarningsProps) {
   if (warnings.length === 0) return null;
 
   return (
-    <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-amber-300 text-xs space-y-1">
+    <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-warning text-xs space-y-1">
       {warnings.map((warning) => (
         <div key={warning} className="flex items-center gap-2">
           <AlertTriangle className="w-3 h-3" /> {warning}
@@ -39,6 +40,8 @@ export function HeaderWarnings({ warnings }: HeaderWarningsProps) {
 
 const PREVIEW_COLUMNS = ['first_name', 'last_name', 'username', 'password', 'email', 'timezone', 'team'];
 const MAX_VISIBLE_PREVIEW_ROWS = 100;
+
+const CHECKBOX_CLASS = 'size-4 accent-primary cursor-pointer';
 
 interface PreviewTableProps {
   rows: PreviewRow[];
@@ -52,15 +55,16 @@ export function PreviewTable({ rows, totalRowCount, selectedRowIndices, onSelect
   const rowsLeft = Math.max(totalRowCount - MAX_VISIBLE_PREVIEW_ROWS, 0);
 
   return (
-    <div className="border border-white/10 rounded-lg overflow-hidden">
+    <div className="border border-border rounded-lg overflow-hidden">
       <div className="max-h-80 overflow-auto">
         <table className="w-full text-xs">
-          <thead className="bg-white/5 text-neutral-300 sticky top-0 z-10">
+          <thead className="bg-muted/50 text-muted-foreground sticky top-0 z-10">
             <tr>
               <th className="text-left px-2 py-2 w-8">
                 <input
                   type="checkbox"
                   title="Select all rows"
+                  className={CHECKBOX_CLASS}
                   checked={selectedRowIndices.size > 0 && selectedRowIndices.size === totalRowCount}
                   onChange={(e) => onSelectAll(e.target.checked)}
                 />
@@ -74,29 +78,30 @@ export function PreviewTable({ rows, totalRowCount, selectedRowIndices, onSelect
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-3 py-6 text-center text-neutral-500">
+                <td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">
                   No preview rows yet
                 </td>
               </tr>
             ) : (
               rows.map((row) => (
-                <tr key={row.rowIndex} className={`border-t border-white/5 ${selectedRowIndices.has(row.rowIndex) ? 'bg-indigo-500/10' : ''}`}>
+                <tr key={row.rowIndex} className={cn('border-t border-border', selectedRowIndices.has(row.rowIndex) && 'bg-primary/10')}>
                   <td className="px-2 py-2 text-center">
                     <input
                       type="checkbox"
                       title={`Select row ${row.rowIndex}`}
+                      className={CHECKBOX_CLASS}
                       checked={selectedRowIndices.has(row.rowIndex)}
                       onChange={(e) => onToggleRow(row.rowIndex, e.target.checked)}
                     />
                   </td>
-                  <td className="px-2 py-2 text-white">{row.first_name}</td>
-                  <td className="px-2 py-2 text-white">{row.last_name}</td>
-                  <td className="px-2 py-2 text-white">{row.username}</td>
-                  <td className="px-2 py-2 text-white">{row.password}</td>
-                  <td className="px-2 py-2 text-white">{row.email}</td>
-                  <td className="px-2 py-2 text-white">{row.timezone}</td>
-                  <td className="px-2 py-2 text-white">{row.team}</td>
-                  <td className="px-2 py-2 text-amber-300">{row.issues.join(', ') || '-'}</td>
+                  <td className="px-2 py-2">{row.first_name}</td>
+                  <td className="px-2 py-2">{row.last_name}</td>
+                  <td className="px-2 py-2">{row.username}</td>
+                  <td className="px-2 py-2">{row.password}</td>
+                  <td className="px-2 py-2">{row.email}</td>
+                  <td className="px-2 py-2">{row.timezone}</td>
+                  <td className="px-2 py-2">{row.team}</td>
+                  <td className="px-2 py-2 text-warning">{row.issues.join(', ') || '-'}</td>
                 </tr>
               ))
             )}
@@ -104,7 +109,7 @@ export function PreviewTable({ rows, totalRowCount, selectedRowIndices, onSelect
         </table>
       </div>
       {rowsLeft > 0 && (
-        <div className="px-3 py-2 text-xs text-neutral-400 border-t border-white/10 bg-black/20">
+        <div className="px-3 py-2 text-xs text-muted-foreground border-t border-border bg-muted/30">
           ... {rowsLeft} rows left (showing first {MAX_VISIBLE_PREVIEW_ROWS})
         </div>
       )}
@@ -119,14 +124,17 @@ interface SubmitResultBannerProps {
 
 export function SubmitResultBanner({ result, onDownloadCredentials }: SubmitResultBannerProps) {
   return (
-    <div className={`rounded-lg border p-3 text-xs ${result.success ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-red-500/30 bg-red-500/10 text-red-300'}`}>
+    <div className={cn(
+      'rounded-lg border p-3 text-xs',
+      result.success ? 'border-success/30 bg-success/10 text-success' : 'border-destructive/30 bg-destructive/10 text-destructive'
+    )}>
       {result.success ? (
         <div className="space-y-1">
           <div>Created: {result.createdCount} | Failed: {result.failedCount}</div>
           {result.downloadUrl && (
             <div className="pt-2">
-              <Button variant="ghost" onClick={onDownloadCredentials}>
-                <FileSpreadsheet className="w-4 h-4 mr-2" /> Download Credentials CSV
+              <Button variant="secondary" size="sm" icon={FileSpreadsheet} onClick={onDownloadCredentials}>
+                Download Credentials CSV
               </Button>
             </div>
           )}
@@ -158,6 +166,10 @@ interface BulkCreateInputSectionProps {
   onFillEmpty: (mode: GenerationMode) => void;
 }
 
+const SELECT_CLASS = 'bg-background/60 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30 transition-colors';
+
+const LABEL_BUTTON_CLASS = 'inline-flex items-center gap-2 h-8 px-3 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 cursor-pointer text-sm transition-colors';
+
 export function BulkCreateInputSection({
   contests,
   contestId,
@@ -173,18 +185,14 @@ export function BulkCreateInputSection({
   return (
     <>
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs text-neutral-400">
+        <p className="text-xs text-muted-foreground">
           First row must be header. Supported columns: {EXPECTED_FIELDS.join(', ')}. Team column is applied when a contest is selected.
         </p>
         <div className="flex items-center gap-2">
-          <button
-            onClick={onDownloadTemplate}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-neutral-200 cursor-pointer text-sm transition-colors"
-          >
-            <Table2 className="w-4 h-4" />
+          <Button variant="secondary" size="sm" icon={Table2} onClick={onDownloadTemplate}>
             Download CSV Template
-          </button>
-          <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-neutral-200 cursor-pointer text-sm transition-colors">
+          </Button>
+          <label className={LABEL_BUTTON_CLASS}>
             <Upload className="w-4 h-4" />
             Upload CSV
             <input
@@ -198,11 +206,11 @@ export function BulkCreateInputSection({
       </div>
 
       <div className="flex items-center gap-2">
-        <label className="text-xs text-neutral-400">Contest for team mapping:</label>
+        <label className="text-xs text-muted-foreground">Contest for team mapping:</label>
         <select
           value={contestId}
           onChange={(event) => onContestIdChange(Number(event.target.value) || 0)}
-          className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+          className={SELECT_CLASS}
           title="Contest for team mapping"
         >
           <option value={0}>No contest</option>
@@ -216,21 +224,21 @@ export function BulkCreateInputSection({
         value={csvText}
         onChange={(event) => onCsvTextChange(event.target.value)}
         placeholder={placeholder}
-        className="w-full h-44 overflow-auto bg-black/40 border border-white/10 rounded-lg p-3 text-sm text-white font-mono resize-none"
+        className="w-full h-44 overflow-auto bg-background/60 border border-border rounded-lg p-3 text-sm text-foreground font-mono resize-none placeholder:text-muted-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30 transition-colors"
       />
 
       <div className="flex flex-wrap gap-2">
-        <Button variant="ghost" onClick={onRebuildPreview}>
-          <FileSpreadsheet className="w-4 h-4 mr-2" /> Parse & Preview
+        <Button variant="ghost" icon={FileSpreadsheet} onClick={onRebuildPreview}>
+          Parse &amp; Preview
         </Button>
-        <Button variant="ghost" onClick={() => onFillEmpty('both')}>
-          <Wand2 className="w-4 h-4 mr-2" /> Random Username + Password
+        <Button variant="ghost" icon={Wand2} onClick={() => onFillEmpty('both')}>
+          Random Username + Password
         </Button>
-        <Button variant="ghost" onClick={() => onFillEmpty('username')}>
-          <Wand2 className="w-4 h-4 mr-2" /> Random Username
+        <Button variant="ghost" icon={Wand2} onClick={() => onFillEmpty('username')}>
+          Random Username
         </Button>
-        <Button variant="ghost" onClick={() => onFillEmpty('password')}>
-          <Wand2 className="w-4 h-4 mr-2" /> Random Password
+        <Button variant="ghost" icon={Wand2} onClick={() => onFillEmpty('password')}>
+          Random Password
         </Button>
       </div>
     </>

@@ -1,11 +1,12 @@
 'use client';
 
+import { Eye, EyeOff } from 'lucide-react';
+
 import { Button } from '@/components/core/Button';
-import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import type { ContestOption } from './bulkEditActions';
 
-const CONTEST_SELECT_CLASS = 'bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white';
-const TEXT_INPUT_CLASS = 'bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white';
+const CONTEST_SELECT_CLASS = 'bg-background/60 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30 transition-colors';
+const TEXT_INPUT_CLASS = 'bg-background/60 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30 transition-colors';
 
 interface SectionBoxProps {
   title: string;
@@ -14,8 +15,8 @@ interface SectionBoxProps {
 
 function SectionBox({ title, children }: SectionBoxProps) {
   return (
-    <div className="rounded-lg border border-white/10 bg-black/20 p-3 space-y-3">
-      <div className="text-xs text-neutral-300">{title}</div>
+    <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-3">
+      <div className="text-xs text-muted-foreground">{title}</div>
       {children}
     </div>
   );
@@ -46,10 +47,14 @@ export function ContestSection({ contests, selectedContestId, loading, hasRows, 
             </option>
           ))}
         </select>
-        <Button variant="ghost" onClick={() => onRunContestMutation('add')} disabled={loading || !hasRows || !selectedContestId}>
+        <Button variant="positiveOutline" onClick={() => onRunContestMutation('add')} disabled={loading || !hasRows || !selectedContestId}>
           Add to contest
         </Button>
-        <Button variant="ghost" onClick={() => onRunContestMutation('remove')} disabled={loading || !hasRows || !selectedContestId}>
+        <Button
+          variant="negativeOutline"
+          onClick={() => onRunContestMutation('remove')}
+          disabled={loading || !hasRows || !selectedContestId}
+        >
           Remove from contest
         </Button>
       </div>
@@ -108,10 +113,10 @@ export function TeamSection({ contests, teamContestId, teamCode, teamsOptions, l
             className={`${TEXT_INPUT_CLASS} font-mono`}
           />
         )}
-        <Button variant="ghost" onClick={onRunTeamSet} disabled={loading || !hasRows || !teamContestId}>
+        <Button variant="positiveOutline" onClick={onRunTeamSet} disabled={loading || !hasRows || !teamContestId}>
           Add to team
         </Button>
-        <Button variant="ghost" onClick={onRunTeamRemoveAny} disabled={loading || !hasRows}>
+        <Button variant="negativeOutline" onClick={onRunTeamRemoveAny} disabled={loading || !hasRows}>
           Remove from any team
         </Button>
       </div>
@@ -176,14 +181,21 @@ interface BulkEditPreviewTableProps {
   allRevealed: boolean;
 }
 
-export function BulkEditPreviewTable({ rows, revealedIds, revealingIds = [], onToggleRevealRow, onToggleAllRevealed, allRevealed }: BulkEditPreviewTableProps) {
+export function BulkEditPreviewTable({
+  rows,
+  revealedIds,
+  revealingIds = [],
+  onToggleRevealRow,
+  onToggleAllRevealed,
+  allRevealed,
+}: BulkEditPreviewTableProps) {
   const isRevealed = (rowId: number): boolean => revealedIds.includes(rowId);
   const isRevealing = (rowId: number): boolean => revealingIds.includes(rowId);
   return (
-    <div className="border border-white/10 rounded-lg overflow-hidden">
+    <div className="border border-border rounded-lg overflow-hidden">
       <div className="max-h-80 overflow-auto">
         <table className="w-full text-xs">
-          <thead className="bg-white/5 text-neutral-300 sticky top-0 z-10">
+          <thead className="bg-muted/50 text-muted-foreground sticky top-0 z-10">
             <tr>
               <th className="text-left px-2 py-2">ID</th>
               <th className="text-left px-2 py-2">first_name</th>
@@ -192,15 +204,14 @@ export function BulkEditPreviewTable({ rows, revealedIds, revealingIds = [], onT
               <th className="text-left px-2 py-2">
                 <span className="inline-flex items-center gap-1">
                   password
-                  <button
-                    type="button"
-                    aria-label={allRevealed ? 'Hide all passwords' : 'Reveal all passwords'}
-                    title={allRevealed ? 'Hide all passwords' : 'Reveal all passwords'}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={allRevealed ? EyeOff : Eye}
+                    iconOnly
+                    tooltip={allRevealed ? 'Hide all passwords' : 'Reveal all passwords'}
                     onClick={onToggleAllRevealed}
-                    className="p-0.5 rounded hover:bg-white/10 text-neutral-400 hover:text-indigo-300 transition-colors"
-                  >
-                    {allRevealed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  </button>
+                  />
                 </span>
               </th>
               <th className="text-left px-2 py-2">email</th>
@@ -209,47 +220,45 @@ export function BulkEditPreviewTable({ rows, revealedIds, revealingIds = [], onT
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-neutral-500">
+                <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">
                   No selected users
                 </td>
               </tr>
             ) : (
               rows.map((row) => (
-                <tr key={row.id} className="border-t border-white/5">
-                  <td className="px-2 py-2 text-neutral-400">#{row.id}</td>
-                  <td className="px-2 py-2 text-white">{row.first_name}</td>
-                  <td className="px-2 py-2 text-white">{row.last_name}</td>
-                  <td className="px-2 py-2 text-white">{row.username}</td>
+                <tr key={row.id} className="border-t border-border">
+                  <td className="px-2 py-2 text-muted-foreground">#{row.id}</td>
+                  <td className="px-2 py-2">{row.first_name}</td>
+                  <td className="px-2 py-2">{row.last_name}</td>
+                  <td className="px-2 py-2">{row.username}</td>
                   <td className="px-2 py-2 font-mono">
                     {isRevealed(row.id) && row.password ? (
-                      <span className="inline-flex items-center gap-1 text-white">
+                      <span className="inline-flex items-center gap-1">
                         {row.password}
-                        <button
-                          type="button"
-                          aria-label={`Hide password for ${row.username}`}
-                          title={`Hide password for ${row.username}`}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          icon={EyeOff}
+                          iconOnly
+                          tooltip={`Hide password for ${row.username}`}
                           onClick={() => onToggleRevealRow(row.id)}
-                          className="p-0.5 rounded hover:bg-white/10 text-neutral-500 hover:text-indigo-300 transition-colors"
-                        >
-                          <EyeOff className="w-3.5 h-3.5" />
-                        </button>
+                        />
                       </span>
                     ) : row.stored_kind === 'bcrypt' ? (
-                      <span className="text-neutral-600">bcrypt ••••</span>
+                      <span className="text-muted-foreground/50">bcrypt ••••</span>
                     ) : (
-                      <button
-                        type="button"
-                        aria-label={`Reveal password for ${row.username}`}
-                        title={`Reveal password for ${row.username}`}
-                        disabled={isRevealing(row.id)}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={Eye}
+                        iconOnly
+                        tooltip={`Reveal password for ${row.username}`}
+                        loading={isRevealing(row.id)}
                         onClick={() => onToggleRevealRow(row.id)}
-                        className="p-0.5 rounded hover:bg-white/10 text-neutral-400 hover:text-indigo-300 transition-colors disabled:opacity-50"
-                      >
-                        {isRevealing(row.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5" />}
-                      </button>
+                      />
                     )}
                   </td>
-                  <td className="px-2 py-2 text-white">{row.email || '-'}</td>
+                  <td className="px-2 py-2">{row.email || '-'}</td>
                 </tr>
               ))
             )}

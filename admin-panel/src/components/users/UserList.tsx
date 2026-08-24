@@ -1,14 +1,16 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
-import { Button } from '@/components/core/Button';
-import { Plus, HelpCircle } from 'lucide-react';
+import { FileSpreadsheet, HelpCircle, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { UserModal } from './UserModal';
+
+import { Button } from '@/components/core/Button';
 import { apiClient, type ApiResponse } from '@/lib/apiClient';
+
 import { UserBulkCreateCsv } from './UserBulkCreateCsv';
 import { UserBulkEditDialog } from './UserBulkEditDialog';
+import { UserModal } from './UserModal';
 import { UserTable } from './UserTable';
 import { TableToolbar } from '@/components/core/TableToolbar';
 import { TablePaginationControls } from '@/components/core/TablePaginationControls';
@@ -148,27 +150,21 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-3">
-          <h2 className="text-xl font-bold text-white">All Users</h2>
-          <Link href={`/${locale}/docs#users`} className="p-1 hover:bg-white/10 rounded-full transition-colors text-neutral-400 hover:text-white" title="View Documentation">
+          <h2 className="text-xl font-bold text-foreground">All Users</h2>
+          <Link
+            href={`/${locale}/docs#users`}
+            className="p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground"
+            title="View Documentation"
+          >
             <HelpCircle className="w-4 h-4" />
           </Link>
         </div>
         {canManageUsers && (
           <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              className="flex items-center gap-2"
-              onClick={() => setIsBulkModalOpen(true)}
-            >
-              <Plus className="w-4 h-4" />
+            <Button variant="positiveOutline" icon={FileSpreadsheet} onClick={() => setIsBulkModalOpen(true)}>
               Bulk Add Users
             </Button>
-            <Button
-                variant="primary"
-                className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white pl-3 pr-4"
-                onClick={handleCreate}
-            >
-              <Plus className="w-4 h-4" />
+            <Button variant="positive" icon={Plus} onClick={handleCreate}>
               Create User
             </Button>
           </div>
@@ -182,7 +178,7 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
         searchPlaceholder="Search users..."
         rightContent={
           canManageUsers ? (
-            <Button variant="ghost" onClick={() => setIsBulkEditOpen(true)} disabled={selectedIds.size === 0}>
+            <Button variant="secondary" onClick={() => setIsBulkEditOpen(true)} disabled={selectedIds.size === 0}>
               Edit Selected ({selectedIds.size})
             </Button>
           ) : null

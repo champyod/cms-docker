@@ -1,13 +1,15 @@
 'use client';
 
-import { useState } from 'react';
-import { useSyncedState } from '@/hooks/useSyncedState';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
-import { Button } from '@/components/core/Button';
-import { Edit2, Trash2, Plus, Users, HelpCircle } from 'lucide-react';
+import { Edit2, HelpCircle, Plus, Trash2, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { updateTeam, deleteTeam } from '@/app/actions/teams';
+import { useState } from 'react';
+
+import { deleteTeam } from '@/app/actions/teams';
+import { Button } from '@/components/core/Button';
+import { EmptyState } from '@/components/core/EmptyState';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
+import { useSyncedState } from '@/hooks/useSyncedState';
 import { TeamModal } from './TeamModal';
 
 interface TeamWithCount {
@@ -62,78 +64,75 @@ export function TeamList({ initialTeams, permissions }: TeamListProps) {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-3">
-          <h2 className="text-xl font-bold text-white">All Teams</h2>
-          <Link href={`/${locale}/docs#users`} className="p-1 hover:bg-white/10 rounded-full transition-colors text-neutral-400 hover:text-white" title="View Documentation">
+          <h2 className="text-xl font-bold">All Teams</h2>
+          <Link href={`/${locale}/docs#users`} className="p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-primary" title="View Documentation">
             <HelpCircle className="w-4 h-4" />
           </Link>
         </div>
         {canManageUsers && (
-          <Button 
-            variant="primary" 
-            className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white pl-3 pr-4"
+          <Button
+            variant="positive"
+            icon={Plus}
             onClick={() => setIsModalOpen(true)}
           >
-            <Plus className="w-4 h-4" />
             Add Team
           </Button>
         )}
       </div>
 
-
-
-      <div className="border border-white/5 rounded-xl overflow-hidden bg-neutral-900/40">
-        <Table>
-          <TableHeader>
-            <TableRow className="border-b border-white/5 hover:bg-white/5">
-              <TableHead className="text-neutral-400">ID</TableHead>
-              <TableHead className="text-neutral-400">Code</TableHead>
-              <TableHead className="text-neutral-400">Name</TableHead>
-              <TableHead className="text-neutral-400">Members</TableHead>
-              <TableHead className="text-neutral-400">Organization</TableHead>
-              <TableHead className="text-neutral-400">Leader</TableHead>
-              <TableHead className="text-neutral-400 text-right">Actions</TableHead>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>ID</TableHead>
+            <TableHead>Code</TableHead>
+            <TableHead>Name</TableHead>
+            <TableHead>Members</TableHead>
+            <TableHead>Organization</TableHead>
+            <TableHead>Leader</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {teams.map((team) => (
+            <TableRow key={team.id} data-shortcut-row={team.id} className="cursor-pointer">
+              <TableCell className="font-mono text-muted-foreground text-xs">#{team.id}</TableCell>
+              <TableCell className="font-mono text-primary text-sm">{team.code}</TableCell>
+              <TableCell className="font-medium">{team.name}</TableCell>
+              <TableCell className="text-muted-foreground text-sm">{team._count?.participations ?? 0}</TableCell>
+              <TableCell className="text-muted-foreground text-sm">{team.organization ?? '—'}</TableCell>
+              <TableCell className="text-muted-foreground text-sm">
+                {team.leader ? `${team.leader.first_name} ${team.leader.last_name}`.trim() || team.leader.username : '—'}
+              </TableCell>
+              <TableCell className="text-right">
+                <div className="flex items-center justify-end gap-2">
+                  <a href={`/${locale}/teams/${team.id}`}>
+                    <Button variant="ghost" size="sm" icon={Users} iconOnly tooltip="View team members" data-shortcut-primary />
+                  </a>
+                  {canManageUsers && (
+                    <>
+                      <Button variant="ghost" size="sm" icon={Edit2} iconOnly tooltip="Edit team" onClick={() => startEdit(team)} />
+                      <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete team" onClick={() => handleDelete(team.id)} />
+                    </>
+                  )}
+                </div>
+              </TableCell>
             </TableRow>
-          </TableHeader>
-          <TableBody>
-            {teams.map((team) => (
-              <TableRow key={team.id} className="border-b border-white/5 hover:bg-white/5">
-                <TableCell className="font-mono text-neutral-500 text-xs">#{team.id}</TableCell>
-                <TableCell className="font-mono text-indigo-400 text-sm">{team.code}</TableCell>
-                <TableCell className="font-medium text-white">{team.name}</TableCell>
-                <TableCell className="text-neutral-400 text-sm">{team._count?.participations ?? 0}</TableCell>
-                <TableCell className="text-neutral-400 text-sm">{team.organization ?? '—'}</TableCell>
-                <TableCell className="text-neutral-400 text-sm">{team.leader ? `${team.leader.first_name} ${team.leader.last_name}`.trim() || team.leader.username : '—'}</TableCell>
-                <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <a href={`/${locale}/teams/${team.id}`}>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-neutral-400 hover:text-emerald-400">
-                        <Users className="w-4 h-4" />
-                      </Button>
-                    </a>
-                    {canManageUsers && (
-                      <>
-                        <Button variant="ghost" size="sm" onClick={() => startEdit(team)} className="h-8 w-8 p-0 text-neutral-400 hover:text-indigo-400">
-                          <Edit2 className="w-4 h-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => handleDelete(team.id)} className="h-8 w-8 p-0 text-neutral-400 hover:text-red-400">
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-            {teams.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center py-12 text-neutral-500">
-                  No teams found.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+          ))}
+          {teams.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={7} className="p-0">
+                <EmptyState
+                  icon={Users}
+                  title="No teams found"
+                  description="Teams will appear here once created."
+                  actionLabel={canManageUsers ? 'Add Team' : undefined}
+                  onAction={canManageUsers ? () => setIsModalOpen(true) : undefined}
+                />
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
 
       <TeamModal
         isOpen={isModalOpen}

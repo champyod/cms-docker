@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { FileSpreadsheet } from 'lucide-react';
+
 import { Button } from '@/components/core/Button';
-import { X, Loader2, FileSpreadsheet } from 'lucide-react';
-import { apiClient } from '@/lib/apiClient';
-import { Portal } from '@/components/core/Portal';
+import { Dialog, DialogFooter } from '@/components/core/Dialog';
 import { PasswordKindSelector } from '@/components/core/PasswordFieldWithKind';
+import { apiClient } from '@/lib/apiClient';
 import type { PasswordKind } from '@/lib/password-format';
 import {
   buildPreviewRows,
@@ -54,14 +55,6 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests }: User
   const [contestId, setContestId] = useState<number>(0);
   const [passwordKind, setPasswordKind] = useState<PasswordKind>('bcrypt');
 
-  useEffect(() => {
-    if (!isOpen) return;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = 'unset';
-    };
-  }, [isOpen]);
-
   const placeholder = useMemo(() => TEMPLATE_CSV, []);
 
   const handleDownloadTemplate = (): void => {
@@ -104,11 +97,6 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests }: User
       buildPreview(text, generationMode);
     };
     reader.readAsText(file);
-  };
-
-  const regeneratePreview = (mode: GenerationMode): void => {
-    setGenerationMode(mode);
-    buildPreview(csvText, mode);
   };
 
   const fillEmptyInPreview = (mode: GenerationMode): void => {
@@ -160,81 +148,83 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests }: User
     });
   };
 
-  if (!isOpen) return null;
-
   return (
-    <Portal>
-      <div className="fixed inset-0 z-100 flex items-center justify-center overflow-hidden bg-black/80 backdrop-blur-sm p-4" onClick={onClose}>
-        <div className="relative z-10 w-full max-w-6xl max-h-[90vh] bg-neutral-900 border border-white/10 rounded-xl shadow-2xl flex flex-col" onClick={(event) => event.stopPropagation()}>
-          <div className="flex items-center justify-between p-4 border-b border-white/10">
-            <h2 className="text-xl font-bold text-white">Bulk Add Users (CSV)</h2>
-            <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-lg transition-colors" title="Close" aria-label="Close">
-              <X className="w-5 h-5 text-neutral-400" />
-            </button>
-          </div>
-
-          {/* INPUT */}
-          <div className="p-4 space-y-4 overflow-auto">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] uppercase tracking-wider text-neutral-500">New password storage</span>
-              <PasswordKindSelector kind={passwordKind} onKind={setPasswordKind} />
-            </div>
-
-            <BulkCreateInputSection
-              contests={contests}
-              contestId={contestId}
-              csvText={csvText}
-              placeholder={placeholder}
-              onContestIdChange={setContestId}
-              onCsvTextChange={setCsvText}
-              onDownloadTemplate={handleDownloadTemplate}
-              onUploadFile={handleUploadFile}
-              onRebuildPreview={() => buildPreview(csvText, generationMode)}
-              onFillEmpty={fillEmptyInPreview}
-            />
-
-            <HeaderWarnings warnings={headerWarnings} />
-
-            <PreviewTable
-              rows={previewRows.slice(0, 100)}
-              totalRowCount={previewRows.length}
-              selectedRowIndices={selectedRowIndices}
-              onSelectAll={(checked) => {
-                setSelectedRowIndices(checked ? new Set(previewRows.map((r) => r.rowIndex)) : new Set());
-              }}
-              onToggleRow={toggleRow}
-            />
-
-            {selectedRowIndices.size > 0 && (
-              <div className="rounded-lg border border-indigo-500/30 bg-indigo-500/10 p-3 text-indigo-300 text-xs flex items-center justify-between">
-                <span>{selectedRowIndices.size} row(s) selected</span>
-                <button
-                  onClick={handleExportSelectedPreview}
-                  className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 transition-colors"
-                >
-                  <FileSpreadsheet className="w-3 h-3" />
-                  Export Selected
-                </button>
-              </div>
-            )}
-
-            {submitResult && (
-              <SubmitResultBanner result={submitResult} onDownloadCredentials={handleExportCreatedCredentials} />
-            )}
-          </div>
-
-          {/* FOOTER */}
-          <div className="p-4 border-t border-white/10 flex items-center justify-between gap-3">
-            <span className="text-xs text-neutral-400">Generation mode: {generationMode}</span>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" onClick={onClose} disabled={submitting}>Cancel</Button>
-              <Button variant="primary" onClick={handleSubmitBulk} disabled={submitting || previewRows.length === 0}>
-                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create Users from Preview'}
-              </Button>
-            </div>
-          </div>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      title="Bulk Add Users (CSV)"
+      className="sm:max-w-6xl"
+    >
+      {/* INPUT */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] uppercase tracking-wider text-muted-foreground">New password storage</span>
+          <PasswordKindSelector kind={passwordKind} onKind={setPasswordKind} />
         </div>
+
+        <BulkCreateInputSection
+          contests={contests}
+          contestId={contestId}
+          csvText={csvText}
+          placeholder={placeholder}
+          onContestIdChange={setContestId}
+          onCsvTextChange={setCsvText}
+          onDownloadTemplate={handleDownloadTemplate}
+          onUploadFile={handleUploadFile}
+          onRebuildPreview={() => buildPreview(csvText, generationMode)}
+          onFillEmpty={fillEmptyInPreview}
+        />
+
+        <HeaderWarnings warnings={headerWarnings} />
+
+        <PreviewTable
+          rows={previewRows.slice(0, 100)}
+          totalRowCount={previewRows.length}
+          selectedRowIndices={selectedRowIndices}
+          onSelectAll={(checked) => {
+            setSelectedRowIndices(checked ? new Set(previewRows.map((r) => r.rowIndex)) : new Set());
+          }}
+          onToggleRow={toggleRow}
+        />
+
+        {selectedRowIndices.size > 0 && (
+          <div className="rounded-lg border border-primary/30 bg-primary/10 p-3 text-primary text-xs flex items-center justify-between">
+            <span>{selectedRowIndices.size} row(s) selected</span>
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={FileSpreadsheet}
+              onClick={handleExportSelectedPreview}
+            >
+              Export Selected
+            </Button>
+          </div>
+        )}
+
+        {submitResult && (
+          <SubmitResultBanner result={submitResult} onDownloadCredentials={handleExportCreatedCredentials} />
+        )}
       </div>
-    </Portal>
+
+      {/* FOOTER */}
+      <DialogFooter className="mt-4 pt-4 border-t border-border">
+        <Button variant="negativeOutline" onClick={onClose} disabled={submitting}>
+          Cancel
+        </Button>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Generation mode: {generationMode}</span>
+          <Button
+            variant="positive"
+            loading={submitting}
+            onClick={handleSubmitBulk}
+            disabled={submitting || previewRows.length === 0}
+          >
+            Create Users from Preview
+          </Button>
+        </div>
+      </DialogFooter>
+    </Dialog>
   );
 }

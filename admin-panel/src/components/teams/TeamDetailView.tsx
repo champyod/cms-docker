@@ -1,13 +1,12 @@
 'use client';
 
+import { ChevronDown, ChevronUp, ExternalLink, Save, Settings, Trash2, Trophy, Users } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
-import { updateTeam, deleteTeam } from '@/app/actions/teams';
+
+import { deleteTeam, updateTeam } from '@/app/actions/teams';
+import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
-import { 
-  Users, Trophy, Settings, Save, Trash2, 
-  ChevronDown, ChevronUp, ExternalLink, Edit2
-} from 'lucide-react';
 
 interface TeamMember {
   user: {
@@ -86,59 +85,50 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white">{team.name}</h1>
-          <p className="text-neutral-400 mt-1">Team Code: <code className="text-indigo-400">{team.code}</code></p>
+          <h1 className="text-3xl font-bold">{team.name}</h1>
+          <p className="text-muted-foreground mt-1">Team Code: <code className="text-primary">{team.code}</code></p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={handleDelete}
-            className="flex items-center gap-2 px-4 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-lg transition-colors"
-          >
-            <Trash2 className="w-4 h-4" />
+          <Button variant="negativeOutline" icon={Trash2} onClick={handleDelete}>
             Delete Team
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors disabled:opacity-50"
-          >
-            <Save className="w-4 h-4" />
+          </Button>
+          <Button variant="positive" icon={Save} loading={saving} disabled={saving} onClick={handleSave}>
             {saving ? 'Saving...' : 'Save Changes'}
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* General Info */}
-      <Card className="glass-card border-white/5 overflow-hidden">
+      <Card className="overflow-hidden">
         <button
           onClick={() => toggleSection('info')}
-          className="w-full p-4 flex items-center justify-between hover:bg-white/5 transition-colors"
+          className="w-full p-4 flex items-center justify-between hover:bg-accent/50 transition-colors"
         >
           <div className="flex items-center gap-3">
-            <Settings className="w-5 h-5 text-indigo-400" />
-            <span className="font-bold text-white">Team Information</span>
+            <Settings className="w-5 h-5 text-primary" />
+            <span className="font-bold">Team Information</span>
           </div>
-          {expandedSections.info ? <ChevronUp className="w-4 h-4 text-neutral-400" /> : <ChevronDown className="w-4 h-4 text-neutral-400" />}
+          {expandedSections.info ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
         </button>
-        
+
         {expandedSections.info && (
           <div className="p-4 pt-0 grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-neutral-500 uppercase mb-1">Team Code</label>
+              <label className="block text-xs font-bold text-muted-foreground uppercase mb-1">Team Code</label>
               <input
                 type="text"
                 value={formData.code}
                 onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50"
+                className="w-full px-3 py-2 bg-background/60 border border-border rounded-lg text-foreground text-sm focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30 transition-colors"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-neutral-500 uppercase mb-1">Team Name</label>
+              <label className="block text-xs font-bold text-muted-foreground uppercase mb-1">Team Name</label>
               <input
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50"
+                className="w-full px-3 py-2 bg-background/60 border border-border rounded-lg text-foreground text-sm focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30 transition-colors"
               />
             </div>
           </div>
@@ -146,43 +136,43 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
       </Card>
 
       {/* Members */}
-      <Card className="glass-card border-white/5 overflow-hidden">
+      <Card className="overflow-hidden">
         <button
           onClick={() => toggleSection('members')}
-          className="w-full p-4 flex items-center justify-between hover:bg-white/5 transition-colors"
+          className="w-full p-4 flex items-center justify-between hover:bg-accent/50 transition-colors"
         >
           <div className="flex items-center gap-3">
-            <Users className="w-5 h-5 text-green-400" />
-            <span className="font-bold text-white">Team Members ({team.members.length})</span>
+            <Users className="w-5 h-5 text-success" />
+            <span className="font-bold">Team Members ({team.members.length})</span>
           </div>
-          {expandedSections.members ? <ChevronUp className="w-4 h-4 text-neutral-400" /> : <ChevronDown className="w-4 h-4 text-neutral-400" />}
+          {expandedSections.members ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
         </button>
 
         {expandedSections.members && (
-          <div className="divide-y divide-white/5">
+          <div className="divide-y divide-border">
             {team.members.map((member) => (
-              <div key={member.user.id} className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors">
+              <div key={member.user.id} className="p-4 flex items-center justify-between hover:bg-accent/50 transition-colors">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-green-500 to-emerald-500 flex items-center justify-center text-xs font-bold text-white">
+                  <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center text-xs font-bold text-primary">
                     {member.user.username.substring(0, 2).toUpperCase()}
                   </div>
                   <div>
-                    <div className="font-medium text-white">{member.user.username}</div>
-                    <div className="text-xs text-neutral-500">{member.user.first_name} {member.user.last_name}</div>
+                    <div className="font-medium">{member.user.username}</div>
+                    <div className="text-xs text-muted-foreground">{member.user.first_name} {member.user.last_name}</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   {member.contests.slice(0, 3).map(c => (
-                    <span key={c.id} className="text-xs px-2 py-0.5 bg-indigo-600/20 text-indigo-400 rounded-full">
+                    <span key={c.id} className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">
                       {c.name}
                     </span>
                   ))}
                   {member.contests.length > 3 && (
-                    <span className="text-xs text-neutral-500">+{member.contests.length - 3} more</span>
+                    <span className="text-xs text-muted-foreground">+{member.contests.length - 3} more</span>
                   )}
                   <a
                     href={`/${locale}/users/${member.user.id}`}
-                    className="p-1.5 text-neutral-500 hover:text-indigo-400 transition-colors"
+                    className="p-1.5 text-muted-foreground hover:text-primary transition-colors"
                   >
                     <ExternalLink className="w-4 h-4" />
                   </a>
@@ -190,7 +180,7 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
               </div>
             ))}
             {team.members.length === 0 && (
-              <div className="p-8 text-center text-neutral-500 text-sm">
+              <div className="p-8 text-center text-muted-foreground text-sm">
                 No members in this team yet. Add members by assigning this team to a participation in a contest.
               </div>
             )}
@@ -199,41 +189,41 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
       </Card>
 
       {/* Contests */}
-      <Card className="glass-card border-white/5 overflow-hidden">
+      <Card className="overflow-hidden">
         <button
           onClick={() => toggleSection('contests')}
-          className="w-full p-4 flex items-center justify-between hover:bg-white/5 transition-colors"
+          className="w-full p-4 flex items-center justify-between hover:bg-accent/50 transition-colors"
         >
           <div className="flex items-center gap-3">
-            <Trophy className="w-5 h-5 text-amber-400" />
-            <span className="font-bold text-white">Contests ({team.contests.length})</span>
+            <Trophy className="w-5 h-5 text-warning" />
+            <span className="font-bold">Contests ({team.contests.length})</span>
           </div>
-          {expandedSections.contests ? <ChevronUp className="w-4 h-4 text-neutral-400" /> : <ChevronDown className="w-4 h-4 text-neutral-400" />}
+          {expandedSections.contests ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
         </button>
 
         {expandedSections.contests && (
-          <div className="divide-y divide-white/5">
+          <div className="divide-y divide-border">
             {team.contests.map((contest) => (
-              <div key={contest.id} className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors">
+              <div key={contest.id} className="p-4 flex items-center justify-between hover:bg-accent/50 transition-colors">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-amber-600/20 flex items-center justify-center text-amber-400 font-bold text-sm">
+                  <div className="w-8 h-8 rounded-lg bg-warning/10 border border-warning/20 flex items-center justify-center text-warning font-bold text-sm">
                     {contest.name.substring(0, 2).toUpperCase()}
                   </div>
                   <div>
-                    <div className="font-medium text-white">{contest.name}</div>
-                    <div className="text-xs text-neutral-500">{contest.description}</div>
+                    <div className="font-medium">{contest.name}</div>
+                    <div className="text-xs text-muted-foreground">{contest.description}</div>
                   </div>
                 </div>
                 <a
                   href={`/${locale}/contests/${contest.id}`}
-                  className="p-1.5 text-neutral-500 hover:text-indigo-400 transition-colors"
+                  className="p-1.5 text-muted-foreground hover:text-primary transition-colors"
                 >
                   <ExternalLink className="w-4 h-4" />
                 </a>
               </div>
             ))}
             {team.contests.length === 0 && (
-              <div className="p-8 text-center text-neutral-500 text-sm">
+              <div className="p-8 text-center text-muted-foreground text-sm">
                 This team is not participating in any contests yet.
               </div>
             )}
