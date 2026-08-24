@@ -1,3 +1,15 @@
+edit_entry() {
+  fleet_load
+  local r="${ROWS[$CUR]}" idx label host
+  IFS='|' read -r idx label host <<<"$r"
+  if ui_form_edit "Edit $label" \
+      "label|Label|$label" \
+      "host|Host|$host"; then
+    fleet_save_entry "$idx" "$FORM_OUT_label" "$FORM_OUT_host"
+    log_info "updated $FORM_OUT_label -> $FORM_OUT_host (redeploy workers to apply)"
+  fi
+}
+
 #!/bin/bash
 # Worker-server connection TUI — run on a WORKER machine to choose which
 # main server this worker's containers talk to, then (re)deploy locally.
@@ -15,6 +27,8 @@ cd "$(dirname "$0")/.."
 
 WORKER_ENV=".env.worker"
 
+# shellcheck disable=SC1091
+[ -f scripts/__lib/form.sh ] && source scripts/__lib/form.sh
 log_info() { printf '[INFO] %s\n' "$*"; }
 log_warn() { printf '[WARN] %s\n' "$*" >&2; }
 die() { log_warn "ERROR: $*"; exit 1; }
@@ -83,13 +97,6 @@ env_set_kv() {
   else echo "$k=$v" >> "$WORKER_ENV"; fi
 }
 
-prompt_field() {
-  local label="$1" cur="$2" v=""
-  printf '  %-8s [%s]: ' "$label" "$cur"
-  IFS= read -r v || v=""
-  printf '%s' "${v:-$cur}"
-}
-
 render() {
   fleet_load
   local i row idx label host mark act
@@ -112,22 +119,27 @@ render() {
 add_entry() {
   local idx label host
   idx="$(next_idx)"
-  echo ""; echo "${C_B}Add main server${C_0}  (Enter accepts suggestion)"
-  label="$(prompt_field label "$(printf 'main-%s' "$idx")")"
-  host="$(prompt_field host "$(env_val "$WORKER_ENV" CORE_SERVICES_HOST || true)")"
-  [ -n "$host" ] || { log_warn "host required"; return 0; }
-  fleet_save_entry "$idx" "$label" "$host"
-  log_info "saved $label -> $host"
+  if ui_form_edit "Add main server" \
+      "label|Label|main-$idx" \
+      "host|Host|$(active_host)"; then
+    label="$FORM_OUT_label"; host="$FORM_OUT_host"
+    [ -n "$host" ] || { log_warn "host required"; return 0; }
+    fleet_save_entry "$idx" "$label" "$host"
+    log_info "saved $label -> $host"
+  fi
 }
 
 edit_entry() {
-  local r="$1" idx label host
-  IFS='|' read -r idx label host <<<"${ROWS[$r]}"
-  echo ""; echo "${C_B}Edit $label${C_0}  (Enter keeps value)"
-  label="$(prompt_field label "$label")"
-  host="$(prompt_field host "$host")"
-  fleet_save_entry "$idx" "$label" "$host"
-  log_info "updated $label -> $host"
+  fleet_load
+  local r="${ROWS[$CUR]}" idx label host
+  IFS='|' read -r idx label host <<<"$r"
+  if ui_form_edit "Edit $label" \
+      "label|Label|$label" \
+      "host|Host|$host"; then
+    [ -n "$FORM_OUT_host" ] || { log_warn "host required"; return 0; }
+    fleet_save_entry "$idx" "$FORM_OUT_label" "$FORM_OUT_host"
+    log_info "updated $FORM_OUT_label -> $FORM_OUT_host (redeploy workers to apply)"
+  fi
 }
 
 tui_loop() {

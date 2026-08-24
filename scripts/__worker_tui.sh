@@ -29,6 +29,8 @@ SELECTED=()
 
 # shellcheck disable=SC1091
 [ -f scripts/__lib/common.sh ] && source scripts/__lib/common.sh
+# shellcheck disable=SC1091
+[ -f scripts/__lib/form.sh ] && source scripts/__lib/form.sh
 log_info() { printf '[INFO] %s\n' "$*"; }
 log_warn() { printf '[WARN] %s\n' "$*" >&2; }
 die() { log_warn "ERROR: $*"; exit 1; }
@@ -188,16 +190,6 @@ refresh_hint() {
   log_info "Registry changed -> run 'make env' (or ./cms) to regenerate config/cms.toml."
 }
 
-# ---------------------------------------------------------------------------
-# Interactive editor/deployer
-# ---------------------------------------------------------------------------
-prompt_field() {
-  local label="$1" cur="$2" v=""
-  printf '  %-8s [%s]: ' "$label" "$cur"
-  IFS= read -r v || v=""
-  printf '%s' "${v:-$cur}"
-}
-
 next_free_shard() {
   local used=" " s row
   for row in "${WORKERS[@]}"; do used+=" ${row%%|*} "; done
@@ -207,34 +199,38 @@ next_free_shard() {
 }
 
 add_entry() {
-  local s h p l m c
-  s="$(next_free_shard)"
-  echo ""; echo "${C_B}New worker${C_0}  (Enter accepts suggested value)"
-  s="$(prompt_field shard "$s")"
-  p="$(prompt_field port "$((26000 + s))")"
-  h="$(prompt_field host "$(core_host_ip)")"
-  l="$(prompt_field local? "1  (0 = registry-only/remote)")"
-  m="$(prompt_field memory "$(global_memory || echo 512M)")"
-  c="$(prompt_field cpus "$(global_cpus || echo 0.5)")"
-  [[ "$s" =~ ^[0-9]+$ ]] || { log_warn "shard must be numeric"; return 0; }
-  [[ "$p" =~ ^[0-9]+$ ]] || { log_warn "port must be numeric"; return 0; }
-  [[ "$l" =~ ^[01]$ ]] || l=1
-  fleet_load; WORKERS+=("$s|$h|$p|$l|$m|$c"); fleet_save
-  refresh_hint
+  local s h p m c
+  fleet_load; s="$(next_free_shard)"
+  if ui_form_edit "New worker shard" \
+      "shard|Shard|$s" \
+      "port|Port|$((26000 + s))" \
+      "host|Registry host|$(core_host_ip)" \
+      "memory|Memory|$(global_memory || echo 512M)" \
+      "cpus|CPUs|$(global_cpus || echo 0.5)"; then
+    s="$FORM_OUT_shard"; h="$FORM_OUT_host"; p="$FORM_OUT_port"; m="$FORM_OUT_memory"; c="$FORM_OUT_cpus"
+    [[ "$s" =~ ^[0-9]+$ ]] || { log_warn "shard must be numeric"; return 0; }
+    [[ "$p" =~ ^[0-9]+$ ]] || { log_warn "port must be numeric"; return 0; }
+    fleet_load; WORKERS+=("$s|$h|$p|$m|$c"); toml_save
+    log_info "Added shard $s ($h:$p). Run 'make env' to refresh cms.toml."
+  fi
 }
 
 edit_entry() {
-  local idx="$1" row s h p l m c
-  row="${WORKERS[$idx]}"; IFS='|' read -r s h p l m c <<<"$row"
-  echo ""; echo "${C_B}Edit shard $s${C_0}  (Enter keeps current)"
-  s="$(prompt_field shard "$s")"
-  h="$(prompt_field host "$h")"
-  p="$(prompt_field port "$p")"
-  l="$(prompt_field local? "$l")"
-  m="$(prompt_field memory "$m")"
-  c="$(prompt_field cpus "$c")"
-  WORKERS["$idx"]="$s|$h|$p|$l|$m|$c"; fleet_save
-  refresh_hint
+  fleet_load
+  local row="${ROWS[$CUR]}" s h p m c
+  IFS='|' read -r s h p m c <<<"$row"
+  if ui_form_edit "Edit shard $s" \
+      "shard|Shard|$s" \
+      "port|Port|$p" \
+      "host|Registry host|$h" \
+      "memory|Memory|$m" \
+      "cpus|CPUs|$c"; then
+    s="$FORM_OUT_shard"; h="$FORM_OUT_host"; p="$FORM_OUT_port"; m="$FORM_OUT_memory"; c="$FORM_OUT_cpus"
+    [[ "$s" =~ ^[0-9]+$ ]] || { log_warn "shard must be numeric"; return 0; }
+    [[ "$p" =~ ^[0-9]+$ ]] || { log_warn "port must be numeric"; return 0; }
+    ROWS[$CUR]="$s|$h|$p|$m|$c"; toml_save
+    log_info "Updated shard $s ($h:$p). Re-deploy to apply."
+  fi
 }
 
 render() {
