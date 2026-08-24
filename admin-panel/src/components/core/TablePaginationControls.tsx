@@ -35,7 +35,7 @@ export function TablePaginationControls({
         {'->'}
       </Button>
 
-      <span className="ml-2 text-neutral-400">page</span>
+      <span className="ml-2 text-muted-foreground">page</span>
       <input
         type="number"
         min={1}
@@ -44,16 +44,16 @@ export function TablePaginationControls({
         title="Page number"
         placeholder="Page"
         onChange={(event) => onPageInputChange(event.target.value)}
-        className="w-20 bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-sm text-white"
+        className="w-20 rounded-md border border-input bg-transparent px-2 py-1 text-sm text-foreground outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
       />
       <Button variant="ghost" size="sm" onClick={onPageGo}>Go</Button>
 
-      <span className="ml-2 text-neutral-400">per page</span>
+      <span className="ml-2 text-muted-foreground">per page</span>
       <select
         value={perPage}
         title="Rows per page"
         onChange={(event) => onPerPageChange(Number(event.target.value) || 20)}
-        className="bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-sm text-white"
+        className="rounded-md border border-input bg-card px-2 py-1 text-sm text-foreground outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
       >
         {[10, 20, 50, 100].map((value) => (
           <option key={value} value={value}>{value}</option>

@@ -9,7 +9,7 @@ interface TableProps extends React.TableHTMLAttributes<HTMLTableElement> {
 export const Table = React.forwardRef<HTMLTableElement, TableProps>(
   ({ className, children, outerClassName, ...props }, ref) => {
     return (
-      <div className={cn("w-full overflow-auto rounded-2xl border border-white/10 shadow-lg bg-black/5 backdrop-blur-sm", outerClassName)}>
+      <div className={cn("w-full overflow-auto rounded-xl border border-border bg-card shadow-sm", outerClassName)}>
         <table
           ref={ref}
           className={cn("w-full caption-bottom text-sm text-left", className)}
@@ -25,7 +25,7 @@ Table.displayName = "Table";
 
 export const TableHeader = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>(
   ({ className, ...props }, ref) => (
-    <thead ref={ref} className={cn("[&_tr]:border-b border-white/10 bg-white/5", className)} {...props} />
+    <thead ref={ref} className={cn("[&_tr]:border-b bg-muted/50", className)} {...props} />
   )
 );
 TableHeader.displayName = "TableHeader";
@@ -42,7 +42,7 @@ export const TableRow = React.forwardRef<HTMLTableRowElement, React.HTMLAttribut
     <tr
       ref={ref}
       className={cn(
-        "border-b border-white/5 transition-colors hover:bg-white/5 data-[state=selected]:bg-indigo-500/10",
+        "border-b border-border transition-colors hover:bg-muted/50 data-[state=selected]:bg-primary/10",
         className
       )}
       {...props}
@@ -69,7 +69,7 @@ export const TableCell = React.forwardRef<HTMLTableCellElement, React.TdHTMLAttr
   ({ className, ...props }, ref) => (
     <td
       ref={ref}
-      className={cn("p-4 align-middle [&:has([role=checkbox])]:pr-0 text-slate-300", className)}
+      className={cn("p-4 align-middle [&:has([role=checkbox])]:pr-0 text-foreground", className)}
       {...props}
     />
   )

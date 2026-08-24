@@ -1,28 +1,38 @@
-import { cn } from "@/lib/utils";
+import { cva, type VariantProps } from 'class-variance-authority';
+import { cn } from '@/lib/utils';
 
-interface BadgeProps {
-    children: React.ReactNode;
-    variant?: 'indigo' | 'cyan' | 'emerald' | 'amber' | 'red' | 'neutral';
-    className?: string;
+export const badgeVariants = cva(
+  'inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest',
+  {
+    variants: {
+      variant: {
+        indigo: 'border-primary/20 bg-primary/10 text-primary',
+        cyan: 'border-info/20 bg-info/10 text-info',
+        emerald: 'border-success/20 bg-success/10 text-success',
+        amber: 'border-warning/20 bg-warning/10 text-warning',
+        red: 'border-destructive/20 bg-destructive/10 text-destructive',
+        neutral: 'border-border bg-secondary text-muted-foreground',
+        success: 'border-success/20 bg-success/10 text-success',
+        warning: 'border-warning/20 bg-warning/10 text-warning',
+        info: 'border-info/20 bg-info/10 text-info',
+        destructive: 'border-destructive/20 bg-destructive/10 text-destructive',
+      },
+    },
+    defaultVariants: {
+      variant: 'indigo',
+    },
+  }
+);
+
+interface BadgeProps extends VariantProps<typeof badgeVariants> {
+  children: React.ReactNode;
+  className?: string;
 }
 
 export function Badge({ children, variant = 'indigo', className }: BadgeProps) {
-    const variants = {
-        indigo: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
-        cyan: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
-        emerald: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-        amber: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-        red: 'bg-red-500/10 text-red-400 border-red-500/20',
-        neutral: 'bg-white/5 text-neutral-400 border-white/10'
-    };
-
-    return (
-        <span className={cn(
-            "px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest rounded border",
-            variants[variant],
-            className
-        )}>
-            {children}
-        </span>
-    );
+  return (
+    <span className={cn(badgeVariants({ variant }), className)}>
+      {children}
+    </span>
+  );
 }
