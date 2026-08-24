@@ -61,7 +61,7 @@
 
 9. **DOCKER SOCKET = ROOT**: Any code touching Docker (container control, service restart) MUST require `permission_all` (superadmin only).
 
-10. **PASSWORD STORAGE FORMAT**: Passwords use `bcrypt:<hash>` or `plaintext:<value>` prefix. Never store raw hashes without prefix. All new passwords MUST use bcrypt.
+10. **PASSWORD STORAGE FORMAT**: Passwords use `bcrypt:<hash>` or `plaintext:<value>` prefix. Never store raw unprefixed values — the legacy `cmscommon.crypto.validate_password` raises on them. Dual-mode is user-selectable per save (bcrypt | plain text) with bcrypt as the default; plaintext makes the stored value revealable in edit forms via click-to-reveal. Generated bulk credentials may also be stored as plaintext when explicitly chosen.
 
 11. **REVALIDATE AFTER MUTATION**: Every Server Action that writes data MUST call `revalidatePath()` to keep the UI consistent.
 
