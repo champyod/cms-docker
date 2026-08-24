@@ -28,7 +28,10 @@ export default async function AdminsPage({
         <Text variant="muted">Manage admin accounts and permissions.</Text>
       </Stack>
 
-      <AdminList initialAdmins={admins} />
+      <AdminList
+        initialAdmins={admins}
+        actionLabels={{ edit: dict.admins.actions.edit, delete: dict.admins.actions.delete }}
+      />
     </Stack>
   );
 }

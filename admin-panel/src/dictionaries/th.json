@@ -13,5 +13,50 @@
     "permissionRequired": "คุณต้องการสิทธิ์ {permission} เพื่อเข้าถึงหน้านี้",
     "contactAdmin": "ติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์การเข้าถึง",
     "returnToDashboard": "กลับไปหน้าแดชบอร์ด"
+  },
+  "users": {
+    "title": "User Management",
+    "subtitle": "จัดการผู้ใช้งานและผู้เข้าร่วมการแข่งขัน",
+    "allUsers": "ผู้ใช้งานทั้งหมด",
+    "bulkAddUsers": "เพิ่มผู้ใช้จำนวนมาก",
+    "createUser": "สร้างผู้ใช้",
+    "editUser": "แก้ไขผู้ใช้",
+    "editSelected": "แก้ไขที่เลือก",
+    "searchPlaceholder": "ค้นหาผู้ใช้...",
+    "tableEmptyTitle": "ไม่พบผู้ใช้",
+    "tableEmptyDescription": "ปรับการค้นหาหรือสร้างผู้ใช้ใหม่เพื่อเริ่มต้น",
+    "bulkCreateTitle": "เพิ่มผู้ใช้จำนวนมาก (CSV)",
+    "bulkEditTitle": "แก้ไขผู้ใช้ที่เลือก",
+    "bulkCreateTemplate": "ดาวน์โหลดเทมเพลต CSV",
+    "bulkCreateParse": "แยกวิเคราะห์และแสดงตัวอย่าง",
+    "bulkOverwriteApply": "ใช้ข้อมูลรับรอง"
+  },
+  "teams": {
+    "title": "ทีม",
+    "subtitle": "จัดการทีมสำหรับการแข่งขัน",
+    "allTeams": "ทีมทั้งหมด",
+    "addTeam": "เพิ่มทีม",
+    "editTeam": "แก้ไขทีม",
+    "teamDetail": "รายละเอียดทีม",
+    "viewMembers": "ดูสมาชิกทีม",
+    "editTeamTooltip": "แก้ไขทีม",
+    "deleteTeamTooltip": "ลบทีม",
+    "tableEmptyTitle": "ไม่พบทีม",
+    "tableEmptyDescription": "ทีมจะปรากฏที่นี่เมื่อสร้างแล้ว"
+  },
+  "submissions": {
+    "title": "การส่งคำตอบ",
+    "subtitle": "ติดตามกิจกรรมการส่งคำตอบและผลลัพธ์แบบเรียลไทม์",
+    "allSubmissions": "การส่งคำตอบทั้งหมด",
+    "readOnlyBadge": "อ่านอย่างเดียว",
+    "tableEmptyTitle": "ไม่พบการส่งคำตอบ",
+    "tableEmptyDescription": "การส่งคำตอบจะปรากฏที่นี่เมื่อผู้เข้าแข่งขันเริ่มส่ง",
+    "viewSubmission": "ดูการส่งคำตอบ"
+  },
+  "admins": {
+    "actions": {
+      "edit": "แก้ไข",
+      "delete": "ลบ"
+    }
   }
 }
