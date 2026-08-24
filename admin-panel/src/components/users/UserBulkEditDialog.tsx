@@ -26,7 +26,8 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
     emailDomain, setEmailDomain,
     passwordKind, setPasswordKind,
     rows, teamsOptions,
-    revealRowPassword, revealingIds,
+    revealedIds, revealingIds, allRevealed,
+    revealRowPassword, toggleAllRevealed,
     runRegenerate, exportSelectedRows,
     runContestMutation, runTeamSet, runTeamRemoveAny,
     runTimezoneUpdate, runEmailDomainUpdate, runEmailClear,
@@ -110,7 +111,14 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
             {statusMessage && <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300">{statusMessage}</div>}
             {errorMessage && <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">{errorMessage}</div>}
 
-            <BulkEditPreviewTable rows={rows} onRevealPassword={revealRowPassword} revealingIds={revealingIds} />
+            <BulkEditPreviewTable
+              rows={rows}
+              revealedIds={revealedIds}
+              revealingIds={revealingIds}
+              allRevealed={allRevealed}
+              onToggleRevealRow={revealRowPassword}
+              onToggleAllRevealed={toggleAllRevealed}
+            />
 
             <div className="flex items-center justify-end gap-2">
               <Button variant="ghost" onClick={() => applyCredentials(false)} disabled={loading || rows.length === 0}>
