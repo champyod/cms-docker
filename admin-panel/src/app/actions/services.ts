@@ -59,30 +59,6 @@ export async function analyzeRestartRequirements(changedKeys: string[]) {
     return { requiredRestarts: Array.from(finalSet) };
 }
 
-export async function getLiveServiceConnections() {
-    await ensurePermission('all');
-    try {
-        type LiveServiceConnection = {
-            name: string;
-            shard: number;
-            address: string;
-            port: number;
-        };
-
-        // Query the services table which LogService maintains
-        // Note: 'services' table is not in Prisma schema, so we use $queryRaw
-        const services = await prisma.$queryRaw<LiveServiceConnection[]>`
-            SELECT name, shard, address, port FROM services ORDER BY name, shard;
-        `;
-
-        return { success: true, services };
-    } catch (error) {
-        console.error('Failed to fetch live service connections:', error);
-        // If table doesn't exist yet (first boot), return empty
-        return { success: true, services: [] };
-    }
-}
-
 export async function restartServices(type: 'all' | 'core' | 'admin' | 'worker' | 'custom', customList?: string[]) {
   await ensurePermission('all');
   try {

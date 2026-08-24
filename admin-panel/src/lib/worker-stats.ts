@@ -16,7 +16,7 @@ export interface WorkerStat {
 }
 
 type ConfiguredWorker = { shard: number; host: string; port: number };
-type LiveWorkerService = { address: string; port: number; shard: number };
+type RunningShard = { shard: number; status: string };
 
 const WORKER_ENV_LINE_RE = /^(?:export\s+)?WORKER_(\d+)\s*=\s*['"]?([^:'"]+)['"]?\s*:\s*(\d+)\s*$/;
 
@@ -55,34 +55,17 @@ function countEvaluationsByShard(evaluations: Array<{ evaluation_shard: number |
   return shardCounts;
 }
 
-function normalizeHost(value: string): string {
-  return value.trim().toLowerCase();
-}
-
-function hostMatches(liveHost: string, targetHost: string): boolean {
-  return liveHost === targetHost ||
-    liveHost.includes(targetHost) ||
-    targetHost.includes(liveHost) ||
-    (targetHost === 'localhost' && liveHost === '127.0.0.1') ||
-    (targetHost === '127.0.0.1' && liveHost === 'localhost');
-}
-
-function isWorkerServiceLive(services: LiveWorkerService[], host: string, port: number, shard: number): boolean {
-  const targetHost = normalizeHost(host);
-  return services.some((service) => {
-    if (service.shard === shard) return true;
-    if (service.port !== port) return false;
-    return hostMatches(normalizeHost(service.address || ''), targetHost);
-  });
+function isShardRunning(running: RunningShard[], shard: number): boolean {
+  return running.some((r) => r.shard === shard && r.status.toLowerCase().includes('up'));
 }
 
 function describeConfiguredWorker(
   worker: ConfiguredWorker,
   shardCounts: Record<number, number>,
-  services: LiveWorkerService[]
+  running: RunningShard[]
 ): WorkerStat {
   const taskCount = shardCounts[worker.shard] || 0;
-  const isLive = isWorkerServiceLive(services, worker.host, worker.port, worker.shard);
+  const isLive = isShardRunning(running, worker.shard);
 
   return {
     id: `worker-${worker.shard}`,
@@ -93,17 +76,24 @@ function describeConfiguredWorker(
   };
 }
 
+function parseContainerShard(name: string): number | null {
+  const m = name.match(/cms-worker-(\d+)/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
 function describeContainerWorkers(containerLines: string[], shardCounts: Record<number, number>): WorkerStat[] {
-  return containerLines.map((line, index) => {
+  return containerLines.map((line) => {
     const [name, status] = line.split('\t');
     const isRunning = status.toLowerCase().includes('up');
+    const shard = parseContainerShard(name);
+    const tasks = shard !== null ? (shardCounts[shard] || 0) : 0;
 
     return {
       id: name,
       name: name,
-      status: isRunning ? (shardCounts[index] > 0 ? 'busy' : 'online') : 'offline',
-      tasks: shardCounts[index] || 0,
-      load: shardCounts[index] ? Math.min(100, (shardCounts[index] / 10) * 100) : 0
+      status: isRunning ? (tasks > 0 ? 'busy' : 'online') : 'offline',
+      tasks,
+      load: tasks ? Math.min(100, (tasks / 10) * 100) : 0
     };
   });
 }
@@ -115,20 +105,28 @@ export async function collectWorkerStats(): Promise<WorkerStat[]> {
     // Get all cms-worker containers
     const { stdout } = await execPromise('docker ps -a --filter "name=cms-worker" --format "{{.Names}}\t{{.Status}}"');
 
-    // Get active evaluations per shard
-    const activeEvaluations = await prisma.evaluations.findMany({
+    // Open evaluations per shard — the real busy/backlog signal.
+    const groups = await prisma.evaluations.groupBy({
+      by: ['evaluation_shard'],
       where: { outcome: null },
-      select: { evaluation_shard: true }
+      _count: { _all: true }
     });
+    const shardCounts: Record<number, number> = {};
+    for (const g of groups) {
+      if (g.evaluation_shard !== null) shardCounts[g.evaluation_shard] = g._count._all;
+    }
 
-    const shardCounts = countEvaluationsByShard(activeEvaluations);
-
-    const liveWorkerServices = await prisma.$queryRaw<LiveWorkerService[]>`
-      SELECT address, port, shard FROM services WHERE name = 'Worker' ORDER BY shard;
-    `;
+    const running: RunningShard[] = stdout
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => {
+        const [name, status] = line.split('\t');
+        return { shard: parseContainerShard(name) ?? -1, status };
+      });
 
     if (configuredWorkers.length > 0) {
-      return configuredWorkers.map((worker) => describeConfiguredWorker(worker, shardCounts, liveWorkerServices));
+      return configuredWorkers.map((worker) => describeConfiguredWorker(worker, shardCounts, running));
     }
 
     if (!stdout.trim()) {

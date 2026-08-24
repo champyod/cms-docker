@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { readEnvFile, updateEnvFile } from '@/app/actions/env';
 import { getAvailableContests } from '@/app/actions/contests';
 import { getWorkers, updateWorkers } from '@/app/actions/workerConfig';
-import { getLiveServiceConnections } from '@/app/actions/services';
+import { getWorkersLiveStatus, WorkerLiveDetail } from '@/app/actions/workers';
 import { useDeployContest } from '@/hooks/useDeployContest';
 import { PageContent, PageHeader, Stack } from '@/components/core/Layout';
 import { Loading } from '@/components/core/Loading';
@@ -12,7 +12,7 @@ import { useToast } from '@/components/providers/ToastProvider';
 import { MismatchBanner } from '@/components/deployments/MismatchBanner';
 import { ActiveContestCard, ContestOption } from '@/components/deployments/ActiveContestCard';
 import { ContestSettingsForm } from '@/components/deployments/ContestSettingsForm';
-import { WorkersPanel, LiveService, WorkerConfig } from '@/components/deployments/WorkersPanel';
+import { WorkersPanel, WorkerConfig } from '@/components/deployments/WorkersPanel';
 
 export function DeploymentsClient() {
     const { addToast } = useToast();
@@ -28,7 +28,9 @@ export function DeploymentsClient() {
     const [originalGlobal, setOriginalGlobal] = useState<string>('{}');
     const [workers, setWorkers] = useState<WorkerConfig[]>([]);
     const [originalWorkers, setOriginalWorkers] = useState<string>('[]');
-    const [liveServices, setLiveServices] = useState<LiveService[]>([]);
+    const [liveWorkers, setLiveWorkers] = useState<WorkerLiveDetail[]>([]);
+    const [workersForbidden, setWorkersForbidden] = useState(false);
+    const [canManageWorkers, setCanManageWorkers] = useState(true);
 
     const isDirty = JSON.stringify(globalSettings) !== originalGlobal;
     const workersDirty = JSON.stringify(workers) !== originalWorkers;
@@ -53,11 +55,11 @@ export function DeploymentsClient() {
 
     const loadData = async () => {
         setLoading(true);
-        const [envResult, contestsResult, workersResult, servicesResult] = await Promise.all([
+        const [envResult, contestsResult, workersResult, statusResult] = await Promise.all([
             readEnvFile('.env.contest'),
             getAvailableContests(),
             getWorkers(),
-            getLiveServiceConnections()
+            getWorkersLiveStatus()
         ]);
 
         const actualActiveId = applyEnvSnapshot(envResult);
@@ -80,12 +82,29 @@ export function DeploymentsClient() {
         setWorkers(normalizedWorkers);
         setOriginalWorkers(JSON.stringify(normalizedWorkers));
 
-        if (servicesResult.success) setLiveServices(servicesResult.services);
+        if (statusResult && !statusResult.forbidden) {
+            setLiveWorkers(statusResult.workers ?? []);
+            setCanManageWorkers(statusResult.canManage);
+            setWorkersForbidden(false);
+        } else {
+            setWorkersForbidden(true);
+        }
 
         setLoading(false);
     };
 
     useEffect(() => { loadData(); }, []);
+
+    // Poll worker telemetry so activity/lagging stay fresh.
+    useEffect(() => {
+        const id = setInterval(async () => {
+            try {
+                const res = await getWorkersLiveStatus();
+                if (!res.forbidden) setLiveWorkers(res.workers ?? []);
+            } catch { /* keep last snapshot */ }
+        }, 20_000);
+        return () => clearInterval(id);
+    }, []);
 
     const handleActivateAndRestart = () => {
         if (!selectedContestId || !hasChangedContest) return;
@@ -213,7 +232,9 @@ export function DeploymentsClient() {
                 {/* Right Column: Worker Nodes */}
                 <WorkersPanel
                     workers={workers}
-                    liveServices={liveServices}
+                    status={liveWorkers}
+                    forbidden={workersForbidden}
+                    canManage={canManageWorkers}
                     saving={saving}
                     workersDirty={workersDirty}
                     onSaveWorkers={handleSaveWorkers}
