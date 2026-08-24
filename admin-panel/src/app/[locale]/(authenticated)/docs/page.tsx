@@ -118,13 +118,13 @@ export default function DocsPage() {
                 <div>
                    <h3 className="font-bold text-foreground mb-2">Teams</h3>
                    <p className="text-sm text-muted-foreground">
-                     Users are grouped into Teams (e.g., "IOI 2024", "Guest"). You can use teams to bulk-add users or filter scoreboards.
+                     Users are grouped into Teams (e.g., &quot;IOI 2024&quot;, &quot;Guest&quot;). You can use teams to bulk-add users or filter scoreboards.
                    </p>
                 </div>
                 <div className="pt-4 border-t border-border">
                   <h3 className="font-bold text-foreground mb-2">Participation Settings</h3>
                   <p className="text-sm text-muted-foreground mb-4">
-                    When a user is added to a contest, a "Participation" object is created to track their specific constraints.
+                    When a user is added to a contest, a &quot;Participation&quot; object is created to track their specific constraints.
                    </p>
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="bg-muted/50 p-4 rounded-lg border border-border">
@@ -253,7 +253,7 @@ export default function DocsPage() {
                       The Token Generation System
                     </h3>
                     <p className="text-sm text-muted-foreground leading-relaxed">
-                      Tokens control how often users can "test" their solutions against the full judge.
+                      Tokens control how often users can &quot;test&quot; their solutions against the full judge.
                       A bucket starts with <span className="text-foreground">Gen Initial</span> tokens.
                       Every <span className="text-foreground">Gen Interval</span> (minutes),
                       the user receives <span className="text-foreground">Gen Number</span> more tokens,
@@ -269,7 +269,7 @@ export default function DocsPage() {
                       <div>Max: 5</div>
                     </div>
                     <p className="text-[10px] text-muted-foreground mt-2 italic">
-                      User starts with 2 tries. Every 30 mins they get 1 more, but can't hold more than 5 at once.
+                      User starts with 2 tries. Every 30 mins they get 1 more, but can&apos;t hold more than 5 at once.
                       </p>
                     </div>
                   </div>
@@ -304,7 +304,7 @@ export default function DocsPage() {
                       Result Invalidation
                     </h4>
                     <p className="text-xs text-amber-200/70 leading-relaxed">
-                      If you update a task's testcases or scoring rules, you must <strong className="text-amber-400">Invalidate</strong> existing results to force a re-evaluation on the next judge cycle.
+                      If you update a task&apos;s testcases or scoring rules, you must <strong className="text-amber-400">Invalidate</strong> existing results to force a re-evaluation on the next judge cycle.
                     </p>
                   </div>
                 </div>

@@ -21,6 +21,7 @@ export default function SearchClient() {
 
   useEffect(() => {
     if (!query) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset-on-empty-query; behavior must not change
       setResults(null);
       return;
     }
@@ -35,7 +36,7 @@ export default function SearchClient() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-foreground">Search Results for "{query}"</h1>
+      <h1 className="text-2xl font-bold text-foreground">{`Search Results for "${query}"`}</h1>
 
       {loading && <SkeletonText lines={2} />}
       

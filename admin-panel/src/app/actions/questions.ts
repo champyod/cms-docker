@@ -1,6 +1,7 @@
 'use server'
 
 import { prisma } from '@/lib/prisma';
+import type { Prisma } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { ensurePermission } from '@/lib/permissions';
 
@@ -81,7 +82,7 @@ export async function unignoreQuestion(questionId: number) {
 
 export async function getUnansweredQuestions(contestId: number | null) {
   await ensurePermission('contests');
-  const where: any = {
+  const where: Record<string, unknown> = {
     reply_timestamp: null,
     ignored: false
   };
@@ -91,7 +92,7 @@ export async function getUnansweredQuestions(contestId: number | null) {
   }
 
   return prisma.questions.findMany({
-    where,
+    where: where as Prisma.questionsWhereInput,
     include: {
       participations: { include: { users: { select: { username: true } } } }
     },

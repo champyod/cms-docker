@@ -89,10 +89,11 @@ export async function POST(req: NextRequest) {
 
     revalidatePath('/[locale]/contests', 'page');
     return apiSuccess({ message: 'Contest created successfully' });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error as { message?: string; code?: string };
     // Check for DB check constraints
     for (const [constraint, field] of Object.entries(CONSTRAINT_TO_FIELD_MAP)) {
-      if (error.message?.includes(constraint)) {
+      if (err.message?.includes(constraint)) {
         return apiError({
           message: getConstraintErrorMessage(constraint),
           errors: [{ field, message: getConstraintErrorMessage(constraint), code: constraint }],
@@ -101,7 +102,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (error.message?.includes('unique constraint') || error.code === 'P2002') {
+    if (err.message?.includes('unique constraint') || err.code === 'P2002') {
       return apiError({ message: 'Contest name already exists', status: 400 });
     }
     return apiError(error);

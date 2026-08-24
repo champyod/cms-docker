@@ -17,7 +17,7 @@ export function MismatchBanner({ activeContestId, activeContestName, dbActiveCon
                     The .env file points to contest <strong className="text-foreground">#{activeContestId}</strong>
                     {activeContestName ? ` (${activeContestName})` : ''},
                     but the database has contest <strong className="text-foreground">#{dbActiveContestId}</strong> marked as active.
-                    This can happen after a failed deploy or manual edits. Click "Activate & Restart Stack" to resolve.
+                    This can happen after a failed deploy or manual edits. Click &quot;Activate &amp; Restart Stack&quot; to resolve.
                 </Text>
             </div>
         </div>

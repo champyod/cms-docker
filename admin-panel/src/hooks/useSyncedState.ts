@@ -8,6 +8,7 @@ export function useSyncedState<T>(value: T) {
   useEffect(() => {
     if (prevRef.current !== value) {
       prevRef.current = value;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- prop-sync idiom (official adjust-during-render alternative); behavior identical
       setState(value);
     }
   }, [value]);

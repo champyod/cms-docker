@@ -27,7 +27,7 @@ export async function PUT(
       });
     }
 
-    const toDate = (d: any) => d ? new Date(d) : null;
+    const toDate = (d: unknown) => (d ? new Date(d as string | number | Date) : null);
 
     const startDate = toDate(data.start);
     const stopDate = toDate(data.stop);
@@ -102,10 +102,11 @@ export async function PUT(
     revalidatePath('/[locale]/contests', 'page');
     revalidatePath(`/[locale]/contests/${id}`, 'page');
     return apiSuccess({ message: 'Contest updated successfully' });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error as { message?: string; code?: string };
     // Check for DB check constraints
     for (const [constraint, field] of Object.entries(CONSTRAINT_TO_FIELD_MAP)) {
-      if (error.message?.includes(constraint)) {
+      if (err.message?.includes(constraint)) {
         return apiError({
           message: getConstraintErrorMessage(constraint),
           errors: [{ field, message: getConstraintErrorMessage(constraint), code: constraint }],
@@ -114,7 +115,7 @@ export async function PUT(
       }
     }
 
-    if (error.code === 'P2002' || error.message?.includes('unique constraint')) {
+    if (err.code === 'P2002' || err.message?.includes('unique constraint')) {
       return apiError({ message: 'Contest name already exists', status: 400 });
     }
     return apiError(error);
@@ -136,7 +137,8 @@ export async function DELETE(
     await prisma.contests.delete({ where: { id } });
     revalidatePath('/[locale]/contests', 'page');
     return apiSuccess({ message: 'Contest deleted successfully' });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error as { message?: string; code?: string };
     return apiError(error);
   }
 }

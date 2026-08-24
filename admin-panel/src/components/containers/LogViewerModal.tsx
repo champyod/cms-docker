@@ -32,6 +32,7 @@ export function LogViewerModal({ containerId, containerName, onClose }: LogViewe
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- mount-load or modal-reset pattern; behavior must not change
     fetchLogs();
     const interval = setInterval(fetchLogs, 5000);
     return () => clearInterval(interval);

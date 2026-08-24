@@ -74,6 +74,7 @@ export function ContainersClient() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- mount-load or modal-reset pattern; behavior must not change
     loadContainers();
     const interval = setInterval(loadContainers, 10000);
     return () => clearInterval(interval);

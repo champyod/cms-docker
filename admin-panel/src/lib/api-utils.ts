@@ -36,24 +36,32 @@ export async function verifyApiPermission(permission: Permission) {
   return { authorized: true as const, session };
 }
 
-export function apiError(error: any) {
+interface KnownApiError {
+  code?: string;
+  status?: number;
+  message?: string;
+  errors?: unknown;
+}
+
+export function apiError(error: unknown) {
   console.error('API Error:', error);
-  const code = (error as { code?: string }).code;
+  const err = error as KnownApiError;
+  const code = err.code;
   let message: string;
   if (code === 'P2002') {
     message = 'A record with these details already exists';
   } else if (code === 'P2025') {
     message = 'Record not found';
-  } else if (error.status != null && error.status < 500) {
-    message = error.message || 'An unexpected error occurred';
+  } else if (err.status != null && err.status < 500) {
+    message = err.message || 'An unexpected error occurred';
   } else {
     message = 'An unexpected error occurred';
   }
-  const status = error.status || 500;
-  const extra = error.errors ? { errors: error.errors } : {};
+  const status = err.status || 500;
+  const extra = err.errors ? { errors: err.errors } : {};
   return NextResponse.json({ success: false, error: message, ...extra }, { status });
 }
 
-export function apiSuccess(data?: any) {
+export function apiSuccess(data?: object) {
   return NextResponse.json({ success: true, ...data });
 }
