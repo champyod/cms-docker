@@ -22,7 +22,7 @@ pub fn panel(title: &str, theme: &Theme) -> Block<'static> {
     Block::default()
         .title(format!(" {title} "))
         .title_style(Style::new().fg(theme.accent))
-        .style(Style::new().fg(theme.fg).bg(theme.bg))
+        .style(Style::new().fg(theme.fg))
         .borders(ratatui::widgets::Borders::ALL)
 }
 

@@ -9,7 +9,6 @@ use ratatui::{Terminal, backend::CrosstermBackend};
 /// Theme colors: btop-dark defaults (bg 235, fg 252, accent 196)
 /// plus status palette (ok 114, err 203, warn 214, dim 244).
 pub struct Theme {
-    pub bg: ratatui::style::Color,
     pub fg: ratatui::style::Color,
     pub accent: ratatui::style::Color,
     pub ok: ratatui::style::Color,
@@ -21,7 +20,6 @@ pub struct Theme {
 impl Default for Theme {
     fn default() -> Self {
         Self {
-            bg: ratatui::style::Color::Indexed(235),
             fg: ratatui::style::Color::Indexed(252),
             accent: ratatui::style::Color::Indexed(196),
             ok: ratatui::style::Color::Indexed(114),
