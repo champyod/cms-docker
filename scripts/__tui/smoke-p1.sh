@@ -36,3 +36,4 @@ fi
 
 echo "SPIN_RC=$(tui::spin "thinking" -- true >/dev/null 2>&1; echo $? )"
 echo "SMOKE PASS"
+exit 0
