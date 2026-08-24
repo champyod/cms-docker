@@ -181,8 +181,14 @@ fn update_lines(app: &App) -> Vec<Line<'static>> {
         None => vec![widgets::dim_line("branch   unknown", &app.theme)],
         Some(git) => vec![
             Line::from(format!("branch   {}", git.branch)),
-            Line::from(format!("ahead    {}", git.ahead)),
-            Line::from(format!("behind   {}", git.behind)),
+            Line::from(format!(
+                "local    {} (ahead {})",
+                git.head_short, git.ahead
+            )),
+            Line::from(format!(
+                "upstream {} (behind {})",
+                git.upstream_short, git.behind
+            )),
         ],
     }
 }

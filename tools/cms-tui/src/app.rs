@@ -12,6 +12,7 @@ pub enum Tab {
     Dashboard,
     Fleet,
     Wizards,
+    Menu,
 }
 
 impl Tab {
@@ -19,7 +20,8 @@ impl Tab {
         match self {
             Tab::Dashboard => Tab::Fleet,
             Tab::Fleet => Tab::Wizards,
-            Tab::Wizards => Tab::Dashboard,
+            Tab::Wizards => Tab::Menu,
+            Tab::Menu => Tab::Dashboard,
         }
     }
 }
@@ -32,6 +34,8 @@ pub struct App {
     pub snapshot: Snapshot,
     pub fleet: crate::ui::fleet::FleetScreen,
     pub wizard: crate::wizards::WizardScreen,
+    pub menu: crate::menu::MenuScreen,
+    pub pending_cmd: Option<String>,
     pub help_open: bool,
     pub toasts: Vec<(String, std::time::Instant)>,
 }
@@ -46,6 +50,8 @@ impl App {
             snapshot: Snapshot::empty(),
             fleet: Default::default(),
             wizard: Default::default(),
+            menu: Default::default(),
+            pending_cmd: None,
             help_open: false,
             toasts: Vec::new(),
         }
@@ -123,6 +129,13 @@ impl App {
                     self.wizard.handle_key(code);
                     if let Some(msg) = self.wizard.take_toast() {
                         self.toast(msg);
+                    }
+                },
+                Tab::Menu => {
+                    self.menu.handle_key(code);
+                    if let Some(cmd) = self.menu.take_cmd() {
+                        self.pending_cmd = Some(cmd);
+                        self.should_quit = true;
                     }
                 },
                 _ => {},

@@ -12,6 +12,8 @@ pub struct GitInfo {
     pub branch: String,
     pub ahead: i64,
     pub behind: i64,
+    pub head_short: String,
+    pub upstream_short: String,
 }
 
 /// Current branch plus divergence from origin/main; None outside a repo.
@@ -22,10 +24,18 @@ pub async fn info() -> Option<GitInfo> {
         .ok()?;
     let ahead = rev_count(&root, "origin/main..HEAD").await.ok()?;
     let behind = rev_count(&root, "HEAD..origin/main").await.ok()?;
+    let head_short = git(&root, ["rev-parse", "--short", "HEAD"])
+        .await
+        .unwrap_or_default();
+    let upstream_short = git(&root, ["rev-parse", "--short", "origin/main"])
+        .await
+        .unwrap_or_default();
     Some(GitInfo {
         branch: branch.trim().to_string(),
         ahead,
         behind,
+        head_short: head_short.trim().to_string(),
+        upstream_short: upstream_short.trim().to_string(),
     })
 }
 
