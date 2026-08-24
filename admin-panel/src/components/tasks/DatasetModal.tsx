@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { X, Database, Loader2, Save, Terminal } from 'lucide-react';
-import { Portal } from '../core/Portal';
+import { Database, Save, Terminal } from 'lucide-react';
+import { Dialog } from '@/components/core/Dialog';
+import { Button } from '@/components/core/Button';
+import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/apiClient';
 import { DatasetGeneralForm } from './DatasetGeneralForm';
 import { DatasetManagersTab } from './DatasetManagersTab';
@@ -111,70 +113,73 @@ export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess }: Da
   if (!isOpen) return null;
 
   return (
-    <Portal>
-      <div className="fixed inset-0 z-50 flex overflow-hidden">
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={onClose} />
-        <div className="relative w-full max-w-2xl bg-neutral-900 border-l border-white/10 shadow-2xl flex flex-col ml-auto h-full animate-in slide-in-from-right duration-300">
-          <div className="flex items-center justify-between p-6 border-b border-white/10">
-            <div className="flex items-center gap-3">
-              <Database className="w-6 h-6 text-amber-400" />
-              <div>
-                <h2 className="text-xl font-bold text-white">
-                  {dataset ? `Edit Dataset: ${dataset.description}` : 'Create New Dataset'}
-                </h2>
-                <p className="text-sm text-neutral-400">Configure dataset parameters and managers</p>
-              </div>
-            </div>
-            <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg transition-colors text-neutral-400 hover:text-white">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          <div className="flex-1 flex overflow-hidden">
-            <div className="w-48 border-r border-white/5 bg-black/20 p-4 space-y-2">
-              <button
-                onClick={() => setActiveTab('general')}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'general' ? 'bg-amber-600/20 text-amber-400' : 'text-neutral-400 hover:text-white hover:bg-white/5'}`}
-              >
-                <Database className="w-4 h-4" />
-                General
-              </button>
-              <button
-                onClick={() => setActiveTab('managers')}
-                disabled={!dataset}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'managers' ? 'bg-amber-600/20 text-amber-400' : !dataset ? 'opacity-50 cursor-not-allowed text-neutral-500' : 'text-neutral-400 hover:text-white hover:bg-white/5'}`}
-                title={!dataset ? 'Save dataset first' : ''}
-              >
-                <Terminal className="w-4 h-4" />
-                Managers
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-6">
-              {activeTab === 'general' && <DatasetGeneralForm formData={formData} onChange={setFormData} onSubmit={handleSubmit} error={error} />}
-              {activeTab === 'managers' && dataset && (
-                <DatasetManagersTab datasetId={dataset.id} managers={managers} loadingManagers={loadingManagers} onReload={loadManagers} />
-              )}
-            </div>
-          </div>
-
-          <div className="p-6 border-t border-white/10 bg-black/20 flex justify-end gap-3">
-            <button onClick={onClose} className="px-4 py-2 bg-transparent hover:bg-white/5 text-neutral-300 rounded-lg transition-colors border border-transparent hover:border-white/10">
-              Close
-            </button>
-            {activeTab === 'general' && (
-              <button
-                onClick={() => (document.getElementById('dataset-form') as HTMLFormElement)?.requestSubmit()}
-                disabled={loading}
-                className="flex items-center gap-2 px-6 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-amber-900/20"
-              >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                {dataset ? 'Save Changes' : 'Create Dataset'}
-              </button>
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      title={dataset ? `Edit Dataset: ${dataset.description}` : 'Create New Dataset'}
+      description="Configure dataset parameters and managers"
+      footer={
+        <>
+          <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>
+            Close
+          </Button>
+          {activeTab === 'general' && (
+            <Button
+              type="button"
+              variant="positive"
+              icon={Save}
+              loading={loading}
+              disabled={loading}
+              onClick={() => (document.getElementById('dataset-form') as HTMLFormElement)?.requestSubmit()}
+            >
+              {dataset ? 'Save Changes' : 'Create Dataset'}
+            </Button>
+          )}
+        </>
+      }
+      className="flex h-[85vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
+    >
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="w-48 shrink-0 space-y-2 overflow-y-auto border-r border-border bg-muted/20 p-4">
+          <button
+            onClick={() => setActiveTab('general')}
+            className={cn(
+              'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+              activeTab === 'general'
+                ? 'bg-primary/10 text-primary ring-1 ring-ring/50'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
             )}
-          </div>
+          >
+            <Database className="w-4 h-4" />
+            General
+          </button>
+          <button
+            onClick={() => setActiveTab('managers')}
+            disabled={!dataset}
+            title={!dataset ? 'Save dataset first' : undefined}
+            className={cn(
+              'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+              activeTab === 'managers'
+                ? 'bg-primary/10 text-primary ring-1 ring-ring/50'
+                : !dataset
+                  ? 'cursor-not-allowed text-muted-foreground opacity-50'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            )}
+          >
+            <Terminal className="w-4 h-4" />
+            Managers
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          {activeTab === 'general' && <DatasetGeneralForm formData={formData} onChange={setFormData} onSubmit={handleSubmit} error={error} />}
+          {activeTab === 'managers' && dataset && (
+            <DatasetManagersTab datasetId={dataset.id} managers={managers} loadingManagers={loadingManagers} onReload={loadManagers} />
+          )}
         </div>
       </div>
-    </Portal>
+    </Dialog>
   );
 }

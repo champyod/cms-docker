@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, FileCode, Settings, Clock, Cpu, FileType, CheckSquare } from 'lucide-react';
+import { FileCode, Settings, Clock, Cpu, FileType, CheckSquare } from 'lucide-react';
 import type { TaskData } from '@/app/actions/tasks';
 import { apiClient } from '@/lib/apiClient';
 import { useToast } from '@/components/providers/ToastProvider';
-import { Portal } from '@/components/core/Portal';
+import { Dialog } from '@/components/core/Dialog';
+import { Button } from '@/components/core/Button';
+import { cn } from '@/lib/utils';
 import { parseIntervalToSeconds } from '@/lib/task-intervals';
 import { GeneralTab, GradingTab, LimitsTab, TokensTab, LanguagesTab } from './task-modal-sections';
 
@@ -154,58 +156,56 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps):
   if (!isOpen) return null;
 
   return (
-    <Portal>
-      <div className="fixed inset-0 z-100 flex items-center justify-center overflow-hidden">
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
-        <div className="relative z-10 w-full max-w-4xl h-[80vh] bg-neutral-900 border border-white/10 rounded-xl shadow-2xl flex flex-col">
-          <div className="flex items-center justify-between p-4 border-b border-white/10 shrink-0">
-            <div className="flex items-center gap-2">
-              <FileCode className="w-5 h-5 text-indigo-400" />
-              <h2 className="text-lg font-bold text-white">{task ? 'Edit Task' : 'Create New Task'}</h2>
-            </div>
-            <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-lg transition-colors" title="Close modal">
-              <X className="w-5 h-5 text-neutral-400" />
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      title={task ? 'Edit Task' : 'Create New Task'}
+      footer={
+        <>
+          <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>
+            Cancel
+          </Button>
+          <Button type="submit" form="task-form" variant="positive" loading={loading} disabled={loading} className="min-w-[140px]">
+            {task ? 'Save Changes' : 'Create Task'}
+          </Button>
+        </>
+      }
+      className="flex h-[85vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl"
+    >
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="w-64 shrink-0 space-y-2 overflow-y-auto border-r border-border bg-muted/20 p-4">
+          {TAB_CONFIG.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                'flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors',
+                activeTab === tab.id
+                  ? 'bg-primary/10 text-primary ring-1 ring-ring/50'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              )}
+            >
+              <tab.icon className="h-4 w-4" />
+              {tab.label}
             </button>
-          </div>
+          ))}
+        </div>
 
-          <div className="flex flex-1 overflow-hidden">
-            <div className="w-64 bg-black/20 border-r border-white/10 p-4 space-y-2 overflow-y-auto">
-              {TAB_CONFIG.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === tab.id ? 'bg-indigo-500/20 text-indigo-400 ring-1 ring-indigo-500/50' : 'text-neutral-400 hover:bg-white/5 hover:text-white'}`}
-                >
-                  <tab.icon className="w-4 h-4" />
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-8 relative">
-              <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
-                {error && <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">{error}</div>}
-                {activeTab === 'general' && <GeneralTab formData={formData} onChange={setFormData} />}
-                {activeTab === 'grading' && <GradingTab formData={formData} onChange={setFormData} />}
-                {activeTab === 'limits' && <LimitsTab formData={formData} onChange={setFormData} />}
-                {activeTab === 'tokens' && <TokensTab formData={formData} onChange={setFormData} />}
-                {activeTab === 'languages' && (
-                  <LanguagesTab formData={formData} onChange={setFormData} onToggleLanguage={handleLanguageToggle} onToggleFormat={handleFormatToggle} />
-                )}
-              </form>
-            </div>
-          </div>
-
-          <div className="p-4 border-t border-white/10 bg-black/40 flex justify-end gap-3 shrink-0">
-            <button type="button" onClick={onClose} className="px-6 py-2 bg-transparent hover:bg-white/5 text-neutral-300 rounded-lg transition-colors">
-              Cancel
-            </button>
-            <button onClick={handleSubmit} disabled={loading} className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors disabled:opacity-50 font-medium">
-              {loading ? 'Saving...' : task ? 'Save Changes' : 'Create Task'}
-            </button>
-          </div>
+        <div className="relative flex-1 overflow-y-auto p-8">
+          <form id="task-form" onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
+            {error && <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+            {activeTab === 'general' && <GeneralTab formData={formData} onChange={setFormData} />}
+            {activeTab === 'grading' && <GradingTab formData={formData} onChange={setFormData} />}
+            {activeTab === 'limits' && <LimitsTab formData={formData} onChange={setFormData} />}
+            {activeTab === 'tokens' && <TokensTab formData={formData} onChange={setFormData} />}
+            {activeTab === 'languages' && (
+              <LanguagesTab formData={formData} onChange={setFormData} onToggleLanguage={handleLanguageToggle} onToggleFormat={handleFormatToggle} />
+            )}
+          </form>
         </div>
       </div>
-    </Portal>
+    </Dialog>
   );
 }
