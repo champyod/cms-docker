@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import { Toaster } from '@/components/ui/sonner';
+import { NO_FLASH_THEME_SCRIPT } from '@/lib/theme';
 import './globals.css';
 
 const geistSans = Geist({
@@ -25,10 +26,13 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const rootClassName = ['dark', geistSans.variable, geistMono.variable].join(' ');
+  const rootClassName = [geistSans.variable, geistMono.variable].join(' ');
 
   return (
     <html lang="en" className={rootClassName} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: NO_FLASH_THEME_SCRIPT }} />
+      </head>
       <body className="font-sans antialiased">
         {children}
         <Toaster richColors position="bottom-right" closeButton />

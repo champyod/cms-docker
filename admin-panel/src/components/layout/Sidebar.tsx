@@ -1,181 +1,265 @@
 'use client';
 
 import React, { useState } from 'react';
-import { cn } from '@/lib/utils';
-import { 
-  Home, Users, Trophy, Settings, LogOut, ChevronRight,
-  FileCode, Activity, Shield, Box, Rocket, Wrench, ChevronDown, Database, BookOpen
-  , Globe
-} from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import {
+  Activity,
+  BookOpen,
+  Box,
+  ChevronLeft,
+  ChevronRight,
+  FileCode,
+  Globe,
+  Home,
+  LogOut,
+  Rocket,
+  Settings,
+  Shield,
+  Trophy,
+  Users,
+  Wrench,
+  type LucideIcon,
+} from 'lucide-react';
+import { Button } from '@/components/core/Button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 
-interface SidebarItemProps {
-  icon: React.ElementType;
-  label: string;
-  href: string;
-  collapsed?: boolean;
+export const SIDEBAR_STORAGE_KEY = 'cms-sidebar-expanded';
+const SIDEBAR_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
+
+interface SidebarPermissions {
+  permission_all: boolean;
+  permission_tasks: boolean;
+  permission_users: boolean;
+  permission_contests: boolean;
+  permission_messaging: boolean;
 }
 
-const SidebarItem: React.FC<SidebarItemProps> = ({ icon: Icon, label, href, collapsed }) => {
-  const pathname = usePathname();
-  const locale = pathname.split('/')[1] || 'en';
-  const isActive = pathname === href || (href !== `/${locale}` && pathname.startsWith(href));
+interface NavVisibility {
+  superadmin: boolean;
+  contests: boolean;
+  tasks: boolean;
+  users: boolean;
+}
 
-  return (
+interface NavItemDef {
+  label: string;
+  icon: LucideIcon;
+  buildHref: (locale: string) => string;
+  isVisible: (visibility: NavVisibility) => boolean;
+}
+
+const DASHBOARD_ITEM: NavItemDef = {
+  label: 'Dashboard',
+  icon: Home,
+  buildHref: (locale) => `/${locale}`,
+  isVisible: () => true,
+};
+
+const DOCUMENTATION_ITEM: NavItemDef = {
+  label: 'Documentation',
+  icon: BookOpen,
+  buildHref: (locale) => `/${locale}/docs`,
+  isVisible: () => true,
+};
+
+const CONTEST_ITEMS: NavItemDef[] = [
+  { label: 'Contests', icon: Trophy, buildHref: (l) => `/${l}/contests`, isVisible: (v) => v.contests },
+  { label: 'Tasks', icon: FileCode, buildHref: (l) => `/${l}/tasks`, isVisible: (v) => v.tasks },
+  { label: 'Submissions', icon: Activity, buildHref: (l) => `/${l}/submissions`, isVisible: (v) => v.contests },
+  { label: 'Users', icon: Users, buildHref: (l) => `/${l}/users`, isVisible: (v) => v.users },
+  { label: 'Teams', icon: Users, buildHref: (l) => `/${l}/teams`, isVisible: (v) => v.users },
+];
+
+const INFRASTRUCTURE_ITEMS: NavItemDef[] = [
+  { label: 'Active Contest', icon: Rocket, buildHref: (l) => `/${l}/deployments`, isVisible: () => true },
+  { label: 'Admins', icon: Shield, buildHref: (l) => `/${l}/admins`, isVisible: () => true },
+  { label: 'Resources', icon: Activity, buildHref: (l) => `/${l}/resources`, isVisible: () => true },
+  { label: 'Containers', icon: Box, buildHref: (l) => `/${l}/containers`, isVisible: () => true },
+  { label: 'Ranking', icon: Globe, buildHref: (l) => `/${l}/ranking`, isVisible: () => true },
+  { label: 'Maintenance', icon: Wrench, buildHref: (l) => `/${l}/maintenance`, isVisible: () => true },
+  { label: 'Settings', icon: Settings, buildHref: (l) => `/${l}/settings`, isVisible: () => true },
+];
+
+function isActiveRoute(pathname: string, href: string, locale: string): boolean {
+  return pathname === href || (href !== `/${locale}` && pathname.startsWith(href));
+}
+
+function persistExpandedPreference(expanded: boolean): void {
+  const value = expanded ? '1' : '0';
+  try {
+    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, value);
+  } catch {
+    // Storage may be blocked; cookie below remains the durable store.
+  }
+  document.cookie = `${SIDEBAR_STORAGE_KEY}=${value}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE_SECONDS}; samesite=lax`;
+}
+
+interface NavItemProps {
+  item: NavItemDef;
+  locale: string;
+  collapsed: boolean;
+}
+
+const NavItem = ({ item, locale, collapsed }: NavItemProps) => {
+  const pathname = usePathname();
+  const href = item.buildHref(locale);
+  const isActive = isActiveRoute(pathname, href, locale);
+
+  const link = (
     <Link
       href={href}
+      aria-current={isActive ? 'page' : undefined}
       className={cn(
-        "flex items-center w-full p-2.5 rounded-xl transition-all duration-200 group relative",
-        isActive 
-          ? "bg-indigo-600/20 text-indigo-300" 
-          : "hover:bg-white/5 text-slate-400 hover:text-white",
-        collapsed && "justify-center"
+        'flex h-9 items-center rounded-lg px-2.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50',
+        collapsed && 'w-9 justify-center px-0',
+        isActive
+          ? 'bg-primary/10 text-primary'
+          : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
       )}
     >
-      <Icon className={cn("w-4.5 h-4.5", isActive && "text-indigo-400")} />
-      {!collapsed && (
-        <span className="ml-3 font-medium text-sm">{label}</span>
-      )}
-      {!collapsed && isActive && (
-        <div className="ml-auto w-1 h-1 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.6)]" />
-      )}
+      <item.icon className="size-4 shrink-0" aria-hidden />
+      {!collapsed && <span className="ml-3 truncate">{item.label}</span>}
     </Link>
+  );
+
+  if (!collapsed) return link;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{link}</TooltipTrigger>
+      <TooltipContent side="right">{item.label}</TooltipContent>
+    </Tooltip>
   );
 };
 
-interface SidebarGroupProps {
-    label: string;
-    icon: React.ElementType;
-    children: React.ReactNode;
-    collapsed: boolean;
-    defaultOpen?: boolean;
-}
-
-const SidebarGroup: React.FC<SidebarGroupProps> = ({ label, icon: Icon, children, collapsed, defaultOpen = true }) => {
-    const [isOpen, setIsOpen] = useState(defaultOpen);
-
-    if (collapsed) {
-        return (
-            <div className="flex flex-col items-center gap-2 py-2">
-                <div className="w-8 h-px bg-white/5 my-1" />
-                {children}
-            </div>
-        );
-    }
-
-    return (
-        <div className="space-y-1">
-            <button 
-                onClick={() => setIsOpen(!isOpen)}
-                className="flex items-center w-full px-3 py-2 text-slate-500 hover:text-slate-300 transition-colors uppercase tracking-widest text-[10px] font-bold group"
-            >
-                <Icon className="w-3 h-3 mr-2 opacity-50 group-hover:opacity-100" />
-                <span>{label}</span>
-                <ChevronDown className={cn("ml-auto w-3 h-3 transition-transform duration-200", !isOpen && "-rotate-90")} />
-            </button>
-            <div className={cn(
-                "overflow-hidden transition-all duration-300 space-y-1 pl-2 border-l border-white/5 ml-4",
-              isOpen ? "max-h-125 opacity-100 py-1" : "max-h-0 opacity-0"
-            )}>
-                {children}
-            </div>
-        </div>
-    );
+const SectionLabel = ({ label, collapsed }: { label: string; collapsed: boolean }) => {
+  if (collapsed) {
+    return <div className="mx-auto my-3 h-px w-6 bg-border" role="presentation" />;
+  }
+  return (
+    <p className="px-2.5 pt-4 pb-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+      {label}
+    </p>
+  );
 };
 
-export const Sidebar: React.FC<{
-  className?: string,
-  locale: string,
-  permissions?: {
-    permission_all: boolean;
-    permission_tasks: boolean;
-    permission_users: boolean;
-    permission_contests: boolean;
-    permission_messaging: boolean;
-  }
-}> = ({ className, locale, permissions }) => {
-  const [collapsed, setCollapsed] = React.useState(false);
+const SignOutLink = ({ locale, collapsed }: { locale: string; collapsed: boolean }) => {
+  const anchor = (
+    <a
+      href={`/${locale}/auth/signout`}
+      className={cn(
+        'flex h-9 items-center rounded-lg px-2.5 text-sm font-medium outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring/50',
+        collapsed && 'w-9 justify-center px-0'
+      )}
+    >
+      <LogOut className="size-4 shrink-0" aria-hidden />
+      {!collapsed && <span className="ml-3 truncate">Sign Out</span>}
+    </a>
+  );
 
-  const isSuperAdmin = permissions?.permission_all ?? false;
-  const canManageTasks = isSuperAdmin || (permissions?.permission_tasks ?? false);
-  const canManageUsers = isSuperAdmin || (permissions?.permission_users ?? false);
-  const canManageContests = isSuperAdmin || (permissions?.permission_contests ?? false);
+  if (!collapsed) return anchor;
 
   return (
-    <aside 
+    <Tooltip>
+      <TooltipTrigger asChild>{anchor}</TooltipTrigger>
+      <TooltipContent side="right">Sign Out</TooltipContent>
+    </Tooltip>
+  );
+};
+
+export interface SidebarProps {
+  className?: string;
+  locale: string;
+  permissions?: SidebarPermissions;
+  initialExpanded?: boolean;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({
+  className,
+  locale,
+  permissions,
+  initialExpanded = true,
+}) => {
+  const [expanded, setExpanded] = useState(initialExpanded);
+
+  const superadmin = permissions?.permission_all ?? false;
+  const visibility: NavVisibility = {
+    superadmin,
+    contests: superadmin || (permissions?.permission_contests ?? false),
+    tasks: superadmin || (permissions?.permission_tasks ?? false),
+    users: superadmin || (permissions?.permission_users ?? false),
+  };
+
+  const handleToggle = () => {
+    const next = !expanded;
+    setExpanded(next);
+    persistExpandedPreference(next);
+  };
+
+  return (
+    <aside
       className={cn(
-        "sticky top-0 self-start flex flex-col h-screen py-6 pl-4 transition-all duration-300",
-        collapsed ? "w-24" : "w-72",
+        'sticky top-0 relative flex h-screen shrink-0 flex-col border-r border-border bg-background/95 backdrop-blur transition-[width] duration-200',
+        expanded ? 'w-56' : 'w-14',
         className
       )}
     >
-      <div className={cn(
-        "flex-1 min-h-0 flex flex-col glass-panel rounded-3xl p-4 relative transition-all duration-300",
-        collapsed && "items-center"
-      )}>
-        {/* Toggle Button */}
-        <button 
-          onClick={() => setCollapsed(!collapsed)}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="absolute -right-3 top-8 bg-indigo-600 rounded-full p-1 shadow-lg border border-indigo-400/50 text-white hover:bg-indigo-500 transition-colors z-10"
+      {/* Toggle Button */}
+      <div className="absolute top-20 -right-3 z-10">
+        <Button
+          variant="secondary"
+          size="sm"
+          iconOnly
+          tooltip={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
+          onClick={handleToggle}
+          className="rounded-full border border-border shadow-md"
         >
-          <ChevronRight className={cn("w-4 h-4 transition-transform", !collapsed && "rotate-180")} />
-        </button>
+          {expanded ? <ChevronLeft className="size-4" /> : <ChevronRight className="size-4" />}
+        </Button>
+      </div>
 
-        {/* Logo area */}
-        <div className={cn("mb-10 px-2 flex items-center", collapsed && "justify-center")}>
-          <div className="w-8 h-8 rounded-xl bg-linear-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-            <span className="font-bold text-white text-lg">C</span>
-          </div>
-          {!collapsed && (
-            <span className="ml-3 font-bold text-lg bg-linear-to-r from-white to-slate-400 bg-clip-text text-transparent">
-              CMS Admin
-            </span>
-          )}
+      {/* Logo area */}
+      <div
+        className={cn(
+          'flex h-16 shrink-0 items-center border-b border-border px-3',
+          expanded ? 'gap-3' : 'justify-center px-0'
+        )}
+      >
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary font-bold text-primary-foreground shadow-sm">
+          C
         </div>
+        {expanded && <span className="truncate font-semibold">CMS Admin</span>}
+      </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 min-h-0 space-y-6 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20 pr-1">
-          <div className="space-y-1">
-            <SidebarItem icon={Home} label="Dashboard" href={`/${locale}`} collapsed={collapsed} />
-          </div>
+      {/* Navigation */}
+      <nav
+        aria-label="Main navigation"
+        className="flex-1 space-y-1 overflow-y-auto px-2 py-3 scrollbar-thin scrollbar-thumb-border hover:scrollbar-thumb-muted-foreground/40"
+      >
+        <NavItem item={DASHBOARD_ITEM} locale={locale} collapsed={!expanded} />
 
-          <SidebarGroup label="Contest" icon={Trophy} collapsed={collapsed}>
-            {canManageContests && <SidebarItem icon={Trophy} label="Contests" href={`/${locale}/contests`} collapsed={collapsed} />}
-            {canManageTasks && <SidebarItem icon={FileCode} label="Tasks" href={`/${locale}/tasks`} collapsed={collapsed} />}
-            {canManageContests && <SidebarItem icon={Activity} label="Submissions" href={`/${locale}/submissions`} collapsed={collapsed} />}
-            {canManageUsers && <SidebarItem icon={Users} label="Users" href={`/${locale}/users`} collapsed={collapsed} />}
-            {canManageUsers && <SidebarItem icon={Users} label="Teams" href={`/${locale}/teams`} collapsed={collapsed} />}
-          </SidebarGroup>
+        <SectionLabel label="Contest" collapsed={!expanded} />
+        {CONTEST_ITEMS.filter((item) => item.isVisible(visibility)).map((item) => (
+          <NavItem key={item.label} item={item} locale={locale} collapsed={!expanded} />
+        ))}
 
-          {isSuperAdmin && (
-            <SidebarGroup label="Infrastructure" icon={Database} collapsed={collapsed}>
-                <SidebarItem icon={Rocket} label="Active Contest" href={`/${locale}/deployments`} collapsed={collapsed} />
-                <SidebarItem icon={Shield} label="Admins" href={`/${locale}/admins`} collapsed={collapsed} />
-                <SidebarItem icon={Activity} label="Resources" href={`/${locale}/resources`} collapsed={collapsed} />
-                <SidebarItem icon={Box} label="Containers" href={`/${locale}/containers`} collapsed={collapsed} />
-              <SidebarItem icon={Globe} label="Ranking" href={`/${locale}/ranking`} collapsed={collapsed} />
-                <SidebarItem icon={Wrench} label="Maintenance" href={`/${locale}/maintenance`} collapsed={collapsed} />
-                <SidebarItem icon={Settings} label="Settings" href={`/${locale}/settings`} collapsed={collapsed} />
-            </SidebarGroup>
-          )}
-        </nav>
+        {superadmin && (
+          <>
+            <SectionLabel label="Infrastructure" collapsed={!expanded} />
+            {INFRASTRUCTURE_ITEMS.map((item) => (
+              <NavItem key={item.label} item={item} locale={locale} collapsed={!expanded} />
+            ))}
+          </>
+        )}
+      </nav>
 
-        {/* Footer actions */}
-        <div className="mt-auto pt-4 border-t border-white/5 space-y-2">
-          <SidebarItem icon={BookOpen} label="Documentation" href={`/${locale}/docs`} collapsed={collapsed} />
-          <a href={`/${locale}/auth/signout`} className={cn(
-               "flex items-center w-full p-2.5 rounded-xl transition-all duration-200 group relative hover:bg-white/5 text-slate-400 hover:text-white",
-                collapsed && "justify-center"
-           )}>
-              <LogOut className="w-5 h-5" />
-               {!collapsed && <span className="ml-3 font-medium text-sm">Sign Out</span>}
-           </a>
-        </div>
+      {/* Footer actions */}
+      <div className="shrink-0 space-y-1 border-t border-border px-2 py-3">
+        <NavItem item={DOCUMENTATION_ITEM} locale={locale} collapsed={!expanded} />
+        <SignOutLink locale={locale} collapsed={!expanded} />
       </div>
     </aside>
   );
 };
-

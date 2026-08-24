@@ -1,7 +1,8 @@
-import { Sidebar } from "@/components/layout/Sidebar";
+import { Sidebar, SIDEBAR_STORAGE_KEY } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { getSession, refreshSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { PageBackground } from "@/components/core/PageBackground";
 import { Stack } from "@/components/core/Layout";
 
@@ -23,9 +24,16 @@ export default async function AuthenticatedLayout({
 
   await refreshSession(session);
 
+  const sidebarExpanded = (await cookies()).get(SIDEBAR_STORAGE_KEY)?.value !== '0';
+
   return (
     <PageBackground className="flex h-screen overflow-hidden">
-      <Sidebar className="z-20" locale={locale} permissions={session.permissions} />
+      <Sidebar
+        className="z-20"
+        locale={locale}
+        permissions={session.permissions}
+        initialExpanded={sidebarExpanded}
+      />
       <Stack as="main" className="flex-1 min-h-0 relative overflow-hidden" gap={0}>
         <Header className="z-10" username={session.username} />
 

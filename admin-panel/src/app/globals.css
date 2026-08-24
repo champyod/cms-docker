@@ -34,6 +34,7 @@
   --input: oklch(0.92 0.004 286.32);
   --ring: oklch(0.585 0.233 277.117);
   --radius: 0.75rem;
+  color-scheme: light;
 }
 
 .dark {
@@ -59,6 +60,7 @@
   --input: oklch(0.274 0.006 286.033);
   --ring: oklch(0.585 0.233 277.117);
   --radius: 0.75rem;
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -93,8 +95,7 @@
 
 @layer base {
   body {
-    @apply bg-black text-white antialiased;
-      background: radial-gradient(circle at top left, #0a0a0a, #000000);
+    @apply bg-background text-foreground antialiased;
     min-height: 100vh;
   }
 }

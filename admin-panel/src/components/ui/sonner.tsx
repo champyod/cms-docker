@@ -1,12 +1,17 @@
 'use client';
 
-import type { CSSProperties } from 'react';
+import { useSyncExternalStore, type CSSProperties } from 'react';
 import { Toaster as Sonner, type ToasterProps } from 'sonner';
+import { getAppliedTheme, subscribeToTheme, type ThemePreference } from '@/lib/theme';
 
-const Toaster = ({ ...props }: ToasterProps) => {
+const SERVER_SNAPSHOT = (): ThemePreference | null => null;
+
+const Toaster = ({ theme, ...props }: ToasterProps) => {
+  const appliedTheme = useSyncExternalStore(subscribeToTheme, getAppliedTheme, SERVER_SNAPSHOT);
+
   return (
     <Sonner
-      theme="system"
+      theme={theme ?? appliedTheme ?? 'system'}
       className="toaster group"
       style={
         {
