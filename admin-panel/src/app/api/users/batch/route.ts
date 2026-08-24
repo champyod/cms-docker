@@ -1,11 +1,11 @@
 import { NextRequest } from 'next/server';
 import { apiError, verifyApiPermission } from '@/lib/api-utils';
 import { cleanupExpiredCreds } from '@/lib/creds-file';
-import { handleApplyCredentials, handleRegenerate } from './credentialActions';
+import { handleApplyCredentials, handleExportCurrent, handleRegenerate } from './credentialActions';
 import { handleContest, handleTeam } from './enrollmentActions';
 import { handleProfile } from './profileActions';
 
-const BATCH_ACTIONS = ['regenerate', 'contest', 'team', 'profile', 'apply-credentials'] as const;
+const BATCH_ACTIONS = ['regenerate', 'contest', 'team', 'profile', 'apply-credentials', 'export-current'] as const;
 
 type BatchAction = typeof BATCH_ACTIONS[number];
 
@@ -33,6 +33,8 @@ export async function POST(req: NextRequest) {
         return handleRegenerate(request);
       case 'apply-credentials':
         return handleApplyCredentials(request);
+      case 'export-current':
+        return handleExportCurrent(request);
       case 'contest':
         return handleContest(request);
       case 'team':

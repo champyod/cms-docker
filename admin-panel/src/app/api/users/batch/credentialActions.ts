@@ -4,9 +4,10 @@ import { prisma } from '@/lib/prisma';
 import { apiError, apiSuccess } from '@/lib/api-utils';
 import { csvEscape, randomToken, writeCredsCsv } from '@/lib/creds-file';
 import {
+  DEFAULT_PASSWORD_KIND,
   formatStoredPassword,
   isPasswordKind,
-  DEFAULT_PASSWORD_KIND,
+  parseStoredPassword,
   type PasswordKind,
 } from '@/lib/password-format';
 
@@ -133,6 +134,35 @@ export async function handleRegenerate({ body, userIds }: BatchActionRequest): P
     return issueCredentialsCsv(updated);
   }
   return apiSuccess({ success: true, count: updated.length });
+}
+
+export async function handleExportCurrent({ userIds }: BatchActionRequest): Promise<NextResponse> {
+  if (userIds.length === 0) {
+    return apiError({ message: 'userIds is required', status: 400 });
+  }
+
+  const users = await prisma.users.findMany({
+    where: { id: { in: userIds } },
+    select: { id: true, username: true, password: true },
+    orderBy: { id: 'asc' },
+  });
+
+  let plainCount = 0;
+  const rows: CredentialRow[] = users.map((user) => {
+    const parsed = parseStoredPassword(user.password);
+    if (parsed.kind === 'plaintext' && parsed.value) {
+      plainCount += 1;
+      return { id: user.id, username: user.username, password: parsed.value };
+    }
+    return { id: user.id, username: user.username };
+  });
+
+  revalidatePath('/[locale]/users', 'page');
+
+  if (plainCount === 0) {
+    return apiSuccess({ success: true, count: 0, note: 'No plain-text stored passwords in selection (bcrypt entries cannot be exported)' });
+  }
+  return issueCredentialsCsv(rows);
 }
 
 async function applyCredentialUpdate(

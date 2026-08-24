@@ -99,7 +99,7 @@ async function postCredentialUpdates(
   }
 }
 
-function openServerDownload(downloadUrl: string): void {
+export function openServerDownload(downloadUrl: string): void {
   const anchor = document.createElement('a');
   anchor.href = downloadUrl;
   anchor.setAttribute('download', `users-applied-${Date.now()}.csv`);

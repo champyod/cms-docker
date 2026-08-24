@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { apiClient } from '@/lib/apiClient';
 import { getTeams } from '@/app/actions/teams';
 import type { PasswordKind } from '@/lib/password-format';
+import { openServerDownload } from './bulkEditActions';
 import { makePassword, makeUsername } from './csvPreview';
 import { submitCredentialUpdates, type BatchActionResult } from './bulkEditActions';
 import type { ContestOption, SelectedUser } from './bulkEditActions';
@@ -99,6 +100,33 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
     setStatusMessage(buildStatus(result));
     setLoading(false);
     onSuccess();
+  };
+
+  const exportCurrentPasswords = async (): Promise<void> => {
+    if (selectedUserIds.length === 0) return;
+    setLoading(true);
+    setErrorMessage('');
+    setStatusMessage('');
+    try {
+      const result = await apiClient.post('/api/users/batch', {
+        action: 'export-current',
+        userIds: selectedUserIds,
+      }) as BatchActionResult;
+      if (!result.success) {
+        setErrorMessage(result.error || 'Export failed');
+        setLoading(false);
+        return;
+      }
+      if (result.downloadUrl) openServerDownload(result.downloadUrl);
+      setStatusMessage(
+        (typeof result.count === 'number' && result.count > 0)
+          ? `Exported ${result.count} plain-text password(s)`
+          : 'No plain-text stored passwords in selection'
+      );
+    } catch (e) {
+      setErrorMessage((e as Error)?.message || 'Network error');
+    }
+    setLoading(false);
   };
 
   const runRegenerate = (mode: 'username' | 'password'): void => {
@@ -221,7 +249,7 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
     emailDomain, setEmailDomain,
     passwordKind, setPasswordKind,
     rows, teamsOptions,
-    runRegenerate, exportSelectedRows,
+    runRegenerate, exportCurrentPasswords, exportSelectedRows,
     runContestMutation, runTeamSet, runTeamRemoveAny,
     runTimezoneUpdate, runEmailDomainUpdate, runEmailClear,
     applyCredentials,

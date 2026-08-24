@@ -26,7 +26,7 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
     emailDomain, setEmailDomain,
     passwordKind, setPasswordKind,
     rows, teamsOptions,
-    runRegenerate, exportSelectedRows,
+    runRegenerate, exportCurrentPasswords, exportSelectedRows,
     runContestMutation, runTeamSet, runTeamRemoveAny,
     runTimezoneUpdate, runEmailDomainUpdate, runEmailClear,
     applyCredentials,
@@ -66,6 +66,9 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
               </Button>
               <Button variant="ghost" onClick={() => runRegenerate('password')} disabled={loading || rows.length === 0}>
                 <Wand2 className="w-4 h-4 mr-2" /> Regenerate Password
+              </Button>
+              <Button variant="ghost" onClick={exportCurrentPasswords} disabled={loading || rows.length === 0}>
+                <Wand2 className="w-4 h-4 mr-2" /> Export Stored Plain Text
               </Button>
               <Button variant="ghost" onClick={handleExportSelectedRows} disabled={rows.length === 0}>
                 <Wand2 className="w-4 h-4 mr-2" /> Export Current Preview
