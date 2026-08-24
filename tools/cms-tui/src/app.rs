@@ -26,6 +26,7 @@ pub struct App {
     pub tab: Tab,
     pub theme: Theme,
     pub should_quit: bool,
+    pub needs_collect: bool,
     pub snapshot: Snapshot,
 }
 
@@ -35,6 +36,7 @@ impl App {
             tab: Tab::Dashboard,
             theme,
             should_quit: false,
+            needs_collect: true,
             snapshot: Snapshot::empty(),
         }
     }
@@ -45,41 +47,39 @@ impl App {
     ) -> Result<()> {
         let mut poll =
             tokio::time::interval(std::time::Duration::from_secs(10));
+        poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         poll.tick().await;
         loop {
-            self.snapshot = Snapshot::collect().await;
+            if self.needs_collect {
+                self.needs_collect = false;
+                self.snapshot = Snapshot::collect().await;
+            }
             terminal.draw(|frame| ui::render(frame, self))?;
-            if !self.wait_for_input(&mut poll).await? {
+            self.wait_for_input(&mut poll).await?;
+            if self.should_quit {
                 return Ok(());
             }
         }
     }
 
-    /// Waits for either the next poll interval or user input.
-    /// Returns false when the app should quit.
+    /// Waits for either the next poll interval or user input,
+    /// marking the snapshot stale when either arrives.
     async fn wait_for_input(
         &mut self,
         poll: &mut tokio::time::Interval,
-    ) -> Result<bool> {
+    ) -> Result<()> {
         tokio::select! {
-            _ = poll.tick() => Ok(true),
-            action = wait_action() => {
-                match action {
-                    Action::Quit => Ok(false),
-                    other => {
-                        self.dispatch(other);
-                        Ok(true)
-                    },
-                }
-            },
+            _ = poll.tick() => self.needs_collect = true,
+            action = wait_action() => self.dispatch(action),
         }
+        Ok(())
     }
 
     fn dispatch(&mut self, action: Action) {
         match action {
             Action::Quit => self.should_quit = true,
             Action::NextTab => self.tab = self.tab.next(),
-            Action::Refresh => {},
+            Action::Refresh => self.needs_collect = true,
             Action::Help => {},
         }
     }
