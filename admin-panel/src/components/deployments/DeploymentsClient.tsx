@@ -16,7 +16,7 @@ import { WorkersPanel, WorkerConfig } from '@/components/deployments/WorkersPane
 
 export function DeploymentsClient() {
     const { addToast } = useToast();
-    const { state: deployState, deploy: handleDeploy, cancel: cancelDeploy, reset: resetDeploy } = useDeployContest();
+    const { state: deployState, deploy: handleDeploy, reset: resetDeploy } = useDeployContest();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [availableContests, setAvailableContests] = useState<ContestOption[]>([]);

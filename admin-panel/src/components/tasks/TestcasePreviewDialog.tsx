@@ -1,6 +1,5 @@
 'use client';
 
-import { FileText } from 'lucide-react';
 import { Dialog } from '@/components/core/Dialog';
 import { Button } from '@/components/core/Button';
 import { decodeFileBytes, ENCODING_OPTIONS, getEncodingLabel } from '@/lib/file-encoding';

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/core/Button';
 import { Dialog } from '@/components/core/Dialog';
-import { RefreshCw, Terminal, Download, Search } from 'lucide-react';
+import { RefreshCw, Download, Search } from 'lucide-react';
 import { getContainerLogs } from '@/app/actions/docker';
 
 interface LogViewerModalProps {

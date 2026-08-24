@@ -26,7 +26,7 @@ export default async function TasksPage({
   const page = parseInt(params.page || '1', 10);
   const search = params.search || '';
 
-  const { tasks, totalPages, total } = await getTasks({ page, search });
+  const { tasks, totalPages } = await getTasks({ page, search });
 
   return (
     <Stack gap={8}>

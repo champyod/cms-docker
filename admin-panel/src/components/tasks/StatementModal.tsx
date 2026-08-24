@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { FileText, Upload } from 'lucide-react';
+import { Upload } from 'lucide-react';
 import { Dialog } from '@/components/core/Dialog';
 import { Button } from '@/components/core/Button';
 import { apiClient } from '@/lib/apiClient';

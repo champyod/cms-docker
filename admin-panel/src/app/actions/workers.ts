@@ -3,7 +3,7 @@
 import { execFile } from 'child_process';
 import path from 'path';
 import { promisify } from 'util';
-import { ensurePermission, checkPermission, getFreshPermissions, hasPermission } from '@/lib/permissions';
+import { ensurePermission, getFreshPermissions, hasPermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
 import { getRepoRoot } from '@/lib/repo-root';

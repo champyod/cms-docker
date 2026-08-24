@@ -2,7 +2,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { ensurePermission } from '@/lib/permissions';
-import { buildUserSearchWhere, safeUserSelect, usersPageSelect, type UsersPageRow } from '@/lib/prisma-selects';
+import { buildUserSearchWhere, usersPageSelect, type UsersPageRow } from '@/lib/prisma-selects';
 import { parseStoredPassword } from '@/lib/password-format';
 
 const USERS_PER_PAGE = 20;

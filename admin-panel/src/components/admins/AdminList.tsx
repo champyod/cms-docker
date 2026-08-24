@@ -5,7 +5,7 @@ import { useSyncedState } from '@/hooks/useSyncedState';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
-import { Edit2, Trash2, Plus, Shield, ShieldCheck } from 'lucide-react';
+import { Edit2, Trash2, Plus, ShieldCheck } from 'lucide-react';
 import { updateAdmin, deleteAdmin } from '@/app/actions/admins';
 import { AdminModal } from './AdminModal';
 import type { PermissionFlagKey } from './adminFormConfig';

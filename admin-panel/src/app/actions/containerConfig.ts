@@ -29,7 +29,7 @@ export async function getContainerConfig(): Promise<ContainerRestartConfig> {
   try {
     const data = await readFile(CONFIG_PATH(), 'utf-8');
     return JSON.parse(data);
-  } catch (error) {
+  } catch {
     return {};
   }
 }
@@ -116,7 +116,7 @@ export async function getContainerRestartCount(containerId: string): Promise<num
   try {
     const { stdout } = await execPromise(`docker inspect ${containerId} --format='{{.RestartCount}}'`);
     return parseInt(stdout.trim()) || 0;
-  } catch (error) {
+  } catch {
     return 0;
   }
 }

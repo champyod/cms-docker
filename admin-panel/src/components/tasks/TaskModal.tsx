@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { FileCode, Settings, Clock, Cpu, FileType, CheckSquare } from 'lucide-react';
+import { FileCode, Clock, Cpu, FileType, CheckSquare } from 'lucide-react';
 import type { TaskData } from '@/app/actions/tasks';
 import { apiClient } from '@/lib/apiClient';
 import { useToast } from '@/components/providers/ToastProvider';

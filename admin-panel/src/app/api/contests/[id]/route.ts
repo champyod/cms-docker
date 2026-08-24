@@ -138,7 +138,6 @@ export async function DELETE(
     revalidatePath('/[locale]/contests', 'page');
     return apiSuccess({ message: 'Contest deleted successfully' });
   } catch (error: unknown) {
-    const err = error as { message?: string; code?: string };
     return apiError(error);
   }
 }

@@ -5,7 +5,7 @@ import { getServerStats, getWorkerStats } from '@/app/actions/stats';
 import { WorkerGrid } from '@/components/resources/WorkerGrid';
 import { CoreServicesStatus } from '@/components/resources/CoreServicesStatus';
 import { NetworkTrafficLogs } from '@/components/resources/NetworkTrafficLogs';
-import { Activity, Server, ShieldCheck, Clock, Cpu, Database, Network } from 'lucide-react';
+import { Activity, Cpu, Database, Network } from 'lucide-react';
 import { Card } from '@/components/core/Card';
 
 export function ResourceView() {

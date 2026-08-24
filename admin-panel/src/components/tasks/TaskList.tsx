@@ -36,7 +36,7 @@ interface TaskListProps {
   };
 }
 
-export function TaskList({ initialTasks, totalPages: _totalPages, permissions }: TaskListProps): React.JSX.Element {
+export function TaskList({ initialTasks, permissions }: TaskListProps): React.JSX.Element {
   const router = useRouter();
   const pathname = usePathname();
   const locale = pathname.split('/')[1] ?? 'en';

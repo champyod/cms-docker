@@ -1,4 +1,4 @@
-import { AlertCircle, Book, CheckCircle, Code, HelpCircle, Terminal, Users, Flag, Trophy, Server, Activity, Cpu } from 'lucide-react';
+import { Book, Code, Terminal, Users, Flag, Trophy, Server, Activity, Cpu } from 'lucide-react';
 import Link from 'next/link';
 import { Card } from '@/components/core/Card';
 
@@ -10,7 +10,7 @@ export default function DocsPage() {
         <div className="absolute top-0 left-0 w-full h-[500px] bg-indigo-600/10 blur-[120px] rounded-full pointer-events-none -translate-y-1/2 translate-x-1/2" />
         <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-cyan-600/5 blur-[100px] rounded-full pointer-events-none translate-y-1/2" />
 
-        <div className="flex-1 overflow-y-auto p-8 z-10 scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20">
+        <div className="flex-1 overflow-y-auto p-8 z-10 scrollbar-thin scrollbar-thumb-border hover:scrollbar-thumb-muted-foreground/40">
           <div className="max-w-5xl mx-auto space-y-12">
             <div className="flex items-center justify-between border-b border-border pb-6">
               <div>

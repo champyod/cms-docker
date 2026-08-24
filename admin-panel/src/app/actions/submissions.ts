@@ -3,7 +3,7 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { ensurePermission } from '@/lib/permissions';
-import { safeUserSelect, submissionsListInclude } from '@/lib/prisma-selects';
+import { submissionsListInclude } from '@/lib/prisma-selects';
 import { revalidatePath } from 'next/cache';
 
 const SUBMISSIONS_PER_PAGE = 20;

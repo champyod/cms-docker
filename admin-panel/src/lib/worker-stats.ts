@@ -45,16 +45,6 @@ function loadConfiguredWorkers(envCorePath: string): ConfiguredWorker[] {
   }
 }
 
-function countEvaluationsByShard(evaluations: Array<{ evaluation_shard: number | null }>): Record<number, number> {
-  const shardCounts: Record<number, number> = {};
-  evaluations.forEach((ev) => {
-    if (ev.evaluation_shard !== null) {
-      shardCounts[ev.evaluation_shard] = (shardCounts[ev.evaluation_shard] || 0) + 1;
-    }
-  });
-  return shardCounts;
-}
-
 function isShardRunning(running: RunningShard[], shard: number): boolean {
   return running.some((r) => r.shard === shard && r.status.toLowerCase().includes('up'));
 }

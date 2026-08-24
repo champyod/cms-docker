@@ -97,10 +97,6 @@ export function PageHeader({ title, description, actions, className }: PageHeade
 }
 
 // --- Container/Section Component ---
-interface SectionProps extends React.HTMLAttributes<HTMLDivElement> {
-    title?: string;
-}
-
 export function PageContent({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
     return (
         <div className={cn("space-y-8", className)} {...props}>

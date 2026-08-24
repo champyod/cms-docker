@@ -1,11 +1,9 @@
 'use server';
 
-import fs from 'fs/promises';
 import path from 'path';
 import { exec } from 'child_process';
 import util from 'util';
 import { ensurePermission } from '@/lib/permissions';
-import { prisma } from '@/lib/prisma';
 import { getRepoRoot } from '@/lib/repo-root';
 import { logToDiscord } from '@/lib/discord-notifier';
 import { buildRestartCommand, getRestartPolicies } from '@/lib/restart-planner';
@@ -15,7 +13,6 @@ import {
 } from '@/lib/deploy-operations';
 import type {
   DeployContestResult,
-  DeployStatus,
   DeployStatusResult,
 } from '@/lib/deploy-operations';
 
