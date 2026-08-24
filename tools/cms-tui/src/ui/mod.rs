@@ -1,5 +1,6 @@
 pub mod dashboard;
 pub mod fleet;
+pub mod modal;
 pub mod widgets;
 
 use crate::app::App;

@@ -9,6 +9,7 @@ use ratatui::widgets::{Paragraph, Row, Table};
 use crate::app::App;
 use crate::data::env;
 use crate::data::workers::{self, WorkerRow};
+use crate::ui::modal::{self, Confirm, Kind, LogBuffer};
 use crate::ui::widgets;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -48,12 +49,28 @@ impl EditField {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct FleetScreen {
     pub cursor: usize,
     mode: Option<EditField>,
     input: String,
     toast_msg: Option<String>,
+    confirm: Option<Confirm>,
+    logs: Option<LogStream>,
+    async_note: Option<std::sync::Arc<std::sync::Mutex<Option<String>>>>,
+}
+
+struct LogStream {
+    buffer: LogBuffer,
+    shard: u32,
+    task: tokio::task::JoinHandle<()>,
+}
+
+impl Drop for LogStream {
+    fn drop(&mut self) {
+        self.buffer.kill();
+        self.task.abort();
+    }
 }
 
 impl FleetScreen {
@@ -62,6 +79,25 @@ impl FleetScreen {
     }
 
     pub fn handle_key(&mut self, code: KeyCode) {
+        if self.logs.is_some() {
+            if matches!(code, KeyCode::Char('q') | KeyCode::Esc) {
+                self.logs = None;
+            }
+            return;
+        }
+        if let Some(c) = &self.confirm {
+            let kind = c.kind;
+            match code {
+                KeyCode::Char('y') => self.run_confirmed(kind),
+                KeyCode::Char('n') | KeyCode::Esc => self.confirm = None,
+                _ => {},
+            }
+            return;
+        }
+        self.browse_key(code);
+    }
+
+    fn browse_key(&mut self, code: KeyCode) {
         if let Some(field) = self.mode {
             match code {
                 KeyCode::Esc => self.mode = None,
@@ -89,7 +125,85 @@ impl FleetScreen {
                 self.mode = Some(EditField::Host);
                 self.input.clear();
             },
+            KeyCode::Char('d') => self.open_confirm(Confirm::deploy_preview),
+            KeyCode::Char('K') => self.open_confirm(Confirm::stop_confirm),
+            KeyCode::Char('L') => self.open_logs(),
             _ => {},
+        }
+    }
+
+    fn selected_shard(&self) -> Option<u32> {
+        workers_blocking().get(self.cursor).map(|w| w.shard)
+    }
+
+    fn open_confirm(&mut self, make: impl Fn(u32) -> Confirm) {
+        if let Some(shard) = self.selected_shard() {
+            self.confirm = Some(make(shard));
+        }
+    }
+
+    fn open_logs(&mut self) {
+        let Some(shard) = self.selected_shard() else {
+            return;
+        };
+        let buffer = LogBuffer::new();
+        let container = format!("worker-{shard}");
+        let task = modal::spawn_log_tail(buffer.clone(), container);
+        self.logs = Some(LogStream { buffer, shard, task });
+    }
+
+    fn run_confirmed(&mut self, kind: Kind) {
+        self.confirm = None;
+        let Some(shard) = self.selected_shard() else {
+            return;
+        };
+        let project = format!("cw{shard}");
+        let (mut args, label): (Vec<String>, String) = match kind {
+            Kind::Deploy(_) => (
+                vec![
+                    "compose".into(),
+                    "-p".into(),
+                    project,
+                    "up".into(),
+                    "-d".into(),
+                    "--no-build".into(),
+                ],
+                format!("deployed shard {shard}"),
+            ),
+            Kind::Stop(_) => (
+                vec!["compose".into(), "-p".into(), project, "stop".into()],
+                format!("stopped shard {shard}"),
+            ),
+        };
+        let note = std::sync::Arc::new(std::sync::Mutex::new(None::<String>));
+        let note2 = note.clone();
+        tokio::spawn(async move {
+            args.insert(0, "docker".to_string());
+            let program = args.remove(0);
+            let status = tokio::process::Command::new(program)
+                .args(&args)
+                .status()
+                .await
+                .map(|s| s.success())
+                .unwrap_or(false);
+            *note2.lock().unwrap_or_else(|e| e.into_inner()) =
+                Some(if status { label } else { format!("{label} FAILED") });
+        });
+        self.async_note = Some(note);
+    }
+
+    pub fn poll_async_notes(&mut self) {
+        if self.async_note.is_none() {
+            return;
+        }
+        let msg = self.async_note.as_ref().and_then(|note| {
+            note.lock()
+                .ok()
+                .and_then(|mut slot| slot.take())
+        });
+        if msg.is_some() {
+            self.async_note = None;
+            self.toast_msg = msg;
         }
     }
 
@@ -124,6 +238,14 @@ pub fn render(frame: &mut ratatui::Frame, app: &App) {
     .split(frame.size());
     render_table(frame, app, chunks[0]);
     render_detail(frame, app, chunks[1]);
+    if let Some(c) = &app.fleet.confirm {
+        c.render(frame, &app.theme);
+    }
+    if let Some(stream) = &app.fleet.logs {
+        let lines = stream.buffer.snapshot();
+        let title = format!(" LOGS worker-{} ", stream.shard);
+        modal::render_logs(frame, &app.theme, &title, &lines);
+    }
 }
 
 fn render_table(frame: &mut ratatui::Frame, app: &App, area: Rect) {

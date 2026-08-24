@@ -58,6 +58,7 @@ impl App {
                 self.needs_collect = false;
                 self.snapshot = Snapshot::collect().await;
             }
+            self.fleet.poll_async_notes();
             terminal.draw(|frame| ui::render(frame, self))?;
             self.wait_for_input(&mut poll).await?;
             if self.should_quit {
