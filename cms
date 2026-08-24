@@ -14,6 +14,13 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+# --no-tui anywhere in args → force plain CLI mode (skip TUI routing)
+for _a in "$@"; do
+  [[ "$_a" == "--no-tui" ]] && { CMS_NO_TUI=1; export CMS_NO_TUI; }
+done
+_ARGS=(); for _a in "$@"; do [[ "$_a" == "--no-tui" ]] || _ARGS+=("$_a"); done
+set -- "${_ARGS[@]}"
+
 # ---- subcommand dispatch ----
 cmd_usage() {
   cat <<'CMDS'
@@ -61,8 +68,8 @@ CMDS
 
 handle_subcommand() {
   # TTY-gated interactive layer: real terminals get the TUI router; pipes,
-  # non-tty contexts, incompatible forms (--workers-json, drill) and
-  # CMS_NO_TUI=1 fall through to the plain handlers below unchanged.
+  # non-tty contexts, --no-tui flag, incompatible forms (--workers-json,
+  # drill) and CMS_NO_TUI=1 fall through to the plain handlers below unchanged.
   if [[ -t 0 && -t 1 && -z "${CMS_NO_TUI:-}" ]]; then
     case "${1:-}:${2:-}" in
       status:--workers-json|backup:drill) : ;;
@@ -103,7 +110,7 @@ handle_subcommand() {
         worker)
           # Interactive terminal -> fleet TUI (pick/edit/deploy workers).
           if [[ -t 0 && -z "$img" && -f .env.core && -f .env.worker ]]; then
-            exec bash scripts/__worker_tui.sh tui
+            exec bash scripts/__tui/runners/__fleet-actions.sh tui
           fi
           run_stack worker; exit "$?" ;;
         core|admin|contest|infra) run_stack "$stack"; exit "$?" ;;
@@ -264,6 +271,12 @@ echo "==============================================="
 echo " CMS one-stop bootstrap"
 echo "==============================================="
 [[ -t 0 ]] || ASSUME_YES=1
+
+# Interactive no-args → master dashboard (btop grid). Piped/--yes/--skip/
+# --no-tui → bootstrap lifecycle as before.
+if [[ -t 0 && -t 1 && $ASSUME_YES -eq 0 && -z "$SKIPS" && -z "${CMS_NO_TUI:-}" && $# -eq 0 ]]; then
+  exec bash scripts/__tui/__main.sh
+fi
 
 run_step prereqs "" '
   command -v docker >/dev/null || exit 1
