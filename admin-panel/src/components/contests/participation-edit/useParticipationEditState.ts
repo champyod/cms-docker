@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { updateParticipation, sendMessage, revealParticipationPassword } from '@/app/actions/participations';
+import type { PasswordKind } from '@/lib/password-format';
 
 export type RevealedState = { kind: 'plaintext'; value: string } | { kind: 'bcrypt' } | null;
 
@@ -9,7 +10,7 @@ interface ParticipationInput { id: number; hidden: boolean; unrestricted: boolea
 
 export function useParticipationEditState(isOpen: boolean, participation: ParticipationInput, adminId: number, onClose: () => void) {
   const [activeTab, setActiveTab] = useState<'settings' | 'message'>('settings');
-  const [formData, setFormData] = useState({ hidden: participation.hidden, unrestricted: participation.unrestricted, extra_time_minutes: 0, delay_time_minutes: 0, password: '' });
+  const [formData, setFormData] = useState({ hidden: participation.hidden, unrestricted: participation.unrestricted, extra_time_minutes: 0, delay_time_minutes: 0, password: '', password_kind: 'plaintext' as PasswordKind });
   const [messageData, setMessageData] = useState({ subject: '', text: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -20,7 +21,7 @@ export function useParticipationEditState(isOpen: boolean, participation: Partic
 
   useEffect(() => {
     if (isOpen) {
-      setFormData({ hidden: participation.hidden, unrestricted: participation.unrestricted, extra_time_minutes: 0, delay_time_minutes: 0, password: '' });
+      setFormData({ hidden: participation.hidden, unrestricted: participation.unrestricted, extra_time_minutes: 0, delay_time_minutes: 0, password: '', password_kind: 'plaintext' });
       setRevealed(null); setRevealTab('plain'); setRevealError(''); setError('');
     } else {
       setRevealed(null); setRevealTab('plain'); setRevealError('');
@@ -43,11 +44,14 @@ export function useParticipationEditState(isOpen: boolean, participation: Partic
   const handleSave = async () => {
     setSaving(true); setError('');
     try {
-      const payload: { hidden: boolean; unrestricted: boolean; extra_time_seconds: number; delay_time_seconds: number; password?: string | null } = {
+      const payload: { hidden: boolean; unrestricted: boolean; extra_time_seconds: number; delay_time_seconds: number; password?: string | null; passwordKind?: PasswordKind } = {
         hidden: formData.hidden, unrestricted: formData.unrestricted,
         extra_time_seconds: formData.extra_time_minutes * 60, delay_time_seconds: formData.delay_time_minutes * 60,
       };
-      if (formData.password.trim().length > 0) payload.password = formData.password;
+      if (formData.password.trim().length > 0) {
+        payload.password = formData.password;
+        payload.passwordKind = formData.password_kind;
+      }
       const result = await updateParticipation(participation.id, payload);
       if (result.success) {
         if (formData.password.trim().length > 0) { setRevealed({ kind: 'plaintext', value: formData.password }); setRevealTab('plain'); setRevealError(''); }

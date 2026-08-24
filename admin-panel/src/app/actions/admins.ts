@@ -2,13 +2,15 @@
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
-import bcrypt from 'bcryptjs';
 import { ensurePermission, invalidateAccessCache } from '@/lib/permissions';
 import { getSession, type AdminPermissions } from '@/lib/auth';
 import { safeAdminSelect, type AdminWithLogin } from '@/lib/prisma-selects';
-
-const BCRYPT_PREFIX = 'bcrypt:';
-const BCRYPT_SALT_ROUNDS = 10;
+import {
+  formatStoredPassword,
+  parseStoredPassword,
+  DEFAULT_PASSWORD_KIND,
+  type PasswordKind,
+} from '@/lib/password-format';
 
 interface ActionResult {
   success: boolean;
@@ -19,12 +21,14 @@ interface CreateAdminInput extends Partial<AdminPermissions> {
   name: string;
   username: string;
   password: string;
+  passwordKind?: PasswordKind;
 }
 
 interface UpdateAdminInput extends Partial<AdminPermissions> {
   name?: string;
   enabled?: boolean;
   password?: string;
+  passwordKind?: PasswordKind;
 }
 
 type AdminUpdateData = {
@@ -41,11 +45,6 @@ export async function getAdmins(): Promise<AdminWithLogin[]> {
   });
 }
 
-async function hashPassword(password: string): Promise<string> {
-  const hashedPassword = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
-  return `${BCRYPT_PREFIX}${hashedPassword}`;
-}
-
 export async function createAdmin(data: CreateAdminInput): Promise<ActionResult> {
   await ensurePermission('all');
   try {
@@ -53,7 +52,7 @@ export async function createAdmin(data: CreateAdminInput): Promise<ActionResult>
       data: {
         name: data.name,
         username: data.username,
-        authentication: await hashPassword(data.password),
+        authentication: await formatStoredPassword(data.passwordKind ?? DEFAULT_PASSWORD_KIND, data.password),
         enabled: true,
         permission_all: data.permission_all ?? false,
         permission_messaging: data.permission_messaging ?? false,
@@ -111,7 +110,7 @@ async function buildAdminUpdateData(data: UpdateAdminInput): Promise<AdminUpdate
   if (data.permission_tasks !== undefined) updateData.permission_tasks = data.permission_tasks;
   if (data.permission_users !== undefined) updateData.permission_users = data.permission_users;
   if (data.permission_contests !== undefined) updateData.permission_contests = data.permission_contests;
-  if (data.password) updateData.authentication = await hashPassword(data.password);
+  if (data.password) updateData.authentication = await formatStoredPassword(data.passwordKind ?? DEFAULT_PASSWORD_KIND, data.password);
   return updateData;
 }
 
@@ -171,5 +170,20 @@ export async function deleteAdmin(adminId: number): Promise<ActionResult> {
     return { success: true };
   } catch (error) {
     return { success: false, error: (error as Error).message };
+  }
+}
+
+export async function revealAdminPassword(id: number): Promise<
+  { success: true; kind: 'plaintext'; value: string } | { success: true; kind: 'bcrypt' } | { success: false; error: string }
+> {
+  await ensurePermission('all');
+  try {
+    const row = await prisma.admins.findUnique({ where: { id }, select: { authentication: true } });
+    if (!row) return { success: false, error: 'Admin not found' };
+    const parsed = parseStoredPassword(row.authentication);
+    if (parsed.kind === 'bcrypt') return { success: true, kind: 'bcrypt' };
+    return { success: true, kind: 'plaintext', value: parsed.value };
+  } catch {
+    return { success: false, error: 'Unable to load password' };
   }
 }

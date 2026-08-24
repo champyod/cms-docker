@@ -2,9 +2,14 @@ import { prisma } from '@/lib/prisma';
 import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
-import bcrypt from 'bcryptjs';
 import { cleanupExpiredCreds, csvEscape, writeCredsCsv } from '@/lib/creds-file';
 import { resolveTeamIdByCode } from '@/lib/teams';
+import {
+  formatStoredPassword,
+  isPasswordKind,
+  DEFAULT_PASSWORD_KIND,
+  type PasswordKind,
+} from '@/lib/password-format';
 import {
   prepareRow,
   shouldGeneratePassword,
@@ -18,20 +23,18 @@ interface BulkOutcome {
   failed: Array<{ rowIndex: number; reason: string }>;
 }
 
-const BCRYPT_SALT_ROUNDS = 10;
-const BCRYPT_PREFIX = 'bcrypt:';
-
-async function createUserWithParticipation(prepared: PreparedRow, contestId: number): Promise<void> {
-  const salt = await bcrypt.genSalt(BCRYPT_SALT_ROUNDS);
-  const hash = await bcrypt.hash(prepared.plainPassword, salt);
-
+async function createUserWithParticipation(
+  prepared: PreparedRow,
+  contestId: number,
+  passwordKind: PasswordKind
+): Promise<void> {
   const user = await prisma.users.create({
     data: {
       first_name: prepared.firstName,
       last_name: prepared.lastName,
       username: prepared.username,
       email: prepared.email || null,
-      password: `${BCRYPT_PREFIX}${hash}`,
+      password: await formatStoredPassword(passwordKind, prepared.plainPassword),
       timezone: prepared.timezone || null,
       preferred_languages: [],
     },
@@ -53,6 +56,7 @@ async function processBulkRow(
   index: number,
   generationMode: GenerationMode,
   contestId: number,
+  passwordKind: PasswordKind,
   seenUsernames: Set<string>,
   outcome: BulkOutcome
 ): Promise<void> {
@@ -63,7 +67,7 @@ async function processBulkRow(
   }
 
   try {
-    await createUserWithParticipation(prepared, contestId);
+    await createUserWithParticipation(prepared, contestId, passwordKind);
   } catch (error) {
     const e = error as { code?: string; message?: string };
     if (e.code === 'P2002') {
@@ -81,12 +85,17 @@ async function processBulkRow(
   });
 }
 
-async function processBulkRows(rows: BulkUserRow[], generationMode: GenerationMode, contestId: number): Promise<BulkOutcome> {
+async function processBulkRows(
+  rows: BulkUserRow[],
+  generationMode: GenerationMode,
+  contestId: number,
+  passwordKind: PasswordKind
+): Promise<BulkOutcome> {
   const outcome: BulkOutcome = { created: [], failed: [] };
   const seenUsernames = new Set<string>();
 
   for (let index = 0; index < rows.length; index += 1) {
-    await processBulkRow(rows[index], index, generationMode, contestId, seenUsernames, outcome);
+    await processBulkRow(rows[index], index, generationMode, contestId, passwordKind, seenUsernames, outcome);
   }
 
   return outcome;
@@ -135,7 +144,8 @@ export async function POST(req: NextRequest) {
 
     const generationMode: GenerationMode = body?.generationMode ?? 'none';
     const contestId = Number(body?.contestId || 0);
-    const outcome = await processBulkRows(rows, generationMode, contestId);
+    const passwordKind = isPasswordKind(body?.passwordKind) ? body.passwordKind : DEFAULT_PASSWORD_KIND;
+    const outcome = await processBulkRows(rows, generationMode, contestId, passwordKind);
 
     revalidatePath('/[locale]/users', 'page');
     if (contestId) {

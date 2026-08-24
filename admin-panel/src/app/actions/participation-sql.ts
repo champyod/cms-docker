@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { formatStoredPassword, type PasswordKind } from '@/lib/password-format';
 
 const MAX_IP_ENTRIES = 50;
 const CIDR_PATTERN = /^(\d{1,3}\.){3}\d{1,3}(\/(3[0-2]|[12]?\d))?$/;
@@ -8,6 +9,8 @@ export interface UpdateParticipationInput {
   hidden?: boolean;
   unrestricted?: boolean;
   password?: string | null;
+  /** Storage mode for `password`; defaults to 'plaintext' (legacy CMS validator requires the prefix). */
+  passwordKind?: PasswordKind;
   extra_time_seconds?: number;
   delay_time_seconds?: number;
   ip?: string;
@@ -65,13 +68,16 @@ export async function executeParticipationUpdate(
   const ipClause = validIps.length > 0
     ? `ARRAY[${validIps.map((_, idx) => `$${idx + 9}::cidr`).join(',')}]`
     : 'NULL';
+  const storedPassword = data.password
+    ? await formatStoredPassword(data.passwordKind ?? 'plaintext', data.password)
+    : null;
   const params: unknown[] = [
     data.team_id ?? null,
     data.hidden ?? false,
     data.unrestricted ?? false,
     (data.extra_time_seconds ?? 0).toString(),
     (data.delay_time_seconds ?? 0).toString(),
-    data.password ?? null,
+    storedPassword,
     data.starting_time ? new Date(data.starting_time) : null,
     participationId,
     ...validIps,

@@ -1,12 +1,15 @@
 import { revalidatePath } from 'next/cache';
 import type { NextResponse } from 'next/server';
-import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 import { apiError, apiSuccess } from '@/lib/api-utils';
 import { csvEscape, randomToken, writeCredsCsv } from '@/lib/creds-file';
+import {
+  formatStoredPassword,
+  isPasswordKind,
+  DEFAULT_PASSWORD_KIND,
+  type PasswordKind,
+} from '@/lib/password-format';
 
-const BCRYPT_SALT_ROUNDS = 10;
-const BCRYPT_PREFIX = 'bcrypt:';
 const CREDS_CSV_HEADER = 'id,username,password';
 const USERNAME_RANDOM_SUFFIX_LENGTH = 4;
 const MAX_USERNAME_GENERATION_ATTEMPTS = 100;
@@ -36,6 +39,7 @@ function makePassword(): string {
 async function regenerateUser(
   user: { id: number; first_name: string; last_name: string },
   mode: 'username' | 'password',
+  passwordKind: PasswordKind,
   localUsernames: Set<string>
 ): Promise<CredentialRow> {
   const updateData: { username?: string; password?: string } = {};
@@ -49,8 +53,7 @@ async function regenerateUser(
 
   if (mode === 'password') {
     const plainPassword = makePassword();
-    const hash = await bcrypt.hash(plainPassword, BCRYPT_SALT_ROUNDS);
-    updateData.password = `${BCRYPT_PREFIX}${hash}`;
+    updateData.password = await formatStoredPassword(passwordKind, plainPassword);
     resultRow.password = plainPassword;
   }
 
@@ -105,6 +108,8 @@ export async function handleRegenerate({ body, userIds }: BatchActionRequest): P
     return apiError({ message: 'Invalid regenerate mode', status: 400 });
   }
 
+  const passwordKind = isPasswordKind(body.passwordKind) ? body.passwordKind : DEFAULT_PASSWORD_KIND;
+
   const users = await prisma.users.findMany({
     where: { id: { in: userIds } },
     select: { id: true, first_name: true, last_name: true, username: true },
@@ -113,7 +118,7 @@ export async function handleRegenerate({ body, userIds }: BatchActionRequest): P
   const localUsernames = new Set<string>();
   const updated: CredentialRow[] = [];
   for (const user of users) {
-    updated.push(await regenerateUser(user, mode, localUsernames));
+    updated.push(await regenerateUser(user, mode, passwordKind, localUsernames));
   }
 
   revalidatePath('/[locale]/users', 'page');
@@ -130,16 +135,9 @@ export async function handleRegenerate({ body, userIds }: BatchActionRequest): P
   return apiSuccess({ success: true, count: updated.length });
 }
 
-async function hashCredentialPassword(password: string): Promise<string | null> {
-  try {
-    return `${BCRYPT_PREFIX}${await bcrypt.hash(String(password), BCRYPT_SALT_ROUNDS)}`;
-  } catch {
-    return null;
-  }
-}
-
 async function applyCredentialUpdate(
   u: { id?: number; username?: string; password?: string },
+  passwordKind: PasswordKind,
   updated: CredentialRow[],
   failed: Array<{ id?: number; reason: string }>
 ): Promise<void> {
@@ -152,12 +150,7 @@ async function applyCredentialUpdate(
   const data: { username?: string; password?: string } = {};
   if (u.username) data.username = String(u.username).trim();
   if (u.password) {
-    const hashed = await hashCredentialPassword(u.password);
-    if (hashed === null) {
-      failed.push({ id: userId, reason: 'password hash failed' });
-      return;
-    }
-    data.password = hashed;
+    data.password = await formatStoredPassword(passwordKind, String(u.password));
   }
 
   try {
@@ -182,11 +175,12 @@ export async function handleApplyCredentials({ body }: BatchActionRequest): Prom
     return apiError({ message: 'updates is required', status: 400 });
   }
 
+  const passwordKind = isPasswordKind(body.passwordKind) ? body.passwordKind : DEFAULT_PASSWORD_KIND;
   const updated: CredentialRow[] = [];
   const failed: Array<{ id?: number; reason: string }> = [];
 
   for (const u of updates) {
-    await applyCredentialUpdate(u, updated, failed);
+    await applyCredentialUpdate(u, passwordKind, updated, failed);
   }
 
   revalidatePath('/[locale]/users', 'page');

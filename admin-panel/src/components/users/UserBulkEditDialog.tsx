@@ -3,6 +3,7 @@
 import { Loader2, Wand2, X } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { Portal } from '@/components/core/Portal';
+import { PasswordKindSelector } from '@/components/core/PasswordFieldWithKind';
 import { BulkEditPreviewTable, ContestSection, ProfileSection, TeamSection } from './bulkEditSections';
 import { buildEditExportCsv, type ContestOption, type SelectedUser } from './bulkEditActions';
 import { useBulkEditActions } from './useBulkEditActions';
@@ -23,6 +24,7 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
     teamCode, setTeamCode,
     timezone, setTimezone,
     emailDomain, setEmailDomain,
+    passwordKind, setPasswordKind,
     rows, teamsOptions,
     runRegenerate, exportSelectedRows,
     runContestMutation, runTeamSet, runTeamRemoveAny,
@@ -51,6 +53,11 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
           <div className="p-4 space-y-4 overflow-auto">
             <div className="rounded-lg border border-white/10 bg-black/20 p-3 text-xs text-neutral-300">
               Selected: {rows.length} user(s)
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] uppercase tracking-wider text-neutral-500">New password storage</span>
+              <PasswordKindSelector kind={passwordKind} onKind={setPasswordKind} />
             </div>
 
             <div className="flex flex-wrap gap-2">

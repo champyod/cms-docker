@@ -6,9 +6,11 @@ import { Card } from '@/components/core/Card';
 import { X, Loader2 } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
 import { useToast } from '@/components/providers/ToastProvider';
-import { PasswordFieldWithGenerator } from '@/components/core/PasswordFieldWithGenerator';
+import { PasswordFieldWithKind, type PasswordRevealState } from '@/components/core/PasswordFieldWithKind';
 import { Portal } from '@/components/core/Portal';
 import { cn } from '@/lib/utils';
+import { revealUserPassword } from '@/app/actions/users';
+import type { PasswordKind } from '@/lib/password-format';
 import type { UsersPageRow } from '@/lib/prisma-selects';
 
 const DEFAULT_TIMEZONE = 'Asia/Bangkok';
@@ -59,9 +61,32 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: U
   const [error, setError] = useState('');
   const { addToast } = useToast();
   const [formData, setFormData] = useState<UserFormState>(EMPTY_USER_FORM);
+  const [passwordKind, setPasswordKind] = useState<PasswordKind>('bcrypt');
+  const [reveal, setReveal] = useState<PasswordRevealState>({ state: 'none' });
 
   useEffect(() => {
     setFormData(user ? formFromUser(user) : EMPTY_USER_FORM);
+    setPasswordKind('bcrypt');
+    setReveal({ state: 'none' });
+    if (!user || !isOpen) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await revealUserPassword(user.id);
+        if (cancelled || !result.success) return;
+        setReveal(
+          result.kind === 'plaintext'
+            ? { state: 'plaintext', value: result.value }
+            : { state: 'bcrypt' }
+        );
+      } catch {
+        if (!cancelled) setReveal({ state: 'none' });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [user, isOpen]);
 
   if (!isOpen) return null;
@@ -74,10 +99,13 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: U
     setError('');
 
     try {
+      const { password, ...profile } = formData;
+      const payload = password ? { ...profile, password, passwordKind } : { ...profile, passwordKind };
+
       const result = user
-        ? await apiClient.put(`/api/users/${user.id}`, formData)
+        ? await apiClient.put(`/api/users/${user.id}`, payload)
         : await apiClient.post('/api/users', {
-            ...formData,
+            ...payload,
             contestId: formData.contestId ? Number(formData.contestId) : undefined,
             teamCode: formData.teamCode || undefined,
           });
@@ -181,12 +209,15 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: U
             </div>
 
             <div className="space-y-1.5">
-              <PasswordFieldWithGenerator
+              <PasswordFieldWithKind
                 label={user ? 'New Password (Optional)' : 'Password'}
                 value={formData.password}
                 onChange={(password) => updateForm({ password })}
                 required={!user}
                 placeholder="••••••••"
+                kind={passwordKind}
+                onKind={setPasswordKind}
+                reveal={{ ...reveal, onReveal: () => undefined }}
               />
             </div>
 

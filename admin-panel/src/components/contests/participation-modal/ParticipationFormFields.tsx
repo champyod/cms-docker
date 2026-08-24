@@ -1,7 +1,7 @@
 'use client';
 
 import { Users, Clock, Network, Calendar, Key } from 'lucide-react';
-import { PasswordFieldWithGenerator } from '@/components/core/PasswordFieldWithGenerator';
+import { PasswordFieldWithKind } from '@/components/core/PasswordFieldWithKind';
 import type { ParticipationFormData } from './useParticipationForm';
 
 interface Props {
@@ -52,7 +52,7 @@ export function ParticipationFormFields({ formData, onChange, teams }: Props) {
       </div>
       <div>
         <div className="mb-1"><label className="flex items-center gap-2 text-xs font-bold text-neutral-500 uppercase"><Key className="w-3 h-3" /> Contest Password</label></div>
-        <PasswordFieldWithGenerator label="" value={formData.password} onChange={(password) => onChange({ password })} placeholder="Leave blank to keep current password" hint="Leave blank to keep current password" />
+        <PasswordFieldWithKind label="" value={formData.password} onChange={(password) => onChange({ password })} placeholder="Leave blank to keep current password" kind={formData.password_kind} onKind={(password_kind) => onChange({ password_kind })} />
       </div>
     </>
   );

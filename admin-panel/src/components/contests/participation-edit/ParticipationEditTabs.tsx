@@ -1,13 +1,23 @@
 'use client';
 
 import { Eye } from 'lucide-react';
-import { PasswordFieldWithGenerator } from '@/components/core/PasswordFieldWithGenerator';
+import { PasswordFieldWithKind } from '@/components/core/PasswordFieldWithKind';
 import { PasswordRevealPanel } from './PasswordRevealPanel';
 import type { RevealedState } from './useParticipationEditState';
+import type { PasswordKind } from '@/lib/password-format';
+
+interface SettingsForm {
+  hidden: boolean;
+  unrestricted: boolean;
+  extra_time_minutes: number;
+  delay_time_minutes: number;
+  password: string;
+  password_kind: PasswordKind;
+}
 
 interface SettingsProps {
-  formData: { hidden: boolean; unrestricted: boolean; extra_time_minutes: number; delay_time_minutes: number; password: string };
-  onForm: (p: Partial<{ hidden: boolean; unrestricted: boolean; extra_time_minutes: number; delay_time_minutes: number; password: string }>) => void;
+  formData: SettingsForm;
+  onForm: (p: Partial<SettingsForm>) => void;
   revealed: RevealedState;
   revealTab: 'plain' | 'stored';
   onRevealTab: (t: 'plain' | 'stored') => void;
@@ -31,7 +41,7 @@ export function SettingsTab({ formData, onForm, revealed, revealTab, onRevealTab
           <label className="block text-xs font-bold text-neutral-500 uppercase">Password (optional)</label>
           <button type="button" onClick={onReveal} disabled={revealing} className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-white/10 hover:bg-white/15 text-neutral-200 border border-white/10 rounded-lg transition-colors disabled:opacity-50"><Eye className="w-3.5 h-3.5" />{revealing ? 'Revealing…' : 'Reveal current'}</button>
         </div>
-        <PasswordFieldWithGenerator value={formData.password} onChange={(password) => onForm({ password })} placeholder="Leave blank to keep current password" hint="Leave blank to keep current password" />
+        <PasswordFieldWithKind label="" value={formData.password} onChange={(password) => onForm({ password })} placeholder="Leave blank to keep current password" kind={formData.password_kind} onKind={(password_kind) => onForm({ password_kind })} />
         {revealError && <p className="text-xs text-red-400 mt-2">{revealError}</p>}
         <PasswordRevealPanel revealed={revealed} revealTab={revealTab} onTab={onRevealTab} />
       </div>

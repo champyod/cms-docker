@@ -1,12 +1,9 @@
 import { prisma } from '@/lib/prisma';
 import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { safeUserSelect } from '@/lib/prisma-selects';
+import { formatStoredPassword, isPasswordKind, DEFAULT_PASSWORD_KIND } from '@/lib/password-format';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
-import bcrypt from 'bcryptjs';
-
-const BCRYPT_SALT_ROUNDS = 10;
-const BCRYPT_PREFIX = 'bcrypt:';
 
 interface UserUpdateData {
   first_name: string;
@@ -39,9 +36,8 @@ export async function PUT(
     if (timezone !== undefined) updateData.timezone = timezone || null;
 
     if (password) {
-      const salt = await bcrypt.genSalt(BCRYPT_SALT_ROUNDS);
-      const hash = await bcrypt.hash(password, salt);
-      updateData.password = `${BCRYPT_PREFIX}${hash}`;
+      const passwordKind = isPasswordKind(data.passwordKind) ? data.passwordKind : DEFAULT_PASSWORD_KIND;
+      updateData.password = await formatStoredPassword(passwordKind, password);
     }
 
     await prisma.users.update({

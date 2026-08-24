@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiClient } from '@/lib/apiClient';
 import { getTeams } from '@/app/actions/teams';
+import type { PasswordKind } from '@/lib/password-format';
 import { makePassword, makeUsername } from './csvPreview';
 import { submitCredentialUpdates, type BatchActionResult } from './bulkEditActions';
 import type { ContestOption, SelectedUser } from './bulkEditActions';
@@ -26,6 +27,7 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
   const [teamCode, setTeamCode] = useState('');
   const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
   const [emailDomain, setEmailDomain] = useState('');
+  const [passwordKind, setPasswordKind] = useState<PasswordKind>('bcrypt');
   const [rows, setRows] = useState(selectedUsers);
   const [teamsOptions, setTeamsOptions] = useState<string[]>([]);
 
@@ -208,7 +210,7 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
   };
 
   const applyCredentials = (closeAfter: boolean): Promise<void> =>
-    submitCredentialUpdates(rows, closeAfter, onClose, onSuccess, { setLoading, setErrorMessage, setStatusMessage });
+    submitCredentialUpdates(rows, closeAfter, onClose, onSuccess, { setLoading, setErrorMessage, setStatusMessage }, passwordKind);
 
   return {
     loading, statusMessage, errorMessage,
@@ -217,6 +219,7 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
     teamCode, setTeamCode,
     timezone, setTimezone,
     emailDomain, setEmailDomain,
+    passwordKind, setPasswordKind,
     rows, teamsOptions,
     runRegenerate, exportSelectedRows,
     runContestMutation, runTeamSet, runTeamRemoveAny,

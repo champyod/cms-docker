@@ -5,6 +5,8 @@ import { Button } from '@/components/core/Button';
 import { X, Loader2, FileSpreadsheet } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
 import { Portal } from '@/components/core/Portal';
+import { PasswordKindSelector } from '@/components/core/PasswordFieldWithKind';
+import type { PasswordKind } from '@/lib/password-format';
 import {
   buildPreviewRows,
   fillRowCredentials,
@@ -50,6 +52,7 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests }: User
   const [submitResult, setSubmitResult] = useState<BulkSubmitResult | null>(null);
   const [selectedRowIndices, setSelectedRowIndices] = useState<Set<number>>(new Set());
   const [contestId, setContestId] = useState<number>(0);
+  const [passwordKind, setPasswordKind] = useState<PasswordKind>('bcrypt');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -138,6 +141,7 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests }: User
         })),
         generationMode,
         contestId: contestId || undefined,
+        passwordKind,
       });
 
       setSubmitResult(result);
@@ -171,6 +175,11 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests }: User
 
           {/* INPUT */}
           <div className="p-4 space-y-4 overflow-auto">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] uppercase tracking-wider text-neutral-500">New password storage</span>
+              <PasswordKindSelector kind={passwordKind} onKind={setPasswordKind} />
+            </div>
+
             <BulkCreateInputSection
               contests={contests}
               contestId={contestId}

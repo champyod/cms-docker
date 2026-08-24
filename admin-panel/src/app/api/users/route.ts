@@ -1,13 +1,12 @@
 import { prisma } from '@/lib/prisma';
 import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { buildUserSearchWhere, safeUserSelect, usersPageSelect } from '@/lib/prisma-selects';
+import { formatStoredPassword, isPasswordKind, DEFAULT_PASSWORD_KIND } from '@/lib/password-format';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
-import bcrypt from 'bcryptjs';
 
 const DEFAULT_USERS_PER_PAGE = 20;
 const MAX_USERS_PER_PAGE = 100;
-const BCRYPT_SALT_ROUNDS = 10;
 
 export async function GET(req: NextRequest) {
   const { authorized, response } = await verifyApiPermission('users');
@@ -56,9 +55,8 @@ export async function POST(req: NextRequest) {
 
     if (!password) return apiError({ message: 'Password is required', status: 400 });
 
-    const salt = await bcrypt.genSalt(BCRYPT_SALT_ROUNDS);
-    const hash = await bcrypt.hash(password, salt);
-    const storedPassword = `bcrypt:${hash}`;
+    const passwordKind = isPasswordKind(data.passwordKind) ? data.passwordKind : DEFAULT_PASSWORD_KIND;
+    const storedPassword = await formatStoredPassword(passwordKind, password);
 
     const created = await prisma.users.create({
       data: {

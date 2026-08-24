@@ -2,7 +2,8 @@
 
 import { Loader } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { PasswordFieldWithGenerator } from '@/components/core/PasswordFieldWithGenerator';
+import { PasswordFieldWithKind, type RevealProps } from '@/components/core/PasswordFieldWithKind';
+import type { PasswordKind } from '@/lib/password-format';
 import { PERMISSION_CHECKBOXES, type AdminFormState } from './adminFormConfig';
 
 export interface RoleSelectorProps {
@@ -102,9 +103,12 @@ export interface FormFieldsProps {
   formData: AdminFormState;
   isEdit: boolean;
   onChange: (updates: Partial<AdminFormState>) => void;
+  passwordKind: PasswordKind;
+  onPasswordKind: (kind: PasswordKind) => void;
+  reveal?: RevealProps;
 }
 
-export function AdminFormFields({ formData, isEdit, onChange }: FormFieldsProps) {
+export function AdminFormFields({ formData, isEdit, onChange, passwordKind, onPasswordKind, reveal }: FormFieldsProps) {
   return (
     <>
       <div>
@@ -130,12 +134,15 @@ export function AdminFormFields({ formData, isEdit, onChange }: FormFieldsProps)
         />
       </div>
 
-      <PasswordFieldWithGenerator
+      <PasswordFieldWithKind
         label={`Password ${isEdit ? '(Leave empty to keep current)' : ''}`}
         value={formData.password}
         onChange={(password) => onChange({ password })}
         required={!isEdit}
         placeholder="••••••••"
+        kind={passwordKind}
+        onKind={onPasswordKind}
+        reveal={reveal}
       />
     </>
   );

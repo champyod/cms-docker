@@ -1,4 +1,5 @@
 import { apiClient } from '@/lib/apiClient';
+import type { PasswordKind } from '@/lib/password-format';
 
 export interface ContestOption {
   id: number;
@@ -42,7 +43,8 @@ export async function submitCredentialUpdates(
   closeAfter: boolean,
   onClose: () => void,
   onSuccess: () => void,
-  setters: CredentialSetter
+  setters: CredentialSetter,
+  passwordKind: PasswordKind
 ): Promise<void> {
   const { setLoading, setErrorMessage, setStatusMessage } = setters;
   const updates = collectCredentialUpdates(rows);
@@ -60,11 +62,12 @@ export async function submitCredentialUpdates(
   setErrorMessage('');
   setStatusMessage('');
 
-  await postCredentialUpdates(updates, closeAfter, onClose, onSuccess, setters);
+  await postCredentialUpdates(updates, passwordKind, closeAfter, onClose, onSuccess, setters);
 }
 
 async function postCredentialUpdates(
   updates: Array<{ id: number; username: string; password?: string | null }>,
+  passwordKind: PasswordKind,
   closeAfter: boolean,
   onClose: () => void,
   onSuccess: () => void,
@@ -73,7 +76,7 @@ async function postCredentialUpdates(
   const { setLoading, setErrorMessage, setStatusMessage } = setters;
 
   try {
-    const result = await apiClient.post('/api/users/batch', { action: 'apply-credentials', updates }) as BatchActionResult;
+    const result = await apiClient.post('/api/users/batch', { action: 'apply-credentials', updates, passwordKind }) as BatchActionResult;
 
     if (!result.success) {
       setErrorMessage(result.error || 'Failed to apply credentials');

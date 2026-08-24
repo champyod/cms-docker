@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { X, Shield } from 'lucide-react';
-import { createAdmin, updateAdmin } from '@/app/actions/admins';
+import { createAdmin, updateAdmin, revealAdminPassword } from '@/app/actions/admins';
 import { Portal } from '@/components/core/Portal';
+import type { PasswordRevealState } from '@/components/core/PasswordFieldWithKind';
+import type { PasswordKind } from '@/lib/password-format';
 import type { AdminWithLogin } from '@/lib/prisma-selects';
 
 import {
@@ -31,10 +33,33 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
   const [formData, setFormData] = useState<AdminFormState>(EMPTY_ADMIN_FORM);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [passwordKind, setPasswordKind] = useState<PasswordKind>('bcrypt');
+  const [reveal, setReveal] = useState<PasswordRevealState>({ state: 'none' });
 
   useEffect(() => {
     setFormData(initialData ? formFromAdmin(initialData) : EMPTY_ADMIN_FORM);
     setError('');
+    setPasswordKind('bcrypt');
+    setReveal({ state: 'none' });
+    if (!initialData || !isOpen) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await revealAdminPassword(initialData.id);
+        if (cancelled || !result.success) return;
+        setReveal(
+          result.kind === 'plaintext'
+            ? { state: 'plaintext', value: result.value }
+            : { state: 'bcrypt' }
+        );
+      } catch {
+        if (!cancelled) setReveal({ state: 'none' });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [initialData, isOpen]);
 
   if (!isOpen) return null;
@@ -43,7 +68,7 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
 
   const submitAdmin = async (): Promise<{ success: boolean; error?: string }> => {
     if (!initialData) {
-      return createAdmin(formData);
+      return createAdmin({ ...formData, passwordKind });
     }
     return updateAdmin(initialData.id, {
       name: formData.name,
@@ -52,6 +77,7 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
       permission_tasks: formData.permission_tasks,
       permission_users: formData.permission_users,
       permission_contests: formData.permission_contests,
+      passwordKind,
       ...(formData.password ? { password: formData.password } : {})
     });
   };
@@ -101,7 +127,14 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
 
           {/* FORM */}
           <form onSubmit={handleSubmit} className="p-4 space-y-4">
-            <AdminFormFields formData={formData} isEdit={!!initialData} onChange={updateForm} />
+            <AdminFormFields
+              formData={formData}
+              isEdit={!!initialData}
+              onChange={updateForm}
+              passwordKind={passwordKind}
+              onPasswordKind={setPasswordKind}
+              reveal={{ ...reveal, onReveal: () => undefined }}
+            />
 
             {/* ROLE */}
             <AdminRoleSelector
