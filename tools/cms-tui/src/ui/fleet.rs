@@ -58,7 +58,11 @@ pub struct FleetScreen {
     confirm: Option<Confirm>,
     logs: Option<LogStream>,
     async_note: Option<std::sync::Arc<std::sync::Mutex<Option<String>>>>,
+    menu_sel: Option<usize>,
+    add_mode: bool,
 }
+
+const MENU_ITEMS: [&str; 5] = ["Deploy", "Stop", "Logs", "Edit", "Add worker"];
 
 struct LogStream {
     buffer: LogBuffer,
@@ -94,7 +98,83 @@ impl FleetScreen {
             }
             return;
         }
+        if let Some(sel) = self.menu_sel {
+            let len = MENU_ITEMS.len();
+            match code {
+                KeyCode::Esc => self.menu_sel = None,
+                KeyCode::Up | KeyCode::Char('k') => {
+                    self.menu_sel = Some(sel.saturating_sub(1));
+                },
+                KeyCode::Down | KeyCode::Char('j') => {
+                    self.menu_sel = Some((sel + 1).min(len - 1));
+                },
+                KeyCode::Enter => {
+                    self.menu_sel = None;
+                    self.run_menu_item(sel);
+                },
+                _ => {},
+            }
+            return;
+        }
+        if self.add_mode {
+            match code {
+                KeyCode::Esc => {
+                    self.add_mode = false;
+                    self.input.clear();
+                },
+                KeyCode::Backspace => {
+                    self.input.pop();
+                },
+                KeyCode::Char(c) => self.input.push(c),
+                KeyCode::Enter => self.commit_add(),
+                _ => {},
+            }
+            return;
+        }
         self.browse_key(code);
+    }
+
+    fn run_menu_item(&mut self, sel: usize) {
+        match sel {
+            0 => {
+                if let Some(shard) = self.selected_shard() {
+                    self.confirm = Some(Confirm::deploy_preview(shard));
+                }
+            },
+            1 => {
+                if let Some(shard) = self.selected_shard() {
+                    self.confirm = Some(Confirm::stop_confirm(shard));
+                }
+            },
+            2 => self.open_logs(),
+            3 => {
+                self.mode = Some(EditField::Host);
+                self.input.clear();
+            },
+            _ => {
+                self.add_mode = true;
+                self.input.clear();
+            },
+        }
+    }
+
+    fn commit_add(&mut self) {
+        if !self.input.contains(':') {
+            self.toast_msg = Some("format must be host:port".into());
+            self.add_mode = false;
+            self.input.clear();
+            return;
+        }
+        let next = next_shard_number();
+        let mut updates = std::collections::HashMap::new();
+        updates.insert(format!("WORKER_{next}"), self.input.clone());
+        let path = env::repo_root().join(env::CORE_ENV_FILE);
+        self.toast_msg = Some(match env::write_keys(&path, &updates) {
+            Ok(()) => format!("registered WORKER_{next}={}", self.input),
+            Err(e) => format!("write failed: {e}"),
+        });
+        self.add_mode = false;
+        self.input.clear();
     }
 
     fn browse_key(&mut self, code: KeyCode) {
@@ -125,6 +205,11 @@ impl FleetScreen {
                 self.mode = Some(EditField::Host);
                 self.input.clear();
             },
+            KeyCode::Char('a') => {
+                self.add_mode = true;
+                self.input.clear();
+            },
+            KeyCode::Enter => self.menu_sel = Some(0),
             KeyCode::Char('d') => self.open_confirm(Confirm::deploy_preview),
             KeyCode::Char('K') => self.open_confirm(Confirm::stop_confirm),
             KeyCode::Char('L') => self.open_logs(),
@@ -238,6 +323,22 @@ pub fn render(frame: &mut ratatui::Frame, app: &App) {
     .split(frame.size());
     render_table(frame, app, chunks[0]);
     render_detail(frame, app, chunks[1]);
+    if let Some(sel) = app.fleet.menu_sel {
+        modal::render_menu(frame, &app.theme, &MENU_ITEMS, sel);
+    }
+    if app.fleet.add_mode {
+        let area = frame.size();
+        let block = crate::ui::widgets::panel(" ADD WORKER host:port ", &app.theme);
+        let text = vec![Line::from(Span::styled(
+            format!("> {}", app.fleet.input),
+            ratatui::style::Style::new()
+                .fg(app.theme.accent)
+                .add_modifier(ratatui::style::Modifier::BOLD),
+        ))];
+        use ratatui::widgets::{Clear, Paragraph as P};
+        frame.render_widget(Clear, centered_box(area, 40, 3));
+        frame.render_widget(P::new(text).block(block), centered_box(area, 40, 3));
+    }
     if let Some(c) = &app.fleet.confirm {
         c.render(frame, &app.theme);
     }
@@ -344,5 +445,24 @@ fn db_settings_for(shard: u32) -> (Option<String>, Option<String>) {
     (
         map.get(&format!("WORKER_DB_HOST_{shard}")).cloned(),
         map.get(&format!("WORKER_DB_PORT_{shard}")).cloned(),
+    )
+}
+
+fn next_shard_number() -> u32 {
+    let map = env::parse(&env::repo_root().join(env::CORE_ENV_FILE));
+    map.keys()
+        .filter_map(|k| k.strip_prefix("WORKER_")?.parse::<u32>().ok())
+        .max()
+        .unwrap_or(0)
+        + 1
+}
+
+fn centered_box(area: ratatui::layout::Rect, w: u16, h: u16) -> ratatui::layout::Rect {
+    use ratatui::layout::Rect;
+    Rect::new(
+        area.x + area.width.saturating_sub(w) / 2,
+        area.y + area.height.saturating_sub(h) / 2,
+        w.min(area.width),
+        h.min(area.height),
     )
 }

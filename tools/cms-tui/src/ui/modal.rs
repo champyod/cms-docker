@@ -62,6 +62,36 @@ impl Confirm {
     }
 }
 
+pub fn render_menu(
+    frame: &mut ratatui::Frame,
+    theme: &crate::style::Theme,
+    items: &[&str],
+    selected: usize,
+) {
+    let area = centered(frame.size(), 34, items.len() as u16 + 2);
+    let text: Vec<Line> = items
+        .iter()
+        .enumerate()
+        .map(|(i, item)| {
+            let mark = if i == selected { "▸ " } else { "  " };
+            let mut style = Style::new().fg(theme.fg);
+            if i == selected {
+                style = style.add_modifier(Modifier::REVERSED);
+            }
+            Line::from(Span::styled(format!("{mark}{item}"), style))
+        })
+        .chain(std::iter::once(Line::from(Span::styled(
+            "↑↓ choose · Enter run · Esc close",
+            Style::new().fg(theme.accent),
+        ))))
+        .collect();
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        Paragraph::new(text).block(widgets_panel(" ACTIONS ", theme)),
+        area,
+    );
+}
+
 fn widgets_panel(title: &str, theme: &crate::style::Theme) -> ratatui::widgets::Block<'static> {
     ratatui::widgets::Block::default()
         .title(title.to_string())

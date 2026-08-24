@@ -101,7 +101,18 @@ impl App {
             Action::Help => self.help_open = true,
             Action::NextTab => self.tab = self.tab.next(),
             Action::Refresh | Action::Redraw => self.needs_collect = true,
-            Action::Key(code) => match self.tab {
+            Action::Key(code) => {
+                if self.tab == Tab::Dashboard
+                    && matches!(
+                        code,
+                        KeyCode::Char('d')
+                            | KeyCode::Char('K')
+                            | KeyCode::Char('L')
+                    )
+                {
+                    self.tab = Tab::Fleet;
+                }
+                match self.tab {
                 Tab::Fleet => {
                     self.fleet.handle_key(code);
                     if let Some(msg) = self.fleet.take_toast() {
@@ -115,6 +126,7 @@ impl App {
                     }
                 },
                 _ => {},
+                }
             },
         }
     }
