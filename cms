@@ -71,6 +71,9 @@ handle_subcommand() {
   # non-tty contexts, --no-tui flag, incompatible forms (--workers-json,
   # drill) and CMS_NO_TUI=1 fall through to the plain handlers below unchanged.
   if [[ -t 0 && -t 1 && -z "${CMS_NO_TUI:-}" ]]; then
+    if [[ -z "${1:-}" && -x .tools/cms-tui/cms-tui-linux-x86_64 ]]; then
+      exec .tools/cms-tui/cms-tui-linux-x86_64
+    fi
     case "${1:-}:${2:-}" in
       status:--workers-json|backup:drill) : ;;
       *)
