@@ -67,7 +67,7 @@ function UpdateServerButton(): ReactElement {
     setUpdating(true);
     try {
       const res = await updateServer();
-      if (res.success) alert('✓ ' + res.message);
+      if (res.success) alert(res.message);
       else alert('Error: ' + res.error);
     } catch {
       alert('Failed to trigger update');
@@ -125,7 +125,7 @@ function PullImagesButton(): ReactElement {
     setPulling(true);
     try {
       const res = await pullLatestImages();
-      if (res.success) alert('✓ ' + res.message);
+      if (res.success) alert(res.message);
       else alert('Error: ' + res.error);
     } catch {
       alert('Failed to pull images');
@@ -155,7 +155,7 @@ function RebuildButton({ stack, label }: { stack: 'core' | 'admin' | 'worker' | 
     setRebuilding(true);
     try {
       const res = await rebuildImages(stack);
-      if (res.success) alert('✓ ' + res.message);
+      if (res.success) alert(res.message);
       else alert('Error: ' + res.error);
     } catch {
       alert('Failed to rebuild');

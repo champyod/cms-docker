@@ -5,11 +5,6 @@
 
 @custom-variant dark (&:is(.dark *));
 
-@theme {
-  --color-glass: rgba(255, 255, 255, 0.1);
-  --color-glass-border: rgba(255, 255, 255, 0.2);
-}
-
 /* Design tokens: neutral SaaS zinc + single indigo accent, soft-medium radius */
 .light {
   --background: oklch(1 0 0);
@@ -97,30 +92,5 @@
   body {
     @apply bg-background text-foreground antialiased;
     min-height: 100vh;
-  }
-}
-
-@layer components {
-  /* Glass Panel - Base transparency */
-  .glass-panel {
-    @apply bg-neutral-900/60 backdrop-blur-xl border border-white/5 shadow-xl;
-  }
-  
-  /* Glass Card - Rounded, interactive */
-  .glass-card {
-    @apply bg-neutral-900/60 backdrop-blur-lg border border-white/5 rounded-3xl shadow-lg transition-all duration-300;
-  }
-  .glass-card-hover {
-    @apply hover:bg-white/5;
-  }
-
-  /* Glass Input - Floating feel */
-  .glass-input {
-    @apply bg-black/50 border border-white/10 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-white placeholder-white/20 backdrop-blur-md;
-  }
-  
-  /* Glass Button - Clickable */
-  .glass-button {
-    @apply bg-white/5 hover:bg-white/10 active:bg-white/20 border border-white/10 rounded-xl px-4 py-2 transition-all duration-200 backdrop-blur-md font-medium cursor-pointer;
   }
 }

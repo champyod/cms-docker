@@ -7,6 +7,7 @@ import { Badge } from '@/components/core/Badge';
 import { Calendar, Clock, ExternalLink, Trash2, Rocket, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/apiClient';
+import { ROW_SELECTED_CLASSES } from '@/hooks/useShortcuts';
 
 function formatDate(date: Date): string {
   return new Date(date).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -44,7 +45,7 @@ export function ContestTableRow({ contest, locale, isSuperAdmin, canManage, onSe
   };
 
   return (
-    <TableRow key={contest.id} className={cn(isActive && 'bg-primary/5')}>
+    <TableRow key={contest.id} data-shortcut-row className={cn(isActive && 'bg-primary/5', ROW_SELECTED_CLASSES)}>
       <TableCell className="font-mono text-xs">
         <div className="flex items-center gap-2">
           <span className={isActive ? 'text-primary' : 'text-muted-foreground'}>#{contest.id}</span>
