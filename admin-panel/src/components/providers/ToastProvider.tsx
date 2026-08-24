@@ -1,10 +1,16 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
-import { X, AlertCircle, CheckCircle, Info, AlertTriangle } from 'lucide-react';
+import React, { createContext, useCallback, useContext, type ReactNode } from 'react';
+import { toast, type ExternalToast } from 'sonner';
+import { AlertTriangle, CheckCircle2, Info, XCircle, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
+
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
 
 export interface Toast {
   id: string;
@@ -12,6 +18,7 @@ export interface Toast {
   title: string;
   message?: string;
   duration?: number; // In ms. If Infinity or 0, it doesn't auto-hide.
+  action?: ToastAction;
 }
 
 interface ToastContextType {
@@ -19,7 +26,30 @@ interface ToastContextType {
   removeToast: (id: string) => void;
 }
 
+interface ToastPublisher {
+  success(title: string, data?: ExternalToast): unknown;
+  error(title: string, data?: ExternalToast): unknown;
+  warning(title: string, data?: ExternalToast): unknown;
+  info(title: string, data?: ExternalToast): unknown;
+}
+
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
+
+const TOAST_ICONS: Record<ToastType, LucideIcon> = {
+  success: CheckCircle2,
+  error: XCircle,
+  warning: AlertTriangle,
+  info: Info,
+};
+
+const TOAST_ICON_CLASSES: Record<ToastType, string> = {
+  success: 'text-emerald-400',
+  error: 'text-red-400',
+  warning: 'text-amber-400',
+  info: 'text-cyan-400',
+};
+
+const DEFAULT_TOAST_DURATION_MS = 5000;
 
 export function useToast() {
   const context = useContext(ToastContext);
@@ -29,81 +59,48 @@ export function useToast() {
   return context;
 }
 
-export function ToastProvider({ children }: { children: ReactNode }) {
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+export function resolveToastDuration(duration?: number): number {
+  if (duration === undefined) return DEFAULT_TOAST_DURATION_MS;
+  return duration > 0 && duration !== Infinity ? duration : Infinity;
+}
 
-  useEffect(() => {
-    const timers = timersRef.current;
-    return () => {
-      timers.forEach((timer) => clearTimeout(timer));
-      timers.clear();
-    };
+function generateToastId(): string {
+  return Math.random().toString(36).substring(2, 9);
+}
+
+function createToastIcon(type: ToastType): ReactNode {
+  const Icon = TOAST_ICONS[type];
+  return <Icon className={cn('w-5 h-5', TOAST_ICON_CLASSES[type])} />;
+}
+
+export function buildToastOptions(input: Omit<Toast, 'id'>, id: string): ExternalToast {
+  return {
+    id,
+    description: input.message,
+    duration: resolveToastDuration(input.duration),
+    icon: createToastIcon(input.type),
+    action: input.action,
+  };
+}
+
+export function dispatchToast(publisher: ToastPublisher, input: Omit<Toast, 'id'>): string {
+  const id = generateToastId();
+  publisher[input.type](input.title, buildToastOptions(input, id));
+  return id;
+}
+
+export function ToastProvider({ children }: { children: ReactNode }) {
+  const addToast = useCallback((input: Omit<Toast, 'id'>) => {
+    dispatchToast(toast, input);
   }, []);
 
   const removeToast = useCallback((id: string) => {
-    const timer = timersRef.current.get(id);
-    if (timer) {
-      clearTimeout(timer);
-      timersRef.current.delete(id);
-    }
-    setToasts((prev) => prev.filter((t) => t.id !== id));
+    toast.dismiss(id);
   }, []);
-
-  const addToast = useCallback(({ type, title, message, duration = 5000 }: Omit<Toast, 'id'>) => {
-    const id = Math.random().toString(36).substring(2, 9);
-    const newToast: Toast = { id, type, title, message, duration };
-
-    setToasts((prev) => [...prev, newToast]);
-
-    if (duration !== Infinity && duration > 0) {
-      const timer = setTimeout(() => removeToast(id), duration);
-      timersRef.current.set(id, timer);
-    }
-  }, [removeToast]);
 
   return (
     <ToastContext.Provider value={{ addToast, removeToast }}>
       {children}
-      <ToastStack toasts={toasts} onRemove={removeToast} />
     </ToastContext.Provider>
-  );
-}
-
-function ToastStack({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: string) => void }) {
-  return (
-    <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 w-full max-w-sm pointer-events-none">
-      {toasts.map((toast) => (
-        <div
-          key={toast.id}
-          className={cn(
-            "pointer-events-auto flex items-start gap-3 p-4 rounded-xl shadow-lg border backdrop-blur-md transition-all animate-in slide-in-from-right-full",
-            toast.type === 'success' && "bg-emerald-900/90 border-emerald-500/20 text-emerald-100",
-            toast.type === 'error' && "bg-red-900/90 border-red-500/20 text-red-100",
-            toast.type === 'warning' && "bg-amber-900/90 border-amber-500/20 text-amber-100",
-            toast.type === 'info' && "bg-blue-900/90 border-blue-500/20 text-blue-100",
-          )}
-        >
-          <div className="mt-0.5">
-            {toast.type === 'success' && <CheckCircle className="w-5 h-5 text-emerald-400" />}
-            {toast.type === 'error' && <AlertCircle className="w-5 h-5 text-red-400" />}
-            {toast.type === 'warning' && <AlertTriangle className="w-5 h-5 text-amber-400" />}
-            {toast.type === 'info' && <Info className="w-5 h-5 text-blue-400" />}
-          </div>
-          <div className="flex-1">
-            <h3 className="font-semibold text-sm">{toast.title}</h3>
-            {toast.message && <p className="text-xs opacity-90 mt-1">{toast.message}</p>}
-          </div>
-          <button
-            onClick={() => onRemove(toast.id)}
-            className="opacity-70 hover:opacity-100 transition-opacity"
-            title="Close notification"
-            aria-label="Close notification"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      ))}
-    </div>
   );
 }
