@@ -127,7 +127,9 @@ handle_subcommand() {
         *) echo "usage: cms db <init|reset|clean|sync>" >&2; exit 2 ;;
       esac ;;
     admin-create) exec make admin-create ;;
-    status)  shift; exec bash scripts/__status.sh "$@" ;;
+    status)
+      if [[ "${2:-}" == "--workers-json" ]]; then exec bash scripts/__worker_status_json.sh "${@:3}"; fi
+      shift; exec bash scripts/__status.sh "$@" ;;
     monitor) shift; exec bash scripts/__monitor.sh "$@" ;;
     backup)
       if [[ "${2:-}" == "drill" ]]; then shift 2; exec bash scripts/__backup_drill.sh "$@"; fi
