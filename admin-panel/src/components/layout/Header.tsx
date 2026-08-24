@@ -8,9 +8,11 @@ import { getUnansweredQuestions } from '@/app/actions/questions';
 import { useRouter } from 'next/navigation';
 import { ThemeToggle } from './ThemeToggle';
 import { Button } from '@/components/core/Button';
+import { CommandPalette } from '../palette/CommandPalette';
 
 export const Header: React.FC<{ className?: string; username?: string }> = ({ className, username }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [hasNotifications, setHasNotifications] = useState(false);
   const lastCheckTimeRef = useRef(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -90,6 +92,19 @@ export const Header: React.FC<{ className?: string; username?: string }> = ({ cl
         />
       </form>
 
+      {/* Command Palette Trigger */}
+      <Button
+        variant="ghost"
+        size="sm"
+        tooltip="Search commands (Ctrl+K)"
+        onClick={() => setPaletteOpen(true)}
+      >
+        <Search className="size-4" />
+        <kbd className="ml-1 hidden rounded border border-border bg-muted px-1.5 font-mono text-[10px] font-semibold text-muted-foreground sm:inline-flex">
+          ⌘K
+        </kbd>
+      </Button>
+
       {/* Theme Toggle */}
       <ThemeToggle />
 
@@ -115,6 +130,8 @@ export const Header: React.FC<{ className?: string; username?: string }> = ({ cl
           </div>
         </div>
       </div>
+
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
     </header>
   );
 };

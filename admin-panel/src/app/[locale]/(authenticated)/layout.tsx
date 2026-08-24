@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { PageBackground } from "@/components/core/PageBackground";
 import { Stack } from "@/components/core/Layout";
+import { ShortcutLayer } from "@/components/layout/ShortcutOverlay";
 
 export default async function AuthenticatedLayout({
   children,
@@ -41,6 +42,7 @@ export default async function AuthenticatedLayout({
           {children}
         </div>
       </Stack>
+      <ShortcutLayer />
     </PageBackground>
   );
 }
