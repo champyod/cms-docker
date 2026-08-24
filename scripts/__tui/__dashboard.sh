@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# scripts/__tui/dashboard.sh — btop-style master dashboard (P2).
+# scripts/__tui/__dashboard.sh — btop-style master dashboard (P2).
 # Panels WORKERS/SERVICES/DATABASE/BACKUPS/UPDATES poll every 10s; mutating
 # keys route through tui::confirm + tui::audit; falls back to
 # scripts/__status.sh when tui::init fails. Source-safe: no side effects.
 
 DASH_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-# shellcheck source=scripts/__tui/engine.sh
-source "$DASH_DIR/engine.sh"
+# shellcheck source=scripts/__tui/__engine.sh
+source "$DASH_DIR/__engine.sh"
 
 DASH_REFRESH_SECS=10
 DASH_CORE_SERVICES="cms-database cms-log-service cms-resource-service cms-scoring-service cms-checker-service"

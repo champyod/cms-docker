@@ -69,7 +69,7 @@ handle_subcommand() {
       *)
         case "$1" in
           status|monitor|backup|restore|doctor|test|db|admin-create|contest|pull|stop|clean|deploy|tailscale|funnel|update-server|expose)
-            exec bash scripts/__tui/main.sh "$@"
+            exec bash scripts/__tui/__main.sh "$@"
             ;;
         esac
         ;;
@@ -155,11 +155,11 @@ handle_subcommand() {
     worker)
       sub="${2:-}"
       case "$sub" in
-        edit|tui) shift; exec bash scripts/__tui/runners/fleet.sh "${@:2}" ;;
+        edit|tui) shift; exec bash scripts/__tui/runners/__fleet-actions.sh "${@:2}" ;;
         deploy)   shift 2; exec bash scripts/__worker_tui.sh deploy "${@:2}" ;;
         stop)     shift 2; exec bash scripts/__worker_tui.sh stop "${2:-all}" ;;
         list)     exec bash scripts/__worker_tui.sh list ;;
-        server)  shift 2; exec bash scripts/__tui/wizards/server.sh "${@:2}" ;;
+        server)  shift 2; exec bash scripts/__tui/wizards/__server.sh "${@:2}" ;;
         connect) shift 2; exec bash scripts/__worker_connect.sh "$@" ;;
         cgroup)  shift 2; exec bash scripts/__worker_cgroup_setup.sh "$@" ;;
         *) echo "usage: cms worker <edit|deploy [shard]|stop|list|connect|cgroup>" >&2; exit 2 ;;
@@ -168,7 +168,7 @@ handle_subcommand() {
       shift
       exec bash scripts/__tailscale_serve.sh "${@:-setup}" ;;
     expose)
-      exec bash scripts/__tui/wizards/expose.sh ;;
+      exec bash scripts/__tui/wizards/__expose.sh ;;
     funnel)
       shift; exec bash scripts/__funnel.sh "${@:-status}" ;;
     contest)

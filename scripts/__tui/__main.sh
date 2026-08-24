@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/__tui/main.sh — TTY-gated router for interactive `cms <command>`.
+# scripts/__tui/__main.sh — TTY-gated router for interactive `cms <command>`.
 #
 # Invoked by ./cms only when stdin+stdout are TTYs, CMS_NO_TUI is unset, and
 # no incompatible form was given (--workers-json, drill). Undersized terminals
@@ -14,23 +14,23 @@ _MAIN_SCRIPTS="$_MAIN_CMS_ROOT/scripts"
 # Bare invocation goes straight to the dashboard module (own engine init and
 # alt-screen lifecycle); command routing continues below.
 if [[ $# -eq 0 ]]; then
-	exec bash "$_MAIN_TUI_DIR/dashboard.sh"
+	exec bash "$_MAIN_TUI_DIR/__dashboard.sh"
 fi
 
 ORIG_ARGS=("$@")
 
-# shellcheck source=engine.sh
-source "$_MAIN_TUI_DIR/engine.sh"
-# shellcheck source=runners/simple.sh
-source "$_MAIN_TUI_DIR/runners/simple.sh"
-# shellcheck source=runners/stacks.sh
-source "$_MAIN_TUI_DIR/runners/stacks.sh"
-# shellcheck source=menus/tailscale.sh
-source "$_MAIN_TUI_DIR/menus/tailscale.sh"
-# shellcheck source=menus/funnel.sh
-source "$_MAIN_TUI_DIR/menus/funnel.sh"
-# shellcheck source=menus/update-server.sh
-source "$_MAIN_TUI_DIR/menus/update-server.sh"
+# shellcheck source=__engine.sh
+source "$_MAIN_TUI_DIR/__engine.sh"
+# shellcheck source=runners/__simple.sh
+source "$_MAIN_TUI_DIR/runners/__simple.sh"
+# shellcheck source=runners/__stacks.sh
+source "$_MAIN_TUI_DIR/runners/__stacks.sh"
+# shellcheck source=menus/__tailscale.sh
+source "$_MAIN_TUI_DIR/menus/__tailscale.sh"
+# shellcheck source=menus/__funnel.sh
+source "$_MAIN_TUI_DIR/menus/__funnel.sh"
+# shellcheck source=menus/__update-server.sh
+source "$_MAIN_TUI_DIR/menus/__update-server.sh"
 
 if ! tui::init; then
 	CMS_NO_TUI=1 exec bash "$_MAIN_CMS_ROOT/cms" "${ORIG_ARGS[@]}"

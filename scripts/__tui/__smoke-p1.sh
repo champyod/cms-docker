@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# scripts/__tui/smoke-p1.sh — P1 smoke proof for engine.sh.
+# scripts/__tui/__smoke-p1.sh — P1 smoke proof for __engine.sh.
 # Must run under a real pty of at least 80x24; exits nonzero otherwise.
 set -euo pipefail
 
 HERE="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-# shellcheck source=engine.sh
-source "$HERE/engine.sh"
+# shellcheck source=__engine.sh
+source "$HERE/__engine.sh"
 
 if ! tui::init; then
 	echo "SMOKE FAIL: tui::init rejected environment (need interactive tty >= ${TUI_MIN_COLS}x${TUI_MIN_ROWS})" >&2
