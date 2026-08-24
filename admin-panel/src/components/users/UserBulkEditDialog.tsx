@@ -1,6 +1,6 @@
 'use client';
 
-import { Loader2, Wand2, X } from 'lucide-react';
+import { Download, Loader2, Wand2, X } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { Portal } from '@/components/core/Portal';
 import { PasswordKindSelector } from '@/components/core/PasswordFieldWithKind';
@@ -26,7 +26,9 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
     emailDomain, setEmailDomain,
     passwordKind, setPasswordKind,
     rows, teamsOptions,
-    runRegenerate, exportCurrentPasswords, exportSelectedRows,
+    revealedIds, revealingIds, allRevealed,
+    revealRowPassword, toggleAllRevealed,
+    runRegenerate, exportSelectedRows,
     runContestMutation, runTeamSet, runTeamRemoveAny,
     runTimezoneUpdate, runEmailDomainUpdate, runEmailClear,
     applyCredentials,
@@ -67,11 +69,8 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
               <Button variant="ghost" onClick={() => runRegenerate('password')} disabled={loading || rows.length === 0}>
                 <Wand2 className="w-4 h-4 mr-2" /> Regenerate Password
               </Button>
-              <Button variant="ghost" onClick={exportCurrentPasswords} disabled={loading || rows.length === 0}>
-                <Wand2 className="w-4 h-4 mr-2" /> Export Stored Plain Text
-              </Button>
-              <Button variant="ghost" onClick={handleExportSelectedRows} disabled={rows.length === 0}>
-                <Wand2 className="w-4 h-4 mr-2" /> Export Current Preview
+              <Button variant="secondary" onClick={handleExportSelectedRows} disabled={rows.length === 0}>
+                <Download className="w-4 h-4 mr-2" /> Export CSV
               </Button>
             </div>
 
@@ -112,7 +111,14 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
             {statusMessage && <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300">{statusMessage}</div>}
             {errorMessage && <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">{errorMessage}</div>}
 
-            <BulkEditPreviewTable rows={rows} />
+            <BulkEditPreviewTable
+              rows={rows}
+              revealedIds={revealedIds}
+              revealingIds={revealingIds}
+              allRevealed={allRevealed}
+              onToggleRevealRow={revealRowPassword}
+              onToggleAllRevealed={toggleAllRevealed}
+            />
 
             <div className="flex items-center justify-end gap-2">
               <Button variant="ghost" onClick={() => applyCredentials(false)} disabled={loading || rows.length === 0}>

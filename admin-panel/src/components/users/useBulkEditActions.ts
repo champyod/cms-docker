@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiClient } from '@/lib/apiClient';
 import { getTeams } from '@/app/actions/teams';
+import { revealUserPassword } from '@/app/actions/users';
 import type { PasswordKind } from '@/lib/password-format';
 import { openServerDownload } from './bulkEditActions';
 import { makePassword, makeUsername } from './csvPreview';
@@ -30,6 +31,66 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
   const [emailDomain, setEmailDomain] = useState('');
   const [passwordKind, setPasswordKind] = useState<PasswordKind>('bcrypt');
   const [rows, setRows] = useState(selectedUsers);
+  const [revealingIds, setRevealingIds] = useState<number[]>([]);
+  const [revealedIds, setRevealedIds] = useState<number[]>([]);
+
+  const revealRowPassword = async (rowId: number): Promise<void> => {
+    setRevealingIds((prev) => [...prev, rowId]);
+    try {
+      if (!revealedIds.includes(rowId)) {
+        const result = await revealUserPassword(rowId);
+        setRows((prev) =>
+          prev.map((r) =>
+            r.id === rowId
+              ? {
+                  ...r,
+                  password: result.success && result.kind === 'plaintext' ? result.value : r.password,
+                  stored_kind: result.success ? result.kind : r.stored_kind,
+                }
+              : r
+          )
+        );
+        if (!result.success || result.kind !== 'plaintext') {
+          setRevealingIds((prev) => prev.filter((id) => id !== rowId));
+          return;
+        }
+      }
+      setRevealedIds((prev) =>
+        prev.includes(rowId) ? prev.filter((id) => id !== rowId) : [...prev, rowId]
+      );
+    } catch {
+      // Row stays hidden; admin can retry.
+    }
+    setRevealingIds((prev) => prev.filter((id) => id !== rowId));
+  };
+
+  const toggleAllRevealed = (): void => {
+    if (allRevealed) {
+      setRevealedIds([]);
+      return;
+    }
+    setRevealingIds(rows.map((r) => r.id));
+    void (async () => {
+      try {
+        const results = await Promise.all(
+          rows.map(async (r) => ({ id: r.id, res: await revealUserPassword(r.id) }))
+        );
+        setRows((prev) =>
+          prev.map((r) => {
+            const hit = results.find((x) => x.id === r.id);
+            if (!hit || !hit.res.success || hit.res.kind !== 'plaintext') {
+              return { ...r, stored_kind: hit && hit.res.success ? 'bcrypt' as const : r.stored_kind };
+            }
+            return { ...r, password: r.password ?? hit.res.value, stored_kind: 'plaintext' as const };
+          })
+        );
+        setRevealedIds(rows.map((r) => r.id));
+      } catch {
+        // Leave states as-is on failure.
+      }
+      setRevealingIds([]);
+    })();
+  };
   const [teamsOptions, setTeamsOptions] = useState<string[]>([]);
 
   useEffect(() => {
@@ -152,6 +213,11 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
         return next;
       })
     );
+    setRevealedIds((prev) => {
+      const nextSet = new Set(prev);
+      selectedUserIds.forEach((id) => nextSet.add(id));
+      return [...nextSet];
+    });
 
     setStatusMessage(`Locally regenerated ${mode} for ${selectedUserIds.length} user(s)`);
     setLoading(false);
@@ -240,6 +306,8 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
   const applyCredentials = (closeAfter: boolean): Promise<void> =>
     submitCredentialUpdates(rows, closeAfter, onClose, onSuccess, { setLoading, setErrorMessage, setStatusMessage }, passwordKind);
 
+  const allRevealed = rows.length > 0 && rows.every((r) => revealedIds.includes(r.id));
+
   return {
     loading, statusMessage, errorMessage,
     selectedContestId, setSelectedContestId,
@@ -249,6 +317,8 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
     emailDomain, setEmailDomain,
     passwordKind, setPasswordKind,
     rows, teamsOptions,
+    revealedIds, revealingIds, allRevealed,
+    revealRowPassword, toggleAllRevealed,
     runRegenerate, exportCurrentPasswords, exportSelectedRows,
     runContestMutation, runTeamSet, runTeamRemoveAny,
     runTimezoneUpdate, runEmailDomainUpdate, runEmailClear,

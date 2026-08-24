@@ -14,6 +14,8 @@ export interface SelectedUser {
   email?: string | null;
   /** Local preview plaintext only — never a stored hash; cleared on every load from the backend. */
   password?: string | null;
+  /** Storage kind discovered via reveal; drives the muted bcrypt marker. */
+  stored_kind?: 'bcrypt' | 'plaintext';
 }
 
 export interface BatchActionResult {
