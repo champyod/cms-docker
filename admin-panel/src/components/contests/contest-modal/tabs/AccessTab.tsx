@@ -38,11 +38,11 @@ interface AccessTabProps {
 
 export function AccessTab({ formData, setFormData }: AccessTabProps) {
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+    <div className="animate-in fade-in slide-in-from-right-4 space-y-6 duration-300">
       {/* ACCESS TAB */}
       {ACCESS_TOGGLES.map(item => (
-        <div key={item.key} className="flex items-center justify-between p-4 bg-black/20 rounded-xl border border-white/5">
-          <span className="text-sm font-medium text-neutral-300">{item.label}</span>
+        <div key={item.key} className="flex items-center justify-between rounded-xl border border-border bg-muted/20 p-4">
+          <span className="text-sm font-medium text-foreground">{item.label}</span>
           <ToggleSwitch
             checked={formData[item.key]}
             onToggle={() => setFormData({ ...formData, [item.key]: !formData[item.key] })}

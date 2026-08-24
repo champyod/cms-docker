@@ -1,9 +1,10 @@
 'use client';
 
-import { X, User, Shield, Mail } from 'lucide-react';
-import { Portal } from '../core/Portal';
+import { Shield, Mail } from 'lucide-react';
 import { useParticipationEditState } from './participation-edit/useParticipationEditState';
 import { SettingsTab, MessageTab } from './participation-edit/ParticipationEditTabs';
+import { Dialog } from '@/components/core/Dialog';
+import { cn } from '@/lib/utils';
 
 interface ParticipationEditModalProps {
   isOpen: boolean;
@@ -12,31 +13,30 @@ interface ParticipationEditModalProps {
   adminId: number;
 }
 
+const TAB_BASE = 'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors';
+const TAB_ACTIVE = 'bg-card text-foreground shadow-xs';
+const TAB_INACTIVE = 'text-muted-foreground hover:text-foreground';
+
+function EditTabs({ activeTab, onSelect }: { activeTab: 'settings' | 'message'; onSelect: (tab: 'settings' | 'message') => void }) {
+  return (
+    <div className="mb-4 flex gap-1 rounded-lg bg-muted/50 p-1">
+      <button type="button" onClick={() => onSelect('settings')} className={cn(TAB_BASE, activeTab === 'settings' ? TAB_ACTIVE : TAB_INACTIVE)}><Shield className="h-4 w-4" />Settings</button>
+      <button type="button" onClick={() => onSelect('message')} className={cn(TAB_BASE, activeTab === 'message' ? TAB_ACTIVE : TAB_INACTIVE)}><Mail className="h-4 w-4" />Send Message</button>
+    </div>
+  );
+}
+
 export function ParticipationEditModal({ isOpen, onClose, participation, adminId }: ParticipationEditModalProps) {
   const s = useParticipationEditState(isOpen, participation, adminId, onClose);
-  if (!isOpen) return null;
   return (
-    <Portal>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-black/80 backdrop-blur-sm p-4" onClick={s.handleClose}>
-        <div className="relative z-10 w-full max-w-lg mx-4 bg-neutral-900 border border-white/10 rounded-xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
-          <div className="flex items-center justify-between p-4 border-b border-white/10">
-            <div className="flex items-center gap-2"><User className="w-5 h-5 text-indigo-400" /><h2 className="text-lg font-bold text-white">Edit: {participation.users.username}</h2></div>
-            <button onClick={s.handleClose} className="p-1 hover:bg-white/10 rounded-lg transition-colors"><X className="w-5 h-5 text-neutral-400" /></button>
-          </div>
-          <div className="flex border-b border-white/10">
-            <button onClick={() => s.setActiveTab('settings')} className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium ${s.activeTab === 'settings' ? 'text-indigo-400 border-b-2 border-indigo-400' : 'text-neutral-400 hover:text-white'}`}><Shield className="w-4 h-4" />Settings</button>
-            <button onClick={() => s.setActiveTab('message')} className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium ${s.activeTab === 'message' ? 'text-indigo-400 border-b-2 border-indigo-400' : 'text-neutral-400 hover:text-white'}`}><Mail className="w-4 h-4" />Send Message</button>
-          </div>
-          {s.error && <div className="mx-4 mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">{s.error}</div>}
-          <div className="p-4">
-            {s.activeTab === 'settings' ? (
-              <SettingsTab formData={s.formData} onForm={(p) => s.setFormData({ ...s.formData, ...p })} revealed={s.revealed} revealTab={s.revealTab} onRevealTab={s.setRevealTab} revealError={s.revealError} revealing={s.revealing} onReveal={s.handleReveal} onClose={s.handleClose} onSave={s.handleSave} saving={s.saving} />
-            ) : (
-              <MessageTab messageData={s.messageData} onMessage={(p) => s.setMessageData({ ...s.messageData, ...p })} onClose={s.handleClose} onSend={s.handleSendMessage} saving={s.saving} />
-            )}
-          </div>
-        </div>
-      </div>
-    </Portal>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) s.handleClose(); }} title={`Edit: ${participation.users.username}`}>
+      <EditTabs activeTab={s.activeTab} onSelect={s.setActiveTab} />
+      {s.error && <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{s.error}</div>}
+      {s.activeTab === 'settings' ? (
+        <SettingsTab formData={s.formData} onForm={(p) => s.setFormData({ ...s.formData, ...p })} revealed={s.revealed} revealTab={s.revealTab} onRevealTab={s.setRevealTab} revealError={s.revealError} revealing={s.revealing} onReveal={s.handleReveal} onClose={s.handleClose} onSave={s.handleSave} saving={s.saving} />
+      ) : (
+        <MessageTab messageData={s.messageData} onMessage={(p) => s.setMessageData({ ...s.messageData, ...p })} onClose={s.handleClose} onSend={s.handleSendMessage} saving={s.saving} />
+      )}
+    </Dialog>
   );
 }

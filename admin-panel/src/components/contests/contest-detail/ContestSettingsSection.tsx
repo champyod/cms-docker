@@ -1,7 +1,11 @@
 'use client';
 
 import { Card } from '@/components/core/Card';
+import { ToggleSwitch } from '../contest-modal/shared/ToggleSwitch';
 import { Settings, ChevronDown, ChevronUp } from 'lucide-react';
+
+const LABEL_CLASSES = 'mb-1 block text-xs font-bold uppercase tracking-widest text-muted-foreground';
+const FIELD_CLASSES = 'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]';
 
 interface FormState {
   name: string; description: string; timezone: string;
@@ -18,23 +22,35 @@ interface Props {
 
 function ToggleRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <div className="flex items-center justify-between"><label className="text-sm text-neutral-300">{label}</label><input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="w-4 h-4 rounded" /></div>
+    <div className="flex items-center justify-between">
+      <label className="text-sm text-foreground">{label}</label>
+      <ToggleSwitch checked={checked} onToggle={() => onChange(!checked)} />
+    </div>
   );
 }
 
 export function ContestSettingsSection({ formData, expanded, onToggle, onChange }: Props) {
   return (
-    <Card className="glass-card border-white/5 overflow-hidden">
-      <button onClick={onToggle} className="w-full p-4 flex items-center justify-between hover:bg-white/5 transition-colors">
-        <div className="flex items-center gap-3"><Settings className="w-5 h-5 text-indigo-400" /><span className="font-bold text-white">Contest Settings</span></div>
-        {expanded ? <ChevronUp className="w-4 h-4 text-neutral-400" /> : <ChevronDown className="w-4 h-4 text-neutral-400" />}
+    <Card className="overflow-hidden">
+      <button onClick={onToggle} className="flex w-full items-center justify-between p-4 transition-colors hover:bg-muted/50">
+        <div className="flex items-center gap-3"><Settings className="h-5 w-5 text-primary" /><span className="font-bold text-foreground">Contest Settings</span></div>
+        {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
       </button>
       {expanded && (
-        <div className="p-4 pt-0 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 p-4 pt-0 md:grid-cols-2">
           <div className="space-y-4">
-            <div><label className="block text-xs font-bold text-neutral-500 uppercase mb-1">Name</label><input type="text" value={formData.name} onChange={(e) => onChange({ name: e.target.value })} className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50" /></div>
-            <div><label className="block text-xs font-bold text-neutral-500 uppercase mb-1">Description</label><textarea value={formData.description} onChange={(e) => onChange({ description: e.target.value })} rows={2} className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50" /></div>
-            <div><label className="block text-xs font-bold text-neutral-500 uppercase mb-1">Timezone</label><input type="text" value={formData.timezone} onChange={(e) => onChange({ timezone: e.target.value })} placeholder="Asia/Bangkok" className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50" /></div>
+            <div>
+              <label className={LABEL_CLASSES}>Name</label>
+              <input type="text" value={formData.name} onChange={(e) => onChange({ name: e.target.value })} className={FIELD_CLASSES} />
+            </div>
+            <div>
+              <label className={LABEL_CLASSES}>Description</label>
+              <textarea value={formData.description} onChange={(e) => onChange({ description: e.target.value })} rows={2} className={FIELD_CLASSES} />
+            </div>
+            <div>
+              <label className={LABEL_CLASSES}>Timezone</label>
+              <input type="text" value={formData.timezone} onChange={(e) => onChange({ timezone: e.target.value })} placeholder="Asia/Bangkok" className={FIELD_CLASSES} />
+            </div>
           </div>
           <div className="space-y-3">
             <ToggleRow label="Allow Questions" checked={formData.allow_questions} onChange={(v) => onChange({ allow_questions: v })} />

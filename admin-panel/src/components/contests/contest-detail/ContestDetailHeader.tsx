@@ -1,6 +1,8 @@
 'use client';
 
 import { Save, Rocket } from 'lucide-react';
+import { Button } from '@/components/core/Button';
+import { Badge } from '@/components/core/Badge';
 
 interface Props {
   name: string;
@@ -16,14 +18,25 @@ export function ContestDetailHeader({ name, description, isActive, saving, onSet
     <div className="flex items-center justify-between">
       <div>
         <div className="flex items-center gap-3">
-          <h1 className="text-3xl font-bold text-white">{name}</h1>
-          {isActive && <span className="px-3 py-1 rounded-full text-xs font-medium border border-indigo-500/30 bg-indigo-500/10 text-indigo-400 flex items-center gap-1.5"><Rocket className="w-3 h-3" />Active Contest</span>}
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">{name}</h1>
+          {isActive && (
+            <Badge>
+              <Rocket className="h-3 w-3" />
+              Active Contest
+            </Badge>
+          )}
         </div>
-        <p className="text-neutral-400 mt-1">{description}</p>
+        <p className="mt-1 text-muted-foreground">{description}</p>
       </div>
       <div className="flex items-center gap-3">
-        {!isActive && <button onClick={onSetActive} disabled={saving} className="flex items-center gap-2 px-4 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 rounded-lg transition-colors text-sm disabled:opacity-50"><Rocket className="w-4 h-4" />Set as Active Contest</button>}
-        <button onClick={onSave} disabled={saving} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors disabled:opacity-50"><Save className="w-4 h-4" />{saving ? 'Saving...' : 'Save Changes'}</button>
+        {!isActive && (
+          <Button variant="positiveOutline" icon={Rocket} onClick={onSetActive} disabled={saving}>
+            Set as Active Contest
+          </Button>
+        )}
+        <Button variant="positive" icon={Save} onClick={onSave} loading={saving} disabled={saving}>
+          {saving ? 'Saving...' : 'Save Changes'}
+        </Button>
       </div>
     </div>
   );

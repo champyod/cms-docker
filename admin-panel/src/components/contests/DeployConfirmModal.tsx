@@ -1,6 +1,7 @@
 'use client';
 
-import { Modal } from '@/components/core/Modal';
+import { Dialog as UIDialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { DialogFooter } from '@/components/core/Dialog';
 import { Button } from '@/components/core/Button';
 import { CheckCircle2, Loader2, Rocket } from 'lucide-react';
 import type { DeployPhase } from '@/hooks/useDeployContest';
@@ -21,44 +22,40 @@ export function DeployConfirmModal({ isOpen, phase, targetLabel, extraNote, onCl
   const busy = BUSY_PHASES.includes(phase);
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={() => {
-        if (!busy) onClose();
-      }}
-      title={busy ? 'Deploying Contest...' : 'Confirm Deploy'}
-    >
-      <div className="space-y-4">
-        {(phase === 'idle' || phase === 'already_running') && (
-          <>
-            <p className="text-neutral-300 text-sm">
-              This will mark <strong className="text-white">{targetLabel}</strong> as the active contest,
-              update the .env file, and restart the contest stack.{extraNote ? ` ${extraNote}` : ''}
-            </p>
-            <div className="flex justify-end gap-3 pt-2">
-              <Button variant="ghost" onClick={onClose}>Cancel</Button>
-              <Button variant="primary" onClick={onConfirm} className="flex items-center gap-2">
-                <Rocket className="w-4 h-4" />
-                Deploy
-              </Button>
+    <UIDialog open={isOpen} onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
+      <DialogContent showCloseButton={!busy} className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{busy ? 'Deploying Contest...' : 'Confirm Deploy'}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          {(phase === 'idle' || phase === 'already_running') && (
+            <>
+              <p className="text-sm text-muted-foreground">
+                This will mark <strong className="text-foreground">{targetLabel}</strong> as the active contest,
+                update the .env file, and restart the contest stack.{extraNote ? ` ${extraNote}` : ''}
+              </p>
+              <DialogFooter>
+                <Button variant="ghost" onClick={onClose}>Cancel</Button>
+                <Button variant="positive" icon={Rocket} onClick={onConfirm}>Deploy</Button>
+              </DialogFooter>
+            </>
+          )}
+          {busy && (
+            <div className="flex flex-col items-center gap-4 py-6">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">
+                {phase === 'deploying' ? 'Starting deploy...' : 'Deploying contest stack...'}
+              </p>
             </div>
-          </>
-        )}
-        {busy && (
-          <div className="flex flex-col items-center gap-4 py-6">
-            <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
-            <p className="text-neutral-300 text-sm">
-              {phase === 'deploying' ? 'Starting deploy...' : 'Deploying contest stack...'}
-            </p>
-          </div>
-        )}
-        {phase === 'completed' && (
-          <div className="flex flex-col items-center gap-4 py-6">
-            <CheckCircle2 className="w-8 h-8 text-green-400" />
-            <p className="text-green-300 text-sm font-medium">Contest deployed successfully!</p>
-          </div>
-        )}
-      </div>
-    </Modal>
+          )}
+          {phase === 'completed' && (
+            <div className="flex flex-col items-center gap-4 py-6">
+              <CheckCircle2 className="h-8 w-8 text-success" />
+              <p className="text-sm font-medium text-success">Contest deployed successfully!</p>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </UIDialog>
   );
 }

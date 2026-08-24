@@ -1,5 +1,6 @@
 'use client';
 
+import { cn } from '@/lib/utils';
 import type { RevealedState } from './useParticipationEditState';
 
 interface Props {
@@ -8,30 +9,42 @@ interface Props {
   onTab: (t: 'plain' | 'stored') => void;
 }
 
+const PANEL_CLASSES = 'mt-3 rounded-lg border border-border bg-muted/40 p-3';
+const TAB_ACTIVE = 'rounded-lg border border-primary/30 bg-primary/20 px-3 py-1.5 text-xs font-medium text-primary transition-colors';
+const TAB_INACTIVE = 'rounded-lg border border-border bg-muted/50 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground';
+const VALUE_CLASSES = 'rounded-lg border border-input bg-background px-3 py-2 text-sm';
+
+function RevealTabs({ revealTab, onTab }: Pick<Props, 'revealTab' | 'onTab'>) {
+  return (
+    <div className="flex gap-2">
+      <button type="button" onClick={() => onTab('plain')} className={cn(revealTab === 'plain' ? TAB_ACTIVE : TAB_INACTIVE)}>Plain text</button>
+      <button type="button" onClick={() => onTab('stored')} className={cn(revealTab === 'stored' ? TAB_ACTIVE : TAB_INACTIVE)}>Stored form</button>
+    </div>
+  );
+}
+
 export function PasswordRevealPanel({ revealed, revealTab, onTab }: Props) {
   if (!revealed) return null;
   if (revealed.kind === 'bcrypt') {
     return (
-      <div className="mt-3 p-3 bg-black/40 border border-white/10 rounded-lg">
+      <div className={PANEL_CLASSES}>
         <div className="space-y-2">
-          <p className="text-xs text-amber-300/90">Stored as bcrypt hash — irreversible. Type a new password above to replace it.</p>
-          <div className="flex gap-2">
-            <button type="button" onClick={() => onTab('plain')} className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${revealTab === 'plain' ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' : 'bg-white/5 text-neutral-400 border-white/10 hover:text-white'}`}>Plain text</button>
-            <button type="button" onClick={() => onTab('stored')} className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${revealTab === 'stored' ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' : 'bg-white/5 text-neutral-400 border-white/10 hover:text-white'}`}>Stored form</button>
-          </div>
-          {revealTab === 'plain' ? <div className="px-3 py-2 bg-black/80 border border-white/10 rounded-lg text-sm text-neutral-400 italic">— unavailable (bcrypt) —</div> : <div className="px-3 py-2 bg-black/80 border border-white/10 rounded-lg text-sm text-neutral-300 font-mono break-all">bcrypt:$2…••••</div>}
+          <p className="text-xs text-warning">Stored as bcrypt hash — irreversible. Type a new password above to replace it.</p>
+          <RevealTabs revealTab={revealTab} onTab={onTab} />
+          {revealTab === 'plain'
+            ? <div className={cn(VALUE_CLASSES, 'italic text-muted-foreground')}>— unavailable (bcrypt) —</div>
+            : <div className={cn(VALUE_CLASSES, 'break-all font-mono text-foreground')}>bcrypt:$2…••••</div>}
         </div>
       </div>
     );
   }
   return (
-    <div className="mt-3 p-3 bg-black/40 border border-white/10 rounded-lg">
+    <div className={PANEL_CLASSES}>
       <div className="space-y-2">
-        <div className="flex gap-2">
-          <button type="button" onClick={() => onTab('plain')} className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${revealTab === 'plain' ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' : 'bg-white/5 text-neutral-400 border-white/10 hover:text-white'}`}>Plain text</button>
-          <button type="button" onClick={() => onTab('stored')} className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${revealTab === 'stored' ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' : 'bg-white/5 text-neutral-400 border-white/10 hover:text-white'}`}>Stored form</button>
-        </div>
-        {revealTab === 'plain' ? <input readOnly value={revealed.value} placeholder="(empty)" className="w-full px-3 py-2 bg-black/80 border border-white/10 rounded-lg text-white text-sm" /> : <div className="px-3 py-2 bg-black/80 border border-white/10 rounded-lg text-sm text-neutral-300 font-mono break-all">{revealed.value ? `plaintext:••••` : '(empty)'}</div>}
+        <RevealTabs revealTab={revealTab} onTab={onTab} />
+        {revealTab === 'plain'
+          ? <input readOnly value={revealed.value} placeholder="(empty)" className={cn(VALUE_CLASSES, 'w-full text-foreground')} />
+          : <div className={cn(VALUE_CLASSES, 'break-all font-mono text-foreground')}>{revealed.value ? `plaintext:••••` : '(empty)'}</div>}
       </div>
     </div>
   );

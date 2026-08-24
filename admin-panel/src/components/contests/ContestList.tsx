@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { useSyncedState } from '@/hooks/useSyncedState';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
+import { EmptyState } from '@/components/core/EmptyState';
+import { Trophy } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { ContestModal } from './ContestModal';
 import { DeployConfirmModal } from './DeployConfirmModal';
@@ -34,22 +36,30 @@ export function ContestList({ initialContests, totalPages, permissions }: Contes
   return (
     <div className="space-y-6">
       <ContestListHeader locale={locale} canManage={canManage} onCreate={handleCreate} />
-      <div className="border border-white/5 rounded-xl overflow-hidden bg-neutral-900/40 backdrop-blur-sm">
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
         <Table>
           <TableHeader>
-            <TableRow className="border-b border-white/5 hover:bg-white/5">
-              <TableHead className="text-neutral-400">ID</TableHead>
-              <TableHead className="text-neutral-400">Name</TableHead>
-              <TableHead className="text-neutral-400">Status</TableHead>
-              <TableHead className="text-neutral-400">Timeline</TableHead>
-              <TableHead className="text-neutral-400">Tasks</TableHead>
-              <TableHead className="text-neutral-400">Participants</TableHead>
-              <TableHead className="text-neutral-400 text-right">Actions</TableHead>
+            <TableRow>
+              <TableHead>ID</TableHead>
+              <TableHead>Name</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Timeline</TableHead>
+              <TableHead>Tasks</TableHead>
+              <TableHead>Participants</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {contests.map((contest) => <ContestTableRow key={contest.id} contest={contest as never} locale={locale} isSuperAdmin={isSuperAdmin} canManage={canManage} onSetActive={actions.requestDeploy} />)}
-            {contests.length === 0 && <TableRow><TableCell colSpan={7} className="text-center py-12 text-neutral-500">No contests found.</TableCell></TableRow>}
+            {contests.map((contest) => (
+              <ContestTableRow key={contest.id} contest={contest} locale={locale} isSuperAdmin={isSuperAdmin} canManage={canManage} onSetActive={actions.requestDeploy} />
+            ))}
+            {contests.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={7}>
+                  <EmptyState icon={Trophy} title="No contests found" description="Create your first contest to get started." />
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </div>
