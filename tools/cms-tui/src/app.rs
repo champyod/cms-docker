@@ -28,6 +28,8 @@ pub struct App {
     pub should_quit: bool,
     pub needs_collect: bool,
     pub snapshot: Snapshot,
+    pub fleet: crate::ui::fleet::FleetScreen,
+    pub toasts: Vec<(String, std::time::Instant)>,
 }
 
 impl App {
@@ -38,6 +40,8 @@ impl App {
             should_quit: false,
             needs_collect: true,
             snapshot: Snapshot::empty(),
+            fleet: Default::default(),
+            toasts: Vec::new(),
         }
     }
 
@@ -75,12 +79,25 @@ impl App {
         Ok(())
     }
 
+    pub fn toast(&mut self, message: String) {
+        self.toasts.push((message, std::time::Instant::now()));
+        self.toasts.retain(|(_, at)| at.elapsed() < std::time::Duration::from_secs(5));
+    }
+
     fn dispatch(&mut self, action: Action) {
         match action {
             Action::Quit => self.should_quit = true,
             Action::NextTab => self.tab = self.tab.next(),
             Action::Refresh => self.needs_collect = true,
             Action::Help => {},
+            Action::Key(code) => {
+                if self.tab == Tab::Fleet {
+                    self.fleet.handle_key(code);
+                    if let Some(msg) = self.fleet.take_toast() {
+                        self.toast(msg);
+                    }
+                }
+            },
         }
     }
 }
@@ -120,7 +137,7 @@ fn poll_event() -> Option<Action> {
                 KeyCode::Char('w') | KeyCode::Tab => Some(Action::NextTab),
                 KeyCode::Char('r') => Some(Action::Refresh),
                 KeyCode::Char('?') => Some(Action::Help),
-                _ => None,
+                other => Some(Action::Key(other)),
             }
         },
         _ => None,

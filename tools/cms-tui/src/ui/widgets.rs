@@ -78,3 +78,12 @@ mod tests {
         assert!(line.spans[0].content.contains("○ proxy"));
     }
 }
+
+/// Dot glyph for a plain running/stopped boolean.
+pub fn dot_state(running: bool, theme: &Theme) -> (&'static str, ratatui::style::Color) {
+    if running {
+        ("● run", theme.ok)
+    } else {
+        ("○ stop", theme.dim)
+    }
+}

@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 pub const CORE_ENV_FILE: &str = ".env.core";
+pub const WORKER_ENV_FILE: &str = ".env.worker";
 
 /// Walks up from the current directory until a directory containing
 /// `.env.core` is found; falls back to the current directory.
@@ -41,6 +42,34 @@ fn split_pair(line: &str) -> Option<(&str, &str)> {
     }
     let (key, value) = line.split_once('=')?;
     Some((key.trim(), value.trim()))
+}
+
+/// Atomically updates or appends KEY=VALUE pairs, preserving all
+/// unrelated lines and ordering. Creates the file when missing.
+pub fn write_keys(path: &Path, updates: &HashMap<String, String>) -> std::io::Result<()> {
+    let existing = std::fs::read_to_string(path).unwrap_or_default();
+    let mut out = String::with_capacity(existing.len() + 128);
+    let mut seen: Vec<&str> = Vec::new();
+    for line in existing.lines() {
+        match split_pair(line) {
+            Some((key, _)) if updates.contains_key(key) => {
+                seen.push(key);
+                out.push_str(&format!("{}={}\n", key, updates[key]));
+            },
+            _ => {
+                out.push_str(line);
+                out.push('\n');
+            },
+        }
+    }
+    for (key, value) in updates {
+        if !seen.contains(&key.as_str()) {
+            out.push_str(&format!("{}={}\n", key, value));
+        }
+    }
+    let tmp = path.with_extension("tmp");
+    std::fs::write(&tmp, out)?;
+    std::fs::rename(tmp, path)
 }
 
 #[cfg(test)]
