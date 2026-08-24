@@ -6,5 +6,6 @@ pub enum Action {
     NextTab,
     Refresh,
     Help,
+    Redraw,
     Key(KeyCode),
 }

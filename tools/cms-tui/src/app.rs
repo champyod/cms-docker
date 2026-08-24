@@ -100,7 +100,7 @@ impl App {
             Action::Quit => self.should_quit = true,
             Action::Help => self.help_open = true,
             Action::NextTab => self.tab = self.tab.next(),
-            Action::Refresh => self.needs_collect = true,
+            Action::Refresh | Action::Redraw => self.needs_collect = true,
             Action::Key(code) => match self.tab {
                 Tab::Fleet => {
                     self.fleet.handle_key(code);
@@ -140,6 +140,7 @@ fn poll_event() -> Option<Action> {
         return None;
     }
     match crossterm::event::read().ok()? {
+        Event::Resize(_, _) => Some(Action::Redraw),
         Event::Key(key)
             if key.kind == KeyEventKind::Press =>
         {
