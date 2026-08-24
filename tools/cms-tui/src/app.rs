@@ -11,13 +11,15 @@ use crate::ui;
 pub enum Tab {
     Dashboard,
     Fleet,
+    Wizards,
 }
 
 impl Tab {
     pub fn next(self) -> Self {
         match self {
             Tab::Dashboard => Tab::Fleet,
-            Tab::Fleet => Tab::Dashboard,
+            Tab::Fleet => Tab::Wizards,
+            Tab::Wizards => Tab::Dashboard,
         }
     }
 }
@@ -29,6 +31,7 @@ pub struct App {
     pub needs_collect: bool,
     pub snapshot: Snapshot,
     pub fleet: crate::ui::fleet::FleetScreen,
+    pub wizard: crate::wizards::WizardScreen,
     pub toasts: Vec<(String, std::time::Instant)>,
 }
 
@@ -41,6 +44,7 @@ impl App {
             needs_collect: true,
             snapshot: Snapshot::empty(),
             fleet: Default::default(),
+            wizard: Default::default(),
             toasts: Vec::new(),
         }
     }
@@ -91,13 +95,20 @@ impl App {
             Action::NextTab => self.tab = self.tab.next(),
             Action::Refresh => self.needs_collect = true,
             Action::Help => {},
-            Action::Key(code) => {
-                if self.tab == Tab::Fleet {
+            Action::Key(code) => match self.tab {
+                Tab::Fleet => {
                     self.fleet.handle_key(code);
                     if let Some(msg) = self.fleet.take_toast() {
                         self.toast(msg);
                     }
-                }
+                },
+                Tab::Wizards => {
+                    self.wizard.handle_key(code);
+                    if let Some(msg) = self.wizard.take_toast() {
+                        self.toast(msg);
+                    }
+                },
+                _ => {},
             },
         }
     }

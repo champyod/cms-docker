@@ -3,6 +3,7 @@ mod data;
 mod keys;
 mod style;
 mod ui;
+mod wizards;
 
 use anyhow::Result;
 
