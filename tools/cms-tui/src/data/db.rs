@@ -1,0 +1,1 @@
+//! Postgres health/count collector.
