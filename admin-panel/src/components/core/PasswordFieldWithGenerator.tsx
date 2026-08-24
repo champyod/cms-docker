@@ -2,8 +2,10 @@
 
 import { useMemo, useState } from 'react';
 import { Copy, Eye, EyeOff, RefreshCw } from 'lucide-react';
-import { Modal } from './Modal';
+import { Dialog } from './Dialog';
+import { Button } from './Button';
 import { useToast } from '@/components/providers/ToastProvider';
+import { cn } from '@/lib/utils';
 
 type CaseMode = 'both' | 'upper' | 'lower';
 
@@ -111,7 +113,7 @@ export function PasswordFieldWithGenerator({
 
   return (
     <div>
-      {label ? <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">{label}</label> : null}
+      {label ? <label className="block text-xs font-bold text-muted-foreground uppercase mb-2">{label}</label> : null}
       <div className="relative">
         <input
           required={required}
@@ -120,75 +122,96 @@ export function PasswordFieldWithGenerator({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
-          className="w-full px-4 py-3 bg-black/80 border border-white/10 rounded-lg text-white focus:outline-none focus:border-indigo-500/50 pr-28"
+          className="w-full rounded-lg border border-border bg-background/60 px-4 py-3 pr-28 text-foreground focus:border-ring focus:outline-none"
         />
         <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
+            icon={Copy}
+            iconOnly
+            tooltip="Copy"
             onClick={handleCopy}
-            className="p-1.5 rounded text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
-            title="Copy"
-          >
-            <Copy className="w-4 h-4" />
-          </button>
-          <button
+          />
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
+            icon={showPassword ? EyeOff : Eye}
+            iconOnly
+            tooltip={showPassword ? 'Hide' : 'Reveal'}
             onClick={() => setShowPassword((old) => !old)}
-            className="p-1.5 rounded text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
-            title={showPassword ? 'Hide' : 'Reveal'}
-          >
-            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-          </button>
-          <button
+          />
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
+            icon={RefreshCw}
+            iconOnly
+            tooltip="Generate"
             onClick={() => setIsGeneratorOpen(true)}
-            className="p-1.5 rounded text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
-            title="Generate"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
+          />
         </div>
       </div>
-      {hint && <p className="text-xs text-neutral-500 mt-1">{hint}</p>}
+      {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
 
-      <Modal
-        isOpen={isGeneratorOpen}
-        onClose={() => setIsGeneratorOpen(false)}
+      <Dialog
+        open={isGeneratorOpen}
+        onOpenChange={setIsGeneratorOpen}
         title="Generate Password"
-        className="max-w-xl max-h-[85vh] overflow-y-auto"
+        footer={
+          <>
+            <Button type="button" variant="ghost" onClick={generatePassword} disabled={!charset.length}>
+              Generate
+            </Button>
+            <Button
+              type="button"
+              variant="positive"
+              disabled={!generated}
+              onClick={() => {
+                if (generated) onChange(generated);
+                setIsGeneratorOpen(false);
+              }}
+            >
+              Use Password
+            </Button>
+          </>
+        }
+        className="max-h-[85vh] overflow-y-auto sm:max-w-xl"
       >
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Length</label>
+            <label className="mb-2 block text-xs font-bold uppercase text-muted-foreground">Length</label>
             <input
               type="number"
               min={4}
               max={128}
               value={length}
               onChange={(event) => setLength(Math.max(4, Math.min(128, Number(event.target.value) || 8)))}
-              className="w-full px-3 py-2 bg-black/80 border border-white/10 rounded-lg text-white"
+              className="w-full rounded-lg border border-border bg-background/60 px-3 py-2 text-foreground"
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <label className="flex items-center justify-between p-3 bg-black/40 rounded-lg border border-white/10">
-              <span className="text-sm text-white">Letters</span>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-3">
+              <span className="text-sm text-foreground">Letters</span>
               <input type="checkbox" checked={includeLetters} onChange={(event) => setIncludeLetters(event.target.checked)} />
             </label>
-            <label className="flex items-center justify-between p-3 bg-black/40 rounded-lg border border-white/10">
-              <span className="text-sm text-white">Numbers</span>
+            <label className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-3">
+              <span className="text-sm text-foreground">Numbers</span>
               <input type="checkbox" checked={includeNumbers} onChange={(event) => setIncludeNumbers(event.target.checked)} />
             </label>
-            <label className="flex items-center justify-between p-3 bg-black/40 rounded-lg border border-white/10 sm:col-span-2">
-              <span className="text-sm text-white">Special symbols (@ # $ % ...)</span>
+            <label className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-3 sm:col-span-2">
+              <span className="text-sm text-foreground">Special symbols (@ # $ % ...)</span>
               <input
                 type="checkbox"
                 checked={includeSpecialSymbols}
                 onChange={(event) => setIncludeSpecialSymbols(event.target.checked)}
               />
             </label>
-            <label className="flex items-center justify-between p-3 bg-black/40 rounded-lg border border-white/10 sm:col-span-2">
-              <span className="text-sm text-white">Operator symbols (- + = _ [ ] ?)</span>
+            <label className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-3 sm:col-span-2">
+              <span className="text-sm text-foreground">Operator symbols (- + = _ [ ] ?)</span>
               <input
                 type="checkbox"
                 checked={includeOperatorSymbols}
@@ -198,12 +221,12 @@ export function PasswordFieldWithGenerator({
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Letter Case</label>
+            <label className="mb-2 block text-xs font-bold uppercase text-muted-foreground">Letter Case</label>
             <select
               value={caseMode}
               onChange={(event) => setCaseMode(event.target.value as CaseMode)}
               disabled={!includeLetters}
-              className="w-full px-3 py-2 bg-black/80 border border-white/10 rounded-lg text-white disabled:opacity-50"
+              className="w-full rounded-lg border border-border bg-background/60 px-3 py-2 text-foreground disabled:opacity-50"
             >
               <option value="both">Both Upper + Lower</option>
               <option value="upper">Upper Only</option>
@@ -211,33 +234,11 @@ export function PasswordFieldWithGenerator({
             </select>
           </div>
 
-          <div className="p-3 bg-black/50 border border-white/10 rounded-lg break-all text-sm text-indigo-300 min-h-11">
+          <div className={cn('min-h-11 break-all rounded-lg border border-border bg-muted/50 p-3 text-sm text-primary')}>
             {generated || 'Press Generate to preview password'}
           </div>
-
-          <div className="flex flex-col sm:flex-row gap-2 pt-2">
-            <button
-              type="button"
-              onClick={generatePassword}
-              className="flex-1 px-4 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded-lg"
-              disabled={!charset.length}
-            >
-              Generate
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (generated) onChange(generated);
-                setIsGeneratorOpen(false);
-              }}
-              className="flex-1 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg disabled:opacity-50"
-              disabled={!generated}
-            >
-              Use Password
-            </button>
-          </div>
         </div>
-      </Modal>
+      </Dialog>
     </div>
   );
 }
