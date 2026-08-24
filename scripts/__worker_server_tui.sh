@@ -1,3 +1,4 @@
+#!/bin/bash
 edit_entry() {
   fleet_load
   local r="${ROWS[$CUR]}" idx label host
@@ -103,7 +104,7 @@ render() {
   act="$(active_host)"
   printf '%sWorker → Main-server Connections%s   (.env.worker)\n' "$C_B" "$C_0"
   printf ' %-4s %-22s %-28s %s\n' "sel" "label" "host" "state"
-  for i in ${!ROWS[@]}; do
+  for i in "${!ROWS[@]}"; do
     row="${ROWS[$i]}"; IFS='|' read -r idx label host <<<"$row"
     mark=" "
     [ "$i" = "$CUR" ] && mark=">" && printf '%s' "$C_B"
