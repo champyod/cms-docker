@@ -121,27 +121,32 @@ dash::join2() { # LEFT RIGHT -> side-by-side, padded to equal height
 }
 
 dash::render_screen() {
-	local w='' pair_a pair_b
+	local w='' frame='' pair_a pair_b
 	read -r _ w <<<"$(stty size </dev/tty 2>/dev/null)"
 	w=${w:-100}
-	printf '\033[H\033[2J'
-	tui::header "CMS CONTROL PLANE" </dev/null
-	dash::paint "$TUI_ACCENT" '▌ WORKERS'; printf '\n'
-	printf '%s\n' "$DASH_WORKERS_TSV" | tui::table --print
-	printf '\n'
+
+	local hdr workers svc db bk up ftr
+	hdr=$(tui::header "CMS CONTROL PLANE" </dev/null)
+	workers=$(printf '%s\n' "$DASH_WORKERS_TSV" | tui::table --print)
+
 	if (( w >= 132 )); then
 		pair_a=$(dash::join2 "$(printf '%s\n' "$DASH_SVC_TSV" | tui::table --print)" \
 			"$(tui::panel DATABASE "${DASH_DB_PANEL[@]}" </dev/null)")
 		pair_b=$(dash::join2 "$(tui::panel BACKUPS "${DASH_BK_PANEL[@]}" </dev/null)" \
 			"$(tui::panel UPDATES "${DASH_UP_PANEL[@]}" </dev/null)")
-		printf '%s\n\n%s\n' "$pair_a" "$pair_b"
+		frame+="$hdr"$'\n'"$workers"$'\n'"$pair_a"$'\n\n'"$pair_b"
 	else
-		printf '%s\n' "$DASH_SVC_TSV" | tui::table --print; printf '\n'
-		tui::panel DATABASE "${DASH_DB_PANEL[@]}" </dev/null; printf '\n'
-		tui::panel BACKUPS "${DASH_BK_PANEL[@]}" </dev/null; printf '\n'
-		tui::panel UPDATES "${DASH_UP_PANEL[@]}" </dev/null; printf '\n'
+		svc=$(printf '%s\n' "$DASH_SVC_TSV" | tui::table --print)
+		db=$(tui::panel DATABASE "${DASH_DB_PANEL[@]}" </dev/null)
+		bk=$(tui::panel BACKUPS "${DASH_BK_PANEL[@]}" </dev/null)
+		up=$(tui::panel UPDATES "${DASH_UP_PANEL[@]}" </dev/null)
+		frame+="$hdr"$'\n'"$workers"$'\n'"$svc"$'\n'"$db"$'\n'"$bk"$'\n'"$up"
 	fi
-	dash::footer
+
+	ftr=$(dash::footer)
+	frame+=$'\n'"$ftr"$'\033[J'
+
+	printf '\033[H%s' "$frame"
 }
 
 dash::footer() {
