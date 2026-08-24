@@ -167,10 +167,12 @@ export function ProfileSection({ timezone, emailDomain, loading, hasRows, onTime
 }
 
 interface BulkEditPreviewTableProps {
-  rows: Array<{ id: number; first_name: string; last_name: string; username: string; password?: string | null; email?: string | null }>;
+  rows: Array<{ id: number; first_name: string; last_name: string; username: string; password?: string | null; email?: string | null; stored_kind?: 'bcrypt' | 'plaintext' }>;
+  onRevealPassword?: (rowId: number) => void;
+  revealingIds?: number[];
 }
 
-export function BulkEditPreviewTable({ rows }: BulkEditPreviewTableProps) {
+export function BulkEditPreviewTable({ rows, onRevealPassword, revealingIds = [] }: BulkEditPreviewTableProps) {
   return (
     <div className="border border-white/10 rounded-lg overflow-hidden">
       <div className="max-h-80 overflow-auto">
@@ -199,7 +201,22 @@ export function BulkEditPreviewTable({ rows }: BulkEditPreviewTableProps) {
                   <td className="px-2 py-2 text-white">{row.first_name}</td>
                   <td className="px-2 py-2 text-white">{row.last_name}</td>
                   <td className="px-2 py-2 text-white">{row.username}</td>
-                  <td className="px-2 py-2 text-white font-mono">{row.password || '-'}</td>
+                  <td className="px-2 py-2 text-white font-mono">
+                    {row.password ? (
+                      row.password
+                    ) : row.stored_kind === 'bcrypt' ? (
+                      <span className="text-neutral-600">bcrypt ••••</span>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={revealingIds.includes(row.id)}
+                        onClick={() => onRevealPassword?.(row.id)}
+                      >
+                        {revealingIds.includes(row.id) ? '…' : 'Reveal'}
+                      </Button>
+                    )}
+                  </td>
                   <td className="px-2 py-2 text-white">{row.email || '-'}</td>
                 </tr>
               ))

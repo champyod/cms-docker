@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiClient } from '@/lib/apiClient';
 import { getTeams } from '@/app/actions/teams';
+import { revealUserPassword } from '@/app/actions/users';
 import type { PasswordKind } from '@/lib/password-format';
 import { openServerDownload } from './bulkEditActions';
 import { makePassword, makeUsername } from './csvPreview';
@@ -30,6 +31,28 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
   const [emailDomain, setEmailDomain] = useState('');
   const [passwordKind, setPasswordKind] = useState<PasswordKind>('bcrypt');
   const [rows, setRows] = useState(selectedUsers);
+  const [revealingIds, setRevealingIds] = useState<number[]>([]);
+
+  const revealRowPassword = async (rowId: number): Promise<void> => {
+    setRevealingIds((prev) => [...prev, rowId]);
+    try {
+      const result = await revealUserPassword(rowId);
+      setRows((prev) =>
+        prev.map((r) =>
+          r.id === rowId
+            ? {
+                ...r,
+                password: result.success && result.kind === 'plaintext' ? result.value : null,
+                stored_kind: result.success ? result.kind : undefined,
+              }
+            : r
+        )
+      );
+    } catch {
+      // Row stays unrevealed; admin can retry.
+    }
+    setRevealingIds((prev) => prev.filter((id) => id !== rowId));
+  };
   const [teamsOptions, setTeamsOptions] = useState<string[]>([]);
 
   useEffect(() => {
@@ -249,6 +272,7 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
     emailDomain, setEmailDomain,
     passwordKind, setPasswordKind,
     rows, teamsOptions,
+    revealRowPassword, revealingIds,
     runRegenerate, exportCurrentPasswords, exportSelectedRows,
     runContestMutation, runTeamSet, runTeamRemoveAny,
     runTimezoneUpdate, runEmailDomainUpdate, runEmailClear,
