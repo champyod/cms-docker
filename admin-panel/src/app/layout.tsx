@@ -1,8 +1,18 @@
 import type { Metadata } from 'next';
+import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
-import { Inter } from 'next/font/google';
 
-const inter = Inter({ subsets: ['latin'], display: 'swap' });
+const geistSans = Geist({
+  subsets: ['latin'],
+  variable: '--font-geist-sans',
+  display: 'swap',
+});
+
+const geistMono = Geist_Mono({
+  subsets: ['latin'],
+  variable: '--font-geist-mono',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'CMS Admin Panel',
@@ -14,9 +24,11 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const rootClassName = ['dark', geistSans.variable, geistMono.variable].join(' ');
+
   return (
-    <html lang="en">
-      <body className={inter.className}>
+    <html lang="en" className={rootClassName} suppressHydrationWarning>
+      <body className="font-sans antialiased">
         {children}
       </body>
     </html>
