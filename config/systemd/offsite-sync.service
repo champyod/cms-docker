@@ -1,0 +1,12 @@
+[Unit]
+Description=CMS Offsite Backup Synchronization
+After=network-online.target tailscale.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=@CMS_DIR@
+ExecStart=@CMS_DIR@/scripts/__offsite-sync.sh --apply
+TimeoutStartSec=1800
+Nice=10
+IOSchedulingClass=idle

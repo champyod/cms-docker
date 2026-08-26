@@ -1,0 +1,29 @@
+// Copy to config/monitor_targets.json and set MONITOR_ENHANCED=1 in .env.infra.
+// Each entry defines an HTTP endpoint the monitor service polls for health.
+//
+// Fields:
+//   id              — unique target identifier
+//   url             — full URL to check
+//   interval        — seconds between checks
+//   timeout         — seconds to wait for response
+//   expectedStatus  — HTTP status code that means "healthy"
+//   alertDiscord    — send Discord webhook on failure (requires DISCORD_WEBHOOK_URL in .env.infra)
+
+[
+  {
+    "id": "grader-root",
+    "url": "https://grader.mwit.ac.th/",
+    "interval": 60,
+    "timeout": 5,
+    "expectedStatus": 200,
+    "alertDiscord": true
+  },
+  {
+    "id": "admin-panel",
+    "url": "https://admin.grader.mwit.ac.th/",
+    "interval": 60,
+    "timeout": 5,
+    "expectedStatus": 200,
+    "alertDiscord": true
+  }
+]

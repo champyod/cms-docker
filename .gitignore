@@ -37,4 +37,13 @@ admin-panel/.env
 # Agent tools
 .claude/
 /CMS-ENTRYPOINT-NOTES.md
+
+# Generated / runtime secrets
 config/funnel.htpasswd
+config/grader.nginx.conf
+config/letsencrypt/
+config/monitor_targets.json
+certbot-webroot/
+
+# Backup archives
+backups/*.tar.gz

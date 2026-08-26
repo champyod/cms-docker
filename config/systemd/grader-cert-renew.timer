@@ -1,0 +1,10 @@
+[Unit]
+Description=CMS SSL Certificate Renewal (every 12 hours)
+
+[Timer]
+OnCalendar=*:00/12:00
+Persistent=true
+RandomizedDelaySec=900
+
+[Install]
+WantedBy=timers.target
