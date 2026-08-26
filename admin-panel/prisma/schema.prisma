@@ -471,6 +471,20 @@ model user_tests {
   @@index([task_id], map: "ix_user_tests_task_id")
 }
 
+model monitor_targets {
+  id             String   @id @default(cuid())
+  url            String
+  interval       Int      @default(60)
+  timeout        Int      @default(5)
+  expectedStatus Int      @default(200)
+  alertDiscord   Boolean  @default(true)
+  enabled        Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("monitor_targets")
+}
+
 model users {
   id                  Int              @id @default(autoincrement())
   first_name          String           @db.VarChar

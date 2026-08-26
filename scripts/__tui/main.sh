@@ -135,6 +135,7 @@ main::route() {
 		funnel) funnel_menu::show ;;
 		update-server) update_server_menu::run "$@" ;;
 		expose) exec bash "$_MAIN_SCRIPTS/__exposure_tui.sh" ;;
+		domain) exec bash "$_MAIN_SCRIPTS/__domain.sh" "$@" ;;
 		*) CMS_NO_TUI=1 exec bash "$_MAIN_CMS_ROOT/cms" "${ORIG_ARGS[@]}" ;;
 	esac
 }

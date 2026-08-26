@@ -158,12 +158,21 @@ env:
 		cat .env.local >> .env; \
 		echo "" >> .env; \
 	fi
+	@# Domain variables (DOMAIN_NAME, CERT_TYPE, HSTS_MAX_AGE, OFFSITE_*, SOCKET_PROXY, MONITOR_ENHANCED)
+	@# are passed through to .env automatically via the cat merges above.
 	@# Legacy map: ACTIVE_CONTEST_ID → CONTEST_ID
 	@ACTIVE_VAL=$$(grep "^ACTIVE_CONTEST_ID=" .env.contest 2>/dev/null | cut -d '=' -f2- | tr -d '\r' | xargs); \
 	CONTEST_VAL=$$(grep "^CONTEST_ID=" .env 2>/dev/null | grep -v "^#" | cut -d '=' -f2- | tr -d '\r' | xargs); \
 	if [ -n "$$ACTIVE_VAL" ] && [ -z "$$CONTEST_VAL" ]; then \
 		echo "CONTEST_ID=$$ACTIVE_VAL" >> .env; \
 		echo "[deprecated] ACTIVE_CONTEST_ID is deprecated, use CONTEST_ID (mapped $$ACTIVE_VAL → CONTEST_ID)" >&2; \
+	fi
+	@# Map CMS_DOMAIN → CONTEST_DOMAIN when ACCESS_METHOD=domain
+	@CMS_DOM=$$(grep "^CMS_DOMAIN=" .env.core 2>/dev/null | cut -d '=' -f2- | tr -d '\r' | xargs); \
+	EXIST_DOM=$$(grep "^CONTEST_DOMAIN=" .env 2>/dev/null | grep -v "^#" | cut -d '=' -f2- | tr -d '\r' | xargs); \
+	if [ -n "$$CMS_DOM" ] && [ -z "$$EXIST_DOM" ]; then \
+		echo "CONTEST_DOMAIN=$$CMS_DOM" >> .env; \
+		echo "Mapped CMS_DOMAIN=$$CMS_DOM → CONTEST_DOMAIN"; \
 	fi
 	@chmod 600 .env
 	@# Generate admin-panel/.env for Prisma and Next.js
