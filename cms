@@ -48,6 +48,8 @@ Commands:
   expose                    TUI: pick local/public/tailscale wiring per UI
   funnel setup|passwd|remove|status
                             public ts.net access behind basic auth (no tailnet)
+  domain setup|status|renew|preflight
+                            grader.mwit.ac.th HTTPS domain lifecycle (TLS+Nginx+certs)
   contest create            create contests from YAML
   update-server             shard-aware server update flow
 
@@ -68,7 +70,7 @@ handle_subcommand() {
       status:--workers-json|backup:drill) : ;;
       *)
         case "$1" in
-          status|monitor|backup|restore|doctor|test|db|admin-create|contest|pull|stop|clean|deploy|tailscale|funnel|update-server|expose)
+          status|monitor|backup|restore|doctor|test|db|admin-create|contest|pull|stop|clean|deploy|tailscale|funnel|update-server|expose|domain)
             exec bash scripts/__tui/main.sh "$@"
             ;;
         esac
@@ -176,6 +178,7 @@ handle_subcommand() {
       [[ "$sub" == "create" ]] || { echo "usage: cms contest create <yaml...>" >&2; exit 2; }
       shift 2; exec bash scripts/__create_contests.sh "$@" ;;
     update-server) shift; exec bash scripts/__update-server.sh "$@" ;;
+    domain) shift; exec bash scripts/__domain.sh "${@:-status}" ;;
     *) return 1 ;;
   esac
 }

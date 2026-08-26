@@ -2,6 +2,7 @@ import { checkPermission } from '@/lib/permissions';
 import { getDictionary } from '@/i18n';
 import { PermissionDenied } from '@/components/PermissionDenied';
 import { EnvConfigView } from '@/components/settings/EnvConfigView';
+import { MonitorConfigSection } from '@/components/settings/MonitorConfigSection';
 
 export default async function SettingsPage({
   params,
@@ -24,6 +25,8 @@ export default async function SettingsPage({
       </div>
 
       <EnvConfigView />
+
+      <MonitorConfigSection />
     </div>
   );
 }
