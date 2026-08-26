@@ -1,0 +1,202 @@
+# Grader domain nginx config — envsubst template
+# Rendered by __domain.sh → config/grader.nginx.conf
+# Render with: envsubst '$DOMAIN_NAME $ADMIN_DOMAIN ...' < template > output
+# Only listed ${VAR} placeholders are substituted; $host/$remote_addr etc. left intact.
+
+# Rate limit zones
+limit_req_zone $binary_remote_addr zone=admin_login:10m rate=5r/s;
+limit_req_zone $binary_remote_addr zone=ranking_auth:10m rate=10r/s;
+
+# ── Upstreams ──────────────────────────────────────────────────────
+upstream cms_contest {
+    least_conn;
+    server cms-contest-web-server:${CONTEST_LISTEN_PORT};
+}
+
+upstream cms_admin_panel {
+    server cms-admin-panel-next:3000;
+}
+
+upstream cms_classic_admin {
+    server cms-admin-web-server:${ADMIN_LISTEN_PORT};
+}
+
+upstream cms_ranking {
+    server cms-ranking-web-server:${RANKING_LISTEN_PORT};
+}
+
+upstream oj_backend {
+    server host.docker.internal:${OJ_BACKEND_PORT};
+}
+
+# ── Server 1: HTTP → HTTPS redirect + ACME challenge ──────────────
+server {
+    listen 80 default_server;
+    server_name ${DOMAIN_NAME};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        allow all;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# ── Server 2: grader.mwit.ac.th (contest + ranking + WS) ─────────
+server {
+    listen 443 ssl http2;
+    server_name ${DOMAIN_NAME};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN_NAME}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN_NAME}/privkey.pem;
+    include /etc/nginx/conf.d/nginx-ssl.conf;
+    add_header Strict-Transport-Security "max-age=${HSTS_MAX_AGE}; includeSubDomains" always;
+
+    client_max_body_size 10M;
+    client_body_buffer_size 128k;
+    proxy_connect_timeout 90;
+    proxy_send_timeout 90;
+    proxy_read_timeout 90;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    location = /login {
+        limit_req zone=admin_login burst=20 nodelay;
+        proxy_pass http://cms_contest;
+        proxy_redirect off;
+    }
+
+    location / {
+        proxy_pass http://cms_contest;
+        proxy_redirect off;
+    }
+
+    location /ranking/ {
+        ${RANKING_AUTH_DIRECTIVES}
+        proxy_pass http://cms_ranking/;
+        proxy_redirect off;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_buffering off;
+        limit_req zone=ranking_auth burst=10 nodelay;
+    }
+
+    location /ws {
+        proxy_pass http://cms_contest;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+
+    location ~* \.(jpg|jpeg|png|gif|ico|css|js)$ {
+        proxy_pass http://cms_contest;
+        expires 1d;
+        add_header Cache-Control "public, immutable";
+    }
+
+    access_log /var/log/nginx/grader_access.log;
+    error_log /var/log/nginx/grader_error.log;
+}
+
+# ── Server 3: admin.grader (Next.js panel + classic admin) ────────
+server {
+    listen 443 ssl http2;
+    server_name ${ADMIN_DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN_NAME}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN_NAME}/privkey.pem;
+    include /etc/nginx/conf.d/nginx-ssl.conf;
+    add_header Strict-Transport-Security "max-age=${HSTS_MAX_AGE}; includeSubDomains" always;
+
+    client_max_body_size 10M;
+    client_body_buffer_size 128k;
+    proxy_connect_timeout 90;
+    proxy_send_timeout 90;
+    proxy_read_timeout 90;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    location / {
+        proxy_pass http://cms_admin_panel;
+        proxy_redirect off;
+    }
+
+    location /classic/ {
+        proxy_pass http://cms_classic_admin/;
+        proxy_redirect off;
+    }
+
+    access_log /var/log/nginx/admin_access.log;
+    error_log /var/log/nginx/admin_error.log;
+}
+
+# ── Server 4: oj.grader (external OJ backend via host-gateway) ────
+server {
+    listen 443 ssl http2;
+    server_name ${OJ_DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN_NAME}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN_NAME}/privkey.pem;
+    include /etc/nginx/conf.d/nginx-ssl.conf;
+    add_header Strict-Transport-Security "max-age=${HSTS_MAX_AGE}; includeSubDomains" always;
+
+    client_max_body_size 100M;
+    client_body_buffer_size 128k;
+    proxy_connect_timeout 90;
+    proxy_send_timeout 90;
+    proxy_read_timeout 90;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    location / {
+        proxy_pass http://oj_backend;
+        proxy_redirect off;
+    }
+
+    access_log /var/log/nginx/oj_access.log;
+    error_log /var/log/nginx/oj_error.log;
+}
+
+# ── Server 5: ranking.grader (always auth) ───────────────────────
+server {
+    listen 443 ssl http2;
+    server_name ${RANKING_DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN_NAME}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN_NAME}/privkey.pem;
+    include /etc/nginx/conf.d/nginx-ssl.conf;
+    add_header Strict-Transport-Security "max-age=${HSTS_MAX_AGE}; includeSubDomains" always;
+
+    client_max_body_size 10M;
+    client_body_buffer_size 128k;
+    proxy_connect_timeout 90;
+    proxy_send_timeout 90;
+    proxy_read_timeout 90;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    location / {
+        ${RANKING_AUTH_DIRECTIVES}
+        proxy_pass http://cms_ranking/;
+        proxy_redirect off;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_buffering off;
+        limit_req zone=ranking_auth burst=10 nodelay;
+    }
+
+    access_log /var/log/nginx/ranking_access.log;
+    error_log /var/log/nginx/ranking_error.log;
+}

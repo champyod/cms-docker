@@ -1,0 +1,11 @@
+[Unit]
+Description=CMS SSL Certificate Renewal + Reload
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=@CMS_DIR@
+ExecStart=/usr/bin/env bash -c 'certbot renew --quiet --deploy-hook "systemctl reload nginx-portal"'
+ExecStartPost=/usr/bin/env bash -c 'test -f .env.infra && . .env.infra && test -n "${DISCORD_WEBHOOK_URL:-}" && curl -sS -X POST "${DISCORD_WEBHOOK_URL}" -H "Content-Type: application/json" -d "{\"content\":\":lock: SSL cert renewed on $(hostname)\"}" || true'
+TimeoutStartSec=300
