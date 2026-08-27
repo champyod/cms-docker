@@ -48,6 +48,23 @@ services:
       - certbot-webroot:/var/www/certbot
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot; sleep 12h & wait $${!}; done;'"
 
+  redis-rate-limit:
+    image: redis:7-alpine
+    container_name: grader-redis-rate-limit
+    restart: on-failure:5
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis-rate-limit-data:/data
+    networks:
+      - cms-network
+    # No host ports — reachable only via cms-network as redis-rate-limit:6379
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
 # ── Volumes ───────────────────────────────────────────────────────
 volumes:
   letsencrypt-certs:
@@ -56,6 +73,8 @@ volumes:
     name: cms-certbot-webroot
   nginx-logs:
     name: cms-nginx-logs-domain
+  redis-rate-limit-data:
+    name: cms-redis-rate-limit-data
 
 # ── Networks ──────────────────────────────────────────────────────
 networks:

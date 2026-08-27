@@ -82,6 +82,14 @@ CERT_PATH=""
 KEY_PATH=""
 CERT_EMAIL="${CERT_EMAIL:-admin@mwit.ac.th}"
 HSTS_MAX_AGE="${HSTS_MAX_AGE:-31536000}"
+REDIS_RATE_LIMIT="${REDIS_RATE_LIMIT:-0}"
+PER_USER_LIMIT="${PER_USER_LIMIT:-1}"
+REDIS_HOST="${REDIS_HOST:-redis-rate-limit}"
+REDIS_PORT="${REDIS_PORT:-6379}"
+CONTEST_LISTEN_PORT="${CONTEST_LISTEN_PORT:-8888}"
+ADMIN_LISTEN_PORT="${ADMIN_LISTEN_PORT:-8889}"
+RANKING_LISTEN_PORT="${RANKING_LISTEN_PORT:-8890}"
+OJ_BACKEND_PORT="${OJ_BACKEND_PORT:-9000}"
 DRY_RUN=1
 
 # ---------------------------------------------------------------------------
@@ -268,14 +276,54 @@ _render_nginx_config() {
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
     log_info "[dry-run] would render $template -> $output"
-    log_info "[dry-run] variables: DOMAIN_NAME=$DOMAIN_NAME HSTS_MAX_AGE=$HSTS_MAX_AGE"
+    log_info "[dry-run] variables: DOMAIN_NAME=$DOMAIN_NAME HSTS_MAX_AGE=$HSTS_MAX_AGE REDIS_RATE_LIMIT=$REDIS_RATE_LIMIT PER_USER_LIMIT=$PER_USER_LIMIT REDIS_HOST=$REDIS_HOST REDIS_PORT=$REDIS_PORT"
     return 0
   fi
 
-  export DOMAIN_NAME HSTS_MAX_AGE
+  export DOMAIN_NAME ADMIN_DOMAIN OJ_DOMAIN RANKING_DOMAIN HSTS_MAX_AGE
+  export CONTEST_LISTEN_PORT ADMIN_LISTEN_PORT RANKING_LISTEN_PORT OJ_BACKEND_PORT
   export RANKING_AUTH_DIRECTIVES="${RANKING_AUTH_DIRECTIVES:-}"
-  envsubst '${DOMAIN_NAME} ${HSTS_MAX_AGE} ${RANKING_AUTH_DIRECTIVES}' < "$template" > "$output"
-  log_info "nginx config rendered: $output"
+
+  local redis_upstream_block redis_lua_placeholder per_user_login per_user_ranking
+
+  if [[ "${REDIS_RATE_LIMIT:-0}" == "1" ]]; then
+    redis_upstream_block=$(cat <<EOF
+# Redis distributed rate limit — enabled (REDIS_RATE_LIMIT=1)
+# Docker DNS resolver for future OpenResty lua-resty-redis (request-time resolution; nginx starts even if redis absent)
+resolver 127.0.0.11 valid=10s ipv6=off;
+resolver_timeout 3s;
+# Upstream deferred to lua request-time connect to avoid startup DNS failure when redis absent
+# upstream redis_rate_limit_backend { server ${REDIS_HOST}:${REDIS_PORT} max_fails=2 fail_timeout=10s; }
+# Local limit_req remains as primary until OpenResty image with resty.redis is deployed
+EOF
+)
+    redis_lua_placeholder=$(cat <<'EOLUA'
+# Redis rate limiting active: future OpenResty path would use lua-resty-redis token bucket here
+# lua_shared_dict redis_limit 10m;
+# access_by_lua_block { local r=require("resty.redis"); local red=r:new(); red:set_timeout(80); local ok=red:connect("redis-rate-limit",6379); if ok then local c=red:incr("rl:"..ngx.var.binary_remote_addr); if c==1 then red:expire("rl:"..ngx.var.binary_remote_addr,1) end; if c and c>5 then ngx.exit(503) end end }
+# Local limit_req remains as fallback if Redis is unreachable
+EOLUA
+)
+  else
+    redis_upstream_block="# REDIS_RATE_LIMIT=0 — local limit_req only (no Redis upstream)"
+    redis_lua_placeholder="# REDIS_RATE_LIMIT=0 — Redis disabled, using local limit_req (5r/s admin_login, 10r/s ranking_auth)"
+  fi
+
+  if [[ "${PER_USER_LIMIT:-1}" == "1" ]]; then
+    per_user_login="limit_req zone=per_user burst=20 nodelay;"
+    per_user_ranking="limit_req zone=per_user burst=20 nodelay;"
+  else
+    per_user_login="# PER_USER_LIMIT=0 — per-user bucket disabled"
+    per_user_ranking="# PER_USER_LIMIT=0 — per-user bucket disabled"
+  fi
+
+  export REDIS_UPSTREAM_BLOCK="$redis_upstream_block"
+  export REDIS_LUA_PLACEHOLDER="$redis_lua_placeholder"
+  export PER_USER_LOGIN_DIRECTIVES="$per_user_login"
+  export PER_USER_RANKING_DIRECTIVES="$per_user_ranking"
+
+  envsubst '${DOMAIN_NAME} ${ADMIN_DOMAIN} ${OJ_DOMAIN} ${RANKING_DOMAIN} ${HSTS_MAX_AGE} ${CONTEST_LISTEN_PORT} ${ADMIN_LISTEN_PORT} ${RANKING_LISTEN_PORT} ${OJ_BACKEND_PORT} ${RANKING_AUTH_DIRECTIVES} ${REDIS_UPSTREAM_BLOCK} ${REDIS_LUA_PLACEHOLDER} ${PER_USER_LOGIN_DIRECTIVES} ${PER_USER_RANKING_DIRECTIVES}' < "$template" > "$output"
+  log_info "nginx config rendered: $output (REDIS_RATE_LIMIT=${REDIS_RATE_LIMIT} PER_USER_LIMIT=${PER_USER_LIMIT})"
 }
 
 # ---------------------------------------------------------------------------
