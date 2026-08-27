@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# scripts/__tui/dashboard.sh — btop-style master dashboard (P2).
+# scripts/__tui/__dashboard.sh — btop-style master dashboard (P2).
 # Panels WORKERS/SERVICES/DATABASE/BACKUPS/UPDATES poll every 10s; mutating
 # keys route through tui::confirm + tui::audit; falls back to
 # scripts/__status.sh when tui::init fails. Source-safe: no side effects.
 
 DASH_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-# shellcheck source=scripts/__tui/engine.sh
-source "$DASH_DIR/engine.sh"
+# shellcheck source=scripts/__tui/__engine.sh
+source "$DASH_DIR/__engine.sh"
 
 DASH_REFRESH_SECS=10
 DASH_CORE_SERVICES="cms-database cms-log-service cms-resource-service cms-scoring-service cms-checker-service"
@@ -22,8 +22,6 @@ dash::env_val() { # FILE KEY -> value (blank when missing)
 dash::paint() { if tui::tty_ok; then printf '\033[38;5;%sm%s\033[0m' "$1" "$2"; else printf '%s' "$2"; fi; }
 
 dash::state_color() { case "$1" in healthy|running|idle|true) echo "$TUI_OK" ;; unhealthy|absent|erroring|false) echo "$TUI_ERR" ;; starting|connecting|working|none) echo "$TUI_WARN" ;; *) echo "$TUI_DIM" ;; esac; }
-
-dash::label() { dash::paint "$TUI_ACCENT" "▌ $1"; printf '\n'; }
 
 dash::rows_tsv() { # JSON-ARRAY-ON-STDIN KEY... -> TSV rows (jq if present, else python3)
 	local ks=("$@") prog
@@ -81,13 +79,7 @@ dash::collect_database() {
 	)
 }
 
-dash::human_age() { # SECONDS -> compact human age
-	local s=$1
-	if (( s < 90 )); then printf '%ss' "$s"
-	elif (( s < 5400 )); then printf '%sm' $(( s / 60 ))
-	elif (( s < 129600 )); then printf '%sh' $(( s / 3600 ))
-	else printf '%sd' $(( s / 86400 )); fi
-}
+dash::human_age() { local s=$1; if (( s < 90 )); then printf '%ss' "$s"; elif (( s < 5400 )); then printf '%sm' $(( s / 60 )); elif (( s < 129600 )); then printf '%sh' $(( s / 3600 )); else printf '%sd' $(( s / 86400 )); fi; }
 
 dash::collect_backups() {
 	local latest ts
@@ -129,27 +121,32 @@ dash::join2() { # LEFT RIGHT -> side-by-side, padded to equal height
 }
 
 dash::render_screen() {
-	local w='' pair_a pair_b
+	local w='' frame='' pair_a pair_b
 	read -r _ w <<<"$(stty size </dev/tty 2>/dev/null)"
 	w=${w:-100}
-	printf '\033[H\033[2J'
-	tui::header "CMS CONTROL PLANE"
-	dash::label "WORKERS"
-	printf '%s\n' "$DASH_WORKERS_TSV" | tui::table --print
-	printf '\n'
+
+	local hdr workers svc db bk up ftr
+	hdr=$(tui::header "CMS CONTROL PLANE" </dev/null)
+	workers=$(printf '%s\n' "$DASH_WORKERS_TSV" | tui::table --print)
+
 	if (( w >= 132 )); then
 		pair_a=$(dash::join2 "$(printf '%s\n' "$DASH_SVC_TSV" | tui::table --print)" \
-			"$(tui::panel DATABASE "${DASH_DB_PANEL[@]}")")
-		pair_b=$(dash::join2 "$(tui::panel BACKUPS "${DASH_BK_PANEL[@]}")" \
-			"$(tui::panel UPDATES "${DASH_UP_PANEL[@]}")")
-		printf '%s\n\n%s\n' "$pair_a" "$pair_b"
+			"$(tui::panel DATABASE "${DASH_DB_PANEL[@]}" </dev/null)")
+		pair_b=$(dash::join2 "$(tui::panel BACKUPS "${DASH_BK_PANEL[@]}" </dev/null)" \
+			"$(tui::panel UPDATES "${DASH_UP_PANEL[@]}" </dev/null)")
+		frame+="$hdr"$'\n'"$workers"$'\n'"$pair_a"$'\n\n'"$pair_b"
 	else
-		printf '%s\n' "$DASH_SVC_TSV" | tui::table --print; printf '\n'
-		tui::panel DATABASE "${DASH_DB_PANEL[@]}"; printf '\n'
-		tui::panel BACKUPS "${DASH_BK_PANEL[@]}"; printf '\n'
-		tui::panel UPDATES "${DASH_UP_PANEL[@]}"; printf '\n'
+		svc=$(printf '%s\n' "$DASH_SVC_TSV" | tui::table --print)
+		db=$(tui::panel DATABASE "${DASH_DB_PANEL[@]}" </dev/null)
+		bk=$(tui::panel BACKUPS "${DASH_BK_PANEL[@]}" </dev/null)
+		up=$(tui::panel UPDATES "${DASH_UP_PANEL[@]}" </dev/null)
+		frame+="$hdr"$'\n'"$workers"$'\n'"$svc"$'\n'"$db"$'\n'"$bk"$'\n'"$up"
 	fi
-	dash::footer
+
+	ftr=$(dash::footer)
+	frame+=$'\n'"$ftr"$'\033[J'
+
+	printf '\033[H%s' "$frame"
 }
 
 dash::footer() {
@@ -162,7 +159,7 @@ dash::footer() {
 
 dash::help() {
 	printf '\033[H\033[2J'
-	tui::header "DASHBOARD HELP"
+	tui::header "DASHBOARD HELP" </dev/null
 	tui::panel KEYBINDS \
 		"r  refresh all panels now" \
 		"w  hint: ./cms worker deploy" \
@@ -170,7 +167,7 @@ dash::help() {
 		"d  deploy all workers → ./cms deploy worker" \
 		"b  backup now        → ./cms backup" \
 		"?  this overlay" \
-		"q  quit (terminal restored)"
+		"q  quit (terminal restored)" </dev/null
 	printf '\n'
 	tui::panel SUBCOMMANDS \
 		"./cms status | monitor | doctor | test" \
@@ -178,47 +175,54 @@ dash::help() {
 		"./cms stop [stack] | pull [stack] | clean [stack]" \
 		"./cms backup [drill] | restore <archive>" \
 		"./cms db <init|reset|clean|sync>" \
-		"./cms worker [edit|deploy|stop|list]"
+		"./cms worker [edit|deploy|stop|list]" </dev/null
 	printf '\n%s' "$(dash::paint "$TUI_DIM" "press any key to return…")"
-	read -rsn1 _ || true
-}
-
-dash::act_deploy() {
-	tui::confirm "Deploy ALL registered workers now?" || return 1
-	tui::audit "dashboard.deploy-worker" "./cms deploy worker"
-	tui::spin "deploying workers" -- ./cms deploy worker
-	DASH_MSG="worker deploy finished (exit $?)"
+	dash::poll_key 30 && [[ "$KEY" == [qQ] ]] && exit 0
 	return 0
 }
 
-dash::act_backup() {
-	tui::confirm "Run a backup now?" || return 1
-	tui::audit "dashboard.backup" "./cms backup"
-	tui::spin "running backup" -- ./cms backup
-	DASH_MSG="backup finished (exit $?)"
-	return 0
+dash::act() { # TEXT TAG CMD... — confirm+audit+spin guard for mutating keys
+	local text="$1" tag="$2"; shift 2
+	tui::confirm "$text" || return 1
+	tui::audit "dashboard.$tag" "$*"
+	tui::spin "$text" -- "$@"
+	DASH_MSG="$tag finished (exit $?)"
+}
+
+dash::poll_key() { # TIMEOUT_S -> rc0 sets KEY iff bound user key; swallows ANSI reply litter inline
+	KEY=''; local k
+	while :; do
+		IFS= read -rsn1 -t "${1:-1}" k || return 1
+		if [[ "$k" == $'\x1b' ]]; then
+			IFS= read -rsn1 -t 0.001 k || continue
+			if [[ "$k" == ']' ]]; then
+				while IFS= read -rsn1 -t 0.001 k && [[ "$k" != $'\a' && "$k" != $'\x1b' ]]; do :; done
+				[[ "$k" == $'\x1b' ]] && IFS= read -rsn1 -t 0.001 k
+			else while IFS= read -rsn1 -t 0.001 k && [[ "$k" != [A-Za-z~] ]]; do :; done; fi
+			continue
+		fi
+		case "$k" in q|Q|r|R|w|W|s|S|d|D|b|B|h|H|\?) KEY=$k && return 0 ;; esac
+	done
 }
 
 dash::loop() {
-	local last=-9999 key
+	local last=-9999
 	while true; do
 		if (( SECONDS - last >= DASH_REFRESH_SECS )); then
 			dash::collect_all
 			last=$SECONDS
 		fi
 		dash::render_screen
-		if IFS= read -rsn1 -t 1 key; then
-			case "$key" in
-				q|Q)    return 0 ;;
-				r|R)    dash::collect_all; last=$SECONDS ;;
-				w|W)    DASH_MSG="hint: run ./cms worker deploy" ;;
-				s|S)    DASH_SVC_DETAIL=$(( 1 - DASH_SVC_DETAIL )); dash::collect_services ;;
-				d|D)    if dash::act_deploy; then dash::collect_all; last=$SECONDS; fi ;;
-				b|B)    if dash::act_backup; then dash::collect_backups; last=$SECONDS; fi ;;
-				\?|h|H) dash::help ;;
-			esac
-			continue
-		fi
+		dash::poll_key 1 || continue
+		case "$KEY" in
+			q|Q)    return 0 ;;
+			r|R)    dash::collect_all; last=$SECONDS ;;
+			w|W)    DASH_MSG="hint: run ./cms worker deploy" ;;
+			s|S)    DASH_SVC_DETAIL=$(( 1 - DASH_SVC_DETAIL )); dash::collect_services ;;
+			d|D)    if dash::act "Deploy ALL registered workers now?" deploy-worker ./cms deploy worker; then dash::collect_all; last=$SECONDS; fi ;;
+			b|B)    if dash::act "Run a backup now?" backup ./cms backup; then dash::collect_backups; last=$SECONDS; fi ;;
+			\?|h|H) dash::help ;;
+		esac
 	done
 }
 

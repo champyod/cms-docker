@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# scripts/__tui/menus/funnel.sh — public funnel menu: status panel plus
+# scripts/__tui/menus/__funnel.sh — public funnel menu: status panel plus
 # setup/passwd/remove actions behind confirmation. Requires initialized engine.
 
 _FUNNEL_TUI_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 _FUNNEL_SCRIPTS="$(cd -- "$_FUNNEL_TUI_DIR/../.." && pwd -P)/scripts"
-# shellcheck source=../engine.sh
-source "$_FUNNEL_TUI_DIR/engine.sh"
-# shellcheck source=../runners/simple.sh
-source "$_FUNNEL_TUI_DIR/runners/simple.sh"
+# shellcheck source=../__engine.sh
+source "$_FUNNEL_TUI_DIR/__engine.sh"
+# shellcheck source=../runners/__simple.sh
+source "$_FUNNEL_TUI_DIR/runners/__simple.sh"
 
 FUNNEL_MENU_MAX_LINES="${FUNNEL_MENU_MAX_LINES:-20}"
 

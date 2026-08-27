@@ -11,7 +11,7 @@
 #   no .env.core                                          -> --fresh
 #   otherwise                                             -> plain update walk
 #
-# Usage: bash scripts/__tui/wizards/setup-update.sh [engine args...]
+# Usage: bash scripts/__tui/wizards/__setup-update.sh [engine args...]
 
 TUI_STANDALONE=0
 [[ "${BASH_SOURCE[0]}" == "$0" ]] && { TUI_STANDALONE=1; set -euo pipefail; }

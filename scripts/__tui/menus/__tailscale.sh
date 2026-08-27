@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# scripts/__tui/menus/tailscale.sh — tailscale serve menu: status panel plus
+# scripts/__tui/menus/__tailscale.sh — tailscale serve menu: status panel plus
 # setup/remove actions behind confirmation. Requires an initialized engine.
 
 _TS_TUI_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 _TS_SCRIPTS="$(cd -- "$_TS_TUI_DIR/../.." && pwd -P)/scripts"
-# shellcheck source=../engine.sh
-source "$_TS_TUI_DIR/engine.sh"
-# shellcheck source=../runners/simple.sh
-source "$_TS_TUI_DIR/runners/simple.sh"
+# shellcheck source=../__engine.sh
+source "$_TS_TUI_DIR/__engine.sh"
+# shellcheck source=../runners/__simple.sh
+source "$_TS_TUI_DIR/runners/__simple.sh"
 
 TAILSCALE_MENU_MAX_LINES="${TAILSCALE_MENU_MAX_LINES:-20}"
 

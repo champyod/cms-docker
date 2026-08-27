@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/__tui/runners/simple.sh — reusable confirm/spin/result command adapter.
+# scripts/__tui/runners/__simple.sh — reusable confirm/spin/result command adapter.
 #
 # Contract:
 #   * Callers must have run tui::init successfully; primitives return 127
@@ -14,8 +14,8 @@
 #   simple::run_list DESC CMD [CMD...]
 
 _SIMPLE_TUI_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
-# shellcheck source=../engine.sh
-source "$_SIMPLE_TUI_DIR/engine.sh"
+# shellcheck source=../__engine.sh
+source "$_SIMPLE_TUI_DIR/__engine.sh"
 
 SIMPLE_TAIL_LINES="${SIMPLE_TAIL_LINES:-15}"
 

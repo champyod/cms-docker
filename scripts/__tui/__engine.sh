@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# scripts/__tui/engine.sh — shared engine for the CMS gum-based TUI.
+# scripts/__tui/__engine.sh — shared engine for the CMS gum-based TUI.
 #
 # Usage (from any script):
-#   source scripts/__tui/engine.sh
+#   source scripts/__tui/__engine.sh
 #   if tui::init; then ... tui::choose "Pick" a b c ...
 #   else             tui::plain; <legacy plain-CLI path>; fi
 #
