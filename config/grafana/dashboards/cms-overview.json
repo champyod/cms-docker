@@ -1,0 +1,65 @@
+{
+  "title": "CMS Overview",
+  "uid": "cms-overview",
+  "tags": ["cms"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Prometheus Up",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [{ "expr": "up{job=\"prometheus\"}", "refId": "A" }],
+      "fieldConfig": { "defaults": { "thresholds": { "steps": [{ "color": "red", "value": 0 }, { "color": "green", "value": 1 }] } } }
+    },
+    {
+      "type": "stat",
+      "title": "Node Exporter Up",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [{ "expr": "up{job=\"node-exporter\"}", "refId": "A" }],
+      "fieldConfig": { "defaults": { "thresholds": { "steps": [{ "color": "red", "value": 0 }, { "color": "green", "value": 1 }] } } }
+    },
+    {
+      "type": "stat",
+      "title": "Nginx Up",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "targets": [{ "expr": "up{job=\"nginx\"}", "refId": "A" }],
+      "fieldConfig": { "defaults": { "thresholds": { "steps": [{ "color": "red", "value": 0 }, { "color": "green", "value": 1 }] } } }
+    },
+    {
+      "type": "stat",
+      "title": "cms-monitor Up",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "targets": [{ "expr": "up{job=\"cms-monitor\"}", "refId": "A" }],
+      "fieldConfig": { "defaults": { "thresholds": { "steps": [{ "color": "red", "value": 0 }, { "color": "green", "value": 1 }] } } }
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU (node-exporter)",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [{ "expr": "100 - (avg by(instance) (irate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)", "refId": "A", "legendFormat": "cpu" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Memory (node-exporter)",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [{ "expr": "1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)", "refId": "A", "legendFormat": "mem used ratio" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Nginx active connections (stub_status via textfile if exported, else via up)",
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "targets": [{ "expr": "nginx_connections_active", "refId": "A" }],
+      "description": "Requires nginx-prometheus-exporter or stub_status textfile. Until then this panel stays empty — nginx up is tracked above."
+    }
+  ]
+}

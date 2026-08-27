@@ -47,3 +47,8 @@ certbot-webroot/
 
 # Backup archives
 backups/*.tar.gz
+
+# Monitoring data (Docker volumes — not files, but ignore stray local copies)
+prometheus-data/
+grafana-data/
+config/prometheus/data/

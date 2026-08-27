@@ -7,6 +7,12 @@
 # Usage:
 #   __fail2ban-setup.sh --check    verify config + log paths (dry-run)
 #   __fail2ban-setup.sh --apply    copy jail config to /etc/fail2ban/jail.d/
+#
+# Notes:
+#   CAPTCHA (if enabled) shows after 3 failed logins per IP+user within 15m and
+#   reduces automated brute-force before fail2ban acts. fail2ban jail still
+#   bans after 5 fails regardless (nginx-http-auth maxretry=5). Keep CAPTCHA
+#   optional via CAPTCHA_ENABLED=0 by default so prod stays off unless enabled.
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -51,6 +57,13 @@ Log paths: /var/log/nginx/*error*.log (inside nginx-logs volume)
 
 The config source is at config/fail2ban/jail.d/grader.conf.
 Deployed to /etc/fail2ban/jail.d/grader.conf on the host.
+
+CAPTCHA (optional): When CAPTCHA_ENABLED=1, admin login shows a
+Turnstile/hCaptcha widget on the 4th attempt within 15m per IP+user
+(CAPTCHA_THRESHOLD=3). The widget is provider-switchable via
+CAPTCHA_PROVIDER and disabled by default if keys are missing.
+fail2ban still bans after 5 fails (CAPTCHA_BAN_THRESHOLD=5) regardless;
+CAPTCHA merely slows automated attempts before the ban.
 EOF
 }
 

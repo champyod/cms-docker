@@ -1,4 +1,9 @@
 #!/bin/bash
+# __monitor.sh — CMS host monitor (Discord alerts, Docker events, backups)
+# Prometheus integration: when MONITORING_ENABLED=1 + profile monitoring, Prometheus
+# scrapes the same ping targets as monitor_targets.json (see config/prometheus/prometheus.yml)
+# via jobs: prometheus (self), node-exporter, nginx (stub_status /metrics), cms-monitor placeholder.
+# Prometheus scrape_interval 15s mirrors MONITOR_INTERVAL; Grafana dashboards in config/grafana/dashboards/.
 
 # Configuration
 ENV_FILE="$(dirname "$0")/../.env"
