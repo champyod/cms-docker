@@ -1,0 +1,79 @@
+# WAF stack — OWASP ModSecurity CRS in front of grader-nginx-proxy (optional, disabled by default)
+# Plan-first: WAF is available but NOT forced. Enable explicitly when ready.
+#
+# Disabled by default:
+#   WAF_ENABLED=0 (default) — grader-waf container not started, no ports bound, nginx unaffected.
+#   CAPTCHA (Upgrade-2) remains active whether WAF is on or off; both can be on at once.
+#
+# Enable WAF (explicit opt-in):
+#   1. Set WAF_ENABLED=1 in .env.infra (or .env) and optionally tune WAF_PARANOIA / WAF_ANOMALY_INBOUND / WAF_ANOMALY_OUTBOUND / WAF_PORT.
+#   2. Start with profile:
+#        docker compose --profile waf -f docker-compose.yml -f docker-compose.domain.yml -f docker-compose.waf.yml up -d
+#      Or domain-only:
+#        docker compose -f docker-compose.domain.yml -f docker-compose.waf.yml --profile waf up -d
+#   3. Keep SecRuleEngine DetectionOnly for ~1 week, review audit log, then switch to On (see docs/waf-tuning.md).
+#
+# Architecture:
+#   grader-waf (OWASP CRS nginx) → grader-nginx-proxy (existing nginx) → backends
+#   - grader-waf BACKEND=http://grader-nginx-proxy:80 (internal port 80, TLS terminates at grader-nginx-proxy or at grader-waf if routed via host)
+#   - When WAF_ENABLED=1, expose WAF on host WAF_PORT (default 8080) for testing alongside existing 443.
+#     Production wiring (443 → WAF → nginx) requires host port 443 to be re-bound to grader-waf;
+#     document both patterns in docs/waf-tuning.md. Default keeps host 443 on grader-nginx-proxy so enabling WAF
+#     never breaks existing TLS.
+#   - If you want WAF to front 443, set WAF_PORT=443 and change DOMAIN_NGINX_HTTPS_PORT to avoid clash, or
+#     bind WAF to 127.0.0.1:${WAF_PORT} and front with host LB. Nothing forces this — user decides.
+#
+# Backward compatibility:
+#   - When WAF_ENABLED=0 (default), this file's service is gated behind profile `waf`; docker compose up without --profile waf ignores grader-waf entirely.
+#   - No additional requirement for nginx to start. nginx -t passes with WAF_ENABLED=0 or 1.
+#   - Ports are NOT bound when profile not requested, regardless of WAF_ENABLED env.
+
+services:
+  grader-waf:
+    image: owasp/modsecurity-crs:nginx-alpine
+    container_name: grader-waf
+    restart: on-failure:5
+    profiles:
+      - waf
+    networks:
+      - cms-network
+    # Host port is only needed when WAF is active; binding to loopback keeps attack surface minimal.
+    # When WAF_ENABLED=0 you do not start this profile, so ports are irrelevant. When WAF_ENABLED=1
+    # and profile `waf` is requested, WAF listens on WAF_PORT (8080 default) — change to 443 only
+    # when intentionally fronting production traffic (see docs/waf-tuning.md "Wiring" section).
+    ports:
+      - "${WAF_BIND_IP:-127.0.0.1}:${WAF_PORT:-8080}:80"
+    volumes:
+      - ./config/modsecurity/modsecurity.conf:/etc/modsecurity/modsecurity.conf:ro
+      - ./config/modsecurity/crs-setup.conf:/etc/modsecurity/crs/crs-setup.conf:ro
+      # Persist audit logs to host for tuning (mounted volume, not host path dir required at compose parse)
+      - waf-logs:/var/log
+    environment:
+      PARANOIA: ${WAF_PARANOIA:-1}
+      ANOMALY_INBOUND: ${WAF_ANOMALY_INBOUND:-5}
+      ANOMALY_OUTBOUND: ${WAF_ANOMALY_OUTBOUND:-4}
+      BACKEND: http://grader-nginx-proxy:80
+      BACKEND_WS: http://grader-nginx-proxy:80
+      PROXY: "1"
+      PORT: "80"
+      MODSEC_RULE_ENGINE: ${WAF_RULE_ENGINE:-DetectionOnly}
+      # Keep nginx access log quiet for health checks
+      NGINX_ALWAYS_TLS: "off"
+      # Expose real IP via X-Forwarded-For passthrough to backend
+    depends_on:
+      - nginx-proxy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:80/healthz 2>/dev/null || wget --no-verbose --tries=1 --spider http://localhost:80/ 2>/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+networks:
+  cms-network:
+    name: cms-network
+    driver: bridge
+
+volumes:
+  waf-logs:
+    name: cms-waf-logs

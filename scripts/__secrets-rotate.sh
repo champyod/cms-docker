@@ -4,10 +4,15 @@
 # Scans .env files for weak/default secrets, generates new credentials,
 # and applies them with stack restarts. Never rotates without explicit --apply.
 #
+# Alternative: HashiCorp Vault (optional, VAULT_ENABLED=0) — see .env.infra.example VAULT_*
+#   Vault provides auto-rotation + audit via hashicorp/vault:1.15 (--profile vault)
+#   This script works without Vault; Vault is opt-in, disabled by default, local overrides gitignored via .env.local
+#
 # Usage:
 #   __secrets-rotate.sh --audit              list weak secrets (read-only)
 #   __secrets-rotate.sh --generate --out .env.new   create new credentials
 #   __secrets-rotate.sh --apply              overwrite .env files + restart stacks
+#   Vault alternative: VAULT_ENABLED=1 docker compose -f docker-compose.vault.yml --profile vault up -d
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -1,0 +1,44 @@
+# Vault stack — HashiCorp Vault for secret auto-rotation (optional, disabled)
+# ADDITIVE: does not replace .env file flow. Optional scaffolding only.
+# Usage:
+#   VAULT_ENABLED=1 docker compose --profile vault -f docker-compose.vault.yml up -d
+#   VAULT_ENABLED=1 docker compose -f docker-compose.yml -f docker-compose.vault.yml --profile vault up -d
+# Disabled by default (VAULT_ENABLED=0). Prod uses .env files unless explicitly switched.
+# Token at VAULT_TOKEN gitignored via .env.local; storage at config/vault/data gitignored.
+# Alternative without Vault: scripts/__secrets-rotate.sh — see header there.
+
+services:
+  vault:
+    image: hashicorp/vault:1.15
+    container_name: grader-vault
+    restart: on-failure:5
+    profiles:
+      - vault
+    environment:
+      VAULT_ADDR: http://0.0.0.0:8200
+      VAULT_API_ADDR: http://vault:8200
+    cap_add:
+      - IPC_LOCK
+    ports:
+      - "${VAULT_BIND_IP:-127.0.0.1}:${VAULT_PORT:-8200}:8200"
+    volumes:
+      - vault-data:/vault/data
+      - ./config/vault/config.hcl:/vault/config/config.hcl:ro
+    networks:
+      - cms-network
+    command: server -config=/vault/config/config.hcl
+    healthcheck:
+      test: ["CMD-SHELL", "vault status 2>/dev/null | grep -q 'Sealed.*false' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+networks:
+  cms-network:
+    name: cms-network
+    driver: bridge
+
+volumes:
+  vault-data:
+    name: cms-vault-data
