@@ -1,0 +1,104 @@
+# Monitoring stack — Prometheus + Grafana + node-exporter
+# ADDITIVE: does not replace or modify cms-monitor (profile monitor). Optional.
+# Enabled via: docker compose --profile monitoring -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+#           or: docker compose -f docker-compose.domain.yml -f docker-compose.monitoring.yml --profile monitoring up -d
+# Also gated by MONITORING_ENABLED env (0=off default for prod, 1=on for dev) — documented in .env.infra.example.
+# All host ports bound to 127.0.0.1 only. Disabled by default (profile required).
+# Scrapes: prometheus self, node-exporter, nginx stub_status (when MONITORING_ENABLED=1), cms-monitor placeholder
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: grader-prometheus
+    restart: on-failure:5
+    profiles:
+      - monitoring
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - cms-network
+    ports:
+      - "${PROMETHEUS_BIND_IP:-127.0.0.1}:${PROMETHEUS_PORT:-9090}:9090"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  grafana:
+    image: grafana/grafana:11.2.2
+    container_name: grader-grafana
+    restart: on-failure:5
+    profiles:
+      - monitoring
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3001/}
+      GF_SERVER_HTTP_PORT: "3000"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_INSTALL_PLUGINS: ""
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+      GF_SECURITY_ALLOW_EMBEDDING: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - cms-network
+    ports:
+      - "${GRAFANA_BIND_IP:-127.0.0.1}:${GRAFANA_PORT:-3001}:3000"
+    depends_on:
+      prometheus:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: grader-node-exporter
+    restart: on-failure:5
+    profiles:
+      - monitoring
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--path.rootfs=/host"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($|/)"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host:ro,rslave
+    networks:
+      - cms-network
+    # No host ports — scraped internally as node-exporter:9100
+    expose:
+      - "9100"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9100/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+networks:
+  cms-network:
+    name: cms-network
+    driver: bridge
+
+volumes:
+  prometheus-data:
+    name: cms-prometheus-data
+  grafana-data:
+    name: cms-grafana-data

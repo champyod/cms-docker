@@ -86,6 +86,8 @@ REDIS_RATE_LIMIT="${REDIS_RATE_LIMIT:-0}"
 PER_USER_LIMIT="${PER_USER_LIMIT:-1}"
 REDIS_HOST="${REDIS_HOST:-redis-rate-limit}"
 REDIS_PORT="${REDIS_PORT:-6379}"
+MONITORING_ENABLED="${MONITORING_ENABLED:-0}"
+TAILSCALE_IP="${TAILSCALE_IP:-127.0.0.1}"
 CONTEST_LISTEN_PORT="${CONTEST_LISTEN_PORT:-8888}"
 ADMIN_LISTEN_PORT="${ADMIN_LISTEN_PORT:-8889}"
 RANKING_LISTEN_PORT="${RANKING_LISTEN_PORT:-8890}"
@@ -276,7 +278,7 @@ _render_nginx_config() {
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
     log_info "[dry-run] would render $template -> $output"
-    log_info "[dry-run] variables: DOMAIN_NAME=$DOMAIN_NAME HSTS_MAX_AGE=$HSTS_MAX_AGE REDIS_RATE_LIMIT=$REDIS_RATE_LIMIT PER_USER_LIMIT=$PER_USER_LIMIT REDIS_HOST=$REDIS_HOST REDIS_PORT=$REDIS_PORT"
+    log_info "[dry-run] variables: DOMAIN_NAME=$DOMAIN_NAME HSTS_MAX_AGE=$HSTS_MAX_AGE REDIS_RATE_LIMIT=$REDIS_RATE_LIMIT PER_USER_LIMIT=$PER_USER_LIMIT REDIS_HOST=$REDIS_HOST REDIS_PORT=$REDIS_PORT MONITORING_ENABLED=$MONITORING_ENABLED"
     return 0
   fi
 
@@ -322,8 +324,28 @@ EOLUA
   export PER_USER_LOGIN_DIRECTIVES="$per_user_login"
   export PER_USER_RANKING_DIRECTIVES="$per_user_ranking"
 
-  envsubst '${DOMAIN_NAME} ${ADMIN_DOMAIN} ${OJ_DOMAIN} ${RANKING_DOMAIN} ${HSTS_MAX_AGE} ${CONTEST_LISTEN_PORT} ${ADMIN_LISTEN_PORT} ${RANKING_LISTEN_PORT} ${OJ_BACKEND_PORT} ${RANKING_AUTH_DIRECTIVES} ${REDIS_UPSTREAM_BLOCK} ${REDIS_LUA_PLACEHOLDER} ${PER_USER_LOGIN_DIRECTIVES} ${PER_USER_RANKING_DIRECTIVES}' < "$template" > "$output"
-  log_info "nginx config rendered: $output (REDIS_RATE_LIMIT=${REDIS_RATE_LIMIT} PER_USER_LIMIT=${PER_USER_LIMIT})"
+  local nginx_metrics_location
+  if [[ "${MONITORING_ENABLED:-0}" == "1" ]]; then
+    nginx_metrics_location=$(cat <<EOF
+# Monitoring enabled (MONITORING_ENABLED=1) — stub_status for Prometheus
+# Scraped as nginx:80/metrics from prometheus job "nginx" (cms-network internal)
+# Restricted to loopback + Tailscale IP
+location /metrics {
+    stub_status;
+    allow 127.0.0.1;
+    allow ${TAILSCALE_IP:-127.0.0.1};
+    deny all;
+    access_log off;
+}
+EOF
+)
+  else
+    nginx_metrics_location="# MONITORING_ENABLED=0 — /metrics not exposed (enable with MONITORING_ENABLED=1 and re-run __domain.sh --apply)"
+  fi
+  export NGINX_METRICS_LOCATION="$nginx_metrics_location"
+
+  envsubst '${DOMAIN_NAME} ${ADMIN_DOMAIN} ${OJ_DOMAIN} ${RANKING_DOMAIN} ${HSTS_MAX_AGE} ${CONTEST_LISTEN_PORT} ${ADMIN_LISTEN_PORT} ${RANKING_LISTEN_PORT} ${OJ_BACKEND_PORT} ${RANKING_AUTH_DIRECTIVES} ${REDIS_UPSTREAM_BLOCK} ${REDIS_LUA_PLACEHOLDER} ${PER_USER_LOGIN_DIRECTIVES} ${PER_USER_RANKING_DIRECTIVES} ${NGINX_METRICS_LOCATION}' < "$template" > "$output"
+  log_info "nginx config rendered: $output (REDIS_RATE_LIMIT=${REDIS_RATE_LIMIT} PER_USER_LIMIT=${PER_USER_LIMIT} MONITORING_ENABLED=${MONITORING_ENABLED})"
 }
 
 # ---------------------------------------------------------------------------
