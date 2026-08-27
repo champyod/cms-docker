@@ -3,9 +3,26 @@
 # Render with: envsubst '$DOMAIN_NAME $ADMIN_DOMAIN ...' < template > output
 # Only listed ${VAR} placeholders are substituted; $host/$remote_addr etc. left intact.
 
-# Rate limit zones
+# Rate limit zones — local fallback (always defined, never removed)
 limit_req_zone $binary_remote_addr zone=admin_login:10m rate=5r/s;
 limit_req_zone $binary_remote_addr zone=ranking_auth:10m rate=10r/s;
+
+# Per-user bucket — key from X-User header or session cookie, falls back to IP
+map $http_x_user $limit_user_tmp {
+    default $http_x_user;
+    ""      $cookie_session;
+}
+map $limit_user_tmp $limit_key {
+    default $limit_user_tmp;
+    ""      $binary_remote_addr;
+}
+limit_req_zone $limit_key zone=per_user:10m rate=5r/s;
+
+# Redis distributed limit — rendered via __domain.sh polyfill
+# When REDIS_RATE_LIMIT=1: resolver + upstream for redis-rate-limit:6379
+# When REDIS_RATE_LIMIT=0: comment only, no upstream (local limit_req remains)
+${REDIS_UPSTREAM_BLOCK}
+${REDIS_LUA_PLACEHOLDER}
 
 # ── Upstreams ──────────────────────────────────────────────────────
 upstream cms_contest {
@@ -66,6 +83,7 @@ server {
 
     location = /login {
         limit_req zone=admin_login burst=20 nodelay;
+        ${PER_USER_LOGIN_DIRECTIVES}
         proxy_pass http://cms_contest;
         proxy_redirect off;
     }
@@ -84,6 +102,7 @@ server {
         proxy_set_header Connection "upgrade";
         proxy_buffering off;
         limit_req zone=ranking_auth burst=10 nodelay;
+        ${PER_USER_RANKING_DIRECTIVES}
     }
 
     location /ws {
@@ -195,6 +214,7 @@ server {
         proxy_set_header Connection "upgrade";
         proxy_buffering off;
         limit_req zone=ranking_auth burst=10 nodelay;
+        ${PER_USER_RANKING_DIRECTIVES}
     }
 
     access_log /var/log/nginx/ranking_access.log;
