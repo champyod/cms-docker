@@ -576,6 +576,10 @@ services:
       WORKER_NAME: ${WORKER_NAME:-worker-${WORKER_SHARD:-0}}
       WORKER_MEMORY_LIMIT: ${WORKER_MEMORY_LIMIT:-4G}
       WORKER_CPU_LIMIT: ${WORKER_CPU_LIMIT:-4}
+      MTLS_WORKERS_ENABLED: ${MTLS_WORKERS_ENABLED:-0}
+      MTLS_CA_CERT: ${MTLS_CA_CERT:-config/mtls/ca.pem}
+      MTLS_WORKER_CERT: ${MTLS_WORKER_CERT:-config/mtls/worker.pem}
+      MTLS_WORKER_KEY: ${MTLS_WORKER_KEY:-config/mtls/worker-key.pem}
     extra_hosts:
       - "cms-log-service:${CORE_SERVICES_HOST:-127.0.0.1}"
       - "cms-resource-service:${CORE_SERVICES_HOST:-127.0.0.1}"
@@ -590,6 +594,12 @@ services:
       - cms-data:/var/local/lib/cms
       - worker-tmp:/tmp
       - /sys/fs/cgroup:/sys/fs/cgroup:rw
+      # mTLS certs (optional, disabled by default — MTLS_WORKERS_ENABLED=0)
+      # When MTLS_WORKERS_ENABLED=1, mount CA + worker cert/key; see docs/optional-features.md
+      # Paths at MTLS_CA_CERT etc. are optional mounts — container starts without them when disabled.
+      # Uncomment to enforce presence: - ${MTLS_CA_CERT:-config/mtls/ca.pem}:/etc/cms/mtls/ca.pem:ro
+      # - ${MTLS_WORKER_CERT:-config/mtls/worker.pem}:/etc/cms/mtls/worker.pem:ro
+      # - ${MTLS_WORKER_KEY:-config/mtls/worker-key.pem}:/etc/cms/mtls/worker-key.pem:ro
     ports:
       - "${WORKER_PORT:-26000}:${WORKER_PORT:-26000}"
     networks:

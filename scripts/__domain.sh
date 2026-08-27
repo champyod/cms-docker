@@ -88,11 +88,35 @@ REDIS_HOST="${REDIS_HOST:-redis-rate-limit}"
 REDIS_PORT="${REDIS_PORT:-6379}"
 MONITORING_ENABLED="${MONITORING_ENABLED:-0}"
 TAILSCALE_IP="${TAILSCALE_IP:-127.0.0.1}"
+WAF_ENABLED="${WAF_ENABLED:-0}"
+WAF_PORT="${WAF_PORT:-8080}"
+WAF_BIND_IP="${WAF_BIND_IP:-127.0.0.1}"
+WAF_PARANOIA="${WAF_PARANOIA:-1}"
+WAF_ANOMALY_INBOUND="${WAF_ANOMALY_INBOUND:-5}"
+WAF_ANOMALY_OUTBOUND="${WAF_ANOMALY_OUTBOUND:-4}"
+WAF_RULE_ENGINE="${WAF_RULE_ENGINE:-DetectionOnly}"
 CONTEST_LISTEN_PORT="${CONTEST_LISTEN_PORT:-8888}"
 ADMIN_LISTEN_PORT="${ADMIN_LISTEN_PORT:-8889}"
 RANKING_LISTEN_PORT="${RANKING_LISTEN_PORT:-8890}"
 OJ_BACKEND_PORT="${OJ_BACKEND_PORT:-9000}"
+# Optional features — disabled by default (0), prod stays off unless explicitly enabled
+HSM_ENABLED="${HSM_ENABLED:-0}"
+HSM_MODULE="${HSM_MODULE:-softhsm}"
+HSM_PIN="${HSM_PIN:-}"
+HSM_KEY_LABEL="${HSM_KEY_LABEL:-grader-privkey}"
+VAULT_ENABLED="${VAULT_ENABLED:-0}"
+VAULT_ADDR="${VAULT_ADDR:-http://vault:8200}"
+VAULT_TOKEN="${VAULT_TOKEN:-}"
+VAULT_PATH="${VAULT_PATH:-secret/cms}"
+DNSSEC_ENABLED="${DNSSEC_ENABLED:-0}"
+CAA_ENABLED="${CAA_ENABLED:-0}"
+CAA_ISSUER="${CAA_ISSUER:-letsencrypt.org}"
+MTLS_WORKERS_ENABLED="${MTLS_WORKERS_ENABLED:-0}"
+MTLS_CA_CERT="${MTLS_CA_CERT:-config/mtls/ca.pem}"
+MTLS_WORKER_CERT="${MTLS_WORKER_CERT:-config/mtls/worker.pem}"
+MTLS_WORKER_KEY="${MTLS_WORKER_KEY:-config/mtls/worker-key.pem}"
 DRY_RUN=1
+AUTO_YES=0
 
 # ---------------------------------------------------------------------------
 # Usage
@@ -118,9 +142,111 @@ Options (setup):
   --email <email>             Email for Let's Encrypt registration
   --dry-run                   Print actions without executing (default)
   --apply                     Actually execute changes
+  --yes, -y                   Skip optional prompts (HSM/Vault/DNSSEC/mTLS stay disabled)
+
+Optional features (disabled by default — prod stays off):
+  HSM_ENABLED=0  Vault, DNSSEC/CAA, mTLS workers are opt-in via prompts
+  HSM: --hsm PKCS#11 via config/hsm/* (SoftHSM dev / YubiHSM ~$800 / CloudHSM ~$30/mo)
+  Vault: hashicorp/vault:1.15 via --profile vault (or see scripts/__secrets-rotate.sh)
+  DNSSEC/CAA: DNS only — see docs/dnssec-caa-guide.md
+  mTLS: TAILSCALE_IP allow ALL when MTLS_WORKERS_ENABLED=0; mTLS only when 1
 
 All commands default to dry-run. Use --apply to enforce.
 EOF
+}
+
+# ---------------------------------------------------------------------------
+# Optional features: prompt + log (never forced, disabled by default)
+# ---------------------------------------------------------------------------
+_prompt_optional_features() {
+  if [[ "$AUTO_YES" -eq 1 ]] || [[ ! -t 0 ]]; then
+    return 0
+  fi
+  local ans
+  if [[ "${HSM_ENABLED:-0}" == "0" ]]; then
+    printf "Enable HSM (SoftHSM/YubiHSM/CloudHSM) for TLS key on hardware? [y/N] "
+    read -r ans || true
+    if [[ "$ans" =~ ^[Yy] ]]; then
+      HSM_ENABLED=1
+      printf "  HSM module (softhsm|yubihsm|cloudhsm) [%s]: " "$HSM_MODULE"
+      read -r ans || true
+      [[ -n "$ans" ]] && HSM_MODULE="$ans"
+      printf "  HSM PIN (will be stored in .env.local — gitignored): "
+      read -r -s ans || true; echo ""
+      [[ -n "$ans" ]] && HSM_PIN="$ans"
+      printf "  HSM key label [%s]: " "$HSM_KEY_LABEL"
+      read -r ans || true
+      [[ -n "$ans" ]] && HSM_KEY_LABEL="$ans"
+    fi
+  fi
+  if [[ "${VAULT_ENABLED:-0}" == "0" ]]; then
+    printf "Enable HashiCorp Vault for secret auto-rotation? [y/N] "
+    read -r ans || true
+    if [[ "$ans" =~ ^[Yy] ]]; then
+      VAULT_ENABLED=1
+      printf "  Vault addr [%s]: " "$VAULT_ADDR"
+      read -r ans || true
+      [[ -n "$ans" ]] && VAULT_ADDR="$ans"
+      printf "  Vault token (gitignored via .env.local): "
+      read -r -s ans || true; echo ""
+      [[ -n "$ans" ]] && VAULT_TOKEN="$ans"
+      printf "  Vault path [%s]: " "$VAULT_PATH"
+      read -r ans || true
+      [[ -n "$ans" ]] && VAULT_PATH="$ans"
+    fi
+  fi
+  if [[ "${DNSSEC_ENABLED:-0}" == "0" ]] && [[ "${CAA_ENABLED:-0}" == "0" ]]; then
+    printf "Enable DNSSEC (DNS spoof protection) — needs DNS + computer center? [y/N] "
+    read -r ans || true
+    [[ "$ans" =~ ^[Yy] ]] && DNSSEC_ENABLED=1
+    printf "Enable CAA (restrict CA to %s)? [y/N] " "$CAA_ISSUER"
+    read -r ans || true
+    if [[ "$ans" =~ ^[Yy] ]]; then
+      CAA_ENABLED=1
+      printf "  CAA issuer [%s]: " "$CAA_ISSUER"
+      read -r ans || true
+      [[ -n "$ans" ]] && CAA_ISSUER="$ans"
+    fi
+  fi
+  if [[ "${MTLS_WORKERS_ENABLED:-0}" == "0" ]]; then
+    printf "Enable mTLS for worker RPC (self-CA, beyond tailnet)? [y/N] "
+    read -r ans || true
+    if [[ "$ans" =~ ^[Yy] ]]; then
+      MTLS_WORKERS_ENABLED=1
+      printf "  mTLS CA cert [%s]: " "$MTLS_CA_CERT"
+      read -r ans || true
+      [[ -n "$ans" ]] && MTLS_CA_CERT="$ans"
+      printf "  mTLS worker cert [%s]: " "$MTLS_WORKER_CERT"
+      read -r ans || true
+      [[ -n "$ans" ]] && MTLS_WORKER_CERT="$ans"
+      printf "  mTLS worker key [%s]: " "$MTLS_WORKER_KEY"
+      read -r ans || true
+      [[ -n "$ans" ]] && MTLS_WORKER_KEY="$ans"
+    fi
+  fi
+}
+
+_log_optional_features() {
+  if [[ "${HSM_ENABLED:-0}" == "1" ]]; then
+    log_info "HSM enabled (module=$HSM_MODULE label=$HSM_KEY_LABEL) — certbot will use --hsm with PKCS#11"
+  else
+    log_info "HSM disabled (set HSM_ENABLED=1 to enable — see .env.infra.example HSM_*)"
+  fi
+  if [[ "${VAULT_ENABLED:-0}" == "1" ]]; then
+    log_info "Vault enabled (addr=$VAULT_ADDR path=$VAULT_PATH) — secrets via Vault"
+  else
+    log_info "Vault disabled (set VAULT_ENABLED=1 to enable — see .env.infra.example VAULT_*; alternative: scripts/__secrets-rotate.sh)"
+  fi
+  if [[ "${DNSSEC_ENABLED:-0}" == "1" ]] || [[ "${CAA_ENABLED:-0}" == "1" ]]; then
+    log_info "DNSSEC=${DNSSEC_ENABLED} CAA=${CAA_ENABLED} (issuer=$CAA_ISSUER) — see docs/dnssec-caa-guide.md"
+  else
+    log_info "DNSSEC disabled (set DNSSEC_ENABLED=1 to enable) — CAA disabled (set CAA_ENABLED=1, CAA_ISSUER=letsencrypt.org)"
+  fi
+  if [[ "${MTLS_WORKERS_ENABLED:-0}" == "1" ]]; then
+    log_info "mTLS workers enabled (CA=$MTLS_CA_CERT) — firewall should restrict RPC to mTLS only"
+  else
+    log_info "mTLS workers disabled (set MTLS_WORKERS_ENABLED=1 to enable — TAILSCALE_IP allow ALL remains)"
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -130,6 +256,8 @@ cmd_setup() {
   log_info "Domain setup — mode: $([ "$DRY_RUN" -eq 1 ] && echo 'DRY-RUN' || echo 'APPLY')"
   log_info "Primary: $DOMAIN_NAME  Admin: $ADMIN_DOMAIN  OJ: $OJ_DOMAIN  Ranking: $RANKING_DOMAIN"
   log_info "Certificate type: $CERT_TYPE"
+  _prompt_optional_features
+  _log_optional_features
 
   # Validate port 80 reachability for Let's Encrypt
   if [[ "$CERT_TYPE" == "letsencrypt" ]]; then
@@ -278,7 +406,12 @@ _render_nginx_config() {
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
     log_info "[dry-run] would render $template -> $output"
-    log_info "[dry-run] variables: DOMAIN_NAME=$DOMAIN_NAME HSTS_MAX_AGE=$HSTS_MAX_AGE REDIS_RATE_LIMIT=$REDIS_RATE_LIMIT PER_USER_LIMIT=$PER_USER_LIMIT REDIS_HOST=$REDIS_HOST REDIS_PORT=$REDIS_PORT MONITORING_ENABLED=$MONITORING_ENABLED"
+    log_info "[dry-run] variables: DOMAIN_NAME=$DOMAIN_NAME HSTS_MAX_AGE=$HSTS_MAX_AGE REDIS_RATE_LIMIT=$REDIS_RATE_LIMIT PER_USER_LIMIT=$PER_USER_LIMIT REDIS_HOST=$REDIS_HOST REDIS_PORT=$REDIS_PORT MONITORING_ENABLED=$MONITORING_ENABLED WAF_ENABLED=$WAF_ENABLED WAF_PORT=$WAF_PORT WAF_PARANOIA=$WAF_PARANOIA WAF_ANOMALY_INBOUND=$WAF_ANOMALY_INBOUND WAF_RULE_ENGINE=$WAF_RULE_ENGINE"
+    if [[ "${WAF_ENABLED:-0}" == "1" ]]; then
+      log_info "[dry-run] WAF_ENABLED=1 — waf fronting note: grader-waf (OWASP CRS, PARANOIA=$WAF_PARANOIA, ANOMALY_INBOUND=$WAF_ANOMALY_INBOUND, RULE_ENGINE=$WAF_RULE_ENGINE) fronts grader-nginx-proxy via cms-network BACKEND=http://grader-nginx-proxy:80; host port ${WAF_BIND_IP}:${WAF_PORT} → 80 when --profile waf is used. See docs/waf-tuning.md"
+    else
+      log_info "[dry-run] WAF_ENABLED=0 — WAF disabled, nginx works exactly as before (no waf container, no new ports)"
+    fi
     return 0
   fi
 
@@ -345,7 +478,12 @@ EOF
   export NGINX_METRICS_LOCATION="$nginx_metrics_location"
 
   envsubst '${DOMAIN_NAME} ${ADMIN_DOMAIN} ${OJ_DOMAIN} ${RANKING_DOMAIN} ${HSTS_MAX_AGE} ${CONTEST_LISTEN_PORT} ${ADMIN_LISTEN_PORT} ${RANKING_LISTEN_PORT} ${OJ_BACKEND_PORT} ${RANKING_AUTH_DIRECTIVES} ${REDIS_UPSTREAM_BLOCK} ${REDIS_LUA_PLACEHOLDER} ${PER_USER_LOGIN_DIRECTIVES} ${PER_USER_RANKING_DIRECTIVES} ${NGINX_METRICS_LOCATION}' < "$template" > "$output"
-  log_info "nginx config rendered: $output (REDIS_RATE_LIMIT=${REDIS_RATE_LIMIT} PER_USER_LIMIT=${PER_USER_LIMIT} MONITORING_ENABLED=${MONITORING_ENABLED})"
+  log_info "nginx config rendered: $output (REDIS_RATE_LIMIT=${REDIS_RATE_LIMIT} PER_USER_LIMIT=${PER_USER_LIMIT} MONITORING_ENABLED=${MONITORING_ENABLED} WAF_ENABLED=${WAF_ENABLED:-0})"
+  if [[ "${WAF_ENABLED:-0}" == "1" ]]; then
+    log_info "WAF_ENABLED=1 — grader-waf is fronting grader-nginx-proxy (PARANOIA=${WAF_PARANOIA} ANOMALY_INBOUND=${WAF_ANOMALY_INBOUND} RULE_ENGINE=${WAF_RULE_ENGINE}, host ${WAF_BIND_IP}:${WAF_PORT}→80 when --profile waf up). CAPTCHA remains active alongside WAF."
+  else
+    log_info "WAF_ENABLED=0 — WAF disabled, nginx unchanged (no waf container, backward compatible)"
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -392,6 +530,7 @@ _preflight_port80() {
 # ---------------------------------------------------------------------------
 cmd_status() {
   log_info "Domain status for $DOMAIN_NAME"
+  _log_optional_features
   echo ""
 
   # DNS resolution
@@ -522,6 +661,7 @@ cmd_renew() {
 # ---------------------------------------------------------------------------
 cmd_preflight() {
   log_info "Preflight checks for $DOMAIN_NAME"
+  _log_optional_features
   echo ""
   local pass=0 warn=0 fail=0
 
@@ -689,6 +829,7 @@ while [[ $# -gt 0 ]]; do
     --email)      CERT_EMAIL="$2"; shift 2 ;;
     --dry-run)    DRY_RUN=1; shift ;;
     --apply)      DRY_RUN=0; shift ;;
+    --yes|-y)     AUTO_YES=1; shift ;;
     --help|-h)    usage; exit 0 ;;
     *)            log_die "unknown option: $1 — see --help" 1 ;;
   esac
