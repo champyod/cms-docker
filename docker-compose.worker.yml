@@ -53,11 +53,10 @@ services:
       - /sys/fs/cgroup:/sys/fs/cgroup:rw
     ports:
       - "${WORKER_PORT:-26000}:${WORKER_PORT:-26000}"
+      # Expose for VPS connection (ResourceService)
+      - "2600${WORKER_SHARD:-0}:2600${WORKER_SHARD:-0}"
     networks:
       - cms-network
-    # Expose for VPS connection (ResourceService)
-    ports:
-      - "2600${WORKER_SHARD:-0}:2600${WORKER_SHARD:-0}"
     privileged: true
     cgroup: host
     # Security options for sandbox isolation
