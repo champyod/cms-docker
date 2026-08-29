@@ -26,12 +26,13 @@
 14. [Comment Policy](#comment-policy)
 15. [Security Policies](#security-policies)
 16. [Docker & Infrastructure](#docker--infrastructure)
-17. [Database & Prisma](#database--prisma)
-18. [Python CMS Layer](#python-cms-layer)
-19. [Environment Variables](#environment-variables)
-20. [Directory Structure](#directory-structure)
-21. [Common Tasks](#common-tasks)
-22. [Troubleshooting](#troubleshooting)
+17. [TUI & Operations](#tui--operations)
+18. [Database & Prisma](#database--prisma)
+19. [Python CMS Layer](#python-cms-layer)
+20. [Environment Variables](#environment-variables)
+21. [Directory Structure](#directory-structure)
+22. [Common Tasks](#common-tasks)
+23. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -815,23 +816,34 @@ docker-compose.monitor.yml           # Backups, health monitoring
 ### Makefile Targets
 
 ```bash
-make env           # Generate .env, cms.toml, admin-panel/.env
-make core          # Deploy core stack (source build)
-make core-img      # Deploy core stack (pre-built images)
-make admin         # Deploy admin panel
-make contest       # Deploy contest interfaces
-make worker        # Deploy workers
-make admin-create  # Create superadmin account interactively
-make prisma-sync   # Sync Prisma schema to DB
-make db-clean      # Reset everything (destructive)
+make env            # Generate .env, cms.toml, admin-panel/.env
+make core           # Deploy core stack (DEPLOYMENT_TYPE=img → pull+up, else src build)
+make admin          # Deploy admin panel
+make contest        # Deploy contest interfaces (CONTEST_ID canonical)
+make worker         # Deploy workers
+make infra          # Deploy monitor/backup stack (alias: infra → monitor)
+make pull           # Pull images for ALL profiles (offline-tolerant, warns on failure)
+make stack-stop     # core|admin|contest|worker|infra -stop (contest-down removes containers)
+make stack-clean    # down -v per stack
+make db-clean       # down -v ALL profiles (destructive)
+make db-reset       # db-clean + core with img override
+make cms-init       # Initialize CMS database
+make admin-create   # Create superadmin account interactively
+make prisma-sync    # Sync Prisma schema to DB
+make lint           # shellcheck/hadolint/yamllint + compose config validation
+make preflight      # Run scripts/__preflight.sh
+make smoke-test     # Run scripts/__smoke-test.sh
+make backup         # Run cms-monitor backup
 ```
+
+**Deprecated**: `core-img`/`admin-img`/`contest-img`/`worker-img`/`infra-img` aliases and `pull-core` style shorthands still exist but print warnings — use `make <stack>` with `DEPLOYMENT_TYPE=img` or `make pull` instead.
 
 **IMPORTANT: Production Deployment**
 
-For production/final server deployments, **always use the `-img` variants**:
-- `make core-img` instead of `make core`
+For production/final server deployments, **always use `DEPLOYMENT_TYPE=img`**:
+- `make core DEPLOYMENT_TYPE=img` instead of `make core` (source build)
 - Pre-built images are faster and more reliable for production
-- Source builds (`make core`) are primarily for development
+- Source builds (`make core` no override) are primarily for development
 
 Deployment workflow:
 ```bash
@@ -841,11 +853,12 @@ git pull origin main
 # 2. Regenerate environment files
 make env
 
-# 3. Deploy with pre-built images (production)
-make core-img      # Use -img variant for production
-make admin
-make contest
-make worker
+# 3. Pull + deploy with pre-built images (production)
+make pull
+make core DEPLOYMENT_TYPE=img  # Use img variant for production
+make admin DEPLOYMENT_TYPE=img
+make contest DEPLOYMENT_TYPE=img
+make worker DEPLOYMENT_TYPE=img
 
 # 4. Sync database if schema changed
 make prisma-sync
@@ -858,6 +871,72 @@ The admin panel can:
 - **Edit .env files** on host via `/repo-root` mount
 - **Restart services** via `docker compose` commands
 - **Switch active contest** by editing `.env.contest` and rebuilding
+
+---
+
+## TUI & OPERATIONS
+
+### Control Plane Entry Point
+
+`./cms` with no args opens the **dashboard TUI** (six panels); `./cms <command>` runs CLI commands non-interactively. TTY-gated: commands that mutate or stream (deploy, update, backup, monitor, expose, worker TUI, funnel, tailscale, domain) refuse to run without a terminal — headless/batch use the underlying Makefile targets or `--apply`/flag forms instead.
+
+### Dashboard Keys
+
+```
+Tab/w  cycle panels (active border highlighted)   r  refresh all panels now
+j/k    move row cursor within panel               s  toggle SERVICES detail columns
+Enter  drill into focused row                     d  deploy all workers  → ./cms worker deploy all
+                                                  a  deploy ALL stacks   → ./cms deploy all (–img prompt)
+?      help overlay                               u  update server      → ./cms update-server
+q      quit (terminal restored)                   f  features launcher  → 16-cmd picker
+                                                  b  backup now         → ./cms backup
+```
+
+Panels: `WORKERS` (Enter → fleet TUI), `SERVICES` (per-service logs/restart/status), `STACKS` (per-stack deploy/stop), `DATABASE` (init/reset/clean/sync), `BACKUPS` (backup now), `UPDATES` (update-server). Mutating keys go through `dash::act` — confirm + audit + spinner.
+
+### Worker Fleet
+
+```bash
+./cms worker tui       # fleet editor: add/edit/delete shards, deploy-all
+./cms worker deploy    # deploy all shards
+./cms worker stop|list # stop all / list fleet
+./cms worker server    # TUI: pick which main server this worker connects to
+./cms worker connect   # attach a worker interactively (hostname/IP + shard, validated)
+./cms worker cgroup    # set up sandbox cgroups
+```
+
+Fleet row format (pipe-separated, 6 fields): `shard|host|port|local|memory|cpu`. `fleet_save` writes `WORKER_<shard>=<host>:<port>` to `.env.core` and `WORKER_SHARD<n>_{LOCAL,MEMORY,CPU}` to `.env.worker`. Shard/host/port/memory/cpu are validated on add/edit (numeric shard+port, no `:`/whitespace in host, `^[0-9]+[MG]i?$` memory, `^[0-9]+(\.[0-9]+)?$` cpus).
+
+### Secrets Rotation
+
+```bash
+./cms secrets audit     # report insecure/weak secrets (safe)
+./cms secrets generate  # print replacements (use --out FILE to save)
+./cms secrets rotate    # rotate flagged secrets in place (guarded: --apply required)
+```
+
+Secret inputs are masked (`tui::input --password`, gum `--password`), validated by type (hex32 for key/secret, e.g. `OFFSITE_ENCRYPT_KEY`; password strength checks in funnel). `is_default_secret` flags `admin`/placeholder values in Fix Mode.
+
+### Backup & Update
+
+```bash
+./cms backup            # run backup now
+./cms backup drill      # backup + test restore of latest archive
+./cms backup offsite    # sync backups to offsite node (dry-run by default; --apply executes)
+./cms restore <archive> # restore a backup archive
+./cms update            # interactive config update wizard (config only)
+./cms update-server     # shard-aware FULL server update (git + img + db + verify)
+./cms fix               # non-interactive repair of missing/insecure config (validate_value + generators)
+```
+
+Offsite sync config: `.env.infra`/`.env.core` — `BACKUP_DIR`, `OFFSITE_TAILNET_NODE`, `OFFSITE_REMOTE_PATH`; optional `OFFSITE_ENCRYPT_KEY` enables GPG-encrypted archives (`.gpg` suffix). Offsite sync sources `__lib/common.sh`, resolves `__offsite-sync.sh`.
+
+### Input Validation Conventions
+
+- `validate_value` (in `scripts/__update_engine.sh`) enforces typed inputs: `port` (positive int ≤65535), `ip` (octet range 0-255, octal-guarded), `hostname`, `memory` (`^[0-9]+[MG]i?$`), `cpu` (`^[0-9]+(\.[0-9]+)?$`), `path`, `url`, `str`.
+- Interactive prompts use `tui::input` with retry loop (3 attempts) — invalid values re-prompt with error line, never silently accepted.
+- Required vars (`R` flag in `VAR_SPECS`) reject empty; secrets auto-generate from seeded generators (`hex32`, `rand_pw`) when a default exists.
+- Simple legacy scripts (worker connect, funnel) validate inline with the same regex patterns.
 
 ---
 
