@@ -119,7 +119,7 @@ require_env() {
 # ---------------------------------------------------------------------------
 # Return 0 (true) when <value> matches the known-bad / default secret set:
 #   empty, CHANGE_ME*, YOUR_*, *PASSWORD_HERE, cmspassword, usern4me,
-#   passw0rd, 8e045a51e4b102ea803c06f92841a1fb, DEFAULT_SECRET_KEY
+#   passw0rd, 8e045a51e4b102ea803c06f92841a1fb, DEFAULT_SECRET_KEY, admin
 # Return 1 otherwise.
 is_default_secret() {
   local value="${1:-}"
@@ -131,7 +131,7 @@ is_default_secret() {
 
   # Literal known-bad values.
   case "$value" in
-    cmspassword|usern4me|passw0rd|8e045a51e4b102ea803c06f92841a1fb|DEFAULT_SECRET_KEY)
+    cmspassword|usern4me|passw0rd|8e045a51e4b102ea803c06f92841a1fb|DEFAULT_SECRET_KEY|admin)
       return 0
       ;;
   esac

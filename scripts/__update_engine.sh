@@ -26,7 +26,7 @@ declare -F log_die  >/dev/null 2>&1 || log_die()  { printf '[FAIL] %s\n' "${1:-f
 declare -F is_default_secret >/dev/null 2>&1 || is_default_secret() {
   local v="${1:-}"
   [ -z "$v" ] && return 0
-  case "$v" in cmspassword|usern4me|passw0rd|DEFAULT_SECRET_KEY) return 0 ;; esac
+  case "$v" in cmspassword|usern4me|passw0rd|DEFAULT_SECRET_KEY|admin) return 0 ;; esac
   [[ "$v" == CHANGE_ME* || "$v" == YOUR_* || "$v" == *PASSWORD_HERE* ]]
 }
 
@@ -451,14 +451,29 @@ generate_for() {
     esac
 }
 
+# 10# prefix keeps leading-zero octets (e.g. 08) from parsing as octal.
+_ip_octets_in_range() {
+    local value=$1 octet
+    IFS='.' read -r -a octets <<<"$value"
+    for octet in "${octets[@]}"; do
+        (( 10#$octet <= 255 )) || return 1
+    done
+}
+
 validate_value() {
     local type=$1 value=$2
     case "$type" in
-        port)     is_positive_int "$value" ;;
+        port)     is_positive_int "$value" && [ "$value" -le 65535 ] ;;
         num)      case "$value" in ''|*[!0-9]*) return 1 ;; *) return 0 ;; esac ;;
         bool)     [[ "$value" == "true" || "$value" == "false" ]] ;;
         enum:*)   local opts="${type#enum:}"; [[ ",$opts," == *",$value,"* ]] ;;
-        url)      [[ -z "$value" || "$value" == https://* || "$value" == http://* ]] ;;
+        url)      [[ -z "$value" || "$value" =~ ^https?://[^/[:space:]] ]] ;;
+        ip)       [[ "$value" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] && _ip_octets_in_range "$value" ;;
+        hostname) [[ "$value" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$ ]] ;;
+        memory)   [[ "$value" =~ ^[0-9]+[MG]i?$ ]] ;;
+        cpu)      [[ "$value" =~ ^[0-9]+(\.[0-9]+)?$ ]] ;;
+        path)     [[ "$value" == /* ]] ;;
+        str)      [[ -n "$value" ]] ;;
         *)        return 0 ;;
     esac
 }
@@ -530,8 +545,8 @@ walk_section() {
 }
 
 VAR_SPECS=(
-  "Core & Network|.env.core|PUBLIC_IP|str||live_ip"
-  "Core & Network|.env.core|TAILSCALE_IP|str||"
+  "Core & Network|.env.core|PUBLIC_IP|ip||live_ip"
+  "Core & Network|.env.core|TAILSCALE_IP|ip||"
   "Core & Network|.env.core|REMOTE_WORKERS_ENABLED|bool||false"
   "Core & Network|.env.core|POSTGRES_PORT_EXTERNAL|port||5432"
   "Core & Network|.env.core|POSTGRES_PORT|port||5432"
@@ -539,13 +554,13 @@ VAR_SPECS=(
   "Core & Network|.env.core|POSTGRES_HOST_AUTH_METHOD|str||md5"
   "Core & Network|.env.core|POSTGRES_DB|str||cmsdb"
   "Core & Network|.env.core|POSTGRES_USER|str||cmsuser"
-  "Core & Network|.env.core|POSTGRES_PASSWORD|secret||rand_pw"
-  "Core & Network|.env.core|CMS_SECRET_KEY|secret||hex32"
-  "Core & Network|.env.core|CMS_DOMAIN|str||cms.local"
-  "Core & Network|.env.core|CMS_CONFIG|str||/usr/local/etc/cms.toml"
-  "Core & Network|.env.core|CMS_LOG_DIR|str||/var/local/log/cms"
-  "Core & Network|.env.core|CMS_CACHE_DIR|str||/var/local/cache/cms"
-  "Core & Network|.env.core|CMS_DATA_DIR|str||/var/local/lib/cms"
+  "Core & Network|.env.core|POSTGRES_PASSWORD|secret|R|rand_pw"
+  "Core & Network|.env.core|CMS_SECRET_KEY|secret|R|hex32"
+  "Core & Network|.env.core|CMS_DOMAIN|hostname||cms.local"
+  "Core & Network|.env.core|CMS_CONFIG|path||/usr/local/etc/cms.toml"
+  "Core & Network|.env.core|CMS_LOG_DIR|path||/var/local/log/cms"
+  "Core & Network|.env.core|CMS_CACHE_DIR|path||/var/local/cache/cms"
+  "Core & Network|.env.core|CMS_DATA_DIR|path||/var/local/lib/cms"
   "Core & Network|.env.core|APT_MIRROR|str||archive.ubuntu.com"
   "Core & Network|.env.core|IMG_TAG|str||major-admin-panel"
   "Core & Network|.env.core|LOG_SERVICE_SHARD|num||0"
@@ -557,16 +572,16 @@ VAR_SPECS=(
   "Admin Panel|.env.admin|DEPLOYMENT_TYPE|enum:img,src||img"
   "Admin Panel|.env.admin|ADMIN_NEXT_PORT_EXTERNAL|port||8891"
   "Admin Panel|.env.admin|ADMIN_PORT_EXTERNAL|port||8889"
-  "Admin Panel|.env.admin|ADMIN_LISTEN_ADDRESS|str||0.0.0.0"
+  "Admin Panel|.env.admin|ADMIN_LISTEN_ADDRESS|ip||0.0.0.0"
   "Admin Panel|.env.admin|ADMIN_LISTEN_PORT|port||8889"
   "Admin Panel|.env.admin|ADMIN_DOMAIN|str||admin.cms.local"
   "Admin Panel|.env.admin|ADMIN_NEXT_DOMAIN|str||admin-next.cms.local"
   "Admin Panel|.env.admin|RANKING_PORT_EXTERNAL|port||8890"
-  "Admin Panel|.env.admin|RANKING_LISTEN_ADDRESS|str||0.0.0.0"
+  "Admin Panel|.env.admin|RANKING_LISTEN_ADDRESS|ip||0.0.0.0"
   "Admin Panel|.env.admin|RANKING_LISTEN_PORT|port||8890"
   "Admin Panel|.env.admin|RANKING_DOMAIN|str||ranking.cms.local"
   "Admin Panel|.env.admin|RANKING_USERNAME|str||admin"
-  "Admin Panel|.env.admin|RANKING_PASSWORD|secret||"
+  "Admin Panel|.env.admin|RANKING_PASSWORD|secret|R|rand_pw"
   "Admin Panel|.env.admin|ADMIN_COOKIE_DURATION|num||36000"
   "Admin Panel|.env.admin|AUTH_SECRET|secret||hex32"
   "Admin Panel|.env.admin|SERVER_BASE_URL|url||http://localhost"
@@ -578,12 +593,12 @@ VAR_SPECS=(
   "Admin Panel|.env.admin|REDIS_RATE_LIMIT|num||0"
   "Admin Panel|.env.admin|SOCKET_PROXY|enum:0,1||0"
   "Admin Panel|.env.admin|MONITOR_ENHANCED|enum:0,1||0"
-  "Admin Panel|.env.admin|CMS_RANKING_LOG_DIR|str||/var/local/log/cms/ranking"
-  "Admin Panel|.env.admin|CMS_RANKING_LIB_DIR|str||/var/local/lib/cms/ranking"
+  "Admin Panel|.env.admin|CMS_RANKING_LOG_DIR|path||/var/local/log/cms/ranking"
+  "Admin Panel|.env.admin|CMS_RANKING_LIB_DIR|path||/var/local/lib/cms/ranking"
   "Contest|.env.contest|CONTEST_ID|num||1"
   "Contest|.env.contest|CONTEST_DOMAIN|str||grader.mwit.ac.th"
   "Contest|.env.contest|CONTEST_LISTEN_PORT|port||8888"
-  "Contest|.env.contest|CONTEST_LISTEN_ADDRESS|str||0.0.0.0"
+  "Contest|.env.contest|CONTEST_LISTEN_ADDRESS|ip||0.0.0.0"
   "Contest|.env.contest|ACTIVE_CONTEST_PORT|port||8888"
   "Contest|.env.contest|SECRET_KEY|secret||hex32"
   "Contest|.env.contest|COOKIE_DURATION|num||10800"
@@ -592,20 +607,20 @@ VAR_SPECS=(
   "Contest|.env.contest|MAX_SUBMISSION_LENGTH|num||100000"
   "Contest|.env.contest|MAX_INPUT_LENGTH|num||5000000"
   "Contest|.env.contest|SUBMIT_LOCAL_COPY|bool||true"
-  "Contest|.env.contest|CONTEST_WEB_CPU_LIMIT|str||2"
-  "Contest|.env.contest|CONTEST_WEB_MEMORY_LIMIT|str||2G"
+  "Contest|.env.contest|CONTEST_WEB_CPU_LIMIT|cpu||2"
+  "Contest|.env.contest|CONTEST_WEB_MEMORY_LIMIT|memory||2G"
   "Contest|.env.contest|ENABLE_TLS|bool||false"
   "Worker|.env.worker|CORE_SERVICES_HOST|str||mirror_public_ip"
   "Worker|.env.worker|WORKER_SHARD|num||0"
   "Worker|.env.worker|WORKER_NAME|str||worker-0"
   "Worker|.env.worker|WORKER_PORT|port||26000"
   "Worker|.env.worker|WORKER_REPLICAS|num||1"
-  "Worker|.env.worker|WORKER_CPU_LIMIT|str||2"
-  "Worker|.env.worker|WORKER_MEMORY_LIMIT|str||2G"
-  "Worker|.env.worker|WORKER_CPU_RESERVATION|str||1"
-  "Worker|.env.worker|WORKER_MEMORY_RESERVATION|str||1G"
+  "Worker|.env.worker|WORKER_CPU_LIMIT|cpu||2"
+  "Worker|.env.worker|WORKER_MEMORY_LIMIT|memory||2G"
+  "Worker|.env.worker|WORKER_CPU_RESERVATION|cpu||1"
+  "Worker|.env.worker|WORKER_MEMORY_RESERVATION|memory||1G"
   "Worker|.env.worker|ISOLATE_CGROUP_CONTROL|enum:0,1||1"
-  "Worker|.env.worker|ISOLATE_CGROUP_PATH|str||/sys/fs/cgroup/cms-isolate"
+  "Worker|.env.worker|ISOLATE_CGROUP_PATH|path||/sys/fs/cgroup/cms-isolate"
   "Worker|.env.worker|KEEP_SANDBOX|bool||false"
   "Worker|.env.worker|MAX_FILE_SIZE|num||1048576"
   "Infra & Monitoring|.env.infra|DISCORD_WEBHOOK_URL|url||"
@@ -616,17 +631,17 @@ VAR_SPECS=(
   "Infra & Monitoring|.env.infra|MONITOR_INTERVAL|num||10"
   "Infra & Monitoring|.env.infra|MONITOR_COOLDOWN|num||300"
   "Infra & Monitoring|.env.infra|DOCKER_GID|num||docker_gid"
-  "Infra & Monitoring|.env.infra|DISK_PATH|str||/host"
+  "Infra & Monitoring|.env.infra|DISK_PATH|path||/host"
   "Infra & Monitoring|.env.infra|BACKUP_INTERVAL_MINS|num||1440"
   "Infra & Monitoring|.env.infra|BACKUP_MAX_COUNT|num||50"
   "Infra & Monitoring|.env.infra|BACKUP_MAX_AGE_DAYS|num||10"
   "Infra & Monitoring|.env.infra|BACKUP_MAX_SIZE_GB|num||5"
   "Infra & Monitoring|.env.infra|DOMAIN_NAME|str||grader.mwit.ac.th"
-  "Infra & Monitoring|.env.infra|DOMAIN_CERT_METHOD|str||letsencrypt"
+  "Infra & Monitoring|.env.infra|DOMAIN_CERT_METHOD|enum:letsencrypt,provided,selfsigned||letsencrypt"
   "Infra & Monitoring|.env.infra|HSTS_MAX_AGE|num||300"
   "Infra & Monitoring|.env.infra|OFFSITE_TAILNET_NODE|str||100.75.203.112"
-  "Infra & Monitoring|.env.infra|OFFSITE_ENCRYPT_KEY|secret||"
-  "Infra & Monitoring|.env.infra|OFFSITE_BACKUP_PATH|str||/var/local/backups/cms"
+  "Infra & Monitoring|.env.infra|OFFSITE_ENCRYPT_KEY|secret|R|hex32"
+  "Infra & Monitoring|.env.infra|OFFSITE_BACKUP_PATH|path||/var/local/backups/cms"
   "Infra & Monitoring|.env.infra|SOCKET_PROXY|enum:0,1||0"
   "Infra & Monitoring|.env.infra|MONITOR_ENHANCED|enum:0,1||0"
   "Infra & Monitoring|.env.infra|REDIS_HOST|str||redis-rate-limit"
@@ -635,19 +650,19 @@ VAR_SPECS=(
   "Infra & Monitoring|.env.infra|PER_USER_LIMIT|num||1"
   "Infra & Monitoring|.env.infra|MONITORING_ENABLED|enum:0,1||0"
   "Infra & Monitoring|.env.infra|PROMETHEUS_PORT|port||9090"
-  "Infra & Monitoring|.env.infra|PROMETHEUS_BIND_IP|str||127.0.0.1"
+  "Infra & Monitoring|.env.infra|PROMETHEUS_BIND_IP|ip||127.0.0.1"
   "Infra & Monitoring|.env.infra|GRAFANA_PORT|port||3001"
-  "Infra & Monitoring|.env.infra|GRAFANA_BIND_IP|str||127.0.0.1"
+  "Infra & Monitoring|.env.infra|GRAFANA_BIND_IP|ip||127.0.0.1"
   "Infra & Monitoring|.env.infra|GRAFANA_ADMIN_USER|str||admin"
   "Infra & Monitoring|.env.infra|GRAFANA_PASSWORD|secret||admin"
   "Infra & Monitoring|.env.infra|GRAFANA_ROOT_URL|url||http://localhost:3001/"
-  "Infra & Monitoring|.env.infra|TAILSCALE_IP|str||127.0.0.1"
+  "Infra & Monitoring|.env.infra|TAILSCALE_IP|ip||127.0.0.1"
   "Infra & Monitoring|.env.infra|CAA_ENABLED|enum:0,1||0"
   "Infra & Monitoring|.env.infra|CAA_ISSUER|str||letsencrypt.org"
   "Infra & Monitoring|.env.infra|DNSSEC_ENABLED|enum:0,1||0"
   "Infra & Monitoring|.env.infra|HSM_ENABLED|enum:0,1||0"
   "Infra & Monitoring|.env.infra|HSM_KEY_LABEL|str||grader-privkey"
-  "Infra & Monitoring|.env.infra|HSM_MODULE|str||softhsm"
+  "Infra & Monitoring|.env.infra|HSM_MODULE|enum:softhsm,yubihsm,cloudhsm||softhsm"
   "Infra & Monitoring|.env.infra|HSM_PIN|secret||"
   "Infra & Monitoring|.env.infra|MTLS_CA_CERT|str||config/mtls/ca.pem"
   "Infra & Monitoring|.env.infra|MTLS_WORKER_CERT|str||config/mtls/worker.pem"
@@ -659,7 +674,7 @@ VAR_SPECS=(
   "Infra & Monitoring|.env.infra|VAULT_TOKEN|secret||"
   "Infra & Monitoring|.env.infra|WAF_ANOMALY_INBOUND|num||5"
   "Infra & Monitoring|.env.infra|WAF_ANOMALY_OUTBOUND|num||4"
-  "Infra & Monitoring|.env.infra|WAF_BIND_IP|str||127.0.0.1"
+  "Infra & Monitoring|.env.infra|WAF_BIND_IP|ip||127.0.0.1"
   "Infra & Monitoring|.env.infra|WAF_ENABLED|enum:0,1||0"
   "Infra & Monitoring|.env.infra|WAF_PARANOIA|num||1"
   "Infra & Monitoring|.env.infra|WAF_PORT|port||8080"
