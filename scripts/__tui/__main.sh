@@ -117,7 +117,7 @@ main::route() {
 	shift
 	case "$cmd" in
 		status) main::status_view ;;
-		monitor) exec bash "$_MAIN_SCRIPTS/__monitor.sh" "$@" ;;
+		monitor) simple::run "Monitor services (one-shot)" "$(main::_script_cmd "$_MAIN_SCRIPTS/__monitor.sh" "$@")" ;;
 		backup) simple::run "Backup now (make backup)" "make backup" ;;
 		restore) simple::run "Restore from archive" "$(main::_script_cmd "$_MAIN_SCRIPTS/__restore.sh" "$@")" ;;
 		doctor) simple::run "Preflight environment checks" "$(main::_script_cmd "$_MAIN_SCRIPTS/__preflight.sh")" ;;
