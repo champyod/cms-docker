@@ -1,5 +1,4 @@
-# Domain nginx stack — grader.mwit.ac.th + certbot
-# ADDITIVE: does not replace or modify cms-nginx-contest.
+# Domain nginx stack — ADDITIVE: does not replace or modify cms-nginx-contest.
 # Usage: docker compose -f docker-compose.domain.yml up -d
 # Dev note: ports 80/443 may clash with existing nginx-proxy; use
 #           DOMAIN_NGINX_HTTP_PORT/DOMAIN_NGINX_HTTPS_PORT overrides.
@@ -11,10 +10,10 @@ services:
     restart: on-failure:5
     depends_on: []
     environment:
-      DOMAIN_NAME: ${DOMAIN_NAME:-grader.mwit.ac.th}
-      ADMIN_DOMAIN: ${ADMIN_DOMAIN:-admin.grader.mwit.ac.th}
-      OJ_DOMAIN: ${OJ_DOMAIN:-oj.grader.mwit.ac.th}
-      RANKING_DOMAIN: ${RANKING_DOMAIN:-ranking.grader.mwit.ac.th}
+      DOMAIN_NAME: ${DOMAIN_NAME}
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN}
+      OJ_DOMAIN: ${OJ_DOMAIN}
+      RANKING_DOMAIN: ${RANKING_DOMAIN}
       CONTEST_LISTEN_PORT: ${CONTEST_LISTEN_PORT:-8888}
       ADMIN_LISTEN_PORT: ${ADMIN_LISTEN_PORT:-8889}
       RANKING_LISTEN_PORT: ${RANKING_LISTEN_PORT:-8890}

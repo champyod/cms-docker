@@ -9,6 +9,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        APT_MIRROR: ${APT_MIRROR:-th.archive.ubuntu.com}
+        APT_PORTS_MIRROR: ${APT_PORTS_MIRROR:-ports.ubuntu.com}
+        # Use debian:bookworm for Raspberry Pi (has native arm64 isolate packages)
+        BASE_IMAGE: ${BASE_IMAGE:-ubuntu:noble}
     container_name: cms-worker-${WORKER_SHARD:-0}
     restart: on-failure:5
     environment:
@@ -50,6 +55,9 @@ services:
       - "${WORKER_PORT:-26000}:${WORKER_PORT:-26000}"
     networks:
       - cms-network
+    # Expose for VPS connection (ResourceService)
+    ports:
+      - "2600${WORKER_SHARD:-0}:2600${WORKER_SHARD:-0}"
     privileged: true
     cgroup: host
     # Security options for sandbox isolation

@@ -8,11 +8,12 @@
 //   timeout         — seconds to wait for response
 //   expectedStatus  — HTTP status code that means "healthy"
 //   alertDiscord    — send Discord webhook on failure (requires DISCORD_WEBHOOK_URL in .env.infra)
-
+//
+// Replace with your actual domain:
 [
   {
     "id": "grader-root",
-    "url": "https://grader.mwit.ac.th/",
+    "url": "https://your-domain.com/",
     "interval": 60,
     "timeout": 5,
     "expectedStatus": 200,
@@ -20,7 +21,7 @@
   },
   {
     "id": "admin-panel",
-    "url": "https://admin.grader.mwit.ac.th/",
+    "url": "https://admin.your-domain.com/",
     "interval": 60,
     "timeout": 5,
     "expectedStatus": 200,

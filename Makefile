@@ -203,11 +203,22 @@ env:
 		echo "Refreshing config/cms.toml from sample..."; \
 		cp config/cms.sample.toml config/cms.toml; \
 	fi
+	@if [ -d config/cms.ranking.toml ]; then \
+		echo "Removing directory config/cms.ranking.toml (created by Docker volumes)..."; \
+		rm -rf config/cms.ranking.toml; \
+	fi
+	@if [ ! -f config/cms.ranking.toml ]; then \
+		echo "Copying config/cms.ranking.sample.toml to config/cms.ranking.toml..."; \
+		cp config/cms.ranking.sample.toml config/cms.ranking.toml; \
+		echo "Setting bind address to 0.0.0.0 in config/cms.ranking.toml..."; \
+		sed -i 's/"127.0.0.1"/"0.0.0.0"/g' config/cms.ranking.toml; \
+	fi
 	@echo "Injecting database configuration and service addresses into config/cms.toml..."; \
 	chmod +x scripts/__inject_config.sh && ./scripts/__inject_config.sh;
 	@if [ -f config/cms_ranking.toml ]; then \
 		echo "Updating config/cms_ranking.toml..."; \
 		sed -i 's/"127.0.0.1"/"0.0.0.0"/g' config/cms_ranking.toml; \
+	fi
 	fi
 	@mkdir -p backups && touch backups/.gitkeep
 	@echo "Ensured backups/.gitkeep exists (monitor mount needs host dir)"
@@ -232,6 +243,8 @@ env:
 setup:
 	@./cms $(CMS_ARGS)
 
+
+# Source Build Targets (Development)
 core:
 	@DEPLOY_TYPE="$${DEPLOYMENT_TYPE_OVERRIDE:-}"; \
 	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env.admin 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
@@ -527,6 +540,32 @@ backup:
 		echo "ERROR: cms-monitor not running and scripts/__backup.sh not found or not executable." >&2; \
 		exit 1; \
 	fi
+
+# Image Based Targets (Production/User)
+core-img:
+	docker compose -f docker-compose.core.img.yml up -d
+
+admin-img:
+	docker compose -f docker-compose.admin.img.yml up -d
+
+worker-img:
+	docker compose -f docker-compose.worker.img.yml up -d
+
+# Utilities
+pull:
+	docker compose -f docker-compose.core.img.yml -f docker-compose.admin.img.yml -f docker-compose.worker.img.yml pull
+
+cms-init:
+	docker compose -f docker-compose.core.yml run --rm log-service cmsInitDB
+
+create-admin:
+	docker compose -f docker-compose.core.yml run --rm log-service cmsAddAdmin
+
+up:
+	docker compose -f docker-compose.core.img.yml -f docker-compose.admin.img.yml -f docker-compose.worker.img.yml up -d
+
+down:
+	docker compose -f docker-compose.core.yml -f docker-compose.admin.yml -f docker-compose.worker.yml -f docker-compose.core.img.yml -f docker-compose.admin.img.yml -f docker-compose.worker.img.yml down
 
 clean:
 	rm -f .env
