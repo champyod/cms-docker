@@ -100,11 +100,16 @@ fleet::add_wizard() {
 	s="$(fleet::_next_shard)" || return 1
 	s="$(fleet::_ask_shard -1 "$s")" || return 1
 	h="$(fleet::_input "Registry host" "$(fleet::env_val "$FLEET_CORE_ENV" CORE_SERVICES_HOST || true)")" || return 1
+	[[ -n $h ]] || { printf 'fleet: host must not be empty\n' >&2; return 0; }
+	[[ $h != *:* && $h != *[[:space:]]* ]] || { printf 'fleet: host must not contain ":" or whitespace\n' >&2; return 0; }
 	p="$(fleet::_input "Port" "$((FLEET_BASE_PORT + s))")" || return 1
-	[[ $p =~ ^[0-9]+$ ]] || { printf 'fleet: port must be numeric\n' >&2; return 1; }
+	[[ $p =~ ^[0-9]+$ ]] || { printf 'fleet: port must be numeric\n' >&2; return 0; }
+	[[ $p -ge 1 && $p -le 65535 ]] || { printf 'fleet: port must be between 1 and 65535\n' >&2; return 0; }
 	gm="$(fleet::env_val "$FLEET_WORKER_ENV" WORKER_MEMORY_LIMIT || true)"; gc="$(fleet::env_val "$FLEET_WORKER_ENV" WORKER_CPU_LIMIT || true)"
 	m="$(fleet::_input "Memory limit" "${gm:-512M}")" || return 1
+	[[ $m =~ ^[0-9]+[MG]i?$ ]] || { printf 'fleet: memory must match e.g. 512M, 1G, 512Mi\n' >&2; return 0; }
 	c="$(fleet::_input "CPU limit" "${gc:-0.5}")" || return 1
+	[[ $c =~ ^[0-9]+(\.[0-9]+)?$ ]] || { printf 'fleet: cpus must be numeric (e.g. 0.5, 2)\n' >&2; return 0; }
 	tui::panel "New worker" "name: worker-$s (container cms-worker-$s)" "endpoint: $h:$p" "limits: $m / $c cpus"
 	tui::confirm "Save shard $s to $FLEET_CORE_ENV?" || return 1
 	FLEET_ROWS+=("$s|$h|$p|1|$m|$c")

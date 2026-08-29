@@ -51,10 +51,20 @@ ensure_htpasswd() {
 cmd_passwd() {
   local user="${1:-}" pass="${2:-}"
   [ -n "$user" ] || die "usage: $0 passwd <user> [password]"
+  case "$user" in *:*) die "htpasswd forbids ':' in username: $user" ;; esac
   mkdir -p "$(dirname "$HTPASSWD")"
   if [ -z "$pass" ]; then
-    printf 'Password for %s: ' "$user"
-    read -rs pass; echo ""
+    local attempts=0
+    while :; do
+      attempts=$((attempts + 1))
+      printf 'Password for %s: ' "$user"
+      read -rs pass; echo ""
+      if [ "${#pass}" -ge 8 ]; then break; fi
+      if [ "$attempts" -ge 3 ]; then die "password must be at least 8 characters"; fi
+      log_warn "password must be at least 8 characters (attempt $attempts/3)"
+    done
+  else
+    [ "${#pass}" -ge 8 ] || die "password must be at least 8 characters"
   fi
   local hash=""
   hash="$(openssl passwd -apr1 "$pass" 2>/dev/null || true)"
