@@ -212,8 +212,7 @@ main() {
         fi
       done
       if [[ -f .env.local ]]; then
-        echo "### .env.local ###"
-        cat .env.local
+
         echo ""
       fi
     } > .env
