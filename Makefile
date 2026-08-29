@@ -541,23 +541,6 @@ backup:
 		exit 1; \
 	fi
 
-# Image Based Targets (Production/User)
-core-img:
-	docker compose -f docker-compose.core.img.yml up -d
-
-admin-img:
-	docker compose -f docker-compose.admin.img.yml up -d
-
-worker-img:
-	docker compose -f docker-compose.worker.img.yml up -d
-
-# Utilities
-pull:
-	docker compose -f docker-compose.core.img.yml -f docker-compose.admin.img.yml -f docker-compose.worker.img.yml pull
-
-cms-init:
-	docker compose -f docker-compose.core.yml run --rm log-service cmsInitDB
-
 create-admin:
 	docker compose -f docker-compose.core.yml run --rm log-service cmsAddAdmin
 

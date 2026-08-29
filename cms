@@ -33,7 +33,7 @@ Usage:
 Commands:
   help                      this help
   setup                     first-time guided setup (fresh or update wizard)
-  update                    interactive configuration update wizard
+  update                    interactive config update wizard (config only)
   fix                       non-interactive repair of missing/insecure config
   deploy <stack> [--img]    make core|admin|contest|worker|infra [-img]; stack=all loops
   stop [stack]              stop one stack or all
@@ -58,7 +58,8 @@ Commands:
   domain setup|status|renew|preflight
                             grader.mwit.ac.th HTTPS domain lifecycle (TLS+Nginx+certs)
   contest create            create contests from YAML
-  update-server             shard-aware server update flow
+  update-server             shard-aware FULL server update (git+img+db+verify)
+  update all                alias for update-server (full update)
 
 Examples:
   ./cms setup
@@ -94,7 +95,12 @@ handle_subcommand() {
       fi
       exec bash scripts/__update_engine.sh ${mode_args[@]+"${mode_args[@]}"} "${@:2}"
       ;;
-    update) shift; exec bash scripts/__update_engine.sh "$@" ;;
+    update)
+      if [[ "${2:-}" == "all" ]]; then
+        shift 2; exec bash scripts/__update-server.sh "$@"
+      fi
+      shift; exec bash scripts/__update_engine.sh "$@"
+      ;;
     fix)    exec bash scripts/__update_engine.sh --fix ;;
     deploy)
       stack="${2:-}"

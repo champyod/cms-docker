@@ -7,6 +7,8 @@
 DASH_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck source=scripts/__tui/__engine.sh
 source "$DASH_DIR/__engine.sh"
+# shellcheck source=scripts/__tui/runners/__simple.sh
+source "$DASH_DIR/runners/__simple.sh"
 
 DASH_REFRESH_SECS=10
 DASH_CORE_SERVICES="cms-database cms-log-service cms-resource-service cms-scoring-service cms-checker-service"
@@ -152,7 +154,7 @@ dash::render_screen() {
 dash::footer() {
 	local msg=''
 	[[ -n "$DASH_MSG" ]] && msg=" · $(dash::paint "$TUI_WARN" "$DASH_MSG")"
-	dash::paint "$TUI_DIM" "r refresh · w worker-hint · s services-detail · d deploy-workers · b backup-now · ? help · q quit"
+	dash::paint "$TUI_DIM" "r refresh · w worker-hint · s services-detail · d deploy-workers · a deploy-ALL · u update-server · b backup-now · f features · ? help · q quit"
 	printf '\nupdated %s%s\n' "$(date '+%H:%M:%S')" "$msg"
 	DASH_MSG=''
 }
@@ -164,7 +166,10 @@ dash::help() {
 		"r  refresh all panels now" \
 		"w  hint: ./cms worker deploy" \
 		"s  toggle SERVICES detail columns" \
-		"d  deploy all workers → ./cms deploy worker" \
+		"d  deploy all workers (fleet) → ./cms worker deploy all" \
+		"a  deploy ALL stacks      → ./cms deploy all (–img prompt)" \
+		"u  update server (full)   → ./cms update-server" \
+		"f  features launcher      → 16-cmd picker" \
 		"b  backup now        → ./cms backup" \
 		"?  this overlay" \
 		"q  quit (terminal restored)" </dev/null
@@ -189,6 +194,29 @@ dash::act() { # TEXT TAG CMD... — confirm+audit+spin guard for mutating keys
 	DASH_MSG="$tag finished (exit $?)"
 }
 
+dash::features() {
+	local pick cmd
+	pick="$(tui::choose "Features — ./cms <cmd>" \
+		"status — Status dashboard" \
+		"monitor — Monitor services" \
+		"backup — Backup now" \
+		"restore — Restore from backup" \
+		"doctor — Doctor diagnostics" \
+		"test — Self test" \
+		"db — Database tools" \
+		"admin-create — Create admin" \
+		"contest — Switch contest" \
+		"pull — Pull upstream" \
+		"deploy — Deploy workers" \
+		"stop — Stop services" \
+		"clean — Clean artifacts" \
+		"tailscale — Tailscale setup" \
+		"funnel — Funnel exposure" \
+		"update-server — Update server")" || return 1
+	cmd="${pick%% *}"
+	simple::run "Features: $pick" "./cms $cmd"
+}
+
 dash::poll_key() { # TIMEOUT_S -> rc0 sets KEY iff bound user key; swallows ANSI reply litter inline
 	KEY=''; local k
 	while :; do
@@ -201,7 +229,7 @@ dash::poll_key() { # TIMEOUT_S -> rc0 sets KEY iff bound user key; swallows ANSI
 			else while IFS= read -rsn1 -t 0.001 k && [[ "$k" != [A-Za-z~] ]]; do :; done; fi
 			continue
 		fi
-		case "$k" in q|Q|r|R|w|W|s|S|d|D|b|B|h|H|\?) KEY=$k && return 0 ;; esac
+		case "$k" in q|Q|r|R|w|W|s|S|d|D|b|B|a|A|u|U|f|F|h|H|\?) KEY=$k && return 0 ;; esac
 	done
 }
 
@@ -219,7 +247,10 @@ dash::loop() {
 			r|R)    dash::collect_all; last=$SECONDS ;;
 			w|W)    DASH_MSG="hint: run ./cms worker deploy" ;;
 			s|S)    DASH_SVC_DETAIL=$(( 1 - DASH_SVC_DETAIL )); dash::collect_services ;;
-			d|D)    if dash::act "Deploy ALL registered workers now?" deploy-worker ./cms deploy worker; then dash::collect_all; last=$SECONDS; fi ;;
+			d|D)    if dash::act "Deploy ALL registered workers now?" deploy-fleet ./cms worker deploy all; then dash::collect_all; last=$SECONDS; fi ;;
+			a|A)    if dash::act "Deploy ALL stacks (core infra admin contest worker)?" deploy-all ./cms deploy all; then dash::collect_all; last=$SECONDS; fi ;;
+			u|U)    if dash::act "Run full server update (git pull + images + db)?" update-server ./cms update-server; then dash::collect_all; last=$SECONDS; fi ;;
+			f|F)    if dash::features; then dash::collect_all; last=$SECONDS; fi ;;
 			b|B)    if dash::act "Run a backup now?" backup ./cms backup; then dash::collect_backups; last=$SECONDS; fi ;;
 			\?|h|H) dash::help ;;
 		esac

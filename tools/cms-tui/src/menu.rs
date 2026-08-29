@@ -24,7 +24,7 @@ pub const COMMANDS: [(&str, &str); 16] = [
     ("Clean artifacts", "clean"),
     ("Tailscale setup", "tailscale"),
     ("Funnel exposure", "funnel"),
-    ("Update server", "update-server"),
+    ("Update ALL server (full)", "update-server"),
 ];
 
 #[derive(Default)]
