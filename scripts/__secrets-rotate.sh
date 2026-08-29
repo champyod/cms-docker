@@ -276,7 +276,7 @@ cmd_generate() {
   # Write output
   cat > "$outfile" <<SECRETS
 # Generated secrets — $(date -u +%Y-%m-%dT%H:%M:%SZ)
-# Review these values, then run: ./cms secrets --apply
+# Review these values, then run: ./cms secrets rotate
 
 # Database password (.env.core)
 POSTGRES_PASSWORD=${postgres_password}

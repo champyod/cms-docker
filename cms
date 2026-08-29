@@ -43,8 +43,10 @@ Commands:
   admin-create              create superadmin account
   status                    live service status dashboard
   monitor                   monitoring/backup operations UI
-  backup [drill]            run backup now; 'drill' tests the restore path
+  backup [drill|offsite]      run backup now; 'drill' tests restore; 'offsite' syncs remote
   restore <archive>         restore a backup archive
+  secrets rotate|audit|generate
+                            rotate weak/default secrets (apply guarded)
   doctor                    preflight environment checks
   test                      smoke-test the deployment
   worker [edit|deploy|stop|list]  fleet TUI / deploy all shards / stop / show
@@ -75,7 +77,7 @@ handle_subcommand() {
   # drill) and CMS_NO_TUI=1 fall through to the plain handlers below unchanged.
   if [[ -t 0 && -t 1 && -z "${CMS_NO_TUI:-}" ]]; then
     case "${1:-}:${2:-}" in
-      status:--workers-json|backup:drill) : ;;
+      status:--workers-json|backup:drill|backup:offsite) : ;;
       *)
         case "$1" in
           status|monitor|backup|restore|doctor|test|db|admin-create|contest|pull|stop|clean|deploy|tailscale|funnel|update-server|expose|domain)
@@ -162,9 +164,20 @@ handle_subcommand() {
       shift; exec bash scripts/__status.sh "$@" ;;
     monitor) shift; exec bash scripts/__monitor.sh "$@" ;;
     backup)
-      if [[ "${2:-}" == "drill" ]]; then shift 2; exec bash scripts/__backup_drill.sh "$@"; fi
-      exec make backup ;;
+      case "${2:-}" in
+        drill)   shift 2; exec bash scripts/__backup_drill.sh "$@" ;;
+        offsite) shift 2; exec bash scripts/__offsite-sync.sh "$@" ;;
+        *) exec make backup ;;
+      esac ;;
     restore) shift; exec bash scripts/__restore.sh "$@" ;;
+    secrets)
+      sub="${2:-}"
+      case "$sub" in
+        rotate)   shift 2; exec bash scripts/__secrets-rotate.sh --apply "$@" ;;
+        audit)    shift 2; exec bash scripts/__secrets-rotate.sh --audit "$@" ;;
+        generate) shift 2; exec bash scripts/__secrets-rotate.sh --generate "$@" ;;
+        *) echo "usage: cms secrets <rotate|audit|generate>" >&2; exit 2 ;;
+      esac ;;
     doctor)  exec bash scripts/__preflight.sh ;;
     test)    shift; exec bash scripts/__smoke-test.sh "$@" ;;
     worker)

@@ -210,15 +210,15 @@ add_entry() {
     s="$FORM_OUT_shard"; h="$FORM_OUT_host"; p="$FORM_OUT_port"; m="$FORM_OUT_memory"; c="$FORM_OUT_cpus"
     [[ "$s" =~ ^[0-9]+$ ]] || { log_warn "shard must be numeric"; return 0; }
     [[ "$p" =~ ^[0-9]+$ ]] || { log_warn "port must be numeric"; return 0; }
-    fleet_load; WORKERS+=("$s|$h|$p|$m|$c"); toml_save
+    fleet_load; WORKERS+=("$s|$h|$p|1|$m|$c"); fleet_save
     log_info "Added shard $s ($h:$p). Run 'make env' to refresh cms.toml."
   fi
 }
 
 edit_entry() {
   fleet_load
-  local row="${ROWS[$CUR]}" s h p m c
-  IFS='|' read -r s h p m c <<<"$row"
+  local row="${WORKERS[$CUR]}" s h p l m c
+  IFS='|' read -r s h p l m c <<<"$row"
   if ui_form_edit "Edit shard $s" \
       "shard|Shard|$s" \
       "port|Port|$p" \
@@ -228,7 +228,7 @@ edit_entry() {
     s="$FORM_OUT_shard"; h="$FORM_OUT_host"; p="$FORM_OUT_port"; m="$FORM_OUT_memory"; c="$FORM_OUT_cpus"
     [[ "$s" =~ ^[0-9]+$ ]] || { log_warn "shard must be numeric"; return 0; }
     [[ "$p" =~ ^[0-9]+$ ]] || { log_warn "port must be numeric"; return 0; }
-    ROWS[$CUR]="$s|$h|$p|$m|$c"; toml_save
+    WORKERS[$CUR]="$s|$h|$p|$l|$m|$c"; fleet_save
     log_info "Updated shard $s ($h:$p). Re-deploy to apply."
   fi
 }
@@ -288,8 +288,8 @@ tui_loop() {
             SELECTED+=("$CUR")
           fi
         fi ;;
-      a) add_entry || true ;;
-      e) fleet_load || true; { [ "${#WORKERS[@]}" -gt 0 ] && edit_entry "$CUR"; } || true ;;
+      a) add_entry ;;
+      e) fleet_load || true; { [ "${#WORKERS[@]}" -gt 0 ] && edit_entry "$CUR"; } ;;
       d)
         fleet_load || true
         if [ "${#WORKERS[@]}" -gt 0 ]; then

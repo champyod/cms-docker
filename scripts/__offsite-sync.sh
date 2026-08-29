@@ -69,6 +69,61 @@ Behavior:
   - Destination: $OFFSITE_REMOTE_PATH/$DATE_STAMP/
   - If OFFSITE_ENCRYPT_KEY is set, encrypts with gpg --symmetric before transfer
   - Dry-run prints the rsync command without executing
-  - Creates systemd timer templates for daily sync
 EOF
 }
+
+# ---------------------------------------------------------------------------
+# Argument parsing
+# ---------------------------------------------------------------------------
+MODE="dry-run"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run) MODE="dry-run"; shift ;;
+    --apply)   MODE="apply"; shift ;;
+    --help|-h) usage; exit 0 ;;
+    *) log_die "unknown option: $1 — see --help" 1 ;;
+  esac
+done
+
+# ---------------------------------------------------------------------------
+# Validation
+# ---------------------------------------------------------------------------
+[[ -n "$OFFSITE_TAILNET_NODE" ]] || log_die "OFFSITE_TAILNET_NODE not set in .env.infra — no default" 1
+[[ -n "$OFFSITE_REMOTE_PATH" ]] || log_die "OFFSITE_REMOTE_PATH not set in .env.infra — no default" 1
+[[ -d "$BACKUP_DIR" ]] || log_die "backup dir not found: $BACKUP_DIR" 1
+
+mapfile -t ARCHIVES < <(ls -1t "${BACKUP_DIR}"/*.tar.gz 2>/dev/null || true)
+(( ${#ARCHIVES[@]} > 0 )) || log_die "no backup archives (*.tar.gz) found in $BACKUP_DIR" 1
+
+REMOTE_DIR="${OFFSITE_REMOTE_PATH}/${DATE_STAMP}"
+
+# ---------------------------------------------------------------------------
+# Sync
+# ---------------------------------------------------------------------------
+encrypt_archive() {
+  local src="$1"
+  [[ -n "$OFFSITE_ENCRYPT_KEY" ]] || return 0
+  local dst="${src}.gpg"
+  if [[ "$MODE" == "apply" ]]; then
+    gpg --batch --yes --symmetric --cipher-algo AES256 \
+      --passphrase "$OFFSITE_ENCRYPT_KEY" -o "$dst" "$src"
+  else
+    echo "gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase '***' -o ${dst} ${src}"
+  fi
+}
+
+if [[ "$MODE" == "apply" ]]; then
+  ssh "$OFFSITE_TAILNET_NODE" "mkdir -p '${REMOTE_DIR}'"
+  for archive in "${ARCHIVES[@]}"; do
+    encrypt_archive "$archive"
+    rsync -avz "${archive}${OFFSITE_ENCRYPT_KEY:+.gpg}" "${OFFSITE_TAILNET_NODE}:${REMOTE_DIR}/"
+  done
+  log_info "Offsite sync complete → ${OFFSITE_TAILNET_NODE}:${REMOTE_DIR}/"
+else
+  echo "ssh ${OFFSITE_TAILNET_NODE} mkdir -p '${REMOTE_DIR}'"
+  for archive in "${ARCHIVES[@]}"; do
+    encrypt_archive "$archive"
+    echo "rsync -avz ${archive}${OFFSITE_ENCRYPT_KEY:+.gpg} ${OFFSITE_TAILNET_NODE}:${REMOTE_DIR}/"
+  done
+  log_info "Dry run — re-run with --apply to execute"
+fi
