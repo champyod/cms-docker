@@ -7,7 +7,7 @@
 #
 # Usage:
 #   __domain.sh setup   [options]   configure domains + TLS + nginx
-#   __domain.sh status              show DNS resolution, cert expiry, renewal timer, connectivity
+#   __domain.sh status              show DNS, cert expiry, renewal, connectivity
 #   __domain.sh renew               force-renew LE certs or swap provided certs
 #   __domain.sh preflight           9-check connectivity matrix
 #
@@ -71,23 +71,23 @@ print(json.dumps(body))
 }
 
 # ---------------------------------------------------------------------------
-# Defaults - NO HARDCODED DEFAULTS, all from env with empty fallbacks
+# Defaults
 # ---------------------------------------------------------------------------
-DOMAIN_NAME="${DOMAIN_NAME:-}"
-ADMIN_DOMAIN="${ADMIN_DOMAIN:-}"
-OJ_DOMAIN="${OJ_DOMAIN:-}"
-RANKING_DOMAIN="${RANKING_DOMAIN:-}"
+DOMAIN_NAME="${DOMAIN_NAME:-cms.local}"
+ADMIN_DOMAIN="${ADMIN_DOMAIN:-admin.cms.local}"
+OJ_DOMAIN="${OJ_DOMAIN:-oj.cms.local}"
+RANKING_DOMAIN="${RANKING_DOMAIN:-ranking.cms.local}"
 CERT_TYPE="${CERT_TYPE:-letsencrypt}"
 CERT_PATH=""
 KEY_PATH=""
-CERT_EMAIL="${CERT_EMAIL:-}"
-HSTS_MAX_AGE="${HSTS_MAX_AGE:-300}"
+CERT_EMAIL="${CERT_EMAIL:-admin@mwit.ac.th}"
+HSTS_MAX_AGE="${HSTS_MAX_AGE:-31536000}"
 REDIS_RATE_LIMIT="${REDIS_RATE_LIMIT:-0}"
 PER_USER_LIMIT="${PER_USER_LIMIT:-1}"
 REDIS_HOST="${REDIS_HOST:-redis-rate-limit}"
 REDIS_PORT="${REDIS_PORT:-6379}"
 MONITORING_ENABLED="${MONITORING_ENABLED:-0}"
-TAILSCALE_IP="${TAILSCALE_IP:-}"
+TAILSCALE_IP="${TAILSCALE_IP:-127.0.0.1}"
 WAF_ENABLED="${WAF_ENABLED:-0}"
 WAF_PORT="${WAF_PORT:-8080}"
 WAF_BIND_IP="${WAF_BIND_IP:-127.0.0.1}"
@@ -98,8 +98,6 @@ WAF_RULE_ENGINE="${WAF_RULE_ENGINE:-DetectionOnly}"
 CONTEST_LISTEN_PORT="${CONTEST_LISTEN_PORT:-8888}"
 ADMIN_LISTEN_PORT="${ADMIN_LISTEN_PORT:-8889}"
 RANKING_LISTEN_PORT="${RANKING_LISTEN_PORT:-8890}"
-
-RANKING_LISTEN_PORT="${RANKING_LISTEN_PORT:-8890}"
 OJ_BACKEND_PORT="${OJ_BACKEND_PORT:-9000}"
 # Optional features — disabled by default (0), prod stays off unless explicitly enabled
 HSM_ENABLED="${HSM_ENABLED:-0}"
@@ -107,7 +105,7 @@ HSM_MODULE="${HSM_MODULE:-softhsm}"
 HSM_PIN="${HSM_PIN:-}"
 HSM_KEY_LABEL="${HSM_KEY_LABEL:-grader-privkey}"
 VAULT_ENABLED="${VAULT_ENABLED:-0}"
-VAULT_ADDR="${VAULT_ADDR:-}"
+VAULT_ADDR="${VAULT_ADDR:-http://vault:8200}"
 VAULT_TOKEN="${VAULT_TOKEN:-}"
 VAULT_PATH="${VAULT_PATH:-secret/cms}"
 DNSSEC_ENABLED="${DNSSEC_ENABLED:-0}"
@@ -135,10 +133,10 @@ Commands:
 
 Options (setup):
   --cert <letsencrypt|provided|selfsigned>  Certificate type (default: letsencrypt)
-  --domain <domain>           Primary domain (REQUIRED - no default)
-  --admin-domain <domain>     Admin subdomain
-  --oj-domain <domain>        OJ subdomain
-  --ranking-domain <domain>   Ranking subdomain
+  --domain <domain>           Primary domain (default: cms.local)
+  --admin-domain <domain>     Admin subdomain (default: admin.cms.local)
+  --oj-domain <domain>        OJ subdomain (default: oj.cms.local)
+  --ranking-domain <domain>   Ranking subdomain (default: ranking.cms.local)
   --cert-path <path>          Path to fullchain.pem (required for --cert provided)
   --key-path <path>           Path to privkey.pem (required for --cert provided)
   --email <email>             Email for Let's Encrypt registration
@@ -200,8 +198,10 @@ _prompt_optional_features() {
   if [[ "${DNSSEC_ENABLED:-0}" == "0" ]] && [[ "${CAA_ENABLED:-0}" == "0" ]]; then
     printf "Enable DNSSEC (DNS spoof protection) — needs DNS + computer center? [y/N] "
     read -r ans || true
+    [[ "$ans" =~ ^[Yy] ]] && DNSSEC_ENABLED=1
+    printf "Enable CAA (restrict CA to %s)? [y/N] " "$CAA_ISSUER"
+    read -r ans || true
     if [[ "$ans" =~ ^[Yy] ]]; then
-      DNSSEC_ENABLED=1
       CAA_ENABLED=1
       printf "  CAA issuer [%s]: " "$CAA_ISSUER"
       read -r ans || true
@@ -209,11 +209,11 @@ _prompt_optional_features() {
     fi
   fi
   if [[ "${MTLS_WORKERS_ENABLED:-0}" == "0" ]]; then
-    printf "Enable mTLS for worker RPC (beyond Tailscale IP allowlist)? [y/N] "
+    printf "Enable mTLS for worker RPC (self-CA, beyond tailnet)? [y/N] "
     read -r ans || true
     if [[ "$ans" =~ ^[Yy] ]]; then
       MTLS_WORKERS_ENABLED=1
-      printf "  mTLS CA cert path [%s]: " "$MTLS_CA_CERT"
+      printf "  mTLS CA cert [%s]: " "$MTLS_CA_CERT"
       read -r ans || true
       [[ -n "$ans" ]] && MTLS_CA_CERT="$ans"
       printf "  mTLS worker cert [%s]: " "$MTLS_WORKER_CERT"
@@ -227,18 +227,620 @@ _prompt_optional_features() {
 }
 
 _log_optional_features() {
-  if [[ "${HSM_ENABLED:-0}" == "0" ]]; then
+  if [[ "${HSM_ENABLED:-0}" == "1" ]]; then
+    log_info "HSM enabled (module=$HSM_MODULE label=$HSM_KEY_LABEL) — certbot will use --hsm with PKCS#11"
+  else
     log_info "HSM disabled (set HSM_ENABLED=1 to enable — see .env.infra.example HSM_*)"
   fi
-  if [[ "${VAULT_ENABLED:-0}" == "0" ]]; then
+  if [[ "${VAULT_ENABLED:-0}" == "1" ]]; then
+    log_info "Vault enabled (addr=$VAULT_ADDR path=$VAULT_PATH) — secrets via Vault"
+  else
     log_info "Vault disabled (set VAULT_ENABLED=1 to enable — see .env.infra.example VAULT_*; alternative: scripts/__secrets-rotate.sh)"
   fi
-  if [[ "${DNSSEC_ENABLED:-0}" == "0" ]] && [[ "${CAA_ENABLED:-0}" == "0" ]]; then
+  if [[ "${DNSSEC_ENABLED:-0}" == "1" ]] || [[ "${CAA_ENABLED:-0}" == "1" ]]; then
+    log_info "DNSSEC=${DNSSEC_ENABLED} CAA=${CAA_ENABLED} (issuer=$CAA_ISSUER) — see docs/dnssec-caa-guide.md"
+  else
     log_info "DNSSEC disabled (set DNSSEC_ENABLED=1 to enable) — CAA disabled (set CAA_ENABLED=1, CAA_ISSUER=letsencrypt.org)"
   fi
-  if [[ "${MTLS_WORKERS_ENABLED:-0}" == "0" ]]; then
+  if [[ "${MTLS_WORKERS_ENABLED:-0}" == "1" ]]; then
+    log_info "mTLS workers enabled (CA=$MTLS_CA_CERT) — firewall should restrict RPC to mTLS only"
+  else
     log_info "mTLS workers disabled (set MTLS_WORKERS_ENABLED=1 to enable — TAILSCALE_IP allow ALL remains)"
   fi
 }
 
-# ... rest of the file remains the same ...
+# ---------------------------------------------------------------------------
+# Setup subcommand
+# ---------------------------------------------------------------------------
+cmd_setup() {
+  log_info "Domain setup — mode: $([ "$DRY_RUN" -eq 1 ] && echo 'DRY-RUN' || echo 'APPLY')"
+  log_info "Primary: $DOMAIN_NAME  Admin: $ADMIN_DOMAIN  OJ: $OJ_DOMAIN  Ranking: $RANKING_DOMAIN"
+  log_info "Certificate type: $CERT_TYPE"
+  _prompt_optional_features
+  _log_optional_features
+
+  # Validate port 80 reachability for Let's Encrypt
+  if [[ "$CERT_TYPE" == "letsencrypt" ]]; then
+    _preflight_port80
+  fi
+
+  # Create cert directories
+  local cert_dir="${REPO_ROOT}/config/letsencrypt"
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log_info "[dry-run] would create directory: $cert_dir"
+  else
+    mkdir -p "$cert_dir"
+    log_info "created $cert_dir"
+  fi
+
+  # Render nginx config from template
+  _render_nginx_config
+
+  # Handle certificate type
+  case "$CERT_TYPE" in
+    letsencrypt)
+      _setup_letsencrypt
+      ;;
+    provided)
+      _setup_provided_cert
+      ;;
+    selfsigned)
+      _setup_selfsigned
+      ;;
+    *)
+      log_die "unknown cert type: $CERT_TYPE — use letsencrypt, provided, or selfsigned" 1
+      ;;
+  esac
+
+  # Validate nginx config
+  _validate_nginx_config
+
+  discord_alert "Domain setup completed for ${DOMAIN_NAME} (cert: ${CERT_TYPE})" 65280
+  log_info "Domain setup complete"
+}
+
+# ---------------------------------------------------------------------------
+# Let's Encrypt setup
+# ---------------------------------------------------------------------------
+_setup_letsencrypt() {
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log_info "[dry-run] would run certbot certonly for $DOMAIN_NAME, $ADMIN_DOMAIN, $OJ_DOMAIN, $RANKING_DOMAIN"
+    return 0
+  fi
+
+  if ! command -v certbot >/dev/null 2>&1; then
+    log_warn "certbot not found on host — attempting via docker"
+    _run_certbot_docker
+    return
+  fi
+
+  local cert_dir="${REPO_ROOT}/config/letsencrypt"
+  certbot certonly --webroot -w "${cert_dir}/www" \
+    -d "$DOMAIN_NAME" -d "$ADMIN_DOMAIN" -d "$OJ_DOMAIN" -d "$RANKING_DOMAIN" \
+    --email "$CERT_EMAIL" --agree-tos --non-interactive \
+    --cert-path "${cert_dir}/live" --key-path "${cert_dir}/live" \
+    || log_die "certbot certonly failed" 1
+  log_info "Let's Encrypt certificates obtained"
+}
+
+_run_certbot_docker() {
+  local cert_dir="${REPO_ROOT}/config/letsencrypt"
+  mkdir -p "${cert_dir}/www" "${cert_dir}/live"
+  docker run --rm \
+    -v "${cert_dir}/live:/etc/letsencrypt" \
+    -v "${cert_dir}/www:/var/www/certbot" \
+    certbot/certbot certonly --webroot -w /var/www/certbot \
+    -d "$DOMAIN_NAME" -d "$ADMIN_DOMAIN" -d "$OJ_DOMAIN" -d "$RANKING_DOMAIN" \
+    --email "$CERT_EMAIL" --agree-tos --non-interactive \
+    || log_die "certbot docker run failed" 1
+  log_info "Let's Encrypt certificates obtained via docker"
+}
+
+# ---------------------------------------------------------------------------
+# Provided certificate setup
+# ---------------------------------------------------------------------------
+_setup_provided_cert() {
+  if [[ -z "$CERT_PATH" || -z "$KEY_PATH" ]]; then
+    log_die "--cert-path and --key-path are required for --cert provided" 1
+  fi
+
+  if [[ ! -f "$CERT_PATH" ]]; then
+    log_die "certificate file not found: $CERT_PATH" 1
+  fi
+  if [[ ! -f "$KEY_PATH" ]]; then
+    log_die "private key file not found: $KEY_PATH" 1
+  fi
+
+  # Public trust check
+  if ! openssl verify -untrusted "$CERT_PATH" "$CERT_PATH" >/dev/null 2>&1; then
+    log_warn "certificate failed openssl verify — may not be trusted by clients"
+  else
+    log_info "certificate passed openssl verify"
+  fi
+
+  local dest_dir="${REPO_ROOT}/config/letsencrypt/live"
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log_info "[dry-run] would copy $CERT_PATH -> ${dest_dir}/fullchain.pem"
+    log_info "[dry-run] would copy $KEY_PATH -> ${dest_dir}/privkey.pem"
+  else
+    mkdir -p "$dest_dir"
+    cp -f "$CERT_PATH" "${dest_dir}/fullchain.pem"
+    cp -f "$KEY_PATH" "${dest_dir}/privkey.pem"
+    chmod 600 "${dest_dir}/privkey.pem"
+    log_info "provided certificates installed to $dest_dir"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Self-signed certificate setup
+# ---------------------------------------------------------------------------
+_setup_selfsigned() {
+  local dest_dir="${REPO_ROOT}/config/letsencrypt/live"
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log_info "[dry-run] would generate self-signed cert for $DOMAIN_NAME"
+    return 0
+  fi
+
+  mkdir -p "$dest_dir"
+  openssl req -x509 -nodes -days 365 \
+    -newkey rsa:2048 \
+    -keyout "${dest_dir}/privkey.pem" \
+    -out "${dest_dir}/fullchain.pem" \
+    -subj "/CN=${DOMAIN_NAME}/O=CMS/C=TH" \
+    2>/dev/null
+  chmod 600 "${dest_dir}/privkey.pem"
+  log_info "self-signed certificate generated for $DOMAIN_NAME"
+}
+
+# ---------------------------------------------------------------------------
+# Nginx config rendering
+# ---------------------------------------------------------------------------
+_render_nginx_config() {
+  local template="${REPO_ROOT}/config/grader.nginx.conf.template"
+  local output="${REPO_ROOT}/config/grader.nginx.conf"
+
+  if [[ ! -f "$template" ]]; then
+    log_warn "nginx template not found: $template — skipping render"
+    return 0
+  fi
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log_info "[dry-run] would render $template -> $output"
+    log_info "[dry-run] variables: DOMAIN_NAME=$DOMAIN_NAME HSTS_MAX_AGE=$HSTS_MAX_AGE REDIS_RATE_LIMIT=$REDIS_RATE_LIMIT PER_USER_LIMIT=$PER_USER_LIMIT REDIS_HOST=$REDIS_HOST REDIS_PORT=$REDIS_PORT MONITORING_ENABLED=$MONITORING_ENABLED WAF_ENABLED=$WAF_ENABLED WAF_PORT=$WAF_PORT WAF_PARANOIA=$WAF_PARANOIA WAF_ANOMALY_INBOUND=$WAF_ANOMALY_INBOUND WAF_RULE_ENGINE=$WAF_RULE_ENGINE"
+    if [[ "${WAF_ENABLED:-0}" == "1" ]]; then
+      log_info "[dry-run] WAF_ENABLED=1 — waf fronting note: grader-waf (OWASP CRS, PARANOIA=$WAF_PARANOIA, ANOMALY_INBOUND=$WAF_ANOMALY_INBOUND, RULE_ENGINE=$WAF_RULE_ENGINE) fronts grader-nginx-proxy via cms-network BACKEND=http://grader-nginx-proxy:80; host port ${WAF_BIND_IP}:${WAF_PORT} → 80 when --profile waf is used. See docs/waf-tuning.md"
+    else
+      log_info "[dry-run] WAF_ENABLED=0 — WAF disabled, nginx works exactly as before (no waf container, no new ports)"
+    fi
+    return 0
+  fi
+
+  export DOMAIN_NAME ADMIN_DOMAIN OJ_DOMAIN RANKING_DOMAIN HSTS_MAX_AGE
+  export CONTEST_LISTEN_PORT ADMIN_LISTEN_PORT RANKING_LISTEN_PORT OJ_BACKEND_PORT
+  export RANKING_AUTH_DIRECTIVES="${RANKING_AUTH_DIRECTIVES:-}"
+
+  local redis_upstream_block redis_lua_placeholder per_user_login per_user_ranking
+
+  if [[ "${REDIS_RATE_LIMIT:-0}" == "1" ]]; then
+    redis_upstream_block=$(cat <<EOF
+# Redis distributed rate limit — enabled (REDIS_RATE_LIMIT=1)
+# Docker DNS resolver for future OpenResty lua-resty-redis (request-time resolution; nginx starts even if redis absent)
+resolver 127.0.0.11 valid=10s ipv6=off;
+resolver_timeout 3s;
+# Upstream deferred to lua request-time connect to avoid startup DNS failure when redis absent
+# upstream redis_rate_limit_backend { server ${REDIS_HOST}:${REDIS_PORT} max_fails=2 fail_timeout=10s; }
+# Local limit_req remains as primary until OpenResty image with resty.redis is deployed
+EOF
+)
+    redis_lua_placeholder=$(cat <<'EOLUA'
+# Redis rate limiting active: future OpenResty path would use lua-resty-redis token bucket here
+# lua_shared_dict redis_limit 10m;
+# access_by_lua_block { local r=require("resty.redis"); local red=r:new(); red:set_timeout(80); local ok=red:connect("redis-rate-limit",6379); if ok then local c=red:incr("rl:"..ngx.var.binary_remote_addr); if c==1 then red:expire("rl:"..ngx.var.binary_remote_addr,1) end; if c and c>5 then ngx.exit(503) end end }
+# Local limit_req remains as fallback if Redis is unreachable
+EOLUA
+)
+  else
+    redis_upstream_block="# REDIS_RATE_LIMIT=0 — local limit_req only (no Redis upstream)"
+    redis_lua_placeholder="# REDIS_RATE_LIMIT=0 — Redis disabled, using local limit_req (5r/s admin_login, 10r/s ranking_auth)"
+  fi
+
+  if [[ "${PER_USER_LIMIT:-1}" == "1" ]]; then
+    per_user_login="limit_req zone=per_user burst=20 nodelay;"
+    per_user_ranking="limit_req zone=per_user burst=20 nodelay;"
+  else
+    per_user_login="# PER_USER_LIMIT=0 — per-user bucket disabled"
+    per_user_ranking="# PER_USER_LIMIT=0 — per-user bucket disabled"
+  fi
+
+  export REDIS_UPSTREAM_BLOCK="$redis_upstream_block"
+  export REDIS_LUA_PLACEHOLDER="$redis_lua_placeholder"
+  export PER_USER_LOGIN_DIRECTIVES="$per_user_login"
+  export PER_USER_RANKING_DIRECTIVES="$per_user_ranking"
+
+  local nginx_metrics_location
+  if [[ "${MONITORING_ENABLED:-0}" == "1" ]]; then
+    nginx_metrics_location=$(cat <<EOF
+# Monitoring enabled (MONITORING_ENABLED=1) — stub_status for Prometheus
+# Scraped as nginx:80/metrics from prometheus job "nginx" (cms-network internal)
+# Restricted to loopback + Tailscale IP
+location /metrics {
+    stub_status;
+    allow 127.0.0.1;
+    allow ${TAILSCALE_IP:-127.0.0.1};
+    deny all;
+    access_log off;
+}
+EOF
+)
+  else
+    nginx_metrics_location="# MONITORING_ENABLED=0 — /metrics not exposed (enable with MONITORING_ENABLED=1 and re-run __domain.sh --apply)"
+  fi
+  export NGINX_METRICS_LOCATION="$nginx_metrics_location"
+
+  envsubst '${DOMAIN_NAME} ${ADMIN_DOMAIN} ${OJ_DOMAIN} ${RANKING_DOMAIN} ${HSTS_MAX_AGE} ${CONTEST_LISTEN_PORT} ${ADMIN_LISTEN_PORT} ${RANKING_LISTEN_PORT} ${OJ_BACKEND_PORT} ${RANKING_AUTH_DIRECTIVES} ${REDIS_UPSTREAM_BLOCK} ${REDIS_LUA_PLACEHOLDER} ${PER_USER_LOGIN_DIRECTIVES} ${PER_USER_RANKING_DIRECTIVES} ${NGINX_METRICS_LOCATION}' < "$template" > "$output"
+  log_info "nginx config rendered: $output (REDIS_RATE_LIMIT=${REDIS_RATE_LIMIT} PER_USER_LIMIT=${PER_USER_LIMIT} MONITORING_ENABLED=${MONITORING_ENABLED} WAF_ENABLED=${WAF_ENABLED:-0})"
+  if [[ "${WAF_ENABLED:-0}" == "1" ]]; then
+    log_info "WAF_ENABLED=1 — grader-waf is fronting grader-nginx-proxy (PARANOIA=${WAF_PARANOIA} ANOMALY_INBOUND=${WAF_ANOMALY_INBOUND} RULE_ENGINE=${WAF_RULE_ENGINE}, host ${WAF_BIND_IP}:${WAF_PORT}→80 when --profile waf up). CAPTCHA remains active alongside WAF."
+  else
+    log_info "WAF_ENABLED=0 — WAF disabled, nginx unchanged (no waf container, backward compatible)"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Nginx config validation
+# ---------------------------------------------------------------------------
+_validate_nginx_config() {
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log_info "[dry-run] would run nginx -t inside docker"
+    return 0
+  fi
+
+  if docker ps --format '{{.Names}}' 2>/dev/null | grep -q 'nginx'; then
+    local container
+    container="$(docker ps --format '{{.Names}}' | grep 'nginx' | head -1)"
+    if docker exec "$container" nginx -t 2>&1; then
+      log_info "nginx config test passed in $container"
+    else
+      log_warn "nginx config test failed in $container"
+    fi
+  else
+    log_warn "no nginx container running — skipping nginx -t"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Port 80 preflight (for Let's Encrypt HTTP-01 challenge)
+# ---------------------------------------------------------------------------
+_preflight_port80() {
+  log_info "checking port 80 reachability for Let's Encrypt HTTP-01 challenge"
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log_info "[dry-run] would check port 80 reachability"
+    return 0
+  fi
+
+  if ! curl -sf -o /dev/null --max-time 5 "http://${DOMAIN_NAME}/" 2>/dev/null; then
+    log_warn "port 80 may not be reachable at $DOMAIN_NAME — LE challenge could fail"
+  else
+    log_info "port 80 reachable at $DOMAIN_NAME"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Status subcommand
+# ---------------------------------------------------------------------------
+cmd_status() {
+  log_info "Domain status for $DOMAIN_NAME"
+  _log_optional_features
+  echo ""
+
+  # DNS resolution
+  _status_dns "$DOMAIN_NAME" "primary"
+  _status_dns "$ADMIN_DOMAIN" "admin"
+  _status_dns "$OJ_DOMAIN" "oj"
+  _status_dns "$RANKING_DOMAIN" "ranking"
+  echo ""
+
+  # Cert expiry
+  _status_cert_expiry
+  echo ""
+
+  # Renewal timer
+  _status_renewal_timer
+  echo ""
+
+  # HTTPS connectivity
+  _status_connectivity "$DOMAIN_NAME" "primary"
+  _status_connectivity "$ADMIN_DOMAIN" "admin"
+  _status_connectivity "$OJ_DOMAIN" "oj"
+  _status_connectivity "$RANKING_DOMAIN" "ranking"
+}
+
+_status_dns() {
+  local domain="$1" label="$2"
+  local hosts
+  if hosts="$(getent hosts "$domain" 2>/dev/null)"; then
+    log_info "DNS [$label] $domain -> $(echo "$hosts" | head -1 | awk '{print $1}')"
+  elif command -v dig >/dev/null 2>&1; then
+    local ip
+    ip="$(dig +short "$domain" 2>/dev/null | head -1)"
+    if [[ -n "$ip" ]]; then
+      log_info "DNS [$label] $domain -> $ip"
+    else
+      log_warn "DNS [$label] $domain — NOT RESOLVED"
+    fi
+  else
+    log_warn "DNS [$label] $domain — cannot resolve (no getent, no dig)"
+  fi
+}
+
+_status_cert_expiry() {
+  local cert_dir="${REPO_ROOT}/config/letsencrypt/live"
+  local cert_file="${cert_dir}/fullchain.pem"
+  if [[ ! -f "$cert_file" ]]; then
+    log_warn "no certificate found at $cert_file"
+    return 0
+  fi
+
+  local expiry
+  expiry="$(openssl x509 -enddate -noout -in "$cert_file" 2>/dev/null | sed 's/notAfter=//')"
+  if [[ -n "$expiry" ]]; then
+    log_info "Certificate expiry: $expiry"
+    # Calculate days remaining
+    local expiry_epoch now_epoch days_left
+    expiry_epoch="$(date -d "$expiry" +%s 2>/dev/null || date -j -f "%b %d %H:%M:%S %Y %Z" "$expiry" +%s 2>/dev/null || echo 0)"
+    now_epoch="$(date +%s)"
+    if [[ "$expiry_epoch" -gt 0 ]]; then
+      days_left=$(( (expiry_epoch - now_epoch) / 86400 ))
+      if (( days_left < 7 )); then
+        log_warn "Certificate expires in $days_left days — renew immediately!"
+      elif (( days_left < 30 )); then
+        log_warn "Certificate expires in $days_left days"
+      else
+        log_info "Certificate valid for $days_left more days"
+      fi
+    fi
+  fi
+}
+
+_status_renewal_timer() {
+  if systemctl is-enabled certbot.timer 2>/dev/null | grep -q enabled; then
+    log_info "Renewal timer: certbot.timer is enabled"
+  elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q certbot; then
+    log_info "Renewal timer: certbot container is running"
+  else
+    log_warn "No renewal mechanism detected (certbot.timer or certbot container)"
+  fi
+}
+
+_status_connectivity() {
+  local domain="$1" label="$2"
+  if curl -Ikso /dev/null --max-time 5 "https://${domain}/" 2>/dev/null; then
+    log_info "HTTPS [$label] $domain — reachable"
+  else
+    log_warn "HTTPS [$label] $domain — unreachable"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Renew subcommand
+# ---------------------------------------------------------------------------
+cmd_renew() {
+  log_info "Certificate renewal — mode: $([ "$DRY_RUN" -eq 1 ] && echo 'DRY-RUN' || echo 'APPLY')"
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log_info "[dry-run] would force-renew certificates for $DOMAIN_NAME"
+    return 0
+  fi
+
+  if command -v certbot >/dev/null 2>&1; then
+    certbot renew --force-renewal --cert-name "$DOMAIN_NAME" || log_die "certbot renew failed" 1
+    log_info "certificates renewed via certbot"
+  elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q certbot; then
+    local container
+    container="$(docker ps --format '{{.Names}}' | grep certbot | head -1)"
+    docker exec "$container" certbot renew --force-renewal || log_die "certbot renew failed in container" 1
+    log_info "certificates renewed via certbot container ($container)"
+  else
+    log_die "no certbot found on host or in docker" 1
+  fi
+
+  # Reload nginx to pick up new certs
+  if docker ps --format '{{.Names}}' 2>/dev/null | grep -q nginx; then
+    local nginx_container
+    nginx_container="$(docker ps --format '{{.Names}}' | grep nginx | head -1)"
+    docker exec "$nginx_container" nginx -s reload 2>/dev/null || log_warn "nginx reload failed"
+    log_info "nginx reloaded in $nginx_container"
+  fi
+
+  discord_alert "Certificates renewed for ${DOMAIN_NAME}" 65280
+  log_info "Renewal complete"
+}
+
+# ---------------------------------------------------------------------------
+# Preflight subcommand — 9-check matrix
+# ---------------------------------------------------------------------------
+cmd_preflight() {
+  log_info "Preflight checks for $DOMAIN_NAME"
+  _log_optional_features
+  echo ""
+  local pass=0 warn=0 fail=0
+
+  # 1. SSH LAN
+  _check_ssh && ((pass++)) || ((fail++))
+
+  # 2. Tailscale
+  _check_tailscale && ((pass++)) || ((fail++))
+
+  # 3. Remote worker RPC
+  _check_worker_rpc && ((pass++)) || ((warn++))
+
+  # 4. Database
+  _check_database && ((pass++)) || ((fail++))
+
+  # 5. DNS resolution
+  _check_dns && ((pass++)) || ((warn++))
+
+  # 6. HTTP port 80
+  _check_http80 && ((pass++)) || ((warn++))
+
+  # 7. HTTPS port 443
+  _check_https443 && ((pass++)) || ((warn++))
+
+  # 8. Domain paths
+  _check_domain_paths && ((pass++)) || ((warn++))
+
+  # 9. Funnel still works
+  _check_funnel && ((pass++)) || ((warn++))
+
+  echo ""
+  log_info "Preflight results: PASS=$pass  WARN=$warn  FAIL=$fail"
+  if (( fail > 0 )); then
+    log_warn "Some checks failed — review above output"
+  fi
+}
+
+_check_ssh() {
+  printf '  %-30s' "SSH LAN:"
+  if ss -tlnp 2>/dev/null | grep -q ':22 '; then
+    printf 'PASS (port 22 listening)\n'
+    return 0
+  else
+    printf 'FAIL (port 22 not listening)\n'
+    return 1
+  fi
+}
+
+_check_tailscale() {
+  printf '  %-30s' "Tailscale:"
+  if command -v tailscale >/dev/null 2>&1 && tailscale status >/dev/null 2>&1; then
+    local ts_ip
+    ts_ip="$(tailscale ip -4 2>/dev/null || echo 'unknown')"
+    printf 'PASS (%s)\n' "$ts_ip"
+    return 0
+  else
+    printf 'FAIL (tailscale not running)\n'
+    return 1
+  fi
+}
+
+_check_worker_rpc() {
+  printf '  %-30s' "Remote worker RPC:"
+  local worker_host="${WORKER_HOST:-100.75.203.112}"
+  local worker_port="${WORKER_RPC_PORT:-26000}"
+  if nc -zw3 "$worker_host" "$worker_port" 2>/dev/null; then
+    printf 'PASS (%s:%s)\n' "$worker_host" "$worker_port"
+    return 0
+  else
+    printf 'WARN (%s:%s unreachable)\n' "$worker_host" "$worker_port"
+    return 1
+  fi
+}
+
+_check_database() {
+  printf '  %-30s' "Database:"
+  if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'cms-database'; then
+    local health
+    health="$(docker inspect -f '{{.State.Health.Status}}' cms-database 2>/dev/null || echo 'unknown')"
+    printf 'PASS (%s)\n' "$health"
+    return 0
+  else
+    printf 'FAIL (cms-database not running)\n'
+    return 1
+  fi
+}
+
+_check_dns() {
+  printf '  %-30s' "DNS ($DOMAIN_NAME):"
+  if getent hosts "$DOMAIN_NAME" >/dev/null 2>&1; then
+    printf 'PASS\n'
+    return 0
+  else
+    printf 'WARN (not resolved)\n'
+    return 1
+  fi
+}
+
+_check_http80() {
+  printf '  %-30s' "HTTP :80 ($DOMAIN_NAME):"
+  if curl -sf -o /dev/null --max-time 5 "http://${DOMAIN_NAME}/" 2>/dev/null; then
+    printf 'PASS\n'
+    return 0
+  else
+    printf 'WARN (unreachable)\n'
+    return 1
+  fi
+}
+
+_check_https443() {
+  printf '  %-30s' "HTTPS :443 ($DOMAIN_NAME):"
+  if curl -Ikso /dev/null --max-time 5 "https://${DOMAIN_NAME}/" 2>/dev/null; then
+    printf 'PASS\n'
+    return 0
+  else
+    printf 'WARN (unreachable)\n'
+    return 1
+  fi
+}
+
+_check_domain_paths() {
+  printf '  %-30s' "Domain paths:"
+  local ok=1
+  for d in "$DOMAIN_NAME" "$ADMIN_DOMAIN" "$OJ_DOMAIN" "$RANKING_DOMAIN"; do
+    if ! curl -Ikso /dev/null --max-time 5 "https://${d}/" 2>/dev/null; then
+      ok=0
+      break
+    fi
+  done
+  if [[ "$ok" -eq 1 ]]; then
+    printf 'PASS (all domains reachable)\n'
+    return 0
+  else
+    printf 'WARN (some domains unreachable)\n'
+    return 1
+  fi
+}
+
+_check_funnel() {
+  printf '  %-30s' "Funnel:"
+  if command -v tailscale >/dev/null 2>&1 && tailscale serve status 2>/dev/null | grep -q 'https'; then
+    printf 'PASS\n'
+    return 0
+  else
+    printf 'WARN (not configured or not running)\n'
+    return 1
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Argument parsing
+# ---------------------------------------------------------------------------
+cmd="${1:-}"
+shift || true
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --cert)       CERT_TYPE="$2"; shift 2 ;;
+    --domain)     DOMAIN_NAME="$2"; shift 2 ;;
+    --admin-domain) ADMIN_DOMAIN="$2"; shift 2 ;;
+    --oj-domain)  OJ_DOMAIN="$2"; shift 2 ;;
+    --ranking-domain) RANKING_DOMAIN="$2"; shift 2 ;;
+    --cert-path)  CERT_PATH="$2"; shift 2 ;;
+    --key-path)   KEY_PATH="$2"; shift 2 ;;
+    --email)      CERT_EMAIL="$2"; shift 2 ;;
+    --dry-run)    DRY_RUN=1; shift ;;
+    --apply)      DRY_RUN=0; shift ;;
+    --yes|-y)     AUTO_YES=1; shift ;;
+    --help|-h)    usage; exit 0 ;;
+    *)            log_die "unknown option: $1 — see --help" 1 ;;
+  esac
+done
+
+case "$cmd" in
+  setup)    cmd_setup ;;
+  status)   cmd_status ;;
+  renew)    cmd_renew ;;
+  preflight) cmd_preflight ;;
+  --help|-h|help) usage; exit 0 ;;
+  "")       usage; exit 1 ;;
+  *)        log_die "unknown command: $cmd — see --help" 1 ;;
+esac

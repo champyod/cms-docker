@@ -58,7 +58,10 @@ Commands:
   funnel setup|passwd|remove|status
                             public ts.net access behind basic auth (no tailnet)
   domain setup|status|renew|preflight
-                            grader.mwit.ac.th HTTPS domain lifecycle (TLS+Nginx+certs)
+                            <DOMAIN_NAME> HTTPS domain lifecycle (TLS+Nginx+certs)
+  config sync [--dry-run]   generate .env.* from config.toml
+  config edit               open config.toml in $EDITOR
+  config show               print current config.toml
   contest create            create contests from YAML
   update-server             shard-aware FULL server update (git+img+db+verify)
   update all                alias for update-server (full update)
@@ -205,7 +208,15 @@ handle_subcommand() {
       shift 2; exec bash scripts/__create_contests.sh "$@" ;;
     update-server) shift; exec bash scripts/__update-server.sh "$@" ;;
     domain) shift; exec bash scripts/__domain.sh "${@:-status}" ;;
-    *) return 1 ;;
+  config)
+    sub="${2:-sync}"
+    case "$sub" in
+      sync)  shift 2; exec bash scripts/__config_sync.sh "$@" ;;
+      edit)  ${EDITOR:-nano} config.toml ;;
+      show)  cat config.toml 2>/dev/null || echo "No config.toml — run: ./cms config sync" ;;
+      *) echo "usage: cms config <sync|edit|show> [--dry-run]" >&2; exit 2 ;;
+    esac ;;
+  *) return 1 ;;
   esac
 }
 

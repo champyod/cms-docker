@@ -17,6 +17,9 @@ codecov/
 .dev/
 test_logs/
 
+# Customizable CMS Configuration
+config.toml
+
 # Environment Configuration
 .env
 .env.*
