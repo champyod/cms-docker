@@ -164,6 +164,16 @@ tui::choose() {
 		--header "" -- "$@"
 }
 
+# tui::choose_multi "prompt" item... → space-separated items on stdout.
+tui::choose_multi() {
+	local prompt="${1:?usage: tui::choose_multi PROMPT ITEM...}"; shift
+	tui::_need_gum || return $?
+	tui::_prompt "$prompt"
+	"$GUM_BIN" choose --no-limit --cursor.foreground "$TUI_ACCENT" \
+		--selected.foreground "$TUI_ACCENT" --header.foreground "$TUI_ACCENT" \
+		--header "" -- "$@"
+}
+
 # tui::filter "prompt" item... → matched item on stdout.
 tui::filter() {
 	local prompt="${1:?usage: tui::filter PROMPT ITEM...}"; shift

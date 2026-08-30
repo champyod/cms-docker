@@ -63,7 +63,7 @@ server {
     }
 }
 
-# ── Server 2: grader.mwit.ac.th (contest + ranking + WS) ─────────
+# ── Server 2: ${DOMAIN_NAME} (contest + ranking + WS) ─────────
 server {
     listen 443 ssl http2;
     server_name ${DOMAIN_NAME};

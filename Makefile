@@ -54,185 +54,9 @@ help:
 # env — hardened merge flow
 # ---------------------------------------------------------------------------
 env:
-	@echo "Generating .env file..."
-	@# --- Template missing env files from examples with secret generation (only NEW files) ---
-	@if [ ! -f .env.core ] && [ -f .env.core.example ]; then \
-		CORE_PW=$$(openssl rand -base64 24 2>/dev/null | tr -d "/+= " | cut -c1-24); \
-		CORE_PW=$${CORE_PW:-cms$$(date +%s)}; \
-		sed "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$$CORE_PW|" .env.core.example > .env.core; \
-		echo "Templated .env.core from .env.core.example (generated POSTGRES_PASSWORD)"; \
-	fi
-	@if [ ! -f .env.admin ] && [ -f .env.admin.example ]; then \
-		RANK_PW=$$(openssl rand -base64 18 2>/dev/null | tr -d "/+= " | cut -c1-18); \
-		RANK_PW=$${RANK_PW:-rank$$(date +%s)}; \
-		sed "s|^RANKING_PASSWORD=.*|RANKING_PASSWORD=cms_ranking_$$RANK_PW|" .env.admin.example > .env.admin.tmp_rank && mv .env.admin.tmp_rank .env.admin; \
-		echo "Templated .env.admin (generated RANKING_PASSWORD)"; \
-		if grep -q "CHANGE_ME_GENERATE" .env.admin 2>/dev/null; then \
-			NEW_SECRET=$$(openssl rand -hex 32 2>/dev/null || echo "CHANGE_ME_GENERATE_FAILED"); \
-			if [ "$$NEW_SECRET" != "CHANGE_ME_GENERATE_FAILED" ]; then \
-				sed -i "s/CHANGE_ME_GENERATE_WITH_OPENSSL_RAND_HEX_32/$$NEW_SECRET/" .env.admin; \
-				echo "Generated AUTH_SECRET for new .env.admin"; \
-			fi; \
-		fi; \
-		echo "Templated .env.admin from .env.admin.example"; \
-	fi
-	@if [ ! -f .env.contest ] && [ -f .env.contest.example ]; then \
-		cp .env.contest.example .env.contest; \
-		if grep -q "^SECRET_KEY=$$" .env.contest 2>/dev/null || grep -q "^SECRET_KEY= *$$" .env.contest 2>/dev/null; then \
-			NEW_SECRET=$$(openssl rand -hex 32 2>/dev/null || echo ""); \
-			if [ -n "$$NEW_SECRET" ]; then \
-				sed -i "s/^SECRET_KEY=.*/SECRET_KEY=$$NEW_SECRET/" .env.contest; \
-				echo "Generated SECRET_KEY for new .env.contest"; \
-			fi; \
-		fi; \
-		echo "Templated .env.contest from .env.contest.example"; \
-	fi
-	@if [ ! -f .env.worker ] && [ -f .env.worker.example ]; then \
-		cp .env.worker.example .env.worker; \
-		echo "Templated .env.worker from .env.worker.example"; \
-	fi
-	@if [ ! -f .env.infra ] && [ -f .env.infra.example ]; then \
-		cp .env.infra.example .env.infra; \
-		echo "Templated .env.infra from .env.infra.example"; \
-	fi
-	@echo "# Auto-generated .env file from .env.* files" > .env
-	@echo "" >> .env
-	@# Core Environment
-	@if [ -f .env.core ]; then \
-		echo "### .env.core ###" >> .env; \
-		cat .env.core >> .env; \
-		echo "" >> .env; \
-	elif [ -f .env.core.example ]; then \
-		echo "### .env.core.example (Template used - please create .env.core) ###" >> .env; \
-		cat .env.core.example >> .env; \
-		echo "" >> .env; \
-		echo "WARNING: Using .env.core.example template"; \
-	fi
-	@# Admin Environment
-	@if [ -f .env.admin ]; then \
-		echo "### .env.admin ###" >> .env; \
-		cat .env.admin >> .env; \
-		echo "" >> .env; \
-	elif [ -f .env.admin.example ]; then \
-		echo "### .env.admin.example (Template used - please create .env.admin) ###" >> .env; \
-		cat .env.admin.example >> .env; \
-		echo "" >> .env; \
-		echo "WARNING: Using .env.admin.example template"; \
-	fi
-	@# Contest Environment
-	@if [ -f .env.contest ]; then \
-		echo "### .env.contest ###" >> .env; \
-		cat .env.contest >> .env; \
-		echo "" >> .env; \
-	elif [ -f .env.contest.example ]; then \
-		echo "### .env.contest.example (Template used - please create .env.contest) ###" >> .env; \
-		cat .env.contest.example >> .env; \
-		echo "" >> .env; \
-		echo "WARNING: Using .env.contest.example template"; \
-	fi
-	@# Worker Environment
-	@if [ -f .env.worker ]; then \
-		echo "### .env.worker ###" >> .env; \
-		cat .env.worker >> .env; \
-		echo "" >> .env; \
-	elif [ -f .env.worker.example ]; then \
-		echo "### .env.worker.example (Template used - please create .env.worker) ###" >> .env; \
-		cat .env.worker.example >> .env; \
-		echo "" >> .env; \
-		echo "WARNING: Using .env.worker.example template"; \
-	fi
-	@# Infra Environment
-	@if [ -f .env.infra ]; then \
-		echo "### .env.infra ###" >> .env; \
-		cat .env.infra >> .env; \
-		echo "" >> .env; \
-	elif [ -f .env.infra.example ]; then \
-		echo "### .env.infra.example (Template used - please create .env.infra) ###" >> .env; \
-		cat .env.infra.example >> .env; \
-		echo "" >> .env; \
-		echo "WARNING: Using .env.infra.example template"; \
-	fi
-	@# Local Environment
-	@if [ -f .env.local ]; then \
-		echo "### .env.local ###" >> .env; \
-		cat .env.local >> .env; \
-		echo "" >> .env; \
-	fi
-	@# Domain variables (DOMAIN_NAME, CERT_TYPE, HSTS_MAX_AGE, OFFSITE_*, SOCKET_PROXY, MONITOR_ENHANCED)
-	@# are passed through to .env automatically via the cat merges above.
-	@# Legacy map: ACTIVE_CONTEST_ID → CONTEST_ID
-	@ACTIVE_VAL=$$(grep "^ACTIVE_CONTEST_ID=" .env.contest 2>/dev/null | cut -d '=' -f2- | tr -d '\r' | xargs); \
-	CONTEST_VAL=$$(grep "^CONTEST_ID=" .env 2>/dev/null | grep -v "^#" | cut -d '=' -f2- | tr -d '\r' | xargs); \
-	if [ -n "$$ACTIVE_VAL" ] && [ -z "$$CONTEST_VAL" ]; then \
-		echo "CONTEST_ID=$$ACTIVE_VAL" >> .env; \
-		echo "[deprecated] ACTIVE_CONTEST_ID is deprecated, use CONTEST_ID (mapped $$ACTIVE_VAL → CONTEST_ID)" >&2; \
-	fi
-	@# Map CMS_DOMAIN → CONTEST_DOMAIN when ACCESS_METHOD=domain
-	@CMS_DOM=$$(grep "^CMS_DOMAIN=" .env.core 2>/dev/null | cut -d '=' -f2- | tr -d '\r' | xargs); \
-	EXIST_DOM=$$(grep "^CONTEST_DOMAIN=" .env 2>/dev/null | grep -v "^#" | cut -d '=' -f2- | tr -d '\r' | xargs); \
-	if [ -n "$$CMS_DOM" ] && [ -z "$$EXIST_DOM" ]; then \
-		echo "CONTEST_DOMAIN=$$CMS_DOM" >> .env; \
-		echo "Mapped CMS_DOMAIN=$$CMS_DOM → CONTEST_DOMAIN"; \
-	fi
-	@chmod 600 .env
-	@# Generate admin-panel/.env for Prisma and Next.js
-	@echo "Generating admin-panel/.env..."
-	@if [ -f .env.core ]; then \
-		DB_USER=$$(grep "^POSTGRES_USER=" .env.core | cut -d '=' -f2- | tr -d '\r' | xargs); \
-		DB_PASS=$$(grep "^POSTGRES_PASSWORD=" .env.core | cut -d '=' -f2- | tr -d '\r' | xargs); \
-		DB_NAME=$$(grep "^POSTGRES_DB=" .env.core | cut -d '=' -f2- | tr -d '\r' | xargs); \
-		DB_HOST=$$(grep "^POSTGRES_HOST=" .env.core | cut -d '=' -f2- | tr -d '\r' | xargs); \
-		DB_PORT=$$(grep "^POSTGRES_PORT=" .env.core | cut -d '=' -f2- | tr -d '\r' | xargs); \
-		DB_PORT=$${DB_PORT:-5432}; \
-		echo "DATABASE_URL=\"postgresql://$$DB_USER:$$DB_PASS@localhost:$$DB_PORT/$$DB_NAME\"" > admin-panel/.env; \
-		if [ -f .env.admin ]; then \
-			AUTH_SECRET=$$(grep "^AUTH_SECRET=" .env.admin | cut -d '=' -f2- | tr -d '\r' | xargs); \
-			[ -n "$$AUTH_SECRET" ] && echo "AUTH_SECRET=$$AUTH_SECRET" >> admin-panel/.env; \
-		fi; \
-		chmod 600 admin-panel/.env 2>/dev/null || true; \
-	else \
-		echo "# Please configure .env.core first" > admin-panel/.env; \
-		chmod 600 admin-panel/.env 2>/dev/null || true; \
-	fi
-	@# Configuration Files
-	@if [ -d config/cms.toml ]; then \
-		echo "Removing directory config/cms.toml (created by Docker volumes)..."; \
-		rm -rf config/cms.toml; \
-	fi
-	@if [ ! -f config/cms.toml ]; then \
-		echo "Refreshing config/cms.toml from sample..."; \
-		cp config/cms.sample.toml config/cms.toml; \
-	fi
-	@if [ -d config/cms.ranking.toml ]; then \
-		echo "Removing directory config/cms.ranking.toml (created by Docker volumes)..."; \
-		rm -rf config/cms.ranking.toml; \
-	fi
-	@if [ ! -f config/cms.ranking.toml ]; then \
-		echo "Copying config/cms.ranking.sample.toml to config/cms.ranking.toml..."; \
-		cp config/cms.ranking.sample.toml config/cms.ranking.toml; \
-		echo "Setting bind address to 0.0.0.0 in config/cms.ranking.toml..."; \
-		sed -i 's/"127.0.0.1"/"0.0.0.0"/g' config/cms.ranking.toml; \
-	fi
-	@echo "Injecting database configuration and service addresses into config/cms.toml..."; \
-	chmod +x scripts/__inject_config.sh && ./scripts/__inject_config.sh;
-	@if [ -f config/cms_ranking.toml ]; then \
-		echo "Updating config/cms_ranking.toml..."; \
-		sed -i 's/"127.0.0.1"/"0.0.0.0"/g' config/cms_ranking.toml; \
-	fi
-	fi
-	@mkdir -p backups && touch backups/.gitkeep
-	@echo "Ensured backups/.gitkeep exists (monitor mount needs host dir)"
-	@echo "Hint: if running monitor non-root, ensure ownership: chown 1000:1000 backups (or match container UID)"
-	@echo ".env file generated. You can now run: ./cms   (one-stop bootstrap)"
-	@if [ -x scripts/__preflight.sh ]; then \
-		echo "Running preflight checks..."; \
-		./scripts/__preflight.sh; \
-	elif [ -f scripts/__preflight.sh ]; then \
-		echo "Running preflight checks..."; \
-		bash scripts/__preflight.sh; \
-	else \
-		echo "preflight.sh missing — skipping preflight checks"; \
-	fi
+	@echo "[deprecated] 'make env' is now an alias for './cms config sync'"
+	@echo "  Edit config.toml, then run: ./cms config sync"
+	@bash scripts/__config_sync.sh
 
 # ---------------------------------------------------------------------------
 # Canonical profile targets — DEPLOYMENT_TYPE=img → pull + up --no-build, src → up --build
@@ -243,8 +67,6 @@ env:
 setup:
 	@./cms $(CMS_ARGS)
 
-
-# Source Build Targets (Development)
 core:
 	@DEPLOY_TYPE="$${DEPLOYMENT_TYPE_OVERRIDE:-}"; \
 	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env.admin 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
@@ -540,32 +362,6 @@ backup:
 		echo "ERROR: cms-monitor not running and scripts/__backup.sh not found or not executable." >&2; \
 		exit 1; \
 	fi
-
-# Image Based Targets (Production/User)
-core-img:
-	docker compose -f docker-compose.core.img.yml up -d
-
-admin-img:
-	docker compose -f docker-compose.admin.img.yml up -d
-
-worker-img:
-	docker compose -f docker-compose.worker.img.yml up -d
-
-# Utilities
-pull:
-	docker compose -f docker-compose.core.img.yml -f docker-compose.admin.img.yml -f docker-compose.worker.img.yml pull
-
-cms-init:
-	docker compose -f docker-compose.core.yml run --rm log-service cmsInitDB
-
-create-admin:
-	docker compose -f docker-compose.core.yml run --rm log-service cmsAddAdmin
-
-up:
-	docker compose -f docker-compose.core.img.yml -f docker-compose.admin.img.yml -f docker-compose.worker.img.yml up -d
-
-down:
-	docker compose -f docker-compose.core.yml -f docker-compose.admin.yml -f docker-compose.worker.yml -f docker-compose.core.img.yml -f docker-compose.admin.img.yml -f docker-compose.worker.img.yml down
 
 clean:
 	rm -f .env

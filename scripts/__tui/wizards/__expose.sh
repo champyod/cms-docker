@@ -112,7 +112,7 @@ apply_row() {  # idx mode — identical effects to the legacy exposure TUI
       fi ;;
     domain)
       env_set "$f" "$k" "127.0.0.1"
-      log_info "domain mode: service binds localhost, nginx reverse-proxies via $(env_val .env.core CMS_DOMAIN 2>/dev/null || echo your-domain.com)"
+      log_info "domain mode: service binds localhost, nginx reverse-proxies via $(env_val .env.core CMS_DOMAIN 2>/dev/null || echo cms.local)"
       ;;
   esac
 
@@ -133,9 +133,99 @@ url_hint() {  # idx mode -> human URL preview
   esac
   case "$2" in
     ts-https) echo "https://<node>.ts.net:$(serve_hp "$1")" ;;
-    domain)   echo "https://$(env_val .env.core CMS_DOMAIN 2>/dev/null || echo your-domain.com)/" ;;
+    domain)   echo "https://$(env_val .env.core CMS_DOMAIN 2>/dev/null || echo cms.local)/" ;;
     public)   echo "http://<host>:$port" ;;
     ts-http)  echo "http://<ts-ip>:$port" ;;
     *)        echo "localhost only" ;;
   esac
 }
+
+show_matrix() {  # PENDING[idx] vs live state, as a gum table (plain cat fallback)
+  local i
+  printf 'service\twiring (active → planned)\turl hint\n'
+  for i in "${!ROWS[@]}"; do
+    printf '%s\t%s → %s\t%s\n' \
+      "$(row_field "${ROWS[$i]}" name)" \
+      "$(detect_mode "$i")" "${PENDING[$i]}" \
+      "$(url_hint "$i" "${PENDING[$i]}")"
+  done | tui::table
+}
+
+recreate_prompt() {  # offer stack recreation for changed rows (admin/contest split)
+  local da=0 dc=0 i name stacks=""
+  for i in ${CHANGED[@]+"${CHANGED[@]}"}; do
+    name="$(row_field "${ROWS[$i]}" name)"
+    case "$name" in classic-admin|ranking|admin-panel) da=1 ;; contest-web|nginx-front) dc=1 ;; esac
+  done
+  [ "$da" = 1 ] && stacks+=" admin"
+  [ "$dc" = 1 ] && stacks+=" contest"
+  [ -z "$stacks" ] && return 0
+  CHANGED=()
+  tui::confirm "Recreate stack(s)$stacks now?" || {
+    log_info "Apply later with: ./cms deploy$stacks --img"
+    return 0
+  }
+  tui::audit "expose.recreate" "$stacks"
+  [ "$da" = 1 ] && { DEPLOYMENT_TYPE_OVERRIDE=img make -s admin || make -s admin; }
+  [ "$dc" = 1 ] && { DEPLOYMENT_TYPE_OVERRIDE=img make -s contest || make -s contest; }
+}
+
+pick_mode() {  # idx -> chosen mode (respects per-row support matrix)
+  local idx="$1" opts=() m
+  for m in "${MODES[@]}"; do
+    if [ "$m" = ts-https ] && ! supports_ts_https "$idx"; then continue; fi
+    if [ "$m" = domain ] && [ "$(row_field "${ROWS[$idx]}" name)" = nginx-front ]; then continue; fi
+    opts+=("$m")
+  done
+  tui::choose "Wiring for $(row_field "${ROWS[$idx]}" name):" "${opts[@]}"
+}
+
+apply_pending_all() {  # re-assert every row's planned wiring, then recreate stacks
+  local i
+  CHANGED=()
+  for i in "${!ROWS[@]}"; do
+    apply_row "$i" "${PENDING[$i]}" || true
+    CHANGED+=("$i")
+  done
+  recreate_prompt
+}
+
+wizard_loop() {
+  local i sel names=()
+  for i in "${!ROWS[@]}"; do names+=("$(row_field "${ROWS[$i]}" name)"); done
+  while :; do
+    show_matrix
+    sel="$(tui::choose "UI exposure — pick a service:" \
+      "${names[@]}" "Apply ALL planned wiring" "Quit")" || exit 0
+    case "$sel" in
+      "Apply ALL planned wiring") apply_pending_all ;;
+      Quit) exit 0 ;;
+      *)
+        for i in "${!ROWS[@]}"; do [ "${names[$i]}" = "$sel" ] && break; done
+        mode="$(pick_mode "$i")" || continue
+        PENDING[$i]="$mode"
+        apply_row "$i" "$mode" || true
+        CHANGED+=("$i")
+        recreate_prompt ;;
+    esac
+  done
+}
+
+init_pending() {
+  local i
+  PENDING=()
+  for i in "${!ROWS[@]}"; do PENDING+=("$(detect_mode "$i")"); done
+  CHANGED=()
+}
+
+main() {
+  cd "$(dirname "${BASH_SOURCE[0]}")/../../.." || exit 1
+  tui::init || die "expose needs an interactive terminal (>=80x24)"
+  [ -f "$ADMIN_ENV" ] || die "$ADMIN_ENV missing — run ./cms first"
+  [ -f "$CONTEST_ENV" ] || die "$CONTEST_ENV missing — run ./cms first"
+  init_pending
+  tui::header "CMS UI Exposure"
+  wizard_loop
+}
+
+if [[ "$TUI_STANDALONE" == 1 ]]; then main "$@"; fi

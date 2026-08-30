@@ -304,20 +304,56 @@ ask_var() {
     prompt_var "$file" "$key" "$type" "$required" "$default_spec" "$fresh"
 }
 
+
+select_services() {
+  local defaults="core admin contest worker infra"
+  if declare -F tui::choose_multi >/dev/null 2>&1; then
+    SERVICES_SELECTED=$(tui::choose_multi \
+      "Select services to configure on this node" \
+      "core" "admin" "contest" "worker" "infra")
+  else
+    echo "  Services [core,admin,contest,worker,infra]: "
+    read -r ans
+    SERVICES_SELECTED="${ans:-$defaults}"
+  fi
+  # Ensure spaces for filtering
+  SERVICES_SELECTED=" ${SERVICES_SELECTED//,/ } "
+}
+
+filter_specs() {
+  ACTIVE_SPECS=()
+  for spec in "${VAR_SPECS[@]}"; do
+    IFS='|' read -r section file key type required default <<<"$spec"
+    case "$section" in
+      "Core & Network") service="core" ;;
+      "Admin Panel")    service="admin" ;;
+      "Contest")        service="contest" ;;
+      "Worker")         service="worker" ;;
+      "Infra & Monitoring") service="infra" ;;
+      *) service="none" ;;
+    esac
+    if [[ " $SERVICES_SELECTED " == *" $service "* ]]; then
+      ACTIVE_SPECS+=("$spec")
+    fi
+  done
+}
+
 run_tui_vars_wizard() {
-    local total=${#VAR_SPECS[@]}
+    select_services
+    filter_specs
+    local total=${#ACTIVE_SPECS[@]}
     print_step "Interactive variable review — ${total} vars (j/k move, e edit, c keep, a apply all, q quit)"
     show_vars_table
     declare -A __pending
     local spec section file key type required default
-    for spec in "${VAR_SPECS[@]}"; do
+    for spec in "${ACTIVE_SPECS[@]}"; do
         IFS='|' read -r section file key type required default <<<"$spec"
         __pending["$key"]=$(get_var "$file" "$key")
     done
     while true; do
         echo ""
         local options=()
-        for spec in "${VAR_SPECS[@]}"; do
+        for spec in "${ACTIVE_SPECS[@]}"; do
             IFS='|' read -r section file key type required default <<<"$spec"
             local cur=$(get_var "$file" "$key")
             local def=$(get_default_for "$file" "$key"); [ -z "$def" ] && def="$default"
@@ -346,11 +382,51 @@ run_tui_vars_wizard() {
             *)
                 local sel_key
                 sel_key=$(echo "$choice" | awk '{print $1}')
-                for spec in "${VAR_SPECS[@]}"; do
+                for spec in "${ACTIVE_SPECS[@]}"; do
                     IFS='|' read -r section file key type required default <<<"$spec"
                     if [ "$key" = "$sel_key" ]; then
                         CURRENT_SECTION="$section"
                         ensure_env_file "$file"
+                        local act
+                        act=$(tui::choose "Action for $key ($file) — e edit / c keep / u default / q back" "e) edit value" "c) confirm keep" "u) update to default" "q) back") || break
+                        case "$act" in
+                            e* )
+                                local newval
+                                newval=$(prompt_var "$file" "$key" "$type" "$required" "$default" "$FRESH")
+                                __pending["$key"]="$newval"
+                                local cur0
+                                cur0=$(get_var "$file" "$key")
+                                if [ "$newval" = "$cur0" ] && [ "$FRESH" -eq 0 ]; then
+                                    record_stat "$section" kept
+                                else
+                                    apply_var "$file" "$key" "$newval" changed
+                                fi
+                                ;;
+                            c* )
+                                record_stat "$section" kept
+                                ;;
+                            u* )
+                                local def2
+                                def2=$(get_default_for "$file" "$key"); [ -z "$def2" ] && def2="$default"
+                                local gen
+                                gen=$(generate_for "$key" "$default"); [ -z "$gen" ] && gen="$def2"
+                                if [ -n "$gen" ]; then
+                                    __pending["$key"]="$gen"
+                                    apply_var "$file" "$key" "$gen" changed
+                                else
+                                    print_warning "No default/generator for $key — keeping current."
+                                    record_stat "$section" kept
+                                fi
+                                ;;
+                            *) : ;;
+                        esac
+                        show_vars_table
+                        break
+                    fi
+                done
+                ;;
+        esac
+    done
                         local act
                         act=$(tui::choose "Action for $key ($file) — e edit / c keep / u default / q back" "e) edit value" "c) confirm keep" "u) update to default" "q) back") || break
                         case "$act" in
@@ -581,7 +657,7 @@ VAR_SPECS=(
   "Admin Panel|.env.admin|CMS_RANKING_LOG_DIR|str||/var/local/log/cms/ranking"
   "Admin Panel|.env.admin|CMS_RANKING_LIB_DIR|str||/var/local/lib/cms/ranking"
   "Contest|.env.contest|CONTEST_ID|num||1"
-  "Contest|.env.contest|CONTEST_DOMAIN|str||grader.mwit.ac.th"
+  "Contest|.env.contest|CONTEST_DOMAIN|str||cms.local"
   "Contest|.env.contest|CONTEST_LISTEN_PORT|port||8888"
   "Contest|.env.contest|CONTEST_LISTEN_ADDRESS|str||0.0.0.0"
   "Contest|.env.contest|ACTIVE_CONTEST_PORT|port||8888"
@@ -621,10 +697,10 @@ VAR_SPECS=(
   "Infra & Monitoring|.env.infra|BACKUP_MAX_COUNT|num||50"
   "Infra & Monitoring|.env.infra|BACKUP_MAX_AGE_DAYS|num||10"
   "Infra & Monitoring|.env.infra|BACKUP_MAX_SIZE_GB|num||5"
-  "Infra & Monitoring|.env.infra|DOMAIN_NAME|str||grader.mwit.ac.th"
+  "Infra & Monitoring|.env.infra|DOMAIN_NAME|str||cms.local"
   "Infra & Monitoring|.env.infra|DOMAIN_CERT_METHOD|str||letsencrypt"
   "Infra & Monitoring|.env.infra|HSTS_MAX_AGE|num||300"
-  "Infra & Monitoring|.env.infra|OFFSITE_TAILNET_NODE|str||100.75.203.112"
+  "Infra & Monitoring|.env.infra|OFFSITE_TAILNET_NODE|str||""
   "Infra & Monitoring|.env.infra|OFFSITE_ENCRYPT_KEY|secret||"
   "Infra & Monitoring|.env.infra|OFFSITE_BACKUP_PATH|str||/var/local/backups/cms"
   "Infra & Monitoring|.env.infra|SOCKET_PROXY|enum:0,1||0"
