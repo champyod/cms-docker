@@ -48,17 +48,32 @@ fn run_app<B: ratatui::backend::Backend>(
         if event::poll(std::time::Duration::from_millis(50))? {
             if let Event::Key(key) = event::read()? {
                 if app.current_route() == &app::Route::Actions {
+                    // Menu keys are consumed by the Actions page; all other
+                    // keys fall through to the global bindings below so page
+                    // switching, going back (Esc), and quitting (q) still work.
                     match key.code {
                         KeyCode::Down | KeyCode::Char('j' | 'k') | KeyCode::Up => {
                             app.actions_menu.handle_key(key.code);
+                            continue;
                         }
-                        KeyCode::Enter => app.run_selected_action(),
+                        KeyCode::Enter => {
+                            app.run_selected_action();
+                            continue;
+                        }
                         _ => {}
                     }
-                    continue;
                 }
                 match key.code {
-                    KeyCode::Char('q') | KeyCode::Esc => {
+                    KeyCode::Char('q') => {
+                        if app.current_route() == &app::Route::Actions {
+                            app.quit();
+                        } else if app.can_pop() {
+                            app.pop_route();
+                        } else {
+                            app.quit();
+                        }
+                    }
+                    KeyCode::Esc => {
                         if app.can_pop() {
                             app.pop_route();
                         } else {
