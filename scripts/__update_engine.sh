@@ -427,46 +427,6 @@ run_tui_vars_wizard() {
                 ;;
         esac
     done
-                        local act
-                        act=$(tui::choose "Action for $key ($file) — e edit / c keep / u default / q back" "e) edit value" "c) confirm keep" "u) update to default" "q) back") || break
-                        case "$act" in
-                            e* )
-                                local newval
-                                newval=$(prompt_var "$file" "$key" "$type" "$required" "$default" "$FRESH")
-                                __pending["$key"]="$newval"
-                                local cur0
-                                cur0=$(get_var "$file" "$key")
-                                if [ "$newval" = "$cur0" ] && [ "$FRESH" -eq 0 ]; then
-                                    record_stat "$section" kept
-                                else
-                                    apply_var "$file" "$key" "$newval" changed
-                                fi
-                                ;;
-                            c* )
-                                record_stat "$section" kept
-                                ;;
-                            u* )
-                                local def2
-                                def2=$(get_default_for "$file" "$key"); [ -z "$def2" ] && def2="$default"
-                                local gen
-                                gen=$(generate_for "$key" "$default"); [ -z "$gen" ] && gen="$def2"
-                                if [ -n "$gen" ]; then
-                                    __pending["$key"]="$gen"
-                                    apply_var "$file" "$key" "$gen" changed
-                                else
-                                    print_warning "No default/generator for $key — keeping current."
-                                    record_stat "$section" kept
-                                fi
-                                ;;
-                            *) : ;;
-                        esac
-                        show_vars_table
-                        break
-                    fi
-                done
-                ;;
-        esac
-    done
 }
 
 gen_hex32()  { openssl rand -hex 32 2>/dev/null || python3 -c 'import secrets; print(secrets.token_hex(16))'; }
@@ -700,7 +660,7 @@ VAR_SPECS=(
   "Infra & Monitoring|.env.infra|DOMAIN_NAME|str||cms.local"
   "Infra & Monitoring|.env.infra|DOMAIN_CERT_METHOD|str||letsencrypt"
   "Infra & Monitoring|.env.infra|HSTS_MAX_AGE|num||300"
-  "Infra & Monitoring|.env.infra|OFFSITE_TAILNET_NODE|str||""
+  "Infra & Monitoring|.env.infra|OFFSITE_TAILNET_NODE|str||"
   "Infra & Monitoring|.env.infra|OFFSITE_ENCRYPT_KEY|secret||"
   "Infra & Monitoring|.env.infra|OFFSITE_BACKUP_PATH|str||/var/local/backups/cms"
   "Infra & Monitoring|.env.infra|SOCKET_PROXY|enum:0,1||0"
