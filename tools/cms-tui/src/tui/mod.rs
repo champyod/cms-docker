@@ -55,10 +55,6 @@ async fn run_app<B: ratatui::backend::Backend>(
                     KeyCode::Char('3') => app.push_route(app::Route::Customization),
                     KeyCode::Char('4') => app.push_route(app::Route::Security),
                     KeyCode::Char('5') => app.push_route(app::Route::Maintenance),
-                    // Trigger a test TTY drop command
-                    KeyCode::Char('t') => {
-                        let _ = app.run_command_in_tty("echo 'This is a simulated docker-up output' && echo 'Container foo started'");
-                    }
                     _ => {}
                 }
             }
