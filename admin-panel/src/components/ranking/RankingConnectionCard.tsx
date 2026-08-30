@@ -33,7 +33,7 @@ export function RankingConnectionCard({
   return (
     <Card>
       <Stack direction="col" gap={4}>
-        <Input label="Ranking Base URL" value={baseUrl} onChange={(e) => onBaseUrl(e.target.value)} placeholder="http://100.114.35.41:8890" disabled={connected || loadingSession} />
+        <Input label="Ranking Base URL" value={baseUrl} onChange={(e) => onBaseUrl(e.target.value)} placeholder="http://<ranking-server>:8890" disabled={connected || loadingSession} />
         <Stack direction="row" gap={4} className="w-full">
           <Input label="Username" value={username} onChange={(e) => onUsername(e.target.value)} placeholder="rank" disabled={connected || loadingSession} />
           <Input label="Password" type="password" value={password} onChange={(e) => onPassword(e.target.value)} placeholder="••••••••" disabled={connected || loadingSession} />

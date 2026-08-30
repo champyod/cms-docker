@@ -112,7 +112,11 @@ apply_row() {  # idx mode — identical effects to the legacy exposure TUI
       fi ;;
     domain)
       env_set "$f" "$k" "127.0.0.1"
+<<<<<<< HEAD:scripts/__tui/wizards/expose.sh
       log_info "domain mode: service binds localhost, nginx reverse-proxies via $(env_val .env.core CMS_DOMAIN 2>/dev/null || echo grader.mwit.ac.th)"
+=======
+      log_info "domain mode: service binds localhost, nginx reverse-proxies via $(env_val .env.core CMS_DOMAIN 2>/dev/null || echo cms.local)"
+>>>>>>> feat/customizable-cms:scripts/__tui/wizards/__expose.sh
       ;;
   esac
 
@@ -133,7 +137,11 @@ url_hint() {  # idx mode -> human URL preview
   esac
   case "$2" in
     ts-https) echo "https://<node>.ts.net:$(serve_hp "$1")" ;;
+<<<<<<< HEAD:scripts/__tui/wizards/expose.sh
     domain)   echo "https://$(env_val .env.core CMS_DOMAIN 2>/dev/null || echo grader.mwit.ac.th)/" ;;
+=======
+    domain)   echo "https://$(env_val .env.core CMS_DOMAIN 2>/dev/null || echo cms.local)/" ;;
+>>>>>>> feat/customizable-cms:scripts/__tui/wizards/__expose.sh
     public)   echo "http://<host>:$port" ;;
     ts-http)  echo "http://<ts-ip>:$port" ;;
     *)        echo "localhost only" ;;

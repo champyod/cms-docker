@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# scripts/__tui/engine.sh — shared engine for the CMS gum-based TUI.
+# scripts/__tui/__engine.sh — shared engine for the CMS gum-based TUI.
 #
 # Usage (from any script):
-#   source scripts/__tui/engine.sh
+#   source scripts/__tui/__engine.sh
 #   if tui::init; then ... tui::choose "Pick" a b c ...
 #   else             tui::plain; <legacy plain-CLI path>; fi
 #
@@ -160,6 +160,16 @@ tui::choose() {
 	tui::_need_gum || return $?
 	tui::_prompt "$prompt"
 	"$GUM_BIN" choose --cursor.foreground "$TUI_ACCENT" \
+		--selected.foreground "$TUI_ACCENT" --header.foreground "$TUI_ACCENT" \
+		--header "" -- "$@"
+}
+
+# tui::choose_multi "prompt" item... → space-separated items on stdout.
+tui::choose_multi() {
+	local prompt="${1:?usage: tui::choose_multi PROMPT ITEM...}"; shift
+	tui::_need_gum || return $?
+	tui::_prompt "$prompt"
+	"$GUM_BIN" choose --no-limit --cursor.foreground "$TUI_ACCENT" \
 		--selected.foreground "$TUI_ACCENT" --header.foreground "$TUI_ACCENT" \
 		--header "" -- "$@"
 }

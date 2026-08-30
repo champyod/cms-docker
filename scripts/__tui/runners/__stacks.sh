@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/__tui/runners/stacks.sh — stack chooser for deploy/stop/clean/pull.
+# scripts/__tui/runners/__stacks.sh — stack chooser for deploy/stop/clean/pull.
 #
 # Make invocations mirror ./cms dispatch byte-for-byte:
 #   deploy N          -> make N            (--img adds DEPLOYMENT_TYPE_OVERRIDE=img)
@@ -10,8 +10,8 @@
 # Long makes stream straight to the terminal after confirmation (no capture).
 
 _STACKS_TUI_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
-# shellcheck source=../engine.sh
-source "$_STACKS_TUI_DIR/engine.sh"
+# shellcheck source=../__engine.sh
+source "$_STACKS_TUI_DIR/__engine.sh"
 
 STACKS_DEPLOY_ORDER=(core infra admin contest worker)
 STACKS_STOP_ORDER=(core admin contest worker infra)

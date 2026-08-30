@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# scripts/__tui/menus/update-server.sh — guarded wrapper around the
+# scripts/__tui/menus/__update-server.sh — guarded wrapper around the
 # shard-aware server update flow (__update-server.sh), streamed directly.
 
 _US_TUI_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 _US_SCRIPTS="$(cd -- "$_US_TUI_DIR/../.." && pwd -P)/scripts"
-# shellcheck source=../engine.sh
-source "$_US_TUI_DIR/engine.sh"
+# shellcheck source=../__engine.sh
+source "$_US_TUI_DIR/__engine.sh"
 
 update_server_menu::run() {
 	local desc="Shard-aware server update"

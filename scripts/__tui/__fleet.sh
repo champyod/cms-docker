@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# scripts/__tui/fleet.sh — gum TUI for the CMS worker fleet (P3).
-# Rebuild of scripts/__worker_tui.sh over __tui/engine.sh. Registry stays
+# scripts/__tui/__fleet.sh — gum TUI for the CMS worker fleet (P3).
+# Rebuild of scripts/__worker_tui.sh over __tui/__engine.sh. Registry stays
 # byte-compatible: WORKER_<shard>=<host>:<port> in .env.core plus optional
 # WORKER_SHARD<n>_{LOCAL,MEMORY,CPU} flags in .env.worker. Deploy/stop/delete
 # delegate to scripts/__worker_tui.sh so docker invocations stay identical.

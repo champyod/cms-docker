@@ -73,10 +73,17 @@ print(json.dumps(body))
 # ---------------------------------------------------------------------------
 # Defaults
 # ---------------------------------------------------------------------------
+<<<<<<< HEAD
 DOMAIN_NAME="${DOMAIN_NAME:-grader.mwit.ac.th}"
 ADMIN_DOMAIN="${ADMIN_DOMAIN:-admin.grader.mwit.ac.th}"
 OJ_DOMAIN="${OJ_DOMAIN:-oj.grader.mwit.ac.th}"
 RANKING_DOMAIN="${RANKING_DOMAIN:-ranking.grader.mwit.ac.th}"
+=======
+DOMAIN_NAME="${DOMAIN_NAME:-cms.local}"
+ADMIN_DOMAIN="${ADMIN_DOMAIN:-admin.cms.local}"
+OJ_DOMAIN="${OJ_DOMAIN:-oj.cms.local}"
+RANKING_DOMAIN="${RANKING_DOMAIN:-ranking.cms.local}"
+>>>>>>> feat/customizable-cms
 CERT_TYPE="${CERT_TYPE:-letsencrypt}"
 CERT_PATH=""
 KEY_PATH=""
@@ -133,10 +140,17 @@ Commands:
 
 Options (setup):
   --cert <letsencrypt|provided|selfsigned>  Certificate type (default: letsencrypt)
+<<<<<<< HEAD
   --domain <domain>           Primary domain (default: grader.mwit.ac.th)
   --admin-domain <domain>     Admin subdomain (default: admin.grader.mwit.ac.th)
   --oj-domain <domain>        OJ subdomain (default: oj.grader.mwit.ac.th)
   --ranking-domain <domain>   Ranking subdomain (default: ranking.grader.mwit.ac.th)
+=======
+  --domain <domain>           Primary domain (default: cms.local)
+  --admin-domain <domain>     Admin subdomain (default: admin.cms.local)
+  --oj-domain <domain>        OJ subdomain (default: oj.cms.local)
+  --ranking-domain <domain>   Ranking subdomain (default: ranking.cms.local)
+>>>>>>> feat/customizable-cms
   --cert-path <path>          Path to fullchain.pem (required for --cert provided)
   --key-path <path>           Path to privkey.pem (required for --cert provided)
   --email <email>             Email for Let's Encrypt registration

@@ -54,6 +54,7 @@ help:
 # env — hardened merge flow
 # ---------------------------------------------------------------------------
 env:
+<<<<<<< HEAD
 	@echo "Generating .env file..."
 	@# --- Template missing env files from examples with secret generation (only NEW files) ---
 	@if [ ! -f .env.core ] && [ -f .env.core.example ]; then \
@@ -222,6 +223,11 @@ env:
 	else \
 		echo "preflight.sh missing — skipping preflight checks"; \
 	fi
+=======
+	@echo "[deprecated] 'make env' is now an alias for './cms config sync'"
+	@echo "  Edit config.toml, then run: ./cms config sync"
+	@bash scripts/__config_sync.sh
+>>>>>>> feat/customizable-cms
 
 # ---------------------------------------------------------------------------
 # Canonical profile targets — DEPLOYMENT_TYPE=img → pull + up --no-build, src → up --build

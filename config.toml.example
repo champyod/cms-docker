@@ -1,0 +1,149 @@
+# config.toml — Single source of truth for CMS deployment.
+# Run `./cms config sync` after editing to regenerate .env.* files.
+# This file is gitignored. Only config.toml.example is tracked.
+
+[core]
+ACCESS_METHOD = "public_port"    # str; "public_port" or "domain"; see .env.core.example for details
+PUBLIC_IP = "0.0.0.0"           # str; your VPS public IP; live_ip auto-detects
+TAILSCALE_IP = ""               # str; Tailscale IP for RPC; empty=127.0.0.1 only
+REMOTE_WORKERS_ENABLED = false  # bool
+CMS_DOMAIN = "cms.local"        # str; base domain; sub-services are admin.${CMS_DOMAIN} etc.
+POSTGRES_HOST = "database"      # str
+POSTGRES_PORT = 5432            # port
+POSTGRES_PORT_EXTERNAL = 5432   # port
+POSTGRES_DB = "cmsdb"           # str
+POSTGRES_USER = "cmsuser"       # str
+POSTGRES_PASSWORD = ""          # secret; auto-generated if empty on first sync
+POSTGRES_HOST_AUTH_METHOD = "md5"
+CMS_CONFIG = "/usr/local/etc/cms.toml"
+LOG_SERVICE_SHARD = 0           # num
+RESOURCE_SERVICE_SHARD = 0      # num
+SCORING_SERVICE_SHARD = 0       # num
+EVALUATION_SERVICE_SHARD = 0    # num
+PROXY_SERVICE_SHARD = 0         # num
+CHECKER_SERVICE_SHARD = 0       # num
+CMS_LOG_DIR = "/var/local/log/cms"
+CMS_CACHE_DIR = "/var/local/cache/cms"
+CMS_DATA_DIR = "/var/local/lib/cms"
+IMG_TAG = "major-admin-panel"   # str
+APT_MIRROR = "archive.ubuntu.com"
+MTLS_WORKERS_ENABLED = 0        # enum:0,1; price: $0 self-CA; warning: cert distribution
+MTLS_CA_CERT = "config/mtls/ca.pem"
+MTLS_WORKER_CERT = "config/mtls/worker.pem"
+MTLS_WORKER_KEY = "config/mtls/worker-key.pem"
+
+[admin]
+DEPLOYMENT_TYPE = "img"         # enum:img,src
+ADMIN_LISTEN_ADDRESS = "0.0.0.0"
+ADMIN_LISTEN_PORT = 8889        # port
+ADMIN_PORT_EXTERNAL = 8889      # port
+ADMIN_NEXT_PORT_EXTERNAL = 8891 # port
+ADMIN_NEXT_DOMAIN = "admin-next.cms.local"
+VITE_API_URL = "http://localhost:8889"
+SERVER_BASE_URL = "http://localhost"
+ADMIN_DOMAIN = "admin.cms.local"
+ADMIN_COOKIE_DURATION = 36000   # num; seconds
+AUTH_SECRET = ""                # secret; auto-generated hex32 if empty
+CAPTCHA_ENABLED = 0             # enum:0,1; effect: reduces brute-force before fail2ban
+CAPTCHA_PROVIDER = "turnstile"  # enum:turnstile,hcaptcha; only used if CAPTCHA_ENABLED=1
+CAPTCHA_SITE_KEY = ""           # str
+CAPTCHA_SECRET_KEY = ""         # secret
+CAPTCHA_THRESHOLD = 3           # num
+CAPTCHA_BAN_THRESHOLD = 5       # num
+RANKING_LISTEN_ADDRESS = "0.0.0.0"
+RANKING_LISTEN_PORT = 8890      # port
+RANKING_PORT_EXTERNAL = 8890    # port
+RANKING_DOMAIN = "ranking.cms.local"
+RANKING_USERNAME = "admin"      # str
+RANKING_PASSWORD = ""           # secret; auto-generated if empty
+CMS_RANKING_LOG_DIR = "/var/local/log/cms/ranking"
+CMS_RANKING_LIB_DIR = "/var/local/lib/cms/ranking"
+DOMAIN_NAME = ""                # str; primary FQDN (e.g. grader.example.org); empty=cms.local
+DOMAIN_CERT_METHOD = "letsencrypt" # enum:letsencrypt,provided,selfsigned
+HSTS_MAX_AGE = 300              # num; seconds; 31536000=1yr prod; 300=staging
+SOCKET_PROXY = 0                # enum:0,1
+MONITOR_ENHANCED = 0            # enum:0,1
+REDIS_RATE_LIMIT = 0            # enum:0,1
+PER_USER_LIMIT = 1              # num
+REDIS_HOST = "redis-rate-limit" # str
+REDIS_PORT = 6379               # port
+WAF_ENABLED = 0                 # enum:0,1; warning: tune DetectionOnly 1 week first
+WAF_PORT = 8080                 # port
+WAF_PARANOIA = 1                # num
+WAF_ANOMALY_INBOUND = 5         # num
+
+[contest]
+CONTEST_ID = 1                  # num
+CONTEST_DOMAIN = ""             # str; FQDN contestants use; empty=CMS_DOMAIN
+CONTEST_LISTEN_PORT = 8888      # port
+CONTEST_LISTEN_ADDRESS = "0.0.0.0"
+SECRET_KEY = ""                 # secret; auto-generated hex32 if empty
+COOKIE_DURATION = 10800         # num; seconds
+ACCESS_METHOD = "public_port"   # enum:public_port,domain
+NUM_PROXIES_USED = 1            # num
+MAX_SUBMISSION_LENGTH = 100000  # num
+MAX_INPUT_LENGTH = 5000000      # num
+SUBMIT_LOCAL_COPY = true        # bool
+CONTEST_WEB_CPU_LIMIT = "2"     # str
+CONTEST_WEB_MEMORY_LIMIT = "2G" # str
+ENABLE_TLS = false              # bool
+
+[worker]
+CORE_SERVICES_HOST = "cms-log-service" # str; remote workers: main server IP
+WORKER_SHARD = 0                # num; MUST be unique per instance
+WORKER_NAME = "worker-0"        # str
+WORKER_PORT = 26000             # port
+WORKER_REPLICAS = 1             # num
+WORKER_CPU_LIMIT = "2"          # str
+WORKER_MEMORY_LIMIT = "2G"      # str
+WORKER_CPU_RESERVATION = "1"    # str
+WORKER_MEMORY_RESERVATION = "1G"
+ISOLATE_CGROUP_CONTROL = 1      # enum:0,1
+ISOLATE_CGROUP_PATH = "/sys/fs/cgroup/cms-isolate"
+KEEP_SANDBOX = false            # bool
+MAX_FILE_SIZE = 1048576         # num; KB
+
+[infra]
+DISCORD_WEBHOOK_URL = ""        # url; optional
+DISCORD_ROLE_ID = ""            # str
+MONITOR_CPU_THRESHOLD = 80      # num; percent
+MONITOR_MEM_THRESHOLD = 80      # num
+MONITOR_DISK_THRESHOLD = 80     # num
+MONITOR_INTERVAL = 10           # num; seconds
+MONITOR_COOLDOWN = 300          # num; seconds
+DISK_PATH = "/host"             # str
+BACKUP_INTERVAL_MINS = 1440     # num
+BACKUP_MAX_COUNT = 50           # num
+BACKUP_MAX_AGE_DAYS = 10        # num
+BACKUP_MAX_SIZE_GB = 5          # num
+DOCKER_GID = 999                # num; find with: stat -c %g /var/run/docker.sock
+OFFSITE_TAILNET_NODE = ""       # str; Tailscale IP of remote backup node
+OFFSITE_ENCRYPT_KEY = ""        # secret; openssl rand -hex 32
+OFFSITE_BACKUP_PATH = "/var/local/backups/cms"
+MONITORING_ENABLED = 0          # enum:0,1
+PROMETHEUS_PORT = 9090          # port
+PROMETHEUS_BIND_IP = "127.0.0.1"
+GRAFANA_PORT = 3001             # port
+GRAFANA_BIND_IP = "127.0.0.1"
+GRAFANA_ADMIN_USER = "admin"    # str
+GRAFANA_PASSWORD = ""           # secret; default 'admin' is insecure
+GRAFANA_ROOT_URL = "http://localhost:3001/"
+HSM_ENABLED = 0                 # enum:0,1; price: $0 SoftHSM | ~$800 YubiHSM 2
+HSM_MODULE = "softhsm"          # enum:softhsm,yubihsm,cloudhsm
+HSM_PIN = ""                    # secret
+HSM_KEY_LABEL = "grader-privkey"
+VAULT_ENABLED = 0               # enum:0,1; price: $0 self-hosted | ~$0.40/secret/mo cloud
+VAULT_ADDR = "http://vault:8200"
+VAULT_TOKEN = ""                # secret
+VAULT_PATH = "secret/cms"
+DNSSEC_ENABLED = 0              # enum:0,1; requires DNS control
+CAA_ENABLED = 0                 # enum:0,1
+CAA_ISSUER = "letsencrypt.org"
+MTLS_WORKERS_ENABLED = 0        # enum:0,1; mirrors [core]
+WAF_ENABLED = 0                 # enum:0,1; mirrors [admin]
+WAF_PORT = 8080
+WAF_BIND_IP = "127.0.0.1"
+WAF_PARANOIA = 1
+WAF_ANOMALY_INBOUND = 5
+WAF_ANOMALY_OUTBOUND = 4
+WAF_RULE_ENGINE = "DetectionOnly"

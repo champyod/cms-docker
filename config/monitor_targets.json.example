@@ -12,7 +12,11 @@
 [
   {
     "id": "grader-root",
+<<<<<<< HEAD
     "url": "https://grader.mwit.ac.th/",
+=======
+    "url": "https://cms.local/",
+>>>>>>> feat/customizable-cms
     "interval": 60,
     "timeout": 5,
     "expectedStatus": 200,
@@ -20,7 +24,11 @@
   },
   {
     "id": "admin-panel",
+<<<<<<< HEAD
     "url": "https://admin.grader.mwit.ac.th/",
+=======
+    "url": "https://admin.cms.local/",
+>>>>>>> feat/customizable-cms
     "interval": 60,
     "timeout": 5,
     "expectedStatus": 200,
