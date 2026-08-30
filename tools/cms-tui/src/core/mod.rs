@@ -6,6 +6,7 @@
 pub mod config;
 pub mod docker;
 pub mod model;
+pub mod runner;
 pub mod scripts;
 
 pub use model::*;
