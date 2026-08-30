@@ -1,30 +1,191 @@
-use clap::Subcommand;
-use std::error::Error;
-use crate::core::docker::DockerClient;
-use crate::core::scripts::execute_script;
+use clap::{Subcommand, ValueEnum};
 
-#[derive(Subcommand, Debug)]
-pub enum Commands {
-    /// Deploy CMS components
-    Deploy {
-        #[arg(short, long)]
-        target: String,
-    },
-    /// Execute a maintenance script
-    Run {
-        script_name: String,
-    }
+pub mod commands;
+
+/// Database lifecycle subcommands (`db <init|reset|clean|sync>`).
+#[derive(ValueEnum, Clone, Debug)]
+pub enum DbSub {
+    Init,
+    Reset,
+    Clean,
+    Sync,
 }
 
-pub async fn handle_command(cmd: Commands) -> Result<(), Box<dyn Error>> {
-    match cmd {
-        Commands::Deploy { target } => {
-            let client = DockerClient::new()?;
-            client.run_compose("up", &target).await?;
-        }
-        Commands::Run { script_name } => {
-            execute_script(&script_name)?;
-        }
-    }
-    Ok(())
+/// Backup subcommands (`backup [drill|offsite]`; None = default backup).
+#[derive(ValueEnum, Clone, Debug)]
+pub enum BackupSub {
+    Drill,
+    Offsite,
+}
+
+/// Secrets subcommands (`secrets <rotate|audit|generate>`).
+#[derive(ValueEnum, Clone, Debug)]
+pub enum SecretsSub {
+    Rotate,
+    Audit,
+    Generate,
+}
+
+/// Worker fleet subcommands (`worker <edit|deploy|stop|list|server|connect|cgroup>`).
+#[derive(ValueEnum, Clone, Debug)]
+pub enum WorkerSub {
+    Edit,
+    Deploy,
+    Stop,
+    List,
+    Server,
+    Connect,
+    Cgroup,
+}
+
+/// Tailscale subcommands (`tailscale <setup|status|remove>`).
+#[derive(ValueEnum, Clone, Debug)]
+pub enum TailscaleSub {
+    Setup,
+    Status,
+    Remove,
+}
+
+/// Funnel subcommands (`funnel <setup|passwd|remove|status>`).
+#[derive(ValueEnum, Clone, Debug)]
+pub enum FunnelSub {
+    Setup,
+    Passwd,
+    Remove,
+    Status,
+}
+
+/// Domain subcommands (`domain <setup|status|renew|preflight>`).
+#[derive(ValueEnum, Clone, Debug)]
+pub enum DomainSub {
+    Setup,
+    Status,
+    Renew,
+    Preflight,
+}
+
+/// Config subcommands (`config <sync|edit|show>`).
+#[derive(ValueEnum, Clone, Debug)]
+pub enum ConfigSub {
+    Sync,
+    Edit,
+    Show,
+}
+
+/// Contest subcommands (`contest <create>`).
+#[derive(ValueEnum, Clone, Debug)]
+pub enum ContestSub {
+    Create,
+}
+
+/// Full-parity CLI, mirroring the `cms` bash dispatcher.
+#[derive(Subcommand, Debug)]
+pub enum Commands {
+    /// First-time guided setup (fresh or update wizard).
+    Setup,
+    /// Interactive config update wizard; `--all` aliases `update all` (full server update).
+    Update {
+        /// Perform full server update (alias for `update all` / `update-server`).
+        #[arg(long, default_value_t = false)]
+        all: bool,
+    },
+    /// Non-interactive repair of missing/insecure config.
+    Fix,
+    /// Deploy a stack (`core|admin|contest|worker|infra|all`) with optional `--img`.
+    Deploy {
+        /// Target stack to deploy.
+        target: String,
+        /// Use pre-built images (`--img`).
+        #[arg(long, default_value_t = false)]
+        img: bool,
+    },
+    /// Stop one stack or all (`stop [stack]`).
+    Stop {
+        /// Stack to stop (default: all).
+        #[arg(default_value = "all")]
+        stack: String,
+    },
+    /// Clean one stack or all (`clean [stack]`).
+    Clean {
+        /// Stack to clean (default: all).
+        #[arg(default_value = "all")]
+        stack: String,
+    },
+    /// Pull images for one stack or all (`pull [stack]`).
+    Pull {
+        /// Stack to pull (default: all).
+        #[arg(default_value = "all")]
+        stack: String,
+    },
+    /// Database lifecycle shortcuts (`db <init|reset|clean|sync>`).
+    Db {
+        #[arg(value_enum)]
+        sub: DbSub,
+    },
+    /// Create superadmin account.
+    AdminCreate,
+    /// Live service status dashboard.
+    Status,
+    /// Monitoring/backup operations UI.
+    Monitor,
+    /// Run backup now; `drill` tests restore; `offsite` syncs remote.
+    Backup {
+        #[arg(value_enum)]
+        sub: Option<BackupSub>,
+    },
+    /// Restore a backup archive (`restore <archive>`).
+    Restore {
+        /// Archive to restore.
+        archive: String,
+    },
+    /// Secrets lifecycle (`secrets <rotate|audit|generate>`).
+    Secrets {
+        #[arg(value_enum)]
+        sub: SecretsSub,
+    },
+    /// Preflight environment checks.
+    Doctor,
+    /// Smoke-test the deployment.
+    Test,
+    /// Worker fleet commands (`worker <edit|deploy|stop|list|server|connect|cgroup>`).
+    Worker {
+        #[arg(value_enum)]
+        sub: WorkerSub,
+    },
+    /// Tailnet HTTPS front (`tailscale <setup|status|remove>`).
+    Tailscale {
+        #[arg(value_enum)]
+        sub: TailscaleSub,
+    },
+    /// Pick local/public/tailscale wiring per UI.
+    Expose,
+    /// Public ts.net access behind basic auth (`funnel <setup|passwd|remove|status>`).
+    Funnel {
+        #[arg(value_enum)]
+        sub: FunnelSub,
+    },
+    /// Contest management (`contest create`).
+    Contest {
+        #[arg(value_enum)]
+        sub: ContestSub,
+    },
+    /// Shard-aware full server update (git+img+db+verify).
+    UpdateServer,
+    /// Domain HTTPS lifecycle (`domain <setup|status|renew|preflight>`).
+    Domain {
+        #[arg(value_enum)]
+        sub: DomainSub,
+    },
+    /// Config lifecycle (`config <sync|edit|show>`).
+    Config {
+        #[arg(value_enum)]
+        sub: ConfigSub,
+    },
+}
+
+/// Dispatch a parsed `Commands` to the stub handlers in `commands`.
+///
+/// Kept as the public entry called from `main.rs`.
+pub async fn handle_command(cmd: Commands) -> Result<(), Box<dyn std::error::Error>> {
+    commands::handle(cmd).await
 }

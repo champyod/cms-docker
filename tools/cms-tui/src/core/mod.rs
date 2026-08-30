@@ -3,9 +3,9 @@
 // with Docker, executing bash scripts, and managing configurations.
 // It is used by both the CLI and TUI frontends.
 
-pub mod model;
-pub mod docker;
-pub mod scripts;
 pub mod config;
+pub mod docker;
+pub mod model;
+pub mod scripts;
 
 pub use model::*;

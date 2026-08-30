@@ -3,6 +3,7 @@ pub mod components;
 pub mod pages;
 
 use app::App;
+use components::template;
 use crossterm::{
     event::{self, Event, KeyCode},
     execute,
@@ -24,7 +25,7 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
     terminal.show_cursor()?;
 
     if let Err(err) = res {
-        println!("{:?}", err)
+        eprintln!("cms-tui error: {:?}", err)
     }
 
     Ok(())
@@ -34,16 +35,16 @@ async fn run_app<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
     app: &mut App,
 ) -> io::Result<()> {
-    while !app.should_quit {
+    while !app.is_quitting() {
         terminal.draw(|f| {
-            components::template::render(f, app);
+            template::render(f, app);
         })?;
 
         if event::poll(std::time::Duration::from_millis(50))? {
             if let Event::Key(key) = event::read()? {
                 match key.code {
                     KeyCode::Char('q') | KeyCode::Esc => {
-                        if app.route_stack.len() > 1 {
+                        if app.can_pop() {
                             app.pop_route();
                         } else {
                             app.quit();
@@ -52,6 +53,8 @@ async fn run_app<B: ratatui::backend::Backend>(
                     KeyCode::Char('1') => app.push_route(app::Route::Dashboard),
                     KeyCode::Char('2') => app.push_route(app::Route::Actions),
                     KeyCode::Char('3') => app.push_route(app::Route::Customization),
+                    KeyCode::Char('4') => app.push_route(app::Route::Security),
+                    KeyCode::Char('5') => app.push_route(app::Route::Maintenance),
                     // Trigger a test TTY drop command
                     KeyCode::Char('t') => {
                         let _ = app.run_command_in_tty("echo 'This is a simulated docker-up output' && echo 'Container foo started'");
