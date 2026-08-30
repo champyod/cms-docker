@@ -10,6 +10,10 @@
 # under scripts/__*.sh and are invoked from here — never run them directly.
 #
 # Usage: ./cms.sh [--no-sample] [--skip step1,step2] [--yes] [-h]
+# Re-exec under bash if invoked via sh (e.g. from the TUI Rust binary using sh -c).
+# shellcheck disable=SC2128
+[ -z "${BASH_VERSION:-}" ] && exec bash -- "$0" "$@"
+
 set -euo pipefail
 
 cd "$(dirname "$0")"
