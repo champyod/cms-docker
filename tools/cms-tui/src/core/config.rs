@@ -17,6 +17,10 @@ pub enum ConfigError {
 ///
 /// Skips blank lines and `#` comments; strips an optional `export ` prefix so
 /// values written for shells are loaded into the map unchanged.
+///
+/// # Errors
+///
+/// Returns `Err` if the file cannot be read or a line lacks `=` separator.
 pub fn read_env_file(path: &Path) -> Result<BTreeMap<String, String>, ConfigError> {
     let content = fs::read_to_string(path)?;
     let mut map = BTreeMap::new();
@@ -38,6 +42,10 @@ pub fn read_env_file(path: &Path) -> Result<BTreeMap<String, String>, ConfigErro
 }
 
 /// Reads and parses a TOML configuration file into a generic value tree.
+///
+/// # Errors
+///
+/// Returns `Err` if the file cannot be read or contains invalid TOML.
 pub fn read_toml(path: &Path) -> Result<toml::Value, ConfigError> {
     let content = fs::read_to_string(path)?;
     Ok(toml::from_str(&content)?)
@@ -45,6 +53,10 @@ pub fn read_toml(path: &Path) -> Result<toml::Value, ConfigError> {
 
 /// Returns the content of the CMS config file, or an actionable fallback
 /// message when the file has not been generated yet (mirrors `cms config show`).
+///
+/// # Errors
+///
+/// Returns `Err` if the file exists but cannot be read.
 pub fn config_show(path: &Path) -> Result<String, ConfigError> {
     if path.is_file() {
         return fs::read_to_string(path).map_err(ConfigError::Io);

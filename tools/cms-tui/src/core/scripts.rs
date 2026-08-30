@@ -13,6 +13,10 @@ pub enum ScriptError {
 ///
 /// Allowing `..`, `/`, or a leading `-` would let an untrusted input resolve
 /// outside the scripts dir or be parsed as an `sh` option.
+///
+/// # Errors
+///
+/// Returns `Err` if `script` is empty, contains traversal, or starts with `-`.
 pub fn validate_script_name(script: &str) -> Result<(), ScriptError> {
     if script.is_empty() || script.contains("..") || script.contains('/') || script.starts_with('-')
     {
@@ -22,6 +26,10 @@ pub fn validate_script_name(script: &str) -> Result<(), ScriptError> {
 }
 
 /// Executes `scripts/<script>` in the repo root and returns the exit code.
+///
+/// # Errors
+///
+/// Returns `Err` if validation fails or the script fails to spawn.
 pub fn execute_script(script: &str, args: &[&str]) -> Result<i32, ScriptError> {
     validate_script_name(script)?;
     let runner = Runner::new()?;

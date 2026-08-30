@@ -47,10 +47,10 @@ fn draw_breadcrumbs(f: &mut Frame, area: Rect, app: &App) {
     let trail = app
         .route_stack()
         .iter()
-        .map(|route| route.to_string())
+        .map(ToString::to_string)
         .collect::<Vec<_>>()
         .join(" > ");
-    let crumb = Paragraph::new(format!(" {} ", trail))
+    let crumb = Paragraph::new(format!(" {trail} "))
         .style(Style::default().fg(Color::Cyan))
         .block(Block::default().borders(Borders::ALL));
     f.render_widget(crumb, area);

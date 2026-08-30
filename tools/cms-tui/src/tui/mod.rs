@@ -12,11 +12,16 @@ use ratatui::Terminal;
 use std::error::Error;
 use std::io;
 
-pub async fn run() -> Result<(), Box<dyn Error>> {
+/// Runs the TUI event loop.
+///
+/// # Errors
+///
+/// Returns `Err` if terminal initialization fails.
+pub fn run() -> Result<(), Box<dyn Error>> {
     let mut terminal = app::run()?;
     let mut app = App::new();
 
-    let res = run_app(&mut terminal, &mut app).await;
+    let res = run_app(&mut terminal, &mut app);
 
     // Restore terminal
     let mut stdout = io::stdout();
@@ -25,13 +30,13 @@ pub async fn run() -> Result<(), Box<dyn Error>> {
     terminal.show_cursor()?;
 
     if let Err(err) = res {
-        eprintln!("cms-tui error: {:?}", err)
+        eprintln!("cms-tui error: {err:?}");
     }
 
     Ok(())
 }
 
-async fn run_app<B: ratatui::backend::Backend>(
+fn run_app<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
     app: &mut App,
 ) -> io::Result<()> {

@@ -31,6 +31,10 @@ impl Runner {
     ///
     /// Walks up from the crate directory until a `Makefile` + `cms` are found;
     /// errors otherwise so callers fail fast rather than run in the wrong dir.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if the repo root markers are not found.
     pub fn new() -> Result<Self, RunError> {
         let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let root = Self::find_repo_root(&crate_dir)
@@ -38,6 +42,11 @@ impl Runner {
         Ok(Self { cwd: root })
     }
 
+    /// Runs `make <target>` in the repo root.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if `make` fails to spawn.
     pub fn run_make(&self, target: &str, envs: &[(&str, &str)]) -> Result<i32, RunError> {
         let mut cmd = Command::new("make");
         cmd.current_dir(&self.cwd).arg(target);
@@ -51,6 +60,11 @@ impl Runner {
         Ok(status.code().unwrap_or(-1))
     }
 
+    /// Runs `scripts/<script>` via `sh` in the repo root.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if the script fails to spawn.
     pub fn run_sh(&self, script: &str, args: &[&str]) -> Result<i32, RunError> {
         let script_path = self.cwd.join("scripts").join(script);
         let mut cmd = Command::new("sh");
@@ -67,27 +81,7 @@ impl Runner {
         Ok(status.code().unwrap_or(-1))
     }
 
-    pub async fn run_make_async(
-        &self,
-        target: &str,
-        envs: &[(&str, &str)],
-    ) -> Result<i32, RunError> {
-        let mut cmd = tokio::process::Command::new("make");
-        cmd.current_dir(&self.cwd)
-            .arg(target)
-            .stdin(Stdio::null())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit());
-        for (key, value) in envs {
-            cmd.env(key, value);
-        }
-        let status = cmd.status().await.map_err(|source| RunError::Spawn {
-            program: "make".into(),
-            source,
-        })?;
-        Ok(status.code().unwrap_or(-1))
-    }
-
+    #[must_use]
     pub fn repo_root(&self) -> &Path {
         &self.cwd
     }

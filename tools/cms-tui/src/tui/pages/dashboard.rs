@@ -8,7 +8,7 @@ use ratatui::{
     Frame,
 };
 
-fn status_color(status: &ServiceStatus) -> Color {
+const fn status_color(status: &ServiceStatus) -> Color {
     match status {
         ServiceStatus::Up => Color::Green,
         ServiceStatus::Down => Color::Red,
@@ -18,7 +18,7 @@ fn status_color(status: &ServiceStatus) -> Color {
     }
 }
 
-fn status_label(status: &ServiceStatus) -> &'static str {
+const fn status_label(status: &ServiceStatus) -> &'static str {
     match status {
         ServiceStatus::Up => "Up",
         ServiceStatus::Down => "Down",
@@ -32,7 +32,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
     let count = app.state.services.len();
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(format!(" Infrastructure Overview — {} services ", count))
+        .title(format!(" Infrastructure Overview — {count} services "))
         .style(Style::default().fg(Color::Cyan));
 
     if app.state.services.is_empty() {

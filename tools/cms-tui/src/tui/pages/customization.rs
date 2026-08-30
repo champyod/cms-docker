@@ -11,7 +11,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
     let count = app.state.configs.len();
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(format!(" Customization — {} config files ", count))
+        .title(format!(" Customization — {count} config files "))
         .style(Style::default().fg(Color::Cyan));
 
     if app.state.configs.is_empty() {

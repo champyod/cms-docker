@@ -22,6 +22,7 @@ pub struct StepReport {
 }
 
 impl StepReport {
+    #[must_use]
     pub fn is_success(&self) -> bool {
         self.steps.iter().all(|(_, code)| *code == 0)
     }
@@ -36,12 +37,22 @@ pub struct DockerClient {
 }
 
 impl DockerClient {
+    /// Creates a client rooted at the CMS repo.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if the CMS repo root cannot be located.
     pub fn new() -> Result<Self, RunError> {
         Ok(Self {
             runner: Runner::new()?,
         })
     }
 
+    /// Deploys the requested stack via `make`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if `stack` is unknown or empty.
     pub fn deploy(&self, stack: &str, img: bool) -> Result<StepReport, DockerError> {
         let envs: Vec<(&str, &str)> = if img {
             vec![("DEPLOYMENT_TYPE_OVERRIDE", "img")]
@@ -60,22 +71,37 @@ impl DockerClient {
         Ok(report)
     }
 
+    /// Stops the requested stack via `make`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if `stack` is unknown.
     pub fn stop(&self, stack: &str) -> Result<StepReport, DockerError> {
         let targets = stop_targets(stack)?;
-        self.run_targets(targets)
+        Ok(self.run_targets(targets))
     }
 
+    /// Cleans the requested stack via `make`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if `stack` is unknown.
     pub fn clean(&self, stack: &str) -> Result<StepReport, DockerError> {
         let targets = clean_targets(stack)?;
-        self.run_targets(targets)
+        Ok(self.run_targets(targets))
     }
 
+    /// Pulls images for the requested stack via `make`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if `stack` is unknown.
     pub fn pull(&self, stack: &str) -> Result<StepReport, DockerError> {
         let targets = pull_targets(stack)?;
-        self.run_targets(targets)
+        Ok(self.run_targets(targets))
     }
 
-    fn run_targets(&self, targets: Vec<String>) -> Result<StepReport, DockerError> {
+    fn run_targets(&self, targets: Vec<String>) -> StepReport {
         let mut report = StepReport::default();
         for target in targets {
             let code = self
@@ -84,16 +110,21 @@ impl DockerClient {
                 .unwrap_or_else(|err| log_spawn_error(&target, &err));
             report.steps.push((target, code));
         }
-        Ok(report)
+        report
     }
 }
 
+/// Resolves deploy make targets for `stack`.
+///
+/// # Errors
+///
+/// Returns `Err` if `stack` is empty or unknown.
 pub fn deploy_targets(stack: &str) -> Result<Vec<String>, DockerError> {
     if stack.is_empty() {
         return Err(DockerError::MissingStack);
     }
     if stack == "all" {
-        return Ok(DEPLOY_ALL_ORDER.iter().map(|s| s.to_string()).collect());
+        return Ok(DEPLOY_ALL_ORDER.iter().map(ToString::to_string).collect());
     }
     if ALL_STACKS.contains(&stack) {
         return Ok(vec![stack.to_string()]);
@@ -101,6 +132,11 @@ pub fn deploy_targets(stack: &str) -> Result<Vec<String>, DockerError> {
     Err(DockerError::UnknownStack(stack.to_string()))
 }
 
+/// Resolves stop make targets for `stack`.
+///
+/// # Errors
+///
+/// Returns `Err` if `stack` is unknown.
 pub fn stop_targets(stack: &str) -> Result<Vec<String>, DockerError> {
     if stack.is_empty() || stack == "all" {
         return Ok(ALL_STACKS.iter().map(|s| format!("{s}-stop")).collect());
@@ -115,6 +151,10 @@ pub fn stop_targets(stack: &str) -> Result<Vec<String>, DockerError> {
 ///
 /// `clean all` maps to a single destructive `make clean` (per `./cms`), unlike
 /// stop which loops the per-stack stops.
+///
+/// # Errors
+///
+/// Returns `Err` if `stack` is unknown.
 pub fn clean_targets(stack: &str) -> Result<Vec<String>, DockerError> {
     if stack.is_empty() || stack == "all" {
         return Ok(vec!["clean".to_string()]);
@@ -125,6 +165,11 @@ pub fn clean_targets(stack: &str) -> Result<Vec<String>, DockerError> {
     Err(DockerError::UnknownStack(stack.to_string()))
 }
 
+/// Resolves pull make targets for `stack`.
+///
+/// # Errors
+///
+/// Returns `Err` if `stack` is empty or unknown.
 pub fn pull_targets(stack: &str) -> Result<Vec<String>, DockerError> {
     if stack.is_empty() || stack == "all" {
         return Ok(vec!["pull".to_string()]);

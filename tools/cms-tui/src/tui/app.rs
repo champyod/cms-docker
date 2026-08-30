@@ -12,7 +12,7 @@ use std::fmt;
 use std::io::{self, Write};
 use std::process::Command;
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Route {
     Dashboard,
     Actions,
@@ -24,16 +24,16 @@ pub enum Route {
 impl fmt::Display for Route {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Route::Dashboard => write!(f, "Dashboard"),
-            Route::Actions => write!(f, "Actions & Deployment"),
-            Route::Customization => write!(f, "Customization"),
-            Route::Security => write!(f, "Security"),
-            Route::Maintenance => write!(f, "Maintenance"),
+            Self::Dashboard => write!(f, "Dashboard"),
+            Self::Actions => write!(f, "Actions & Deployment"),
+            Self::Customization => write!(f, "Customization"),
+            Self::Security => write!(f, "Security"),
+            Self::Maintenance => write!(f, "Maintenance"),
         }
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum WorkingPopup {
     Blinking,
     TtyDropped,
@@ -49,6 +49,7 @@ pub struct App {
 }
 
 impl App {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             route_stack: vec![Route::Dashboard],
@@ -60,27 +61,33 @@ impl App {
         }
     }
 
+    #[must_use]
     pub fn current_route(&self) -> &Route {
         self.route_stack.last().unwrap_or(&Route::Dashboard)
     }
 
-    pub fn is_quitting(&self) -> bool {
+    #[must_use]
+    pub const fn is_quitting(&self) -> bool {
         self.should_quit
     }
 
-    pub fn can_pop(&self) -> bool {
+    #[must_use]
+    pub const fn can_pop(&self) -> bool {
         self.route_stack.len() > 1
     }
 
-    pub fn stack_depth(&self) -> usize {
+    #[must_use]
+    pub const fn stack_depth(&self) -> usize {
         self.route_stack.len()
     }
 
+    #[must_use]
     pub fn route_stack(&self) -> &[Route] {
         &self.route_stack
     }
 
-    pub fn should_show_working_popup(&self) -> bool {
+    #[must_use]
+    pub const fn should_show_working_popup(&self) -> bool {
         self.should_show_working_popup
     }
 
@@ -101,7 +108,7 @@ impl App {
         self.route_stack.push(Route::Dashboard);
     }
 
-    pub fn quit(&mut self) {
+    pub const fn quit(&mut self) {
         self.should_quit = true;
     }
 }
@@ -116,12 +123,16 @@ impl App {
     // --- Core Execution Logic ---
 
     /// Runs a command, dropping to TTY for interactive or verbose output.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if terminal mode switching or the subprocess fails.
     pub fn run_command_in_tty(&mut self, command_str: &str) -> Result<(), Box<dyn Error>> {
         self.suspend_tui()?;
 
         print!("\x1b[2J\x1b[?25h"); // Clear screen, show cursor
         println!("--- Dropping to TTY for interactive command ---");
-        println!("Command: {}", command_str);
+        println!("Command: {command_str}");
         println!("--- (Press any key after command finishes to return to TUI) ---");
         io::stdout().flush()?;
 
@@ -134,7 +145,7 @@ impl App {
         let mut input = String::new();
         let _ = io::stdin().read_line(&mut input);
 
-        self.resume_tui()?;
+        Self::resume_tui()?;
         self.show_command_result(status.success(), status.code().unwrap_or(-1));
 
         Ok(())
@@ -149,7 +160,7 @@ impl App {
         execute!(stdout, LeaveAlternateScreen, DisableMouseCapture)
     }
 
-    fn resume_tui(&mut self) -> io::Result<()> {
+    fn resume_tui() -> io::Result<()> {
         let mut stdout = io::stdout();
         enable_raw_mode()?;
         execute!(stdout, EnterAlternateScreen, EnableMouseCapture)
@@ -159,13 +170,18 @@ impl App {
         self.last_toast = Some(if success {
             ("Command succeeded!".to_string(), 50)
         } else {
-            (format!("Command failed with code: {}", code), 50)
+            (format!("Command failed with code: {code}"), 50)
         });
         self.should_show_working_popup = false;
         self.working_message = WorkingPopup::Blinking;
     }
 }
 
+/// Initializes the terminal for TUI mode.
+///
+/// # Errors
+///
+/// Returns `Err` if raw mode or alternate screen setup fails.
 pub fn run() -> Result<Terminal<CrosstermBackend<std::io::Stdout>>, Box<dyn Error>> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();

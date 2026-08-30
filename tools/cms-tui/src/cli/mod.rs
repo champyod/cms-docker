@@ -186,6 +186,10 @@ pub enum Commands {
 /// Dispatch a parsed `Commands` to the stub handlers in `commands`.
 ///
 /// Kept as the public entry called from `main.rs`.
-pub async fn handle_command(cmd: Commands) -> Result<(), Box<dyn std::error::Error>> {
-    commands::handle(cmd).await
+///
+/// # Errors
+///
+/// Returns `Err` when the command execution fails.
+pub fn handle_command(cmd: Commands) -> Result<(), Box<dyn std::error::Error>> {
+    commands::handle(cmd)
 }

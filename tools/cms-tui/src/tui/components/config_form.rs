@@ -14,7 +14,7 @@ pub struct TextField {
 }
 
 impl TextField {
-    fn new(label: String, value: String, focused: bool) -> Self {
+    const fn new(label: String, value: String, focused: bool) -> Self {
         let cursor = value.len();
         Self {
             label,
@@ -46,8 +46,7 @@ impl TextField {
         let prev = self.value[..clamped]
             .char_indices()
             .last()
-            .map(|(idx, _)| idx)
-            .unwrap_or(0);
+            .map_or(0, |(idx, _)| idx);
         self.value.drain(prev..clamped);
         self.cursor = prev;
     }
@@ -64,8 +63,7 @@ impl TextField {
         let prev = self.value[..clamped]
             .char_indices()
             .last()
-            .map(|(idx, _)| idx)
-            .unwrap_or(0);
+            .map_or(0, |(idx, _)| idx);
         self.cursor = prev;
     }
 
@@ -81,21 +79,23 @@ impl TextField {
         let ch_len = self.value[clamped..]
             .chars()
             .next()
-            .map(|c| c.len_utf8())
-            .unwrap_or(1);
+            .map_or(1, char::len_utf8);
         self.cursor = (clamped + ch_len).min(self.value.len());
     }
 }
 
-/// WHY: `handle_key` contract — Enter advances focus to the next field; on the
-/// last field Enter returns `true` to signal submit. No extra pseudo-field
-/// needed. Caller interprets `true` as "form submitted / confirmed".
+/// Config form with field focus handling.
+///
+/// WHY: `handle_key` — Enter advances focus; on last field returns `true` to
+/// signal submit without an extra pseudo-field. Caller interprets `true` as
+/// "form submitted / confirmed".
 pub struct ConfigForm {
     fields: Vec<TextField>,
     active: usize,
 }
 
 impl ConfigForm {
+    #[must_use]
     pub fn new(fields: Vec<(String, String)>) -> Self {
         let mut text_fields: Vec<TextField> = fields
             .into_iter()
@@ -112,6 +112,7 @@ impl ConfigForm {
         }
     }
 
+    #[must_use]
     pub fn values(&self) -> Vec<(String, String)> {
         self.fields
             .iter()

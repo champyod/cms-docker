@@ -14,18 +14,17 @@ struct Args {
     command: Option<cli::Commands>,
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
     match args.command {
         Some(cmd) => {
             // CLI Mode
-            cli::handle_command(cmd).await?;
+            cli::handle_command(cmd)?;
         }
         None => {
             // TUI Mode
-            tui::run().await?;
+            tui::run()?;
         }
     }
 

@@ -47,7 +47,14 @@ fn propagate_exit(code: i32) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Dispatches all 24 commands to their real core execution (Phase 3 wiring).
-pub async fn handle(cmd: Commands) -> Result<(), Box<dyn std::error::Error>> {
+///
+/// # Errors
+///
+/// Returns `Err` when a command exits non-zero or a client fails to initialize.
+///
+/// The CLI dispatcher is intentionally a flat `match` over all commands.
+#[allow(clippy::too_many_lines)]
+pub fn handle(cmd: Commands) -> Result<(), Box<dyn std::error::Error>> {
     match cmd {
         Commands::Setup => propagate_exit(run_script("__update_engine.sh", &["--fresh"])),
         Commands::Update { all } => {
@@ -64,7 +71,7 @@ pub async fn handle(cmd: Commands) -> Result<(), Box<dyn std::error::Error>> {
             for (step, code) in &report.steps {
                 println!("{step}: {}", if *code == 0 { "OK" } else { "FAILED" });
             }
-            propagate_exit(if report.is_success() { 0 } else { 1 })
+            propagate_exit(i32::from(!report.is_success()))
         }
         Commands::Stop { stack } => run_docker_exit(&DockerClient::new()?, |c| c.stop(&stack)),
         Commands::Clean { stack } => run_docker_exit(&DockerClient::new()?, |c| c.clean(&stack)),
@@ -161,7 +168,7 @@ where
     for (step, code) in &report.steps {
         println!("{step}: {}", if *code == 0 { "OK" } else { "FAILED" });
     }
-    propagate_exit(if report.is_success() { 0 } else { 1 })
+    propagate_exit(i32::from(!report.is_success()))
 }
 
 /// Opens `config.toml` in `$EDITOR` (default `nano`), matching `cms config edit`.
@@ -170,14 +177,13 @@ fn run_config_edit() -> i32 {
     match Runner::new() {
         Ok(runner) => {
             let config_path = runner.repo_root().join("config.toml");
-            Command::new(editor)
-                .arg(config_path)
-                .status()
-                .map(|status| status.code().unwrap_or(1))
-                .unwrap_or_else(|err| {
+            Command::new(editor).arg(config_path).status().map_or_else(
+                |err| {
                     eprintln!("cms error: editor failed to launch: {err}");
                     1
-                })
+                },
+                |status| status.code().unwrap_or(1),
+            )
         }
         Err(err) => {
             eprintln!("cms error: repo root not found: {err}");

@@ -18,6 +18,7 @@ pub struct ActionMenu {
 }
 
 impl ActionMenu {
+    #[must_use]
     pub fn new(items: Vec<(String, String)>) -> Self {
         let mapped: Vec<MenuItem> = items
             .into_iter()
@@ -29,7 +30,7 @@ impl ActionMenu {
         }
     }
 
-    pub fn handle_key(&mut self, key: KeyCode) -> Option<usize> {
+    pub const fn handle_key(&mut self, key: KeyCode) -> Option<usize> {
         if self.items.is_empty() {
             return None;
         }
@@ -51,10 +52,12 @@ impl ActionMenu {
         }
     }
 
-    pub fn selected(&self) -> usize {
+    #[must_use]
+    pub const fn selected(&self) -> usize {
         self.selected
     }
 
+    #[must_use]
     pub fn selected_label(&self) -> &str {
         if self.items.is_empty() {
             return "";
@@ -62,11 +65,13 @@ impl ActionMenu {
         self.items[self.selected].label.as_str()
     }
 
-    pub fn len(&self) -> usize {
+    #[must_use]
+    pub const fn len(&self) -> usize {
         self.items.len()
     }
 
-    pub fn is_empty(&self) -> bool {
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
         self.items.is_empty()
     }
 

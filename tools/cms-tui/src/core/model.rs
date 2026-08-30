@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Represents the high-level domains in your CMS ecosystem.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Environment {
     Core,
     Contest,
@@ -14,18 +14,18 @@ pub enum Environment {
 impl std::fmt::Display for Environment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Environment::Core => write!(f, "Core"),
-            Environment::Contest => write!(f, "Contest"),
-            Environment::Admin => write!(f, "Admin"),
-            Environment::Worker => write!(f, "Worker"),
-            Environment::Infra => write!(f, "Infra"),
-            Environment::Monitoring => write!(f, "Monitoring"),
+            Self::Core => write!(f, "Core"),
+            Self::Contest => write!(f, "Contest"),
+            Self::Admin => write!(f, "Admin"),
+            Self::Worker => write!(f, "Worker"),
+            Self::Infra => write!(f, "Infra"),
+            Self::Monitoring => write!(f, "Monitoring"),
         }
     }
 }
 
 /// A single running component within an environment (e.g., `Postgres`, `AdminWeb`).
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Service {
     pub id: String,       // Internal ID (e.g., "postgres", "admin-web")
     pub name: String,     // Display name (e.g., "Postgres Database")
@@ -34,7 +34,7 @@ pub struct Service {
     pub version: String, // Version of image or service
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ServiceStatus {
     Up,
     Down,
@@ -44,7 +44,7 @@ pub enum ServiceStatus {
 }
 
 /// A configuration file managed by the system (e.g., `.env.core`, `cms.conf`).
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ConfigFile {
     pub id: String,     // Internal identifier (e.g., "env-core", "cms-conf")
     pub name: String,   // Display name (e.g., ".env for Core")
@@ -53,7 +53,7 @@ pub struct ConfigFile {
 }
 
 /// An executable task or script (e.g., `make core`, `__backup.sh`).
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Task {
     pub id: String,          // Internal ID (e.g., "docker-up-core")
     pub name: String,        // Display name (e.g., "Start Core Services")
@@ -63,7 +63,7 @@ pub struct Task {
     pub requires_tty: bool,  // Does this task produce interactive or verbose output needing a TTY?
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TaskType {
     DockerControl,
     DBOperation,
@@ -74,7 +74,7 @@ pub enum TaskType {
 }
 
 /// The overarching application state.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppState {
     pub services: Vec<Service>,
     pub configs: Vec<ConfigFile>,
@@ -89,6 +89,7 @@ impl Default for AppState {
 
 impl AppState {
     /// Seeds the state with the static CMS data model.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             services: Self::seed_services(),

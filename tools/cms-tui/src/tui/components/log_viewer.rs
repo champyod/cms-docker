@@ -18,7 +18,8 @@ pub struct LogViewer {
 }
 
 impl LogViewer {
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self {
             lines: Vec::new(),
             scroll_offset: 0,
@@ -35,7 +36,8 @@ impl LogViewer {
         self.lines.clear();
         self.scroll_offset = 0;
     }
-    pub fn is_following(&self) -> bool {
+    #[must_use]
+    pub const fn is_following(&self) -> bool {
         self.follow_tail
     }
     pub fn handle_key(&mut self, key: KeyCode) -> bool {
@@ -46,13 +48,11 @@ impl LogViewer {
                 false
             }
             KeyCode::Down => {
-                if self.follow_tail {
-                    false
-                } else {
+                if !self.follow_tail {
                     let max: usize = self.lines.len().saturating_sub(1);
                     self.scroll_offset = (self.scroll_offset + 1).min(max);
-                    false
                 }
+                false
             }
             KeyCode::PageUp => {
                 self.follow_tail = false;
@@ -60,22 +60,20 @@ impl LogViewer {
                 false
             }
             KeyCode::PageDown => {
-                if self.follow_tail {
-                    false
-                } else {
+                if !self.follow_tail {
                     let max: usize = self.lines.len().saturating_sub(1);
                     self.scroll_offset = (self.scroll_offset + PAGE_SIZE).min(max);
-                    false
                 }
+                false
             }
-            KeyCode::Char('f') | KeyCode::Char('F') => {
+            KeyCode::Char('f' | 'F') => {
                 self.follow_tail = !self.follow_tail;
                 if self.follow_tail {
                     self.scroll_offset = 0;
                 }
                 false
             }
-            KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => true,
+            KeyCode::Char('q' | 'Q') | KeyCode::Esc => true,
             _ => false,
         }
     }
@@ -120,7 +118,7 @@ impl LogViewer {
         let offset: usize = self.scroll_offset.min(max_offset);
         let end: usize = (offset + logs_visible).min(self.lines.len());
         let window: String = self.lines[offset..end].join("\n");
-        format!("{}\n{}", PAUSED_MARKER, window)
+        format!("{PAUSED_MARKER}\n{window}")
     }
 }
 
@@ -194,7 +192,7 @@ mod tests {
     fn scrolling_clamps_to_bounds() {
         let mut v: LogViewer = LogViewer::new();
         for i in 0..30 {
-            v.append(&format!("line {}", i));
+            v.append(&format!("line {i}"));
         }
         v.handle_key(KeyCode::Up);
         for _ in 0..100 {
