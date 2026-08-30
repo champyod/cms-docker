@@ -1,0 +1,750 @@
+# CMS Docker Compose — unified stack with profiles: core, admin, contest, worker, monitor
+# Services orchestrate the Competitive Management System platform
+
+services:
+  # ============================================================
+  # CORE SERVICES (profiles: core)
+  # ============================================================
+
+  # PostgreSQL Database
+  database:
+    image: postgres:15
+    container_name: cms-database
+    restart: on-failure:5
+    profiles:
+      - core
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cmsdb}
+      POSTGRES_USER: ${POSTGRES_USER:-cmsuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cmspassword}
+      POSTGRES_HOST_AUTH_METHOD: ${POSTGRES_HOST_AUTH_METHOD:-md5}
+    ports:
+      - "${DB_BIND_IP:-127.0.0.1}:${POSTGRES_PORT_EXTERNAL:-5432}:5432"
+    volumes:
+      - cms-database-data:/var/lib/postgresql/data
+    networks:
+      - cms-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h localhost -U ${POSTGRES_USER:-cmsuser} -d ${POSTGRES_DB:-cmsdb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # CMS Log Service - Centralized logging
+  log-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
+    image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
+    container_name: cms-log-service
+    restart: on-failure:5
+    profiles:
+      - core
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
+      SERVICE_TYPE: LogService
+      SERVICE_SHARD: ${LOG_SERVICE_SHARD:-0}
+    ports:
+      - "${TAILSCALE_IP:-127.0.0.1}:29000:29000"
+    volumes:
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
+      - cms-logs:/var/local/log/cms
+      - cms-cache:/var/local/cache/cms
+    networks:
+      - cms-network
+    command: >
+      sh -c "sudo mkdir -p /var/local/log/cms/LogService-${LOG_SERVICE_SHARD:-0} &&
+             sudo chown -R cmsuser:cmsuser /var/local/log/cms &&
+             sudo chmod -R 750 /var/local/log/cms &&
+             wait-for-it database:5432 -t 60 -- cmsLogService ${LOG_SERVICE_SHARD:-0}"
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f cmsLogService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostbyname(socket.gethostname()), 29000))\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  # CMS Resource Service - Resource monitoring and management
+  resource-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
+    image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
+    container_name: cms-resource-service
+    restart: on-failure:5
+    profiles:
+      - core
+    depends_on:
+      database:
+        condition: service_healthy
+      log-service:
+        condition: service_healthy
+    environment:
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
+      SERVICE_TYPE: ResourceService
+      SERVICE_SHARD: ${RESOURCE_SERVICE_SHARD:-0}
+    ports:
+      - "${TAILSCALE_IP:-127.0.0.1}:28000:28000"
+    volumes:
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
+      - cms-logs:/var/local/log/cms
+      - cms-cache:/var/local/cache/cms
+    networks:
+      - cms-network
+    privileged: true
+    command: >
+      sh -c "sudo mkdir -p /var/local/log/cms/ResourceService-${RESOURCE_SERVICE_SHARD:-0} &&
+             sudo chown -R cmsuser:cmsuser /var/local/log/cms &&
+             sudo chmod -R 750 /var/local/log/cms &&
+             cmsResourceService ${RESOURCE_SERVICE_SHARD:-0}"
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f cmsResourceService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostbyname(socket.gethostname()), 28000))\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  # CMS Scoring Service - Handles scoring and ranking
+  scoring-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
+    image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
+    container_name: cms-scoring-service
+    restart: on-failure:5
+    profiles:
+      - core
+    depends_on:
+      database:
+        condition: service_healthy
+      log-service:
+        condition: service_healthy
+    environment:
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
+      SERVICE_TYPE: ScoringService
+      SERVICE_SHARD: ${SCORING_SERVICE_SHARD:-0}
+    ports:
+      - "${TAILSCALE_IP:-127.0.0.1}:28500:28500"
+    volumes:
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
+      - cms-logs:/var/local/log/cms
+      - cms-cache:/var/local/cache/cms
+      - cms-data:/var/local/lib/cms
+    networks:
+      - cms-network
+    command: >
+      sh -c "sudo mkdir -p /var/local/log/cms/ScoringService-${SCORING_SERVICE_SHARD:-0} &&
+             sudo chown -R cmsuser:cmsuser /var/local/log/cms &&
+             sudo chmod -R 750 /var/local/log/cms &&
+             cmsScoringService ${SCORING_SERVICE_SHARD:-0}"
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f cmsScoringService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostbyname(socket.gethostname()), 28500))\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  # CMS Checker Service - Validates submissions
+  checker-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
+    image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
+    container_name: cms-checker-service
+    restart: on-failure:5
+    profiles:
+      - core
+    depends_on:
+      database:
+        condition: service_healthy
+      log-service:
+        condition: service_healthy
+    environment:
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
+      SERVICE_TYPE: Checker
+      SERVICE_SHARD: ${CHECKER_SERVICE_SHARD:-0}
+    ports:
+      - "${TAILSCALE_IP:-127.0.0.1}:22000:22000"
+    volumes:
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
+      - cms-logs:/var/local/log/cms
+      - cms-cache:/var/local/cache/cms
+      - cms-data:/var/local/lib/cms
+    networks:
+      - cms-network
+    privileged: true
+    command: >
+      sh -c "sudo mkdir -p /var/local/log/cms/Checker-${CHECKER_SERVICE_SHARD:-0} &&
+             sudo chown -R cmsuser:cmsuser /var/local/log/cms &&
+             sudo chmod -R 750 /var/local/log/cms &&
+             cmsChecker ${CHECKER_SERVICE_SHARD:-0}"
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f cmsChecker && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostbyname(socket.gethostname()), 22000))\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  # ============================================================
+  # CONTEST SERVICES (profiles: contest)
+  # ============================================================
+
+  # CMS Evaluation Service - Contest scoped evaluation queue
+  evaluation-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
+    image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
+    container_name: cms-evaluation-service
+    restart: on-failure:5
+    profiles:
+      - contest
+    depends_on:
+      database:
+        condition: service_healthy
+      log-service:
+        condition: service_healthy
+    environment:
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
+      SERVICE_TYPE: EvaluationService
+      SERVICE_SHARD: ${EVALUATION_SERVICE_SHARD:-0}
+      CONTEST_ID: ${CONTEST_ID:-1}
+    ports:
+      - "${TAILSCALE_IP:-127.0.0.1}:25000:25000"
+    volumes:
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
+      - cms-logs:/var/local/log/cms
+      - cms-cache:/var/local/cache/cms
+      - cms-data:/var/local/lib/cms
+    networks:
+      - cms-network
+    command: >
+      sh -c "sudo mkdir -p /var/local/log/cms/EvaluationService-${EVALUATION_SERVICE_SHARD:-0} &&
+             sudo chown -R cmsuser:cmsuser /var/local/log/cms &&
+             sudo chmod -R 750 /var/local/log/cms &&
+             cmsEvaluationService ${EVALUATION_SERVICE_SHARD:-0} -c ${CONTEST_ID:-1}"
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f cmsEvaluationService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostbyname(socket.gethostname()), 25000))\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  # CMS Proxy Service - Contest scoped ranking relay
+  proxy-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
+    image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
+    container_name: cms-proxy-service
+    restart: on-failure:5
+    profiles:
+      - contest
+    depends_on:
+      database:
+        condition: service_healthy
+      log-service:
+        condition: service_healthy
+    environment:
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
+      SERVICE_TYPE: ProxyService
+      SERVICE_SHARD: ${PROXY_SERVICE_SHARD:-0}
+      CONTEST_ID: ${CONTEST_ID:-1}
+    ports:
+      - "${TAILSCALE_IP:-127.0.0.1}:28600:28600"
+    volumes:
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
+      - cms-logs:/var/local/log/cms
+      - cms-cache:/var/local/cache/cms
+      - cms-data:/var/local/lib/cms
+    networks:
+      - cms-network
+    command: >
+      sh -c "sudo mkdir -p /var/local/log/cms/ProxyService-${PROXY_SERVICE_SHARD:-0} &&
+             sudo chown -R cmsuser:cmsuser /var/local/log/cms &&
+             sudo chmod -R 750 /var/local/log/cms &&
+             cmsProxyService ${PROXY_SERVICE_SHARD:-0} -c ${CONTEST_ID:-1}"
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f cmsProxyService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostbyname(socket.gethostname()), 28600))\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  # CMS Contest Web Server - Contestant interface
+  contest-web-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
+    image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
+    container_name: cms-contest-web-server
+    # survive daemon/host restarts like every other service; admin-panel
+    # lifecycle actions still work (stop/start overrides policy at runtime)
+    restart: on-failure:5
+    profiles:
+      - contest
+    depends_on:
+      database:
+        condition: service_healthy
+      log-service:
+        condition: service_healthy
+    environment:
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
+      SERVICE_TYPE: ContestWebServer
+      SERVICE_SHARD: ${CONTEST_WEB_SERVER_SHARD:-0}
+      CONTEST_ID: ${CONTEST_ID:-1}
+      CONTEST_LISTEN_PORT: ${CONTEST_LISTEN_PORT:-8888}
+      CONTEST_LISTEN_ADDRESS: ${CONTEST_LISTEN_ADDRESS:-0.0.0.0}
+      SECRET_KEY: ${SECRET_KEY}
+      COOKIE_DURATION: ${COOKIE_DURATION:-10800}
+      MAX_SUBMISSION_LENGTH: ${MAX_SUBMISSION_LENGTH:-100000}
+      MAX_INPUT_LENGTH: ${MAX_INPUT_LENGTH:-5000000}
+      SUBMIT_LOCAL_COPY: ${SUBMIT_LOCAL_COPY:-true}
+      NUM_PROXIES_USED: ${NUM_PROXIES_USED:-1}
+    volumes:
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
+      - cms-logs:/var/local/log/cms
+      - cms-cache:/var/local/cache/cms
+      - cms-data:/var/local/lib/cms
+      - cms-submissions:/var/local/lib/cms/submissions
+    networks:
+      - cms-network
+    ports:
+      - "${CONTEST_BIND_IP:-0.0.0.0}:${CONTEST_PORT_EXTERNAL:-8888}:${CONTEST_LISTEN_PORT:-8888}"
+    privileged: true
+    command: >
+      sh -c "sudo mkdir -p /var/local/log/cms/ContestWebServer-${CONTEST_WEB_SERVER_SHARD:-0} /var/local/cache/cms /var/local/lib/cms &&
+             sudo chown -R cmsuser:cmsuser /var/local/log/cms /var/local/cache/cms /var/local/lib/cms &&
+             sudo chmod -R 750 /var/local/log/cms /var/local/cache/cms /var/local/lib/cms &&
+             cmsContestWebServer ${CONTEST_WEB_SERVER_SHARD:-0} -c ${CONTEST_ID:-1}"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.cms-contest.rule=Host(`${CONTEST_DOMAIN:-contest.cms.local}`)"
+      - "traefik.http.services.cms-contest.loadbalancer.server.port=${CONTEST_LISTEN_PORT:-8888}"
+      - "traefik.http.routers.cms-contest.tls=${ENABLE_TLS:-false}"
+      - "traefik.http.routers.cms-contest.tls.certresolver=${TLS_CERTRESOLVER:-letsencrypt}"
+    deploy:
+      resources:
+        limits:
+          cpus: ${CONTEST_WEB_CPU_LIMIT:-0.5}
+          memory: ${CONTEST_WEB_MEMORY_LIMIT:-512M}
+        reservations:
+          cpus: ${CONTEST_WEB_CPU_RESERVATION:-0.1}
+          memory: ${CONTEST_WEB_MEMORY_RESERVATION:-256M}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${CONTEST_LISTEN_PORT:-8888}/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Nginx reverse proxy for contest web server (TLS via ENABLE_TLS=true)
+  nginx-proxy:
+    image: nginx:alpine
+    container_name: cms-nginx-contest
+    restart: on-failure:5
+    profiles:
+      - contest
+    depends_on:
+      contest-web-server:
+        condition: service_healthy
+      proxy-service:
+        condition: service_healthy
+    environment:
+      NGINX_HOST: ${CONTEST_DOMAIN:-contest.cms.local}
+      CONTEST_LISTEN_PORT: ${CONTEST_LISTEN_PORT:-8888}
+      RANKING_AUTH_DIRECTIVES: ${RANKING_AUTH_DIRECTIVES:-}
+      ENABLE_TLS: ${ENABLE_TLS:-false}
+      FUNNEL_ENABLED: ${FUNNEL_ENABLED:-false}
+      FUNNEL_REALM: ${FUNNEL_REALM:-CMS restricted}
+    volumes:
+      - ./config/nginx-contest.conf:/etc/nginx/templates/default.conf.template:ro
+      - ./scripts/__nginx-proxy-render.sh:/usr/local/bin/render.sh:ro
+      - ./config/funnel.htpasswd:/etc/nginx/funnel.htpasswd:ro
+      - nginx-cache:/var/cache/nginx
+      - nginx-logs:/var/log/nginx
+    networks:
+      - cms-network
+    ports:
+      - "${NGINX_BIND_IP:-0.0.0.0}:${NGINX_HTTP_PORT:-80}:80"
+      - "${NGINX_BIND_IP:-0.0.0.0}:${NGINX_HTTPS_PORT:-443}:443"
+      - "127.0.0.1:${FUNNEL_PANEL_LISTEN:-8892}:8892"
+      - "127.0.0.1:${FUNNEL_RANKING_LISTEN:-8893}:8893"
+    command: ["/usr/local/bin/render.sh"]
+
+
+  admin-panel-next:
+    build:
+      context: ./admin-panel
+      dockerfile: Dockerfile
+    image: ghcr.io/champyod/cms-docker-admin-panel:${IMG_TAG:-major-admin-panel}
+    container_name: cms-admin-panel-next
+    restart: on-failure:5
+    profiles:
+      - admin
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8889}
+      SERVER_BASE_URL: ${SERVER_BASE_URL:-http://localhost}
+      PUBLIC_IP: ${PUBLIC_IP:-0.0.0.0}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
+      AUTH_SECRET: ${AUTH_SECRET}
+      REPO_ROOT: /repo-root
+      DEPLOYMENT_TYPE: ${DEPLOYMENT_TYPE:-img}
+      IS_DOCKER: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./:/repo-root
+      - /proc:/host/proc:ro
+      - cms-logs:/var/local/log/cms
+    networks:
+      - cms-network
+    ports:
+      - "${ADMIN_NEXT_BIND_IP:-0.0.0.0}:${ADMIN_NEXT_PORT_EXTERNAL:-8891}:3000"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.cms-admin-next.rule=Host(`${ADMIN_NEXT_DOMAIN:-admin-next.cms.local}`)"
+      - "traefik.http.services.cms-admin-next.loadbalancer.server.port=3000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # CMS Admin Web Server (Legacy Python Version)
+  admin-web-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
+    image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
+    container_name: cms-admin-web-server
+    restart: on-failure:5
+    profiles:
+      - admin
+    depends_on:
+      database:
+        condition: service_healthy
+      log-service:
+        condition: service_healthy
+    environment:
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
+      ADMIN_LISTEN_PORT: ${ADMIN_LISTEN_PORT:-8889}
+      ADMIN_LISTEN_ADDRESS: ${ADMIN_LISTEN_ADDRESS:-0.0.0.0}
+    volumes:
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
+      - cms-logs:/var/local/log/cms
+      - cms-cache:/var/local/cache/cms
+    networks:
+      - cms-network
+    ports:
+      - "${ADMIN_BIND_IP:-0.0.0.0}:${ADMIN_PORT_EXTERNAL:-8889}:${ADMIN_LISTEN_PORT:-8889}"
+    command: ["cmsAdminWebServer"]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.cms-admin.rule=Host(`${ADMIN_DOMAIN:-admin.cms.local}`)"
+      - "traefik.http.services.cms-admin.loadbalancer.server.port=${ADMIN_LISTEN_PORT:-8889}"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${ADMIN_LISTEN_PORT:-8889}/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Ranking Web Server - Live rankings display
+  ranking-web-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
+    image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
+    container_name: cms-ranking-web-server
+    restart: on-failure:5
+    profiles:
+      - admin
+    depends_on:
+      database:
+        condition: service_healthy
+      log-service:
+        condition: service_healthy
+    environment:
+      CMS_RANKING_CONFIG: ${CMS_RANKING_CONFIG:-/usr/local/etc/cms_ranking.toml}
+      RANKING_LISTEN_PORT: ${RANKING_LISTEN_PORT:-8890}
+      RANKING_LISTEN_ADDRESS: ${RANKING_LISTEN_ADDRESS:-0.0.0.0}
+    volumes:
+      - ./config/cms_ranking.toml:/usr/local/etc/cms_ranking.toml:ro
+      - cms-logs:/var/local/log/cms
+      - cms-ranking-data:/var/local/lib/cms/ranking
+    networks:
+      - cms-network
+    ports:
+      - "${RANKING_BIND_IP:-0.0.0.0}:${RANKING_PORT_EXTERNAL:-8890}:${RANKING_LISTEN_PORT:-8890}"
+    command: ["cmsRankingWebServer"]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.cms-ranking.rule=Host(`${RANKING_DOMAIN:-ranking.cms.local}`)"
+      - "traefik.http.services.cms-ranking.loadbalancer.server.port=${RANKING_LISTEN_PORT:-8890}"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${RANKING_LISTEN_PORT:-8890}/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Printing Service - Manages printing requests (optional)
+  printing-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
+    image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
+    container_name: cms-printing-service
+    restart: on-failure:5
+    profiles:
+      - admin
+      - printing
+    depends_on:
+      database:
+        condition: service_healthy
+      log-service:
+        condition: service_healthy
+    environment:
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
+      SERVICE_TYPE: PrintingService
+      SERVICE_SHARD: ${PRINTING_SERVICE_SHARD:-0}
+      PRINTING_ENABLED: ${PRINTING_ENABLED:-false}
+    volumes:
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
+      - cms-logs:/var/local/log/cms
+      - cms-cache:/var/local/cache/cms
+    networks:
+      - cms-network
+    privileged: true
+    command: >
+      sh -c "if [ \"$${PRINTING_ENABLED}\" = \"true\" ]; then cmsPrintingService $${PRINTING_SERVICE_SHARD:-0}; else echo 'Printing service disabled'; sleep infinity; fi"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.cms-printing.rule=Host(`${PRINTING_DOMAIN:-printing.cms.local}`)"
+
+  # ============================================================
+  # WORKER SERVICES (profiles: worker)
+  # ============================================================
+
+  # CMS Worker - Evaluates submissions in isolated sandboxes
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/champyod/cms-docker-worker:${IMG_TAG:-major-admin-panel}
+    container_name: cms-worker-${WORKER_SHARD:-0}
+    restart: on-failure:5
+    profiles:
+      - worker
+    environment:
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
+      SERVICE_TYPE: Worker
+      ISOLATE_CGROUP_CONTROL: ${ISOLATE_CGROUP_CONTROL:-1}
+      ISOLATE_CGROUP_PATH: ${ISOLATE_CGROUP_PATH:-/sys/fs/cgroup/cms-isolate}
+      WORKER_SHARD: ${WORKER_SHARD:-0}
+      CORE_SERVICES_HOST: ${CORE_SERVICES_HOST:-cms-log-service}
+      KEEP_SANDBOX: ${KEEP_SANDBOX:-false}
+      MAX_FILE_SIZE: ${MAX_FILE_SIZE:-1048576}
+      WORKER_NAME: ${WORKER_NAME:-worker-${WORKER_SHARD:-0}}
+      WORKER_MEMORY_LIMIT: ${WORKER_MEMORY_LIMIT:-4G}
+      WORKER_CPU_LIMIT: ${WORKER_CPU_LIMIT:-4}
+      MTLS_WORKERS_ENABLED: ${MTLS_WORKERS_ENABLED:-0}
+      MTLS_CA_CERT: ${MTLS_CA_CERT:-config/mtls/ca.pem}
+      MTLS_WORKER_CERT: ${MTLS_WORKER_CERT:-config/mtls/worker.pem}
+      MTLS_WORKER_KEY: ${MTLS_WORKER_KEY:-config/mtls/worker-key.pem}
+    extra_hosts:
+      - "cms-log-service:${CORE_SERVICES_HOST:-127.0.0.1}"
+      - "cms-resource-service:${CORE_SERVICES_HOST:-127.0.0.1}"
+      - "cms-scoring-service:${CORE_SERVICES_HOST:-127.0.0.1}"
+      - "cms-checker-service:${CORE_SERVICES_HOST:-127.0.0.1}"
+      - "cms-evaluation-service:${CORE_SERVICES_HOST:-127.0.0.1}"
+      - "cms-proxy-service:${CORE_SERVICES_HOST:-127.0.0.1}"
+    volumes:
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
+      - cms-logs:/var/local/log/cms
+      - cms-cache:/var/local/cache/cms
+      - cms-data:/var/local/lib/cms
+      - worker-tmp:/tmp
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+      # mTLS certs (optional, disabled by default — MTLS_WORKERS_ENABLED=0)
+      # When MTLS_WORKERS_ENABLED=1, mount CA + worker cert/key; see docs/optional-features.md
+      # Paths at MTLS_CA_CERT etc. are optional mounts — container starts without them when disabled.
+      # Uncomment to enforce presence: - ${MTLS_CA_CERT:-config/mtls/ca.pem}:/etc/cms/mtls/ca.pem:ro
+      # - ${MTLS_WORKER_CERT:-config/mtls/worker.pem}:/etc/cms/mtls/worker.pem:ro
+      # - ${MTLS_WORKER_KEY:-config/mtls/worker-key.pem}:/etc/cms/mtls/worker-key.pem:ro
+    ports:
+      - "${WORKER_PORT:-26000}:${WORKER_PORT:-26000}"
+    networks:
+      - cms-network
+    privileged: true
+    cgroup: host
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfined
+    cap_add:
+      - SYS_ADMIN
+      - SYS_PTRACE
+      - SYS_RESOURCE
+      - NET_ADMIN
+    command: >
+      sh -lc '
+        set -e
+        SHARD=${WORKER_SHARD:-0}
+        CGROUP_CONTROL=${ISOLATE_CGROUP_CONTROL:-1}
+
+        sudo mkdir -p /var/local/log/cms/Worker-$$SHARD /var/local/cache/cms /var/local/lib/cms &&
+        sudo chown -R cmsuser:cmsuser /var/local/log/cms /var/local/cache/cms /var/local/lib/cms &&
+        sudo chmod -R 750 /var/local/log/cms /var/local/cache/cms /var/local/lib/cms
+
+        if [ "$$CGROUP_CONTROL" = "1" ]; then
+          sudo mkdir -p /run/isolate
+          CGROUP_BASE=${ISOLATE_CGROUP_PATH:-/sys/fs/cgroup/cms-isolate}
+
+          if [ ! -d "$$CGROUP_BASE" ]; then
+            echo "ERROR: ISOLATE_CGROUP_PATH does not exist: $$CGROUP_BASE"
+            echo "Run scripts/__worker_cgroup_setup.sh on the worker host first."
+            exit 1
+          fi
+
+          echo "$$CGROUP_BASE" | sudo tee /run/isolate/cgroup >/dev/null
+          sudo chmod 755 /run/isolate
+          sudo chmod 644 /run/isolate/cgroup
+
+          echo "Attempting to enable cgroup v2 controllers for resource limits..."
+          if [ -f "$$CGROUP_BASE/cgroup.subtree_control" ]; then
+            echo "+cpu +memory +pids" | sudo tee "$$CGROUP_BASE/cgroup.subtree_control" >/dev/null || true
+          fi
+
+          echo "Pre-creating box cgroups for isolate (IDs 0-999)..."
+          for box_id in $$(seq 0 999); do
+            sudo mkdir -p "$$CGROUP_BASE/box-$$box_id" 2>/dev/null || true
+            if [ -d "$$CGROUP_BASE/box-$$box_id" ]; then
+              sudo chmod 755 "$$CGROUP_BASE/box-$$box_id" 2>/dev/null || true
+            fi
+          done
+        else
+          echo "ISOLATE_CGROUP_CONTROL disabled: starting worker without isolate cgroup mode"
+        fi
+
+        echo "Cleaning up stale isolate cgroups (v1)..."
+        for subsys in cpu cpuacct memory pids freezer; do
+          [ -d "/sys/fs/cgroup/$$subsys/isolate" ] && sudo cgdelete -r "$$subsys:isolate" 2>/dev/null || true
+        done
+
+        echo "Worker startup complete. Starting service..."
+        exec cmsWorker $$SHARD
+      '
+
+    deploy:
+      resources:
+        limits:
+          cpus: ${WORKER_CPU_LIMIT:-0.5}
+          memory: ${WORKER_MEMORY_LIMIT:-512M}
+        reservations:
+          cpus: ${WORKER_CPU_RESERVATION:-0.1}
+          memory: ${WORKER_MEMORY_RESERVATION:-256M}
+      replicas: ${WORKER_REPLICAS:-1}
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f cmsWorker || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ============================================================
+  # MONITOR SERVICES (profiles: monitor)
+  # ============================================================
+
+  monitor:
+    build:
+      context: .
+      dockerfile: docker/monitor/Dockerfile
+    image: ghcr.io/champyod/cms-docker-monitor:${IMG_TAG:-major-admin-panel}
+    container_name: cms-monitor
+    restart: on-failure:5
+    profiles:
+      - monitor
+    pid: host
+    group_add:
+      - "${DOCKER_GID:-999}"
+    environment:
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - DISCORD_ROLE_ID=${DISCORD_ROLE_ID}
+      - MONITOR_INTERVAL=5
+      - MONITOR_COOLDOWN=300
+      - DISK_PATH=/host
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
+      - BACKUP_INTERVAL_MINS=${BACKUP_INTERVAL_MINS:-1440}
+      - BACKUP_MAX_COUNT=${BACKUP_MAX_COUNT:-50}
+      - BACKUP_MAX_AGE_DAYS=${BACKUP_MAX_AGE_DAYS:-10}
+      - BACKUP_MAX_SIZE_GB=${BACKUP_MAX_SIZE_GB:-5}
+      - BACKUP_DIR=/app/backups
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /:/host:ro # Mount host root to /host to check disk usage
+      - ./backups:/app/backups
+      - ./scripts/__backup.sh:/usr/local/bin/cms-backup.sh:ro
+      - ./config:/repo-root/config:ro # Mount config to read container restart settings
+    networks:
+      - cms-network
+
+# ============================================================
+# NETWORKS
+# ============================================================
+
+networks:
+  cms-network:
+    name: cms-network
+    driver: bridge
+
+# ============================================================
+# VOLUMES
+# ============================================================
+
+volumes:
+  cms-database-data:
+    name: cms-database-data
+  cms-logs:
+    name: cms-logs
+  cms-cache:
+    name: cms-cache
+  cms-data:
+    name: cms-data
+  cms-ranking-data:
+    name: cms-ranking-data
+  cms-submissions:
+    name: cms-submissions-contest
+  nginx-cache:
+    name: cms-nginx-cache-contest
+  nginx-logs:
+    name: cms-nginx-logs-contest
+  worker-tmp:
+    name: cms-worker-tmp-${WORKER_SHARD:-0}

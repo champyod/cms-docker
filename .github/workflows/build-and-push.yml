@@ -1,0 +1,273 @@
+name: Build and Push Docker Images
+
+# One workflow run per qualifying push; each image builds as its own PARALLEL
+# job (kept separate on purpose — the images are large and serialising them
+# would multiply wall-clock time). Skipped areas show as skipped, not failed.
+on:
+  push:
+    branches: ["main", "major/admin-panel"]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'examples/**'
+      - '.gitignore'
+  pull_request:
+    branches: ["main", "major/admin-panel"]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      build_arm:
+        description: 'Build Worker for ARM (linux/arm64)'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  changes:
+    name: Detect changed areas
+    runs-on: ubuntu-latest
+    outputs:
+      core: ${{ steps.filter.outputs.core }}
+      worker: ${{ steps.filter.outputs.worker }}
+      admin: ${{ steps.filter.outputs.admin }}
+      monitor: ${{ steps.filter.outputs.monitor }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            core:
+              - 'Dockerfile'
+              - 'src/**'
+              - 'constraints.txt'
+            worker:
+              - 'Dockerfile'
+              - 'src/**'
+              - 'constraints.txt'
+            admin:
+              - 'admin-panel/**'
+            monitor:
+              - 'docker/monitor/**'
+              - 'scripts/__monitor.sh'
+
+  build-and-push-core:
+    needs: changes
+    if: needs.changes.outputs.core == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # raphael.js is vendored in the repo; verify integrity instead of
+      # fetching it at build time (no network dependency in the build).
+      - name: Verify vendored ranking frontend assets
+        run: |
+          test -f src/cmsranking/static/lib/raphael.js || { echo "::error::src/cmsranking/static/lib/raphael.js is missing (expected vendor of https://cdnjs.cloudflare.com/ajax/libs/raphael/2.3.0/raphael.min.js)"; exit 1; }
+          echo "4da6e9aca75e3576d27ac0962ccadc6d6483cd486901d70d3dee50e77ae7f588  src/cmsranking/static/lib/raphael.js" | sha256sum --check --strict -
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the Container registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for CMS Core
+        id: meta-core
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-core
+          tags: |
+            type=ref,event=branch
+            type=sha,format=long
+            type=raw,value=latest,enable=${{ github.ref_name == 'main' || github.ref_name == 'major/admin-panel' }}
+
+      - name: Build and push CMS Core
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-core.outputs.tags }}
+          labels: ${{ steps.meta-core.outputs.labels }}
+          cache-from: type=gha,scope=core
+          cache-to: type=gha,mode=max,scope=core
+
+  build-and-push-worker:
+    needs: [changes]
+    if: needs.changes.outputs.worker == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify vendored ranking frontend assets
+        run: |
+          test -f src/cmsranking/static/lib/raphael.js || { echo "::error::src/cmsranking/static/lib/raphael.js is missing (expected vendor of https://cdnjs.cloudflare.com/ajax/libs/raphael/2.3.0/raphael.min.js)"; exit 1; }
+          echo "4da6e9aca75e3576d27ac0962ccadc6d6483cd486901d70d3dee50e77ae7f588  src/cmsranking/static/lib/raphael.js" | sha256sum --check --strict -
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the Container registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for CMS Worker
+        id: meta-worker
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-worker
+          tags: |
+            type=ref,event=branch
+            type=sha,format=long
+            type=raw,value=latest,enable=${{ github.ref_name == 'main' || github.ref_name == 'major/admin-panel' }}
+
+      - name: Determine platforms for Worker
+        id: determine-platforms
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.build_arm }}" = "true" ]; then
+            echo "platforms=linux/amd64,linux/arm64" >> $GITHUB_OUTPUT
+          else
+            echo "platforms=linux/amd64" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build and push CMS Worker
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: ${{ steps.determine-platforms.outputs.platforms }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-worker.outputs.tags }}
+          labels: ${{ steps.meta-worker.outputs.labels }}
+          cache-from: type=gha,scope=worker
+          cache-to: type=gha,mode=max,scope=worker
+
+  build-and-push-admin:
+    needs: changes
+    if: needs.changes.outputs.admin == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the Container registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Admin Panel (Next.js)
+        id: meta-admin
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-admin-panel
+          tags: |
+            type=ref,event=branch
+            type=sha,format=long
+            type=raw,value=latest,enable=${{ github.ref_name == 'main' || github.ref_name == 'major/admin-panel' }}
+
+      - name: Build and push Admin Panel
+        uses: docker/build-push-action@v5
+        with:
+          context: ./admin-panel
+          file: ./admin-panel/Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-admin.outputs.tags }}
+          labels: ${{ steps.meta-admin.outputs.labels }}
+          cache-from: type=gha,scope=admin
+          cache-to: type=gha,mode=max,scope=admin
+
+  build-and-push-monitor:
+    needs: changes
+    if: needs.changes.outputs.monitor == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the Container registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Monitor
+        id: meta-monitor
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-monitor
+          tags: |
+            type=ref,event=branch
+            type=sha,format=long
+            type=raw,value=latest,enable=${{ github.ref_name == 'main' || github.ref_name == 'major/admin-panel' }}
+
+      - name: Build and push Monitor
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/monitor/Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-monitor.outputs.tags }}
+          labels: ${{ steps.meta-monitor.outputs.labels }}
+          cache-from: type=gha,scope=monitor
+          cache-to: type=gha,mode=max,scope=monitor

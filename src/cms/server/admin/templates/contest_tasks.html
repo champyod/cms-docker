@@ -17,7 +17,7 @@
     {% endfor %}
   </select>
   <input type="submit"
-{% if not admin.permission_all %}
+{% if not admin.permission_all and not admin.permission_tasks %}
          disabled
 {% endif %}
          value="Add task" />
@@ -27,7 +27,7 @@
   {{ xsrf_form_html|safe }}
   Remove selected task from the contest:
   <input type="submit" name="operation"
-{% if not admin.permission_all %}
+{% if not admin.permission_all and not admin.permission_tasks %}
          disabled
 {% endif %}
          value="Remove from contest" />
@@ -36,22 +36,22 @@
 
   Move selected task:
   <input type="submit" name="operation"
-{% if not admin.permission_all %}
+{% if not admin.permission_all and not admin.permission_tasks %}
          disabled
 {% endif %}
          value="to the top" />
   <input type="submit" name="operation"
-{% if not admin.permission_all %}
+{% if not admin.permission_all and not admin.permission_tasks %}
          disabled
 {% endif %}
          value="up by 1" />
   <input type="submit" name="operation"
-{% if not admin.permission_all %}
+{% if not admin.permission_all and not admin.permission_tasks %}
          disabled
 {% endif %}
          value="down by 1" />
   <input type="submit" name="operation"
-{% if not admin.permission_all %}
+{% if not admin.permission_all and not admin.permission_tasks %}
          disabled
 {% endif %}
          value="to the bottom" />

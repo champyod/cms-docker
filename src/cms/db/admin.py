@@ -16,9 +16,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-"""Admin-related database interfaces for SQLAlchemy.
-
-"""
+"""Admin-related database interfaces for SQLAlchemy."""
 
 from sqlalchemy.schema import Column
 from sqlalchemy.types import Boolean, Integer, Unicode
@@ -36,49 +34,40 @@ class Admin(Base):
 
     """
 
-    __tablename__ = 'admins'
+    __tablename__ = "admins"
 
     # Auto increment primary key.
-    id: int = Column(
-        Integer,
-        primary_key=True)
+    id: int = Column(Integer, primary_key=True)
 
     # Real name (human readable) of the user.
-    name: str = Column(
-        Unicode,
-        nullable=False)
+    name: str = Column(Unicode, nullable=False)
 
     # Username used to log in in AWS.
-    username: str = Column(
-        Codename,
-        nullable=False,
-        unique=True)
+    username: str = Column(Codename, nullable=False, unique=True)
 
     # String used to authenticate the user, in the format
     # <authentication type>:<authentication_string>
-    authentication: str = Column(
-        Unicode,
-        nullable=False)
+    authentication: str = Column(Unicode, nullable=False)
 
     # Whether the account is enabled. Disabled accounts have their
     # info kept in the database, but for all other purposes it is like
     # they did not exist.
-    enabled: bool = Column(
-        Boolean,
-        nullable=False,
-        default=True)
+    enabled: bool = Column(Boolean, nullable=False, default=True)
 
     # All-access bit. If this is set, the admin can do any operation
     # in AWS, regardless of the value of the other access bits.
-    permission_all: bool = Column(
-        Boolean,
-        nullable=False,
-        default=False)
+    permission_all: bool = Column(Boolean, nullable=False, default=False)
 
     # Messaging-access bit. If this is set, the admin can communicate
     # with the contestants via announcement, private messages and
     # questions.
-    permission_messaging: bool = Column(
-        Boolean,
-        nullable=False,
-        default=False)
+    permission_messaging: bool = Column(Boolean, nullable=False, default=False)
+
+    # Task management bit. If this is set, the admin can create/edit/delete tasks.
+    permission_tasks: bool = Column(Boolean, nullable=False, default=False)
+
+    # User management bit. If this is set, the admin can create/edit/delete users.
+    permission_users: bool = Column(Boolean, nullable=False, default=False)
+
+    # Contest management bit. If this is set, the admin can create/edit/delete contests.
+    permission_contests: bool = Column(Boolean, nullable=False, default=False)

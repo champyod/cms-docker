@@ -306,7 +306,7 @@
   </table>
   <input type="submit"
          value="Update"
-{% if not admin.permission_all %}
+{% if not admin.permission_all and not admin.permission_contests %}
          disabled
 {% endif %}
          >
@@ -318,7 +318,7 @@
     <input type="submit"
          name="operation"
          value="Remove" style="float: right;"
-{% if not admin.permission_all %}
+{% if not admin.permission_all and not admin.permission_contests %}
          disabled
 {% endif %}
          />

@@ -43,7 +43,7 @@ from cms import ServiceCoord, get_service_shards
 from cms.db.session import Session
 from cms.io.priorityqueue import QueueEntry, QueueEntryDict, QueueItem
 from cmscommon.datetime import make_timestamp
-from cms.db import SessionGen, Digest, Dataset, Evaluation, Submission, \
+from cms.db import SessionGen, Contest, Digest, Dataset, Evaluation, Participation, Submission, \
     SubmissionResult, Testcase, UserTest, UserTestResult, get_submissions, \
     get_submission_results, get_datasets_to_judge
 from cms.grading.Job import Job, JobGroup
@@ -251,7 +251,6 @@ class EvaluationService(TriggeredService[ESOperation, EvaluationExecutor]):
     RESULT_CACHE_SIZE = 100
     # The maximum time since the last result before processing.
     MAX_FLUSHING_TIME_SECONDS = 2
-
     def __init__(self, shard: int, contest_id: int | None = None):
         super().__init__(shard)
 
@@ -312,13 +311,15 @@ class EvaluationService(TriggeredService[ESOperation, EvaluationExecutor]):
 
         """
         new_operations = 0
+        fairness_delay = self._compute_submission_fairness_delay(submission)
         for dataset in get_datasets_to_judge(submission.task):
             submission_result = submission.get_result(dataset)
             number_of_operations = 0
             for operation, priority, timestamp in submission_get_operations(
                     submission_result, submission, dataset, archive_sandbox):
+                adjusted_timestamp = timestamp + fairness_delay
                 number_of_operations += 1
-                if self.enqueue(operation, priority, timestamp):
+                if self.enqueue(operation, priority, adjusted_timestamp):
                     new_operations += 1
 
             # If we got 0 operations, but the submission result is to
@@ -333,6 +334,43 @@ class EvaluationService(TriggeredService[ESOperation, EvaluationExecutor]):
                 self.evaluation_ended(submission_result)
 
         return new_operations
+
+    def _compute_submission_fairness_delay(self, submission: Submission) -> timedelta:
+        """Compute neutral fairness delay for this submission.
+
+        Delay grows linearly with the number of this participation's submissions
+        that are currently waiting in the evaluation queue.
+
+        """
+        pending_submission_ids: set[int] = set()
+        for queue_entry in self.get_executor().get_status():
+            item = queue_entry.get("item", {})
+            operation_type = item.get("type")
+            if operation_type not in (ESOperation.COMPILATION, ESOperation.EVALUATION):
+                continue
+            object_id = item.get("object_id")
+            if isinstance(object_id, int):
+                pending_submission_ids.add(object_id)
+
+        if not pending_submission_ids:
+            return timedelta(0)
+
+        with SessionGen() as session:
+            penalty_seconds = session.query(Contest.queue_fairness_penalty_seconds)\
+                .join(Participation, Participation.contest_id == Contest.id)\
+                .filter(Participation.id == submission.participation_id)\
+                .scalar()
+
+            effective_penalty_seconds = float(penalty_seconds or 0)
+            if effective_penalty_seconds <= 0:
+                return timedelta(0)
+
+            pending_count = session.query(func.count(Submission.id))\
+                .filter(Submission.id.in_(pending_submission_ids))\
+                .filter(Submission.participation_id == submission.participation_id)\
+                .scalar()
+
+        return timedelta(seconds=effective_penalty_seconds * int(pending_count or 0))
 
     def user_test_enqueue_operations(self, user_test: UserTest) -> int:
         """Push in queue the operations required by a user test.

@@ -1,0 +1,48 @@
+import { Sidebar, SIDEBAR_STORAGE_KEY } from "@/components/layout/Sidebar";
+import { Header } from "@/components/layout/Header";
+import { getSession, refreshSession } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { PageBackground } from "@/components/core/PageBackground";
+import { Stack } from "@/components/core/Layout";
+import { ShortcutLayer } from "@/components/layout/ShortcutOverlay";
+
+export default async function AuthenticatedLayout({
+  children,
+  params,
+}: {
+  children: React.ReactNode;
+  params: Promise<{ locale: string }>;
+}) {
+  const resolvedParams = await params;
+  const { locale } = resolvedParams;
+
+  const session = await getSession();
+
+  if (!session) {
+    redirect(`/${locale}/auth/login`);
+  }
+
+  await refreshSession(session);
+
+  const sidebarExpanded = (await cookies()).get(SIDEBAR_STORAGE_KEY)?.value !== '0';
+
+  return (
+    <PageBackground className="flex h-screen overflow-hidden">
+      <Sidebar
+        className="z-20"
+        locale={locale}
+        permissions={session.permissions}
+        initialExpanded={sidebarExpanded}
+      />
+      <Stack as="main" className="flex-1 min-h-0 relative overflow-hidden" gap={0}>
+        <Header className="z-10" username={session.username} />
+
+        <div className="flex-1 overflow-y-auto p-8 z-10 scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20">
+          {children}
+        </div>
+      </Stack>
+      <ShortcutLayer />
+    </PageBackground>
+  );
+}

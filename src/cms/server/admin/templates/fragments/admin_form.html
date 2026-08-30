@@ -5,12 +5,18 @@
   {% set admin_name = admin_being_edited.name %}
   {% set admin_permission_all = admin_being_edited.permission_all %}
   {% set admin_permission_messaging = admin_being_edited.permission_messaging %}
+  {% set admin_permission_tasks = admin_being_edited.permission_tasks %}
+  {% set admin_permission_users = admin_being_edited.permission_users %}
+  {% set admin_permission_contests = admin_being_edited.permission_contests %}
   {% set admin_enabled = admin_being_edited.enabled %}
 {% else %}
   {% set admin_username = "" %}
   {% set admin_name = "" %}
   {% set admin_permission_all = True %}
   {% set admin_permission_messaging = False %}
+  {% set admin_permission_tasks = False %}
+  {% set admin_permission_users = False %}
+  {% set admin_permission_contests = False %}
   {% set admin_enabled = True %}
 {% endif %}
 
@@ -39,6 +45,24 @@
       <td>Messaging permissions</td>
       <td>
         <input type="checkbox" name="permission_messaging" {% if admin_permission_messaging %}checked{% endif %} />
+      </td>
+    </tr>
+    <tr>
+      <td>Task permissions</td>
+      <td>
+        <input type="checkbox" name="permission_tasks" {% if admin_permission_tasks %}checked{% endif %} />
+      </td>
+    </tr>
+    <tr>
+      <td>User permissions</td>
+      <td>
+        <input type="checkbox" name="permission_users" {% if admin_permission_users %}checked{% endif %} />
+      </td>
+    </tr>
+    <tr>
+      <td>Contest permissions</td>
+      <td>
+        <input type="checkbox" name="permission_contests" {% if admin_permission_contests %}checked{% endif %} />
       </td>
     </tr>
     <tr>

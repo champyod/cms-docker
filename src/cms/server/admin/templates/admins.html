@@ -13,8 +13,11 @@
         <th>Enabled</th>
         <th>Username</th>
         <th>Name</th>
-        <th>All permissions</th>
-        <th>Messaging permissions</th>
+        <th>All</th>
+        <th>Messaging</th>
+        <th>Tasks</th>
+        <th>Users</th>
+        <th>Contests</th>
       </tr>
     </thead>
     <tbody>
@@ -31,6 +34,9 @@
         <td>{{ a.name }}</td>
         <td>{{ a.permission_all }}</td>
         <td>{{ a.permission_messaging }}</td>
+        <td>{{ a.permission_tasks }}</td>
+        <td>{{ a.permission_users }}</td>
+        <td>{{ a.permission_contests }}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -47,12 +53,11 @@
 
 <ul>
   <li>Disabled admins cannot log in.</li>
-  <li>Admins with the "All permissions" bit set can do any
-    operation, regardless of the status of the other permission
-    bits.</li>
-  <li>The "Messaging" permissions allow the admin to communicate with
-    the contestants, answering questions, sending private messages
-    and announcements.</li>
+  <li>Admins with the "All" bit set can do any operation, regardless of the status of the other permission bits.</li>
+  <li>The "Messaging" permission allows the admin to communicate with contestants, answering questions, sending private messages and announcements.</li>
+  <li>The "Tasks" permission allows creating/editing/deleting tasks.</li>
+  <li>The "Users" permission allows creating/editing/deleting users and teams.</li>
+  <li>The "Contests" permission allows creating/editing/deleting contests.</li>
 </ul>
 
 {% endblock core %}

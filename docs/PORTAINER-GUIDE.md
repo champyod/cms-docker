@@ -95,7 +95,6 @@ Deploy stacks in this order:
    ```
    CMS_CONFIG=/usr/local/etc/cms.conf
    CMS_RANKING_CONFIG=/usr/local/etc/cms.ranking.conf
-   ADMIN_WEB_SERVER_SHARD=0
    ADMIN_LISTEN_ADDRESS=0.0.0.0
    ADMIN_LISTEN_PORT=8889
    ADMIN_PORT_EXTERNAL=8889
@@ -251,12 +250,12 @@ Continue as needed.
    
    Download and run the worker connection script:
    ```bash
-   curl -fsSL http://YOUR-MAIN-SERVER/scripts/worker-connect.sh | sudo bash
+   curl -fsSL http://YOUR-MAIN-SERVER/scripts/__worker_connect.sh | sudo bash
    ```
    
    Or manually:
    ```bash
-   wget http://YOUR-MAIN-SERVER/scripts/worker-connect.sh
+   wget http://YOUR-MAIN-SERVER/scripts/__worker_connect.sh
    chmod +x worker-connect.sh
    sudo ./worker-connect.sh
    ```

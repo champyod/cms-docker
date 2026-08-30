@@ -1,0 +1,62 @@
+{
+  "dashboard": {
+    "welcome": "Welcome back, Admin",
+    "description": "Here's what's happening with your contests today.",
+    "stats": {
+      "totalUsers": "Total Users",
+      "totalContests": "Total Contests",
+      "totalSubmissions": "Total Submissions"
+    }
+  },
+  "errors": {
+    "permissionDenied": "Permission Denied",
+    "permissionRequired": "You need {permission} permission to access this page.",
+    "contactAdmin": "Contact your administrator to request access.",
+    "returnToDashboard": "Return to Dashboard"
+  },
+  "users": {
+    "title": "User Management",
+    "subtitle": "Manage system users and participants.",
+    "allUsers": "All Users",
+    "bulkAddUsers": "Bulk Add Users",
+    "createUser": "Create User",
+    "editUser": "Edit User",
+    "editSelected": "Edit Selected",
+    "searchPlaceholder": "Search users...",
+    "tableEmptyTitle": "No users found.",
+    "tableEmptyDescription": "Adjust your search or create a new user to get started.",
+    "bulkCreateTitle": "Bulk Add Users (CSV)",
+    "bulkEditTitle": "Edit Selected Users",
+    "bulkCreateTemplate": "Download CSV Template",
+    "bulkCreateParse": "Parse & Preview",
+    "bulkOverwriteApply": "Apply Credentials"
+  },
+  "teams": {
+    "title": "Teams",
+    "subtitle": "Manage teams for competitive programming.",
+    "allTeams": "All Teams",
+    "addTeam": "Add Team",
+    "editTeam": "Edit Team",
+    "teamDetail": "Team Details",
+    "viewMembers": "View team members",
+    "editTeamTooltip": "Edit team",
+    "deleteTeamTooltip": "Delete team",
+    "tableEmptyTitle": "No teams found",
+    "tableEmptyDescription": "Teams will appear here once created."
+  },
+  "submissions": {
+    "title": "Submissions",
+    "subtitle": "Monitor real-time submission activity and results.",
+    "allSubmissions": "All Submissions",
+    "readOnlyBadge": "Read-only",
+    "tableEmptyTitle": "No submissions found",
+    "tableEmptyDescription": "Submissions will appear here once contestants start submitting.",
+    "viewSubmission": "View submission"
+  },
+  "admins": {
+    "actions": {
+      "edit": "Edit",
+      "delete": "Delete"
+    }
+  }
+}

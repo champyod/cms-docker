@@ -89,7 +89,7 @@ sudo firewall-cmd --reload
 
 ```bash
 # Deploy all stacks
-./scripts/quick-start.sh
+./cms
 
 # Or manually
 docker compose -f docker-compose.core.yml --env-file .env.core up -d
@@ -303,7 +303,7 @@ sudo ufw reload
 #### Step 4: Deploy Services
 
 ```bash
-./scripts/quick-start.sh
+./cms
 ```
 
 #### Step 5: Access CMS
@@ -379,7 +379,7 @@ Edit worker configuration or use the connect script:
 
 ```bash
 # Download and run worker connect script
-curl -fsSL http://203.0.113.45:8889/scripts/worker-connect.sh -o worker-connect.sh
+curl -fsSL http://203.0.113.45:8889/scripts/__worker_connect.sh -o worker-connect.sh
 chmod +x worker-connect.sh
 sudo ./worker-connect.sh
 ```
@@ -463,7 +463,7 @@ sudo ufw allow 29000/tcp
 **Check 1: Verify services are running**
 ```bash
 docker ps
-./scripts/status.sh
+./scripts/__status.sh
 ```
 
 **Check 2: Verify ports are listening**
@@ -540,7 +540,7 @@ sudo ufw allow 8889/tcp
 sudo ufw allow 8890/tcp
 
 # 4. Deploy
-./scripts/quick-start.sh
+./cms
 
 # 5. Access
 echo "Contest: http://$MY_IP:8888"
@@ -567,7 +567,7 @@ sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
 
 # 5. Deploy
-./scripts/quick-start.sh
+./cms
 
 # 6. Enable HTTPS
 sudo certbot --nginx -d contest.example.com -d admin.example.com

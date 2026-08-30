@@ -15,7 +15,7 @@ user_id (int|None): if we are rendering one of the questions on a single user's
   <div class="notification_msg">
     <div class="notification_timestamp">
       {% if user_id is none %}
-        <a href="{{ url("contest", contest.id, "user", msg.participation.user.id, "edit") }}" title="{{ msg.participation.user.first_name }} {{ msg.participation.user.last_name }}">{{ msg.participation.user.username }}</a> &mdash;
+        <a href="{{ url("contest", contest.id, "user", msg.participation.user.id, "edit") }}" title="@{{ msg.participation.user.username }}">{{ msg.participation.user.first_name }} {{ msg.participation.user.last_name }}</a> &mdash;
       {% endif %}
       {{ msg.question_timestamp }}
     </div>

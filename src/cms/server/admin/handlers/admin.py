@@ -17,9 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-"""Admin-related handlers for AWS.
-
-"""
+"""Admin-related handlers for AWS."""
 
 import logging
 
@@ -51,12 +49,15 @@ def _admin_attrs(handler: BaseHandler) -> dict:
 
     # Get the password and translate it to an authentication, if present.
     handler.get_string(attrs, "password", empty=None)
-    if attrs['password'] is not None:
+    if attrs["password"] is not None:
         attrs["authentication"] = hash_password(attrs["password"])
     del attrs["password"]
 
     handler.get_bool(attrs, "permission_all")
     handler.get_bool(attrs, "permission_messaging")
+    handler.get_bool(attrs, "permission_tasks")
+    handler.get_bool(attrs, "permission_users")
+    handler.get_bool(attrs, "permission_contests")
 
     handler.get_bool(attrs, "enabled")
 
@@ -70,15 +71,17 @@ class AddAdminHandler(SimpleHandler("add_admin.html", permission_all=True)):
 
         try:
             attrs = _admin_attrs(self)
-            assert attrs.get("authentication") is not None, \
+            assert attrs.get("authentication") is not None, (
                 "Empty password not permitted."
+            )
 
             admin = Admin(**attrs)
             self.sql_session.add(admin)
 
         except Exception as error:
             self.service.add_notification(
-                make_datetime(), "Invalid field(s)", repr(error))
+                make_datetime(), "Invalid field(s)", repr(error)
+            )
             self.redirect(fallback_page)
             return
 
@@ -89,22 +92,22 @@ class AddAdminHandler(SimpleHandler("add_admin.html", permission_all=True)):
 
 
 class AdminsHandler(BaseHandler):
-    """Page to see all admins.
+    """Page to see all admins."""
 
-    """
     @require_permission(BaseHandler.AUTHENTICATED)
     def get(self):
         self.r_params = self.render_params()
-        self.r_params["admins"] = self.sql_session.query(Admin)\
-            .order_by(Admin.enabled.desc())\
-            .order_by(Admin.username).all()
+        self.r_params["admins"] = (
+            self.sql_session.query(Admin)
+            .order_by(Admin.enabled.desc())
+            .order_by(Admin.username)
+            .all()
+        )
         self.render("admins.html", **self.r_params)
 
 
 class AdminHandler(BaseHandler):
-    """Admin handler, with a POST method to edit the admin.
-
-    """
+    """Admin handler, with a POST method to edit the admin."""
 
     # Fields that an admin can change themself, regardless of the
     # permission bits.
@@ -131,7 +134,8 @@ class AdminHandler(BaseHandler):
 
         except Exception as error:
             self.service.add_notification(
-                make_datetime(), "Invalid field(s)", repr(error))
+                make_datetime(), "Invalid field(s)", repr(error)
+            )
             self.redirect(self.url("admin", admin_id))
             return
 

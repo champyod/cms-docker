@@ -1,28 +1,86 @@
-version: '3.8'
-
 # CMS Contest Stack
 # This stack contains the contest web interface for participants
 # Requires: Core services stack must be running first
 # Configure contest selection via CONTEST_ID environment variable
 
 services:
+  # CMS Evaluation Service - Contest scoped evaluation queue
+  evaluation-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cms-evaluation-service
+    restart: on-failure:5
+    environment:
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
+      SERVICE_TYPE: EvaluationService
+      SERVICE_SHARD: ${EVALUATION_SERVICE_SHARD:-0}
+      CONTEST_ID: ${CONTEST_ID:-1}
+    ports:
+      - "${TAILSCALE_IP:-127.0.0.1}:25000:25000"
+    volumes:
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
+      - cms-logs:/var/local/log/cms
+      - cms-cache:/var/local/cache/cms
+      - cms-data:/var/local/lib/cms
+    networks:
+      - cms-network
+    command: >
+      sh -c "sudo mkdir -p /var/local/log/cms/EvaluationService-${EVALUATION_SERVICE_SHARD:-0} &&
+             sudo chmod -R 777 /var/local/log/cms &&
+             sleep 5 && cmsEvaluationService ${EVALUATION_SERVICE_SHARD:-0} -c ${CONTEST_ID:-1}"
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f cmsEvaluationService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostbyname(socket.gethostname()), 25000))\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  # CMS Proxy Service - Contest scoped ranking relay
+  proxy-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cms-proxy-service
+    restart: on-failure:5
+    environment:
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
+      SERVICE_TYPE: ProxyService
+      SERVICE_SHARD: ${PROXY_SERVICE_SHARD:-0}
+      CONTEST_ID: ${CONTEST_ID:-1}
+    ports:
+      - "${TAILSCALE_IP:-127.0.0.1}:28600:28600"
+    volumes:
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
+      - cms-logs:/var/local/log/cms
+      - cms-cache:/var/local/cache/cms
+    networks:
+      - cms-network
+    command: >
+      sh -c "sudo mkdir -p /var/local/log/cms/ProxyService-${PROXY_SERVICE_SHARD:-0} &&
+             sudo chmod -R 777 /var/local/log/cms &&
+             sleep 5 && cmsProxyService ${PROXY_SERVICE_SHARD:-0} -c ${CONTEST_ID:-1}"
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f cmsProxyService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostbyname(socket.gethostname()), 28600))\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
   # CMS Contest Web Server - Contestant interface
   contest-web-server:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        APT_MIRROR: ${APT_MIRROR:-th.archive.ubuntu.com}
-        APT_PORTS_MIRROR: ${APT_PORTS_MIRROR:-ports.ubuntu.com}
-    container_name: cms-contest-web-server-${CONTEST_ID:-1}
-    restart: unless-stopped
+    container_name: cms-contest-web-server
+    restart: "no"
     environment:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: ContestWebServer
       SERVICE_SHARD: ${CONTEST_WEB_SERVER_SHARD:-0}
+      CONTEST_ID: ${CONTEST_ID:-1}
       CONTEST_LISTEN_PORT: ${CONTEST_LISTEN_PORT:-8888}
       CONTEST_LISTEN_ADDRESS: ${CONTEST_LISTEN_ADDRESS:-0.0.0.0}
-      CONTEST_ID: ${CONTEST_ID:-1}
       # Security settings
       SECRET_KEY: ${SECRET_KEY}
       COOKIE_DURATION: ${COOKIE_DURATION:-10800}
@@ -37,22 +95,23 @@ services:
       - cms-logs:/var/local/log/cms
       - cms-cache:/var/local/cache/cms
       - cms-data:/var/local/lib/cms
-      - cms-submissions-${CONTEST_ID:-1}:/var/local/lib/cms/submissions
+      - cms-submissions:/var/local/lib/cms/submissions
     networks:
       - cms-network
     ports:
-      - "${CONTEST_PORT_EXTERNAL:-8888}:${CONTEST_LISTEN_PORT:-8888}"
+      - "${CONTEST_BIND_IP:-0.0.0.0}:${CONTEST_PORT_EXTERNAL:-8888}:${CONTEST_LISTEN_PORT:-8888}"
     privileged: true
-    cgroup: host
     command: >
-      sh -c "sleep 10 && cmsContestWebServer ${CONTEST_WEB_SERVER_SHARD:-0} -c ${CONTEST_ID:-1}"
+      sh -c "sudo mkdir -p /var/local/log/cms/ContestWebServer-${CONTEST_WEB_SERVER_SHARD:-0} /var/local/cache/cms /var/local/lib/cms &&
+             sudo chmod -R 777 /var/local/log/cms /var/local/cache/cms /var/local/lib/cms &&
+             sleep 10 && cmsContestWebServer ${CONTEST_WEB_SERVER_SHARD:-0} -c ${CONTEST_ID:-1}"
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.cms-contest-${CONTEST_ID:-1}.rule=Host(`${CONTEST_DOMAIN:-contest.cms.local}`)"
-      - "traefik.http.services.cms-contest-${CONTEST_ID:-1}.loadbalancer.server.port=${CONTEST_LISTEN_PORT:-8888}"
+      - "traefik.http.routers.cms-contest.rule=Host(`${CONTEST_DOMAIN:-contest.cms.local}`)"
+      - "traefik.http.services.cms-contest.loadbalancer.server.port=${CONTEST_LISTEN_PORT:-8888}"
       # Optional: Enable HTTPS
-      - "traefik.http.routers.cms-contest-${CONTEST_ID:-1}.tls=${ENABLE_TLS:-false}"
-      - "traefik.http.routers.cms-contest-${CONTEST_ID:-1}.tls.certresolver=${TLS_CERTRESOLVER:-letsencrypt}"
+      - "traefik.http.routers.cms-contest.tls=${ENABLE_TLS:-false}"
+      - "traefik.http.routers.cms-contest.tls.certresolver=${TLS_CERTRESOLVER:-letsencrypt}"
     deploy:
       resources:
         limits:
@@ -71,14 +130,14 @@ services:
   # Optional: Nginx reverse proxy for contest web server
   nginx-proxy:
     image: nginx:alpine
-    container_name: cms-nginx-contest-${CONTEST_ID:-1}
-    restart: unless-stopped
+    container_name: cms-nginx-contest
+    restart: on-failure:5
     depends_on:
       - contest-web-server
     environment:
-      CONTEST_ID: ${CONTEST_ID:-1}
       NGINX_HOST: ${CONTEST_DOMAIN:-contest.cms.local}
       NGINX_PORT: ${NGINX_EXTERNAL_PORT:-80}
+      RANKING_AUTH_DIRECTIVES: ${RANKING_AUTH_DIRECTIVES:-}
     volumes:
       - ./config/nginx-contest.conf:/etc/nginx/templates/default.conf.template:ro
       - nginx-cache:/var/cache/nginx
@@ -86,12 +145,12 @@ services:
     networks:
       - cms-network
     ports:
-      - "${NGINX_HTTP_PORT:-80}:80"
-      - "${NGINX_HTTPS_PORT:-443}:443"
+      - "${NGINX_BIND_IP:-0.0.0.0}:${NGINX_HTTP_PORT:-80}:80"
+      - "${NGINX_BIND_IP:-0.0.0.0}:${NGINX_HTTPS_PORT:-443}:443"
     profiles:
       - nginx
     command: >
-      sh -c "envsubst '$$NGINX_HOST $$CONTEST_LISTEN_PORT' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"
+      sh -c "envsubst '$$NGINX_HOST $$CONTEST_LISTEN_PORT $$RANKING_AUTH_DIRECTIVES' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"
 
 networks:
   cms-network:
@@ -108,9 +167,9 @@ volumes:
   cms-data:
     external: true
     name: cms-data
-  cms-submissions-1:
-    name: cms-submissions-contest-${CONTEST_ID:-1}
+  cms-submissions:
+    name: cms-submissions-contest
   nginx-cache:
-    name: cms-nginx-cache-contest-${CONTEST_ID:-1}
+    name: cms-nginx-cache-contest
   nginx-logs:
-    name: cms-nginx-logs-contest-${CONTEST_ID:-1}
+    name: cms-nginx-logs-contest

@@ -1,5 +1,3 @@
-version: '3.8'
-
 # CMS Worker Stack
 # This stack contains worker services for evaluating submissions
 # Can be deployed on separate machines and scaled horizontally
@@ -17,10 +15,14 @@ services:
         # Use debian:bookworm for Raspberry Pi (has native arm64 isolate packages)
         BASE_IMAGE: ${BASE_IMAGE:-ubuntu:noble}
     container_name: cms-worker-${WORKER_SHARD:-0}
-    restart: unless-stopped
+    restart: on-failure:5
     environment:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: Worker
+      # Required for isolate inside docker
+      ISOLATE_CGROUP_CONTROL: ${ISOLATE_CGROUP_CONTROL:-1}
+      # Delegated host cgroup path prepared by scripts/__worker_cgroup_setup.sh
+      ISOLATE_CGROUP_PATH: ${ISOLATE_CGROUP_PATH:-/sys/fs/cgroup/cms-isolate}
       # Worker shard - Each worker needs a unique shard number
       WORKER_SHARD: ${WORKER_SHARD:-0}
       # Connection to core services
@@ -33,18 +35,28 @@ services:
       # Resource limits
       WORKER_MEMORY_LIMIT: ${WORKER_MEMORY_LIMIT:-4G}
       WORKER_CPU_LIMIT: ${WORKER_CPU_LIMIT:-4}
+    extra_hosts:
+      - "cms-log-service:${CORE_SERVICES_HOST:-127.0.0.1}"
+      - "cms-resource-service:${CORE_SERVICES_HOST:-127.0.0.1}"
+      - "cms-scoring-service:${CORE_SERVICES_HOST:-127.0.0.1}"
+      - "cms-checker-service:${CORE_SERVICES_HOST:-127.0.0.1}"
+      - "cms-evaluation-service:${CORE_SERVICES_HOST:-127.0.0.1}"
+      - "cms-proxy-service:${CORE_SERVICES_HOST:-127.0.0.1}"
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
       - cms-cache:/var/local/cache/cms
       - cms-data:/var/local/lib/cms
       # Temporary directory for sandboxes
-      - worker-tmp-${WORKER_SHARD:-0}:/tmp
+      - worker-tmp:/tmp
+      # Mount cgroups for isolate (cgroup v1 and v2)
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    ports:
+      - "${WORKER_PORT:-26000}:${WORKER_PORT:-26000}"
+      # Expose for VPS connection (ResourceService)
+      - "2600${WORKER_SHARD:-0}:2600${WORKER_SHARD:-0}"
     networks:
       - cms-network
-    # Expose for VPS connection (ResourceService)
-    ports:
-      - "2600${WORKER_SHARD:-0}:2600${WORKER_SHARD:-0}"
     privileged: true
     cgroup: host
     # Security options for sandbox isolation
@@ -54,8 +66,55 @@ services:
     cap_add:
       - SYS_ADMIN
       - SYS_PTRACE
+      - SYS_RESOURCE
+      - NET_ADMIN
     command: >
-      sh -c "sleep 15 && cmsWorker ${WORKER_SHARD:-0}"
+      sh -lc '
+        set -e
+        SHARD=${WORKER_SHARD:-0}
+        CGROUP_CONTROL=${ISOLATE_CGROUP_CONTROL:-1}
+
+        sudo mkdir -p /var/local/log/cms/Worker-$$SHARD /var/local/cache/cms /var/local/lib/cms
+        sudo chmod -R 777 /var/local/log/cms /var/local/cache/cms /var/local/lib/cms
+
+        if [ "$$CGROUP_CONTROL" = "1" ]; then
+          sudo mkdir -p /run/isolate
+          CGROUP_BASE=${ISOLATE_CGROUP_PATH:-/sys/fs/cgroup/cms-isolate}
+
+          if [ ! -d "$$CGROUP_BASE" ]; then
+            echo "ERROR: ISOLATE_CGROUP_PATH does not exist: $$CGROUP_BASE"
+            echo "Run scripts/__worker_cgroup_setup.sh on the worker host first."
+            exit 1
+          fi
+
+          echo "$$CGROUP_BASE" | sudo tee /run/isolate/cgroup >/dev/null
+          sudo chmod 755 /run/isolate
+          sudo chmod 644 /run/isolate/cgroup
+
+          echo "Attempting to enable cgroup v2 controllers for resource limits..."
+          if [ -f "$$CGROUP_BASE/cgroup.subtree_control" ]; then
+            echo "+cpu +memory +pids" | sudo tee "$$CGROUP_BASE/cgroup.subtree_control" >/dev/null || true
+          fi
+
+          echo "Pre-creating box cgroups for isolate (IDs 0-999)..."
+          for box_id in $$(seq 0 999); do
+            sudo mkdir -p "$$CGROUP_BASE/box-$$box_id" 2>/dev/null || true
+            if [ -d "$$CGROUP_BASE/box-$$box_id" ]; then
+              sudo chmod 755 "$$CGROUP_BASE/box-$$box_id" 2>/dev/null || true
+            fi
+          done
+        else
+          echo "ISOLATE_CGROUP_CONTROL disabled: starting worker without isolate cgroup mode"
+        fi
+
+        echo "Cleaning up stale isolate cgroups (v1)..."
+        for subsys in cpu cpuacct memory pids freezer; do
+          [ -d "/sys/fs/cgroup/$$subsys/isolate" ] && sudo cgdelete -r "$$subsys:isolate" 2>/dev/null || true
+        done
+
+        echo "Worker startup complete. Starting service..."
+        exec cmsWorker $$SHARD
+      '
     deploy:
       resources:
         limits:
@@ -88,5 +147,5 @@ volumes:
   cms-data:
     external: true
     name: cms-data
-  worker-tmp-0:
+  worker-tmp:
     name: cms-worker-tmp-${WORKER_SHARD:-0}

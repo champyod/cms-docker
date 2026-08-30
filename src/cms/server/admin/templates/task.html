@@ -72,7 +72,7 @@ $("select[name=task_type_{{ dataset.id }}]").change(function() {
         <td>
           <span class="info" title="The statements of this task, by language code. Primary statements are shown prominently to contestants."></span>
           Statements
-{% if admin.permission_all %}
+{% if admin.permission_all or admin.permission_tasks %}
           [<a href="{{ url("task", task.id, "statements", "add") }}">add</a>]
 {% endif %}
         </td>
@@ -103,7 +103,7 @@ $("select[name=task_type_{{ dataset.id }}]").change(function() {
         <td>
           <span class="info" title="Attachments for this task. Contestant can view and download attachments from the task page."></span>
           Attachments
-{% if admin.permission_all %}
+{% if admin.permission_all or admin.permission_tasks %}
           [<a href="{{ url("task", task.id, "attachments", "add") }}">add</a>]
 {% endif %}
         </td>
@@ -288,7 +288,7 @@ $("select[name=task_type_{{ dataset.id }}]").change(function() {
 {% if task.datasets|length == 0 %}
     No datasets have been created for this task.<br/>
 {% endif %}
-{% if admin.permission_all %}
+{% if admin.permission_all or admin.permission_tasks %}
     <a href="{{ url("task", task.id, "add_dataset") }}">Create a new dataset</a><br/>
 {% endif %}
     </p>
@@ -299,7 +299,7 @@ $("select[name=task_type_{{ dataset.id }}]").change(function() {
   <div id="dataset_{{ dataset.id }}" class="task_dataset">
 
     <p>
-{% if admin.permission_all %}
+{% if admin.permission_all or admin.permission_tasks %}
       {% if dataset is sameas (task.active_dataset) %}
       [Make Live ...]
       {% else %}
@@ -404,7 +404,7 @@ $("select[name=task_type_{{ dataset.id }}]").change(function() {
           <td>
             <span class="info" title="Managers for this task. Managers are sources, headers, libraries or binaries used during the evaluation."></span>
             Managers
-{% if admin.permission_all %}
+{% if admin.permission_all or admin.permission_tasks %}
             [<a href="{{ url("dataset", dataset.id, "managers", "add") }}">add</a>]
 {% endif %}
           </td>
@@ -451,7 +451,7 @@ $("select[name=task_type_{{ dataset.id }}]").change(function() {
 
   <h4 id="title_testcases_{{ dataset.id }}" class="toggling_on">Test cases</h4>
     <div id="testcases_{{ dataset.id }}" class="task_dataset_testcases">
-{% if admin.permission_all %}
+{% if admin.permission_all or admin.permission_tasks %}
       <a href="{{ url("dataset", dataset.id, "testcases", "add") }}">Add a testcase</a>
       <a href="{{ url("dataset", dataset.id, "testcases", "add_multiple") }}">Add multiple testcases</a>
 {% endif %}
@@ -494,7 +494,7 @@ $("select[name=task_type_{{ dataset.id }}]").change(function() {
   {% endfor %}
   </div>
   <input type="submit"
-{% if not admin.permission_all %}
+{% if not admin.permission_all and not admin.permission_tasks %}
          disabled
 {% endif %}
          value="Update" />
@@ -506,7 +506,7 @@ $("select[name=task_type_{{ dataset.id }}]").change(function() {
     <input type="submit"
          name="operation"
          value="Remove" style="float: right;"
-{% if not admin.permission_all %}
+{% if not admin.permission_all and not admin.permission_tasks %}
          disabled
 {% endif %}
          />

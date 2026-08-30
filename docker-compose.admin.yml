@@ -1,39 +1,71 @@
-version: '3.8'
-
 # CMS Admin Stack
 # This stack contains the administrative interface for managing contests
 # Requires: Core services stack must be running first
 
 services:
-  # CMS Admin Web Server - Administrative interface
+  # CMS Admin Panel (Next.js Version)
+  admin-panel-next:
+    build:
+      context: ./admin-panel
+      dockerfile: Dockerfile
+    image: cms-admin-panel-next
+    container_name: cms-admin-panel-next
+    restart: on-failure:5
+    environment:
+      # API and Server Configuration
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8889}
+      SERVER_BASE_URL: ${SERVER_BASE_URL:-http://localhost}
+      PUBLIC_IP: ${PUBLIC_IP:-0.0.0.0}
+
+      # Database
+      DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
+
+      # Authentication
+      AUTH_SECRET: ${AUTH_SECRET}
+
+      # Infrastructure Management
+      REPO_ROOT: /repo-root
+      DEPLOYMENT_TYPE: ${DEPLOYMENT_TYPE:-img}  # 'img' for pre-built images, 'src' for source builds
+      IS_DOCKER: "true"
+    volumes:
+      # Mount Docker socket to allow managing other containers
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Mount the root repository to allow editing config/env files on the host
+      - ./:/repo-root
+      # Host procfs for true host-level metrics in Resources page
+      - /proc:/host/proc:ro
+      - cms-logs:/var/local/log/cms
+    networks:
+      - cms-network
+    ports:
+      - "${ADMIN_NEXT_BIND_IP:-0.0.0.0}:${ADMIN_NEXT_PORT_EXTERNAL:-8891}:3000"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.cms-admin-next.rule=Host(`${ADMIN_NEXT_DOMAIN:-admin-next.cms.local}`)"
+      - "traefik.http.services.cms-admin-next.loadbalancer.server.port=3000"
+
+  # CMS Admin Web Server (Legacy Python Version)
   admin-web-server:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        APT_MIRROR: ${APT_MIRROR:-th.archive.ubuntu.com}
-        APT_PORTS_MIRROR: ${APT_PORTS_MIRROR:-ports.ubuntu.com}
+    image: cms-admin-web-server
     container_name: cms-admin-web-server
-    restart: unless-stopped
+    restart: on-failure:5
     environment:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
-      SERVICE_TYPE: AdminWebServer
-      SERVICE_SHARD: ${ADMIN_WEB_SERVER_SHARD:-0}
       ADMIN_LISTEN_PORT: ${ADMIN_LISTEN_PORT:-8889}
       ADMIN_LISTEN_ADDRESS: ${ADMIN_LISTEN_ADDRESS:-0.0.0.0}
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
       - cms-cache:/var/local/cache/cms
-      - cms-data:/var/local/lib/cms
     networks:
       - cms-network
     ports:
-      - "${ADMIN_PORT_EXTERNAL:-8889}:${ADMIN_LISTEN_PORT:-8889}"
-    privileged: true
-    cgroup: host
+      - "${ADMIN_BIND_IP:-0.0.0.0}:${ADMIN_PORT_EXTERNAL:-8889}:${ADMIN_LISTEN_PORT:-8889}"
     command: >
-      sh -c "sleep 10 && cmsAdminWebServer ${ADMIN_WEB_SERVER_SHARD:-0}"
+      sh -c "sleep 10 && cmsAdminWebServer"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.cms-admin.rule=Host(`${ADMIN_DOMAIN:-admin.cms.local}`)"
@@ -44,23 +76,20 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        APT_MIRROR: ${APT_MIRROR:-th.archive.ubuntu.com}
-        APT_PORTS_MIRROR: ${APT_PORTS_MIRROR:-ports.ubuntu.com}
     container_name: cms-ranking-web-server
-    restart: unless-stopped
+    restart: on-failure:5
     environment:
-      CMS_RANKING_CONFIG: ${CMS_RANKING_CONFIG:-/usr/local/etc/cms.ranking.toml}
+      CMS_RANKING_CONFIG: ${CMS_RANKING_CONFIG:-/usr/local/etc/cms_ranking.toml}
       RANKING_LISTEN_PORT: ${RANKING_LISTEN_PORT:-8890}
       RANKING_LISTEN_ADDRESS: ${RANKING_LISTEN_ADDRESS:-0.0.0.0}
     volumes:
-      - ./config/cms.ranking.toml:/usr/local/etc/cms.ranking.toml:ro
+      - ./config/cms_ranking.toml:/usr/local/etc/cms_ranking.toml:ro
       - cms-logs:/var/local/log/cms
       - cms-ranking-data:/var/local/lib/cms/ranking
     networks:
       - cms-network
     ports:
-      - "${RANKING_PORT_EXTERNAL:-8890}:${RANKING_LISTEN_PORT:-8890}"
+      - "${RANKING_BIND_IP:-0.0.0.0}:${RANKING_PORT_EXTERNAL:-8890}:${RANKING_LISTEN_PORT:-8890}"
     command: >
       sh -c "sleep 10 && cmsRankingWebServer"
     labels:
@@ -73,11 +102,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        APT_MIRROR: ${APT_MIRROR:-th.archive.ubuntu.com}
-        APT_PORTS_MIRROR: ${APT_PORTS_MIRROR:-ports.ubuntu.com}
     container_name: cms-printing-service
-    restart: unless-stopped
+    restart: on-failure:5
     environment:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: PrintingService
@@ -90,11 +116,10 @@ services:
     networks:
       - cms-network
     privileged: true
-    cgroup: host
     profiles:
       - printing
     command: >
-      sh -c "if [ \"$PRINTING_ENABLED\" = \"true\" ]; then sleep 10 && cmsPrintingService ${PRINTING_SERVICE_SHARD:-0}; else echo 'Printing service disabled'; sleep infinity; fi"
+      sh -c "if [ \"$${PRINTING_ENABLED}\" = \"true\" ]; then sleep 10 && cmsPrintingService $${PRINTING_SERVICE_SHARD:-0}; else echo 'Printing service disabled'; sleep infinity; fi"
 
 networks:
   cms-network:

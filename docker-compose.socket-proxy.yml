@@ -1,0 +1,58 @@
+# Docker Socket Proxy — filtered Docker API access for admin panel
+# ADDITIVE: does not replace existing services.
+# Usage: docker compose -f docker-compose.socket-proxy.yml up -d
+# When SOCKET_PROXY=1, set DOCKER_HOST=tcp://socket-proxy:2375 in admin-panel.
+
+services:
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy
+    container_name: cms-socket-proxy
+    restart: on-failure:5
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      # ── Allow list (plan §8) ────────────────────────────────
+      # Container lifecycle (GET list, POST start/stop/restart)
+      CONTAINERS: 1
+      POST: 1
+      GET: 1
+      ALLOW_START: 1
+      ALLOW_STOP: 1
+      ALLOW_RESTART: 1
+      # Monitoring (read-only)
+      LOGS: 1
+      STATS: 1
+      INFO: 1
+      EVENTS: 1
+      # ── Deny list (explicit zero) ───────────────────────────
+      # No image pull/build
+      IMAGES: 0
+      BUILD: 0
+      COMMIT: 0
+      # No network/volume manipulation
+      NETWORKS: 0
+      VOLUMES: 0
+      # No exec (would be root RCE)
+      EXEC: 0
+      # No swarm/config/secrets
+      SERVICES: 0
+      TASKS: 0
+      SWARM: 0
+      CONFIGS: 0
+      SECRETS: 0
+      # No node/distribution/auth
+      NODES: 0
+      DISTRIBUTION: 0
+      AUTH: 0
+      PLUGINS: 0
+    networks:
+      - cms-network
+    # Internal only — no host port exposure
+    expose:
+      - "2375"
+
+# ── Networks ──────────────────────────────────────────────────────
+networks:
+  cms-network:
+    name: cms-network
+    driver: bridge

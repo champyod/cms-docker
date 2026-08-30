@@ -1,0 +1,25 @@
+import { prisma } from '@/lib/prisma';
+import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
+import { NextRequest } from 'next/server';
+import { revalidatePath } from 'next/cache';
+
+export async function POST(req: NextRequest) {
+  const { authorized, response } = await verifyApiPermission('users');
+  if (!authorized) return response;
+
+  try {
+    const data = await req.json();
+    await prisma.teams.create({
+      data: {
+        code: data.code,
+        name: data.name,
+      }
+    });
+    revalidatePath('/[locale]/teams', 'page');
+    return apiSuccess({ message: 'Team created successfully' });
+  } catch (error) {
+    const e = error as { message?: string };
+    if (e.message?.includes('unique constraint')) return apiError({ message: 'Team code already exists', status: 400 });
+    return apiError(error);
+  }
+}

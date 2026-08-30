@@ -1,0 +1,105 @@
+'use server';
+
+import { exec } from 'child_process';
+import util from 'util';
+import { ensurePermission } from '@/lib/permissions';
+import { getRepoRoot } from '@/lib/repo-root';
+
+const execPromise = util.promisify(exec);
+
+const CONTAINER_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/;
+const CONTAINER_ACTIONS = ['start', 'stop', 'restart', 'pause', 'unpause'] as const;
+
+export interface ContainerInfo {
+  id: string;
+  name: string;
+  image: string;
+  status: string;
+  state: string;
+  created: string;
+  isCmsContainer: boolean;
+}
+
+export async function getContainers() {
+  await ensurePermission('all');
+  try {
+    const { stdout } = await execPromise('docker ps -a --format "{{json .}}"');
+    const lines = stdout.trim().split('\n');
+    if (!stdout.trim()) return [];
+
+    return lines.map(line => {
+      const parsed = JSON.parse(line);
+      const name = parsed.Names;
+      const isCmsContainer = name.startsWith('cms-') || name.includes('cms');
+
+      return {
+        id: parsed.ID,
+        name: name,
+        image: parsed.Image,
+        status: parsed.Status,
+        state: parsed.State,
+        created: parsed.CreatedAt,
+        isCmsContainer: isCmsContainer
+      } as ContainerInfo;
+    });
+  } catch (error) {
+    console.error('Failed to get containers:', error);
+    return [];
+  }
+}
+
+export async function controlContainer(id: string, action: 'start' | 'stop' | 'restart' | 'pause' | 'unpause') {
+  await ensurePermission('all');
+  if (!(CONTAINER_ACTIONS as readonly string[]).includes(action) || !CONTAINER_ID_RE.test(id)) {
+    return { success: false, error: 'Invalid container id or action' };
+  }
+  try {
+    const { stdout, stderr } = await execPromise(`docker ${action} ${id}`);
+    if (stderr && !stdout) throw new Error(stderr);
+    return { success: true };
+  } catch (error) {
+    console.error(`Failed to ${action} container ${id}:`, error);
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+export async function getContainerLogs(id: string, tail: number = 100) {
+  await ensurePermission('all');
+  const coercedTail = Number.isInteger(Number(tail)) && Number(tail) >= 1 && Number(tail) <= 1000 ? Number(tail) : 100;
+  if (!CONTAINER_ID_RE.test(id)) {
+    return { success: false, error: 'Invalid container id or action' };
+  }
+  try {
+    const { stdout, stderr } = await execPromise(`docker logs --tail ${coercedTail} ${id}`);
+    return { success: true, logs: stdout || stderr };
+  } catch (error) {
+    console.error(`Failed to get logs for container ${id}:`, error);
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+export async function runCompose(action: 'up' | 'down' | 'restart' | 'build', serviceType?: 'core' | 'admin' | 'contest' | 'worker') {
+  await ensurePermission('all');
+  try {
+    const repoRoot = getRepoRoot();
+    let fileArgs = '';
+    
+    if (serviceType === 'core') fileArgs = '-f docker-compose.core.yml';
+    else if (serviceType === 'admin') fileArgs = '-f docker-compose.admin.yml';
+    else if (serviceType === 'contest') fileArgs = '-f docker-compose.contest.yml';
+    else if (serviceType === 'worker') fileArgs = '-f docker-compose.worker.yml';
+    else {
+      fileArgs = '-f docker-compose.core.yml -f docker-compose.admin.yml -f docker-compose.contest.yml -f docker-compose.worker.yml';
+    }
+
+    let cmd = `docker compose ${fileArgs} ${action}`;
+    if (action === 'up') cmd += ' -d';
+    if (action === 'build') cmd += ' --no-cache';
+
+    const { stdout, stderr } = await execPromise(cmd, { cwd: repoRoot });
+    return { success: true, output: stdout || stderr };
+  } catch (error) {
+    console.error('Compose command failed:', error);
+    return { success: false, error: (error as Error).message };
+  }
+}

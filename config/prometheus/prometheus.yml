@@ -1,0 +1,51 @@
+# Prometheus scrape config — optional monitoring stack
+# Scrapes: self, node-exporter, nginx stub_status (enabled when MONITORING_ENABLED=1), cms-monitor placeholder
+# Mirrors monitor_targets.json ping targets where applicable.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+  external_labels:
+    monitor: "cms-monitoring"
+
+scrape_configs:
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+        labels:
+          instance: "prometheus"
+
+  - job_name: "node-exporter"
+    static_configs:
+      - targets: ["node-exporter:9100"]
+        labels:
+          instance: "grader-host"
+
+  - job_name: "nginx"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["grader-nginx-proxy:80"]
+        labels:
+          instance: "grader-nginx"
+    # When MONITORING_ENABLED=0 this target will be down (stub_status not rendered) — expected.
+
+  - job_name: "cms-monitor"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["cms-monitor:8080"]
+        labels:
+          instance: "cms-monitor"
+    # Placeholder: cms-monitor does not expose Prometheus metrics yet.
+    # When it does (e.g. Python prometheus_client on :8080/metrics), this job will go up.
+    # Until then it will show as DOWN — harmless.
+
+  # Optional: scrape cms services if they expose /metrics in future
+  - job_name: "cms-services"
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - "cms-contest-web-server:8888"
+          - "cms-admin-panel-next:3000"
+          - "cms-ranking-web-server:8890"
+        labels:
+          instance: "cms-service"

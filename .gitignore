@@ -9,9 +9,9 @@ cms.egg-info
 .testfailures
 .unittestfailures
 .coverage*
-cache/
+/cache/
 /lib/
-log/
+/log/
 .vagrant/
 codecov/
 .dev/
@@ -23,11 +23,54 @@ test_logs/
 !.env.*.example
 !.env.example
 
-# Local overrides (legacy)
+# Local overrides — gitignored for inside info / prod stay-off
+.env.local
+.env.*.local
 *.local
+*.pem.local
 
 # VSCode settings
 .vscode/
 
-# Agent documentation (keep README.md and progress.md tracked)
 .agent/environment.md
+.result
+docker-compose.contests.generated.yml
+admin-panel/.env
+
+# Agent tools
+.claude/
+/CMS-ENTRYPOINT-NOTES.md
+
+# Generated / runtime secrets
+config/funnel.htpasswd
+config/grader.nginx.conf
+config/letsencrypt/
+config/monitor_targets.json
+certbot-webroot/
+
+# Optional features — local HSM/Vault/mTLS artefacts (gitignored, not for prod by default)
+config/hsm/
+config/hsm/*.db
+*.db
+config/vault/data/
+config/vault/*.hcl.local
+config/mtls/
+*.pem.local
+config/*.pem
+config/*.pem.local
+
+# Backup archives
+backups/*.tar.gz
+
+# Monitoring data (Docker volumes — not files, but ignore stray local copies)
+prometheus-data/
+grafana-data/
+config/prometheus/data/
+
+# WAF ModSecurity audit/debug logs (plan-first; DetectionOnly writes heavily)
+modsec_audit.log
+modsec_debug.log
+config/modsecurity/modsec_audit.log
+config/modsecurity/modsec_debug.log
+waf-logs/
+cms-waf-logs/

@@ -1,0 +1,11 @@
+# Legacy multi-stack Docker setup: base images track upstream releases and
+# RUN scripts rely on bash-isms under SHELL bash. Version-pinning is tracked
+# as separate backlog work; these style rules stay ignored until then.
+ignored:
+  - DL3006  # untagged base image
+  - DL3008  # unpinned apt versions
+  - DL3015  # --no-install-recommends
+  - DL3018  # unpinned apk versions
+  - DL3003  # cd in RUN instead of WORKDIR
+  - SC3054  # POSIX array ref (RUN uses bash)
+  - SC3044  # POSIX popd (RUN uses bash)

@@ -55,58 +55,30 @@ Remote workers are evaluation containers that run on separate machines from your
 
 ---
 
-## Quick Setup
+## Worker Management (Recommended)
 
-### One-Command Installation
+The modern Admin Panel (port 8891) provides a unified interface to manage all workers (local and remote).
 
-On your remote worker machine:
+### Managing Workers via Admin UI
+1.  Navigate to **Infrastructure** → **Resources** in the Admin Panel.
+2.  Add or remove worker entries by specifying their `Hostname/IP` and `Port`.
+3.  The system automatically updates `.env.core` with `WORKER_N` variables.
+4.  Run `make env` (or click **Apply Changes** in the UI) to regenerate `config/cms.toml`.
+5.  The system will guide you through restarting the core services to finalize the connection.
 
-```bash
-curl -fsSL http://YOUR_MAIN_SERVER_IP/scripts/worker-connect.sh | sudo bash
-```
-
-**What it does:**
-1. ✅ Checks for Docker, installs if missing
-2. ✅ Prompts for main server IP
-3. ✅ Prompts for worker shard number
-4. ✅ Downloads configuration
-5. ✅ Creates environment file
-6. ✅ Pulls Docker image
-7. ✅ Creates systemd service
-8. ✅ Starts worker
-9. ✅ Shows status
-
-**Interactive Prompts:**
-
-```
-Enter the IP address of your main CMS server: 203.0.113.45
-Enter worker shard number (unique, e.g., 1, 2, 3): 1
-Enter worker name [worker-1]: worker-aws-1
-```
-
-**Setup time: ~5 minutes**
-
-### Serving the Script
-
-On your main server, make the script accessible:
-
-```bash
-# Option 1: Using Python HTTP server
-cd cms-docker/scripts
-python3 -m http.server 8000
-
-# Option 2: Using Nginx
-sudo cp worker-connect.sh /var/www/html/scripts/
-```
-
-Then workers can access:
-```bash
-curl -fsSL http://YOUR_SERVER_IP:8000/worker-connect.sh | sudo bash
-```
+### Security: Tailscale & VPNs
+By default, RPC ports are restricted to `127.0.0.1` for security. To enable remote workers:
+1.  **Tailscale (Recommended)**: Run `./cms setup` and provide your Tailscale IP when prompted. This binds services only to the Tailscale interface.
+2.  **Other VPNs**: Follow the same process but provide your VPN interface IP.
+3.  **Public Access (Dangerous)**: Set `TAILSCALE_IP=0.0.0.0` in `.env.core` and run `make env && make core-img`. This exposes evaluation ports to the entire internet.
 
 ---
 
-## Manual Setup
+## Quick Setup
+... (rest of the file)
+
+... (rest of the file)
+
 
 For users who want more control:
 
@@ -139,6 +111,8 @@ Create `.env.worker`:
 # Worker Configuration
 WORKER_SHARD=1  # MUST be unique per worker
 WORKER_NAME=worker-remote-1
+ISOLATE_CGROUP_CONTROL=1
+ISOLATE_CGROUP_PATH=/sys/fs/cgroup/cms-isolate
 
 # Main Server Connection
 CORE_SERVICES_HOST=203.0.113.45  # Your main server public IP
@@ -178,11 +152,16 @@ services:
       - WORKER_SHARD=${WORKER_SHARD}
       - WORKER_NAME=${WORKER_NAME:-worker-${WORKER_SHARD}}
       - CORE_SERVICES_HOST=${CORE_SERVICES_HOST}
+      - ISOLATE_CGROUP_CONTROL=${ISOLATE_CGROUP_CONTROL:-1}
+      - ISOLATE_CGROUP_PATH=${ISOLATE_CGROUP_PATH:-/sys/fs/cgroup/cms-isolate}
     
     volumes:
       - ./config/cms.conf:/usr/local/etc/cms.conf:ro
       - cms-worker-cache:/var/local/cache/cms
       - cms-worker-log:/var/local/log/cms
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+
+    cgroup: host
     
     deploy:
       resources:
@@ -241,13 +220,38 @@ cd cms-docker
 docker build -t cms:latest .
 ```
 
-### Step 7: Start Worker
+### Step 7: Configure cgroup delegation for isolate
+
+On the worker host, prepare a delegated cgroup path before starting the worker.
+
+```bash
+# From repository root
+sudo ./scripts/__worker_cgroup_setup.sh /sys/fs/cgroup/cms-isolate
+```
+
+If you don't have the script yet, use manual commands:
+
+```bash
+sudo mkdir -p /etc/systemd/system/docker.service.d
+cat <<'EOF' | sudo tee /etc/systemd/system/docker.service.d/10-delegate.conf
+[Service]
+Delegate=yes
+TasksMax=infinity
+EOF
+sudo systemctl daemon-reload
+sudo systemctl restart docker
+sudo sh -c 'echo +cpu +memory +pids > /sys/fs/cgroup/cgroup.subtree_control'
+sudo mkdir -p /sys/fs/cgroup/cms-isolate
+sudo sh -c 'echo +cpu +memory +pids > /sys/fs/cgroup/cms-isolate/cgroup.subtree_control'
+```
+
+### Step 8: Start Worker
 
 ```bash
 docker compose up -d
 ```
 
-### Step 8: Verify Connection
+### Step 9: Verify Connection
 
 ```bash
 # Check logs
@@ -360,7 +364,7 @@ for i in "${!WORKERS[@]}"; do
   
   echo "Deploying worker $SHARD on $WORKER_IP..."
   
-  ssh root@$WORKER_IP "curl -fsSL http://$MAIN_SERVER_IP/scripts/worker-connect.sh | \
+  ssh root@$WORKER_IP "curl -fsSL http://$MAIN_SERVER_IP/scripts/__worker_connect.sh | \
     WORKER_SHARD=$SHARD \
     MAIN_SERVER_IP=$MAIN_SERVER_IP \
     bash"
@@ -402,7 +406,7 @@ aws ec2 run-instances \
   --key-name your-key \
   --security-group-ids sg-workers \
   --user-data '#!/bin/bash
-curl -fsSL http://YOUR_SERVER_IP/scripts/worker-connect.sh | bash'
+curl -fsSL http://YOUR_SERVER_IP/scripts/__worker_connect.sh | bash'
 
 # Or use EC2 launch template
 ```
@@ -416,7 +420,7 @@ gcloud compute instances create cms-worker-1 \
   --image-family ubuntu-2004-lts \
   --image-project ubuntu-os-cloud \
   --metadata startup-script='#!/bin/bash
-curl -fsSL http://YOUR_SERVER_IP/scripts/worker-connect.sh | bash'
+curl -fsSL http://YOUR_SERVER_IP/scripts/__worker_connect.sh | bash'
 ```
 
 ### Azure VM
@@ -439,7 +443,7 @@ Via Web Console:
 3. Add User Data:
    ```bash
    #!/bin/bash
-   curl -fsSL http://YOUR_SERVER_IP/scripts/worker-connect.sh | bash
+   curl -fsSL http://YOUR_SERVER_IP/scripts/__worker_connect.sh | bash
    ```
 
 ---
@@ -591,14 +595,14 @@ Add to crontab:
 
 ## Next Steps
 
-- **[Setup Guide](SETUP-GUIDE.md)** - Main setup instructions
+- **[Tutorial](TUTORIAL.md)** - Main setup instructions
 - **[Troubleshooting](TROUBLESHOOTING.md)** - Fix common issues
-- **[Quick Reference](QUICK-REFERENCE.md)** - Common commands
+- **[Quick Reference](QUICKREF.md)** - Common commands
 
 ---
 
 ## Support
 
-- 📖 [Full Documentation](README.md)
+- 📖 [Full Documentation](../README.md)
 - 💬 [Telegram Community](https://t.me/contestms)
 - 🐛 [Report Issues](https://github.com/cms-dev/cms/issues)
