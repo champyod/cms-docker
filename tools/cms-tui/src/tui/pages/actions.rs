@@ -1,7 +1,22 @@
 use crate::tui::app::App;
-use crate::tui::pages::render_env_list;
-use ratatui::{layout::Rect, Frame};
+use crate::tui::components::action_menu::ActionMenu;
+use ratatui::layout::Rect;
+use ratatui::Frame;
 
-pub fn render(f: &mut Frame, area: Rect, _app: &App) {
-    render_env_list(f, area, "Actions & Deployment — Deployable Stacks");
+pub fn render(f: &mut Frame, area: Rect, app: &App) {
+    let items: Vec<(String, String)> = app
+        .state
+        .tasks
+        .iter()
+        .map(|task| {
+            (
+                task.name.clone(),
+                format!("{:?} · {}", task.category, task.command),
+            )
+        })
+        .collect();
+
+    let title = format!(" Actions & Deployment — {} tasks ", items.len());
+    let menu = ActionMenu::new(items);
+    menu.render(f, area, &title);
 }

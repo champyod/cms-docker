@@ -1,3 +1,4 @@
+use crate::core::model::AppState;
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
     execute,
@@ -44,6 +45,7 @@ pub struct App {
     should_show_working_popup: bool,
     pub working_message: WorkingPopup,
     pub last_toast: Option<(String, u8)>, // (message, timeout ticks)
+    pub state: AppState,
 }
 
 impl App {
@@ -54,6 +56,7 @@ impl App {
             should_show_working_popup: false,
             working_message: WorkingPopup::Blinking,
             last_toast: None,
+            state: AppState::new(),
         }
     }
 

@@ -25,7 +25,7 @@ impl std::fmt::Display for Environment {
 }
 
 /// A single running component within an environment (e.g., `Postgres`, `AdminWeb`).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Service {
     pub id: String,       // Internal ID (e.g., "postgres", "admin-web")
     pub name: String,     // Display name (e.g., "Postgres Database")
@@ -44,7 +44,7 @@ pub enum ServiceStatus {
 }
 
 /// A configuration file managed by the system (e.g., `.env.core`, `cms.conf`).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ConfigFile {
     pub id: String,     // Internal identifier (e.g., "env-core", "cms-conf")
     pub name: String,   // Display name (e.g., ".env for Core")
@@ -53,7 +53,7 @@ pub struct ConfigFile {
 }
 
 /// An executable task or script (e.g., `make core`, `__backup.sh`).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Task {
     pub id: String,          // Internal ID (e.g., "docker-up-core")
     pub name: String,        // Display name (e.g., "Start Core Services")
@@ -74,6 +74,7 @@ pub enum TaskType {
 }
 
 /// The overarching application state.
+#[derive(Debug, Clone, PartialEq)]
 pub struct AppState {
     pub services: Vec<Service>,
     pub configs: Vec<ConfigFile>,
