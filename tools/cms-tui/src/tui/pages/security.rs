@@ -34,7 +34,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
 
     let mut lines: Vec<Line> = Vec::new();
     lines.push(Line::from(Span::styled(
-        " Security taxonomy — display only (no execution in Phase 5)",
+        " Security command surface — reference for available operations ",
         Style::default()
             .fg(Color::DarkGray)
             .add_modifier(Modifier::DIM),

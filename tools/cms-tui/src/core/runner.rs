@@ -20,8 +20,8 @@ pub enum RunError {
 ///
 /// The CMS tooling assumes a stable repo layout (a `cms` script and `Makefile`
 /// at the git root). Resolving the repo root once and reusing it keeps every
-/// spawned command consistent and avoids the fragile relative-path errors that
-/// plagued the Phase 1 stub.
+/// spawned command consistent and avoids fragile relative-path failures when
+/// running from the crate directory.
 pub struct Runner {
     cwd: PathBuf,
 }

@@ -46,7 +46,7 @@ fn propagate_exit(code: i32) -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
-/// Dispatches all 24 commands to their real core execution (Phase 3 wiring).
+/// Dispatches all 24 commands to their real core execution.
 ///
 /// # Errors
 ///
