@@ -339,14 +339,18 @@ mod tests {
         let mut app = app();
         app.push_route(Route::Actions);
         let tasks = app.state.tasks.clone();
-        for index in 0..app.actions_menu.len() {
+        assert_eq!(app.actions_menu.selected(), 0);
+        assert_eq!(app.actions_menu.selected_label(), tasks[0].name.as_str());
+        for (index, task) in tasks
+            .iter()
+            .enumerate()
+            .take(app.actions_menu.len())
+            .skip(1)
+        {
             app.actions_menu.handle_key(crossterm::event::KeyCode::Down);
             let selected = app.actions_menu.selected();
             assert_eq!(selected, index);
-            assert_eq!(
-                app.actions_menu.selected_label(),
-                tasks.get(selected).map_or("", |task| task.name.as_str())
-            );
+            assert_eq!(app.actions_menu.selected_label(), task.name.as_str());
         }
     }
 

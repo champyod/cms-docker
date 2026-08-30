@@ -5,33 +5,35 @@ use super::{
     TailscaleSub, WorkerSub,
 };
 use crate::core::config::config_show;
+use crate::core::dispatch::{self, DispatchKey, DispatchTarget};
 use crate::core::docker::DockerClient;
 use crate::core::runner::Runner;
 
 /// Returns the subprocess exit code for a script, treating a failed spawn as 1.
-fn run_script(script: &str, args: &[&str]) -> i32 {
-    match Runner::new() {
-        Ok(runner) => runner.run_sh(script, args).unwrap_or_else(|err| {
-            eprintln!("cms error: script {script} failed to spawn: {err}");
-            1
-        }),
-        Err(err) => {
-            eprintln!("cms error: repo root not found: {err}");
-            2
-        }
-    }
+///
+/// `script` must be a target resolved from the dispatch table; the table's
+/// single source of truth guarantees the name stays consistent across the
+/// bash shim and this binary.
+fn run_script(runner: &Runner, script: &str, args: &[&str]) -> i32 {
+    runner.run_sh(script, args).unwrap_or_else(|err| {
+        eprintln!("cms error: script {script} failed to spawn: {err}");
+        1
+    })
 }
 
-/// Returns the subprocess exit code for a make target, treating a failed spawn as 1.
-fn run_make(target: &str, envs: &[(&str, &str)]) -> i32 {
-    match Runner::new() {
-        Ok(runner) => runner.run_make(target, envs).unwrap_or_else(|err| {
+/// Resolves and runs the target declared for `key` with the given runtime args.
+///
+/// Returns the subprocess exit code, treating a failed spawn as 1.
+fn run_target(runner: &Runner, key: DispatchKey, args: &[&str]) -> i32 {
+    match dispatch::target(key) {
+        Some(DispatchTarget::Script(name)) => run_script(runner, name, args),
+        Some(DispatchTarget::Make(target)) => runner.run_make(target, &[]).unwrap_or_else(|err| {
             eprintln!("cms error: make {target} failed to spawn: {err}");
             1
         }),
-        Err(err) => {
-            eprintln!("cms error: repo root not found: {err}");
-            2
+        None => {
+            eprintln!("cms error: no dispatch target for {key:?}");
+            1
         }
     }
 }
@@ -52,19 +54,23 @@ fn propagate_exit(code: i32) -> Result<(), Box<dyn std::error::Error>> {
 ///
 /// Returns `Err` when a command exits non-zero or a client fails to initialize.
 ///
-/// The CLI dispatcher is intentionally a flat `match` over all commands.
+/// The CLI dispatcher resolves each command's script/make target from the
+/// single dispatch table; only the runtime arguments (stacks, archives, verbs,
+/// flags) are derived here from the parsed subcommand.
 #[allow(clippy::too_many_lines)]
 pub fn handle(cmd: Commands) -> Result<(), Box<dyn std::error::Error>> {
+    let runner = Runner::new()?;
     match cmd {
-        Commands::Setup => propagate_exit(run_script("__update_engine.sh", &["--fresh"])),
+        Commands::Setup => propagate_exit(run_target(&runner, DispatchKey::Setup, &["--fresh"])),
         Commands::Update { all } => {
-            if all {
-                propagate_exit(run_script("__update-server.sh", &[]))
+            let key = if all {
+                DispatchKey::UpdateAll
             } else {
-                propagate_exit(run_script("__update_engine.sh", &[]))
-            }
+                DispatchKey::Update
+            };
+            propagate_exit(run_target(&runner, key, &[]))
         }
-        Commands::Fix => propagate_exit(run_script("__update_engine.sh", &["--fix"])),
+        Commands::Fix => propagate_exit(run_target(&runner, DispatchKey::Fix, &["--fix"])),
         Commands::Deploy { target, img } => {
             let client = DockerClient::new()?;
             let report = client.deploy(&target, img)?;
@@ -77,78 +83,93 @@ pub fn handle(cmd: Commands) -> Result<(), Box<dyn std::error::Error>> {
         Commands::Clean { stack } => run_docker_exit(&DockerClient::new()?, |c| c.clean(&stack)),
         Commands::Pull { stack } => run_docker_exit(&DockerClient::new()?, |c| c.pull(&stack)),
         Commands::Db { sub } => {
-            let target = match sub {
-                DbSub::Init => "cms-init",
-                DbSub::Reset => "db-reset",
-                DbSub::Clean => "db-clean",
-                DbSub::Sync => "prisma-sync",
+            let key = match sub {
+                DbSub::Init => DispatchKey::DbInit,
+                DbSub::Reset => DispatchKey::DbReset,
+                DbSub::Clean => DispatchKey::DbClean,
+                DbSub::Sync => DispatchKey::DbSync,
             };
-            propagate_exit(run_make(target, &[]))
+            propagate_exit(run_target(&runner, key, &[]))
         }
-        Commands::AdminCreate => propagate_exit(run_make("admin-create", &[])),
-        Commands::Status => propagate_exit(run_script("__status.sh", &[])),
-        Commands::Monitor => propagate_exit(run_script("__monitor.sh", &[])),
-        Commands::Backup { sub } => match sub {
-            Some(BackupSub::Drill) => propagate_exit(run_script("__backup_drill.sh", &[])),
-            Some(BackupSub::Offsite) => propagate_exit(run_script("__offsite-sync.sh", &[])),
-            None => propagate_exit(run_make("backup", &[])),
-        },
-        Commands::Restore { archive } => propagate_exit(run_script("__restore.sh", &[&archive])),
+        Commands::AdminCreate => propagate_exit(run_target(&runner, DispatchKey::AdminCreate, &[])),
+        Commands::Status => propagate_exit(run_target(&runner, DispatchKey::Status, &[])),
+        Commands::Monitor => propagate_exit(run_target(&runner, DispatchKey::Monitor, &[])),
+        Commands::Backup { sub } => {
+            let key = match sub {
+                Some(BackupSub::Drill) => DispatchKey::BackupDrill,
+                Some(BackupSub::Offsite) => DispatchKey::BackupOffsite,
+                None => DispatchKey::Backup,
+            };
+            propagate_exit(run_target(&runner, key, &[]))
+        }
+        Commands::Restore { archive } => {
+            propagate_exit(run_target(&runner, DispatchKey::Restore, &[&archive]))
+        }
         Commands::Secrets { sub } => {
-            let flag = match sub {
-                SecretsSub::Rotate => "--apply",
-                SecretsSub::Audit => "--audit",
-                SecretsSub::Generate => "--generate",
+            let (key, flag) = match sub {
+                SecretsSub::Rotate => (DispatchKey::SecretsRotate, "--apply"),
+                SecretsSub::Audit => (DispatchKey::SecretsAudit, "--audit"),
+                SecretsSub::Generate => (DispatchKey::SecretsGenerate, "--generate"),
             };
-            propagate_exit(run_script("__secrets-rotate.sh", &[flag]))
+            propagate_exit(run_target(&runner, key, &[flag]))
         }
-        Commands::Doctor => propagate_exit(run_script("__preflight.sh", &[])),
-        Commands::Test => propagate_exit(run_script("__smoke-test.sh", &[])),
-        Commands::Worker { sub } => match sub {
-            WorkerSub::Edit => propagate_exit(run_script("__tui/runners/__fleet-actions.sh", &[])),
-            WorkerSub::Deploy => propagate_exit(run_script("__worker_tui.sh", &["deploy"])),
-            WorkerSub::Stop => propagate_exit(run_script("__worker_tui.sh", &["stop", "all"])),
-            WorkerSub::List => propagate_exit(run_script("__worker_tui.sh", &["list"])),
-            WorkerSub::Server => propagate_exit(run_script("__tui/wizards/__server.sh", &[])),
-            WorkerSub::Connect => propagate_exit(run_script("__worker_connect.sh", &[])),
-            WorkerSub::Cgroup => propagate_exit(run_script("__worker_cgroup_setup.sh", &[])),
-        },
+        Commands::Doctor => propagate_exit(run_target(&runner, DispatchKey::Doctor, &[])),
+        Commands::Test => propagate_exit(run_target(&runner, DispatchKey::Test, &[])),
+        Commands::Worker { sub } => {
+            let (key, args) = match sub {
+                WorkerSub::Edit => (DispatchKey::WorkerEdit, Vec::new()),
+                WorkerSub::Deploy => (DispatchKey::WorkerDeploy, vec!["deploy".to_string()]),
+                WorkerSub::Stop => (
+                    DispatchKey::WorkerStop,
+                    vec!["stop".to_string(), "all".to_string()],
+                ),
+                WorkerSub::List => (DispatchKey::WorkerList, vec!["list".to_string()]),
+                WorkerSub::Server => (DispatchKey::WorkerServer, Vec::new()),
+                WorkerSub::Connect => (DispatchKey::WorkerConnect, Vec::new()),
+                WorkerSub::Cgroup => (DispatchKey::WorkerCgroup, Vec::new()),
+            };
+            let args: Vec<&str> = args.iter().map(String::as_str).collect();
+            propagate_exit(run_target(&runner, key, &args))
+        }
         Commands::Tailscale { sub } => {
-            let arg = match sub {
-                TailscaleSub::Setup => "setup",
-                TailscaleSub::Status => "status",
-                TailscaleSub::Remove => "remove",
+            let (key, arg) = match sub {
+                TailscaleSub::Setup => (DispatchKey::TailscaleSetup, "setup"),
+                TailscaleSub::Status => (DispatchKey::TailscaleStatus, "status"),
+                TailscaleSub::Remove => (DispatchKey::TailscaleRemove, "remove"),
             };
-            propagate_exit(run_script("__tailscale_serve.sh", &[arg]))
+            propagate_exit(run_target(&runner, key, &[arg]))
         }
-        Commands::Expose => propagate_exit(run_script("__tui/wizards/__expose.sh", &[])),
+        Commands::Expose => propagate_exit(run_target(&runner, DispatchKey::Expose, &[])),
         Commands::Funnel { sub } => {
-            let arg = match sub {
-                FunnelSub::Setup => "setup",
-                FunnelSub::Passwd => "passwd",
-                FunnelSub::Remove => "remove",
-                FunnelSub::Status => "status",
+            let (key, arg) = match sub {
+                FunnelSub::Setup => (DispatchKey::FunnelSetup, "setup"),
+                FunnelSub::Passwd => (DispatchKey::FunnelPasswd, "passwd"),
+                FunnelSub::Remove => (DispatchKey::FunnelRemove, "remove"),
+                FunnelSub::Status => (DispatchKey::FunnelStatus, "status"),
             };
-            propagate_exit(run_script("__funnel.sh", &[arg]))
+            propagate_exit(run_target(&runner, key, &[arg]))
         }
         Commands::Contest { sub } => match sub {
-            ContestSub::Create => propagate_exit(run_script("__create_contests.sh", &[])),
+            ContestSub::Create => {
+                propagate_exit(run_target(&runner, DispatchKey::ContestCreate, &[]))
+            }
         },
-        Commands::UpdateServer => propagate_exit(run_script("__update-server.sh", &[])),
+        Commands::UpdateServer => {
+            propagate_exit(run_target(&runner, DispatchKey::UpdateServer, &[]))
+        }
         Commands::Domain { sub } => {
-            let arg = match sub {
-                DomainSub::Setup => "setup",
-                DomainSub::Status => "status",
-                DomainSub::Renew => "renew",
-                DomainSub::Preflight => "preflight",
+            let (key, arg) = match sub {
+                DomainSub::Setup => (DispatchKey::DomainSetup, "setup"),
+                DomainSub::Status => (DispatchKey::DomainStatus, "status"),
+                DomainSub::Renew => (DispatchKey::DomainRenew, "renew"),
+                DomainSub::Preflight => (DispatchKey::DomainPreflight, "preflight"),
             };
-            propagate_exit(run_script("__domain.sh", &[arg]))
+            propagate_exit(run_target(&runner, key, &[arg]))
         }
         Commands::Config { sub } => match sub {
-            ConfigSub::Sync => propagate_exit(run_script("__config_sync.sh", &[])),
+            ConfigSub::Sync => propagate_exit(run_target(&runner, DispatchKey::ConfigSync, &[])),
             ConfigSub::Edit => propagate_exit(run_config_edit()),
             ConfigSub::Show => {
-                let runner = Runner::new()?;
                 let output = config_show(&runner.repo_root().join("config.toml"))?;
                 println!("{output}");
                 Ok(())

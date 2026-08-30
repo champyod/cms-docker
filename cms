@@ -78,6 +78,20 @@ Examples:
 CMDS
 }
 
+# Run the Rust TUI rebuild from source so shipped behavior always matches
+# tools/cms-tui; build it on demand if the release artifact is missing, and
+# fall back to the legacy bash TUI only when the Rust toolchain is absent.
+run_tui() {
+  local _tui_bin="tools/cms-tui/target/release/cms-tui"
+  if [[ ! -x "$_tui_bin" ]] && command -v cargo >/dev/null 2>&1; then
+    (cd tools/cms-tui && cargo build --release) >&2
+  fi
+  if [[ -x "$_tui_bin" ]]; then
+    exec "$_tui_bin" "$@"
+  fi
+  exec bash scripts/__tui/__main.sh "$@"
+}
+
 handle_subcommand() {
   # TTY-gated interactive layer: real terminals get the TUI router; pipes,
   # non-tty contexts, --no-tui flag, incompatible forms (--workers-json,
@@ -87,8 +101,8 @@ handle_subcommand() {
       status:--workers-json|backup:drill|backup:offsite) : ;;
       *)
         case "$1" in
-          status|monitor|backup|restore|doctor|test|db|admin-create|contest|pull|stop|clean|deploy|tailscale|funnel|update-server|expose|domain)
-            exec bash scripts/__tui/__main.sh "$@" 
+          setup|update|fix|deploy|stop|clean|pull|db|admin-create|status|monitor|backup|restore|secrets|doctor|test|worker|tailscale|expose|funnel|contest|update-server|domain|config)
+            run_tui "$@"
             ;;
         esac
         ;;
@@ -309,13 +323,11 @@ echo " CMS one-stop bootstrap"
 echo "==============================================="
 [[ -t 0 ]] || ASSUME_YES=1
 
-# Interactive no-args → master dashboard (btop grid). Piped/--yes/--skip/
-# --no-tui → bootstrap lifecycle as before.
+# Interactive no-args → master dashboard. Piped/--yes/--skip/--no-tui →
+# bootstrap lifecycle as before. Interactive entry always goes through the Rust
+# TUI rebuild; the bash TUI is only a fallback when no Rust toolchain exists.
 if [[ -t 0 && -t 1 && $ASSUME_YES -eq 0 && -z "$SKIPS" && -z "${CMS_NO_TUI:-}" && $# -eq 0 ]]; then
-  if [[ -x .tools/cms-tui/cms-tui-linux-x86_64 ]]; then
-    exec .tools/cms-tui/cms-tui-linux-x86_64
-  fi
-  exec bash scripts/__tui/__main.sh
+  run_tui
 fi
 
 run_step prereqs "" '
