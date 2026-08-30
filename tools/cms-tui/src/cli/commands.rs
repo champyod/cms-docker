@@ -1,204 +1,187 @@
+use std::process::Command;
+
 use super::{
     BackupSub, Commands, ConfigSub, ContestSub, DbSub, DomainSub, FunnelSub, SecretsSub,
     TailscaleSub, WorkerSub,
 };
+use crate::core::config::config_show;
+use crate::core::docker::DockerClient;
+use crate::core::runner::Runner;
 
-/// Exhaustive dispatcher — each variant calls a named async stub that prints the
-/// resolved action and returns `Ok(())`. No real execution (Phase 3 wires core).
+/// Returns the subprocess exit code for a script, treating a failed spawn as 1.
+fn run_script(script: &str, args: &[&str]) -> i32 {
+    match Runner::new() {
+        Ok(runner) => runner.run_sh(script, args).unwrap_or_else(|err| {
+            eprintln!("cms error: script {script} failed to spawn: {err}");
+            1
+        }),
+        Err(err) => {
+            eprintln!("cms error: repo root not found: {err}");
+            2
+        }
+    }
+}
+
+/// Returns the subprocess exit code for a make target, treating a failed spawn as 1.
+fn run_make(target: &str, envs: &[(&str, &str)]) -> i32 {
+    match Runner::new() {
+        Ok(runner) => runner.run_make(target, envs).unwrap_or_else(|err| {
+            eprintln!("cms error: make {target} failed to spawn: {err}");
+            1
+        }),
+        Err(err) => {
+            eprintln!("cms error: repo root not found: {err}");
+            2
+        }
+    }
+}
+
+/// Returns `Err` when `code` is non-zero, so failed commands surface in `main`
+/// exactly like the bash dispatcher's `exit "$rc"` paths.
+fn propagate_exit(code: i32) -> Result<(), Box<dyn std::error::Error>> {
+    if code != 0 {
+        Err(format!("command exited with status {code}").into())
+    } else {
+        Ok(())
+    }
+}
+
+/// Dispatches all 24 commands to their real core execution (Phase 3 wiring).
 pub async fn handle(cmd: Commands) -> Result<(), Box<dyn std::error::Error>> {
     match cmd {
-        Commands::Setup => cmd_setup().await,
-        Commands::Update { all } => cmd_update(all).await,
-        Commands::Fix => cmd_fix().await,
-        Commands::Deploy { target, img } => cmd_deploy(target, img).await,
-        Commands::Stop { stack } => cmd_stop(stack).await,
-        Commands::Clean { stack } => cmd_clean(stack).await,
-        Commands::Pull { stack } => cmd_pull(stack).await,
-        Commands::Db { sub } => cmd_db(sub).await,
-        Commands::AdminCreate => cmd_admin_create().await,
-        Commands::Status => cmd_status().await,
-        Commands::Monitor => cmd_monitor().await,
-        Commands::Backup { sub } => cmd_backup(sub).await,
-        Commands::Restore { archive } => cmd_restore(archive).await,
-        Commands::Secrets { sub } => cmd_secrets(sub).await,
-        Commands::Doctor => cmd_doctor().await,
-        Commands::Test => cmd_test().await,
-        Commands::Worker { sub } => cmd_worker(sub).await,
-        Commands::Tailscale { sub } => cmd_tailscale(sub).await,
-        Commands::Expose => cmd_expose().await,
-        Commands::Funnel { sub } => cmd_funnel(sub).await,
-        Commands::Contest { sub } => cmd_contest(sub).await,
-        Commands::UpdateServer => cmd_update_server().await,
-        Commands::Domain { sub } => cmd_domain(sub).await,
-        Commands::Config { sub } => cmd_config(sub).await,
+        Commands::Setup => propagate_exit(run_script("__update_engine.sh", &["--fresh"])),
+        Commands::Update { all } => {
+            if all {
+                propagate_exit(run_script("__update-server.sh", &[]))
+            } else {
+                propagate_exit(run_script("__update_engine.sh", &[]))
+            }
+        }
+        Commands::Fix => propagate_exit(run_script("__update_engine.sh", &["--fix"])),
+        Commands::Deploy { target, img } => {
+            let client = DockerClient::new()?;
+            let report = client.deploy(&target, img)?;
+            for (step, code) in &report.steps {
+                println!("{step}: {}", if *code == 0 { "OK" } else { "FAILED" });
+            }
+            propagate_exit(if report.is_success() { 0 } else { 1 })
+        }
+        Commands::Stop { stack } => run_docker_exit(&DockerClient::new()?, |c| c.stop(&stack)),
+        Commands::Clean { stack } => run_docker_exit(&DockerClient::new()?, |c| c.clean(&stack)),
+        Commands::Pull { stack } => run_docker_exit(&DockerClient::new()?, |c| c.pull(&stack)),
+        Commands::Db { sub } => {
+            let target = match sub {
+                DbSub::Init => "cms-init",
+                DbSub::Reset => "db-reset",
+                DbSub::Clean => "db-clean",
+                DbSub::Sync => "prisma-sync",
+            };
+            propagate_exit(run_make(target, &[]))
+        }
+        Commands::AdminCreate => propagate_exit(run_make("admin-create", &[])),
+        Commands::Status => propagate_exit(run_script("__status.sh", &[])),
+        Commands::Monitor => propagate_exit(run_script("__monitor.sh", &[])),
+        Commands::Backup { sub } => match sub {
+            Some(BackupSub::Drill) => propagate_exit(run_script("__backup_drill.sh", &[])),
+            Some(BackupSub::Offsite) => propagate_exit(run_script("__offsite-sync.sh", &[])),
+            None => propagate_exit(run_make("backup", &[])),
+        },
+        Commands::Restore { archive } => propagate_exit(run_script("__restore.sh", &[&archive])),
+        Commands::Secrets { sub } => {
+            let flag = match sub {
+                SecretsSub::Rotate => "--apply",
+                SecretsSub::Audit => "--audit",
+                SecretsSub::Generate => "--generate",
+            };
+            propagate_exit(run_script("__secrets-rotate.sh", &[flag]))
+        }
+        Commands::Doctor => propagate_exit(run_script("__preflight.sh", &[])),
+        Commands::Test => propagate_exit(run_script("__smoke-test.sh", &[])),
+        Commands::Worker { sub } => match sub {
+            WorkerSub::Edit => propagate_exit(run_script("__tui/runners/__fleet-actions.sh", &[])),
+            WorkerSub::Deploy => propagate_exit(run_script("__worker_tui.sh", &["deploy"])),
+            WorkerSub::Stop => propagate_exit(run_script("__worker_tui.sh", &["stop", "all"])),
+            WorkerSub::List => propagate_exit(run_script("__worker_tui.sh", &["list"])),
+            WorkerSub::Server => propagate_exit(run_script("__tui/wizards/__server.sh", &[])),
+            WorkerSub::Connect => propagate_exit(run_script("__worker_connect.sh", &[])),
+            WorkerSub::Cgroup => propagate_exit(run_script("__worker_cgroup_setup.sh", &[])),
+        },
+        Commands::Tailscale { sub } => {
+            let arg = match sub {
+                TailscaleSub::Setup => "setup",
+                TailscaleSub::Status => "status",
+                TailscaleSub::Remove => "remove",
+            };
+            propagate_exit(run_script("__tailscale_serve.sh", &[arg]))
+        }
+        Commands::Expose => propagate_exit(run_script("__tui/wizards/__expose.sh", &[])),
+        Commands::Funnel { sub } => {
+            let arg = match sub {
+                FunnelSub::Setup => "setup",
+                FunnelSub::Passwd => "passwd",
+                FunnelSub::Remove => "remove",
+                FunnelSub::Status => "status",
+            };
+            propagate_exit(run_script("__funnel.sh", &[arg]))
+        }
+        Commands::Contest { sub } => match sub {
+            ContestSub::Create => propagate_exit(run_script("__create_contests.sh", &[])),
+        },
+        Commands::UpdateServer => propagate_exit(run_script("__update-server.sh", &[])),
+        Commands::Domain { sub } => {
+            let arg = match sub {
+                DomainSub::Setup => "setup",
+                DomainSub::Status => "status",
+                DomainSub::Renew => "renew",
+                DomainSub::Preflight => "preflight",
+            };
+            propagate_exit(run_script("__domain.sh", &[arg]))
+        }
+        Commands::Config { sub } => match sub {
+            ConfigSub::Sync => propagate_exit(run_script("__config_sync.sh", &[])),
+            ConfigSub::Edit => propagate_exit(run_config_edit()),
+            ConfigSub::Show => {
+                let runner = Runner::new()?;
+                let output = config_show(&runner.repo_root().join("config.toml"))?;
+                println!("{output}");
+                Ok(())
+            }
+        },
     }
 }
 
-async fn cmd_setup() -> Result<(), Box<dyn std::error::Error>> {
-    println!("setup");
-    Ok(())
-}
-
-async fn cmd_update(all: bool) -> Result<(), Box<dyn std::error::Error>> {
-    if all {
-        println!("update all");
-    } else {
-        println!("update");
+/// Runs a `DockerClient` operation and propagates non-zero step results.
+fn run_docker_exit<F>(client: &DockerClient, op: F) -> Result<(), Box<dyn std::error::Error>>
+where
+    F: FnOnce(
+        &DockerClient,
+    ) -> Result<crate::core::docker::StepReport, crate::core::docker::DockerError>,
+{
+    let report = op(client)?;
+    for (step, code) in &report.steps {
+        println!("{step}: {}", if *code == 0 { "OK" } else { "FAILED" });
     }
-    Ok(())
+    propagate_exit(if report.is_success() { 0 } else { 1 })
 }
 
-async fn cmd_fix() -> Result<(), Box<dyn std::error::Error>> {
-    println!("fix");
-    Ok(())
-}
-
-async fn cmd_deploy(target: String, img: bool) -> Result<(), Box<dyn std::error::Error>> {
-    if img {
-        println!("deploy {target} --img");
-    } else {
-        println!("deploy {target}");
+/// Opens `config.toml` in `$EDITOR` (default `nano`), matching `cms config edit`.
+fn run_config_edit() -> i32 {
+    let editor = std::env::var("EDITOR").unwrap_or_else(|_| "nano".to_string());
+    match Runner::new() {
+        Ok(runner) => {
+            let config_path = runner.repo_root().join("config.toml");
+            Command::new(editor)
+                .arg(config_path)
+                .status()
+                .map(|status| status.code().unwrap_or(1))
+                .unwrap_or_else(|err| {
+                    eprintln!("cms error: editor failed to launch: {err}");
+                    1
+                })
+        }
+        Err(err) => {
+            eprintln!("cms error: repo root not found: {err}");
+            2
+        }
     }
-    Ok(())
-}
-
-async fn cmd_stop(stack: String) -> Result<(), Box<dyn std::error::Error>> {
-    println!("stop {stack}");
-    Ok(())
-}
-
-async fn cmd_clean(stack: String) -> Result<(), Box<dyn std::error::Error>> {
-    println!("clean {stack}");
-    Ok(())
-}
-
-async fn cmd_pull(stack: String) -> Result<(), Box<dyn std::error::Error>> {
-    println!("pull {stack}");
-    Ok(())
-}
-
-async fn cmd_db(sub: DbSub) -> Result<(), Box<dyn std::error::Error>> {
-    match sub {
-        DbSub::Init => println!("db init"),
-        DbSub::Reset => println!("db reset"),
-        DbSub::Clean => println!("db clean"),
-        DbSub::Sync => println!("db sync"),
-    }
-    Ok(())
-}
-
-async fn cmd_admin_create() -> Result<(), Box<dyn std::error::Error>> {
-    println!("admin-create");
-    Ok(())
-}
-
-async fn cmd_status() -> Result<(), Box<dyn std::error::Error>> {
-    println!("status");
-    Ok(())
-}
-
-async fn cmd_monitor() -> Result<(), Box<dyn std::error::Error>> {
-    println!("monitor");
-    Ok(())
-}
-
-async fn cmd_backup(sub: Option<BackupSub>) -> Result<(), Box<dyn std::error::Error>> {
-    match sub {
-        Some(BackupSub::Drill) => println!("backup drill"),
-        Some(BackupSub::Offsite) => println!("backup offsite"),
-        None => println!("backup"),
-    }
-    Ok(())
-}
-
-async fn cmd_restore(archive: String) -> Result<(), Box<dyn std::error::Error>> {
-    println!("restore {archive}");
-    Ok(())
-}
-
-async fn cmd_secrets(sub: SecretsSub) -> Result<(), Box<dyn std::error::Error>> {
-    match sub {
-        SecretsSub::Rotate => println!("secrets rotate"),
-        SecretsSub::Audit => println!("secrets audit"),
-        SecretsSub::Generate => println!("secrets generate"),
-    }
-    Ok(())
-}
-
-async fn cmd_doctor() -> Result<(), Box<dyn std::error::Error>> {
-    println!("doctor");
-    Ok(())
-}
-
-async fn cmd_test() -> Result<(), Box<dyn std::error::Error>> {
-    println!("test");
-    Ok(())
-}
-
-async fn cmd_worker(sub: WorkerSub) -> Result<(), Box<dyn std::error::Error>> {
-    match sub {
-        WorkerSub::Edit => println!("worker edit"),
-        WorkerSub::Deploy => println!("worker deploy"),
-        WorkerSub::Stop => println!("worker stop"),
-        WorkerSub::List => println!("worker list"),
-        WorkerSub::Server => println!("worker server"),
-        WorkerSub::Connect => println!("worker connect"),
-        WorkerSub::Cgroup => println!("worker cgroup"),
-    }
-    Ok(())
-}
-
-async fn cmd_tailscale(sub: TailscaleSub) -> Result<(), Box<dyn std::error::Error>> {
-    match sub {
-        TailscaleSub::Setup => println!("tailscale setup"),
-        TailscaleSub::Status => println!("tailscale status"),
-        TailscaleSub::Remove => println!("tailscale remove"),
-    }
-    Ok(())
-}
-
-async fn cmd_expose() -> Result<(), Box<dyn std::error::Error>> {
-    println!("expose");
-    Ok(())
-}
-
-async fn cmd_funnel(sub: FunnelSub) -> Result<(), Box<dyn std::error::Error>> {
-    match sub {
-        FunnelSub::Setup => println!("funnel setup"),
-        FunnelSub::Passwd => println!("funnel passwd"),
-        FunnelSub::Remove => println!("funnel remove"),
-        FunnelSub::Status => println!("funnel status"),
-    }
-    Ok(())
-}
-
-async fn cmd_contest(sub: ContestSub) -> Result<(), Box<dyn std::error::Error>> {
-    match sub {
-        ContestSub::Create => println!("contest create"),
-    }
-    Ok(())
-}
-
-async fn cmd_update_server() -> Result<(), Box<dyn std::error::Error>> {
-    println!("update-server");
-    Ok(())
-}
-
-async fn cmd_domain(sub: DomainSub) -> Result<(), Box<dyn std::error::Error>> {
-    match sub {
-        DomainSub::Setup => println!("domain setup"),
-        DomainSub::Status => println!("domain status"),
-        DomainSub::Renew => println!("domain renew"),
-        DomainSub::Preflight => println!("domain preflight"),
-    }
-    Ok(())
-}
-
-async fn cmd_config(sub: ConfigSub) -> Result<(), Box<dyn std::error::Error>> {
-    match sub {
-        ConfigSub::Sync => println!("config sync"),
-        ConfigSub::Edit => println!("config edit"),
-        ConfigSub::Show => println!("config show"),
-    }
-    Ok(())
 }
