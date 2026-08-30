@@ -44,12 +44,10 @@ impl Runner {
         for (key, value) in envs {
             cmd.env(key, value);
         }
-        let status = cmd
-            .status()
-            .map_err(|source| RunError::Spawn {
-                program: "make".into(),
-                source,
-            })?;
+        let status = cmd.status().map_err(|source| RunError::Spawn {
+            program: "make".into(),
+            source,
+        })?;
         Ok(status.code().unwrap_or(-1))
     }
 
@@ -62,12 +60,10 @@ impl Runner {
             .stdin(Stdio::inherit())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit());
-        let status = cmd
-            .status()
-            .map_err(|source| RunError::Spawn {
-                program: script_path.display().to_string(),
-                source,
-            })?;
+        let status = cmd.status().map_err(|source| RunError::Spawn {
+            program: script_path.display().to_string(),
+            source,
+        })?;
         Ok(status.code().unwrap_or(-1))
     }
 
@@ -85,13 +81,10 @@ impl Runner {
         for (key, value) in envs {
             cmd.env(key, value);
         }
-        let status = cmd
-            .status()
-            .await
-            .map_err(|source| RunError::Spawn {
-                program: "make".into(),
-                source,
-            })?;
+        let status = cmd.status().await.map_err(|source| RunError::Spawn {
+            program: "make".into(),
+            source,
+        })?;
         Ok(status.code().unwrap_or(-1))
     }
 
@@ -119,7 +112,10 @@ mod tests {
     #[test]
     fn resolves_repo_root_containing_cms_and_makefile() {
         let runner = Runner::new().expect("repo root should resolve");
-        assert!(runner.repo_root().join("cms").exists(), "cms script present");
+        assert!(
+            runner.repo_root().join("cms").exists(),
+            "cms script present"
+        );
         assert!(
             runner.repo_root().join("Makefile").exists(),
             "Makefile present"
