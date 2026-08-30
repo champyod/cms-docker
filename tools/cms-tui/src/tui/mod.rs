@@ -47,6 +47,16 @@ fn run_app<B: ratatui::backend::Backend>(
 
         if event::poll(std::time::Duration::from_millis(50))? {
             if let Event::Key(key) = event::read()? {
+                if app.current_route() == &app::Route::Actions {
+                    match key.code {
+                        KeyCode::Down | KeyCode::Char('j' | 'k') | KeyCode::Up => {
+                            app.actions_menu.handle_key(key.code);
+                        }
+                        KeyCode::Enter => app.run_selected_action(),
+                        _ => {}
+                    }
+                    continue;
+                }
                 match key.code {
                     KeyCode::Char('q') | KeyCode::Esc => {
                         if app.can_pop() {

@@ -1,4 +1,5 @@
 use crate::core::model::AppState;
+use crate::tui::components::action_menu::ActionMenu;
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
     execute,
@@ -46,6 +47,7 @@ pub struct App {
     pub working_message: WorkingPopup,
     pub last_toast: Option<(String, u8)>, // (message, timeout ticks)
     pub state: AppState,
+    pub actions_menu: ActionMenu,
 }
 
 impl App {
@@ -58,7 +60,22 @@ impl App {
             working_message: WorkingPopup::Blinking,
             last_toast: None,
             state: AppState::new(),
+            actions_menu: Self::build_actions_menu(&AppState::new()),
         }
+    }
+
+    fn build_actions_menu(state: &AppState) -> ActionMenu {
+        let items: Vec<(String, String)> = state
+            .tasks
+            .iter()
+            .map(|task| {
+                (
+                    task.name.clone(),
+                    format!("{:?} · {}", task.category, task.command),
+                )
+            })
+            .collect();
+        ActionMenu::new(items)
     }
 
     #[must_use]
@@ -94,18 +111,27 @@ impl App {
     pub fn push_route(&mut self, route: Route) {
         if self.current_route() != &route {
             self.route_stack.push(route);
+            self.refresh_for_route();
         }
     }
 
     pub fn pop_route(&mut self) {
         if self.can_pop() {
             self.route_stack.pop();
+            self.refresh_for_route();
         }
     }
 
     pub fn reset_to_home(&mut self) {
         self.route_stack.clear();
         self.route_stack.push(Route::Dashboard);
+        self.refresh_for_route();
+    }
+
+    fn refresh_for_route(&mut self) {
+        if self.current_route() == &Route::Actions {
+            self.actions_menu = Self::build_actions_menu(&self.state);
+        }
     }
 
     pub const fn quit(&mut self) {
@@ -174,6 +200,47 @@ impl App {
         });
         self.should_show_working_popup = false;
         self.working_message = WorkingPopup::Blinking;
+    }
+
+    /// Runs the task currently selected in the Actions menu. TTY tasks drop to
+    /// the terminal for interactive output; non-TTY tasks run inline and report
+    /// their result in a toast without leaving the TUI.
+    pub fn run_selected_action(&mut self) {
+        let selected = self.actions_menu.selected();
+        let Some(task) = self.state.tasks.get(selected) else {
+            self.set_toast("(no action selected)");
+            return;
+        };
+        let command = task.command.clone();
+        let requires_tty = task.requires_tty;
+        if requires_tty {
+            if let Err(err) = self.run_command_in_tty(&command) {
+                self.set_toast(&format!("Failed to run: {err}"));
+            }
+            return;
+        }
+        self.run_inline_task(&command);
+    }
+
+    fn run_inline_task(&mut self, command: &str) {
+        let result = (|| -> Result<i32, Box<dyn Error>> {
+            let runner = crate::core::runner::Runner::new()?;
+            let status = Command::new("sh")
+                .current_dir(runner.repo_root())
+                .arg("-c")
+                .arg(command)
+                .status()?;
+            Ok(status.code().unwrap_or(-1))
+        })();
+        match result {
+            Ok(0) => self.set_toast("Command succeeded!"),
+            Ok(code) => self.set_toast(&format!("Command failed with code: {code}")),
+            Err(err) => self.set_toast(&format!("Failed to run: {err}")),
+        }
+    }
+
+    fn set_toast(&mut self, message: &str) {
+        self.last_toast = Some((message.to_string(), 50));
     }
 }
 
@@ -246,5 +313,51 @@ mod tests {
         app.push_route(Route::Security);
         app.reset_to_home();
         assert_eq!(app.route_stack(), &[Route::Dashboard]);
+    }
+
+    #[test]
+    fn actions_menu_rebuilds_from_tasks_on_route_push() {
+        let mut app = app();
+        app.push_route(Route::Actions);
+        assert_eq!(app.actions_menu.len(), app.state.tasks.len());
+        assert_eq!(app.actions_menu.selected(), 0);
+    }
+
+    #[test]
+    fn actions_menu_selection_survives_across_route_changes() {
+        let mut app = app();
+        app.push_route(Route::Actions);
+        app.actions_menu.handle_key(crossterm::event::KeyCode::Down);
+        assert_eq!(app.actions_menu.selected(), 1);
+        app.push_route(Route::Dashboard);
+        app.push_route(Route::Actions);
+        assert_eq!(app.actions_menu.selected(), 0);
+    }
+
+    #[test]
+    fn actions_menu_selection_maps_to_matching_task() {
+        let mut app = app();
+        app.push_route(Route::Actions);
+        let tasks = app.state.tasks.clone();
+        for index in 0..app.actions_menu.len() {
+            app.actions_menu.handle_key(crossterm::event::KeyCode::Down);
+            let selected = app.actions_menu.selected();
+            assert_eq!(selected, index);
+            assert_eq!(
+                app.actions_menu.selected_label(),
+                tasks.get(selected).map_or("", |task| task.name.as_str())
+            );
+        }
+    }
+
+    #[test]
+    fn run_selected_action_empty_selection_is_noop() {
+        let mut app = app();
+        app.push_route(Route::Actions);
+        app.state.tasks.clear();
+        app.refresh_for_route();
+        assert_eq!(app.actions_menu.len(), 0);
+        app.run_selected_action();
+        assert!(app.last_toast.is_some());
     }
 }
