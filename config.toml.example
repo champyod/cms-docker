@@ -56,6 +56,7 @@ RANKING_PORT_EXTERNAL = 8890    # port
 RANKING_DOMAIN = "ranking.cms.local"
 RANKING_USERNAME = "admin"      # str
 RANKING_PASSWORD = ""           # secret; auto-generated if empty
+RANKING_LOGO_PATH = ""          # str; host path to ranking logo (png/jpg/gif/bmp) e.g. "./config/assets/logo.png" — synced to ranking volume on ./cms config sync (hot-swap, overwrites old)
 CMS_RANKING_LOG_DIR = "/var/local/log/cms/ranking"
 CMS_RANKING_LIB_DIR = "/var/local/lib/cms/ranking"
 DOMAIN_NAME = ""                # str; primary FQDN (e.g. grader.example.org); empty=cms.local
