@@ -37,7 +37,7 @@ Usage:
 Commands:
   help                      this help
   setup                     first-time guided setup (fresh or update wizard)
-  update                    interactive configuration update wizard
+  update                    interactive config update wizard (config only)
   fix                       non-interactive repair of missing/insecure config
   deploy <stack> [--img]    make core|admin|contest|worker|infra [-img]; stack=all loops
   stop [stack]              stop one stack or all
@@ -47,8 +47,10 @@ Commands:
   admin-create              create superadmin account
   status                    live service status dashboard
   monitor                   monitoring/backup operations UI
-  backup [drill]            run backup now; 'drill' tests the restore path
+  backup [drill|offsite]      run backup now; 'drill' tests restore; 'offsite' syncs remote
   restore <archive>         restore a backup archive
+  secrets rotate|audit|generate
+                            rotate weak/default secrets (apply guarded)
   doctor                    preflight environment checks
   test                      smoke-test the deployment
   worker [edit|deploy|stop|list]  fleet TUI / deploy all shards / stop / show
@@ -65,7 +67,8 @@ Commands:
   config edit               open config.toml in $EDITOR
   config show               print current config.toml
   contest create            create contests from YAML
-  update-server             shard-aware server update flow
+  update-server             shard-aware FULL server update (git+img+db+verify)
+  update all                alias for update-server (full update)
 
 Examples:
   ./cms setup
@@ -75,17 +78,31 @@ Examples:
 CMDS
 }
 
+# Run the Rust TUI rebuild from source so shipped behavior always matches
+# tools/cms-tui; build it on demand if the release artifact is missing, and
+# fall back to the legacy bash TUI only when the Rust toolchain is absent.
+run_tui() {
+  local _tui_bin="tools/cms-tui/target/release/cms-tui"
+  if [[ ! -x "$_tui_bin" ]] && command -v cargo >/dev/null 2>&1; then
+    (cd tools/cms-tui && cargo build --release) >&2
+  fi
+  if [[ -x "$_tui_bin" ]]; then
+    exec "$_tui_bin" "$@"
+  fi
+  exec bash scripts/__tui/__main.sh "$@"
+}
+
 handle_subcommand() {
   # TTY-gated interactive layer: real terminals get the TUI router; pipes,
   # non-tty contexts, --no-tui flag, incompatible forms (--workers-json,
   # drill) and CMS_NO_TUI=1 fall through to the plain handlers below unchanged.
   if [[ -t 0 && -t 1 && -z "${CMS_NO_TUI:-}" ]]; then
     case "${1:-}:${2:-}" in
-      status:--workers-json|backup:drill) : ;;
+      status:--workers-json|backup:drill|backup:offsite) : ;;
       *)
         case "$1" in
-          status|monitor|backup|restore|doctor|test|db|admin-create|contest|pull|stop|clean|deploy|tailscale|funnel|update-server|expose|domain)
-            exec bash scripts/__tui/__main.sh "$@" 
+          setup|update|fix|deploy|stop|clean|pull|db|admin-create|status|monitor|backup|restore|secrets|doctor|test|worker|tailscale|expose|funnel|contest|update-server|domain|config)
+            run_tui "$@"
             ;;
         esac
         ;;
@@ -101,7 +118,12 @@ handle_subcommand() {
       fi
       exec bash scripts/__update_engine.sh ${mode_args[@]+"${mode_args[@]}"} "${@:2}"
       ;;
-    update) shift; exec bash scripts/__update_engine.sh "$@" ;;
+    update)
+      if [[ "${2:-}" == "all" ]]; then
+        shift 2; exec bash scripts/__update-server.sh "$@"
+      fi
+      shift; exec bash scripts/__update_engine.sh "$@"
+      ;;
     fix)    exec bash scripts/__update_engine.sh --fix ;;
     deploy)
       stack="${2:-}"
@@ -163,9 +185,20 @@ handle_subcommand() {
       shift; exec bash scripts/__status.sh "$@" ;;
     monitor) shift; exec bash scripts/__monitor.sh "$@" ;;
     backup)
-      if [[ "${2:-}" == "drill" ]]; then shift 2; exec bash scripts/__backup_drill.sh "$@"; fi
-      exec make backup ;;
+      case "${2:-}" in
+        drill)   shift 2; exec bash scripts/__backup_drill.sh "$@" ;;
+        offsite) shift 2; exec bash scripts/__offsite-sync.sh "$@" ;;
+        *) exec make backup ;;
+      esac ;;
     restore) shift; exec bash scripts/__restore.sh "$@" ;;
+    secrets)
+      sub="${2:-}"
+      case "$sub" in
+        rotate)   shift 2; exec bash scripts/__secrets-rotate.sh --apply "$@" ;;
+        audit)    shift 2; exec bash scripts/__secrets-rotate.sh --audit "$@" ;;
+        generate) shift 2; exec bash scripts/__secrets-rotate.sh --generate "$@" ;;
+        *) echo "usage: cms secrets <rotate|audit|generate>" >&2; exit 2 ;;
+      esac ;;
     doctor)  exec bash scripts/__preflight.sh ;;
     test)    shift; exec bash scripts/__smoke-test.sh "$@" ;;
     worker)
@@ -290,13 +323,11 @@ echo " CMS one-stop bootstrap"
 echo "==============================================="
 [[ -t 0 ]] || ASSUME_YES=1
 
-# Interactive no-args → master dashboard (btop grid). Piped/--yes/--skip/
-# --no-tui → bootstrap lifecycle as before.
+# Interactive no-args → master dashboard. Piped/--yes/--skip/--no-tui →
+# bootstrap lifecycle as before. Interactive entry always goes through the Rust
+# TUI rebuild; the bash TUI is only a fallback when no Rust toolchain exists.
 if [[ -t 0 && -t 1 && $ASSUME_YES -eq 0 && -z "$SKIPS" && -z "${CMS_NO_TUI:-}" && $# -eq 0 ]]; then
-  if [[ -x .tools/cms-tui/cms-tui-linux-x86_64 ]]; then
-    exec .tools/cms-tui/cms-tui-linux-x86_64
-  fi
-  exec bash scripts/__tui/__main.sh
+  run_tui
 fi
 
 run_step prereqs "" '

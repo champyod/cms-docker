@@ -1,0 +1,45 @@
+version: '3.8'
+
+# Tailscale Funnel for CMS Contest
+# Provides secure public HTTPS access without domain or public IP
+# Usage: docker compose -f docker-compose.contest.yml -f docker-compose.tailscale.yml --env-file .env.contest --env-file .env.tailscale up -d
+
+services:
+  # Tailscale container with Funnel enabled
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: cms-tailscale
+    hostname: ${TAILSCALE_HOSTNAME:-cms-contest}
+    restart: unless-stopped
+    environment:
+      - TS_AUTHKEY=${TAILSCALE_AUTHKEY}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_USERSPACE=false
+      - TS_SERVE_CONFIG=/config/serve.json
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      - ./config/tailscale:/config:ro
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    networks:
+      - cms-network
+    depends_on:
+      - contest-web-server
+    healthcheck:
+      test: ["CMD", "tailscale", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+networks:
+  cms-network:
+    external: true
+    name: cms-network
+
+volumes:
+  tailscale-state:
+    name: tailscale-state

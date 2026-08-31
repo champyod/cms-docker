@@ -39,11 +39,11 @@ for env_file in "${REPO_ROOT}/.env.infra" "${REPO_ROOT}/.env.core" "${REPO_ROOT}
 done
 
 # ---------------------------------------------------------------------------
-# Config
+# Config - NO HARDCODED DEFAULTS
 # ---------------------------------------------------------------------------
 BACKUP_DIR="${BACKUP_DIR:-${REPO_ROOT}/backups}"
-OFFSITE_TAILNET_NODE="${OFFSITE_TAILNET_NODE:-100.75.203.112}"
-OFFSITE_REMOTE_PATH="${OFFSITE_REMOTE_PATH:-/var/local/backups/cms}"
+OFFSITE_TAILNET_NODE="${OFFSITE_TAILNET_NODE:-}"
+OFFSITE_REMOTE_PATH="${OFFSITE_REMOTE_PATH:-}"
 OFFSITE_ENCRYPT_KEY="${OFFSITE_ENCRYPT_KEY:-}"
 DATE_STAMP="$(date +%Y-%m-%d)"
 DRY_RUN=1
@@ -60,8 +60,8 @@ Modes:
   --apply      Sync backups to remote node
 
 Environment (.env.infra):
-  OFFSITE_TAILNET_NODE    Remote Tailscale IP (default: 100.75.203.112)
-  OFFSITE_REMOTE_PATH     Remote destination path (default: /var/local/backups/cms)
+  OFFSITE_TAILNET_NODE    Remote Tailscale IP (REQUIRED - no default)
+  OFFSITE_REMOTE_PATH     Remote destination path (REQUIRED - no default)
   OFFSITE_ENCRYPT_KEY     GPG symmetric encryption key (optional)
 
 Behavior:
@@ -69,138 +69,61 @@ Behavior:
   - Destination: $OFFSITE_REMOTE_PATH/$DATE_STAMP/
   - If OFFSITE_ENCRYPT_KEY is set, encrypts with gpg --symmetric before transfer
   - Dry-run prints the rsync command without executing
-  - Creates systemd timer templates for daily sync
 EOF
-}
-
-# ---------------------------------------------------------------------------
-# Sync subcommand
-# ---------------------------------------------------------------------------
-cmd_sync() {
-  log_info "Offsite sync — mode: $([ "$DRY_RUN" -eq 1 ] && echo 'DRY-RUN' || echo 'APPLY')"
-  log_info "Source: $BACKUP_DIR"
-  log_info "Target: ${OFFSITE_TAILNET_NODE}:${OFFSITE_REMOTE_PATH}/${DATE_STAMP}/"
-
-  # Find backup archives
-  local archives=()
-  while IFS= read -r -d '' f; do
-    archives+=("$f")
-  done < <(find "$BACKUP_DIR" -maxdepth 2 -name '*.tar.gz' -print0 2>/dev/null || true)
-
-  if [[ ${#archives[@]} -eq 0 ]]; then
-    log_warn "No backup archives found in $BACKUP_DIR"
-    return 0
-  fi
-
-  log_info "Found ${#archives[@]} backup archive(s)"
-
-  # Build rsync command
-  local remote_dest="${OFFSITE_TAILNET_NODE}:${OFFSITE_REMOTE_PATH}/${DATE_STAMP}/"
-  local rsync_args=(
-    -avz --progress
-    --timeout=30
-    --contimeout=10
-  )
-
-  if [[ "$DRY_RUN" -eq 1 ]]; then
-    rsync_args+=(--dry-run)
-  fi
-
-  # Handle encryption
-  if [[ -n "$OFFSITE_ENCRYPT_KEY" ]]; then
-    log_info "Encryption enabled (GPG symmetric)"
-    _sync_encrypted "${archives[@]}"
-  else
-    log_info "No encryption key set — syncing unencrypted"
-    rsync "${rsync_args[@]}" "${archives[@]}" "$remote_dest" || {
-      log_warn "rsync failed"
-      return 1
-    }
-  fi
-
-  if [[ "$DRY_RUN" -eq 1 ]]; then
-    log_info "[dry-run] rsync would transfer ${#archives[@]} file(s) to $remote_dest"
-  else
-    log_info "Sync complete — ${#archives[@]} file(s) transferred to $remote_dest"
-  fi
-}
-
-_sync_encrypted() {
-  local archives=("$@")
-  local remote_dest="${OFFSITE_TAILNET_NODE}:${OFFSITE_REMOTE_PATH}/${DATE_STAMP}/"
-  local tmp_dir
-  tmp_dir="$(mktemp -d /tmp/cms-offsite-XXXXXX)"
-  trap 'rm -rf "$tmp_dir"' EXIT
-
-  for archive in "${archives[@]}"; do
-    local basename
-    basename="$(basename "$archive")"
-    local enc_file="${tmp_dir}/${basename}.gpg"
-
-    if [[ "$DRY_RUN" -eq 1 ]]; then
-      log_info "[dry-run] would encrypt $archive -> $enc_file"
-    else
-      gpg --batch --yes --symmetric --cipher-algo AES256 \
-        --passphrase "$OFFSITE_ENCRYPT_KEY" \
-        -o "$enc_file" "$archive" \
-        || log_die "GPG encryption failed for $archive" 1
-      log_info "encrypted $basename -> $(basename "$enc_file")"
-    fi
-  done
-
-  # Sync encrypted files
-  local rsync_args=(
-    -avz --progress
-    --timeout=30
-    --contimeout=10
-  )
-  [[ "$DRY_RUN" -eq 1 ]] && rsync_args+=(--dry-run)
-
-  rsync "${rsync_args[@]}" "${tmp_dir}/" "$remote_dest" || {
-    log_warn "rsync failed after encryption"
-    return 1
-  }
-
-  rm -rf "$tmp_dir"
-  trap - EXIT
-}
-
-# ---------------------------------------------------------------------------
-# Systemd timer generation
-# ---------------------------------------------------------------------------
-cmd_generate_timer() {
-  local svc_file="${REPO_ROOT}/config/systemd/offsite-sync.service"
-  local timer_file="${REPO_ROOT}/config/systemd/offsite-sync.timer"
-
-  if [[ -f "$svc_file" && -f "$timer_file" ]]; then
-    log_info "systemd units already exist:"
-    log_info "  $svc_file"
-    log_info "  $timer_file"
-    log_info "To install: sudo cp $svc_file $timer_file /etc/systemd/system/ && sudo systemctl daemon-reload"
-    return 0
-  fi
-
-  log_info "systemd unit templates already exist in config/systemd/"
 }
 
 # ---------------------------------------------------------------------------
 # Argument parsing
 # ---------------------------------------------------------------------------
-MODE=""
-
+MODE="dry-run"
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --dry-run) DRY_RUN=1; MODE="${MODE:-sync}"; shift ;;
-    --apply)   DRY_RUN=0; MODE="${MODE:-sync}"; shift ;;
-    --timer)   MODE="timer"; shift ;;
+    --dry-run) MODE="dry-run"; shift ;;
+    --apply)   MODE="apply"; shift ;;
     --help|-h) usage; exit 0 ;;
-    *)         log_die "unknown option: $1 — see --help" 1 ;;
+    *) log_die "unknown option: $1 — see --help" 1 ;;
   esac
 done
 
-case "$MODE" in
-  sync)  cmd_sync ;;
-  timer) cmd_generate_timer ;;
-  "")    DRY_RUN=1; cmd_sync ;;
-  *)     log_die "unknown mode: $MODE" 1 ;;
-esac
+# ---------------------------------------------------------------------------
+# Validation
+# ---------------------------------------------------------------------------
+[[ -n "$OFFSITE_TAILNET_NODE" ]] || log_die "OFFSITE_TAILNET_NODE not set in .env.infra — no default" 1
+[[ -n "$OFFSITE_REMOTE_PATH" ]] || log_die "OFFSITE_REMOTE_PATH not set in .env.infra — no default" 1
+[[ -d "$BACKUP_DIR" ]] || log_die "backup dir not found: $BACKUP_DIR" 1
+
+mapfile -t ARCHIVES < <(ls -1t "${BACKUP_DIR}"/*.tar.gz 2>/dev/null || true)
+(( ${#ARCHIVES[@]} > 0 )) || log_die "no backup archives (*.tar.gz) found in $BACKUP_DIR" 1
+
+REMOTE_DIR="${OFFSITE_REMOTE_PATH}/${DATE_STAMP}"
+
+# ---------------------------------------------------------------------------
+# Sync
+# ---------------------------------------------------------------------------
+encrypt_archive() {
+  local src="$1"
+  [[ -n "$OFFSITE_ENCRYPT_KEY" ]] || return 0
+  local dst="${src}.gpg"
+  if [[ "$MODE" == "apply" ]]; then
+    gpg --batch --yes --symmetric --cipher-algo AES256 \
+      --passphrase "$OFFSITE_ENCRYPT_KEY" -o "$dst" "$src"
+  else
+    echo "gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase '***' -o ${dst} ${src}"
+  fi
+}
+
+if [[ "$MODE" == "apply" ]]; then
+  ssh "$OFFSITE_TAILNET_NODE" "mkdir -p '${REMOTE_DIR}'"
+  for archive in "${ARCHIVES[@]}"; do
+    encrypt_archive "$archive"
+    rsync -avz "${archive}${OFFSITE_ENCRYPT_KEY:+.gpg}" "${OFFSITE_TAILNET_NODE}:${REMOTE_DIR}/"
+  done
+  log_info "Offsite sync complete → ${OFFSITE_TAILNET_NODE}:${REMOTE_DIR}/"
+else
+  echo "ssh ${OFFSITE_TAILNET_NODE} mkdir -p '${REMOTE_DIR}'"
+  for archive in "${ARCHIVES[@]}"; do
+    encrypt_archive "$archive"
+    echo "rsync -avz ${archive}${OFFSITE_ENCRYPT_KEY:+.gpg} ${OFFSITE_TAILNET_NODE}:${REMOTE_DIR}/"
+  done
+  log_info "Dry run — re-run with --apply to execute"
+fi

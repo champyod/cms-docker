@@ -59,18 +59,36 @@ print_info "CMS Worker Connection Setup"
 echo ""
 
 # Core service host
-read -p "Enter the CMS core services hostname/IP: " CORE_HOST
-if [ -z "$CORE_HOST" ]; then
-    print_error "Core host cannot be empty"
-    exit 1
-fi
+CORE_HOST=""
+CORE_HOST_ATTEMPTS=0
+while :; do
+    CORE_HOST_ATTEMPTS=$((CORE_HOST_ATTEMPTS + 1))
+    read -p "Enter the CMS core services hostname/IP: " CORE_HOST
+    if [ -n "$CORE_HOST" ]; then
+        break
+    fi
+    if [ "$CORE_HOST_ATTEMPTS" -ge 3 ]; then
+        print_error "Core host cannot be empty"
+        exit 1
+    fi
+    print_warning "Core host cannot be empty (attempt $CORE_HOST_ATTEMPTS/3)"
+done
 
 # Worker shard number
-read -p "Enter worker shard number (unique ID for this worker, e.g., 10, 11, 12...): " WORKER_SHARD
-if [ -z "$WORKER_SHARD" ]; then
-    WORKER_SHARD=10
-    print_warning "Using default shard number: $WORKER_SHARD"
-fi
+WORKER_SHARD=""
+WORKER_SHARD_ATTEMPTS=0
+while :; do
+    WORKER_SHARD_ATTEMPTS=$((WORKER_SHARD_ATTEMPTS + 1))
+    read -p "Enter worker shard number (unique ID, e.g. 10, 11, 12...) [blank → re-ask]: " WORKER_SHARD
+    if [[ "$WORKER_SHARD" =~ ^[0-9]+$ ]] && [ "$WORKER_SHARD" -gt 0 ]; then
+        break
+    fi
+    if [ "$WORKER_SHARD_ATTEMPTS" -ge 3 ]; then
+        print_error "Worker shard must be a positive integer"
+        exit 1
+    fi
+    print_warning "Worker shard must be a positive integer (attempt $WORKER_SHARD_ATTEMPTS/3)"
+done
 
 # Worker name
 read -p "Enter worker name (default: worker-$WORKER_SHARD): " WORKER_NAME

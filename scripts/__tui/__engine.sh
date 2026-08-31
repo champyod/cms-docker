@@ -192,6 +192,48 @@ tui::confirm() {
 	"$GUM_BIN" confirm --selected.background "$TUI_ACCENT" "$@"
 }
 
+# tui::input "prompt" [default] [--password] [--validate REGEX] [--limit N] [--required]
+# → typed value on stdout; empty allowed unless --required, retries 3x on failed validation, returns 1 after.
+tui::input() {
+	local prompt="${1:?usage: tui::input PROMPT [DEFAULT] [--password] [--validate REGEX] [--limit N] [--required]}"
+	shift
+	local default="" password=0 validate="" limit=0 required=0
+	[[ $# -gt 0 && ${1:-} != --* ]] && { default="$1"; shift; }
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+			--password) password=1; shift ;;
+			--validate) validate="${2:?tui::input: --validate needs a REGEX}"; shift 2 ;;
+			--limit)    limit="${2:?tui::input: --limit needs a number}"; shift 2 ;;
+			--required) required=1; shift ;;
+			*) printf 'tui::input: unknown option: %s\n' "$1" >&2; return 2 ;;
+		esac
+	done
+	[[ $limit =~ ^[0-9]+$ ]] || { printf 'tui::input: --limit must be a number\n' >&2; return 2; }
+	tui::_need_gum || return $?
+	local -a args=(--placeholder "$prompt" --prompt.foreground "$TUI_ACCENT" --cursor.foreground "$TUI_ACCENT")
+	(( password )) && args+=(--password)
+	[[ -n "$default" ]] && args+=(--value "$default")
+	(( limit > 0 )) && args+=(--char-limit "$limit")
+	local attempt value
+	for ((attempt = 1; attempt <= 3; attempt++)); do
+		tui::_prompt "$prompt"
+		if ! value="$("$GUM_BIN" input "${args[@]}")"; then
+			return $?
+		fi
+		if [[ -z "$value" && "$required" -eq 1 ]]; then
+			printf 'tui::input: %s: value is required\n' "$prompt" >&2
+			continue
+		fi
+		if [[ -n "$validate" && -n "$value" ]] && ! [[ "$value" =~ $validate ]]; then
+			printf 'tui::input: %s: invalid value\n' "$prompt" >&2
+			continue
+		fi
+		printf '%s\n' "$value"
+		return 0
+	done
+	return 1
+}
+
 # tui::spin "label" -- cmd... → runs cmd under spinner; cmd's exit code passes through.
 tui::spin() {
 	local label="${1:?usage: tui::spin LABEL -- CMD...}"; shift

@@ -82,13 +82,31 @@ jobs:
             export POSTGRES_PASSWORD=x AUTH_SECRET=x SECRET_KEY=x CONTEST_ID=1
             ENV_ARGS=()
           fi
+          # Overlay stacks reference services from a base stack
+          # (e.g. docker-compose.tailscale.yml depends on contest-web-server
+          # from docker-compose.contest.yml), so they must be validated
+          # merged with their base instead of standalone.
+          declare -A OVERLAY_BASE=(
+            [docker-compose.tailscale.yml]=docker-compose.contest.yml
+            [docker-compose.waf.yml]=docker-compose.contest.yml
+          )
           for f in docker-compose*.yml docker/docker-compose*.yml; do
             [ -f "$f" ] || continue
-            echo "::group::docker compose config -q -- $f"
-            if [ "${#ENV_ARGS[@]}" -gt 0 ]; then
-              docker compose "${ENV_ARGS[@]}" -f "$f" config -q
+            if [ -n "${OVERLAY_BASE[$f]:-}" ]; then
+              base="${OVERLAY_BASE[$f]}"
+              echo "::group::docker compose config -q -- $base + $f"
+              if [ "${#ENV_ARGS[@]}" -gt 0 ]; then
+                docker compose "${ENV_ARGS[@]}" -f "$base" -f "$f" config -q
+              else
+                docker compose -f "$base" -f "$f" config -q
+              fi
             else
-              docker compose -f "$f" config -q
+              echo "::group::docker compose config -q -- $f"
+              if [ "${#ENV_ARGS[@]}" -gt 0 ]; then
+                docker compose "${ENV_ARGS[@]}" -f "$f" config -q
+              else
+                docker compose -f "$f" config -q
+              fi
             fi
             echo "::endgroup::"
           done
