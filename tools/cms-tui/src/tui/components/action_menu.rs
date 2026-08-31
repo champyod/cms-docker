@@ -75,6 +75,11 @@ impl ActionMenu {
         self.items.is_empty()
     }
 
+    #[must_use]
+    pub fn get_item(&self, index: usize) -> Option<&MenuItem> {
+        self.items.get(index)
+    }
+
     pub fn render(&self, f: &mut Frame, area: Rect, title: &str) {
         let block = Block::default()
             .borders(Borders::ALL)

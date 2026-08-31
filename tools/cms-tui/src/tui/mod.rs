@@ -47,31 +47,11 @@ fn run_app<B: ratatui::backend::Backend>(
 
         if event::poll(std::time::Duration::from_millis(50))? {
             if let Event::Key(key) = event::read()? {
-                if app.current_route() == &app::Route::Actions {
-                    // Menu keys are consumed by the Actions page; all other
-                    // keys fall through to the global bindings below so page
-                    // switching, going back (Esc), and quitting (q) still work.
-                    match key.code {
-                        KeyCode::Down | KeyCode::Char('j' | 'k') | KeyCode::Up => {
-                            app.actions_menu.handle_key(key.code);
-                            continue;
-                        }
-                        KeyCode::Enter => {
-                            app.run_selected_action();
-                            continue;
-                        }
-                        _ => {}
-                    }
-                }
+                // Global keys that work on ANY page
                 match key.code {
                     KeyCode::Char('q') => {
-                        if app.current_route() == &app::Route::Actions {
-                            app.quit();
-                        } else if app.can_pop() {
-                            app.pop_route();
-                        } else {
-                            app.quit();
-                        }
+                        app.quit();
+                        continue;
                     }
                     KeyCode::Esc => {
                         if app.can_pop() {
@@ -79,12 +59,55 @@ fn run_app<B: ratatui::backend::Backend>(
                         } else {
                             app.quit();
                         }
+                        continue;
                     }
-                    KeyCode::Char('1') => app.push_route(app::Route::Dashboard),
-                    KeyCode::Char('2') => app.push_route(app::Route::Actions),
-                    KeyCode::Char('3') => app.push_route(app::Route::Customization),
-                    KeyCode::Char('4') => app.push_route(app::Route::Security),
-                    KeyCode::Char('5') => app.push_route(app::Route::Maintenance),
+                    KeyCode::Char('1') => {
+                        app.push_route(app::Route::Dashboard);
+                        continue;
+                    }
+                    KeyCode::Char('2') => {
+                        app.push_route(app::Route::Stacks);
+                        continue;
+                    }
+                    KeyCode::Char('3') => {
+                        app.push_route(app::Route::Database);
+                        continue;
+                    }
+                    KeyCode::Char('4') => {
+                        app.push_route(app::Route::Worker);
+                        continue;
+                    }
+                    KeyCode::Char('5') => {
+                        app.push_route(app::Route::Ingress);
+                        continue;
+                    }
+                    KeyCode::Char('6') => {
+                        app.push_route(app::Route::Config);
+                        continue;
+                    }
+                    KeyCode::Char('7') => {
+                        app.push_route(app::Route::Backup);
+                        continue;
+                    }
+                    KeyCode::Char('8') => {
+                        app.push_route(app::Route::System);
+                        continue;
+                    }
+                    KeyCode::Char('9') => {
+                        app.push_route(app::Route::Bootstrap);
+                        continue;
+                    }
+                    _ => {}
+                }
+
+                // Page-specific keys (arrows, Enter) — only on non-Dashboard pages
+                match key.code {
+                    KeyCode::Down | KeyCode::Up | KeyCode::Char('j' | 'k') => {
+                        if let Some(menu) = app.active_menu() {
+                            menu.handle_key(key.code);
+                        }
+                    }
+                    KeyCode::Enter => app.run_selected_action(),
                     _ => {}
                 }
             }
