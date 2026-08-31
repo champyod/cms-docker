@@ -13,6 +13,7 @@ import {
   Globe,
   Home,
   LogOut,
+  Palette,
   Rocket,
   Settings,
   Shield,
@@ -78,6 +79,7 @@ const INFRASTRUCTURE_ITEMS: NavItemDef[] = [
   { label: 'Resources', icon: Activity, buildHref: (l) => `/${l}/resources`, isVisible: () => true },
   { label: 'Containers', icon: Box, buildHref: (l) => `/${l}/containers`, isVisible: () => true },
   { label: 'Ranking', icon: Globe, buildHref: (l) => `/${l}/ranking`, isVisible: () => true },
+  { label: 'Appearance', icon: Palette, buildHref: (l) => `/${l}/appearance`, isVisible: () => true },
   { label: 'Maintenance', icon: Wrench, buildHref: (l) => `/${l}/maintenance`, isVisible: () => true },
   { label: 'Settings', icon: Settings, buildHref: (l) => `/${l}/settings`, isVisible: () => true },
 ];
