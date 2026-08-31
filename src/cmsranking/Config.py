@@ -65,6 +65,13 @@ class Config:
     log_dir: str = default_path("log/ranking")
     lib_dir: str = default_path("lib/ranking")
 
+    # Optional explicit logo file inside container. When set and the file
+    # exists, RankingWebServer serves it for /logo; otherwise it falls back
+    # to lib_dir/logo.* + static/img/logo.png. Host-side ./cms config sync
+    # copies RANKING_LOGO_PATH into the ranking volume instead, so this field
+    # can remain None in most deployments.
+    logo_path: str | None = None
+
     def __post_init__(self):
         os.makedirs(self.lib_dir, exist_ok=True)
         os.makedirs(self.log_dir, exist_ok=True)

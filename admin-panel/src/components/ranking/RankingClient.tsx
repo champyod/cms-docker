@@ -1,8 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+
 import { Button } from '@/components/core/Button';
 import { PageContent, PageHeader, Stack } from '@/components/core/Layout';
+import { useToast } from '@/components/providers/ToastProvider';
+
+import { BrandingCard } from './BrandingCard';
 import { RankingConnectionCard } from './RankingConnectionCard';
 import { RankingScoreboard } from './RankingScoreboard';
 import { useRankingRows, type RankingSnapshot } from './useRankingRows';
@@ -16,6 +20,10 @@ export function RankingClient() {
   const [loadingSnapshot, setLoadingSnapshot] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [snapshot, setSnapshot] = useState<RankingSnapshot | null>(null);
+  const [logoUrl, setLogoUrl] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [brandingError, setBrandingError] = useState<string | undefined>(undefined);
+  const { addToast } = useToast();
 
   const rows = useRankingRows(snapshot);
 
@@ -72,9 +80,56 @@ export function RankingClient() {
       setPassword('');
     });
 
+  const buildLogoUrl = useCallback(() => `/api/ranking/logo?ts=${Date.now()}`, []);
+
+  const fetchLogo = useCallback(async () => {
+    const url = buildLogoUrl();
+    try {
+      const res = await fetch(url, { cache: 'no-store' });
+      const contentType = res.headers.get('content-type') ?? '';
+      if (contentType.startsWith('image/')) {
+        setLogoUrl(url);
+        return;
+      }
+      const data = (await res.json()) as { success: boolean; exists?: boolean };
+      if (data.exists === false) setLogoUrl('');
+      else setLogoUrl(url);
+    } catch {
+      setLogoUrl('');
+    }
+  }, [buildLogoUrl]);
+
+  const handleLogoUpload = useCallback(
+    async (file: File) => {
+      setUploading(true);
+      setBrandingError(undefined);
+      try {
+        const formData = new FormData();
+        formData.append('logo', file);
+        const res = await fetch('/api/ranking/logo', { method: 'POST', body: formData });
+        const data = (await res.json()) as { success: boolean; error?: string };
+        if (!res.ok || !data.success) throw new Error(data.error ?? 'Failed to upload logo');
+        const nextUrl = buildLogoUrl();
+        setLogoUrl(nextUrl);
+        addToast({ type: 'success', title: 'Logo updated', message: 'Ranking logo hot reloaded' });
+      } catch (error) {
+        const message = (error as Error).message;
+        setBrandingError(message);
+        addToast({ type: 'error', title: 'Upload failed', message });
+      } finally {
+        setUploading(false);
+      }
+    },
+    [addToast, buildLogoUrl],
+  );
+
   useEffect(() => {
     void loadSession();
   }, []);
+
+  useEffect(() => {
+    void fetchLogo();
+  }, [fetchLogo]);
 
   return (
     <PageContent>
@@ -92,6 +147,7 @@ export function RankingClient() {
           </Stack>
         }
       />
+      <BrandingCard previewUrl={logoUrl} loading={uploading} onUpload={handleLogoUpload} error={brandingError} />
       <RankingConnectionCard baseUrl={baseUrl} username={username} password={password} connected={connected} loadingSession={loadingSession} errorMessage={errorMessage} onBaseUrl={setBaseUrl} onUsername={setUsername} onPassword={setPassword} onConnect={connect} />
       <RankingScoreboard rows={rows} loadingSnapshot={loadingSnapshot} />
     </PageContent>

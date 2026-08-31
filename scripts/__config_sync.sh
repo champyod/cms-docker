@@ -162,6 +162,11 @@ main() {
 
   parse_toml "$TOML_FILE"
 
+  # Ensure ranking config exists from sample (needed for logo_path injection)
+  if [[ ! -f "config/cms_ranking.toml" && -f "config/cms_ranking.sample.toml" ]]; then
+    cp "config/cms_ranking.sample.toml" "config/cms_ranking.toml" && log_info "Created config/cms_ranking.toml from sample"
+  fi
+
   # Auto-generate secrets for empty secret fields
   if [[ "$NO_SECRETS" -eq 0 ]]; then
     scan_and_generate_secrets core    __CORE_KEYS
@@ -237,6 +242,83 @@ main() {
   else
     echo "Would write admin-panel/.env: DATABASE_URL=postgresql://..."
   fi
+
+  # Sync ranking logo from RANKING_LOGO_PATH into ranking volume (hot-swap, no waste)
+  sync_ranking_logo() {
+    local src="${__TOML[admin.RANKING_LOGO_PATH]:-}"
+    [[ -z "$src" ]] && { log_info "RANKING_LOGO_PATH empty — skipping logo sync (fallback static logo)"; return 0; }
+    # Expand ~ and resolve relative to CMS_ROOT
+    src="${src/#\~/$HOME}"
+    [[ "$src" != /* ]] && src="$CMS_ROOT/$src"
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      echo "Would sync ranking logo: $src → ranking volume logo.* (overwrite, cleanup old)"
+      return 0
+    fi
+    if [[ ! -f "$src" ]]; then
+      log_warn "RANKING_LOGO_PATH file not found: $src — skipping logo sync"
+      return 0
+    fi
+    local ext="${src##*.}"
+    ext="$(echo "$ext" | tr '[:upper:]' '[:lower:]')"
+    [[ "$ext" == "jpeg" ]] && ext="jpg"
+    case "$ext" in
+      png|jpg|gif|bmp) ;;
+      *) log_warn "RANKING_LOGO_PATH unsupported extension '.$ext' (allowed: png/jpg/gif/bmp) — skipping"; return 0 ;;
+    esac
+    local size
+    size="$(stat -c%s "$src" 2>/dev/null || stat -f%z "$src" 2>/dev/null || echo 0)"
+    if [[ "$size" -gt 5242880 ]]; then
+      log_warn "Logo file too large ($size bytes > 5MB) — skipping"
+      return 0
+    fi
+    local dest_name="logo.${ext}"
+    local ranking_lib_dir="${__TOML[admin.CMS_RANKING_LIB_DIR]:-/var/local/lib/cms/ranking}"
+    log_info "Syncing ranking logo: $src → $ranking_lib_dir/$dest_name (hot-swap)"
+    # Prefer docker cp when ranking container is running (no root, no mountpoint)
+    local container="cms-ranking-web-server"
+    local tmp_cleanup=()
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$container"; then
+      # Remove old logo.* inside container, then copy new (overwrite, no waste)
+      docker exec "$container" sh -c "rm -f $ranking_lib_dir/logo.png $ranking_lib_dir/logo.jpg $ranking_lib_dir/logo.gif $ranking_lib_dir/logo.bmp 2>/dev/null; mkdir -p $ranking_lib_dir" 2>/dev/null || true
+      if docker cp "$src" "$container:$ranking_lib_dir/$dest_name" 2>/dev/null; then
+        # Ensure other extensions removed (only new ext remains)
+        docker exec "$container" sh -c "for f in $ranking_lib_dir/logo.png $ranking_lib_dir/logo.jpg $ranking_lib_dir/logo.gif $ranking_lib_dir/logo.bmp; do [ \"\$f\" = \"$ranking_lib_dir/$dest_name\" ] || rm -f \"\$f\"; done" 2>/dev/null || true
+        log_info "Logo hot-swapped via docker cp into $container:$ranking_lib_dir/$dest_name (old logo.* cleaned)"
+      else
+        log_warn "docker cp failed — trying volume mountpoint fallback"
+      fi
+    fi
+    # Fallback: write via helper container to ranking volume (no root, no mountpoint)
+    if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$container" || ! docker exec "$container" test -f "$ranking_lib_dir/$dest_name" 2>/dev/null; then
+      if docker info >/dev/null 2>&1; then
+        # Create volume if missing
+        docker volume create cms-ranking-data >/dev/null 2>&1 || true
+        local src_dir src_base
+        src_dir="$(dirname "$src")"
+        src_base="$(basename "$src")"
+        # Use alpine helper to copy and cleanup old extensions (single overwrite, no waste)
+        if docker run --rm -v cms-ranking-data:/data -v "$src_dir:/src:ro" alpine sh -c "rm -f /data/logo.png /data/logo.jpg /data/logo.gif /data/logo.bmp 2>/dev/null; cp /src/$src_base /data/$dest_name && chmod 644 /data/$dest_name && ls -lh /data/$dest_name" 2>/dev/null; then
+          log_info "Logo synced via helper container to volume cms-ranking-data:/data/$dest_name (old logo.* cleaned)"
+        else
+          # Fallback: try mountpoint if helper fails (e.g., no alpine image)
+          local mp
+          mp="$(docker volume inspect cms-ranking-data --format '{{.Mountpoint}}' 2>/dev/null || echo "")"
+          if [[ -n "$mp" && -d "$mp" && -w "$mp" ]]; then
+            rm -f "$mp"/logo.png "$mp"/logo.jpg "$mp"/logo.gif "$mp"/logo.bmp 2>/dev/null || true
+            cp "$src" "$mp/$dest_name" && chmod 644 "$mp/$dest_name"
+            log_info "Logo synced via volume mountpoint $mp/$dest_name (helper fallback)"
+          else
+            log_warn "Helper container copy failed — run 'docker compose up -d ranking-web-server' will still see logo on next start if volume persists"
+          fi
+        fi
+      else
+        log_warn "Docker daemon not reachable — logo staged, will sync when docker available"
+      fi
+    fi
+    # Hot-swap is filesystem-based; RWS ImageHandler picks new file on next /logo request (no restart needed, mtime used for caching)
+    log_info "Logo sync done — refresh Ranking page (hard reload) to verify /logo"
+  }
+  sync_ranking_logo || log_warn "Logo sync encountered issues (non-fatal)"
 
   # Run config injection (generates config/cms.toml)
   if [[ "$DRY_RUN" -eq 0 ]]; then

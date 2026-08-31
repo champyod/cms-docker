@@ -200,6 +200,41 @@ if p.exists():
     def toml_escape(v): return v.replace("\\", "\\\\").replace('"', '\\"')
     t = re.sub(r'^username = ".*"', lambda m: f'username = "{toml_escape(u)}"', t, flags=re.MULTILINE)
     t = re.sub(r'^password = ".*"', lambda m: f'password = "{toml_escape(pw)}"', t, flags=re.MULTILINE)
+    # Sync RANKING_LOGO_PATH -> container-side logo_path (if host file set)
+    admin_logo = ""
+    for env_file in [".env.admin", ".env"]:
+        try:
+            for line in Path(env_file).read_text().splitlines():
+                if line.startswith("RANKING_LOGO_PATH="):
+                    admin_logo = line.split("=",1)[1].strip().strip('"').strip("'")
+                    break
+            if admin_logo: break
+        except: pass
+    # Derive container dest from host ext + configured lib dir
+    # Read CMS_RANKING_LIB_DIR from .env.admin if present
+    lib_dir = "/var/local/lib/cms/ranking"
+    try:
+        for line in Path(".env.admin").read_text().splitlines():
+            if line.startswith("CMS_RANKING_LIB_DIR="):
+                lib_dir = line.split("=",1)[1].strip().strip('"').strip("'") or lib_dir
+                break
+    except: pass
+    if admin_logo:
+        ext = admin_logo.rsplit(".",1)[-1].lower() if "." in admin_logo else "png"
+        if ext == "jpeg": ext = "jpg"
+        if ext not in ("png","jpg","gif","bmp"): ext = "png"
+        container_logo = f"{lib_dir}/logo.{ext}"
+        if re.search(r'^logo_path\s*=', t, re.MULTILINE):
+            t = re.sub(r'^logo_path\s*=.*', lambda m: f'logo_path = "{toml_escape(container_logo)}"', t, flags=re.MULTILINE)
+        else:
+            # Insert after lib_dir or at end of top-level section
+            if re.search(r'^lib_dir\s*=', t, re.MULTILINE):
+                t = re.sub(r'^(lib_dir\s*=.*)', lambda m: m.group(1) + f'\nlogo_path = "{toml_escape(container_logo)}"', t, flags=re.MULTILINE, count=1)
+            else:
+                t = t.rstrip() + f'\nlogo_path = "{toml_escape(container_logo)}"\n'
+    else:
+        # No logo configured -> ensure logo_path removed (fallback to lib_dir/logo.*)
+        t = re.sub(r'^logo_path\s*=.*\n?', '', t, flags=re.MULTILINE)
     p.write_text(t)
 PY
 fi

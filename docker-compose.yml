@@ -417,6 +417,7 @@ services:
       - ./:/repo-root
       - /proc:/host/proc:ro
       - cms-logs:/var/local/log/cms
+      - cms-ranking-data:/var/local/lib/cms/ranking:rw
     networks:
       - cms-network
     ports:

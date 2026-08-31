@@ -609,11 +609,26 @@ def main() -> int:
     stores["scoring"] = ScoringStore(stores)
     stores["scoring"].init_store()
 
+    # Logo: prefer explicit config.logo_path when present, otherwise
+    # lib_dir/logo.* with static fallback. Hot-swap via host copy keeps
+    # lib_dir/logo.* updated; direct path allows bind-mounted custom logo.
+    if config.logo_path and os.path.isfile(config.logo_path):
+        logo_ext = os.path.splitext(config.logo_path)[1].lstrip(".").lower()
+        if logo_ext in ImageHandler.EXT_TO_MIME:
+            logo_location = os.path.splitext(config.logo_path)[0]
+        else:
+            logger.warning("logo_path has unsupported extension, using lib_dir fallback")
+            logo_location = os.path.join(config.lib_dir, "%(name)s")
+    else:
+        logo_location = os.path.join(config.lib_dir, "%(name)s")
+    if config.logo_path and not os.path.isfile(config.logo_path):
+        logger.info("logo_path %s not found, using lib_dir fallback", config.logo_path)
+
     toplevel_handler = RoutingHandler(
         RootHandler(web_dir),
         DataWatcher(stores, config.buffer_size),
         ImageHandler(
-            os.path.join(config.lib_dir, '%(name)s'),
+            logo_location,
             os.path.join(web_dir, 'img', 'logo.png')),
         ScoreHandler(stores),
         HistoryHandler(stores),
