@@ -47,8 +47,31 @@ function collectContestServices(filteredList: string[], policies: RestartPolicie
   return contestServices;
 }
 
+export async function analyzeContainerDependencies(containerNames: string[]): Promise<string[]> {
+  // Why: container bulk restart must preview transitive dependents (database -> log service -> workers) so operator sees full impact before confirming
+  const policies = await getRestartPolicies();
+  if (!policies) return [...containerNames];
+  const expanded = new Set<string>(containerNames);
+  const queue = [...containerNames];
+  while (queue.length > 0) {
+    const current = queue.shift() as string;
+    const key = current.startsWith('cms-contest-web-server-') ? 'cms-contest-web-server' : current;
+    const dependents = policies.dependencies[key] ?? policies.dependencies[current];
+    if (dependents) {
+      for (const dependent of dependents) {
+        if (!expanded.has(dependent)) {
+          expanded.add(dependent);
+          queue.push(dependent);
+        }
+      }
+    }
+  }
+  return Array.from(expanded);
+}
+
 async function buildCustomRestartCommand(customList: string[], files: string): Promise<RestartCommandPlan> {
   const needsContestStack = customList.includes('contest-stack') || customList.some(s => s.startsWith('cms-contest-web-server'));
+  // Why: filter keeps only safe service names and strips contest-stack sentinel so docker compose receives valid service identifiers
   const filteredList = customList.filter(s => s !== 'contest-stack' && /^[a-zA-Z0-9_-]+$/.test(s));
 
   if (needsContestStack) {

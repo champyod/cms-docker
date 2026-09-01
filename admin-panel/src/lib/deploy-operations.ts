@@ -21,6 +21,7 @@ export interface DeployStatusResult {
   startedAt?: string;
   log?: string;
   error?: string;
+  percent?: number | null;
 }
 
 interface DeployPaths {
@@ -32,7 +33,29 @@ interface DeployPaths {
 
 type DeployMeta = { contestId: number; startedAt: string };
 
-const DEPLOY_TIMEOUT_MS = 120_000;
+export const DEPLOY_IDLE_TIMEOUT_MS = 60_000;
+
+/**
+ * Why idle timeout instead of absolute: docker pull can legitimately take
+ * several minutes on a slow link but always appends log lines while progressing.
+ * Only lack of log change for 60 seconds indicates a hung process, so we track
+ * lastChangeAt from log file modification time rather than start time.
+ */
+export function parseDeployPercent(log: string): number | null {
+  if (!log) return null;
+  // Match patterns like "37%", "Pulling ...  37%", "Downloading [====>    ] 37%"
+  // Collect all percent occurrences and return the largest seen, which reflects furthest progress.
+  const matches = log.match(/(\d{1,3})%/g);
+  if (!matches || matches.length === 0) return null;
+  let maximum = 0;
+  for (const match of matches) {
+    const value = parseInt(match.replace('%', ''), 10);
+    if (!Number.isNaN(value) && value >= 0 && value <= 100 && value > maximum) {
+      maximum = value;
+    }
+  }
+  return maximum > 0 ? maximum : null;
+}
 
 const getDeployLogsDir = () => path.join(getRepoRoot(), 'logs', 'deploy');
 
@@ -176,29 +199,41 @@ export async function runDeployContest(contestId: number): Promise<DeployContest
   }
 }
 
-async function resolveDeployStatus(paths: DeployPaths, meta: DeployMeta, log: string): Promise<DeployStatusResult> {
-  const elapsedMs = Date.now() - new Date(meta.startedAt).getTime();
-
-  if (elapsedMs > DEPLOY_TIMEOUT_MS) {
-    await clearActiveOperation();
-    return { success: false, status: 'timeout', contestId: meta.contestId, startedAt: meta.startedAt, log, error: 'Deploy timed out after 120 seconds.' };
+async function getLogLastChangeMs(paths: DeployPaths, meta: DeployMeta): Promise<number> {
+  try {
+    const stat = await fs.stat(paths.logPath);
+    return stat.mtimeMs;
+  } catch {
+    return new Date(meta.startedAt).getTime();
   }
+}
+
+async function resolveDeployStatus(paths: DeployPaths, meta: DeployMeta, log: string): Promise<DeployStatusResult> {
+  const percent = parseDeployPercent(log);
 
   const isDone = await fs.access(paths.donePath).then(() => true).catch(() => false);
   if (isDone) {
     await clearActiveOperation();
     await logToDiscord('Contest Deploy Completed', `Contest ID **${meta.contestId}** deployed successfully.`, 3066993);
-    return { success: true, status: 'completed', contestId: meta.contestId, startedAt: meta.startedAt, log };
+    return { success: true, status: 'completed', contestId: meta.contestId, startedAt: meta.startedAt, log, percent };
   }
 
   const errorContent = await fs.readFile(paths.errorPath, 'utf-8').catch(() => null);
   if (errorContent !== null) {
     await clearActiveOperation();
     await logToDiscord('Contest Deploy Failed', `Contest ID **${meta.contestId}** deploy failed. Exit code: ${errorContent.trim()}`, 15158332, true);
-    return { success: false, status: 'failed', contestId: meta.contestId, startedAt: meta.startedAt, log, error: `Docker process exited with code ${errorContent.trim()}.` };
+    return { success: false, status: 'failed', contestId: meta.contestId, startedAt: meta.startedAt, log, percent, error: `Docker process exited with code ${errorContent.trim()}.` };
   }
 
-  return { success: true, status: 'running', contestId: meta.contestId, startedAt: meta.startedAt, log };
+  // Why idle 60 seconds from last log change: absolute 120 seconds would kill slow but progressing docker pulls; idle detection ensures timeout only when no output arrives, proving the process is hung.
+  const lastChangeMs = await getLogLastChangeMs(paths, meta);
+  const idleMs = Date.now() - lastChangeMs;
+  if (idleMs > DEPLOY_IDLE_TIMEOUT_MS) {
+    await clearActiveOperation();
+    return { success: false, status: 'timeout', contestId: meta.contestId, startedAt: meta.startedAt, log, percent, error: `Deploy timed out after 60 seconds without log output.` };
+  }
+
+  return { success: true, status: 'running', contestId: meta.contestId, startedAt: meta.startedAt, log, percent };
 }
 
 export async function fetchDeployStatus(operationId: string): Promise<DeployStatusResult> {
@@ -216,4 +251,15 @@ export async function fetchDeployStatus(operationId: string): Promise<DeployStat
   const log = await fs.readFile(paths.logPath, 'utf-8').catch(() => '');
 
   return resolveDeployStatus(paths, meta, log);
+}
+
+export function getDeployOperationPathsForApi(operationId: string): DeployPaths {
+  return getDeployOperationPaths(operationId);
+}
+
+export async function readDeployMeta(operationId: string): Promise<DeployMeta | null> {
+  const paths = getDeployOperationPaths(operationId);
+  const raw = await fs.readFile(paths.metaPath, 'utf-8').catch(() => null);
+  if (raw === null) return null;
+  return JSON.parse(raw) as DeployMeta;
 }
