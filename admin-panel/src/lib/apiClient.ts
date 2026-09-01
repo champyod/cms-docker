@@ -9,6 +9,38 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : '';
 }
 
+let hasRedirectedToLogin = false;
+
+function getLocaleForRedirect(): string {
+  if (typeof window !== 'undefined') {
+    const segments = window.location.pathname.split('/');
+    const candidate = segments[1];
+    if (candidate && /^[a-z]{2}(-[A-Z]{2})?$/i.test(candidate)) {
+      return candidate;
+    }
+  }
+  return 'en';
+}
+
+function handleUnauthorizedRedirect(): void {
+  if (hasRedirectedToLogin) return;
+  hasRedirectedToLogin = true;
+  try {
+    document.cookie = 'session=; Max-Age=0; path=/; SameSite=Lax';
+  } catch {
+    // Cookie deletion may fail if blocked; redirect still proceeds
+  }
+  if (typeof window !== 'undefined') {
+    try {
+      window.dispatchEvent(new CustomEvent('cms-authentication-expired'));
+    } catch {
+      // Event dispatch may fail in constrained environments; redirect still proceeds
+    }
+    const locale = getLocaleForRedirect();
+    window.location.href = `/${locale}/auth/login`;
+  }
+}
+
 class ApiClient {
   private async request<T = unknown>(
     path: string,
@@ -23,9 +55,13 @@ class ApiClient {
         },
       });
 
-      const data: unknown = await resp.json();
+      const data: unknown = await resp.json().catch(() => ({}));
 
       if (!resp.ok) {
+        // Why: 401 means session expired or permission revoked — clear polling and redirect once to login
+        if (resp.status === 401) {
+          handleUnauthorizedRedirect();
+        }
         const payload =
           typeof data === 'object' && data !== null
             ? (data as Record<string, unknown>)

@@ -141,7 +141,7 @@ const SectionLabel = ({ label, collapsed }: { label: string; collapsed: boolean 
     return <div className="mx-auto my-3 h-px w-6 bg-border" role="presentation" />;
   }
   return (
-    <p className="px-2.5 pt-4 pb-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+    <p className="px-2.5 pt-4 pb-1 text-xs font-bold uppercase tracking-widest text-muted-foreground">
       {label}
     </p>
   );

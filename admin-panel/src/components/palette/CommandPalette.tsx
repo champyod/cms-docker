@@ -191,6 +191,15 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  useEffect(() => {
+    if (!open) return;
+    const timer = window.setTimeout(() => {
+      const input = document.querySelector<HTMLInputElement>('[data-slot="command-input"]');
+      input?.focus();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [open]);
+
   const close = useCallback(() => handleOpenChange(false), [handleOpenChange]);
 
   const navigateTo = useCallback(

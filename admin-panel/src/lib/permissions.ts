@@ -6,7 +6,7 @@ export type Permission = 'all' | 'tasks' | 'users' | 'contests' | 'messaging';
 
 export type FreshPermissions = { all: boolean; tasks: boolean; users: boolean; contests: boolean; messaging: boolean };
 
-/** Superadmin (`all`) bypasses every check; the literal permission 'all' itself is never grantable below superadmin. */
+// Why: superadmin bypasses every check so single source decides visibility; literal 'all' never granted below superadmin
 export function hasPermission(fresh: FreshPermissions, permission: Permission): boolean {
   if (fresh.all) return true;
   switch (permission) {
@@ -22,6 +22,7 @@ export function hasPermission(fresh: FreshPermissions, permission: Permission): 
       return false;
   }
 }
+// Why: cache fresh permissions for 60 seconds to avoid database round trip on every render while still reflecting revocation quickly
 const accessCache = new Map<string, { value: FreshPermissions; expires: number }>();
 const ACCESS_TTL_MS = 60_000;
 
@@ -46,6 +47,7 @@ export function invalidateAccessCache(userId?: string): void {
   if (userId) accessCache.delete(userId); else accessCache.clear();
 }
 
+// Why: use fresh database permissions not stale token so revocation takes effect without leaking existence via distinct denial page
 export async function checkPermission(permission: Permission, redirectToLogin = true) {
   const session = await getSession();
   
