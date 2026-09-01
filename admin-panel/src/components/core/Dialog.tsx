@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+
 import {
   Dialog as UIDialog,
   DialogContent,
@@ -8,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { EmptyState } from '@/components/core/EmptyState';
 import { cn } from '@/lib/utils';
 
 interface DialogProps {
@@ -29,6 +31,7 @@ export function Dialog({
   children,
   className,
 }: DialogProps) {
+  const isContentEmpty = children === null || children === undefined;
   return (
     <UIDialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={className}>
@@ -38,7 +41,7 @@ export function Dialog({
             {description && <DialogDescription>{description}</DialogDescription>}
           </DialogHeader>
         )}
-        {children}
+        {isContentEmpty ? <EmptyState title="No content available" description="Dialog content is empty" /> : children}
         {footer && <DialogFooter>{footer}</DialogFooter>}
       </DialogContent>
     </UIDialog>
