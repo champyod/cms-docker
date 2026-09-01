@@ -2,7 +2,7 @@ import { getTeams } from '@/app/actions/teams';
 import { TeamList } from '@/components/teams/TeamList';
 import { checkPermission, getPermissions } from '@/lib/permissions';
 import { getDictionary } from '@/i18n';
-import { PermissionDenied } from '@/components/PermissionDenied';
+import { notFound } from 'next/navigation';
 import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
 
@@ -15,8 +15,9 @@ export default async function TeamsPage({
   const dict = await getDictionary(locale);
   const hasPermission = await checkPermission('users', false);
 
+  // Why: return 404 for forbidden access so existence is indistinguishable from missing page
   if (!hasPermission) {
-    return <PermissionDenied permission="permission_users" locale={locale} dict={dict} />;
+    notFound();
   }
 
   const permissions = await getPermissions();
@@ -25,8 +26,8 @@ export default async function TeamsPage({
   return (
     <Stack gap={8}>
       <Stack gap={2}>
-        <Text variant="h1">Teams</Text>
-        <Text variant="muted">Manage teams for competitive programming.</Text>
+        <Text variant="h1">{dict.teams.title}</Text>
+        <Text variant="muted">{dict.teams.subtitle}</Text>
       </Stack>
 
       <TeamList initialTeams={teams} permissions={permissions} />

@@ -49,7 +49,7 @@ export function WorkerGrid({ workers }: { workers: WorkerStats[] }) {
                 <h3 className="text-sm font-bold text-foreground group-hover:text-indigo-400 transition-colors">
                   {worker.name}
                 </h3>
-                <span className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider">
+                <span className="text-xs text-muted-foreground font-mono uppercase tracking-wider">
                   {worker.id}
                 </span>
               </div>
@@ -59,7 +59,7 @@ export function WorkerGrid({ workers }: { workers: WorkerStats[] }) {
                   worker.status === 'busy' ? 'bg-amber-500' : 
                 'bg-red-500'
               }`} />
-              <span className="text-[10px] font-bold text-muted-foreground uppercase">
+              <span className="text-xs font-bold text-muted-foreground uppercase">
                 {worker.status}
               </span>
             </div>
@@ -67,7 +67,7 @@ export function WorkerGrid({ workers }: { workers: WorkerStats[] }) {
 
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <div className="flex justify-between text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
+              <div className="flex justify-between text-xs text-muted-foreground font-bold uppercase tracking-widest">
                 <div className="flex items-center gap-1">
                   <Cpu className="w-3 h-3" />
                   Task Load
@@ -86,7 +86,7 @@ export function WorkerGrid({ workers }: { workers: WorkerStats[] }) {
 
             <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border">
               <div className="flex flex-col">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-tight">
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest leading-tight">
                   Active Tasks
                 </span>
                 <span className="text-sm font-bold text-foreground font-mono">
@@ -94,7 +94,7 @@ export function WorkerGrid({ workers }: { workers: WorkerStats[] }) {
                 </span>
               </div>
               <div className="flex flex-col items-end">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-tight">
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest leading-tight">
                   Status
                 </span>
                 <div className="flex items-center gap-1">
@@ -103,7 +103,7 @@ export function WorkerGrid({ workers }: { workers: WorkerStats[] }) {
                   ) : (
                     <CheckCircle2 className="w-3 h-3 text-emerald-400" />
                   )}
-                  <span className={`text-[10px] font-bold ${worker.tasks > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                  <span className={`text-xs font-bold ${worker.tasks > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
                     {worker.tasks > 0 ? 'Busy' : 'Idle'}
                   </span>
                 </div>

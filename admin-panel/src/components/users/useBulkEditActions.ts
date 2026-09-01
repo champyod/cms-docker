@@ -95,20 +95,17 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
 
   useEffect(() => {
     // Stored password hashes must never reach the editable preview — only locally generated plaintext appears here.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRows(selectedUsers.map((u) => ({ ...u, password: null })));
   }, [selectedUsers]);
 
   useEffect(() => {
     if (contests.length > 0 && !contests.find((contest) => contest.id === selectedContestId)) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedContestId(contests[0].id);
     }
   }, [contests, selectedContestId]);
 
   useEffect(() => {
     if (contests.length > 0 && !contests.find((contest) => contest.id === teamContestId)) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTeamContestId(contests[0].id);
     }
   }, [contests, teamContestId]);

@@ -27,7 +27,6 @@ export default function MaintenanceClient() {
   };
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- mount-load or modal-reset pattern; behavior must not change
     loadData();
   }, []);
 

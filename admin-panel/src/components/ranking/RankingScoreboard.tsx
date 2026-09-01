@@ -36,8 +36,8 @@ export function RankingScoreboard({ rows, loadingSnapshot }: Props) {
               {rows.map((row) => (
                 <TableRow key={row.userId}>
                   <TableCell className="font-mono">{row.rank}</TableCell>
-                  <TableCell className="max-w-[200px] truncate">{row.firstName}</TableCell>
-                  <TableCell className="max-w-[200px] truncate">{row.lastName}</TableCell>
+                  <TableCell className="max-w-48 truncate">{row.firstName}</TableCell>
+                  <TableCell className="max-w-48 truncate">{row.lastName}</TableCell>
                   <TableCell className="text-sm font-mono">{row.team}</TableCell>
                   <TableCell className="text-right font-mono">{row.solved}</TableCell>
                   <TableCell className="text-right font-mono">{row.totalScore.toFixed(2).replace(/\.00$/, '')}</TableCell>

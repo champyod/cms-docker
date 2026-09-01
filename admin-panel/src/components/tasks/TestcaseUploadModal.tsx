@@ -142,7 +142,7 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
             </Button>
           </>
         }
-        className="flex h-[85vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
+        className="flex h-96 w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
       >
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {step === 1 ? (
@@ -175,7 +175,7 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
                 <div className="min-w-50 flex-1">
                   <label className="mb-1.5 block text-xs font-bold uppercase text-muted-foreground">Input Pattern</label>
                   <input type="text" value={inputPattern} onChange={(event) => setInputPattern(event.target.value)} className="w-full rounded border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground focus:border-ring focus:outline-none" placeholder="e.g. *.in" />
-                  <p className="mt-1 text-[10px] text-muted-foreground">Use * for number, ** for 2-digit number</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Use * for number, ** for 2-digit number</p>
                 </div>
                 <div className="min-w-50 flex-1">
                   <label className="mb-1.5 block text-xs font-bold uppercase text-muted-foreground">Output Pattern</label>
@@ -212,7 +212,7 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
                           <div className="flex min-w-0 flex-1 flex-col gap-1">
                             <span className="truncate text-xs text-muted-foreground">In: <span className={pair.inputFile ? 'text-foreground' : 'text-destructive'}>{pair.inputFile?.name ?? 'Missing'}</span></span>
                             <span className="truncate text-xs text-muted-foreground">Out: <span className={pair.outputFile ? 'text-foreground' : 'text-destructive'}>{pair.outputFile?.name ?? 'Missing'}</span></span>
-                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                               {pair.inputFile && <span>Input: <span className="text-info">{getEncodingLabel(pair.inputFile.selectedEncoding)}</span><span className="text-muted-foreground"> (detected {getEncodingLabel(pair.inputFile.detectedEncoding)})</span></span>}
                               {pair.outputFile && <span>Output: <span className="text-info">{getEncodingLabel(pair.outputFile.selectedEncoding)}</span><span className="text-muted-foreground"> (detected {getEncodingLabel(pair.outputFile.detectedEncoding)})</span></span>}
                             </div>

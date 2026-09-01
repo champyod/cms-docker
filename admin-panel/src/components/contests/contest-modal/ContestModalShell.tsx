@@ -136,7 +136,7 @@ function ShellFooter({ contest, loading, onClose }: Pick<ContestModalShellProps,
         variant="positive"
         loading={loading}
         disabled={loading}
-        className="min-w-[140px]"
+        className="min-w-32"
       >
         {contest ? 'Save Changes' : 'Create Contest'}
       </Button>
@@ -188,7 +188,7 @@ export function ContestModalShell({
       }}
       title={contest ? 'Edit Contest' : 'Create New Contest'}
       footer={<ShellFooter contest={contest} loading={loading} onClose={onClose} />}
-      className="flex h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl"
+      className="flex h-96 w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl"
     >
       <ShellBody
         validationErrors={validationErrors} error={error} activeTab={activeTab}

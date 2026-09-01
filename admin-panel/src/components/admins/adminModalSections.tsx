@@ -23,7 +23,7 @@ export function AdminRoleSelector({ isSuperadmin, onSelectRole }: RoleSelectorPr
           className={cn(
             "flex-1 py-1.5 px-3 rounded text-xs font-medium transition-all",
             isSuperadmin
-              ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/20"
+              ? "bg-indigo-500 text-foreground shadow-lg shadow-indigo-500/20"
               : "text-muted-foreground hover:text-foreground"
           )}
         >
@@ -35,7 +35,7 @@ export function AdminRoleSelector({ isSuperadmin, onSelectRole }: RoleSelectorPr
           className={cn(
             "flex-1 py-1.5 px-3 rounded text-xs font-medium transition-all",
             (!isSuperadmin)
-              ? "bg-purple-600 text-white shadow-lg shadow-purple-500/20"
+              ? "bg-purple-600 text-foreground shadow-lg shadow-purple-500/20"
               : "text-muted-foreground hover:text-foreground"
           )}
         >

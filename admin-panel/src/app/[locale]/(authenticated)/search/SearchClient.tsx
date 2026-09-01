@@ -21,7 +21,6 @@ export default function SearchClient() {
 
   useEffect(() => {
     if (!query) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset-on-empty-query; behavior must not change
       setResults(null);
       return;
     }

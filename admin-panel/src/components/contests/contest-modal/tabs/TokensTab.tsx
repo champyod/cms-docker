@@ -39,7 +39,7 @@ function MaxTotalTokensField(props: TokensTabProps) {
     <div className="space-y-2">
       <label className={cn(LABEL_CLASSES, 'flex items-center justify-between')}>
           Max Total Tokens
-          <span className="text-[10px] font-normal normal-case text-muted-foreground">Total allowed across contest</span>
+          <span className="text-xs font-normal normal-case text-muted-foreground">Total allowed across contest</span>
       </label>
       <UnlimitedNumberInput
         value={formData.token_max_number}

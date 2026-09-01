@@ -25,7 +25,6 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData }: TeamModal
 
   useEffect(() => {
     if (initialData) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync prop to form on open
       setFormData({ code: initialData.code, name: initialData.name });
     } else {
       setFormData({ code: '', name: '' });

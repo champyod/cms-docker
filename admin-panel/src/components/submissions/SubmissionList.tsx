@@ -56,7 +56,7 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage }: 
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[100px]">ID</TableHead>
+            <TableHead className="w-24">ID</TableHead>
             <TableHead>Time</TableHead>
             <TableHead>User</TableHead>
             <TableHead>Task</TableHead>
@@ -93,7 +93,7 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage }: 
                           <UserIcon className="w-3 h-3 text-muted-foreground" />
                           {submission.participations.users.username}
                       </div>
-                      <div className="text-[10px] text-muted-foreground ml-5">{submission.participations.contests.name}</div>
+                      <div className="text-xs text-muted-foreground ml-5">{submission.participations.contests.name}</div>
                   </TableCell>
                   <TableCell>
                        <div className="flex items-center gap-2">

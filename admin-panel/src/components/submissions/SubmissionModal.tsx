@@ -67,7 +67,7 @@ export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModal
         </div>
 
         {/* Content - Scrollable */}
-        <div className="max-h-[60vh] overflow-y-auto pr-1 space-y-6">
+        <div className="max-h-96 overflow-y-auto pr-1 space-y-6">
 
             {/* Status Grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
