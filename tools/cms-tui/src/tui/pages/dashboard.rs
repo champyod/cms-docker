@@ -1,7 +1,7 @@
-use crate::core::model::ServiceStatus;
 use crate::tui::app::App;
+use crate::core::model::ServiceStatus;
 use ratatui::{
-    layout::Rect,
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
@@ -29,57 +29,90 @@ const fn status_label(status: &ServiceStatus) -> &'static str {
 }
 
 pub fn render(f: &mut Frame, area: Rect, app: &App) {
-    let count = app.state.services.len();
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(format!(" Infrastructure Overview — {count} services "))
-        .style(Style::default().fg(Color::Cyan));
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(0),
+            Constraint::Length(3),
+        ])
+        .split(area);
 
-    if app.state.services.is_empty() {
-        let paragraph = Paragraph::new("(no services)")
-            .style(Style::default().add_modifier(Modifier::DIM))
-            .block(block);
-        f.render_widget(paragraph, area);
-        return;
-    }
-
-    let mut lines: Vec<Line> = Vec::new();
-    lines.push(Line::from(Span::styled(
-        " Services grouped by environment — name · version · status",
-        Style::default()
-            .fg(Color::DarkGray)
-            .add_modifier(Modifier::DIM),
-    )));
-    lines.push(Line::from(""));
-
-    for service in &app.state.services {
-        let status = Span::styled(
-            format!(" [{}] ", status_label(&service.status)),
+    let title = Paragraph::new(" Infrastructure Overview ")
+        .style(
             Style::default()
-                .fg(status_color(&service.status))
+                .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
+        )
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .style(Style::default().fg(Color::Cyan)),
         );
-        let env = Span::styled(
-            format!(" {} ", service.env),
-            Style::default().fg(Color::Yellow),
-        );
-        let name = Span::styled(
-            format!(" {} ", service.name),
-            Style::default().fg(Color::White),
-        );
-        let version = Span::styled(
-            format!(" v{} ", service.version),
-            Style::default().fg(Color::DarkGray),
-        );
-        let id = Span::styled(
-            format!(" ({}) ", service.id),
+    f.render_widget(title, chunks[0]);
+
+    let count = app.state.services.len();
+    if app.state.services.is_empty() {
+        let paragraph = Paragraph::new("(no services — run 'make core' to deploy)")
+            .style(Style::default().add_modifier(Modifier::DIM))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .style(Style::default().fg(Color::DarkGray)),
+            );
+        f.render_widget(paragraph, chunks[1]);
+    } else {
+        let mut lines: Vec<Line> = Vec::new();
+        lines.push(Line::from(Span::styled(
+            " Services grouped by environment — name · version · status",
             Style::default()
                 .fg(Color::DarkGray)
                 .add_modifier(Modifier::DIM),
-        );
-        lines.push(Line::from(vec![env, name, version, status, id]));
+        )));
+        lines.push(Line::from(""));
+
+        for service in &app.state.services {
+            let status = Span::styled(
+                format!(" [{}] ", status_label(&service.status)),
+                Style::default()
+                    .fg(status_color(&service.status))
+                    .add_modifier(Modifier::BOLD),
+            );
+            let env = Span::styled(
+                format!(" {} ", service.env),
+                Style::default().fg(Color::Yellow),
+            );
+            let name = Span::styled(
+                format!(" {} ", service.name),
+                Style::default().fg(Color::White),
+            );
+            let version = Span::styled(
+                format!(" v{} ", service.version),
+                Style::default().fg(Color::DarkGray),
+            );
+            let id = Span::styled(
+                format!(" ({}) ", service.id),
+                Style::default()
+                    .fg(Color::DarkGray)
+                    .add_modifier(Modifier::DIM),
+            );
+            lines.push(Line::from(vec![env, name, version, status, id]));
+        }
+
+        let paragraph = Paragraph::new(lines)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(format!(" {count} services "))
+                    .style(Style::default().fg(Color::Cyan)),
+            );
+        f.render_widget(paragraph, chunks[1]);
     }
 
-    let paragraph = Paragraph::new(lines).block(block);
-    f.render_widget(paragraph, area);
+    let help = Paragraph::new(
+        "[1-9] Switch page   [q] Quit   [r] Refresh   [Esc] Back",
+    )
+    .style(Style::default().fg(Color::DarkGray))
+    .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)));
+    f.render_widget(help, chunks[2]);
 }
