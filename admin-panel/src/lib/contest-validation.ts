@@ -1,4 +1,5 @@
 import { getConstraintErrorMessage as getMsg } from './contest-validation-constraints';
+import { parseIntervalToSeconds } from './task-intervals';
 
 export { CONSTRAINT_TO_FIELD_MAP, getConstraintErrorMessage } from './contest-validation-constraints';
 
@@ -39,28 +40,7 @@ export interface ContestData {
   min_submission_interval_grace_period?: number | null;
 }
 
-export const parseInterval = (val: unknown): number => {
-  if (!val) return 0;
-  if (typeof val === 'number') return val;
-  if (typeof val === 'string') {
-    if (/^\d+$/.test(val)) return parseInt(val, 10);
-    const parts = val.split(':').map(Number);
-    if (parts.length === 3 && parts.every((n) => !isNaN(n))) {
-      return parts[0] * 3600 + parts[1] * 60 + parts[2];
-    }
-    return 0;
-  }
-  if (typeof val === 'object' && val !== null) {
-    const obj = val as Record<string, number>;
-    let total = 0;
-    if (obj.days !== undefined) total += obj.days * 24 * 3600;
-    if (obj.hours !== undefined) total += obj.hours * 3600;
-    if (obj.minutes !== undefined) total += obj.minutes * 60;
-    if (obj.seconds !== undefined) total += obj.seconds;
-    return total;
-  }
-  return 0;
-};
+export const parseInterval = (val: unknown): number => parseIntervalToSeconds(val) ?? 0;
 
 export function intervalToString(seconds: number, unit: 'seconds' | 'minutes' = 'seconds'): string {
   return `${seconds} ${unit}`;

@@ -53,19 +53,31 @@ export async function POST(req: NextRequest) {
     const data = await req.json();
     const { first_name, last_name, username, email, password, timezone } = data;
 
+    const usernameTrimmed = typeof username === 'string' ? username.trim() : '';
+    const firstNameTrimmed = typeof first_name === 'string' ? first_name.trim() : '';
+    const lastNameTrimmed = typeof last_name === 'string' ? last_name.trim() : '';
+    if (!usernameTrimmed) return apiError({ message: 'Username is required', status: 400 });
+    if (!/^[A-Za-z0-9_.-]+$/.test(usernameTrimmed)) return apiError({ message: 'Username must contain only letters, numbers, dot, hyphen and underscore', status: 400 });
+    if (!firstNameTrimmed) return apiError({ message: 'First name is required', status: 400 });
+    if (!lastNameTrimmed) return apiError({ message: 'Last name is required', status: 400 });
+    if (email && typeof email === 'string' && email.trim().length > 0) {
+      const emailTrimmed = email.trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrimmed)) return apiError({ message: 'Invalid email format', status: 400 });
+    }
     if (!password) return apiError({ message: 'Password is required', status: 400 });
+    if (typeof password !== 'string' || password.length < 4) return apiError({ message: 'Password must be at least 4 characters', status: 400 });
 
     const passwordKind = isPasswordKind(data.passwordKind) ? data.passwordKind : DEFAULT_PASSWORD_KIND;
     const storedPassword = await formatStoredPassword(passwordKind, password);
 
     const created = await prisma.users.create({
       data: {
-        first_name,
-        last_name,
-        username,
-        email: email || null,
+        first_name: firstNameTrimmed,
+        last_name: lastNameTrimmed,
+        username: usernameTrimmed,
+        email: typeof email === 'string' && email.trim().length > 0 ? email.trim() : null,
         password: storedPassword,
-        timezone: timezone || null,
+        timezone: typeof timezone === 'string' && timezone.trim().length > 0 ? timezone.trim() : null,
         preferred_languages: [],
       },
     });
