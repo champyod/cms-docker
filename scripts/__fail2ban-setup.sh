@@ -14,7 +14,11 @@
 #   bans after 5 fails regardless (nginx-http-auth maxretry=5). Keep CAPTCHA
 #   optional via CAPTCHA_ENABLED=0 by default so prod stays off unless enabled.
 
-set -euo pipefail
+set -eu
+# pipefail only if available
+if (set -o pipefail 2>/dev/null); then
+    set -o pipefail
+fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "$REPO_ROOT"

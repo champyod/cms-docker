@@ -15,7 +15,11 @@
 #   __funnel.sh status    show serve/funnel table
 #   __funnel.sh passwd <user> [password]   write config/funnel.htpasswd
 
-set -euo pipefail
+set -eu
+# pipefail only if available
+if (set -o pipefail 2>/dev/null); then
+    set -o pipefail
+fi
 cd "$(dirname "$0")/.."
 
 HTPASSWD="config/funnel.htpasswd"

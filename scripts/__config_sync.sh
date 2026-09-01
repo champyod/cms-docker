@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eu
+# pipefail only if available
+if (set -o pipefail 2>/dev/null); then
+    set -o pipefail
+fi
 
 # __config_sync.sh — Generate .env.* files from config.toml.
 # Replaces the legacy Makefile env: target body.
