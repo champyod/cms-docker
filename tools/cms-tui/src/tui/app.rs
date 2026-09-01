@@ -122,11 +122,20 @@ impl App {
         let items = vec![
             (
                 "Fleet Manager (TUI)".to_string(),
-                "worker fleet".to_string(),
+                "bash scripts/__worker_tui.sh deploy all".to_string(),
             ),
-            ("Pick Server".to_string(), "worker server".to_string()),
-            ("Connect Worker".to_string(), "worker connect".to_string()),
-            ("Setup Cgroups".to_string(), "worker cgroup".to_string()),
+            (
+                "Pick Server".to_string(),
+                "echo 'Pick Server now lives in the Rust TUI — configure via Worker → Fleet Manager'".to_string(),
+            ),
+            (
+                "Connect Worker".to_string(),
+                "bash scripts/__worker_connect.sh".to_string(),
+            ),
+            (
+                "Setup Cgroups".to_string(),
+                "bash scripts/__worker_cgroup_setup.sh".to_string(),
+            ),
         ];
         ActionMenu::new(items)
     }
@@ -135,11 +144,20 @@ impl App {
         let items = vec![
             (
                 "Tailscale Setup/Status".to_string(),
-                "tailscale".to_string(),
+                "bash scripts/__tailscale_serve.sh status".to_string(),
             ),
-            ("Expose Wizard".to_string(), "expose".to_string()),
-            ("Funnel Setup/Status".to_string(), "funnel".to_string()),
-            ("Domain Setup/Status".to_string(), "domain".to_string()),
+            (
+                "Expose Wizard".to_string(),
+                "echo 'Expose Wizard now lives in the Rust TUI — use Ingress panel'".to_string(),
+            ),
+            (
+                "Funnel Setup/Status".to_string(),
+                "bash scripts/__funnel.sh status".to_string(),
+            ),
+            (
+                "Domain Setup/Status".to_string(),
+                "bash scripts/__domain.sh status".to_string(),
+            ),
         ];
         ActionMenu::new(items)
     }
@@ -148,18 +166,27 @@ impl App {
         let items = vec![
             (
                 "Sync Config (.env.* from config.toml)".to_string(),
-                "config sync".to_string(),
+                "bash scripts/__config_sync.sh".to_string(),
             ),
-            ("Edit config.toml".to_string(), "config edit".to_string()),
-            ("Show config.toml".to_string(), "config show".to_string()),
-            ("Secrets: Audit".to_string(), "secrets audit".to_string()),
+            (
+                "Edit config.toml".to_string(),
+                "nano config.toml".to_string(),
+            ),
+            (
+                "Show config.toml".to_string(),
+                "cat config.toml".to_string(),
+            ),
+            (
+                "Secrets: Audit".to_string(),
+                "bash scripts/__secrets-rotate.sh --audit".to_string(),
+            ),
             (
                 "Secrets: Generate".to_string(),
-                "secrets generate".to_string(),
+                "bash scripts/__secrets-rotate.sh --generate".to_string(),
             ),
             (
                 "Secrets: Rotate (guarded)".to_string(),
-                "secrets rotate".to_string(),
+                "bash scripts/__secrets-rotate.sh --apply".to_string(),
             ),
         ];
         ActionMenu::new(items)
@@ -170,10 +197,16 @@ impl App {
             ("Run Backup Now".to_string(), "make backup".to_string()),
             (
                 "Backup Drill (test restore)".to_string(),
-                "backup drill".to_string(),
+                "bash scripts/__backup_drill.sh".to_string(),
             ),
-            ("Offsite Sync".to_string(), "backup offsite".to_string()),
-            ("Restore from Archive".to_string(), "restore".to_string()),
+            (
+                "Offsite Sync".to_string(),
+                "bash scripts/__offsite-sync.sh".to_string(),
+            ),
+            (
+                "Restore from Archive".to_string(),
+                "bash scripts/__restore.sh".to_string(),
+            ),
         ];
         ActionMenu::new(items)
     }
@@ -182,12 +215,15 @@ impl App {
         let items = vec![
             (
                 "Doctor (Preflight Checks)".to_string(),
-                "doctor".to_string(),
+                "bash scripts/__preflight.sh".to_string(),
             ),
-            ("Smoke Test".to_string(), "test".to_string()),
+            (
+                "Smoke Test".to_string(),
+                "bash scripts/__smoke-test.sh".to_string(),
+            ),
             (
                 "Full Update Server".to_string(),
-                "update-server".to_string(),
+                "bash scripts/__update-server.sh".to_string(),
             ),
         ];
         ActionMenu::new(items)
@@ -195,16 +231,22 @@ impl App {
 
     fn build_bootstrap_menu(_state: &AppState) -> ActionMenu {
         let items = vec![
-            ("Setup (Fresh Install)".to_string(), "setup".to_string()),
+            (
+                "Setup (Fresh Install)".to_string(),
+                "bash scripts/__update_engine.sh --fresh".to_string(),
+            ),
             (
                 "Update Config (Interactive)".to_string(),
-                "update".to_string(),
+                "bash scripts/__update_engine.sh".to_string(),
             ),
             (
                 "Fix (Non-interactive Repair)".to_string(),
-                "fix".to_string(),
+                "bash scripts/__update_engine.sh --fix".to_string(),
             ),
-            ("Create Superadmin".to_string(), "admin-create".to_string()),
+            (
+                "Create Superadmin".to_string(),
+                "make admin-create".to_string(),
+            ),
         ];
         ActionMenu::new(items)
     }
