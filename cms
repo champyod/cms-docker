@@ -78,18 +78,29 @@ Examples:
 CMDS
 }
 
-# Run the Rust TUI/CLI rebuild from source so shipped behavior always matches.
-# The cms-tui binary (ratatui + clap) is the single entry point for all
-# interactive (TUI) and non-interactive (CLI) commands. No gum fallback.
+# Run the Rust TUI/CLI — vendored binary first (no cargo needed on prod),
+# then local build, then cargo build. No gum fallback.
 run_tui() {
   local _tui_bin="tools/cms-tui/target/release/cms-tui"
+  local _vendored=""
+  case "$(uname -m)" in
+    x86_64|amd64) _vendored=".tools/cms-tui/cms-tui-linux-x86_64" ;;
+    aarch64|arm64) _vendored=".tools/cms-tui/cms-tui-linux-arm64" ;;
+  esac
+  if [[ -n "$_vendored" && -x "$_vendored" ]]; then
+    exec "$_vendored" "$@"
+  fi
   if [[ ! -x "$_tui_bin" ]] && command -v cargo >/dev/null 2>&1; then
     (cd tools/cms-tui && cargo build --release) >&2
   fi
   if [[ -x "$_tui_bin" ]]; then
     exec "$_tui_bin" "$@"
   fi
-  echo "cms-tui not built and cargo not available — run: (cd tools/cms-tui && cargo build --release)" >&2
+  if [[ -n "$_vendored" && -f "$_vendored" ]]; then
+    chmod +x "$_vendored" 2>/dev/null
+    exec "$_vendored" "$@"
+  fi
+  echo "cms-tui not found — run: (cd tools/cms-tui && cargo build --release) or install cargo" >&2
   exit 1
 }
 
