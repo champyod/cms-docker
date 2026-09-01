@@ -78,9 +78,9 @@ Examples:
 CMDS
 }
 
-# Run the Rust TUI rebuild from source so shipped behavior always matches
-# tools/cms-tui; build it on demand if the release artifact is missing, and
-# fall back to the legacy bash TUI only when the Rust toolchain is absent.
+# Run the Rust TUI/CLI rebuild from source so shipped behavior always matches.
+# The cms-tui binary (ratatui + clap) is the single entry point for all
+# interactive (TUI) and non-interactive (CLI) commands. No gum fallback.
 run_tui() {
   local _tui_bin="tools/cms-tui/target/release/cms-tui"
   if [[ ! -x "$_tui_bin" ]] && command -v cargo >/dev/null 2>&1; then
@@ -89,161 +89,16 @@ run_tui() {
   if [[ -x "$_tui_bin" ]]; then
     exec "$_tui_bin" "$@"
   fi
-  exec bash scripts/__tui/__main.sh "$@"
+  echo "cms-tui not built and cargo not available — run: (cd tools/cms-tui && cargo build --release)" >&2
+  exit 1
 }
 
-handle_subcommand() {
-  # TTY-gated interactive layer: real terminals get the TUI router; pipes,
-  # non-tty contexts, --no-tui flag, incompatible forms (--workers-json,
-  # drill) and CMS_NO_TUI=1 fall through to the plain handlers below unchanged.
-  if [[ -t 0 && -t 1 && -z "${CMS_NO_TUI:-}" ]]; then
-    case "${1:-}:${2:-}" in
-      status:--workers-json|backup:drill|backup:offsite) : ;;
-      *)
-        case "$1" in
-          setup|update|fix|deploy|stop|clean|pull|db|admin-create|status|monitor|backup|restore|secrets|doctor|test|worker|tailscale|expose|funnel|contest|update-server|domain|config)
-            run_tui "$@"
-            ;;
-        esac
-        ;;
-    esac
-  fi
-  case "$1" in
-    help|-h) cmd_usage; exit 0 ;;
-    setup)
-      mode_args=(--fresh)
-      if [[ -f .env.core ]]; then
-        read -r -p "Existing install detected — run the interactive update wizard instead? [Y/n] " yn || yn="n"
-        if [[ ! "$yn" =~ ^[Nn] ]]; then mode_args=(); fi
-      fi
-      exec bash scripts/__update_engine.sh ${mode_args[@]+"${mode_args[@]}"} "${@:2}"
-      ;;
-    update)
-      if [[ "${2:-}" == "all" ]]; then
-        shift 2; exec bash scripts/__update-server.sh "$@"
-      fi
-      shift; exec bash scripts/__update_engine.sh "$@"
-      ;;
-    fix)    exec bash scripts/__update_engine.sh --fix ;;
-    deploy)
-      stack="${2:-}"
-      [[ -z "$stack" ]] && { echo "usage: cms deploy <core|admin|contest|worker|infra|all> [--img]" >&2; exit 2; }
-      img=""
-      [[ "${3:-}" == "--img" ]] && img=1
-      run_stack() {
-        if [[ -n "$img" ]]; then
-          DEPLOYMENT_TYPE_OVERRIDE=img make "$1"
-        else
-          make "$1"
-        fi
-      }
-      case "$stack" in
-        worker)
-          # Interactive terminal -> fleet TUI (pick/edit/deploy workers).
-          if [[ -t 0 && -z "$img" && -f .env.core && -f .env.worker ]]; then
-            exec bash scripts/__tui/runners/__fleet-actions.sh tui
-          fi
-          run_stack worker; exit "$?" ;;
-        core|admin|contest|infra) run_stack "$stack"; exit "$?" ;;
-        all)
-          rc=0
-          for s in core infra admin contest worker; do run_stack "$s" || rc=1; done
-          exit "$rc" ;;
-        *) echo "unknown stack: $stack" >&2; exit 2 ;;
-      esac ;;
-    stop|clean)
-      action="$1"
-      stack="${2:-all}"
-      case "$stack" in
-        all)
-          if [[ "$action" == "clean" ]]; then exec make clean; fi
-          rc=0
-          for s in core admin contest worker infra; do make "${s}-stop" || rc=1; done
-          exit "$rc" ;;
-        core|admin|contest|worker|infra) exec make "${stack}-${action}" ;;
-        *) echo "unknown stack: $stack" >&2; exit 2 ;;
-      esac ;;
-    pull)
-      stack="${2:-all}"
-      case "$stack" in
-        all) exec make pull ;;
-        core|admin|contest|worker|infra) exec make "pull-${stack}" ;;
-        *) echo "unknown stack: $stack" >&2; exit 2 ;;
-      esac ;;
-    db)
-      sub="${2:-}"
-      case "$sub" in
-        init)  exec make cms-init ;;
-        reset) exec make db-reset ;;
-        clean) exec make db-clean ;;
-        sync)  exec make prisma-sync ;;
-        *) echo "usage: cms db <init|reset|clean|sync>" >&2; exit 2 ;;
-      esac ;;
-    admin-create) exec make admin-create ;;
-    status)
-      if [[ "${2:-}" == "--workers-json" ]]; then exec bash scripts/__worker_status_json.sh "${@:3}"; fi
-      shift; exec bash scripts/__status.sh "$@" ;;
-    monitor) shift; exec bash scripts/__monitor.sh "$@" ;;
-    backup)
-      case "${2:-}" in
-        drill)   shift 2; exec bash scripts/__backup_drill.sh "$@" ;;
-        offsite) shift 2; exec bash scripts/__offsite-sync.sh "$@" ;;
-        *) exec make backup ;;
-      esac ;;
-    restore) shift; exec bash scripts/__restore.sh "$@" ;;
-    secrets)
-      sub="${2:-}"
-      case "$sub" in
-        rotate)   shift 2; exec bash scripts/__secrets-rotate.sh --apply "$@" ;;
-        audit)    shift 2; exec bash scripts/__secrets-rotate.sh --audit "$@" ;;
-        generate) shift 2; exec bash scripts/__secrets-rotate.sh --generate "$@" ;;
-        *) echo "usage: cms secrets <rotate|audit|generate>" >&2; exit 2 ;;
-      esac ;;
-    doctor)  exec bash scripts/__preflight.sh ;;
-    test)    shift; exec bash scripts/__smoke-test.sh "$@" ;;
-    worker)
-      sub="${2:-}"
-      case "$sub" in
-        edit|tui) shift; exec bash scripts/__tui/runners/__fleet-actions.sh "${@:2}" ;;
-        deploy)   shift 2; exec bash scripts/__worker_tui.sh deploy "${@:2}" ;;
-        stop)     shift 2; exec bash scripts/__worker_tui.sh stop "${2:-all}" ;;
-        list)     exec bash scripts/__worker_tui.sh list ;;
-        server)  shift 2; exec bash scripts/__tui/wizards/__server.sh "${@:2}" ;;
-        connect) shift 2; exec bash scripts/__worker_connect.sh "$@" ;;
-        cgroup)  shift 2; exec bash scripts/__worker_cgroup_setup.sh "$@" ;;
-        *) echo "usage: cms worker <edit|deploy [shard]|stop|list|connect|cgroup>" >&2; exit 2 ;;
-      esac ;;
-    tailscale)
-      shift
-      exec bash scripts/__tailscale_serve.sh "${@:-setup}" ;;
-    expose)
-      exec bash scripts/__tui/wizards/__expose.sh ;;
-    funnel)
-      shift; exec bash scripts/__funnel.sh "${@:-status}" ;;
-    contest)
-      sub="${2:-}"
-      [[ "$sub" == "create" ]] || { echo "usage: cms contest create <yaml...>" >&2; exit 2; }
-      shift 2; exec bash scripts/__create_contests.sh "$@" ;;
-    update-server) shift; exec bash scripts/__update-server.sh "$@" ;;
-    domain) shift; exec bash scripts/__domain.sh "${@:-status}" ;;
-  config)
-    sub="${2:-sync}"
-    case "$sub" in
-      sync)  shift 2; exec bash scripts/__config_sync.sh "$@" ;;
-      edit)  ${EDITOR:-nano} config.toml ;;
-      show)  cat config.toml 2>/dev/null || echo "No config.toml — run: ./cms config sync" ;;
-      *) echo "usage: cms config <sync|edit|show> [--dry-run]" >&2; exit 2 ;;
-    esac ;;
-  *) return 1 ;;
-  esac
-}
+# Thin shim: every subcommand and TTY no-args goes through Rust cms-tui.
+# Single source: cli/mod.rs + core/dispatch.rs. No bash duplication.
+# Lifecycle below only runs for no-args non-TTY bootstrap.
 
 if [[ $# -gt 0 ]]; then
-  if ! handle_subcommand "$@"; then
-    echo "Unknown command: $1" >&2
-    cmd_usage >&2
-    exit 2
-  fi
+  run_tui "$@"
 fi
 
 NO_SAMPLE=0
@@ -323,9 +178,8 @@ echo " CMS one-stop bootstrap"
 echo "==============================================="
 [[ -t 0 ]] || ASSUME_YES=1
 
-# Interactive no-args → master dashboard. Piped/--yes/--skip/--no-tui →
-# bootstrap lifecycle as before. Interactive entry always goes through the Rust
-# TUI rebuild; the bash TUI is only a fallback when no Rust toolchain exists.
+# Interactive no-args → Rust TUI dashboard. Piped/--yes/--skip/--no-tui →
+# bootstrap lifecycle as before. No gum fallback — Rust TUI is the only TUI.
 if [[ -t 0 && -t 1 && $ASSUME_YES -eq 0 && -z "$SKIPS" && -z "${CMS_NO_TUI:-}" && $# -eq 0 ]]; then
   run_tui
 fi
