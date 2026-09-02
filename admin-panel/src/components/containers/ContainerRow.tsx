@@ -1,10 +1,8 @@
 'use client';
-
 import { Button } from '@/components/core/Button';
 import { cn } from '@/lib/utils';
 import { ContainerInfo } from '@/app/actions/docker';
 import { Play, Square, RotateCcw, Terminal, Settings, Bell, BellOff, Check } from 'lucide-react';
-
 interface ContainerRef {
   id: string;
   name: string;
@@ -17,7 +15,6 @@ interface ContainerRestartSettings {
   lastRestartTime?: number;
   discordNotifications: boolean;
 }
-
 interface ContainerRowProps {
   container: ContainerInfo;
   config: ContainerRestartSettings;
