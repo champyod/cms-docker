@@ -1,16 +1,14 @@
 'use client';
 
-import * as React from 'react';
-
 import {
   Dialog as UIDialog,
   DialogContent,
   DialogDescription,
+  DialogFooter as UIDialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/core/EmptyState';
-import { cn } from '@/lib/utils';
 
 interface DialogProps {
   open: boolean;
@@ -42,22 +40,10 @@ export function Dialog({
           </DialogHeader>
         )}
         {isContentEmpty ? <EmptyState title="No content available" description="Dialog content is empty" /> : children}
-        {footer && <DialogFooter>{footer}</DialogFooter>}
+        {footer && <UIDialogFooter>{footer}</UIDialogFooter>}
       </DialogContent>
     </UIDialog>
   );
 }
 
-// Footer convention: cancel/negative buttons LEFT, primary action RIGHT-most.
-export function DialogFooter({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div
-      className={cn(
-        'flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between',
-        className
-      )}
-    >
-      {children}
-    </div>
-  );
-}
+export { UIDialogFooter as DialogFooter };
