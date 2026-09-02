@@ -16,7 +16,11 @@
 #   __tailscale_serve.sh remove
 #   __tailscale_serve.sh status
 
-set -euo pipefail
+set -eu
+# pipefail only if available
+if (set -o pipefail 2>/dev/null); then
+    set -o pipefail
+fi
 cd "$(dirname "$0")/.."
 
 ADMIN_ENV=".env.admin"

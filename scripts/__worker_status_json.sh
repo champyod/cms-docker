@@ -9,7 +9,11 @@
 # Usage:
 #   __worker_status_json.sh [--pretty]
 
-set -euo pipefail
+set -eu
+# pipefail only if available
+if (set -o pipefail 2>/dev/null); then
+    set -o pipefail
+fi
 cd "$(dirname "$0")/.."
 
 CORE_ENV=".env.core"

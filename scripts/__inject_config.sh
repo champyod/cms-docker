@@ -1,5 +1,9 @@
 #!/bin/bash
-set -euo pipefail
+set -eu
+# pipefail only if available
+if (set -o pipefail 2>/dev/null); then
+    set -o pipefail
+fi
 
 # Source shared helpers if present — guard for absence per contract.
 if [[ -f "__lib/common.sh" ]]; then

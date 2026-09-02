@@ -4,6 +4,7 @@ pub mod config;
 pub mod dashboard;
 pub mod database;
 pub mod ingress;
+pub mod page;
 pub mod stacks;
 pub mod system;
 pub mod worker;

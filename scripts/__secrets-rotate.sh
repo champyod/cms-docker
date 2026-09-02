@@ -14,7 +14,11 @@
 #   __secrets-rotate.sh --apply              overwrite .env files + restart stacks
 #   Vault alternative: VAULT_ENABLED=1 docker compose -f docker-compose.vault.yml --profile vault up -d
 
-set -euo pipefail
+set -eu
+# pipefail only if available
+if (set -o pipefail 2>/dev/null); then
+    set -o pipefail
+fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "$REPO_ROOT"

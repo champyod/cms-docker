@@ -4,7 +4,11 @@
 # Checks run in order; hard failures accumulate and produce exit 2 at the end.
 # Warnings never block the run.
 
-set -euo pipefail
+set -eu
+# pipefail only if available
+if (set -o pipefail 2>/dev/null); then
+    set -o pipefail
+fi
 
 # ---------------------------------------------------------------------------
 # Resolve repository root and load shared helpers.
