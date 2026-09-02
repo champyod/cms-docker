@@ -81,7 +81,7 @@ function QueueFairnessField({ formData, setFormData, validationErrors }: LimitsT
         onChange={(e) => setFormData({ ...formData, queue_fairness_penalty_seconds: Math.max(0, parseInt(e.target.value) || 0) })}
         className={fieldClasses(validationErrors.has('queue_fairness_penalty_seconds'))}
       />
-      <p className="text-[11px] text-muted-foreground">0 disables fairness delay. Formula: submission time + n × seconds.</p>
+      <p className="text-xs text-muted-foreground">0 disables fairness delay. Formula: submission time + n × seconds.</p>
       <ErrorText errors={validationErrors} field="queue_fairness_penalty_seconds" />
     </div>
   );

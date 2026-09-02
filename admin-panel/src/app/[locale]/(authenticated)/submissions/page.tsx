@@ -1,8 +1,8 @@
 import { getSubmissions } from '@/app/actions/submissions';
 import { SubmissionList } from '@/components/submissions/SubmissionList';
-import { getDictionary } from '@/i18n';
 import { checkPermission } from '@/lib/permissions';
-import { PermissionDenied } from '@/components/PermissionDenied';
+import { getDictionary } from '@/i18n';
+import { notFound } from 'next/navigation';
 import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
 
@@ -10,15 +10,16 @@ export default async function SubmissionsPage({
   params,
   searchParams,
 }: {
-    params: Promise<{ locale: string }>;
-    searchParams: Promise<{ page?: string; search?: string }>;
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<{ page?: string; search?: string }>;
 }) {
   const { locale } = await params;
   const dict = await getDictionary(locale);
   const hasPermission = await checkPermission('contests', false);
 
+  // Why: return 404 for forbidden access so existence is indistinguishable from missing page
   if (!hasPermission) {
-    return <PermissionDenied permission="permission_contests" locale={locale} dict={dict} />;
+    notFound();
   }
 
   const sParams = await searchParams;
@@ -29,8 +30,8 @@ export default async function SubmissionsPage({
   return (
     <Stack gap={8}>
       <Stack gap={2}>
-        <Text variant="h1">Submissions</Text>
-        <Text variant="muted">Monitor real-time submission activity and results.</Text>
+        <Text variant="h1">{dict.submissions.title}</Text>
+        <Text variant="muted">{dict.submissions.subtitle}</Text>
       </Stack>
 
       <SubmissionList

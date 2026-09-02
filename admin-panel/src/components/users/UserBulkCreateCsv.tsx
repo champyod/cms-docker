@@ -160,7 +160,7 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests }: User
       {/* INPUT */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <span className="text-[11px] uppercase tracking-wider text-muted-foreground">New password storage</span>
+          <span className="text-xs uppercase tracking-wider text-muted-foreground">New password storage</span>
           <PasswordKindSelector kind={passwordKind} onKind={setPasswordKind} />
         </div>
 

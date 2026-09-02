@@ -32,9 +32,9 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, tea
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
   const s = useContestDetailState(contest);
-  const participantUserIds = new Set(contest.participations.map((p) => p.user_id));
-  const nonParticipants = availableUsers.filter((u) => !participantUserIds.has(u.id));
-  const availableForAdd = availableTasks.filter((t) => !contest.tasks.find((ct) => ct.id === t.id));
+  const participantUserIds = new Set(contest.participations.map((p: ContestDetailRow['participations'][number]) => p.user_id));
+  const nonParticipants = availableUsers.filter((u: AvailableUserRow) => !participantUserIds.has(u.id));
+  const availableForAdd = availableTasks.filter((t: AvailableTaskRow) => !contest.tasks.find((ct: ContestDetailRow['tasks'][number]) => ct.id === t.id));
 
   return (
     <div className="space-y-6">

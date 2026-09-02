@@ -10,7 +10,8 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 }
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, label, error, icon, ...props }, ref) => {
+  ({ className, label, error, icon, value, ...props }, ref) => {
+    const isValueEmpty = value === null || value === undefined;
     return (
       <div className="space-y-1.5 w-full">
         {label && (
@@ -27,8 +28,9 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           <input
             ref={ref}
             aria-invalid={error ? true : undefined}
+            value={isValueEmpty ? '' : (value as string)}
             className={cn(
-              "flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none",
+              "flex h-11 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none",
               "placeholder:text-muted-foreground",
               "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
               "aria-invalid:border-destructive aria-invalid:ring-destructive/20",

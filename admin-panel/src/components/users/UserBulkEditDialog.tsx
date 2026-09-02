@@ -54,7 +54,7 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-[11px] uppercase tracking-wider text-muted-foreground">New password storage</span>
+          <span className="text-xs uppercase tracking-wider text-muted-foreground">New password storage</span>
           <PasswordKindSelector kind={passwordKind} onKind={setPasswordKind} />
         </div>
 

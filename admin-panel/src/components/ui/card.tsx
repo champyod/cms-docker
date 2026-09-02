@@ -2,7 +2,15 @@ import * as React from 'react';
 
 import { cn } from '@/lib/utils';
 
-function Card({ className, ...props }: React.ComponentProps<'div'>) {
+function Card({ className, children, ...props }: React.ComponentProps<'div'>) {
+  const isEmpty = children === null || children === undefined;
+  if (isEmpty) {
+    return (
+      <div data-slot="card" className={cn('bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm', className)} {...props}>
+        <div className="px-6 text-sm text-muted-foreground text-center">No content available</div>
+      </div>
+    );
+  }
   return (
     <div
       data-slot="card"
@@ -11,7 +19,9 @@ function Card({ className, ...props }: React.ComponentProps<'div'>) {
         className
       )}
       {...props}
-    />
+    >
+      {children}
+    </div>
   );
 }
 

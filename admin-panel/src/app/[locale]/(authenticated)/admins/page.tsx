@@ -2,7 +2,7 @@ import { getAdmins } from '@/app/actions/admins';
 import { AdminList } from '@/components/admins/AdminList';
 import { checkPermission } from '@/lib/permissions';
 import { getDictionary } from '@/i18n';
-import { PermissionDenied } from '@/components/PermissionDenied';
+import { notFound } from 'next/navigation';
 import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
 
@@ -15,8 +15,9 @@ export default async function AdminsPage({
   const dict = await getDictionary(locale);
   const hasPermission = await checkPermission('all', false);
 
+  // Why: return 404 for forbidden access so existence is indistinguishable from missing page
   if (!hasPermission) {
-    return <PermissionDenied permission="permission_all" locale={locale} dict={dict} />;
+    notFound();
   }
 
   const admins = await getAdmins();
@@ -24,8 +25,8 @@ export default async function AdminsPage({
   return (
     <Stack gap={8}>
       <Stack gap={2}>
-        <Text variant="h1">Administrators</Text>
-        <Text variant="muted">Manage admin accounts and permissions.</Text>
+        <Text variant="h1">{dict.admins.title}</Text>
+        <Text variant="muted">{dict.admins.subtitle}</Text>
       </Stack>
 
       <AdminList

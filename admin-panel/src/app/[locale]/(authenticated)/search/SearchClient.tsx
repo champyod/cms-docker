@@ -21,7 +21,6 @@ export default function SearchClient() {
 
   useEffect(() => {
     if (!query) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset-on-empty-query; behavior must not change
       setResults(null);
       return;
     }
@@ -47,7 +46,7 @@ export default function SearchClient() {
                 <section>
                     <SectionHeader title="Users" count={results.users.length} icon={Users} iconColor="text-blue-400" />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {results.users.map((u) => (
+                        {results.users.map((u: SearchResults['users'][number]) => (
                             <Link href={`/${locale}/users?search=${encodeURIComponent(u.username)}`} key={u.id}>
                                 <SearchResultCard title={u.username} subtitle={`${u.first_name} ${u.last_name}`} />
                             </Link>
@@ -61,7 +60,7 @@ export default function SearchClient() {
                 <section>
                     <SectionHeader title="Tasks" count={results.tasks.length} icon={ClipboardList} iconColor="text-emerald-400" />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {results.tasks.map((t) => (
+                        {results.tasks.map((t: SearchResults['tasks'][number]) => (
                             <Link href={`/${locale}/tasks/${t.id}`} key={t.id}>
                                 <SearchResultCard title={t.name} subtitle={t.title} />
                             </Link>
@@ -75,7 +74,7 @@ export default function SearchClient() {
                 <section>
                      <SectionHeader title="Contests" count={results.contests.length} icon={Trophy} iconColor="text-amber-400" />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {results.contests.map((c) => (
+                        {results.contests.map((c: SearchResults['contests'][number]) => (
                             <Link href={`/${locale}/contests/${c.id}`} key={c.id}>
                                 <SearchResultCard title={c.name} subtitle={c.description} />
                             </Link>
@@ -89,7 +88,7 @@ export default function SearchClient() {
                 <section>
                     <SectionHeader title="Admins" count={results.admins.length} icon={Shield} iconColor="text-purple-400" />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {results.admins.map((a) => (
+                        {results.admins.map((a: SearchResults['admins'][number]) => (
                             <div key={a.id} className="cursor-default">
                                 <SearchResultCard title={a.username} subtitle={a.name} className="cursor-default hover:bg-accent/50" />
                             </div>

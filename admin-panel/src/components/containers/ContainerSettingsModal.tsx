@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog } from '@/components/core/Dialog';
 import { Button } from '@/components/core/Button';
 import { cn } from '@/lib/utils';
 import { Power, RotateCcw, Bell, AlertTriangle } from 'lucide-react';
 import { updateContainerConfig, resetRestartCount } from '@/app/actions/containerConfig';
+import { getDiscordWebhookStatus } from '@/lib/discord-notifier';
 import { useToast } from '@/components/providers/ToastProvider';
 
 interface ContainerSettingsModalProps {
@@ -32,7 +33,12 @@ export function ContainerSettingsModal({
   const [maxRestarts, setMaxRestarts] = useState(config.maxRestarts);
   const [discordNotifications, setDiscordNotifications] = useState(config.discordNotifications ?? true);
   const [saving, setSaving] = useState(false);
+  const [isDiscordConfigured, setIsDiscordConfigured] = useState<boolean | null>(null);
   const { addToast } = useToast();
+
+  useEffect(() => {
+    getDiscordWebhookStatus().then((status) => setIsDiscordConfigured(status.configured)).catch(() => setIsDiscordConfigured(false));
+  }, []);
 
   const handleSave = async () => {
     setSaving(true);
@@ -44,6 +50,9 @@ export function ContainerSettingsModal({
 
     if (res.success) {
       addToast({ title: 'Success', message: 'Container settings updated', type: 'success' });
+      if (isDiscordConfigured === false && discordNotifications) {
+        addToast({ title: 'Discord not configured', message: 'Webhook is empty — notifications will be skipped until configured.', type: 'warning' });
+      }
       onUpdate();
       onClose();
     } else {
@@ -107,7 +116,7 @@ export function ContainerSettingsModal({
             >
               <span
                 className={cn(
-                  'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                  'inline-block h-4 w-4 transform rounded-full bg-card transition-transform',
                   autoRestart ? 'translate-x-6' : 'translate-x-1'
                 )}
               />
@@ -153,6 +162,9 @@ export function ContainerSettingsModal({
               <label className="text-sm font-bold text-foreground flex items-center gap-2">
                 <Bell className="w-4 h-4 text-info" />
                 Discord Notifications
+                {isDiscordConfigured === false && (
+                  <span className="px-2 py-0.5 bg-warning/10 border border-warning/20 text-warning text-xs font-bold rounded-full">Discord not configured</span>
+                )}
               </label>
               <p className="text-xs text-muted-foreground mt-1">
                 Send container events (start/stop/die/restart) to Discord webhook
@@ -167,7 +179,7 @@ export function ContainerSettingsModal({
             >
               <span
                 className={cn(
-                  'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                  'inline-block h-4 w-4 transform rounded-full bg-card transition-transform',
                   discordNotifications ? 'translate-x-6' : 'translate-x-1'
                 )}
               />
@@ -179,6 +191,14 @@ export function ContainerSettingsModal({
               <p className="text-xs text-warning flex items-start gap-1.5">
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                 Discord notifications disabled. Container events will not be sent to webhook.
+              </p>
+            </div>
+          )}
+          {isDiscordConfigured === false && discordNotifications && (
+            <div className="bg-warning/10 border border-warning/20 rounded-lg p-3">
+              <p className="text-xs text-warning flex items-start gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                Discord webhook is not configured. Notifications will be skipped until DISCORD_WEBHOOK_URL is set.
               </p>
             </div>
           )}

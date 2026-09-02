@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Image as ImageIcon, Save, Settings2 } from 'lucide-react';
+import NextImage from 'next/image';
 
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
@@ -72,8 +73,7 @@ function BrandingTab({
         </div>
         <div className="flex justify-center rounded-xl bg-black/20 p-4">
           {logoPreview ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img alt="Ranking logo preview" src={logoPreview} className="max-h-28 w-auto object-contain" />
+            <NextImage alt="Ranking logo preview" src={logoPreview} width={320} height={112} className="max-h-28 w-auto object-contain" unoptimized />
           ) : (
             <span className="text-sm text-muted-foreground">No logo configured — upload on the Ranking page</span>
           )}
@@ -134,7 +134,7 @@ function ServicesTab({ values }: { values: Record<string, string> }) {
             {group.keys.map((key) => (
               <div key={key} className="flex items-center justify-between rounded-lg border border-border bg-card/30 px-3 py-2">
                 <code className="text-xs font-mono text-primary">{key}</code>
-                <span className="max-w-[60%] truncate text-xs text-muted-foreground text-right">{values[key] ?? '—'}</span>
+                <span className="max-w-3/5 truncate text-xs text-muted-foreground text-right">{values[key] ?? '—'}</span>
               </div>
             ))}
           </div>
@@ -145,7 +145,8 @@ function ServicesTab({ values }: { values: Record<string, string> }) {
   );
 }
 
-export function AppearanceClient({ locale: _locale }: { locale: string }) {
+export function AppearanceClient({ locale }: { locale: string }) {
+  void locale;
   const { addToast } = useToast();
   const [active, setActive] = useState<TabKey>('branding');
   const [values, setValues] = useState<Record<string, string>>({});

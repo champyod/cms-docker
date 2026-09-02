@@ -1,8 +1,8 @@
 import { getUsers } from '@/app/actions/users';
 import { UserList } from '@/components/users/UserList';
-import { getDictionary } from '@/i18n';
 import { checkPermission, getPermissions } from '@/lib/permissions';
-import { PermissionDenied } from '@/components/PermissionDenied';
+import { getDictionary } from '@/i18n';
+import { notFound } from 'next/navigation';
 import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
 import { prisma } from '@/lib/prisma';
@@ -18,8 +18,9 @@ export default async function UsersPage({
   const dict = await getDictionary(locale);
   const hasPermission = await checkPermission('users', false);
 
+  // Why: return 404 for forbidden access so existence is indistinguishable from missing page
   if (!hasPermission) {
-    return <PermissionDenied permission="permission_users" locale={locale} dict={dict} />;
+    notFound();
   }
 
   const permissions = await getPermissions();
@@ -37,8 +38,8 @@ export default async function UsersPage({
   return (
     <Stack gap={8}>
       <Stack gap={2}>
-        <Text variant="h1">User Management</Text>
-        <Text variant="muted">Manage system users and participants.</Text>
+        <Text variant="h1">{dict.users.title}</Text>
+        <Text variant="muted">{dict.users.subtitle}</Text>
       </Stack>
 
       <UserList

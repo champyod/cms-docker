@@ -9,10 +9,16 @@ export async function POST(req: NextRequest) {
 
   try {
     const data = await req.json();
+    const code = typeof data.code === 'string' ? data.code.trim() : '';
+    const name = typeof data.name === 'string' ? data.name.trim() : '';
+    if (!code) return apiError({ message: 'Team code is required', status: 400 });
+    if (!/^[A-Za-z0-9_-]+$/.test(code)) return apiError({ message: 'Team code must contain only letters, numbers, hyphens and underscores', status: 400 });
+    if (!name) return apiError({ message: 'Team name is required', status: 400 });
+    if (name.length > 200) return apiError({ message: 'Team name must be at most 200 characters', status: 400 });
     await prisma.teams.create({
       data: {
-        code: data.code,
-        name: data.name,
+        code,
+        name,
       }
     });
     revalidatePath('/[locale]/teams', 'page');

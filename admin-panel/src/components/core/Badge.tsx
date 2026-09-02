@@ -1,8 +1,9 @@
 import { cva, type VariantProps } from 'class-variance-authority';
+
 import { cn } from '@/lib/utils';
 
 export const badgeVariants = cva(
-  'inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest',
+  'inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-bold uppercase tracking-widest',
   {
     variants: {
       variant: {
@@ -30,6 +31,10 @@ interface BadgeProps extends VariantProps<typeof badgeVariants> {
 }
 
 export function Badge({ children, variant = 'indigo', className }: BadgeProps) {
+  const isEmpty = children === null || children === undefined || children === '';
+  if (isEmpty) {
+    return <span className={cn(badgeVariants({ variant: 'neutral' }), className)}>No value</span>;
+  }
   return (
     <span className={cn(badgeVariants({ variant }), className)}>
       {children}

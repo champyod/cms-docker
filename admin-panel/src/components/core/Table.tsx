@@ -1,4 +1,6 @@
 import React from 'react';
+
+import { EmptyState } from '@/components/core/EmptyState';
 import { cn } from '@/lib/utils';
 
 interface TableProps extends React.TableHTMLAttributes<HTMLTableElement> {
@@ -8,6 +10,10 @@ interface TableProps extends React.TableHTMLAttributes<HTMLTableElement> {
 
 export const Table = React.forwardRef<HTMLTableElement, TableProps>(
   ({ className, children, outerClassName, ...props }, ref) => {
+    const isEmpty = children === null || children === undefined;
+    if (isEmpty) {
+      return <EmptyState title="No data available" description="Table has no rows to display" />;
+    }
     return (
       <div className={cn("w-full overflow-auto rounded-xl border border-border bg-card shadow-sm", outerClassName)}>
         <table

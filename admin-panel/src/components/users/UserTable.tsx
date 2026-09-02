@@ -26,7 +26,7 @@ interface UserTableProps {
 
 function teamCodes(user: UsersPageRow): string {
   const codes = (user.participations || [])
-    .map((participation) => participation?.teams?.code)
+    .map((participation: UsersPageRow['participations'][number]) => participation?.teams?.code)
     .filter(Boolean);
   return Array.from(new Set(codes)).join(', ') || '-';
 }

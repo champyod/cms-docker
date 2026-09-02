@@ -1,6 +1,5 @@
-import { getDictionary } from '@/i18n';
 import { checkPermission } from '@/lib/permissions';
-import { PermissionDenied } from '@/components/PermissionDenied';
+import { notFound } from 'next/navigation';
 import { RankingClient } from '@/components/ranking/RankingClient';
 
 export default async function RankingPage({
@@ -8,12 +7,12 @@ export default async function RankingPage({
 }: {
   params: Promise<{ locale: string }>;
 }) {
-  const { locale } = await params;
-  const dict = await getDictionary(locale);
+  await params;
   const hasPermission = await checkPermission('all', false);
 
+  // Why: return 404 for forbidden access so existence is indistinguishable from missing page
   if (!hasPermission) {
-    return <PermissionDenied permission="permission_all" locale={locale} dict={dict} />;
+    notFound();
   }
 
   return <RankingClient />;

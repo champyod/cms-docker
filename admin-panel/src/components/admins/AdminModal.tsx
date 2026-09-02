@@ -37,7 +37,6 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
   const [reveal, setReveal] = useState<PasswordRevealState>({ state: 'none' });
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- mount-load or modal-reset pattern; behavior must not change
     setFormData(initialData ? formFromAdmin(initialData) : EMPTY_ADMIN_FORM);
     setError('');
     setPasswordKind('bcrypt');

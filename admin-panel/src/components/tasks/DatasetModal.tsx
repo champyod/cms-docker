@@ -139,7 +139,7 @@ export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess }: Da
           )}
         </>
       }
-      className="flex h-[85vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
+      className="flex h-96 w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
     >
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="w-48 shrink-0 space-y-2 overflow-y-auto border-r border-border bg-muted/20 p-4">

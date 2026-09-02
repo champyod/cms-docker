@@ -1,7 +1,9 @@
 import { ResourceView } from '@/components/resources/ResourceView';
 import { checkPermission } from '@/lib/permissions';
 import { getDictionary } from '@/i18n';
-import { PermissionDenied } from '@/components/PermissionDenied';
+import { notFound } from 'next/navigation';
+import { Text } from '@/components/core/Typography';
+import { Stack } from '@/components/core/Layout';
 
 export default async function ResourcesPage({
   params,
@@ -12,22 +14,19 @@ export default async function ResourcesPage({
   const dict = await getDictionary(locale);
   const hasPermission = await checkPermission('all', false);
 
+  // Why: return 404 for forbidden access so existence is indistinguishable from missing page
   if (!hasPermission) {
-    return <PermissionDenied permission="permission_all" locale={locale} dict={dict} />;
+    notFound();
   }
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight text-white">
-          Resource Control
-        </h1>
-        <p className="text-neutral-400">
-          Monitor and manage main server resources and distributed worker activity.
-        </p>
-      </div>
+    <Stack gap={8}>
+      <Stack gap={2}>
+        <Text variant="h1">{dict.resources.title}</Text>
+        <Text variant="muted">{dict.resources.subtitle}</Text>
+      </Stack>
 
       <ResourceView />
-    </div>
+    </Stack>
   );
 }

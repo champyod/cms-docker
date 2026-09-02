@@ -1,8 +1,10 @@
 import { checkPermission } from '@/lib/permissions';
 import { getDictionary } from '@/i18n';
-import { PermissionDenied } from '@/components/PermissionDenied';
+import { notFound } from 'next/navigation';
 import { EnvConfigView } from '@/components/settings/EnvConfigView';
 import { MonitorConfigSection } from '@/components/settings/MonitorConfigSection';
+import { Stack } from '@/components/core/Layout';
+import { Text } from '@/components/core/Typography';
 
 export default async function SettingsPage({
   params,
@@ -13,20 +15,21 @@ export default async function SettingsPage({
   const dict = await getDictionary(locale);
   const hasPermission = await checkPermission('all', false);
 
+  // Why: return 404 for forbidden access so existence is indistinguishable from missing page
   if (!hasPermission) {
-    return <PermissionDenied permission="permission_all" locale={locale} dict={dict} />;
+    notFound();
   }
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-white mb-2">System Settings</h1>
-        <p className="text-neutral-400">Configure environment files and service restarts.</p>
-      </div>
+    <Stack gap={8}>
+      <Stack gap={2}>
+        <Text variant="h1">{dict.settings.title}</Text>
+        <Text variant="muted">{dict.settings.subtitle}</Text>
+      </Stack>
 
       <EnvConfigView />
 
       <MonitorConfigSection />
-    </div>
+    </Stack>
   );
 }

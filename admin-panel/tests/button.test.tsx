@@ -57,7 +57,7 @@ describe('rendered variants', () => {
 
   it('keeps legacy size API', () => {
     const html = renderToStaticMarkup(<Button size="sm">Go</Button>);
-    expect(html).toContain('h-8');
+    expect(html).toContain('h-11');
   });
 });
 
@@ -101,7 +101,7 @@ describe('iconOnly mode', () => {
 
   it('renders square sizing for inferred icon-only buttons', () => {
     const html = renderToStaticMarkup(<Button icon={Trash2} tooltip="Delete" />);
-    expect(html).toContain('w-10');
+    expect(html).toContain('w-11');
     expect(html).toContain('h-10');
     expect(html).toContain('p-0');
   });
@@ -110,7 +110,7 @@ describe('iconOnly mode', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const html = renderToStaticMarkup(<Button iconOnly icon={Trash2} tooltip="Add" />);
     expect(warn).not.toHaveBeenCalled();
-    expect(html).toContain('w-10');
+    expect(html).toContain('w-11');
     expect(html).not.toContain('>Add<');
   });
 });

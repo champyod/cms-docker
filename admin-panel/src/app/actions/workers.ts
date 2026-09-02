@@ -104,8 +104,8 @@ export async function getWorkersLiveStatus(): Promise<{
         });
         tasksByShard = new Map(
             groups
-                .filter((g) => g.evaluation_shard !== null)
-                .map((g) => [g.evaluation_shard as number, g._count._all])
+                .filter((g: (typeof groups)[number]) => g.evaluation_shard !== null)
+                .map((g: (typeof groups)[number]) => [g.evaluation_shard as number, g._count._all])
         );
     } catch { /* table may not exist pre-init */ }
 

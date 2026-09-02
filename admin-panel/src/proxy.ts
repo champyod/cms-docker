@@ -20,8 +20,9 @@ export function proxy(request: NextRequest): NextResponse | undefined {
   );
 
   if (pathnameIsMissingLocale) {
+    const search = request.nextUrl.search;
     return NextResponse.redirect(
-      new URL(`/${DEFAULT_LOCALE}${pathname === "/" ? "" : pathname}`, request.url)
+      new URL(`/${DEFAULT_LOCALE}${pathname === "/" ? "" : pathname}${search}`, request.url)
     );
   }
 }

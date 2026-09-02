@@ -167,12 +167,12 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps):
           <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>
             Cancel
           </Button>
-          <Button type="submit" form="task-form" variant="positive" loading={loading} disabled={loading} className="min-w-[140px]">
+          <Button type="submit" form="task-form" variant="positive" loading={loading} disabled={loading} className="min-w-32">
             {task ? 'Save Changes' : 'Create Task'}
           </Button>
         </>
       }
-      className="flex h-[85vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl"
+      className="flex h-96 w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl"
     >
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="w-64 shrink-0 space-y-2 overflow-y-auto border-r border-border bg-muted/20 p-4">

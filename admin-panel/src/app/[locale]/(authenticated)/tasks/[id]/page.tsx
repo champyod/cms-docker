@@ -1,5 +1,5 @@
 import { getTask } from '@/app/actions/tasks';
-import { notFound, redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import { TaskDetailView } from '@/components/tasks/TaskDetailView';
 import { checkPermission } from '@/lib/permissions';
 
@@ -29,8 +29,9 @@ function serializeValue(value: unknown): unknown {
 }
 
 export default async function TaskDetailPage({ params }: { params: Promise<{ id: string; locale: string }> }): Promise<React.JSX.Element> {
-  const { id, locale } = await params;
-  if (!(await checkPermission('tasks', false))) redirect(`/${locale}`);
+  const { id } = await params;
+  // Why: forbidden detail must be indistinguishable from missing so return 404 not redirect
+  if (!(await checkPermission('tasks', false))) notFound();
   const taskId = parseInt(id, 10);
   if (Number.isNaN(taskId)) notFound();
   const task = await getTask(taskId);
