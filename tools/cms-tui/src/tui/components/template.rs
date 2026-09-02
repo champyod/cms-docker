@@ -3,7 +3,7 @@ use crate::tui::pages;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Paragraph, Wrap},
     Frame,
 };
 
@@ -15,7 +15,7 @@ pub fn render(f: &mut Frame, app: &App) {
             Constraint::Length(3),
             Constraint::Length(1),
             Constraint::Min(0),
-            Constraint::Length(3),
+            Constraint::Length(4),
         ])
         .split(f.size());
 
@@ -30,16 +30,17 @@ pub fn render(f: &mut Frame, app: &App) {
 }
 
 fn draw_header(f: &mut Frame, area: Rect) {
-    let header = Paragraph::new("").block(
-        Block::default()
-            .borders(Borders::ALL)
-            .title(" CMS-TUI ")
-            .style(
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            ),
-    );
+    let header = Paragraph::new(" CMS-TUI — Contest Management System ")
+        .style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .style(Style::default().fg(Color::Cyan)),
+        );
     f.render_widget(header, area);
 }
 
@@ -52,16 +53,16 @@ fn draw_breadcrumbs(f: &mut Frame, area: Rect, app: &App) {
         .join(" > ");
     let crumb = Paragraph::new(format!(" {trail} "))
         .style(Style::default().fg(Color::Cyan))
-        .block(Block::default().borders(Borders::ALL));
+        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)));
     f.render_widget(crumb, area);
 }
 
 fn draw_footer(f: &mut Frame, area: Rect) {
-    let footer = Paragraph::new(
-        " [q] Quit   [Esc] Back   [1] Dashboard   [2] Actions   [3] Customization   [4] Security   [5] Maintenance ",
-    )
-    .style(Style::default().fg(Color::DarkGray))
-    .block(Block::default().borders(Borders::ALL));
+    let footer_text = " [q] Quit   [Esc] Back   [1] Dashboard   [2] Stacks   [3] Database   [4] Worker   [5] Ingress   [6] Config   [7] Backup   [8] System   [9] Bootstrap ";
+    let footer = Paragraph::new(footer_text)
+        .style(Style::default().fg(Color::DarkGray))
+        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)))
+        .wrap(Wrap { trim: true });
     f.render_widget(footer, area);
 }
 
@@ -83,7 +84,8 @@ fn draw_popup(f: &mut Frame, area: Rect, app: &App) {
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(" Please Wait "),
+                .title(" Please Wait ")
+                .style(Style::default().fg(Color::Yellow)),
         );
     f.render_widget(popup, popup_chunks[1]);
 }
