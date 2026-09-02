@@ -1,5 +1,6 @@
 import { verifyApiPermission } from '@/lib/api-utils';
-import { fetchDeployStatus, DEPLOY_IDLE_TIMEOUT_MS } from '@/lib/deploy-operations';
+import { DEPLOY_HEARTBEAT_MS, DEPLOY_IDLE_TIMEOUT_MS, DEPLOY_OPERATION_ID_REGEX, DEPLOY_POLL_MS, DEPLOY_TAIL_LENGTH } from '@/lib/constants/deploy';
+import { fetchDeployStatus } from '@/lib/deploy-store';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,7 +13,7 @@ export async function GET(
   const { authorized, response } = await verifyApiPermission('all');
   if (!authorized) return response;
 
-  if (!/^[0-9a-f]{16}$/.test(operationId)) {
+  if (!DEPLOY_OPERATION_ID_REGEX.test(operationId)) {
     return new Response(JSON.stringify({ error: 'Invalid operation identifier' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
@@ -59,7 +60,7 @@ export async function GET(
 
         if (logChanged || statusChanged || percentChanged || isTerminal) {
           // Tail last 4000 characters so payload stays small while toast and log viewer have recent context.
-          const tail = result.log ? result.log.slice(-4000) : '';
+          const tail = result.log ? result.log.slice(-DEPLOY_TAIL_LENGTH) : '';
           sendEvent({
             status: result.status,
             contestId: result.contestId,
@@ -82,7 +83,7 @@ export async function GET(
             status: 'timeout' as const,
             contestId: result.contestId,
             startedAt: result.startedAt,
-            log: result.log ? result.log.slice(-4000) : '',
+            log: result.log ? result.log.slice(-DEPLOY_TAIL_LENGTH) : '',
             fullLength: logLength,
             percent,
             error: 'Deploy timed out after 60 seconds without log output.',
@@ -111,9 +112,9 @@ export async function GET(
             controller.close();
           }
         }
-      }, 1000);
+      }, DEPLOY_POLL_MS);
 
-      const heartbeat = setInterval(sendHeartbeat, 15000);
+      const heartbeat = setInterval(sendHeartbeat, DEPLOY_HEARTBEAT_MS);
 
       // Immediate first push
       try {
