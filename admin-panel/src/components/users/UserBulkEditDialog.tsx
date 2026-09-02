@@ -47,7 +47,6 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
       title="Edit Selected Users"
       className="sm:max-w-6xl"
     >
-      {/* CONTROLS */}
       <div className="space-y-4">
         <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs">
           Selected: {rows.length} user(s)
@@ -122,8 +121,6 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
           </Button>
         </div>
       </div>
-
-      {/* FOOTER */}
       <DialogFooter className="mt-4 pt-4 border-t border-border">
         <Button variant="negativeOutline" onClick={onClose} disabled={loading}>
           Cancel

@@ -41,7 +41,6 @@ export default function SearchClient() {
       
       {!loading && results && (
         <div className="space-y-8">
-            {/* Users */}
             {results.users.length > 0 && (
                 <section>
                     <SectionHeader title="Users" count={results.users.length} icon={Users} iconColor="text-blue-400" />
@@ -54,8 +53,6 @@ export default function SearchClient() {
                     </div>
                 </section>
             )}
-
-            {/* Tasks */}
             {results.tasks.length > 0 && (
                 <section>
                     <SectionHeader title="Tasks" count={results.tasks.length} icon={ClipboardList} iconColor="text-emerald-400" />
@@ -68,8 +65,6 @@ export default function SearchClient() {
                     </div>
                 </section>
             )}
-
-            {/* Contests */}
             {results.contests.length > 0 && (
                 <section>
                      <SectionHeader title="Contests" count={results.contests.length} icon={Trophy} iconColor="text-amber-400" />
@@ -82,8 +77,6 @@ export default function SearchClient() {
                     </div>
                 </section>
             )}
-            
-             {/* Admins */}
             {results.admins.length > 0 && (
                 <section>
                     <SectionHeader title="Admins" count={results.admins.length} icon={Shield} iconColor="text-purple-400" />

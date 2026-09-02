@@ -95,7 +95,6 @@ export function ContainerSettingsModal({
       }
     >
       <div className="space-y-6">
-        {/* Auto-Restart Toggle */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div>
@@ -132,8 +131,6 @@ export function ContainerSettingsModal({
             </div>
           )}
         </div>
-
-        {/* Max Restarts Limit */}
         <div className="space-y-3">
           <label className="text-sm font-bold text-foreground flex items-center gap-2">
             <RotateCcw className="w-4 h-4 text-primary" />
@@ -154,8 +151,6 @@ export function ContainerSettingsModal({
             Recommended: 5 attempts. Range: 1-20.
           </p>
         </div>
-
-        {/* Discord Notifications */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div>
@@ -203,8 +198,6 @@ export function ContainerSettingsModal({
             </div>
           )}
         </div>
-
-        {/* Current Status */}
         <div className="bg-muted/40 border border-border rounded-lg p-4 space-y-2">
           <div className="text-xs font-bold text-muted-foreground">CURRENT STATUS</div>
           <div className="flex items-center justify-between">

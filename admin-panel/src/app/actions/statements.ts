@@ -100,7 +100,6 @@ export async function deleteAttachment(attachmentId: number) {
   }
 }
 
-// Helper to fetch CMS large-object content as base64
 export async function getFileByDigest(digest: string): Promise<{ data: string } | null> {
   await ensurePermission('tasks');
 

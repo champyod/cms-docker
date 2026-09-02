@@ -4,7 +4,7 @@ import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 
 // Why: use 7-day session cookie but 2-hour JWT expiry so refreshSession must validate liveness on each request
-const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 
 const secretKey = (() => {
   if (process.env.AUTH_SECRET) return process.env.AUTH_SECRET;

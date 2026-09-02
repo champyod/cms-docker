@@ -154,10 +154,7 @@ function ShellBody({
 }: Pick<ContestModalShellProps, 'validationErrors' | 'error' | 'activeTab' | 'setActiveTab' | 'onSubmit' | 'children'>) {
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden">
-      {/* Sidebar Tabs */}
       <SidebarTabs validationErrors={validationErrors} activeTab={activeTab} setActiveTab={setActiveTab} />
-
-      {/* Form Content */}
       <div className="relative flex-1 overflow-y-auto p-8">
         <ContentBanners validationErrors={validationErrors} error={error} />
 

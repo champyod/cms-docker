@@ -41,7 +41,6 @@ export async function POST(req: NextRequest): Promise<Response> {
     revalidatePath('/[locale]/tasks', 'page');
     revalidatePath(`/[locale]/tasks/${taskId}`, 'page');
 
-    // Convert BigInt to string before returning JSON
     const responseDataset = {
       ...dataset,
       memory_limit: dataset.memory_limit ? dataset.memory_limit.toString() : null

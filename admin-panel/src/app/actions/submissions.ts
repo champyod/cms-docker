@@ -64,13 +64,11 @@ function buildSubmissionsWhere(filters: { contestId?: number; taskId?: number; u
     where.task_id = filters.taskId;
   }
   if (Object.keys(participations).length > 0) {
-    // Preserves the pre-refactor filter bytes exactly; relation-shape validation left to Prisma as before.
     where.participations = participations as Prisma.submissionsWhereInput['participations'];
   }
   return where;
 }
 
-// Update submission comment
 export async function updateSubmissionComment(submissionId: number, comment: string): Promise<ActionResult> {
     await ensurePermission('messaging');
 
@@ -87,7 +85,6 @@ export async function updateSubmissionComment(submissionId: number, comment: str
     }
 }
 
-// Toggle official status
 export async function toggleSubmissionOfficial(submissionId: number): Promise<ActionResult> {
     await ensurePermission('contests');
 
@@ -107,7 +104,6 @@ export async function toggleSubmissionOfficial(submissionId: number): Promise<Ac
    }
 }
 
-// Recalculate a submission's score/evaluation
 export async function recalculateSubmission(submissionId: number, type: RecalcType = 'score'): Promise<ActionResult & { message?: string }> {
   await ensurePermission('contests');
 
@@ -117,13 +113,11 @@ export async function recalculateSubmission(submissionId: number, type: RecalcTy
       return { success: false, error: 'Submission not found' };
     }
 
-    // RPC-FIRST: call EvaluationService before touching DB
     const accepted = await invalidateViaRpc(submissionId, context.datasetId, rpcLevelFor(type));
     if (!accepted) {
       return { success: false, error: 'Resubmission failed: evaluation service did not accept the request' };
     }
 
-    // ONLY if RPC succeeded: clear DB entries to mark for re-evaluation
     await clearRecalculatedTables(submissionId, type);
 
     revalidatePath('/[locale]/submissions');

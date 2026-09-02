@@ -1,6 +1,5 @@
 import { prisma } from '@/lib/prisma';
 
-/** Finds a team by its code, creating a stub named after the code when absent. */
 export async function resolveTeamIdByCode(teamCode: string): Promise<number> {
   const existingTeam = await prisma.teams.findUnique({
     where: { code: teamCode },

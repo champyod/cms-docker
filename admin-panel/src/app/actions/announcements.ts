@@ -4,7 +4,6 @@ import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { ensurePermission } from '@/lib/permissions';
 
-// Get announcements for a contest
 export async function getAnnouncements(contestId: number) {
   await ensurePermission('messaging');
   return prisma.announcements.findMany({
@@ -14,7 +13,6 @@ export async function getAnnouncements(contestId: number) {
   });
 }
 
-// Create an announcement
 export async function createAnnouncement(contestId: number, adminId: number, data: {
   subject: string;
   text: string;
@@ -38,7 +36,6 @@ export async function createAnnouncement(contestId: number, adminId: number, dat
   }
 }
 
-// Update an announcement
 export async function updateAnnouncement(announcementId: number, data: {
   subject?: string;
   text?: string;
@@ -60,7 +57,6 @@ export async function updateAnnouncement(announcementId: number, data: {
   }
 }
 
-// Delete an announcement
 export async function deleteAnnouncement(announcementId: number) {
   await ensurePermission('messaging');
   try {

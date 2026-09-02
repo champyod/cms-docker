@@ -1,7 +1,6 @@
 import { cn } from '@/lib/utils';
 import React, { ElementType } from 'react';
 
-// --- Stack Component ---
 interface StackProps extends React.HTMLAttributes<HTMLDivElement> {
   as?: ElementType;
   direction?: 'row' | 'col';
@@ -38,10 +37,9 @@ export function Stack({
   );
 }
 
-// --- Grid Component ---
 interface GridProps extends React.HTMLAttributes<HTMLDivElement> {
     as?: ElementType;
-    cols?: 1 | 2 | 3 | 4 | 5 | 6 | 12; // Add common col counts
+    cols?: 1 | 2 | 3 | 4 | 5 | 6 | 12;
     gap?: number;
 }
 
@@ -70,7 +68,6 @@ export function Grid({
     );
 }
 
-// --- PageHeader Component ---
 interface PageHeaderProps {
   title: React.ReactNode;
   description?: React.ReactNode;
@@ -96,7 +93,6 @@ export function PageHeader({ title, description, actions, className }: PageHeade
   );
 }
 
-// --- Container/Section Component ---
 export function PageContent({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
     return (
         <div className={cn("space-y-8", className)} {...props}>

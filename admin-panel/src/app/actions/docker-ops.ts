@@ -94,7 +94,6 @@ export async function getNetworkTrafficLogs(limit: number = 50) {
   await ensurePermission('all');
   try {
     const coercedLimit = Number.isInteger(Number(limit)) && Number(limit) >= 1 && Number(limit) <= 500 ? Number(limit) : 50;
-    // Read network traffic from docker stats
     const { stdout } = await execPromise(
       `docker stats --no-stream --format "{{.Name}}\t{{.NetIO}}" | head -n ${coercedLimit}`
     );

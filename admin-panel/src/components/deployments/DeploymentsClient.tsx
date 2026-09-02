@@ -130,7 +130,6 @@ export function DeploymentsClient() {
             setSaving(false);
             resetDeploy();
         } else if (deployState.phase === 'idle' && saving) {
-            // Cancel returned to idle
             setSaving(false);
         }
     }, [deployState.phase]);
@@ -208,7 +207,6 @@ export function DeploymentsClient() {
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
                 <Stack gap={6} className="xl:col-span-2">
-                    {/* Active Contest Card */}
                     <ActiveContestCard
                         activeContestId={activeContestId}
                         activeContestName={activeContestName}
@@ -220,8 +218,6 @@ export function DeploymentsClient() {
                         onActivate={handleActivateAndRestart}
                         onCancel={cancelDeploy}
                     />
-
-                    {/* Contest Settings */}
                     <ContestSettingsForm
                         globalSettings={globalSettings}
                         saving={saving}
@@ -230,8 +226,6 @@ export function DeploymentsClient() {
                         onSaveSettings={handleSaveSettings}
                     />
                 </Stack>
-
-                {/* Right Column: Worker Nodes */}
                 <WorkersPanel
                     workers={workers}
                     status={liveWorkers}

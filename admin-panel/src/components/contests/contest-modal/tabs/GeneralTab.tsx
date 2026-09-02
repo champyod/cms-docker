@@ -157,7 +157,6 @@ export function GeneralTab({ formData, setFormData, validationErrors, onLanguage
   const fields = { formData, setFormData, validationErrors };
   return (
     <div className="animate-in fade-in slide-in-from-right-4 space-y-6 duration-300">
-      {/* GENERAL TAB */}
       <NameField {...fields} />
       <DescriptionField {...fields} />
       <TimeFields {...fields} />

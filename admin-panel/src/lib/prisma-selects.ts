@@ -30,7 +30,6 @@ export type AdminWithLogin = Prisma.adminsGetPayload<{
   select: typeof safeAdminSelect & { last_login_at: true };
 }>;
 
-/** Case-insensitive search across user names, credentials, and enrolled team codes/names. */
 export function buildUserSearchWhere(search: string): Prisma.usersWhereInput {
   if (!search) return {};
 

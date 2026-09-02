@@ -31,12 +31,10 @@ export async function cleanupExpiredCreds(): Promise<void> {
               await fs.unlink(full);
             }
           } catch {
-            // ignore per-file errors
           }
         })
     );
   } catch {
-    // ignore cleanup errors
   }
 }
 

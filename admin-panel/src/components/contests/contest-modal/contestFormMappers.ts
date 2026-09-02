@@ -68,7 +68,7 @@ export function emptyContestForm(): ContestFormData {
 
 export function defaultNewContestForm(): ContestFormData {
   const now = new Date();
-  const end = new Date(now.getTime() + 5 * 60 * 60 * 1000); // 5 hours
+  const end = new Date(now.getTime() + 5 * 60 * 60 * 1000);
   const analysisStart = new Date(end.getTime() + 1000);
   const analysisStop = new Date(end.getTime() + 1000 * 60 * 60);
 
@@ -80,7 +80,7 @@ export function defaultNewContestForm(): ContestFormData {
     stop: formatDateForInput(end),
     languages: [...PROGRAMMING_LANGUAGES],
     max_submission_number: 100,
-    min_submission_interval: 60, // 60s
+    min_submission_interval: 60,
     min_user_test_interval: 60,
     score_precision: 2,
     analysis_start: formatDateForInput(analysisStart),

@@ -73,7 +73,6 @@ export default function MaintenanceClient() {
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Backup Section */}
         <Stack gap={6}>
             <Card className="p-6 h-full">
                 <Stack direction="row" align="center" gap={3} className="mb-6">
@@ -137,8 +136,6 @@ export default function MaintenanceClient() {
                 </Stack>
             </Card>
         </Stack>
-
-        {/* Discord Section */}
         <Stack gap={6}>
             <Card className="p-6 h-full">
                 <Stack direction="row" align="center" gap={3} className="mb-6">

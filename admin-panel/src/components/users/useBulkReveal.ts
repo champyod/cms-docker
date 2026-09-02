@@ -45,7 +45,6 @@ export function useBulkReveal(rows: SelectedUser[], setRows: (updater: (previous
         previous.includes(rowId) ? previous.filter((identifier) => identifier !== rowId) : [...previous, rowId]
       );
     } catch {
-      // keep hidden on failure
     }
     setRevealingIds((previous) => previous.filter((identifier) => identifier !== rowId));
   };
@@ -72,7 +71,6 @@ export function useBulkReveal(rows: SelectedUser[], setRows: (updater: (previous
         );
         setRevealedIds(rows.map((row) => row.id));
       } catch {
-        // leave as-is
       }
       setRevealingIds([]);
     })();

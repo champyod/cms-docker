@@ -36,7 +36,6 @@ async function findFirstLogo(dir: string): Promise<{ filePath: string; ext: Allo
       await fs.access(candidate);
       return { filePath: candidate, ext };
     } catch {
-      // not found, continue
     }
   }
   return null;
@@ -49,7 +48,6 @@ async function removeOtherLogos(dir: string, keepExt: AllowedExt | null): Promis
     try {
       await fs.unlink(target);
     } catch {
-      // ignore missing
     }
   }
 }

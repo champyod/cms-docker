@@ -44,10 +44,6 @@ export async function getWorkerStatus(host: string, port?: number): Promise<{
   return { status, containerRunning, host, port };
 }
 
-// ---------------------------------------------------------------------------
-// Live worker telemetry (real sources: docker inspect/logs, TCP probe,
-// open-evaluation counts). Replaces the never-populated `services` table.
-// ---------------------------------------------------------------------------
 export interface WorkerLiveDetail {
     host: string;
     port: number;
@@ -60,9 +56,7 @@ export interface WorkerLiveDetail {
     activity: 'working' | 'connecting' | 'erroring' | 'idle' | 'unknown';
     lastLog: string;
     reachable: boolean;
-    /** Open (outcome-less) evaluations routed to this shard */
     tasks: number;
-    /** Backlog heuristic: tasks >= LAGGING_TASK_THRESHOLD */
     lagging: boolean;
 }
 

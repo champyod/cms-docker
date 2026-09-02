@@ -52,7 +52,6 @@ export async function GET(
     try {
       await fs.unlink(usedPath);
     } catch {
-      // ignore delete error
     }
   }
 }

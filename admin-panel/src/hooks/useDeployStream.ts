@@ -100,7 +100,6 @@ export function useDeployStream(
             idleTimerRef.current = null;
           }
         } catch {
-          // ignore malformed payload
         }
       };
 

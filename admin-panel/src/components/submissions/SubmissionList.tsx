@@ -68,7 +68,7 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage }: 
         </TableHeader>
         <TableBody>
           {submissions.map((submission) => {
-            const result = submission.submission_results[0]; // Assuming first result is the one we care about for list
+            const result = submission.submission_results[0];
             const score = result?.score;
             const compilationFailed = result?.compilation_outcome === 'fail';
             const compiling = result?.compilation_outcome === null;
@@ -155,8 +155,6 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage }: 
           )}
         </TableBody>
       </Table>
-
-      {/* Pagination Controls */}
       <div className="flex justify-center gap-2">
           <Button
             variant="ghost"

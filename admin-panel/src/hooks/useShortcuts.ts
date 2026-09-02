@@ -8,11 +8,6 @@ export const OVERLAY_TOGGLE_KEY = '?';
 export const SHORTCUT_ROW_ATTRIBUTE = 'data-shortcut-row';
 export const ROW_SELECTED_CLASSES = ['ring-2', 'ring-ring/70', 'ring-inset', 'bg-accent/40'] as const;
 
-/**
- * Opt-in row contract for j/k navigation: sweep phases add
- * `data-shortcut-row` to a table row (and optionally `data-shortcut-primary`
- * on its primary link/button) — no other wiring required.
- */
 export interface ShortcutRouteBinding {
   readonly key: string;
   readonly label: string;

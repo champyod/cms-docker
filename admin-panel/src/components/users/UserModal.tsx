@@ -114,8 +114,6 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: U
           {error}
         </div>
       )}
-
-      {/* FORM */}
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
@@ -141,8 +139,6 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: U
             />
           </div>
         </div>
-
-        {/* ACCOUNT */}
         <div className="space-y-1.5">
           <label className={labelClassName}>Username</label>
           <input
@@ -178,8 +174,6 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: U
             reveal={{ ...reveal, onReveal: () => undefined }}
           />
         </div>
-
-        {/* PREFERENCES */}
         <div className="space-y-1.5">
           <label className={labelClassName}>Timezone</label>
           <input
@@ -190,8 +184,6 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: U
             placeholder="Asia/Bangkok"
           />
         </div>
-
-        {/* ENROLLMENT */}
         {!user && (
           <>
             <div className="space-y-1.5">
@@ -222,8 +214,6 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: U
             </div>
           </>
         )}
-
-        {/* FOOTER */}
         <DialogFooter className="pt-6">
           <Button
             variant="negativeOutline"

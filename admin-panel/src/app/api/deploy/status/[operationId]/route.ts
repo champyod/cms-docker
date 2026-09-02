@@ -116,7 +116,6 @@ export async function GET(
 
       const heartbeat = setInterval(sendHeartbeat, DEPLOY_HEARTBEAT_MS);
 
-      // Immediate first push
       try {
         const done = await checkAndPush();
         if (done) {
@@ -134,7 +133,6 @@ export async function GET(
         }
       }
 
-      // Cleanup if client disconnects is handled by cancel below
     },
     cancel() {
       closed = true;

@@ -115,8 +115,6 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
           {error}
         </div>
       )}
-
-      {/* FORM */}
       <form onSubmit={handleSubmit} className="space-y-4">
         <AdminFormFields
           formData={formData}
@@ -126,14 +124,10 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
           onPasswordKind={setPasswordKind}
           reveal={{ ...reveal, onReveal: () => undefined }}
         />
-
-        {/* ROLE */}
         <AdminRoleSelector
           isSuperadmin={formData.permission_all}
           onSelectRole={(role) => updateForm(ROLE_PRESETS[role])}
         />
-
-        {/* PERMISSIONS */}
         <div className="space-y-3 pt-2">
           {!formData.permission_all ? (
             <AdminPermissionCheckboxes formData={formData} onChange={updateForm} />
@@ -149,8 +143,6 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
             </div>
           )}
         </div>
-
-        {/* FOOTER */}
         <AdminModalFooter loading={loading} isEdit={!!initialData} onClose={onClose} />
       </form>
     </Dialog>

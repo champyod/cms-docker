@@ -68,8 +68,6 @@ export function ActiveContestCard({
                         </Stack>
                     </div>
                 )}
-
-                {/* Contest Selector */}
                 <Stack gap={2} className="mt-6">
                     <Text variant="label" className="flex items-center gap-2">
                         <Rocket className="w-3 h-3" />

@@ -29,21 +29,12 @@ export function TabContentRouter({
 
   return (
     <>
-      {/* GENERAL TAB */}
       {activeTab === 'general' && (
         <GeneralTab {...baseProps} onLanguageToggle={onLanguageToggle} />
       )}
-
-      {/* ACCESS TAB */}
       {activeTab === 'access' && <AccessTab {...baseProps} />}
-
-      {/* TOKENS TAB */}
       {activeTab === 'tokens' && <TokensTab {...baseProps} />}
-
-      {/* LIMITS TAB */}
       {activeTab === 'limits' && <LimitsTab {...baseProps} />}
-
-      {/* ANALYSIS TAB */}
       {activeTab === 'analysis' && (
         <AnalysisTab {...baseProps} analysisEditedRef={analysisEditedRef} />
       )}

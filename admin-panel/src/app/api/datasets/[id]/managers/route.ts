@@ -40,7 +40,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const buffer = Buffer.from(fileData, 'base64');
     const digest = await storeFile(buffer, 'Uploaded via Admin API (Manager)');
 
-    // Upsert manager
     await prisma.$executeRaw`
       INSERT INTO managers (dataset_id, filename, digest)
       VALUES (${datasetId}, ${filename}, ${digest})

@@ -126,8 +126,6 @@ export function MonitorConfigSectionClient({
   return (
     <div className="bg-card backdrop-blur-xl border border-border rounded-2xl p-6 space-y-6">
       <h2 className="text-lg font-semibold text-foreground">Monitor Configuration</h2>
-
-      {/* Target List */}
       {targets.length === 0 ? (
         <p className="text-neutral-400 text-sm">No monitor targets configured.</p>
       ) : (
@@ -181,8 +179,6 @@ export function MonitorConfigSectionClient({
           ))}
         </div>
       )}
-
-      {/* Add Form */}
       <div className="bg-black/40 border border-border rounded-xl p-4 space-y-4">
         <h3 className="text-sm font-medium text-foreground">Add Target</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

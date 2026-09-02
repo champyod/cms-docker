@@ -78,7 +78,6 @@ export async function restartServices(type: 'all' | 'core' | 'admin' | 'worker' 
 
     const { stdout, stderr } = await execPromise(plan.command, { cwd: rootDir, timeout: 120000 });
 
-    // Check if command actually succeeded
     if (stderr && stderr.includes('error')) {
       return { success: false, error: stderr };
     }

@@ -177,7 +177,6 @@ export function fillRowCredentials(row: PreviewRow, mode: GenerationMode, usedUs
   return next;
 }
 
-
 function collectHeaderWarnings(rawHeaders: string[], mappedHeaders: (PreviewFieldKey | null)[]): string[] {
   const warnings: string[] = [];
   if (!mappedHeaders.includes('first_name')) warnings.push('Missing column: first_name (or alias firstname/first)');

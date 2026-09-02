@@ -93,7 +93,6 @@ async function completeLogin(admin: AuthenticatedAdmin, bucketKey: string): Prom
   try {
     await prisma.admins.update({ where: { id: admin.id }, data: { last_login_at: new Date() } });
   } catch {
-    // best-effort
   }
   clearBucket(bucketKey);
 }

@@ -157,7 +157,6 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests }: User
       title="Bulk Add Users (CSV)"
       className="sm:max-w-6xl"
     >
-      {/* INPUT */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <span className="text-xs uppercase tracking-wider text-muted-foreground">New password storage</span>
@@ -207,8 +206,6 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests }: User
           <SubmitResultBanner result={submitResult} onDownloadCredentials={handleExportCreatedCredentials} />
         )}
       </div>
-
-      {/* FOOTER */}
       <DialogFooter className="mt-4 pt-4 border-t border-border">
         <Button variant="negativeOutline" onClick={onClose} disabled={submitting}>
           Cancel

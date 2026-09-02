@@ -95,7 +95,6 @@ async function cleanStaleOperations(): Promise<void> {
       }
     }
   } catch {
-    // best-effort
   }
 }
 

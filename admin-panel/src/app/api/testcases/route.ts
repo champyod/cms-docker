@@ -20,8 +20,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     const { datasetId, testcases } = data;
 
     if (Array.isArray(testcases)) {
-       // Batch upload
-        for (const tc of testcases) {
+         for (const tc of testcases) {
           const inputBuffer = Buffer.from(tc.inputBase64, 'base64');
           const inputDigest = await storeFile(inputBuffer, 'Uploaded via Admin API');
           const outputBuffer = Buffer.from(tc.outputBase64, 'base64');

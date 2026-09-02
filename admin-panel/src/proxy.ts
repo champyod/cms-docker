@@ -5,12 +5,11 @@ import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from "@/lib/locales";
 export function proxy(request: NextRequest): NextResponse | undefined {
   const pathname = request.nextUrl.pathname;
 
-  // Skip assets
   if (
     pathname.includes("_next") ||
     pathname.includes("api") ||
     pathname.includes("static") ||
-    pathname.includes(".") // Files like favicon.ico
+    pathname.includes(".")
   ) {
     return NextResponse.next();
   }
@@ -29,7 +28,6 @@ export function proxy(request: NextRequest): NextResponse | undefined {
 
 export const config = {
   matcher: [
-    // Skip all internal paths (_next)
     "/((?!_next|api|favicon.ico).*)",
   ],
 };

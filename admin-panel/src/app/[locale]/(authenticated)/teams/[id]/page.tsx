@@ -24,7 +24,6 @@ export default async function TeamDetailPage({
     notFound();
   }
 
-  // Serialize dates for client component
   const serializedTeam = {
     ...team,
     contests: team.contests.map(c => ({
