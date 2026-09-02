@@ -40,7 +40,11 @@ export interface ContestData {
   min_submission_interval_grace_period?: number | null;
 }
 
-export const parseInterval = (val: unknown): number => parseIntervalToSeconds(val) ?? 0;
+export function parseInterval(val: unknown): number {
+  const result = parseIntervalToSeconds(val);
+  if (result === undefined) throw new Error(`Invalid interval value: ${String(val)}`);
+  return result;
+}
 
 export function intervalToString(seconds: number, unit: 'seconds' | 'minutes' = 'seconds'): string {
   return `${seconds} ${unit}`;
