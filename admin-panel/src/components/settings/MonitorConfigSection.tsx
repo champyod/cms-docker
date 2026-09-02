@@ -31,7 +31,7 @@ export async function MonitorConfigSection(): Promise<React.ReactElement> {
     orderBy: { createdAt: 'desc' },
   });
 
-  const serialized: MonitorTarget[] = targets.map((t) => ({
+  const serialized: MonitorTarget[] = targets.map((t: (typeof targets)[number]) => ({
     ...t,
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,

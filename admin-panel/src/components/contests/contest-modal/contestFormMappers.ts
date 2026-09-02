@@ -142,10 +142,10 @@ function contestTokenFields(
   return {
     token_mode: contest.token_mode,
     token_max_number: contest.token_max_number,
-    token_min_interval: parseInterval(contest.token_min_interval),
+    token_min_interval: contest.token_min_interval == null ? 0 : parseInterval(contest.token_min_interval),
     token_gen_initial: contest.token_gen_initial,
     token_gen_number: contest.token_gen_number,
-    token_gen_interval: Math.round(parseInterval(contest.token_gen_interval) / 60),
+    token_gen_interval: contest.token_gen_interval == null ? 30 : Math.round(parseInterval(contest.token_gen_interval) / 60),
     token_gen_max: contest.token_gen_max,
   };
 }
@@ -167,8 +167,8 @@ function contestLimitFields(
   return {
     max_submission_number: contest.max_submission_number,
     max_user_test_number: contest.max_user_test_number,
-    min_submission_interval: parseInterval(contest.min_submission_interval),
-    min_user_test_interval: parseInterval(contest.min_user_test_interval),
+    min_submission_interval: contest.min_submission_interval == null ? 0 : parseInterval(contest.min_submission_interval),
+    min_user_test_interval: contest.min_user_test_interval == null ? 0 : parseInterval(contest.min_user_test_interval),
     queue_fairness_penalty_seconds: contest.queue_fairness_penalty_seconds ?? 0,
     score_precision: contest.score_precision,
     analysis_enabled: contest.analysis_enabled,
