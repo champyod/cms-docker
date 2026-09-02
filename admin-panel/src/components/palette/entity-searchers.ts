@@ -27,7 +27,7 @@ function buildContestSearcher(): EntitySearcher {
   return async (query, signal) => {
     const data = await getContests({ page: 1, search: query });
     if (signal.aborted) return [];
-    return data.contests.slice(0, MAX_RESULTS_PER_ENTITY).map((contest) => ({
+    return data.contests.slice(0, MAX_RESULTS_PER_ENTITY).map((contest: Awaited<ReturnType<typeof getContests>>['contests'][number]) => ({
       key: `contest-${contest.id}`,
       label: contest.name,
       detail: `Contest #${contest.id}`,
