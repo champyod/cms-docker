@@ -361,7 +361,7 @@ impl App {
         let status = if cfg!(target_os = "windows") {
             Command::new("cmd").args(["/C", command_str]).status()?
         } else {
-            Command::new("sh").arg("-c").arg(command_str).status()?
+            Command::new("bash").arg("-c").arg(command_str).status()?
         };
 
         let mut input = String::new();
@@ -443,7 +443,7 @@ impl App {
     fn run_inline_task(&mut self, command: &str) {
         let result = (|| -> Result<i32, Box<dyn Error>> {
             let runner = crate::core::runner::Runner::new()?;
-            let status = Command::new("sh")
+            let status = Command::new("bash")
                 .current_dir(runner.repo_root())
                 .arg("-c")
                 .arg(command)

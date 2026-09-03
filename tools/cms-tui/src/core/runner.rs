@@ -29,15 +29,16 @@ pub struct Runner {
 impl Runner {
     /// Creates a runner rooted at the CMS repository root.
     ///
-    /// Walks up from the crate directory until a `Makefile` + `cms` are found;
-    /// errors otherwise so callers fail fast rather than run in the wrong dir.
+    /// Walks up from the executable (vendored under `.tools/cms-tui/` in the
+    /// deployed repo) and then from the current working directory until a
+    /// `Makefile` + `cms` are found; errors otherwise so callers fail fast
+    /// rather than run in the wrong dir.
     ///
     /// # Errors
     ///
     /// Returns `Err` if the repo root markers are not found.
     pub fn new() -> Result<Self, RunError> {
-        let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let root = Self::find_repo_root(&crate_dir)
+        let root = Self::detect_repo_root()
             .ok_or_else(|| RunError::NotFound("CMS repo root (cms + Makefile)".into()))?;
         Ok(Self { cwd: root })
     }
@@ -60,14 +61,18 @@ impl Runner {
         Ok(status.code().unwrap_or(-1))
     }
 
-    /// Runs `scripts/<script>` via `sh` in the repo root.
+    /// Runs `scripts/<script>` via `bash` in the repo root.
+    ///
+    /// All `scripts/__*.sh` are bash (shebang, arrays, `local`); spawning a
+    /// POSIX `sh` instead aborts fatally on a failed `source` and would break
+    /// entirely on dash-only systems.
     ///
     /// # Errors
     ///
     /// Returns `Err` if the script fails to spawn.
     pub fn run_sh(&self, script: &str, args: &[&str]) -> Result<i32, RunError> {
         let script_path = self.cwd.join("scripts").join(script);
-        let mut cmd = Command::new("sh");
+        let mut cmd = Command::new("bash");
         cmd.current_dir(&self.cwd)
             .arg(&script_path)
             .args(args)
@@ -84,6 +89,24 @@ impl Runner {
     #[must_use]
     pub fn repo_root(&self) -> &Path {
         &self.cwd
+    }
+
+    /// Resolves the repo root from runtime paths only: the executable
+    /// location first (covers the vendored deployment), then the current
+    /// working directory (covers `cargo run`/test builds inside the repo).
+    /// Compile-time paths are never used — they would bake the build
+    /// machine's layout into released binaries.
+    fn detect_repo_root() -> Option<PathBuf> {
+        if let Some(exe_dir) = std::env::current_exe()
+            .ok()
+            .and_then(|exe| exe.parent().map(Path::to_path_buf))
+        {
+            if let Some(root) = Self::find_repo_root(&exe_dir) {
+                return Some(root);
+            }
+        }
+        let cwd = std::env::current_dir().ok()?;
+        Self::find_repo_root(&cwd)
     }
 
     /// Walks up from `start` to the first directory containing both a `Makefile`
@@ -145,6 +168,6 @@ mod tests {
         // and we should surface a clear error via Runner::new.
         let result = Runner::new();
         drop(tmp);
-        let _ = result; // finding root from CARGO_MANIFEST_DIR is what matters
+        let _ = result; // dev tree resolves via cwd; this only checks no panic
     }
 }
