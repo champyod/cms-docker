@@ -6,7 +6,11 @@ import util from 'util';
 import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
 import { logToDiscord } from '@/lib/discord-notifier';
-import { buildRestartCommand, getRestartPolicies } from '@/lib/restart-planner';
+import {
+  analyzeContainerDependencies as analyzeContainerDependenciesLib,
+  buildRestartCommand,
+  getRestartPolicies,
+} from '@/lib/restart-planner';
 import {
   runDeployContest,
   fetchDeployStatus,
@@ -20,6 +24,14 @@ const execPromise = util.promisify(exec);
 
 async function getContestComposeFile(): Promise<string> {
     return 'docker-compose.contest.yml';
+}
+
+// Why: client components must not import the fs-backed planner directly —
+// Turbopack bundles client imports for the browser and cannot resolve
+// node:fs. Exposed as a server action (permission-gated like its siblings).
+export async function analyzeContainerDependencies(containerNames: string[]): Promise<string[]> {
+    await ensurePermission('all');
+    return analyzeContainerDependenciesLib(containerNames);
 }
 
 export async function analyzeRestartRequirements(changedKeys: string[]) {

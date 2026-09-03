@@ -17,9 +17,11 @@ import {
   syncContainerConfigWithDocker,
   ContainerRestartConfig
 } from '@/app/actions/containerConfig';
-import { analyzeRestartRequirements } from '@/app/actions/services';
+import {
+  analyzeRestartRequirements,
+  analyzeContainerDependencies,
+} from '@/app/actions/services';
 import { getDiscordWebhookStatus } from '@/lib/discord-notifier';
-import { analyzeContainerDependencies } from '@/lib/restart-planner';
 import { useToast } from '@/components/providers/ToastProvider';
 import { cn } from '@/lib/utils';
 import { LogViewerModal } from '@/components/containers/LogViewerModal';
