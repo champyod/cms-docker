@@ -80,7 +80,7 @@ RANKING_DOMAIN="${RANKING_DOMAIN:-ranking.cms.local}"
 CERT_TYPE="${CERT_TYPE:-letsencrypt}"
 CERT_PATH=""
 KEY_PATH=""
-CERT_EMAIL="${CERT_EMAIL:-admin@mwit.ac.th}"
+CERT_EMAIL="${CERT_EMAIL:-}"
 HSTS_MAX_AGE="${HSTS_MAX_AGE:-31536000}"
 REDIS_RATE_LIMIT="${REDIS_RATE_LIMIT:-0}"
 PER_USER_LIMIT="${PER_USER_LIMIT:-1}"
@@ -261,6 +261,7 @@ cmd_setup() {
 
   # Validate port 80 reachability for Let's Encrypt
   if [[ "$CERT_TYPE" == "letsencrypt" ]]; then
+    [[ -n "$CERT_EMAIL" ]] || log_die "CERT_EMAIL is required for letsencrypt — set env or pass --email" 1
     _preflight_port80
   fi
 
