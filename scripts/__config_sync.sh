@@ -171,6 +171,12 @@ main() {
     cp "config/cms_ranking.sample.toml" "config/cms_ranking.toml" && log_info "Created config/cms_ranking.toml from sample"
   fi
 
+  # Ensure CMS config exists from sample — __inject_config.sh modifies but
+  # never creates it, and __config_sync must be self-sufficient on first run.
+  if [[ ! -f "config/cms.toml" && -f "config/cms.sample.toml" ]]; then
+    cp "config/cms.sample.toml" "config/cms.toml" && log_info "Created config/cms.toml from sample"
+  fi
+
   # Auto-generate secrets for empty secret fields
   if [[ "$NO_SECRETS" -eq 0 ]]; then
     scan_and_generate_secrets core    __CORE_KEYS
