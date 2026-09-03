@@ -1,9 +1,6 @@
 use crate::tui::app::App;
 use crate::tui::components::action_menu::ActionMenu;
-use ratatui::{
-    layout::Rect,
-    Frame,
-};
+use ratatui::{layout::Rect, Frame};
 
 pub fn render_page(
     f: &mut Frame,

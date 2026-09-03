@@ -1,5 +1,5 @@
-use crate::tui::app::App;
 use crate::core::model::ServiceStatus;
+use crate::tui::app::App;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -99,20 +99,21 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
             lines.push(Line::from(vec![env, name, version, status, id]));
         }
 
-        let paragraph = Paragraph::new(lines)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(format!(" {count} services "))
-                    .style(Style::default().fg(Color::Cyan)),
-            );
+        let paragraph = Paragraph::new(lines).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(format!(" {count} services "))
+                .style(Style::default().fg(Color::Cyan)),
+        );
         f.render_widget(paragraph, chunks[1]);
     }
 
-    let help = Paragraph::new(
-        "[1-9] Switch page   [q] Quit   [r] Refresh   [Esc] Back",
-    )
-    .style(Style::default().fg(Color::DarkGray))
-    .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)));
+    let help = Paragraph::new("[1-9] Switch page   [q] Quit   [r] Refresh   [Esc] Back")
+        .style(Style::default().fg(Color::DarkGray))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::DarkGray)),
+        );
     f.render_widget(help, chunks[2]);
 }

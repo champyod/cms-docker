@@ -53,7 +53,11 @@ fn draw_breadcrumbs(f: &mut Frame, area: Rect, app: &App) {
         .join(" > ");
     let crumb = Paragraph::new(format!(" {trail} "))
         .style(Style::default().fg(Color::Cyan))
-        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)));
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::DarkGray)),
+        );
     f.render_widget(crumb, area);
 }
 
@@ -61,7 +65,11 @@ fn draw_footer(f: &mut Frame, area: Rect) {
     let footer_text = " [q] Quit   [Esc] Back   [1] Dashboard   [2] Stacks   [3] Database   [4] Worker   [5] Ingress   [6] Config   [7] Backup   [8] System   [9] Bootstrap ";
     let footer = Paragraph::new(footer_text)
         .style(Style::default().fg(Color::DarkGray))
-        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::DarkGray)),
+        )
         .wrap(Wrap { trim: true });
     f.render_widget(footer, area);
 }
