@@ -20,13 +20,12 @@ help:
 	@echo "  make core           - Build+start core profile (DEPLOYMENT_TYPE=img → pull+up --no-build, src → up --build)"
 	@echo "  make admin          - Build+start admin profile"
 	@echo "  make contest        - Build+start contest profile (CONTEST_ID canonical)"
-	@echo "  make worker         - Build+start worker profile"
+	@echo "  make worker         - Deploy worker fleet (pull/build + per-shard deploy)"
 	@echo "  make infra          - Build+start monitor profile (alias: infra → monitor)"
 	@echo "  make core-stop      - Stop core profile (down --profile core)"
 	@echo "  make admin-stop     - Stop admin profile"
 	@echo "  make contest-stop   - Stop contest profile (stop — keeps containers, use contest-down to remove)"
-	@echo "  make contest-down   - Down contest profile (removes containers/networks)"
-	@echo "  make worker-stop    - Stop worker profile"
+	@echo "  make worker-stop    - Stop worker fleet (all local shards)"
 	@echo "  make infra-stop     - Stop monitor profile"
 	@echo "  make core-clean     - Down -v core profile"
 	@echo "  make admin-clean    - Down -v admin profile"
@@ -120,12 +119,12 @@ worker:
 	if [ "$$DEPLOY_TYPE" = "img" ]; then \
 		echo "DEPLOYMENT_TYPE=img → pulling worker images..."; \
 		$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile worker pull || true; \
-		$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile worker up -d --no-build; \
 	else \
-		echo "DEPLOYMENT_TYPE=src → building worker images..."; \
-		$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile worker up -d --build; \
-	fi
-	@echo "Worker profile started."
+		echo "DEPLOYMENT_TYPE=src → building worker image..."; \
+		$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile worker build; \
+	fi; \
+	bash scripts/__worker_tui.sh deploy all
+	@echo "Worker fleet deployed."
 
 infra:
 	@DEPLOY_TYPE="$${DEPLOYMENT_TYPE_OVERRIDE:-}"; \
@@ -174,7 +173,7 @@ contest-clean:
 	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile contest down -v $(CONTEST_SERVICES)
 
 worker-stop:
-	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile worker down
+	bash scripts/__worker_tui.sh stop all
 
 worker-clean:
 	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile worker down -v
