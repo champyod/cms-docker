@@ -7,7 +7,6 @@ import { getRepoRoot } from '@/lib/repo-root';
 
 const HOST_RE = /^[a-zA-Z0-9]([a-zA-Z0-9_.-]{0,62}[a-zA-Z0-9])?$/;
 
-// Helper to find cms.toml
 async function getCmsConfigPath() {
   const possiblePaths = [
     path.join(getRepoRoot(), 'config/cms.toml'),

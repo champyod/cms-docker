@@ -11,7 +11,6 @@ export async function POST(req: NextRequest) {
   try {
     const data = await req.json();
 
-    // Validate contest name
     const nameRegex = /^[A-Za-z0-9_-]+$/;
     if (!data.name || !nameRegex.test(data.name)) {
       return apiError({
@@ -21,7 +20,6 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Call validation library
     const validation = validateContestData(data);
     if (!validation.valid) {
       return apiError({
@@ -91,7 +89,6 @@ export async function POST(req: NextRequest) {
     return apiSuccess({ message: 'Contest created successfully' });
   } catch (error: unknown) {
     const err = error as { message?: string; code?: string };
-    // Check for DB check constraints
     for (const [constraint, field] of Object.entries(CONSTRAINT_TO_FIELD_MAP)) {
       if (err.message?.includes(constraint)) {
         return apiError({

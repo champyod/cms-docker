@@ -54,7 +54,6 @@ export async function updateContainerConfig(containerId: string, config: {
 
     await writeFile(CONFIG_PATH(), JSON.stringify(currentConfig, null, 2));
 
-    // Update Docker container restart policy
     if (config.autoRestart !== undefined) {
       await updateDockerRestartPolicy(containerId, currentConfig[containerId].autoRestart, currentConfig[containerId].maxRestarts);
     }
@@ -127,14 +126,12 @@ export async function syncContainerConfigWithDocker(containerId: string) {
     return { success: false, error: 'Invalid container id or action' };
   }
   try {
-    // Get Docker restart policy
     const { stdout } = await execPromise(`docker inspect ${containerId} --format='{{.HostConfig.RestartPolicy.Name}}:{{.HostConfig.RestartPolicy.MaximumRetryCount}}'`);
     const [policyName, maxRetries] = stdout.trim().split(':');
 
     const config = await getContainerConfig();
     const currentConfig = config[containerId] || {};
 
-    // Sync with Docker settings
     const dockerAutoRestart = policyName === 'on-failure' || policyName === 'always' || policyName === 'unless-stopped';
     const dockerMaxRestarts = policyName === 'on-failure' ? parseInt(maxRetries) || 5 : 999;
 
@@ -157,7 +154,6 @@ export async function initializeContainerConfig(containerId: string) {
   const config = await getContainerConfig();
 
   if (!config[containerId]) {
-    // Sync with Docker first
     await syncContainerConfigWithDocker(containerId);
   }
 }

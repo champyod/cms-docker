@@ -1,50 +1,18 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+
+import { revealUserPassword } from '@/app/actions/users';
 import { Button } from '@/components/core/Button';
 import { Dialog, DialogFooter } from '@/components/core/Dialog';
-import { apiClient } from '@/lib/apiClient';
-import { useToast } from '@/components/providers/ToastProvider';
 import { PasswordFieldWithKind, type PasswordRevealState } from '@/components/core/PasswordFieldWithKind';
+import { useToast } from '@/components/providers/ToastProvider';
+import { apiClient } from '@/lib/apiClient';
 import { cn } from '@/lib/utils';
-import { revealUserPassword } from '@/app/actions/users';
 import type { PasswordKind } from '@/lib/password-format';
 import type { UsersPageRow } from '@/lib/prisma-selects';
 
-const DEFAULT_TIMEZONE = 'Asia/Bangkok';
-
-interface UserFormState {
-  first_name: string;
-  last_name: string;
-  username: string;
-  email: string;
-  password: string;
-  timezone: string;
-  contestId: string;
-  teamCode: string;
-}
-
-const EMPTY_USER_FORM: UserFormState = {
-  first_name: '',
-  last_name: '',
-  username: '',
-  email: '',
-  password: '',
-  timezone: DEFAULT_TIMEZONE,
-  contestId: '',
-  teamCode: '',
-};
-
-function formFromUser(user: UsersPageRow): UserFormState {
-  return {
-    ...EMPTY_USER_FORM,
-    first_name: user.first_name,
-    last_name: user.last_name,
-    username: user.username,
-    email: user.email || '',
-    timezone: user.timezone || DEFAULT_TIMEZONE,
-  };
-}
+import { EMPTY_USER_FORM, formFromUser, type UserFormState } from './userFormState';
 
 interface UserModalProps {
   isOpen: boolean;
@@ -146,8 +114,6 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: U
           {error}
         </div>
       )}
-
-      {/* FORM */}
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
@@ -173,8 +139,6 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: U
             />
           </div>
         </div>
-
-        {/* ACCOUNT */}
         <div className="space-y-1.5">
           <label className={labelClassName}>Username</label>
           <input
@@ -210,8 +174,6 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: U
             reveal={{ ...reveal, onReveal: () => undefined }}
           />
         </div>
-
-        {/* PREFERENCES */}
         <div className="space-y-1.5">
           <label className={labelClassName}>Timezone</label>
           <input
@@ -222,8 +184,6 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: U
             placeholder="Asia/Bangkok"
           />
         </div>
-
-        {/* ENROLLMENT */}
         {!user && (
           <>
             <div className="space-y-1.5">
@@ -250,12 +210,10 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: U
                 className={cn(inputClassName, 'font-mono')}
                 placeholder="TEAM_A"
               />
-              <p className="text-[11px] text-muted-foreground">If team code is set, contest must be selected.</p>
+              <p className="text-xs text-muted-foreground">If team code is set, contest must be selected.</p>
             </div>
           </>
         )}
-
-        {/* FOOTER */}
         <DialogFooter className="pt-6">
           <Button
             variant="negativeOutline"

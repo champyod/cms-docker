@@ -35,7 +35,7 @@ export function TestcasePreviewDialog({ pair, onClose, onUpdateEncoding }: Previ
           </Button>
         </>
       }
-      className="flex h-[88vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
+      className="flex h-96 w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
     >
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-hidden lg:grid-cols-2">
         {[
@@ -50,7 +50,7 @@ export function TestcasePreviewDialog({ pair, onClose, onUpdateEncoding }: Previ
               </div>
               {file && (
                 <div className="flex flex-col items-end gap-1">
-                  <span className="text-[11px] text-muted-foreground">Detected {getEncodingLabel(file.detectedEncoding)}</span>
+                  <span className="text-xs text-muted-foreground">Detected {getEncodingLabel(file.detectedEncoding)}</span>
                   <select
                     value={file.selectedEncoding}
                     onChange={(event) => onUpdateEncoding(pair.id, side, event.target.value as FileEncoding)}

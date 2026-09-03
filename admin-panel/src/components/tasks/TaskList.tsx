@@ -102,12 +102,12 @@ export function TaskList({ initialTasks, permissions }: TaskListProps): React.JS
               return (
                 <TableRow key={task.id} data-shortcut-row className={cn('border-b border-border hover:bg-muted/50 transition-colors', hasErrors && 'opacity-60', ROW_SELECTED_CLASSES)}>
                   <TableCell className="font-mono text-muted-foreground text-xs text-nowrap">#{task.id}</TableCell>
-                  <TableCell className="font-medium text-foreground max-w-[150px]">
+                  <TableCell className="font-medium text-foreground max-w-36">
                     <div className="flex items-center gap-2">
                       {task.diagnostics.length > 0 && (
                         <div className="group relative">
                           <AlertTriangle className={cn('w-4 h-4 cursor-help shrink-0', hasErrors ? 'text-destructive' : 'text-warning')} />
-                          <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block z-50 min-w-[200px] p-2 bg-popover border border-border rounded-lg shadow-xl text-xs space-y-1">
+                          <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block z-50 min-w-48 p-2 bg-popover border border-border rounded-lg shadow-xl text-xs space-y-1">
                             <p className="font-bold border-b border-border pb-1 mb-1">Task Issues</p>
                             {task.diagnostics.map((d, i) => (
                               <div key={i} className={`flex gap-1.5 ${d.type === 'error' ? 'text-destructive' : 'text-warning'}`}>
@@ -124,7 +124,7 @@ export function TaskList({ initialTasks, permissions }: TaskListProps): React.JS
                       </button>
                     </div>
                   </TableCell>
-                  <TableCell className={`max-w-[200px] truncate ${hasErrors ? 'text-muted-foreground italic' : 'text-muted-foreground'}`} title={task.title}>
+                  <TableCell className={`max-w-48 truncate ${hasErrors ? 'text-muted-foreground italic' : 'text-muted-foreground'}`} title={task.title}>
                     {task.title}
                   </TableCell>
                   <TableCell>

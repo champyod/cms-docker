@@ -92,7 +92,6 @@ export async function collectWorkerStats(): Promise<WorkerStat[]> {
   try {
     const configuredWorkers = loadConfiguredWorkers(path.join(getRepoRoot(), '.env.core'));
 
-    // Get all cms-worker containers
     const { stdout } = await execPromise('docker ps -a --filter "name=cms-worker" --format "{{.Names}}\t{{.Status}}"');
 
     // Open evaluations per shard — the real busy/backlog signal.

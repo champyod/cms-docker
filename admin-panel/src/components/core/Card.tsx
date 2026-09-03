@@ -1,6 +1,8 @@
 'use client';
 
 import React from 'react';
+
+import { EmptyState } from '@/components/core/EmptyState';
 import { cn } from '@/lib/utils';
 
 interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -10,6 +12,10 @@ interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
 
 export const Card = React.forwardRef<HTMLDivElement, CardProps>(
   ({ className, children, active, ...props }, ref) => {
+    const isEmpty = children === null || children === undefined;
+    if (isEmpty) {
+      return <EmptyState title="No content available" description="Card content is empty" />;
+    }
     return (
       <div
         ref={ref}

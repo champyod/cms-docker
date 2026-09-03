@@ -7,7 +7,6 @@ import { handleProfile } from './profileActions';
 
 const BATCH_ACTIONS = ['regenerate', 'contest', 'team', 'profile', 'apply-credentials', 'export-current'] as const;
 
-
 function parseUserIds(body: Record<string, unknown>): number[] {
   if (!Array.isArray(body.userIds)) return [];
   return body.userIds

@@ -19,7 +19,7 @@ interface SubmissionModalProps {
 export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModalProps) {
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
 
-  const result = submission.submission_results[0]; // Active result
+  const result = submission.submission_results[0];
     const compilationFailed = result?.compilation_outcome === 'fail';
 
   const handleRecalculate = async (type: 'score' | 'evaluation' | 'full') => {
@@ -45,7 +45,6 @@ export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModal
       title={`Submission #${submission.id}`}
       className="sm:max-w-4xl"
     >
-        {/* Header meta */}
         <div className="flex items-center justify-between gap-4 mb-6">
             <div className="text-muted-foreground text-sm flex gap-4">
                 <span>User: <span className="font-medium text-foreground">{submission.participations.users.username}</span></span>
@@ -65,11 +64,7 @@ export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModal
               </span>
             )}
         </div>
-
-        {/* Content - Scrollable */}
-        <div className="max-h-[60vh] overflow-y-auto pr-1 space-y-6">
-
-            {/* Status Grid */}
+        <div className="max-h-96 overflow-y-auto pr-1 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-muted/40 rounded-xl p-4 border border-border">
                     <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Compilation</h3>
@@ -117,8 +112,6 @@ export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModal
                      </span>
                 </div>
             </div>
-
-            {/* Logs */}
             {result?.compilation_text && result.compilation_text.length > 0 && (
                 <div className="space-y-2">
                      <h3 className="text-sm font-semibold flex items-center gap-2">
@@ -134,8 +127,6 @@ export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModal
             )}
 
         </div>
-
-        {/* Footer Actions */}
         <DialogFooter className="mt-6 pt-4 border-t border-border">
              <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
                  <Button

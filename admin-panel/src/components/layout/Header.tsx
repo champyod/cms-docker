@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { Bell, Search, User } from 'lucide-react';
 import { useToast } from '../providers/ToastProvider';
@@ -11,17 +11,43 @@ import { Button } from '@/components/core/Button';
 import { CommandPalette } from '../palette/CommandPalette';
 
 export const Header: React.FC<{ className?: string; username?: string }> = ({ className, username }) => {
-  const [searchQuery, setSearchQuery] = useState('');
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [hasNotifications, setHasNotifications] = useState(false);
   const lastCheckTimeRef = useRef(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const authenticationExpiredRef = useRef(false);
   const { addToast } = useToast();
   const router = useRouter();
 
-  // Poll for new questions every 30 seconds
+  const stopPolling = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }, []);
+
+  const handleAuthenticationExpired = useCallback(() => {
+    // Why: after 401 the session is invalid so polling would spam errors — stop and redirect once
+    if (authenticationExpiredRef.current) return;
+    authenticationExpiredRef.current = true;
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    const segments = window.location.pathname.split('/');
+    const locale = segments[1] || 'en';
+    router.push(`/${locale}/auth/login`);
+  }, [router]);
+
   useEffect(() => {
     const checkNotifications = async () => {
+      if (authenticationExpiredRef.current) {
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
+        return;
+      }
       try {
         const questions = await getUnansweredQuestions(null);
 
@@ -43,28 +69,32 @@ export const Header: React.FC<{ className?: string; username?: string }> = ({ cl
         } else {
           setHasNotifications(false);
         }
-      } catch (e) {
-        console.error('Failed to check notifications', e);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : '';
+        const isAuthenticationError = message.includes('Unauthorized') || message.includes('Missing') || message.includes('permission');
+        if (isAuthenticationError) {
+          handleAuthenticationExpired();
+          return;
+        }
+        console.error('Failed to check notifications', error);
       }
     };
 
-    // Initial check
-    checkNotifications();
+    const handleExternalExpiration = () => {
+      handleAuthenticationExpired();
+    };
 
-    intervalRef.current = setInterval(checkNotifications, 30000); // 30s
+    window.addEventListener('cms-authentication-expired', handleExternalExpiration);
+
+      checkNotifications();
+
+    intervalRef.current = setInterval(checkNotifications, 30 * 1000);
 
     return () => {
+      window.removeEventListener('cms-authentication-expired', handleExternalExpiration);
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [addToast]);
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      const locale = window.location.pathname.split('/')[1] || 'en';
-      router.push(`/${locale}/search?q=${encodeURIComponent(searchQuery)}`);
-    }
-  };
+  }, [addToast, handleAuthenticationExpired, stopPolling]);
 
   const handleNotificationsClick = () => {
     const locale = window.location.pathname.split('/')[1] || 'en';
@@ -78,37 +108,24 @@ export const Header: React.FC<{ className?: string; username?: string }> = ({ cl
         className
       )}
     >
-      {/* Search Bar */}
-      <form onSubmit={handleSearch} className="relative group">
-        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <Search className="h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+      <div className="relative group">
+        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+          <Search className="h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
         </div>
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="h-9 w-56 rounded-full border border-input bg-muted/50 pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-          placeholder="Search..."
-        />
-      </form>
-
-      {/* Command Palette Trigger */}
-      <Button
-        variant="ghost"
-        size="sm"
-        tooltip="Search commands (Ctrl+K)"
-        onClick={() => setPaletteOpen(true)}
-      >
-        <Search className="size-4" />
-        <kbd className="ml-1 hidden rounded border border-border bg-muted px-1.5 font-mono text-[10px] font-semibold text-muted-foreground sm:inline-flex">
+        <button
+          type="button"
+          aria-label="Search navigation, entities, and actions (Control plus K)"
+          onClick={() => setPaletteOpen(true)}
+          onFocus={() => setPaletteOpen(true)}
+          className="h-9 w-64 cursor-pointer rounded-full border border-input bg-muted/50 pl-9 pr-14 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+        >
+          <Search className="h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
+        </button>
+        <kbd className="pointer-events-none absolute inset-y-0 right-2 my-auto hidden h-5 items-center rounded border border-border bg-muted px-1.5 font-mono text-xs font-semibold text-muted-foreground sm:inline-flex">
           ⌘K
         </kbd>
-      </Button>
-
-      {/* Theme Toggle */}
+      </div>
       <ThemeToggle />
-
-      {/* Notifications */}
       <Button variant="ghost" size="sm" iconOnly tooltip="Notifications" onClick={handleNotificationsClick}>
         <span className="relative flex">
           <Bell className="size-4" />
@@ -117,8 +134,6 @@ export const Header: React.FC<{ className?: string; username?: string }> = ({ cl
           )}
         </span>
       </Button>
-
-      {/* User Profile */}
       <div className="flex items-center gap-3 pl-4 border-l border-border">
         <div className="text-right hidden md:block">
           <p className="text-sm font-medium text-foreground">{username || 'Admin User'}</p>

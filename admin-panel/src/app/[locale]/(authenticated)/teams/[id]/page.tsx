@@ -1,4 +1,4 @@
-import { notFound, redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import { getTeamWithDetails } from '@/app/actions/teams';
 import { TeamDetailView } from '@/components/teams/TeamDetailView';
 import { checkPermission } from '@/lib/permissions';
@@ -8,8 +8,9 @@ export default async function TeamDetailPage({
 }: {
   params: Promise<{ id: string; locale: string }>;
 }) {
-  const { id, locale } = await params;
-  if (!await checkPermission('users', false)) redirect(`/${locale}`);
+  const { id } = await params;
+  // Why: forbidden detail must be indistinguishable from missing so return 404 not redirect
+  if (!await checkPermission('users', false)) notFound();
 
   const teamId = parseInt(id, 10);
 
@@ -23,7 +24,6 @@ export default async function TeamDetailPage({
     notFound();
   }
 
-  // Serialize dates for client component
   const serializedTeam = {
     ...team,
     contests: team.contests.map(c => ({

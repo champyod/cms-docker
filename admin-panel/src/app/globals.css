@@ -1,5 +1,3 @@
-/* Tailwind CSS v4 Configuration & Base Styles */
-/* Note: @theme and @apply with v4 syntax might trigger IDE warnings but are correct. */
 @import "tailwindcss";
 @import "tw-animate-css";
 

@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { notFound, redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import { ContestDetailView } from '@/components/contests/ContestDetailView';
 import { getCurrentUser } from '@/app/actions/auth';
 import { checkPermission } from '@/lib/permissions';
@@ -36,8 +36,9 @@ export default async function ContestDetailPage({
 }: {
   params: Promise<{ id: string; locale: string }>;
 }) {
-  const { id, locale } = await params;
-  if (!await checkPermission('contests', false)) redirect(`/${locale}`);
+  const { id } = await params;
+  // Why: forbidden detail must be indistinguishable from missing so return 404 not redirect
+  if (!await checkPermission('contests', false)) notFound();
 
   const contestId = parseInt(id, 10);
 

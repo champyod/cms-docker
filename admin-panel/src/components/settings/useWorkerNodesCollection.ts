@@ -51,7 +51,6 @@ export function useWorkerNodesCollection(): WorkerNodesCollection {
   };
 
   useEffect(() => {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- mount-load pattern; behavior must not change
     void loadWorkers();
   }, []);
 

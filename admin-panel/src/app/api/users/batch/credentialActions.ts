@@ -148,7 +148,7 @@ export async function handleExportCurrent({ userIds }: BatchActionRequest): Prom
   });
 
   let plainCount = 0;
-  const rows: CredentialRow[] = users.map((user) => {
+  const rows: CredentialRow[] = users.map((user: (typeof users)[number]) => {
     const parsed = parseStoredPassword(user.password);
     if (parsed.kind === 'plaintext' && parsed.value) {
       plainCount += 1;

@@ -82,7 +82,6 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">{team.name}</h1>
@@ -97,8 +96,6 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
           </Button>
         </div>
       </div>
-
-      {/* General Info */}
       <Card className="overflow-hidden">
         <button
           onClick={() => toggleSection('info')}
@@ -134,8 +131,6 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
           </div>
         )}
       </Card>
-
-      {/* Members */}
       <Card className="overflow-hidden">
         <button
           onClick={() => toggleSection('members')}
@@ -187,8 +182,6 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
           </div>
         )}
       </Card>
-
-      {/* Contests */}
       <Card className="overflow-hidden">
         <button
           onClick={() => toggleSection('contests')}

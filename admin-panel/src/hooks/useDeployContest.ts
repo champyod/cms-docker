@@ -1,8 +1,11 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { deployContest, getDeployStatus } from '@/app/actions/services';
-import type { DeployStatus } from '@/lib/deploy-operations';
+import { toast } from 'sonner';
+import { deployContest } from '@/app/actions/services';
+import type { DeployStatus } from '@/lib/deploy-percent.shared';
+import { useDeployStream } from '@/hooks/useDeployStream';
+import { createDeployToast } from '@/lib/deployToast';
 
 export type DeployPhase = 'idle' | 'deploying' | 'polling' | 'completed' | 'failed' | 'timeout' | 'already_running';
 
@@ -13,10 +16,9 @@ export interface DeployState {
   status: DeployStatus | null;
   error: string | null;
   log: string;
+  percent: number | null;
   startedAt: string | null;
 }
-
-const POLL_INTERVAL_MS = 3000;
 
 const initialState: DeployState = {
   phase: 'idle',
@@ -25,153 +27,64 @@ const initialState: DeployState = {
   status: null,
   error: null,
   log: '',
+  percent: null,
   startedAt: null,
 };
 
-export function useDeployContest() {
+export function useDeployContest(): { state: DeployState; deploy: (contestId: number) => Promise<void>; cancel: () => void; reset: () => void } {
   const [state, setState] = useState<DeployState>(initialState);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const toastIdRef = useRef<string | number | null>(null);
   const mountedRef = useRef(true);
+  const toastHelper = createDeployToast();
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      if (intervalRef.current !== null) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
     };
   }, []);
 
-  const stopPolling = useCallback(() => {
-    if (intervalRef.current !== null) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  }, []);
+  const { startStreaming, stopStreaming } = useDeployStream(setState, toastIdRef, mountedRef);
 
-  const startPolling = useCallback((opId: string, cId: number) => {
-    stopPolling();
+  const dismissProgressToast = useCallback(() => {
+    toastHelper.dismiss(toastIdRef);
+  }, [toastHelper]);
 
-    const doPoll = async () => {
+  const deploy = useCallback(
+    async (contestId: number): Promise<void> => {
+      stopStreaming();
+      dismissProgressToast();
+      setState({ ...initialState, phase: 'deploying', contestId });
+      const result = await deployContest(contestId);
       if (!mountedRef.current) return;
-      const result = await getDeployStatus(opId);
-      if (!mountedRef.current) return;
-
-      if (result.status === 'completed') {
-        stopPolling();
-        setState({
-          phase: 'completed',
-          contestId: cId,
-          operationId: opId,
-          status: 'completed',
-          error: null,
-          log: result.log || '',
-          startedAt: result.startedAt || null,
-        });
-      } else if (result.status === 'failed') {
-        stopPolling();
-        setState({
-          phase: 'failed',
-          contestId: cId,
-          operationId: opId,
-          status: 'failed',
-          error: result.error || 'Deploy failed',
-          log: result.log || '',
-          startedAt: result.startedAt || null,
-        });
-      } else if (result.status === 'timeout') {
-        stopPolling();
-        setState({
-          phase: 'timeout',
-          contestId: cId,
-          operationId: opId,
-          status: 'timeout',
-          error: result.error || 'Deploy timed out',
-          log: result.log || '',
-          startedAt: result.startedAt || null,
-        });
-      } else if (result.status === 'not_found') {
-        stopPolling();
-        setState({
-          phase: 'failed',
-          contestId: cId,
-          operationId: opId,
-          status: 'not_found',
-          error: result.error || 'Operation not found',
-          log: '',
-          startedAt: null,
-        });
-      } else if (result.status === 'running') {
-        setState((prev) => ({
-          ...prev,
-          phase: 'polling',
-          status: 'running',
-          log: result.log || prev.log,
-        }));
+      if (result.alreadyRunning) {
+        setState({ phase: 'already_running', contestId, operationId: null, status: null, error: result.error || 'A deploy is already in progress.', log: '', percent: null, startedAt: null });
+        toast.warning('Deploy already running', { description: result.error || 'Another deployment is in progress.' });
+        return;
       }
-    };
-
-    intervalRef.current = setInterval(doPoll, POLL_INTERVAL_MS);
-    doPoll();
-  }, [stopPolling]);
-
-  const deploy = useCallback(async (contestId: number) => {
-    stopPolling();
-    setState({ ...initialState, phase: 'deploying', contestId });
-
-    const result = await deployContest(contestId);
-    if (!mountedRef.current) return;
-
-    if (result.alreadyRunning) {
-      setState({
-        phase: 'already_running',
-        contestId,
-        operationId: null,
-        status: null,
-        error: result.error || 'A deploy is already in progress.',
-        log: '',
-        startedAt: null,
-      });
-      return;
-    }
-
-    if (!result.success || !result.operationId) {
-      setState({
-        phase: 'failed',
-        contestId,
-        operationId: null,
-        status: null,
-        error: result.error || 'Failed to start deploy',
-        log: '',
-        startedAt: null,
-      });
-      return;
-    }
-
-    setState({
-      phase: 'polling',
-      contestId,
-      operationId: result.operationId,
-      status: 'running',
-      error: null,
-      log: '',
-      startedAt: null,
-    });
-
-    startPolling(result.operationId, contestId);
-  }, [stopPolling, startPolling]);
+      if (!result.success || !result.operationId) {
+        setState({ phase: 'failed', contestId, operationId: null, status: null, error: result.error || 'Failed to start deploy', log: '', percent: null, startedAt: null });
+        toast.error('Deploy failed to start', { description: result.error || 'Could not initiate deployment.' });
+        return;
+      }
+      setState({ phase: 'polling', contestId, operationId: result.operationId, status: 'running', error: null, log: '', percent: null, startedAt: null });
+      toastIdRef.current = toast.loading(`Deploying contest #${contestId}`, { description: 'Starting deployment...', duration: Infinity });
+      startStreaming(result.operationId, contestId);
+    },
+    [stopStreaming, dismissProgressToast, startStreaming],
+  );
 
   const cancel = useCallback(() => {
-    stopPolling();
+    stopStreaming();
+    dismissProgressToast();
     setState(initialState);
-  }, [stopPolling]);
+  }, [stopStreaming, dismissProgressToast]);
 
   const reset = useCallback(() => {
-    stopPolling();
+    stopStreaming();
+    dismissProgressToast();
     setState(initialState);
-  }, [stopPolling]);
+  }, [stopStreaming, dismissProgressToast]);
 
   return { state, deploy, cancel, reset };
 }

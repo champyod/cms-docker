@@ -3,6 +3,7 @@
 import { useCallback, useRef } from 'react';
 
 import { Loader2 } from 'lucide-react';
+import Image from 'next/image';
 
 import { Card } from '@/components/core/Card';
 import { useToast } from '@/components/providers/ToastProvider';
@@ -23,7 +24,7 @@ function PreviewImage({ previewUrl, onClick }: { previewUrl: string; onClick: ()
       <button
         type="button"
         onClick={onClick}
-        className="flex h-32 w-full items-center justify-center rounded-xl border border-dashed border-white/10 bg-black/20 text-sm text-muted-foreground transition-colors hover:border-white/20 hover:text-white"
+        className="flex h-32 w-full items-center justify-center rounded-xl border border-dashed border-border bg-black/20 text-sm text-muted-foreground transition-colors hover:border-border hover:text-foreground"
       >
         No ranking logo — click to upload
       </button>
@@ -32,8 +33,7 @@ function PreviewImage({ previewUrl, onClick }: { previewUrl: string; onClick: ()
 
   return (
     <button type="button" onClick={onClick} className="flex w-full justify-center rounded-xl bg-black/20 p-4">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img alt="Ranking logo" src={previewUrl} className="max-h-32 w-auto object-contain" />
+      <Image alt="Ranking logo" src={previewUrl} width={320} height={128} className="max-h-32 w-auto object-contain" unoptimized />
     </button>
   );
 }
@@ -41,7 +41,7 @@ function PreviewImage({ previewUrl, onClick }: { previewUrl: string; onClick: ()
 function LoadingOverlay() {
   return (
     <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/30 backdrop-blur-sm">
-      <Loader2 className="h-8 w-8 animate-spin text-white" aria-label="Uploading" />
+      <Loader2 className="h-8 w-8 animate-spin text-foreground" aria-label="Uploading" />
     </div>
   );
 }
@@ -73,7 +73,7 @@ export function BrandingCard({ previewUrl, loading, onUpload, error }: BrandingC
   return (
     <Card className="space-y-4">
       <div>
-        <h2 className="text-sm font-semibold tracking-tight text-white">Ranking Branding</h2>
+        <h2 className="text-sm font-semibold tracking-tight text-foreground">Ranking Branding</h2>
         <p className="text-xs text-muted-foreground">Click the preview to upload a new ranking logo. Accepted: png, jpg, jpeg, gif, bmp (max 5MB).</p>
       </div>
 

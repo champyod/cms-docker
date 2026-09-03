@@ -61,6 +61,15 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (!authorized) return response;
   try {
     const data = (await req.json()) as Record<string, unknown>;
+    const name = typeof data.name === 'string' ? data.name.trim() : '';
+    const title = typeof data.title === 'string' ? data.title.trim() : '';
+    if (!name) return apiError({ message: 'Task name is required', status: 400 });
+    if (!/^[A-Za-z0-9_-]+$/.test(name)) return apiError({ message: 'Task name must contain only letters, numbers, hyphens and underscores', status: 400 });
+    if (!title) return apiError({ message: 'Task title is required', status: 400 });
+    if (data.contest_id !== undefined && data.contest_id !== null && data.contest_id !== '') {
+      const contestId = Number(data.contest_id);
+      if (!Number.isInteger(contestId) || contestId <= 0) return apiError({ message: 'Contest identifier must be a positive integer', status: 400 });
+    }
     await insertTask(data);
     revalidatePath('/[locale]/tasks', 'page');
     return apiSuccess({ message: 'Task created successfully' });

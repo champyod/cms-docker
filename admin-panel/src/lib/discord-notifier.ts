@@ -1,3 +1,12 @@
+export function isDiscordWebhookConfigured(): boolean {
+    const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+    return Boolean(webhookUrl && webhookUrl.trim().length > 0);
+}
+
+export async function getDiscordWebhookStatus(): Promise<{ configured: boolean }> {
+    return { configured: isDiscordWebhookConfigured() };
+}
+
 export async function logToDiscord(title: string, message: string, color: number = 3447003, mention: boolean = false) {
     const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
     if (!webhookUrl) return;

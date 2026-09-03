@@ -1,10 +1,13 @@
 'use client';
 
 import React from 'react';
+
 import { cva } from 'class-variance-authority';
-import { motion, type HTMLMotionProps } from 'motion/react';
 import { Loader2, type LucideIcon } from 'lucide-react';
+import { motion, type HTMLMotionProps } from 'motion/react';
+
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { EmptyState } from '@/components/core/EmptyState';
 import { cn } from '@/lib/utils';
 
 export const BUTTON_VARIANTS = [
@@ -42,7 +45,7 @@ const buttonVariants = cva(
         positive: 'bg-primary text-primary-foreground shadow-xs hover:bg-primary/90',
         positiveOutline: 'border border-primary/50 bg-transparent text-primary hover:bg-primary/10',
         negative:
-          'bg-destructive text-white shadow-xs hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40',
+          'bg-destructive text-foreground shadow-xs hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40',
         negativeOutline:
           'border border-destructive/50 bg-transparent text-destructive hover:bg-destructive/10',
         secondary: 'bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80',
@@ -50,8 +53,8 @@ const buttonVariants = cva(
         link: 'text-primary underline-offset-4 hover:underline',
       },
       size: {
-        sm: 'h-8 gap-1.5 px-3 text-sm rounded-lg',
-        md: 'h-10 px-4 py-2 rounded-xl',
+        sm: 'h-11 gap-1.5 px-3 text-sm rounded-lg',
+        md: 'h-11 px-4 py-2 rounded-xl',
         lg: 'h-12 px-6 text-lg rounded-2xl',
       },
     },
@@ -63,8 +66,8 @@ const buttonVariants = cva(
 );
 
 const ICON_ONLY_SIZE: Record<ButtonSize, string> = {
-  sm: 'h-8 w-8 p-0',
-  md: 'h-10 w-10 p-0',
+  sm: 'h-11 w-11 p-0',
+  md: 'h-11 w-11 p-0',
   lg: 'h-12 w-12 p-0',
 };
 
@@ -94,21 +97,39 @@ function TooltipShell({ label, children }: { label: string; children: React.Reac
   );
 }
 
+function getIconOnlyState(
+  children: React.ReactNode,
+  icon: LucideIcon | undefined,
+  iconOnly: boolean | undefined
+): { hasChildren: boolean; isIconOnly: boolean } {
+  const hasChildren = children !== null && children !== undefined;
+  return { hasChildren, isIconOnly: iconOnly ?? Boolean(icon && !hasChildren) };
+}
+
+function getAriaLabel(
+  isIconOnly: boolean,
+  tooltip: string | undefined,
+  children: React.ReactNode
+): string | undefined {
+  if (!isIconOnly) return undefined;
+  if (tooltip) return tooltip;
+  return typeof children === 'string' ? children : undefined;
+}
+
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   (
     { className, variant, size = 'md', loading, icon, iconOnly, tooltip, children, disabled, type = 'button', ...props },
     ref
   ) => {
     const resolvedVariant = resolveVariant(variant);
-    const hasChildren = children !== null && children !== undefined;
-    const isIconOnly = iconOnly ?? Boolean(icon && !hasChildren);
-
+    const { hasChildren, isIconOnly } = getIconOnlyState(children, icon, iconOnly);
     if (process.env.NODE_ENV !== 'production' && isIconOnly && !tooltip) {
       console.warn('Button: iconOnly requires a `tooltip` prop for accessibility.');
     }
-
-    const ariaLabel = isIconOnly ? tooltip ?? (typeof children === 'string' ? children : undefined) : undefined;
-
+    if (!hasChildren && !icon && !loading) {
+      return <EmptyState title="No action available" description="Button content is empty" />;
+    }
+    const ariaLabel = getAriaLabel(isIconOnly, tooltip, children);
     const button = (
       <motion.button
         ref={ref}
@@ -126,10 +147,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         {children}
       </motion.button>
     );
-
-    if (isIconOnly && tooltip) {
-      return <TooltipShell label={tooltip}>{button}</TooltipShell>;
-    }
+    if (isIconOnly && tooltip) return <TooltipShell label={tooltip}>{button}</TooltipShell>;
     return button;
   }
 );

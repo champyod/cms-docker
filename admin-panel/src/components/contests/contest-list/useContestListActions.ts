@@ -16,7 +16,6 @@ export function useContestListActions() {
   useEffect(() => {
     if (deployState.phase === 'completed') {
       addToast({ type: 'success', title: 'Contest Deployed', message: `Contest #${deployState.contestId} is now active.` });
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- deploy completion side-effect; behavior must not change
       setDeployTarget(null); resetDeployState(); window.location.reload();
     } else if (deployState.phase === 'failed' || deployState.phase === 'timeout') {
       addToast({ type: 'error', title: 'Deploy Failed', message: deployState.error || 'Deploy did not complete.' });

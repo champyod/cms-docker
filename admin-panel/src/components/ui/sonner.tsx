@@ -1,7 +1,9 @@
 'use client';
 
 import { useSyncExternalStore, type CSSProperties } from 'react';
+
 import { Toaster as Sonner, type ToasterProps } from 'sonner';
+
 import { getAppliedTheme, subscribeToTheme, type ThemePreference } from '@/lib/theme';
 
 const SERVER_SNAPSHOT = (): ThemePreference | null => null;

@@ -1,7 +1,6 @@
 import { cn } from '@/lib/utils';
 import React, { ElementType } from 'react';
 
-// --- Stack Component ---
 interface StackProps extends React.HTMLAttributes<HTMLDivElement> {
   as?: ElementType;
   direction?: 'row' | 'col';
@@ -38,10 +37,9 @@ export function Stack({
   );
 }
 
-// --- Grid Component ---
 interface GridProps extends React.HTMLAttributes<HTMLDivElement> {
     as?: ElementType;
-    cols?: 1 | 2 | 3 | 4 | 5 | 6 | 12; // Add common col counts
+    cols?: 1 | 2 | 3 | 4 | 5 | 6 | 12;
     gap?: number;
 }
 
@@ -70,7 +68,6 @@ export function Grid({
     );
 }
 
-// --- PageHeader Component ---
 interface PageHeaderProps {
   title: React.ReactNode;
   description?: React.ReactNode;
@@ -82,7 +79,7 @@ export function PageHeader({ title, description, actions, className }: PageHeade
   return (
     <div className={cn("flex flex-col gap-2", className)}>
         <div className="flex items-center justify-between">
-             <h1 className="text-3xl font-bold tracking-tight text-white">
+             <h1 className="text-3xl font-bold tracking-tight text-foreground">
                 {title}
             </h1>
             {actions && <div>{actions}</div>}
@@ -96,7 +93,6 @@ export function PageHeader({ title, description, actions, className }: PageHeade
   );
 }
 
-// --- Container/Section Component ---
 export function PageContent({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
     return (
         <div className={cn("space-y-8", className)} {...props}>

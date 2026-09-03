@@ -39,7 +39,7 @@ function MaxTotalTokensField(props: TokensTabProps) {
     <div className="space-y-2">
       <label className={cn(LABEL_CLASSES, 'flex items-center justify-between')}>
           Max Total Tokens
-          <span className="text-[10px] font-normal normal-case text-muted-foreground">Total allowed across contest</span>
+          <span className="text-xs font-normal normal-case text-muted-foreground">Total allowed across contest</span>
       </label>
       <UnlimitedNumberInput
         value={formData.token_max_number}
@@ -147,13 +147,9 @@ function TokenConfigFields(props: TokensTabProps) {
   const { formData } = props;
   return (
     <div className="grid animate-in fade-in grid-cols-2 gap-6 duration-300">
-
-      {/* Common fields for Finite and Infinite */}
       <MaxTotalTokensField {...props} />
 
       <MinIntervalField {...props} field="token_min_interval" label="Min Interval (sec)" />
-
-      {/* Finite-only fields */}
       {formData.token_mode === 'finite' && (
         <FiniteOnlyFields {...props} />
       )}
@@ -164,7 +160,6 @@ function TokenConfigFields(props: TokensTabProps) {
 export function TokensTab({ formData, setFormData, validationErrors }: TokensTabProps) {
   return (
     <div className="animate-in fade-in slide-in-from-right-4 space-y-6 duration-300">
-      {/* TOKENS TAB */}
       <TokenModeField formData={formData} setFormData={setFormData} />
 
       {formData.token_mode !== 'disabled' && (

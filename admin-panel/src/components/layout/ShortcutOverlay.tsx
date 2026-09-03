@@ -11,7 +11,7 @@ export interface ShortcutOverlayProps {
 
 function Kbd({ children }: { children: ReactNode }) {
   return (
-    <kbd className="inline-flex h-5 min-w-5 select-none items-center justify-center rounded border border-border bg-muted px-1 font-mono text-[10px] font-semibold text-muted-foreground">
+    <kbd className="inline-flex h-5 min-w-5 select-none items-center justify-center rounded border border-border bg-muted px-1 font-mono text-xs font-semibold text-muted-foreground">
       {children}
     </kbd>
   );
@@ -48,7 +48,6 @@ export function ShortcutOverlay({ open, onOpenChange }: ShortcutOverlayProps) {
       description="Press ? anywhere to toggle this list."
       className="sm:max-w-xl"
     >
-      {/* General + Lists */}
       <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
         <ShortcutGroup title="General">
           <ShortcutRow keys={['?']} label="Toggle shortcut list" />
@@ -61,8 +60,6 @@ export function ShortcutOverlay({ open, onOpenChange }: ShortcutOverlayProps) {
           <ShortcutRow keys={['Enter']} label="Open selected row" />
         </ShortcutGroup>
       </div>
-
-      {/* Go to */}
       <ShortcutGroup title="Go to — press g, then key">
         <div className="grid gap-x-8 sm:grid-cols-2">
           {NAVIGATION_BINDINGS.map((binding) => (

@@ -5,7 +5,6 @@ import type { Prisma } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { ensurePermission } from '@/lib/permissions';
 
-// Get questions for a contest
 export async function getQuestions(contestId: number) {
   await ensurePermission('contests');
   return prisma.questions.findMany({
@@ -20,7 +19,6 @@ export async function getQuestions(contestId: number) {
   });
 }
 
-// Reply to a question
 export async function replyToQuestion(questionId: number, adminId: number, data: {
   reply_subject: string;
   reply_text: string;
@@ -46,7 +44,6 @@ export async function replyToQuestion(questionId: number, adminId: number, data:
   }
 }
 
-// Ignore a question
 export async function ignoreQuestion(questionId: number) {
   await ensurePermission('contests');
 
@@ -63,7 +60,6 @@ export async function ignoreQuestion(questionId: number) {
   }
 }
 
-// Unignore a question
 export async function unignoreQuestion(questionId: number) {
   await ensurePermission('contests');
 

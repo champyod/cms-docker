@@ -86,12 +86,12 @@ function CaptchaWidget({
 
   if (provider === 'turnstile') {
     return (
-      <div className="flex flex-col items-center gap-2 rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
-        <div className="flex items-center gap-2 text-xs text-white/60">
+      <div className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-4 backdrop-blur-sm">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <ShieldCheck className="h-3.5 w-3.5" />
           <span>Security check required</span>
         </div>
-        <div ref={containerRef} className="min-h-[65px] flex items-center justify-center">
+        <div ref={containerRef} className="min-h-16 flex items-center justify-center">
           <div className="cf-turnstile" data-sitekey={siteKey} data-callback="onCaptchaSuccess" data-expired-callback="onCaptchaExpired" />
         </div>
       </div>
@@ -99,12 +99,12 @@ function CaptchaWidget({
   }
 
   return (
-    <div className="flex flex-col items-center gap-2 rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
-      <div className="flex items-center gap-2 text-xs text-white/60">
+    <div className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-4 backdrop-blur-sm">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <ShieldCheck className="h-3.5 w-3.5" />
         <span>Security check required</span>
       </div>
-      <div ref={containerRef} className="min-h-[65px] flex items-center justify-center">
+      <div ref={containerRef} className="min-h-16 flex items-center justify-center">
         <div className="h-captcha" data-sitekey={siteKey} data-callback="onCaptchaSuccess" data-expired-callback="onCaptchaExpired" />
       </div>
     </div>
@@ -193,7 +193,7 @@ export default function LoginPage() {
       <Card className="w-full max-w-md p-8">
         <Stack align="center" gap={8} className="mb-8">
           <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-            <Lock className="w-6 h-6 text-white" />
+            <Lock className="w-6 h-6 text-foreground" />
           </div>
           <Stack align="center" gap={2}>
             <Text variant="h2">Welcome Back</Text>

@@ -18,8 +18,8 @@ export async function MonitorConfigSection(): Promise<React.ReactElement> {
 
   if (!enhanced) {
     return (
-      <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl p-6">
-        <h2 className="text-lg font-semibold text-white mb-2">Monitor Configuration</h2>
+      <div className="bg-card backdrop-blur-xl border border-border rounded-2xl p-6">
+        <h2 className="text-lg font-semibold text-foreground mb-2">Monitor Configuration</h2>
         <p className="text-neutral-400 text-sm">
           Monitor enhancement disabled (set MONITOR_ENHANCED=1 in .env.infra).
         </p>
@@ -31,7 +31,7 @@ export async function MonitorConfigSection(): Promise<React.ReactElement> {
     orderBy: { createdAt: 'desc' },
   });
 
-  const serialized: MonitorTarget[] = targets.map((t) => ({
+  const serialized: MonitorTarget[] = targets.map((t: (typeof targets)[number]) => ({
     ...t,
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,

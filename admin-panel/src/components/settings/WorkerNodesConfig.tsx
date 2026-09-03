@@ -16,7 +16,6 @@ export function WorkerNodesConfig(): ReactElement | null {
   const editor = useWorkerNodeRowEditor(collection.workers, collection.replaceWorkers);
   const addForm = useWorkerNodeAddForm(collection.workers, collection.replaceWorkers);
 
-  // Hide card when no workers
   if (!collection.loading && collection.workers.length === 0) {
     return null;
   }

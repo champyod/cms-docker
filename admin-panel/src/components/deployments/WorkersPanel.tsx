@@ -131,7 +131,7 @@ function WorkersPanelInner({
                                 <Stack direction="row" align="center" justify="between" className="mb-1">
                                     <Stack direction="row" align="center" gap={1.5}>
                                         <div className={`w-2 h-2 rounded-full ${dot.cls}`} />
-                                        <Text variant="label" className="text-[10px] uppercase font-bold tracking-widest" color={dot.tone}>
+                                        <Text variant="label" className="text-xs uppercase font-bold tracking-widest" color={dot.tone}>
                                             {dot.label}
                                         </Text>
                                         {detail && (
@@ -180,7 +180,7 @@ function WorkersPanelInner({
 
                                 {detail && (
                                     <>
-                                        <Stack direction="row" align="center" gap={2} className="mt-2 flex-wrap text-[11px] text-muted-foreground">
+                                        <Stack direction="row" align="center" gap={2} className="mt-2 flex-wrap text-xs text-muted-foreground">
                                             <span>state: {detail.state}</span>
                                             {detail.health !== 'none' && <span>health: {detail.health}</span>}
                                             {detail.uptime && <span>up {detail.uptime}</span>}
@@ -199,14 +199,14 @@ function WorkersPanelInner({
                                             </button>
                                         </Stack>
                                         {expanded && detail.lastLog && (
-                                            <pre className="mt-1 p-2 bg-background/80 rounded text-[11px] text-muted-foreground overflow-x-auto whitespace-pre-wrap">
+                                            <pre className="mt-1 p-2 bg-background/80 rounded text-xs text-muted-foreground overflow-x-auto whitespace-pre-wrap">
                                                 {detail.lastLog}
                                             </pre>
                                         )}
                                     </>
                                 )}
                                 {!detail && !forbidden && (
-                                    <Text variant="label" color="text-muted-foreground" className="text-[11px] mt-1">
+                                    <Text variant="label" color="text-muted-foreground" className="text-xs mt-1">
                                         No telemetry yet — is this worker deployed?
                                     </Text>
                                 )}

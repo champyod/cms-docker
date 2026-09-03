@@ -124,10 +124,8 @@ export function MonitorConfigSectionClient({
   );
 
   return (
-    <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl p-6 space-y-6">
-      <h2 className="text-lg font-semibold text-white">Monitor Configuration</h2>
-
-      {/* Target List */}
+    <div className="bg-card backdrop-blur-xl border border-border rounded-2xl p-6 space-y-6">
+      <h2 className="text-lg font-semibold text-foreground">Monitor Configuration</h2>
       {targets.length === 0 ? (
         <p className="text-neutral-400 text-sm">No monitor targets configured.</p>
       ) : (
@@ -135,12 +133,12 @@ export function MonitorConfigSectionClient({
           {targets.map((target) => (
             <Card
               key={target.id}
-              className={`flex items-center gap-4 p-4 bg-black/40 border border-white/5 rounded-xl ${
+              className={`flex items-center gap-4 p-4 bg-black/40 border border-border rounded-xl ${
                 !target.enabled ? 'opacity-50' : ''
               }`}
             >
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-white truncate font-mono">{target.url}</p>
+                <p className="text-sm text-foreground truncate font-mono">{target.url}</p>
                 <p className="text-xs text-neutral-400">
                   {target.interval}s interval · {target.timeout}s timeout · HTTP{' '}
                   {target.expectedStatus}
@@ -150,7 +148,7 @@ export function MonitorConfigSectionClient({
               <button
                 type="button"
                 onClick={() => handleToggle(target.id)}
-                className="text-neutral-400 hover:text-white transition-colors"
+                className="text-neutral-400 hover:text-foreground transition-colors"
                 aria-label={target.enabled ? 'Disable target' : 'Enable target'}
               >
                 {target.enabled ? (
@@ -181,10 +179,8 @@ export function MonitorConfigSectionClient({
           ))}
         </div>
       )}
-
-      {/* Add Form */}
-      <div className="bg-black/40 border border-white/5 rounded-xl p-4 space-y-4">
-        <h3 className="text-sm font-medium text-white">Add Target</h3>
+      <div className="bg-black/40 border border-border rounded-xl p-4 space-y-4">
+        <h3 className="text-sm font-medium text-foreground">Add Target</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Input
             label="URL"
@@ -198,7 +194,7 @@ export function MonitorConfigSectionClient({
             <select
               value={interval}
               onChange={(e) => setInterval_(Number(e.target.value))}
-              className="w-full h-10 px-3 bg-black/40 border border-white/5 rounded-xl text-sm text-white"
+              className="w-full h-10 px-3 bg-black/40 border border-border rounded-xl text-sm text-foreground"
             >
               <option value={30}>30</option>
               <option value={60}>60</option>
@@ -211,7 +207,7 @@ export function MonitorConfigSectionClient({
             <select
               value={timeout}
               onChange={(e) => setTimeout_(Number(e.target.value))}
-              className="w-full h-10 px-3 bg-black/40 border border-white/5 rounded-xl text-sm text-white"
+              className="w-full h-10 px-3 bg-black/40 border border-border rounded-xl text-sm text-foreground"
             >
               <option value={3}>3</option>
               <option value={5}>5</option>
@@ -224,7 +220,7 @@ export function MonitorConfigSectionClient({
             <select
               value={expectedStatus}
               onChange={(e) => setExpectedStatus(Number(e.target.value))}
-              className="w-full h-10 px-3 bg-black/40 border border-white/5 rounded-xl text-sm text-white"
+              className="w-full h-10 px-3 bg-black/40 border border-border rounded-xl text-sm text-foreground"
             >
               <option value={200}>200</option>
               <option value={201}>201</option>

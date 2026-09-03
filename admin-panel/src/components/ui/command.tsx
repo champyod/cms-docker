@@ -13,7 +13,15 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 
-function Command({ className, ...props }: React.ComponentProps<typeof CommandPrimitive>) {
+function Command({ className, children, ...props }: React.ComponentProps<typeof CommandPrimitive>) {
+  const isEmpty = children === null || children === undefined;
+  if (isEmpty) {
+    return (
+      <CommandPrimitive data-slot="command" className={cn('bg-popover text-popover-foreground flex h-full w-full flex-col overflow-hidden rounded-md', className)} {...props}>
+        <div className="text-sm text-muted-foreground text-center py-8">No commands available</div>
+      </CommandPrimitive>
+    );
+  }
   return (
     <CommandPrimitive
       data-slot="command"
@@ -22,7 +30,9 @@ function Command({ className, ...props }: React.ComponentProps<typeof CommandPri
         className
       )}
       {...props}
-    />
+    >
+      {children}
+    </CommandPrimitive>
   );
 }
 
@@ -64,13 +74,13 @@ function CommandInput({
   return (
     <div
       data-slot="command-input-wrapper"
-      className="flex h-9 items-center gap-2 border-b px-3"
+      className="flex h-11 items-center gap-2 border-b px-3"
     >
-      <SearchIcon className="size-4 shrink-0 opacity-50" />
+      <SearchIcon className="size-4 shrink-0 opacity-50" aria-hidden />
       <CommandPrimitive.Input
         data-slot="command-input"
         className={cn(
-          'placeholder:text-muted-foreground flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-hidden disabled:cursor-not-allowed disabled:opacity-50',
+          'placeholder:text-muted-foreground flex h-11 w-full rounded-md bg-transparent py-3 text-sm outline-hidden disabled:cursor-not-allowed disabled:opacity-50',
           className
         )}
         {...props}
@@ -83,7 +93,7 @@ function CommandList({ className, ...props }: React.ComponentProps<typeof Comman
   return (
     <CommandPrimitive.List
       data-slot="command-list"
-      className={cn('max-h-[300px] scroll-py-1 overflow-x-hidden overflow-y-auto', className)}
+      className={cn('max-h-72 scroll-py-1 overflow-x-hidden overflow-y-auto', className)}
       {...props}
     />
   );

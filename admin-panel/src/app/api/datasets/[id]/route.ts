@@ -13,7 +13,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const data = (await req.json()) as Record<string, unknown>;
     
-    // We handle custom actions if provided in the body or standard update
     if (data.action === 'rename') {
        await prisma.datasets.update({ where: { id }, data: { description: data.description as string } });
     } else if (data.action === 'activate') {

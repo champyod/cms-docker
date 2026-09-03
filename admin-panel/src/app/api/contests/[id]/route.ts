@@ -17,7 +17,6 @@ export async function PUT(
   try {
     const data = await req.json();
 
-    // Call validation library
     const validation = validateContestData(data, true);
     if (!validation.valid) {
       return apiError({
@@ -104,7 +103,6 @@ export async function PUT(
     return apiSuccess({ message: 'Contest updated successfully' });
   } catch (error: unknown) {
     const err = error as { message?: string; code?: string };
-    // Check for DB check constraints
     for (const [constraint, field] of Object.entries(CONSTRAINT_TO_FIELD_MAP)) {
       if (err.message?.includes(constraint)) {
         return apiError({
@@ -121,7 +119,6 @@ export async function PUT(
     return apiError(error);
   }
 }
-
 
 export async function DELETE(
   req: NextRequest,

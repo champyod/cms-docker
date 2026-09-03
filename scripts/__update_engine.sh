@@ -8,7 +8,11 @@
 #            of keeping current values.
 #
 # Helpers ported from the legacy setup.sh (absorbed into this engine).
-set -euo pipefail
+set -eu
+# pipefail only if available
+if (set -o pipefail 2>/dev/null); then
+    set -o pipefail
+fi
 
 CMS_ROOT="${CMS_DOCKER_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 cd "$CMS_ROOT"

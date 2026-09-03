@@ -75,7 +75,6 @@ export async function addParticipant(contestId: number, userId: number) {
   await ensurePermission('contests');
 
   try {
-    // Use raw SQL for interval fields
     await prisma.$executeRaw`
       INSERT INTO participations (contest_id, user_id, hidden, unrestricted, delay_time, extra_time)
       VALUES (${contestId}, ${userId}, false, false, '0 seconds'::interval, '0 seconds'::interval)
@@ -157,8 +156,7 @@ export async function getAvailableContests() {
 export async function activateContest(id: number) {
   await ensurePermission('contests');
   try {
-    // Single atomic statement: sets is_active=true for the given id,
-    // false for all others. No race window between clearing and setting.
+    // Atomic UPDATE — no race window between setting active and clearing others
     await prisma.$executeRaw`
       UPDATE contests SET is_active = (id = ${id})
     `;

@@ -9,7 +9,11 @@
 #   __offsite-sync.sh --dry-run     print rsync command without executing
 #   __offsite-sync.sh --apply       sync backups to remote node
 
-set -euo pipefail
+set -eu
+# pipefail only if available
+if (set -o pipefail 2>/dev/null); then
+    set -o pipefail
+fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "$REPO_ROOT"

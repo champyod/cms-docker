@@ -24,7 +24,7 @@ function WorkerDisplayInfo({ worker, status }: WorkerDisplayInfoProps): ReactEle
               {status.status.toUpperCase()}
             </span>
             {!status.containerRunning && status.status !== 'connected' && (
-              <span className="text-[10px] text-muted-foreground">(container offline)</span>
+              <span className="text-xs text-muted-foreground">(container offline)</span>
             )}
           </>
         )}

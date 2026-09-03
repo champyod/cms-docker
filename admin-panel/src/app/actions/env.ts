@@ -21,7 +21,6 @@ export async function readEnvFile(filename: string) {
     const envPath = resolveEnvPath(repoRoot, filename);
     const content = await fs.readFile(envPath, 'utf-8');
     
-    // Parse into key-value pairs
     const lines = content.split('\n');
     const config: Record<string, string> = {};
     
@@ -46,7 +45,6 @@ export async function updateEnvFile(filename: string, updates: Record<string, st
     const envPath = resolveEnvPath(repoRoot, filename);
     let content = await fs.readFile(envPath, 'utf-8');
     
-    // Update or append
     Object.entries(updates).forEach(([key, value]) => {
       if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
         return;
@@ -75,7 +73,7 @@ export async function readActiveContestId(): Promise<{ success: true; contestId:
     const envPath = path.join(repoRoot, '.env.contest');
     const content = await fs.readFile(envPath, 'utf-8');
     
-    // Try ACTIVE_CONTEST_ID first, then CONTEST_ID for backward compat
+    // Backward-compatible fallback to legacy CONTEST_ID
     const matchActive = content.match(/^ACTIVE_CONTEST_ID=(\d+)/m);
     const matchContest = content.match(/^CONTEST_ID=(\d+)/m);
     const match = matchActive || matchContest;
@@ -140,8 +138,7 @@ export async function migrateFromMultiContest(): Promise<{ success: true; contes
         }
       }
     } catch {
-      // Fall through to the not-migrated result below
-    }
+      }
     
     return { success: true, contestId: null, migrated: false };
   } catch (error) {

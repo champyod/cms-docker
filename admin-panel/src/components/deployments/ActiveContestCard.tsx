@@ -22,6 +22,7 @@ interface ActiveContestCardProps {
   hasChangedContest: boolean;
   onSelectContest: (id: number | null) => void;
   onActivate: () => void;
+  onCancel: () => void;
 }
 
 export function ActiveContestCard({
@@ -32,8 +33,10 @@ export function ActiveContestCard({
   deployPhase,
   hasChangedContest,
   onSelectContest,
-  onActivate
+  onActivate,
+  onCancel
 }: ActiveContestCardProps) {
+  const isDeploying = deployPhase === 'deploying' || deployPhase === 'polling';
     return (
         <Card className="p-6">
             <Stack gap={5}>
@@ -65,8 +68,6 @@ export function ActiveContestCard({
                         </Stack>
                     </div>
                 )}
-
-                {/* Contest Selector */}
                 <Stack gap={2} className="mt-6">
                     <Text variant="label" className="flex items-center gap-2">
                         <Rocket className="w-3 h-3" />
@@ -76,7 +77,8 @@ export function ActiveContestCard({
                         <select
                             value={selectedContestId ?? ''}
                             onChange={(e) => onSelectContest(e.target.value ? parseInt(e.target.value) : null)}
-                            className="flex-1 bg-background/80 px-4 py-2.5 rounded-lg border border-border text-foreground text-sm outline-none focus:border-ring/60 appearance-none cursor-pointer"
+                            disabled={isDeploying}
+                            className="flex-1 bg-background/80 px-4 py-2.5 rounded-lg border border-border text-foreground text-sm outline-none focus:border-ring/60 appearance-none cursor-pointer disabled:opacity-50"
                         >
                             <option value="" className="bg-card">-- Select a contest --</option>
                             {availableContests.map((contest) => (
@@ -85,16 +87,31 @@ export function ActiveContestCard({
                                 </option>
                             ))}
                         </select>
-                        <Button
-                            onClick={onActivate}
-                            disabled={deployPhase === 'deploying' || deployPhase === 'polling' || !hasChangedContest || !selectedContestId}
-                            loading={deployPhase === 'deploying' || deployPhase === 'polling'}
-                            icon={deployPhase === 'deploying' || deployPhase === 'polling' ? RefreshCw : Rocket}
-                        >
-                            {deployPhase === 'deploying' ? 'Starting...'
-                                : deployPhase === 'polling' ? 'Deploying...'
-                                : 'Activate & Restart Stack'}
-                        </Button>
+                        {!isDeploying ? (
+                            <Button
+                                onClick={onActivate}
+                                disabled={!hasChangedContest || !selectedContestId}
+                                icon={Rocket}
+                            >
+                                Activate &amp; Restart Stack
+                            </Button>
+                        ) : (
+                            <>
+                                <Button
+                                    disabled
+                                    loading
+                                    icon={RefreshCw}
+                                >
+                                    {deployPhase === 'deploying' ? 'Starting...' : 'Deploying...'}
+                                </Button>
+                                <Button
+                                    variant="secondary"
+                                    onClick={onCancel}
+                                >
+                                    Cancel
+                                </Button>
+                            </>
+                        )}
                     </Stack>
                     <Text variant="small" color="text-muted-foreground" className="mb-4">
                         This will update the env file, mark the contest as active in the database, and restart the contest stack.

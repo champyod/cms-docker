@@ -1,6 +1,6 @@
 import { checkPermission } from '@/lib/permissions';
 import { getDictionary } from '@/i18n';
-import { PermissionDenied } from '@/components/PermissionDenied';
+import { notFound } from 'next/navigation';
 import { Card } from '@/components/core/Card';
 import {
   Users,
@@ -94,8 +94,9 @@ export default async function DashboardPage({
   const dict = await getDictionary(locale);
   const hasPermission = await checkPermission('all', false);
 
+  // Why: return 404 for forbidden access so existence is indistinguishable from missing page
   if (!hasPermission) {
-    return <PermissionDenied permission="permission_all" locale={locale} dict={dict} />;
+    notFound();
   }
 
   const [stats, serviceStatus, recentActivity] = await Promise.all([

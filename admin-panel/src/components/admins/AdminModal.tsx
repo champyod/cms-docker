@@ -37,7 +37,6 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
   const [reveal, setReveal] = useState<PasswordRevealState>({ state: 'none' });
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- mount-load or modal-reset pattern; behavior must not change
     setFormData(initialData ? formFromAdmin(initialData) : EMPTY_ADMIN_FORM);
     setError('');
     setPasswordKind('bcrypt');
@@ -116,8 +115,6 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
           {error}
         </div>
       )}
-
-      {/* FORM */}
       <form onSubmit={handleSubmit} className="space-y-4">
         <AdminFormFields
           formData={formData}
@@ -127,14 +124,10 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
           onPasswordKind={setPasswordKind}
           reveal={{ ...reveal, onReveal: () => undefined }}
         />
-
-        {/* ROLE */}
         <AdminRoleSelector
           isSuperadmin={formData.permission_all}
           onSelectRole={(role) => updateForm(ROLE_PRESETS[role])}
         />
-
-        {/* PERMISSIONS */}
         <div className="space-y-3 pt-2">
           {!formData.permission_all ? (
             <AdminPermissionCheckboxes formData={formData} onChange={updateForm} />
@@ -150,8 +143,6 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
             </div>
           )}
         </div>
-
-        {/* FOOTER */}
         <AdminModalFooter loading={loading} isEdit={!!initialData} onClose={onClose} />
       </form>
     </Dialog>

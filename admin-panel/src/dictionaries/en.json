@@ -1,7 +1,7 @@
 {
   "dashboard": {
     "welcome": "Welcome back, Admin",
-    "description": "Here's what's happening with your contests today.",
+    "description": "Here is what is happening with your contests today.",
     "stats": {
       "totalUsers": "Total Users",
       "totalContests": "Total Contests",
@@ -13,6 +13,16 @@
     "permissionRequired": "You need {permission} permission to access this page.",
     "contactAdmin": "Contact your administrator to request access.",
     "returnToDashboard": "Return to Dashboard"
+  },
+  "contests": {
+    "title": "Contests Management",
+    "subtitle": "Create and manage programming contests.",
+    "allContests": "All Contests"
+  },
+  "tasks": {
+    "title": "Tasks",
+    "subtitle": "Manage programming tasks, statements, and test cases.",
+    "allTasks": "All Tasks"
   },
   "users": {
     "title": "User Management",
@@ -54,9 +64,24 @@
     "viewSubmission": "View submission"
   },
   "admins": {
+    "title": "Administrators",
+    "subtitle": "Manage admin accounts and permissions.",
     "actions": {
       "edit": "Edit",
       "delete": "Delete"
     }
+  },
+  "resources": {
+    "title": "Resource Control",
+    "subtitle": "Monitor and manage main server resources and distributed worker activity."
+  },
+  "settings": {
+    "title": "System Settings",
+    "subtitle": "Configure environment files and service restarts."
+  },
+  "docs": {
+    "title": "CMS Documentation",
+    "subtitle": "Comprehensive guide to the Contest Management System.",
+    "officialDocs": "CMS Official Docs"
   }
 }

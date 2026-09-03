@@ -16,7 +16,7 @@ import { WorkersPanel, WorkerConfig } from '@/components/deployments/WorkersPane
 
 export function DeploymentsClient() {
     const { addToast } = useToast();
-    const { state: deployState, deploy: handleDeploy, reset: resetDeploy } = useDeployContest();
+    const { state: deployState, deploy: handleDeploy, cancel: cancelDeploy, reset: resetDeploy } = useDeployContest();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [availableContests, setAvailableContests] = useState<ContestOption[]>([]);
@@ -121,16 +121,16 @@ export function DeploymentsClient() {
                 const match = availableContests.find(c => c.id === cId);
                 if (match) setActiveContestName(match.name);
             }
-            addToast({ type: 'success', title: 'Contest Deployed', message: `Contest #${cId} is now active and stack restarted.` });
+            // Toast is handled inside useDeployContest via EventSource progress and completion
             resetDeploy();
         } else if (deployState.phase === 'failed' || deployState.phase === 'timeout') {
             setSaving(false);
-            addToast({ type: 'error', title: 'Deploy Failed', message: deployState.error || 'Deploy did not complete successfully.' });
             resetDeploy();
         } else if (deployState.phase === 'already_running') {
             setSaving(false);
-            addToast({ type: 'warning', title: 'Deploy Already Running', message: deployState.error || 'Another deploy is already in progress.' });
             resetDeploy();
+        } else if (deployState.phase === 'idle' && saving) {
+            setSaving(false);
         }
     }, [deployState.phase]);
 
@@ -207,7 +207,6 @@ export function DeploymentsClient() {
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
                 <Stack gap={6} className="xl:col-span-2">
-                    {/* Active Contest Card */}
                     <ActiveContestCard
                         activeContestId={activeContestId}
                         activeContestName={activeContestName}
@@ -217,9 +216,8 @@ export function DeploymentsClient() {
                         hasChangedContest={hasChangedContest}
                         onSelectContest={setSelectedContestId}
                         onActivate={handleActivateAndRestart}
+                        onCancel={cancelDeploy}
                     />
-
-                    {/* Contest Settings */}
                     <ContestSettingsForm
                         globalSettings={globalSettings}
                         saving={saving}
@@ -228,8 +226,6 @@ export function DeploymentsClient() {
                         onSaveSettings={handleSaveSettings}
                     />
                 </Stack>
-
-                {/* Right Column: Worker Nodes */}
                 <WorkersPanel
                     workers={workers}
                     status={liveWorkers}

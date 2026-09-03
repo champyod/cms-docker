@@ -2,7 +2,7 @@ import { getTasks } from '@/app/actions/tasks';
 import { TaskList } from '@/components/tasks/TaskList';
 import { checkPermission, getPermissions } from '@/lib/permissions';
 import { getDictionary } from '@/i18n';
-import { PermissionDenied } from '@/components/PermissionDenied';
+import { notFound } from 'next/navigation';
 import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
 
@@ -17,8 +17,9 @@ export default async function TasksPage({
   const dict = await getDictionary(locale);
   const hasPermission = await checkPermission('tasks', false);
 
+  // Why: return 404 for forbidden access so existence is indistinguishable from missing page
   if (!hasPermission) {
-    return <PermissionDenied permission="permission_tasks" locale={locale} dict={dict} />;
+    notFound();
   }
 
   const permissions = await getPermissions();
@@ -31,8 +32,8 @@ export default async function TasksPage({
   return (
     <Stack gap={8}>
       <Stack gap={2}>
-        <Text variant="h1">Tasks</Text>
-        <Text variant="muted">Manage programming tasks, statements, and test cases.</Text>
+        <Text variant="h1">{dict.tasks.title}</Text>
+        <Text variant="muted">{dict.tasks.subtitle}</Text>
       </Stack>
 
       <TaskList initialTasks={tasks} totalPages={totalPages} permissions={permissions} />
