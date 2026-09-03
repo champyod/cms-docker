@@ -107,8 +107,13 @@ export async function getWorkersLiveStatus(): Promise<{
         typeof v === typeof fallback ? (v as T) : fallback;
 
     const workers: WorkerLiveDetail[] = details.map((d, index) => {
-        const host = String(d.host ?? '');
-        const port = Number(d.port ?? 0);
+        let host = String(d.host ?? '');
+        let port = Number(d.port ?? 0);
+        if (!host && typeof d.endpoint === 'string' && d.endpoint.includes(':')) {
+            const lastColon = d.endpoint.lastIndexOf(':');
+            host = d.endpoint.substring(0, lastColon);
+            port = Number(d.endpoint.substring(lastColon + 1)) || port;
+        }
         const shard = typeof d.shard === 'number' ? d.shard : index;
         const tasks = tasksByShard.get(shard) ?? 0;
         return {
