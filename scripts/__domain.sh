@@ -671,36 +671,37 @@ cmd_preflight() {
   local pass=0 warn=0 fail=0
 
   # 1. SSH LAN
-  _check_ssh && ((pass++)) || ((fail++))
+  _check_ssh && { pass=$((pass + 1)); } || { fail=$((fail + 1)); }
 
   # 2. Tailscale
-  _check_tailscale && ((pass++)) || ((fail++))
+  _check_tailscale && { pass=$((pass + 1)); } || { fail=$((fail + 1)); }
 
   # 3. Remote worker RPC
-  _check_worker_rpc && ((pass++)) || ((warn++))
+  _check_worker_rpc && { pass=$((pass + 1)); } || { warn=$((warn + 1)); }
 
   # 4. Database
-  _check_database && ((pass++)) || ((fail++))
+  _check_database && { pass=$((pass + 1)); } || { fail=$((fail + 1)); }
 
   # 5. DNS resolution
-  _check_dns && ((pass++)) || ((warn++))
+  _check_dns && { pass=$((pass + 1)); } || { warn=$((warn + 1)); }
 
   # 6. HTTP port 80
-  _check_http80 && ((pass++)) || ((warn++))
+  _check_http80 && { pass=$((pass + 1)); } || { warn=$((warn + 1)); }
 
   # 7. HTTPS port 443
-  _check_https443 && ((pass++)) || ((warn++))
+  _check_https443 && { pass=$((pass + 1)); } || { warn=$((warn + 1)); }
 
   # 8. Domain paths
-  _check_domain_paths && ((pass++)) || ((warn++))
+  _check_domain_paths && { pass=$((pass + 1)); } || { warn=$((warn + 1)); }
 
   # 9. Funnel still works
-  _check_funnel && ((pass++)) || ((warn++))
+  _check_funnel && { pass=$((pass + 1)); } || { warn=$((warn + 1)); }
 
   echo ""
   log_info "Preflight results: PASS=$pass  WARN=$warn  FAIL=$fail"
   if (( fail > 0 )); then
     log_warn "Some checks failed — review above output"
+    exit 1
   fi
 }
 

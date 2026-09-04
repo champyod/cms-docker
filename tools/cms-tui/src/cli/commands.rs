@@ -1,7 +1,7 @@
 use std::process::Command;
 
 use super::{
-    BackupSub, Commands, ConfigSub, ContestSub, DbSub, DomainSub, FunnelSub, SecretsSub,
+    BackupSub, Commands, ConfigSub, ContestSub, DbSub, DomainCmd, FunnelSub, SecretsSub,
     TailscaleSub, WorkerSub,
 };
 use crate::core::config::config_show;
@@ -157,15 +157,55 @@ pub fn handle(cmd: Commands) -> Result<(), Box<dyn std::error::Error>> {
         Commands::UpdateServer => {
             propagate_exit(run_target(&runner, DispatchKey::UpdateServer, &[]))
         }
-        Commands::Domain { sub } => {
-            let (key, arg) = match sub {
-                DomainSub::Setup => (DispatchKey::DomainSetup, "setup"),
-                DomainSub::Status => (DispatchKey::DomainStatus, "status"),
-                DomainSub::Renew => (DispatchKey::DomainRenew, "renew"),
-                DomainSub::Preflight => (DispatchKey::DomainPreflight, "preflight"),
-            };
-            propagate_exit(run_target(&runner, key, &[arg]))
-        }
+        Commands::Domain { sub } => match sub {
+            DomainCmd::Setup {
+                cert,
+                domain,
+                admin_domain,
+                oj_domain,
+                ranking_domain,
+                cert_path,
+                key_path,
+                email,
+                apply,
+                yes,
+            } => {
+                let mut args: Vec<String> = vec!["setup".into(), "--cert".into(), cert];
+                for (flag, value) in [
+                    ("--domain", domain),
+                    ("--admin-domain", admin_domain),
+                    ("--oj-domain", oj_domain),
+                    ("--ranking-domain", ranking_domain),
+                    ("--cert-path", cert_path),
+                    ("--key-path", key_path),
+                    ("--email", email),
+                ] {
+                    if let Some(value) = value {
+                        args.push(flag.into());
+                        args.push(value);
+                    }
+                }
+                if apply {
+                    args.push("--apply".into());
+                }
+                if yes {
+                    args.push("--yes".into());
+                }
+                let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+                propagate_exit(run_target(&runner, DispatchKey::DomainSetup, &arg_refs))
+            }
+            DomainCmd::Status => {
+                propagate_exit(run_target(&runner, DispatchKey::DomainStatus, &["status"]))
+            }
+            DomainCmd::Renew => {
+                propagate_exit(run_target(&runner, DispatchKey::DomainRenew, &["renew"]))
+            }
+            DomainCmd::Preflight => propagate_exit(run_target(
+                &runner,
+                DispatchKey::DomainPreflight,
+                &["preflight"],
+            )),
+        },
         Commands::Config { sub } => match sub {
             ConfigSub::Sync => propagate_exit(run_target(&runner, DispatchKey::ConfigSync, &[])),
             ConfigSub::Edit => propagate_exit(run_config_edit()),

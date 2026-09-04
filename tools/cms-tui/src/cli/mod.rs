@@ -56,11 +56,50 @@ pub enum FunnelSub {
 }
 
 /// Domain subcommands (`domain <setup|status|renew|preflight>`).
-#[derive(ValueEnum, Clone, Debug)]
-pub enum DomainSub {
-    Setup,
+///
+/// `Setup` carries the full flag set accepted by `scripts/__domain.sh setup`
+/// so flags typed after `./cms domain setup` reach the script instead of
+/// being rejected by clap.
+#[derive(Subcommand, Clone, Debug)]
+pub enum DomainCmd {
+    /// Configure domains, TLS certificates, and render nginx config.
+    Setup {
+        /// Certificate type (letsencrypt|provided|selfsigned).
+        #[arg(long, default_value = "letsencrypt")]
+        cert: String,
+        /// Primary domain (default from DOMAIN_NAME env).
+        #[arg(long)]
+        domain: Option<String>,
+        /// Admin subdomain.
+        #[arg(long)]
+        admin_domain: Option<String>,
+        /// OJ subdomain.
+        #[arg(long)]
+        oj_domain: Option<String>,
+        /// Ranking subdomain.
+        #[arg(long)]
+        ranking_domain: Option<String>,
+        /// Path to fullchain.pem (required for --cert provided).
+        #[arg(long)]
+        cert_path: Option<String>,
+        /// Path to privkey.pem (required for --cert provided).
+        #[arg(long)]
+        key_path: Option<String>,
+        /// Email for Let's Encrypt registration (required for letsencrypt).
+        #[arg(long)]
+        email: Option<String>,
+        /// Actually execute changes (default: dry-run, prints only).
+        #[arg(long, default_value_t = false)]
+        apply: bool,
+        /// Skip optional feature prompts.
+        #[arg(long, short = 'y', default_value_t = false)]
+        yes: bool,
+    },
+    /// Show DNS resolution, cert expiry, renewal timer, connectivity.
     Status,
+    /// Force-renew LE certs or swap provided certificates.
     Renew,
+    /// 9-check connectivity matrix.
     Preflight,
 }
 
@@ -173,8 +212,8 @@ pub enum Commands {
     UpdateServer,
     /// Domain HTTPS lifecycle (`domain <setup|status|renew|preflight>`).
     Domain {
-        #[arg(value_enum)]
-        sub: DomainSub,
+        #[command(subcommand)]
+        sub: DomainCmd,
     },
     /// Config lifecycle (`config <sync|edit|show>`).
     Config {
