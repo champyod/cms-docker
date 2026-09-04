@@ -60,23 +60,12 @@ Local real secrets/artefacts are **gitignored**: `.env.local`, `.env.*.local`, `
 
 ## 3. DNSSEC + CAA — DNS integrity + CA restriction (DNS only)
 
-- **Why:** DNSSEC signs the zone (spoof/BGP hijack resistance); CAA says “only `letsencrypt.org` may issue for `grader.mwit.ac.th`”.
-- **Price:** `$0` at registry/DNS, but needs DNS control + computer center coordination for `DS` at parent (`.ac.th`).
-- **Pros:** resolver-validated DNS; CAA blocks rogue CA issuance.
-- **Cons:** KSK/ZSK rollovers; DS mismatch or clock skew → `SERVFAIL` for all clients.
-- **Maintenance:** ZSK ~90 days, KSK ~ yearly; `DS` at parent; monitor `dig +dnssec` + `delv`. See `docs/dnssec-caa-guide.md`.
-- **Increase / lost:** without → DNS spoof could point `grader` to attacker; with correctly operated → authenticity, but mis-op → outage (so disabled default).
-- **How to enable:** see `docs/dnssec-caa-guide.md`. In short:
-  ```bash
-  echo 'DNSSEC_ENABLED=1' >> .env.local
-  echo 'CAA_ENABLED=1' >> .env.local
-  echo 'CAA_ISSUER=letsencrypt.org' >> .env.local
-  # then publish CAA:  grader.mwit.ac.th. IN CAA 0 issue "letsencrypt.org"
-  # and DS from `dnssec-dsfromkey` at parent
-  dig CAA grader.mwit.ac.th +short  # verify
-  dig +dnssec grader.mwit.ac.th @1.1.1.1  # verify AD flag
-  ```
-  No compose change. `__domain.sh status` logs `DNSSEC=… CAA=…`.
+Full why/price/pros/cons and the rollover runbook live in
+[dnssec-caa-guide.md](dnssec-caa-guide.md) — kept there, not duplicated here.
+
+- **Flags:** `DNSSEC_ENABLED=0`, `CAA_ENABLED=0`, `CAA_ISSUER=letsencrypt.org` — DNS-only, no compose change.
+- **Enable:** set the flags in `.env.local`, publish the CAA record and the `DS` at the parent zone per the guide, then verify with `dig +dnssec` (AD flag) and `dig CAA`.
+- **Status:** `__domain.sh status` logs `DNSSEC=… CAA=…`.
 
 ## 4. mTLS — mutual TLS for worker RPC (beyond Tailscale)
 
