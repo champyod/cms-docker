@@ -60,6 +60,7 @@ Useful variants:
 ./cms --yes                  # non-interactive (CI): prints manual cmds instead of prompting
 ./cms --skip worker,monitor  # partial bring-up; every step is idempotent — re-run resumes
 ./cms --no-sample            # don't import examples/contests.yaml into an empty DB
+./cms --no-tui               # force plain CLI mode (skip TUI routing — for scripting/SSH)
 make setup                   # same thing via Makefile (CMS_ARGS="--no-sample" make setup)
 ```
 
@@ -181,6 +182,7 @@ below map 1:1 onto the Makefile and helper scripts.
 | `./cms` | Full bootstrap lifecycle (idempotent, resumable) |
 | `./cms setup` | First-time guided setup — fresh install **or** update wizard on existing installs |
 | `./cms update` | Interactive configuration wizard (any managed variable) |
+| `./cms update all` | Alias for `update-server` — full server update |
 | `./cms fix` | Non-interactive repair of missing/insecure config |
 | `./cms deploy <stack> [--img]` | Start one stack (`core/admin/contest/worker/infra`) or `all`; `--img` forces registry images |
 | `./cms stop [stack]` / `clean [stack]` / `pull [stack]` | Lifecycle per stack or all |
@@ -188,8 +190,9 @@ below map 1:1 onto the Makefile and helper scripts.
 | `./cms admin-create` | Create a superadmin interactively |
 | `./cms status` | Live service status dashboard |
 | `./cms monitor` | Monitoring/backup operations UI |
-| `./cms backup [drill]` | Full backup now; `drill` proves the restore path |
+| `./cms backup [drill\|offsite]` | Full backup now; `drill` proves the restore path; `offsite` syncs to a remote backup node |
 | `./cms restore <archive>` | Restore a backup archive into a scratch container |
+| `./cms secrets rotate\|audit\|generate` | Rotate weak/default secrets (apply guarded), audit current values, generate new |
 | `./cms doctor` | Preflight checks only (disk, secrets, ports, cgroup) |
 | `./cms test` | Smoke-test: boot stacks headless, verify healthchecks, teardown |
 | `./cms worker` / `edit` | Fleet TUI: list/add/edit/delete workers, live status, batch deploy |
@@ -197,10 +200,13 @@ below map 1:1 onto the Makefile and helper scripts.
 | `./cms worker server` | TUI: choose which main server this worker connects to |
 | `./cms worker connect\|cgroup` | Attach to a worker / prepare host cgroups (root) |
 | `./cms contest create <yaml...>` | Batch-create contests from YAML/JSON |
+| `./cms funnel setup\|passwd\|remove\|status` | Public ts.net access behind basic auth — no tailnet needed |
+| `./cms domain setup\|status\|renew\|preflight` | HTTPS domain lifecycle for `DOMAIN_NAME` (TLS certs + Nginx) |
+| `./cms config sync [--dry-run]` / `edit` / `show` | Generate `.env.*` + `cms.toml` from `config.toml` / open it in `$EDITOR` / print it |
 | `./cms update-server` | Safe server update: preflight → backup → rolling recreate → verify |
 
 Global bootstrap flags: `--yes` (non-interactive), `--skip <a,b>`,
-`--no-sample`.
+`--no-sample`, `--no-tui` (force plain CLI).
 
 ---
 
@@ -375,6 +381,25 @@ preflight hard-fails on placeholder/default secrets with fix instructions.
 | CWS logs "no contest with the specified id" | Import a contest or align `CONTEST_ID`: `./scripts/__create_contests.sh -f examples/contests.yaml` |
 | Config changes not applying | `make env` never overwrites existing `config/cms.toml`; delete it to force regeneration |
 | Disk near-full during pulls | Images total ≈ 6–7 GB; preflight aborts under 3 GB free — prune with `docker system df` guidance |
+
+## Useful References
+
+| Doc | Purpose |
+|-----|---------|
+| [docs/TUTORIAL.md](docs/TUTORIAL.md) | Step-by-step first contest walkthrough |
+| [docs/QUICKREF.md](docs/QUICKREF.md) | Command cheat sheet for daily operations |
+| [docs/ACCESS-CONFIGURATION.md](docs/ACCESS-CONFIGURATION.md) | Binding IPs, ports, and exposure modes |
+| [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) | External dependencies and versions |
+| [docs/optional-features.md](docs/optional-features.md) | HSM, Vault, DNSSEC/CAA, mTLS, rate limiting, monitoring stack |
+| [docs/waf-tuning.md](docs/waf-tuning.md) | WAF (ModSecurity CRS) enablement and tuning |
+| [docs/csp-implementation.md](docs/csp-implementation.md) | Content-Security-Policy details |
+| [docs/dnssec-caa-guide.md](docs/dnssec-caa-guide.md) | DNSSEC + CAA record setup |
+| [docs/WORKER-SETUP.md](docs/WORKER-SETUP.md) | Remote worker host preparation, step by step |
+| [docs/SERVICE_GUIDE.md](docs/SERVICE_GUIDE.md) | Service dependencies and restart ordering |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Extended troubleshooting beyond the table above |
+| [docs/PORTAINER-GUIDE.md](docs/PORTAINER-GUIDE.md) | Managing the stack from Portainer |
+
+Historical release notes: [docs/RELEASE_NOTES_v1.1.2.md](docs/RELEASE_NOTES_v1.1.2.md).
 
 ## License
 
