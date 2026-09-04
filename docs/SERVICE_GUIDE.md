@@ -1,10 +1,15 @@
 # CMS Service Architecture & Dependency Guide
 
-This guide explains the relationships between CMS services and the correct order for restarting them to ensure system stability.
+This guide explains the relationships between CMS services and the correct order for restarting them to ensure system stability. For the stack/profile overview, see the [Architecture section of the README](../README.md#architecture).
 
 ## Service Dependencies
 
-CMS services are split into four main stacks: **Core**, **Admin**, **Contest**, and **Worker**.
+Dependencies below mirror the `depends_on` blocks in
+[`docker-compose.yml`](../docker-compose.yml) — startup ordering is
+healthcheck-gated, so `docker compose` brings services up in this order
+automatically.
+
+CMS services are split into five stacks: **Core**, **Admin**, **Contest**, **Worker**, and **Monitor**.
 
 ### 1. Core Stack (The Foundation)
 The Core stack must be healthy before any other services can function properly.
@@ -13,27 +18,40 @@ The Core stack must be healthy before any other services can function properly.
 | :--- | :--- | :--- |
 | `database` | None | PostgreSQL database (Source of truth). |
 | `log-service` | `database` (healthy) | Centralized logging for all other services. |
-| `resource-service`| `log-service` | Monitors system resources. |
-| `scoring-service` | `log-service`, `database` | Calculates scores and rankings. |
-| `evaluation-service`| `log-service`, `database` | Manages the task evaluation queue. |
-| `proxy-service` | `log-service` | Handles internal RPC communication. |
-| `checker-service` | `log-service` | Validates submission results. |
+| `resource-service`| `database`, `log-service` | Monitors system resources. |
+| `scoring-service` | `database`, `log-service` | Calculates scores and rankings. |
+| `checker-service` | `database`, `log-service` | Validates submission results. |
 
 ### 2. Admin Stack
 | Service | Depends On | Purpose |
 | :--- | :--- | :--- |
-| `admin-web-server` | `database` | Next.js Management Panel. |
-| `ranking-web-server`| `database` | Real-time public rankings. |
+| `admin-panel-next` (:8891) | `database` | Modern Next.js Management Panel — manage everything here. |
+| `admin-web-server` (:8889) | `database`, `log-service` | Legacy Python admin UI. |
+| `ranking-web-server` (:8890) | `database`, `log-service` | Real-time public rankings. |
+| `printing-service` (optional) | `database`, `log-service` | Contest printing service. |
 
 ### 3. Contest Stack
 | Service | Depends On | Purpose |
 | :--- | :--- | :--- |
-| `contest-web-server`| `database`, `proxy-service` | The interface for contestants. |
+| `contest-web-server` (:8888+) | `database`, `log-service` | The interface for contestants. |
+| `evaluation-service` | `database`, `log-service` | Manages the task evaluation queue. |
+| `proxy-service` | `database`, `log-service` | Handles internal RPC communication. |
+| `nginx-proxy` | `contest-web-server`, `proxy-service` | Public front for the contest web (TLS option). |
 
 ### 4. Worker Stack
 | Service | Depends On | Purpose |
 | :--- | :--- | :--- |
-| `worker` | `resource-service` | Executes user code in a sandbox. |
+| `worker` | None (compose) — targets core RPC via `CORE_SERVICES_HOST` | Executes user code in a sandbox. |
+
+The worker has no compose `depends_on`: each worker host connects to the
+main server's core services over the network (`CORE_SERVICES_HOST`, fixed
+RPC ports 29000/28000/28500/22000/25000/28600 — see
+[WORKER-SETUP.md](WORKER-SETUP.md)).
+
+### 5. Monitor Stack
+| Service | Depends On | Purpose |
+| :--- | :--- | :--- |
+| `monitor` | docker.sock (via `DOCKER_GID`) | Health/backups/Discord alerting. |
 
 ---
 
@@ -47,11 +65,9 @@ When you modify settings in the Admin Panel:
 3.  **Dependency Expansion**: The system recursively adds services that depend on the impacted ones.
 4.  **One-Click Apply**: You will be presented with a **"Save & Restart"** button that applies the configuration and executes the restarts in the correct sequence.
 
+The mapping is driven by [`config/restart_policies.json`](../config/restart_policies.json).
+
 ---
-
-## Restart Strategy (Manual)
-... (rest of the file)
-
 
 ## Dependency Mermaid Diagram
 
@@ -60,24 +76,39 @@ graph TD
     DB[(Database)]
     LOG[Log Service]
     RES[Resource Service]
-    EV[Evaluation Service]
     SC[Scoring Service]
+    CHK[Checker Service]
+    EV[Evaluation Service]
     PX[Proxy Service]
-    ADMIN[Admin Web]
-    CONTEST[Contest Web]
+    CWS[Contest Web]
+    NGINX[Nginx Proxy]
+    PANEL[Admin Panel Next]
+    ADMIN[Admin Web Server]
+    RANK[Ranking Web Server]
     WORKER[Worker Node]
 
     LOG --> DB
+    RES --> DB
     RES --> LOG
-    EV --> LOG
-    EV --> DB
-    SC --> LOG
     SC --> DB
+    SC --> LOG
+    CHK --> DB
+    CHK --> LOG
+
+    EV --> DB
+    EV --> LOG
+    PX --> DB
     PX --> LOG
-    
+    CWS --> DB
+    CWS --> LOG
+    NGINX --> CWS
+    NGINX --> PX
+
+    PANEL --> DB
     ADMIN --> DB
-    CONTEST --> DB
-    CONTEST --> PX
-    
-    WORKER --> RES
+    ADMIN --> LOG
+    RANK --> DB
+    RANK --> LOG
+
+    WORKER -.->|CORE_SERVICES_HOST RPC| LOG
 ```
