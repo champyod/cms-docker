@@ -33,7 +33,7 @@ Common issues and solutions for CMS Docker deployment.
 docker ps --filter "name=cms-"
 
 # 2. Check service logs
-docker logs cms-contest-web-server-1
+docker logs cms-contest-web-server
 docker logs cms-admin-web-server
 
 # 3. Check if ports are listening
@@ -208,8 +208,8 @@ git submodule update --init --recursive
 docker network inspect cms-network
 
 # Test connectivity
-docker exec cms-contest-web-server-1 ping cms-database
-docker exec cms-worker ping cms-log-service
+docker exec cms-contest-web-server ping cms-database
+docker exec cms-worker-0 ping cms-log-service
 ```
 
 **Solutions:**
@@ -308,7 +308,7 @@ docker exec cms-log-service cmsInitDB
 **D. Database corrupted:**
 ```bash
 # Stop all services
-./scripts/__stop_all.sh
+./cms stop
 
 # Remove database volume
 docker volume rm cms-db-data
@@ -370,7 +370,7 @@ docker exec cms-log-service cmsInitDB
 docker exec -it cms-admin-web-server cmsAddAdmin username
 
 # If still fails, check database connection
-docker exec cms-admin-web-server cat /usr/local/etc/cms.conf
+docker exec cms-admin-web-server cat /usr/local/etc/cms.toml
 ```
 
 ---
@@ -399,10 +399,10 @@ docker inspect CONTAINER_NAME | grep RestartCount
 **A. Configuration error:**
 ```bash
 # Check config
-docker exec CONTAINER_NAME cat /usr/local/etc/cms.conf
+docker exec CONTAINER_NAME cat /usr/local/etc/cms.toml
 
-# Validate JSON
-cat config/cms.conf | python3 -m json.tool
+# Validate TOML
+python3 -c "import tomllib; tomllib.load(open('config/cms.toml','rb'))"
 ```
 
 **B. Resource limits:**
@@ -498,7 +498,7 @@ docker exec CONTAINER_NAME ping TARGET_SERVICE
 
 ```bash
 # Check worker status
-docker logs cms-worker
+docker logs cms-worker-0
 
 # Check if worker is registered
 docker exec cms-resource-service cmsResourceService -l
@@ -508,14 +508,13 @@ docker exec cms-resource-service cmsResourceService -l
 
 ```bash
 # Restart worker
-docker restart cms-worker
+docker restart cms-worker-0
 
 # Check worker connection
-docker exec cms-worker ping cms-log-service
+docker exec cms-worker-0 ping cms-log-service
 
-# Ensure worker shard is unique
-# Check .env.worker
-WORKER_SHARD=0  # Must be unique
+# Ensure the worker shard is unique per instance
+# (WORKER_SHARD is managed via ./cms worker edit / config.toml)
 ```
 
 ### Worker Sandbox Errors
@@ -537,7 +536,7 @@ uname -r
 # Should be 3.10+
 
 # Check cgroups
-docker exec cms-worker mount | grep cgroup
+docker exec cms-worker-0 mount | grep cgroup
 ```
 
 ### Worker Out of Memory
@@ -552,11 +551,11 @@ docker exec cms-worker mount | grep cgroup
 WORKER_MEMORY=8g
 
 # Check memory usage
-docker stats cms-worker
+docker stats cms-worker-0
 
-# Reduce parallel evaluations
-# In cms.conf:
-"max_jobs_per_worker": 1
+# Reduce parallel evaluations: run fewer worker shards or lower
+# WORKER_CPU_LIMIT / WORKER_MEMORY_LIMIT (config.toml → ./cms config sync),
+# or add worker capacity via ./cms worker edit
 ```
 
 ---
@@ -574,7 +573,8 @@ docker stats cms-worker
 docker stats
 
 # Check database queries
-docker exec cms-database pg_stat_activity
+docker exec cms-database psql -U cmsuser -d cmsdb -c \
+  "SELECT pid, state, query FROM pg_stat_activity;"
 
 # Check network latency
 ping YOUR_SERVER_IP
@@ -609,8 +609,8 @@ docker exec cms-database psql -U cmsuser -d cmsdb -c \
   "SELECT count(*) FROM pg_stat_activity;"
 
 # Increase max connections
-# Edit cms.conf database section
-"max_connections": 200
+# In docker-compose.yml (database service command/env, e.g. -c max_connections=200),
+# or POSTGRES tuning via config.toml → ./cms config sync
 ```
 
 ### High CPU Usage
