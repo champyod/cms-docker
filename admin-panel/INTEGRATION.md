@@ -126,7 +126,7 @@ export async function regenerateConfig() {
     
     // Step 2: Restart services based on deployment type
     if (deploymentType === 'img') {
-      await execAsync('cd /repo-root && docker compose -f docker-compose.core.yml -f docker-compose.core.img.yml up -d --no-build');
+      await execAsync('cd /repo-root && docker compose -f docker-compose.yml --profile core up -d --no-build');
     } else {
       await execAsync('cd /repo-root && docker restart cms-log-service');
     }
