@@ -63,22 +63,18 @@ The modern Admin Panel (port 8891) provides a unified interface to manage all wo
 1.  Navigate to **Infrastructure** → **Resources** in the Admin Panel.
 2.  Add or remove worker entries by specifying their `Hostname/IP` and `Port`.
 3.  The system automatically updates `.env.core` with `WORKER_N` variables.
-4.  Run `make env` (or click **Apply Changes** in the UI) to regenerate `config/cms.toml`.
+4.  Run `./cms config sync` (or click **Apply Changes** in the UI) to regenerate `config/cms.toml`.
 5.  The system will guide you through restarting the core services to finalize the connection.
 
 ### Security: Tailscale & VPNs
 By default, RPC ports are restricted to `127.0.0.1` for security. To enable remote workers:
 1.  **Tailscale (Recommended)**: Run `./cms setup` and provide your Tailscale IP when prompted. This binds services only to the Tailscale interface.
 2.  **Other VPNs**: Follow the same process but provide your VPN interface IP.
-3.  **Public Access (Dangerous)**: Set `TAILSCALE_IP=0.0.0.0` in `.env.core` and run `make env && make core-img`. This exposes evaluation ports to the entire internet.
+3.  **Public Access (Dangerous)**: Set `TAILSCALE_IP=0.0.0.0` in `config.toml`, then `./cms config sync && make core-img`. This exposes evaluation ports to the entire internet.
 
 ---
 
 ## Quick Setup
-... (rest of the file)
-
-... (rest of the file)
-
 
 For users who want more control:
 
@@ -122,12 +118,12 @@ WORKER_CPUS=4
 WORKER_MEMORY=4g
 
 # Service Ports (must match main server)
-LOG_SERVICE_PORT=22000
-RESOURCE_SERVICE_PORT=25000
-SCORING_SERVICE_PORT=28000
-CHECKER_PORT=28500
-EVALUATION_SERVICE_PORT=28600
-PROXY_SERVICE_PORT=29000
+LOG_SERVICE_PORT=29000
+RESOURCE_SERVICE_PORT=28000
+SCORING_SERVICE_PORT=28500
+CHECKER_PORT=22000
+EVALUATION_SERVICE_PORT=25000
+PROXY_SERVICE_PORT=28600
 ```
 
 ### Step 4: Create docker-compose.yml
@@ -148,7 +144,7 @@ services:
       - apparmor:unconfined
     
     environment:
-      - CMS_CONFIG=/usr/local/etc/cms.conf
+      - CMS_CONFIG=/usr/local/etc/cms.toml
       - WORKER_SHARD=${WORKER_SHARD}
       - WORKER_NAME=${WORKER_NAME:-worker-${WORKER_SHARD}}
       - CORE_SERVICES_HOST=${CORE_SERVICES_HOST}
@@ -156,7 +152,7 @@ services:
       - ISOLATE_CGROUP_PATH=${ISOLATE_CGROUP_PATH:-/sys/fs/cgroup/cms-isolate}
     
     volumes:
-      - ./config/cms.conf:/usr/local/etc/cms.conf:ro
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-worker-cache:/var/local/cache/cms
       - cms-worker-log:/var/local/log/cms
       - /sys/fs/cgroup:/sys/fs/cgroup:rw
@@ -178,33 +174,33 @@ volumes:
 
 ### Step 5: Download Configuration
 
-Get `cms.conf` from main server:
+Get `config/cms.toml` from the main server (or use the recommended
+`./cms worker server` flow, which sets `CORE_SERVICES_HOST` for you):
 
 ```bash
 mkdir -p config
 
 # Method 1: SCP
-scp user@YOUR_SERVER_IP:/path/to/cms-docker/config/cms.conf config/
+scp user@YOUR_SERVER_IP:/path/to/cms-docker/config/cms.toml config/
 
 # Method 2: Manual copy/paste
-nano config/cms.conf
+nano config/cms.toml
 # Paste content from main server
 ```
 
-Edit `config/cms.conf` to use main server IP:
+Edit `config/cms.toml` to point the core services at the main server IP
+(host entries below become `YOUR_SERVER_IP`; ports are the fixed RPC
+ports from Step 3):
 
-```json
-{
-    "core_services": {
-        "LogService":        [["YOUR_SERVER_IP", 22000]],
-        "ResourceService":   [["YOUR_SERVER_IP", 25000]],
-        "ScoringService":    [["YOUR_SERVER_IP", 28000]],
-        "Checker":           [["YOUR_SERVER_IP", 28500]],
-        "EvaluationService": [["YOUR_SERVER_IP", 28600]],
-        "Worker":            [],
-        "ProxyService":      [["YOUR_SERVER_IP", 29000]]
-    }
-}
+```toml
+[core_services]
+LogService        = [["YOUR_SERVER_IP", 29000]]
+ResourceService   = [["YOUR_SERVER_IP", 28000]]
+ScoringService    = [["YOUR_SERVER_IP", 28500]]
+Checker           = [["YOUR_SERVER_IP", 22000]]
+EvaluationService = [["YOUR_SERVER_IP", 25000]]
+Worker            = []
+ProxyService      = [["YOUR_SERVER_IP", 28600]]
 ```
 
 ### Step 6: Pull Docker Image
@@ -539,12 +535,10 @@ WORKER_MEMORY=8g
 
 ### Connection Timeout
 
-**Increase timeout in cms.conf:**
-```json
-{
-    "timeout": 30
-}
-```
+Connection behavior follows the core services config — inspect and edit
+`config.toml` with `./cms config edit`, then `./cms config sync` and
+restart the affected stack. Worker-side resource tuning uses
+`WORKER_CPUS` / `WORKER_MEMORY` (above).
 
 ---
 
