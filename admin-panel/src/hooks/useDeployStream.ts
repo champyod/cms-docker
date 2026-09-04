@@ -72,8 +72,8 @@ export function useDeployStream(
           stopStreaming();
           dismissProgressToast();
           if (!mountedRef.current) return;
-          setState({ phase: 'timeout', contestId, operationId, status: 'timeout', error: 'Deploy timed out after 60 seconds without log output.', log: '', percent: null, startedAt: null });
-          toast.error('Deploy timed out', { description: 'No log output for 60 seconds.' });
+          setState({ phase: 'timeout', contestId, operationId, status: 'timeout', error: 'Deploy timed out after 5 minutes without log output.', log: '', percent: null, startedAt: null });
+          toast.error('Deploy timed out', { description: 'No log output for 5 minutes.' });
         }
       }, DEPLOY_POLL_MS);
 

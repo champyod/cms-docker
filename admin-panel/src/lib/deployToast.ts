@@ -31,6 +31,6 @@ export function createDeployToast(): {
 export function showDeployResult(status: string, contestId: number, error?: string): void {
   if (status === 'completed') toast.success('Contest deployed', { description: `Contest #${contestId} is now active.` });
   else if (status === 'failed') toast.error('Deploy failed', { description: error || 'Deployment did not complete.' });
-  else if (status === 'timeout') toast.error('Deploy timed out', { description: error || 'No output for 60 seconds.' });
+  else if (status === 'timeout') toast.error('Deploy timed out', { description: error || 'No output for 5 minutes.' });
   else if (status === 'not_found') toast.error('Deploy not found', { description: error || 'Operation unknown.' });
 }
