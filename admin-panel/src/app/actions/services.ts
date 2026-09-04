@@ -101,31 +101,6 @@ export async function restartServices(type: 'all' | 'core' | 'admin' | 'worker' 
   }
 }
 
-/** @deprecated Use deployContest() instead for async, non-blocking deploys. */
-export async function saveAndRestartContest(contestId: number) {
-  await ensurePermission('all');
-  try {
-    const rootDir = getRepoRoot();
-    const { writeActiveContestId } = await import('./env');
-    const result = await writeActiveContestId(contestId);
-    if (!result.success) return { success: false, error: 'Failed to update contest env file' };
-
-    const cmd = `docker compose -f docker-compose.contest.yml up -d --build --force-recreate`;
-
-    await logToDiscord('Contest Restart', `Admin activated contest ID **${contestId}** and restarted contest stack.`, 16753920, true);
-
-    const { stdout, stderr } = await execPromise(cmd, { cwd: rootDir, timeout: 120000 });
-
-    if (stderr && stderr.includes('error')) {
-      return { success: false, error: stderr };
-    }
-
-    return { success: true, message: `Contest ${contestId} activated and stack restarted.`, output: stdout };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
-  }
-}
-
 export async function deployContest(contestId: number): Promise<DeployContestResult> {
   await ensurePermission('all');
   return runDeployContest(contestId);

@@ -3,6 +3,7 @@
 # This file is gitignored. Only config.toml.example is tracked.
 
 [core]
+COMPOSE_PROJECT_NAME = "cms-docker" # str; docker compose project name; must match existing container project
 ACCESS_METHOD = "public_port"    # str; "public_port" or "domain"; see .env.core.example for details
 PUBLIC_IP = "0.0.0.0"           # str; your VPS public IP; live_ip auto-detects
 TAILSCALE_IP = ""               # str; Tailscale IP for RPC; empty=127.0.0.1 only
