@@ -4,7 +4,7 @@ All four are **available but disabled by default** (`=0`), asked in `scripts/__d
 
 | # | Feature | Env flag (default) | Enable via | Compose profile |
 |---|---------|--------------------|------------|-----------------|
-| 1 | HSM | `HSM_ENABLED=0` | `HSM_ENABLED=1 ./scripts/__domain.sh setup --apply` — prompts for `HSM_MODULE`/`HSM_PIN`/`HSM_KEY_LABEL` | `hsm` — `docker compose -f docker-compose.domain.yml --profile hsm up -d` (or `--profile hsm` via main) |
+| 1 | HSM | `HSM_ENABLED=0` | `HSM_ENABLED=1 ./scripts/__domain.sh setup --apply` — prompts for `HSM_MODULE`/`HSM_PIN`/`HSM_KEY_LABEL` | `hsm` — `docker compose -f docker-compose.domain.yml --profile hsm up -d` |
 | 2 | Vault | `VAULT_ENABLED=0` | `VAULT_ENABLED=1` with `VAULT_ADDR`/`VAULT_TOKEN`/`VAULT_PATH` | `vault` — `docker compose -f docker-compose.vault.yml --profile vault up -d` |
 | 3 | DNSSEC + CAA | `DNSSEC_ENABLED=0`, `CAA_ENABLED=0` | `DNSSEC_ENABLED=1` / `CAA_ENABLED=1` (`CAA_ISSUER=letsencrypt.org`) | none — DNS only (see `docs/dnssec-caa-guide.md`) |
 | 4 | mTLS workers | `MTLS_WORKERS_ENABLED=0` | `MTLS_WORKERS_ENABLED=1` with `MTLS_CA_CERT` etc. | worker service env `MTLS_*` — no extra profile; volumes documented in `docker-compose.yml` |
@@ -15,7 +15,7 @@ Local real secrets/artefacts are **gitignored**: `.env.local`, `.env.*.local`, `
 
 ## 1. HSM — Hardware Security Module for TLS key
 
-- **Why / where:** `docs/infra-glossary-complete.html` infra glossary already covers upgrade suggestion; practical use is `certbot --hsm` with PKCS#11 URI so grader private key never lives on disk.
+- **Why / where:** practical use is `certbot --hsm` with PKCS#11 URI so grader private key never lives on disk.
 - **Price:** `$0` SoftHSM (software emulation, dev) | ~`$800` YubiHSM 2 (USB HSM) | ~`$30/mo` AWS CloudHSM (managed).
 - **Pros:** key never on disk, survives disk leak; PKCS#11 `pkcs11:token=grader;object=grader-privkey` flow.
 - **Cons:** renewal switches from file to PKCS#11 URI; PIN rotation; backup ceremony.
