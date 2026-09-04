@@ -80,8 +80,8 @@ To make your contest live:
 Create multiple contests at once:
 
 ```bash
-# Create a contest definition file
-./scripts/__create_contests.sh --batch contests.yaml
+# Create contests from a definition file
+./scripts/__create_contests.sh -f contests.yaml
 ```
 
 See "Batch Contest Creation" section below for details.
@@ -162,14 +162,9 @@ int main() {
 }
 ```
 
-### Import Task Using Script
+### Import Task
 
-```bash
-# Use the import script
-./scripts/import-task.sh hello_world "Practice Contest 2024"
-```
-
-Or manually through Admin Panel:
+Use the Admin Panel:
 1. Go to Admin Panel → Tasks → Add Task
 2. Fill in task details
 3. Upload test cases
@@ -184,17 +179,7 @@ Or manually through Admin Panel:
 2. Fill in username and password
 3. Add to contest
 
-**Via Batch Script:**
-```bash
-./scripts/create-users.sh --batch users.csv
-```
-
-`users.csv`:
-```csv
-username,password,first_name,last_name,email
-alice,alice123,Alice,Smith,alice@example.com
-bob,bob123,Bob,Jones,bob@example.com
-```
+Repeat per participant, or import users in bulk from the Admin Panel.
 
 ## Step 7: Test the Contest
 
@@ -262,19 +247,23 @@ make core-img admin-img contest-img worker-img
 
 ### Add More Workers
 
+Workers are managed from the Admin Panel (Infrastructure → Resources)
+or the fleet TUI — never by hand-editing `.env.*` (generated files):
+
 ```bash
-# Edit .env.core
-nano .env.core
+# Interactive fleet editor: add worker entries (hostname:port)
+./cms worker edit
 
-# Add workers
-WORKER_1=cms-worker-1:26001
-WORKER_2=192.168.1.50:26000
-
-# Regenerate configuration
-make env
-
-# Restart core services
+# Regenerate .env.* and restart core
+./cms config sync
 make core-img
+```
+
+On each worker host, connect it to this server:
+
+```bash
+./cms worker server     # pick the main server
+./cms worker deploy     # deploy the local shard
 ```
 
 ### Backup Database
@@ -291,9 +280,13 @@ cat backup.sql | docker exec -i cms-database psql -U cmsuser cmsdb
 
 ### Scale Workers
 
+Each worker shard is its own deployment (`WORKER_SHARD` unique per
+instance — the compose service pins `container_name: cms-worker-$WORKER_SHARD`,
+so `--scale` cannot multiply it). Add shards via the fleet:
+
 ```bash
-# Add more worker containers
-docker compose -f docker-compose.worker.yml up -d --scale worker=3
+./cms worker edit       # add shard entries
+./cms worker deploy     # deploy all/some shards
 ```
 
 ## Troubleshooting
@@ -340,7 +333,7 @@ docker compose -f docker-compose.worker.yml up -d --scale worker=3
    ```bash
    docker ps | grep database
    ```
-2. Verify password in `.env.core` matches database
+2. Verify password in `config.toml` (`POSTGRES_PASSWORD`) matches the database
 3. If needed, reset database:
    ```bash
    make db-clean
@@ -353,13 +346,13 @@ docker compose -f docker-compose.worker.yml up -d --scale worker=3
 **Problem:** "port is already allocated"
 
 **Solution:**
-1. Edit `.env.core` to change ports:
+1. Edit `config.toml` to change ports:
    ```ini
    POSTGRES_PORT_EXTERNAL=5433  # Instead of 5432
    ```
 2. Regenerate and restart:
    ```bash
-   make env
+   ./cms config sync
    make core-img
    ```
 
@@ -373,7 +366,7 @@ docker compose -f docker-compose.worker.yml up -d --scale worker=3
 
 ```bash
 # Daily Operations
-make env              # Regenerate configuration
+./cms config sync     # Regenerate configuration from config.toml
 make core-img         # Start/restart core services
 make admin-img        # Start/restart admin panel
 make contest-img      # Start/restart contest interface
