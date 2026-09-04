@@ -78,6 +78,19 @@ export async function getContainerLogs(id: string, tail: number = 100) {
   }
 }
 
+const CONTEST_WEB_SERVER_CONTAINER = 'cms-contest-web-server';
+
+export async function getContainerContestId(): Promise<{ success: true; contestId: number | null } | { success: false; error: string }> {
+  await ensurePermission('all');
+  try {
+    const { stdout } = await execPromise(`docker inspect ${CONTEST_WEB_SERVER_CONTAINER} --format '{{range .Config.Env}}{{println .}}{{end}}'`);
+    const match = stdout.match(/^CONTEST_ID=(\d+)$/m);
+    return { success: true, contestId: match ? parseInt(match[1], 10) : null };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+}
+
 export async function runCompose(action: 'up' | 'down' | 'restart' | 'build', serviceType?: 'core' | 'admin' | 'contest' | 'worker') {
   await ensurePermission('all');
   try {

@@ -3,8 +3,7 @@
 import { useState, useEffect } from 'react';
 import { readEnvFile, updateEnvFile } from '@/app/actions/env';
 import { getAvailableContests } from '@/app/actions/contests';
-import { getWorkers, updateWorkers } from '@/app/actions/workerConfig';
-import { getWorkersLiveStatus, WorkerLiveDetail } from '@/app/actions/workers';
+import { getContainerContestId } from '@/app/actions/docker';
 import { useDeployContest } from '@/hooks/useDeployContest';
 import { PageContent, PageHeader, Stack } from '@/components/core/Layout';
 import { Loading } from '@/components/core/Loading';
@@ -12,7 +11,8 @@ import { useToast } from '@/components/providers/ToastProvider';
 import { MismatchBanner } from '@/components/deployments/MismatchBanner';
 import { ActiveContestCard, ContestOption } from '@/components/deployments/ActiveContestCard';
 import { ContestSettingsForm } from '@/components/deployments/ContestSettingsForm';
-import { WorkersPanel, WorkerConfig } from '@/components/deployments/WorkersPanel';
+import { WorkersPanel } from '@/components/deployments/WorkersPanel';
+import { useDeployWorkers } from '@/components/deployments/useDeployWorkers';
 
 export function DeploymentsClient() {
     const { addToast } = useToast();
@@ -23,17 +23,24 @@ export function DeploymentsClient() {
     const [activeContestId, setActiveContestId] = useState<number | null>(null);
     const [activeContestName, setActiveContestName] = useState<string | null>(null);
     const [dbActiveContestId, setDbActiveContestId] = useState<number | null>(null);
+    const [containerContestId, setContainerContestId] = useState<number | null>(null);
     const [selectedContestId, setSelectedContestId] = useState<number | null>(null);
     const [globalSettings, setGlobalSettings] = useState<Record<string, string>>({});
     const [originalGlobal, setOriginalGlobal] = useState<string>('{}');
-    const [workers, setWorkers] = useState<WorkerConfig[]>([]);
-    const [originalWorkers, setOriginalWorkers] = useState<string>('[]');
-    const [liveWorkers, setLiveWorkers] = useState<WorkerLiveDetail[]>([]);
-    const [workersForbidden, setWorkersForbidden] = useState(false);
-    const [canManageWorkers, setCanManageWorkers] = useState(true);
+
+    const {
+        workers,
+        workersDirty,
+        liveWorkers,
+        workersForbidden,
+        canManageWorkers,
+        handleSaveWorkers,
+        addGlobalWorker,
+        removeGlobalWorker,
+        updateGlobalWorker,
+    } = useDeployWorkers(setSaving);
 
     const isDirty = JSON.stringify(globalSettings) !== originalGlobal;
-    const workersDirty = JSON.stringify(workers) !== originalWorkers;
     const hasChangedContest = selectedContestId !== null && selectedContestId !== activeContestId;
 
     const applyEnvSnapshot = (envResult: Awaited<ReturnType<typeof readEnvFile>>) => {
@@ -55,14 +62,14 @@ export function DeploymentsClient() {
 
     const loadData = async () => {
         setLoading(true);
-        const [envResult, contestsResult, workersResult, statusResult] = await Promise.all([
+        const [envResult, contestsResult, containerResult] = await Promise.all([
             readEnvFile('.env.contest'),
             getAvailableContests(),
-            getWorkers(),
-            getWorkersLiveStatus()
+            getContainerContestId()
         ]);
 
         const actualActiveId = applyEnvSnapshot(envResult);
+        setContainerContestId(containerResult.success ? containerResult.contestId : null);
 
         const databaseContests = contestsResult.success ? contestsResult.contests : [];
         setAvailableContests(databaseContests);
@@ -78,33 +85,10 @@ export function DeploymentsClient() {
             if (match) setActiveContestName(match.name);
         }
 
-        const normalizedWorkers = Array.isArray(workersResult) ? workersResult : [];
-        setWorkers(normalizedWorkers);
-        setOriginalWorkers(JSON.stringify(normalizedWorkers));
-
-        if (statusResult && !statusResult.forbidden) {
-            setLiveWorkers(statusResult.workers ?? []);
-            setCanManageWorkers(statusResult.canManage);
-            setWorkersForbidden(false);
-        } else {
-            setWorkersForbidden(true);
-        }
-
         setLoading(false);
     };
 
     useEffect(() => { loadData(); }, []);
-
-    // Poll worker telemetry so activity/lagging stay fresh.
-    useEffect(() => {
-        const id = setInterval(async () => {
-            try {
-                const res = await getWorkersLiveStatus();
-                if (!res.forbidden) setLiveWorkers(res.workers ?? []);
-            } catch { /* keep last snapshot */ }
-        }, 20_000);
-        return () => clearInterval(id);
-    }, []);
 
     const handleActivateAndRestart = () => {
         if (!selectedContestId || !hasChangedContest) return;
@@ -122,6 +106,9 @@ export function DeploymentsClient() {
                 if (match) setActiveContestName(match.name);
             }
             // Toast is handled inside useDeployContest via EventSource progress and completion
+            getContainerContestId().then((res) => {
+                if (res.success) setContainerContestId(res.contestId);
+            }).catch(() => {});
             resetDeploy();
         } else if (deployState.phase === 'failed' || deployState.phase === 'timeout') {
             setSaving(false);
@@ -152,41 +139,13 @@ export function DeploymentsClient() {
         }
     };
 
-    const handleSaveWorkers = async () => {
-        setSaving(true);
-        try {
-            const result = await updateWorkers(workers);
-            if (!result.success) {
-                addToast({ type: 'error', title: 'Worker Sync Failed', message: result.error || 'Could not sync worker config' });
-                setSaving(false);
-                return;
-            }
-            setOriginalWorkers(JSON.stringify(workers));
-            addToast({ type: 'success', title: 'Workers Synced', message: 'Worker configuration updated.' });
-        } catch (error) {
-            addToast({ type: 'error', title: 'Unexpected Error', message: (error as Error).message });
-        } finally {
-            setSaving(false);
-        }
-    };
-
     const handleGlobalChange = (key: string, val: string) => {
         setGlobalSettings(prev => ({ ...prev, [key]: val }));
     };
 
-    const addGlobalWorker = () => setWorkers([...workers, { host: '', port: 26000 }]);
-    const removeGlobalWorker = (index: number) => setWorkers(workers.filter((_, i) => i !== index));
-    const updateGlobalWorker = (index: number, field: 'host' | 'port', value: string) => {
-        const newWorkers = [...workers];
-        if (field === 'port') {
-            newWorkers[index].port = parseInt(value) || 26000;
-        } else {
-            newWorkers[index].host = value;
-        }
-        setWorkers(newWorkers);
-    };
-
-    const hasMismatch = !deployState.phase.startsWith('deploy') && !deployState.phase.startsWith('poll') && activeContestId !== null && dbActiveContestId !== null && activeContestId !== dbActiveContestId;
+    const hasMismatch = !deployState.phase.startsWith('deploy') && !deployState.phase.startsWith('poll') && activeContestId !== null && dbActiveContestId !== null
+        && (activeContestId !== dbActiveContestId
+            || (containerContestId !== null && (activeContestId !== containerContestId || dbActiveContestId !== containerContestId)));
 
     if (loading) return <Loading text="Loading contest deployment..." fullScreen />;
 
@@ -202,6 +161,7 @@ export function DeploymentsClient() {
                     activeContestId={activeContestId}
                     activeContestName={activeContestName}
                     dbActiveContestId={dbActiveContestId}
+                    containerContestId={containerContestId}
                 />
             )}
 
