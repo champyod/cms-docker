@@ -56,7 +56,7 @@ No vendor, no subscription.
 
 ## 6. Maintenance
 
-- **Weekly**: `docker compose --profile waf logs grader-waf | grep ModSecurity` — scan for new FP spikes.
+- **Weekly**: `docker compose -f docker-compose.domain.yml -f docker-compose.waf.yml --profile waf logs grader-waf | grep ModSecurity` — scan for new FP spikes.
 - **Rule update**: bump `owasp/modsecurity-crs:nginx-alpine` tag monthly; re-run DetectionOnly for 24 h after upgrade.
 - **Threshold**: if FPs cluster just above 5, raise `WAF_ANOMALY_INBOUND=8` for that deployment, or whitelist per-location (section 8).
 - **Log rotation**: `waf-logs` is a Docker volume; cap with `docker system prune` or add a logrotate sidecar if needed.
@@ -164,7 +164,7 @@ WAF_RULE_ENGINE=On docker compose --profile waf -f docker-compose.domain.yml -f 
 
 # Option B: edit config/modsecurity/modsecurity.conf → SecRuleEngine On
 # then:
-docker compose --profile waf restart grader-waf
+docker compose -f docker-compose.domain.yml -f docker-compose.waf.yml --profile waf restart grader-waf
 ```
 
 Monitor `modsec_audit.log` for blocked legitimate traffic; if any, revert to DetectionOnly, add exclusion, re-enable.
