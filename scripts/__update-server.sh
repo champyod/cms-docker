@@ -147,7 +147,7 @@ update_worker_shards() {
             if [ -f "$env_file" ]; then
                 log "Restarting shard $idx..."
                 if [ "$mode" = "img" ]; then
-                    docker compose --env-file "$env_file" -p "cms-worker-$idx" -f docker-compose.worker.yml -f docker-compose.worker.img.yml up -d --no-build
+                    docker compose --env-file "$env_file" -p "cms-worker-$idx" -f docker-compose.worker.yml up -d --no-build
                 else
                     log "Restarting shard $idx (source build)..."
                     docker compose --env-file "$env_file" -p "cms-worker-$idx" -f docker-compose.worker.yml up -d --build
@@ -274,8 +274,8 @@ Manual rollback steps:
        git checkout <git_head value from the record>
   3. Restore previous images using the recorded repo_digests, e.g.:
        docker pull ghcr.io/<owner>/<image>@<old repo_digest>
-     then pin that digest in the matching docker-compose.*.img.yml
-     "image:" entries (or check out the old commit and rebuild).
+     then pin that digest via IMG_TAG in .env / the shard env file
+     (or check out the old commit and rebuild).
   4. Bring stacks back up for every detected stack:
        make core-img infra-img admin-img contest-img worker-img
   5. Re-run ./cms update-server once the cause is fixed.
