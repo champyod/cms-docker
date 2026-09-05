@@ -4,7 +4,7 @@
 # Scans .env files for weak/default secrets, generates new credentials,
 # and applies them with stack restarts. Never rotates without explicit --apply.
 #
-# Alternative: HashiCorp Vault (optional, VAULT_ENABLED=0) — see .env.infra.example VAULT_*
+# Alternative: HashiCorp Vault (optional, VAULT_ENABLED=0) — see config.toml.example [infra] VAULT_*
 #   Vault provides auto-rotation + audit via hashicorp/vault:1.15 (--profile vault)
 #   This script works without Vault; Vault is opt-in, disabled by default, local overrides gitignored via .env.local
 #

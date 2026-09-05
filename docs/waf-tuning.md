@@ -103,10 +103,11 @@ WAF and CAPTCHA are **independent layers**:
 `config/modsecurity/modsecurity.conf` already sets `SecRuleEngine DetectionOnly`. Start WAF:
 
 ```bash
-cp .env.infra.example .env.infra   # ensure WAF_ENABLED=0 initially
+./cms config sync   # ensure WAF_ENABLED=0 initially (config.toml [infra])
 # when ready to observe:
 WAF_ENABLED=1 WAF_PORT=8080 docker compose -f docker-compose.domain.yml -f docker-compose.waf.yml --profile waf up -d
-# or: echo WAF_ENABLED=1 >> .env.infra && docker compose --profile waf -f docker-compose.yml -f docker-compose.domain.yml -f docker-compose.waf.yml up -d
+# or: set WAF_ENABLED=1 in config.toml [infra], ./cms config sync, then:
+# docker compose --profile waf -f docker-compose.yml -f docker-compose.domain.yml -f docker-compose.waf.yml up -d
 ```
 
 Verify: `curl -i http://127.0.0.1:8080/` should return the grader page via WAF; `docker logs grader-waf` shows CRS init.

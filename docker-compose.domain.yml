@@ -68,7 +68,7 @@ services:
   # ── HSM (optional, profile: hsm) — SoftHSM for dev, YubiHSM for hardware ───
   # Disabled by default (HSM_ENABLED=0). Enable with: HSM_ENABLED=1 docker compose -f docker-compose.domain.yml --profile hsm up -d
   # Or: HSM_ENABLED=1 HSM_MODULE=softhsm ./cms domain setup --apply (certbot uses --hsm with PKCS#11 URI)
-  # SoftHSM token DB lives at config/hsm/tokens/* (+ *.db) — gitignored; see .env.infra.example HSM_*.
+  # SoftHSM token DB lives at config/hsm/tokens/* (+ *.db) — gitignored; see config.toml.example [infra] HSM_*.
   # YubiHSM needs host USB passthrough; replace image with yubico/yubihsm and mount /dev/bus/usb.
   # certbot HSM renewal example: certbot certonly --hsm --hsm-module /usr/lib/softhsm/libsofthsm2.so --hsm-pin "$HSM_PIN" -d "$DOMAIN_NAME"
   hsm:

@@ -64,7 +64,7 @@ Useful variants:
 make setup                   # same thing via Makefile (CMS_ARGS="--no-sample" make setup)
 ```
 
-Deployment mode is picked from `DEPLOYMENT_TYPE` in `.env.admin`
+Deployment mode is picked from `DEPLOYMENT_TYPE` in `config.toml` `[admin]`
 (`img` = pull pre-built images from GHCR, `src` = build locally).
 Override per-invocation with `DEPLOYMENT_TYPE_OVERRIDE=src ./cms`.
 
@@ -75,27 +75,28 @@ Override per-invocation with `DEPLOYMENT_TYPE_OVERRIDE=src ./cms`.
 Fastest production path — pulls versioned images from GHCR.
 
 ```bash
-cp .env.core.example .env.core      # then edit credentials!
-# ... optionally copy other .env.*.example files ...
-make env                            # merge envs, render configs, run preflight gate
+cp config.toml.example config.toml   # then edit credentials!
+./cms config sync                    # generate .env.*, render configs, run preflight gate
 
-make pull                           # fetch all stack images
-make core-img                       # database + RPC services (health-gated)
-make cms-init                       # create/patch DB schema
-make admin-create                   # interactive superadmin
-make prisma-sync                    # sync Admin Panel schema
+make pull                            # fetch all stack images
+make core-img                        # database + RPC services (health-gated)
+make cms-init                        # create/patch DB schema
+make admin-create                    # interactive superadmin
+make prisma-sync                     # sync Admin Panel schema
 make contest-img admin-img infra-img
-make worker-img                     # needs host cgroup prep (see Prerequisites)
+make worker-img                      # needs host cgroup prep (see Prerequisites)
 ```
+
+> **Upgrading from an `.env.*`-based setup?** `.env.*` files are now generated — `config sync` overwrites them from `config.toml`. Values that only lived in `.env.*` are not imported: set them in `config.toml` (or via `./cms update`) before your next `config sync`.
 
 ## 3. Manual: Build From Source
 
 Builds the CMS image locally from `src/` (all grading languages included).
-Set it once in `.env.admin` (`DEPLOYMENT_TYPE=src`) or per-command:
+Set it once in `config.toml` `[admin]` (`DEPLOYMENT_TYPE = "src"`) or per-command:
 
 ```bash
-cp .env.core.example .env.core      # then edit credentials!
-make env
+cp config.toml.example config.toml   # then edit credentials!
+./cms config sync
 
 DEPLOYMENT_TYPE=src make core       # builds + starts core stack
 make cms-init

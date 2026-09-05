@@ -234,12 +234,12 @@ _log_optional_features() {
   if [[ "${HSM_ENABLED:-0}" == "1" ]]; then
     log_info "HSM enabled (module=$HSM_MODULE label=$HSM_KEY_LABEL) — certbot will use --hsm with PKCS#11"
   else
-    log_info "HSM disabled (set HSM_ENABLED=1 to enable — see .env.infra.example HSM_*)"
+    log_info "HSM disabled (set HSM_ENABLED=1 in config.toml [infra] to enable)"
   fi
   if [[ "${VAULT_ENABLED:-0}" == "1" ]]; then
     log_info "Vault enabled (addr=$VAULT_ADDR path=$VAULT_PATH) — secrets via Vault"
   else
-    log_info "Vault disabled (set VAULT_ENABLED=1 to enable — see .env.infra.example VAULT_*; alternative: scripts/__secrets-rotate.sh)"
+    log_info "Vault disabled (set VAULT_ENABLED=1 in config.toml [infra] to enable; alternative: scripts/__secrets-rotate.sh)"
   fi
   if [[ "${DNSSEC_ENABLED:-0}" == "1" ]] || [[ "${CAA_ENABLED:-0}" == "1" ]]; then
     log_info "DNSSEC=${DNSSEC_ENABLED} CAA=${CAA_ENABLED} (issuer=$CAA_ISSUER) — see docs/dnssec-caa-guide.md"

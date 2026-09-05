@@ -112,7 +112,7 @@ bash -n scripts/__domain.sh && bash -n scripts/__secrets-rotate.sh
 docker compose config > /dev/null
 docker compose -f docker-compose.domain.yml config > /dev/null
 docker compose -f docker-compose.vault.yml --profile vault config | grep -q vault
-grep -q 'HSM_ENABLED=0' .env.infra.example && grep -q 'VAULT_ENABLED=0' .env.infra.example
-grep -q 'DNSSEC_ENABLED=0' .env.infra.example && grep -q 'MTLS_WORKERS_ENABLED=0' .env.infra.example
+grep -q 'HSM_ENABLED = 0' config.toml.example && grep -q 'VAULT_ENABLED = 0' config.toml.example
+grep -q 'DNSSEC_ENABLED = 0' config.toml.example && grep -q 'MTLS_WORKERS_ENABLED = 0' config.toml.example
 git check-ignore -q .env.local config/hsm/tokens/foo.db config/mtls/ca.pem.local && echo "gitignore ok"
 ```

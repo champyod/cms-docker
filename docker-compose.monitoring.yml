@@ -2,7 +2,7 @@
 # ADDITIVE: does not replace or modify cms-monitor (profile monitor). Optional.
 # Enabled via: docker compose --profile monitoring -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 #           or: docker compose -f docker-compose.domain.yml -f docker-compose.monitoring.yml --profile monitoring up -d
-# Also gated by MONITORING_ENABLED env (0=off default for prod, 1=on for dev) — documented in .env.infra.example.
+# Also gated by MONITORING_ENABLED env (0=off default for prod, 1=on for dev) — documented in config.toml.example [infra].
 # All host ports bound to 127.0.0.1 only. Disabled by default (profile required).
 # Scrapes: prometheus self, node-exporter, nginx stub_status (when MONITORING_ENABLED=1), cms-monitor placeholder
 

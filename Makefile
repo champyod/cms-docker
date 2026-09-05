@@ -326,7 +326,12 @@ lint:
 	fi
 	@if command -v docker >/dev/null 2>&1; then \
 		echo "→ compose config validation"; \
-		docker compose --env-file .env.core.example -f docker-compose.yml config -q && echo "compose config OK" || { echo "compose config FAILED" >&2; exit 1; }; \
+		bash scripts/__config_sync.sh --no-secrets >/dev/null 2>&1 || { echo "config sync failed — using dummy env vars" >&2; }; \
+		if [ -f .env.core ]; then \
+			docker compose --env-file .env.core -f docker-compose.yml config -q && echo "compose config OK" || { echo "compose config FAILED" >&2; exit 1; }; \
+		else \
+			POSTGRES_PASSWORD=x AUTH_SECRET=x SECRET_KEY=x CONTEST_ID=1 docker compose -f docker-compose.yml config -q && echo "compose config OK (dummy env)" || { echo "compose config FAILED" >&2; exit 1; }; \
+		fi; \
 	else \
 		echo "→ docker not found, skipping compose validation"; \
 	fi

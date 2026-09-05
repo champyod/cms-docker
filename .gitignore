@@ -23,8 +23,6 @@ config.toml
 # Environment Configuration
 .env
 .env.*
-!.env.*.example
-!.env.example
 
 # Local overrides — gitignored for inside info / prod stay-off
 .env.local
