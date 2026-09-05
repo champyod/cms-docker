@@ -48,6 +48,8 @@ print_error()   { echo -e "${RED}[✗]${NC} $1"; }
 print_step()    { echo -e "${CYAN}[STEP]${NC} $1"; }
 
 DRY_RUN=false
+CONFIG_TOML="config.toml"
+CONFIG_EXAMPLE="config.toml.example"
 ASSUME_YES=0
 MODE="walk"
 for arg in "$@"; do
@@ -62,34 +64,52 @@ for arg in "$@"; do
   esac
 done
 
-update_env_var() {
-    local file=$1
+# quote_toml_value <value> — bare for true/false/pure numbers, else double-quoted
+quote_toml_value() { case "$1" in true|false) echo "$1";; *[!0-9]*|"") echo "\"$1\"";; *) echo "$1";; esac; }
+
+# Rewrite KEY inside [section] of config.toml, preserving any trailing inline
+# comment. $1 is the section header as written in the file, e.g. "[core]".
+# Bare value for true/false/pure numbers, double-quoted otherwise. A missing
+# key is appended to its section; a missing section is appended at EOF.
+update_toml_var() {
+    local section=$1
     local key=$2
     local value=$3
+    local toml="$CONFIG_TOML"
 
-    if [ ! -f "$file" ]; then
-        echo "${key}=${value}" > "$file"
-        return
+    if [ ! -f "$toml" ]; then
+        cp "$CONFIG_EXAMPLE" "$toml"
     fi
 
-    if grep -q "^${key}=" "$file"; then
-        local escaped_val=$(echo "$value" | sed 's/[&/]/\\&/g')
-        sed -i "s|^${key}=.*|${key}=${escaped_val}|" "$file"
-    else
-        echo "${key}=${value}" >> "$file"
-    fi
-}
+    local line
+    line="${key} = $(quote_toml_value "$value")"
 
-write_or_print() {
-    local file="$1"
-    shift
-    if [ "$DRY_RUN" = "true" ]; then
-        echo "---- DRY-RUN: Would write $file ----"
-        cat -
-        echo "---- DRY-RUN: End $file ----"
-    else
-        cat - > "$file"
-    fi
+    local tmp
+    tmp=$(mktemp)
+    awk -v section="$section" -v k="$key" -v newline="$line" '
+        { line = $0; sub(/[ \t\r]+$/, "", line); if (line == section) { insec = 1; seen = 1; print; next } }
+        /^\[/ {
+            if (insec && !done) { print newline; done = 1 }
+            insec = 0; print; next
+        }
+        insec && !done {
+            p = $1; gsub(/[ \t]/, "", p)
+            if (p == k) {
+                comment = ""
+                idx = index($0, "#")
+                if (idx > 0) comment = " " substr($0, idx)
+                print newline comment
+                done = 1
+                next
+            }
+        }
+        { print }
+        END {
+            if (insec && !done) { print newline }
+            else if (!seen) { print ""; print section; print newline }
+        }
+    ' "$toml" > "$tmp"
+    mv "$tmp" "$toml"
 }
 
 run_or_print() {
@@ -157,14 +177,8 @@ configure_ranking_auth() {
     local existing_ranking_username
     local existing_ranking_password
 
-    existing_ranking_username=$(get_var .env.contest RANKING_USERNAME)
-    if [ -z "$existing_ranking_username" ]; then
-        existing_ranking_username=$(get_var .env.admin RANKING_USERNAME)
-    fi
-    existing_ranking_password=$(get_var .env.contest RANKING_PASSWORD)
-    if [ -z "$existing_ranking_password" ]; then
-        existing_ranking_password=$(get_var .env.admin RANKING_PASSWORD)
-    fi
+    existing_ranking_username=$(get_var "[admin]" RANKING_USERNAME)
+    existing_ranking_password=$(get_var "[admin]" RANKING_PASSWORD)
 
     if [ "$MODE" = "fix" ]; then
         if [ -n "$existing_ranking_username" ] && ! is_default_secret "$existing_ranking_password"; then
@@ -190,17 +204,17 @@ configure_ranking_auth() {
     fi
 
     if [ "$DRY_RUN" = "true" ]; then
-        echo "DRY-RUN: Would update .env.contest: RANKING_USERNAME=$RANKING_USERNAME_INPUT"
-        echo "DRY-RUN: Would update .env.contest: RANKING_PASSWORD=<hidden>"
+        echo "DRY-RUN: Would update config.toml [admin]: RANKING_USERNAME=$RANKING_USERNAME_INPUT"
+        echo "DRY-RUN: Would update config.toml [admin]: RANKING_PASSWORD=<hidden>"
         echo "DRY-RUN: Would run: make env"
         echo "DRY-RUN: Would run: ./scripts/__inject_config.sh"
         return
     fi
 
-    update_env_var .env.contest "RANKING_USERNAME" "$RANKING_USERNAME_INPUT"
-    update_env_var .env.contest "RANKING_PASSWORD" "$RANKING_PASSWORD_INPUT"
+    update_toml_var "[admin]" "RANKING_USERNAME" "$RANKING_USERNAME_INPUT"
+    update_toml_var "[admin]" "RANKING_PASSWORD" "$RANKING_PASSWORD_INPUT"
     propagate_generated
-    print_success "Ranking credentials updated in .env.contest, .env, config/cms.toml, and config/cms_ranking.toml"
+    print_success "Ranking credentials updated in config.toml [admin], .env, config/cms.toml, and config/cms_ranking.toml"
 }
 
 propagate_generated() {
@@ -214,33 +228,53 @@ propagate_generated() {
     fi
 }
 
-ensure_env_file() {
-    local file=$1
-    local example="${file}.example"
-    if [ ! -f "$file" ] && [ -f "$example" ]; then
+# Bootstrap config.toml from the tracked example. $1 (section) is accepted
+# for call-site compatibility and ignored — one config file, one bootstrap.
+ensure_config_toml() {
+    if [ ! -f "$CONFIG_TOML" ] && [ -f "$CONFIG_EXAMPLE" ]; then
         if [ "$DRY_RUN" = "true" ]; then
-            echo "DRY-RUN: Would template $file from $example"
+            echo "DRY-RUN: Would template $CONFIG_TOML from $CONFIG_EXAMPLE"
         else
-            cp "$example" "$file"
-            print_info "Templated $file from $example"
+            cp "$CONFIG_EXAMPLE" "$CONFIG_TOML"
+            print_info "Templated $CONFIG_TOML from $CONFIG_EXAMPLE"
         fi
     fi
 }
 
-get_var() {
-    local file=$1 key=$2
-    awk -F= -v k="$key" '$1==k { v=$0; sub(/^[^=]*=/, "", v); sub(/[[:space:]]*#.*$/, "", v); print v; exit }' "$file" 2>/dev/null | tr -d '\r' || true
+# read_toml_value <file> <section-header> <key> — prints the value
+# (comment stripped, trimmed, dequoted); empty output when absent.
+read_toml_value() {
+    local toml_file=$1 section=$2 key=$3
+    [ -f "$toml_file" ] || return 0
+    awk -F= -v section="$section" -v k="$key" '
+        { line = $0; sub(/[ \t\r]+$/, "", line); if (line == section) { insec = 1; next } }
+        /^\[/ { insec = 0 }
+        insec {
+            p = $1; gsub(/[ \t]/, "", p)
+            if (p == k) {
+                v = $0; sub(/^[^=]*=/, "", v)
+                sub(/[[:space:]]*#.*$/, "", v)
+                gsub(/^[ \t]+|[ \t\r]+$/, "", v)
+                gsub(/^"|"$/, "", v)
+                print v
+                exit
+            }
+        }
+    ' "$toml_file" 2>/dev/null | tr -d '\r' || true
 }
 
+# Read KEY from [section] in config.toml ($1 = section header, e.g. "[core]").
+get_var() {
+    read_toml_value "$CONFIG_TOML" "$1" "$2"
+}
+
+# Default for KEY from [section] in the tracked config.toml.example.
 get_default_for() {
-    local file=$1 key=$2
-    local ex="${file}.example"
-    [ -f "$ex" ] || return 0
-    awk -F= -v k="$key" '$1==k { v=$0; sub(/^[^=]*=/, "", v); sub(/[[:space:]]*#.*$/, "", v); gsub(/^[ \t]+|[ \t]+$/, "", v); print v; exit }' "$ex" 2>/dev/null | tr -d '\r' || true
+    read_toml_value "$CONFIG_EXAMPLE" "$1" "$2"
 }
 
 get_status() {
-    local file=$1 key=$2 current=$3 default_val=$4
+    local key=$1 current=$2 default_val=$3
     if [ -z "$current" ]; then echo "MISSING"; return; fi
     if is_default_secret "$current"; then echo "DEFAULT"; return; fi
     if [ -n "$default_val" ] && [ "$current" = "$default_val" ]; then echo "DEFAULT"; return; fi
@@ -251,42 +285,42 @@ get_status() {
 show_vars_table() {
     local use_tui=0
     if declare -F tui::tty_ok >/dev/null 2>&1 && tui::tty_ok 2>/dev/null; then use_tui=1; fi
-    local header="Var\tCurrent\tDefault\tStatus\tFile"
+    local header="Var\tCurrent\tDefault\tStatus\tSection"
     local rows=""
-    local spec section file key type required default_cur current defval status cur_disp def_disp
+    local spec group section key type required default_cur current defval status cur_disp def_disp
     for spec in "${VAR_SPECS[@]}"; do
-        IFS='|' read -r section file key type required default_cur <<<"$spec"
-        current=$(get_var "$file" "$key")
-        defval=$(get_default_for "$file" "$key")
+        IFS='|' read -r group section key type required default_cur <<<"$spec"
+        current=$(get_var "$section" "$key")
+        defval=$(get_default_for "$section" "$key")
         [ -z "$defval" ] && defval="$default_cur"
-        status=$(get_status "$file" "$key" "$current" "$defval")
+        status=$(get_status "$key" "$current" "$defval")
         cur_disp=$(mask_show "$key" "$current")
         def_disp=$(mask_show "$key" "$defval")
-        rows+="${key}\t${cur_disp}\t${def_disp}\t${status}\t${file}"$'\n'
+        rows+="${key}\t${cur_disp}\t${def_disp}\t${status}\t${section}"$'\n'
     done
     if [ "$use_tui" = "1" ]; then
         { echo -e "$header"; echo -e "$rows"; } | tui::table
     else
-        printf "%-28s %-22s %-22s %-10s %s\n" "Var" "Current" "Default" "Status" "File"
+        printf "%-28s %-22s %-22s %-10s %s\n" "Var" "Current" "Default" "Status" "Section"
         printf "%-28s %-22s %-22s %-10s %s\n" "----------------------------" "----------------------" "----------------------" "----------" "--------------"
-        while IFS=$'\t' read -r key cur def stat file; do
+        while IFS=$'\t' read -r key cur def stat section_disp; do
             [ -z "$key" ] && continue
-            printf "%-28s %-22s %-22s %-10s %s\n" "$key" "$cur" "$def" "$stat" "$file"
+            printf "%-28s %-22s %-22s %-10s %s\n" "$key" "$cur" "$def" "$stat" "$section_disp"
         done <<<"$(echo -e "$rows")"
     fi
 }
 
 ask_var() {
-    local file=$1 key=$2 type=$3 required=$4 default_spec=$5 fresh=$6
+    local section=$1 key=$2 type=$3 required=$4 default_spec=$5 fresh=$6
     local current default_val status cur_disp def_disp
-    current=$(get_var "$file" "$key")
-    default_val=$(get_default_for "$file" "$key")
+    current=$(get_var "$section" "$key")
+    default_val=$(get_default_for "$section" "$key")
     [ -z "$default_val" ] && default_val="$default_spec"
-    status=$(get_status "$file" "$key" "$current" "$default_val")
+    status=$(get_status "$key" "$current" "$default_val")
     cur_disp=$(mask_show "$key" "$current")
     def_disp=$(mask_show "$key" "$default_val")
     if [ "$MODE" = "fix" ]; then
-        needs_fix "$file" "$key" "$type" "$required" || { echo "$current"; return; }
+        needs_fix "$section" "$key" "$type" "$required" || { echo "$current"; return; }
         local gen=$(generate_for "$key" "$default_spec")
         [ -z "$gen" ] && gen="$default_val"
         echo "$gen"
@@ -301,11 +335,11 @@ ask_var() {
     local use_tui=0
     if declare -F tui::tty_ok >/dev/null 2>&1 && tui::tty_ok 2>/dev/null; then use_tui=1; fi
     if [ "$use_tui" = "1" ]; then
-        tui::panel "$key" "Current: $cur_disp" "Default: $def_disp" "Status: $status" "File: $file"
+        tui::panel "$key" "Current: $cur_disp" "Default: $def_disp" "Status: $status" "Section: $section"
     else
         echo "  $key [current: $cur_disp] (default: $def_disp) Status: $status"
     fi
-    prompt_var "$file" "$key" "$type" "$required" "$default_spec" "$fresh"
+    prompt_var "$section" "$key" "$type" "$required" "$default_spec" "$fresh"
 }
 
 
@@ -327,8 +361,8 @@ select_services() {
 filter_specs() {
   ACTIVE_SPECS=()
   for spec in "${VAR_SPECS[@]}"; do
-    IFS='|' read -r section file key type required default <<<"$spec"
-    case "$section" in
+    IFS='|' read -r group section key type required default <<<"$spec"
+    case "$group" in
       "Core & Network") service="core" ;;
       "Admin Panel")    service="admin" ;;
       "Contest")        service="contest" ;;
@@ -349,22 +383,22 @@ run_tui_vars_wizard() {
     print_step "Interactive variable review — ${total} vars (j/k move, e edit, c keep, a apply all, q quit)"
     show_vars_table
     declare -A __pending
-    local spec section file key type required default
+    local spec group section key type required default
     for spec in "${ACTIVE_SPECS[@]}"; do
-        IFS='|' read -r section file key type required default <<<"$spec"
-        __pending["$key"]=$(get_var "$file" "$key")
+        IFS='|' read -r group section key type required default <<<"$spec"
+        __pending["$key"]=$(get_var "$section" "$key")
     done
     while true; do
         echo ""
         local options=()
         for spec in "${ACTIVE_SPECS[@]}"; do
-            IFS='|' read -r section file key type required default <<<"$spec"
-            local cur=$(get_var "$file" "$key")
-            local def=$(get_default_for "$file" "$key"); [ -z "$def" ] && def="$default"
-            local st=$(get_status "$file" "$key" "$cur" "$def")
+            IFS='|' read -r group section key type required default <<<"$spec"
+            local cur; cur=$(get_var "$section" "$key")
+            local def; def=$(get_default_for "$section" "$key"); [ -z "$def" ] && def="$default"
+            local st; st=$(get_status "$key" "$cur" "$def")
             local cur_d
             cur_d=$(mask_show "$key" "$cur")
-            options+=("${key} [${st}] ${cur_d} -> ${def} (${file})")
+            options+=("${key} [${st}] ${cur_d} -> ${def} (${section})")
         done
         options+=(">>> APPLY ALL CONFIRMED <<<" ">>> QUIT WITHOUT SAVING <<<")
         local choice
@@ -374,7 +408,7 @@ run_tui_vars_wizard() {
         fi
         case "$choice" in
             ">>> APPLY ALL CONFIRMED <<<")
-                if tui::confirm "Apply all confirmed values to .env.* files?"; then
+                if tui::confirm "Apply all confirmed values to config.toml?"; then
                     break
                 fi
                 ;;
@@ -387,39 +421,39 @@ run_tui_vars_wizard() {
                 local sel_key
                 sel_key=$(echo "$choice" | awk '{print $1}')
                 for spec in "${ACTIVE_SPECS[@]}"; do
-                    IFS='|' read -r section file key type required default <<<"$spec"
+                    IFS='|' read -r group section key type required default <<<"$spec"
                     if [ "$key" = "$sel_key" ]; then
-                        CURRENT_SECTION="$section"
-                        ensure_env_file "$file"
+                        CURRENT_GROUP="$group"
+                        ensure_config_toml "$section"
                         local act
-                        act=$(tui::choose "Action for $key ($file) — e edit / c keep / u default / q back" "e) edit value" "c) confirm keep" "u) update to default" "q) back") || break
+                        act=$(tui::choose "Action for $key ($section) — e edit / c keep / u default / q back" "e) edit value" "c) confirm keep" "u) update to default" "q) back") || break
                         case "$act" in
                             e* )
                                 local newval
-                                newval=$(prompt_var "$file" "$key" "$type" "$required" "$default" "$FRESH")
+                                newval=$(prompt_var "$section" "$key" "$type" "$required" "$default" "$FRESH")
                                 __pending["$key"]="$newval"
                                 local cur0
-                                cur0=$(get_var "$file" "$key")
+                                cur0=$(get_var "$section" "$key")
                                 if [ "$newval" = "$cur0" ] && [ "$FRESH" -eq 0 ]; then
-                                    record_stat "$section" kept
+                                    record_stat "$group" kept
                                 else
-                                    apply_var "$file" "$key" "$newval" changed
+                                    apply_var "$section" "$key" "$newval" changed
                                 fi
                                 ;;
                             c* )
-                                record_stat "$section" kept
+                                record_stat "$group" kept
                                 ;;
                             u* )
                                 local def2
-                                def2=$(get_default_for "$file" "$key"); [ -z "$def2" ] && def2="$default"
+                                def2=$(get_default_for "$section" "$key"); [ -z "$def2" ] && def2="$default"
                                 local gen
                                 gen=$(generate_for "$key" "$default"); [ -z "$gen" ] && gen="$def2"
                                 if [ -n "$gen" ]; then
                                     __pending["$key"]="$gen"
-                                    apply_var "$file" "$key" "$gen" changed
+                                    apply_var "$section" "$key" "$gen" changed
                                 else
                                     print_warning "No default/generator for $key — keeping current."
-                                    record_stat "$section" kept
+                                    record_stat "$group" kept
                                 fi
                                 ;;
                             *) : ;;
@@ -452,31 +486,31 @@ mask_show() {
 COUNT_CHANGED=0
 COUNT_KEPT=0
 COUNT_GENERATED=0
-SECTION_STATS=""
+GROUP_STATS=""
 
 record_stat() {
-    local section=$1 kind=$2
+    local group=$1 kind=$2
     case "$kind" in
         changed)   COUNT_CHANGED=$((COUNT_CHANGED+1)) ;;
         kept)      COUNT_KEPT=$((COUNT_KEPT+1)) ;;
         generated) COUNT_GENERATED=$((COUNT_GENERATED+1)) ;;
     esac
-    SECTION_STATS+="${section}|${kind}"$'\n'
+    GROUP_STATS+="${group}|${kind}"$'\n'
 }
 
 apply_var() {
-    local file=$1 key=$2 value=$3 kind=$4
+    local section=$1 key=$2 value=$3 kind=$4
     if [ "$DRY_RUN" = "true" ]; then
-        echo "DRY-RUN: Would update $file: $(is_secret_key "$key" && echo "${key}=<hidden>" || echo "${key}=${value}") [$kind]"
+        echo "DRY-RUN: Would update $section: $(is_secret_key "$key" && echo "${key}=<hidden>" || echo "${key}=${value}") [$kind]"
     else
-        update_env_var "$file" "$key" "$value"
+        update_toml_var "$section" "$key" "$value"
         if is_secret_key "$key"; then
             print_success "$key: <hidden> [$kind]"
         else
             print_success "$key: ${value} [$kind]"
         fi
     fi
-    record_stat "$CURRENT_SECTION" "$kind"
+    record_stat "$CURRENT_GROUP" "$kind"
 }
 
 generate_for() {
@@ -486,7 +520,7 @@ generate_for() {
         rand_pw)  gen_pw ;;
         live_ip)  gen_live_ip ;;
         docker_gid) gen_docker_gid ;;
-        mirror_public_ip) get_var .env.core PUBLIC_IP ;;
+        mirror_public_ip) get_var "[core]" PUBLIC_IP ;;
         *) echo "" ;;
     esac
 }
@@ -504,9 +538,9 @@ validate_value() {
 }
 
 prompt_var() {
-    local file=$1 key=$2 type=$3 required=$4 default=$5 fresh=$6
+    local section=$1 key=$2 type=$3 required=$4 default=$5 fresh=$6
     local current
-    current=$(get_var "$file" "$key")
+    current=$(get_var "$section" "$key")
     local label
     label=$(mask_show "$key" "$current")
     local ans chosen gen_out eof=0
@@ -562,154 +596,154 @@ prompt_var() {
 }
 
 walk_section() {
-    local title=$1 file=$2
-    CURRENT_SECTION="$title"
+    local group=$1 section=$2
+    CURRENT_GROUP="$group"
     echo ""
-    print_step "$title  ($file)"
-    ensure_env_file "$file"
+    print_step "$group  ($section)"
+    ensure_config_toml "$section"
 }
 
 VAR_SPECS=(
-  "Core & Network|.env.core|PUBLIC_IP|str||live_ip"
-  "Core & Network|.env.core|TAILSCALE_IP|str||"
-  "Core & Network|.env.core|REMOTE_WORKERS_ENABLED|bool||false"
-  "Core & Network|.env.core|POSTGRES_PORT_EXTERNAL|port||5432"
-  "Core & Network|.env.core|POSTGRES_PORT|port||5432"
-  "Core & Network|.env.core|POSTGRES_HOST|str||database"
-  "Core & Network|.env.core|POSTGRES_HOST_AUTH_METHOD|str||md5"
-  "Core & Network|.env.core|POSTGRES_DB|str||cmsdb"
-  "Core & Network|.env.core|POSTGRES_USER|str||cmsuser"
-  "Core & Network|.env.core|POSTGRES_PASSWORD|secret||rand_pw"
-  "Core & Network|.env.core|CMS_SECRET_KEY|secret||hex32"
-  "Core & Network|.env.core|CMS_DOMAIN|str||cms.local"
-  "Core & Network|.env.core|CMS_CONFIG|str||/usr/local/etc/cms.toml"
-  "Core & Network|.env.core|CMS_LOG_DIR|str||/var/local/log/cms"
-  "Core & Network|.env.core|CMS_CACHE_DIR|str||/var/local/cache/cms"
-  "Core & Network|.env.core|CMS_DATA_DIR|str||/var/local/lib/cms"
-  "Core & Network|.env.core|APT_MIRROR|str||archive.ubuntu.com"
-  "Core & Network|.env.core|IMG_TAG|str||major-admin-panel"
-  "Core & Network|.env.core|LOG_SERVICE_SHARD|num||0"
-  "Core & Network|.env.core|RESOURCE_SERVICE_SHARD|num||0"
-  "Core & Network|.env.core|SCORING_SERVICE_SHARD|num||0"
-  "Core & Network|.env.core|EVALUATION_SERVICE_SHARD|num||0"
-  "Core & Network|.env.core|PROXY_SERVICE_SHARD|num||0"
-  "Core & Network|.env.core|CHECKER_SERVICE_SHARD|num||0"
-  "Admin Panel|.env.admin|DEPLOYMENT_TYPE|enum:img,src||img"
-  "Admin Panel|.env.admin|ADMIN_NEXT_PORT_EXTERNAL|port||8891"
-  "Admin Panel|.env.admin|ADMIN_PORT_EXTERNAL|port||8889"
-  "Admin Panel|.env.admin|ADMIN_LISTEN_ADDRESS|str||0.0.0.0"
-  "Admin Panel|.env.admin|ADMIN_LISTEN_PORT|port||8889"
-  "Admin Panel|.env.admin|ADMIN_DOMAIN|str||admin.cms.local"
-  "Admin Panel|.env.admin|ADMIN_NEXT_DOMAIN|str||admin-next.cms.local"
-  "Admin Panel|.env.admin|RANKING_PORT_EXTERNAL|port||8890"
-  "Admin Panel|.env.admin|RANKING_LISTEN_ADDRESS|str||0.0.0.0"
-  "Admin Panel|.env.admin|RANKING_LISTEN_PORT|port||8890"
-  "Admin Panel|.env.admin|RANKING_DOMAIN|str||ranking.cms.local"
-  "Admin Panel|.env.admin|RANKING_USERNAME|str||admin"
-  "Admin Panel|.env.admin|RANKING_PASSWORD|secret||"
-  "Admin Panel|.env.admin|ADMIN_COOKIE_DURATION|num||36000"
-  "Admin Panel|.env.admin|AUTH_SECRET|secret||hex32"
-  "Admin Panel|.env.admin|SERVER_BASE_URL|url||http://localhost"
-  "Admin Panel|.env.admin|VITE_API_URL|url||http://localhost:8889"
-  "Admin Panel|.env.admin|CAPTCHA_ENABLED|enum:0,1||0"
-  "Admin Panel|.env.admin|PER_USER_LIMIT|num||1"
-  "Admin Panel|.env.admin|REDIS_HOST|str||redis-rate-limit"
-  "Admin Panel|.env.admin|REDIS_PORT|port||6379"
-  "Admin Panel|.env.admin|REDIS_RATE_LIMIT|num||0"
-  "Admin Panel|.env.admin|SOCKET_PROXY|enum:0,1||0"
-  "Admin Panel|.env.admin|MONITOR_ENHANCED|enum:0,1||0"
-  "Admin Panel|.env.admin|CMS_RANKING_LOG_DIR|str||/var/local/log/cms/ranking"
-  "Admin Panel|.env.admin|CMS_RANKING_LIB_DIR|str||/var/local/lib/cms/ranking"
-  "Contest|.env.contest|CONTEST_ID|num||1"
-  "Contest|.env.contest|CONTEST_DOMAIN|str||cms.local"
-  "Contest|.env.contest|CONTEST_LISTEN_PORT|port||8888"
-  "Contest|.env.contest|CONTEST_LISTEN_ADDRESS|str||0.0.0.0"
-  "Contest|.env.contest|ACTIVE_CONTEST_PORT|port||8888"
-  "Contest|.env.contest|SECRET_KEY|secret||hex32"
-  "Contest|.env.contest|COOKIE_DURATION|num||10800"
-  "Contest|.env.contest|ACCESS_METHOD|enum:public_port,domain||public_port"
-  "Contest|.env.contest|NUM_PROXIES_USED|num||1"
-  "Contest|.env.contest|MAX_SUBMISSION_LENGTH|num||100000"
-  "Contest|.env.contest|MAX_INPUT_LENGTH|num||5000000"
-  "Contest|.env.contest|SUBMIT_LOCAL_COPY|bool||true"
-  "Contest|.env.contest|CONTEST_WEB_CPU_LIMIT|str||2"
-  "Contest|.env.contest|CONTEST_WEB_MEMORY_LIMIT|str||2G"
-  "Contest|.env.contest|ENABLE_TLS|bool||false"
-  "Worker|.env.worker|CORE_SERVICES_HOST|str||mirror_public_ip"
-  "Worker|.env.worker|WORKER_SHARD|num||0"
-  "Worker|.env.worker|WORKER_NAME|str||worker-0"
-  "Worker|.env.worker|WORKER_PORT|port||26000"
-  "Worker|.env.worker|WORKER_REPLICAS|num||1"
-  "Worker|.env.worker|WORKER_CPU_LIMIT|str||2"
-  "Worker|.env.worker|WORKER_MEMORY_LIMIT|str||2G"
-  "Worker|.env.worker|WORKER_CPU_RESERVATION|str||1"
-  "Worker|.env.worker|WORKER_MEMORY_RESERVATION|str||1G"
-  "Worker|.env.worker|ISOLATE_CGROUP_CONTROL|enum:0,1||1"
-  "Worker|.env.worker|ISOLATE_CGROUP_PATH|str||/sys/fs/cgroup/cms-isolate"
-  "Worker|.env.worker|KEEP_SANDBOX|bool||false"
-  "Worker|.env.worker|MAX_FILE_SIZE|num||1048576"
-  "Infra & Monitoring|.env.infra|DISCORD_WEBHOOK_URL|url||"
-  "Infra & Monitoring|.env.infra|DISCORD_ROLE_ID|str||"
-  "Infra & Monitoring|.env.infra|MONITOR_CPU_THRESHOLD|num||80"
-  "Infra & Monitoring|.env.infra|MONITOR_MEM_THRESHOLD|num||80"
-  "Infra & Monitoring|.env.infra|MONITOR_DISK_THRESHOLD|num||80"
-  "Infra & Monitoring|.env.infra|MONITOR_INTERVAL|num||10"
-  "Infra & Monitoring|.env.infra|MONITOR_COOLDOWN|num||300"
-  "Infra & Monitoring|.env.infra|DOCKER_GID|num||docker_gid"
-  "Infra & Monitoring|.env.infra|DISK_PATH|str||/host"
-  "Infra & Monitoring|.env.infra|BACKUP_INTERVAL_MINS|num||1440"
-  "Infra & Monitoring|.env.infra|BACKUP_MAX_COUNT|num||50"
-  "Infra & Monitoring|.env.infra|BACKUP_MAX_AGE_DAYS|num||10"
-  "Infra & Monitoring|.env.infra|BACKUP_MAX_SIZE_GB|num||5"
-  "Infra & Monitoring|.env.infra|DOMAIN_NAME|str||cms.local"
-  "Infra & Monitoring|.env.infra|DOMAIN_CERT_METHOD|str||letsencrypt"
-  "Infra & Monitoring|.env.infra|HSTS_MAX_AGE|num||300"
-  "Infra & Monitoring|.env.infra|OFFSITE_TAILNET_NODE|str||"
-  "Infra & Monitoring|.env.infra|OFFSITE_ENCRYPT_KEY|secret||"
-  "Infra & Monitoring|.env.infra|OFFSITE_BACKUP_PATH|str||/var/local/backups/cms"
-  "Infra & Monitoring|.env.infra|SOCKET_PROXY|enum:0,1||0"
-  "Infra & Monitoring|.env.infra|MONITOR_ENHANCED|enum:0,1||0"
-  "Infra & Monitoring|.env.infra|REDIS_HOST|str||redis-rate-limit"
-  "Infra & Monitoring|.env.infra|REDIS_PORT|port||6379"
-  "Infra & Monitoring|.env.infra|REDIS_RATE_LIMIT|num||0"
-  "Infra & Monitoring|.env.infra|PER_USER_LIMIT|num||1"
-  "Infra & Monitoring|.env.infra|MONITORING_ENABLED|enum:0,1||0"
-  "Infra & Monitoring|.env.infra|PROMETHEUS_PORT|port||9090"
-  "Infra & Monitoring|.env.infra|PROMETHEUS_BIND_IP|str||127.0.0.1"
-  "Infra & Monitoring|.env.infra|GRAFANA_PORT|port||3001"
-  "Infra & Monitoring|.env.infra|GRAFANA_BIND_IP|str||127.0.0.1"
-  "Infra & Monitoring|.env.infra|GRAFANA_ADMIN_USER|str||admin"
-  "Infra & Monitoring|.env.infra|GRAFANA_PASSWORD|secret||admin"
-  "Infra & Monitoring|.env.infra|GRAFANA_ROOT_URL|url||http://localhost:3001/"
-  "Infra & Monitoring|.env.infra|TAILSCALE_IP|str||127.0.0.1"
-  "Infra & Monitoring|.env.infra|CAA_ENABLED|enum:0,1||0"
-  "Infra & Monitoring|.env.infra|CAA_ISSUER|str||letsencrypt.org"
-  "Infra & Monitoring|.env.infra|DNSSEC_ENABLED|enum:0,1||0"
-  "Infra & Monitoring|.env.infra|HSM_ENABLED|enum:0,1||0"
-  "Infra & Monitoring|.env.infra|HSM_KEY_LABEL|str||grader-privkey"
-  "Infra & Monitoring|.env.infra|HSM_MODULE|str||softhsm"
-  "Infra & Monitoring|.env.infra|HSM_PIN|secret||"
-  "Infra & Monitoring|.env.infra|MTLS_CA_CERT|str||config/mtls/ca.pem"
-  "Infra & Monitoring|.env.infra|MTLS_WORKER_CERT|str||config/mtls/worker.pem"
-  "Infra & Monitoring|.env.infra|MTLS_WORKER_KEY|str||config/mtls/worker-key.pem"
-  "Infra & Monitoring|.env.infra|MTLS_WORKERS_ENABLED|enum:0,1||0"
-  "Infra & Monitoring|.env.infra|VAULT_ADDR|url||http://vault:8200"
-  "Infra & Monitoring|.env.infra|VAULT_ENABLED|enum:0,1||0"
-  "Infra & Monitoring|.env.infra|VAULT_PATH|str||secret/cms"
-  "Infra & Monitoring|.env.infra|VAULT_TOKEN|secret||"
-  "Infra & Monitoring|.env.infra|WAF_ANOMALY_INBOUND|num||5"
-  "Infra & Monitoring|.env.infra|WAF_ANOMALY_OUTBOUND|num||4"
-  "Infra & Monitoring|.env.infra|WAF_BIND_IP|str||127.0.0.1"
-  "Infra & Monitoring|.env.infra|WAF_ENABLED|enum:0,1||0"
-  "Infra & Monitoring|.env.infra|WAF_PARANOIA|num||1"
-  "Infra & Monitoring|.env.infra|WAF_PORT|port||8080"
-  "Infra & Monitoring|.env.infra|WAF_RULE_ENGINE|str||DetectionOnly"
+  "Core & Network|[core]|PUBLIC_IP|str||live_ip"
+  "Core & Network|[core]|TAILSCALE_IP|str||"
+  "Core & Network|[core]|REMOTE_WORKERS_ENABLED|bool||false"
+  "Core & Network|[core]|POSTGRES_PORT_EXTERNAL|port||5432"
+  "Core & Network|[core]|POSTGRES_PORT|port||5432"
+  "Core & Network|[core]|POSTGRES_HOST|str||database"
+  "Core & Network|[core]|POSTGRES_HOST_AUTH_METHOD|str||md5"
+  "Core & Network|[core]|POSTGRES_DB|str||cmsdb"
+  "Core & Network|[core]|POSTGRES_USER|str||cmsuser"
+  "Core & Network|[core]|POSTGRES_PASSWORD|secret||rand_pw"
+  "Core & Network|[core]|CMS_SECRET_KEY|secret||hex32"
+  "Core & Network|[core]|CMS_DOMAIN|str||cms.local"
+  "Core & Network|[core]|CMS_CONFIG|str||/usr/local/etc/cms.toml"
+  "Core & Network|[core]|CMS_LOG_DIR|str||/var/local/log/cms"
+  "Core & Network|[core]|CMS_CACHE_DIR|str||/var/local/cache/cms"
+  "Core & Network|[core]|CMS_DATA_DIR|str||/var/local/lib/cms"
+  "Core & Network|[core]|APT_MIRROR|str||archive.ubuntu.com"
+  "Core & Network|[core]|IMG_TAG|str||major-admin-panel"
+  "Core & Network|[core]|LOG_SERVICE_SHARD|num||0"
+  "Core & Network|[core]|RESOURCE_SERVICE_SHARD|num||0"
+  "Core & Network|[core]|SCORING_SERVICE_SHARD|num||0"
+  "Core & Network|[core]|EVALUATION_SERVICE_SHARD|num||0"
+  "Core & Network|[core]|PROXY_SERVICE_SHARD|num||0"
+  "Core & Network|[core]|CHECKER_SERVICE_SHARD|num||0"
+  "Admin Panel|[admin]|DEPLOYMENT_TYPE|enum:img,src||img"
+  "Admin Panel|[admin]|ADMIN_NEXT_PORT_EXTERNAL|port||8891"
+  "Admin Panel|[admin]|ADMIN_PORT_EXTERNAL|port||8889"
+  "Admin Panel|[admin]|ADMIN_LISTEN_ADDRESS|str||0.0.0.0"
+  "Admin Panel|[admin]|ADMIN_LISTEN_PORT|port||8889"
+  "Admin Panel|[admin]|ADMIN_DOMAIN|str||admin.cms.local"
+  "Admin Panel|[admin]|ADMIN_NEXT_DOMAIN|str||admin-next.cms.local"
+  "Admin Panel|[admin]|RANKING_PORT_EXTERNAL|port||8890"
+  "Admin Panel|[admin]|RANKING_LISTEN_ADDRESS|str||0.0.0.0"
+  "Admin Panel|[admin]|RANKING_LISTEN_PORT|port||8890"
+  "Admin Panel|[admin]|RANKING_DOMAIN|str||ranking.cms.local"
+  "Admin Panel|[admin]|RANKING_USERNAME|str||admin"
+  "Admin Panel|[admin]|RANKING_PASSWORD|secret||"
+  "Admin Panel|[admin]|ADMIN_COOKIE_DURATION|num||36000"
+  "Admin Panel|[admin]|AUTH_SECRET|secret||hex32"
+  "Admin Panel|[admin]|SERVER_BASE_URL|url||http://localhost"
+  "Admin Panel|[admin]|VITE_API_URL|url||http://localhost:8889"
+  "Admin Panel|[admin]|CAPTCHA_ENABLED|enum:0,1||0"
+  "Admin Panel|[admin]|PER_USER_LIMIT|num||1"
+  "Admin Panel|[admin]|REDIS_HOST|str||redis-rate-limit"
+  "Admin Panel|[admin]|REDIS_PORT|port||6379"
+  "Admin Panel|[admin]|REDIS_RATE_LIMIT|num||0"
+  "Admin Panel|[admin]|SOCKET_PROXY|enum:0,1||0"
+  "Admin Panel|[admin]|MONITOR_ENHANCED|enum:0,1||0"
+  "Admin Panel|[admin]|CMS_RANKING_LOG_DIR|str||/var/local/log/cms/ranking"
+  "Admin Panel|[admin]|CMS_RANKING_LIB_DIR|str||/var/local/lib/cms/ranking"
+  "Contest|[contest]|CONTEST_ID|num||1"
+  "Contest|[contest]|CONTEST_DOMAIN|str||cms.local"
+  "Contest|[contest]|CONTEST_LISTEN_PORT|port||8888"
+  "Contest|[contest]|CONTEST_LISTEN_ADDRESS|str||0.0.0.0"
+  "Contest|[contest]|ACTIVE_CONTEST_PORT|port||8888"
+  "Contest|[contest]|SECRET_KEY|secret||hex32"
+  "Contest|[contest]|COOKIE_DURATION|num||10800"
+  "Contest|[contest]|ACCESS_METHOD|enum:public_port,domain||public_port"
+  "Contest|[contest]|NUM_PROXIES_USED|num||1"
+  "Contest|[contest]|MAX_SUBMISSION_LENGTH|num||100000"
+  "Contest|[contest]|MAX_INPUT_LENGTH|num||5000000"
+  "Contest|[contest]|SUBMIT_LOCAL_COPY|bool||true"
+  "Contest|[contest]|CONTEST_WEB_CPU_LIMIT|str||2"
+  "Contest|[contest]|CONTEST_WEB_MEMORY_LIMIT|str||2G"
+  "Contest|[contest]|ENABLE_TLS|bool||false"
+  "Worker|[worker]|CORE_SERVICES_HOST|str||mirror_public_ip"
+  "Worker|[worker]|WORKER_SHARD|num||0"
+  "Worker|[worker]|WORKER_NAME|str||worker-0"
+  "Worker|[worker]|WORKER_PORT|port||26000"
+  "Worker|[worker]|WORKER_REPLICAS|num||1"
+  "Worker|[worker]|WORKER_CPU_LIMIT|str||2"
+  "Worker|[worker]|WORKER_MEMORY_LIMIT|str||2G"
+  "Worker|[worker]|WORKER_CPU_RESERVATION|str||1"
+  "Worker|[worker]|WORKER_MEMORY_RESERVATION|str||1G"
+  "Worker|[worker]|ISOLATE_CGROUP_CONTROL|enum:0,1||1"
+  "Worker|[worker]|ISOLATE_CGROUP_PATH|str||/sys/fs/cgroup/cms-isolate"
+  "Worker|[worker]|KEEP_SANDBOX|bool||false"
+  "Worker|[worker]|MAX_FILE_SIZE|num||1048576"
+  "Infra & Monitoring|[infra]|DISCORD_WEBHOOK_URL|url||"
+  "Infra & Monitoring|[infra]|DISCORD_ROLE_ID|str||"
+  "Infra & Monitoring|[infra]|MONITOR_CPU_THRESHOLD|num||80"
+  "Infra & Monitoring|[infra]|MONITOR_MEM_THRESHOLD|num||80"
+  "Infra & Monitoring|[infra]|MONITOR_DISK_THRESHOLD|num||80"
+  "Infra & Monitoring|[infra]|MONITOR_INTERVAL|num||10"
+  "Infra & Monitoring|[infra]|MONITOR_COOLDOWN|num||300"
+  "Infra & Monitoring|[infra]|DOCKER_GID|num||docker_gid"
+  "Infra & Monitoring|[infra]|DISK_PATH|str||/host"
+  "Infra & Monitoring|[infra]|BACKUP_INTERVAL_MINS|num||1440"
+  "Infra & Monitoring|[infra]|BACKUP_MAX_COUNT|num||50"
+  "Infra & Monitoring|[infra]|BACKUP_MAX_AGE_DAYS|num||10"
+  "Infra & Monitoring|[infra]|BACKUP_MAX_SIZE_GB|num||5"
+  "Admin Panel|[admin]|DOMAIN_NAME|str||cms.local"
+  "Admin Panel|[admin]|DOMAIN_CERT_METHOD|str||letsencrypt"
+  "Admin Panel|[admin]|HSTS_MAX_AGE|num||300"
+  "Infra & Monitoring|[infra]|OFFSITE_TAILNET_NODE|str||"
+  "Infra & Monitoring|[infra]|OFFSITE_ENCRYPT_KEY|secret||"
+  "Infra & Monitoring|[infra]|OFFSITE_BACKUP_PATH|str||/var/local/backups/cms"
+  "Admin Panel|[admin]|SOCKET_PROXY|enum:0,1||0"
+  "Admin Panel|[admin]|MONITOR_ENHANCED|enum:0,1||0"
+  "Admin Panel|[admin]|REDIS_HOST|str||redis-rate-limit"
+  "Admin Panel|[admin]|REDIS_PORT|port||6379"
+  "Admin Panel|[admin]|REDIS_RATE_LIMIT|num||0"
+  "Admin Panel|[admin]|PER_USER_LIMIT|num||1"
+  "Infra & Monitoring|[infra]|MONITORING_ENABLED|enum:0,1||0"
+  "Infra & Monitoring|[infra]|PROMETHEUS_PORT|port||9090"
+  "Infra & Monitoring|[infra]|PROMETHEUS_BIND_IP|str||127.0.0.1"
+  "Infra & Monitoring|[infra]|GRAFANA_PORT|port||3001"
+  "Infra & Monitoring|[infra]|GRAFANA_BIND_IP|str||127.0.0.1"
+  "Infra & Monitoring|[infra]|GRAFANA_ADMIN_USER|str||admin"
+  "Infra & Monitoring|[infra]|GRAFANA_PASSWORD|secret||admin"
+  "Infra & Monitoring|[infra]|GRAFANA_ROOT_URL|url||http://localhost:3001/"
+  "Core & Network|[core]|TAILSCALE_IP|str||127.0.0.1"
+  "Infra & Monitoring|[infra]|CAA_ENABLED|enum:0,1||0"
+  "Infra & Monitoring|[infra]|CAA_ISSUER|str||letsencrypt.org"
+  "Infra & Monitoring|[infra]|DNSSEC_ENABLED|enum:0,1||0"
+  "Infra & Monitoring|[infra]|HSM_ENABLED|enum:0,1||0"
+  "Infra & Monitoring|[infra]|HSM_KEY_LABEL|str||grader-privkey"
+  "Infra & Monitoring|[infra]|HSM_MODULE|str||softhsm"
+  "Infra & Monitoring|[infra]|HSM_PIN|secret||"
+  "Core & Network|[core]|MTLS_CA_CERT|str||config/mtls/ca.pem"
+  "Core & Network|[core]|MTLS_WORKER_CERT|str||config/mtls/worker.pem"
+  "Core & Network|[core]|MTLS_WORKER_KEY|str||config/mtls/worker-key.pem"
+  "Infra & Monitoring|[infra]|MTLS_WORKERS_ENABLED|enum:0,1||0"
+  "Infra & Monitoring|[infra]|VAULT_ADDR|url||http://vault:8200"
+  "Infra & Monitoring|[infra]|VAULT_ENABLED|enum:0,1||0"
+  "Infra & Monitoring|[infra]|VAULT_PATH|str||secret/cms"
+  "Infra & Monitoring|[infra]|VAULT_TOKEN|secret||"
+  "Infra & Monitoring|[infra]|WAF_ANOMALY_INBOUND|num||5"
+  "Infra & Monitoring|[infra]|WAF_ANOMALY_OUTBOUND|num||4"
+  "Infra & Monitoring|[infra]|WAF_BIND_IP|str||127.0.0.1"
+  "Infra & Monitoring|[infra]|WAF_ENABLED|enum:0,1||0"
+  "Infra & Monitoring|[infra]|WAF_PARANOIA|num||1"
+  "Infra & Monitoring|[infra]|WAF_PORT|port||8080"
+  "Infra & Monitoring|[infra]|WAF_RULE_ENGINE|str||DetectionOnly"
 )
 
 needs_fix() {
-    local file=$1 key=$2 type=$3 required=$4
+    local section=$1 key=$2 type=$3 required=$4
     local current
-    current=$(get_var "$file" "$key")
+    current=$(get_var "$section" "$key")
     if [ -z "$current" ]; then
         [ "$required" = "R" ] && return 0
         return 1
@@ -721,32 +755,32 @@ needs_fix() {
 
 run_fix_mode() {
     print_step "Fix Mode (non-interactive)"
-    local unfixable=0 last_section=""
+    local unfixable=0 last_group=""
     for spec in "${VAR_SPECS[@]}"; do
-        IFS='|' read -r section file key type required default <<<"$spec"
-        if [[ "$section" != "$last_section" ]]; then
+        IFS='|' read -r group section key type required default <<<"$spec"
+        if [[ "$group" != "$last_group" ]]; then
             echo ""
-            print_step "$section  ($file)"
-            last_section="$section"
-            CURRENT_SECTION="$section"
+            print_step "$group  ($section)"
+            last_group="$group"
+            CURRENT_GROUP="$group"
         fi
-        needs_fix "$file" "$key" "$type" "$required" || { record_stat "$section" kept; continue; }
+        needs_fix "$section" "$key" "$type" "$required" || { record_stat "$group" kept; continue; }
         local newval
         newval=$(generate_for "$key" "$default")
         if [ -z "$newval" ]; then
             newval="$default"
         fi
         if [ -z "$newval" ]; then
-            print_error "$key ($file): unfixable — no generator and no default"
+            print_error "$key ($section): unfixable — no generator and no default"
             unfixable=1
             continue
         fi
         if ! validate_value "$type" "$newval"; then
-            print_error "$key ($file): generated value failed validation: $newval"
+            print_error "$key ($section): generated value failed validation: $newval"
             unfixable=1
             continue
         fi
-        apply_var "$file" "$key" "$newval" generated
+        apply_var "$section" "$key" "$newval" generated
     done
     if [ "$unfixable" -eq 0 ]; then
         configure_ranking_auth
@@ -762,20 +796,20 @@ print_summary() {
     printf '  %-14s %s\n' "kept:"      "$COUNT_KEPT"
     printf '  %-14s %s\n' "generated:" "$COUNT_GENERATED"
     echo "--------------------------------------------------"
-    local seen="" sec kinds
+    local seen="" group
     while IFS= read -r row; do
         [ -z "$row" ] && continue
-        sec="${row%%|*}"; kinds="${row#*|}"
-        if [[ ",$seen," != *",$sec,"* ]]; then
-            seen="${seen}${seen:+,}$sec"
+        group="${row%%|*}"
+        if [[ ",$seen," != *",$group,"* ]]; then
+            seen="${seen}${seen:+,}$group"
             local c=0 k=0 g=0 r
             while IFS= read -r r; do
-                [[ "${r%%|*}" == "$sec" ]] || continue
+                [[ "${r%%|*}" == "$group" ]] || continue
                 case "${r#*|}" in changed) c=$((c+1));; kept) k=$((k+1));; generated) g=$((g+1));; esac
-            done <<<"$SECTION_STATS"
-            printf '  %-24s changed:%-3s kept:%-3s generated:%-3s\n' "$sec" "$c" "$k" "$g"
+            done <<<"$GROUP_STATS"
+            printf '  %-24s changed:%-3s kept:%-3s generated:%-3s\n' "$group" "$c" "$k" "$g"
         fi
-    done <<<"$SECTION_STATS"
+    done <<<"$GROUP_STATS"
     echo "=================================================="
 }
 
@@ -818,20 +852,20 @@ else
         print_info "You will be asked per-var: [e]dit / [k]eep / [c]onfirm — bulk 'a' not yet, answer each."
         echo ""
     fi
-    LAST_SECTION=""
+    LAST_GROUP=""
     for spec in "${VAR_SPECS[@]}"; do
-        IFS='|' read -r section file key type required default <<<"$spec"
-        if [[ "$section" != "$LAST_SECTION" ]]; then
-            walk_section "$section" "$file"
-            LAST_SECTION="$section"
+        IFS='|' read -r group section key type required default <<<"$spec"
+        if [[ "$group" != "$LAST_GROUP" ]]; then
+            walk_section "$group" "$section"
+            LAST_GROUP="$group"
         fi
-        newval=$(ask_var "$file" "$key" "$type" "$required" "$default" "$FRESH")
-        cur_val=$(get_var "$file" "$key")
+        newval=$(ask_var "$section" "$key" "$type" "$required" "$default" "$FRESH")
+        cur_val=$(get_var "$section" "$key")
         if [ "$newval" = "$cur_val" ] && [ "$FRESH" -eq 0 ]; then
-            record_stat "$section" kept
+            record_stat "$group" kept
             continue
         fi
-        apply_var "$file" "$key" "$newval" changed
+        apply_var "$section" "$key" "$newval" changed
     done
 fi
 
