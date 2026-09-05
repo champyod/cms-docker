@@ -39,7 +39,7 @@ gen_pw()    { openssl rand -base64 12 2>/dev/null | tr -d "=+/" | cut -c1-16; }
 declare -A __TOML
 # Explicitly initialized empty: ${#arr[@]} must resolve under `set -u` even
 # when a TOML section has no keys.
-declare -a __CORE_KEYS=() __ADMIN_KEYS=() __CONTEST_KEYS=() __WORKER_KEYS=() __INFRA_KEYS=()
+declare -a __CORE_KEYS=() __ADMIN_KEYS=() __CONTEST_KEYS=() __WORKER_KEYS=() __INFRA_KEYS=() __TAILSCALE_KEYS=()
 
 parse_toml() {
   local file="$1" section="" line key val
@@ -58,11 +58,12 @@ parse_toml() {
       val="${val#\'}"; val="${val%\'}"
       __TOML["${section}.${key}"]="$val"
       case "$section" in
-        core)    __CORE_KEYS+=("$key") ;;
-        admin)   __ADMIN_KEYS+=("$key") ;;
-        contest) __CONTEST_KEYS+=("$key") ;;
-        worker)  __WORKER_KEYS+=("$key") ;;
-        infra)   __INFRA_KEYS+=("$key") ;;
+        core)      __CORE_KEYS+=("$key") ;;
+        admin)     __ADMIN_KEYS+=("$key") ;;
+        contest)   __CONTEST_KEYS+=("$key") ;;
+        worker)    __WORKER_KEYS+=("$key") ;;
+        infra)     __INFRA_KEYS+=("$key") ;;
+        tailscale) __TAILSCALE_KEYS+=("$key") ;;
       esac
     fi
   done < "$file"
@@ -77,6 +78,7 @@ generate_secret_for() {
     POSTGRES_PASSWORD) gen_pw ;;
     AUTH_SECRET)        gen_hex32 ;;
     SECRET_KEY)          gen_hex32 ;;
+    CMS_SECRET_KEY)      gen_hex32 ;;
     RANKING_PASSWORD)    echo "cms_ranking_$(gen_pw)" ;;
     OFFSITE_ENCRYPT_KEY) gen_hex32 ;;
     GRAFANA_PASSWORD)    gen_hex32 ;;
@@ -195,7 +197,7 @@ main() {
     if [[ "$DRY_RUN" -eq 0 && "$SECRETS_CHANGED" -eq 1 ]]; then
       __TOML=()
       __CORE_KEYS=(); __ADMIN_KEYS=(); __CONTEST_KEYS=()
-      __WORKER_KEYS=(); __INFRA_KEYS=()
+      __WORKER_KEYS=(); __INFRA_KEYS=(); __TAILSCALE_KEYS=()
       parse_toml "$TOML_FILE"
     fi
   fi
@@ -222,6 +224,7 @@ main() {
   write_env_section "contest" ".env.contest" __CONTEST_KEYS
   write_env_section "worker"  ".env.worker"  __WORKER_KEYS
   write_env_section "infra"   ".env.infra"   __INFRA_KEYS
+  write_env_section "tailscale" ".env.tailscale" __TAILSCALE_KEYS
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
     [[ -n "$core_fleet_rows" ]] && \
@@ -242,7 +245,7 @@ main() {
     {
       echo "# Auto-generated .env file from config.toml via cms config sync."
       echo ""
-      for f in .env.core .env.admin .env.contest .env.worker .env.infra; do
+      for f in .env.core .env.admin .env.contest .env.worker .env.infra .env.tailscale; do
         if [[ -f "$f" ]]; then
           echo "### $f ###"
           cat "$f"
@@ -374,8 +377,9 @@ main() {
   # Set permissions on .env.* files
   if [[ "$DRY_RUN" -eq 0 ]]; then
     local total_vars=$((${#__CORE_KEYS[@]} + ${#__ADMIN_KEYS[@]} + \
-                        ${#__CONTEST_KEYS[@]} + ${#__WORKER_KEYS[@]} + ${#__INFRA_KEYS[@]}))
-    chmod 600 .env .env.core .env.admin .env.contest .env.worker .env.infra admin-panel/.env 2>/dev/null || true
+                        ${#__CONTEST_KEYS[@]} + ${#__WORKER_KEYS[@]} + ${#__INFRA_KEYS[@]} + \
+                        ${#__TAILSCALE_KEYS[@]}))
+    chmod 600 .env .env.core .env.admin .env.contest .env.worker .env.infra .env.tailscale admin-panel/.env 2>/dev/null || true
     log_info "Synced ${total_vars} vars from config.toml → .env.* files"
   fi
 

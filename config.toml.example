@@ -4,7 +4,7 @@
 
 [core]
 COMPOSE_PROJECT_NAME = "cms-docker" # str; docker compose project name; must match existing container project
-ACCESS_METHOD = "public_port"    # str; "public_port" or "domain"; see .env.core.example for details
+ACCESS_METHOD = "public_port"    # str; "public_port" or "domain"
 PUBLIC_IP = "0.0.0.0"           # str; your VPS public IP; live_ip auto-detects
 TAILSCALE_IP = ""               # str; Tailscale IP for RPC; empty=127.0.0.1 only
 REMOTE_WORKERS_ENABLED = false  # bool
@@ -16,6 +16,7 @@ POSTGRES_DB = "cmsdb"           # str
 POSTGRES_USER = "cmsuser"       # str
 POSTGRES_PASSWORD = ""          # secret; auto-generated if empty on first sync
 POSTGRES_HOST_AUTH_METHOD = "md5"
+CMS_SECRET_KEY = ""             # secret; auto-generated hex32 if empty; injected into cms.toml
 CMS_CONFIG = "/usr/local/etc/cms.toml"
 LOG_SERVICE_SHARD = 0           # num
 RESOURCE_SERVICE_SHARD = 0      # num
@@ -79,6 +80,7 @@ CONTEST_ID = 1                  # num
 CONTEST_DOMAIN = ""             # str; FQDN contestants use; empty=CMS_DOMAIN
 CONTEST_LISTEN_PORT = 8888      # port
 CONTEST_LISTEN_ADDRESS = "0.0.0.0"
+ACTIVE_CONTEST_PORT = 8888      # port; legacy alias — mapped to CONTEST_LISTEN_PORT when that is empty
 SECRET_KEY = ""                 # secret; auto-generated hex32 if empty
 COOKIE_DURATION = 10800         # num; seconds
 ACCESS_METHOD = "public_port"   # enum:public_port,domain
@@ -149,3 +151,7 @@ WAF_PARANOIA = 1
 WAF_ANOMALY_INBOUND = 5
 WAF_ANOMALY_OUTBOUND = 4
 WAF_RULE_ENGINE = "DetectionOnly"
+
+[tailscale]
+TAILSCALE_AUTHKEY = ""          # secret; tskey-auth-... from the Tailscale admin console (user-provided)
+TAILSCALE_HOSTNAME = "cms-contest" # str; hostname the tailscale sidecar registers as
