@@ -115,20 +115,20 @@ pub fn handle(cmd: Commands) -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Doctor => propagate_exit(run_target(&runner, DispatchKey::Doctor, &[])),
         Commands::Test => propagate_exit(run_target(&runner, DispatchKey::Test, &[])),
-        Commands::Worker { sub } => {
-            let (key, args) = match sub {
+        Commands::Worker { sub, args } => {
+            let (key, mut script_args) = match sub {
                 WorkerSub::Edit => (DispatchKey::WorkerEdit, Vec::new()),
                 WorkerSub::Deploy => (DispatchKey::WorkerDeploy, vec!["deploy".to_string()]),
-                WorkerSub::Stop => (
-                    DispatchKey::WorkerStop,
-                    vec!["stop".to_string(), "all".to_string()],
-                ),
+                WorkerSub::Stop => (DispatchKey::WorkerStop, vec!["stop".to_string()]),
                 WorkerSub::List => (DispatchKey::WorkerList, vec!["list".to_string()]),
                 WorkerSub::Attach => (DispatchKey::WorkerAttach, vec!["attach".to_string()]),
                 WorkerSub::Cgroup => (DispatchKey::WorkerCgroup, Vec::new()),
             };
-            let args: Vec<&str> = args.iter().map(String::as_str).collect();
-            propagate_exit(run_target(&runner, key, &args))
+            if matches!(sub, WorkerSub::Deploy | WorkerSub::Stop | WorkerSub::Attach) {
+                script_args.extend(args);
+            }
+            let script_arg_refs: Vec<&str> = script_args.iter().map(String::as_str).collect();
+            propagate_exit(run_target(&runner, key, &script_arg_refs))
         }
         Commands::Tailscale { sub } => {
             let (key, arg) = match sub {

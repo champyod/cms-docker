@@ -189,6 +189,11 @@ pub enum Commands {
     Worker {
         #[arg(value_enum)]
         sub: WorkerSub,
+        /// Extra args passed through to the fleet script: a shard spec like
+        /// `4-7` or `4,5,6` for `deploy`/`stop`, or
+        /// `<shard-spec> <host> <port-spec>` for `attach`.
+        #[arg(num_args = 0..=3)]
+        args: Vec<String>,
     },
     /// Tailnet HTTPS front (`tailscale <setup|status|remove>`).
     Tailscale {

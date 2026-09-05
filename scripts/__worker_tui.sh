@@ -216,11 +216,14 @@ refresh_hint() {
 }
 
 next_free_shard() {
-  local used=" " s row
-  for row in "${WORKERS[@]}"; do used+=" ${row%%|*} "; done
-  s=0
-  while [[ "$used" == *" $s "* ]]; do s=$((s+1)); done
-  echo "$s"
+  # Suggest max(existing)+1: remote fleets use sparse shard numbers
+  # (e.g. 10, 11, 12), so a first-gap suggestion would offer 0.
+  local max=0 s row
+  for row in ${WORKERS[@]+"${WORKERS[@]}"}; do
+    s="${row%%|*}"
+    [ "$s" -gt "$max" ] && max="$s"
+  done
+  echo "$((max + 1))"
 }
 
 # Expand "4", "4,5,6,7", "4-7" or "4,6-8" into a sorted, deduplicated list
@@ -330,7 +333,10 @@ attach_entry() {  # [shard-spec host port-spec] — prompts when args are omitte
     log_warn "got ${#ports[@]} port(s) for ${#shards[@]} shard(s)"
     return 1
   fi
-  [ -n "$host" ] || { log_warn "host required"; return 1; }
+  if [ -z "$host" ] || [[ "$host" =~ [[:space:]:] ]]; then
+    log_warn "host required — no whitespace or ':' allowed"
+    return 1
+  fi
   local i p
   for i in "${shards[@]}"; do
     [ "$i" -ge 0 ] || { log_warn "shard must be >= 0: $i"; return 1; }
@@ -338,10 +344,22 @@ attach_entry() {  # [shard-spec host port-spec] — prompts when args are omitte
   for p in "${ports[@]}"; do
     { [ "$p" -ge 1 ] && [ "$p" -le 65535 ]; } || { log_warn "port out of range: $p"; return 1; }
   done
-  local gm gc row s keep
+  attach_write_rows "$host" "${shards[@]}" --- "${ports[@]}" || return 1
+  attach_print_block "$host" "${shards[@]}" --- "${ports[@]}"
+}
+
+# Replace the given shards' registry rows with LOCAL=0 entries and save.
+# Uses "---" as a separator because shard and port lists are both numeric.
+attach_write_rows() {
+  local host="$1"; shift
+  local -a shards=() ports=() kept=() added=()
+  local arg
+  while [ "$1" != "---" ]; do shards+=("$1"); shift; done
+  shift
+  for arg in "$@"; do ports+=("$arg"); done
+  local gm gc row s keep i
   gm="$(global_memory)"; gc="$(global_cpus)"
   fleet_load
-  local -a kept=() added=()
   for row in ${WORKERS[@]+"${WORKERS[@]}"}; do
     s="${row%%|*}"; keep=1
     for i in "${shards[@]}"; do [ "$s" = "$i" ] && keep=0; done
@@ -350,13 +368,24 @@ attach_entry() {  # [shard-spec host port-spec] — prompts when args are omitte
   for i in "${!shards[@]}"; do
     added+=("${shards[$i]}|$host|${ports[$i]}|0|${gm:-512M}|${gc:-0.5}")
   done
-  WORKERS=(${kept[@]+"${kept[@]}"} ${added[@]+"${added[@]}"})
+  WORKERS=("${kept[@]+"${kept[@]}"}" "${added[@]+"${added[@]}"}")
   fleet_save
   log_info "Attached ${#shards[@]} shard(s) as registry-only rows (LOCAL=0):"
   for i in "${!shards[@]}"; do
     printf '  WORKER_%s=%s:%s\n' "${shards[$i]}" "$host" "${ports[$i]}"
   done
   refresh_hint
+}
+
+# Print the worker-side setup block (paste on the worker box).
+attach_print_block() {
+  local host="$1"; shift
+  local -a shards=() ports=()
+  while [ "$1" != "---" ]; do shards+=("$1"); shift; done
+  shift
+  local arg
+  for arg in "$@"; do ports+=("$arg"); done
+  local i
   echo ""
   log_info "On the worker box ($host), from its cms-docker checkout:"
   echo "  # needs a checkout whose './cms config sync' preserves WORKER_N rows"
