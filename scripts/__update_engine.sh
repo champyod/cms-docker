@@ -344,13 +344,13 @@ ask_var() {
 
 
 select_services() {
-  local defaults="core admin contest worker infra"
+  local defaults="core admin contest worker infra tailscale"
   if declare -F tui::choose_multi >/dev/null 2>&1; then
     SERVICES_SELECTED=$(tui::choose_multi \
       "Select services to configure on this node" \
-      "core" "admin" "contest" "worker" "infra")
+      "core" "admin" "contest" "worker" "infra" "tailscale")
   else
-    echo "  Services [core,admin,contest,worker,infra]: "
+    echo "  Services [core,admin,contest,worker,infra,tailscale]: "
     read -r ans
     SERVICES_SELECTED="${ans:-$defaults}"
   fi
@@ -368,6 +368,7 @@ filter_specs() {
       "Contest")        service="contest" ;;
       "Worker")         service="worker" ;;
       "Infra & Monitoring") service="infra" ;;
+      "Tailscale") service="tailscale" ;;
       *) service="none" ;;
     esac
     if [[ " $SERVICES_SELECTED " == *" $service "* ]]; then
@@ -486,6 +487,7 @@ mask_show() {
 COUNT_CHANGED=0
 COUNT_KEPT=0
 COUNT_GENERATED=0
+SIZING_SHOWN=0
 GROUP_STATS=""
 
 record_stat() {
@@ -595,15 +597,47 @@ prompt_var() {
     echo "$chosen"
 }
 
+sizing_context() {
+    local cms_data_dir cms_log_dir cms_cache_dir disk_path
+    cms_data_dir=$(get_var "[core]" CMS_DATA_DIR)
+    [ -z "$cms_data_dir" ] && cms_data_dir="/var/local/lib/cms"
+    cms_log_dir=$(get_var "[core]" CMS_LOG_DIR)
+    [ -z "$cms_log_dir" ] && cms_log_dir="/var/local/log/cms"
+    cms_cache_dir=$(get_var "[core]" CMS_CACHE_DIR)
+    [ -z "$cms_cache_dir" ] && cms_cache_dir="/var/local/cache/cms"
+    disk_path=$(get_var "[infra]" DISK_PATH)
+    [ -z "$disk_path" ] && disk_path="/host"
+    local sect_paths=(
+        "$cms_data_dir"
+        "$cms_log_dir"
+        "$cms_cache_dir"
+        "$disk_path"
+    )
+    local has_info=0
+    for path in "${sect_paths[@]}"; do
+        if [ -d "$path" ] && command -v df >/dev/null 2>&1; then
+            if [ "$has_info" = 0 ]; then
+                echo ""
+                print_step "Current disk usage (sizing context)"
+                has_info=1
+            fi
+            df -h "$path" 2>/dev/null | tail -1 | awk '{printf "  %-30s %s used of %s (%s full)\n", "'"$path"'", $3, $2, $5}'
+        fi
+    done
+}
+
 walk_section() {
     local group=$1 section=$2
     CURRENT_GROUP="$group"
     echo ""
     print_step "$group  ($section)"
+    # Show disk context before backup/sizing prompts
+    if [[ "$group" == "Infra & Monitoring" ]] && [[ "$SIZING_SHOWN" -eq 0 ]]; then sizing_context; SIZING_SHOWN=1; fi
     ensure_config_toml "$section"
 }
 
 VAR_SPECS=(
+  "Core & Network|[core]|COMPOSE_PROJECT_NAME|str||cms-docker"
   "Core & Network|[core]|PUBLIC_IP|str||live_ip"
   "Core & Network|[core]|TAILSCALE_IP|str||"
   "Core & Network|[core]|REMOTE_WORKERS_ENABLED|bool||false"
@@ -646,6 +680,11 @@ VAR_SPECS=(
   "Admin Panel|[admin]|SERVER_BASE_URL|url||http://localhost"
   "Admin Panel|[admin]|VITE_API_URL|url||http://localhost:8889"
   "Admin Panel|[admin]|CAPTCHA_ENABLED|enum:0,1||0"
+  "Admin Panel|[admin]|CAPTCHA_PROVIDER|enum:turnstile,hcaptcha||turnstile"
+  "Admin Panel|[admin]|CAPTCHA_SITE_KEY|str||"
+  "Admin Panel|[admin]|CAPTCHA_SECRET_KEY|secret||"
+  "Admin Panel|[admin]|CAPTCHA_THRESHOLD|num||3"
+  "Admin Panel|[admin]|CAPTCHA_BAN_THRESHOLD|num||5"
   "Admin Panel|[admin]|PER_USER_LIMIT|num||1"
   "Admin Panel|[admin]|REDIS_HOST|str||redis-rate-limit"
   "Admin Panel|[admin]|REDIS_PORT|port||6379"
@@ -653,6 +692,7 @@ VAR_SPECS=(
   "Admin Panel|[admin]|SOCKET_PROXY|enum:0,1||0"
   "Admin Panel|[admin]|MONITOR_ENHANCED|enum:0,1||0"
   "Admin Panel|[admin]|CMS_RANKING_LOG_DIR|str||/var/local/log/cms/ranking"
+  "Admin Panel|[admin]|RANKING_LOGO_PATH|str||"
   "Admin Panel|[admin]|CMS_RANKING_LIB_DIR|str||/var/local/lib/cms/ranking"
   "Contest|[contest]|CONTEST_ID|num||1"
   "Contest|[contest]|CONTEST_DOMAIN|str||cms.local"
@@ -723,6 +763,8 @@ VAR_SPECS=(
   "Infra & Monitoring|[infra]|HSM_KEY_LABEL|str||grader-privkey"
   "Infra & Monitoring|[infra]|HSM_MODULE|str||softhsm"
   "Infra & Monitoring|[infra]|HSM_PIN|secret||"
+  "Core & Network|[core]|ACCESS_METHOD|enum:public_port,domain||public_port"
+  "Core & Network|[core]|MTLS_WORKERS_ENABLED|enum:0,1||0"
   "Core & Network|[core]|MTLS_CA_CERT|str||config/mtls/ca.pem"
   "Core & Network|[core]|MTLS_WORKER_CERT|str||config/mtls/worker.pem"
   "Core & Network|[core]|MTLS_WORKER_KEY|str||config/mtls/worker-key.pem"
@@ -731,6 +773,10 @@ VAR_SPECS=(
   "Infra & Monitoring|[infra]|VAULT_ENABLED|enum:0,1||0"
   "Infra & Monitoring|[infra]|VAULT_PATH|str||secret/cms"
   "Infra & Monitoring|[infra]|VAULT_TOKEN|secret||"
+  "Admin Panel|[admin]|WAF_ENABLED|enum:0,1||0"
+  "Admin Panel|[admin]|WAF_PORT|port||8080"
+  "Admin Panel|[admin]|WAF_PARANOIA|num||1"
+  "Admin Panel|[admin]|WAF_ANOMALY_INBOUND|num||5"
   "Infra & Monitoring|[infra]|WAF_ANOMALY_INBOUND|num||5"
   "Infra & Monitoring|[infra]|WAF_ANOMALY_OUTBOUND|num||4"
   "Infra & Monitoring|[infra]|WAF_BIND_IP|str||127.0.0.1"
@@ -738,6 +784,8 @@ VAR_SPECS=(
   "Infra & Monitoring|[infra]|WAF_PARANOIA|num||1"
   "Infra & Monitoring|[infra]|WAF_PORT|port||8080"
   "Infra & Monitoring|[infra]|WAF_RULE_ENGINE|str||DetectionOnly"
+  "Tailscale|[tailscale]|TAILSCALE_AUTHKEY|secret||"
+  "Tailscale|[tailscale]|TAILSCALE_HOSTNAME|str||cms-contest"
 )
 
 needs_fix() {

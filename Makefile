@@ -306,6 +306,8 @@ admin-create:
 # ---------------------------------------------------------------------------
 lint:
 	@echo "Running lint checks..."
+	@echo "→ spec parity"
+	@bash scripts/__check_spec_parity.sh
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		echo "→ shellcheck"; \
 		shellcheck scripts/*.sh; \

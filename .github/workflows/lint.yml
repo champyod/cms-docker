@@ -58,6 +58,9 @@ jobs:
             shellcheck -S error -x "${files[@]}"
           fi
 
+      - name: VAR_SPEC parity
+        run: bash scripts/__check_spec_parity.sh
+
       - name: hadolint
         run: hadolint Dockerfile docker/monitor/Dockerfile
 
