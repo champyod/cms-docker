@@ -37,7 +37,9 @@ gen_pw()    { openssl rand -base64 12 2>/dev/null | tr -d "=+/" | cut -c1-16; }
 # --- Pure-bash TOML parser: [section] + key = value only ---
 # Populates __TOML["section.key"]=value and ordered key arrays per section.
 declare -A __TOML
-declare -a __CORE_KEYS __ADMIN_KEYS __CONTEST_KEYS __WORKER_KEYS __INFRA_KEYS
+# Explicitly initialized empty: ${#arr[@]} must resolve under `set -u` even
+# when a TOML section has no keys.
+declare -a __CORE_KEYS=() __ADMIN_KEYS=() __CONTEST_KEYS=() __WORKER_KEYS=() __INFRA_KEYS=()
 
 parse_toml() {
   local file="$1" section="" line key val
@@ -208,11 +210,32 @@ main() {
   fi
 
   # Write .env.* files
+  # Fleet registry rows (WORKER_N in .env.core, per-shard overrides in
+  # .env.worker) are managed by scripts/__worker_tui.sh, not config.toml —
+  # snapshot and re-append so regeneration never drops them.
+  local core_fleet_rows worker_fleet_rows
+  core_fleet_rows="$(grep -E '^WORKER_[0-9]+=' .env.core 2>/dev/null || true)"
+  worker_fleet_rows="$(grep -E '^WORKER_SHARD[0-9]+_(LOCAL|MEMORY|CPU)=' .env.worker 2>/dev/null || true)"
+
   write_env_section "core"    ".env.core"    __CORE_KEYS
   write_env_section "admin"   ".env.admin"   __ADMIN_KEYS
   write_env_section "contest" ".env.contest" __CONTEST_KEYS
   write_env_section "worker"  ".env.worker"  __WORKER_KEYS
   write_env_section "infra"   ".env.infra"   __INFRA_KEYS
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    [[ -n "$core_fleet_rows" ]] && \
+      echo "Would preserve $(wc -l <<< "$core_fleet_rows") fleet row(s) in .env.core"
+    [[ -n "$worker_fleet_rows" ]] && \
+      echo "Would preserve $(wc -l <<< "$worker_fleet_rows") fleet override(s) in .env.worker"
+  else
+    [[ -n "$core_fleet_rows" ]] && {
+      printf '%s\n' "$core_fleet_rows" >> .env.core
+      log_info "Preserved $(wc -l <<< "$core_fleet_rows") fleet row(s) in .env.core"
+    }
+    [[ -n "$worker_fleet_rows" ]] && \
+      printf '%s\n' "$worker_fleet_rows" >> .env.worker
+  fi
 
   # Merge into single .env (mirrors Makefile env: target)
   if [[ "$DRY_RUN" -eq 0 ]]; then

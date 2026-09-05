@@ -12,9 +12,12 @@
 #                 WORKER_SHARD<n>_MEMORY/_CPU    <- OPTIONAL per-shard overrides
 #
 # Usage:
-#   scripts/__worker_tui.sh                        interactive TUI (tty)
-#   scripts/__worker_tui.sh deploy [all|<shard>]   non-interactive deploy
-#   scripts/__worker_tui.sh stop [all|<shard>]
+#   scripts/__worker_tui.sh                              interactive TUI (tty)
+#   scripts/__worker_tui.sh attach [spec host port-spec] attach a remote
+#                                    worker box: registry-only rows for
+#                                    spec "4", "4,5,6,7" or "4-7"
+#   scripts/__worker_tui.sh deploy [all|<shard>|<spec>]  non-interactive deploy
+#   scripts/__worker_tui.sh stop [all|<shard>|<spec>]
 #   scripts/__worker_tui.sh list
 
 set -eu
@@ -170,10 +173,19 @@ seed_if_empty() {
 cmd_deploy() {
   require_env_files
   seed_if_empty
-  local target="${1:-all}" rc=0 row s
+  local target="${1:-all}" rc=0 row s hit w_list
+  local -a want=()
+  if [ "$target" != "all" ]; then
+    w_list="$(expand_spec "$target")" || { log_warn "bad shard spec: $target"; return 1; }
+    mapfile -t want <<< "$w_list"
+  fi
   for row in "${WORKERS[@]}"; do
     s="${row%%|*}"
-    [ "$target" != all ] && [ "$target" != "$s" ] && continue
+    if [ "$target" != all ]; then
+      hit=0
+      for w in "${want[@]}"; do [ "$s" = "$w" ] && hit=1; done
+      [ "$hit" = 1 ] || continue
+    fi
     deploy_worker "$row" || rc=1
   done
   return "$rc"
@@ -181,10 +193,19 @@ cmd_deploy() {
 
 cmd_stop() {
   require_env_files; fleet_load
-  local target="${1:-all}" row s
-  for row in "${WORKERS[@]}"; do
+  local target="${1:-all}" row s hit w_list
+  local -a want=()
+  if [ "$target" != "all" ]; then
+    w_list="$(expand_spec "$target")" || { log_warn "bad shard spec: $target"; return 1; }
+    mapfile -t want <<< "$w_list"
+  fi
+  for row in ${WORKERS[@]+"${WORKERS[@]}"}; do
     s="${row%%|*}"
-    [ "$target" != all ] && [ "$target" != "$s" ] && continue
+    if [ "$target" != all ]; then
+      hit=0
+      for w in "${want[@]}"; do [ "$s" = "$w" ] && hit=1; done
+      [ "$hit" = 1 ] || continue
+    fi
     stop_worker "$row"
   done
 }
@@ -200,6 +221,52 @@ next_free_shard() {
   s=0
   while [[ "$used" == *" $s "* ]]; do s=$((s+1)); done
   echo "$s"
+}
+
+# Expand "4", "4,5,6,7", "4-7" or "4,6-8" into a sorted, deduplicated list
+# (one number per line). Fails on anything else.
+expand_spec() {
+  local spec="${1// /}"
+  [ -n "$spec" ] || return 1
+  (
+    set -f
+    IFS=','
+    local -a out=()
+    local item a b
+    for item in $spec; do
+      if [[ "$item" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+        a="${BASH_REMATCH[1]}"; b="${BASH_REMATCH[2]}"
+        [ "$a" -le "$b" ] || exit 1
+        while [ "$a" -le "$b" ]; do out+=("$a"); a=$((a+1)); done
+      elif [[ "$item" =~ ^[0-9]+$ ]]; then
+        out+=("$item")
+      else
+        exit 1
+      fi
+    done
+    [ "${#out[@]}" -gt 0 ] || exit 1
+    printf '%s\n' "${out[@]}" | sort -n -u
+  )
+}
+
+# Ports for an attach batch: a single number is the base port (one per shard,
+# incrementing); a range or comma list must resolve to exactly #shards ports.
+resolve_ports() {
+  local spec="${1// /}" count="$2" base i
+  [ -n "$spec" ] && [ -n "$count" ] || return 1
+  if [[ "$spec" == *-* || "$spec" == *,* ]]; then
+    expand_spec "$spec" || return 1
+  else
+    [[ "$spec" =~ ^[0-9]+$ ]] || return 1
+    base="$spec"
+    [ "$base" -ge 1 ] && [ "$base" -le 65535 ] || return 1
+    i=0
+    while [ "$i" -lt "$count" ]; do
+      [ "$((base + i))" -le 65535 ] || return 1
+      echo "$((base + i))"
+      i=$((i+1))
+    done
+  fi
 }
 
 add_entry() {
@@ -237,6 +304,70 @@ edit_entry() {
   fi
 }
 
+# Attach a remote worker box: write its shards into the registry as
+# registry-only (LOCAL=0) rows the core routes to, then print the block to
+# run on the worker box (same rows, no LOCAL override → deploy locally there).
+attach_entry() {  # [shard-spec host port-spec] — prompts when args are omitted
+  require_env_files
+  local spec="$1" host="$2" pspec="$3"
+  if [ -z "$spec" ] || [ -z "$host" ] || [ -z "$pspec" ]; then
+    [ -t 0 ] && [ -t 1 ] || die "usage: $0 attach <shard-spec> <host> <port-spec>"
+    printf 'Shards to attach (e.g. 4,5,6,7 or 4-7): '
+    IFS= read -r spec || return 0
+    printf 'Worker box host/IP for the core to reach it on: '
+    IFS= read -r host || return 0
+    printf 'Ports (base e.g. 26004, or explicit 26004-26007): '
+    IFS= read -r pspec || return 0
+  fi
+  local s_list p_list
+  s_list="$(expand_spec "$spec")" || { log_warn "bad shard spec: $spec"; return 1; }
+  local -a shards=() ports=()
+  mapfile -t shards <<< "$s_list"
+  p_list="$(resolve_ports "$pspec" "${#shards[@]}")" || {
+    log_warn "bad port spec: $pspec"; return 1; }
+  mapfile -t ports <<< "$p_list"
+  if [ "${#ports[@]}" -ne "${#shards[@]}" ]; then
+    log_warn "got ${#ports[@]} port(s) for ${#shards[@]} shard(s)"
+    return 1
+  fi
+  [ -n "$host" ] || { log_warn "host required"; return 1; }
+  local i p
+  for i in "${shards[@]}"; do
+    [ "$i" -ge 0 ] || { log_warn "shard must be >= 0: $i"; return 1; }
+  done
+  for p in "${ports[@]}"; do
+    { [ "$p" -ge 1 ] && [ "$p" -le 65535 ]; } || { log_warn "port out of range: $p"; return 1; }
+  done
+  local gm gc row s keep
+  gm="$(global_memory)"; gc="$(global_cpus)"
+  fleet_load
+  local -a kept=() added=()
+  for row in ${WORKERS[@]+"${WORKERS[@]}"}; do
+    s="${row%%|*}"; keep=1
+    for i in "${shards[@]}"; do [ "$s" = "$i" ] && keep=0; done
+    if [ "$keep" = 1 ]; then kept+=("$row"); else log_info "Replacing registry row for shard $s"; fi
+  done
+  for i in "${!shards[@]}"; do
+    added+=("${shards[$i]}|$host|${ports[$i]}|0|${gm:-512M}|${gc:-0.5}")
+  done
+  WORKERS=(${kept[@]+"${kept[@]}"} ${added[@]+"${added[@]}"})
+  fleet_save
+  log_info "Attached ${#shards[@]} shard(s) as registry-only rows (LOCAL=0):"
+  for i in "${!shards[@]}"; do
+    printf '  WORKER_%s=%s:%s\n' "${shards[$i]}" "$host" "${ports[$i]}"
+  done
+  refresh_hint
+  echo ""
+  log_info "On the worker box ($host), from its cms-docker checkout:"
+  echo "  # needs a checkout whose './cms config sync' preserves WORKER_N rows"
+  echo "  cat >> .env.core <<'FLEET'"
+  for i in "${!shards[@]}"; do
+    printf 'WORKER_%s=%s:%s\n' "${shards[$i]}" "$host" "${ports[$i]}"
+  done
+  echo "  FLEET"
+  echo "  ./cms config sync && ./cms worker deploy all && ./cms worker list"
+}
+
 render() {
   fleet_load
   local i=0 row s h p l m c st mark x scope
@@ -258,7 +389,7 @@ render() {
   done
   [ "${#WORKERS[@]}" -eq 0 ] && printf ' %s(no entries — press a to add)%s\n' "$C_DIM" "$C_0"
   echo ""
-  echo " ↑↓ move · space select · a add · e edit · d delete · D deploy sel/all · K stop · L logs · r refresh · q quit"
+  echo " ↑↓ move · space select · a add · A attach remote box · e edit · d delete · D deploy sel/all · K stop · L logs · r refresh · q quit"
 }
 
 tui_loop() {
@@ -293,6 +424,7 @@ tui_loop() {
           fi
         fi ;;
       a) add_entry ;;
+      A) attach_entry "" "" "" || true ;;
       e) fleet_load || true; { [ "${#WORKERS[@]}" -gt 0 ] && edit_entry "$CUR"; } ;;
       d)
         fleet_load || true
@@ -353,8 +485,11 @@ case "${1:-tui}" in
     [ -t 0 ] && [ -t 1 ] || die "interactive TUI needs a terminal — use: $0 deploy|stop|list"
     require_env_files
     tui_loop ;;
+  attach)
+    shift
+    attach_entry "${1:-}" "${2:-}" "${3:-}" ;;
   deploy) cmd_deploy "${2:-all}" ;;
   stop)   cmd_stop "${2:-all}" ;;
   list)   list_plain ;;
-  *) die "usage: $0 [tui|deploy [all|shard]|stop [all|shard]|list]" ;;
+  *) die "usage: $0 [tui|attach [spec host port-spec]|deploy [all|shard|spec]|stop [all|shard|spec]|list]" ;;
 esac
