@@ -897,15 +897,14 @@ Panels: `WORKERS` (Enter → fleet TUI), `SERVICES` (per-service logs/restart/st
 ### Worker Fleet
 
 ```bash
-./cms worker tui       # fleet editor: add/edit/delete shards, deploy-all
+./cms worker edit      # fleet editor: add/edit/delete shards, deploy-all
 ./cms worker deploy    # deploy all shards
 ./cms worker stop|list # stop all / list fleet
-./cms worker server    # TUI: pick which main server this worker connects to
-./cms worker connect   # attach a worker interactively (hostname/IP + shard, validated)
+./cms worker attach    # attach a remote box: shard spec (4-7 / 4,5,6), host, port base
 ./cms worker cgroup    # set up sandbox cgroups
 ```
 
-Fleet row format (pipe-separated, 6 fields): `shard|host|port|local|memory|cpu`. `fleet_save` writes `WORKER_<shard>=<host>:<port>` to `.env.core` and `WORKER_SHARD<n>_{LOCAL,MEMORY,CPU}` to `.env.worker`. Shard/host/port/memory/cpu are validated on add/edit (numeric shard+port, no `:`/whitespace in host, `^[0-9]+[MG]i?$` memory, `^[0-9]+(\.[0-9]+)?$` cpus).
+Fleet row format (pipe-separated, 6 fields): `shard|host|port|local|memory|cpu`. `fleet_save` writes `WORKER_<shard>=<host>:<port>` to `.env.core` and `WORKER_SHARD<n>_{LOCAL,MEMORY,CPU}` to `.env.worker`. Shard/host/port/memory/cpu are validated on add/edit (numeric shard+port, no `:`/whitespace in host, `^[0-9]+[MG]i?$` memory, `^[0-9]+(\.[0-9]+)?$` cpus). `attach` expands shard specs (`4`, `4,5,6,7`, `4-7`) into per-shard rows written with `LOCAL=0` (registry-only); re-attaching an existing shard replaces its row, and `./cms config sync` preserves all `WORKER_N` rows.
 
 ### Secrets Rotation
 
@@ -936,7 +935,7 @@ Offsite sync config: `.env.infra`/`.env.core` — `BACKUP_DIR`, `OFFSITE_TAILNET
 - `validate_value` (in `scripts/__update_engine.sh`) enforces typed inputs: `port` (positive int ≤65535), `ip` (octet range 0-255, octal-guarded), `hostname`, `memory` (`^[0-9]+[MG]i?$`), `cpu` (`^[0-9]+(\.[0-9]+)?$`), `path`, `url`, `str`.
 - Interactive prompts use `tui::input` with retry loop (3 attempts) — invalid values re-prompt with error line, never silently accepted.
 - Required vars (`R` flag in `VAR_SPECS`) reject empty; secrets auto-generate from seeded generators (`hex32`, `rand_pw`) when a default exists.
-- Simple legacy scripts (worker connect, funnel) validate inline with the same regex patterns.
+- Simple legacy scripts (funnel) validate inline with the same regex patterns.
 
 ---
 

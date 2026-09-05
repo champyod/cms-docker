@@ -172,25 +172,31 @@ volumes:
   cms-worker-log:
 ```
 
-### Step 5: Download Configuration
+### Step 5: Get the worker configuration
 
-Get `config/cms.toml` from the main server (or use the recommended
-`./cms worker server` flow, which sets `CORE_SERVICES_HOST` for you):
+Recommended — the fleet flow generates it for you. On the **main server**,
+run:
+
+```bash
+./cms worker attach <shard-spec> <this-box-ip> <port-spec>
+```
+
+This registers the box as registry-only fleet rows and prints a block; on
+**this worker box** (this repository checked out), run that block — its
+`./cms config sync` generates `config/cms.toml` with the core services
+pointed at the main server.
+
+Manual alternative (no fleet): copy `config/cms.toml` from the main server,
+then edit the `[core_services]` host entries to the main server IP:
 
 ```bash
 mkdir -p config
-
-# Method 1: SCP
 scp user@YOUR_SERVER_IP:/path/to/cms-docker/config/cms.toml config/
-
-# Method 2: Manual copy/paste
-nano config/cms.toml
-# Paste content from main server
 ```
 
-Edit `config/cms.toml` to point the core services at the main server IP
-(host entries below become `YOUR_SERVER_IP`; ports are the fixed RPC
-ports from Step 3):
+Manual path only — edit `config/cms.toml` to point the core services at the
+main server IP (host entries below become `YOUR_SERVER_IP`; ports are the
+fixed RPC ports from Step 3):
 
 ```toml
 [core_services]
@@ -345,27 +351,24 @@ Via Web Console:
 
 ### Automated Deployment
 
-Script to deploy multiple workers:
+Attach every worker box from the main server — each run writes
+registry-only rows (`LOCAL=0`) and prints the block to run on that box:
 
 ```bash
 #!/bin/bash
 # deploy-workers.sh
 
-MAIN_SERVER_IP="203.0.113.45"
 WORKERS=("worker1-ip" "worker2-ip" "worker3-ip")
 
 for i in "${!WORKERS[@]}"; do
-  WORKER_IP="${WORKERS[$i]}"
   SHARD=$((i + 1))
-  
-  echo "Deploying worker $SHARD on $WORKER_IP..."
-  
-  ssh root@$WORKER_IP "curl -fsSL http://$MAIN_SERVER_IP/scripts/__worker_connect.sh | \
-    WORKER_SHARD=$SHARD \
-    MAIN_SERVER_IP=$MAIN_SERVER_IP \
-    bash"
+  ./cms worker attach "$SHARD" "${WORKERS[$i]}" "$((26000 + SHARD))"
 done
 ```
+
+On each worker box (this repository checked out), run the block printed by
+`worker attach` — it appends the same rows to its `.env.core` and deploys
+the shards locally (`./cms config sync && ./cms worker deploy all`).
 
 ### Worker Management
 
@@ -402,7 +405,11 @@ aws ec2 run-instances \
   --key-name your-key \
   --security-group-ids sg-workers \
   --user-data '#!/bin/bash
-curl -fsSL http://YOUR_SERVER_IP/scripts/__worker_connect.sh | bash'
+git clone https://github.com/champyod/cms-docker /opt/cms-docker
+cd /opt/cms-docker
+./cms config sync
+echo "WORKER_1=WORKER_IP:26001" >> .env.core   # WORKER_IP = this box's public IP
+./cms config sync && ./cms worker deploy all'
 
 # Or use EC2 launch template
 ```
@@ -416,7 +423,11 @@ gcloud compute instances create cms-worker-1 \
   --image-family ubuntu-2004-lts \
   --image-project ubuntu-os-cloud \
   --metadata startup-script='#!/bin/bash
-curl -fsSL http://YOUR_SERVER_IP/scripts/__worker_connect.sh | bash'
+git clone https://github.com/champyod/cms-docker /opt/cms-docker
+cd /opt/cms-docker
+./cms config sync
+echo "WORKER_1=WORKER_IP:26001" >> .env.core   # WORKER_IP = this box's public IP
+./cms config sync && ./cms worker deploy all'
 ```
 
 ### Azure VM
@@ -439,7 +450,11 @@ Via Web Console:
 3. Add User Data:
    ```bash
    #!/bin/bash
-   curl -fsSL http://YOUR_SERVER_IP/scripts/__worker_connect.sh | bash
+   git clone https://github.com/champyod/cms-docker /opt/cms-docker
+   cd /opt/cms-docker
+   ./cms config sync
+   echo "WORKER_1=WORKER_IP:26001" >> .env.core   # WORKER_IP = this box's public IP
+   ./cms config sync && ./cms worker deploy all
    ```
 
 ---

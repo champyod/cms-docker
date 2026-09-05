@@ -196,9 +196,9 @@ below map 1:1 onto the Makefile and helper scripts.
 | `./cms doctor` | Preflight checks only (disk, secrets, ports, cgroup) |
 | `./cms test` | Smoke-test: boot stacks headless, verify healthchecks, teardown |
 | `./cms worker` / `edit` | Fleet TUI: list/add/edit/delete workers, live status, batch deploy |
-| `./cms worker deploy [shard]` / `stop` | Deploy all/some fleet entries non-interactively / stop them |
-| `./cms worker server` | TUI: choose which main server this worker connects to |
-| `./cms worker connect\|cgroup` | Attach to a worker / prepare host cgroups (root) |
+| `./cms worker deploy [spec]` / `stop [spec]` | Deploy/stop all fleet entries — or a spec like `4-7` or `4,5,6` |
+| `./cms worker attach [spec host port]` | Attach a remote worker box: registry-only rows + worker-side setup block |
+| `./cms worker cgroup` | Prepare host cgroups for the isolate sandbox |
 | `./cms contest create <yaml...>` | Batch-create contests from YAML/JSON |
 | `./cms funnel setup\|passwd\|remove\|status` | Public ts.net access behind basic auth — no tailnet needed |
 | `./cms domain setup\|status\|renew\|preflight` | HTTPS domain lifecycle for `DOMAIN_NAME` (TLS certs + Nginx) |
@@ -293,15 +293,19 @@ Traffic inside the tailnet is WireGuard-encrypted end-to-end regardless.
 
 ### Remote worker machines
 
-On each worker host (after its own `./cms` bootstrap), pick the main server
-it talks to:
+On the main server, attach the worker box — this writes registry-only
+rows and prints the worker-side setup block:
 
 ```bash
-./cms worker server     # TUI: add/select main servers; Enter sets CORE_SERVICES_HOST
-./cms worker deploy all # deploy local shards against the selected main
+./cms worker attach 4-7 WORKER-BOX-IP 26004
 ```
 
-Candidates persist as `WORKER_MAIN_<n>=label|host` in `.env.worker`.
+On the worker host (this repository checked out), run the printed block;
+it appends the same rows to its `.env.core` and deploys the shards locally:
+
+```bash
+./cms config sync && ./cms worker deploy all && ./cms worker list
+```
 
 Contest web stays public through `cms-nginx-contest` (enable TLS there via
 `ENABLE_TLS=true` when a public domain + certs are available).

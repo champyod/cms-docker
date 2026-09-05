@@ -259,12 +259,14 @@ or the fleet TUI — never by hand-editing `.env.*` (generated files):
 make core-img
 ```
 
-On each worker host, connect it to this server:
+On the main server, attach each worker box (prints the worker-side block):
 
 ```bash
-./cms worker server     # pick the main server
-./cms worker deploy     # deploy the local shard
+./cms worker attach 4 WORKER-BOX-IP 26004
 ```
+
+Then on the worker host (this repository checked out), run the printed
+block: `./cms config sync && ./cms worker deploy all && ./cms worker list`.
 
 ### Backup Database
 

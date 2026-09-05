@@ -249,24 +249,16 @@ Continue as needed.
      portainer/agent:latest
    ```
 
-3. **Use Auto-Connect Script**
-   
-   Download and run the worker connection script:
+3. **Register the Worker (on the main server)**
    ```bash
-   curl -fsSL http://YOUR-MAIN-SERVER/scripts/__worker_connect.sh | sudo bash
+   ./cms worker attach 10 WORKER-BOX-IP 26010
    ```
-   
-   Or manually:
-   ```bash
-   wget http://YOUR-MAIN-SERVER/scripts/__worker_connect.sh
-   chmod +x worker-connect.sh
-   sudo ./worker-connect.sh
-   ```
+   Writes registry-only rows and prints the worker-side setup block.
 
-4. **Follow Prompts**
-   - Enter your main CMS server IP
-   - Choose worker shard number (10, 11, 12... for remote workers)
-   - Let the script complete
+4. **Deploy on the Worker Machine**
+   - From this repository's checkout on the worker box, run the block
+     printed by `worker attach` (appends rows, then
+     `./cms config sync && ./cms worker deploy all`)
 
 ### Add Remote Environment to Portainer
 

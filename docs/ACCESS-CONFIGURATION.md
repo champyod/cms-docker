@@ -365,30 +365,21 @@ Redeploy services.
 
 ### For Public Port Access
 
-When using public IP, remote workers need to connect to your server's public IP.
+When using public IP, remote workers connect to your server's public IP.
 
-**On Remote Worker Machine:**
-
-Edit worker configuration or use the connect script:
+**On the main server** — register the worker box as registry-only fleet rows:
 
 ```bash
-# Download and run worker connect script
-curl -fsSL http://203.0.113.45:8889/scripts/__worker_connect.sh -o worker-connect.sh
-chmod +x worker-connect.sh
-sudo ./worker-connect.sh
+./cms worker attach 10 WORKER-BOX-IP 26010   # multi-shard: 10-12 or 10,11,12
 ```
 
-When prompted, enter your **public IP**: `203.0.113.45`
-
-**Or manually configure** (worker host `config.toml`, then `./cms worker deploy`):
+**On the remote worker machine** (this repository checked out) — run the
+block printed by `attach`; it appends the same rows to its `.env.core`
+and deploys the shards locally:
 
 ```bash
-CORE_SERVICES_HOST=203.0.113.45
-WORKER_SHARD=10  # Use unique numbers for remote workers
-WORKER_NAME=remote-worker-10
+./cms config sync && ./cms worker deploy all && ./cms worker list
 ```
-
-Or set `CORE_SERVICES_HOST` interactively with `./cms worker server`.
 
 ### Required Ports for Remote Workers
 

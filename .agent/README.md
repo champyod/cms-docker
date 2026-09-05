@@ -49,8 +49,7 @@ cms-docker/
 │   ├── cmsEvaluationService  # Submission evaluation
 │   ├── cmsScoringService     # Score calculation
 │   ├── cmsProxyService       # Sends scores to ranking
-│   ├── cmsWorker             # Evaluates submissions
-│   └── worker-connect.sh     # Remote worker connection helper
+│   └── cmsWorker             # Evaluates submissions
 │
 ├── Dockerfile                # Build CMS Docker image
 ├── Makefile                  # Build automation
