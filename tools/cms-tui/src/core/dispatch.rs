@@ -63,10 +63,8 @@ pub enum DispatchKey {
     WorkerStop,
     /// `./cms worker list`
     WorkerList,
-    /// `./cms worker server`
-    WorkerServer,
-    /// `./cms worker connect`
-    WorkerConnect,
+    /// `./cms worker attach` (interactive remote-box onboarding)
+    WorkerAttach,
     /// `./cms worker cgroup`
     WorkerCgroup,
     /// `./cms tailscale setup`
@@ -160,8 +158,7 @@ const TABLE: &[DispatchEntry] = &[
     DispatchEntry::script(DispatchKey::WorkerDeploy, "__worker_tui.sh"),
     DispatchEntry::script(DispatchKey::WorkerStop, "__worker_tui.sh"),
     DispatchEntry::script(DispatchKey::WorkerList, "__worker_tui.sh"),
-    DispatchEntry::script(DispatchKey::WorkerServer, "__worker_connect.sh"),
-    DispatchEntry::script(DispatchKey::WorkerConnect, "__worker_connect.sh"),
+    DispatchEntry::script(DispatchKey::WorkerAttach, "__worker_tui.sh"),
     DispatchEntry::script(DispatchKey::WorkerCgroup, "__worker_cgroup_setup.sh"),
     DispatchEntry::script(DispatchKey::TailscaleSetup, "__tailscale_serve.sh"),
     DispatchEntry::script(DispatchKey::TailscaleStatus, "__tailscale_serve.sh"),
@@ -220,8 +217,7 @@ mod tests {
             DispatchKey::WorkerDeploy,
             DispatchKey::WorkerStop,
             DispatchKey::WorkerList,
-            DispatchKey::WorkerServer,
-            DispatchKey::WorkerConnect,
+            DispatchKey::WorkerAttach,
             DispatchKey::WorkerCgroup,
             DispatchKey::TailscaleSetup,
             DispatchKey::TailscaleStatus,

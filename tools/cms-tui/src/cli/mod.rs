@@ -26,15 +26,14 @@ pub enum SecretsSub {
     Generate,
 }
 
-/// Worker fleet subcommands (`worker <edit|deploy|stop|list|server|connect|cgroup>`).
+/// Worker fleet subcommands (`worker <edit|deploy|stop|list|attach|cgroup>`).
 #[derive(ValueEnum, Clone, Debug)]
 pub enum WorkerSub {
     Edit,
     Deploy,
     Stop,
     List,
-    Server,
-    Connect,
+    Attach,
     Cgroup,
 }
 
@@ -67,7 +66,7 @@ pub enum DomainCmd {
         /// Certificate type (letsencrypt|provided|selfsigned).
         #[arg(long, default_value = "letsencrypt")]
         cert: String,
-        /// Primary domain (default from DOMAIN_NAME env).
+        /// Primary domain (default from `DOMAIN_NAME` env).
         #[arg(long)]
         domain: Option<String>,
         /// Admin subdomain.
@@ -186,7 +185,7 @@ pub enum Commands {
     Doctor,
     /// Smoke-test the deployment.
     Test,
-    /// Worker fleet commands (`worker <edit|deploy|stop|list|server|connect|cgroup>`).
+    /// Worker fleet commands (`worker <edit|deploy|stop|list|attach|cgroup>`).
     Worker {
         #[arg(value_enum)]
         sub: WorkerSub,

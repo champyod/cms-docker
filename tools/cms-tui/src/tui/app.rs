@@ -125,14 +125,6 @@ impl App {
                 "bash scripts/__worker_tui.sh deploy all".to_string(),
             ),
             (
-                "Pick Server".to_string(),
-                "echo 'Pick Server now lives in the Rust TUI — configure via Worker → Fleet Manager'".to_string(),
-            ),
-            (
-                "Connect Worker".to_string(),
-                "bash scripts/__worker_connect.sh".to_string(),
-            ),
-            (
                 "Setup Cgroups".to_string(),
                 "bash scripts/__worker_cgroup_setup.sh".to_string(),
             ),

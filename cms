@@ -53,9 +53,8 @@ Commands:
                             rotate weak/default secrets (apply guarded)
   doctor                    preflight environment checks
   test                      smoke-test the deployment
-  worker [edit|deploy|stop|list]  fleet TUI / deploy all shards / stop / show
-  worker server             TUI: pick which main server this worker connects to
-  worker connect|cgroup     attach to a worker / set up sandbox cgroups
+  worker [edit|deploy|stop|list|attach]  fleet TUI / deploy / stop / show / attach remote worker box
+  worker cgroup             set up sandbox cgroups for isolate (sudo)
   tailscale setup|status|remove
                             tailnet HTTPS front for admin/ranking UIs
   expose                    TUI: pick local/public/tailscale wiring per UI

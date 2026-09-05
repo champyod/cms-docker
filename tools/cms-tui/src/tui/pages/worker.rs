@@ -9,8 +9,8 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         area,
         app,
         &app.worker_menu,
-        "Worker — Fleet Manager/Pick Server/Connect/Cgroup",
-        "Manage worker fleet: edit fleet, pick server, connect, setup cgroups. Use ↑/↓ or j/k to navigate, Enter to execute.",
+        "Worker — Fleet Manager/Attach/Cgroup",
+        "Manage worker fleet: edit fleet, attach remote box, setup cgroups. Use ↑/↓ or j/k to navigate, Enter to execute.",
         "[↑/↓/j/k] Navigate   [Enter] Execute   [1-9] Switch page   [Esc] Back   [q] Quit",
     );
 }

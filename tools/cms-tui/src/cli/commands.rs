@@ -124,8 +124,7 @@ pub fn handle(cmd: Commands) -> Result<(), Box<dyn std::error::Error>> {
                     vec!["stop".to_string(), "all".to_string()],
                 ),
                 WorkerSub::List => (DispatchKey::WorkerList, vec!["list".to_string()]),
-                WorkerSub::Server => (DispatchKey::WorkerServer, Vec::new()),
-                WorkerSub::Connect => (DispatchKey::WorkerConnect, Vec::new()),
+                WorkerSub::Attach => (DispatchKey::WorkerAttach, vec!["attach".to_string()]),
                 WorkerSub::Cgroup => (DispatchKey::WorkerCgroup, Vec::new()),
             };
             let args: Vec<&str> = args.iter().map(String::as_str).collect();
