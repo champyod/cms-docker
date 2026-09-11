@@ -194,4 +194,49 @@ for sql_file in "${SQL_FILES[@]}"; do
   fi
 done
 
+# WHY post-apply RLS assertion: ENABLE/FORCE with a mistyped table succeeds silently (DO $$ guard) and leaves the table unprotected. Verify the RESULT, not just the apply exit code.
+# WHY full-apply only: --pre-push and --bootstrap-roles exit before this point; they apply only a subset (capture file / role files) where RLS is deliberately not yet complete, so a check there would false-fail and violate their tolerant contract. Full apply is the only mode where all RLS files have been applied.
+log_info "verifying RLS (ENABLE + FORCE) on public tables..."
+_RLS_RC=0
+_RLS_COUNT="$(docker exec -i -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -A -c "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' AND NOT c.relrowsecurity;" 2>&1)" || _RLS_RC=$?
+if [[ $_RLS_RC -ne 0 ]]; then
+  # WHY log_warn not log_die: a docker/psql execution failure (container gone, network hiccup) is infra, not a security verdict — must not mask or fake a gap as pass/fail.
+  log_warn "RLS ENABLE check skipped: docker/psql execution failed (exit $_RLS_RC): $_RLS_COUNT"
+else
+  _RLS_COUNT_TRIMMED="$(printf '%s' "$_RLS_COUNT" | tr -d '[:space:]')"
+  if [[ "$_RLS_COUNT_TRIMMED" =~ ^[0-9]+$ ]] && [[ "$_RLS_COUNT_TRIMMED" -gt 0 ]]; then
+    _RLS_TABLES_RC=0
+    _RLS_TABLES="$(docker exec -i -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -A -c "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' AND NOT c.relrowsecurity ORDER BY c.relname;" 2>&1)" || _RLS_TABLES_RC=$?
+    if [[ $_RLS_TABLES_RC -ne 0 ]]; then
+      log_die "RLS ENABLE gap: ${_RLS_COUNT_TRIMMED} public table(s) without RLS (failed to fetch names, psql exit $_RLS_TABLES_RC): $_RLS_TABLES" 1
+    fi
+    _RLS_TABLES_FMT="$(printf '%s' "$_RLS_TABLES" | tr '\n' ' ' | xargs)"
+    log_die "RLS ENABLE gap: ${_RLS_COUNT_TRIMMED} public table(s) without RLS: ${_RLS_TABLES_FMT}" 1
+  elif [[ ! "$_RLS_COUNT_TRIMMED" =~ ^[0-9]+$ ]]; then
+    log_warn "RLS ENABLE check skipped: unexpected psql output: $_RLS_COUNT"
+  else
+    log_info "RLS ENABLE check passed (0 tables without RLS)"
+  fi
+fi
+_RLS_FORCE_RC=0
+_RLS_FORCE_COUNT="$(docker exec -i -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -A -c "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity AND NOT c.relforcerowsecurity;" 2>&1)" || _RLS_FORCE_RC=$?
+if [[ $_RLS_FORCE_RC -ne 0 ]]; then
+  log_warn "RLS FORCE check skipped: docker/psql execution failed (exit $_RLS_FORCE_RC): $_RLS_FORCE_COUNT"
+else
+  _RLS_FORCE_TRIMMED="$(printf '%s' "$_RLS_FORCE_COUNT" | tr -d '[:space:]')"
+  if [[ "$_RLS_FORCE_TRIMMED" =~ ^[0-9]+$ ]] && [[ "$_RLS_FORCE_TRIMMED" -gt 0 ]]; then
+    _RLS_FORCE_TABLES_RC=0
+    _RLS_FORCE_TABLES="$(docker exec -i -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -A -c "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity AND NOT c.relforcerowsecurity ORDER BY c.relname;" 2>&1)" || _RLS_FORCE_TABLES_RC=$?
+    if [[ $_RLS_FORCE_TABLES_RC -ne 0 ]]; then
+      log_die "RLS FORCE gap: ${_RLS_FORCE_TRIMMED} public table(s) with RLS but without FORCE (failed to fetch names, psql exit $_RLS_FORCE_TABLES_RC): $_RLS_FORCE_TABLES" 1
+    fi
+    _RLS_FORCE_FMT="$(printf '%s' "$_RLS_FORCE_TABLES" | tr '\n' ' ' | xargs)"
+    log_die "RLS FORCE gap: ${_RLS_FORCE_TRIMMED} public table(s) with RLS but without FORCE: ${_RLS_FORCE_FMT}" 1
+  elif [[ ! "$_RLS_FORCE_TRIMMED" =~ ^[0-9]+$ ]]; then
+    log_warn "RLS FORCE check skipped: unexpected psql output: $_RLS_FORCE_COUNT"
+  else
+    log_info "RLS FORCE check passed (0 tables with RLS but without FORCE)"
+  fi
+fi
+
 log_info "SQL apply complete."

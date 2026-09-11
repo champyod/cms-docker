@@ -8,7 +8,6 @@ on:
       - 'docs/**'
       - 'examples/**'
       - '.gitignore'
-      - 'admin-panel/**' # owned by the admin-panel session and linted in its own pipeline
   pull_request:
     branches: ["main", "major/admin-panel"]
     types: [opened, synchronize, reopened]
@@ -60,6 +59,20 @@ jobs:
 
       - name: VAR_SPEC parity
         run: bash scripts/__check_spec_parity.sh
+
+      # WHY gates read admin-panel/** (permission registry / schema.prisma / actions/routes) but were skipped by the old paths-ignore: 'admin-panel/**'.
+      # The claim that build-and-push.yml covers admin-panel/** is inaccurate — that workflow only builds/pushes the admin-panel Docker image when admin-panel/** changes (dorny/paths-filter admin: 'admin-panel/**'), it does NOT run the parity/RLS gates. These gates are added here so lint still runs on admin-panel/** changes and validates permission/audit/RLS coverage and generator freshness.
+      - name: Audit coverage
+        run: bash scripts/__check_audit_coverage.sh
+
+      - name: Permission parity
+        run: bash scripts/__check_permission_parity.sh
+
+      - name: RLS coverage
+        run: bash scripts/__check_rls_coverage.sh
+
+      - name: RLS SQL freshness
+        run: bash scripts/__generate_rls_sql.sh --check
 
       - name: hadolint
         run: hadolint Dockerfile docker/monitor/Dockerfile
