@@ -251,11 +251,8 @@ class Service:
         """
         return os.path.join(config.global_.run_dir, "%s_%d" % (self.name, self.shard))
 
-    @rpc_method
-    def start_backdoor(self, backlog=50):
-        """Start a backdoor server on a local UNIX domain socket.
-
-        """
+    def _start_backdoor_impl(self, backlog: int = 50) -> None:
+        """Internal backdoor startup; bypasses RPC opt-in check for local use."""
         backdoor_path = self.get_backdoor_path()
         try:
             os.remove(backdoor_path)
@@ -273,11 +270,8 @@ class Service:
         self.backdoor = BackdoorServer(backdoor_sock, locals={'service': self})
         self.backdoor.start()
 
-    @rpc_method
-    def stop_backdoor(self):
-        """Stop a backdoor server started by start_backdoor.
-
-        """
+    def _stop_backdoor_impl(self) -> None:
+        """Internal backdoor shutdown; bypasses RPC opt-in check for local use."""
         if self.backdoor is not None:
             self.backdoor.stop()
         backdoor_path = self.get_backdoor_path()
@@ -285,6 +279,32 @@ class Service:
             os.remove(backdoor_path)
         except FileNotFoundError:
             pass
+
+    @rpc_method
+    def start_backdoor(self, backlog=50):
+        """Start a backdoor server on a local UNIX domain socket.
+
+        """
+        # WHY: remote backdoor is high-risk; require explicit opt-in even with valid RPC secret.
+        if not getattr(getattr(config, "rpc", None), "allow_backdoor", False):
+            logger.error(
+                "Backdoor RPC start_backdoor rejected (not enabled) for %s",
+                self._my_coord)
+            raise RuntimeError("Backdoor RPC is disabled.")
+        self._start_backdoor_impl(backlog)
+
+    @rpc_method
+    def stop_backdoor(self):
+        """Stop a backdoor server started by start_backdoor.
+
+        """
+        # WHY: remote backdoor is high-risk; require explicit opt-in even with valid RPC secret.
+        if not getattr(getattr(config, "rpc", None), "allow_backdoor", False):
+            logger.error(
+                "Backdoor RPC stop_backdoor rejected (not enabled) for %s",
+                self._my_coord)
+            raise RuntimeError("Backdoor RPC is disabled.")
+        self._stop_backdoor_impl()
 
     def run(self) -> bool:
         """Starts the main loop of the service.
@@ -317,7 +337,7 @@ class Service:
                 raise
 
         if config.global_.backdoor:
-            self.start_backdoor()
+            self._start_backdoor_impl()
 
         logger.info("%s %d up and running!", *self._my_coord)
 
@@ -327,7 +347,7 @@ class Service:
         logger.info("%s %d is shutting down", *self._my_coord)
 
         if config.global_.backdoor:
-            self.stop_backdoor()
+            self._stop_backdoor_impl()
 
         self._disconnect_all()
         return True

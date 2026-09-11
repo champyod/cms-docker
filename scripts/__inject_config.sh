@@ -71,6 +71,8 @@ DB_NAME="$(get_env_val "POSTGRES_DB")"
 DB_HOST="$(get_env_val "POSTGRES_HOST")"
 DB_PORT="$(get_env_val "POSTGRES_PORT")"
 CMS_SECRET="$(get_env_val "CMS_SECRET_KEY")"
+RPC_SECRET="$(get_env_val "RPC_SECRET")"
+RPC_ALLOW_BACKDOOR="$(get_env_val "RPC_ALLOW_BACKDOOR")"
 TAILSCALE_IP="$(get_env_val "TAILSCALE_IP")"
 CORE_SERVICES_IP="$(get_env_val "CORE_SERVICES_IP")"
 
@@ -102,7 +104,7 @@ echo "  - DB Host: $DB_HOST:$DB_PORT"
 echo "  - DB User: $DB_USER"
 echo "  - DB Name: $DB_NAME"
 
-export DB_USER DB_PASS DB_NAME DB_HOST DB_PORT CMS_SECRET TAILSCALE_IP CORE_SERVICES_IP
+export DB_USER DB_PASS DB_NAME DB_HOST DB_PORT CMS_SECRET RPC_SECRET RPC_ALLOW_BACKDOOR TAILSCALE_IP CORE_SERVICES_IP
 
 # Ranking Scoreboard auth — exact-match reads, never via grep regex.
 R_USER="$(get_kv_from_file "RANKING_USERNAME" ".env.contest")"
@@ -187,6 +189,30 @@ if 'log_dir =' not in text:
     text = "[global]\nlog_dir = \"/var/local/log/cms\"\n" + text
 if 'cache_dir =' not in text:
     text = text.replace('log_dir = "/var/local/log/cms"', 'log_dir = "/var/local/log/cms"\ncache_dir = "/var/local/cache/cms"\ndata_dir = "/var/local/lib/cms"')
+
+# Inject RPC shared secret and backdoor flag into [rpc] section.
+rpc_secret = os.environ.get("RPC_SECRET", "").strip()
+rpc_backdoor = os.environ.get("RPC_ALLOW_BACKDOOR", "").strip().lower()
+# Normalize bool for TOML
+if rpc_backdoor in ("true", "1", "yes"):
+    rpc_backdoor_val = "true"
+elif rpc_backdoor in ("false", "0", "no", ""):
+    rpc_backdoor_val = "false"
+else:
+    rpc_backdoor_val = "false"
+if rpc_secret:
+    if re.search(r'^\s*secret\s*=', text, re.MULTILINE):
+        text = re.sub(r'^\s*secret\s*=.*', lambda m: f'secret = "{toml_escape(rpc_secret)}"', text, flags=re.MULTILINE)
+    elif re.search(r'^\[rpc\]', text, re.MULTILINE):
+        text = re.sub(r'^(\[rpc\].*)', lambda m: m.group(1) + f'\nsecret = "{toml_escape(rpc_secret)}"', text, flags=re.MULTILINE, count=1)
+    else:
+        text += f'\n[rpc]\nsecret = "{toml_escape(rpc_secret)}"\n'
+# Ensure allow_backdoor is present when [rpc] exists
+if re.search(r'^\[rpc\]', text, re.MULTILINE):
+    if re.search(r'^\s*allow_backdoor\s*=', text, re.MULTILINE):
+        text = re.sub(r'^\s*allow_backdoor\s*=.*', lambda m: f'allow_backdoor = {rpc_backdoor_val}', text, flags=re.MULTILINE)
+    else:
+        text = re.sub(r'^(\[rpc\].*)', lambda m: m.group(1) + f'\nallow_backdoor = {rpc_backdoor_val}', text, flags=re.MULTILINE, count=1)
 
 config_path.write_text(text)
 PY

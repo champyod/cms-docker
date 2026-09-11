@@ -75,6 +75,10 @@ WAF_PORT = 8080                 # port
 WAF_PARANOIA = 1                # num
 WAF_ANOMALY_INBOUND = 5         # num
 
+[rpc]
+RPC_SECRET = ""               # secret; auto-generated hex32 if empty; shared inter-service RPC secret
+RPC_ALLOW_BACKDOOR = false    # bool; allow remote start_backdoor/stop_backdoor via RPC (requires secret)
+
 [contest]
 CONTEST_ID = 1                  # num
 CONTEST_DOMAIN = ""             # str; FQDN contestants use; empty=CMS_DOMAIN

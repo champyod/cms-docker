@@ -39,7 +39,7 @@ gen_pw()    { openssl rand -base64 12 2>/dev/null | tr -d "=+/" | cut -c1-16; }
 declare -A __TOML
 # Explicitly initialized empty: ${#arr[@]} must resolve under `set -u` even
 # when a TOML section has no keys.
-declare -a __CORE_KEYS=() __ADMIN_KEYS=() __CONTEST_KEYS=() __WORKER_KEYS=() __INFRA_KEYS=() __TAILSCALE_KEYS=()
+declare -a __CORE_KEYS=() __ADMIN_KEYS=() __CONTEST_KEYS=() __WORKER_KEYS=() __INFRA_KEYS=() __TAILSCALE_KEYS=() __RPC_KEYS=()
 
 parse_toml() {
   local file="$1" section="" line key val
@@ -63,6 +63,7 @@ parse_toml() {
         worker)    __WORKER_KEYS+=("$key") ;;
         infra)     __INFRA_KEYS+=("$key") ;;
         tailscale) __TAILSCALE_KEYS+=("$key") ;;
+        rpc)       __RPC_KEYS+=("$key") ;;
       esac
     fi
   done < "$file"
@@ -78,6 +79,7 @@ generate_secret_for() {
     AUTH_SECRET)        gen_hex32 ;;
     SECRET_KEY)          gen_hex32 ;;
     CMS_SECRET_KEY)      gen_hex32 ;;
+    RPC_SECRET)          gen_hex32 ;;
     RANKING_PASSWORD)    echo "cms_ranking_$(gen_pw)" ;;
     OFFSITE_ENCRYPT_KEY) gen_hex32 ;;
     GRAFANA_PASSWORD)    gen_hex32 ;;
@@ -167,6 +169,7 @@ main() {
     scan_and_generate_secrets contest __CONTEST_KEYS
     scan_and_generate_secrets worker  __WORKER_KEYS
     scan_and_generate_secrets infra   __INFRA_KEYS
+    scan_and_generate_secrets rpc     __RPC_KEYS
 
     if [[ "$SECRETS_CHANGED" -eq 1 ]]; then
       log_info "Generated secrets in config.toml"
@@ -176,7 +179,7 @@ main() {
     if [[ "$DRY_RUN" -eq 0 && "$SECRETS_CHANGED" -eq 1 ]]; then
       __TOML=()
       __CORE_KEYS=(); __ADMIN_KEYS=(); __CONTEST_KEYS=()
-      __WORKER_KEYS=(); __INFRA_KEYS=(); __TAILSCALE_KEYS=()
+      __WORKER_KEYS=(); __INFRA_KEYS=(); __TAILSCALE_KEYS=(); __RPC_KEYS=()
       parse_toml "$TOML_FILE"
     fi
   fi
@@ -202,6 +205,7 @@ main() {
       write_section_block "worker"    __WORKER_KEYS
       write_section_block "infra"     __INFRA_KEYS
       write_section_block "tailscale" __TAILSCALE_KEYS
+      write_section_block "rpc"       __RPC_KEYS
     } > .env
     chmod 600 .env
   else
@@ -320,7 +324,7 @@ main() {
   if [[ "$DRY_RUN" -eq 0 ]]; then
     local total_vars=$((${#__CORE_KEYS[@]} + ${#__ADMIN_KEYS[@]} + \
                         ${#__CONTEST_KEYS[@]} + ${#__WORKER_KEYS[@]} + ${#__INFRA_KEYS[@]} + \
-                        ${#__TAILSCALE_KEYS[@]}))
+                        ${#__TAILSCALE_KEYS[@]} + ${#__RPC_KEYS[@]}))
     chmod 600 .env admin-panel/.env 2>/dev/null || true
     log_info "Synced ${total_vars} vars from config.toml → .env"
   fi

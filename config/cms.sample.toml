@@ -177,6 +177,14 @@ rankings = ["http://usern4me:passw0rd@cms-ranking-web-server:8890/"]
 #https_certfile = "..."
 
 
+[rpc]
+# Shared secret for inter-service RPC authentication. Must be identical on
+# all hosts that need to talk over RPC. Leave commented/empty to use the
+# auto-generated value produced by `make env` / `./cms config sync`.
+#secret = "CHANGE-ME"
+# Allow remote backdoor RPC (high-risk); requires valid RPC secret as well.
+#allow_backdoor = false
+
 [prometheus]
 # Listening HTTP address and port for the exporter. If exposed this may
 # leak private information, make sure to secure this endpoint.

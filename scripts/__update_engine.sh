@@ -343,13 +343,13 @@ ask_var() {
 
 
 select_services() {
-  local defaults="core admin contest worker infra tailscale"
+  local defaults="core admin contest worker infra tailscale rpc"
   if declare -F tui::choose_multi >/dev/null 2>&1; then
     SERVICES_SELECTED=$(tui::choose_multi \
       "Select services to configure on this node" \
-      "core" "admin" "contest" "worker" "infra" "tailscale")
+      "core" "admin" "contest" "worker" "infra" "tailscale" "rpc")
   else
-    echo "  Services [core,admin,contest,worker,infra,tailscale]: "
+    echo "  Services [core,admin,contest,worker,infra,tailscale,rpc]: "
     read -r ans
     SERVICES_SELECTED="${ans:-$defaults}"
   fi
@@ -367,6 +367,7 @@ filter_specs() {
       "Worker")         service="worker" ;;
       "Infra & Monitoring") service="infra" ;;
       "Tailscale") service="tailscale" ;;
+      "RPC") service="rpc" ;;
       *) service="none" ;;
     esac
     if [[ " $SERVICES_SELECTED " == *" $service "* ]]; then
@@ -765,6 +766,8 @@ VAR_SPECS=(
   "Core & Network|[core]|MTLS_CA_CERT|str||config/mtls/ca.pem"
   "Core & Network|[core]|MTLS_WORKER_CERT|str||config/mtls/worker.pem"
   "Core & Network|[core]|MTLS_WORKER_KEY|str||config/mtls/worker-key.pem"
+  "RPC|[rpc]|RPC_SECRET|secret||hex32"
+  "RPC|[rpc]|RPC_ALLOW_BACKDOOR|bool||false"
   "Infra & Monitoring|[infra]|MTLS_WORKERS_ENABLED|enum:0,1||0"
   "Infra & Monitoring|[infra]|VAULT_ADDR|url||http://vault:8200"
   "Infra & Monitoring|[infra]|VAULT_ENABLED|enum:0,1||0"

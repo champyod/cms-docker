@@ -22,6 +22,7 @@
 
 from collections.abc import Callable
 import functools
+import hmac
 import json
 import logging
 import socket
@@ -44,6 +45,33 @@ if typing.TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+
+def _get_rpc_secret() -> str | None:
+    """Return configured RPC secret (or None if unset)."""
+    try:
+        from cms import config as cms_config
+        secret = getattr(getattr(cms_config, "rpc", None), "secret", None)
+        if isinstance(secret, str) and secret:
+            return secret
+    except Exception:
+        pass
+    return None
+
+
+def _check_rpc_secret(presented: object, configured: str | None) -> bool:
+    """Verify presented secret against configured one.
+
+    Fail closed: missing configured or missing/wrong presented -> False.
+    Uses hmac.compare_digest to avoid timing leaks.
+
+    """
+    # WHY: fail closed — unauthenticated RPC must never execute methods.
+    if not configured:
+        return False
+    if not isinstance(presented, str) or not presented:
+        return False
+    return hmac.compare_digest(presented, configured)
 
 
 class RPCError(Exception):
@@ -411,6 +439,52 @@ class RemoteServiceServer(RemoteServiceBase):
 
         method_name = request["__method"]
 
+        # WHY: authenticate before dispatching; fail closed and never log secret.
+        configured_secret = _get_rpc_secret()
+        presented_secret = request.get("__secret")
+        if not _check_rpc_secret(presented_secret, configured_secret):
+            logger.error(
+                "RPC authentication failed for service %s method %s from %s",
+                getattr(self.local_service, "name", "?"),
+                method_name, self._repr_remote())
+            response["__error"] = "RPC authentication failed."
+            # Do not execute method — send error response only.
+            # Encode and send below without method dispatch.
+            try:
+                data = json.dumps(response).encode('utf-8')
+            except (TypeError, ValueError):
+                logger.warning("JSON encoding failed.", exc_info=True)
+                return
+            try:
+                self._write(data)
+            except OSError:
+                return
+            return
+
+        # Gate backdoor RPC behind explicit opt-in even when secret is valid.
+        if method_name in ("start_backdoor", "stop_backdoor"):
+            try:
+                from cms import config as cms_config
+                allow = bool(getattr(getattr(cms_config, "rpc", None),
+                                     "allow_backdoor", False))
+            except Exception:
+                allow = False
+            if not allow:
+                logger.error(
+                    "RPC backdoor method %s rejected (not enabled) from %s",
+                    method_name, self._repr_remote())
+                response["__error"] = "Backdoor RPC is disabled."
+                try:
+                    data = json.dumps(response).encode('utf-8')
+                except (TypeError, ValueError):
+                    logger.warning("JSON encoding failed.", exc_info=True)
+                    return
+                try:
+                    self._write(data)
+                except OSError:
+                    return
+                return
+
         if not hasattr(self.local_service, method_name):
             response["__error"] = "Method %s doesn't exist." % method_name
         else:
@@ -640,9 +714,13 @@ class RemoteServiceClient(RemoteServiceBase):
         id_ = uuid.uuid4().hex
 
         # Build the request.
-        request = {"__id": id_,
+        # WHY: include RPC secret so receiver can authenticate sender.
+        secret = _get_rpc_secret()
+        request: dict[str, object] = {"__id": id_,
                    "__method": method,
                    "__data": data}
+        if secret:
+            request["__secret"] = secret
 
         result = gevent.event.AsyncResult()
 

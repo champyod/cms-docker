@@ -148,6 +148,13 @@ class ProxyServiceConfig:
 
 
 @dataclass()
+class RpcConfig:
+    secret: str | None = None
+    # WHY: backdoor RPC is high-risk; explicit opt-in required even with valid secret.
+    allow_backdoor: bool = False
+
+
+@dataclass()
 class PrometheusConfig:
     listen_address: str = "127.0.0.1"
     listen_port: int = 8811
@@ -176,6 +183,7 @@ class Config:
     contest_web_server: CWSConfig = field_helper(CWSConfig)
     admin_web_server: AWSConfig = field_helper(AWSConfig)
     proxy_service: ProxyServiceConfig = field_helper(ProxyServiceConfig)
+    rpc: RpcConfig = field_helper(RpcConfig)
     prometheus: PrometheusConfig = field_helper(PrometheusConfig)
     telegram_bot: TelegramBotConfig | None = None
     # This is the one that will be provided in the config file.
