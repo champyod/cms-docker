@@ -117,7 +117,7 @@ export ROLE_ID="${DISCORD_ROLE_ID:-}"
 # Run the backup using the script but with BACKUP_DIR redirected
 # We need to source the script's env loading and then run run_backup
 # Actually, let's just call the backup script with the env already set
-# The backup script sources .env.core etc itself, so we just need to set BACKUP_DIR
+# The backup script sources .env itself, so we just need to set BACKUP_DIR
 
 # Let's run cms-backup.sh with BACKUP_DIR already exported
 # But we need to be careful — the backup script will try to connect to the database

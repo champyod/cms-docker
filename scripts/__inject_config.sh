@@ -87,7 +87,7 @@ DB_NAME="${DB_NAME:-cmsdb}"
 # reach Postgres through the compose network service name ("database") — never a
 # routable IP, which is unreachable from inside the docker bridge and breaks RPC.
 # REMOTE workers have no such container: set WORKER_DB_HOST (+ WORKER_DB_PORT)
-# in .env.worker so cms.toml points at the main server's routable address instead.
+# in .env so cms.toml points at the main server's routable address instead.
 if [[ -n "$(get_worker_env_val "WORKER_DB_HOST")" ]]; then
   DB_HOST="$(get_worker_env_val "WORKER_DB_HOST")"
   _W_DB_PORT="$(get_worker_env_val "WORKER_DB_PORT")"

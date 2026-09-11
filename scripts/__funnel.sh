@@ -23,7 +23,7 @@ fi
 cd "$(dirname "$0")/.."
 
 HTPASSWD="config/funnel.htpasswd"
-ADMIN_ENV=".env.admin"
+ADMIN_ENV=".env"
 
 log_info() { printf '[INFO] %s\n' "$*"; }
 log_warn() { printf '[WARN] %s\n' "$*" >&2; }

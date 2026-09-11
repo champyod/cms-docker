@@ -445,7 +445,7 @@ case "${1:-}" in
   --help|-h)
     echo "Usage: $0 [--cleanup-only]"
     echo "Env: BACKUP_DIR, BACKUP_MAX_COUNT, BACKUP_MAX_AGE_DAYS, BACKUP_MAX_SIZE_GB"
-    echo "     DISCORD_WEBHOOK_URL (env only), POSTGRES_* from .env.core"
+    echo "     DISCORD_WEBHOOK_URL (env only), POSTGRES_* from .env"
     ;;
   "") run_backup ;;
   *) log_warn "Unknown arg: $1 — running backup anyway"; run_backup ;;

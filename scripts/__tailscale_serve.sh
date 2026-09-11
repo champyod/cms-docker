@@ -3,7 +3,7 @@
 #
 # Registers `tailscale serve` listeners that proxy tailnet HTTPS ports to the
 # loopback-bound CMS UIs, and optionally hides the raw plaintext ports by
-# rebinding them to 127.0.0.1 (.env.admin) so they are unreachable off-host.
+# rebinding them to 127.0.0.1 (.env) so they are unreachable off-host.
 #
 # Env knobs (.env [admin] / [tailscale]):
 #   TAILSCALE_SERVE=1              master switch consumed by ./cms bootstrap

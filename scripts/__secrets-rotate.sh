@@ -92,10 +92,10 @@ Options:
   --help                  Show this help
 
 Audited secrets:
-  - POSTGRES_PASSWORD (.env.core) — both file + inline
-  - RANKING_PASSWORD (.env.admin)
-  - CMS_SECRET_KEY (.env.core / cms.toml)
-  - AUTH_SECRET (.env.admin)
+  - POSTGRES_PASSWORD (.env) — both file + inline
+  - RANKING_PASSWORD (.env)
+  - CMS_SECRET_KEY (.env / cms.toml)
+  - AUTH_SECRET (.env)
   - SECRET_KEY (admin-panel/.env)
   - AUTH_SECRET (admin-panel/.env)
   - funnel.htpasswd (config/funnel.htpasswd)

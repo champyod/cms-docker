@@ -64,10 +64,7 @@ log "Regenerating environment files (make env)..."
 make env || die "make env failed."
 
 # Deployment type must be detected AFTER env regeneration (branch switch may change it)
-DEPLOY_TYPE="$(grep -E '^DEPLOYMENT_TYPE=' .env.admin 2>/dev/null | tail -n1 | cut -d '=' -f2 | cut -d '#' -f1 | tr -d '[:space:]' | tr -d '\"' | tr -d "'" || true)"
-if [ -z "$DEPLOY_TYPE" ]; then
-    DEPLOY_TYPE="$(grep -E '^DEPLOYMENT_TYPE=' .env 2>/dev/null | tail -n1 | cut -d '=' -f2 | cut -d '#' -f1 | tr -d '[:space:]' | tr -d '\"' | tr -d "'" || true)"
-fi
+DEPLOY_TYPE="$(grep -E '^DEPLOYMENT_TYPE=' .env 2>/dev/null | tail -n1 | cut -d '=' -f2 | cut -d '#' -f1 | tr -d '[:space:]' | tr -d '\"' | tr -d "'" || true)"
 DEPLOY_TYPE="${DEPLOY_TYPE:-img}"
 log "Detected deployment type: ${DEPLOY_TYPE}"
 
@@ -241,7 +238,7 @@ else
 fi
 
 if [ "$HAS_ADMIN" = true ]; then
-    ADMIN_PORT="$(read_env_port .env.admin ADMIN_NEXT_PORT_EXTERNAL 8891)"
+    ADMIN_PORT="$(read_env_port .env ADMIN_NEXT_PORT_EXTERNAL 8891)"
     log "Checking admin panel on http://127.0.0.1:${ADMIN_PORT}/ ..."
     if http_ok "http://127.0.0.1:${ADMIN_PORT}/"; then ADMIN_RESULT="PASS"; else ADMIN_RESULT="FAIL"; fi
 fi

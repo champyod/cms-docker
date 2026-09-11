@@ -52,7 +52,7 @@ DRY_RUN=0
 print_usage() {
   cat <<'USAGE'
 Usage: smoke-test.sh [--mode img|src] [--stacks core,admin,contest] [--keep] [--dry-run] [-h]
-  --mode    img (GHCR) or src (build). Default: DEPLOYMENT_TYPE from .env.admin else img.
+  --mode    img (GHCR) or src (build). Default: DEPLOYMENT_TYPE from .env else img.
   --stacks  comma-separated subset of {core,admin,contest,worker,monitor}. Default: core,admin.
   --keep    do not teardown at end (implies SMOKE_KEEP_UP=1 handling).
   --dry-run print planned steps without executing.
@@ -84,12 +84,9 @@ if [[ -n "$MODE" && "$MODE" != "img" && "$MODE" != "src" ]]; then
   log_die "invalid --mode: $MODE (expected img|src)" 2
 fi
 
-# Resolve default mode from .env.admin DEPLOYMENT_TYPE if not given
+# Resolve default mode from .env DEPLOYMENT_TYPE if not given
 if [[ -z "$MODE" ]]; then
-  if [[ -f "${REPO_ROOT}/.env.admin" ]]; then
-    MODE=$(grep -E '^DEPLOYMENT_TYPE=' "${REPO_ROOT}/.env.admin" | tail -n1 | cut -d= -f2 | tr -d '[:space:]' | tr -d '"' | tr -d "'" || true)
-  fi
-  if [[ -z "$MODE" && -f "${REPO_ROOT}/.env" ]]; then
+  if [[ -f "${REPO_ROOT}/.env" ]]; then
     MODE=$(grep -E '^DEPLOYMENT_TYPE=' "${REPO_ROOT}/.env" | tail -n1 | cut -d= -f2 | cut -d'#' -f1 | tr -d '[:space:]' | tr -d '"' | tr -d "'" || true)
   fi
   [[ -z "$MODE" ]] && MODE="img"
