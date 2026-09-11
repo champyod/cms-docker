@@ -44,15 +44,11 @@ record_pre_update_state() {
 record_pre_update_state
 
 # ---------------------------------------------------------------------------
-# (a) Pull latest code (+ submodules when present)
+# (a) Pull latest code
 # ---------------------------------------------------------------------------
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     log "Pulling latest code..."
     git pull --ff-only || die "git pull failed; resolve manually and re-run."
-    if [ -f .gitmodules ]; then
-        log "Updating git submodules..."
-        git submodule update --init --recursive || die "git submodule update failed."
-    fi
 else
     warn "Not a git repository; skipping code pull."
 fi

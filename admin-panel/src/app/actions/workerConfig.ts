@@ -96,7 +96,7 @@ export async function getWorkers() {
       }
     }
 
-    const envCorePath = path.join(getRepoRoot(), '.env.core');
+    const envCorePath = path.join(getRepoRoot(), '.env');
     const envCoreContent = await fs.readFile(envCorePath, 'utf-8');
     return parseWorkersFromEnvCore(envCoreContent);
   } catch (error) {

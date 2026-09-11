@@ -19,7 +19,7 @@ export default function MaintenanceClient() {
 
   const loadData = async () => {
     setLoading(true);
-    const result = await readEnvFile('.env.infra');
+    const result = await readEnvFile('.env');
     if (result.success && result.config) {
       setData(result.config);
     }
@@ -36,7 +36,7 @@ export default function MaintenanceClient() {
 
   const handleSave = async () => {
     setSaving(true);
-    const result = await updateEnvFile('.env.infra', data);
+    const result = await updateEnvFile('.env', data);
     if (result.success) {
       alert('Maintenance settings saved successfully!');
     } else {

@@ -278,16 +278,16 @@ cmd_generate() {
 # Generated secrets — $(date -u +%Y-%m-%dT%H:%M:%SZ)
 # Review these values, then run: ./cms secrets rotate
 
-# Database password (.env.core)
+# Database password (.env)
 POSTGRES_PASSWORD=${postgres_password}
 
-# Ranking password (.env.admin)
+# Ranking password (.env)
 RANKING_PASSWORD=${ranking_password}
 
 # CMS secret key (config/cms.toml)
 CMS_SECRET_KEY=${cms_secret}
 
-# Next.js admin panel secrets (.env.admin + admin-panel/.env)
+# Next.js admin panel secrets (.env + admin-panel/.env)
 AUTH_SECRET=${auth_secret}
 SECRET_KEY=${secret_key}
 

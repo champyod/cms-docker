@@ -16,7 +16,7 @@ export type EnvFilesData = Record<string, Record<string, string>>;
 export const CONFIG_SECTIONS: EnvConfigSection[] = [
   {
     title: 'Database Configuration',
-    filename: '.env.core',
+    filename: '.env',
     fields: [
       { key: 'POSTGRES_DB', label: 'Database Name', description: 'PostgreSQL database name.' },
       { key: 'POSTGRES_USER', label: 'Database User', description: 'PostgreSQL username.' },
@@ -25,7 +25,7 @@ export const CONFIG_SECTIONS: EnvConfigSection[] = [
   },
   {
     title: 'Network & Access',
-    filename: '.env.core',
+    filename: '.env',
     fields: [
       { key: 'PUBLIC_IP', label: 'Public IP', description: 'Public facing IP address of this server.' },
       { key: 'TAILSCALE_IP', label: 'Tailscale IP', description: 'Internal VPN IP (optional).' },
@@ -34,7 +34,7 @@ export const CONFIG_SECTIONS: EnvConfigSection[] = [
   },
   {
     title: 'Admin Panel Config',
-    filename: '.env.admin',
+    filename: '.env',
     fields: [
       { key: 'VITE_API_URL', label: 'API URL', description: 'URL for the Admin API.' },
       { key: 'ADMIN_LISTEN_PORT', label: 'Admin Port', description: 'Internal port for Admin Web Server.' },
@@ -42,7 +42,7 @@ export const CONFIG_SECTIONS: EnvConfigSection[] = [
   },
   {
     title: 'Ranking Settings',
-    filename: '.env.admin',
+    filename: '.env',
     fields: [
       { key: 'RANKING_USERNAME', label: 'Ranking Username', description: 'Auth for scoreboard.' },
       { key: 'RANKING_PASSWORD', label: 'Ranking Password', description: 'Auth for scoreboard.' },

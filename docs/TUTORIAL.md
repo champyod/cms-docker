@@ -16,7 +16,7 @@ This tutorial will guide you through setting up and running your first programmi
 # Clone the repository
 git clone https://github.com/champyod/cms-docker.git
 cd cms-docker
-git submodule update --init --recursive
+# CMS Python source is vendored in src/ — no submodule step needed.
 
 # Run the interactive configuration tool
 ./cms setup

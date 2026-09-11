@@ -1,12 +1,12 @@
 #!/bin/bash
 # Worker fleet TUI — manage the WORKER_<shard>=<host>:<port> registry in
-# .env.core and deploy each local entry as its own compose project
+# .env and deploy each local entry as its own compose project
 # (cms-worker-<shard>, host port <port>).
 #
 # Data model (backward compatible):
-#   .env.core   : WORKER_<shard>=host:port      <- registry, rendered into
+#   .env        : WORKER_<shard>=host:port      <- registry, rendered into
 #                                                  config/cms.toml by make env
-#   .env.worker : all existing vars untouched    <- per-host worker defaults
+#   .env        : all existing vars untouched    <- per-host worker defaults
 #                 WORKER_SHARD<n>_LOCAL=0        <- OPTIONAL: registry-only,
 #                                                 skip local deployment
 #                 WORKER_SHARD<n>_MEMORY/_CPU    <- OPTIONAL per-shard overrides
@@ -53,7 +53,7 @@ global_cpus()   { env_val "$WORKER_ENV" WORKER_CPU_LIMIT   || true; }
 core_host_ip()  { env_val "$CORE_ENV"   CORE_SERVICES_HOST || true; }
 
 # ---------------------------------------------------------------------------
-# Registry persistence (.env.core WORKER_N block + optional flags in worker env)
+# Registry persistence (.env WORKER_N block + optional flags in worker env)
 # ---------------------------------------------------------------------------
 fleet_load() {
   WORKERS=()

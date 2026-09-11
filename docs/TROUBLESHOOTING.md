@@ -187,12 +187,6 @@ docker build --network=host -t cms:latest .
 docker build --progress=plain --no-cache -t cms:latest .
 ```
 
-**C. Missing git submodules:**
-```bash
-# Initialize submodules
-git submodule update --init --recursive
-```
-
 ---
 
 ## Network Issues

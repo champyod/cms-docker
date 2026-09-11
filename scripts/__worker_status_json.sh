@@ -4,7 +4,7 @@
 # Sources (no phantom tables): docker inspect (state/health/uptime/restarts),
 # container logs (activity classification), .env.contest (assigned contest),
 # TCP probe (reachability incl. remote workers), cms.toml registry via
-# scripts/__worker_tui.sh fleet semantics (WORKER_N in .env.core).
+# scripts/__worker_tui.sh fleet semantics (WORKER_N in .env).
 #
 # Usage:
 #   __worker_status_json.sh [--pretty]

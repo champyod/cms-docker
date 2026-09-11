@@ -5,7 +5,7 @@
 #   https://<node>.<tailnet>.ts.net:8443  -> nginx basic-auth -> admin panel
 #   https://<node>.<tailnet>.ts.net:10000 -> nginx basic-auth -> ranking
 #
-# Prereqs: FUNNEL_ENABLED=true in .env.admin, funnel enabled for the node
+# Prereqs: FUNNEL_ENABLED=true in .env, funnel enabled for the node
 #          in the tailnet ACL policy ("nodeAttr": ["funnel"]), and creds set
 #          via `./cms funnel passwd <user>`.
 #
