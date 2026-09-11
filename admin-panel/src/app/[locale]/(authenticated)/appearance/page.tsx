@@ -8,7 +8,7 @@ export default async function AppearancePage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  const hasPermission = await checkPermission('all', false);
+  const hasPermission = await checkPermission('appearance:update', false);
 
   // Why: return 404 for forbidden access so existence is indistinguishable from missing page
   if (!hasPermission) {

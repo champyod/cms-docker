@@ -32,7 +32,7 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { authorized, response } = await verifyApiPermission('contests');
+  const { authorized, response } = await verifyApiPermission('submission:update');
   if (!authorized) return response;
 
   const id = parseInt((await params).id);

@@ -3,9 +3,10 @@
 import { Edit2, HelpCircle, Plus, Trash2, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { deleteTeam } from '@/app/actions/teams';
+import { hasEffectivePermission } from '@/lib/permission-engine';
 import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
@@ -23,27 +24,23 @@ interface TeamWithCount {
 
 interface TeamListProps {
   initialTeams: TeamWithCount[];
-  permissions: {
-    permission_all: boolean;
-    permission_tasks: boolean;
-    permission_users: boolean;
-    permission_contests: boolean;
-    permission_messaging: boolean;
-  };
+  permissionKeys: readonly string[];
 }
 
-export function TeamList({ initialTeams, permissions }: TeamListProps) {
+export function TeamList({ initialTeams, permissionKeys }: TeamListProps) {
   const [teams] = useSyncedState(initialTeams);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<TeamWithCount | null>(null);
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
 
-  const isSuperAdmin = permissions?.permission_all ?? false;
-  const canManageUsers = isSuperAdmin || (permissions?.permission_users ?? false);
+  const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
+  const canCreateTeams = hasEffectivePermission(effective, 'team:create');
+  const canManageUsers = hasEffectivePermission(effective, 'team:update');
+  const canDeleteTeams = hasEffectivePermission(effective, 'team:delete');
 
   const handleDelete = async (id: number) => {
-    if (!canManageUsers) return;
+    if (!canDeleteTeams) return;
     if (confirm('Delete this team?')) {
       const result = await deleteTeam(id);
       if (result.success) {
@@ -69,7 +66,7 @@ export function TeamList({ initialTeams, permissions }: TeamListProps) {
             <HelpCircle className="w-4 h-4" />
           </Link>
         </div>
-        {canManageUsers && (
+        {canCreateTeams && (
           <Button
             variant="positive"
             icon={Plus}
@@ -109,10 +106,10 @@ export function TeamList({ initialTeams, permissions }: TeamListProps) {
                     <Button variant="ghost" size="sm" icon={Users} iconOnly tooltip="View team members" data-shortcut-primary />
                   </a>
                   {canManageUsers && (
-                    <>
-                      <Button variant="ghost" size="sm" icon={Edit2} iconOnly tooltip="Edit team" onClick={() => startEdit(team)} />
-                      <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete team" onClick={() => handleDelete(team.id)} />
-                    </>
+                    <Button variant="ghost" size="sm" icon={Edit2} iconOnly tooltip="Edit team" onClick={() => startEdit(team)} />
+                  )}
+                  {canDeleteTeams && (
+                    <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete team" onClick={() => handleDelete(team.id)} />
                   )}
                 </div>
               </TableCell>
@@ -125,8 +122,8 @@ export function TeamList({ initialTeams, permissions }: TeamListProps) {
                   icon={Users}
                   title="No teams found"
                   description="Teams will appear here once created."
-                  actionLabel={canManageUsers ? 'Add Team' : undefined}
-                  onAction={canManageUsers ? () => setIsModalOpen(true) : undefined}
+                  actionLabel={canCreateTeams ? 'Add Team' : undefined}
+                  onAction={canCreateTeams ? () => setIsModalOpen(true) : undefined}
                 />
               </TableCell>
             </TableRow>

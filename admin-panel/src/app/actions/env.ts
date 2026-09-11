@@ -15,7 +15,7 @@ function resolveEnvPath(repoRoot: string, filename: string): string {
 }
 
 export async function readEnvFile(filename: string) {
-  await ensurePermission('all');
+  await ensurePermission('env:read');
   try {
     const repoRoot = getRepoRoot();
     const envPath = resolveEnvPath(repoRoot, filename);
@@ -39,7 +39,7 @@ export async function readEnvFile(filename: string) {
 }
 
 export async function updateEnvFile(filename: string, updates: Record<string, string>) {
-  await ensurePermission('all');
+  await ensurePermission('env:update');
   try {
     const repoRoot = getRepoRoot();
     const envPath = resolveEnvPath(repoRoot, filename);
@@ -67,7 +67,7 @@ export async function updateEnvFile(filename: string, updates: Record<string, st
 }
 
 export async function readActiveContestId(): Promise<{ success: true; contestId: number | null } | { success: false; error: string }> {
-  await ensurePermission('all');
+  await ensurePermission('env:read');
   try {
     const repoRoot = getRepoRoot();
     const envPath = path.join(repoRoot, '.env.contest');
@@ -88,7 +88,7 @@ export async function readActiveContestId(): Promise<{ success: true; contestId:
 }
 
 export async function writeActiveContestId(id: number): Promise<{ success: true } | { success: false; error: string }> {
-  await ensurePermission('all');
+  await ensurePermission('env:update');
   try {
     const repoRoot = getRepoRoot();
     const envPath = path.join(repoRoot, '.env.contest');
@@ -115,7 +115,7 @@ export async function writeActiveContestId(id: number): Promise<{ success: true 
 }
 
 export async function migrateFromMultiContest(): Promise<{ success: true; contestId: number | null; migrated: boolean } | { success: false; error: string }> {
-  await ensurePermission('all');
+  await ensurePermission('env:update');
   try {
     const repoRoot = getRepoRoot();
     const envPath = path.join(repoRoot, '.env.contest');

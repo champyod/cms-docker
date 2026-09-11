@@ -16,19 +16,12 @@ const key = new TextEncoder().encode(secretKey);
 // COOKIE_SECURE=true only if explicitly set — defaults false so HTTP access works
 const isSecureCookie = process.env.COOKIE_SECURE === 'true';
 
-export interface AdminPermissions {
-  permission_all: boolean;
-  permission_tasks: boolean;
-  permission_users: boolean;
-  permission_contests: boolean;
-  permission_messaging: boolean;
-}
-
+// Why: permissions are resolved per request via getFreshPermissions, never stored on the token,
+// so a re-signed session cannot carry stale grants.
 export interface SessionPayload {
   userId: string;
   username: string;
   expiresAt: string | Date;
-  permissions: AdminPermissions;
 }
 
 /** Signs a payload as an HS256 JWT with a fixed 2h expiry (short-lived by design; sessions refresh via refreshSession). */
@@ -58,26 +51,18 @@ function buildCookieOptions(expiresAt: Date) {
   };
 }
 
-export async function createSession(userId: string, username: string, permissions: AdminPermissions) {
+export async function createSession(userId: string, username: string): Promise<void> {
   const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
-  const session = await encrypt({ userId, username, permissions, expiresAt });
+  const session = await encrypt({ userId, username, expiresAt });
   (await cookies()).set("session", session, buildCookieOptions(expiresAt));
 }
 
-export async function refreshSession(payload: SessionPayload) {
+export async function refreshSession(payload: SessionPayload): Promise<string | null> {
   let admin;
   try {
     admin = await prisma.admins.findUnique({
-      where: { id: parseInt(payload.userId) },
-      select: {
-        username: true,
-        enabled: true,
-        permission_all: true,
-        permission_messaging: true,
-        permission_tasks: true,
-        permission_users: true,
-        permission_contests: true,
-      },
+      where: { id: Number.parseInt(payload.userId, 10) },
+      select: { username: true, enabled: true },
     });
   } catch {
     // DB unavailable — fail closed, keep existing cookie untouched
@@ -97,13 +82,6 @@ export async function refreshSession(payload: SessionPayload) {
   const session = await encrypt({
     userId: payload.userId,
     username: admin.username,
-    permissions: {
-      permission_all: admin.permission_all,
-      permission_messaging: admin.permission_messaging,
-      permission_tasks: admin.permission_tasks,
-      permission_users: admin.permission_users,
-      permission_contests: admin.permission_contests,
-    },
     expiresAt,
   });
 
@@ -115,7 +93,7 @@ export async function refreshSession(payload: SessionPayload) {
   return session;
 }
 
-export async function deleteSession() {
+export async function deleteSession(): Promise<void> {
   (await cookies()).delete("session");
 }
 

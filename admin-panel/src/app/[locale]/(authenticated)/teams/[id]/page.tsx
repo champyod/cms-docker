@@ -10,7 +10,7 @@ export default async function TeamDetailPage({
 }) {
   const { id } = await params;
   // Why: forbidden detail must be indistinguishable from missing so return 404 not redirect
-  if (!await checkPermission('users', false)) notFound();
+  if (!await checkPermission('team:read', false)) notFound();
 
   const teamId = parseInt(id, 10);
 

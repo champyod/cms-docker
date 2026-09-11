@@ -1,7 +1,13 @@
-import { getSession } from './auth';
-import { getFreshPermissions, hasPermission } from '@/lib/permissions';
+import { getSession, type SessionPayload } from './auth';
+import { getFreshPermissions, type PermissionKey } from '@/lib/permissions';
+import { hasEffectivePermission } from '@/lib/permission-engine';
 import { NextResponse } from 'next/server';
-import type { Permission } from './permissions';
+
+// Why: `?: undefined` on the absent branch mirrors TypeScript's inferred shape for the old
+// return values, so existing destructuring call sites (`{ authorized, response }`) keep compiling.
+export type ApiAuthResult =
+  | { authorized: false; response: NextResponse; session?: undefined }
+  | { authorized: true; session: SessionPayload; response?: undefined };
 
 export function sanitize<T>(value: T | undefined | null): T | null {
   if (value === undefined || value === null || value === '$undefined') return null;
@@ -10,7 +16,7 @@ export function sanitize<T>(value: T | undefined | null): T | null {
   return value;
 }
 
-export async function verifyApiAuth() {
+export async function verifyApiAuth(): Promise<ApiAuthResult> {
   const session = await getSession();
   if (!session) {
     return { authorized: false, response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
@@ -18,22 +24,22 @@ export async function verifyApiAuth() {
   return { authorized: true, session };
 }
 
-export async function verifyApiPermission(permission: Permission) {
+export async function verifyApiPermission(permission: PermissionKey): Promise<ApiAuthResult> {
   const session = await getSession();
   if (!session) {
-    return { authorized: false as const, response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+    return { authorized: false, response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
 
-  const fresh = await getFreshPermissions(session.userId);
-  if (!fresh) {
-    return { authorized: false as const, response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+  const effective = await getFreshPermissions(session.userId);
+  if (!effective) {
+    return { authorized: false, response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
 
-  if (!hasPermission(fresh, permission)) {
-    return { authorized: false as const, response: NextResponse.json({ error: `Forbidden: Missing ${permission} permission` }, { status: 403 }) };
+  if (!hasEffectivePermission(effective, permission)) {
+    return { authorized: false, response: NextResponse.json({ error: `Forbidden: Missing ${permission} permission` }, { status: 403 }) };
   }
 
-  return { authorized: true as const, session };
+  return { authorized: true, session };
 }
 
 interface KnownApiError {
@@ -43,7 +49,7 @@ interface KnownApiError {
   errors?: unknown;
 }
 
-export function apiError(error: unknown) {
+export function apiError(error: unknown): NextResponse {
   console.error('API Error:', error);
   const err = error as KnownApiError;
   const code = err.code;
@@ -62,6 +68,6 @@ export function apiError(error: unknown) {
   return NextResponse.json({ success: false, error: message, ...extra }, { status });
 }
 
-export function apiSuccess(data?: object) {
+export function apiSuccess(data?: object): NextResponse {
   return NextResponse.json({ success: true, ...data });
 }

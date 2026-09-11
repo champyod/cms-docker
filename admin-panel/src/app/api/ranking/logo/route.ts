@@ -97,7 +97,7 @@ async function serveImageFile(filePath: string, ext: AllowedExt): Promise<NextRe
 }
 
 export async function GET(): Promise<NextResponse> {
-  const { authorized, response } = await verifyApiPermission('all');
+  const { authorized, response } = await verifyApiPermission('ranking:read');
   if (!authorized) return response;
 
   try {
@@ -141,7 +141,7 @@ async function writeLogoToDir(dir: string, buffer: Buffer, ext: AllowedExt): Pro
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const { authorized, response } = await verifyApiPermission('all');
+  const { authorized, response } = await verifyApiPermission('ranking:update');
   if (!authorized) return response;
 
   try {
@@ -175,7 +175,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 }
 
 export async function DELETE(): Promise<NextResponse> {
-  const { authorized, response } = await verifyApiPermission('all');
+  const { authorized, response } = await verifyApiPermission('ranking:update');
   if (!authorized) return response;
 
   try {

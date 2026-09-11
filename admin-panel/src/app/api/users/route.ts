@@ -9,7 +9,7 @@ const DEFAULT_USERS_PER_PAGE = 20;
 const MAX_USERS_PER_PAGE = 100;
 
 export async function GET(req: NextRequest) {
-  const { authorized, response } = await verifyApiPermission('users');
+  const { authorized, response } = await verifyApiPermission('user:list');
   if (!authorized) return response;
 
   try {
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { authorized, response } = await verifyApiPermission('users');
+  const { authorized, response } = await verifyApiPermission('user:create');
   if (!authorized) return response;
 
   try {

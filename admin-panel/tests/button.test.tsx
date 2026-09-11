@@ -5,6 +5,7 @@ import { Button, LEGACY_VARIANT_MAP, resolveVariant } from '@/components/core/Bu
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 describe('legacy variant mapping', () => {
@@ -87,6 +88,7 @@ describe('icon support', () => {
 describe('iconOnly mode', () => {
   it('warns in development when tooltip is missing', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubEnv('NODE_ENV', 'test');
     renderToStaticMarkup(<Button icon={Trash2} />);
     expect(warn).toHaveBeenCalledOnce();
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('tooltip'));
@@ -102,7 +104,7 @@ describe('iconOnly mode', () => {
   it('renders square sizing for inferred icon-only buttons', () => {
     const html = renderToStaticMarkup(<Button icon={Trash2} tooltip="Delete" />);
     expect(html).toContain('w-11');
-    expect(html).toContain('h-10');
+    expect(html).toContain('h-11');
     expect(html).toContain('p-0');
   });
 

@@ -57,7 +57,7 @@ async function insertTask(data: Record<string, unknown>): Promise<void> {
 }
 
 export async function POST(req: NextRequest): Promise<Response> {
-  const { authorized, response } = await verifyApiPermission('tasks');
+  const { authorized, response } = await verifyApiPermission('task:create');
   if (!authorized) return response;
   try {
     const data = (await req.json()) as Record<string, unknown>;

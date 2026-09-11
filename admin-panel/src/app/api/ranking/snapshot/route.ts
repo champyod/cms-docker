@@ -28,7 +28,7 @@ async function fetchJson(baseUrl: string, path: string, authHeader: string) {
 }
 
 export async function GET() {
-  const { authorized, response } = await verifyApiPermission('all');
+  const { authorized, response } = await verifyApiPermission('ranking:snapshot');
   if (!authorized) return response;
 
   try {

@@ -38,7 +38,7 @@ export default async function ContestDetailPage({
 }) {
   const { id } = await params;
   // Why: forbidden detail must be indistinguishable from missing so return 404 not redirect
-  if (!await checkPermission('contests', false)) notFound();
+  if (!await checkPermission('contest:read', false)) notFound();
 
   const contestId = parseInt(id, 10);
 

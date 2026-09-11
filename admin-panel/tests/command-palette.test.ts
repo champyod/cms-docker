@@ -5,35 +5,22 @@ import {
   filterNavItems,
   filterTeams,
   isNumericQuery,
-  type NavVisibility,
-  type PalettePermissions,
 } from '@/components/palette/palette-data';
 import { createSearchScheduler } from '@/components/palette/search-scheduler';
 
-const ALL_PERMISSIONS: PalettePermissions = {
-  permission_all: true,
-  permission_tasks: true,
-  permission_users: true,
-  permission_contests: true,
-  permission_messaging: true,
-};
+const ALL_PERMISSIONS: readonly string[] = ['all:all'];
 
-const CONTESTS_ONLY_PERMISSIONS: PalettePermissions = {
-  permission_all: false,
-  permission_tasks: false,
-  permission_users: false,
-  permission_contests: true,
-  permission_messaging: false,
-};
+const CONTEST_PERMISSIONS: readonly string[] = ['contest:list', 'submission:list'];
 
-function labelsFor(visibility: NavVisibility): string[] {
-  return filterNavItems(visibility).map((item) => item.label);
+const USER_PERMISSIONS: readonly string[] = ['user:list', 'team:list'];
+
+function labelsFor(permissionKeys: readonly string[]): string[] {
+  return filterNavItems(new Set(permissionKeys)).map((item) => item.label);
 }
 
 describe('buildNavVisibility', () => {
   it('returns closed visibility for missing permissions', () => {
-    expect(buildNavVisibility(null)).toEqual({
-      superadmin: false,
+    expect(buildNavVisibility([])).toEqual({
       contests: false,
       tasks: false,
       users: false,
@@ -41,13 +28,12 @@ describe('buildNavVisibility', () => {
   });
 
   it('grants full visibility through the superadmin bypass', () => {
-    const visibility = buildNavVisibility({ ...ALL_PERMISSIONS, permission_tasks: false });
-    expect(visibility).toEqual({ superadmin: true, contests: true, tasks: true, users: true });
+    const visibility = buildNavVisibility(ALL_PERMISSIONS);
+    expect(visibility).toEqual({ contests: true, tasks: true, users: true });
   });
 
   it('maps granular permissions without the superadmin bypass', () => {
-    expect(buildNavVisibility(CONTESTS_ONLY_PERMISSIONS)).toEqual({
-      superadmin: false,
+    expect(buildNavVisibility(CONTEST_PERMISSIONS)).toEqual({
       contests: true,
       tasks: false,
       users: false,
@@ -57,11 +43,11 @@ describe('buildNavVisibility', () => {
 
 describe('filterNavItems', () => {
   it('shows general items only when nothing is permitted', () => {
-    expect(labelsFor(buildNavVisibility(null))).toEqual(['Dashboard', 'Documentation']);
+    expect(labelsFor([])).toEqual(['Dashboard', 'Documentation']);
   });
 
   it('shows contest-scoped items for contest permission only', () => {
-    const labels = labelsFor(buildNavVisibility(CONTESTS_ONLY_PERMISSIONS));
+    const labels = labelsFor(CONTEST_PERMISSIONS);
     expect(labels).toEqual(expect.arrayContaining(['Dashboard', 'Documentation', 'Contests', 'Submissions']));
     expect(labels).not.toContain('Tasks');
     expect(labels).not.toContain('Users');
@@ -70,20 +56,13 @@ describe('filterNavItems', () => {
   });
 
   it('shows user-scoped items for user permission', () => {
-    const visibility = buildNavVisibility({
-      permission_all: false,
-      permission_tasks: false,
-      permission_users: true,
-      permission_contests: false,
-      permission_messaging: false,
-    });
-    const labels = labelsFor(visibility);
+    const labels = labelsFor(USER_PERMISSIONS);
     expect(labels).toEqual(expect.arrayContaining(['Users', 'Teams']));
     expect(labels).not.toContain('Contests');
   });
 
   it('shows every item for superadmin', () => {
-    expect(labelsFor(buildNavVisibility(ALL_PERMISSIONS))).toHaveLength(PALETTE_NAV_ITEMS.length);
+    expect(labelsFor(ALL_PERMISSIONS)).toHaveLength(PALETTE_NAV_ITEMS.length);
   });
 });
 

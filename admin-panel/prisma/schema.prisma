@@ -15,20 +15,22 @@ datasource db {
 }
 
 model admins {
-  id                   Int             @id @default(autoincrement())
-  name                 String          @db.VarChar
-  username             String          @unique @db.VarChar
-  authentication       String          @db.VarChar
+  id                   Int                          @id @default(autoincrement())
+  name                 String                       @db.VarChar
+  username             String                       @unique @db.VarChar
+  authentication       String                       @db.VarChar
   enabled              Boolean
   last_login_at        DateTime?
   permission_all       Boolean
   permission_messaging Boolean
-  permission_tasks     Boolean         @default(false)
-  permission_users     Boolean         @default(false)
-  permission_contests  Boolean         @default(false)
+  permission_tasks     Boolean                      @default(false)
+  permission_users     Boolean                      @default(false)
+  permission_contests  Boolean                      @default(false)
   announcements        announcements[]
   messages             messages[]
   questions            questions[]
+  admin_groups         admin_groups[]
+  permission_overrides admin_permission_overrides[]
 }
 
 model announcements {
@@ -527,4 +529,84 @@ enum token_mode {
   disabled
   finite
   infinite
+}
+
+model permissions {
+  id                         Int                          @id @default(autoincrement())
+  key                        String                       @unique @db.VarChar
+  module                     String                       @db.VarChar
+  verb                       String                       @db.VarChar
+  description                String?                      @db.VarChar
+  group_permissions          group_permissions[]
+  admin_permission_overrides admin_permission_overrides[]
+
+  @@index([module], map: "ix_permissions_module")
+}
+
+model groups {
+  id                Int                 @id @default(autoincrement())
+  name              String              @unique @db.VarChar
+  description       String?             @db.VarChar
+  is_seeded         Boolean             @default(false)
+  created_at        DateTime            @default(now())
+  group_permissions group_permissions[]
+  admin_groups      admin_groups[]
+}
+
+model group_permissions {
+  id            Int         @id @default(autoincrement())
+  group_id      Int
+  permission_id Int
+  groups        groups      @relation(fields: [group_id], references: [id], onDelete: Cascade)
+  permissions   permissions @relation(fields: [permission_id], references: [id], onDelete: Cascade)
+
+  @@unique([group_id, permission_id])
+  @@index([group_id], map: "ix_group_permissions_group_id")
+  @@index([permission_id], map: "ix_group_permissions_permission_id")
+}
+
+model admin_groups {
+  id       Int    @id @default(autoincrement())
+  admin_id Int
+  group_id Int
+  admins   admins @relation(fields: [admin_id], references: [id], onDelete: Cascade)
+  groups   groups @relation(fields: [group_id], references: [id], onDelete: Cascade)
+
+  @@unique([admin_id, group_id])
+  @@index([admin_id], map: "ix_admin_groups_admin_id")
+  @@index([group_id], map: "ix_admin_groups_group_id")
+}
+
+model admin_permission_overrides {
+  id            Int         @id @default(autoincrement())
+  admin_id      Int
+  permission_id Int
+  effect        String      @db.VarChar
+  reason        String?     @db.VarChar
+  admins        admins      @relation(fields: [admin_id], references: [id], onDelete: Cascade)
+  permissions   permissions @relation(fields: [permission_id], references: [id], onDelete: Cascade)
+
+  @@unique([admin_id, permission_id])
+  @@index([admin_id], map: "ix_admin_permission_overrides_admin_id")
+}
+
+model audit_log {
+  id            BigInt   @id @default(autoincrement())
+  actor_id      Int?
+  timestamp     DateTime @default(now()) @db.Timestamp(6)
+  verb          String   @db.VarChar
+  entity        String   @db.VarChar
+  entity_id     String?  @db.VarChar
+  before_values Json?
+  after_values  Json?
+  reason        String?  @db.VarChar
+  ip            String?  @db.VarChar
+  session_id    String?  @db.VarChar
+  result        String   @db.VarChar
+  entry_hash    String?  @db.VarChar
+  prev_hash     String?  @db.VarChar
+
+  @@index([actor_id], map: "ix_audit_log_actor_id")
+  @@index([entity], map: "ix_audit_log_entity")
+  @@index([timestamp], map: "ix_audit_log_timestamp")
 }

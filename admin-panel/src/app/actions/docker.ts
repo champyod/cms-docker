@@ -21,7 +21,7 @@ export interface ContainerInfo {
 }
 
 export async function getContainers() {
-  await ensurePermission('all');
+  await ensurePermission('container:read');
   try {
     const { stdout } = await execPromise('docker ps -a --format "{{json .}}"');
     const lines = stdout.trim().split('\n');
@@ -49,7 +49,7 @@ export async function getContainers() {
 }
 
 export async function controlContainer(id: string, action: 'start' | 'stop' | 'restart' | 'pause' | 'unpause') {
-  await ensurePermission('all');
+  await ensurePermission('container:control');
   if (!(CONTAINER_ACTIONS as readonly string[]).includes(action) || !CONTAINER_ID_RE.test(id)) {
     return { success: false, error: 'Invalid container id or action' };
   }
@@ -64,7 +64,7 @@ export async function controlContainer(id: string, action: 'start' | 'stop' | 'r
 }
 
 export async function getContainerLogs(id: string, tail: number = 100) {
-  await ensurePermission('all');
+  await ensurePermission('container:read');
   const coercedTail = Number.isInteger(Number(tail)) && Number(tail) >= 1 && Number(tail) <= 1000 ? Number(tail) : 100;
   if (!CONTAINER_ID_RE.test(id)) {
     return { success: false, error: 'Invalid container id or action' };
@@ -81,7 +81,7 @@ export async function getContainerLogs(id: string, tail: number = 100) {
 const CONTEST_WEB_SERVER_CONTAINER = 'cms-contest-web-server';
 
 export async function getContainerContestId(): Promise<{ success: true; contestId: number | null } | { success: false; error: string }> {
-  await ensurePermission('all');
+  await ensurePermission('container:read');
   try {
     const { stdout } = await execPromise(`docker inspect ${CONTEST_WEB_SERVER_CONTAINER} --format '{{range .Config.Env}}{{println .}}{{end}}'`);
     const match = stdout.match(/^CONTEST_ID=(\d+)$/m);
@@ -92,7 +92,7 @@ export async function getContainerContestId(): Promise<{ success: true; contestI
 }
 
 export async function runCompose(action: 'up' | 'down' | 'restart' | 'build', serviceType?: 'core' | 'admin' | 'contest' | 'worker') {
-  await ensurePermission('all');
+  await ensurePermission('container:control');
   try {
     const repoRoot = getRepoRoot();
     let fileArgs = '';

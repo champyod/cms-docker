@@ -13,7 +13,7 @@ interface AddMonitorTargetInput {
 }
 
 export async function getMonitorTargets() {
-  await ensurePermission('all');
+  await ensurePermission('monitor:read');
   try {
     const targets = await prisma.monitor_targets.findMany({
       orderBy: { createdAt: 'desc' },
@@ -25,7 +25,7 @@ export async function getMonitorTargets() {
 }
 
 export async function addMonitorTarget(input: AddMonitorTargetInput) {
-  await ensurePermission('all');
+  await ensurePermission('monitor:create');
   try {
     const target = await prisma.monitor_targets.create({
       data: {
@@ -47,7 +47,7 @@ export async function updateMonitorTarget(
   id: string,
   data: Partial<AddMonitorTargetInput>,
 ) {
-  await ensurePermission('all');
+  await ensurePermission('monitor:update');
   try {
     const target = await prisma.monitor_targets.update({
       where: { id },
@@ -61,7 +61,7 @@ export async function updateMonitorTarget(
 }
 
 export async function removeMonitorTarget(id: string) {
-  await ensurePermission('all');
+  await ensurePermission('monitor:delete');
   try {
     await prisma.monitor_targets.delete({ where: { id } });
     revalidatePath('/settings', 'page');
@@ -72,7 +72,7 @@ export async function removeMonitorTarget(id: string) {
 }
 
 export async function toggleMonitorTarget(id: string) {
-  await ensurePermission('all');
+  await ensurePermission('monitor:update');
   try {
     const existing = await prisma.monitor_targets.findUnique({ where: { id } });
     if (!existing) {
@@ -90,7 +90,7 @@ export async function toggleMonitorTarget(id: string) {
 }
 
 export async function testMonitorTarget(id: string) {
-  await ensurePermission('all');
+  await ensurePermission('monitor:test');
   try {
     const target = await prisma.monitor_targets.findUnique({ where: { id } });
     if (!target) {

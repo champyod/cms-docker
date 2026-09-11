@@ -13,7 +13,7 @@ export default async function SettingsPage({
 }) {
   const { locale } = await params;
   const dict = await getDictionary(locale);
-  const hasPermission = await checkPermission('all', false);
+  const hasPermission = await checkPermission('settings:update', false);
 
   // Why: return 404 for forbidden access so existence is indistinguishable from missing page
   if (!hasPermission) {

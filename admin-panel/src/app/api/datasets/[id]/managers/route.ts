@@ -23,7 +23,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<Response> {
-  const { authorized, response } = await verifyApiPermission('tasks');
+  const { authorized, response } = await verifyApiPermission('manager:create');
   if (!authorized) return response as Response;
 
   const datasetId = parseInt((await params).id, 10);

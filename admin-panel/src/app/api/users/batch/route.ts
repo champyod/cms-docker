@@ -15,7 +15,7 @@ function parseUserIds(body: Record<string, unknown>): number[] {
 }
 
 export async function POST(req: NextRequest) {
-  const { authorized, response } = await verifyApiPermission('users');
+  const { authorized, response } = await verifyApiPermission('user:create');
   if (!authorized) return response;
 
   await cleanupExpiredCreds();

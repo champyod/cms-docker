@@ -10,7 +10,7 @@ import { ThemeToggle } from './ThemeToggle';
 import { Button } from '@/components/core/Button';
 import { CommandPalette } from '../palette/CommandPalette';
 
-export const Header: React.FC<{ className?: string; username?: string }> = ({ className, username }) => {
+export const Header: React.FC<{ className?: string; username?: string; permissionKeys: readonly string[] }> = ({ className, username, permissionKeys }) => {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [hasNotifications, setHasNotifications] = useState(false);
   const lastCheckTimeRef = useRef(0);
@@ -146,7 +146,7 @@ export const Header: React.FC<{ className?: string; username?: string }> = ({ cl
         </div>
       </div>
 
-      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} permissionKeys={permissionKeys} />
     </header>
   );
 };

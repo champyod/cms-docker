@@ -6,30 +6,30 @@ import { buildLocaleHref, extractLocale } from '@/hooks/useShortcuts';
 import { Command, CommandInput, CommandList } from '@/components/ui/command';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '../providers/ToastProvider';
-import { getCurrentUser, logout } from '@/app/actions/auth';
+import { logout } from '@/app/actions/auth';
 import { activateContest, getAvailableContests } from '@/app/actions/contests';
 import { buildEntitySearchers } from './entity-searchers';
 import { useEntitySearch } from './useEntitySearch';
 import { MIN_QUERY_LENGTH } from './search-scheduler';
-import { buildNavVisibility, filterNavItems, type PalettePermissions } from './palette-data';
+import { buildNavVisibility, filterNavItems } from './palette-data';
 import { NavigationItems, EntityItems, ActionItems } from './CommandPaletteItems';
 
 const PALETTE_TOGGLE_KEY = 'k';
 const COMMAND_STYLING = '[&_[cmdk-group-heading]]:text-muted-foreground **:data-[slot=command-input-wrapper]:h-12 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group]]:px-2 [&_[cmdk-input-wrapper]_svg]:size-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:size-5';
 
 interface AvailableContestRow { id: number; name: string; is_active: boolean; }
-interface CommandPaletteProps { open: boolean; onOpenChange: (open: boolean) => void; }
+interface CommandPaletteProps { open: boolean; onOpenChange: (open: boolean) => void; permissionKeys: readonly string[]; }
 
-export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): React.JSX.Element {
+export function CommandPalette({ open, onOpenChange, permissionKeys }: CommandPaletteProps): React.JSX.Element {
   const router = useRouter();
   const pathname = usePathname();
   const locale = extractLocale(pathname ?? '');
   const { addToast } = useToast();
   const [query, setQuery] = useState('');
-  const [permissions, setPermissions] = useState<PalettePermissions | null>(null);
   const [availableContests, setAvailableContests] = useState<AvailableContestRow[]>([]);
-  const visibility = useMemo(() => buildNavVisibility(permissions), [permissions]);
-  const navItems = filterNavItems(visibility);
+  const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
+  const visibility = useMemo(() => buildNavVisibility(permissionKeys), [permissionKeys]);
+  const navItems = filterNavItems(effective);
   const searchers = useMemo(() => buildEntitySearchers(visibility), [visibility]);
   const { loading, hits } = useEntitySearch(open, query, searchers);
   const hasQuery = query.trim().length >= MIN_QUERY_LENGTH;
@@ -38,13 +38,6 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
     if (!nextOpen) setQuery('');
     onOpenChange(nextOpen);
   }, [onOpenChange]);
-
-  useEffect(() => {
-    if (!open || permissions !== null) return;
-    let cancelled = false;
-    getCurrentUser().then((user) => { if (!cancelled) setPermissions(user); }).catch(() => { if (!cancelled) setPermissions(null); });
-    return () => { cancelled = true; };
-  }, [open, permissions]);
 
   useEffect(() => {
     if (!open || !visibility.contests) return;

@@ -34,32 +34,18 @@ export default async function AuthenticatedLayout({
 
   // Why: Sidebar must reflect current database permissions not stale token claims
   const freshPermissions = await getFreshPermissions(session.userId);
-  const sidebarPermissions = freshPermissions
-    ? {
-        permission_all: freshPermissions.all,
-        permission_tasks: freshPermissions.tasks,
-        permission_users: freshPermissions.users,
-        permission_contests: freshPermissions.contests,
-        permission_messaging: freshPermissions.messaging,
-      }
-    : {
-        permission_all: session.permissions.permission_all,
-        permission_tasks: session.permissions.permission_tasks,
-        permission_users: session.permissions.permission_users,
-        permission_contests: session.permissions.permission_contests,
-        permission_messaging: session.permissions.permission_messaging,
-      };
+  const permissionKeys: readonly string[] = freshPermissions ? Array.from(freshPermissions) : [];
 
   return (
     <PageBackground className="flex h-screen overflow-hidden">
       <Sidebar
         className="z-20"
         locale={locale}
-        permissions={sidebarPermissions}
+        permissionKeys={permissionKeys}
         initialExpanded={sidebarExpanded}
       />
       <Stack as="main" className="flex-1 min-h-0 relative overflow-hidden" gap={0}>
-        <Header className="z-10" username={session.username} />
+        <Header className="z-10" username={session.username} permissionKeys={permissionKeys} />
 
         <div className="flex-1 overflow-y-auto p-8 z-10 scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20">
           {children}

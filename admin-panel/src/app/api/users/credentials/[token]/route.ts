@@ -11,7 +11,7 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
-  const { authorized, response } = await verifyApiPermission('users');
+  const { authorized, response } = await verifyApiPermission('user:update');
   if (!authorized) return response;
 
   const { token } = await params;

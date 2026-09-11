@@ -15,7 +15,7 @@ export default async function TasksPage({
 }) {
   const { locale } = await paramsPromise;
   const dict = await getDictionary(locale);
-  const hasPermission = await checkPermission('tasks', false);
+  const hasPermission = await checkPermission('task:list', false);
 
   // Why: return 404 for forbidden access so existence is indistinguishable from missing page
   if (!hasPermission) {
@@ -36,7 +36,7 @@ export default async function TasksPage({
         <Text variant="muted">{dict.tasks.subtitle}</Text>
       </Stack>
 
-      <TaskList initialTasks={tasks} totalPages={totalPages} permissions={permissions} />
+      <TaskList initialTasks={tasks} totalPages={totalPages} permissionKeys={Array.from(permissions)} />
     </Stack>
   );
 }

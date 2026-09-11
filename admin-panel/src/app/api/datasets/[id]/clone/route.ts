@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { cloneDatasetRecords } from '@/lib/dataset-cloning';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<Response> {
-  const { authorized, response } = await verifyApiPermission('tasks');
+  const { authorized, response } = await verifyApiPermission('dataset:create');
   if (!authorized) return response;
   const id = parseInt((await params).id, 10);
   if (Number.isNaN(id)) return apiError({ message: 'Invalid ID', status: 400 });

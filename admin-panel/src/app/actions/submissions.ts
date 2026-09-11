@@ -27,7 +27,7 @@ export async function getSubmissions({
   taskId?: number;
     userId?: number;
 }) {
-  await ensurePermission('contests');
+  await ensurePermission('submission:list');
 
   const skip = (page - 1) * SUBMISSIONS_PER_PAGE;
   const where = buildSubmissionsWhere({ contestId, taskId, userId });
@@ -70,7 +70,7 @@ function buildSubmissionsWhere(filters: { contestId?: number; taskId?: number; u
 }
 
 export async function updateSubmissionComment(submissionId: number, comment: string): Promise<ActionResult> {
-    await ensurePermission('messaging');
+    await ensurePermission('submission:update');
 
     try {
         await prisma.submissions.update({
@@ -86,7 +86,7 @@ export async function updateSubmissionComment(submissionId: number, comment: str
 }
 
 export async function toggleSubmissionOfficial(submissionId: number): Promise<ActionResult> {
-    await ensurePermission('contests');
+    await ensurePermission('submission:update');
 
     try {
         const sub = await prisma.submissions.findUnique({ where: { id: submissionId } });
@@ -105,7 +105,7 @@ export async function toggleSubmissionOfficial(submissionId: number): Promise<Ac
 }
 
 export async function recalculateSubmission(submissionId: number, type: RecalcType = 'score'): Promise<ActionResult & { message?: string }> {
-  await ensurePermission('contests');
+  await ensurePermission('submission:recompute');
 
   try {
     const context = await getRecalcContext(submissionId);

@@ -16,7 +16,7 @@ export default async function UsersPage({
 }) {
   const { locale } = await params;
   const dict = await getDictionary(locale);
-  const hasPermission = await checkPermission('users', false);
+  const hasPermission = await checkPermission('user:list', false);
 
   // Why: return 404 for forbidden access so existence is indistinguishable from missing page
   if (!hasPermission) {
@@ -49,7 +49,7 @@ export default async function UsersPage({
         perPage={safePerPage}
         initialSearch={search}
         contests={contests}
-        permissions={permissions}
+        permissionKeys={Array.from(permissions)}
       />
     </Stack>
   );

@@ -4,7 +4,7 @@ import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<Response> {
-  const { authorized, response } = await verifyApiPermission('tasks');
+  const { authorized, response } = await verifyApiPermission('statement:delete');
   if (!authorized) return response;
 
   const id = parseInt((await params).id, 10);

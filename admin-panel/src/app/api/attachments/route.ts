@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { storeFile } from '@/lib/fsobjects';
 
 export async function POST(req: NextRequest): Promise<Response> {
-  const { authorized, response } = await verifyApiPermission('tasks');
+  const { authorized, response } = await verifyApiPermission('attachment:create');
   if (!authorized) return response;
 
   try {

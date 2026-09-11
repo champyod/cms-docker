@@ -4,7 +4,7 @@ import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 
 export async function POST(req: NextRequest): Promise<Response> {
-  const { authorized, response } = await verifyApiPermission('tasks');
+  const { authorized, response } = await verifyApiPermission('dataset:create');
   if (!authorized) return response;
 
   try {

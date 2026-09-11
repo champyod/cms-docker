@@ -25,7 +25,7 @@ export async function addTestcase(datasetId: number, data: {
   outputDigest: string;
   isPublic: boolean;
 }): Promise<ActionResult> {
-  await ensurePermission('tasks');
+  await ensurePermission('testcase:create');
 
   try {
     await prisma.testcases.create({
@@ -49,7 +49,7 @@ export async function addTestcase(datasetId: number, data: {
 }
 
 export async function deleteTestcase(testcaseId: number): Promise<ActionResult> {
-  await ensurePermission('tasks');
+  await ensurePermission('testcase:delete');
 
   try {
     await prisma.testcases.delete({
@@ -64,7 +64,7 @@ export async function deleteTestcase(testcaseId: number): Promise<ActionResult> 
 }
 
 export async function toggleTestcasePublic(testcaseId: number): Promise<ActionResult> {
-  await ensurePermission('tasks');
+  await ensurePermission('testcase:update');
 
   try {
     const tc = await prisma.testcases.findUnique({
@@ -89,7 +89,7 @@ export async function toggleTestcasePublic(testcaseId: number): Promise<ActionRe
 }
 
 export async function updateTestcasesPublic(testcaseIds: number[], isPublic: boolean): Promise<ActionResult> {
-  await ensurePermission('tasks');
+  await ensurePermission('testcase:update');
 
   try {
     await prisma.testcases.updateMany({
@@ -126,7 +126,7 @@ async function createTestcaseSafely(datasetId: number, tc: TestcaseInput): Promi
 }
 
 export async function batchUploadTestcases(datasetId: number, testcases: TestcaseInput[]): Promise<ActionResult> {
-  await ensurePermission('tasks');
+  await ensurePermission('testcase:update');
 
   try {
     for (const tc of testcases) {
@@ -141,7 +141,7 @@ export async function batchUploadTestcases(datasetId: number, testcases: Testcas
 }
 
 export async function getTestcases(datasetId: number): Promise<TestcaseRow[]> {
-  await ensurePermission('tasks');
+  await ensurePermission('testcase:list');
   return prisma.testcases.findMany({
     where: { dataset_id: datasetId },
     orderBy: { codename: 'asc' }

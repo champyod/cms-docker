@@ -8,7 +8,7 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { authorized, response } = await verifyApiPermission('contests');
+  const { authorized, response } = await verifyApiPermission('contest:update');
   if (!authorized) return response;
 
   const id = parseInt((await params).id);
@@ -124,7 +124,7 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { authorized, response } = await verifyApiPermission('contests');
+  const { authorized, response } = await verifyApiPermission('contest:delete');
   if (!authorized) return response;
 
   const id = parseInt((await params).id);

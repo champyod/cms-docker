@@ -1,44 +1,75 @@
 import { prisma } from '@/lib/prisma';
 import { getSession } from "@/lib/auth";
 import { redirect } from "@/lib/redirect";
+import {
+  resolveEffectivePermissions,
+  hasEffectivePermission,
+  type PermissionOverride,
+} from '@/lib/permission-engine';
 
-export type Permission = 'all' | 'tasks' | 'users' | 'contests' | 'messaging';
+// Why: registry keys are always `${module}:${verb}`; this template literal rejects the legacy
+// coarse names (all/tasks/users/contests/messaging) at compile time so stale call sites surface.
+export type PermissionKey = `${string}:${string}`;
 
-export type FreshPermissions = { all: boolean; tasks: boolean; users: boolean; contests: boolean; messaging: boolean };
-
-// Why: superadmin bypasses every check so single source decides visibility; literal 'all' never granted below superadmin
-export function hasPermission(fresh: FreshPermissions, permission: Permission): boolean {
-  if (fresh.all) return true;
-  switch (permission) {
-    case 'tasks':
-      return fresh.tasks;
-    case 'users':
-      return fresh.users;
-    case 'contests':
-      return fresh.contests;
-    case 'messaging':
-      return fresh.messaging;
-    default:
-      return false;
-  }
-}
-// Why: cache fresh permissions for 60 seconds to avoid database round trip on every render while still reflecting revocation quickly
-const accessCache = new Map<string, { value: FreshPermissions; expires: number }>();
+// Why: cache fresh permissions for 60 seconds to avoid a database round trip on every render while still reflecting revocation quickly
+const accessCache = new Map<string, { value: ReadonlySet<string>; expires: number }>();
 const ACCESS_TTL_MS = 60_000;
 
-export async function getFreshPermissions(userId: string): Promise<FreshPermissions | null> {
+/**
+ * Resolves the effective permission keys for an admin from group membership plus per-admin
+ * overrides, never from the legacy boolean columns. Returns null (fail closed) for an
+ * unknown/disabled admin or any database error.
+ */
+export async function getFreshPermissions(userId: string): Promise<ReadonlySet<string> | null> {
   const hit = accessCache.get(userId);
   if (hit && hit.expires > Date.now()) return hit.value;
+
+  const adminId = Number.parseInt(userId, 10);
+  // Why: a non-numeric id can never match an admin row — deny without issuing a query
+  if (!Number.isInteger(adminId)) return null;
+
   try {
     const admin = await prisma.admins.findUnique({
-      where: { id: parseInt(userId) },
-      select: { enabled: true, permission_all: true, permission_messaging: true, permission_tasks: true, permission_users: true, permission_contests: true },
+      where: { id: adminId },
+      select: {
+        enabled: true,
+        admin_groups: {
+          select: {
+            groups: {
+              select: {
+                group_permissions: { select: { permissions: { select: { key: true } } } },
+              },
+            },
+          },
+        },
+        permission_overrides: {
+          select: {
+            effect: true,
+            permissions: { select: { key: true } },
+          },
+        },
+      },
     });
     if (!admin || !admin.enabled) return null;
-    const value: FreshPermissions = { all: admin.permission_all, tasks: admin.permission_tasks, users: admin.permission_users, contests: admin.permission_contests, messaging: admin.permission_messaging };
+
+    const groupPermissionKeys: string[] = [];
+    for (const membership of admin.admin_groups) {
+      for (const link of membership.groups.group_permissions) {
+        groupPermissionKeys.push(link.permissions.key);
+      }
+    }
+
+    const overrides: PermissionOverride[] = admin.permission_overrides.map((override) => ({
+      permissionKey: override.permissions.key,
+      // Why: only an explicit "allow" grants; any other stored value is treated as a deny so a corrupt row fails closed
+      effect: override.effect === 'allow' ? 'allow' : 'deny',
+    }));
+
+    const value = resolveEffectivePermissions(groupPermissionKeys, overrides);
     accessCache.set(userId, { value, expires: Date.now() + ACCESS_TTL_MS });
     return value;
   } catch {
+    // Why: a database failure must deny rather than allow — fail closed
     return null;
   }
 }
@@ -48,77 +79,39 @@ export function invalidateAccessCache(userId?: string): void {
 }
 
 // Why: use fresh database permissions not stale token so revocation takes effect without leaking existence via distinct denial page
-export async function checkPermission(permission: Permission, redirectToLogin = true) {
+export async function checkPermission(permission: PermissionKey, redirectToLogin: boolean = true): Promise<boolean> {
   const session = await getSession();
-  
+
   if (!session) {
     if (redirectToLogin) await redirect("/auth/login");
     return false;
   }
 
-  const fresh = await getFreshPermissions(session.userId);
-  if (!fresh) {
+  const effective = await getFreshPermissions(session.userId);
+  if (!effective) {
     if (redirectToLogin) await redirect("/auth/login");
     return false;
   }
 
-  return hasPermission(fresh, permission);
+  return hasEffectivePermission(effective, permission);
 }
 
-export async function ensurePermission(permission: Permission) {
-  const hasPermission = await checkPermission(permission);
-  if (!hasPermission) {
+export async function ensurePermission(permission: PermissionKey): Promise<void> {
+  const granted = await checkPermission(permission);
+  if (!granted) {
     throw new Error(`Unauthorized: Missing ${permission} permission`);
   }
 }
 
-export interface PermissionsSnapshot {
-  permission_all: boolean;
-  permission_tasks: boolean;
-  permission_users: boolean;
-  permission_contests: boolean;
-  permission_messaging: boolean;
-  all: boolean;
-  tasks: boolean;
-  users: boolean;
-  contests: boolean;
-  messaging: boolean;
-}
+const EMPTY_PERMISSIONS: ReadonlySet<string> = new Set<string>();
 
-const EMPTY_PERMISSIONS: PermissionsSnapshot = {
-  permission_all: false,
-  permission_tasks: false,
-  permission_users: false,
-  permission_contests: false,
-  permission_messaging: false,
-  all: false,
-  tasks: false,
-  users: false,
-  contests: false,
-  messaging: false,
-};
-
-function toSnapshot(fresh: FreshPermissions): PermissionsSnapshot {
-  return {
-    permission_all: fresh.all,
-    permission_tasks: fresh.tasks,
-    permission_users: fresh.users,
-    permission_contests: fresh.contests,
-    permission_messaging: fresh.messaging,
-    all: fresh.all,
-    tasks: fresh.tasks,
-    users: fresh.users,
-    contests: fresh.contests,
-    messaging: fresh.messaging,
-  };
-}
-
-export async function getPermissions(): Promise<PermissionsSnapshot> {
+/** Returns the current admin's effective permission keys, or an empty set when unauthenticated. */
+export async function getPermissions(): Promise<ReadonlySet<string>> {
   const session = await getSession();
   if (!session?.userId) return EMPTY_PERMISSIONS;
 
-  const fresh = await getFreshPermissions(session.userId);
-  if (!fresh) return EMPTY_PERMISSIONS;
+  const effective = await getFreshPermissions(session.userId);
+  if (!effective) return EMPTY_PERMISSIONS;
 
-  return toSnapshot(fresh);
+  return effective;
 }

@@ -92,7 +92,7 @@ export default async function DashboardPage({
 }) {
   const { locale } = await paramsPromise;
   const dict = await getDictionary(locale);
-  const hasPermission = await checkPermission('all', false);
+  const hasPermission = await checkPermission('all:all', false);
 
   // Why: return 404 for forbidden access so existence is indistinguishable from missing page
   if (!hasPermission) {

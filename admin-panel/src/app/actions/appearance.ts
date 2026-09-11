@@ -15,7 +15,7 @@ function isValidKey(key: string): boolean {
 }
 
 export async function readConfigToml(): Promise<{ success: true; content: string; values: Record<string, string> } | { success: false; error: string }> {
-  await ensurePermission('all');
+  await ensurePermission('appearance:read');
   try {
     const repoRoot = getRepoRoot();
     const tomlPath = path.join(repoRoot, 'config.toml');
@@ -43,7 +43,7 @@ export async function readConfigToml(): Promise<{ success: true; content: string
 }
 
 export async function updateConfigToml(updates: Record<string, string>): Promise<{ success: true } | { success: false; error: string }> {
-  await ensurePermission('all');
+  await ensurePermission('appearance:update');
   try {
     const repoRoot = getRepoRoot();
     const tomlPath = path.join(repoRoot, 'config.toml');

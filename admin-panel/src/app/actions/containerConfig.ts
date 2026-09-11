@@ -25,7 +25,7 @@ export interface ContainerRestartConfig {
 }
 
 export async function getContainerConfig(): Promise<ContainerRestartConfig> {
-  await ensurePermission('all');
+  await ensurePermission('container:read');
   try {
     const data = await readFile(CONFIG_PATH(), 'utf-8');
     return JSON.parse(data);
@@ -40,7 +40,7 @@ export async function updateContainerConfig(containerId: string, config: {
   currentRestarts?: number;
   discordNotifications?: boolean;
 }) {
-  await ensurePermission('all');
+  await ensurePermission('container:update');
   try {
     const currentConfig = await getContainerConfig();
 
@@ -66,7 +66,7 @@ export async function updateContainerConfig(containerId: string, config: {
 }
 
 export async function resetRestartCount(containerId: string) {
-  await ensurePermission('all');
+  await ensurePermission('container:update');
   try {
     const currentConfig = await getContainerConfig();
 
@@ -108,7 +108,7 @@ async function updateDockerRestartPolicy(containerId: string, autoRestart: boole
 }
 
 export async function getContainerRestartCount(containerId: string): Promise<number> {
-  await ensurePermission('all');
+  await ensurePermission('container:read');
   if (!CONTAINER_ID_RE.test(containerId)) {
     return 0;
   }
@@ -121,7 +121,7 @@ export async function getContainerRestartCount(containerId: string): Promise<num
 }
 
 export async function syncContainerConfigWithDocker(containerId: string) {
-  await ensurePermission('all');
+  await ensurePermission('container:update');
   if (!CONTAINER_ID_RE.test(containerId)) {
     return { success: false, error: 'Invalid container id or action' };
   }
@@ -150,7 +150,7 @@ export async function syncContainerConfigWithDocker(containerId: string) {
 }
 
 export async function initializeContainerConfig(containerId: string) {
-  await ensurePermission('all');
+  await ensurePermission('container:update');
   const config = await getContainerConfig();
 
   if (!config[containerId]) {

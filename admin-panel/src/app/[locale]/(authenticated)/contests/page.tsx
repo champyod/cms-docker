@@ -15,7 +15,7 @@ export default async function ContestsPage({
 }) {
   const { locale } = await params;
   const dict = await getDictionary(locale);
-  const hasPermission = await checkPermission('contests', false);
+  const hasPermission = await checkPermission('contest:list', false);
 
   // Why: return 404 for forbidden access so existence is indistinguishable from missing page
   if (!hasPermission) {
@@ -36,7 +36,7 @@ export default async function ContestsPage({
         <Text variant="muted">{dict.contests.subtitle}</Text>
       </Stack>
 
-      <ContestList initialContests={contests} totalPages={totalPages} permissions={permissions} />
+      <ContestList initialContests={contests} totalPages={totalPages} permissionKeys={Array.from(permissions)} />
     </Stack>
   );
 }

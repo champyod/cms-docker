@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { DASHBOARD_ITEM, DOCUMENTATION_ITEM, CONTEST_ITEMS, INFRASTRUCTURE_ITEMS, buildVisibility, type SidebarPermissions } from '@/components/layout/sidebar-nav';
+import { DASHBOARD_ITEM, DOCUMENTATION_ITEM, CONTEST_ITEMS, INFRASTRUCTURE_ITEMS } from '@/components/layout/sidebar-nav';
 import { SidebarNavItem, SectionLabel } from '@/components/layout/SidebarNavItem';
 
 export const SIDEBAR_STORAGE_KEY = 'cms-sidebar-expanded';
@@ -40,13 +40,15 @@ function SignOutLink({ locale, collapsed }: { locale: string; collapsed: boolean
 export interface SidebarProps {
   className?: string;
   locale: string;
-  permissions?: SidebarPermissions;
+  permissionKeys: readonly string[];
   initialExpanded?: boolean;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ className, locale, permissions, initialExpanded = true }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ className, locale, permissionKeys, initialExpanded = true }) => {
   const [expanded, setExpanded] = useState(initialExpanded);
-  const visibility = buildVisibility(permissions);
+  const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
+  const contestItems = CONTEST_ITEMS.filter((item) => item.isVisible(effective));
+  const infrastructureItems = INFRASTRUCTURE_ITEMS.filter((item) => item.isVisible(effective));
 
   const handleToggle = (): void => {
     const next = !expanded;
@@ -68,13 +70,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ className, locale, permissions
       <nav aria-label="Main navigation" className="flex-1 space-y-1 overflow-y-auto px-2 py-3 scrollbar-thin scrollbar-thumb-border hover:scrollbar-thumb-muted-foreground/40">
         <SidebarNavItem item={DASHBOARD_ITEM} locale={locale} collapsed={!expanded} />
         <SectionLabel label="Contest" collapsed={!expanded} />
-        {CONTEST_ITEMS.filter((item) => item.isVisible(visibility)).map((item) => (
+        {contestItems.map((item) => (
           <SidebarNavItem key={item.label} item={item} locale={locale} collapsed={!expanded} />
         ))}
-        {visibility.superadmin && (
+        {infrastructureItems.length > 0 && (
           <>
             <SectionLabel label="Infrastructure" collapsed={!expanded} />
-            {INFRASTRUCTURE_ITEMS.map((item) => (
+            {infrastructureItems.map((item) => (
               <SidebarNavItem key={item.label} item={item} locale={locale} collapsed={!expanded} />
             ))}
           </>

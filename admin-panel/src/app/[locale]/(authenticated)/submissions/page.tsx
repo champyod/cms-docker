@@ -15,7 +15,7 @@ export default async function SubmissionsPage({
 }) {
   const { locale } = await params;
   const dict = await getDictionary(locale);
-  const hasPermission = await checkPermission('contests', false);
+  const hasPermission = await checkPermission('submission:list', false);
 
   // Why: return 404 for forbidden access so existence is indistinguishable from missing page
   if (!hasPermission) {

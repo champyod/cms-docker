@@ -15,11 +15,6 @@ export const safeAdminSelect = {
   username: true,
   name: true,
   enabled: true,
-  permission_all: true,
-  permission_messaging: true,
-  permission_tasks: true,
-  permission_users: true,
-  permission_contests: true,
 } satisfies Prisma.adminsSelect;
 
 export type SafeUser = Prisma.usersGetPayload<{ select: typeof safeUserSelect }>;

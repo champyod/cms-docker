@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useSyncedState } from '@/hooks/useSyncedState';
 import { useRouter, usePathname } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
@@ -11,6 +11,7 @@ import { ROW_SELECTED_CLASSES } from '@/hooks/useShortcuts';
 import { EmptyState } from '@/components/core/EmptyState';
 import { TaskModal } from './TaskModal';
 import { apiClient } from '@/lib/apiClient';
+import { hasEffectivePermission } from '@/lib/permission-engine';
 import type { TaskDiagnostic } from '@/lib/task-diagnostics';
 
 interface TaskRow {
@@ -27,16 +28,10 @@ interface TaskRow {
 interface TaskListProps {
   initialTasks: TaskRow[];
   totalPages: number;
-  permissions: {
-    permission_all: boolean;
-    permission_tasks: boolean;
-    permission_users: boolean;
-    permission_contests: boolean;
-    permission_messaging: boolean;
-  };
+  permissionKeys: readonly string[];
 }
 
-export function TaskList({ initialTasks, permissions }: TaskListProps): React.JSX.Element {
+export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React.JSX.Element {
   const router = useRouter();
   const pathname = usePathname();
   const locale = pathname.split('/')[1] ?? 'en';
@@ -44,8 +39,10 @@ export function TaskList({ initialTasks, permissions }: TaskListProps): React.JS
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
 
-  const isSuperAdmin = permissions?.permission_all ?? false;
-  const canManageTasks = isSuperAdmin || (permissions?.permission_tasks ?? false);
+  const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
+  const canCreateTasks = hasEffectivePermission(effective, 'task:create');
+  const canManageTasks = hasEffectivePermission(effective, 'task:update');
+  const canDeleteTasks = hasEffectivePermission(effective, 'task:delete');
 
   const handleEdit = (task: TaskRow): void => {
     if (!canManageTasks) return;
@@ -54,7 +51,7 @@ export function TaskList({ initialTasks, permissions }: TaskListProps): React.JS
   };
 
   const handleDelete = async (id: number): Promise<void> => {
-    if (!canManageTasks) return;
+    if (!canDeleteTasks) return;
     if (confirm('Are you sure you want to delete this task? This is IRREVERSIBLE.')) {
       const result = await apiClient.delete(`/api/tasks/${id}`);
       if (result.success) window.location.reload();
@@ -63,7 +60,7 @@ export function TaskList({ initialTasks, permissions }: TaskListProps): React.JS
   };
 
   const handleCreate = (): void => {
-    if (!canManageTasks) return;
+    if (!canCreateTasks) return;
     setSelectedTask(null);
     setIsModalOpen(true);
   };
@@ -76,7 +73,7 @@ export function TaskList({ initialTasks, permissions }: TaskListProps): React.JS
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-bold text-foreground">All Tasks</h2>
-        {canManageTasks && (
+        {canCreateTasks && (
           <Button variant="positive" icon={Plus} onClick={handleCreate}>
             Create Task
           </Button>
@@ -150,10 +147,10 @@ export function TaskList({ initialTasks, permissions }: TaskListProps): React.JS
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
                       {canManageTasks && (
-                        <>
-                          <Button variant="ghost" size="sm" icon={Edit2} iconOnly tooltip="Edit task" onClick={() => handleEdit(task)} className="text-muted-foreground hover:text-primary" />
-                          <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete task" onClick={() => handleDelete(task.id)} className="text-muted-foreground hover:text-destructive" />
-                        </>
+                        <Button variant="ghost" size="sm" icon={Edit2} iconOnly tooltip="Edit task" onClick={() => handleEdit(task)} className="text-muted-foreground hover:text-primary" />
+                      )}
+                      {canDeleteTasks && (
+                        <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete task" onClick={() => handleDelete(task.id)} className="text-muted-foreground hover:text-destructive" />
                       )}
                     </div>
                   </TableCell>

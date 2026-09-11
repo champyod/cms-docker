@@ -20,7 +20,7 @@ interface ActionResult {
 }
 
 export async function getParticipation(participationId: number) {
-  await ensurePermission('contests');
+  await ensurePermission('participation:read');
   return prisma.participations.findUnique({
     where: { id: participationId },
     include: {
@@ -37,7 +37,7 @@ export async function updateParticipation(
   participationId: number,
   data: UpdateParticipationInput
 ): Promise<ActionResult> {
-  await ensurePermission('contests');
+  await ensurePermission('participation:update');
 
   try {
     const { validIps, error } = parseIpAllowlist(data.ip);
@@ -55,7 +55,7 @@ export async function updateParticipation(
 }
 
 export async function setTestUser(participationId: number): Promise<ActionResult> {
-  await ensurePermission('contests');
+  await ensurePermission('participation:update');
 
   try {
     await prisma.participations.update({
@@ -93,7 +93,7 @@ export async function addTeamToContest(
   teamId: number,
   options: { hidden?: boolean; unrestricted?: boolean } = {}
 ): Promise<ActionResult & { added?: number }> {
-  await ensurePermission('contests');
+  await ensurePermission('participation:create');
 
   try {
     const { allUserIds, newIds } = await resolveNewTeamUserIds(contestId, teamId);
@@ -122,7 +122,7 @@ export async function addTeamToContest(
 }
 
 export async function getParticipationDetails(id: number): Promise<ParticipationDetails | null> {
-  await ensurePermission('contests');
+  await ensurePermission('participation:read');
   const p = await queryParticipationDetails(id);
   if (!p) return null;
 
@@ -143,7 +143,7 @@ export async function getParticipationDetails(id: number): Promise<Participation
 export async function revealParticipationPassword(participationId: number): Promise<
   { success: true; kind: 'plaintext'; value: string } | { success: true; kind: 'bcrypt' } | { success: false; error: string }
 > {
-  await ensurePermission('contests');
+  await ensurePermission('password:reveal');
   try {
     const row = await prisma.participations.findUnique({ where: { id: participationId }, select: { password: true } });
     const stored = row?.password;
@@ -159,7 +159,7 @@ export async function sendMessage(participationId: number, adminId: number, data
   subject: string;
   text: string;
 }): Promise<ActionResult> {
-  await ensurePermission('messaging');
+  await ensurePermission('message:send');
 
   try {
     await prisma.messages.create({
@@ -179,7 +179,7 @@ export async function sendMessage(participationId: number, adminId: number, data
 }
 
 export async function getMessages(participationId: number) {
-  await ensurePermission('contests');
+  await ensurePermission('message:list');
   return prisma.messages.findMany({
     where: { participation_id: participationId },
     include: { admins: { select: { username: true } } },

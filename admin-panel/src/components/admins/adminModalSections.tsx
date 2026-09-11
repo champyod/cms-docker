@@ -5,7 +5,7 @@ import { PasswordFieldWithKind, type RevealProps } from '@/components/core/Passw
 import { Input } from '@/components/core/Input';
 import { Button } from '@/components/core/Button';
 import type { PasswordKind } from '@/lib/password-format';
-import { PERMISSION_CHECKBOXES, type AdminFormState } from './adminFormConfig';
+import { type AdminFormState } from './adminFormConfig';
 
 export interface RoleSelectorProps {
   isSuperadmin: boolean;
@@ -43,32 +43,6 @@ export function AdminRoleSelector({ isSuperadmin, onSelectRole }: RoleSelectorPr
         </button>
       </div>
     </div>
-  );
-}
-
-export interface PermissionCheckboxListProps {
-  formData: AdminFormState;
-  onChange: (updates: Partial<AdminFormState>) => void;
-}
-
-export function AdminPermissionCheckboxes({ formData, onChange }: PermissionCheckboxListProps) {
-  return (
-    <>
-      {PERMISSION_CHECKBOXES.map(({ key, label, description }) => (
-        <div key={key} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border border-border">
-          <div>
-            <label className="text-sm text-foreground font-medium">{label}</label>
-            <p className="text-xs text-muted-foreground">{description}</p>
-          </div>
-          <input
-            type="checkbox"
-            checked={formData[key]}
-            onChange={(e) => onChange({ [key]: e.target.checked })}
-            className="w-5 h-5 rounded accent-primary"
-          />
-        </div>
-      ))}
-    </>
   );
 }
 

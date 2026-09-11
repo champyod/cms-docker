@@ -79,13 +79,7 @@ async function findActiveAdmin(username: string): Promise<AuthenticatedAdmin | n
 }
 
 async function startAdminSession(admin: AuthenticatedAdmin): Promise<void> {
-  await createSession(admin.id.toString(), admin.username, {
-    permission_all: admin.permission_all,
-    permission_tasks: admin.permission_tasks,
-    permission_users: admin.permission_users,
-    permission_contests: admin.permission_contests,
-    permission_messaging: admin.permission_messaging,
-  });
+  await createSession(admin.id.toString(), admin.username);
 }
 
 async function completeLogin(admin: AuthenticatedAdmin, bucketKey: string): Promise<void> {

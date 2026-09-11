@@ -17,7 +17,7 @@ interface UsersPageResult {
 }
 
 export async function getUsers({ page = 1, search = '', perPage = USERS_PER_PAGE }: { page?: number; search?: string; perPage?: number }): Promise<UsersPageResult> {
-  await ensurePermission('users');
+  await ensurePermission('user:list');
 
   const safePerPage = Math.min(Math.max(Number(perPage) || USERS_PER_PAGE, 1), MAX_USERS_PER_PAGE);
   const safePage = Math.max(Number(page) || 1, 1);
@@ -48,7 +48,7 @@ export async function getUsers({ page = 1, search = '', perPage = USERS_PER_PAGE
 export async function revealUserPassword(id: number): Promise<
   { success: true; kind: 'plaintext'; value: string } | { success: true; kind: 'bcrypt' } | { success: false; error: string }
 > {
-  await ensurePermission('users');
+  await ensurePermission('password:reveal');
   try {
     const row = await prisma.users.findUnique({ where: { id }, select: { password: true } });
     if (!row) return { success: false, error: 'User not found' };

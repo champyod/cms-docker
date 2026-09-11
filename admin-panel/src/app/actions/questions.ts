@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { ensurePermission } from '@/lib/permissions';
 
 export async function getQuestions(contestId: number) {
-  await ensurePermission('contests');
+  await ensurePermission('question:list');
   return prisma.questions.findMany({
     where: { 
       participations: { contest_id: contestId }
@@ -23,7 +23,7 @@ export async function replyToQuestion(questionId: number, adminId: number, data:
   reply_subject: string;
   reply_text: string;
 }) {
-  await ensurePermission('contests');
+  await ensurePermission('question:answer');
 
   try {
     await prisma.questions.update({
@@ -45,7 +45,7 @@ export async function replyToQuestion(questionId: number, adminId: number, data:
 }
 
 export async function ignoreQuestion(questionId: number) {
-  await ensurePermission('contests');
+  await ensurePermission('question:ignore');
 
   try {
     await prisma.questions.update({
@@ -61,7 +61,7 @@ export async function ignoreQuestion(questionId: number) {
 }
 
 export async function unignoreQuestion(questionId: number) {
-  await ensurePermission('contests');
+  await ensurePermission('question:ignore');
 
   try {
     await prisma.questions.update({
@@ -77,7 +77,7 @@ export async function unignoreQuestion(questionId: number) {
 }
 
 export async function getUnansweredQuestions(contestId: number | null) {
-  await ensurePermission('contests');
+  await ensurePermission('question:list');
   const where: Record<string, unknown> = {
     reply_timestamp: null,
     ignored: false

@@ -15,26 +15,13 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-export interface SidebarPermissions {
-  permission_all: boolean;
-  permission_tasks: boolean;
-  permission_users: boolean;
-  permission_contests: boolean;
-  permission_messaging: boolean;
-}
-
-export interface NavVisibility {
-  superadmin: boolean;
-  contests: boolean;
-  tasks: boolean;
-  users: boolean;
-}
+import { hasEffectivePermission } from '@/lib/permission-engine';
 
 export interface NavItemDef {
   label: string;
   icon: LucideIcon;
   buildHref: (locale: string) => string;
-  isVisible: (visibility: NavVisibility) => boolean;
+  isVisible: (effective: ReadonlySet<string>) => boolean;
 }
 
 export const DASHBOARD_ITEM: NavItemDef = {
@@ -52,30 +39,20 @@ export const DOCUMENTATION_ITEM: NavItemDef = {
 };
 
 export const CONTEST_ITEMS: NavItemDef[] = [
-  { label: 'Contests', icon: Trophy, buildHref: (locale) => `/${locale}/contests`, isVisible: (visibility) => visibility.contests },
-  { label: 'Tasks', icon: FileCode, buildHref: (locale) => `/${locale}/tasks`, isVisible: (visibility) => visibility.tasks },
-  { label: 'Submissions', icon: Activity, buildHref: (locale) => `/${locale}/submissions`, isVisible: (visibility) => visibility.contests },
-  { label: 'Users', icon: Users, buildHref: (locale) => `/${locale}/users`, isVisible: (visibility) => visibility.users },
-  { label: 'Teams', icon: Users, buildHref: (locale) => `/${locale}/teams`, isVisible: (visibility) => visibility.users },
+  { label: 'Contests', icon: Trophy, buildHref: (locale) => `/${locale}/contests`, isVisible: (effective) => hasEffectivePermission(effective, 'contest:list') },
+  { label: 'Tasks', icon: FileCode, buildHref: (locale) => `/${locale}/tasks`, isVisible: (effective) => hasEffectivePermission(effective, 'task:list') },
+  { label: 'Submissions', icon: Activity, buildHref: (locale) => `/${locale}/submissions`, isVisible: (effective) => hasEffectivePermission(effective, 'submission:list') },
+  { label: 'Users', icon: Users, buildHref: (locale) => `/${locale}/users`, isVisible: (effective) => hasEffectivePermission(effective, 'user:list') },
+  { label: 'Teams', icon: Users, buildHref: (locale) => `/${locale}/teams`, isVisible: (effective) => hasEffectivePermission(effective, 'team:list') },
 ];
 
 export const INFRASTRUCTURE_ITEMS: NavItemDef[] = [
-  { label: 'Active Contest', icon: Rocket, buildHref: (locale) => `/${locale}/deployments`, isVisible: () => true },
-  { label: 'Admins', icon: Shield, buildHref: (locale) => `/${locale}/admins`, isVisible: () => true },
-  { label: 'Resources', icon: Activity, buildHref: (locale) => `/${locale}/resources`, isVisible: () => true },
-  { label: 'Containers', icon: Box, buildHref: (locale) => `/${locale}/containers`, isVisible: () => true },
-  { label: 'Ranking', icon: Globe, buildHref: (locale) => `/${locale}/ranking`, isVisible: () => true },
-  { label: 'Appearance', icon: Palette, buildHref: (locale) => `/${locale}/appearance`, isVisible: () => true },
-  { label: 'Maintenance', icon: Wrench, buildHref: (locale) => `/${locale}/maintenance`, isVisible: () => true },
-  { label: 'Settings', icon: Settings, buildHref: (locale) => `/${locale}/settings`, isVisible: () => true },
+  { label: 'Active Contest', icon: Rocket, buildHref: (locale) => `/${locale}/deployments`, isVisible: (effective) => hasEffectivePermission(effective, 'deployment:list') },
+  { label: 'Admins', icon: Shield, buildHref: (locale) => `/${locale}/admins`, isVisible: (effective) => hasEffectivePermission(effective, 'admin:list') },
+  { label: 'Resources', icon: Activity, buildHref: (locale) => `/${locale}/resources`, isVisible: (effective) => hasEffectivePermission(effective, 'resource:list') },
+  { label: 'Containers', icon: Box, buildHref: (locale) => `/${locale}/containers`, isVisible: (effective) => hasEffectivePermission(effective, 'container:list') },
+  { label: 'Ranking', icon: Globe, buildHref: (locale) => `/${locale}/ranking`, isVisible: (effective) => hasEffectivePermission(effective, 'ranking:list') },
+  { label: 'Appearance', icon: Palette, buildHref: (locale) => `/${locale}/appearance`, isVisible: (effective) => hasEffectivePermission(effective, 'appearance:list') },
+  { label: 'Maintenance', icon: Wrench, buildHref: (locale) => `/${locale}/maintenance`, isVisible: (effective) => hasEffectivePermission(effective, 'maintenance:list') },
+  { label: 'Settings', icon: Settings, buildHref: (locale) => `/${locale}/settings`, isVisible: (effective) => hasEffectivePermission(effective, 'settings:list') },
 ];
-
-export function buildVisibility(permissions?: SidebarPermissions): NavVisibility {
-  const superadmin = permissions?.permission_all ?? false;
-  return {
-    superadmin,
-    contests: superadmin || (permissions?.permission_contests ?? false),
-    tasks: superadmin || (permissions?.permission_tasks ?? false),
-    users: superadmin || (permissions?.permission_users ?? false),
-  };
-}

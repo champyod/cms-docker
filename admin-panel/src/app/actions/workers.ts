@@ -3,7 +3,8 @@
 import { execFile } from 'child_process';
 import path from 'path';
 import { promisify } from 'util';
-import { ensurePermission, getFreshPermissions, hasPermission } from '@/lib/permissions';
+import { ensurePermission, getFreshPermissions } from '@/lib/permissions';
+import { hasEffectivePermission } from '@/lib/permission-engine';
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
 import { getRepoRoot } from '@/lib/repo-root';
@@ -18,7 +19,7 @@ export async function getWorkerStatus(host: string, port?: number): Promise<{
   host: string;
   port?: number;
 }> {
-  await ensurePermission('all');
+  await ensurePermission('service:read');
   if (!HOST_RE.test(host)) {
     return { status: 'unknown', containerRunning: false, host, port };
   }
@@ -73,8 +74,8 @@ export async function getWorkersLiveStatus(): Promise<{
     if (!fresh) return { forbidden: true, canManage: false, workers: [] };
 
     // Viewing worker health is an operator concern (tasks); management stays superadmin.
-    const canView = hasPermission(fresh, 'tasks');
-    const canManage = hasPermission(fresh, 'all');
+    const canView = hasEffectivePermission(fresh, 'task:read');
+    const canManage = hasEffectivePermission(fresh, 'all:all');
     if (!canView) return { forbidden: true, canManage, workers: [] };
 
     let details: Array<Record<string, unknown>> = [];

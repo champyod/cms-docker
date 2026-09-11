@@ -30,12 +30,12 @@ async function getContestComposeFile(): Promise<string> {
 // Turbopack bundles client imports for the browser and cannot resolve
 // node:fs. Exposed as a server action (permission-gated like its siblings).
 export async function analyzeContainerDependencies(containerNames: string[]): Promise<string[]> {
-    await ensurePermission('all');
+    await ensurePermission('container:read');
     return analyzeContainerDependenciesLib(containerNames);
 }
 
 export async function analyzeRestartRequirements(changedKeys: string[]) {
-    await ensurePermission('all');
+    await ensurePermission('service:read');
     const policies = await getRestartPolicies();
     if (!policies) return { requiredRestarts: [] };
 
@@ -69,7 +69,7 @@ export async function analyzeRestartRequirements(changedKeys: string[]) {
 }
 
 export async function restartServices(type: 'all' | 'core' | 'admin' | 'worker' | 'custom', customList?: string[]) {
-  await ensurePermission('all');
+  await ensurePermission('service:restart');
   try {
     const rootDir = getRepoRoot();
     await execPromise('make env', { cwd: rootDir });
@@ -102,17 +102,17 @@ export async function restartServices(type: 'all' | 'core' | 'admin' | 'worker' 
 }
 
 export async function deployContest(contestId: number): Promise<DeployContestResult> {
-  await ensurePermission('all');
+  await ensurePermission('deployment:deploy');
   return runDeployContest(contestId);
 }
 
 export async function getDeployStatus(operationId: string): Promise<DeployStatusResult> {
-  await ensurePermission('all');
+  await ensurePermission('deployment:read');
   return fetchDeployStatus(operationId);
 }
 
 export async function triggerManualBackup() {
-    await ensurePermission('all');
+    await ensurePermission('maintenance:enable');
     try {
         const rootDir = getRepoRoot();
         await logToDiscord('Manual Backup', 'Admin triggered a manual submissions backup.', 3447003);
@@ -125,7 +125,7 @@ export async function triggerManualBackup() {
 }
 
 export async function getServiceStatus() {
-    await ensurePermission('all');
+    await ensurePermission('service:read');
     try {
         const { stdout } = await execPromise('docker ps -a --format "{{json .}}"');
         if (!stdout.trim()) return { status: 'down' as const, running: 0, total: 0 };
@@ -155,7 +155,7 @@ export async function getServiceStatus() {
 }
 
 export async function updateServer() {
-    await ensurePermission('all');
+    await ensurePermission('service:deploy');
     try {
         const rootDir = getRepoRoot();
         await logToDiscord('Server Update', 'Admin triggered a server update.', 16753920, true);

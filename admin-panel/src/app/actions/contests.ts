@@ -16,12 +16,12 @@ export type { ContestData } from '@/lib/contests-repo';
 import type { ContestData } from '@/lib/contests-repo';
 
 export async function getContests({ page = 1, search = '' }: { page?: number; search?: string }) {
-  await ensurePermission('contests');
+  await ensurePermission('contest:list');
   return fetchContestsPage({ page, search });
 }
 
 export async function createContest(data: ContestData) {
-  await ensurePermission('contests');
+  await ensurePermission('contest:create');
 
   const validation = validateContestData(data);
   if (!validation.valid) {
@@ -39,7 +39,7 @@ export async function createContest(data: ContestData) {
 }
 
 export async function updateContest(id: number, data: Partial<ContestData>) {
-  await ensurePermission('contests');
+  await ensurePermission('contest:update');
 
   const validation = validateContestData(data as ContestData, true);
   if (!validation.valid) {
@@ -57,7 +57,7 @@ export async function updateContest(id: number, data: Partial<ContestData>) {
 }
 
 export async function deleteContest(id: number) {
-  await ensurePermission('contests');
+  await ensurePermission('contest:delete');
 
   try {
     await prisma.contests.delete({
@@ -72,7 +72,7 @@ export async function deleteContest(id: number) {
 }
 
 export async function addParticipant(contestId: number, userId: number) {
-  await ensurePermission('contests');
+  await ensurePermission('participation:create');
 
   try {
     await prisma.$executeRaw`
@@ -88,7 +88,7 @@ export async function addParticipant(contestId: number, userId: number) {
 }
 
 export async function removeParticipant(participationId: number) {
-  await ensurePermission('contests');
+  await ensurePermission('participation:delete');
 
   try {
     await prisma.participations.delete({
@@ -103,7 +103,7 @@ export async function removeParticipant(participationId: number) {
 }
 
 export async function addTaskToContest(contestId: number, taskId: number) {
-  await ensurePermission('contests');
+  await ensurePermission('task:update');
 
   try {
     await prisma.tasks.update({
@@ -118,7 +118,7 @@ export async function addTaskToContest(contestId: number, taskId: number) {
 }
 
 export async function removeTaskFromContest(taskId: number) {
-  await ensurePermission('contests');
+  await ensurePermission('task:update');
 
   try {
     await prisma.tasks.update({
@@ -137,7 +137,7 @@ export async function updateContestSettings(id: number, data: Partial<ContestDat
 }
 
 export async function getAvailableContests() {
-  await ensurePermission('contests');
+  await ensurePermission('contest:list');
   try {
     const contests = await prisma.contests.findMany({
       select: {
@@ -154,7 +154,7 @@ export async function getAvailableContests() {
 }
 
 export async function activateContest(id: number) {
-  await ensurePermission('contests');
+  await ensurePermission('contest:switch');
   try {
     // Atomic UPDATE — no race window between setting active and clearing others
     await prisma.$executeRaw`
@@ -168,7 +168,7 @@ export async function activateContest(id: number) {
 }
 
 export async function getActiveContest() {
-  await ensurePermission('contests');
+  await ensurePermission('contest:read');
   try {
     const contest = await prisma.contests.findFirst({
       where: { is_active: true },

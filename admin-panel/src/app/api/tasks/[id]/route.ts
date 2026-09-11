@@ -77,7 +77,7 @@ async function applyTaskUpdates(id: number, standardFields: Record<string, unkno
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<Response> {
-  const { authorized, response } = await verifyApiPermission('tasks');
+  const { authorized, response } = await verifyApiPermission('task:update');
   if (!authorized) return response;
   const id = parseInt((await params).id, 10);
   if (Number.isNaN(id)) return apiError({ message: 'Invalid ID', status: 400 });
@@ -97,7 +97,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<Response> {
-  const { authorized, response } = await verifyApiPermission('tasks');
+  const { authorized, response } = await verifyApiPermission('task:delete');
   if (!authorized) return response;
   const id = parseInt((await params).id, 10);
   if (Number.isNaN(id)) return apiError({ message: 'Invalid ID', status: 400 });

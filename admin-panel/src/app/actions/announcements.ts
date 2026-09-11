@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { ensurePermission } from '@/lib/permissions';
 
 export async function getAnnouncements(contestId: number) {
-  await ensurePermission('messaging');
+  await ensurePermission('announcement:list');
   return prisma.announcements.findMany({
     where: { contest_id: contestId },
     include: { admins: { select: { username: true } } },
@@ -17,7 +17,7 @@ export async function createAnnouncement(contestId: number, adminId: number, dat
   subject: string;
   text: string;
 }) {
-  await ensurePermission('messaging');
+  await ensurePermission('announcement:create');
   try {
     await prisma.announcements.create({
       data: {
@@ -40,7 +40,7 @@ export async function updateAnnouncement(announcementId: number, data: {
   subject?: string;
   text?: string;
 }) {
-  await ensurePermission('messaging');
+  await ensurePermission('announcement:update');
   try {
     await prisma.announcements.update({
       where: { id: announcementId },
@@ -58,7 +58,7 @@ export async function updateAnnouncement(announcementId: number, data: {
 }
 
 export async function deleteAnnouncement(announcementId: number) {
-  await ensurePermission('messaging');
+  await ensurePermission('announcement:delete');
   try {
     await prisma.announcements.delete({
       where: { id: announcementId }

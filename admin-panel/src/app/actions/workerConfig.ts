@@ -82,7 +82,7 @@ function parseWorkersFromEnvCore(content: string): Array<{ host: string; port: n
 }
 
 export async function getWorkers() {
-  await ensurePermission('all');
+  await ensurePermission('settings:read');
 
   const configPath = await getCmsConfigPath();
 
@@ -129,7 +129,7 @@ function applyWorkerBlock(content: string, workers: WorkerEntry[]): string | nul
 }
 
 export async function updateWorkers(workers: { host: string; port: number }[]) {
-  await ensurePermission('all');
+  await ensurePermission('settings:update');
 
   const invalidEntries = findInvalidWorkerEntries(workers);
   if (invalidEntries.length > 0) {

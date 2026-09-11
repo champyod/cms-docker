@@ -8,7 +8,7 @@ import { getRepoRoot } from '@/lib/repo-root';
 const execPromise = util.promisify(exec);
 
 export async function pullLatestImages() {
-  await ensurePermission('all');
+  await ensurePermission('container:control');
   try {
     const rootDir = getRepoRoot();
     const { stdout, stderr } = await execPromise('make pull', { cwd: rootDir, timeout: 300000 });
@@ -24,7 +24,7 @@ export async function pullLatestImages() {
 }
 
 export async function rebuildImages(stack: 'core' | 'admin' | 'worker' | 'all') {
-  await ensurePermission('all');
+  await ensurePermission('container:control');
   try {
     const rootDir = getRepoRoot();
     let cmd = '';
@@ -57,7 +57,7 @@ export async function rebuildImages(stack: 'core' | 'admin' | 'worker' | 'all') 
 }
 
 export async function getCoreServicesStatus() {
-  await ensurePermission('all');
+  await ensurePermission('service:read');
   try {
     const services = [
       'cms-database',
@@ -91,7 +91,7 @@ export async function getCoreServicesStatus() {
 }
 
 export async function getNetworkTrafficLogs(limit: number = 50) {
-  await ensurePermission('all');
+  await ensurePermission('container:read');
   try {
     const coercedLimit = Number.isInteger(Number(limit)) && Number(limit) >= 1 && Number(limit) <= 500 ? Number(limit) : 50;
     const { stdout } = await execPromise(

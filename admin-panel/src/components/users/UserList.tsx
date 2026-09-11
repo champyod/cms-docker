@@ -7,6 +7,7 @@ import { usePathname } from 'next/navigation';
 
 import { Button } from '@/components/core/Button';
 import { apiClient, type ApiResponse } from '@/lib/apiClient';
+import { hasEffectivePermission } from '@/lib/permission-engine';
 
 import { UserBulkCreateCsv } from './UserBulkCreateCsv';
 import { UserBulkEditDialog } from './UserBulkEditDialog';
@@ -25,13 +26,7 @@ interface UserListProps {
   perPage: number;
   initialSearch: string;
   contests: Array<{ id: number; name: string }>;
-  permissions: {
-    permission_all: boolean;
-    permission_tasks: boolean;
-    permission_users: boolean;
-    permission_contests: boolean;
-    permission_messaging: boolean;
-  };
+  permissionKeys: readonly string[];
 }
 
 function mergeIntoCache(prev: Record<number, UsersPageRow>, users: UsersPageRow[]): Record<number, UsersPageRow> {
@@ -40,7 +35,7 @@ function mergeIntoCache(prev: Record<number, UsersPageRow>, users: UsersPageRow[
   return next;
 }
 
-export function UserList({ initialUsers, totalPages, currentPage, perPage, initialSearch, contests, permissions }: UserListProps) {
+export function UserList({ initialUsers, totalPages, currentPage, perPage, initialSearch, contests, permissionKeys }: UserListProps) {
   const [usersList, setUsersList] = useState(initialUsers);
   const [userCache, setUserCache] = useState<Record<number, UsersPageRow>>(() => mergeIntoCache({}, initialUsers));
   const [totalPagesState, setTotalPagesState] = useState(totalPages);
@@ -56,8 +51,10 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
 
-  const isSuperAdmin = permissions?.permission_all ?? false;
-  const canManageUsers = isSuperAdmin || (permissions?.permission_users ?? false);
+  const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
+  const canCreateUsers = hasEffectivePermission(effective, 'user:create');
+  const canManageUsers = hasEffectivePermission(effective, 'user:update');
+  const canDeleteUsers = hasEffectivePermission(effective, 'user:delete');
 
   const fetchUsers = useCallback(async (next: { page?: number; perPage?: number; search?: string } = {}) => {
     const targetPage = Math.max(next.page ?? table.page, 1);
@@ -105,7 +102,7 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
   };
 
   const handleDelete = async (id: number) => {
-    if (!canManageUsers) return;
+    if (!canDeleteUsers) return;
     if (confirm('Are you sure you want to delete this user?')) {
       const result = await apiClient.delete(`/api/users/${id}`);
       if (result.success) {
@@ -117,7 +114,7 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
   };
 
   const handleCreate = () => {
-    if (!canManageUsers) return;
+    if (!canCreateUsers) return;
     setSelectedUser(null);
     setIsModalOpen(true);
   };
@@ -159,7 +156,7 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
             <HelpCircle className="w-4 h-4" />
           </Link>
         </div>
-        {canManageUsers && (
+        {canCreateUsers && (
           <div className="flex items-center gap-2">
             <Button variant="positiveOutline" icon={FileSpreadsheet} onClick={() => setIsBulkModalOpen(true)}>
               Bulk Add Users
@@ -222,7 +219,7 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
         onSuccess={handleSuccess}
       />
 
-      {canManageUsers && (
+      {canCreateUsers && (
         <UserBulkCreateCsv
           isOpen={isBulkModalOpen}
           onClose={() => setIsBulkModalOpen(false)}

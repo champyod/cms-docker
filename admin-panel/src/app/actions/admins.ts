@@ -3,7 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { ensurePermission, invalidateAccessCache } from '@/lib/permissions';
-import { getSession, type AdminPermissions } from '@/lib/auth';
+import { getSession } from '@/lib/auth';
 import { safeAdminSelect, type AdminWithLogin } from '@/lib/prisma-selects';
 import {
   formatStoredPassword,
@@ -17,14 +17,19 @@ interface ActionResult {
   error?: string;
 }
 
-interface CreateAdminInput extends Partial<AdminPermissions> {
+interface AdminPermissionAssignment {
+  groupIds?: number[];
+  overrides?: { permissionKey: string; effect: 'allow' | 'deny' }[];
+}
+
+interface CreateAdminInput extends AdminPermissionAssignment {
   name: string;
   username: string;
   password: string;
   passwordKind?: PasswordKind;
 }
 
-interface UpdateAdminInput extends Partial<AdminPermissions> {
+interface UpdateAdminInput extends AdminPermissionAssignment {
   name?: string;
   enabled?: boolean;
   password?: string;
@@ -35,10 +40,10 @@ type AdminUpdateData = {
   name?: string;
   enabled?: boolean;
   authentication?: string;
-} & Partial<AdminPermissions>;
+};
 
 export async function getAdmins(): Promise<AdminWithLogin[]> {
-  await ensurePermission('all');
+  await ensurePermission('admin:read');
   return prisma.admins.findMany({
     select: { ...safeAdminSelect, last_login_at: true },
     orderBy: { username: 'asc' }
@@ -46,7 +51,7 @@ export async function getAdmins(): Promise<AdminWithLogin[]> {
 }
 
 export async function createAdmin(data: CreateAdminInput): Promise<ActionResult> {
-  await ensurePermission('all');
+  await ensurePermission('admin:create');
   try {
     await prisma.admins.create({
       data: {
@@ -54,11 +59,8 @@ export async function createAdmin(data: CreateAdminInput): Promise<ActionResult>
         username: data.username,
         authentication: await formatStoredPassword(data.passwordKind ?? DEFAULT_PASSWORD_KIND, data.password),
         enabled: true,
-        permission_all: data.permission_all ?? false,
-        permission_messaging: data.permission_messaging ?? false,
-        permission_tasks: data.permission_tasks ?? false,
-        permission_users: data.permission_users ?? false,
-        permission_contests: data.permission_contests ?? false,
+        permission_all: false,
+        permission_messaging: false,
       }
     });
     revalidatePath('/[locale]/admins', 'page');
@@ -87,11 +89,11 @@ function isSelfDemotion(
 ): boolean {
   return sessionUserId === String(adminId)
     && target?.permission_all === true
-    && data.permission_all === false;
+    && data.enabled === false;
 }
 
 function removesSuperadminStatus(data: UpdateAdminInput): boolean {
-  return (data.permission_all !== undefined && !data.permission_all) || data.enabled === false;
+  return data.enabled === false;
 }
 
 async function wouldRemoveLastSuperadmin(adminId: number): Promise<boolean> {
@@ -105,17 +107,12 @@ async function buildAdminUpdateData(data: UpdateAdminInput): Promise<AdminUpdate
   const updateData: AdminUpdateData = {};
   if (data.name) updateData.name = data.name;
   if (data.enabled !== undefined) updateData.enabled = data.enabled;
-  if (data.permission_all !== undefined) updateData.permission_all = data.permission_all;
-  if (data.permission_messaging !== undefined) updateData.permission_messaging = data.permission_messaging;
-  if (data.permission_tasks !== undefined) updateData.permission_tasks = data.permission_tasks;
-  if (data.permission_users !== undefined) updateData.permission_users = data.permission_users;
-  if (data.permission_contests !== undefined) updateData.permission_contests = data.permission_contests;
   if (data.password) updateData.authentication = await formatStoredPassword(data.passwordKind ?? DEFAULT_PASSWORD_KIND, data.password);
   return updateData;
 }
 
 export async function updateAdmin(adminId: number, data: UpdateAdminInput): Promise<ActionResult> {
-  await ensurePermission('all');
+  await ensurePermission('admin:update');
 
   const session = await getSession();
   if (!session) {
@@ -147,7 +144,7 @@ export async function updateAdmin(adminId: number, data: UpdateAdminInput): Prom
 }
 
 export async function deleteAdmin(adminId: number): Promise<ActionResult> {
-  await ensurePermission('all');
+  await ensurePermission('admin:delete');
 
   const session = await getSession();
   if (!session) {
@@ -176,7 +173,7 @@ export async function deleteAdmin(adminId: number): Promise<ActionResult> {
 export async function revealAdminPassword(id: number): Promise<
   { success: true; kind: 'plaintext'; value: string } | { success: true; kind: 'bcrypt' } | { success: false; error: string }
 > {
-  await ensurePermission('all');
+  await ensurePermission('password:reveal');
   try {
     const row = await prisma.admins.findUnique({ where: { id }, select: { authentication: true } });
     if (!row) return { success: false, error: 'Admin not found' };

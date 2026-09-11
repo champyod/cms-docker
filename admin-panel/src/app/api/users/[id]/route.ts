@@ -17,7 +17,7 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { authorized, response } = await verifyApiPermission('users');
+  const { authorized, response } = await verifyApiPermission('user:update');
   if (!authorized) return response;
 
   const id = parseInt((await params).id);
@@ -58,7 +58,7 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { authorized, response } = await verifyApiPermission('users');
+  const { authorized, response } = await verifyApiPermission('user:delete');
   if (!authorized) return response;
 
   const id = parseInt((await params).id);

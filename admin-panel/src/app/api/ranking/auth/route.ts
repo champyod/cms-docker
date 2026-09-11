@@ -3,7 +3,7 @@ import { apiError, apiSuccess, verifyApiPermission } from '@/lib/api-utils';
 import { buildRankingAuthHeader, clearRankingSession, getRankingSession, normalizeRankingBaseUrl, setRankingSession } from '@/lib/ranking-session';
 
 export async function GET() {
-  const { authorized, response } = await verifyApiPermission('all');
+  const { authorized, response } = await verifyApiPermission('ranking:read');
   if (!authorized) return response;
 
   const session = await getRankingSession();
@@ -19,7 +19,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const { authorized, response } = await verifyApiPermission('all');
+  const { authorized, response } = await verifyApiPermission('ranking:update');
   if (!authorized) return response;
 
   try {
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE() {
-  const { authorized, response } = await verifyApiPermission('all');
+  const { authorized, response } = await verifyApiPermission('ranking:update');
   if (!authorized) return response;
 
   await clearRankingSession();

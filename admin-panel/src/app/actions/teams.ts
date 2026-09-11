@@ -6,7 +6,7 @@ import { ensurePermission } from '@/lib/permissions';
 import { safeUserSelect } from '@/lib/prisma-selects';
 
 export async function getTeams() {
-  await ensurePermission('users');
+  await ensurePermission('team:list');
 
   return prisma.teams.findMany({
     select: {
@@ -22,7 +22,7 @@ export async function getTeams() {
 }
 
 export async function createTeam(data: { code: string; name: string }) {
-  await ensurePermission('users');
+  await ensurePermission('team:create');
 
   try {
     await prisma.teams.create({
@@ -43,7 +43,7 @@ export async function createTeam(data: { code: string; name: string }) {
 }
 
 export async function updateTeam(teamId: number, data: { code?: string; name?: string }) {
-  await ensurePermission('users');
+  await ensurePermission('team:update');
 
   try {
     await prisma.teams.update({
@@ -62,7 +62,7 @@ export async function updateTeam(teamId: number, data: { code?: string; name?: s
 }
 
 export async function deleteTeam(teamId: number) {
-  await ensurePermission('users');
+  await ensurePermission('team:delete');
 
   try {
     await prisma.teams.delete({ where: { id: teamId } });
@@ -75,7 +75,7 @@ export async function deleteTeam(teamId: number) {
 }
 
 export async function getTeamWithDetails(teamId: number) {
-  await ensurePermission('users');
+  await ensurePermission('team:read');
 
   const team = await prisma.teams.findUnique({
     where: { id: teamId },

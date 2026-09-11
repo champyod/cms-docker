@@ -5,7 +5,7 @@ import { ensurePermission } from '@/lib/permissions';
 import { safeUserSelect, safeAdminSelect } from '@/lib/prisma-selects';
 
 export async function searchAll(query: string) {
-  await ensurePermission('all');
+  await ensurePermission('all:all');
   if (!query) return { users: [], tasks: [], contests: [], admins: [] };
 
   const [users, tasks, contests, admins] = await Promise.all([

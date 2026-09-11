@@ -13,7 +13,7 @@ export default async function TeamsPage({
 }) {
   const { locale } = await params;
   const dict = await getDictionary(locale);
-  const hasPermission = await checkPermission('users', false);
+  const hasPermission = await checkPermission('team:list', false);
 
   // Why: return 404 for forbidden access so existence is indistinguishable from missing page
   if (!hasPermission) {
@@ -30,7 +30,7 @@ export default async function TeamsPage({
         <Text variant="muted">{dict.teams.subtitle}</Text>
       </Stack>
 
-      <TeamList initialTeams={teams} permissions={permissions} />
+      <TeamList initialTeams={teams} permissionKeys={Array.from(permissions)} />
     </Stack>
   );
 }

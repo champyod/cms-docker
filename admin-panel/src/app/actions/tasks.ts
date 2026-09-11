@@ -17,7 +17,7 @@ export async function getTasks({ page = 1, search = '' }: { page?: number; searc
   totalPages: number;
   total: number;
 }> {
-  await ensurePermission('tasks');
+  await ensurePermission('task:list');
   const skip = (page - 1) * TASKS_PER_PAGE;
   const where: Prisma.tasksWhereInput = search
     ? { OR: [{ name: { contains: search, mode: 'insensitive' } }, { title: { contains: search, mode: 'insensitive' } }] }
@@ -47,7 +47,7 @@ export async function getTasks({ page = 1, search = '' }: { page?: number; searc
 }
 
 export async function getTask(id: number): Promise<Prisma.tasksGetPayload<{ include: { contests: { select: { id: true; name: true; start: true; stop: true; analysis_start: true; analysis_stop: true } }; statements: { select: { id: true; language: true } }; attachments: true; datasets_datasets_task_idTotasks: { include: { testcases: { select: { id: true; codename: true } }; managers: true } }; _count: { select: { submissions: true } } } }> | null> {
-  await ensurePermission('tasks');
+  await ensurePermission('task:read');
   return prisma.tasks.findUnique({
     where: { id },
     include: {
@@ -61,7 +61,7 @@ export async function getTask(id: number): Promise<Prisma.tasksGetPayload<{ incl
 }
 
 export async function getTaskDiagnostics(taskId: number): Promise<ReturnType<typeof computeTaskDiagnostics> extends Promise<infer T> ? T : never> {
-  await ensurePermission('tasks');
+  await ensurePermission('task:read');
   if (!taskId || Number.isNaN(taskId)) return [];
   return computeTaskDiagnostics(taskId);
 }
@@ -94,7 +94,7 @@ function toIntervalString(value: number | null, unit: string, fallback: string):
 }
 
 export async function createTask(data: TaskData): Promise<{ success: boolean; error?: string }> {
-  await ensurePermission('tasks');
+  await ensurePermission('task:create');
   try {
     const tokenMin = toIntervalString(sanitize(data.token_min_interval), 'seconds', '0 seconds') as string;
     const tokenGen = toIntervalString(sanitize(data.token_gen_interval), 'minutes', '30 minutes') as string;
@@ -160,7 +160,7 @@ async function applyTaskIntervals(id: number, intervalFields: Record<string, unk
 }
 
 export async function updateTask(id: number, data: Partial<TaskData>): Promise<{ success: boolean; error?: string }> {
-  await ensurePermission('tasks');
+  await ensurePermission('task:update');
   try {
     const { standardFields, intervalFields } = splitTaskData(data);
     if (Object.keys(standardFields).length > 0) await prisma.tasks.update({ where: { id }, data: standardFields });
@@ -177,7 +177,7 @@ export async function updateTask(id: number, data: Partial<TaskData>): Promise<{
 }
 
 export async function deleteTask(id: number): Promise<{ success: boolean; error?: string }> {
-  await ensurePermission('tasks');
+  await ensurePermission('task:delete');
   try {
     await prisma.tasks.delete({ where: { id } });
     revalidatePath('/[locale]/tasks', 'page');
@@ -188,7 +188,7 @@ export async function deleteTask(id: number): Promise<{ success: boolean; error?
 }
 
 export async function assignTaskToContest(taskId: number, contestId: number | null): Promise<{ success: boolean; error?: string }> {
-  await ensurePermission('tasks');
+  await ensurePermission('task:update');
   try {
     let num: number | null = null;
     if (contestId) {

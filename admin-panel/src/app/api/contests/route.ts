@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { validateContestData, intervalToString, CONSTRAINT_TO_FIELD_MAP, getConstraintErrorMessage } from '@/lib/contest-validation';
 
 export async function POST(req: NextRequest) {
-  const { authorized, response } = await verifyApiPermission('contests');
+  const { authorized, response } = await verifyApiPermission('contest:create');
   if (!authorized) return response;
 
   try {

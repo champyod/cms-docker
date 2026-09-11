@@ -31,7 +31,7 @@ function serializeValue(value: unknown): unknown {
 export default async function TaskDetailPage({ params }: { params: Promise<{ id: string; locale: string }> }): Promise<React.JSX.Element> {
   const { id } = await params;
   // Why: forbidden detail must be indistinguishable from missing so return 404 not redirect
-  if (!(await checkPermission('tasks', false))) notFound();
+  if (!(await checkPermission('task:read', false))) notFound();
   const taskId = parseInt(id, 10);
   if (Number.isNaN(taskId)) notFound();
   const task = await getTask(taskId);

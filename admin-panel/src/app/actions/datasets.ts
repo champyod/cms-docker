@@ -7,7 +7,7 @@ import { cloneDatasetRecords } from '@/lib/dataset-cloning';
 import type { Prisma } from '@prisma/client';
 
 export async function getDataset(id: number): Promise<Prisma.datasetsGetPayload<{ include: { testcases: { orderBy: { codename: 'asc' } }; managers: true; tasks_datasets_task_idTotasks: true } }> | null> {
-  await ensurePermission('tasks');
+  await ensurePermission('dataset:read');
   return prisma.datasets.findUnique({
     where: { id },
     include: {
@@ -22,7 +22,7 @@ export async function createDataset(
   taskId: number,
   data: { description: string; time_limit?: number; memory_limit?: number; task_type?: string; score_type?: string }
 ): Promise<{ success: boolean; dataset?: Prisma.datasetsGetPayload<Record<string, never>>; error?: string }> {
-  await ensurePermission('tasks');
+  await ensurePermission('dataset:create');
   try {
     const dataset = await prisma.datasets.create({
       data: {
@@ -45,7 +45,7 @@ export async function createDataset(
 }
 
 export async function cloneDataset(datasetId: number, newDescription: string): Promise<{ success: boolean; dataset?: Prisma.datasetsGetPayload<Record<string, never>>; error?: string }> {
-  await ensurePermission('tasks');
+  await ensurePermission('dataset:create');
   try {
     const original = await prisma.datasets.findUnique({
       where: { id: datasetId },
@@ -61,7 +61,7 @@ export async function cloneDataset(datasetId: number, newDescription: string): P
 }
 
 export async function renameDataset(datasetId: number, description: string): Promise<{ success: boolean; error?: string }> {
-  await ensurePermission('tasks');
+  await ensurePermission('dataset:update');
   try {
     await prisma.datasets.update({ where: { id: datasetId }, data: { description } });
     revalidatePath('/[locale]/tasks', 'page');
@@ -72,7 +72,7 @@ export async function renameDataset(datasetId: number, description: string): Pro
 }
 
 export async function deleteDataset(datasetId: number): Promise<{ success: boolean; error?: string }> {
-  await ensurePermission('tasks');
+  await ensurePermission('dataset:delete');
   try {
     const dataset = await prisma.datasets.findUnique({
       where: { id: datasetId },
@@ -90,7 +90,7 @@ export async function deleteDataset(datasetId: number): Promise<{ success: boole
 }
 
 export async function activateDataset(datasetId: number): Promise<{ success: boolean; error?: string }> {
-  await ensurePermission('tasks');
+  await ensurePermission('dataset:switch');
   try {
     const dataset = await prisma.datasets.findUnique({ where: { id: datasetId } });
     if (!dataset) return { success: false, error: 'Dataset not found' };
@@ -103,7 +103,7 @@ export async function activateDataset(datasetId: number): Promise<{ success: boo
 }
 
 export async function toggleAutojudge(datasetId: number): Promise<{ success: boolean; error?: string }> {
-  await ensurePermission('tasks');
+  await ensurePermission('dataset:update');
   try {
     const dataset = await prisma.datasets.findUnique({ where: { id: datasetId } });
     if (!dataset) return { success: false, error: 'Dataset not found' };
@@ -119,7 +119,7 @@ export async function updateDataset(
   datasetId: number,
   data: { time_limit?: number | null; memory_limit?: number | null; task_type?: string; score_type?: string }
 ): Promise<{ success: boolean; error?: string }> {
-  await ensurePermission('tasks');
+  await ensurePermission('dataset:update');
   try {
     await prisma.datasets.update({
       where: { id: datasetId },

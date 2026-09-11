@@ -8,7 +8,7 @@ export default async function ContainersPage({
   params: Promise<{ locale: string }>;
 }) {
   await params;
-  const hasPermission = await checkPermission('all', false);
+  const hasPermission = await checkPermission('container:list', false);
 
   // Why: return 404 for forbidden access so existence is indistinguishable from missing page
   if (!hasPermission) {

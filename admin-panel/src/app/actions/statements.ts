@@ -9,7 +9,7 @@ import { STATEMENT_LANGUAGES } from '@/lib/constants';
 export { STATEMENT_LANGUAGES };
 
 export async function getStatements(taskId: number) {
-  await ensurePermission('tasks');
+  await ensurePermission('statement:list');
 
   return prisma.statements.findMany({
     where: { task_id: taskId },
@@ -18,7 +18,7 @@ export async function getStatements(taskId: number) {
 }
 
 export async function addStatement(taskId: number, language: string, fileData: string) {
-  await ensurePermission('tasks');
+  await ensurePermission('statement:create');
 
   try {
     const buffer = Buffer.from(fileData, 'base64');
@@ -40,7 +40,7 @@ export async function addStatement(taskId: number, language: string, fileData: s
 }
 
 export async function deleteStatement(statementId: number) {
-  await ensurePermission('tasks');
+  await ensurePermission('statement:delete');
 
   try {
     await prisma.statements.delete({
@@ -55,7 +55,7 @@ export async function deleteStatement(statementId: number) {
 }
 
 export async function getAttachments(taskId: number) {
-  await ensurePermission('tasks');
+  await ensurePermission('attachment:list');
 
   return prisma.attachments.findMany({
     where: { task_id: taskId },
@@ -64,7 +64,7 @@ export async function getAttachments(taskId: number) {
 }
 
 export async function addAttachment(taskId: number, filename: string, fileData: string) {
-  await ensurePermission('tasks');
+  await ensurePermission('attachment:create');
 
   try {
     const buffer = Buffer.from(fileData, 'base64');
@@ -86,7 +86,7 @@ export async function addAttachment(taskId: number, filename: string, fileData: 
 }
 
 export async function deleteAttachment(attachmentId: number) {
-  await ensurePermission('tasks');
+  await ensurePermission('attachment:delete');
 
   try {
     await prisma.attachments.delete({
@@ -101,7 +101,7 @@ export async function deleteAttachment(attachmentId: number) {
 }
 
 export async function getFileByDigest(digest: string): Promise<{ data: string } | null> {
-  await ensurePermission('tasks');
+  await ensurePermission('fsobject:read');
 
   try {
     const result = await prisma.$queryRaw<{ data: Buffer }[]>`
