@@ -314,6 +314,10 @@ lint:
 	@echo "Running lint checks..."
 	@echo "→ spec parity"
 	@bash scripts/__check_spec_parity.sh
+	@echo "→ audit coverage"
+	@bash scripts/__check_audit_coverage.sh
+	@echo "→ permission parity"
+	@bash scripts/__check_permission_parity.sh
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		echo "→ shellcheck"; \
 		shellcheck scripts/*.sh; \
