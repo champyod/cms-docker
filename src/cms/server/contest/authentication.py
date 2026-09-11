@@ -156,10 +156,15 @@ def validate_login(
         log_failed_attempt("wrong password")
         return None, None
 
-    if contest.ip_restriction and participation.ip is not None \
-            and not any(ip_address in network for network in participation.ip):
-        log_failed_attempt("unauthorized IP address")
-        return None, None
+    if contest.ip_restriction:
+        # WHY: fail closed when IP restriction is on but participation has no IPs.
+        if not participation.ip:
+            log_failed_attempt(
+                "unauthorized IP address (no IP allowed for participation)")
+            return None, None
+        if not any(ip_address in network for network in participation.ip):
+            log_failed_attempt("unauthorized IP address")
+            return None, None
 
     if contest.block_hidden_participations and participation.hidden:
         log_failed_attempt("participation is hidden and unauthorized")
@@ -253,14 +258,19 @@ def authenticate_request(
         return None, None, False
 
     # Check if user is using the right IP (or is on the right subnet).
-    if (contest.ip_restriction and participation.ip is not None
-            and not impersonated
-            and not any(ip_address in network for network in participation.ip)):
-        logger.info(
-            "Unsuccessful authentication from IP address %s, on contest %s, "
-            "as %s, at %s: unauthorized IP address",
-            ip_address, contest.name, participation.user.username, timestamp)
-        return None, None, False
+    if contest.ip_restriction and not impersonated:
+        if not participation.ip:
+            logger.info(
+                "Unsuccessful authentication from IP address %s, on contest %s, "
+                "as %s, at %s: unauthorized IP address",
+                ip_address, contest.name, participation.user.username, timestamp)
+            return None, None, False
+        if not any(ip_address in network for network in participation.ip):
+            logger.info(
+                "Unsuccessful authentication from IP address %s, on contest %s, "
+                "as %s, at %s: unauthorized IP address",
+                ip_address, contest.name, participation.user.username, timestamp)
+            return None, None, False
 
     # Check that the user is not hidden if hidden users are blocked.
     if (contest.block_hidden_participations and participation.hidden

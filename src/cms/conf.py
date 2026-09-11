@@ -202,6 +202,14 @@ class Config:
         # change the log configuration.
         set_detailed_logs(self.global_.stream_log_detailed)
 
+        # WHY: refuse to run with publicly-known default cookie secret.
+        if not self.web_server.secret_key \
+                or self.web_server.secret_key == WebServerConfig.DEFAULT_SECRET_KEY:
+            raise ConfigError(
+                "web_server.secret_key is not set or is the shipped default; "
+                "set a real secret in config.toml (CMS_SECRET_KEY) and re-run "
+                "`make env` / `./cms config sync`")
+
 
 def make_config():
     # Default config file path can be overridden using environment
