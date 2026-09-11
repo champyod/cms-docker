@@ -307,6 +307,8 @@ prisma-sync:
 	elif command -v npm >/dev/null 2>&1; then \
 		cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" npx tsx prisma/seed-permissions.ts; \
 	fi
+	@# WHY: regenerate RLS enable SQL before apply so a new model added to schema.prisma does not silently miss RLS; fail loudly rather than applying stale SQL.
+	@bash scripts/__generate_rls_sql.sh
 	@# WHY: prisma db push can drop/recreate tables, so roles and any later RLS policies must be re-applied after every schema sync.
 	@bash scripts/__apply_sql.sh
 
@@ -327,6 +329,8 @@ lint:
 	@bash scripts/__check_audit_coverage.sh
 	@echo "→ permission parity"
 	@bash scripts/__check_permission_parity.sh
+	@echo "→ RLS coverage"
+	@bash scripts/__check_rls_coverage.sh
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		echo "→ shellcheck"; \
 		shellcheck scripts/*.sh; \
