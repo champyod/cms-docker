@@ -67,6 +67,8 @@ def rpc_authorization_checker(
         admin: Admin = session.query(Admin).filter(Admin.id == admin_id).first()
         if admin is None:
             return False
+        if not admin.enabled:
+            return False
 
         effective = get_effective_permissions(admin_id, session)
 

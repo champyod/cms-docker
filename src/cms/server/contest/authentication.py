@@ -25,6 +25,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import hmac
 import ipaddress
 import json
 import logging
@@ -123,8 +124,12 @@ def validate_login(
         return None, None
 
     if admin_token != "":
-        if (config.contest_web_server.contest_admin_token is not None
-            and admin_token != config.contest_web_server.contest_admin_token):
+        # Fail closed when no impersonation token is configured.
+        configured_token = config.contest_web_server.contest_admin_token
+        if configured_token is None:
+            log_failed_attempt("invalid admin token")
+            return None, None
+        if not hmac.compare_digest(admin_token, configured_token):
             log_failed_attempt("invalid admin token")
             return None, None
 

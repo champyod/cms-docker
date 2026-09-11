@@ -183,6 +183,15 @@ def get_effective_permissions(admin_id: int, sql_session) -> frozenset[str]:
     error the empty set is returned (denying all access).
     """
     now = time.monotonic()
+    try:
+        admin = sql_session.query(Admin).filter(Admin.id == admin_id).first()
+        if admin is None or not admin.enabled:
+            return frozenset()
+    except Exception:
+        logger.error(
+            "Failed to resolve permissions for admin %d; denying access.",
+            admin_id)
+        return frozenset()
     cached = _effective_perms_cache.get(admin_id)
     if cached is not None:
         expires_at, perms = cached
