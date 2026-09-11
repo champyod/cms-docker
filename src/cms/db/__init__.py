@@ -58,6 +58,9 @@ __all__ = [
     "User", "Team", "Participation", "Message", "Question",
     # admin
     "Admin",
+    # permissions
+    "Permission", "Group", "GroupPermission", "AdminGroup",
+    "AdminPermissionOverride", "AuditLog",
     # task
     "Task", "Statement", "Attachment", "Dataset", "Manager", "Testcase",
     # submission

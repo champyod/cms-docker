@@ -1055,9 +1055,25 @@ If you modify the CMS Python source:
 
 ## ENVIRONMENT VARIABLES
 
-### Generated: `admin-panel/.env`
+### Source of truth: `config.toml`
+
+Every runtime value lives in `config.toml` (seeded from `config.toml.example` on first run). Nothing is edited by hand in a generated file.
+
+### Generated outputs
+
+`make env` (or `./cms config sync`) renders exactly two files from `config.toml`:
+
+| File | Consumer | Contents |
+|------|----------|----------|
+| `.env` | all compose services and shell scripts | every variable, grouped under `### [section] ###` headers |
+| `admin-panel/.env` | the Next.js server, run outside compose | `DATABASE_URL` (localhost DSN) + `AUTH_SECRET` |
+
+`.env.contest` remains a per-contest override written by the admin panel when switching active contests.
+
+Generated files are output-only: never edit them directly — the next `config sync` overwrites them. Change `config.toml` and re-run sync instead.
 
 ```bash
+# admin-panel/.env
 DATABASE_URL="postgresql://cmsuser:password@localhost:5432/cmsdb"
 AUTH_SECRET=your-secret-here   # Optional, random if missing
 ```
