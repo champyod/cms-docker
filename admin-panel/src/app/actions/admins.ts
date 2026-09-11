@@ -77,28 +77,48 @@ export async function createAdmin(data: CreateAdminInput): Promise<ActionResult>
 function findAdminTarget(adminId: number) {
   return prisma.admins.findUnique({
     where: { id: adminId },
-    select: { permission_all: true, enabled: true },
+    select: {
+      permission_all: true,
+      enabled: true,
+      admin_groups: { select: { groups: { select: { id: true, name: true } } } },
+    },
   });
 }
+
+type AdminTarget = Awaited<ReturnType<typeof findAdminTarget>>;
 
 function isSelfDemotion(
   sessionUserId: string,
   adminId: number,
-  target: { permission_all: boolean } | null,
+  target: AdminTarget,
   data: UpdateAdminInput
 ): boolean {
-  return sessionUserId === String(adminId)
-    && target?.permission_all === true
-    && data.enabled === false;
+  if (sessionUserId !== String(adminId) || !target) return false;
+  const isSuper = target.admin_groups.some((ag) => ag.groups.name === 'Superadmin');
+  return isSuper && (data.enabled === false || removesSuperadminStatusViaGroups(target, data));
 }
 
-function removesSuperadminStatus(data: UpdateAdminInput): boolean {
-  return data.enabled === false;
+function isCurrentlySuperadmin(target: AdminTarget): boolean {
+  return (target?.admin_groups.some((ag) => ag.groups.name === 'Superadmin')) ?? false;
+}
+
+function removesSuperadminStatusViaGroups(target: AdminTarget, data: UpdateAdminInput): boolean {
+  if (!target || !isCurrentlySuperadmin(target)) return false;
+  if (data.enabled === false) return true;
+  if (data.groupIds !== undefined) {
+    const superadminGroup = target.admin_groups.find((ag) => ag.groups.name === 'Superadmin');
+    return superadminGroup !== undefined && !data.groupIds.includes(superadminGroup.groups.id);
+  }
+  return false;
 }
 
 async function wouldRemoveLastSuperadmin(adminId: number): Promise<boolean> {
   const otherSupers = await prisma.admins.count({
-    where: { permission_all: true, enabled: true, NOT: { id: adminId } },
+    where: {
+      enabled: true,
+      NOT: { id: adminId },
+      admin_groups: { some: { groups: { name: 'Superadmin' } } },
+    },
   });
   return otherSupers === 0;
 }
@@ -124,7 +144,8 @@ export async function updateAdmin(adminId: number, data: UpdateAdminInput): Prom
     return { success: false, error: 'Cannot demote your own superadmin account' };
   }
 
-  if (target?.permission_all === true && removesSuperadminStatus(data)) {
+  // WHY: prevent the last superadmin from being demoted or disabled
+  if (isCurrentlySuperadmin(target) && removesSuperadminStatusViaGroups(target, data)) {
     if (await wouldRemoveLastSuperadmin(adminId)) {
       return { success: false, error: 'Cannot remove the last superadmin' };
     }
@@ -156,7 +177,8 @@ export async function deleteAdmin(adminId: number): Promise<ActionResult> {
   }
 
   const target = await findAdminTarget(adminId);
-  if (target?.permission_all && await wouldRemoveLastSuperadmin(adminId)) {
+  // WHY: deleting a superadmin removes superadmin status — block if this is the last one
+  if (isCurrentlySuperadmin(target) && await wouldRemoveLastSuperadmin(adminId)) {
     return { success: false, error: 'Cannot remove the last superadmin' };
   }
 

@@ -294,6 +294,18 @@ prisma-sync:
 		echo "  Fix: curl -fsSL https://bun.sh/install | bash && export PATH=\"\$$HOME/.bun/bin:\$$PATH\"" >&2; \
 		exit 1; \
 	fi
+	@# WHY: db push creates tables but permission/group rows stay empty — seed fills them so RBAC works immediately after sync.
+	@export PATH="$(HOME)/.bun/bin:$(PATH)"; \
+	echo "Seeding permission groups and permissions..."; \
+	if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-admin-panel-next$$'; then \
+		docker exec cms-admin-panel-next sh -lc "cd /repo-root/admin-panel && bun x tsx prisma/seed-permissions.ts"; \
+	elif command -v bun >/dev/null 2>&1; then \
+		if [ -f admin-panel/.env ]; then set -a; . admin-panel/.env; set +a; fi; \
+		cd admin-panel && bun x tsx prisma/seed-permissions.ts; \
+	elif command -v npm >/dev/null 2>&1; then \
+		if [ -f admin-panel/.env ]; then set -a; . admin-panel/.env; set +a; fi; \
+		cd admin-panel && npx tsx prisma/seed-permissions.ts; \
+	fi
 
 admin-create:
 	@echo "Creating first Superadmin account..."
