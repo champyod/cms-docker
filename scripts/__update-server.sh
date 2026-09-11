@@ -58,6 +58,26 @@ fi
 log "Regenerating environment files (make env)..."
 make env || die "make env failed."
 
+# ---------------------------------------------------------------------------
+# (b2) Ensure least-privilege DB roles exist BEFORE services restart with them
+# WHY: the admin panel connects as cms_admin and the monitor as cms_monitor, and
+# those roles are created by __apply_sql.sh. If they do not exist when the new
+# containers start, the admin panel cannot connect at all. Apply them here, before
+# the restart, using the owner credentials. Tolerant on a fresh install where the
+# database container is not up yet — prisma-sync re-applies them afterwards.
+# ---------------------------------------------------------------------------
+APPLY_SQL_SCRIPT="scripts/__apply_sql.sh"
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "cms-database"; then
+    if [ -x "$APPLY_SQL_SCRIPT" ]; then
+        log "Bootstrapping database roles (idempotent)..."
+        "$APPLY_SQL_SCRIPT" || warn "Role bootstrap failed — prisma-sync will retry after the restart."
+    else
+        warn "$APPLY_SQL_SCRIPT missing — roles will be created during prisma-sync."
+    fi
+else
+    log "Database container not running yet; roles will be created during prisma-sync."
+fi
+
 # Deployment type must be detected AFTER env regeneration (branch switch may change it)
 DEPLOY_TYPE="$(grep -E '^DEPLOYMENT_TYPE=' .env 2>/dev/null | tail -n1 | cut -d '=' -f2 | cut -d '#' -f1 | tr -d '[:space:]' | tr -d '\"' | tr -d "'" || true)"
 DEPLOY_TYPE="${DEPLOY_TYPE:-img}"

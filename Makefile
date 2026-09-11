@@ -267,38 +267,43 @@ cms-init:
 
 prisma-sync:
 	@echo "Synchronizing Admin Panel schema (forcing Prisma v6)..."
-	@export PATH="$(HOME)/.bun/bin:$(PATH)"; \
+	@# WHY: schema sync is a migration operation that needs DDL, so it runs as the owner role — never the runtime DML role (cms_admin has no DDL).
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	OWNER_URL_NET="postgresql://$${POSTGRES_USER:-cmsuser}:$${POSTGRES_PASSWORD}@database:5432/$${POSTGRES_DB:-cmsdb}"; \
+	OWNER_URL_LOCAL="postgresql://$${POSTGRES_USER:-cmsuser}:$${POSTGRES_PASSWORD}@localhost:5432/$${POSTGRES_DB:-cmsdb}"; \
+	export PATH="$(HOME)/.bun/bin:$(PATH)"; \
 	DEPLOY_TYPE="$${DEPLOYMENT_TYPE_OVERRIDE:-}"; \
 	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
 	if [ "$$DEPLOY_TYPE" = "img" ] && docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-admin-panel-next$$'; then \
-		echo "img mode -> running prisma db push inside cms-admin-panel-next (no host toolchain needed)"; \
-		docker exec cms-admin-panel-next sh -lc "cd /repo-root/admin-panel && { ./node_modules/.bin/prisma db push $${PRISMA_ARGS:-} || npx --yes prisma@6 db push $${PRISMA_ARGS:-}; }"; \
+		echo "img mode -> running prisma db push inside cms-admin-panel-next (owner credentials)"; \
+		docker exec -e DATABASE_URL="$$OWNER_URL_NET" cms-admin-panel-next sh -lc "cd /repo-root/admin-panel && { ./node_modules/.bin/prisma db push $${PRISMA_ARGS:-} || npx --yes prisma@6 db push $${PRISMA_ARGS:-}; }"; \
 		st=$$?; \
 		if [ $$st -ne 0 ]; then echo "Schema sync needs confirmation? Re-run with: make prisma-sync PRISMA_ARGS=--accept-data-loss" >&2; fi; \
 	elif [ ! -d "admin-panel" ]; then \
 		echo "ERROR: admin-panel directory not found. Clone the repository with admin-panel/ or check your working directory." >&2; \
 		exit 1; \
 	elif command -v bun >/dev/null 2>&1; then \
-		cd admin-panel && bun x prisma@6 db push $${PRISMA_ARGS:-}; \
+		cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" bun x prisma@6 db push $${PRISMA_ARGS:-}; \
 	elif command -v npm >/dev/null 2>&1; then \
-		cd admin-panel && npx prisma@6 db push $${PRISMA_ARGS:-}; \
+		cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" npx prisma@6 db push $${PRISMA_ARGS:-}; \
 	else \
 		echo "ERROR: Neither 'bun' nor 'npm' found in PATH. Install Bun (https://bun.sh) or Node.js/npm, then run: make prisma-sync" >&2; \
 		echo "  Fix: curl -fsSL https://bun.sh/install | bash && export PATH=\"\$$HOME/.bun/bin:\$$PATH\"" >&2; \
 		exit 1; \
 	fi
-	@# WHY: db push creates tables but permission/group rows stay empty — seed fills them so RBAC works immediately after sync.
-	@export PATH="$(HOME)/.bun/bin:$(PATH)"; \
+	@# WHY: seeding the permission registry is system initialisation, so it also runs as the owner — it must work even before the runtime roles exist.
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	OWNER_URL_NET="postgresql://$${POSTGRES_USER:-cmsuser}:$${POSTGRES_PASSWORD}@database:5432/$${POSTGRES_DB:-cmsdb}"; \
+	OWNER_URL_LOCAL="postgresql://$${POSTGRES_USER:-cmsuser}:$${POSTGRES_PASSWORD}@localhost:5432/$${POSTGRES_DB:-cmsdb}"; \
+	export PATH="$(HOME)/.bun/bin:$(PATH)"; \
 	echo "Seeding permission groups and permissions..."; \
 	if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-admin-panel-next$$'; then \
-		docker exec cms-admin-panel-next sh -lc "cd /repo-root/admin-panel && bun x tsx prisma/seed-permissions.ts"; \
+		docker exec -e DATABASE_URL="$$OWNER_URL_NET" cms-admin-panel-next sh -lc "cd /repo-root/admin-panel && bun x tsx prisma/seed-permissions.ts"; \
 	elif command -v bun >/dev/null 2>&1; then \
-		if [ -f admin-panel/.env ]; then set -a; . admin-panel/.env; set +a; fi; \
-		cd admin-panel && bun x tsx prisma/seed-permissions.ts; \
+		cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" bun x tsx prisma/seed-permissions.ts; \
 	elif command -v npm >/dev/null 2>&1; then \
-		if [ -f admin-panel/.env ]; then set -a; . admin-panel/.env; set +a; fi; \
-		cd admin-panel && npx tsx prisma/seed-permissions.ts; \
+		cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" npx tsx prisma/seed-permissions.ts; \
 	fi
 	@# WHY: prisma db push can drop/recreate tables, so roles and any later RLS policies must be re-applied after every schema sync.
 	@bash scripts/__apply_sql.sh
