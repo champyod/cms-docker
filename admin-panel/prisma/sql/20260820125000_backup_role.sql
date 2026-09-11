@@ -1,4 +1,7 @@
--- 20260820150000_backup_role.sql — dedicated backup role with BYPASSRLS for pg_dump
+-- 20260820125000_backup_role.sql — dedicated backup role with BYPASSRLS for pg_dump
+-- WHY this sorts before 20260820140000_owner_hardening.sql: creating a BYPASSRLS role needs
+-- superuser, and owner_hardening demotes cmsuser to NOSUPERUSER/NOBYPASSRLS. If this file ran
+-- after it, the role would never be created and backups would stay broken.
 -- WHY cms_backup needs BYPASSRLS: pg_dump issues SELECTs over every app table; after
 -- 20260820130000_rls.sql enables FORCE ROW LEVEL SECURITY and
 -- 20260820140000_owner_hardening.sql demotes cmsuser to NOBYPASSRLS, the owner is
