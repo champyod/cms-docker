@@ -31,6 +31,7 @@ from collections.abc import Callable
 import ipaddress
 import json
 import logging
+import time
 import traceback
 from datetime import datetime, timedelta
 from functools import wraps
@@ -59,6 +60,8 @@ from cms.grading.tasktypes import get_task_type_class
 from cms.server import CommonRequestHandler, FileHandlerMixin
 from cmscommon.crypto import hash_password, parse_authentication
 from cmscommon.datetime import make_datetime
+from cms.db.permissions import (
+    AdminGroup, AdminPermissionOverride, GroupPermission, Permission)
 if typing.TYPE_CHECKING:
     from cms.server.admin import AdminWebServer
 
@@ -162,24 +165,93 @@ def parse_ip_networks(
     return result
 
 
-def require_permission(permission: str = "authenticated", self_allowed: bool = False):
-    """Return a decorator requiring a specific admin permission level
+# In-process cache for effective permission sets, keyed by admin id.
+# Each entry is (expiry_monotonic, frozenset_of_keys).
+_effective_perms_cache: dict[int, tuple[float, frozenset[str]]] = {}
+_CACHE_TTL_SECONDS: float = 60.0
 
-    The default value, "authenticated", just checkes that the admin is
-    logged in. All other values also implicitly require it. Therefore,
-    there is no need to use tornado.web.authenticated if using this.
 
-    permission: one of the permission levels.
-    self_allowed: if true, interpret the first argument as the
-       admin id that can execute the method regardless of their
-       permission.
+def get_effective_permissions(admin_id: int, sql_session) -> frozenset[str]:
+    """Return the effective permission key set for *admin_id*.
 
+    Resolution strategy:
+      1. Collect permission keys via admin_groups → group_permissions → permissions.
+      2. UNION with admin_permission_overrides where effect == 'allow'.
+      3. MINUS admin_permission_overrides where effect == 'deny'.
+
+    Results are cached for _CACHE_TTL_SECONDS. Fail-closed: on any DB
+    error the empty set is returned (denying all access).
     """
-    if permission not in [BaseHandler.PERMISSION_ALL,
-                          BaseHandler.PERMISSION_MESSAGING,
-                          BaseHandler.AUTHENTICATED]:
-        raise ValueError("Invalid permission level %s." % permission)
+    now = time.monotonic()
+    cached = _effective_perms_cache.get(admin_id)
+    if cached is not None:
+        expires_at, perms = cached
+        if now < expires_at:
+            return perms
 
+    try:
+        # 1. Group-inherited permissions
+        group_rows = (
+            sql_session.query(Permission.key)
+            .join(GroupPermission,
+                  GroupPermission.permission_id == Permission.id)
+            .join(AdminGroup,
+                  AdminGroup.group_id == GroupPermission.group_id)
+            .filter(AdminGroup.admin_id == admin_id)
+            .all()
+        )
+        result: set[str] = {row[0] for row in group_rows}
+
+        # 2. Explicit allow overrides
+        allow_rows = (
+            sql_session.query(Permission.key)
+            .join(AdminPermissionOverride,
+                  AdminPermissionOverride.permission_id == Permission.id)
+            .filter(AdminPermissionOverride.admin_id == admin_id)
+            .filter(AdminPermissionOverride.effect == "allow")
+            .all()
+        )
+        result |= {row[0] for row in allow_rows}
+
+        # 3. Explicit deny overrides
+        deny_rows = (
+            sql_session.query(Permission.key)
+            .join(AdminPermissionOverride,
+                  AdminPermissionOverride.permission_id == Permission.id)
+            .filter(AdminPermissionOverride.admin_id == admin_id)
+            .filter(AdminPermissionOverride.effect == "deny")
+            .all()
+        )
+        result -= {row[0] for row in deny_rows}
+    except Exception:
+        logger.error(
+            "Failed to resolve permissions for admin %d; denying access.",
+            admin_id)
+        return frozenset()
+
+    frozen = frozenset(result)
+    _effective_perms_cache[admin_id] = (now + _CACHE_TTL_SECONDS, frozen)
+    return frozen
+
+
+def invalidate_permission_cache(admin_id: int) -> None:
+    """Drop cached effective permissions for *admin_id*.
+
+    Call this after modifying admin_groups or admin_permission_overrides
+    for the given admin so that the next request picks up the change.
+    """
+    _effective_perms_cache.pop(admin_id, None)
+
+
+def require_permission(permission: str = "authenticated", self_allowed: bool = False):
+    """Return a decorator requiring a specific permission registry key.
+
+    permission: a registry key of the form "module:verb" (e.g. "task:create"),
+        "all:all" for full access, or "authenticated" for any logged-in admin
+        with no fine-grained check.
+    self_allowed: if true, allow the action when the first URL argument
+        matches the current admin's id, regardless of permissions.
+    """
     _P = typing.ParamSpec("_P")
     _R = typing.TypeVar("_R")
     _T = typing.TypeVar("_T", bound=BaseHandler)
@@ -187,30 +259,31 @@ def require_permission(permission: str = "authenticated", self_allowed: bool = F
     def decorator(
         func: Callable[typing.Concatenate[_T, _P], _R],
     ) -> Callable[typing.Concatenate[_T, _P], _R]:
-        """Decorator for requiring a permission level
-
-        """
         @wraps(func)
         @tornado.web.authenticated
         def newfunc(self: _T, *args: _P.args, **kwargs: _P.kwargs):
-            """Check if the permission is present before calling the function.
-
-            """
+            # AUTHENTICATED only requires a valid session (handled by
+            # @tornado.web.authenticated above).
             if permission == BaseHandler.AUTHENTICATED:
                 return func(self, *args, **kwargs)
 
             user = self.current_user
-            permission_key = "permission_%s" % permission
-            if user.permission_all or getattr(user, permission_key):
+            if user is None:
+                raise tornado.web.HTTPError(403, "Admin is not authorized")
+
+            # Self-edit bypass: first URL arg matches the admin's own id.
+            if self_allowed and len(args) > 0:
+                try:
+                    if int(args[0]) == user.id:
+                        return func(self, *args, **kwargs)
+                except (ValueError, IndexError):
+                    pass
+
+            effective = get_effective_permissions(user.id, self.sql_session)
+            if permission in effective or "all:all" in effective:
                 return func(self, *args, **kwargs)
-            else:
-                if self_allowed and len(args) > 0 and int(args[0]) == user.id:
-                    # First argument is assumed to be the admin id,
-                    # encoded as a str, and should match
-                    # the current user id.
-                    return func(self, *args, **kwargs)
-                else:
-                    raise tornado.web.HTTPError(403, "Admin is not authorized")
+
+            raise tornado.web.HTTPError(403, "Admin is not authorized")
 
         return newfunc
 
@@ -224,8 +297,11 @@ class BaseHandler(CommonRequestHandler):
     child of this class.
 
     """
-    PERMISSION_ALL = "all"
-    PERMISSION_MESSAGING = "messaging"
+    # Backward-compat aliases for existing handler code that references
+    # these class attributes. They now map to registry keys checked
+    # against the effective permission set resolved from the DB.
+    PERMISSION_ALL = "all:all"
+    PERMISSION_MESSAGING = "message:send"
     AUTHENTICATED = "authenticated"
     current_user: Admin | None
     service: "AdminWebServer"
@@ -673,10 +749,15 @@ class FileFromDigestHandler(FileHandler):
         self.fetch(digest, "text/plain", filename)
 
 
-def SimpleHandler(page, authenticated=True, permission_all=False) -> type[BaseHandler]:
-    if permission_all:
+def SimpleHandler(page, authenticated=True, permission=None, permission_all=False) -> type[BaseHandler]:
+    # Backward compat: permission_all=True maps to "all:all" registry key.
+    if permission_all and permission is None:
+        permission = "all:all"
+    perm = permission  # capture for closure
+
+    if perm is not None:
         class Cls(BaseHandler):
-            @require_permission(BaseHandler.PERMISSION_ALL)
+            @require_permission(perm)
             def get(self):
                 self.r_params = self.render_params()
                 self.render(page, **self.r_params)
@@ -694,13 +775,25 @@ def SimpleHandler(page, authenticated=True, permission_all=False) -> type[BaseHa
     return Cls
 
 
-def SimpleContestHandler(page) -> type[BaseHandler]:
-    class Cls(BaseHandler):
-        @require_permission(BaseHandler.AUTHENTICATED)
-        def get(self, contest_id: str):
-            self.contest = self.safe_get_item(Contest, contest_id)
+def SimpleContestHandler(page, permission=None, permission_all=False) -> type[BaseHandler]:
+    # Backward compat: permission_all=True maps to "all:all" registry key.
+    if permission_all and permission is None:
+        permission = "all:all"
+    perm = permission
 
-            self.r_params = self.render_params()
-            self.render(page, **self.r_params)
+    if perm is not None:
+        class Cls(BaseHandler):
+            @require_permission(perm)
+            def get(self, contest_id: str):
+                self.contest = self.safe_get_item(Contest, contest_id)
+                self.r_params = self.render_params()
+                self.render(page, **self.r_params)
+    else:
+        class Cls(BaseHandler):
+            @require_permission(BaseHandler.AUTHENTICATED)
+            def get(self, contest_id: str):
+                self.contest = self.safe_get_item(Contest, contest_id)
+                self.r_params = self.render_params()
+                self.render(page, **self.r_params)
 
     return Cls

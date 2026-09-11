@@ -50,7 +50,7 @@ class ContestTasksHandler(BaseHandler):
                 .all()
         self.render("contest_tasks.html", **self.r_params)
 
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("task:update")
     def post(self, contest_id):
         fallback_page = self.url("contest", contest_id, "tasks")
 
@@ -153,7 +153,7 @@ class ContestTasksHandler(BaseHandler):
 
 
 class AddContestTaskHandler(BaseHandler):
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("task:update")
     def post(self, contest_id):
         fallback_page = self.url("contest", contest_id, "tasks")
 

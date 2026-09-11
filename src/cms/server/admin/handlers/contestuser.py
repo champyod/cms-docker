@@ -66,7 +66,7 @@ class ContestUsersHandler(BaseHandler):
                 .all()
         self.render("contest_users.html", **self.r_params)
 
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("participation:delete")
     def post(self, contest_id):
         fallback_page = self.url("contest", contest_id, "users")
 
@@ -98,7 +98,7 @@ class RemoveParticipationHandler(BaseHandler):
 
     """
 
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("participation:delete")
     def get(self, contest_id, user_id):
         self.contest = self.safe_get_item(Contest, contest_id)
         user = self.safe_get_item(User, user_id)
@@ -120,7 +120,7 @@ class RemoveParticipationHandler(BaseHandler):
         self.r_params["contest"] = self.contest
         self.render("participation_remove.html", **self.r_params)
 
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("participation:delete")
     def delete(self, contest_id, user_id):
         self.contest = self.safe_get_item(Contest, contest_id)
         user = self.safe_get_item(User, user_id)
@@ -144,7 +144,7 @@ class RemoveParticipationHandler(BaseHandler):
 
 
 class AddContestUserHandler(BaseHandler):
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("participation:create")
     def post(self, contest_id):
         fallback_page = self.url("contest", contest_id, "users")
 
@@ -202,7 +202,7 @@ class ParticipationHandler(BaseHandler):
         self.r_params["teams"] = self.sql_session.query(Team).all()
         self.render("participation.html", **self.r_params)
 
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("participation:update")
     def post(self, contest_id, user_id):
         fallback_page = \
             self.url("contest", contest_id, "user", user_id, "edit")
@@ -265,7 +265,7 @@ class MessageHandler(BaseHandler):
 
     """
 
-    @require_permission(BaseHandler.PERMISSION_MESSAGING)
+    @require_permission("message:send")
     def post(self, contest_id, user_id):
         user = self.safe_get_item(User, user_id)
         self.contest = self.safe_get_item(Contest, contest_id)

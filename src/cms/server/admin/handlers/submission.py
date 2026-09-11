@@ -173,7 +173,7 @@ class SubmissionCommentHandler(BaseHandler):
     """Called when the admin comments on a submission.
 
     """
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("submission:update")
     def post(self, submission_id, dataset_id=None):
         submission = self.safe_get_item(Submission, submission_id)
 
@@ -197,7 +197,7 @@ class SubmissionCommentHandler(BaseHandler):
 
 class SubmissionOfficialStatusHandler(BaseHandler):
     """Called when the admin changes the official status of a submission."""
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("submission:update")
     def post(self, submission_id, dataset_id=None):
         submission = self.safe_get_item(Submission, submission_id)
 

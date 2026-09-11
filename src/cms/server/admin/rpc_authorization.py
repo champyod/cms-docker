@@ -22,6 +22,7 @@
 """
 
 from cms.db import Admin, SessionGen
+from cms.server.admin.handlers.base import get_effective_permissions
 
 
 RPCS_ALLOWED_FOR_AUTHENTICATED = [
@@ -63,16 +64,23 @@ def rpc_authorization_checker(
         return False
 
     with SessionGen() as session:
-        # Load admin.
         admin: Admin = session.query(Admin).filter(Admin.id == admin_id).first()
         if admin is None:
             return False
 
-        if admin.permission_all:
+        effective = get_effective_permissions(admin_id, session)
+
+        # Full admin access
+        if "all:all" in effective:
             return (service, method) in RPCS_ALLOWED_FOR_ALL
 
-        elif admin.permission_messaging:
+        # Messaging-level access: explicit key or any question/announcement key
+        has_messaging = (
+            "message:send" in effective
+            or any(k.startswith("question:") or k.startswith("announcement:")
+                   for k in effective)
+        )
+        if has_messaging:
             return (service, method) in RPCS_ALLOWED_FOR_MESSAGING
 
-        else:
-            return (service, method) in RPCS_ALLOWED_FOR_AUTHENTICATED
+        return (service, method) in RPCS_ALLOWED_FOR_AUTHENTICATED

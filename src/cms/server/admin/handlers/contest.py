@@ -37,11 +37,11 @@ from .base import BaseHandler, SimpleContestHandler, SimpleHandler, \
 
 
 class AddContestHandler(
-        SimpleHandler("add_contest.html", permission_all=True)):
+        SimpleHandler("add_contest.html", permission="contest:create")):
     """Adds a new contest.
 
     """
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("contest:create")
     def post(self):
         fallback_page = self.url("contests", "add")
 
@@ -71,7 +71,7 @@ class AddContestHandler(
 
 
 class ContestHandler(SimpleContestHandler("contest.html")):
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("contest:update")
     def post(self, contest_id: str):
         contest = self.safe_get_item(Contest, contest_id)
 
@@ -200,7 +200,7 @@ class RemoveContestHandler(BaseHandler):
 
     """
 
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("contest:delete")
     def get(self, contest_id):
         contest = self.safe_get_item(Contest, contest_id)
         submission_query = self.sql_session.query(Submission)\
@@ -211,7 +211,7 @@ class RemoveContestHandler(BaseHandler):
         self.render_params_for_remove_confirmation(submission_query)
         self.render("contest_remove.html", **self.r_params)
 
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("contest:delete")
     def delete(self, contest_id):
         contest = self.safe_get_item(Contest, contest_id)
 

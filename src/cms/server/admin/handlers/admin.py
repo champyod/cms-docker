@@ -21,7 +21,7 @@
 
 import logging
 
-from cms.db import Admin
+from cms.db import Admin, AdminGroup
 from cmscommon.crypto import hash_password
 from cmscommon.datetime import make_datetime
 from .base import BaseHandler, SimpleHandler, require_permission
@@ -53,29 +53,30 @@ def _admin_attrs(handler: BaseHandler) -> dict:
         attrs["authentication"] = hash_password(attrs["password"])
     del attrs["password"]
 
-    handler.get_bool(attrs, "permission_all")
-    handler.get_bool(attrs, "permission_messaging")
-    handler.get_bool(attrs, "permission_tasks")
-    handler.get_bool(attrs, "permission_users")
-    handler.get_bool(attrs, "permission_contests")
+    attrs["admin_groups"] = [
+        int(gid) for gid in handler.get_arguments("admin_groups")
+    ]
 
     handler.get_bool(attrs, "enabled")
 
     return attrs
 
 
-class AddAdminHandler(SimpleHandler("add_admin.html", permission_all=True)):
-    @require_permission(BaseHandler.PERMISSION_ALL)
+class AddAdminHandler(SimpleHandler("add_admin.html", permission="admin:create")):
+    @require_permission("admin:create")
     def post(self):
         fallback_page = self.url("admins", "add")
 
         try:
             attrs = _admin_attrs(self)
+            group_ids = attrs.pop("admin_groups", [])
             assert attrs.get("authentication") is not None, (
                 "Empty password not permitted."
             )
 
             admin = Admin(**attrs)
+            for gid in group_ids:
+                admin.admin_groups.append(AdminGroup(group_id=gid))
             self.sql_session.add(admin)
 
         except Exception as error:
@@ -125,7 +126,7 @@ class AdminHandler(BaseHandler):
         self.r_params["admin_being_edited"] = admin
         self.render("admin.html", **self.r_params)
 
-    @require_permission(BaseHandler.PERMISSION_ALL, self_allowed=True)
+    @require_permission("admin:update", self_allowed=True)
     def post(self, admin_id: str):
         admin = self.safe_get_item(Admin, admin_id)
 
@@ -143,11 +144,17 @@ class AdminHandler(BaseHandler):
         # they can do anything they want, otherwise, if they are
         # allowed because they are editing their own details, they can
         # only change a subset of the fields.
+        group_ids = new_attrs.pop("admin_groups", [])
         if not self.current_user.permission_all:
-            for key in new_attrs.keys():
+            for key in list(new_attrs.keys()):
                 if key not in AdminHandler.SELF_MODIFIABLE_FIELDS:
                     del new_attrs[key]
         admin.set_attrs(new_attrs)
+
+        if self.current_user.permission_all:
+            admin.admin_groups = [
+                AdminGroup(group_id=gid) for gid in group_ids
+            ]
 
         if self.try_commit():
             logger.info("Admin %s updated.", admin.id)
@@ -155,7 +162,7 @@ class AdminHandler(BaseHandler):
         else:
             self.redirect(self.url("admin", admin_id))
 
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("admin:delete")
     def delete(self, admin_id: str):
         admin = self.safe_get_item(Admin, admin_id)
 

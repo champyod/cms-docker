@@ -20,6 +20,7 @@
 
 from sqlalchemy.schema import Column
 from sqlalchemy.types import Boolean, Integer, Unicode
+from sqlalchemy.orm import relationship
 
 from .types import Codename
 from .base import Base
@@ -71,3 +72,7 @@ class Admin(Base):
 
     # Contest management bit. If this is set, the admin can create/edit/delete contests.
     permission_contests: bool = Column(Boolean, nullable=False, default=False)
+
+    # WHY: link Admin to AdminGroup so the permissions system can resolve
+    # group membership; backref provides AdminGroup.admin automatically.
+    admin_groups = relationship("AdminGroup", backref="admin")
