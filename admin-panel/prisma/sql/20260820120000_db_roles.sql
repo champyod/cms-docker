@@ -1,6 +1,10 @@
 -- 20260820120000_db_roles.sql — least-privilege DB roles
 -- WHY: split the single cmsuser superuser into scoped roles so admin/monitor cannot DROP or corrupt arbitrary tables.
 -- WHY: forward-only and idempotent (DO $$ guards, GRANT is idempotent, no DROP) so it is safe to re-run on LIVE and after prisma db push.
+-- WHY: role creation/alteration is wrapped in an insufficient_privilege handler because 20260820140000_owner_hardening.sql
+--      demotes cmsuser to NOCREATEROLE. Without the handler every subsequent `make prisma-sync` aborts here with
+--      "must be superuser to alter superuser roles" and the GRANTs below would never re-apply. On re-run the roles already
+--      exist, so skipping is correct; the GRANTs (which an object owner can always issue) stay unguarded and still run.
 -- Requires psql variables: cms_service_password, cms_admin_password, cms_monitor_password (supplied by scripts/__apply_sql.sh, never stored here).
 -- WHY set_config: psql :'var' interpolation does not happen inside DO $$ dollar-quoted bodies when the file is fed via -f - (stdin); set_config stores the value so PL/pgSQL can read it via current_setting.
 
@@ -15,6 +19,8 @@ BEGIN
   ELSE
     EXECUTE format('ALTER ROLE cms_service WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L', _pw);
   END IF;
+EXCEPTION WHEN insufficient_privilege THEN
+  RAISE NOTICE 'cms_service role management requires superuser — skipped on demoted re-apply (role already exists)';
 END $$;
 
 -- cms_admin — Admin panel (Next.js). DML on app tables, no DDL.
@@ -28,6 +34,8 @@ BEGIN
   ELSE
     EXECUTE format('ALTER ROLE cms_admin WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L', _pw);
   END IF;
+EXCEPTION WHEN insufficient_privilege THEN
+  RAISE NOTICE 'cms_admin role management requires superuser — skipped on demoted re-apply (role already exists)';
 END $$;
 
 -- cms_monitor — Monitor service. SELECT only.
@@ -40,6 +48,8 @@ BEGIN
   ELSE
     EXECUTE format('ALTER ROLE cms_monitor WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L', _pw);
   END IF;
+EXCEPTION WHEN insufficient_privilege THEN
+  RAISE NOTICE 'cms_monitor role management requires superuser — skipped on demoted re-apply (role already exists)';
 END $$;
 
 -- cms_readonly — Reporting. SELECT only, no login by default.
@@ -48,13 +58,20 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cms_readonly') THEN
     CREATE ROLE cms_readonly WITH NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
   END IF;
+EXCEPTION WHEN insufficient_privilege THEN
+  RAISE NOTICE 'cms_readonly role management requires superuser — skipped on demoted re-apply (role already exists)';
 END $$;
 
 -- WHY: USAGE on public is required to resolve tables/sequences at all.
 GRANT USAGE ON SCHEMA public TO cms_service, cms_admin, cms_monitor, cms_readonly;
 
 -- WHY: revoke CREATE on public from least-privilege roles so even if PUBLIC still has it, these roles cannot DDL (forward-only enforcement).
-REVOKE CREATE ON SCHEMA public FROM cms_service, cms_admin, cms_monitor, cms_readonly;
+DO $$
+BEGIN
+  REVOKE CREATE ON SCHEMA public FROM cms_service, cms_admin, cms_monitor, cms_readonly;
+EXCEPTION WHEN insufficient_privilege THEN
+  RAISE NOTICE 'revoke CREATE on public requires schema ownership — skipped';
+END $$;
 
 -- DML roles: full DML on all current app tables.
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO cms_service, cms_admin;

@@ -54,15 +54,13 @@ export async function getAdmins(): Promise<AdminWithLogin[]> {
 
 export async function createAdmin(data: CreateAdminInput): Promise<ActionResult> {
   await ensurePermission('admin:create');
-  // Why: server-side guard — never write a field the caller cannot update, even if the client sends it
-  const effectivePermissions = await getPermissions();
-  const allowed = stripDisallowedFields('admins', data as unknown as Record<string, unknown>, effectivePermissions);
+  // WHY: creation is gated by `admin:create`; stripDisallowedFields models the UPDATE contract (per-field `update` keys) and must not be applied to create payloads
   try {
     const created = await prisma.admins.create({
       data: {
-        name: allowed.name as string,
-        username: allowed.username as string,
-        authentication: await formatStoredPassword(data.passwordKind ?? DEFAULT_PASSWORD_KIND, allowed.password as string),
+        name: data.name,
+        username: data.username,
+        authentication: await formatStoredPassword(data.passwordKind ?? DEFAULT_PASSWORD_KIND, data.password),
         enabled: true,
       },
       select: { id: true },
@@ -71,7 +69,7 @@ export async function createAdmin(data: CreateAdminInput): Promise<ActionResult>
       verb: 'admin:create',
       entity: 'admin',
       entityId: String(created.id),
-      afterValues: { username: allowed.username as string, name: allowed.name as string },
+      afterValues: { username: data.username, name: data.name },
       result: 'success',
     });
     revalidatePath('/[locale]/admins', 'page');

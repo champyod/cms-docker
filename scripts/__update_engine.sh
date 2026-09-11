@@ -649,6 +649,7 @@ VAR_SPECS=(
   "Core & Network|[core]|POSTGRES_SERVICE_PASSWORD|secret||rand_pw"
   "Core & Network|[core]|POSTGRES_ADMIN_PASSWORD|secret||rand_pw"
   "Core & Network|[core]|POSTGRES_MONITOR_PASSWORD|secret||rand_pw"
+  "Core & Network|[core]|POSTGRES_BACKUP_PASSWORD|secret||rand_pw"
   "Core & Network|[core]|CMS_SECRET_KEY|secret||hex32"
   "Core & Network|[core]|CMS_DOMAIN|str||cms.local"
   "Core & Network|[core]|CMS_CONFIG|str||/usr/local/etc/cms.toml"

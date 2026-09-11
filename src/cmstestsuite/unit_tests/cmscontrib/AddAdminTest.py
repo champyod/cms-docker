@@ -22,19 +22,26 @@ import unittest
 
 from cmstestsuite.unit_tests.databasemixin import DatabaseMixin
 
-from cms.db import Admin
+from cms.db import Admin, Group
 from cmscommon.crypto import validate_password
 from cmscontrib.AddAdmin import add_admin
 
 
 class TestAddAdmin(DatabaseMixin, unittest.TestCase):
 
+    def setUp(self):
+        super().setUp()
+        if self.session.query(Group).filter(Group.name == "Superadmin").first() is None:
+            self.session.add(Group(name="Superadmin", description="Superadmin"))
+            self.session.commit()
+
     def tearDown(self):
         self.delete_data()
         super().tearDown()
 
-    def assertAdminInDb(self, username, pwd, name, enabled, permission_all):
+    def assertAdminInDb(self, username, pwd, name, enabled):
         """Assert that the admin with the given data is in the DB."""
+        self.session.expire_all()
         db_admins = self.session.query(Admin)\
             .filter(Admin.username == username).all()
         self.assertEqual(len(db_admins), 1)
@@ -42,16 +49,16 @@ class TestAddAdmin(DatabaseMixin, unittest.TestCase):
         self.assertTrue(validate_password(a.authentication, pwd))
         self.assertEqual(a.name, name)
         self.assertEqual(a.enabled, enabled)
-        self.assertEqual(a.permission_all, permission_all)
+        self.assertTrue(any(ag.group.name == "Superadmin" for ag in a.admin_groups))
 
     def test_success(self):
         self.assertTrue(add_admin("name", "pwd"))
-        self.assertAdminInDb("name", "pwd", "name", True, True)
+        self.assertAdminInDb("name", "pwd", "name", True)
 
     def test_dont_overwrite(self):
         self.assertTrue(add_admin("name", "pwd"))
         self.assertFalse(add_admin("name", "other"))
-        self.assertAdminInDb("name", "pwd", "name", True, True)
+        self.assertAdminInDb("name", "pwd", "name", True)
 
 
 if __name__ == "__main__":

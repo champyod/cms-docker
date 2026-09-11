@@ -86,6 +86,67 @@ describe('hasEffectivePermission', () => {
   );
 });
 
+describe('all:all deny-wins expansion', () => {
+  it('denies a single key under all:all while keeping other keys', () => {
+    const effective = resolveEffectivePermissions(['all:all'], [
+      { permissionKey: 'admin:delete', effect: 'deny' },
+    ]);
+    expect(hasEffectivePermission(effective, 'admin:delete')).toBe(false);
+    expect(hasEffectivePermission(effective, 'admin:read')).toBe(true);
+    expect(hasEffectivePermission(effective, 'all:all')).toBe(true);
+  });
+
+  it('denying all:all itself revokes every permission', () => {
+    const effective = resolveEffectivePermissions(['all:all'], [
+      { permissionKey: 'all:all', effect: 'deny' },
+    ]);
+    expect(hasEffectivePermission(effective, 'all:all')).toBe(false);
+    expect(hasEffectivePermission(effective, 'admin:delete')).toBe(false);
+    expect(hasEffectivePermission(effective, 'contest:list')).toBe(false);
+    expect(effective.size).toBe(0);
+  });
+
+  it('deny wins over allow for same key under all:all', () => {
+    const effective = resolveEffectivePermissions(['all:all'], [
+      { permissionKey: 'admin:delete', effect: 'allow' },
+      { permissionKey: 'admin:delete', effect: 'deny' },
+    ]);
+    expect(hasEffectivePermission(effective, 'admin:delete')).toBe(false);
+  });
+
+  it('deny-wins regardless of override order under all:all', () => {
+    const forward = resolveEffectivePermissions(['all:all'], [
+      { permissionKey: 'admin:delete', effect: 'allow' },
+      { permissionKey: 'admin:delete', effect: 'deny' },
+    ]);
+    const reverse = resolveEffectivePermissions(['all:all'], [
+      { permissionKey: 'admin:delete', effect: 'deny' },
+      { permissionKey: 'admin:delete', effect: 'allow' },
+    ]);
+    expect(hasEffectivePermission(forward, 'admin:delete')).toBe(false);
+    expect(hasEffectivePermission(reverse, 'admin:delete')).toBe(false);
+    expect([...forward].sort()).toEqual([...reverse].sort());
+  });
+
+  it('non-all admin exact-key behaviour is unchanged', () => {
+    const denied = resolveEffectivePermissions(['a:read'], [
+      { permissionKey: 'a:read', effect: 'deny' },
+    ]);
+    expect(hasEffectivePermission(denied, 'a:read')).toBe(false);
+    const allowed = resolveEffectivePermissions(['a:read'], [
+      { permissionKey: 'b:write', effect: 'allow' },
+    ]);
+    expect(hasEffectivePermission(allowed, 'b:write')).toBe(true);
+    expect(hasEffectivePermission(allowed, 'a:read')).toBe(true);
+  });
+
+  it('resolves all:all via resolveEffectivePermissions, not via shortcut', () => {
+    const effective = resolveEffectivePermissions(['all:all'], []);
+    expect(hasEffectivePermission(effective, 'service:deploy')).toBe(true);
+    expect(hasEffectivePermission(effective, 'all:all')).toBe(true);
+  });
+});
+
 describe('summarisePermissionChanges', () => {
   it('reports granted and revoked keys as sorted arrays', () => {
     const before = new Set(['a:read', 'b:read', 'c:read']);

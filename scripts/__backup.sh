@@ -79,6 +79,9 @@ ROLE_ID="${DISCORD_ROLE_ID:-${ROLE_ID:-}}"
 POSTGRES_USER_VAL="${POSTGRES_USER:-cmsuser}"
 POSTGRES_DB_VAL="${POSTGRES_DB:-cmsdb}"
 POSTGRES_PASSWORD_VAL="${POSTGRES_PASSWORD:-}"
+# WHY cms_backup: dedicated BYPASSRLS SELECT-only role for pg_dump; owner cmsuser is NOBYPASSRLS+FORCE RLS so dump as owner fails
+POSTGRES_BACKUP_USER_VAL="cms_backup"
+POSTGRES_BACKUP_PASSWORD_VAL="${POSTGRES_BACKUP_PASSWORD:-}"
 
 CONTAINER_DB="cms-database"
 VOLUME_DATA="cms-data"
@@ -308,8 +311,16 @@ run_backup() {
   trap cleanup_container_tmp EXIT
 
   # 1) Full logical backup — credentials via docker exec -e PGPASSWORD (never on host argv)
-  log_info "Running pg_dump (Fc) inside $CONTAINER_DB ..."
-  if ! docker exec -e PGPASSWORD="$POSTGRES_PASSWORD_VAL" "$CONTAINER_DB" pg_dump -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -Fc -f "$db_tmp" 2>/tmp/cms-backup-pgdump.log; then
+  # WHY cms_backup: BYPASSRLS role can dump under FORCE RLS; fall back to owner with warning if not configured
+  local pg_dump_user="$POSTGRES_BACKUP_USER_VAL"
+  local pg_dump_pass="$POSTGRES_BACKUP_PASSWORD_VAL"
+  if [[ -z "$pg_dump_pass" ]]; then
+    log_warn "POSTGRES_BACKUP_PASSWORD is empty — falling back to owner $POSTGRES_USER_VAL (may fail under FORCE RLS); run './cms config sync' to generate it"
+    pg_dump_user="$POSTGRES_USER_VAL"
+    pg_dump_pass="$POSTGRES_PASSWORD_VAL"
+  fi
+  log_info "Running pg_dump (Fc) inside $CONTAINER_DB as $pg_dump_user ..."
+  if ! docker exec -e PGPASSWORD="$pg_dump_pass" "$CONTAINER_DB" pg_dump -U "$pg_dump_user" -d "$POSTGRES_DB_VAL" -Fc -f "$db_tmp" 2>/tmp/cms-backup-pgdump.log; then
     local err
     err="$(cat /tmp/cms-backup-pgdump.log 2>/dev/null || echo 'pg_dump failed')"
     log_warn "pg_dump failed: $err"

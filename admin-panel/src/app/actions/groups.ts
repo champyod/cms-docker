@@ -100,6 +100,22 @@ export async function updateGroup(
     });
     if (!existing) return { success: false, error: 'Group not found' };
 
+    // Why: Superadmin is name-keyed and anchors _is_superadmin / wouldRemoveLastSuperadmin detection — renaming it would silently orphan every superadmin
+    if (existing.name === 'Superadmin' && trimmedName !== 'Superadmin') {
+      return {
+        success: false,
+        error: 'Cannot rename the Superadmin group — it is name-keyed and anchors superadmin detection',
+      };
+    }
+
+    // Why: removing all:all from Superadmin would silently strip every superadmin at once
+    if (existing.name === 'Superadmin' && !permissionKeys.includes('all:all')) {
+      return {
+        success: false,
+        error: 'Cannot remove "all:all" from the Superadmin group — it would strip every superadmin at once',
+      };
+    }
+
     const beforeKeys = existing.group_permissions.map((link) => link.permissions.key);
     const permissionIds = await resolvePermissionIds(permissionKeys);
     await prisma.$transaction(async (tx) => {
@@ -149,9 +165,17 @@ export async function deleteGroup(id: number, reason: string): Promise<ActionRes
     });
     if (!existing) return { success: false, error: 'Group not found' };
 
+    // Why: Superadmin is name-keyed and anchors _is_superadmin / wouldRemoveLastSuperadmin detection — deleting it would orphan every superadmin and make last-superadmin guards silently return false while all:all persists on former members
+    if (existing.name === 'Superadmin') {
+      return {
+        success: false,
+        error: 'Cannot delete the Superadmin group — it is name-keyed and anchors superadmin detection',
+      };
+    }
+
     const adminIds = await affectedAdminIds(id);
     // Why: deleting a group cascades only the admin_groups and group_permissions links — the permission
-    // rows are shared definitions and must survive, and seeded groups are ordinary rows with no guard.
+    // rows are shared definitions and must survive, and seeded groups are ordinary rows with no guard (except the Superadmin anchor).
     await prisma.groups.delete({ where: { id } });
 
     await recordAudit({

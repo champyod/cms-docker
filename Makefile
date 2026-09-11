@@ -267,6 +267,8 @@ cms-init:
 
 prisma-sync:
 	@echo "Synchronizing Admin Panel schema (forcing Prisma v6)..."
+	@# WHY: before prisma db push drops legacy columns, capture them into _legacy_admin_permissions so the upgrade backfill can preserve access; tolerant so push still runs if DB/file absent.
+	@bash scripts/__apply_sql.sh --pre-push || true
 	@# WHY: schema sync is a migration operation that needs DDL, so it runs as the owner role — never the runtime DML role (cms_admin has no DDL).
 	@set -a; [ -f .env ] && . ./.env; set +a; \
 	OWNER_URL_NET="postgresql://$${POSTGRES_USER:-cmsuser}:$${POSTGRES_PASSWORD}@database:5432/$${POSTGRES_DB:-cmsdb}"; \

@@ -79,6 +79,7 @@ generate_secret_for() {
     POSTGRES_SERVICE_PASSWORD) gen_pw ;;
     POSTGRES_ADMIN_PASSWORD) gen_pw ;;
     POSTGRES_MONITOR_PASSWORD) gen_pw ;;
+    POSTGRES_BACKUP_PASSWORD) gen_pw ;;
     AUTH_SECRET)        gen_hex32 ;;
     SECRET_KEY)          gen_hex32 ;;
     CMS_SECRET_KEY)      gen_hex32 ;;
