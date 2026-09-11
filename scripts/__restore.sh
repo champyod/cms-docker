@@ -44,6 +44,20 @@ POSTGRES_PASSWORD_VAL="${POSTGRES_PASSWORD:-}"
 CONTAINER_DB="cms-database"
 VOLUME_DATA="cms-data"
 
+# WHY pre-create roles before pg_restore: dumps contain CREATE POLICY ... TO cms_service/cms_admin
+# which fails with "role does not exist" on fresh DB. Creating stub roles idempotently makes
+# restore succeed regardless of role layout changes (layout being simplified to cmsuser/cms_backup;
+# another agent owns SQL). Roles file is at admin-panel/prisma/sql/20260820120000_db_roles.sql
+# (and 20260820125000_backup_role.sql) but applying it needs passwords and superuser; stub
+# NOLOGIN roles are minimal, robust, and sufficient to let pg_restore create policies. Full role
+# definitions are re-applied post-restore via __apply_sql.sh if needed. Chose role pre-creation
+# over pg_restore --no-acl because --no-acl would silently drop policies.
+ensure_roles_exist() {
+  local _ctr="$1"
+  docker exec -e PGPASSWORD="$POSTGRES_PASSWORD_VAL" "$_ctr" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -v ON_ERROR_STOP=1 -c \
+    "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='cms_service') THEN CREATE ROLE cms_service NOLOGIN; END IF; IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='cms_admin') THEN CREATE ROLE cms_admin NOLOGIN; END IF; IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='cms_monitor') THEN CREATE ROLE cms_monitor NOLOGIN; END IF; IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='cms_readonly') THEN CREATE ROLE cms_readonly NOLOGIN; END IF; IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='cms_backup') THEN CREATE ROLE cms_backup NOLOGIN; END IF; END \$\$;" >/dev/null 2>&1 || log_warn "Failed to pre-create roles in $_ctr (continuing anyway)"
+}
+
 # Disk guard — abort if <3GB free (common.sh contract: path floor warn)
 require_disk_free_gb "$REPO_ROOT" 3 5
 
@@ -180,6 +194,9 @@ if [[ "$RESTORE_TARGET" == "scratch" ]]; then
   docker cp "$DUMP_FILE" "${SCRATCH_CONTAINER}:${local_dump}" >/dev/null 2>&1 || \
     log_warn "Failed to copy dump to scratch container"
 
+  # WHY: ensure legacy roles exist before pg_restore so CREATE POLICY ... TO cms_service/cms_admin succeeds on fresh DB
+  ensure_roles_exist "$SCRATCH_CONTAINER"
+
   log_info "Restoring database dump into scratch postgres..."
   if ! docker exec -e PGPASSWORD="$POSTGRES_PASSWORD_VAL" "$SCRATCH_CONTAINER" \
     pg_restore -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -Fc "$local_dump" 2>/tmp/cms-restore-pgrestore.log; then
@@ -238,6 +255,9 @@ local_dump="/tmp/live-restore-${TS_BASE}.dump"
 log_info "Copying dump into live container..."
 docker cp "$DUMP_FILE" "${CONTAINER_DB}:${local_dump}" >/dev/null 2>&1 || \
   log_warn "Failed to copy dump to live container"
+
+# WHY: ensure legacy roles exist before pg_restore (same as scratch path)
+ensure_roles_exist "$CONTAINER_DB"
 
 log_info "Restoring database dump into live postgres..."
 if ! docker exec -e PGPASSWORD="$POSTGRES_PASSWORD_VAL" "$CONTAINER_DB" \

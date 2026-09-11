@@ -196,46 +196,61 @@ done
 
 # WHY post-apply RLS assertion: ENABLE/FORCE with a mistyped table succeeds silently (DO $$ guard) and leaves the table unprotected. Verify the RESULT, not just the apply exit code.
 # WHY full-apply only: --pre-push and --bootstrap-roles exit before this point; they apply only a subset (capture file / role files) where RLS is deliberately not yet complete, so a check there would false-fail and violate their tolerant contract. Full apply is the only mode where all RLS files have been applied.
-log_info "verifying RLS (ENABLE + FORCE) on public tables..."
-_RLS_RC=0
-_RLS_COUNT="$(docker exec -i -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -A -c "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' AND NOT c.relrowsecurity;" 2>&1)" || _RLS_RC=$?
-if [[ $_RLS_RC -ne 0 ]]; then
-  # WHY log_warn not log_die: a docker/psql execution failure (container gone, network hiccup) is infra, not a security verdict — must not mask or fake a gap as pass/fail.
-  log_warn "RLS ENABLE check skipped: docker/psql execution failed (exit $_RLS_RC): $_RLS_COUNT"
-else
-  _RLS_COUNT_TRIMMED="$(printf '%s' "$_RLS_COUNT" | tr -d '[:space:]')"
-  if [[ "$_RLS_COUNT_TRIMMED" =~ ^[0-9]+$ ]] && [[ "$_RLS_COUNT_TRIMMED" -gt 0 ]]; then
-    _RLS_TABLES_RC=0
-    _RLS_TABLES="$(docker exec -i -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -A -c "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' AND NOT c.relrowsecurity ORDER BY c.relname;" 2>&1)" || _RLS_TABLES_RC=$?
-    if [[ $_RLS_TABLES_RC -ne 0 ]]; then
-      log_die "RLS ENABLE gap: ${_RLS_COUNT_TRIMMED} public table(s) without RLS (failed to fetch names, psql exit $_RLS_TABLES_RC): $_RLS_TABLES" 1
-    fi
-    _RLS_TABLES_FMT="$(printf '%s' "$_RLS_TABLES" | tr '\n' ' ' | xargs)"
-    log_die "RLS ENABLE gap: ${_RLS_COUNT_TRIMMED} public table(s) without RLS: ${_RLS_TABLES_FMT}" 1
-  elif [[ ! "$_RLS_COUNT_TRIMMED" =~ ^[0-9]+$ ]]; then
-    log_warn "RLS ENABLE check skipped: unexpected psql output: $_RLS_COUNT"
-  else
-    log_info "RLS ENABLE check passed (0 tables without RLS)"
-  fi
+# WHY scope to expected set: the generated 20260820125500_rls_enable.sql enumerates exactly the application tables that must have RLS. Checking "all public tables" is brittle: a maintenance/legacy table without RLS would false-fail and abort `make prisma-sync`.
+log_info "verifying RLS (ENABLE + FORCE) on expected application tables..."
+_RLS_EXPECTED_FILE="$SQL_DIR/20260820125500_rls_enable.sql"
+_RLS_EXPECTED_TABLES=()
+if [[ -f "$_RLS_EXPECTED_FILE" ]]; then
+  # WHY grep source of truth: file contains `to_regclass('public.<name>')` guards per model
+  while IFS= read -r _t; do _RLS_EXPECTED_TABLES+=("$_t"); done < <(grep -o "to_regclass('public\.[^']*')" "$_RLS_EXPECTED_FILE" | sed "s/.*public\.//;s/'.*//" | sort -u)
 fi
-_RLS_FORCE_RC=0
-_RLS_FORCE_COUNT="$(docker exec -i -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -A -c "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity AND NOT c.relforcerowsecurity;" 2>&1)" || _RLS_FORCE_RC=$?
-if [[ $_RLS_FORCE_RC -ne 0 ]]; then
-  log_warn "RLS FORCE check skipped: docker/psql execution failed (exit $_RLS_FORCE_RC): $_RLS_FORCE_COUNT"
+if [[ ${#_RLS_EXPECTED_TABLES[@]} -eq 0 ]]; then
+  log_warn "RLS check skipped: could not derive expected tables from $_RLS_EXPECTED_FILE"
 else
-  _RLS_FORCE_TRIMMED="$(printf '%s' "$_RLS_FORCE_COUNT" | tr -d '[:space:]')"
-  if [[ "$_RLS_FORCE_TRIMMED" =~ ^[0-9]+$ ]] && [[ "$_RLS_FORCE_TRIMMED" -gt 0 ]]; then
-    _RLS_FORCE_TABLES_RC=0
-    _RLS_FORCE_TABLES="$(docker exec -i -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -A -c "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity AND NOT c.relforcerowsecurity ORDER BY c.relname;" 2>&1)" || _RLS_FORCE_TABLES_RC=$?
-    if [[ $_RLS_FORCE_TABLES_RC -ne 0 ]]; then
-      log_die "RLS FORCE gap: ${_RLS_FORCE_TRIMMED} public table(s) with RLS but without FORCE (failed to fetch names, psql exit $_RLS_FORCE_TABLES_RC): $_RLS_FORCE_TABLES" 1
-    fi
-    _RLS_FORCE_FMT="$(printf '%s' "$_RLS_FORCE_TABLES" | tr '\n' ' ' | xargs)"
-    log_die "RLS FORCE gap: ${_RLS_FORCE_TRIMMED} public table(s) with RLS but without FORCE: ${_RLS_FORCE_FMT}" 1
-  elif [[ ! "$_RLS_FORCE_TRIMMED" =~ ^[0-9]+$ ]]; then
-    log_warn "RLS FORCE check skipped: unexpected psql output: $_RLS_FORCE_COUNT"
+  # WHY build VALUES list: single-query set-membership is simpler than per-table roundtrips and keeps the infra-vs-gap contract clear.
+  _RLS_LIST_SQL=""
+  for _t in "${_RLS_EXPECTED_TABLES[@]}"; do _RLS_LIST_SQL+=",('$_t')"; done
+  _RLS_LIST_SQL="${_RLS_LIST_SQL#,}"
+  _RLS_RC=0
+  _RLS_COUNT="$(docker exec -i -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -A -c "WITH expected(tbl) AS (VALUES ${_RLS_LIST_SQL}) SELECT count(*) FROM expected e JOIN pg_class c ON c.relname=e.tbl JOIN pg_namespace n ON n.oid=c.relnamespace AND n.nspname='public' WHERE c.relkind='r' AND NOT c.relrowsecurity;" 2>&1)" || _RLS_RC=$?
+  if [[ $_RLS_RC -ne 0 ]]; then
+    # WHY log_warn not log_die: a docker/psql execution failure (container gone, network hiccup) is infra, not a security verdict — must not mask or fake a gap as pass/fail.
+    log_warn "RLS ENABLE check skipped: docker/psql execution failed (exit $_RLS_RC): $_RLS_COUNT"
   else
-    log_info "RLS FORCE check passed (0 tables with RLS but without FORCE)"
+    _RLS_COUNT_TRIMMED="$(printf '%s' "$_RLS_COUNT" | tr -d '[:space:]')"
+    if [[ "$_RLS_COUNT_TRIMMED" =~ ^[0-9]+$ ]] && [[ "$_RLS_COUNT_TRIMMED" -gt 0 ]]; then
+      _RLS_TABLES_RC=0
+      _RLS_TABLES="$(docker exec -i -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -A -c "WITH expected(tbl) AS (VALUES ${_RLS_LIST_SQL}) SELECT e.tbl FROM expected e JOIN pg_class c ON c.relname=e.tbl JOIN pg_namespace n ON n.oid=c.relnamespace AND n.nspname='public' WHERE c.relkind='r' AND NOT c.relrowsecurity ORDER BY e.tbl;" 2>&1)" || _RLS_TABLES_RC=$?
+      if [[ $_RLS_TABLES_RC -ne 0 ]]; then
+        log_die "RLS ENABLE gap: ${_RLS_COUNT_TRIMMED} expected table(s) without RLS (failed to fetch names, psql exit $_RLS_TABLES_RC): $_RLS_TABLES" 1
+      fi
+      _RLS_TABLES_FMT="$(printf '%s' "$_RLS_TABLES" | tr '\n' ' ' | xargs)"
+      log_die "RLS ENABLE gap: ${_RLS_COUNT_TRIMMED} expected table(s) without RLS: ${_RLS_TABLES_FMT}" 1
+    elif [[ ! "$_RLS_COUNT_TRIMMED" =~ ^[0-9]+$ ]]; then
+      log_warn "RLS ENABLE check skipped: unexpected psql output: $_RLS_COUNT"
+    else
+      log_info "RLS ENABLE check passed (0 expected tables without RLS)"
+    fi
+  fi
+  _RLS_FORCE_RC=0
+  _RLS_FORCE_COUNT="$(docker exec -i -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -A -c "WITH expected(tbl) AS (VALUES ${_RLS_LIST_SQL}) SELECT count(*) FROM expected e JOIN pg_class c ON c.relname=e.tbl JOIN pg_namespace n ON n.oid=c.relnamespace AND n.nspname='public' WHERE c.relkind='r' AND c.relrowsecurity AND NOT c.relforcerowsecurity;" 2>&1)" || _RLS_FORCE_RC=$?
+  if [[ $_RLS_FORCE_RC -ne 0 ]]; then
+    log_warn "RLS FORCE check skipped: docker/psql execution failed (exit $_RLS_FORCE_RC): $_RLS_FORCE_COUNT"
+  else
+    _RLS_FORCE_TRIMMED="$(printf '%s' "$_RLS_FORCE_COUNT" | tr -d '[:space:]')"
+    if [[ "$_RLS_FORCE_TRIMMED" =~ ^[0-9]+$ ]] && [[ "$_RLS_FORCE_TRIMMED" -gt 0 ]]; then
+      _RLS_FORCE_TABLES_RC=0
+      _RLS_FORCE_TABLES="$(docker exec -i -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -A -c "WITH expected(tbl) AS (VALUES ${_RLS_LIST_SQL}) SELECT e.tbl FROM expected e JOIN pg_class c ON c.relname=e.tbl JOIN pg_namespace n ON n.oid=c.relnamespace AND n.nspname='public' WHERE c.relkind='r' AND c.relrowsecurity AND NOT c.relforcerowsecurity ORDER BY e.tbl;" 2>&1)" || _RLS_FORCE_TABLES_RC=$?
+      if [[ $_RLS_FORCE_TABLES_RC -ne 0 ]]; then
+        log_die "RLS FORCE gap: ${_RLS_FORCE_TRIMMED} expected table(s) with RLS but without FORCE (failed to fetch names, psql exit $_RLS_FORCE_TABLES_RC): $_RLS_FORCE_TABLES" 1
+      fi
+      _RLS_FORCE_FMT="$(printf '%s' "$_RLS_FORCE_TABLES" | tr '\n' ' ' | xargs)"
+      log_die "RLS FORCE gap: ${_RLS_FORCE_TRIMMED} expected table(s) with RLS but without FORCE: ${_RLS_FORCE_FMT}" 1
+    elif [[ ! "$_RLS_FORCE_TRIMMED" =~ ^[0-9]+$ ]]; then
+      log_warn "RLS FORCE check skipped: unexpected psql output: $_RLS_FORCE_COUNT"
+    else
+      log_info "RLS FORCE check passed (0 expected tables with RLS but without FORCE)"
+    fi
   fi
 fi
 

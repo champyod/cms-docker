@@ -1,94 +1,52 @@
--- 20260820120000_db_roles.sql — least-privilege DB roles
--- WHY: split the single cmsuser superuser into scoped roles so admin/monitor cannot DROP or corrupt arbitrary tables.
+-- 20260820120000_db_roles.sql — locked two-role layout: cmsuser (owner/app) + cms_backup (BYPASSRLS, member of owner)
+-- WHY: the app (Python services + Next.js admin panel) both connect as cmsuser (owner). Splitting into cms_service/cms_admin
+--      broke large-object access because PostgreSQL requires the LO owning role to read it; files uploaded via the panel
+--      were unreadable by the grader. Single owner fixes that; no separate DML roles are needed.
+-- WHY: only TWO roles exist: cmsuser (owner, demoted in 20260820140000_owner_hardening.sql to NOSUPERUSER NOBYPASSRLS
+--      NOCREATEROLE NOCREATEDB, still owns objects so retains DDL) and cms_backup (LOGIN NOSUPERUSER BYPASSRLS
+--      NOCREATEDB NOCREATEROLE + MEMBER OF cmsuser for LO reads). Do not reintroduce cms_service/cms_admin/cms_monitor/cms_readonly.
 -- WHY: forward-only and idempotent (DO $$ guards, GRANT is idempotent, no DROP) so it is safe to re-run on LIVE and after prisma db push.
 -- WHY: role creation/alteration is wrapped in an insufficient_privilege handler because 20260820140000_owner_hardening.sql
---      demotes cmsuser to NOCREATEROLE. Without the handler every subsequent `make prisma-sync` aborts here with
---      "must be superuser to alter superuser roles" and the GRANTs below would never re-apply. On re-run the roles already
---      exist, so skipping is correct; the GRANTs (which an object owner can always issue) stay unguarded and still run.
--- Requires psql variables: cms_service_password, cms_admin_password, cms_monitor_password (supplied by scripts/__apply_sql.sh, never stored here).
+--      demotes cmsuser to NOCREATEROLE. Without the handler every subsequent `make prisma-sync` aborts here and the
+--      membership below would never re-apply. On re-run the role already exists, so skipping is correct.
+-- Requires psql variable: cms_backup_password (supplied by scripts/__apply_sql.sh, never stored here).
 -- WHY set_config: psql :'var' interpolation does not happen inside DO $$ dollar-quoted bodies when the file is fed via -f - (stdin); set_config stores the value so PL/pgSQL can read it via current_setting.
 
--- cms_service — Python core/services. Full DML, no DDL.
--- WHY: services DO manage large objects via lo_* (src/cms/db/fsobject.py uses LargeObject with lo_creat/lo_open/loread/lowrite/lo_unlink) so SELECT on pg_largeobject is granted for direct reads; writes happen via lo_* ownership path but pg_largeobject SELECT covers inspection.
-SELECT set_config('my.cms_service_password', :'cms_service_password', false);
+-- cms_backup — backup only. BYPASSRLS for pg_dump under FORCE RLS, SELECT via membership/GRANTs, no DDL.
+-- WHY BYPASSRLS: pg_dump issues SELECTs over every app table; after 20260820130000_rls.sql enables FORCE RLS and owner is
+--      demoted to NOBYPASSRLS, the owner is bound by RLS and pg_dump as cmsuser fails with "query would be affected by
+--      row-level security policy". BYPASSRLS lets the dump see all rows.
+-- WHY MEMBER OF cmsuser: large-object reads require the owning role; cmsuser creates every LO, so making cms_backup
+--      a member of cmsuser inherits LO read for existing AND future objects without per-OID grants. Per-OID grants rot
+--      because new LOs never receive them and ALTER DEFAULT PRIVILEGES ... ON LARGE OBJECTS does not exist in PG15.
+-- WHY no GRANT SELECT ON TABLE pg_catalog.pg_largeobject here: backup's table access is granted in
+--      20260820125000_backup_role.sql; this file only ensures the role exists and the membership is present. No monitor
+--      role exists to receive an adversarial pg_largeobject grant.
+SELECT set_config('my.cms_backup_password', :'cms_backup_password', false);
 DO $$
-DECLARE _pw text := current_setting('my.cms_service_password');
+DECLARE _pw text := current_setting('my.cms_backup_password');
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cms_service') THEN
-    EXECUTE format('CREATE ROLE cms_service WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L', _pw);
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cms_backup') THEN
+    BEGIN
+      EXECUTE format('CREATE ROLE cms_backup WITH LOGIN NOSUPERUSER BYPASSRLS NOCREATEDB NOCREATEROLE PASSWORD %L', _pw);
+    EXCEPTION WHEN insufficient_privilege THEN
+      RAISE NOTICE 'cms_backup creation requires superuser — skipped on demoted re-apply (role should already exist)';
+    END;
   ELSE
-    EXECUTE format('ALTER ROLE cms_service WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L', _pw);
+    BEGIN
+      EXECUTE format('ALTER ROLE cms_backup WITH LOGIN NOSUPERUSER BYPASSRLS NOCREATEDB NOCREATEROLE PASSWORD %L', _pw);
+    EXCEPTION WHEN insufficient_privilege THEN
+      RAISE NOTICE 'cms_backup password rotation requires superuser — skipped on demoted re-apply';
+    END;
   END IF;
-EXCEPTION WHEN insufficient_privilege THEN
-  RAISE NOTICE 'cms_service role management requires superuser — skipped on demoted re-apply (role already exists)';
 END $$;
 
--- cms_admin — Admin panel (Next.js). DML on app tables, no DDL.
--- WHY: admin panel DOES use large objects (admin-panel/src/lib/fsobjects.ts uses lo_from_bytea to store uploads into fsobjects) so cms_admin is granted SELECT/INSERT/UPDATE/DELETE on pg_largeobject to allow direct large-object lifecycle via SQL when needed; DML via app tables still governs the fsobjects rows.
-SELECT set_config('my.cms_admin_password', :'cms_admin_password', false);
-DO $$
-DECLARE _pw text := current_setting('my.cms_admin_password');
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cms_admin') THEN
-    EXECUTE format('CREATE ROLE cms_admin WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L', _pw);
-  ELSE
-    EXECUTE format('ALTER ROLE cms_admin WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L', _pw);
-  END IF;
-EXCEPTION WHEN insufficient_privilege THEN
-  RAISE NOTICE 'cms_admin role management requires superuser — skipped on demoted re-apply (role already exists)';
-END $$;
-
--- cms_monitor — Monitor service. SELECT only.
-SELECT set_config('my.cms_monitor_password', :'cms_monitor_password', false);
-DO $$
-DECLARE _pw text := current_setting('my.cms_monitor_password');
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cms_monitor') THEN
-    EXECUTE format('CREATE ROLE cms_monitor WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L', _pw);
-  ELSE
-    EXECUTE format('ALTER ROLE cms_monitor WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L', _pw);
-  END IF;
-EXCEPTION WHEN insufficient_privilege THEN
-  RAISE NOTICE 'cms_monitor role management requires superuser — skipped on demoted re-apply (role already exists)';
-END $$;
-
--- cms_readonly — Reporting. SELECT only, no login by default.
+-- WHY membership: inherits large-object read for existing and future LOs owned by cmsuser; per-OID GRANTs rot.
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cms_readonly') THEN
-    CREATE ROLE cms_readonly WITH NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
-  END IF;
-EXCEPTION WHEN insufficient_privilege THEN
-  RAISE NOTICE 'cms_readonly role management requires superuser — skipped on demoted re-apply (role already exists)';
+  BEGIN
+    EXECUTE 'GRANT cmsuser TO cms_backup';
+  EXCEPTION WHEN insufficient_privilege THEN
+    RAISE NOTICE 'GRANT cmsuser TO cms_backup requires superuser/owner — skipped on demoted re-apply (membership already present)';
+  END;
 END $$;
-
--- WHY: USAGE on public is required to resolve tables/sequences at all.
-GRANT USAGE ON SCHEMA public TO cms_service, cms_admin, cms_monitor, cms_readonly;
-
--- WHY: revoke CREATE on public from least-privilege roles so even if PUBLIC still has it, these roles cannot DDL (forward-only enforcement).
-DO $$
-BEGIN
-  REVOKE CREATE ON SCHEMA public FROM cms_service, cms_admin, cms_monitor, cms_readonly;
-EXCEPTION WHEN insufficient_privilege THEN
-  RAISE NOTICE 'revoke CREATE on public requires schema ownership — skipped';
-END $$;
-
--- DML roles: full DML on all current app tables.
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO cms_service, cms_admin;
-
--- DML roles need sequence USAGE/SELECT for SERIAL/IDENTITY nextval.
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO cms_service, cms_admin;
-
--- Read-only roles: SELECT only.
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO cms_monitor, cms_readonly;
-GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO cms_monitor, cms_readonly;
-
--- pg_largeobject: WHY split as verified — services read via large-object functions but benefit from SELECT for inspection; admin needs write path for file uploads; monitor/readonly need read for reporting.
-GRANT SELECT ON TABLE pg_catalog.pg_largeobject TO cms_service, cms_monitor, cms_readonly;
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE pg_catalog.pg_largeobject TO cms_admin;
-
--- WHY: default privileges so future tables created by cmsuser (owner) inherit the least-privilege grants without manual re-run (re-apply script still covers drift).
-ALTER DEFAULT PRIVILEGES FOR ROLE cmsuser IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO cms_service, cms_admin;
-ALTER DEFAULT PRIVILEGES FOR ROLE cmsuser IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO cms_service, cms_admin;
-ALTER DEFAULT PRIVILEGES FOR ROLE cmsuser IN SCHEMA public GRANT SELECT ON TABLES TO cms_monitor, cms_readonly;
-ALTER DEFAULT PRIVILEGES FOR ROLE cmsuser IN SCHEMA public GRANT SELECT ON SEQUENCES TO cms_monitor, cms_readonly;

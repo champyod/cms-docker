@@ -13,8 +13,8 @@ services:
       - MONITOR_INTERVAL=5
       - MONITOR_COOLDOWN=300
       - DISK_PATH=/host
-      # WHY: monitor uses least-privilege cms_monitor (SELECT only), not the owner
-      - DATABASE_URL=postgresql://cms_monitor:${POSTGRES_MONITOR_PASSWORD:-${POSTGRES_PASSWORD:-cmspassword}}@database:5432/${POSTGRES_DB:-cmsdb}
+      # WHY: monitor performs no database operations (__monitor.sh has no psql/pg_dump) — no DATABASE_URL needed; backups use cms_backup via __backup.sh.
+      # DATABASE_URL removed — monitor needs no DB access
       - BACKUP_INTERVAL_MINS=${BACKUP_INTERVAL_MINS:-1440}
       - BACKUP_MAX_COUNT=${BACKUP_MAX_COUNT:-50}
       - BACKUP_MAX_AGE_DAYS=${BACKUP_MAX_AGE_DAYS:-10}

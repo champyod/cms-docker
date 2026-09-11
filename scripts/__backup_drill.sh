@@ -111,7 +111,7 @@ if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$CONTAINER_DB"; the
   log_warn "cms-database container not running — backup will likely fail, but proceeding anyway"
 fi
 
-bash "${SCRIPT_DIR}/cms-backup.sh" "" 2>&1 || log_warn "Backup script exited with non-zero (may be expected if db issues)"
+bash "${SCRIPT_DIR}/__backup.sh" "" 2>&1 || log_warn "Backup script exited with non-zero (may be expected if db issues)"
 
 # ---------------------------------------------------------------------------
 # Find the dump file and manifest that were just created
@@ -183,7 +183,7 @@ log_info "Expected from manifest: db_bytes=$EXPECTED_DB_BYTES vol_bytes=$EXPECTE
 log_info "Running cms-restore.sh into scratch container..."
 
 # Capture the restore output without masking failure
-if ! RESTORE_OUTPUT="$(bash "${SCRIPT_DIR}/cms-restore.sh" "$DUMP_FILE" 2>&1)"; then
+if ! RESTORE_OUTPUT="$(bash "${SCRIPT_DIR}/__restore.sh" "$DUMP_FILE" 2>&1)"; then
   RESTORE_EXIT=$?
 else
   RESTORE_EXIT=0

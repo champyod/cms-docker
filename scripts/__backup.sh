@@ -311,11 +311,11 @@ run_backup() {
   trap cleanup_container_tmp EXIT
 
   # 1) Full logical backup — credentials via docker exec -e PGPASSWORD (never on host argv)
-  # WHY cms_backup: BYPASSRLS role can dump under FORCE RLS; fall back to owner with warning if not configured
+  # WHY cms_backup: BYPASSRLS role can dump under FORCE RLS; owner cmsuser is NOBYPASSRLS+FORCE RLS so dump as owner fails — backups REQUIRE cms_backup
   local pg_dump_user="$POSTGRES_BACKUP_USER_VAL"
   local pg_dump_pass="$POSTGRES_BACKUP_PASSWORD_VAL"
   if [[ -z "$pg_dump_pass" ]]; then
-    log_warn "POSTGRES_BACKUP_PASSWORD is empty — falling back to owner $POSTGRES_USER_VAL (may fail under FORCE RLS); run './cms config sync' to generate it"
+    log_warn "POSTGRES_BACKUP_PASSWORD is empty — backups REQUIRE cms_backup (BYPASSRLS); owner $POSTGRES_USER_VAL cannot dump under FORCE RLS — run './cms config sync' to generate it"
     pg_dump_user="$POSTGRES_USER_VAL"
     pg_dump_pass="$POSTGRES_PASSWORD_VAL"
   fi
@@ -324,14 +324,17 @@ run_backup() {
   if docker exec -e PGPASSWORD="$pg_dump_pass" "$CONTAINER_DB" pg_dump -U "$pg_dump_user" -d "$POSTGRES_DB_VAL" -Fc -f "$db_tmp" 2>/tmp/cms-backup-pgdump.log; then
     pg_dump_ok=1
   elif [[ "$pg_dump_user" != "$POSTGRES_USER_VAL" ]]; then
-    # WHY: on the first update after the role split, cms_backup does not exist yet — the roles are
-    # created later by prisma-sync. Retry as the owner so the pre-update safety backup still succeeds
-    # instead of aborting the whole update.
-    log_warn "pg_dump as $pg_dump_user failed — retrying as owner $POSTGRES_USER_VAL"
+    # WHY: pg_dump as demoted owner fails under FORCE RLS ("query would be affected by row-level security policy");
+    # backups REQUIRE cms_backup (BYPASSRLS + member of cmsuser for LO). Owner is not a viable fallback.
+    log_warn "pg_dump as $pg_dump_user failed — owner fallback is not viable: backups REQUIRE cms_backup (BYPASSRLS); owner $POSTGRES_USER_VAL is blocked by FORCE RLS"
     if docker exec -e PGPASSWORD="$POSTGRES_PASSWORD_VAL" "$CONTAINER_DB" pg_dump -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -Fc -f "$db_tmp" 2>/tmp/cms-backup-pgdump.log; then
-      log_info "Owner fallback pg_dump succeeded."
+      log_warn "Owner fallback unexpectedly succeeded (FORCE RLS may not be active) — backups still REQUIRE cms_backup for reliable dumps"
       pg_dump_ok=1
+    else
+      log_warn "Owner fallback failed as expected: owner cannot dump under FORCE RLS — backups REQUIRE cms_backup (BYPASSRLS)"
     fi
+  else
+    log_warn "pg_dump as owner failed as expected: owner is blocked by FORCE RLS — backups REQUIRE cms_backup (BYPASSRLS); run './cms config sync' to generate POSTGRES_BACKUP_PASSWORD"
   fi
   if (( pg_dump_ok == 0 )); then
     local err
