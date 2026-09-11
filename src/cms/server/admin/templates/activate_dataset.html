@@ -53,7 +53,7 @@ below, and wait for it to complete.
 <p>
     Reevaluate all submissions for the dataset "{{ dataset.description }}":
     {{ macro_reevaluation_buttons.reevaluation_buttons(
-           admin.permission_all,
+           admin.has_permission('all:all'),
            url("dataset", dataset.id),
            dataset_id=dataset.id) }}
 </p>

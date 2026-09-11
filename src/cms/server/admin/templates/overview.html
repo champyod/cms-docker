@@ -131,13 +131,13 @@ function update_workers_status(response)
         strings.push('<td>' + start_time + '</td>');
         if (response['data'][i]['operations'] == "disabled") {
             strings.push('<td><button onclick="javascript:enable_worker(' + i + '); return true;"' +
-{% if not admin.permission_all %}
+{% if not admin.has_permission('all:all') %}
                          ' disabled' +
 {% endif %}
                          '>Enable</button></td>');
         } else {
             strings.push('<td><button onclick="javascript:disable_worker(' + i + '); return true;"' +
-{% if not admin.permission_all %}
+{% if not admin.has_permission('all:all') %}
                          ' disabled' +
 {% endif %}
                          '>Disable</button></td>');

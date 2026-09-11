@@ -32,11 +32,8 @@ logger = logging.getLogger(__name__)
 
 
 def _is_superadmin(admin) -> bool:
-    """WHY: groups-based check with permission_all fallback for pre-migration."""
-    return (
-        any(ag.group.name == 'Superadmin' for ag in admin.admin_groups)
-        or admin.permission_all
-    )
+    """Check whether the admin belongs to the Superadmin group."""
+    return any(ag.group.name == 'Superadmin' for ag in admin.admin_groups)
 
 
 def _admin_attrs(handler: BaseHandler) -> dict:
@@ -149,25 +146,23 @@ class AdminHandler(BaseHandler):
             self.redirect(self.url("admin", admin_id))
             return
 
-        # If the admin is allowed here because has permission_all,
-        # they can do anything they want, otherwise, if they are
-        # allowed because they are editing their own details, they can
-        # only change a subset of the fields.
+        # If the admin is allowed here because they are editing their own
+        # details, they can only change a subset of the fields.
         group_ids = new_attrs.pop("admin_groups", [])
-        if not self.current_user.permission_all:
+        if not self.current_user.has_permission("all:all"):
             for key in list(new_attrs.keys()):
                 if key not in AdminHandler.SELF_MODIFIABLE_FIELDS:
                     del new_attrs[key]
         admin.set_attrs(new_attrs)
 
-        if self.current_user.permission_all:
+        if self.current_user.has_permission("all:all"):
             superadmin_gid = (
                 self.sql_session.query(Group.id)
                 .filter(Group.name == 'Superadmin')
                 .scalar()
             )
             if _is_superadmin(admin):
-                will_be_super = admin.permission_all or (
+                will_be_super = (
                     superadmin_gid in group_ids
                     if superadmin_gid else False
                 )

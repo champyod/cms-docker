@@ -38,7 +38,7 @@ user_id (int|None): if we are rendering one of the questions on a single user's
         </div>
       {% endif %}
     {% endif %}
-    {% if admin.permission_all or admin.permission_messaging %}
+    {% if admin.has_permission('message:send') %}
       {% if msg.reply_timestamp is none %}
         {% if not msg.ignored %}
           <div class="claim_reply">

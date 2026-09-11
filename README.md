@@ -26,7 +26,7 @@ All four paths share one config step (`make env`) and one consolidated
 ```bash
 git clone https://github.com/champyod/cms-docker.git
 cd cms-docker
-git submodule update --init --recursive   # pulls the CMS Python source
+# CMS Python source is vendored in src/ — no submodule step needed.
 
 # Linux worker hosts additionally need (once, root):
 sudo ./scripts/__worker_cgroup_setup.sh     # prepares isolate cgroup path
@@ -150,7 +150,7 @@ Pick by scenario:
 
 ### Platform update (new code / new images)
 ```bash
-git pull && git submodule update --init --recursive
+git pull
 ./cms update-server     # safe path: preflight -> auto-backup -> rolling recreate -> health verify
                         # records old image digests + git HEAD to /tmp/cms-update-*.txt for manual rollback
 ./cms doctor            # post-check if you skipped it inside update-server

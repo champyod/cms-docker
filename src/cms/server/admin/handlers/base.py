@@ -61,7 +61,7 @@ from cms.server import CommonRequestHandler, FileHandlerMixin
 from cmscommon.crypto import hash_password, parse_authentication
 from cmscommon.datetime import make_datetime
 from cms.db.permissions import (
-    AdminGroup, AdminPermissionOverride, GroupPermission, Permission)
+    AdminGroup, AdminPermissionOverride, Group, GroupPermission, Permission)
 if typing.TYPE_CHECKING:
     from cms.server.admin import AdminWebServer
 
@@ -347,6 +347,12 @@ class BaseHandler(CommonRequestHandler):
             self.service.auth_handler.clear()
             return None
 
+        # WHY: templates and handlers read capabilities off the admin object,
+        # so resolve the group/override set once per request.
+        admin.effective_permissions = get_effective_permissions(
+            admin.id, self.sql_session
+        )
+
         # Maybe refresh the cookie.
         if self.refresh_cookie:
             self.service.auth_handler.refresh()
@@ -409,6 +415,7 @@ class BaseHandler(CommonRequestHandler):
         params["handler"] = self
         if self.current_user is not None:
             params["admin"] = self.current_user
+        params["groups"] = self.sql_session.query(Group).order_by(Group.name).all()
         if self.contest is not None:
             params["unanswered"] = self.sql_session.query(Question)\
                 .join(Participation)\
@@ -749,10 +756,7 @@ class FileFromDigestHandler(FileHandler):
         self.fetch(digest, "text/plain", filename)
 
 
-def SimpleHandler(page, authenticated=True, permission=None, permission_all=False) -> type[BaseHandler]:
-    # Backward compat: permission_all=True maps to "all:all" registry key.
-    if permission_all and permission is None:
-        permission = "all:all"
+def SimpleHandler(page, authenticated=True, permission=None) -> type[BaseHandler]:
     perm = permission  # capture for closure
 
     if perm is not None:
@@ -775,10 +779,7 @@ def SimpleHandler(page, authenticated=True, permission=None, permission_all=Fals
     return Cls
 
 
-def SimpleContestHandler(page, permission=None, permission_all=False) -> type[BaseHandler]:
-    # Backward compat: permission_all=True maps to "all:all" registry key.
-    if permission_all and permission is None:
-        permission = "all:all"
+def SimpleContestHandler(page, permission=None) -> type[BaseHandler]:
     perm = permission
 
     if perm is not None:

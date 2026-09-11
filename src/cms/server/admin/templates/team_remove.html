@@ -5,7 +5,7 @@
   <h1>Remove Team</h1>
 </div>
 
-{% if admin.permission_all %}
+{% if admin.has_permission('all:all') %}
 <p>
   Are you sure you want to remove team {{ team.code }} ({{ team.name }})?
   <br>
