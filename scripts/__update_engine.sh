@@ -7,7 +7,6 @@
 #   --fresh  Full first-time walk: every var written, defaults offered instead
 #            of keeping current values.
 #
-# Helpers ported from the legacy setup.sh (absorbed into this engine).
 set -eu
 # pipefail only if available
 if (set -o pipefail 2>/dev/null); then
@@ -354,7 +353,6 @@ select_services() {
     read -r ans
     SERVICES_SELECTED="${ans:-$defaults}"
   fi
-  # Ensure spaces for filtering
   SERVICES_SELECTED=" ${SERVICES_SELECTED//,/ } "
 }
 
@@ -631,7 +629,6 @@ walk_section() {
     CURRENT_GROUP="$group"
     echo ""
     print_step "$group  ($section)"
-    # Show disk context before backup/sizing prompts
     if [[ "$group" == "Infra & Monitoring" ]] && [[ "$SIZING_SHOWN" -eq 0 ]]; then sizing_context; SIZING_SHOWN=1; fi
     ensure_config_toml "$section"
 }

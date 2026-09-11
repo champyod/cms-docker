@@ -82,7 +82,6 @@ fleet_save() {  # updates config.toml [worker] with fleet rows, re-runs sync
   local row s h p l m c
   local gm gc; gm="$(global_memory)"; gc="$(global_cpus)"
 
-  # Build WORKER_N and WORKER_SHARDn_* lines for config.toml
   local fleet_block=""
   for row in "${WORKERS[@]}"; do
     IFS='|' read -r s h p l m c <<<"$row"
@@ -141,7 +140,6 @@ for j, fl in enumerate(fleet_lines):
 Path(toml_path).write_text('\n'.join(new_lines) + '\n')
 PYEOF
 
-  # Re-run config sync to regenerate .env
   bash scripts/__config_sync.sh --no-secrets 2>/dev/null || log_warn "config sync after fleet_save failed"
 }
 

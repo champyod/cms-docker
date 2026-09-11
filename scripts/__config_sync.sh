@@ -47,7 +47,6 @@ parse_toml() {
     # Strip inline comments: TOML allows # after values
     line="${line%%#*}"
     [[ -z "${line//[$'\t ']/}" ]] && continue
-    # trim leading/trailing whitespace
     line="$(echo "$line" | xargs)"
     if [[ "$line" =~ ^\[([a-zA-Z0-9_]+)\]$ ]]; then
       section="${BASH_REMATCH[1]}"
@@ -134,7 +133,6 @@ scan_and_generate_secrets() {
 SECRETS_CHANGED=0
 
 main() {
-  # Ensure config.toml exists from example
   if [[ ! -f "$TOML_FILE" ]]; then
     if [[ -f "$TOML_EXAMPLE" ]]; then
       cp "$TOML_EXAMPLE" "$TOML_FILE" || { log_error "Failed to copy config.toml.example → config.toml"; exit 1; }
@@ -163,7 +161,6 @@ main() {
     cp "config/cms.sample.toml" "config/cms.toml" && log_info "Created config/cms.toml from sample"
   fi
 
-  # Auto-generate secrets for empty secret fields
   if [[ "$NO_SECRETS" -eq 0 ]]; then
     scan_and_generate_secrets core    __CORE_KEYS
     scan_and_generate_secrets admin   __ADMIN_KEYS
@@ -211,7 +208,6 @@ main() {
     echo "Would write unified .env from config.toml (all sections)"
   fi
 
-  # Write admin-panel/.env
   if [[ "$DRY_RUN" -eq 0 ]]; then
     local db_user="${__TOML[core.POSTGRES_USER]:-cmsuser}"
     local db_pass="${__TOML[core.POSTGRES_PASSWORD]:-}"
@@ -232,7 +228,6 @@ main() {
   sync_ranking_logo() {
     local src="${__TOML[admin.RANKING_LOGO_PATH]:-}"
     [[ -z "$src" ]] && { log_info "RANKING_LOGO_PATH empty — skipping logo sync (fallback static logo)"; return 0; }
-    # Expand ~ and resolve relative to CMS_ROOT
     src="${src/#\~/$HOME}"
     [[ "$src" != /* ]] && src="$CMS_ROOT/$src"
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -276,7 +271,6 @@ main() {
     # Fallback: write via helper container to ranking volume (no root, no mountpoint)
     if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$container" || ! docker exec "$container" test -f "$ranking_lib_dir/$dest_name" 2>/dev/null; then
       if docker info >/dev/null 2>&1; then
-        # Create volume if missing
         docker volume create cms-ranking-data >/dev/null 2>&1 || true
         local src_dir src_base
         src_dir="$(dirname "$src")"
@@ -323,7 +317,6 @@ main() {
     mkdir -p backups && touch backups/.gitkeep
   fi
 
-  # Set permissions on generated files
   if [[ "$DRY_RUN" -eq 0 ]]; then
     local total_vars=$((${#__CORE_KEYS[@]} + ${#__ADMIN_KEYS[@]} + \
                         ${#__CONTEST_KEYS[@]} + ${#__WORKER_KEYS[@]} + ${#__INFRA_KEYS[@]} + \
@@ -332,7 +325,6 @@ main() {
     log_info "Synced ${total_vars} vars from config.toml → .env"
   fi
 
-  # Run preflight if present
   if [[ "$DRY_RUN" -eq 0 ]] && [[ -f scripts/__preflight.sh ]]; then
     log_info "Running preflight checks..."
     bash scripts/__preflight.sh || log_warn "Preflight reported issues"

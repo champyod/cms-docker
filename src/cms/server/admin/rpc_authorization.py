@@ -70,7 +70,6 @@ def rpc_authorization_checker(
 
         effective = get_effective_permissions(admin_id, session)
 
-        # Full admin access
         if "all:all" in effective:
             return (service, method) in RPCS_ALLOWED_FOR_ALL
 

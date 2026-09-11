@@ -299,12 +299,10 @@ case "$MODE" in
     log_info "Firewall apply mode (enforcing)"
     echo ""
 
-    # Require root
     if [[ $EUID -ne 0 ]]; then
       log_die "firewall --apply requires root — run with sudo" 1
     fi
 
-    # Run preflight checks
     if ! preflight_checks; then
       log_die "preflight checks failed — aborting to prevent lockout" 1
     fi

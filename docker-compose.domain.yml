@@ -124,7 +124,6 @@ services:
       retries: 5
       start_period: 20s
 
-# ── Volumes ───────────────────────────────────────────────────────
 volumes:
   letsencrypt-certs:
     name: cms-letsencrypt-certs
@@ -139,7 +138,6 @@ volumes:
   vault-data-inline:
     name: cms-vault-data-inline
 
-# ── Networks ──────────────────────────────────────────────────────
 networks:
   cms-network:
     name: cms-network

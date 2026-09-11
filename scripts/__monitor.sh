@@ -196,13 +196,11 @@ should_suppress_notification() {
     local container_name="$1"
     local event_type="$2"
 
-    # Get container ID
     local container_id=$(docker ps -aqf "name=$container_name" 2>/dev/null | head -1)
     if [ -z "$container_id" ]; then
         return 1  # Don't suppress if we can't find container
     fi
 
-    # Get config
     local config=$(get_container_restart_config "$container_id")
     local auto_restart=$(echo "$config" | cut -d: -f1)
     local max_restarts=$(echo "$config" | cut -d: -f2)
@@ -213,7 +211,6 @@ should_suppress_notification() {
         return 0  # Suppress
     fi
 
-    # Get restart count from Docker
     local restart_count=$(docker inspect "$container_id" --format='{{.RestartCount}}' 2>/dev/null || echo "0")
 
     # If auto-restart is disabled and container is dying/restarting, suppress after first notification
@@ -251,7 +248,6 @@ listen_docker_events() {
         CURRENT_TIME=$(date +%s)
         LAST_NOTIF=$(grep "^${CONT_NAME}:" "$NOTIF_CACHE" | grep -v ":disabled:" | grep -v ":limit:" | cut -d: -f2 | tail -1 || echo "0")
 
-        # Check if we should suppress this notification
         if should_suppress_notification "$CONT_NAME" "$EVENT_TYPE"; then
             continue
         fi
@@ -260,14 +256,12 @@ listen_docker_events() {
             continue
         fi
 
-        # Get container info for enhanced notification
         local container_id=$(docker ps -aqf "name=$CONT_NAME" 2>/dev/null | head -1)
         local restart_count=$(docker inspect "$container_id" --format='{{.RestartCount}}' 2>/dev/null || echo "0")
         local config=$(get_container_restart_config "$container_id")
         local auto_restart=$(echo "$config" | cut -d: -f1)
         local max_restarts=$(echo "$config" | cut -d: -f2)
 
-        # Update cache
         grep -v "^${CONT_NAME}:" "$NOTIF_CACHE" > "${NOTIF_CACHE}.tmp" || true
         echo "${CONT_NAME}:${CURRENT_TIME}" >> "${NOTIF_CACHE}.tmp"
         mv "${NOTIF_CACHE}.tmp" "$NOTIF_CACHE"

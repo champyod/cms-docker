@@ -23,7 +23,6 @@ pub fn run() -> Result<(), Box<dyn Error>> {
 
     let res = run_app(&mut terminal, &mut app);
 
-    // Restore terminal
     let mut stdout = io::stdout();
     crossterm::terminal::disable_raw_mode()?;
     execute!(stdout, crossterm::terminal::LeaveAlternateScreen)?;

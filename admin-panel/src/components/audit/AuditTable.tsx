@@ -200,7 +200,6 @@ export function AuditTable({
 
   return (
     <div className="space-y-4">
-      {/* Filter bar */}
       <Card className="p-4">
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-[160px]">
@@ -260,13 +259,11 @@ export function AuditTable({
         </div>
       </Card>
 
-      {/* Info bar */}
       <div className="flex items-center justify-between text-sm text-muted-foreground px-1">
         <span>{dict.pageInfo.replace('{total}', String(total))}</span>
         {isPending && <span className="animate-pulse">Loading…</span>}
       </div>
 
-      {/* Table */}
       {entries.length === 0 ? (
         <EmptyState icon={Filter} title={dict.noEntries} />
       ) : (
@@ -310,7 +307,6 @@ export function AuditTable({
         </div>
       )}
 
-      {/* Pagination */}
       {totalPages > 1 && (
         <TablePaginationControls
           currentPage={currentPage}

@@ -5,7 +5,6 @@ if (set -o pipefail 2>/dev/null); then
     set -o pipefail
 fi
 
-# Change directory to the project root
 cd "$(dirname "$0")/.."
 
 log()  { printf '%s [UPDATE] %s\n' "$(date +'%Y-%m-%d %H:%M:%S')" "$*"; }
@@ -154,7 +153,6 @@ update_worker_shards() {
     fi
 }
 
-# Pull images
 if [ "$DEPLOY_TYPE" = "img" ]; then
     log "Pulling latest images for active stacks..."
     [ "$HAS_CORE" = true ] && make pull-core
@@ -164,7 +162,6 @@ if [ "$DEPLOY_TYPE" = "img" ]; then
     [ "$HAS_INFRA" = true ] && make pull-infra
 fi
 
-# Restart services based on type
 log "Restarting services..."
 if [ "$DEPLOY_TYPE" = "img" ]; then
     [ "$HAS_CORE" = true ] && make core-img
@@ -180,7 +177,6 @@ else
     [ "$HAS_WORKER" = true ] && update_worker_shards src
 fi
 
-# Sync DB schema
 log "Syncing database schema..."
 make cms-init || die "make cms-init failed."
 make prisma-sync || die "make prisma-sync failed."

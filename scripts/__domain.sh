@@ -261,13 +261,11 @@ cmd_setup() {
   _prompt_optional_features
   _log_optional_features
 
-  # Validate port 80 reachability for Let's Encrypt
   if [[ "$CERT_TYPE" == "letsencrypt" ]]; then
     [[ -n "$CERT_EMAIL" ]] || log_die "CERT_EMAIL is required for letsencrypt — set env or pass --email" 1
     _preflight_port80
   fi
 
-  # Create cert directories
   local cert_dir="${REPO_ROOT}/config/letsencrypt"
   if [[ "$DRY_RUN" -eq 1 ]]; then
     log_info "[dry-run] would create directory: $cert_dir"
@@ -276,10 +274,8 @@ cmd_setup() {
     log_info "created $cert_dir"
   fi
 
-  # Render nginx config from template
   _render_nginx_config
 
-  # Handle certificate type
   case "$CERT_TYPE" in
     letsencrypt)
       _setup_letsencrypt
@@ -295,7 +291,6 @@ cmd_setup() {
       ;;
   esac
 
-  # Validate nginx config
   _validate_nginx_config
 
   discord_alert "Domain setup completed for ${DOMAIN_NAME} (cert: ${CERT_TYPE})" 65280
@@ -354,7 +349,6 @@ _setup_provided_cert() {
     log_die "private key file not found: $KEY_PATH" 1
   fi
 
-  # Public trust check
   if ! openssl verify -untrusted "$CERT_PATH" "$CERT_PATH" >/dev/null 2>&1; then
     log_warn "certificate failed openssl verify — may not be trusted by clients"
   else
@@ -536,22 +530,18 @@ cmd_status() {
   _log_optional_features
   echo ""
 
-  # DNS resolution
   _status_dns "$DOMAIN_NAME" "primary"
   _status_dns "$ADMIN_DOMAIN" "admin"
   _status_dns "$OJ_DOMAIN" "oj"
   _status_dns "$RANKING_DOMAIN" "ranking"
   echo ""
 
-  # Cert expiry
   _status_cert_expiry
   echo ""
 
-  # Renewal timer
   _status_renewal_timer
   echo ""
 
-  # HTTPS connectivity
   _status_connectivity "$DOMAIN_NAME" "primary"
   _status_connectivity "$ADMIN_DOMAIN" "admin"
   _status_connectivity "$OJ_DOMAIN" "oj"
@@ -588,7 +578,6 @@ _status_cert_expiry() {
   expiry="$(openssl x509 -enddate -noout -in "$cert_file" 2>/dev/null | sed 's/notAfter=//')"
   if [[ -n "$expiry" ]]; then
     log_info "Certificate expiry: $expiry"
-    # Calculate days remaining
     local expiry_epoch now_epoch days_left
     expiry_epoch="$(date -d "$expiry" +%s 2>/dev/null || date -j -f "%b %d %H:%M:%S %Y %Z" "$expiry" +%s 2>/dev/null || echo 0)"
     now_epoch="$(date +%s)"

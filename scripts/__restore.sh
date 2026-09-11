@@ -152,7 +152,6 @@ if [[ "$RESTORE_TARGET" == "scratch" ]]; then
   }
   trap cleanup_scratch EXIT INT TERM
 
-  # Create scratch volume
   log_info "Creating scratch volume: $SCRATCH_VOLUME"
   if docker volume create "$SCRATCH_VOLUME" 2>/dev/null; then
     log_info "Scratch volume created"
@@ -160,7 +159,6 @@ if [[ "$RESTORE_TARGET" == "scratch" ]]; then
     log_warn "Failed to create scratch volume (may already exist)"
   fi
 
-  # Run scratch postgres container
   log_info "Starting scratch postgres container..."
   docker run --name "$SCRATCH_CONTAINER" \
     -e POSTGRES_USER="$POSTGRES_USER_VAL" \
@@ -168,7 +166,6 @@ if [[ "$RESTORE_TARGET" == "scratch" ]]; then
     -e POSTGRES_DB="$POSTGRES_DB_VAL" \
     -d postgres:15 >/dev/null 2>&1 || log_die "Failed to start scratch postgres container"
 
-  # Wait for postgres to be ready
   log_info "Waiting for scratch postgres to be ready..."
   for i in $(seq 1 30); do
     if docker exec "$SCRATCH_CONTAINER" pg_isready -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" 2>/dev/null; then
@@ -178,13 +175,11 @@ if [[ "$RESTORE_TARGET" == "scratch" ]]; then
     sleep 1
   done
 
-  # Copy dump into scratch container and restore
   local_dump="/tmp/restore-${TS_BASE}.dump"
   log_info "Copying dump into scratch container..."
   docker cp "$DUMP_FILE" "${SCRATCH_CONTAINER}:${local_dump}" >/dev/null 2>&1 || \
     log_warn "Failed to copy dump to scratch container"
 
-  # Restore the database dump
   log_info "Restoring database dump into scratch postgres..."
   if ! docker exec -e PGPASSWORD="$POSTGRES_PASSWORD_VAL" "$SCRATCH_CONTAINER" \
     pg_restore -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -Fc "$local_dump" 2>/tmp/cms-restore-pgrestore.log; then
@@ -194,7 +189,6 @@ if [[ "$RESTORE_TARGET" == "scratch" ]]; then
   fi
   log_info "Database restore complete"
 
-  # Restore volumes if --with-volumes was provided
   if [[ -n "$WITH_VOLUMES" ]]; then
     if [[ ! -f "$WITH_VOLUMES" ]]; then
       log_warn "Volume tar file not found: $WITH_VOLUMES — skipping volume restore"
@@ -208,19 +202,15 @@ if [[ "$RESTORE_TARGET" == "scratch" ]]; then
     fi
   fi
 
-  # Verification counts against scratch container
   log_info "Running verification queries against scratch container..."
 
   sub_count="0"
   lob_count="0"
 
-  # Count submissions
   sub_count="$(docker exec "$SCRATCH_CONTAINER" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c 'SELECT count(*) FROM submissions;' 2>/dev/null | tr -d ' \r\n' || echo '0')"
 
-  # Count pg_largeobject entries
   lob_count="$(docker exec "$SCRATCH_CONTAINER" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c 'SELECT count(*) FROM pg_largeobject;' 2>/dev/null | tr -d ' \r\n' || echo '0')"
 
-  # List top 10 tables by rowcount
   log_info "Top 10 tables by rowcount:"
   docker exec "$SCRATCH_CONTAINER" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c \
     "SELECT schemaname, relname, n_tup_ins + n_tup_upd + n_tup_del as total_changes FROM pg_stat_user_tables ORDER BY total_changes DESC LIMIT 10;" 2>/dev/null | \
@@ -244,13 +234,11 @@ fi
 # ---------------------------------------------------------------------------
 log_info "Restoring into live cms-database..."
 
-# Copy dump into the live container
 local_dump="/tmp/live-restore-${TS_BASE}.dump"
 log_info "Copying dump into live container..."
 docker cp "$DUMP_FILE" "${CONTAINER_DB}:${local_dump}" >/dev/null 2>&1 || \
   log_warn "Failed to copy dump to live container"
 
-# Restore the database dump
 log_info "Restoring database dump into live postgres..."
 if ! docker exec -e PGPASSWORD="$POSTGRES_PASSWORD_VAL" "$CONTAINER_DB" \
   pg_restore -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -Fc "$local_dump" 2>/tmp/cms-restore-pgrestore.log; then
@@ -260,7 +248,6 @@ if ! docker exec -e PGPASSWORD="$POSTGRES_PASSWORD_VAL" "$CONTAINER_DB" \
 fi
 log_info "Database restore complete"
 
-# Restore volumes if --with-volumes was provided
 if [[ -n "$WITH_VOLUMES" ]]; then
   if [[ ! -f "$WITH_VOLUMES" ]]; then
     log_warn "Volume tar file not found: $WITH_VOLUMES — skipping volume restore"
@@ -274,19 +261,15 @@ if [[ -n "$WITH_VOLUMES" ]]; then
   fi
 fi
 
-# Verification counts against live container
 log_info "Running verification queries against live container..."
 
 sub_count="0"
 lob_count="0"
 
-# Count submissions
 sub_count="$(docker exec "$CONTAINER_DB" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c 'SELECT count(*) FROM submissions;' 2>/dev/null | tr -d ' \r\n' || echo '0')"
 
-# Count pg_largeobject entries
 lob_count="$(docker exec "$CONTAINER_DB" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c 'SELECT count(*) FROM pg_largeobject;' 2>/dev/null | tr -d ' \r\n' || echo '0')"
 
-# List top 10 tables by rowcount
 log_info "Top 10 tables by rowcount:"
 docker exec "$CONTAINER_DB" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c \
   "SELECT schemaname, relname, n_tup_ins + n_tup_upd + n_tup_del as total_changes FROM pg_stat_user_tables ORDER BY total_changes DESC LIMIT 10;" 2>/dev/null | \

@@ -237,7 +237,6 @@ check_env() {
     # Also check CONTEST_ID via ACTIVE_CONTEST_ID alias if needed — but spec
     # says contest→CONTEST_ID; also check ACTIVE_CONTEST_ID emptiness as hint.
     if [[ -z "$cid" ]]; then
-      # Check if ACTIVE_CONTEST_ID / CONTESTS_DEPLOY_CONFIG present as fallback hint
       contest_issues+=("CONTEST_ID empty (set CONTEST_ID numeric in config.toml [contest])")
     elif ! [[ "$cid" =~ ^[0-9]+$ ]]; then
       contest_issues+=("CONTEST_ID='${cid}' not numeric")
@@ -412,7 +411,6 @@ check_ports() {
     detail=$(IFS=', '; echo "${busy[*]}")
     record_result "port collisions" "WARN" "port(s) ${detail} already bound"
   else
-    # Build port list for PASS detail
     port_list=$(IFS=','; echo "${ports[*]}")
     record_result "port collisions" "PASS" "ports ${port_list} free"
   fi
@@ -472,7 +470,6 @@ for i in "${!CHECK_NAMES[@]}"; do
   local_name="${CHECK_NAMES[$i]}"
   local_status="${CHECK_STATUS[$i]}"
   local_detail="${CHECK_DETAIL[$i]}"
-  # Truncate detail to fit table width
   local_detail_trunc="${local_detail:0:44}"
   printf '│ %-23s │ %-6s │ %-44s │\n' "$local_name" "$local_status" "$local_detail_trunc"
 done

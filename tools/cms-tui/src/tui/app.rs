@@ -334,8 +334,6 @@ impl Default for App {
 }
 
 impl App {
-    // --- Core Execution Logic ---
-
     /// Runs a command, dropping to TTY for interactive or verbose output.
     ///
     /// # Errors

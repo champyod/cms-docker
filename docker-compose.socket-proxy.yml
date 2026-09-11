@@ -11,7 +11,6 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
-      # ── Allow list (plan §8) ────────────────────────────────
       # Container lifecycle (GET list, POST start/stop/restart)
       CONTAINERS: 1
       POST: 1
@@ -24,7 +23,6 @@ services:
       STATS: 1
       INFO: 1
       EVENTS: 1
-      # ── Deny list (explicit zero) ───────────────────────────
       # No image pull/build
       IMAGES: 0
       BUILD: 0
@@ -51,7 +49,6 @@ services:
     expose:
       - "2375"
 
-# ── Networks ──────────────────────────────────────────────────────
 networks:
   cms-network:
     name: cms-network

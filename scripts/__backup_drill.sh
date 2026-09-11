@@ -77,14 +77,11 @@ if ! command -v docker >/dev/null 2>&1; then
   log_die "docker not found in PATH — cannot run backup drill"
 fi
 
-# Check if cms-database container is running
 if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$CONTAINER_DB"; then
   log_warn "WARNING: cms-database container not running — backup drill may fail"
   log_warn "         ensure docker daemon has cms-database running and .env exists with creds"
-  # We still proceed but will likely fail at restore time
 fi
 
-# Check .env exists with credentials
 if [[ ! -f "${REPO_ROOT}/.env" ]]; then
   log_die ".env not found — cannot determine PostgreSQL credentials for drill (run: make env)"
 fi
@@ -95,7 +92,6 @@ fi
 DRILLS_DIR="${REPO_ROOT}/drills"
 mkdir -p "$DRILLS_DIR"
 
-# Temporarily override BACKUP_DIR to drills directory
 DRILLS_BACKUP_ROOT="${DRILLS_DIR}/backups"
 DRILLS_BACKUP_DB_DIR="${DRILLS_BACKUP_ROOT}/db"
 DRILLS_BACKUP_VOL_DIR="${DRILLS_BACKUP_ROOT}/volumes"
@@ -103,10 +99,7 @@ DRILLS_MANIFEST="${DRILLS_BACKUP_ROOT}/manifest.json"
 
 mkdir -p "$DRILLS_BACKUP_DB_DIR" "$DRILLS_BACKUP_VOL_DIR"
 
-# Run backup with BACKUP_DIR pointing to drills
 log_info "Running backup into drills/ subdir ..."
-# We'll run the backup script with BACKUP_DIR overridden
-# Source the backup script's logic or run it with env var
 export BACKUP_DIR="$DRILLS_BACKUP_ROOT"
 export BACKUP_MAX_COUNT="${BACKUP_MAX_COUNT:-50}"
 export BACKUP_MAX_AGE_DAYS="${BACKUP_MAX_AGE_DAYS:-10}"
@@ -114,20 +107,10 @@ export BACKUP_MAX_SIZE_GB="${BACKUP_MAX_SIZE_GB:-5}"
 export DISCORD_WEBHOOK_URL="${DISCORD_WEBHOOK_URL:-}"
 export ROLE_ID="${DISCORD_ROLE_ID:-}"
 
-# Run the backup using the script but with BACKUP_DIR redirected
-# We need to source the script's env loading and then run run_backup
-# Actually, let's just call the backup script with the env already set
-# The backup script sources .env itself, so we just need to set BACKUP_DIR
-
-# Let's run cms-backup.sh with BACKUP_DIR already exported
-# But we need to be careful — the backup script will try to connect to the database
-# and may fail if the container isn't running. Let's check first.
-
 if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$CONTAINER_DB"; then
   log_warn "cms-database container not running — backup will likely fail, but proceeding anyway"
 fi
 
-# Run the backup
 bash "${SCRIPT_DIR}/cms-backup.sh" "" 2>&1 || log_warn "Backup script exited with non-zero (may be expected if db issues)"
 
 # ---------------------------------------------------------------------------
@@ -139,7 +122,6 @@ fi
 
 log_info "Manifest found at $DRILLS_MANIFEST"
 
-# Get the latest timestamp entry from manifest
 # Manifest format: {ts, db_dump, db_sha256, vol_tar, vol_sha256, pg_version, sizes}
 LATEST_TS="$(python3 -c "
 import json
@@ -156,7 +138,6 @@ if [[ "$LATEST_TS" == "unknown" ]]; then
   log_die "Could not extract timestamp from manifest"
 fi
 
-# Find the dump file matching this timestamp
 DUMP_FILE="${DRILLS_BACKUP_DB_DIR}/cmsdb-${LATEST_TS}.dump"
 if [[ ! -f "$DUMP_FILE" ]]; then
   log_die "Dump file not found: $DUMP_FILE"
@@ -164,8 +145,6 @@ fi
 
 log_info "Using dump file: $DUMP_FILE"
 
-# Extract expected counts from manifest for later verification
-# We need: db_bytes, vol_bytes from the sizes field
 EXPECTED_DB_BYTES="$(python3 -c "
 import json
 with open('$DRILLS_MANIFEST') as f:
@@ -210,11 +189,9 @@ else
   RESTORE_EXIT=0
 fi
 
-# Get the verification counts from the restore output
 ACTUAL_SUB_COUNT="0"
 ACTUAL_LOB_COUNT="0"
 
-# Parse the verification counts from the restore output
 if echo "$RESTORE_OUTPUT" | grep -q "Submissions count:"; then
   ACTUAL_SUB_COUNT="$(echo "$RESTORE_OUTPUT" | grep "Submissions count:" | awk '{print $NF}')"
   ACTUAL_LOB_COUNT="$(echo "$RESTORE_OUTPUT" | grep "pg_largeobject entries:" | awk '{print $NF}')"
@@ -228,13 +205,11 @@ log_info "Expected from manifest: db_bytes=$EXPECTED_DB_BYTES vol_bytes=$EXPECTE
 # ---------------------------------------------------------------------------
 PASS=1
 
-# Check submissions count > 0
 if [[ "$ACTUAL_SUB_COUNT" -le 0 ]]; then
   log_warn "FAIL: Submissions count is $ACTUAL_SUB_COUNT, expected > 0"
   PASS=0
 fi
 
-# Check pg_largeobject count > 0
 if [[ "$ACTUAL_LOB_COUNT" -le 0 ]]; then
   log_warn "FAIL: pg_largeobject count is $ACTUAL_LOB_COUNT, expected > 0"
   PASS=0
@@ -251,6 +226,5 @@ if [[ "$PASS" -eq 1 ]]; then
   exit 0
 else
   log_warn "❌ DRILL FAIL: one or more count assertions failed"
-  # Still clean up
   exit 1
 fi

@@ -137,7 +137,6 @@ file_size_bytes() {
 }
 
 get_pg_version() {
-  # Try inside container first
   local ver=""
   if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$CONTAINER_DB"; then
     ver="$(docker exec -e PGPASSWORD="$POSTGRES_PASSWORD_VAL" "$CONTAINER_DB" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c 'SHOW server_version;' 2>/dev/null | tr -d ' \r\n' || true)"
@@ -207,7 +206,6 @@ apply_rotation() {
     mapfile -t timestamps < <(list_backup_timestamps)
     for ts in "${timestamps[@]}"; do
       if (( ${#timestamps[@]} <= 1 )); then break; fi
-      # Find the oldest file's mtime among the set
       local ref_file=""
       if [[ -f "${BACKUP_DB_DIR}/cmsdb-${ts}.dump" ]]; then
         ref_file="${BACKUP_DB_DIR}/cmsdb-${ts}.dump"
@@ -233,7 +231,6 @@ apply_rotation() {
   # 3) By total size
   if [[ "$BACKUP_MAX_SIZE_GB" =~ ^[0-9]+$ ]] && (( BACKUP_MAX_SIZE_GB > 0 )); then
     local max_bytes=$(( BACKUP_MAX_SIZE_GB * 1024 * 1024 * 1024 ))
-    # Use du -sb if available
     local total_bytes
     total_bytes="$(du -sb "${BACKUP_DB_DIR}" "${BACKUP_VOL_DIR}" 2>/dev/null | awk '{s+=$1} END{print s+0}')"
     if [[ -z "$total_bytes" || "$total_bytes" == "0" ]]; then
@@ -241,11 +238,9 @@ apply_rotation() {
       total_bytes="${total_bytes:-0}"
     fi
     mapfile -t timestamps < <(list_backup_timestamps)
-    # Sort timestamps ascending already
     while (( total_bytes > max_bytes )); do
       if (( ${#timestamps[@]} <= 1 )); then break; fi
       local oldest="${timestamps[0]}"
-      # Calculate size of oldest set
       local set_bytes=0
       for f in "${BACKUP_DB_DIR}/cmsdb-${oldest}.dump" "${BACKUP_DB_DIR}/cmsdb-${oldest}.dump.sha256" "${BACKUP_VOL_DIR}/cms-data-${oldest}.tar.gz" "${BACKUP_VOL_DIR}/cms-data-${oldest}.tar.gz.sha256"; do
         if [[ -f "$f" ]]; then
@@ -342,7 +337,6 @@ run_backup() {
 
   # 2) Volume backup via helper container (ro mount)
   log_info "Archiving volume $VOLUME_DATA ..."
-  # Use helper container mounting volume read-only
   local vol_image="alpine:3.19"
   # Pull quietly if needed (ignore failure — try busybox fallback)
   docker pull "$vol_image" >/dev/null 2>&1 || true
@@ -414,7 +408,6 @@ PY
       mv -- "$tmp_manifest" "$MANIFEST_FILE"
       chmod 600 "$MANIFEST_FILE" 2>/dev/null || true
     fi
-    # naive — log warning
     log_warn "python3 not found — manifest update is approximate"
   fi
   chmod 600 "$MANIFEST_FILE" 2>/dev/null || true

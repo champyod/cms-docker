@@ -1055,37 +1055,11 @@ If you modify the CMS Python source:
 
 ## ENVIRONMENT VARIABLES
 
-### Source of Truth: `.env.core`
-
-```bash
-POSTGRES_USER=cmsuser
-POSTGRES_PASSWORD=YOUR_DB_PASSWORD
-POSTGRES_DB=cmsdb
-POSTGRES_PORT_EXTERNAL=5432
-```
-
-### Admin Panel: `.env.admin`
-
-```bash
-ADMIN_NEXT_PORT_EXTERNAL=8891
-DEPLOYMENT_TYPE=img|src
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
-DISCORD_ROLE_ID=123456789
-```
-
 ### Generated: `admin-panel/.env`
 
 ```bash
 DATABASE_URL="postgresql://cmsuser:password@localhost:5432/cmsdb"
 AUTH_SECRET=your-secret-here   # Optional, random if missing
-```
-
-### Generation Flow
-
-```
-.env.core + .env.admin + .env.contest + .env.worker + .env.infra
-                    ↓ make env
-              .env (combined) + admin-panel/.env + config/cms.toml
 ```
 
 ---

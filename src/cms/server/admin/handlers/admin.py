@@ -32,7 +32,6 @@ logger = logging.getLogger(__name__)
 
 
 def _is_superadmin(admin) -> bool:
-    """Check whether the admin belongs to the Superadmin group."""
     return any(ag.group.name == 'Superadmin' for ag in admin.admin_groups)
 
 

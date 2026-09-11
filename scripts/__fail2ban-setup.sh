@@ -80,7 +80,6 @@ cmd_check() {
 
   local ok=1
 
-  # Check source config exists
   printf '  %-40s' "Jail config source:"
   if [[ -f "$JAIL_SOURCE" ]]; then
     printf 'EXISTS (%s)\n' "$JAIL_SOURCE"
@@ -89,7 +88,6 @@ cmd_check() {
     ok=0
   fi
 
-  # Check jail config syntax (basic validation)
   printf '  %-40s' "Jail config syntax:"
   if [[ -f "$JAIL_SOURCE" ]]; then
     if grep -q '\[nginx-http-auth\]' "$JAIL_SOURCE" && grep -q '\[nginx-limit-req\]' "$JAIL_SOURCE"; then
@@ -102,7 +100,6 @@ cmd_check() {
     printf 'SKIP (no config)\n'
   fi
 
-  # Check fail2ban is installed
   printf '  %-40s' "fail2ban installed:"
   if command -v fail2ban-client >/dev/null 2>&1; then
     local version
@@ -113,7 +110,6 @@ cmd_check() {
     ok=0
   fi
 
-  # Check log paths are writable
   for log_path in "${LOG_PATHS[@]}"; do
     printf '  %-40s' "Log path $log_path:"
     if [[ -d "$log_path" ]]; then
@@ -127,7 +123,6 @@ cmd_check() {
     fi
   done
 
-  # Check destination directory
   printf '  %-40s' "Target dir /etc/fail2ban/jail.d/:"
   if [[ -d "/etc/fail2ban/jail.d" ]]; then
     printf 'EXISTS\n'
@@ -135,7 +130,6 @@ cmd_check() {
     printf 'NOT FOUND (will be created on --apply)\n'
   fi
 
-  # Check if jail already deployed
   printf '  %-40s' "Deployed jail config:"
   if [[ -f "$JAIL_DEST" ]]; then
     printf 'EXISTS\n'
@@ -158,7 +152,6 @@ cmd_apply() {
   log_info "fail2ban apply mode"
   echo ""
 
-  # Verify source exists
   if [[ ! -f "$JAIL_SOURCE" ]]; then
     log_die "jail config not found: $JAIL_SOURCE" 1
   fi
@@ -170,29 +163,24 @@ cmd_apply() {
     return 1
   fi
 
-  # Check if we can sudo
   if ! sudo -n true 2>/dev/null; then
     log_warn "sudo not available without password — cannot deploy to /etc/fail2ban/"
     log_warn "Run with: sudo $0 --apply"
     return 1
   fi
 
-  # Create target directory if needed
   sudo mkdir -p /etc/fail2ban/jail.d
 
-  # Deploy jail config
   sudo cp -f "$JAIL_SOURCE" "$JAIL_DEST"
   sudo chmod 644 "$JAIL_DEST"
   log_info "deployed $JAIL_SOURCE -> $JAIL_DEST"
 
-  # Reload fail2ban
   if sudo fail2ban-client reload 2>/dev/null; then
     log_info "fail2ban reloaded"
   else
     log_warn "fail2ban-client reload failed — restart manually: systemctl restart fail2ban"
   fi
 
-  # Verify jails are active
   if sudo fail2ban-client status 2>/dev/null; then
     log_info "fail2ban status:"
     sudo fail2ban-client status 2>/dev/null || true

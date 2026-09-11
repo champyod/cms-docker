@@ -327,7 +327,6 @@ export function GroupList({
         </TableBody>
       </Table>
 
-      {/* Create / Edit Modal */}
       <Dialog
         open={isModalOpen}
         onOpenChange={(open) => {
@@ -486,7 +485,6 @@ export function GroupList({
         </div>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
       <Dialog
         open={isDeleteOpen}
         onOpenChange={(open) => {

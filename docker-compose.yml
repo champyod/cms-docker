@@ -2,9 +2,6 @@
 # Services orchestrate the Competitive Management System platform
 
 services:
-  # ============================================================
-  # CORE SERVICES (profiles: core)
-  # ============================================================
 
   # PostgreSQL Database
   database:
@@ -196,10 +193,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 60s
-
-  # ============================================================
-  # CONTEST SERVICES (profiles: contest)
-  # ============================================================
 
   # CMS Evaluation Service - Contest scoped evaluation queue
   evaluation-service:
@@ -551,10 +544,6 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.cms-printing.rule=Host(`${PRINTING_DOMAIN:-printing.cms.local}`)"
 
-  # ============================================================
-  # WORKER SERVICES (profiles: worker)
-  # ============================================================
-
   # CMS Worker - Evaluates submissions in isolated sandboxes
   worker:
     build:
@@ -680,10 +669,6 @@ services:
       retries: 3
       start_period: 20s
 
-  # ============================================================
-  # MONITOR SERVICES (profiles: monitor)
-  # ============================================================
-
   monitor:
     build:
       context: .
@@ -717,18 +702,10 @@ services:
     networks:
       - cms-network
 
-# ============================================================
-# NETWORKS
-# ============================================================
-
 networks:
   cms-network:
     name: cms-network
     driver: bridge
-
-# ============================================================
-# VOLUMES
-# ============================================================
 
 volumes:
   cms-database-data:

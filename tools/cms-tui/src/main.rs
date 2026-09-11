@@ -19,11 +19,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     match args.command {
         Some(cmd) => {
-            // CLI Mode
             cli::handle_command(cmd)?;
         }
         None => {
-            // TUI Mode
             tui::run()?;
         }
     }

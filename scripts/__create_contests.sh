@@ -49,7 +49,6 @@ usage() {
     exit 1
 }
 
-# Parse arguments
 FILE=""
 TYPE=""
 DRY_RUN=false
@@ -78,7 +77,6 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Validate file
 if [ -z "$FILE" ]; then
     echo -e "${RED}Error: Input file required${NC}"
     usage
@@ -89,7 +87,6 @@ if [ ! -f "$FILE" ]; then
     exit 1
 fi
 
-# Auto-detect file type
 if [ -z "$TYPE" ]; then
     case "$FILE" in
         *.yaml|*.yml)
@@ -110,14 +107,12 @@ echo "File: $FILE"
 echo "Type: $TYPE"
 echo ""
 
-# Check if running in Docker
 if [ -f "/.dockerenv" ]; then
     DOCKER_EXEC=""
 else
     DOCKER_EXEC="docker exec -i cms-log-service"
 fi
 
-# Function to create a single contest
 create_contest() {
     local name="$1"
     local description="$2"
@@ -141,7 +136,6 @@ create_contest() {
         return 0
     fi
     
-    # Create Python script to add contest
     local python_script=$(cat <<EOF
 import datetime
 from cms.db import Contest, SessionGen
@@ -172,7 +166,6 @@ with SessionGen() as session:
 EOF
     )
     
-    # Execute via CMS
     if [ -z "$DOCKER_EXEC" ]; then
         echo "$python_script" | python3
     else
@@ -180,9 +173,7 @@ EOF
     fi
 }
 
-# Process YAML file
 if [ "$TYPE" = "yaml" ]; then
-    # Check if yq is available
     if ! command -v yq &> /dev/null; then
         echo -e "${RED}Error: 'yq' is required for YAML processing${NC}"
         echo "Install with: sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64"
@@ -190,12 +181,10 @@ if [ "$TYPE" = "yaml" ]; then
         exit 1
     fi
     
-    # Get number of contests
     CONTEST_COUNT=$(yq '.contests | length' "$FILE")
     echo "Found $CONTEST_COUNT contest(s) to create"
     echo ""
     
-    # Process each contest
     for i in $(seq 0 $((CONTEST_COUNT - 1))); do
         NAME=$(yq ".contests[$i].name" "$FILE")
         DESC=$(yq ".contests[$i].description" "$FILE")
@@ -210,21 +199,17 @@ if [ "$TYPE" = "yaml" ]; then
         create_contest "$NAME" "$DESC" "$START" "$END" "$TOKEN_MODE" "$TOKEN_MAX" "$TOKEN_GEN" "$MAX_SUB" "$MIN_INT"
     done
     
-# Process JSON file
 elif [ "$TYPE" = "json" ]; then
-    # Check if jq is available
     if ! command -v jq &> /dev/null; then
         echo -e "${RED}Error: 'jq' is required for JSON processing${NC}"
         echo "Install with: sudo apt-get install jq"
         exit 1
     fi
     
-    # Get number of contests
     CONTEST_COUNT=$(jq '.contests | length' "$FILE")
     echo "Found $CONTEST_COUNT contest(s) to create"
     echo ""
     
-    # Process each contest
     for i in $(seq 0 $((CONTEST_COUNT - 1))); do
         NAME=$(jq -r ".contests[$i].name" "$FILE")
         DESC=$(jq -r ".contests[$i].description" "$FILE")

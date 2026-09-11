@@ -190,7 +190,6 @@ def get_effective_permissions(admin_id: int, sql_session) -> frozenset[str]:
             return perms
 
     try:
-        # 1. Group-inherited permissions
         group_rows = (
             sql_session.query(Permission.key)
             .join(GroupPermission,
@@ -202,7 +201,6 @@ def get_effective_permissions(admin_id: int, sql_session) -> frozenset[str]:
         )
         result: set[str] = {row[0] for row in group_rows}
 
-        # 2. Explicit allow overrides
         allow_rows = (
             sql_session.query(Permission.key)
             .join(AdminPermissionOverride,
@@ -213,7 +211,6 @@ def get_effective_permissions(admin_id: int, sql_session) -> frozenset[str]:
         )
         result |= {row[0] for row in allow_rows}
 
-        # 3. Explicit deny overrides
         deny_rows = (
             sql_session.query(Permission.key)
             .join(AdminPermissionOverride,

@@ -79,24 +79,19 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Validate mode
 if [[ -n "$MODE" && "$MODE" != "img" && "$MODE" != "src" ]]; then
   log_die "invalid --mode: $MODE (expected img|src)" 2
 fi
 
-# Resolve default mode from .env DEPLOYMENT_TYPE if not given
 if [[ -z "$MODE" ]]; then
   if [[ -f "${REPO_ROOT}/.env" ]]; then
     MODE=$(grep -E '^DEPLOYMENT_TYPE=' "${REPO_ROOT}/.env" | tail -n1 | cut -d= -f2 | cut -d'#' -f1 | tr -d '[:space:]' | tr -d '"' | tr -d "'" || true)
   fi
   [[ -z "$MODE" ]] && MODE="img"
 fi
-# Normalize
 MODE=$(printf '%s' "$MODE" | tr '[:upper:]' '[:lower:]' | xargs)
 
-# Parse stacks
 IFS=',' read -ra STACK_ARR <<< "$STACKS"
-# trim + validate
 VALID_STACKS="core admin contest worker monitor"
 declare -a STACKS_NORM=()
 for s in "${STACK_ARR[@]}"; do
@@ -105,7 +100,6 @@ for s in "${STACK_ARR[@]}"; do
   if ! printf '%s' "$VALID_STACKS" | grep -qw "$s"; then
     log_die "invalid stack in --stacks: $s (expected core|admin|contest|worker|monitor)" 2
   fi
-  # de-dup
   skip=0; for e in "${STACKS_NORM[@]}"; do [[ "$e" == "$s" ]] && skip=1; done; [[ $skip -eq 1 ]] && continue
   STACKS_NORM+=("$s")
 done
@@ -231,7 +225,6 @@ wait_healthy() {
       # container not yet created
       :
     fi
-    # Check if container is in unhealthy / exited
     local state_status
     state_status=$(docker inspect --format='{{.State.Status}}' "$container" 2>/dev/null || echo "unknown")
     if [[ "$state_status" == "exited" || "$state_status" == "dead" ]]; then
@@ -265,7 +258,6 @@ curl_wait() {
 resolve_contest_port() {
   # Prefer CONTEST_PORT_EXTERNAL if present, else ACTIVE_CONTEST_PORT, else default 8888
   local val=""
-  # Check compose file for env var names used in contest-web-server ports
   if grep -q 'CONTEST_PORT_EXTERNAL' "$COMPOSE_FILE" 2>/dev/null; then
     val="${CONTEST_PORT_EXTERNAL:-}"
     [[ -z "$val" ]] && val="${ACTIVE_CONTEST_PORT:-}"
@@ -337,7 +329,6 @@ if [[ ! -f "${REPO_ROOT}/.env" ]]; then
   exit 2
 fi
 
-# Load .env for checks (export)
 set -a
 # shellcheck disable=SC1090
 source "${REPO_ROOT}/.env" 2>/dev/null || true
@@ -375,7 +366,6 @@ for _v in POSTGRES_PASSWORD AUTH_SECRET SECRET_KEY; do
 done
 
 if [[ "$env_preflight_fail" -ne 0 ]]; then
-  # List which file defines what for hint
   printf '[FAIL] preflight env sanity failed — fix .env.* then run: make env\n' >&2
   exit 2
 fi
@@ -396,7 +386,6 @@ if [[ "$MODE" == "img" ]]; then
   log_info "ensure images: img mode — pulling (profiles:${STACKS_NORM[*]})"
   # shellcheck disable=SC2086
   docker compose -f "$COMPOSE_FILE" $COMPOSE_PROFILES_ARGS pull 2>&1 || true
-  # Verify core image exists locally
   CORE_IMAGE="ghcr.io/champyod/cms-docker-core:${IMG_TAG}"
   if ! docker image inspect "$CORE_IMAGE" >/dev/null 2>&1; then
     log_warn "image ${CORE_IMAGE} not found locally after pull — falling back to build with explicit warning"
@@ -415,13 +404,11 @@ fi
 log_info "image sizes before proceeding:"
 log_image_sizes
 
-# Re-check disk after pull/build
 require_disk_free_gb "$REPO_ROOT"
 
 # ===========================================================================
 # 4. Up sequence with per-service wait helpers
 # ===========================================================================
-# Track overall failure
 SMOKE_FAILED=0
 
 # Helper to run a check and record matrix
@@ -451,7 +438,6 @@ run_curl_wait() {
     record_matrix "$svc" "http" "PASS" "$dur"
   else
     record_matrix "$svc" "http" "FAIL" "$dur"
-    # Try to dump logs of corresponding container if mappable
     local container_guess=""
     case "$svc" in
       admin-next) container_guess="cms-admin-panel-next" ;;
@@ -526,7 +512,6 @@ if printf '%s\n' "${STACKS_NORM[@]}" | grep -qx "contest"; then
   # shellcheck disable=SC2086
   docker compose -f "$COMPOSE_FILE" --profile core --profile contest up -d 2>&1 || fail_mid_flow "compose up contest failed"
   CONTEST_PORT_VAL=$(resolve_contest_port)
-  # Documented: read docker-compose.yml at runtime to discover env name — already done via resolve_contest_port
   run_curl_wait "contest" "http://127.0.0.1:${CONTEST_PORT_VAL}/" 120 || true
   if [[ "$SMOKE_FAILED" -ne 0 ]]; then
     log_warn "contest checks had failures (see matrix)"
@@ -558,7 +543,6 @@ fi
 # ===========================================================================
 print_matrix
 
-# Record artifact note if any failures dumped
 if [[ -n "$FAIL_DIR" && -d "$FAIL_DIR" ]]; then
   log_warn "failure artifacts in ${FAIL_DIR}/ (docker logs --tail 100)"
 fi
@@ -567,13 +551,11 @@ fi
 # 6. Teardown (unless --keep)
 # ===========================================================================
 if [[ "$SMOKE_FAILED" -ne 0 ]]; then
-  # On any failure mid-flow we already have dump; now handle keep vs down
   print_matrix
   on_fail_teardown
   exit 1
 fi
 
-# Success path teardown
 teardown
 
 # ===========================================================================
