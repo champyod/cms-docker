@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { ensurePermission, getPermissions } from '@/lib/permissions';
+import { recordAudit } from '@/lib/audit';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { sanitize } from '@/lib/api-utils';
 import { buildDiagnosticsForLoadedTask, computeTaskDiagnostics } from '@/lib/task-diagnostics';
@@ -123,6 +124,12 @@ export async function createTask(data: TaskData): Promise<{ success: boolean; er
         ${sanitized.feedback_level ?? 'restricted'}::feedback_level, ${sanitized.score_precision ?? 0}, ${sanitized.score_mode ?? 'max'}::score_mode
       )
     `;
+    await recordAudit({
+      verb: 'task:create',
+      entity: 'task',
+      afterValues: sanitized,
+      result: 'success',
+    });
     revalidatePath('/[locale]/tasks', 'page');
     return { success: true };
   } catch (error) {
@@ -172,6 +179,13 @@ export async function updateTask(id: number, data: Partial<TaskData>): Promise<{
     const { standardFields, intervalFields } = splitTaskData(sanitized);
     if (Object.keys(standardFields).length > 0) await prisma.tasks.update({ where: { id }, data: standardFields });
     if (Object.keys(intervalFields).length > 0) await applyTaskIntervals(id, intervalFields);
+    await recordAudit({
+      verb: 'task:update',
+      entity: 'task',
+      entityId: String(id),
+      afterValues: sanitized,
+      result: 'success',
+    });
     revalidatePath('/[locale]/tasks', 'page');
     return { success: true };
   } catch (error) {
@@ -185,8 +199,16 @@ export async function updateTask(id: number, data: Partial<TaskData>): Promise<{
 
 export async function deleteTask(id: number): Promise<{ success: boolean; error?: string }> {
   await ensurePermission('task:delete');
+  const beforeRow = await prisma.tasks.findUnique({ where: { id } });
   try {
     await prisma.tasks.delete({ where: { id } });
+    await recordAudit({
+      verb: 'task:delete',
+      entity: 'task',
+      entityId: String(id),
+      beforeValues: beforeRow ?? undefined,
+      result: 'success',
+    });
     revalidatePath('/[locale]/tasks', 'page');
     return { success: true };
   } catch (error) {
@@ -203,6 +225,13 @@ export async function assignTaskToContest(taskId: number, contestId: number | nu
       num = (maxNum._max.num ?? 0) + 1;
     }
     await prisma.tasks.update({ where: { id: taskId }, data: { contest_id: contestId, num } });
+    await recordAudit({
+      verb: 'task:update',
+      entity: 'task',
+      entityId: String(taskId),
+      afterValues: { contest_id: contestId, num },
+      result: 'success',
+    });
     revalidatePath('/[locale]/tasks', 'page');
     revalidatePath('/[locale]/contests', 'page');
     return { success: true };

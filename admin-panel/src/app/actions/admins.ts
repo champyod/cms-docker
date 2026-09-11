@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { ensurePermission, getPermissions, invalidateAccessCache } from '@/lib/permissions';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { getSession } from '@/lib/auth';
+import { recordAudit } from '@/lib/audit';
 import { safeAdminSelect, type AdminWithLogin } from '@/lib/prisma-selects';
 import {
   formatStoredPassword,
@@ -57,13 +58,21 @@ export async function createAdmin(data: CreateAdminInput): Promise<ActionResult>
   const effectivePermissions = await getPermissions();
   const allowed = stripDisallowedFields('admins', data as unknown as Record<string, unknown>, effectivePermissions);
   try {
-    await prisma.admins.create({
+    const created = await prisma.admins.create({
       data: {
         name: allowed.name as string,
         username: allowed.username as string,
         authentication: await formatStoredPassword(data.passwordKind ?? DEFAULT_PASSWORD_KIND, allowed.password as string),
         enabled: true,
-      }
+      },
+      select: { id: true },
+    });
+    await recordAudit({
+      verb: 'admin:create',
+      entity: 'admin',
+      entityId: String(created.id),
+      afterValues: { username: allowed.username as string, name: allowed.name as string },
+      result: 'success',
     });
     revalidatePath('/[locale]/admins', 'page');
     return { success: true };
@@ -157,9 +166,18 @@ export async function updateAdmin(adminId: number, data: UpdateAdminInput): Prom
   }
 
   try {
+    const beforeAdmin = await prisma.admins.findUnique({ where: { id: adminId }, select: { name: true, enabled: true, username: true } });
     await prisma.admins.update({
       where: { id: adminId },
       data: await buildAdminUpdateData(allowed as unknown as UpdateAdminInput)
+    });
+    await recordAudit({
+      verb: 'admin:update',
+      entity: 'admin',
+      entityId: String(adminId),
+      beforeValues: beforeAdmin ? { name: beforeAdmin.name, enabled: beforeAdmin.enabled, username: beforeAdmin.username } : undefined,
+      afterValues: { changedKeys: Object.keys(allowed as Record<string, unknown>) },
+      result: 'success',
     });
     invalidateAccessCache(String(adminId));
     revalidatePath('/[locale]/admins', 'page');
@@ -188,7 +206,15 @@ export async function deleteAdmin(adminId: number): Promise<ActionResult> {
   }
 
   try {
+    const beforeDelete = await prisma.admins.findUnique({ where: { id: adminId }, select: { username: true, name: true, enabled: true } });
     await prisma.admins.delete({ where: { id: adminId } });
+    await recordAudit({
+      verb: 'admin:delete',
+      entity: 'admin',
+      entityId: String(adminId),
+      beforeValues: beforeDelete ? { username: beforeDelete.username, name: beforeDelete.name, enabled: beforeDelete.enabled } : undefined,
+      result: 'success',
+    });
     invalidateAccessCache(String(adminId));
     revalidatePath('/[locale]/admins', 'page');
     return { success: true };

@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { ensurePermission, getPermissions } from '@/lib/permissions';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { safeUserSelect } from '@/lib/prisma-selects';
+import { recordAudit } from '@/lib/audit';
 
 export async function getTeams() {
   await ensurePermission('team:list');
@@ -28,8 +29,15 @@ export async function createTeam(data: { code: string; name: string }) {
   const allowed = stripDisallowedFields('teams', data as Record<string, unknown>, perms);
 
   try {
-    await prisma.teams.create({
+    const team = await prisma.teams.create({
       data: allowed as { code: string; name: string },
+    });
+    await recordAudit({
+      verb: 'team:create',
+      entity: 'team',
+      entityId: String(team.id),
+      afterValues: allowed,
+      result: 'success',
     });
     revalidatePath('/[locale]/teams', 'page');
     return { success: true };
@@ -52,6 +60,13 @@ export async function updateTeam(teamId: number, data: { code?: string; name?: s
       where: { id: teamId },
       data: allowed as { code?: string; name?: string },
     });
+    await recordAudit({
+      verb: 'team:update',
+      entity: 'team',
+      entityId: String(teamId),
+      afterValues: allowed,
+      result: 'success',
+    });
     revalidatePath('/[locale]/teams', 'page');
     return { success: true };
   } catch (error) {
@@ -63,8 +78,22 @@ export async function updateTeam(teamId: number, data: { code?: string; name?: s
 export async function deleteTeam(teamId: number) {
   await ensurePermission('team:delete');
 
+  let beforeValues: unknown = undefined;
+  try {
+    beforeValues = await prisma.teams.findUnique({ where: { id: teamId } });
+  } catch {
+    beforeValues = undefined;
+  }
+
   try {
     await prisma.teams.delete({ where: { id: teamId } });
+    await recordAudit({
+      verb: 'team:delete',
+      entity: 'team',
+      entityId: String(teamId),
+      beforeValues,
+      result: 'success',
+    });
     revalidatePath('/[locale]/teams', 'page');
     return { success: true };
   } catch (error) {

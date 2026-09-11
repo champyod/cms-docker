@@ -10,6 +10,7 @@ import {
   DEFAULT_PASSWORD_KIND,
   type PasswordKind,
 } from '@/lib/password-format';
+import { recordAudit } from '@/lib/audit';
 import {
   prepareRow,
   shouldGeneratePassword,
@@ -147,6 +148,12 @@ export async function POST(req: NextRequest) {
     const passwordKind = isPasswordKind(body?.passwordKind) ? body.passwordKind : DEFAULT_PASSWORD_KIND;
     const outcome = await processBulkRows(rows, generationMode, contestId, passwordKind);
 
+    await recordAudit({
+      verb: 'user:create',
+      entity: 'user',
+      afterValues: { bulkCount: outcome.created.length, failedCount: outcome.failed.length, contestId: contestId || null },
+      result: 'success',
+    });
     revalidatePath('/[locale]/users', 'page');
     if (contestId) {
       revalidatePath('/[locale]/contests', 'page');

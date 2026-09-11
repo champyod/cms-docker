@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { ensurePermission, getPermissions } from '@/lib/permissions';
+import { recordAudit } from '@/lib/audit';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { storeFile } from '@/lib/fsobjects';
 
@@ -38,6 +39,12 @@ export async function addStatement(taskId: number, language: string, fileData: s
       DO UPDATE SET digest = ${allowed.digest}
     `;
 
+    await recordAudit({
+      verb: 'statement:create',
+      entity: 'statement',
+      afterValues: { task_id: taskId, language: allowed.language, digest: allowed.digest },
+      result: 'success',
+    });
     revalidatePath('/[locale]/tasks', 'page');
     return { success: true, digest: allowed.digest };
   } catch (error) {
@@ -49,9 +56,17 @@ export async function addStatement(taskId: number, language: string, fileData: s
 export async function deleteStatement(statementId: number) {
   await ensurePermission('statement:delete');
 
+  const beforeRow = await prisma.statements.findUnique({ where: { id: statementId } });
   try {
     await prisma.statements.delete({
       where: { id: statementId }
+    });
+    await recordAudit({
+      verb: 'statement:delete',
+      entity: 'statement',
+      entityId: String(statementId),
+      beforeValues: beforeRow ?? undefined,
+      result: 'success',
     });
     revalidatePath('/[locale]/tasks', 'page');
     return { success: true };
@@ -84,6 +99,12 @@ export async function addAttachment(taskId: number, filename: string, fileData: 
       DO UPDATE SET digest = ${digest}
     `;
 
+    await recordAudit({
+      verb: 'attachment:create',
+      entity: 'attachment',
+      afterValues: { task_id: taskId, filename, digest },
+      result: 'success',
+    });
     revalidatePath('/[locale]/tasks', 'page');
     return { success: true, digest };
   } catch (error) {
@@ -95,9 +116,17 @@ export async function addAttachment(taskId: number, filename: string, fileData: 
 export async function deleteAttachment(attachmentId: number) {
   await ensurePermission('attachment:delete');
 
+  const beforeRow = await prisma.attachments.findUnique({ where: { id: attachmentId } });
   try {
     await prisma.attachments.delete({
       where: { id: attachmentId }
+    });
+    await recordAudit({
+      verb: 'attachment:delete',
+      entity: 'attachment',
+      entityId: String(attachmentId),
+      beforeValues: beforeRow ?? undefined,
+      result: 'success',
     });
     revalidatePath('/[locale]/tasks', 'page');
     return { success: true };

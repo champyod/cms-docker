@@ -3,6 +3,7 @@ import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { cloneDatasetRecords } from '@/lib/dataset-cloning';
+import { recordAudit } from '@/lib/audit';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<Response> {
   const { authorized, response } = await verifyApiPermission('dataset:create');
@@ -14,6 +15,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const original = await prisma.datasets.findUnique({ where: { id }, include: { testcases: true, managers: true } });
     if (!original) return apiError({ message: 'Dataset not found', status: 404 });
     const newDataset = await cloneDatasetRecords(original, newDescription);
+    await recordAudit({
+      verb: 'dataset:create',
+      entity: 'dataset',
+      entityId: String((newDataset as { id?: number }).id ?? id),
+      afterValues: { clonedFrom: id, description: newDescription },
+      beforeValues: { sourceDatasetId: id, sourceDescription: original.description },
+      result: 'success',
+    });
     revalidatePath('/[locale]/tasks', 'page');
     return apiSuccess({ dataset: newDataset });
   } catch (error) {

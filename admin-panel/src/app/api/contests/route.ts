@@ -3,6 +3,7 @@ import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { validateContestData, intervalToString, CONSTRAINT_TO_FIELD_MAP, getConstraintErrorMessage } from '@/lib/contest-validation';
+import { recordAudit } from '@/lib/audit';
 
 export async function POST(req: NextRequest) {
   const { authorized, response } = await verifyApiPermission('contest:create');
@@ -85,6 +86,12 @@ export async function POST(req: NextRequest) {
       )
     `;
 
+    await recordAudit({
+      verb: 'contest:create',
+      entity: 'contest',
+      afterValues: { name: data.name, description: data.description },
+      result: 'success',
+    });
     revalidatePath('/[locale]/contests', 'page');
     return apiSuccess({ message: 'Contest created successfully' });
   } catch (error: unknown) {

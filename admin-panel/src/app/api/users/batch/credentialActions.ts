@@ -3,6 +3,7 @@ import type { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiError, apiSuccess } from '@/lib/api-utils';
 import { csvEscape, randomToken, writeCredsCsv } from '@/lib/creds-file';
+import { recordAudit } from '@/lib/audit';
 import {
   DEFAULT_PASSWORD_KIND,
   formatStoredPassword,
@@ -122,6 +123,12 @@ export async function handleRegenerate({ body, userIds }: BatchActionRequest): P
     updated.push(await regenerateUser(user, mode, passwordKind, localUsernames));
   }
 
+  await recordAudit({
+    verb: 'user:update',
+    entity: 'user',
+    afterValues: { action: 'batch-regenerate', mode, count: updated.length, userIds },
+    result: 'success',
+  });
   revalidatePath('/[locale]/users', 'page');
 
   if (updated.length === 0) {
@@ -213,6 +220,12 @@ export async function handleApplyCredentials({ body }: BatchActionRequest): Prom
     await applyCredentialUpdate(u, passwordKind, updated, failed);
   }
 
+  await recordAudit({
+    verb: 'user:update',
+    entity: 'user',
+    afterValues: { action: 'batch-apply-credentials', count: updated.length, failedCount: failed.length },
+    result: 'success',
+  });
   revalidatePath('/[locale]/users', 'page');
 
   if (updated.length === 0) {

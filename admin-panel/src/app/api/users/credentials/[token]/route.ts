@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyApiPermission } from '@/lib/api-utils';
+import { recordAudit } from '@/lib/audit';
 import { CREDS_FILE_PREFIX } from '@/lib/creds-file';
 import fs from 'fs/promises';
 import path from 'path';
@@ -41,6 +42,14 @@ export async function GET(
     const content = await fs.readFile(usedPath, 'utf-8');
 
     const timestamp = Date.now();
+
+    await recordAudit({
+      verb: 'password:reveal',
+      entity: 'user',
+      afterValues: { credentialBatchConsumed: true },
+      result: 'success',
+    });
+
     return new NextResponse(content, {
       status: 200,
       headers: {

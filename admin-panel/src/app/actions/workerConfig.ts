@@ -4,6 +4,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
+import { recordAudit } from '@/lib/audit';
 
 const HOST_RE = /^[a-zA-Z0-9]([a-zA-Z0-9_.-]{0,62}[a-zA-Z0-9])?$/;
 
@@ -147,7 +148,16 @@ export async function updateWorkers(workers: { host: string; port: number }[]) {
       return { success: false, error: 'Worker configuration block not found in cms.toml' };
     }
 
+    const previousBlock = extractWorkerBlock(content);
+    const previousWorkers = previousBlock ? parseWorkersFromBlock(previousBlock) : [];
     await fs.writeFile(configPath, updated);
+    await recordAudit({
+      verb: 'settings:update',
+      entity: 'worker_config',
+      beforeValues: { workers: previousWorkers },
+      afterValues: { workers },
+      result: 'success',
+    });
     return { success: true };
   } catch (error) {
     console.error('Failed to update workers', error);

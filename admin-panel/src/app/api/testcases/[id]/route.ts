@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
+import { recordAudit } from '@/lib/audit';
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<Response> {
   const { authorized, response } = await verifyApiPermission('testcase:update');
@@ -26,6 +27,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
        await prisma.testcases.update({ where: { id }, data: updateData });
     }
 
+    await recordAudit({
+      verb: 'testcase:update',
+      entity: 'testcase',
+      entityId: String(id),
+      afterValues: { changedKeys: Object.keys(data as Record<string, unknown>) },
+      result: 'success',
+    });
     revalidatePath('/[locale]/tasks', 'page');
     return apiSuccess({ message: 'Testcase updated successfully' });
   } catch (error) {
@@ -41,7 +49,15 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (Number.isNaN(id)) return apiError({ message: 'Invalid ID', status: 400 });
 
   try {
+    const beforeTestcase = await prisma.testcases.findUnique({ where: { id }, select: { codename: true, dataset_id: true } });
     await prisma.testcases.delete({ where: { id } });
+    await recordAudit({
+      verb: 'testcase:delete',
+      entity: 'testcase',
+      entityId: String(id),
+      beforeValues: beforeTestcase ? { codename: beforeTestcase.codename, dataset_id: beforeTestcase.dataset_id } : undefined,
+      result: 'success',
+    });
     revalidatePath('/[locale]/tasks', 'page');
     return apiSuccess({ message: 'Testcase deleted successfully' });
   } catch (error) {

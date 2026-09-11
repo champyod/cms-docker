@@ -6,6 +6,7 @@ import { ensurePermission, getPermissions } from '@/lib/permissions';
 import { stripDisallowedFields, getFieldAccess, type FieldAccess } from '@/lib/field-permissions';
 import { submissionsListInclude } from '@/lib/prisma-selects';
 import { revalidatePath } from 'next/cache';
+import { recordAudit } from '@/lib/audit';
 
 const SUBMISSIONS_PER_PAGE = 20;
 const EVALUATION_RPC_ENDPOINT = 'http://cms-admin-web-server:25000/rpc/EvaluationService/0/invalidate_submission';
@@ -84,6 +85,13 @@ export async function updateSubmissionComment(submissionId: number, comment: str
             where: { id: submissionId },
             data: { comment: allowed.comment as string }
         });
+        await recordAudit({
+          verb: 'submission:update',
+          entity: 'submission',
+          entityId: String(submissionId),
+          afterValues: { comment: allowed.comment },
+          result: 'success',
+        });
         revalidatePath('/[locale]/submissions');
       return { success: true };
   } catch (error) {
@@ -109,6 +117,14 @@ export async function toggleSubmissionOfficial(submissionId: number): Promise<Ac
             where: { id: submissionId },
             data: { official: !sub.official }
         });
+        await recordAudit({
+          verb: 'submission:update',
+          entity: 'submission',
+          entityId: String(submissionId),
+          beforeValues: { official: sub.official },
+          afterValues: { official: !sub.official },
+          result: 'success',
+        });
         revalidatePath('/[locale]/submissions');
         return { success: true };
   } catch (error) {
@@ -133,6 +149,13 @@ export async function recalculateSubmission(submissionId: number, type: RecalcTy
 
     await clearRecalculatedTables(submissionId, type);
 
+    await recordAudit({
+      verb: 'submission:recompute',
+      entity: 'submission',
+      entityId: String(submissionId),
+      afterValues: { type },
+      result: 'success',
+    });
     revalidatePath('/[locale]/submissions');
     return { success: true, message: 'Submission queued for recalculation' };
   } catch (error) {

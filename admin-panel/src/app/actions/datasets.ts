@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { ensurePermission, getPermissions } from '@/lib/permissions';
+import { recordAudit } from '@/lib/audit';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { cloneDatasetRecords } from '@/lib/dataset-cloning';
 import type { Prisma } from '@prisma/client';
@@ -48,6 +49,13 @@ export async function createDataset(
         autojudge: false,
       },
     });
+    await recordAudit({
+      verb: 'dataset:create',
+      entity: 'dataset',
+      entityId: String(dataset.id),
+      afterValues: { taskId, description: (allowed.description as string) ?? data.description, time_limit: data.time_limit ?? null, memory_limit: data.memory_limit ?? null, task_type: data.task_type ?? null, score_type: data.score_type ?? null },
+      result: 'success',
+    });
     revalidatePath('/[locale]/tasks', 'page');
     return { success: true, dataset };
   } catch (error) {
@@ -64,6 +72,13 @@ export async function cloneDataset(datasetId: number, newDescription: string): P
     });
     if (!original) return { success: false, error: 'Dataset not found' };
     const newDataset = await cloneDatasetRecords(original, newDescription);
+    await recordAudit({
+      verb: 'dataset:create',
+      entity: 'dataset',
+      entityId: String(newDataset.id),
+      afterValues: { sourceDatasetId: datasetId, newDescription },
+      result: 'success',
+    });
     revalidatePath('/[locale]/tasks', 'page');
     return { success: true, dataset: newDataset };
   } catch (error) {
@@ -81,6 +96,13 @@ export async function renameDataset(datasetId: number, description: string): Pro
     }
 
     await prisma.datasets.update({ where: { id: datasetId }, data: { description: allowed.description as string } });
+    await recordAudit({
+      verb: 'dataset:update',
+      entity: 'dataset',
+      entityId: String(datasetId),
+      afterValues: { description: allowed.description as string },
+      result: 'success',
+    });
     revalidatePath('/[locale]/tasks', 'page');
     return { success: true };
   } catch (error) {
@@ -98,7 +120,15 @@ export async function deleteDataset(datasetId: number): Promise<{ success: boole
     if (dataset?.tasks_datasets_task_idTotasks?.active_dataset_id === datasetId) {
       return { success: false, error: 'Cannot delete the active dataset' };
     }
+    const beforeRow = dataset;
     await prisma.datasets.delete({ where: { id: datasetId } });
+    await recordAudit({
+      verb: 'dataset:delete',
+      entity: 'dataset',
+      entityId: String(datasetId),
+      beforeValues: beforeRow ?? undefined,
+      result: 'success',
+    });
     revalidatePath('/[locale]/tasks', 'page');
     return { success: true };
   } catch (error) {
@@ -112,6 +142,13 @@ export async function activateDataset(datasetId: number): Promise<{ success: boo
     const dataset = await prisma.datasets.findUnique({ where: { id: datasetId } });
     if (!dataset) return { success: false, error: 'Dataset not found' };
     await prisma.tasks.update({ where: { id: dataset.task_id }, data: { active_dataset_id: datasetId } });
+    await recordAudit({
+      verb: 'dataset:switch',
+      entity: 'dataset',
+      entityId: String(datasetId),
+      afterValues: { task_id: dataset.task_id, active_dataset_id: datasetId },
+      result: 'success',
+    });
     revalidatePath('/[locale]/tasks', 'page');
     return { success: true };
   } catch (error) {
@@ -131,6 +168,13 @@ export async function toggleAutojudge(datasetId: number): Promise<{ success: boo
     const dataset = await prisma.datasets.findUnique({ where: { id: datasetId } });
     if (!dataset) return { success: false, error: 'Dataset not found' };
     await prisma.datasets.update({ where: { id: datasetId }, data: { autojudge: !dataset.autojudge } });
+    await recordAudit({
+      verb: 'dataset:update',
+      entity: 'dataset',
+      entityId: String(datasetId),
+      afterValues: { autojudge: !dataset.autojudge },
+      result: 'success',
+    });
     revalidatePath('/[locale]/tasks', 'page');
     return { success: true };
   } catch (error) {
@@ -160,6 +204,13 @@ export async function updateDataset(
     }
 
     await prisma.datasets.update({ where: { id: datasetId }, data: updateData as Prisma.datasetsUpdateInput });
+    await recordAudit({
+      verb: 'dataset:update',
+      entity: 'dataset',
+      entityId: String(datasetId),
+      afterValues: updateData,
+      result: 'success',
+    });
     revalidatePath('/[locale]/tasks', 'page');
     return { success: true };
   } catch (error) {

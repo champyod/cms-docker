@@ -3,6 +3,7 @@ import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { storeFile } from '@/lib/fsobjects';
+import { recordAudit } from '@/lib/audit';
 
 export async function POST(req: NextRequest): Promise<Response> {
   const { authorized, response } = await verifyApiPermission('testcase:create');
@@ -55,6 +56,12 @@ export async function POST(req: NextRequest): Promise<Response> {
        });
     }
 
+    await recordAudit({
+      verb: 'testcase:create',
+      entity: 'testcase',
+      afterValues: { datasetId, codename: (data as { codename?: string }).codename ?? null, bulkCount: Array.isArray(testcases) ? testcases.length : 1 },
+      result: 'success',
+    });
     revalidatePath('/[locale]/tasks', 'page');
     return apiSuccess({ message: 'Testcase(s) uploaded successfully' });
   } catch (error) {

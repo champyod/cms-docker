@@ -4,6 +4,7 @@ import { safeUserSelect } from '@/lib/prisma-selects';
 import { formatStoredPassword, isPasswordKind, DEFAULT_PASSWORD_KIND } from '@/lib/password-format';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
+import { recordAudit } from '@/lib/audit';
 
 interface UserUpdateData {
   first_name: string;
@@ -40,6 +41,7 @@ export async function PUT(
       updateData.password = await formatStoredPassword(passwordKind, password);
     }
 
+    const beforeUser = await prisma.users.findUnique({ where: { id }, select: { first_name: true, last_name: true, username: true, email: true, timezone: true } });
     await prisma.users.update({
       where: { id },
       data: updateData,
@@ -47,6 +49,14 @@ export async function PUT(
 
     const user = await prisma.users.findUnique({ where: { id }, select: safeUserSelect });
 
+    await recordAudit({
+      verb: 'user:update',
+      entity: 'user',
+      entityId: String(id),
+      beforeValues: beforeUser ? { first_name: beforeUser.first_name, last_name: beforeUser.last_name, username: beforeUser.username } : undefined,
+      afterValues: { changedKeys: Object.keys(updateData).filter((k) => k !== 'password') },
+      result: 'success',
+    });
     revalidatePath('/[locale]/users', 'page');
     return apiSuccess({ user });
   } catch (error) {
@@ -65,7 +75,15 @@ export async function DELETE(
   if (isNaN(id)) return apiError({ message: 'Invalid ID', status: 400 });
 
   try {
+    const beforeDeleteUser = await prisma.users.findUnique({ where: { id }, select: { username: true, first_name: true, last_name: true } });
     await prisma.users.delete({ where: { id } });
+    await recordAudit({
+      verb: 'user:delete',
+      entity: 'user',
+      entityId: String(id),
+      beforeValues: beforeDeleteUser ? { username: beforeDeleteUser.username, first_name: beforeDeleteUser.first_name, last_name: beforeDeleteUser.last_name } : undefined,
+      result: 'success',
+    });
     revalidatePath('/[locale]/users', 'page');
     return apiSuccess({ message: 'User deleted successfully' });
   } catch (error) {

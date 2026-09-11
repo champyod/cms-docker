@@ -5,6 +5,7 @@ import path from 'path';
 
 import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
+import { recordAudit } from '@/lib/audit';
 
 function sanitizeValue(value: string): string {
   return value.replace(/[\r\n]+/g, ' ').slice(0, 500);
@@ -67,6 +68,12 @@ export async function updateConfigToml(updates: Record<string, string>): Promise
       }
     }
     await fs.writeFile(tomlPath, content, 'utf-8');
+    await recordAudit({
+      verb: 'appearance:update',
+      entity: 'appearance',
+      afterValues: { changedKeys: Object.keys(updates).filter(isValidKey) },
+      result: 'success',
+    });
     return { success: true };
   } catch (error) {
     return { success: false, error: (error as Error).message };

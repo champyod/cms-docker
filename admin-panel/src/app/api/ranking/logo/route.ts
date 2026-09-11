@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { apiError, apiSuccess, verifyApiPermission } from '@/lib/api-utils';
 import { getRepoRoot } from '@/lib/repo-root';
+import { recordAudit } from '@/lib/audit';
 
 const RANKING_LIB_DIR = '/var/local/lib/cms/ranking';
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -167,6 +168,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     await writeLogoToDir(hostDir, buffer, ext);
 
     await updateConfigToml(ext);
+    await recordAudit({
+      verb: 'ranking:update',
+      entity: 'ranking',
+      afterValues: { action: 'logo-upload', ext },
+      result: 'success',
+    });
     return apiSuccess({ logoPath: `./config/assets/logo.${ext}`, ext });
   } catch (error) {
     console.error('[ranking/logo] POST failed', error);
@@ -187,6 +194,12 @@ export async function DELETE(): Promise<NextResponse> {
 
     await updateConfigToml(null);
 
+    await recordAudit({
+      verb: 'ranking:update',
+      entity: 'ranking',
+      afterValues: { action: 'logo-delete' },
+      result: 'success',
+    });
     return apiSuccess({ reverted: true });
   } catch (error) {
     console.error('[ranking/logo] DELETE failed', error);

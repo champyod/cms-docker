@@ -3,6 +3,7 @@ import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { storeFile } from '@/lib/fsobjects';
+import { recordAudit } from '@/lib/audit';
 
 export async function POST(req: NextRequest): Promise<Response> {
   const { authorized, response } = await verifyApiPermission('attachment:create');
@@ -32,6 +33,12 @@ export async function POST(req: NextRequest): Promise<Response> {
       DO UPDATE SET digest = ${digest}
     `;
 
+    await recordAudit({
+      verb: 'attachment:create',
+      entity: 'attachment',
+      afterValues: { taskId, filename: filenameTrimmed },
+      result: 'success',
+    });
     revalidatePath('/[locale]/tasks', 'page');
     revalidatePath(`/[locale]/tasks/${taskId}`, 'page');
     return apiSuccess({ digest });

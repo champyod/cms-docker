@@ -4,6 +4,7 @@ import { buildUserSearchWhere, safeUserSelect, usersPageSelect } from '@/lib/pri
 import { formatStoredPassword, isPasswordKind, DEFAULT_PASSWORD_KIND } from '@/lib/password-format';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
+import { recordAudit } from '@/lib/audit';
 
 const DEFAULT_USERS_PER_PAGE = 20;
 const MAX_USERS_PER_PAGE = 100;
@@ -84,6 +85,13 @@ export async function POST(req: NextRequest) {
 
     const user = await prisma.users.findUnique({ where: { id: created.id }, select: safeUserSelect });
 
+    await recordAudit({
+      verb: 'user:create',
+      entity: 'user',
+      entityId: String(created.id),
+      afterValues: { username: usernameTrimmed, first_name: firstNameTrimmed, last_name: lastNameTrimmed },
+      result: 'success',
+    });
     revalidatePath('/[locale]/users', 'page');
     return apiSuccess({ user });
   } catch (error) {

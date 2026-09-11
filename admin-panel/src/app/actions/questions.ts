@@ -5,6 +5,7 @@ import type { Prisma } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { ensurePermission, getPermissions } from '@/lib/permissions';
 import { stripDisallowedFields } from '@/lib/field-permissions';
+import { recordAudit } from '@/lib/audit';
 
 export async function getQuestions(contestId: number) {
   await ensurePermission('question:list');
@@ -45,6 +46,13 @@ export async function replyToQuestion(questionId: number, adminId: number, data:
         ignored: false,
       }
     });
+    await recordAudit({
+      verb: 'question:answer',
+      entity: 'question',
+      entityId: String(questionId),
+      afterValues: { reply_subject: allowed.reply_subject, reply_text: allowed.reply_text },
+      result: 'success',
+    });
     revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {
@@ -66,6 +74,13 @@ export async function ignoreQuestion(questionId: number) {
       where: { id: questionId },
       data: { ignored: allowed.ignored }
     });
+    await recordAudit({
+      verb: 'question:ignore',
+      entity: 'question',
+      entityId: String(questionId),
+      afterValues: { ignored: allowed.ignored },
+      result: 'success',
+    });
     revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {
@@ -86,6 +101,13 @@ export async function unignoreQuestion(questionId: number) {
     await prisma.questions.update({
       where: { id: questionId },
       data: { ignored: allowed.ignored }
+    });
+    await recordAudit({
+      verb: 'question:ignore',
+      entity: 'question',
+      entityId: String(questionId),
+      afterValues: { ignored: allowed.ignored },
+      result: 'success',
     });
     revalidatePath('/[locale]/contests', 'page');
     return { success: true };

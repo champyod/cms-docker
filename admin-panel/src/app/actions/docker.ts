@@ -4,6 +4,7 @@ import { exec } from 'child_process';
 import util from 'util';
 import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
+import { recordAudit } from '@/lib/audit';
 
 const execPromise = util.promisify(exec);
 
@@ -56,6 +57,13 @@ export async function controlContainer(id: string, action: 'start' | 'stop' | 'r
   try {
     const { stdout, stderr } = await execPromise(`docker ${action} ${id}`);
     if (stderr && !stdout) throw new Error(stderr);
+    await recordAudit({
+      verb: 'container:control',
+      entity: 'container',
+      entityId: String(id),
+      afterValues: { action, containerId: id },
+      result: 'success',
+    });
     return { success: true };
   } catch (error) {
     console.error(`Failed to ${action} container ${id}:`, error);
@@ -110,6 +118,12 @@ export async function runCompose(action: 'up' | 'down' | 'restart' | 'build', se
     if (action === 'build') cmd += ' --no-cache';
 
     const { stdout, stderr } = await execPromise(cmd, { cwd: repoRoot });
+    await recordAudit({
+      verb: 'container:control',
+      entity: 'container',
+      afterValues: { action, serviceType: serviceType ?? 'all', command: `docker compose ${action}` },
+      result: 'success',
+    });
     return { success: true, output: stdout || stderr };
   } catch (error) {
     console.error('Compose command failed:', error);

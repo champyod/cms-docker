@@ -3,6 +3,7 @@ import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { validateContestData, intervalToString, CONSTRAINT_TO_FIELD_MAP, getConstraintErrorMessage } from '@/lib/contest-validation';
+import { recordAudit } from '@/lib/audit';
 
 export async function PUT(
   req: NextRequest,
@@ -98,6 +99,13 @@ export async function PUT(
       WHERE id = ${id}
     `;
 
+    await recordAudit({
+      verb: 'contest:update',
+      entity: 'contest',
+      entityId: String(id),
+      afterValues: { changedKeys: Object.keys(data as Record<string, unknown>) },
+      result: 'success',
+    });
     revalidatePath('/[locale]/contests', 'page');
     revalidatePath(`/[locale]/contests/${id}`, 'page');
     return apiSuccess({ message: 'Contest updated successfully' });
@@ -131,7 +139,15 @@ export async function DELETE(
   if (isNaN(id)) return apiError({ message: 'Invalid ID', status: 400 });
 
   try {
+    const beforeContest = await prisma.contests.findUnique({ where: { id }, select: { name: true, description: true } });
     await prisma.contests.delete({ where: { id } });
+    await recordAudit({
+      verb: 'contest:delete',
+      entity: 'contest',
+      entityId: String(id),
+      beforeValues: beforeContest ? { name: beforeContest.name, description: beforeContest.description } : undefined,
+      result: 'success',
+    });
     revalidatePath('/[locale]/contests', 'page');
     return apiSuccess({ message: 'Contest deleted successfully' });
   } catch (error: unknown) {

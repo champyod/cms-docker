@@ -5,6 +5,7 @@ import { ensurePermission, getPermissions } from '@/lib/permissions';
 import { getFieldAccess } from '@/lib/field-permissions';
 import { buildUserSearchWhere, usersPageSelect, type UsersPageRow } from '@/lib/prisma-selects';
 import { parseStoredPassword } from '@/lib/password-format';
+import { recordAudit } from '@/lib/audit';
 
 const USERS_PER_PAGE = 20;
 const MAX_USERS_PER_PAGE = 100;
@@ -67,6 +68,14 @@ export async function revealUserPassword(id: number): Promise<
     const row = await prisma.users.findUnique({ where: { id }, select: { password: true } });
     if (!row) return { success: false, error: 'User not found' };
     const parsed = parseStoredPassword(row.password);
+    await recordAudit({
+      verb: 'password:reveal',
+      entity: 'user',
+      entityId: String(id),
+      beforeValues: { userId: id },
+      afterValues: { kind: parsed.kind },
+      result: 'success',
+    });
     if (parsed.kind === 'bcrypt') return { success: true, kind: 'bcrypt' };
     return { success: true, kind: 'plaintext', value: parsed.value };
   } catch {

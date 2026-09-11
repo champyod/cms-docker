@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { ensurePermission, getPermissions } from '@/lib/permissions';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { safeUserSelect } from '@/lib/prisma-selects';
+import { recordAudit } from '@/lib/audit';
 import {
   executeParticipationUpdate,
   parseIpAllowlist,
@@ -49,6 +50,20 @@ export async function updateParticipation(
 
     await executeParticipationUpdate(participationId, allowed, validIps);
 
+    {
+      const { password: _password, passwordKind: _passwordKind, ip: _ip, ...restAllowed } = allowed as Record<string, unknown>;
+      await recordAudit({
+        verb: 'participation:update',
+        entity: 'participation',
+        entityId: String(participationId),
+        afterValues: {
+          ...restAllowed,
+          ...((allowed as { password?: string | null }).password !== undefined ? { passwordChanged: true } : {}),
+          ip: validIps,
+        },
+        result: 'success',
+      });
+    }
     revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {
@@ -73,6 +88,13 @@ export async function setTestUser(participationId: number): Promise<ActionResult
         ...(allowed.hidden !== undefined && { hidden: allowed.hidden }),
         ...(allowed.unrestricted !== undefined && { unrestricted: allowed.unrestricted }),
       },
+    });
+    await recordAudit({
+      verb: 'participation:update',
+      entity: 'participation',
+      entityId: String(participationId),
+      afterValues: allowed,
+      result: 'success',
     });
     revalidatePath('/[locale]/contests', 'page');
     return { success: true };
@@ -128,6 +150,12 @@ export async function addTeamToContest(
       `;
     }
 
+    await recordAudit({
+      verb: 'participation:create',
+      entity: 'participation',
+      afterValues: { contestId, teamId, added: newIds.length, hidden, unrestricted },
+      result: 'success',
+    });
     revalidatePath('/[locale]/contests', 'page');
     return { success: true, added: newIds.length };
   } catch (error) {
@@ -161,8 +189,36 @@ export async function revealParticipationPassword(participationId: number): Prom
   try {
     const row = await prisma.participations.findUnique({ where: { id: participationId }, select: { password: true } });
     const stored = row?.password;
-    if (!stored) return { success: true, kind: 'plaintext', value: '' };
-    if (stored.startsWith(PLAINTEXT_PREFIX)) return { success: true, kind: 'plaintext', value: stored.slice(PLAINTEXT_PREFIX.length) };
+    if (stored === null || stored === undefined) {
+      await recordAudit({
+        verb: 'password:reveal',
+        entity: 'participation',
+        entityId: String(participationId),
+        beforeValues: { participationId },
+        afterValues: { kind: 'plaintext' },
+        result: 'success',
+      });
+      return { success: true, kind: 'plaintext', value: '' };
+    }
+    if (stored.startsWith(PLAINTEXT_PREFIX)) {
+      await recordAudit({
+        verb: 'password:reveal',
+        entity: 'participation',
+        entityId: String(participationId),
+        beforeValues: { participationId },
+        afterValues: { kind: 'plaintext' },
+        result: 'success',
+      });
+      return { success: true, kind: 'plaintext', value: stored.slice(PLAINTEXT_PREFIX.length) };
+    }
+    await recordAudit({
+      verb: 'password:reveal',
+      entity: 'participation',
+      entityId: String(participationId),
+      beforeValues: { participationId },
+      afterValues: { kind: 'bcrypt' },
+      result: 'success',
+    });
     return { success: true, kind: 'bcrypt' };
   } catch {
     return { success: false, error: 'Unable to load password' };
@@ -176,7 +232,7 @@ export async function sendMessage(participationId: number, adminId: number, data
   await ensurePermission('message:send');
 
   try {
-    await prisma.messages.create({
+    const message = await prisma.messages.create({
       data: {
         participation_id: participationId,
         admin_id: adminId,
@@ -184,6 +240,13 @@ export async function sendMessage(participationId: number, adminId: number, data
         text: data.text,
         timestamp: new Date(),
       }
+    });
+    await recordAudit({
+      verb: 'message:send',
+      entity: 'message',
+      entityId: String(message.id),
+      afterValues: { participationId, subject: data.subject },
+      result: 'success',
     });
     revalidatePath('/[locale]/contests', 'page');
     return { success: true };

@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
+import { recordAudit } from '@/lib/audit';
 
 export async function PUT(
   req: NextRequest,
@@ -15,6 +16,7 @@ export async function PUT(
 
   try {
     const data = await req.json();
+    const beforeTeam = await prisma.teams.findUnique({ where: { id }, select: { code: true, name: true } });
     await prisma.teams.update({
       where: { id },
       data: {
@@ -23,6 +25,14 @@ export async function PUT(
       }
     });
 
+    await recordAudit({
+      verb: 'team:update',
+      entity: 'team',
+      entityId: String(id),
+      beforeValues: beforeTeam ? { code: beforeTeam.code, name: beforeTeam.name } : undefined,
+      afterValues: { code: data.code, name: data.name },
+      result: 'success',
+    });
     revalidatePath('/[locale]/teams', 'page');
     return apiSuccess({ message: 'Team updated successfully' });
   } catch (error) {
@@ -41,7 +51,15 @@ export async function DELETE(
   if (isNaN(id)) return apiError({ message: 'Invalid ID', status: 400 });
 
   try {
+    const beforeDeleteTeam = await prisma.teams.findUnique({ where: { id }, select: { code: true, name: true } });
     await prisma.teams.delete({ where: { id } });
+    await recordAudit({
+      verb: 'team:delete',
+      entity: 'team',
+      entityId: String(id),
+      beforeValues: beforeDeleteTeam ? { code: beforeDeleteTeam.code, name: beforeDeleteTeam.name } : undefined,
+      result: 'success',
+    });
     revalidatePath('/[locale]/teams', 'page');
     return apiSuccess({ message: 'Team deleted successfully' });
   } catch (error) {

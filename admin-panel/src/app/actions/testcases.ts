@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { ensurePermission, getPermissions } from '@/lib/permissions';
+import { recordAudit } from '@/lib/audit';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { storeFile } from '@/lib/fsobjects';
 
@@ -40,7 +41,7 @@ export async function addTestcase(datasetId: number, data: {
   }
 
   try {
-    await prisma.testcases.create({
+    const created = await prisma.testcases.create({
       data: {
         dataset_id: datasetId,
         codename,
@@ -48,6 +49,13 @@ export async function addTestcase(datasetId: number, data: {
         output,
         public: isPub ?? false,
       }
+    });
+    await recordAudit({
+      verb: 'testcase:create',
+      entity: 'testcase',
+      entityId: String(created.id),
+      afterValues: { dataset_id: datasetId, codename, input, output, public: isPub ?? false },
+      result: 'success',
     });
     revalidatePath('/[locale]/tasks');
     return { success: true };
@@ -63,9 +71,17 @@ export async function addTestcase(datasetId: number, data: {
 export async function deleteTestcase(testcaseId: number): Promise<ActionResult> {
   await ensurePermission('testcase:delete');
 
+  const beforeRow = await prisma.testcases.findUnique({ where: { id: testcaseId } });
   try {
     await prisma.testcases.delete({
       where: { id: testcaseId }
+    });
+    await recordAudit({
+      verb: 'testcase:delete',
+      entity: 'testcase',
+      entityId: String(testcaseId),
+      beforeValues: beforeRow ?? undefined,
+      result: 'success',
     });
     revalidatePath('/[locale]/tasks');
     return { success: true };
@@ -98,6 +114,13 @@ export async function toggleTestcasePublic(testcaseId: number): Promise<ActionRe
       data: { public: allowed.public }
     });
 
+    await recordAudit({
+      verb: 'testcase:update',
+      entity: 'testcase',
+      entityId: String(testcaseId),
+      afterValues: { public: allowed.public },
+      result: 'success',
+    });
     revalidatePath('/[locale]/tasks');
     return { success: true };
   } catch (error) {
@@ -115,9 +138,15 @@ export async function updateTestcasesPublic(testcaseIds: number[], isPublic: boo
   }
 
   try {
-    await prisma.testcases.updateMany({
+    const result = await prisma.testcases.updateMany({
       where: { id: { in: testcaseIds } },
       data: { public: allowed.public }
+    });
+    await recordAudit({
+      verb: 'testcase:update',
+      entity: 'testcase',
+      afterValues: { testcaseIds, public: allowed.public, count: result.count },
+      result: 'success',
     });
     revalidatePath('/[locale]/tasks');
     return { success: true };
@@ -167,6 +196,12 @@ export async function batchUploadTestcases(datasetId: number, testcases: Testcas
     for (const tc of testcases) {
       await createTestcaseSafely(datasetId, tc);
     }
+    await recordAudit({
+      verb: 'testcase:update',
+      entity: 'testcase',
+      afterValues: { datasetId, count: testcases.length },
+      result: 'success',
+    });
     revalidatePath('/[locale]/tasks');
     return { success: true };
   } catch (error) {

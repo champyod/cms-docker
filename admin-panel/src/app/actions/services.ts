@@ -6,6 +6,7 @@ import util from 'util';
 import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
 import { logToDiscord } from '@/lib/discord-notifier';
+import { recordAudit } from '@/lib/audit';
 import {
   analyzeContainerDependencies as analyzeContainerDependenciesLib,
   buildRestartCommand,
@@ -94,6 +95,12 @@ export async function restartServices(type: 'all' | 'core' | 'admin' | 'worker' 
       return { success: false, error: stderr };
     }
 
+    await recordAudit({
+      verb: 'service:restart',
+      entity: 'service',
+      afterValues: { type, customList: customList ?? null },
+      result: 'success',
+    });
     return { success: true, message: `Services (${type}) restarted.`, output: stdout };
   } catch (error) {
     console.error('Restart error:', error);
@@ -103,7 +110,17 @@ export async function restartServices(type: 'all' | 'core' | 'admin' | 'worker' 
 
 export async function deployContest(contestId: number): Promise<DeployContestResult> {
   await ensurePermission('deployment:deploy');
-  return runDeployContest(contestId);
+  const result = await runDeployContest(contestId);
+  if (result.success) {
+    await recordAudit({
+      verb: 'deployment:deploy',
+      entity: 'deployment',
+      entityId: String(contestId),
+      afterValues: { contestId },
+      result: 'success',
+    });
+  }
+  return result;
 }
 
 export async function getDeployStatus(operationId: string): Promise<DeployStatusResult> {
@@ -118,6 +135,12 @@ export async function triggerManualBackup() {
         await logToDiscord('Manual Backup', 'Admin triggered a manual submissions backup.', 3447003);
         const cmd = 'docker exec -d cms-monitor bash /usr/local/bin/cms-backup.sh';
         await execPromise(cmd, { cwd: rootDir });
+        await recordAudit({
+          verb: 'maintenance:enable',
+          entity: 'service',
+          afterValues: { action: 'backup' },
+          result: 'success',
+        });
         return { success: true, message: 'Backup process started in background.' };
     } catch (error) {
         return { success: false, error: (error as Error).message };
@@ -163,6 +186,12 @@ export async function updateServer() {
         const cmd = `nohup ${path.join(rootDir, 'scripts/__update-server.sh')} > ${path.join(rootDir, 'update.log')} 2>&1 &`;
         await execPromise(cmd);
 
+        await recordAudit({
+          verb: 'service:deploy',
+          entity: 'service',
+          afterValues: { action: 'updateServer' },
+          result: 'success',
+        });
         return { success: true, message: 'Server update started in background. Check logs or wait a few minutes.' };
     } catch (error) {
         return { success: false, error: (error as Error).message };

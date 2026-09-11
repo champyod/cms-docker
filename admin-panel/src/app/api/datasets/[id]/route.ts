@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
+import { recordAudit } from '@/lib/audit';
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<Response> {
   const { authorized, response } = await verifyApiPermission('dataset:update');
@@ -32,6 +33,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
        await prisma.datasets.update({ where: { id }, data: updateData });
     }
 
+    await recordAudit({
+      verb: 'dataset:update',
+      entity: 'dataset',
+      entityId: String(id),
+      afterValues: { action: (data.action as string) ?? 'update', datasetId: id },
+      result: 'success',
+    });
      revalidatePath('/[locale]/tasks', 'page');
     return apiSuccess({ message: 'Dataset updated successfully' });
   } catch (error) {
@@ -56,7 +64,15 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       return apiError({ message: 'Cannot delete the active dataset', status: 400 });
     }
 
+    const beforeDataset = await prisma.datasets.findUnique({ where: { id }, select: { description: true, task_id: true } });
     await prisma.datasets.delete({ where: { id } });
+    await recordAudit({
+      verb: 'dataset:delete',
+      entity: 'dataset',
+      entityId: String(id),
+      beforeValues: beforeDataset ? { description: beforeDataset.description, task_id: beforeDataset.task_id } : undefined,
+      result: 'success',
+    });
     revalidatePath('/[locale]/tasks', 'page');
     return apiSuccess({ message: 'Dataset deleted successfully' });
   } catch (error) {

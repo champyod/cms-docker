@@ -3,6 +3,7 @@ import type { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiError, apiSuccess } from '@/lib/api-utils';
 import type { BatchActionRequest } from './credentialActions';
+import { recordAudit } from '@/lib/audit';
 
 const PROFILE_MODES = ['timezone', 'email-domain', 'clear-email'] as const;
 const EMAIL_DOMAIN_PATTERN = /^[a-z0-9.-]+\.[a-z]{2,}$/i;
@@ -39,6 +40,12 @@ async function applyTimezone(body: Record<string, unknown>, userIds: number[]) {
     data: { timezone },
   });
 
+  await recordAudit({
+    verb: 'user:update',
+    entity: 'user',
+    afterValues: { action: 'batch-profile-timezone', timezone, userIds, updatedCount: result.count },
+    result: 'success',
+  });
   revalidatePath('/[locale]/users', 'page');
   return apiSuccess({ success: true, updatedCount: result.count });
 }
@@ -49,6 +56,12 @@ async function applyClearEmail(userIds: number[]) {
     data: { email: null },
   });
 
+  await recordAudit({
+    verb: 'user:update',
+    entity: 'user',
+    afterValues: { action: 'batch-profile-clear-email', userIds, updatedCount: result.count },
+    result: 'success',
+  });
   revalidatePath('/[locale]/users', 'page');
   return apiSuccess({ success: true, updatedCount: result.count });
 }
@@ -74,6 +87,12 @@ async function applyEmailDomain(body: Record<string, unknown>, userIds: number[]
     updatedCount += 1;
   }
 
+  await recordAudit({
+    verb: 'user:update',
+    entity: 'user',
+    afterValues: { action: 'batch-profile-email-domain', emailDomain, userIds, updatedCount },
+    result: 'success',
+  });
   revalidatePath('/[locale]/users', 'page');
   return apiSuccess({ success: true, updatedCount });
 }

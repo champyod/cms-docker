@@ -4,6 +4,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
+import { recordAudit } from '@/lib/audit';
 
 const ALLOWED_ENV_FILES = new Set(['.env', '.env.contest']);
 
@@ -60,6 +61,12 @@ export async function updateEnvFile(filename: string, updates: Record<string, st
     });
 
     await fs.writeFile(envPath, content);
+    await recordAudit({
+      verb: 'env:update',
+      entity: 'env',
+      afterValues: { filename, changedKeys: Object.keys(updates).filter((k) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(k)) },
+      result: 'success',
+    });
     return { success: true };
   } catch (error) {
     return { success: false, error: (error as Error).message };
@@ -108,6 +115,12 @@ export async function writeActiveContestId(id: number): Promise<{ success: true 
     }
     
     await fs.writeFile(envPath, content);
+    await recordAudit({
+      verb: 'env:update',
+      entity: 'env',
+      afterValues: { filename: '.env.contest', changedKeys: ['ACTIVE_CONTEST_ID', 'CONTEST_ID'], contestId: id },
+      result: 'success',
+    });
     return { success: true };
   } catch (error) {
     return { success: false, error: (error as Error).message };
@@ -134,6 +147,13 @@ export async function migrateFromMultiContest(): Promise<{ success: true; contes
           content = content.replace(/^CONTESTS_DEPLOY_CONFIG=.*\n?/m, '');
           content += `\n# Migrated from multi-contest format\nACTIVE_CONTEST_ID=${firstContestId}\nCONTEST_ID=${firstContestId}\n`;
           await fs.writeFile(envPath, content);
+          await recordAudit({
+            verb: 'env:update',
+            entity: 'env',
+            afterValues: { filename: '.env.contest', changedKeys: ['ACTIVE_CONTEST_ID', 'CONTEST_ID', 'CONTESTS_DEPLOY_CONFIG'], contestId: firstContestId, migrated: true },
+            beforeValues: { migratedFrom: 'CONTESTS_DEPLOY_CONFIG' },
+            result: 'success',
+          });
           return { success: true, contestId: firstContestId, migrated: true };
         }
       }

@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { sanitize, verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
+import { recordAudit } from '@/lib/audit';
 
 function nullablePositive(val: unknown): number | null {
   const sanitized = sanitize(val as string | number | null | undefined);
@@ -71,6 +72,12 @@ export async function POST(req: NextRequest): Promise<Response> {
       if (!Number.isInteger(contestId) || contestId <= 0) return apiError({ message: 'Contest identifier must be a positive integer', status: 400 });
     }
     await insertTask(data);
+    await recordAudit({
+      verb: 'task:create',
+      entity: 'task',
+      afterValues: { name, title },
+      result: 'success',
+    });
     revalidatePath('/[locale]/tasks', 'page');
     return apiSuccess({ message: 'Task created successfully' });
   } catch (error) {

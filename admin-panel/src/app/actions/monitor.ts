@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { ensurePermission, getPermissions } from '@/lib/permissions';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { revalidatePath } from 'next/cache';
+import { recordAudit } from '@/lib/audit';
 
 interface AddMonitorTargetInput {
   url: string;
@@ -48,6 +49,13 @@ export async function addMonitorTarget(input: AddMonitorTargetInput) {
         alertDiscord: allowed.alertDiscord ?? true,
       },
     });
+    await recordAudit({
+      verb: 'monitor:create',
+      entity: 'monitor_target',
+      entityId: String(target.id),
+      afterValues: allowed,
+      result: 'success',
+    });
     revalidatePath('/settings', 'page');
     return { success: true, data: target };
   } catch (error) {
@@ -76,6 +84,13 @@ export async function updateMonitorTarget(
       where: { id },
       data: allowed,
     });
+    await recordAudit({
+      verb: 'monitor:update',
+      entity: 'monitor_target',
+      entityId: String(id),
+      afterValues: allowed,
+      result: 'success',
+    });
     revalidatePath('/settings', 'page');
     return { success: true, data: target };
   } catch (error) {
@@ -85,8 +100,21 @@ export async function updateMonitorTarget(
 
 export async function removeMonitorTarget(id: string) {
   await ensurePermission('monitor:delete');
+  let beforeValues: unknown = undefined;
+  try {
+    beforeValues = await prisma.monitor_targets.findUnique({ where: { id } });
+  } catch {
+    beforeValues = undefined;
+  }
   try {
     await prisma.monitor_targets.delete({ where: { id } });
+    await recordAudit({
+      verb: 'monitor:delete',
+      entity: 'monitor_target',
+      entityId: String(id),
+      beforeValues,
+      result: 'success',
+    });
     revalidatePath('/settings', 'page');
     return { success: true };
   } catch (error) {
@@ -109,6 +137,14 @@ export async function toggleMonitorTarget(id: string) {
     const target = await prisma.monitor_targets.update({
       where: { id },
       data: { enabled: allowed.enabled },
+    });
+    await recordAudit({
+      verb: 'monitor:update',
+      entity: 'monitor_target',
+      entityId: String(id),
+      beforeValues: { enabled: existing.enabled },
+      afterValues: { enabled: allowed.enabled },
+      result: 'success',
     });
     revalidatePath('/settings', 'page');
     return { success: true, data: target };

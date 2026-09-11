@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { apiError, apiSuccess, verifyApiPermission } from '@/lib/api-utils';
 import { buildRankingAuthHeader, clearRankingSession, getRankingSession, normalizeRankingBaseUrl, setRankingSession } from '@/lib/ranking-session';
+import { recordAudit } from '@/lib/audit';
 
 export async function GET() {
   const { authorized, response } = await verifyApiPermission('ranking:read');
@@ -52,6 +53,12 @@ export async function POST(req: NextRequest) {
 
     await setRankingSession(baseUrl, username, password);
 
+    await recordAudit({
+      verb: 'ranking:update',
+      entity: 'ranking',
+      afterValues: { baseUrl, username, action: 'connect' },
+      result: 'success',
+    });
     return apiSuccess({ connected: true, baseUrl, username });
   } catch (error) {
     return apiError(error);
@@ -63,5 +70,11 @@ export async function DELETE() {
   if (!authorized) return response;
 
   await clearRankingSession();
+  await recordAudit({
+    verb: 'ranking:update',
+    entity: 'ranking',
+    afterValues: { action: 'disconnect' },
+    result: 'success',
+  });
   return apiSuccess({ connected: false });
 }

@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { ensurePermission, getPermissions } from '@/lib/permissions';
+import { recordAudit } from '@/lib/audit';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { validateContestData } from '@/lib/contest-validation';
 import {
@@ -35,6 +36,12 @@ export async function createContest(data: ContestData) {
   try {
     await insertContestRow(sanitized, buildContestInsertDefaults(sanitized));
 
+    await recordAudit({
+      verb: 'contest:create',
+      entity: 'contest',
+      afterValues: sanitized,
+      result: 'success',
+    });
     revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {
@@ -56,6 +63,13 @@ export async function updateContest(id: number, data: Partial<ContestData>) {
   try {
     await executeContestUpdate(id, sanitized);
 
+    await recordAudit({
+      verb: 'contest:update',
+      entity: 'contest',
+      entityId: String(id),
+      afterValues: sanitized,
+      result: 'success',
+    });
     revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {
@@ -66,9 +80,17 @@ export async function updateContest(id: number, data: Partial<ContestData>) {
 export async function deleteContest(id: number) {
   await ensurePermission('contest:delete');
 
+  const beforeRow = await prisma.contests.findUnique({ where: { id } });
   try {
     await prisma.contests.delete({
       where: { id },
+    });
+    await recordAudit({
+      verb: 'contest:delete',
+      entity: 'contest',
+      entityId: String(id),
+      beforeValues: beforeRow ?? undefined,
+      result: 'success',
     });
     revalidatePath('/[locale]/contests', 'page');
     return { success: true };
@@ -86,6 +108,12 @@ export async function addParticipant(contestId: number, userId: number) {
       INSERT INTO participations (contest_id, user_id, hidden, unrestricted, delay_time, extra_time)
       VALUES (${contestId}, ${userId}, false, false, '0 seconds'::interval, '0 seconds'::interval)
     `;
+    await recordAudit({
+      verb: 'participation:create',
+      entity: 'participation',
+      afterValues: { contestId, userId },
+      result: 'success',
+    });
     revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {
@@ -97,9 +125,17 @@ export async function addParticipant(contestId: number, userId: number) {
 export async function removeParticipant(participationId: number) {
   await ensurePermission('participation:delete');
 
+  const beforeRow = await prisma.participations.findUnique({ where: { id: participationId } });
   try {
     await prisma.participations.delete({
       where: { id: participationId },
+    });
+    await recordAudit({
+      verb: 'participation:delete',
+      entity: 'participation',
+      entityId: String(participationId),
+      beforeValues: beforeRow ?? undefined,
+      result: 'success',
     });
     revalidatePath('/[locale]/contests', 'page');
     return { success: true };
@@ -117,6 +153,13 @@ export async function addTaskToContest(contestId: number, taskId: number) {
       where: { id: taskId },
       data: { contest_id: contestId }
     });
+    await recordAudit({
+      verb: 'task:update',
+      entity: 'task',
+      entityId: String(taskId),
+      afterValues: { contest_id: contestId },
+      result: 'success',
+    });
     revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {
@@ -131,6 +174,13 @@ export async function removeTaskFromContest(taskId: number) {
     await prisma.tasks.update({
       where: { id: taskId },
       data: { contest_id: null }
+    });
+    await recordAudit({
+      verb: 'task:update',
+      entity: 'task',
+      entityId: String(taskId),
+      afterValues: { contest_id: null },
+      result: 'success',
     });
     revalidatePath('/[locale]/contests', 'page');
     return { success: true };
@@ -167,6 +217,13 @@ export async function activateContest(id: number) {
     await prisma.$executeRaw`
       UPDATE contests SET is_active = (id = ${id})
     `;
+    await recordAudit({
+      verb: 'contest:switch',
+      entity: 'contest',
+      entityId: String(id),
+      afterValues: { is_active: true },
+      result: 'success',
+    });
     revalidatePath('/[locale]/contests', 'page');
     return { success: true };
   } catch (error) {

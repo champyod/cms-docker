@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { apiError, apiSuccess } from '@/lib/api-utils';
 import { resolveTeamIdByCode } from '@/lib/teams';
 import type { BatchActionRequest } from './credentialActions';
+import { recordAudit } from '@/lib/audit';
 
 const CONTEST_MODES = ['add', 'remove'] as const;
 const TEAM_MODES = ['set', 'remove-any'] as const;
@@ -54,6 +55,13 @@ export async function handleContest({ body, userIds }: BatchActionRequest): Prom
 
   if (mode === 'add') {
     const addedCount = await addUsersToContest(contestId, userIds);
+    await recordAudit({
+      verb: 'participation:update',
+      entity: 'contest',
+      entityId: String(contestId),
+      afterValues: { action: 'batch-contest-add', contestId, userIds, addedCount },
+      result: 'success',
+    });
     revalidateUserContestPages();
     return apiSuccess({ success: true, addedCount, removedCount: 0 });
   }
@@ -65,6 +73,13 @@ export async function handleContest({ body, userIds }: BatchActionRequest): Prom
     },
   });
 
+  await recordAudit({
+    verb: 'participation:update',
+    entity: 'contest',
+    entityId: String(contestId),
+    afterValues: { action: 'batch-contest-remove', contestId, userIds, removedCount: removed.count },
+    result: 'success',
+  });
   revalidateUserContestPages();
   return apiSuccess({ success: true, addedCount: 0, removedCount: removed.count });
 }
@@ -116,6 +131,13 @@ async function assignTeamByCode(
   const teamId = await resolveTeamIdByCode(teamCode);
   const updatedCount = await assignTeamToUsers(contestId, teamId, userIds);
 
+  await recordAudit({
+    verb: 'team:update',
+    entity: 'team',
+    entityId: String(teamId),
+    afterValues: { action: 'batch-team-set', contestId, teamCode, teamId, userIds, updatedCount },
+    result: 'success',
+  });
   revalidateUserContestPages();
   return apiSuccess({ success: true, updatedCount, teamId, teamCode });
 }
@@ -133,6 +155,12 @@ export async function handleTeam({ body, userIds }: BatchActionRequest): Promise
 
   if (mode === 'remove-any') {
     const updatedCount = await removeUsersFromAnyTeam(userIds);
+    await recordAudit({
+      verb: 'team:update',
+      entity: 'team',
+      afterValues: { action: 'batch-team-remove-any', userIds, updatedCount },
+      result: 'success',
+    });
     revalidateUserContestPages();
     return apiSuccess({ success: true, updatedCount });
   }

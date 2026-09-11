@@ -3,6 +3,7 @@ import { sanitize, verifyApiPermission, apiError, apiSuccess } from '@/lib/api-u
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { addIntervalClause } from '@/lib/task-intervals';
+import { recordAudit } from '@/lib/audit';
 
 type SanitizedData = Record<string, unknown>;
 
@@ -87,6 +88,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     await normalizeSubmissionFormat(sanitized, id);
     const { standardFields, intervalFields } = splitFields(sanitized);
     await applyTaskUpdates(id, standardFields, intervalFields);
+    await recordAudit({
+      verb: 'task:update',
+      entity: 'task',
+      entityId: String(id),
+      afterValues: { changedKeys: [...Object.keys(standardFields), ...Object.keys(intervalFields)] },
+      result: 'success',
+    });
     revalidatePath('/[locale]/tasks', 'page');
     return apiSuccess({ message: 'Task updated successfully' });
   } catch (error) {
@@ -102,7 +110,15 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const id = parseInt((await params).id, 10);
   if (Number.isNaN(id)) return apiError({ message: 'Invalid ID', status: 400 });
   try {
+    const beforeTask = await prisma.tasks.findUnique({ where: { id }, select: { name: true, title: true } });
     await prisma.tasks.delete({ where: { id } });
+    await recordAudit({
+      verb: 'task:delete',
+      entity: 'task',
+      entityId: String(id),
+      beforeValues: beforeTask ? { name: beforeTask.name, title: beforeTask.title } : undefined,
+      result: 'success',
+    });
     revalidatePath('/[locale]/tasks', 'page');
     return apiSuccess({ message: 'Task deleted successfully' });
   } catch (error) {

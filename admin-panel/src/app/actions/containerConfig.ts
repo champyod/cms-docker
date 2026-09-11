@@ -2,6 +2,7 @@
 
 import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
+import { recordAudit } from '@/lib/audit';
 import { readFile, writeFile } from 'fs/promises';
 import { exec } from 'child_process';
 import util from 'util';
@@ -44,20 +45,30 @@ export async function updateContainerConfig(containerId: string, config: {
   try {
     const currentConfig = await getContainerConfig();
 
-    currentConfig[containerId] = {
+    const beforeEntry = currentConfig[containerId] ? { ...currentConfig[containerId] } : null;
+
+    const afterEntry = {
       autoRestart: config.autoRestart ?? currentConfig[containerId]?.autoRestart ?? false,
       maxRestarts: config.maxRestarts ?? currentConfig[containerId]?.maxRestarts ?? 5,
       currentRestarts: config.currentRestarts ?? currentConfig[containerId]?.currentRestarts ?? 0,
       lastRestartTime: currentConfig[containerId]?.lastRestartTime,
       discordNotifications: config.discordNotifications ?? currentConfig[containerId]?.discordNotifications ?? true,
     };
-
+    currentConfig[containerId] = afterEntry;
     await writeFile(CONFIG_PATH(), JSON.stringify(currentConfig, null, 2));
 
     if (config.autoRestart !== undefined) {
       await updateDockerRestartPolicy(containerId, currentConfig[containerId].autoRestart, currentConfig[containerId].maxRestarts);
     }
 
+    await recordAudit({
+      verb: 'container:update',
+      entity: 'container_config',
+      entityId: String(containerId),
+      beforeValues: beforeEntry,
+      afterValues: { containerId, config: afterEntry },
+      result: 'success',
+    });
     return { success: true };
   } catch (error) {
     console.error('Failed to update container config:', error);
@@ -70,11 +81,23 @@ export async function resetRestartCount(containerId: string) {
   try {
     const currentConfig = await getContainerConfig();
 
+    const hadEntry = Boolean(currentConfig[containerId]);
+    const beforeRestarts = currentConfig[containerId]?.currentRestarts ?? null;
     if (currentConfig[containerId]) {
       currentConfig[containerId].currentRestarts = 0;
       await writeFile(CONFIG_PATH(), JSON.stringify(currentConfig, null, 2));
     }
 
+    if (hadEntry) {
+      await recordAudit({
+        verb: 'container:update',
+        entity: 'container_config',
+        entityId: String(containerId),
+        beforeValues: { currentRestarts: beforeRestarts },
+        afterValues: { currentRestarts: 0, action: 'resetRestartCount' },
+        result: 'success',
+      });
+    }
     return { success: true };
   } catch (error) {
     console.error('Failed to reset restart count:', error);
