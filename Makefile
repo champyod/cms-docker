@@ -300,6 +300,8 @@ prisma-sync:
 		if [ -f admin-panel/.env ]; then set -a; . admin-panel/.env; set +a; fi; \
 		cd admin-panel && npx tsx prisma/seed-permissions.ts; \
 	fi
+	@# WHY: prisma db push can drop/recreate tables, so roles and any later RLS policies must be re-applied after every schema sync.
+	@bash scripts/__apply_sql.sh
 
 admin-create:
 	@echo "Creating first Superadmin account..."

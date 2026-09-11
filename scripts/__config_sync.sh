@@ -76,6 +76,9 @@ generate_secret_for() {
   local key="$1"
   case "$key" in
     POSTGRES_PASSWORD) gen_pw ;;
+    POSTGRES_SERVICE_PASSWORD) gen_pw ;;
+    POSTGRES_ADMIN_PASSWORD) gen_pw ;;
+    POSTGRES_MONITOR_PASSWORD) gen_pw ;;
     AUTH_SECRET)        gen_hex32 ;;
     SECRET_KEY)          gen_hex32 ;;
     CMS_SECRET_KEY)      gen_hex32 ;;
@@ -131,6 +134,143 @@ scan_and_generate_secrets() {
   done
 }
 
+# WHY: existing deployments miss keys added to config.toml.example because
+# bootstrap only copies on first run; secrets for those keys are then never
+# generated and downstream .env falls back to defaults. The merge must run
+# before secret generation so newly-added empty secrets get populated in
+# the same pass. Operator values are never overwritten and the step is
+# idempotent.
+migrate_missing_keys() {
+  # WHY: guard against missing example — corrupted worktrees should not crash sync.
+  [[ -f "$TOML_EXAMPLE" ]] || return 0
+  [[ -f "$TOML_FILE" ]] || return 0
+  declare -A existing_keys
+  declare -A existing_sections
+  local line sec="" key stripped trimmed
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    stripped="${line%%#*}"
+    trimmed="$(echo "$stripped" | xargs 2>/dev/null || echo "")"
+    [[ -z "$trimmed" ]] && continue
+    if [[ "$trimmed" =~ ^\[([a-zA-Z0-9_]+)\]$ ]]; then
+      sec="${BASH_REMATCH[1]}"
+      existing_sections["$sec"]=1
+    elif [[ "$trimmed" =~ ^([A-Za-z0-9_]+)[[:space:]]*=[[:space:]]*(.*)$ ]]; then
+      key="${BASH_REMATCH[1]}"
+      if [[ -n "$sec" ]]; then
+        existing_keys["${sec}.${key}"]=1
+      else
+        existing_keys["${key}"]=1
+      fi
+    fi
+  done < "$TOML_FILE"
+  declare -A missing_by_section
+  declare -A missing_count
+  declare -a sections_order=()
+  declare -A seen_section
+  local total=0
+  sec=""
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    stripped="${line%%#*}"
+    trimmed="$(echo "$stripped" | xargs 2>/dev/null || echo "")"
+    if [[ "$trimmed" =~ ^\[([a-zA-Z0-9_]+)\]$ ]]; then
+      sec="${BASH_REMATCH[1]}"
+      if [[ -z "${seen_section[$sec]:-}" ]]; then
+        sections_order+=("$sec")
+        seen_section["$sec"]=1
+      fi
+      continue
+    fi
+    if [[ "$trimmed" =~ ^([A-Za-z0-9_]+)[[:space:]]*=[[:space:]]*(.*)$ ]]; then
+      key="${BASH_REMATCH[1]}"
+      [[ -z "$sec" ]] && continue
+      if [[ -z "${existing_keys[${sec}.${key}]:-}" ]]; then
+        local raw
+        raw="$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+        [[ -z "$raw" ]] && continue
+        if [[ -z "${missing_by_section[$sec]:-}" ]]; then
+          missing_by_section["$sec"]="$raw"
+        else
+          missing_by_section["$sec"]+=$'\n'"$raw"
+        fi
+        missing_count["$sec"]=$(( ${missing_count["$sec"]:-0} + 1 ))
+        total=$((total+1))
+        existing_keys["${sec}.${key}"]=1
+      fi
+    fi
+  done < "$TOML_EXAMPLE"
+  if [[ "$total" -eq 0 ]]; then
+    return 0
+  fi
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    local summary=""
+    for s in "${sections_order[@]}"; do
+      if [[ -n "${missing_by_section[$s]:-}" ]]; then
+        summary+="[${s}] ${missing_count[$s]} keys; "
+      fi
+    done
+    log_info "Would migrate $total new config keys: ${summary%"; "}"
+    return 0
+  fi
+  local tmp_new
+  tmp_new="$(mktemp)"
+  declare -A pending_missing
+  for k in "${!missing_by_section[@]}"; do pending_missing["$k"]="${missing_by_section[$k]}"; done
+  local prev_sec="" header_sec="" is_header
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    stripped="${line%%#*}"
+    trimmed="$(echo "$stripped" | xargs 2>/dev/null || echo "")"
+    is_header=0
+    header_sec=""
+    if [[ "$trimmed" =~ ^\[([a-zA-Z0-9_]+)\]$ ]]; then
+      is_header=1
+      header_sec="${BASH_REMATCH[1]}"
+    fi
+    if [[ "$is_header" -eq 1 ]]; then
+      if [[ -n "$prev_sec" && -n "${pending_missing[$prev_sec]:-}" ]]; then
+        while IFS= read -r mline || [[ -n "$mline" ]]; do
+          echo "$mline" >> "$tmp_new"
+        done <<< "${pending_missing[$prev_sec]}"
+        unset pending_missing["$prev_sec"]
+      fi
+      prev_sec="$header_sec"
+    fi
+    echo "$line" >> "$tmp_new"
+  done < "$TOML_FILE"
+  if [[ -n "$prev_sec" && -n "${pending_missing[$prev_sec]:-}" ]]; then
+    while IFS= read -r mline || [[ -n "$mline" ]]; do
+      echo "$mline" >> "$tmp_new"
+    done <<< "${pending_missing[$prev_sec]}"
+    unset pending_missing["$prev_sec"]
+  fi
+  for s in "${sections_order[@]}"; do
+    if [[ -n "${pending_missing[$s]:-}" ]]; then
+      if [[ -z "${existing_sections[$s]:-}" ]]; then
+        echo "" >> "$tmp_new"
+        echo "[$s]" >> "$tmp_new"
+        while IFS= read -r mline || [[ -n "$mline" ]]; do
+          echo "$mline" >> "$tmp_new"
+        done <<< "${pending_missing[$s]}"
+      else
+        while IFS= read -r mline || [[ -n "$mline" ]]; do
+          echo "$mline" >> "$tmp_new"
+        done <<< "${pending_missing[$s]}"
+      fi
+      unset pending_missing["$s"]
+    fi
+  done
+  cat "$tmp_new" > "$TOML_FILE"
+  rm -f "$tmp_new"
+  local summary=""
+  for s in "${sections_order[@]}"; do
+    if [[ -n "${missing_by_section[$s]:-}" ]]; then
+      local keys_list
+      keys_list="$(echo "${missing_by_section[$s]}" | sed -n 's/^\([A-Za-z0-9_]*\)[[:space:]]*=.*/\1/p' | tr '\n' ' ' | xargs 2>/dev/null || echo "")"
+      summary+="[${s}] ${keys_list}; "
+    fi
+  done
+  log_info "migrated $total new config keys: ${summary%"; "}"
+}
+
 # --- Main ---
 SECRETS_CHANGED=0
 
@@ -149,6 +289,11 @@ main() {
       log_error "config.toml.example not found — cannot bootstrap"; exit 1
     fi
   fi
+
+  # WHY: merge newly-added example keys into existing config before parsing and
+  # secret generation — bootstrap only copies once, so updates would otherwise
+  # never reach old worktrees and downstream .env would fallback to defaults.
+  migrate_missing_keys
 
   parse_toml "$TOML_FILE"
 
@@ -218,9 +363,16 @@ main() {
     local db_name="${__TOML[core.POSTGRES_DB]:-cmsdb}"
     local db_port="${__TOML[core.POSTGRES_PORT]:-5432}"
     local auth_secret="${__TOML[admin.AUTH_SECRET]:-}"
+    # WHY: admin panel uses least-privilege cms_admin; keep owner fallback when secret not yet generated.
+    local admin_db_user="cms_admin"
+    local admin_db_pass="${__TOML[core.POSTGRES_ADMIN_PASSWORD]:-}"
+    if [[ -z "$admin_db_pass" ]]; then
+      admin_db_user="$db_user"
+      admin_db_pass="$db_pass"
+    fi
     {
       echo "# Auto-generated by ./cms config sync from config.toml."
-      echo "DATABASE_URL=\"postgresql://${db_user}:${db_pass}@localhost:${db_port}/${db_name}\""
+      echo "DATABASE_URL=\"postgresql://${admin_db_user}:${admin_db_pass}@localhost:${db_port}/${db_name}\""
       [[ -n "$auth_secret" ]] && echo "AUTH_SECRET=${auth_secret}"
     } > admin-panel/.env
     chmod 600 admin-panel/.env

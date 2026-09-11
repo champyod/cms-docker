@@ -17,8 +17,8 @@ services:
       SERVER_BASE_URL: ${SERVER_BASE_URL:-http://localhost}
       PUBLIC_IP: ${PUBLIC_IP:-0.0.0.0}
 
-      # Database
-      DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
+      # Database — WHY: admin panel uses least-privilege cms_admin, not the owner
+      DATABASE_URL: postgresql://cms_admin:${POSTGRES_ADMIN_PASSWORD:-${POSTGRES_PASSWORD:-cmspassword}}@database:5432/${POSTGRES_DB:-cmsdb}
 
       # Authentication
       AUTH_SECRET: ${AUTH_SECRET}

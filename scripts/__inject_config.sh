@@ -82,6 +82,7 @@ DB_NAME="${DB_NAME:-$(get_worker_env_val "POSTGRES_DB")}"
 DB_HOST="${DB_HOST:-$(get_worker_env_val "POSTGRES_HOST")}"
 DB_PORT="${DB_PORT:-$(get_worker_env_val "POSTGRES_PORT")}"
 
+# WHY: Python services stay on the owner role (cmsuser) — they need full DML and large-object lifecycle; cms_service is reserved for future least-privilege cutover, not auto-wired here to avoid breaking existing deployments.
 DB_USER="${DB_USER:-cmsuser}"
 DB_PASS="${DB_PASS:-your_password_here}"
 DB_NAME="${DB_NAME:-cmsdb}"

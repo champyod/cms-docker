@@ -400,7 +400,8 @@ services:
       VITE_API_URL: ${VITE_API_URL:-http://localhost:8889}
       SERVER_BASE_URL: ${SERVER_BASE_URL:-http://localhost}
       PUBLIC_IP: ${PUBLIC_IP:-0.0.0.0}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
+      # WHY: admin panel uses least-privilege cms_admin, not the owner; falls back to owner when secret not yet generated.
+      DATABASE_URL: postgresql://cms_admin:${POSTGRES_ADMIN_PASSWORD:-${POSTGRES_PASSWORD:-cmspassword}}@database:5432/${POSTGRES_DB:-cmsdb}
       AUTH_SECRET: ${AUTH_SECRET}
       REPO_ROOT: /repo-root
       DEPLOYMENT_TYPE: ${DEPLOYMENT_TYPE:-img}
@@ -687,7 +688,8 @@ services:
       - MONITOR_INTERVAL=5
       - MONITOR_COOLDOWN=300
       - DISK_PATH=/host
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
+      # WHY: monitor uses least-privilege cms_monitor (SELECT only), not the owner.
+      - DATABASE_URL=postgresql://cms_monitor:${POSTGRES_MONITOR_PASSWORD:-${POSTGRES_PASSWORD:-cmspassword}}@database:5432/${POSTGRES_DB:-cmsdb}
       - BACKUP_INTERVAL_MINS=${BACKUP_INTERVAL_MINS:-1440}
       - BACKUP_MAX_COUNT=${BACKUP_MAX_COUNT:-50}
       - BACKUP_MAX_AGE_DAYS=${BACKUP_MAX_AGE_DAYS:-10}
