@@ -89,6 +89,10 @@ Landed:
 
 Verified: Next.js `tsc` 0 errors, 429/429 tests green. Python files compile; zero references to the old booleans remain anywhere.
 
+## Row-level security (2026-08-20)
+
+RLS enabled with `FORCE` on all 33 app tables (`admins`, `announcements`, `attachments`, `contests`, `datasets`, `evaluations`, `executables`, `files`, `fsobjects`, `managers`, `messages`, `participations`, `questions`, `statements`, `submission_results`, `submissions`, `tasks`, `teams`, `testcases`, `tokens`, `user_test_*`, `monitor_targets`, `users`, `permissions`, `groups`, `group_permissions`, `admin_groups`, `admin_permission_overrides`, `audit_log`) — `FORCE` binds `cmsuser` (owner) so even the owner must satisfy a policy. `audit_log` is append-only (SELECT+INSERT only, no UPDATE/DELETE for any role — hash chain tamper-evident at DB layer). `submissions` is non-deletable (SELECT/INSERT/UPDATE allowed — admin UI needs `comment`/`official` — but no DELETE for any role). `cms_service`/`cms_admin`/`cmsuser` have permissive `USING (true) WITH CHECK (true)` (not `BYPASSRLS`, auditable) except for those two guarantees; `cms_monitor`/`cms_readonly` are SELECT-only. Exemptions: `pg_largeobject` payloads cannot carry RLS (PostgreSQL limitation — only `fsobjects` rows are gated, file bytes via `lo_*`/digest stay app-guarded) and contestant row ownership is not enforceable (contestant path shares the app connection, no DB principal). Policies are re-applied after every `prisma db push` by `scripts/__apply_sql.sh` (filename-ordered, `ON_ERROR_STOP=1`), so they survive schema sync.
+
 ## Known stale / risky
 
 - Vendored `src/` + no recorded pin → cannot diff vs upstream from this checkout. Re-sync needs a manual upstream fetch + tree comparison.
