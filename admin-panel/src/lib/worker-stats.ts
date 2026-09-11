@@ -90,7 +90,7 @@ function describeContainerWorkers(containerLines: string[], shardCounts: Record<
 
 export async function collectWorkerStats(): Promise<WorkerStat[]> {
   try {
-    const configuredWorkers = loadConfiguredWorkers(path.join(getRepoRoot(), '.env.core'));
+    const configuredWorkers = loadConfiguredWorkers(path.join(getRepoRoot(), '.env'));
 
     const { stdout } = await execPromise('docker ps -a --filter "name=cms-worker" --format "{{.Names}}\t{{.Status}}"');
 

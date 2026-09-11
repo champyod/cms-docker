@@ -50,16 +50,14 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Load env (POSTGRES_* from .env.core).  Do not override already-exported.
+# Load env.  Do not override already-exported.
 # ---------------------------------------------------------------------------
-for env_file in "${REPO_ROOT}/.env.core" "${REPO_ROOT}/.env" "${REPO_ROOT}/.env.infra"; do
-  if [[ -f "$env_file" ]]; then
-    set -a
-    # shellcheck disable=SC1091
-    source "$env_file" 2>/dev/null || true
-    set +a
-  fi
-done
+if [[ -f "${REPO_ROOT}/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "${REPO_ROOT}/.env" 2>/dev/null || true
+  set +a
+fi
 
 # ---------------------------------------------------------------------------
 # Config (keep BACKUP_* rotation envs compatible with legacy monitor.sh)

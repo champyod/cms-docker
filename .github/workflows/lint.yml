@@ -81,8 +81,8 @@ jobs:
           # Generate the env stand-in from the tracked config example
           # (--no-secrets keeps CI logs free of random credentials)
           cp -n config.toml.example config.toml 2>/dev/null || true
-          if bash scripts/__config_sync.sh --no-secrets >/dev/null 2>&1 && [ -f .env.core ]; then
-            ENV_ARGS=(--env-file .env.core)
+          if bash scripts/__config_sync.sh --no-secrets >/dev/null 2>&1 && [ -f .env ]; then
+            ENV_ARGS=(--env-file .env)
           else
             echo "config sync failed; using dummy env vars"
             export POSTGRES_PASSWORD=x AUTH_SECRET=x SECRET_KEY=x CONTEST_ID=1

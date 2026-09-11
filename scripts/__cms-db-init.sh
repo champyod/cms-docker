@@ -27,9 +27,9 @@ if ! declare -F log_die >/dev/null 2>&1; then
   log_die() { printf '[FAIL] %s\n' "${1:-fatal}" >&2; exit "${2:-1}"; }
 fi
 
-ENV_FILE=".env.core"
+ENV_FILE=".env"
 if [[ ! -f "$ENV_FILE" ]]; then
-  log_die "Error: $ENV_FILE not found." 1
+  log_die "Error: $ENV_FILE not found — run 'make env' or './cms config sync' first." 1
 fi
 
 # Exact key match via awk (escapes regex metachars).

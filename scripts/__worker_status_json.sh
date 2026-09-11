@@ -16,7 +16,7 @@ if (set -o pipefail 2>/dev/null); then
 fi
 cd "$(dirname "$0")/.."
 
-CORE_ENV=".env.core"
+CORE_ENV=".env"
 CONTEST_ENV=".env.contest"
 
 env_val() { awk -F= -v k="$2" '$1==k {v=$0; sub(/^[^=]*=/,"",v); gsub(/^[ \t]+|[ \t\r]+$/,"",v); print v; exit}' "$1" 2>/dev/null || true; }

@@ -137,7 +137,7 @@ SecRule REQUEST_URI "@beginsWith /api/submissions" "id:1001,phase:1,pass,nolog,c
 SecRule REMOTE_ADDR "@ipMatch 10.0.0.0/8,192.168.0.0/16" "id:1002,phase:1,pass,nolog,ctl:ruleEngine=DetectionOnly"
 
 # Raise threshold globally instead of per-rule (alternative)
-# WAF_ANOMALY_INBOUND=8  in .env.infra and restart grader-waf
+# WAF_ANOMALY_INBOUND=8 in config.toml [infra], then ./cms config sync and restart grader-waf
 ```
 
 Or use CRS update-target helpers:

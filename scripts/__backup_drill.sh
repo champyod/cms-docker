@@ -52,16 +52,14 @@ fi
 require_disk_free_gb "$PWD" 3 5
 
 # ---------------------------------------------------------------------------
-# Load env (POSTGRES_* from .env.core).  Do not override already-exported.
+# Load env.  Do not override already-exported.
 # ---------------------------------------------------------------------------
-for env_file in "${REPO_ROOT}/.env.core" "${REPO_ROOT}/.env" "${REPO_ROOT}/.env.infra"; do
-  if [[ -f "$env_file" ]]; then
-    set -a
-    # shellcheck disable=SC1091
-    source "$env_file" 2>/dev/null || true
-    set +a
-  fi
-done
+if [[ -f "${REPO_ROOT}/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "${REPO_ROOT}/.env" 2>/dev/null || true
+  set +a
+fi
 
 POSTGRES_USER_VAL="${POSTGRES_USER:-cmsuser}"
 POSTGRES_DB_VAL="${POSTGRES_DB:-cmsdb}"
@@ -86,9 +84,9 @@ if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$CONTAINER_DB"; the
   # We still proceed but will likely fail at restore time
 fi
 
-# Check .env.core exists with credentials
-if [[ ! -f "${REPO_ROOT}/.env.core" ]]; then
-  log_die ".env.core not found — cannot determine PostgreSQL credentials for drill"
+# Check .env exists with credentials
+if [[ ! -f "${REPO_ROOT}/.env" ]]; then
+  log_die ".env not found — cannot determine PostgreSQL credentials for drill (run: make env)"
 fi
 
 # ---------------------------------------------------------------------------

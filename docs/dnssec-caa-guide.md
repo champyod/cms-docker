@@ -100,7 +100,7 @@ Multiple `issue` lines mean OR (any listed may issue).
 ### 3. Enable locally
 
 ```bash
-# .env.infra or .env.local (gitignored)
+# config.toml [infra] or .env.local (gitignored)
 CAA_ENABLED=1
 CAA_ISSUER=letsencrypt.org
 ```

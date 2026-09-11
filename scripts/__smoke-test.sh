@@ -346,8 +346,8 @@ set -a
 source "${REPO_ROOT}/.env" 2>/dev/null || true
 set +a
 
-# Also source .env.admin/.env.contest directly if .env missing parts (for placeholder detection)
-for _ef in "${REPO_ROOT}/.env.admin" "${REPO_ROOT}/.env.contest" "${REPO_ROOT}/.env.core"; do
+# .env.contest is a genuine per-contest override — source it too if present
+for _ef in "${REPO_ROOT}/.env.contest"; do
   if [[ -f "$_ef" ]]; then
     set -a; source "$_ef" 2>/dev/null || true; set +a
   fi
@@ -358,7 +358,7 @@ check_secret_var() {
   local var_name="$1"
   local val="${!var_name:-}"
   if [[ -z "$val" ]]; then
-    printf '[FAIL] %s is empty or unset (check .env / .env.*)\n' "$var_name" >&2
+    printf '[FAIL] %s is empty or unset (check .env — run ./cms config sync)\n' "$var_name" >&2
     return 1
   fi
   if is_default_secret "$val"; then

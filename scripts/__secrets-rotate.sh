@@ -68,14 +68,12 @@ is_default_htpasswd() {
 # ---------------------------------------------------------------------------
 # Load environment
 # ---------------------------------------------------------------------------
-for env_file in "${REPO_ROOT}/.env.core" "${REPO_ROOT}/.env.admin" "${REPO_ROOT}/.env.infra" "${REPO_ROOT}/.env"; do
-  if [[ -f "$env_file" ]]; then
-    set -a
-    # shellcheck disable=SC1091
-    source "$env_file" 2>/dev/null || true
-    set +a
-  fi
-done
+if [[ -f "${REPO_ROOT}/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "${REPO_ROOT}/.env" 2>/dev/null || true
+  set +a
+fi
 
 # ---------------------------------------------------------------------------
 # Usage
@@ -116,16 +114,16 @@ cmd_audit() {
   echo ""
   local weak=0 total=0
 
-  # POSTGRES_PASSWORD in .env.core
-  _audit_env_key ".env.core" "POSTGRES_PASSWORD" && ((weak++))
+  # POSTGRES_PASSWORD in .env
+  _audit_env_key ".env" "POSTGRES_PASSWORD" && ((weak++))
   ((total++))
 
-  # RANKING_PASSWORD in .env.admin
-  _audit_env_key ".env.admin" "RANKING_PASSWORD" && ((weak++))
+  # RANKING_PASSWORD in .env
+  _audit_env_key ".env" "RANKING_PASSWORD" && ((weak++))
   ((total++))
 
-  # AUTH_SECRET in .env.admin
-  _audit_env_key ".env.admin" "AUTH_SECRET" && ((weak++))
+  # AUTH_SECRET in .env
+  _audit_env_key ".env" "AUTH_SECRET" && ((weak++))
   ((total++))
 
   # AUTH_SECRET in admin-panel/.env
@@ -224,16 +222,14 @@ _check_remote_worker_ref() {
 
   # Check if WORKER entries reference remote host
   local remote_refs=0
-  for env_file in .env.core .env.admin .env.worker; do
-    if [[ -f "$env_file" ]]; then
-      local matches
-      matches="$(grep -c "$worker_host" "$env_file" 2>/dev/null || true)"
-      if (( matches > 0 )); then
-        log_warn "  $env_file references $worker_host ($matches lines) — rotation may break RPC"
-        remote_refs=1
-      fi
+  if [[ -f ".env" ]]; then
+    local matches
+    matches="$(grep -c "$worker_host" ".env" 2>/dev/null || true)"
+    if (( matches > 0 )); then
+      log_warn "  .env references $worker_host ($matches lines) — rotation may break RPC"
+      remote_refs=1
     fi
-  done
+  fi
 
   # Check CORE_SERVICES_HOST
   if [[ -n "${CORE_SERVICES_HOST:-}" ]]; then
@@ -247,7 +243,7 @@ _check_remote_worker_ref() {
     log_info "  No remote worker references found — rotation is safe"
   else
     log_warn "  After rotation, update worker on $worker_host with new credentials"
-    log_warn "  SSH to $worker_host and update .env.worker, then: cd /path/to/cms && make worker"
+    log_warn "  SSH to $worker_host and update config.toml, then: cd /path/to/cms && ./cms config sync && make worker"
   fi
 }
 
@@ -340,29 +336,25 @@ cmd_apply() {
   # shellcheck disable=SC1091
   source "$secrets_file" 2>/dev/null || true
 
-  # Update .env.core — POSTGRES_PASSWORD
+  # Update config.toml with new secrets, then re-run sync
+  local toml_updated=0
   if [[ -n "${POSTGRES_PASSWORD:-}" ]]; then
-    _update_env_key ".env.core" "POSTGRES_PASSWORD" "$POSTGRES_PASSWORD"
+    _update_config_toml "POSTGRES_PASSWORD" "$POSTGRES_PASSWORD" && toml_updated=1
   fi
-
-  # Update .env.admin — RANKING_PASSWORD, AUTH_SECRET
   if [[ -n "${RANKING_PASSWORD:-}" ]]; then
-    _update_env_key ".env.admin" "RANKING_PASSWORD" "$RANKING_PASSWORD"
+    _update_config_toml "RANKING_PASSWORD" "$RANKING_PASSWORD" && toml_updated=1
   fi
   if [[ -n "${AUTH_SECRET:-}" ]]; then
-    _update_env_key ".env.admin" "AUTH_SECRET" "$AUTH_SECRET"
+    _update_config_toml "AUTH_SECRET" "$AUTH_SECRET" && toml_updated=1
+  fi
+  if [[ -n "${CMS_SECRET_KEY:-}" ]]; then
+    _update_config_toml "CMS_SECRET_KEY" "$CMS_SECRET_KEY" && toml_updated=1
   fi
 
-  # Update admin-panel/.env — AUTH_SECRET, SECRET_KEY
+  # Update admin-panel/.env — AUTH_SECRET, SECRET_KEY (separate consumer)
   if [[ -f "admin-panel/.env" ]]; then
     [[ -n "${AUTH_SECRET:-}" ]] && _update_env_file_key "admin-panel/.env" "AUTH_SECRET" "$AUTH_SECRET"
     [[ -n "${SECRET_KEY:-}" ]] && _update_env_file_key "admin-panel/.env" "SECRET_KEY" "$SECRET_KEY"
-  fi
-
-  # Update config/cms.toml — CMS_SECRET_KEY
-  if [[ -f "config/cms.toml" ]] && [[ -n "${CMS_SECRET_KEY:-}" ]]; then
-    sed -i "s|^CMS_SECRET_KEY\s*=.*|CMS_SECRET_KEY = ${CMS_SECRET_KEY}|" config/cms.toml
-    log_info "Updated CMS_SECRET_KEY in config/cms.toml"
   fi
 
   # Update htpasswd
@@ -372,10 +364,10 @@ cmd_apply() {
     log_info "Updated config/funnel.htpasswd"
   fi
 
-  # Regenerate combined .env
-  if [[ -f "Makefile" ]]; then
-    log_info "Regenerating combined .env via make env"
-    make env 2>/dev/null || log_warn "make env failed — manual intervention may be needed"
+  # Regenerate .env from config.toml
+  if [[ "$toml_updated" -eq 1 ]] && [[ -f "scripts/__config_sync.sh" ]]; then
+    log_info "Regenerating .env via config sync"
+    bash scripts/__config_sync.sh || log_warn "config sync failed — manual intervention may be needed"
   fi
 
   # Restart core stack (database needs new password)
@@ -401,16 +393,20 @@ cmd_apply() {
   log_info "IMPORTANT: Update worker on 100.75.203.112 if RPC is configured"
 }
 
-_update_env_key() {
-  local file="$1" key="$2" value="$3"
-  if [[ -f "$file" ]]; then
-    if grep -q "^${key}=" "$file"; then
-      sed -i "s|^${key}=.*|${key}=${value}|" "$file"
-      log_info "Updated $key in $file"
-    else
-      echo "${key}=${value}" >> "$file"
-      log_info "Added $key to $file"
-    fi
+_update_config_toml() {
+  local key="$1" value="$2" toml="${REPO_ROOT}/config.toml"
+  if [[ ! -f "$toml" ]]; then
+    log_warn "config.toml not found — cannot update $key"
+    return 1
+  fi
+  # Update existing key across all sections (sed matches key = anywhere)
+  if grep -q "^${key}\s*=" "$toml"; then
+    sed -i "s|^${key}\s*=.*|${key} = \"${value}\"|" "$toml"
+    log_info "Updated $key in config.toml"
+    return 0
+  else
+    log_warn "$key not found in config.toml — cannot update"
+    return 1
   fi
 }
 

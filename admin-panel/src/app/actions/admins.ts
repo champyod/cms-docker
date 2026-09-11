@@ -2,7 +2,8 @@
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
-import { ensurePermission, invalidateAccessCache } from '@/lib/permissions';
+import { ensurePermission, getPermissions, invalidateAccessCache } from '@/lib/permissions';
+import { stripDisallowedFields } from '@/lib/field-permissions';
 import { getSession } from '@/lib/auth';
 import { safeAdminSelect, type AdminWithLogin } from '@/lib/prisma-selects';
 import {
@@ -52,12 +53,15 @@ export async function getAdmins(): Promise<AdminWithLogin[]> {
 
 export async function createAdmin(data: CreateAdminInput): Promise<ActionResult> {
   await ensurePermission('admin:create');
+  // Why: server-side guard — never write a field the caller cannot update, even if the client sends it
+  const effectivePermissions = await getPermissions();
+  const allowed = stripDisallowedFields('admins', data as unknown as Record<string, unknown>, effectivePermissions);
   try {
     await prisma.admins.create({
       data: {
-        name: data.name,
-        username: data.username,
-        authentication: await formatStoredPassword(data.passwordKind ?? DEFAULT_PASSWORD_KIND, data.password),
+        name: allowed.name as string,
+        username: allowed.username as string,
+        authentication: await formatStoredPassword(data.passwordKind ?? DEFAULT_PASSWORD_KIND, allowed.password as string),
         enabled: true,
       }
     });
@@ -131,6 +135,9 @@ async function buildAdminUpdateData(data: UpdateAdminInput): Promise<AdminUpdate
 
 export async function updateAdmin(adminId: number, data: UpdateAdminInput): Promise<ActionResult> {
   await ensurePermission('admin:update');
+  // Why: server-side guard — never write a field the caller cannot update, even if the client sends it
+  const effectivePermissions = await getPermissions();
+  const allowed = stripDisallowedFields('admins', data as Record<string, unknown>, effectivePermissions);
 
   const session = await getSession();
   if (!session) {
@@ -152,7 +159,7 @@ export async function updateAdmin(adminId: number, data: UpdateAdminInput): Prom
   try {
     await prisma.admins.update({
       where: { id: adminId },
-      data: await buildAdminUpdateData(data)
+      data: await buildAdminUpdateData(allowed as unknown as UpdateAdminInput)
     });
     invalidateAccessCache(String(adminId));
     revalidatePath('/[locale]/admins', 'page');

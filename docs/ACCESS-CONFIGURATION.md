@@ -86,11 +86,10 @@ sudo firewall-cmd --reload
 # Deploy all stacks
 ./cms
 
-# Or manually
-docker compose -f docker-compose.core.yml --env-file .env.core up -d
-docker compose -f docker-compose.admin.yml --env-file .env.admin up -d
-docker compose -f docker-compose.contest.yml --env-file .env.contest up -d
-docker compose -f docker-compose.worker.yml --env-file .env.worker up -d
+# Or manually (compose loads .env automatically)
+docker compose --profile core up -d
+docker compose --profile admin up -d
+docker compose --profile contest up -d
 ```
 
 #### Step 5: Access CMS
@@ -374,7 +373,7 @@ When using public IP, remote workers connect to your server's public IP.
 ```
 
 **On the remote worker machine** (this repository checked out) — run the
-block printed by `attach`; it appends the same rows to its `.env.core`
+block printed by `attach`; it adds WORKER_N entries to `config.toml` [worker]
 and deploys the shards locally:
 
 ```bash
@@ -538,11 +537,10 @@ echo "Ranking: http://$MY_IP:8890"
 # 1. Configure DNS (in your DNS provider)
 # Add A records pointing to your server IP
 
-# 2. Update .env files
-echo "ACCESS_METHOD=domain" >> .env.admin
-echo "ADMIN_DOMAIN=admin.example.com" >> .env.admin
-echo "ACCESS_METHOD=domain" >> .env.contest
-echo "CONTEST_DOMAIN=contest.example.com" >> .env.contest
+# 2. Edit config.toml
+# [admin] ACCESS_METHOD = "domain"; ADMIN_DOMAIN = "admin.example.com"
+# [contest] ACCESS_METHOD = "domain"; CONTEST_DOMAIN = "contest.example.com"
+# Then: ./cms config sync
 
 # 3. Setup reverse proxy (Nginx or Traefik)
 

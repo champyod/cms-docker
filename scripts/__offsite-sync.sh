@@ -33,14 +33,12 @@ fi
 # ---------------------------------------------------------------------------
 # Load environment
 # ---------------------------------------------------------------------------
-for env_file in "${REPO_ROOT}/.env.infra" "${REPO_ROOT}/.env.core" "${REPO_ROOT}/.env"; do
-  if [[ -f "$env_file" ]]; then
-    set -a
-    # shellcheck disable=SC1091
-    source "$env_file" 2>/dev/null || true
-    set +a
-  fi
-done
+if [[ -f "${REPO_ROOT}/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "${REPO_ROOT}/.env" 2>/dev/null || true
+  set +a
+fi
 
 # ---------------------------------------------------------------------------
 # Config - NO HARDCODED DEFAULTS
@@ -63,7 +61,7 @@ Modes:
   --dry-run    Print rsync command without executing (default)
   --apply      Sync backups to remote node
 
-Environment (.env.infra):
+Environment (.env [infra] section):
   OFFSITE_TAILNET_NODE    Remote Tailscale IP (REQUIRED - no default)
   OFFSITE_REMOTE_PATH     Remote destination path (REQUIRED - no default)
   OFFSITE_ENCRYPT_KEY     GPG symmetric encryption key (optional)
@@ -92,8 +90,8 @@ done
 # ---------------------------------------------------------------------------
 # Validation
 # ---------------------------------------------------------------------------
-[[ -n "$OFFSITE_TAILNET_NODE" ]] || log_die "OFFSITE_TAILNET_NODE not set in .env.infra — no default" 1
-[[ -n "$OFFSITE_REMOTE_PATH" ]] || log_die "OFFSITE_REMOTE_PATH not set in .env.infra — no default" 1
+[[ -n "$OFFSITE_TAILNET_NODE" ]] || log_die "OFFSITE_TAILNET_NODE not set in .env [infra] — no default" 1
+[[ -n "$OFFSITE_REMOTE_PATH" ]] || log_die "OFFSITE_REMOTE_PATH not set in .env [infra] — no default" 1
 [[ -d "$BACKUP_DIR" ]] || log_die "backup dir not found: $BACKUP_DIR" 1
 
 mapfile -t ARCHIVES < <(ls -1t "${BACKUP_DIR}"/*.tar.gz 2>/dev/null || true)

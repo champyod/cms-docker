@@ -62,7 +62,7 @@ The modern Admin Panel (port 8891) provides a unified interface to manage all wo
 ### Managing Workers via Admin UI
 1.  Navigate to **Infrastructure** → **Resources** in the Admin Panel.
 2.  Add or remove worker entries by specifying their `Hostname/IP` and `Port`.
-3.  The system automatically updates `.env.core` with `WORKER_N` variables.
+3.  The system automatically updates `config.toml` [worker] with `WORKER_N` entries.
 4.  Run `./cms config sync` (or click **Apply Changes** in the UI) to regenerate `config/cms.toml`.
 5.  The system will guide you through restarting the core services to finalize the connection.
 
@@ -101,21 +101,22 @@ cd ~/cms-worker
 
 ### Step 3: Create Environment File
 
-Create `.env.worker`:
+Edit `config.toml` [worker] section:
 
-```bash
+```toml
+[worker]
 # Worker Configuration
-WORKER_SHARD=1  # MUST be unique per worker
-WORKER_NAME=worker-remote-1
-ISOLATE_CGROUP_CONTROL=1
-ISOLATE_CGROUP_PATH=/sys/fs/cgroup/cms-isolate
+WORKER_SHARD = 1  # MUST be unique per worker
+WORKER_NAME = "worker-remote-1"
+ISOLATE_CGROUP_CONTROL = 1
+ISOLATE_CGROUP_PATH = "/sys/fs/cgroup/cms-isolate"
 
 # Main Server Connection
-CORE_SERVICES_HOST=203.0.113.45  # Your main server public IP
+CORE_SERVICES_HOST = "203.0.113.45"  # Your main server public IP
 
 # Resource Limits
-WORKER_CPUS=4
-WORKER_MEMORY=4g
+WORKER_CPU_LIMIT = "4"
+WORKER_MEMORY_LIMIT = "4g"
 
 # Service Ports (must match main server)
 LOG_SERVICE_PORT=29000
@@ -367,8 +368,8 @@ done
 ```
 
 On each worker box (this repository checked out), run the block printed by
-`worker attach` — it appends the same rows to its `.env.core` and deploys
-the shards locally (`./cms config sync && ./cms worker deploy all`).
+`worker attach` — it appends WORKER_N entries to its `config.toml` [worker]
+section and deploys the shards locally (`./cms config sync && ./cms worker deploy all`).
 
 ### Worker Management
 
@@ -408,7 +409,7 @@ aws ec2 run-instances \
 git clone https://github.com/champyod/cms-docker /opt/cms-docker
 cd /opt/cms-docker
 ./cms config sync
-echo "WORKER_1=WORKER_IP:26001" >> .env.core   # WORKER_IP = this box's public IP
+# Add WORKER_1 = "WORKER_IP:26001" to config.toml [worker] section
 ./cms config sync && ./cms worker deploy all'
 
 # Or use EC2 launch template
@@ -426,7 +427,7 @@ gcloud compute instances create cms-worker-1 \
 git clone https://github.com/champyod/cms-docker /opt/cms-docker
 cd /opt/cms-docker
 ./cms config sync
-echo "WORKER_1=WORKER_IP:26001" >> .env.core   # WORKER_IP = this box's public IP
+# Add WORKER_1 = "WORKER_IP:26001" to config.toml [worker] section
 ./cms config sync && ./cms worker deploy all'
 ```
 
@@ -453,7 +454,7 @@ Via Web Console:
    git clone https://github.com/champyod/cms-docker /opt/cms-docker
    cd /opt/cms-docker
    ./cms config sync
-   echo "WORKER_1=WORKER_IP:26001" >> .env.core   # WORKER_IP = this box's public IP
+   # Add WORKER_1 = "WORKER_IP:26001" to config.toml [worker] section
    ./cms config sync && ./cms worker deploy all
    ```
 
@@ -543,9 +544,9 @@ docker stats cms-worker-1
 
 **Adjust limits:**
 ```bash
-# In .env.worker
-WORKER_CPUS=8
-WORKER_MEMORY=8g
+# In config.toml [worker]
+WORKER_CPU_LIMIT = "8"
+WORKER_MEMORY_LIMIT = "8g"
 ```
 
 ### Connection Timeout

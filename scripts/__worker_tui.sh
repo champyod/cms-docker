@@ -27,8 +27,8 @@ if (set -o pipefail 2>/dev/null); then
 fi
 cd "$(dirname "$0")/.."
 
-CORE_ENV=".env.core"
-WORKER_ENV=".env.worker"
+CORE_ENV=".env"
+WORKER_ENV=".env"
 
 WORKERS=()      # rows: "shard|host|port|local(1/0)|memory|cpus"
 CUR=0
@@ -76,34 +76,78 @@ fleet_load() {
   rm -f "$tmp"
 }
 
-fleet_save() {  # rewrites WORKER_N block in .env.core, preserves everything else
-  [ -f "$CORE_ENV" ] || die "$CORE_ENV missing"
-  local tmp row s h p l m c wtmp
-  tmp="$(mktemp)"
-  grep -v '^WORKER_[0-9]*=' "$CORE_ENV" > "$tmp"
+fleet_save() {  # updates config.toml [worker] with fleet rows, re-runs sync
+  local toml="config.toml"
+  [ -f "$toml" ] || die "config.toml missing — run ./cms first"
+  local row s h p l m c
+  local gm gc; gm="$(global_memory)"; gc="$(global_cpus)"
+
+  # Build WORKER_N and WORKER_SHARDn_* lines for config.toml
+  local fleet_block=""
   for row in "${WORKERS[@]}"; do
     IFS='|' read -r s h p l m c <<<"$row"
-    echo "WORKER_$s=$h:$p" >> "$tmp"
+    fleet_block+="WORKER_${s} = \"${h}:${p}\"\n"
+    if [ "$l" != "1" ]; then
+      fleet_block+="WORKER_SHARD${s}_LOCAL = ${l}\n"
+    fi
+    [ -n "$gm" ] && [ "$m" != "$gm" ] && fleet_block+="WORKER_SHARD${s}_MEMORY = \"${m}\"\n"
+    [ -n "$gc" ] && [ "$c" != "$gc" ] && fleet_block+="WORKER_SHARD${s}_CPU = \"${c}\"\n"
   done
-  mv "$tmp" "$CORE_ENV"
 
-  if [ -f "$WORKER_ENV" ]; then
-    wtmp="$(mktemp)"
-    grep -vE '^WORKER_SHARD[0-9]+_(LOCAL|MEMORY|CPU)=' "$WORKER_ENV" > "$wtmp" || true
-    local gm gc; gm="$(global_memory)"; gc="$(global_cpus)"
-    for row in "${WORKERS[@]}"; do
-      IFS='|' read -r s h p l m c <<<"$row"
-      [ "$l" != "1" ] && echo "WORKER_SHARD${s}_LOCAL=$l" >> "$wtmp"
-      [ -n "$gm" ] && [ "$m" != "$gm" ] && echo "WORKER_SHARD${s}_MEMORY=$m" >> "$wtmp"
-      [ -n "$gc" ] && [ "$c" != "$gc" ] && echo "WORKER_SHARD${s}_CPU=$c" >> "$wtmp"
-    done
-    mv "$wtmp" "$WORKER_ENV"
-  fi
+  # Update config.toml: remove old fleet entries, insert new ones under [worker]
+  python3 - "$toml" <<PYEOF
+import re
+from pathlib import Path
+
+toml_path = "$toml"
+fleet_text = """$(printf '%b' "$fleet_block")"""
+
+text = Path(toml_path).read_text()
+lines = text.splitlines()
+new_lines = []
+in_worker = False
+
+for line in lines:
+    stripped = line.strip()
+    if stripped.startswith('[') and stripped.endswith(']'):
+        in_worker = (stripped == '[worker]')
+        new_lines.append(line)
+        continue
+    if in_worker:
+        key = stripped.split('=')[0].strip() if '=' in stripped else ''
+        if re.match(r'^WORKER_\d+$', key) or re.match(r'^WORKER_SHARD\d+_(LOCAL|MEMORY|CPU)$', key):
+            continue  # Skip old fleet entries
+    new_lines.append(line)
+
+# Find insertion point: last non-empty line in [worker] section
+insert_idx = len(new_lines)
+in_worker = False
+for i, line in enumerate(new_lines):
+    stripped = line.strip()
+    if stripped == '[worker]':
+        in_worker = True
+        continue
+    if in_worker:
+        if stripped.startswith('[') and stripped.endswith(']'):
+            insert_idx = i
+            break
+        if stripped and not stripped.startswith('#'):
+            insert_idx = i + 1
+
+fleet_lines = [l for l in fleet_text.strip().splitlines() if l.strip()]
+for j, fl in enumerate(fleet_lines):
+    new_lines.insert(insert_idx + j, fl)
+
+Path(toml_path).write_text('\n'.join(new_lines) + '\n')
+PYEOF
+
+  # Re-run config sync to regenerate .env
+  bash scripts/__config_sync.sh --no-secrets 2>/dev/null || log_warn "config sync after fleet_save failed"
 }
 
 require_env_files() {
-  [ -f "$CORE_ENV" ] || die "$CORE_ENV missing — run ./cms first"
-  [ -f "$WORKER_ENV" ] || die "$WORKER_ENV missing — run ./cms first"
+  [ -f "$CORE_ENV" ] || die "$CORE_ENV missing — run ./cms config sync first"
+  [ -f "config.toml" ] || die "config.toml missing — run ./cms config sync first"
 }
 
 # ---------------------------------------------------------------------------
@@ -388,12 +432,14 @@ attach_print_block() {
   local i
   echo ""
   log_info "On the worker box ($host), from its cms-docker checkout:"
-  echo "  # needs a checkout whose './cms config sync' preserves WORKER_N rows"
-  echo "  cat >> .env.core <<'FLEET'"
+  echo "  # Add these WORKER_N entries to config.toml [worker] section, then sync"
+  echo "  cat >> config.toml <<'FLEET'"
+  echo ""
+  echo "[worker]"
   for i in "${!shards[@]}"; do
-    printf 'WORKER_%s=%s:%s\n' "${shards[$i]}" "$host" "${ports[$i]}"
+    printf 'WORKER_%s = "%s:%s"\n' "${shards[$i]}" "$host" "${ports[$i]}"
   done
-  echo "  FLEET"
+  echo "FLEET"
   echo "  ./cms config sync && ./cms worker deploy all && ./cms worker list"
 }
 

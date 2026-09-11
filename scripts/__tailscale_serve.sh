@@ -5,7 +5,7 @@
 # loopback-bound CMS UIs, and optionally hides the raw plaintext ports by
 # rebinding them to 127.0.0.1 (.env.admin) so they are unreachable off-host.
 #
-# Env knobs (.env.admin):
+# Env knobs (.env [admin] / [tailscale]):
 #   TAILSCALE_SERVE=1              master switch consumed by ./cms bootstrap
 #   TS_HTTPS_PANEL=8843            public https port  -> admin panel :8891
 #   TS_HTTPS_CLASSIC=8844          -> classic admin :8889
@@ -23,7 +23,7 @@ if (set -o pipefail 2>/dev/null); then
 fi
 cd "$(dirname "$0")/.."
 
-ADMIN_ENV=".env.admin"
+ADMIN_ENV=".env"
 DRY_RUN="${TS_DRY_RUN:-0}"
 
 log_info() { printf '[INFO] %s\n' "$*"; }
@@ -89,20 +89,29 @@ cmd_setup() {
   fi
 
   if [ "$hide" = 1 ]; then
-    [ -f "$ADMIN_ENV" ] || die "$ADMIN_ENV missing"
-    if grep -qE '^ADMIN_NEXT_BIND_IP=127\.0\.0\.1\b' "$ADMIN_ENV" \
-       && grep -qE '^ADMIN_BIND_IP=127\.0\.0\.1\b' "$ADMIN_ENV" \
-       && grep -qE '^RANKING_BIND_IP=127\.0\.0\.1\b' "$ADMIN_ENV"; then
+    local toml="config.toml"
+    [ -f "$toml" ] || die "config.toml missing"
+    if grep -qE '^ADMIN_NEXT_LISTEN_ADDRESS\s*=\s*"127\.0\.0\.1"' "$toml" \
+       && grep -qE '^ADMIN_LISTEN_ADDRESS\s*=\s*"127\.0\.0\.1"' "$toml" \
+       && grep -qE '^RANKING_LISTEN_ADDRESS\s*=\s*"127\.0\.0\.1"' "$toml"; then
       log_info "raw ports already bound to loopback"
     else
-      sed -i 's/^ADMIN_NEXT_BIND_IP=.*/ADMIN_NEXT_BIND_IP=127.0.0.1/;
-              s/^ADMIN_BIND_IP=.*/ADMIN_BIND_IP=127.0.0.1/;
-              s/^RANKING_BIND_IP=.*/RANKING_BIND_IP=127.0.0.1/' "$ADMIN_ENV"
-      # ensure keys exist even if commented out
-      grep -q '^ADMIN_NEXT_BIND_IP=' "$ADMIN_ENV" || echo 'ADMIN_NEXT_BIND_IP=127.0.0.1' >> "$ADMIN_ENV"
-      grep -q '^ADMIN_BIND_IP=' "$ADMIN_ENV" || echo 'ADMIN_BIND_IP=127.0.0.1' >> "$ADMIN_ENV"
-      grep -q '^RANKING_BIND_IP=' "$ADMIN_ENV" || echo 'RANKING_BIND_IP=127.0.0.1' >> "$ADMIN_ENV"
-      log_info ".env.admin binds moved to 127.0.0.1"
+      python3 - "$toml" <<'PYEOF'
+import re
+from pathlib import Path
+p = Path("config.toml")
+t = p.read_text()
+for key in ("ADMIN_NEXT_LISTEN_ADDRESS", "ADMIN_LISTEN_ADDRESS", "RANKING_LISTEN_ADDRESS"):
+    pattern = rf'^{key}\s*=.*'
+    replacement = f'{key} = "127.0.0.1"'
+    if re.search(pattern, t, re.MULTILINE):
+        t = re.sub(pattern, replacement, t, flags=re.MULTILINE)
+    else:
+        t += f'\n{replacement}\n'
+p.write_text(t)
+PYEOF
+      bash scripts/__config_sync.sh --no-secrets 2>/dev/null || log_warn "config sync after bind update failed"
+      log_info "bind addresses moved to 127.0.0.1 in config.toml"
     fi
     if [ "$redeploy" = 1 ]; then
       log_info "Recreating admin stack with loopback binds ..."

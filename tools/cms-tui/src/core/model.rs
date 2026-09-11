@@ -136,7 +136,7 @@ impl AppState {
             ConfigFile {
                 id: "env-core".to_string(),
                 name: "Core Environment".to_string(),
-                path: ".env.core".to_string(),
+                path: ".env".to_string(),
                 syntax: "dotenv".to_string(),
             },
             ConfigFile {

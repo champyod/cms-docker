@@ -1,5 +1,5 @@
 # config.toml — Single source of truth for CMS deployment.
-# Run `./cms config sync` after editing to regenerate .env.* files.
+# Run `./cms config sync` after editing to regenerate .env file.
 # This file is gitignored. Only config.toml.example is tracked.
 
 [core]

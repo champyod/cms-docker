@@ -16,12 +16,15 @@ import { Dialog } from '@/components/core/Dialog';
 import { Button } from '@/components/core/Button';
 import { Input } from '@/components/core/Input';
 import { Card } from '@/components/core/Card';
+import { PasswordFieldWithKind } from '@/components/core/PasswordFieldWithKind';
 import { useToast } from '@/components/providers/ToastProvider';
 import type { PasswordRevealState } from '@/components/core/PasswordFieldWithKind';
 import type { PasswordKind } from '@/lib/password-format';
 import { resolveEffectivePermissions, type OverrideEffect } from '@/lib/permission-engine';
 import { PERMISSION_REGISTRY } from '@/lib/permission-registry';
 import type { AdminWithLogin } from '@/lib/prisma-selects';
+import { getFieldAccess, stripDisallowedFields } from '@/lib/field-permissions';
+import { RestrictedField } from '@/components/core/RestrictedField';
 
 import {
   EMPTY_ADMIN_FORM,
@@ -29,7 +32,7 @@ import {
   validateAdminForm,
   type AdminFormState,
 } from './adminFormConfig';
-import { AdminFormFields, AdminModalFooter } from './adminModalSections';
+import { AdminModalFooter } from './adminModalSections';
 
 interface AdminModalProps {
   isOpen: boolean;
@@ -155,6 +158,11 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
     [groupPermissionKeys, overrides],
   );
 
+  const fieldAccess = useMemo(
+    () => getFieldAccess('admins', effectivePermissions),
+    [effectivePermissions],
+  );
+
   if (!isOpen) return null;
 
   const updateForm = (updates: Partial<AdminFormState>) => setFormData((current) => ({ ...current, ...updates }));
@@ -230,19 +238,21 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
   };
 
   const persistAccount = async (): Promise<{ success: boolean; error?: string; adminId: number | null }> => {
+    const allowed = stripDisallowedFields('admins', formData as unknown as Record<string, unknown>, effectivePermissions);
+
     if (initialData) {
       const updated = await updateAdmin(initialData.id, {
-        name: formData.name,
+        name: allowed.name as string | undefined,
         passwordKind,
-        ...(formData.password ? { password: formData.password } : {}),
+        ...(allowed.password ? { password: allowed.password as string } : {}),
       });
       return { success: updated.success, error: updated.error, adminId: initialData.id };
     }
 
     const created = await createAdmin({
-      name: formData.name,
-      username: formData.username,
-      password: formData.password,
+      name: allowed.name as string,
+      username: allowed.username as string,
+      password: allowed.password as string,
       passwordKind,
     });
     if (!created.success) return { success: false, error: created.error, adminId: null };
@@ -301,14 +311,50 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
         </div>
       )}
       <form onSubmit={handleSubmit} className="space-y-4">
-        <AdminFormFields
-          formData={formData}
-          isEdit={!!initialData}
-          onChange={updateForm}
-          passwordKind={passwordKind}
-          onPasswordKind={setPasswordKind}
-          reveal={{ ...reveal, onReveal: () => undefined }}
-        />
+        <RestrictedField
+          canRead={fieldAccess.name.canRead}
+          canUpdate={fieldAccess.name.canUpdate}
+          label="Display Name"
+          lockHint="Read-only — you lack admin:update"
+        >
+          <Input
+            value={formData.name}
+            onChange={(e) => updateForm({ name: e.target.value })}
+            placeholder="e.g., John Doe"
+          />
+        </RestrictedField>
+
+        <RestrictedField
+          canRead={fieldAccess.username.canRead}
+          canUpdate={fieldAccess.username.canUpdate}
+          label="Username"
+          lockHint="Immutable after creation"
+        >
+          <Input
+            value={formData.username}
+            onChange={(e) => updateForm({ username: e.target.value })}
+            placeholder="e.g., johnd"
+            disabled={!!initialData}
+          />
+        </RestrictedField>
+
+        <RestrictedField
+          canRead={fieldAccess.password.canRead}
+          canUpdate={fieldAccess.password.canUpdate}
+          label={`Password ${initialData ? '(Leave empty to keep current)' : ''}`}
+          lockHint="Read-only — you lack admin:update"
+        >
+          <PasswordFieldWithKind
+            label=""
+            value={formData.password}
+            onChange={(password) => updateForm({ password })}
+            required={!initialData}
+            placeholder="••••••••"
+            kind={passwordKind}
+            onKind={setPasswordKind}
+            reveal={{ ...reveal, onReveal: () => undefined }}
+          />
+        </RestrictedField>
 
         <Card className="space-y-3">
           <div className="flex items-center justify-between">

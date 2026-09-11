@@ -24,8 +24,8 @@ if ! declare -F log_die >/dev/null 2>&1; then
   log_die() { printf '[FAIL] %s\n' "${1:-fatal}" >&2; exit "${2:-1}"; }
 fi
 
-ENV_FILE=".env.core"
-WORKER_ENV_FILE=".env.worker"
+ENV_FILE=".env"
+WORKER_ENV_FILE=".env"
 CONFIG_FILE="config/cms.toml"
 RANKING_CONFIG_FILE="config/cms_ranking.toml"
 SKIP_RANKING=false
@@ -206,17 +206,15 @@ if p.exists():
     t = re.sub(r'^password = ".*"', lambda m: f'password = "{toml_escape(pw)}"', t, flags=re.MULTILINE)
     # Sync RANKING_LOGO_PATH -> container-side logo_path (if host file set)
     admin_logo = ""
-    for env_file in [".env.admin", ".env"]:
-        try:
-            for line in Path(env_file).read_text().splitlines():
-                if line.startswith("RANKING_LOGO_PATH="):
-                    admin_logo = line.split("=",1)[1].strip().strip('"').strip("'")
-                    break
-            if admin_logo: break
-        except: pass
+    try:
+        for line in Path(".env").read_text().splitlines():
+            if line.startswith("RANKING_LOGO_PATH="):
+                admin_logo = line.split("=",1)[1].strip().strip('"').strip("'")
+                break
+    except: pass
     lib_dir = "/var/local/lib/cms/ranking"
     try:
-        for line in Path(".env.admin").read_text().splitlines():
+        for line in Path(".env").read_text().splitlines():
             if line.startswith("CMS_RANKING_LIB_DIR="):
                 lib_dir = line.split("=",1)[1].strip().strip('"').strip("'") or lib_dir
                 break

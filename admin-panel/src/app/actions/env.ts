@@ -5,7 +5,7 @@ import path from 'path';
 import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
 
-const ALLOWED_ENV_FILES = new Set(['.env', '.env.contest', '.env.example', '.env.production', '.env.infra']);
+const ALLOWED_ENV_FILES = new Set(['.env', '.env.contest']);
 
 function resolveEnvPath(repoRoot: string, filename: string): string {
   if (!ALLOWED_ENV_FILES.has(filename)) {

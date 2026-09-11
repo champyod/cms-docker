@@ -547,8 +547,8 @@ docker exec cms-worker-0 mount | grep cgroup
 
 ```bash
 # Increase memory limit
-# In .env.worker:
-WORKER_MEMORY=8g
+# In config.toml [worker]:
+WORKER_MEMORY_LIMIT = "8g"
 
 # Check memory usage
 docker stats cms-worker-0

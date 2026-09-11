@@ -187,7 +187,7 @@ check_env() {
     local val
     val="${POSTGRES_PASSWORD:-}"
     if [[ -z "$val" ]]; then
-      core_fail="POSTGRES_PASSWORD empty (set in .env.core → .env)"
+      core_fail="POSTGRES_PASSWORD empty (set in config.toml [core], then run: ./cms config sync)"
     elif is_default_secret "$val"; then
       core_fail="POSTGRES_PASSWORD is a default/placeholder value"
     fi
@@ -238,7 +238,7 @@ check_env() {
     # says contest→CONTEST_ID; also check ACTIVE_CONTEST_ID emptiness as hint.
     if [[ -z "$cid" ]]; then
       # Check if ACTIVE_CONTEST_ID / CONTESTS_DEPLOY_CONFIG present as fallback hint
-      contest_issues+=("CONTEST_ID empty (set CONTEST_ID numeric in .env.contest)")
+      contest_issues+=("CONTEST_ID empty (set CONTEST_ID numeric in config.toml [contest])")
     elif ! [[ "$cid" =~ ^[0-9]+$ ]]; then
       contest_issues+=("CONTEST_ID='${cid}' not numeric")
     fi
