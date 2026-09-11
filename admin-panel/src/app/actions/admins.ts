@@ -59,8 +59,6 @@ export async function createAdmin(data: CreateAdminInput): Promise<ActionResult>
         username: data.username,
         authentication: await formatStoredPassword(data.passwordKind ?? DEFAULT_PASSWORD_KIND, data.password),
         enabled: true,
-        permission_all: false,
-        permission_messaging: false,
       }
     });
     revalidatePath('/[locale]/admins', 'page');
@@ -78,7 +76,7 @@ function findAdminTarget(adminId: number) {
   return prisma.admins.findUnique({
     where: { id: adminId },
     select: {
-      permission_all: true,
+      id: true,
       enabled: true,
       admin_groups: { select: { groups: { select: { id: true, name: true } } } },
     },

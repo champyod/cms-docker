@@ -30,11 +30,6 @@ interface AuthenticatedAdmin {
   id: number;
   username: string;
   authentication: string;
-  permission_all: boolean;
-  permission_tasks: boolean;
-  permission_users: boolean;
-  permission_contests: boolean;
-  permission_messaging: boolean;
 }
 
 async function resolveBucketKey(username: string): Promise<string> {

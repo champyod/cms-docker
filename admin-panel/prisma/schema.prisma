@@ -21,11 +21,6 @@ model admins {
   authentication       String                       @db.VarChar
   enabled              Boolean
   last_login_at        DateTime?
-  permission_all       Boolean
-  permission_messaging Boolean
-  permission_tasks     Boolean                      @default(false)
-  permission_users     Boolean                      @default(false)
-  permission_contests  Boolean                      @default(false)
   announcements        announcements[]
   messages             messages[]
   questions            questions[]
