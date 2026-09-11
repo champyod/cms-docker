@@ -1,7 +1,8 @@
 'use server';
 
 import { prisma } from '@/lib/prisma';
-import { ensurePermission } from '@/lib/permissions';
+import { ensurePermission, getPermissions } from '@/lib/permissions';
+import { stripDisallowedFields } from '@/lib/field-permissions';
 import { revalidatePath } from 'next/cache';
 
 interface AddMonitorTargetInput {
@@ -26,14 +27,25 @@ export async function getMonitorTargets() {
 
 export async function addMonitorTarget(input: AddMonitorTargetInput) {
   await ensurePermission('monitor:create');
+  const permissions = await getPermissions();
+  const allowed = stripDisallowedFields('monitor_targets', {
+    url: input.url,
+    interval: input.interval ?? 60,
+    timeout: input.timeout ?? 5,
+    expectedStatus: input.expectedStatus ?? 200,
+    alertDiscord: input.alertDiscord ?? true,
+  }, permissions);
+  if (allowed.url === undefined) {
+    return { success: false, error: 'Insufficient field permissions' };
+  }
   try {
     const target = await prisma.monitor_targets.create({
       data: {
-        url: input.url,
-        interval: input.interval ?? 60,
-        timeout: input.timeout ?? 5,
-        expectedStatus: input.expectedStatus ?? 200,
-        alertDiscord: input.alertDiscord ?? true,
+        url: allowed.url,
+        interval: allowed.interval ?? 60,
+        timeout: allowed.timeout ?? 5,
+        expectedStatus: allowed.expectedStatus ?? 200,
+        alertDiscord: allowed.alertDiscord ?? true,
       },
     });
     revalidatePath('/settings', 'page');
@@ -48,10 +60,21 @@ export async function updateMonitorTarget(
   data: Partial<AddMonitorTargetInput>,
 ) {
   await ensurePermission('monitor:update');
+  const permissions = await getPermissions();
+  const allowed = stripDisallowedFields('monitor_targets', {
+    ...(data.url !== undefined && { url: data.url }),
+    ...(data.interval !== undefined && { interval: data.interval }),
+    ...(data.timeout !== undefined && { timeout: data.timeout }),
+    ...(data.expectedStatus !== undefined && { expectedStatus: data.expectedStatus }),
+    ...(data.alertDiscord !== undefined && { alertDiscord: data.alertDiscord }),
+  }, permissions);
+  if (Object.keys(allowed).length === 0) {
+    return { success: false, error: 'No permitted fields to update' };
+  }
   try {
     const target = await prisma.monitor_targets.update({
       where: { id },
-      data,
+      data: allowed,
     });
     revalidatePath('/settings', 'page');
     return { success: true, data: target };
@@ -78,9 +101,14 @@ export async function toggleMonitorTarget(id: string) {
     if (!existing) {
       return { success: false, error: 'Target not found' };
     }
+    const permissions = await getPermissions();
+    const allowed = stripDisallowedFields('monitor_targets', { enabled: !existing.enabled }, permissions);
+    if (allowed.enabled === undefined) {
+      return { success: false, error: 'Insufficient permissions to toggle enabled' };
+    }
     const target = await prisma.monitor_targets.update({
       where: { id },
-      data: { enabled: !existing.enabled },
+      data: { enabled: allowed.enabled },
     });
     revalidatePath('/settings', 'page');
     return { success: true, data: target };

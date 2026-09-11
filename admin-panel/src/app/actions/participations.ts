@@ -2,7 +2,8 @@
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
-import { ensurePermission } from '@/lib/permissions';
+import { ensurePermission, getPermissions } from '@/lib/permissions';
+import { stripDisallowedFields } from '@/lib/field-permissions';
 import { safeUserSelect } from '@/lib/prisma-selects';
 import {
   executeParticipationUpdate,
@@ -40,10 +41,13 @@ export async function updateParticipation(
   await ensurePermission('participation:update');
 
   try {
-    const { validIps, error } = parseIpAllowlist(data.ip);
+    const permissions = await getPermissions();
+    const allowed = stripDisallowedFields('participations', data as Record<string, unknown>, permissions) as UpdateParticipationInput;
+
+    const { validIps, error } = parseIpAllowlist(allowed.ip);
     if (error) return { success: false, error };
 
-    await executeParticipationUpdate(participationId, data, validIps);
+    await executeParticipationUpdate(participationId, allowed, validIps);
 
     revalidatePath('/[locale]/contests', 'page');
     return { success: true };
@@ -58,11 +62,16 @@ export async function setTestUser(participationId: number): Promise<ActionResult
   await ensurePermission('participation:update');
 
   try {
+    const permissions = await getPermissions();
+    const allowed = stripDisallowedFields('participations', { hidden: true, unrestricted: true }, permissions);
+    if (allowed.hidden === undefined && allowed.unrestricted === undefined) {
+      return { success: false, error: 'Insufficient permissions' };
+    }
     await prisma.participations.update({
       where: { id: participationId },
       data: {
-        hidden: true,
-        unrestricted: true,
+        ...(allowed.hidden !== undefined && { hidden: allowed.hidden }),
+        ...(allowed.unrestricted !== undefined && { unrestricted: allowed.unrestricted }),
       },
     });
     revalidatePath('/[locale]/contests', 'page');
@@ -104,8 +113,13 @@ export async function addTeamToContest(
       return { success: false, error: 'All team members are already in this contest' };
     }
 
-    const hidden = options.hidden ?? false;
-    const unrestricted = options.unrestricted ?? false;
+    const permissions = await getPermissions();
+    const allowed = stripDisallowedFields('participations', {
+      hidden: options.hidden ?? false,
+      unrestricted: options.unrestricted ?? false,
+    }, permissions);
+    const hidden = allowed.hidden ?? false;
+    const unrestricted = allowed.unrestricted ?? false;
 
     for (const userId of newIds) {
       await prisma.$executeRaw`

@@ -1,7 +1,8 @@
 'use server'
 
 import { prisma } from '@/lib/prisma';
-import { ensurePermission } from '@/lib/permissions';
+import { ensurePermission, getPermissions } from '@/lib/permissions';
+import { getFieldAccess } from '@/lib/field-permissions';
 import { buildUserSearchWhere, usersPageSelect, type UsersPageRow } from '@/lib/prisma-selects';
 import { parseStoredPassword } from '@/lib/password-format';
 
@@ -36,8 +37,21 @@ export async function getUsers({ page = 1, search = '', perPage = USERS_PER_PAGE
     prisma.users.count({ where }),
   ]);
 
+  // Why: strip fields the caller cannot read (e.g., PII for viewers without user:read)
+  const perms = await getPermissions();
+  const access = getFieldAccess('users', perms);
+  const filtered = users.map((u) => {
+    const row: Record<string, unknown> = { ...u };
+    for (const field of Object.keys(access)) {
+      if (!access[field].canRead) {
+        delete row[field];
+      }
+    }
+    return row as unknown as UsersPageRow;
+  });
+
   return {
-    users,
+    users: filtered,
     totalPages: Math.max(Math.ceil(total / safePerPage), 1),
     currentPage: safePage,
     perPage: safePerPage,

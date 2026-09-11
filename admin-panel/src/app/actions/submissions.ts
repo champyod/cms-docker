@@ -2,7 +2,8 @@
 
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { ensurePermission } from '@/lib/permissions';
+import { ensurePermission, getPermissions } from '@/lib/permissions';
+import { stripDisallowedFields, getFieldAccess, type FieldAccess } from '@/lib/field-permissions';
 import { submissionsListInclude } from '@/lib/prisma-selects';
 import { revalidatePath } from 'next/cache';
 
@@ -73,9 +74,15 @@ export async function updateSubmissionComment(submissionId: number, comment: str
     await ensurePermission('submission:update');
 
     try {
+        const effectivePermissions = await getPermissions();
+        const allowed = stripDisallowedFields('submissions', { comment }, effectivePermissions);
+        if (!('comment' in allowed)) {
+            return { success: false, error: 'Permission denied for comment field' };
+        }
+
         await prisma.submissions.update({
             where: { id: submissionId },
-            data: { comment }
+            data: { comment: allowed.comment as string }
         });
         revalidatePath('/[locale]/submissions');
       return { success: true };
@@ -89,6 +96,12 @@ export async function toggleSubmissionOfficial(submissionId: number): Promise<Ac
     await ensurePermission('submission:update');
 
     try {
+        const effectivePermissions = await getPermissions();
+        const allowed = stripDisallowedFields('submissions', { official: true }, effectivePermissions);
+        if (!('official' in allowed)) {
+            return { success: false, error: 'Permission denied for official field' };
+        }
+
         const sub = await prisma.submissions.findUnique({ where: { id: submissionId } });
         if (!sub) return { success: false, error: 'Submission not found' };
 
@@ -176,4 +189,10 @@ async function clearRecalculatedTables(submissionId: number, type: RecalcType): 
       where: { submission_id: submissionId }
     });
   }
+}
+
+/** Returns per-field read/update booleans for the submissions entity based on the current user's permissions. */
+export async function getSubmissionFieldAccess(): Promise<Record<string, FieldAccess>> {
+  const effectivePermissions = await getPermissions();
+  return getFieldAccess('submissions', effectivePermissions);
 }

@@ -3,7 +3,8 @@
 import { prisma } from '@/lib/prisma';
 import type { Prisma } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
-import { ensurePermission } from '@/lib/permissions';
+import { ensurePermission, getPermissions } from '@/lib/permissions';
+import { stripDisallowedFields } from '@/lib/field-permissions';
 
 export async function getQuestions(contestId: number) {
   await ensurePermission('question:list');
@@ -24,14 +25,22 @@ export async function replyToQuestion(questionId: number, adminId: number, data:
   reply_text: string;
 }) {
   await ensurePermission('question:answer');
+  const permissions = await getPermissions();
+  const allowed = stripDisallowedFields('questions', {
+    reply_subject: data.reply_subject,
+    reply_text: data.reply_text,
+  }, permissions);
+  if (allowed.reply_subject === undefined || allowed.reply_text === undefined) {
+    return { success: false, error: 'Insufficient field permissions' };
+  }
 
   try {
     await prisma.questions.update({
       where: { id: questionId },
       data: {
         admin_id: adminId,
-        reply_subject: data.reply_subject,
-        reply_text: data.reply_text,
+        reply_subject: allowed.reply_subject,
+        reply_text: allowed.reply_text,
         reply_timestamp: new Date(),
         ignored: false,
       }
@@ -46,11 +55,16 @@ export async function replyToQuestion(questionId: number, adminId: number, data:
 
 export async function ignoreQuestion(questionId: number) {
   await ensurePermission('question:ignore');
+  const permissions = await getPermissions();
+  const allowed = stripDisallowedFields('questions', { ignored: true }, permissions);
+  if (allowed.ignored === undefined) {
+    return { success: false, error: 'Insufficient permissions to update ignored field' };
+  }
 
   try {
     await prisma.questions.update({
       where: { id: questionId },
-      data: { ignored: true }
+      data: { ignored: allowed.ignored }
     });
     revalidatePath('/[locale]/contests', 'page');
     return { success: true };
@@ -62,11 +76,16 @@ export async function ignoreQuestion(questionId: number) {
 
 export async function unignoreQuestion(questionId: number) {
   await ensurePermission('question:ignore');
+  const permissions = await getPermissions();
+  const allowed = stripDisallowedFields('questions', { ignored: false }, permissions);
+  if (allowed.ignored === undefined) {
+    return { success: false, error: 'Insufficient permissions to update ignored field' };
+  }
 
   try {
     await prisma.questions.update({
       where: { id: questionId },
-      data: { ignored: false }
+      data: { ignored: allowed.ignored }
     });
     revalidatePath('/[locale]/contests', 'page');
     return { success: true };

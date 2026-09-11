@@ -2,7 +2,8 @@
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
-import { ensurePermission } from '@/lib/permissions';
+import { ensurePermission, getPermissions } from '@/lib/permissions';
+import { stripDisallowedFields } from '@/lib/field-permissions';
 import { safeUserSelect } from '@/lib/prisma-selects';
 
 export async function getTeams() {
@@ -23,13 +24,12 @@ export async function getTeams() {
 
 export async function createTeam(data: { code: string; name: string }) {
   await ensurePermission('team:create');
+  const perms = await getPermissions();
+  const allowed = stripDisallowedFields('teams', data as Record<string, unknown>, perms);
 
   try {
     await prisma.teams.create({
-      data: {
-        code: data.code,
-        name: data.name,
-      }
+      data: allowed as { code: string; name: string },
     });
     revalidatePath('/[locale]/teams', 'page');
     return { success: true };
@@ -44,14 +44,13 @@ export async function createTeam(data: { code: string; name: string }) {
 
 export async function updateTeam(teamId: number, data: { code?: string; name?: string }) {
   await ensurePermission('team:update');
+  const perms = await getPermissions();
+  const allowed = stripDisallowedFields('teams', data as Record<string, unknown>, perms);
 
   try {
     await prisma.teams.update({
       where: { id: teamId },
-      data: {
-        ...(data.code && { code: data.code }),
-        ...(data.name && { name: data.name }),
-      }
+      data: allowed as { code?: string; name?: string },
     });
     revalidatePath('/[locale]/teams', 'page');
     return { success: true };

@@ -168,7 +168,7 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
         </Table>
       </div>
 
-      <TaskModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} task={selectedTask as unknown as Parameters<typeof TaskModal>[0]['task']} onSuccess={handleSuccess} />
+      <TaskModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} task={selectedTask as unknown as Parameters<typeof TaskModal>[0]['task']} onSuccess={handleSuccess} permissionKeys={permissionKeys} />
     </div>
   );
 }

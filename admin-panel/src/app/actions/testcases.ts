@@ -2,7 +2,8 @@
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
-import { ensurePermission } from '@/lib/permissions';
+import { ensurePermission, getPermissions } from '@/lib/permissions';
+import { stripDisallowedFields } from '@/lib/field-permissions';
 import { storeFile } from '@/lib/fsobjects';
 
 interface TestcaseInput {
@@ -26,15 +27,26 @@ export async function addTestcase(datasetId: number, data: {
   isPublic: boolean;
 }): Promise<ActionResult> {
   await ensurePermission('testcase:create');
+  const permissions = await getPermissions();
+  const allowed = stripDisallowedFields('testcases', {
+    codename: data.codename,
+    public: data.isPublic,
+    input: data.inputDigest,
+    output: data.outputDigest,
+  }, permissions);
+  const { codename, input, output, public: isPub } = allowed;
+  if (codename === undefined || input === undefined || output === undefined) {
+    return { success: false, error: 'Insufficient field permissions' };
+  }
 
   try {
     await prisma.testcases.create({
       data: {
         dataset_id: datasetId,
-        codename: data.codename,
-        input: data.inputDigest,
-        output: data.outputDigest,
-        public: data.isPublic,
+        codename,
+        input,
+        output,
+        public: isPub ?? false,
       }
     });
     revalidatePath('/[locale]/tasks');
@@ -75,9 +87,15 @@ export async function toggleTestcasePublic(testcaseId: number): Promise<ActionRe
       return { success: false, error: 'Testcase not found' };
     }
 
+    const permissions = await getPermissions();
+    const allowed = stripDisallowedFields('testcases', { public: !tc.public }, permissions);
+    if (allowed.public === undefined) {
+      return { success: false, error: 'Insufficient permissions to toggle public' };
+    }
+
     await prisma.testcases.update({
       where: { id: testcaseId },
-      data: { public: !tc.public }
+      data: { public: allowed.public }
     });
 
     revalidatePath('/[locale]/tasks');
@@ -90,11 +108,16 @@ export async function toggleTestcasePublic(testcaseId: number): Promise<ActionRe
 
 export async function updateTestcasesPublic(testcaseIds: number[], isPublic: boolean): Promise<ActionResult> {
   await ensurePermission('testcase:update');
+  const permissions = await getPermissions();
+  const allowed = stripDisallowedFields('testcases', { public: isPublic }, permissions);
+  if (allowed.public === undefined) {
+    return { success: false, error: 'Insufficient permissions to update public field' };
+  }
 
   try {
     await prisma.testcases.updateMany({
       where: { id: { in: testcaseIds } },
-      data: { public: isPublic }
+      data: { public: allowed.public }
     });
     revalidatePath('/[locale]/tasks');
     return { success: true };
@@ -108,14 +131,26 @@ async function createTestcaseSafely(datasetId: number, tc: TestcaseInput): Promi
   const inputDigest = await storeFile(Buffer.from(tc.inputBase64, 'base64'));
   const outputDigest = await storeFile(Buffer.from(tc.outputBase64, 'base64'));
 
+  const permissions = await getPermissions();
+  const allowed = stripDisallowedFields('testcases', {
+    codename: tc.codename,
+    public: tc.isPublic,
+    input: inputDigest,
+    output: outputDigest,
+  }, permissions);
+  const { codename, input, output, public: isPub } = allowed;
+  if (codename === undefined || input === undefined || output === undefined) {
+    throw new Error('Insufficient field permissions for testcase creation');
+  }
+
   try {
     await prisma.testcases.create({
       data: {
         dataset_id: datasetId,
-        codename: tc.codename,
-        input: inputDigest,
-        output: outputDigest,
-        public: tc.isPublic,
+        codename,
+        input,
+        output,
+        public: isPub ?? false,
       }
     });
   } catch (error) {

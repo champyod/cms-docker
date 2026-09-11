@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { createContext, useContext, useMemo, useState, useEffect } from 'react';
 import { FileCode, Clock, Cpu, FileType, CheckSquare } from 'lucide-react';
 import type { TaskData } from '@/app/actions/tasks';
 import { apiClient } from '@/lib/apiClient';
@@ -9,7 +9,14 @@ import { Dialog } from '@/components/core/Dialog';
 import { Button } from '@/components/core/Button';
 import { cn } from '@/lib/utils';
 import { parseIntervalToSeconds } from '@/lib/task-intervals';
+import { getFieldAccess, type FieldAccess } from '@/lib/field-permissions';
 import { GeneralTab, GradingTab, LimitsTab, TokensTab, LanguagesTab } from './task-modal-sections';
+
+// Why: child tab components can consume this context to wrap individual fields with RestrictedField.
+export const FieldAccessContext = createContext<Record<string, FieldAccess>>({});
+export function useFieldAccess(): Record<string, FieldAccess> {
+  return useContext(FieldAccessContext);
+}
 
 interface TaskRecord {
   id: number;
@@ -38,6 +45,7 @@ interface TaskModalProps {
   onClose: () => void;
   task?: TaskRecord | null;
   onSuccess: () => void;
+  permissionKeys?: readonly string[];
 }
 
 type Tab = 'general' | 'grading' | 'limits' | 'tokens' | 'languages';
@@ -101,12 +109,17 @@ function mapTaskToForm(task: TaskRecord): TaskData {
   };
 }
 
-export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps): React.JSX.Element | null {
+export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: TaskModalProps): React.JSX.Element | null {
   const { addToast } = useToast();
   const [activeTab, setActiveTab] = useState<Tab>('general');
   const [formData, setFormData] = useState<TaskData>(EMPTY_FORM);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const fieldAccess = useMemo(() => {
+    const perms = new Set(permissionKeys ?? []);
+    return getFieldAccess('tasks', perms);
+  }, [permissionKeys]);
 
   useEffect(() => {
     if (task) setFormData(mapTaskToForm(task));
@@ -156,56 +169,58 @@ export function TaskModal({ isOpen, onClose, task, onSuccess }: TaskModalProps):
   if (!isOpen) return null;
 
   return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-      title={task ? 'Edit Task' : 'Create New Task'}
-      footer={
-        <>
-          <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>
-            Cancel
-          </Button>
-          <Button type="submit" form="task-form" variant="positive" loading={loading} disabled={loading} className="min-w-32">
-            {task ? 'Save Changes' : 'Create Task'}
-          </Button>
-        </>
-      }
-      className="flex h-96 w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl"
-    >
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="w-64 shrink-0 space-y-2 overflow-y-auto border-r border-border bg-muted/20 p-4">
-          {TAB_CONFIG.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={cn(
-                'flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors',
-                activeTab === tab.id
-                  ? 'bg-primary/10 text-primary ring-1 ring-ring/50'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-              )}
-            >
-              <tab.icon className="h-4 w-4" />
-              {tab.label}
-            </button>
-          ))}
-        </div>
+    <FieldAccessContext.Provider value={fieldAccess}>
+      <Dialog
+        open
+        onOpenChange={(open) => {
+          if (!open) onClose();
+        }}
+        title={task ? 'Edit Task' : 'Create New Task'}
+        footer={
+          <>
+            <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>
+              Cancel
+            </Button>
+            <Button type="submit" form="task-form" variant="positive" loading={loading} disabled={loading} className="min-w-32">
+              {task ? 'Save Changes' : 'Create Task'}
+            </Button>
+          </>
+        }
+        className="flex h-96 w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl"
+      >
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          <div className="w-64 shrink-0 space-y-2 overflow-y-auto border-r border-border bg-muted/20 p-4">
+            {TAB_CONFIG.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  'flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors',
+                  activeTab === tab.id
+                    ? 'bg-primary/10 text-primary ring-1 ring-ring/50'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                )}
+              >
+                <tab.icon className="h-4 w-4" />
+                {tab.label}
+              </button>
+            ))}
+          </div>
 
-        <div className="relative flex-1 overflow-y-auto p-8">
-          <form id="task-form" onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
-            {error && <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
-            {activeTab === 'general' && <GeneralTab formData={formData} onChange={setFormData} />}
-            {activeTab === 'grading' && <GradingTab formData={formData} onChange={setFormData} />}
-            {activeTab === 'limits' && <LimitsTab formData={formData} onChange={setFormData} />}
-            {activeTab === 'tokens' && <TokensTab formData={formData} onChange={setFormData} />}
-            {activeTab === 'languages' && (
-              <LanguagesTab formData={formData} onChange={setFormData} onToggleLanguage={handleLanguageToggle} onToggleFormat={handleFormatToggle} />
-            )}
-          </form>
+          <div className="relative flex-1 overflow-y-auto p-8">
+            <form id="task-form" onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
+              {error && <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+              {activeTab === 'general' && <GeneralTab formData={formData} onChange={setFormData} />}
+              {activeTab === 'grading' && <GradingTab formData={formData} onChange={setFormData} />}
+              {activeTab === 'limits' && <LimitsTab formData={formData} onChange={setFormData} />}
+              {activeTab === 'tokens' && <TokensTab formData={formData} onChange={setFormData} />}
+              {activeTab === 'languages' && (
+                <LanguagesTab formData={formData} onChange={setFormData} onToggleLanguage={handleLanguageToggle} onToggleFormat={handleFormatToggle} />
+              )}
+            </form>
+          </div>
         </div>
-      </div>
-    </Dialog>
+      </Dialog>
+    </FieldAccessContext.Provider>
   );
 }

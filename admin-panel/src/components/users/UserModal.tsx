@@ -1,13 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 
 import { revealUserPassword } from '@/app/actions/users';
 import { Button } from '@/components/core/Button';
 import { Dialog, DialogFooter } from '@/components/core/Dialog';
 import { PasswordFieldWithKind, type PasswordRevealState } from '@/components/core/PasswordFieldWithKind';
+import { RestrictedField } from '@/components/core/RestrictedField';
 import { useToast } from '@/components/providers/ToastProvider';
 import { apiClient } from '@/lib/apiClient';
+import { getFieldAccess, stripDisallowedFields } from '@/lib/field-permissions';
 import { cn } from '@/lib/utils';
 import type { PasswordKind } from '@/lib/password-format';
 import type { UsersPageRow } from '@/lib/prisma-selects';
@@ -20,15 +22,19 @@ interface UserModalProps {
   user?: UsersPageRow | null;
   contests?: Array<{ id: number; name: string }>;
   onSuccess: () => void;
+  permissionKeys: readonly string[];
 }
 
-export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: UserModalProps) {
+export function UserModal({ isOpen, onClose, user, contests = [], onSuccess, permissionKeys }: UserModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const { addToast } = useToast();
   const [formData, setFormData] = useState<UserFormState>(EMPTY_USER_FORM);
   const [passwordKind, setPasswordKind] = useState<PasswordKind>('bcrypt');
   const [reveal, setReveal] = useState<PasswordRevealState>({ state: 'none' });
+
+  const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
+  const fieldAccess = useMemo(() => getFieldAccess('users', effective), [effective]);
 
   useEffect(() => {
     setFormData(user ? formFromUser(user) : EMPTY_USER_FORM);
@@ -63,8 +69,11 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: U
     setError('');
 
     try {
-      const { password, ...profile } = formData;
-      const payload = password ? { ...profile, password, passwordKind } : { ...profile, passwordKind };
+      const allowed = stripDisallowedFields('users', formData as unknown as Record<string, unknown>, effective);
+      const payload: Record<string, unknown> = { ...allowed };
+      if (payload.password === '') delete payload.password;
+      if (!payload.password) delete payload.password;
+      payload.passwordKind = passwordKind;
 
       const result = user
         ? await apiClient.put(`/api/users/${user.id}`, payload)
@@ -98,7 +107,6 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: U
   };
 
   const inputClassName = 'w-full px-3 py-2 bg-background/60 border border-border rounded-lg text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30 transition-colors';
-  const labelClassName = 'text-xs font-medium text-muted-foreground uppercase tracking-wider';
 
   return (
     <Dialog
@@ -116,8 +124,12 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: U
       )}
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <label className={labelClassName}>First Name</label>
+          <RestrictedField
+            canRead={fieldAccess.first_name.canRead}
+            canUpdate={fieldAccess.first_name.canUpdate}
+            label="First Name"
+            lockHint="Read-only — you lack user:update"
+          >
             <input
               required
               type="text"
@@ -126,9 +138,13 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: U
               className={cn(inputClassName, 'font-sans')}
               placeholder="John"
             />
-          </div>
-          <div className="space-y-1.5">
-            <label className={labelClassName}>Last Name</label>
+          </RestrictedField>
+          <RestrictedField
+            canRead={fieldAccess.last_name.canRead}
+            canUpdate={fieldAccess.last_name.canUpdate}
+            label="Last Name"
+            lockHint="Read-only — you lack user:update"
+          >
             <input
               required
               type="text"
@@ -137,10 +153,14 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: U
               className={cn(inputClassName, 'font-sans')}
               placeholder="Doe"
             />
-          </div>
+          </RestrictedField>
         </div>
-        <div className="space-y-1.5">
-          <label className={labelClassName}>Username</label>
+        <RestrictedField
+          canRead={fieldAccess.username.canRead}
+          canUpdate={fieldAccess.username.canUpdate}
+          label="Username"
+          lockHint="Read-only — you lack user:update"
+        >
           <input
             required
             type="text"
@@ -149,10 +169,14 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: U
             className={cn(inputClassName, 'font-mono')}
             placeholder="johndoe"
           />
-        </div>
+        </RestrictedField>
 
-        <div className="space-y-1.5">
-          <label className={labelClassName}>Email (Optional)</label>
+        <RestrictedField
+          canRead={fieldAccess.email.canRead}
+          canUpdate={fieldAccess.email.canUpdate}
+          label="Email (Optional)"
+          lockHint="Read-only — you lack user:update"
+        >
           <input
             type="email"
             value={formData.email}
@@ -160,11 +184,16 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: U
             className={cn(inputClassName, 'font-sans')}
             placeholder="john@example.com"
           />
-        </div>
+        </RestrictedField>
 
-        <div className="space-y-1.5">
+        <RestrictedField
+          canRead={fieldAccess.password.canRead}
+          canUpdate={fieldAccess.password.canUpdate}
+          label={user ? 'New Password (Optional)' : 'Password'}
+          lockHint="Read-only — you lack user:update"
+        >
           <PasswordFieldWithKind
-            label={user ? 'New Password (Optional)' : 'Password'}
+            label=""
             value={formData.password}
             onChange={(password) => updateForm({ password })}
             required={!user}
@@ -173,9 +202,13 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: U
             onKind={setPasswordKind}
             reveal={{ ...reveal, onReveal: () => undefined }}
           />
-        </div>
-        <div className="space-y-1.5">
-          <label className={labelClassName}>Timezone</label>
+        </RestrictedField>
+        <RestrictedField
+          canRead={fieldAccess.timezone.canRead}
+          canUpdate={fieldAccess.timezone.canUpdate}
+          label="Timezone"
+          lockHint="Read-only — you lack user:update"
+        >
           <input
             type="text"
             value={formData.timezone}
@@ -183,11 +216,11 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: U
             className={inputClassName}
             placeholder="Asia/Bangkok"
           />
-        </div>
+        </RestrictedField>
         {!user && (
           <>
             <div className="space-y-1.5">
-              <label className={labelClassName}>Contest (Optional)</label>
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Contest (Optional)</label>
               <select
                 value={formData.contestId}
                 onChange={(e) => updateForm({ contestId: e.target.value })}
@@ -202,7 +235,7 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess }: U
             </div>
 
             <div className="space-y-1.5">
-              <label className={labelClassName}>Team Code (Optional)</label>
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Team Code (Optional)</label>
               <input
                 type="text"
                 value={formData.teamCode}

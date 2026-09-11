@@ -21,13 +21,22 @@
 
 import logging
 
-from cms.db import Admin, AdminGroup
+from cms.db import Admin
+from cms.db.permissions import AdminGroup, Group
 from cmscommon.crypto import hash_password
 from cmscommon.datetime import make_datetime
 from .base import BaseHandler, SimpleHandler, require_permission
 
 
 logger = logging.getLogger(__name__)
+
+
+def _is_superadmin(admin) -> bool:
+    """WHY: groups-based check with permission_all fallback for pre-migration."""
+    return (
+        any(ag.group.name == 'Superadmin' for ag in admin.admin_groups)
+        or admin.permission_all
+    )
 
 
 def _admin_attrs(handler: BaseHandler) -> dict:
@@ -152,6 +161,33 @@ class AdminHandler(BaseHandler):
         admin.set_attrs(new_attrs)
 
         if self.current_user.permission_all:
+            superadmin_gid = (
+                self.sql_session.query(Group.id)
+                .filter(Group.name == 'Superadmin')
+                .scalar()
+            )
+            if _is_superadmin(admin):
+                will_be_super = admin.permission_all or (
+                    superadmin_gid in group_ids
+                    if superadmin_gid else False
+                )
+                if not will_be_super or not admin.enabled:
+                    others = (
+                        self.sql_session.query(Admin)
+                        .join(AdminGroup,
+                              AdminGroup.admin_id == Admin.id)
+                        .filter(AdminGroup.group_id == superadmin_gid)
+                        .filter(Admin.enabled.is_(True))
+                        .filter(Admin.id != admin.id)
+                        .count()
+                    )
+                    if others == 0:
+                        self.service.add_notification(
+                            make_datetime(), "Operation denied",
+                            "Cannot remove the last superadmin."
+                        )
+                        self.redirect(self.url("admin", admin_id))
+                        return
             admin.admin_groups = [
                 AdminGroup(group_id=gid) for gid in group_ids
             ]
@@ -165,6 +201,25 @@ class AdminHandler(BaseHandler):
     @require_permission("admin:delete")
     def delete(self, admin_id: str):
         admin = self.safe_get_item(Admin, admin_id)
+
+        if _is_superadmin(admin):
+            superadmin_gid = (
+                self.sql_session.query(Group.id)
+                .filter(Group.name == 'Superadmin')
+                .scalar()
+            )
+            others = (
+                self.sql_session.query(Admin)
+                .join(AdminGroup,
+                      AdminGroup.admin_id == Admin.id)
+                .filter(AdminGroup.group_id == superadmin_gid)
+                .filter(Admin.enabled.is_(True))
+                .filter(Admin.id != admin.id)
+                .count()
+            )
+            if others == 0:
+                self.write("Cannot delete the last superadmin.")
+                return
 
         self.sql_session.delete(admin)
         self.try_commit()

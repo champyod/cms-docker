@@ -136,6 +136,7 @@ export function TeamList({ initialTeams, permissionKeys }: TeamListProps) {
         onClose={() => { setIsModalOpen(false); setEditingTeam(null); }}
         onSuccess={() => window.location.reload()}
         initialData={editingTeam}
+        permissionKeys={permissionKeys}
       />
     </div>
   );

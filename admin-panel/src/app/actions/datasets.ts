@@ -2,7 +2,8 @@
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
-import { ensurePermission } from '@/lib/permissions';
+import { ensurePermission, getPermissions } from '@/lib/permissions';
+import { stripDisallowedFields } from '@/lib/field-permissions';
 import { cloneDatasetRecords } from '@/lib/dataset-cloning';
 import type { Prisma } from '@prisma/client';
 
@@ -24,15 +25,25 @@ export async function createDataset(
 ): Promise<{ success: boolean; dataset?: Prisma.datasetsGetPayload<Record<string, never>>; error?: string }> {
   await ensurePermission('dataset:create');
   try {
+    const effectivePermissions = await getPermissions();
+    const allowed = stripDisallowedFields('datasets', {
+      description: data.description,
+      time_limit: data.time_limit ?? null,
+      memory_limit: data.memory_limit ?? null,
+      task_type: data.task_type ?? null,
+      score_type: data.score_type ?? null,
+    }, effectivePermissions);
+
     const dataset = await prisma.datasets.create({
       data: {
         task_id: taskId,
-        description: data.description,
-        time_limit: data.time_limit ?? null,
-        memory_limit: data.memory_limit ? BigInt(data.memory_limit * 1024 * 1024) : null,
-        task_type: data.task_type ?? 'Batch',
+        description: (allowed.description as string) ?? data.description,
+        time_limit: allowed.time_limit !== undefined ? (allowed.time_limit as number | null) : null,
+        memory_limit: allowed.memory_limit !== undefined && allowed.memory_limit
+          ? BigInt((allowed.memory_limit as number) * 1024 * 1024) : null,
+        task_type: (allowed.task_type as string) ?? 'Batch',
         task_type_parameters: [],
-        score_type: data.score_type ?? 'Sum',
+        score_type: (allowed.score_type as string) ?? 'Sum',
         score_type_parameters: [],
         autojudge: false,
       },
@@ -63,7 +74,13 @@ export async function cloneDataset(datasetId: number, newDescription: string): P
 export async function renameDataset(datasetId: number, description: string): Promise<{ success: boolean; error?: string }> {
   await ensurePermission('dataset:update');
   try {
-    await prisma.datasets.update({ where: { id: datasetId }, data: { description } });
+    const effectivePermissions = await getPermissions();
+    const allowed = stripDisallowedFields('datasets', { description }, effectivePermissions);
+    if (!('description' in allowed)) {
+      return { success: false, error: 'Permission denied for description field' };
+    }
+
+    await prisma.datasets.update({ where: { id: datasetId }, data: { description: allowed.description as string } });
     revalidatePath('/[locale]/tasks', 'page');
     return { success: true };
   } catch (error) {
@@ -105,6 +122,12 @@ export async function activateDataset(datasetId: number): Promise<{ success: boo
 export async function toggleAutojudge(datasetId: number): Promise<{ success: boolean; error?: string }> {
   await ensurePermission('dataset:update');
   try {
+    const effectivePermissions = await getPermissions();
+    const allowed = stripDisallowedFields('datasets', { autojudge: true }, effectivePermissions);
+    if (!('autojudge' in allowed)) {
+      return { success: false, error: 'Permission denied for autojudge field' };
+    }
+
     const dataset = await prisma.datasets.findUnique({ where: { id: datasetId } });
     if (!dataset) return { success: false, error: 'Dataset not found' };
     await prisma.datasets.update({ where: { id: datasetId }, data: { autojudge: !dataset.autojudge } });
@@ -121,15 +144,22 @@ export async function updateDataset(
 ): Promise<{ success: boolean; error?: string }> {
   await ensurePermission('dataset:update');
   try {
-    await prisma.datasets.update({
-      where: { id: datasetId },
-      data: {
-        ...(data.time_limit !== undefined && { time_limit: data.time_limit }),
-        ...(data.memory_limit !== undefined && { memory_limit: data.memory_limit ? BigInt(data.memory_limit * 1024 * 1024) : null }),
-        ...(data.task_type && { task_type: data.task_type }),
-        ...(data.score_type && { score_type: data.score_type }),
-      },
-    });
+    const effectivePermissions = await getPermissions();
+    const allowed = stripDisallowedFields('datasets', data as Record<string, unknown>, effectivePermissions);
+
+    const updateData: Record<string, unknown> = {};
+    if ('time_limit' in allowed) updateData.time_limit = allowed.time_limit;
+    if ('memory_limit' in allowed) {
+      updateData.memory_limit = allowed.memory_limit ? BigInt((allowed.memory_limit as number) * 1024 * 1024) : null;
+    }
+    if ('task_type' in allowed) updateData.task_type = allowed.task_type;
+    if ('score_type' in allowed) updateData.score_type = allowed.score_type;
+
+    if (Object.keys(updateData).length === 0) {
+      return { success: false, error: 'No permitted fields to update' };
+    }
+
+    await prisma.datasets.update({ where: { id: datasetId }, data: updateData as Prisma.datasetsUpdateInput });
     revalidatePath('/[locale]/tasks', 'page');
     return { success: true };
   } catch (error) {

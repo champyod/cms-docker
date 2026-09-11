@@ -217,6 +217,7 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
         user={selectedUser}
         contests={contests}
         onSuccess={handleSuccess}
+        permissionKeys={permissionKeys}
       />
 
       {canCreateUsers && (

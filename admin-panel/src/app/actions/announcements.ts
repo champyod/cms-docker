@@ -2,7 +2,8 @@
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
-import { ensurePermission } from '@/lib/permissions';
+import { ensurePermission, getPermissions } from '@/lib/permissions';
+import { stripDisallowedFields } from '@/lib/field-permissions';
 
 export async function getAnnouncements(contestId: number) {
   await ensurePermission('announcement:list');
@@ -18,13 +19,21 @@ export async function createAnnouncement(contestId: number, adminId: number, dat
   text: string;
 }) {
   await ensurePermission('announcement:create');
+  const permissions = await getPermissions();
+  const allowed = stripDisallowedFields('announcements', {
+    subject: data.subject,
+    text: data.text,
+  }, permissions);
+  if (allowed.subject === undefined || allowed.text === undefined) {
+    return { success: false, error: 'Insufficient field permissions' };
+  }
   try {
     await prisma.announcements.create({
       data: {
         contest_id: contestId,
         admin_id: adminId,
-        subject: data.subject,
-        text: data.text,
+        subject: allowed.subject,
+        text: allowed.text,
         timestamp: new Date(),
       }
     });
@@ -41,12 +50,17 @@ export async function updateAnnouncement(announcementId: number, data: {
   text?: string;
 }) {
   await ensurePermission('announcement:update');
+  const permissions = await getPermissions();
+  const allowed = stripDisallowedFields('announcements', {
+    subject: data.subject,
+    text: data.text,
+  }, permissions);
   try {
     await prisma.announcements.update({
       where: { id: announcementId },
       data: {
-        ...(data.subject && { subject: data.subject }),
-        ...(data.text && { text: data.text }),
+        ...(allowed.subject !== undefined && { subject: allowed.subject }),
+        ...(allowed.text !== undefined && { text: allowed.text }),
       }
     });
     revalidatePath('/[locale]/contests', 'page');

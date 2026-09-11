@@ -2,7 +2,8 @@
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
-import { ensurePermission } from '@/lib/permissions';
+import { ensurePermission, getPermissions } from '@/lib/permissions';
+import { stripDisallowedFields } from '@/lib/field-permissions';
 import { sanitize } from '@/lib/api-utils';
 import { buildDiagnosticsForLoadedTask, computeTaskDiagnostics } from '@/lib/task-diagnostics';
 import { addIntervalClause } from '@/lib/task-intervals';
@@ -95,11 +96,14 @@ function toIntervalString(value: number | null, unit: string, fallback: string):
 
 export async function createTask(data: TaskData): Promise<{ success: boolean; error?: string }> {
   await ensurePermission('task:create');
+  const perms = await getPermissions();
+  const allowed = stripDisallowedFields('tasks', data as unknown as Record<string, unknown>, perms);
+  const sanitized = allowed as unknown as TaskData;
   try {
-    const tokenMin = toIntervalString(sanitize(data.token_min_interval), 'seconds', '0 seconds') as string;
-    const tokenGen = toIntervalString(sanitize(data.token_gen_interval), 'minutes', '30 minutes') as string;
-    const minSub = toIntervalString(sanitize(data.min_submission_interval), 'seconds', '0 seconds') as string;
-    const minUser = toIntervalString(sanitize(data.min_user_test_interval), 'seconds', '0 seconds') as string;
+    const tokenMin = toIntervalString(sanitize(sanitized.token_min_interval), 'seconds', '0 seconds') as string;
+    const tokenGen = toIntervalString(sanitize(sanitized.token_gen_interval), 'minutes', '30 minutes') as string;
+    const minSub = toIntervalString(sanitize(sanitized.min_submission_interval), 'seconds', '0 seconds') as string;
+    const minUser = toIntervalString(sanitize(sanitized.min_user_test_interval), 'seconds', '0 seconds') as string;
     await prisma.$executeRaw`
       INSERT INTO tasks (
         name, title, contest_id, num,
@@ -110,13 +114,13 @@ export async function createTask(data: TaskData): Promise<{ success: boolean; er
         min_submission_interval, min_user_test_interval,
         feedback_level, score_precision, score_mode
       ) VALUES (
-        ${data.name}, ${data.title}, ${sanitize(data.contest_id)}, null,
-        ${data.submission_format ?? []}, ARRAY[]::varchar[], ${data.allowed_languages ?? []},
-        ${data.token_mode ?? 'disabled'}::token_mode, ${sanitize(data.token_max_number)}, ${tokenMin}::interval,
-        ${data.token_gen_initial ?? 0}, ${data.token_gen_number ?? 0}, ${tokenGen}::interval, ${sanitize(data.token_gen_max)},
-        ${sanitize(data.max_submission_number)}, ${sanitize(data.max_user_test_number)},
+        ${sanitized.name}, ${sanitized.title}, ${sanitize(sanitized.contest_id)}, null,
+        ${sanitized.submission_format ?? []}, ARRAY[]::varchar[], ${sanitized.allowed_languages ?? []},
+        ${sanitized.token_mode ?? 'disabled'}::token_mode, ${sanitize(sanitized.token_max_number)}, ${tokenMin}::interval,
+        ${sanitized.token_gen_initial ?? 0}, ${sanitized.token_gen_number ?? 0}, ${tokenGen}::interval, ${sanitize(sanitized.token_gen_max)},
+        ${sanitize(sanitized.max_submission_number)}, ${sanitize(sanitized.max_user_test_number)},
         ${minSub}::interval, ${minUser}::interval,
-        ${data.feedback_level ?? 'restricted'}::feedback_level, ${data.score_precision ?? 0}, ${data.score_mode ?? 'max'}::score_mode
+        ${sanitized.feedback_level ?? 'restricted'}::feedback_level, ${sanitized.score_precision ?? 0}, ${sanitized.score_mode ?? 'max'}::score_mode
       )
     `;
     revalidatePath('/[locale]/tasks', 'page');
@@ -161,8 +165,11 @@ async function applyTaskIntervals(id: number, intervalFields: Record<string, unk
 
 export async function updateTask(id: number, data: Partial<TaskData>): Promise<{ success: boolean; error?: string }> {
   await ensurePermission('task:update');
+  const perms = await getPermissions();
+  const allowed = stripDisallowedFields('tasks', data as unknown as Record<string, unknown>, perms);
+  const sanitized = allowed as unknown as Partial<TaskData>;
   try {
-    const { standardFields, intervalFields } = splitTaskData(data);
+    const { standardFields, intervalFields } = splitTaskData(sanitized);
     if (Object.keys(standardFields).length > 0) await prisma.tasks.update({ where: { id }, data: standardFields });
     if (Object.keys(intervalFields).length > 0) await applyTaskIntervals(id, intervalFields);
     revalidatePath('/[locale]/tasks', 'page');

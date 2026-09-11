@@ -39,9 +39,10 @@ interface TaskWithRelations {
 
 interface TaskDetailViewProps {
   task: TaskWithRelations;
+  permissionKeys?: readonly string[];
 }
 
-export function TaskDetailView({ task }: TaskDetailViewProps): React.JSX.Element {
+export function TaskDetailView({ task, permissionKeys }: TaskDetailViewProps): React.JSX.Element {
   const pathname = usePathname();
   const locale = pathname.split('/')[1] ?? 'en';
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ info: true, statements: true, datasets: true });
@@ -127,7 +128,7 @@ export function TaskDetailView({ task }: TaskDetailViewProps): React.JSX.Element
       />
       <AttachmentsSection attachments={task.attachments} onUpload={() => setIsAttachmentModalOpen(true)} />
 
-      <TaskModal isOpen={isTaskSettingsOpen} onClose={() => setIsTaskSettingsOpen(false)} task={task as unknown as Parameters<typeof TaskModal>[0]['task']} onSuccess={reload} />
+      <TaskModal isOpen={isTaskSettingsOpen} onClose={() => setIsTaskSettingsOpen(false)} task={task as unknown as Parameters<typeof TaskModal>[0]['task']} onSuccess={reload} permissionKeys={permissionKeys} />
       <DatasetModal isOpen={isDatasetModalOpen} onClose={() => setIsDatasetModalOpen(false)} taskId={task.id} dataset={editingDataset as unknown as Parameters<typeof DatasetModal>[0]['dataset']} onSuccess={reload} />
       <StatementModal isOpen={isStatementModalOpen} onClose={() => setIsStatementModalOpen(false)} taskId={task.id} existingLanguages={task.statements.map((s) => s.language)} onSuccess={reload} />
       <AttachmentModal isOpen={isAttachmentModalOpen} onClose={() => setIsAttachmentModalOpen(false)} taskId={task.id} onSuccess={reload} />

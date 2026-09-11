@@ -1,11 +1,13 @@
 'use client';
 
 import { AlertCircle, CheckCircle2, Loader2, Terminal, XCircle } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
-import { recalculateSubmission } from '@/app/actions/submissions';
+import { recalculateSubmission, getSubmissionFieldAccess } from '@/app/actions/submissions';
 import { Button } from '@/components/core/Button';
 import { Dialog, DialogFooter } from '@/components/core/Dialog';
+import { RestrictedField } from '@/components/core/RestrictedField';
+import type { FieldAccess } from '@/lib/field-permissions';
 import { cn } from '@/lib/utils';
 
 import { SubmissionListItem } from '@/types';
@@ -18,6 +20,22 @@ interface SubmissionModalProps {
 
 export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModalProps) {
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
+  const [fieldAccess, setFieldAccess] = useState<Record<string, FieldAccess> | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const access = await getSubmissionFieldAccess();
+        if (!cancelled) setFieldAccess(access);
+      } catch {
+        // Why: field access is a UI hint, not a security gate — server enforces permissions
+        if (!cancelled) setFieldAccess(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isOpen]);
 
   const result = submission.submission_results[0];
     const compilationFailed = result?.compilation_outcome === 'fail';
@@ -65,6 +83,12 @@ export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModal
             )}
         </div>
         <div className="max-h-96 overflow-y-auto pr-1 space-y-6">
+            <RestrictedField
+              canRead={fieldAccess?.id?.canRead ?? true}
+              canUpdate={false}
+              label="Results"
+              lockHint="Read-only — evaluation results"
+            >
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-muted/40 rounded-xl p-4 border border-border">
                     <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Compilation</h3>
@@ -126,6 +150,7 @@ export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModal
                 </div>
             )}
 
+            </RestrictedField>
         </div>
         <DialogFooter className="mt-6 pt-4 border-t border-border">
              <div className="flex items-center gap-1 bg-muted rounded-lg p-1">

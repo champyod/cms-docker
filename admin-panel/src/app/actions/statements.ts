@@ -2,7 +2,8 @@
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
-import { ensurePermission } from '@/lib/permissions';
+import { ensurePermission, getPermissions } from '@/lib/permissions';
+import { stripDisallowedFields } from '@/lib/field-permissions';
 import { storeFile } from '@/lib/fsobjects';
 
 import { STATEMENT_LANGUAGES } from '@/lib/constants';
@@ -24,15 +25,21 @@ export async function addStatement(taskId: number, language: string, fileData: s
     const buffer = Buffer.from(fileData, 'base64');
     const digest = await storeFile(buffer);
 
+    const permissions = await getPermissions();
+    const allowed = stripDisallowedFields('statements', { language, digest }, permissions);
+    if (allowed.language === undefined || allowed.digest === undefined) {
+      return { success: false, error: 'Insufficient field permissions' };
+    }
+
     await prisma.$executeRaw`
       INSERT INTO statements (task_id, language, digest)
-      VALUES (${taskId}, ${language}, ${digest})
+      VALUES (${taskId}, ${allowed.language}, ${allowed.digest})
       ON CONFLICT (task_id, language)
-      DO UPDATE SET digest = ${digest}
+      DO UPDATE SET digest = ${allowed.digest}
     `;
 
     revalidatePath('/[locale]/tasks', 'page');
-    return { success: true, digest };
+    return { success: true, digest: allowed.digest };
   } catch (error) {
     const e = error as Error;
     return { success: false, error: e.message };
