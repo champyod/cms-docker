@@ -157,7 +157,7 @@ impl App {
     fn build_config_menu(_state: &AppState) -> ActionMenu {
         let items = vec![
             (
-                "Sync Config (.env.* from config.toml)".to_string(),
+                "Sync Config (.env from config.toml)".to_string(),
                 "bash scripts/__config_sync.sh".to_string(),
             ),
             (

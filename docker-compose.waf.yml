@@ -6,7 +6,7 @@
 #   CAPTCHA (Upgrade-2) remains active whether WAF is on or off; both can be on at once.
 #
 # Enable WAF (explicit opt-in):
-#   1. Set WAF_ENABLED=1 in .env.infra (or .env) and optionally tune WAF_PARANOIA / WAF_ANOMALY_INBOUND / WAF_ANOMALY_OUTBOUND / WAF_PORT.
+#   1. Set WAF_ENABLED=1 in .env (or config.toml) and optionally tune WAF_PARANOIA / WAF_ANOMALY_INBOUND / WAF_ANOMALY_OUTBOUND / WAF_PORT.
 #   2. Start with profile:
 #        docker compose --profile waf -f docker-compose.yml -f docker-compose.domain.yml -f docker-compose.waf.yml up -d
 #      Or domain-only:

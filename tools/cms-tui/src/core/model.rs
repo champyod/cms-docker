@@ -43,12 +43,12 @@ pub enum ServiceStatus {
     Unknown,
 }
 
-/// A configuration file managed by the system (e.g., `.env.core`, `cms.conf`).
+/// A configuration file managed by the system (e.g., `.env`, `cms.conf`).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ConfigFile {
-    pub id: String,     // Internal identifier (e.g., "env-core", "cms-conf")
+    pub id: String,     // Internal identifier (e.g., "env", "cms-conf")
     pub name: String,   // Display name (e.g., ".env for Core")
-    pub path: String,   // Relative path to the file (e.g., ".env.core")
+    pub path: String,   // Relative path to the file (e.g., ".env")
     pub syntax: String, // For syntax highlighting (e.g., "dotenv", "toml", "nginx")
 }
 
