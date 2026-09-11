@@ -101,6 +101,12 @@ from .submission import Submission, File, Token, SubmissionResult, \
     Executable, Evaluation
 from .usertest import UserTest, UserTestFile, UserTestManager, \
     UserTestResult, UserTestExecutable
+# WHY: must be imported before configure_mappers() below, otherwise the
+# Admin.admin_groups string reference cannot be resolved and every entry
+# point importing cms.db fails. Also keeps the tables in metadata so
+# cmsInitDB creates them.
+from .permissions import Permission, Group, GroupPermission, AdminGroup, \
+    AdminPermissionOverride, AuditLog
 
 from .init import init_db
 from .drop import drop_db
