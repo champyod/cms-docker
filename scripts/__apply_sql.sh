@@ -26,9 +26,15 @@ declare -F log_die  >/dev/null 2>&1 || log_die()  { printf '[FAIL] %s\n' "${1:-f
 
 # WHY --pre-push: capture legacy permissions BEFORE prisma db push drops the columns.
 # In that mode apply ONLY the capture file and be tolerant (never abort the push).
+# WHY --bootstrap-roles: apply ONLY role-definition files BEFORE the restart so new
+# containers (cms_admin/cms_monitor/cms_backup) can connect; RLS/hardening are
+# deliberately deferred to the post-restart full apply after new code is running.
 PRE_PUSH=0
+BOOTSTRAP_ROLES=0
 if [[ "${1:-}" == "--pre-push" ]]; then
   PRE_PUSH=1
+elif [[ "${1:-}" == "--bootstrap-roles" ]]; then
+  BOOTSTRAP_ROLES=1
 fi
 
 ENV_FILE=".env"
@@ -65,10 +71,14 @@ if [[ -z "$CMS_SERVICE_PASSWORD" || -z "$CMS_ADMIN_PASSWORD" || -z "$CMS_MONITOR
   log_warn "one or more role passwords empty — run './cms config sync' to generate POSTGRES_*_PASSWORD; continuing with available values"
 fi
 
-# Fail loudly if DB container not running (tolerant in --pre-push so the push still runs)
+# Fail loudly if DB container not running (tolerant in --pre-push / --bootstrap-roles so the update still runs)
 if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DB_CONTAINER"; then
   if [[ "$PRE_PUSH" -eq 1 ]]; then
     log_warn "database container '$DB_CONTAINER' is not running — skipping --pre-push capture (prisma db push will still run)"
+    exit 0
+  fi
+  if [[ "$BOOTSTRAP_ROLES" -eq 1 ]]; then
+    log_warn "database container '$DB_CONTAINER' is not running — skipping --bootstrap-roles (prisma-sync will retry after the restart)"
     exit 0
   fi
   log_die "database container '$DB_CONTAINER' is not running — start it with 'make core' first." 1
@@ -97,6 +107,62 @@ if [[ "$PRE_PUSH" -eq 1 ]]; then
   else
     log_info "pre-push capture complete."
   fi
+  exit 0
+fi
+
+# WHY --bootstrap-roles: apply ONLY role-definition files BEFORE the restart so new
+# containers can connect; RLS/hardening are deliberately deferred to post-restart.
+# WHY content-based selector: role files contain CREATE ROLE; RLS/hardening do not.
+# Future role migrations will also contain CREATE ROLE and be auto-included without
+# updating a hardcoded filename list. Additional exclusion of active RLS (CREATE POLICY
+# / ENABLE ROW LEVEL SECURITY in non-comment SQL) is defense-in-depth against a
+# future file that might mention CREATE ROLE in a comment while being RLS-related.
+# Comment lines are stripped for the RLS check to avoid false positives from
+# explanatory comments (e.g., backup_role mentions RLS in its header comment).
+if [[ "$BOOTSTRAP_ROLES" -eq 1 ]]; then
+  if [[ ! -d "$SQL_DIR" ]]; then
+    log_info "no $SQL_DIR directory — nothing to apply"
+    exit 0
+  fi
+  # shellcheck disable=SC2207
+  mapfile -t _ALL_SQL < <(find "$SQL_DIR" -maxdepth 1 -type f -name '*.sql' | sort)
+  if [[ ${#_ALL_SQL[@]} -eq 0 ]]; then
+    log_info "no .sql files in $SQL_DIR — nothing to apply"
+    exit 0
+  fi
+  SQL_FILES=()
+  for _f in "${_ALL_SQL[@]}"; do
+    if ! grep -q "CREATE ROLE" "$_f"; then
+      log_info "skipping non-role file $_f"
+      continue
+    fi
+    # WHY strip comment lines: backup_role header mentions ROW LEVEL SECURITY in a comment
+    # but is not an RLS policy file; check active SQL only.
+    if grep -v '^\s*--' "$_f" | grep -qE "CREATE POLICY|ENABLE ROW LEVEL SECURITY|FORCE ROW LEVEL SECURITY"; then
+      log_info "skipping RLS-related file $_f (contains active RLS policy)"
+      continue
+    fi
+    SQL_FILES+=("$_f")
+  done
+  if [[ ${#SQL_FILES[@]} -eq 0 ]]; then
+    log_info "no role SQL files in $SQL_DIR — nothing to apply"
+    exit 0
+  fi
+  log_info "applying ${#SQL_FILES[@]} role SQL file(s) to $DB_NAME via $DB_CONTAINER (bootstrap)..."
+  for sql_file in "${SQL_FILES[@]}"; do
+    log_info "→ $sql_file"
+    if ! docker exec -i \
+      -e PGPASSWORD="$DB_PASS" \
+      "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 \
+      -v "cms_service_password=$CMS_SERVICE_PASSWORD" \
+      -v "cms_admin_password=$CMS_ADMIN_PASSWORD" \
+      -v "cms_monitor_password=$CMS_MONITOR_PASSWORD" \
+      -v "cms_backup_password=$CMS_BACKUP_PASSWORD" \
+      -f - < "$sql_file"; then
+      log_warn "failed to apply $sql_file — continuing (prisma-sync will retry after the restart)"
+    fi
+  done
+  log_info "role bootstrap complete."
   exit 0
 fi
 

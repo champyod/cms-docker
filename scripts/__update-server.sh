@@ -60,17 +60,19 @@ make env || die "make env failed."
 
 # ---------------------------------------------------------------------------
 # (b2) Ensure least-privilege DB roles exist BEFORE services restart with them
-# WHY: the admin panel connects as cms_admin and the monitor as cms_monitor, and
-# those roles are created by __apply_sql.sh. If they do not exist when the new
-# containers start, the admin panel cannot connect at all. Apply them here, before
-# the restart, using the owner credentials. Tolerant on a fresh install where the
-# database container is not up yet — prisma-sync re-applies them afterwards.
+# WHY: only the role definitions are needed before the restart — the new admin
+# container connects as cms_admin and the monitor as cms_monitor, so those roles
+# must exist or the new containers cannot connect. RLS and owner-hardening are
+# deliberately deferred to the post-restart prisma-sync so they land after the
+# new code is running (avoiding mid-request failures and premature demotion).
+# Tolerant on a fresh install where the database container is not up yet —
+# prisma-sync re-applies the roles afterwards.
 # ---------------------------------------------------------------------------
 APPLY_SQL_SCRIPT="scripts/__apply_sql.sh"
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "cms-database"; then
     if [ -x "$APPLY_SQL_SCRIPT" ]; then
         log "Bootstrapping database roles (idempotent)..."
-        "$APPLY_SQL_SCRIPT" || warn "Role bootstrap failed — prisma-sync will retry after the restart."
+        "$APPLY_SQL_SCRIPT" --bootstrap-roles || warn "Role bootstrap failed — prisma-sync will retry after the restart."
     else
         warn "$APPLY_SQL_SCRIPT missing — roles will be created during prisma-sync."
     fi
