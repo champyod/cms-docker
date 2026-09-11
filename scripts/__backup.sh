@@ -320,7 +320,20 @@ run_backup() {
     pg_dump_pass="$POSTGRES_PASSWORD_VAL"
   fi
   log_info "Running pg_dump (Fc) inside $CONTAINER_DB as $pg_dump_user ..."
-  if ! docker exec -e PGPASSWORD="$pg_dump_pass" "$CONTAINER_DB" pg_dump -U "$pg_dump_user" -d "$POSTGRES_DB_VAL" -Fc -f "$db_tmp" 2>/tmp/cms-backup-pgdump.log; then
+  local pg_dump_ok=0
+  if docker exec -e PGPASSWORD="$pg_dump_pass" "$CONTAINER_DB" pg_dump -U "$pg_dump_user" -d "$POSTGRES_DB_VAL" -Fc -f "$db_tmp" 2>/tmp/cms-backup-pgdump.log; then
+    pg_dump_ok=1
+  elif [[ "$pg_dump_user" != "$POSTGRES_USER_VAL" ]]; then
+    # WHY: on the first update after the role split, cms_backup does not exist yet — the roles are
+    # created later by prisma-sync. Retry as the owner so the pre-update safety backup still succeeds
+    # instead of aborting the whole update.
+    log_warn "pg_dump as $pg_dump_user failed — retrying as owner $POSTGRES_USER_VAL"
+    if docker exec -e PGPASSWORD="$POSTGRES_PASSWORD_VAL" "$CONTAINER_DB" pg_dump -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -Fc -f "$db_tmp" 2>/tmp/cms-backup-pgdump.log; then
+      log_info "Owner fallback pg_dump succeeded."
+      pg_dump_ok=1
+    fi
+  fi
+  if (( pg_dump_ok == 0 )); then
     local err
     err="$(cat /tmp/cms-backup-pgdump.log 2>/dev/null || echo 'pg_dump failed')"
     log_warn "pg_dump failed: $err"
