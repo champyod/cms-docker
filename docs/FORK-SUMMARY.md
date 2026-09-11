@@ -58,11 +58,13 @@ No `cms-docker` string anywhere inside `src/` — Python tree has zero Docker co
 - CI: 2 workflows + dependabot.
 - Latest release tag: v1.1.2.
 
-## In-flight refactor (branch `feat/requirements-catalog`)
+## Permission rebuild (branch `feat/requirements-catalog`)
 
-Permission model rebuilt. Old: 5 booleans on `admins` (`permission_all/tasks/users/contests/messaging`), session token carried them, coarse checks. New: **groups + per-person override**.
+Old model: 5 booleans on `admins` (`permission_all/tasks/users/contests/messaging`), session token carried them, coarse checks, ~20 templates read the booleans.
 
-Schema added (additive): `permissions`, `groups`, `group_permissions`, `admin_groups`, `admin_permission_overrides`, `audit_log`.
+New model: **groups + per-person override**.
+
+Schema added: `permissions`, `groups`, `group_permissions`, `admin_groups`, `admin_permission_overrides`, `audit_log`. The 5 boolean columns were **dropped** after the backfill.
 
 Rules locked:
 - Fine-grained keys `<module>:<verb>`. Registry = single source of truth. 200 keys, 35 modules.
@@ -71,13 +73,21 @@ Rules locked:
 - **No hardcoded read-only.** Every entity gets full verbs. Only real system invariants stay server-side.
 - Pre-made groups (Superadmin, Contest Manager, Problem Setter, Judge, Viewer, Data Correction, Storage Admin, Messaging) are ordinary + deletable.
 - **Audit everything.** Append-only `audit_log`, hash-chained, read-only. All mutations + sensitive reads. Destructive ops demand a reason. Truth source for "who deleted what".
-- Legacy Python admin must enforce the same model. No bypass either side.
-- **Forward-only DB.** Additive migrations only. Sequence: add tables → backfill booleans into groups → parity gate → switch reads → drop booleans last.
+- Legacy Python admin enforces the same model from the same tables. No bypass either side.
+- **Forward-only DB.** Additive migrations only.
 - Config single source: one `config.toml` in, one generated `.env` out, via `make env` / `./cms config sync`. No manual edit, no split, no `.env.example`.
 
-Landed so far: schema + validated, permission registry + engine (229 tests), pure audit writer (39 tests), idempotent seed script, lib layer migrated (`permissions.ts`, `auth.ts`, `api-utils.ts`, `prisma-selects.ts` — session no longer carries permissions), all coarse call sites rewritten (actions, API routes, pages), admin modal rebuilt on groups + overrides, client components moved to `permissionKeys: readonly string[]` prop.
+Landed:
+- Prisma schema + 6 tables; additive + backfill + drop migrations; idempotent seed wired into `prisma-sync`.
+- `permission-registry.ts` (200 keys), `permission-engine.ts` (pure resolver), `audit.ts` (hash-chained writer), `field-permissions.ts` (per-field map).
+- Lib layer: `permissions.ts`, `auth.ts`, `api-utils.ts`, `prisma-selects.ts` — session no longer carries permissions; resolved per request (60s cache).
+- All ~172 coarse call sites rewritten across 26 action files + 28 API routes + 18 pages.
+- Per-field gating for 13 entities: admins, contests, tasks, users, teams, submissions, datasets, testcases, participations, announcements, questions, statements, monitor_targets — each with UI gating + server-side field stripping.
+- UI: groups management page, audit log viewer, admin modal rebuilt on group multi-select + override editor; client components use `permissionKeys: readonly string[]`.
+- Python: SQLAlchemy models for the new tables, group-based `require_permission`, all handlers re-decorated, all ~20 templates migrated to `admin.has_permission()`, boolean columns removed.
+- Config consolidated to a single `.env`; readers repointed; admin settings UI retargeted.
 
-Still open: prune `permission_*` reads that remain (last-superadmin guard), legacy Python admin parity, per-field coverage across remaining pages, drop the 5 boolean columns, seed wiring into `prisma-sync`, infra/TUI areas.
+Verified: Next.js `tsc` 0 errors, 429/429 tests green. Python files compile; zero references to the old booleans remain anywhere.
 
 ## Known stale / risky
 

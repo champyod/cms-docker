@@ -60,7 +60,7 @@
 
 8. **NO SECRETS IN CLIENT CODE**: Never expose database credentials, API keys, or internal tokens to the browser. Only `NEXT_PUBLIC_` prefixed vars reach the client.
 
-9. **DOCKER SOCKET = ROOT**: Any code touching Docker (container control, service restart) MUST require `permission_all` (superadmin only).
+9. **DOCKER SOCKET = ROOT**: Any code touching Docker (container control, service restart) MUST require the `container:control` / `service:restart` permission keys — granted through a group, never hardcoded.
 
 10. **PASSWORD STORAGE FORMAT**: Passwords use `bcrypt:<hash>` or `plaintext:<value>` prefix. Never store raw unprefixed values — the legacy `cmscommon.crypto.validate_password` raises on them. Dual-mode is user-selectable per save (bcrypt | plain text) with bcrypt as the default; plaintext makes the stored value revealable in edit forms via click-to-reveal. Generated bulk credentials may also be stored as plaintext when explicitly chosen.
 
@@ -144,8 +144,8 @@ Docker Stacks:
 | Type | Pattern | Example |
 |------|---------|---------|
 | Server Action | `verbNoun` | `getContests()`, `createUser()`, `switchContest()` |
-| API permission | `verifyApiPermission` | `verifyApiPermission('contests')` |
-| Server permission | `ensurePermission` | `ensurePermission('tasks')` |
+| API permission | `verifyApiPermission` | `verifyApiPermission('contest:update')` |
+| Server permission | `ensurePermission` | `ensurePermission('task:update')` |
 | Client API call | `apiClient.verb` | `apiClient.post('/api/users', data)` |
 | Event handler | `handleVerb` | `handleSubmit()`, `handleDelete()` |
 | Format helper | `formatNoun` | `formatDateForInput()` |
@@ -320,7 +320,7 @@ import { prisma } from '@/lib/prisma';
 import { verifyApiPermission, apiSuccess, apiError, sanitize } from '@/lib/api-utils';
 
 export async function GET(req: NextRequest) {
-  const { authorized, response } = await verifyApiPermission('contests');
+  const { authorized, response } = await verifyApiPermission('contest:list');
   if (!authorized) return response;
 
   try {
@@ -332,7 +332,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { authorized, response } = await verifyApiPermission('contests');
+  const { authorized, response } = await verifyApiPermission('contest:create');
   if (!authorized) return response;
 
   try {
@@ -417,7 +417,7 @@ export async function getContests({ page = 1, search = '' }) {
 }
 
 export async function deleteContest(id: number) {
-  await ensurePermission('contests');
+  await ensurePermission('contest:delete');
   try {
     await prisma.contests.delete({ where: { id } });
     revalidatePath('/[locale]/contests');
@@ -501,36 +501,44 @@ export default async function ContestsPage({ params: { locale } }) {
 1. User submits credentials → `login()` Server Action
 2. Action queries `admins` table via Prisma
 3. Password verified: `plaintext:` → `timingSafeEqual`, `bcrypt:` → `bcrypt.compare`
-4. JWT created with `jose` (HS256, 2h expiry) containing `{ userId, username, permissions }`
+4. JWT created with `jose` (HS256, 2h expiry) containing `{ userId, username }`
 5. JWT stored in HTTP-only cookie (`session`), 7-day expiry
 6. Session read via `getSession()` → `decrypt()` → JWT payload
+7. Effective permissions resolved per request from groups + overrides (never from the token)
 
-### Permission Types
+### Permission Model
+
+Permissions are fine-grained keys of the form `module:verb` (for example `task:update`, `contest:switch`, `submission:rejudge`). The complete key set lives in `src/lib/permission-registry.ts`.
+
+Permissions are granted to **groups**, and admins are inserted into groups to inherit them. An admin may additionally carry **per-person overrides** that allow or deny a single key; a deny always wins. Nothing is granted or denied in code — group membership is the only source.
+
+### Permission Resolution
 
 ```typescript
-type Permission = 'all' | 'tasks' | 'users' | 'contests' | 'messaging';
+getFreshPermissions(userId)              // admin_groups → group_permissions → permissions.key
+                                         //   ⊕ allow overrides  ⊖ deny overrides  (deny wins)
+resolveEffectivePermissions(keys, overrides)
+hasEffectivePermission(effective, key)   // also honors all:all
 ```
 
-- `permission_all` (superadmin) — bypasses all checks, required for Docker/infra operations
-- `permission_tasks` — manage tasks, datasets, testcases
-- `permission_users` — manage users, teams, participations
-- `permission_contests` — manage contests, switch active contest
-- `permission_messaging` — manage questions/announcements
+`all:all` is a normal, checked, audited permission — it is not a code-level bypass.
 
 ### Where Permissions Are Checked
 
 | Layer | Function | Purpose |
 |-------|----------|---------|
-| API Routes | `verifyApiPermission('contests')` | Returns 401/403 response |
-| Server Actions | `ensurePermission('tasks')` | Throws error if unauthorized |
-| Pages | `checkPermission('users')` | Redirects to login if unauthorized |
-| Sidebar (client) | `permissions?.permission_tasks` | Hides nav links (UX only) |
+| API Routes | `verifyApiPermission('contest:update')` | Returns 401/403 response |
+| Server Actions | `ensurePermission('task:update')` | Throws error if unauthorized |
+| Pages | `checkPermission('user:list')` | Redirects to login if unauthorized |
+| Sidebar (client) | `hasEffectivePermission(effective, 'task:list')` | Hides nav links (UX only) |
+| Field level | `getFieldAccess('tasks', effective)` | Hides/locks individual fields |
 
 ### Rules
 
 - Server-side checks are the security boundary. Client-side checks are UX convenience.
 - Always check permissions before any data mutation.
-- `permission_all` is required for: container control, service restart, env editing, admin management.
+- Every mutating operation writes an `audit_log` entry; destructive operations require a reason.
+- Both admins (Next.js and the legacy Python admin) resolve from the same tables and neither bypasses a check.
 
 ---
 
@@ -787,7 +795,7 @@ if (stored.startsWith('plaintext:')) {
 
 ### Docker Socket Security
 
-The admin panel mounts `/var/run/docker.sock`. All Docker operations (`getContainers`, `controlContainer`, `restartServices`) require `permission_all`.
+The admin panel mounts `/var/run/docker.sock`. All Docker operations (`getContainers`, `controlContainer`, `restartServices`) require the `container:control` / `service:restart` permission keys, granted through a group.
 
 ### Security Checklist
 
@@ -795,7 +803,7 @@ The admin panel mounts `/var/run/docker.sock`. All Docker operations (`getContai
 - [ ] All Server Actions call `ensurePermission()` before mutations
 - [ ] New passwords use `bcrypt:` prefix
 - [ ] No secrets in `NEXT_PUBLIC_` env vars
-- [ ] Docker operations require `permission_all`
+- [ ] Docker operations require `container:control` / `service:restart`
 - [ ] User input validated before database writes
 - [ ] Redirects use root paths (not hardcoded locale)
 
@@ -949,7 +957,13 @@ Offsite sync config: `.env.infra`/`.env.core` — `BACKUP_DIR`, `OFFSITE_TAILNET
 
 | Model | Purpose |
 |-------|---------|
-| `admins` | Admin accounts with granular permissions |
+| `admins` | Admin accounts (permissions come from group membership) |
+| `permissions` | Fine-grained `module:verb` permission keys |
+| `groups` | Permission groups (pre-seeded, ordinary, deletable) |
+| `group_permissions` | Group ↔ permission grants |
+| `admin_groups` | Admin ↔ group membership |
+| `admin_permission_overrides` | Per-person allow/deny deltas (deny wins) |
+| `audit_log` | Append-only, hash-chained record of every action |
 | `contests` | Contest configuration (times, tokens, limits) |
 | `tasks` | Problem definitions with submission format |
 | `datasets` | Test data with time/memory limits |
@@ -964,7 +978,7 @@ Offsite sync config: `.env.infra`/`.env.core` — `BACKUP_DIR`, `OFFSITE_TAILNET
 PostgreSQL `interval` type is returned by Prisma as objects or strings. Use `parseInterval()` helper:
 
 ```typescript
-const parseInterval = (val: any): number => {
+const parseInterval = (val: unknown): number => {
   if (!val) return 0;
   if (typeof val === 'number') return val;
   if (typeof val === 'string') {
@@ -1207,7 +1221,7 @@ cms-docker/
 | Prisma error | Run `make prisma-sync`, check DATABASE_URL |
 | Locale links broken | Check for hardcoded `/en/` — use `/${locale}/` |
 | Permission denied | Check `ensurePermission()` / `verifyApiPermission()` calls |
-| Docker control fails | Ensure Docker socket is mounted and user has `permission_all` |
+| Docker control fails | Ensure Docker socket is mounted and the admin's group grants `container:control` |
 | Interval fields show 0 | Use `parseInterval()` helper to parse Postgres interval objects |
 | Toast not showing | Ensure component is wrapped in `ToastProvider` |
 | Notification polling loop | Use `useRef` for mutable state in polling effects, not `useState` in deps |
