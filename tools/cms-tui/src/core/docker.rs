@@ -149,15 +149,12 @@ pub fn stop_targets(stack: &str) -> Result<Vec<String>, DockerError> {
 
 /// Builds the ordered sequence of `make` targets for a clean request.
 ///
-/// `clean all` maps to a single destructive `make clean` (per `./cms`), unlike
-/// stop which loops the per-stack stops.
-///
 /// # Errors
 ///
 /// Returns `Err` if `stack` is unknown.
 pub fn clean_targets(stack: &str) -> Result<Vec<String>, DockerError> {
     if stack.is_empty() || stack == "all" {
-        return Ok(vec!["clean".to_string()]);
+        return Ok(ALL_STACKS.iter().map(|s| format!("{s}-clean")).collect());
     }
     if ALL_STACKS.contains(&stack) {
         return Ok(vec![format!("{stack}-clean")]);
@@ -224,8 +221,20 @@ mod tests {
     }
 
     #[test]
-    fn clean_all_maps_to_single_clean() {
-        assert_eq!(clean_targets("all").unwrap(), vec!["clean"]);
+    fn clean_all_maps_to_per_stack_cleans() {
+        let targets: Vec<String> = clean_targets("all").unwrap();
+        assert_eq!(targets.len(), ALL_STACKS.len());
+        assert_eq!(
+            targets,
+            ALL_STACKS
+                .iter()
+                .map(|s| format!("{s}-clean"))
+                .collect::<Vec<String>>()
+        );
+        assert!(
+            !targets.iter().any(|t| t == "clean"),
+            "`clean all` must never resolve to the bare `clean` target, which removes the generated .env"
+        );
     }
 
     #[test]
