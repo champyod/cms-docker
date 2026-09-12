@@ -1,3 +1,8 @@
+-- 20260912000400_rls_policies/migration.sql — row-level security policies (Section B + Helper)
+-- Origin: admin-panel/prisma/sql/20260820130000_rls.sql with Section A (ENABLE/FORCE block) removed.
+-- WHY Section A removed: ENABLE/FORCE ROW LEVEL SECURITY is already applied by 20260912000300_rls_enable; duplicating it would be redundant.
+-- WHY: policies bind cmsuser with permissive USING(true)/WITH CHECK(true) so FORCE RLS is auditable; audit_log and submissions carry genuine guarantees via absence of policies.
+
 -- 20260820130000_rls.sql — row-level security with owner binding
 -- WHY: bind cmsuser (table owner) with FORCE so RLS is not silently bypassed; every row access must satisfy an explicit policy.
 -- WHY: forward-only and idempotent — DROP POLICY IF EXISTS before CREATE, ENABLE/FORCE is re-runnable, no destructive DDL; safe to re-apply after `prisma db push` via scripts/__apply_sql.sh.
@@ -15,75 +20,6 @@
 --   - pg_largeobject payloads cannot carry RLS — PostgreSQL does not support policies on large objects. Only metadata rows in fsobjects are gated; file access stays guarded by application-level digest handling (src/cms/db/filecacher.py, admin-panel/src/lib/fsobjects.ts).
 --   - Contestant-facing row ownership is NOT enforceable — the contestant path has no database principal (it shares the application connection), so no per-user USING expression is possible. Do not pretend otherwise.
 
--- ── A. Enable RLS everywhere, and bind the owner (FORCE) ──────────────────
--- WHY FORCE: cmsuser owns the tables and would otherwise bypass every policy; FORCE makes even the owner subject to RLS.
-
-ALTER TABLE public.admins ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.admins FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.announcements ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.announcements FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.attachments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.attachments FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.contests ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.contests FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.datasets ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.datasets FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.evaluations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.evaluations FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.executables ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.executables FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.files ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.files FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.fsobjects ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.fsobjects FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.managers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.managers FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.messages FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.participations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.participations FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.questions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.questions FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.statements ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.statements FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.submission_results ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.submission_results FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.submissions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.submissions FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.tasks FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.teams ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.teams FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.testcases ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.testcases FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.tokens ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.tokens FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.user_test_executables ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.user_test_executables FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.user_test_files ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.user_test_files FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.user_test_managers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.user_test_managers FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.user_test_results ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.user_test_results FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.user_tests ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.user_tests FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.monitor_targets ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.monitor_targets FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.users FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.permissions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.permissions FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.groups ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.groups FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.group_permissions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.group_permissions FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.admin_groups ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.admin_groups FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.admin_permission_overrides ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.admin_permission_overrides FORCE ROW LEVEL SECURITY;
-ALTER TABLE public.audit_log ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.audit_log FORCE ROW LEVEL SECURITY;
 
 -- ── Helper: generic tables (all except audit_log and submissions) get permissive policies ──
 -- WHY permissive USING(true)/WITH CHECK(true) for cmsuser with FORCE: auditable and keeps guarantees in (B) effective; the app has no per-user identity to key on so a tautology is the only correct policy.

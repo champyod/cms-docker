@@ -199,7 +199,7 @@ else
     [ "$HAS_WORKER" = true ] && update_worker_shards src
 fi
 
-log "Syncing database schema..."
+log "Syncing database schema via Prisma Migrate..."
 make cms-init || die "make cms-init failed."
 make prisma-sync || die "make prisma-sync failed."
 

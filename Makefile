@@ -38,7 +38,7 @@ help:
 	@echo "  make pull           - Pull images for all profiles (offline-tolerant, warns on failure)"
 	@echo "  make cms-init       - Initialize CMS database"
 	@echo "  make admin-create   - Create first superadmin account"
-	@echo "  make prisma-sync    - Sync Prisma schema to DB (fail+instruct on missing deps)"
+	@echo "  make prisma-sync    - Apply Prisma migrations (migrate deploy) + seed permissions"
 	@echo "  make lint           - Run shellcheck/hadolint/yamllint + compose config validation"
 	@echo "  make smoke-test     - Run scripts/__smoke-test.sh"
 	@echo "  make preflight      - Run scripts/__preflight.sh"
@@ -266,10 +266,9 @@ cms-init:
 	@chmod +x scripts/__cms-db-init.sh && ./scripts/__cms-db-init.sh
 
 prisma-sync:
-	@echo "Synchronizing Admin Panel schema (forcing Prisma v6)..."
-	@# WHY: before prisma db push drops legacy columns, capture them into _legacy_admin_permissions so the upgrade backfill can preserve access; tolerant so push still runs if DB/file absent.
-	@bash scripts/__apply_sql.sh --pre-push || true
-	@# WHY: schema sync is a migration operation that needs DDL, so it runs as the owner role — never the runtime DML role (cms_admin has no DDL).
+	@echo "Synchronizing Admin Panel schema via Prisma Migrate (forcing Prisma v6)..."
+	@# WHY: schema sync is a migration operation that needs DDL, so it runs as the owner role — never the runtime DML role.
+	@bash scripts/__apply_sql.sh --bootstrap-roles || echo "WARN: role bootstrap failed — retry after restart" >&2;
 	@set -a; [ -f .env ] && . ./.env; set +a; \
 	OWNER_URL_NET="postgresql://$${POSTGRES_USER:-cmsuser}:$${POSTGRES_PASSWORD}@database:5432/$${POSTGRES_DB:-cmsdb}"; \
 	OWNER_URL_LOCAL="postgresql://$${POSTGRES_USER:-cmsuser}:$${POSTGRES_PASSWORD}@localhost:5432/$${POSTGRES_DB:-cmsdb}"; \
@@ -278,17 +277,17 @@ prisma-sync:
 	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
 	if [ "$$DEPLOY_TYPE" = "img" ] && docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-admin-panel-next$$'; then \
-		echo "img mode -> running prisma db push inside cms-admin-panel-next (owner credentials)"; \
-		docker exec -e DATABASE_URL="$$OWNER_URL_NET" cms-admin-panel-next sh -lc "cd /repo-root/admin-panel && { ./node_modules/.bin/prisma db push $${PRISMA_ARGS:-} || npx --yes prisma@6 db push $${PRISMA_ARGS:-}; }"; \
+		echo "img mode -> running prisma migrate deploy inside cms-admin-panel-next (owner credentials)"; \
+		docker exec -e DATABASE_URL="$$OWNER_URL_NET" cms-admin-panel-next sh -lc "cd /repo-root/admin-panel && { ./node_modules/.bin/prisma migrate deploy || npx --yes prisma@6 migrate deploy; }"; \
 		st=$$?; \
-		if [ $$st -ne 0 ]; then echo "Schema sync needs confirmation? Re-run with: make prisma-sync PRISMA_ARGS=--accept-data-loss" >&2; fi; \
+		if [ $$st -ne 0 ]; then echo "Migration deploy failed — check logs above" >&2; exit $$st; fi; \
 	elif [ ! -d "admin-panel" ]; then \
 		echo "ERROR: admin-panel directory not found. Clone the repository with admin-panel/ or check your working directory." >&2; \
 		exit 1; \
 	elif command -v bun >/dev/null 2>&1; then \
-		cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" bun x prisma@6 db push $${PRISMA_ARGS:-}; \
+		cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" bun x prisma@6 migrate deploy; \
 	elif command -v npm >/dev/null 2>&1; then \
-		cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" npx prisma@6 db push $${PRISMA_ARGS:-}; \
+		cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" npx prisma@6 migrate deploy; \
 	else \
 		echo "ERROR: Neither 'bun' nor 'npm' found in PATH. Install Bun (https://bun.sh) or Node.js/npm, then run: make prisma-sync" >&2; \
 		echo "  Fix: curl -fsSL https://bun.sh/install | bash && export PATH=\"\$$HOME/.bun/bin:\$$PATH\"" >&2; \
@@ -307,10 +306,6 @@ prisma-sync:
 	elif command -v npm >/dev/null 2>&1; then \
 		cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" npx tsx prisma/seed-permissions.ts; \
 	fi
-	@# WHY: regenerate RLS enable SQL before apply so a new model added to schema.prisma does not silently miss RLS; fail loudly rather than applying stale SQL.
-	@bash scripts/__generate_rls_sql.sh
-	@# WHY: prisma db push can drop/recreate tables, so roles and any later RLS policies must be re-applied after every schema sync.
-	@bash scripts/__apply_sql.sh
 
 admin-create:
 	@echo "Creating first Superadmin account..."

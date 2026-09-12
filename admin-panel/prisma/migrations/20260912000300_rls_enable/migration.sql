@@ -1,3 +1,6 @@
+-- 20260912000300_rls_enable/migration.sql — migrated from admin-panel/prisma/sql/20260820125500_rls_enable.sql (GENERATED)
+-- Original GENERATED header preserved below.
+
 -- 20260820125500_rls_enable.sql — GENERATED — do not hand-edit
 -- Source: admin-panel/prisma/schema.prisma
 -- Generator: scripts/__generate_rls_sql.sh
