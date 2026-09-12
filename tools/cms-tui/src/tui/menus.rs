@@ -34,19 +34,65 @@ fn capitalize(input: &str) -> String {
     }
 }
 
-pub fn stacks_menu() -> ActionMenu {
+fn stacks_deploy(items: &mut Vec<(String, String)>) {
     let stacks = crate::core::docker::ALL_STACKS;
-    let mut items: Vec<(String, String)> = stacks
-        .iter()
-        .map(|stack| {
-            let label = format!("Deploy {}", capitalize(stack));
-            let command = format!("make {stack}");
-            (label, command)
-        })
-        .collect();
-    let all_order = ["core", "infra", "admin", "contest", "worker"];
-    let all_cmd = format!("make {}", all_order.join(" "));
-    items.push(("Deploy All".to_string(), all_cmd));
+    for stack in stacks {
+        items.push((
+            format!("Deploy {}", capitalize(stack)),
+            format!("make {stack}"),
+        ));
+    }
+    items.push((
+        "Deploy All".to_string(),
+        "make core infra admin contest worker".to_string(),
+    ));
+    for stack in stacks {
+        items.push((
+            format!("Deploy {} (--img)", capitalize(stack)),
+            format!("DEPLOYMENT_TYPE_OVERRIDE=img make {stack}"),
+        ));
+    }
+    items.push((
+        "Deploy All (--img)".to_string(),
+        "DEPLOYMENT_TYPE_OVERRIDE=img make core infra admin contest worker".to_string(),
+    ));
+}
+
+fn stacks_controls(items: &mut Vec<(String, String)>) {
+    let stacks = crate::core::docker::ALL_STACKS;
+    for stack in stacks {
+        items.push((
+            format!("Stop {}", capitalize(stack)),
+            format!("make {stack}-stop"),
+        ));
+    }
+    items.push((
+        "Stop All".to_string(),
+        "make core-stop admin-stop contest-stop worker-stop infra-stop".to_string(),
+    ));
+    for stack in stacks {
+        items.push((
+            format!("Clean {}", capitalize(stack)),
+            format!("make {stack}-clean"),
+        ));
+    }
+    items.push((
+        "Clean All".to_string(),
+        "make core-clean admin-clean contest-clean worker-clean infra-clean".to_string(),
+    ));
+    for stack in stacks {
+        items.push((
+            format!("Pull {}", capitalize(stack)),
+            format!("make pull-{stack}"),
+        ));
+    }
+    items.push(("Pull All".to_string(), "make pull".to_string()));
+}
+
+pub fn stacks_menu() -> ActionMenu {
+    let mut items: Vec<(String, String)> = Vec::new();
+    stacks_deploy(&mut items);
+    stacks_controls(&mut items);
     ActionMenu::new(items)
 }
 
@@ -67,9 +113,22 @@ pub fn database_menu() -> ActionMenu {
 
 pub fn worker_menu() -> ActionMenu {
     ActionMenu::new(vec![
+        ("Worker Edit".to_string(), cmd(DispatchKey::WorkerEdit, &[])),
         (
-            "Fleet Manager (TUI)".to_string(),
+            "Worker Deploy (all)".to_string(),
             cmd(DispatchKey::WorkerDeploy, &["deploy", "all"]),
+        ),
+        (
+            "Worker Stop (all)".to_string(),
+            cmd(DispatchKey::WorkerStop, &["stop", "all"]),
+        ),
+        (
+            "Worker List".to_string(),
+            cmd(DispatchKey::WorkerList, &["list"]),
+        ),
+        (
+            "Worker Attach".to_string(),
+            cmd(DispatchKey::WorkerAttach, &["attach"]),
         ),
         (
             "Setup Cgroups".to_string(),
@@ -81,20 +140,52 @@ pub fn worker_menu() -> ActionMenu {
 pub fn ingress_menu() -> ActionMenu {
     ActionMenu::new(vec![
         (
-            "Tailscale Setup/Status".to_string(),
+            "Tailscale Setup".to_string(),
+            cmd(DispatchKey::TailscaleSetup, &["setup"]),
+        ),
+        (
+            "Tailscale Status".to_string(),
             cmd(DispatchKey::TailscaleStatus, &["status"]),
         ),
         (
-            "Expose Wizard".to_string(),
-            "echo 'Expose Wizard now lives in the Rust TUI — use Ingress panel'".to_string(),
+            "Tailscale Remove".to_string(),
+            cmd(DispatchKey::TailscaleRemove, &["remove"]),
+        ),
+        ("Expose Wizard".to_string(), cmd(DispatchKey::Expose, &[])),
+        (
+            "Funnel Setup".to_string(),
+            cmd(DispatchKey::FunnelSetup, &["setup"]),
         ),
         (
-            "Funnel Setup/Status".to_string(),
+            "Funnel Passwd".to_string(),
+            cmd(DispatchKey::FunnelPasswd, &["passwd"]),
+        ),
+        (
+            "Funnel Remove".to_string(),
+            cmd(DispatchKey::FunnelRemove, &["remove"]),
+        ),
+        (
+            "Funnel Status".to_string(),
             cmd(DispatchKey::FunnelStatus, &["status"]),
         ),
         (
-            "Domain Setup/Status".to_string(),
+            "Domain Setup (letsencrypt)".to_string(),
+            cmd(
+                DispatchKey::DomainSetup,
+                &["setup", "--cert", "letsencrypt"],
+            ),
+        ),
+        (
+            "Domain Status".to_string(),
             cmd(DispatchKey::DomainStatus, &["status"]),
+        ),
+        (
+            "Domain Renew".to_string(),
+            cmd(DispatchKey::DomainRenew, &["renew"]),
+        ),
+        (
+            "Domain Preflight".to_string(),
+            cmd(DispatchKey::DomainPreflight, &["preflight"]),
         ),
     ])
 }
@@ -157,6 +248,12 @@ pub fn system_menu() -> ActionMenu {
             "Full Update Server".to_string(),
             cmd(DispatchKey::UpdateServer, &[]),
         ),
+        ("Live Status".to_string(), cmd(DispatchKey::Status, &[])),
+        ("Monitor UI".to_string(), cmd(DispatchKey::Monitor, &[])),
+        (
+            "Create Contest".to_string(),
+            cmd(DispatchKey::ContestCreate, &[]),
+        ),
     ])
 }
 
@@ -169,6 +266,10 @@ pub fn bootstrap_menu() -> ActionMenu {
         (
             "Update Config (Interactive)".to_string(),
             cmd(DispatchKey::Update, &[]),
+        ),
+        (
+            "Full Server Update (--all)".to_string(),
+            cmd(DispatchKey::UpdateAll, &[]),
         ),
         (
             "Fix (Non-interactive Repair)".to_string(),

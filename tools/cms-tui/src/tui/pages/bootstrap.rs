@@ -10,7 +10,8 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         app,
         &app.bootstrap_menu,
         "Bootstrap — Setup/Update/Fix/Admin Create",
-        "Bootstrap operations: fresh setup, interactive update, non-interactive fix, or create superadmin. Use ↑/↓ or j/k to navigate, Enter to execute.",
+        "Bootstrap: fresh setup, update, full server update (--all), fix, \
+         superadmin. Use ↑/↓ or j/k to navigate, Enter to execute.",
         "[↑/↓/j/k] Navigate   [Enter] Execute   [1-9] Switch page   [Esc] Back   [q] Quit",
     );
 }

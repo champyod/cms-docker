@@ -10,7 +10,9 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         app,
         &app.ingress_menu,
         "Ingress — Tailscale/Expose/Funnel/Domain",
-        "Configure ingress: Tailscale setup, Expose wizard, Funnel, Domain. Use ↑/↓ or j/k to navigate, Enter to execute.",
+        "Ingress: Tailscale (setup/status/remove), Expose, Funnel \
+         (setup/passwd/remove/status), Domain \
+         (setup/status/renew/preflight). Use ↑/↓ or j/k, Enter to execute.",
         "[↑/↓/j/k] Navigate   [Enter] Execute   [1-9] Switch page   [Esc] Back   [q] Quit",
     );
 }
