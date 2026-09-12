@@ -237,42 +237,24 @@ impl App {
     }
 
     /// Runs the action currently selected in the active page's menu.
-    /// TTY actions drop to the terminal; non-TTY actions run inline.
     pub fn run_selected_action(&mut self) {
-        let current = self.current_route().clone();
-        let (cmd, requires) = match &current {
-            Route::Stacks
-            | Route::Database
-            | Route::Worker
-            | Route::Ingress
-            | Route::Backup
-            | Route::Bootstrap => self
-                .active_menu()
-                .map(|menu| (menu.selected_command().to_string(), true))
-                .unwrap_or_default(),
-            Route::Config => self.active_menu().map_or_default(|menu| {
-                let label = menu.selected_label().to_string();
+        let (cmd, requires_tty) = self
+            .active_menu()
+            .map(|menu| {
+                let item = menu.get_item(menu.selected());
                 (
                     menu.selected_command().to_string(),
-                    label.contains("edit") || label.contains("rotate"),
+                    item.is_some_and(|item| item.requires_tty),
                 )
-            }),
-            Route::System => self.active_menu().map_or_default(|menu| {
-                let label = menu.selected_label().to_string();
-                (
-                    menu.selected_command().to_string(),
-                    label.contains("update-server"),
-                )
-            }),
-            Route::Dashboard => (String::new(), false),
-        };
+            })
+            .unwrap_or_default();
 
         if cmd.is_empty() {
             self.set_toast("(no action selected)");
             return;
         }
 
-        if requires {
+        if requires_tty {
             if let Err(err) = self.run_command_in_tty(&cmd) {
                 self.set_toast(&format!("Failed to run: {err}"));
             }

@@ -43,6 +43,9 @@ pub struct CommandSpec {
     pub target: DispatchTarget,
     pub args: &'static [ArgSpec],
     pub about: &'static str,
+    pub requires_tty: bool,
+    pub requires_sudo: bool,
+    pub capture_output: bool,
 }
 
 pub(crate) const ARGS_NONE: &[ArgSpec] = &[];
