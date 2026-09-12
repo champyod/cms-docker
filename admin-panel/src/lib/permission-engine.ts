@@ -44,6 +44,47 @@ export function hasEffectivePermission(effective: ReadonlySet<string>, permissio
   return false;
 }
 
+export function isEffectiveSuperset(callerEffective: ReadonlySet<string>, targetEffective: ReadonlySet<string>): boolean {
+  // Why: per-key via hasEffectivePermission so a raw all:all (size 1) expands to every registry key
+  for (const key of targetEffective) if (!hasEffectivePermission(callerEffective, key)) return false;
+  // Why: a raw all:all target holds every registry key implicitly — treat as full set so Superadmin is not seen as holding fewer
+  if (targetEffective.has(ALL_PERMISSION) && targetEffective.size === 1) {
+    for (const d of PERMISSION_REGISTRY) if (!hasEffectivePermission(callerEffective, d.key)) return false;
+  }
+  return true;
+}
+
+export function callerCanGrant(
+  callerEffective: ReadonlySet<string>,
+  requestedKeys: readonly string[],
+): boolean {
+  for (const key of requestedKeys) {
+    if (!hasEffectivePermission(callerEffective, key)) return false;
+  }
+  return true;
+}
+
+export async function getTargetEffectivePermissions(adminId: number): Promise<ReadonlySet<string> | null> {
+  if (!Number.isInteger(adminId)) return null;
+  const { prisma } = await import('@/lib/prisma');
+  try {
+    const admin = await prisma.admins.findUnique({
+      where: { id: adminId },
+      select: {
+        admin_groups: { select: { groups: { select: { group_permissions: { select: { permissions: { select: { key: true } } } } } } } },
+        permission_overrides: { select: { effect: true, permissions: { select: { key: true } } } },
+      },
+    });
+    if (!admin) return null;
+    const keys: string[] = [];
+    for (const m of admin.admin_groups) for (const l of m.groups.group_permissions) keys.push(l.permissions.key);
+    const overrides: { permissionKey: string; effect: OverrideEffect }[] = admin.permission_overrides.map((o) => ({
+      permissionKey: o.permissions.key, effect: o.effect === 'allow' ? 'allow' : 'deny',
+    }));
+    return resolveEffectivePermissions(keys, overrides);
+  } catch { return null; }
+}
+
 export function summarisePermissionChanges(
   before: ReadonlySet<string>,
   after: ReadonlySet<string>,
