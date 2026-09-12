@@ -58,9 +58,12 @@ async function guardAdminMutation(
 ): Promise<AdminMutationGuard> {
   // Why: a caller may only mutate admins whose permissions are a subset of their own
   if (String(adminId) === sessionUserId) return null;
-  const targetEffective = await getTargetEffectivePermissions(adminId);
-  if (targetEffective === null) return null;
-  if (!isEffectiveSuperset(callerEffective, targetEffective)) {
+  const targetResult = await getTargetEffectivePermissions(adminId);
+  if (targetResult.status === 'not_found') return null;
+  if (targetResult.status === 'error') {
+    return { success: false, error: 'Unable to verify target permissions' };
+  }
+  if (!isEffectiveSuperset(callerEffective, targetResult.effective)) {
     return { success: false, error: 'Cannot mutate an admin with permissions you do not hold' };
   }
   return null;

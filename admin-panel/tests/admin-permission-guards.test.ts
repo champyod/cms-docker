@@ -166,9 +166,10 @@ describe('runtime — mocked server actions enforce guards', () => {
       const actual = await vi.importActual<typeof import('@/lib/permission-engine')>('@/lib/permission-engine');
       return {
         ...actual,
-        getTargetEffectivePermissions: vi.fn(async () =>
-          new Set<string>(PERMISSION_REGISTRY.map((d) => d.key)),
-        ),
+        getTargetEffectivePermissions: vi.fn(async () => ({
+          status: 'resolved' as const,
+          effective: new Set<string>(PERMISSION_REGISTRY.map((d) => d.key)),
+        })),
       };
     });
     vi.doMock('@/lib/prisma', () => ({

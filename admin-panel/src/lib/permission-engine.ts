@@ -64,8 +64,13 @@ export function callerCanGrant(
   return true;
 }
 
-export async function getTargetEffectivePermissions(adminId: number): Promise<ReadonlySet<string> | null> {
-  if (!Number.isInteger(adminId)) return null;
+export type TargetEffectiveResult =
+  | { status: 'resolved'; effective: ReadonlySet<string> }
+  | { status: 'not_found' }
+  | { status: 'error'; cause: unknown };
+
+export async function getTargetEffectivePermissions(adminId: number): Promise<TargetEffectiveResult> {
+  if (!Number.isInteger(adminId)) return { status: 'not_found' };
   const { prisma } = await import('@/lib/prisma');
   try {
     const admin = await prisma.admins.findUnique({
@@ -75,14 +80,16 @@ export async function getTargetEffectivePermissions(adminId: number): Promise<Re
         permission_overrides: { select: { effect: true, permissions: { select: { key: true } } } },
       },
     });
-    if (!admin) return null;
+    if (!admin) return { status: 'not_found' };
     const keys: string[] = [];
     for (const m of admin.admin_groups) for (const l of m.groups.group_permissions) keys.push(l.permissions.key);
     const overrides: { permissionKey: string; effect: OverrideEffect }[] = admin.permission_overrides.map((o) => ({
       permissionKey: o.permissions.key, effect: o.effect === 'allow' ? 'allow' : 'deny',
     }));
-    return resolveEffectivePermissions(keys, overrides);
-  } catch { return null; }
+    return { status: 'resolved', effective: resolveEffectivePermissions(keys, overrides) };
+  } catch (cause: unknown) {
+    return { status: 'error', cause };
+  }
 }
 
 export function summarisePermissionChanges(
