@@ -168,7 +168,57 @@ def parse_ip_networks(
 # In-process cache for effective permission sets, keyed by admin id.
 # Each entry is (expiry_monotonic, frozenset_of_keys).
 _effective_perms_cache: dict[int, tuple[float, frozenset[str]]] = {}
-_CACHE_TTL_SECONDS: float = 60.0
+# WHY: bound staleness from out-of-process writes while still coalescing bursts.
+_CACHE_TTL_SECONDS: float = 5.0
+_ALL_PERMISSION = "all:all"
+
+
+def _all_permission_keys(sql_session) -> set[str]:
+    """Return every permission key registered in the database."""
+    rows = sql_session.query(Permission.key).all()
+    return {row[0] for row in rows}
+
+
+def has_effective_permission(
+    effective: frozenset[str], permission: str
+) -> bool:
+    """Check whether *effective* grants *permission*.
+
+    A raw all:all set of size one is treated as granting every key.
+    """
+    if permission in effective:
+        return True
+    if _ALL_PERMISSION in effective and len(effective) == 1:
+        return True
+    return False
+
+
+def is_effective_superset(
+    caller_effective: frozenset[str],
+    target_effective: frozenset[str],
+    sql_session=None,
+) -> bool:
+    """Return whether *caller_effective* covers *target_effective*.
+
+    Treat all:all as every key on both sides.
+    """
+    for key in target_effective:
+        if not has_effective_permission(caller_effective, key):
+            return False
+    if _ALL_PERMISSION in target_effective and len(target_effective) == 1:
+        all_keys: set[str]
+        if sql_session is not None:
+            try:
+                all_keys = _all_permission_keys(sql_session)
+            except Exception:
+                logger.error("Failed to expand all:all for superset check.")
+                return False
+        else:
+            return _ALL_PERMISSION in caller_effective
+        for key in all_keys:
+            if not has_effective_permission(caller_effective, key):
+                return False
+    return True
 
 
 def get_effective_permissions(admin_id: int, sql_session) -> frozenset[str]:
@@ -177,7 +227,8 @@ def get_effective_permissions(admin_id: int, sql_session) -> frozenset[str]:
     Resolution strategy:
       1. Collect permission keys via admin_groups → group_permissions → permissions.
       2. UNION with admin_permission_overrides where effect == 'allow'.
-      3. MINUS admin_permission_overrides where effect == 'deny'.
+      3. Expand all:all into concrete keys before denies.
+      4. MINUS admin_permission_overrides where effect == 'deny'.
 
     Results are cached for _CACHE_TTL_SECONDS. Fail-closed: on any DB
     error the empty set is returned (denying all access).
@@ -228,7 +279,13 @@ def get_effective_permissions(admin_id: int, sql_session) -> frozenset[str]:
             .filter(AdminPermissionOverride.effect == "deny")
             .all()
         )
-        result -= {row[0] for row in deny_rows}
+        denied: set[str] = {row[0] for row in deny_rows}
+        # WHY: expand wildcard before denies so a per-person deny wins.
+        if _ALL_PERMISSION in result and _ALL_PERMISSION not in denied:
+            result |= _all_permission_keys(sql_session)
+        else:
+            result.discard(_ALL_PERMISSION)
+        result -= denied
     except Exception:
         logger.error(
             "Failed to resolve permissions for admin %d; denying access.",
@@ -286,7 +343,7 @@ def require_permission(permission: str = "authenticated", self_allowed: bool = F
                     pass
 
             effective = get_effective_permissions(user.id, self.sql_session)
-            if permission in effective or "all:all" in effective:
+            if has_effective_permission(effective, permission):
                 return func(self, *args, **kwargs)
 
             raise tornado.web.HTTPError(403, "Admin is not authorized")
