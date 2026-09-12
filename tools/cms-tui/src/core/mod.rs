@@ -3,6 +3,7 @@
 // with Docker, executing bash scripts, and managing configurations.
 // It is used by both the CLI and TUI frontends.
 
+pub mod catalog;
 pub mod config;
 pub mod dispatch;
 pub mod docker;
