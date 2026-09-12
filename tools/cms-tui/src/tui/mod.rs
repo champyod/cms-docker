@@ -1,5 +1,6 @@
 pub mod app;
 pub mod components;
+pub mod menus;
 pub mod pages;
 
 use app::App;

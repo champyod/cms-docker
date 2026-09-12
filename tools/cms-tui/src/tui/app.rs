@@ -75,172 +75,16 @@ impl App {
             should_show_working_popup: false,
             working_message: WorkingPopup::Blinking,
             last_toast: None,
-            state: state.clone(),
-            stacks_menu: Self::build_stacks_menu(&state),
-            database_menu: Self::build_database_menu(&state),
-            worker_menu: Self::build_worker_menu(&state),
-            ingress_menu: Self::build_ingress_menu(&state),
-            config_menu: Self::build_config_menu(&state),
-            backup_menu: Self::build_backup_menu(&state),
-            system_menu: Self::build_system_menu(&state),
-            bootstrap_menu: Self::build_bootstrap_menu(&state),
+            state,
+            stacks_menu: crate::tui::menus::stacks_menu(),
+            database_menu: crate::tui::menus::database_menu(),
+            worker_menu: crate::tui::menus::worker_menu(),
+            ingress_menu: crate::tui::menus::ingress_menu(),
+            config_menu: crate::tui::menus::config_menu(),
+            backup_menu: crate::tui::menus::backup_menu(),
+            system_menu: crate::tui::menus::system_menu(),
+            bootstrap_menu: crate::tui::menus::bootstrap_menu(),
         }
-    }
-
-    fn build_stacks_menu(_state: &AppState) -> ActionMenu {
-        let items = vec![
-            ("Deploy Core".to_string(), "make core".to_string()),
-            ("Deploy Admin".to_string(), "make admin".to_string()),
-            ("Deploy Contest".to_string(), "make contest".to_string()),
-            ("Deploy Worker".to_string(), "make worker".to_string()),
-            ("Deploy Infra".to_string(), "make infra".to_string()),
-            (
-                "Deploy All".to_string(),
-                "make core infra admin contest worker".to_string(),
-            ),
-        ];
-        ActionMenu::new(items)
-    }
-
-    fn build_database_menu(_state: &AppState) -> ActionMenu {
-        let items = vec![
-            (
-                "Initialize Database".to_string(),
-                "make cms-init".to_string(),
-            ),
-            ("Reset Database".to_string(), "make db-reset".to_string()),
-            ("Clean Database".to_string(), "make db-clean".to_string()),
-            (
-                "Sync Schema (Prisma)".to_string(),
-                "make prisma-sync".to_string(),
-            ),
-        ];
-        ActionMenu::new(items)
-    }
-
-    fn build_worker_menu(_state: &AppState) -> ActionMenu {
-        let items = vec![
-            (
-                "Fleet Manager (TUI)".to_string(),
-                "bash scripts/__worker_tui.sh deploy all".to_string(),
-            ),
-            (
-                "Setup Cgroups".to_string(),
-                "bash scripts/__worker_cgroup_setup.sh".to_string(),
-            ),
-        ];
-        ActionMenu::new(items)
-    }
-
-    fn build_ingress_menu(_state: &AppState) -> ActionMenu {
-        let items = vec![
-            (
-                "Tailscale Setup/Status".to_string(),
-                "bash scripts/__tailscale_serve.sh status".to_string(),
-            ),
-            (
-                "Expose Wizard".to_string(),
-                "echo 'Expose Wizard now lives in the Rust TUI — use Ingress panel'".to_string(),
-            ),
-            (
-                "Funnel Setup/Status".to_string(),
-                "bash scripts/__funnel.sh status".to_string(),
-            ),
-            (
-                "Domain Setup/Status".to_string(),
-                "bash scripts/__domain.sh status".to_string(),
-            ),
-        ];
-        ActionMenu::new(items)
-    }
-
-    fn build_config_menu(_state: &AppState) -> ActionMenu {
-        let items = vec![
-            (
-                "Sync Config (.env from config.toml)".to_string(),
-                "bash scripts/__config_sync.sh".to_string(),
-            ),
-            (
-                "Edit config.toml".to_string(),
-                "nano config.toml".to_string(),
-            ),
-            (
-                "Show config.toml".to_string(),
-                "cat config.toml".to_string(),
-            ),
-            (
-                "Secrets: Audit".to_string(),
-                "bash scripts/__secrets-rotate.sh --audit".to_string(),
-            ),
-            (
-                "Secrets: Generate".to_string(),
-                "bash scripts/__secrets-rotate.sh --generate".to_string(),
-            ),
-            (
-                "Secrets: Rotate (guarded)".to_string(),
-                "bash scripts/__secrets-rotate.sh --apply".to_string(),
-            ),
-        ];
-        ActionMenu::new(items)
-    }
-
-    fn build_backup_menu(_state: &AppState) -> ActionMenu {
-        let items = vec![
-            ("Run Backup Now".to_string(), "make backup".to_string()),
-            (
-                "Backup Drill (test restore)".to_string(),
-                "bash scripts/__backup_drill.sh".to_string(),
-            ),
-            (
-                "Offsite Sync".to_string(),
-                "bash scripts/__offsite-sync.sh".to_string(),
-            ),
-            (
-                "Restore from Archive".to_string(),
-                "bash scripts/__restore.sh".to_string(),
-            ),
-        ];
-        ActionMenu::new(items)
-    }
-
-    fn build_system_menu(_state: &AppState) -> ActionMenu {
-        let items = vec![
-            (
-                "Doctor (Preflight Checks)".to_string(),
-                "bash scripts/__preflight.sh".to_string(),
-            ),
-            (
-                "Smoke Test".to_string(),
-                "bash scripts/__smoke-test.sh".to_string(),
-            ),
-            (
-                "Full Update Server".to_string(),
-                "bash scripts/__update-server.sh".to_string(),
-            ),
-        ];
-        ActionMenu::new(items)
-    }
-
-    fn build_bootstrap_menu(_state: &AppState) -> ActionMenu {
-        let items = vec![
-            (
-                "Setup (Fresh Install)".to_string(),
-                "bash scripts/__update_engine.sh --fresh".to_string(),
-            ),
-            (
-                "Update Config (Interactive)".to_string(),
-                "bash scripts/__update_engine.sh".to_string(),
-            ),
-            (
-                "Fix (Non-interactive Repair)".to_string(),
-                "bash scripts/__update_engine.sh --fix".to_string(),
-            ),
-            (
-                "Create Superadmin".to_string(),
-                "make admin-create".to_string(),
-            ),
-        ];
-        ActionMenu::new(items)
     }
 
     #[must_use]
@@ -310,14 +154,18 @@ impl App {
 
     fn refresh_for_route(&mut self) {
         match self.current_route() {
-            Route::Stacks => self.stacks_menu = Self::build_stacks_menu(&self.state),
-            Route::Database => self.database_menu = Self::build_database_menu(&self.state),
-            Route::Worker => self.worker_menu = Self::build_worker_menu(&self.state),
-            Route::Ingress => self.ingress_menu = Self::build_ingress_menu(&self.state),
-            Route::Config => self.config_menu = Self::build_config_menu(&self.state),
-            Route::Backup => self.backup_menu = Self::build_backup_menu(&self.state),
-            Route::System => self.system_menu = Self::build_system_menu(&self.state),
-            Route::Bootstrap => self.bootstrap_menu = Self::build_bootstrap_menu(&self.state),
+            Route::Stacks => self.stacks_menu = crate::tui::menus::stacks_menu(),
+            Route::Database => {
+                self.database_menu = crate::tui::menus::database_menu();
+            }
+            Route::Worker => self.worker_menu = crate::tui::menus::worker_menu(),
+            Route::Ingress => self.ingress_menu = crate::tui::menus::ingress_menu(),
+            Route::Config => self.config_menu = crate::tui::menus::config_menu(),
+            Route::Backup => self.backup_menu = crate::tui::menus::backup_menu(),
+            Route::System => self.system_menu = crate::tui::menus::system_menu(),
+            Route::Bootstrap => {
+                self.bootstrap_menu = crate::tui::menus::bootstrap_menu();
+            }
             Route::Dashboard => {}
         }
     }
