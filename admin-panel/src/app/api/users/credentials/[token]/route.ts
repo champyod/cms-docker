@@ -12,7 +12,10 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
-  const { authorized, response } = await verifyApiPermission('user:update');
+  // WHY password:reveal: this endpoint serves the credential CSV, i.e. plaintext
+  // passwords. The permission must match the data disclosed, not the user record
+  // the token is keyed to.
+  const { authorized, response } = await verifyApiPermission('password:reveal');
   if (!authorized) return response;
 
   const { token } = await params;
