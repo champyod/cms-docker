@@ -65,6 +65,18 @@ impl ActionMenu {
         self.items[self.selected].label.as_str()
     }
 
+    /// The command the selected item runs.
+    ///
+    /// Distinct from the label: the label is what the user reads, the command
+    /// is what gets executed. Consumers must run this, never the label.
+    #[must_use]
+    pub fn selected_command(&self) -> &str {
+        if self.items.is_empty() {
+            return "";
+        }
+        self.items[self.selected].description.as_str()
+    }
+
     #[must_use]
     pub const fn len(&self) -> usize {
         self.items.len()
@@ -220,6 +232,17 @@ mod tests {
         assert_eq!(menu.selected_label(), "Restart Worker");
         menu.handle_key(KeyCode::Up);
         assert_eq!(menu.selected_label(), "Run Backup");
+    }
+
+    /// Guards the label/command distinction: the menu shows a label, but the
+    /// runner must spawn the command. Running the label yields exit 127.
+    #[test]
+    fn selected_command_is_the_command_not_the_label() {
+        let mut menu: ActionMenu = sample_menu();
+        assert_ne!(menu.selected_command(), menu.selected_label());
+        assert_eq!(menu.selected_command(), sample_menu().selected_command());
+        menu.handle_key(KeyCode::Down);
+        assert_ne!(menu.selected_command(), menu.selected_label());
     }
 
     #[test]

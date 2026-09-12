@@ -400,18 +400,21 @@ impl App {
             | Route::Backup
             | Route::Bootstrap => self
                 .active_menu()
-                .map(|menu| (menu.selected_label().to_string(), true))
+                .map(|menu| (menu.selected_command().to_string(), true))
                 .unwrap_or_default(),
             Route::Config => self.active_menu().map_or_default(|menu| {
                 let label = menu.selected_label().to_string();
                 (
-                    label.clone(),
+                    menu.selected_command().to_string(),
                     label.contains("edit") || label.contains("rotate"),
                 )
             }),
             Route::System => self.active_menu().map_or_default(|menu| {
                 let label = menu.selected_label().to_string();
-                (label.clone(), label.contains("update-server"))
+                (
+                    menu.selected_command().to_string(),
+                    label.contains("update-server"),
+                )
             }),
             Route::Dashboard => (String::new(), false),
         };
