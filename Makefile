@@ -148,7 +148,7 @@ core-clean:
 # Teardown targets pass dependency profiles plus an explicit service list:
 # the core profile is required for project-graph validation, while the
 # service list keeps the operation scoped so dependencies are never touched.
-ADMIN_SERVICES := admin-panel-next admin-web-server ranking-web-server printing-service
+ADMIN_SERVICES := admin-panel-next admin-web-server ranking-web-server
 CONTEST_SERVICES := evaluation-service proxy-service contest-web-server nginx-proxy
 
 admin-stop:

@@ -53,13 +53,13 @@ What it does, in order, and why the order matters:
 | 1 | records old git HEAD + image digests to `/tmp/cms-update-*.txt` | your rollback reference |
 | 2 | `git pull --ff-only` | get the new code |
 | 3 | `make env` → regenerates `.env` + `config/cms.toml` | generates the new `RPC_SECRET` and the role passwords; without this the RPC layer fails closed |
-| 4 | bootstraps DB roles | the new admin container connects as `cms_admin` and the monitor as `cms_monitor`; they must exist **before** the restart |
+| 4 | bootstraps DB roles | `cms_backup` must exist and carry its password before the restart so backups succeed; schema sync later ensures all roles are correct |
 | 5 | preflight | abort cleanly before touching anything running |
 | 6 | safety backup | restore point for this specific upgrade |
 | 7 | detects active stacks, pulls images, restarts them | new code, new credentials |
-| 8 | `make cms-init` + `make prisma-sync` | applies the schema change, seeds permissions, then applies roles + RLS last |
+| 8 | `make cms-init` + `make prisma-sync` | runs `prisma migrate deploy` to apply the schema change, bootstraps `cms_backup`, seeds permissions, then applies roles + RLS |
 
-Step 8 is where the destructive part lands: `prisma db push` adds the new tables, the boolean data is captured and backfilled into groups, then the 5 columns are dropped, then RLS is enabled and the owner is demoted.
+Step 8 is where the destructive part lands: `prisma migrate deploy` adds the new tables, the boolean data is captured and backfilled into groups, then the 5 columns are dropped, then RLS is enabled and the owner is demoted; a role bootstrap step runs before the restart so `cms_backup` is usable immediately.
 
 ## Step 3 — verify
 
@@ -114,9 +114,9 @@ The database rollback matters more than the code rollback: the schema change is 
 - **`make env` is now mandatory before restart**, not optional. The RPC secret is fail-closed.
 - **One `.env` instead of six.** Edit `config.toml` and re-run `./cms config sync` — never edit `.env` by hand, it is overwritten.
 - **`make env` now adds newly-introduced config keys** to an existing `config.toml` without touching values you already set.
-- **New secrets are generated automatically**: `RPC_SECRET`, and `POSTGRES_SERVICE/ADMIN/MONITOR/BACKUP_PASSWORD`. Nothing to set by hand.
-- **Backups use a new `cms_backup` role.** On the first upgrade the role may not exist yet at backup time; the script falls back to the owner and says so.
-- **The DB owner `cmsuser` is demoted** (NOSUPERUSER/NOBYPASSRLS) so RLS actually binds. DDL still works because it owns its objects.
+- **New secrets are generated automatically**: `RPC_SECRET` and `POSTGRES_BACKUP_PASSWORD`. Nothing to set by hand.
+- **Backups use `cms_backup` (BYPASSRLS, member of `cmsuser`).** Only `cmsuser` and `cms_backup` exist; the database owner `cmsuser` is demoted to `NOBYPASSRLS` so RLS binds.
+- **Schema sync is `prisma migrate deploy`**, with a role bootstrap step before the restart so `cms_backup` is available immediately.
 
 ## Known limits of this upgrade
 

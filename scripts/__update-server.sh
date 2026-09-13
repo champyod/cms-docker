@@ -62,12 +62,10 @@ log "Regenerating environment files (make env)..."
 make env || log_die "make env failed."
 
 # ---------------------------------------------------------------------------
-# (b2) Ensure least-privilege DB roles exist BEFORE services restart with them
-# WHY: only the role definitions are needed before the restart — the new admin
-# container connects as cms_admin and the monitor as cms_monitor, so those roles
-# must exist or the new containers cannot connect. RLS and owner-hardening are
-# deliberately deferred to the post-restart prisma-sync so they land after the
-# new code is running (avoiding mid-request failures and premature demotion).
+# (b2) Ensure DB roles exist BEFORE services restart with them
+# WHY: cms_backup must exist with its password before the restart so backups
+# succeed; RLS and owner-hardening are deferred to the post-restart
+# prisma-sync so they land after the new code is running.
 # Tolerant on a fresh install where the database container is not up yet —
 # prisma-sync re-applies the roles afterwards.
 # ---------------------------------------------------------------------------

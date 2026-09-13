@@ -337,7 +337,7 @@ One [`docker-compose.yml`](docker-compose.yml), five profiles:
 | Profile | Services |
 |---------|----------|
 | `core` | PostgreSQL · LogService · ResourceService · ScoringService · CheckerService |
-| `admin` | AdminPanelNext (:8891) · AdminWebServer (:8889) · RankingWebServer (:8890) · optional PrintingService |
+| `admin` | AdminPanelNext (:8891) · AdminWebServer (:8889) · RankingWebServer (:8890) |
 | `contest` | ContestWebServer (:8888+) · EvaluationService · ProxyService · nginx (TLS option) |
 | `worker` | Sandboxed isolate workers (`WORKER_SHARD` unique per instance) |
 | `monitor` | Health/backups/Discord alerting (non-root, docker.sock via `DOCKER_GID`) |

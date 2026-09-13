@@ -6,14 +6,14 @@ What this fork is. What it changed vs upstream. What got built on top.
 
 `cms-docker` = containerized deployment of Contest Management System. Upstream = [cms-dev/cms](https://github.com/cms-dev/cms) (Python/Tornado). Fork adds: docker stacks, Makefile orchestration, `./cms` TUI launcher, Next.js admin panel, worker fleet, monitoring/WAF/Vault overlays, docs.
 
-Remotes: `origin` = champyod/cms-docker. `upstream` = cms-dev/cms (configured, never fetched — `.git/FETCH_HEAD` empty).
+Remotes: `origin` = champyod/cms-docker. `upstream` = cms-dev/cms (configured).
 
 ## Upstream relationship
 
 - Python source lives `src/`. **Plain copied files, NOT a submodule.** No `.gitmodules`, no `src/.git`, no `.git/modules/`. Nothing under `src/` has its own history.
 - Was a submodule once, later flattened (old branches `features/submodules`, `features/split`, `features/pull-cms` survive).
-- Best-supported base ≈ cms-dev/cms `b98e44b5` (2026-03-02), post-v1.5.1 tree. `src/cms/__init__.py` says `1.6.dev0`. Last sync commits: `f43c081e` "upstream cms" (2026-03-13), `3daffaa7` "update src of cms" (2026-01-29).
-- **Trap:** no pin recorded. `git` in this checkout cannot answer "diff vs upstream". Submodule commands in README/docs are stale and will fail — `README.md:29,153`, `scripts/__update-server.sh:54`, `docs/TUTORIAL.md:19`, `docs/TROUBLESHOOTING.md:190-193`, `.dockerignore:19`.
+- Best-supported base ≈ cms-dev/cms `b98e44b5` (2026-03-02), post-v1.5.1 tree — documented best-effort base, unverified, no verified pin exists. `src/cms/__init__.py` says `1.6.dev0`. Last sync commits: `f43c081e` "upstream cms" (2026-03-13), `3daffaa7` "update src of cms" (2026-01-29).
+- No verified upstream pin is recorded, but the `upstream` remote is configured. To produce a diff, run `git fetch upstream` then compare against the documented best-effort base (unverified), e.g. `git diff b98e44b5..HEAD -- src/` or `git log --oneline b98e44b5..HEAD -- src/`. Submodule commands in README/docs are stale and will fail — `README.md:29,153`, `scripts/__update-server.sh:54`, `docs/TUTORIAL.md:19`, `docs/TROUBLESHOOTING.md:190-193`, `.dockerignore:19`.
 
 ## Python CMS patches (only 3 areas touched)
 
@@ -91,10 +91,10 @@ Verified: Next.js `tsc` 0 errors, 429/429 tests green. Python files compile; zer
 
 ## Row-level security (2026-08-20)
 
-RLS enabled with `FORCE` on all 33 app tables (`admins`, `announcements`, `attachments`, `contests`, `datasets`, `evaluations`, `executables`, `files`, `fsobjects`, `managers`, `messages`, `participations`, `questions`, `statements`, `submission_results`, `submissions`, `tasks`, `teams`, `testcases`, `tokens`, `user_test_*`, `monitor_targets`, `users`, `permissions`, `groups`, `group_permissions`, `admin_groups`, `admin_permission_overrides`, `audit_log`) — `FORCE` binds `cmsuser` (owner) so even the owner must satisfy a policy. `audit_log` is append-only (SELECT+INSERT only, no UPDATE/DELETE for any role — hash chain tamper-evident at DB layer). `submissions` is non-deletable (SELECT/INSERT/UPDATE allowed — admin UI needs `comment`/`official` — but no DELETE for any role). `cms_service`/`cms_admin`/`cmsuser` have permissive `USING (true) WITH CHECK (true)` (not `BYPASSRLS`, auditable) except for those two guarantees; `cms_monitor`/`cms_readonly` are SELECT-only. Exemptions: `pg_largeobject` payloads cannot carry RLS (PostgreSQL limitation — only `fsobjects` rows are gated, file bytes via `lo_*`/digest stay app-guarded) and contestant row ownership is not enforceable (contestant path shares the app connection, no DB principal). Policies are re-applied after every `prisma db push` by `scripts/__apply_sql.sh` (filename-ordered, `ON_ERROR_STOP=1`), so they survive schema sync.
+RLS enabled with `FORCE` on all 33 app tables (`admins`, `announcements`, `attachments`, `contests`, `datasets`, `evaluations`, `executables`, `files`, `fsobjects`, `managers`, `messages`, `participations`, `questions`, `statements`, `submission_results`, `submissions`, `tasks`, `teams`, `testcases`, `tokens`, `user_test_*`, `monitor_targets`, `users`, `permissions`, `groups`, `group_permissions`, `admin_groups`, `admin_permission_overrides`, `audit_log`) — `FORCE` binds `cmsuser` (owner, NOBYPASSRLS) so even the owner must satisfy a policy. `audit_log` is append-only (SELECT+INSERT only, no UPDATE/DELETE for any role — hash chain tamper-evident at DB layer). `submissions` has SELECT/INSERT/UPDATE/DELETE for `cmsuser` (admin UI needs `comment`/`official`; deletes via permission + reason + audit). `cms_backup` has BYPASSRLS and member of `cmsuser` for dump/LO reads, no policies needed. Exemptions: `pg_largeobject` payloads cannot carry RLS (PostgreSQL limitation — only `fsobjects` rows are gated, file bytes via `lo_*`/digest stay app-guarded) and contestant row ownership is not enforceable (contestant path shares the app connection, no DB principal). Policies are re-applied after every `prisma migrate deploy` by `scripts/__apply_sql.sh` (filename-ordered, `ON_ERROR_STOP=1`), so they survive schema sync.
 
 ## Known stale / risky
 
-- Vendored `src/` + no recorded pin → cannot diff vs upstream from this checkout. Re-sync needs a manual upstream fetch + tree comparison.
+- Vendored `src/` with no verified pin → diff requires `git fetch upstream` then tree comparison against the documented best-effort base `b98e44b5` (unverified).
 - Submodule instructions in README/docs are wrong — tree is flat.
 - `src/cmstaskenv/` retained though upstream `main` dropped it.

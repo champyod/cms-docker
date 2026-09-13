@@ -6,7 +6,8 @@ if (set -o pipefail 2>/dev/null); then
 fi
 
 # __apply_sql.sh — apply every .sql file under admin-panel/prisma/sql/ in filename order.
-# WHY: prisma db push can drop/recreate tables, so roles and RLS need re-apply after every schema sync.
+# WHY: roles are limited to cmsuser (owner, NOBYPASSRLS) and cms_backup (BYPASSRLS, member of cmsuser)
+# for least privilege; post-restart schema sync runs prisma migrate deploy and re-applies roles/RLS.
 # Safe to re-run: each SQL file is idempotent (DO $$ guards / IF NOT EXISTS).
 
 CMS_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -18,9 +19,9 @@ source "${SCRIPT_DIR}/__lib/common.sh"
 
 # WHY --pre-push: capture legacy permissions BEFORE prisma db push drops the columns.
 # In that mode apply ONLY the capture file and be tolerant (never abort the push).
-# WHY --bootstrap-roles: apply ONLY role-definition files BEFORE the restart so new
-# containers (cms_admin/cms_monitor/cms_backup) can connect; RLS/hardening are
-# deliberately deferred to the post-restart full apply after new code is running.
+# WHY --bootstrap-roles: apply ONLY role-definition files BEFORE the restart so
+# cms_backup can connect with its real password; RLS/hardening are deferred to
+# the post-restart full apply after new code is running.
 PRE_PUSH=0
 BOOTSTRAP_ROLES=0
 if [[ "${1:-}" == "--pre-push" ]]; then
@@ -54,13 +55,10 @@ if [[ -z "${DB_PASS:-}" ]]; then
 fi
 
 # Resolve role passwords (generated secrets in config.toml/.env)
-CMS_SERVICE_PASSWORD="$(get_env_val "POSTGRES_SERVICE_PASSWORD" "$ENV_FILE")"
-CMS_ADMIN_PASSWORD="$(get_env_val "POSTGRES_ADMIN_PASSWORD" "$ENV_FILE")"
-CMS_MONITOR_PASSWORD="$(get_env_val "POSTGRES_MONITOR_PASSWORD" "$ENV_FILE")"
 CMS_BACKUP_PASSWORD="$(get_env_val "POSTGRES_BACKUP_PASSWORD" "$ENV_FILE")"
-# Back-compat: if secrets not yet generated, warn but allow SQL files that tolerate empty
-if [[ -z "$CMS_SERVICE_PASSWORD" || -z "$CMS_ADMIN_PASSWORD" || -z "$CMS_MONITOR_PASSWORD" || -z "$CMS_BACKUP_PASSWORD" ]]; then
-  log_warn "one or more role passwords empty — run './cms config sync' to generate POSTGRES_*_PASSWORD; continuing with available values"
+# Back-compat: if secret not yet generated, warn but allow SQL files that tolerate empty
+if [[ -z "$CMS_BACKUP_PASSWORD" ]]; then
+  log_warn "POSTGRES_BACKUP_PASSWORD empty — run './cms config sync' to generate it; continuing with available values"
 fi
 
 # Fail loudly if DB container not running (tolerant in --pre-push / --bootstrap-roles so the update still runs)
@@ -90,9 +88,6 @@ if [[ "$PRE_PUSH" -eq 1 ]]; then
   if ! docker exec -i \
     -e PGPASSWORD="$DB_PASS" \
     "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 \
-    -v "cms_service_password=$CMS_SERVICE_PASSWORD" \
-    -v "cms_admin_password=$CMS_ADMIN_PASSWORD" \
-    -v "cms_monitor_password=$CMS_MONITOR_PASSWORD" \
     -v "cms_backup_password=$CMS_BACKUP_PASSWORD" \
     -f - < "$CAPTURE_FILE"; then
     log_warn "failed to apply $CAPTURE_FILE — continuing (prisma db push must still run)"
@@ -102,8 +97,8 @@ if [[ "$PRE_PUSH" -eq 1 ]]; then
   exit 0
 fi
 
-# WHY --bootstrap-roles: apply ONLY role-definition files BEFORE the restart so new
-# containers can connect; RLS/hardening are deliberately deferred to post-restart.
+# WHY --bootstrap-roles: apply ONLY role-definition files BEFORE the restart so
+# cms_backup can connect; RLS/hardening are deliberately deferred to post-restart.
 # WHY content-based selector: role files contain CREATE ROLE; RLS/hardening do not.
 # Future role migrations will also contain CREATE ROLE and be auto-included without
 # updating a hardcoded filename list. Additional exclusion of active RLS (CREATE POLICY
@@ -146,9 +141,6 @@ if [[ "$BOOTSTRAP_ROLES" -eq 1 ]]; then
     if ! docker exec -i \
       -e PGPASSWORD="$DB_PASS" \
       "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 \
-      -v "cms_service_password=$CMS_SERVICE_PASSWORD" \
-      -v "cms_admin_password=$CMS_ADMIN_PASSWORD" \
-      -v "cms_monitor_password=$CMS_MONITOR_PASSWORD" \
       -v "cms_backup_password=$CMS_BACKUP_PASSWORD" \
       -f - < "$sql_file"; then
       log_warn "failed to apply $sql_file — continuing (prisma-sync will retry after the restart)"
@@ -177,9 +169,6 @@ for sql_file in "${SQL_FILES[@]}"; do
   if ! docker exec -i \
     -e PGPASSWORD="$DB_PASS" \
     "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 \
-    -v "cms_service_password=$CMS_SERVICE_PASSWORD" \
-    -v "cms_admin_password=$CMS_ADMIN_PASSWORD" \
-    -v "cms_monitor_password=$CMS_MONITOR_PASSWORD" \
     -v "cms_backup_password=$CMS_BACKUP_PASSWORD" \
     -f - < "$sql_file"; then
     log_die "failed to apply $sql_file" 1

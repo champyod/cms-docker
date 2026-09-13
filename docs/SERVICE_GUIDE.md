@@ -28,7 +28,6 @@ The Core stack must be healthy before any other services can function properly.
 | `admin-panel-next` (:8891) | `database` | Modern Next.js Management Panel — manage everything here. |
 | `admin-web-server` (:8889) | `database`, `log-service` | Legacy Python admin UI. |
 | `ranking-web-server` (:8890) | `database`, `log-service` | Real-time public rankings. |
-| `printing-service` (optional) | `database`, `log-service` | Contest printing service. |
 
 ### 3. Contest Stack
 | Service | Depends On | Purpose |

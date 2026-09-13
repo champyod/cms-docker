@@ -6,12 +6,11 @@
 -- 20260820130000_rls.sql — row-level security with owner binding
 -- WHY: bind cmsuser (table owner) with FORCE so RLS is not silently bypassed; every row access must satisfy an explicit policy.
 -- WHY: forward-only and idempotent — DROP POLICY IF EXISTS before CREATE, ENABLE/FORCE is re-runnable, no destructive DDL; safe to re-apply after `prisma db push` via scripts/__apply_sql.sh.
--- WHY: policies reference only cmsuser (plus SELECT-only built-ins) so pg_dump restore into a fresh
---   database never fails with "role does not exist" — cmsuser exists everywhere as the app owner.
---   Roles cms_service/cms_admin/cms_monitor are intentionally NOT referenced here; another agent owns
---   the role layout change to the two-role world (cmsuser + cms_backup) and the dump role cms_backup
---   has BYPASSRLS so it bypasses RLS entirely. Naming absent roles in CREATE POLICY would make
---   pg_restore exit 1 with 27 errors.
+-- WHY: policies reference only cmsuser so pg_dump restore into a fresh database
+--   never fails with "role does not exist" — cmsuser exists everywhere as the app owner.
+--   The remaining role cms_backup has BYPASSRLS so it bypasses RLS entirely and
+--   does not need a policy. Naming absent roles in CREATE POLICY would make
+--   pg_restore fail.
 -- WHY: guarantees that are actually enforceable here are encoded as the ABSENCE of a policy (deny by default with FORCE):
 --   1) audit_log is append-only (SELECT + INSERT only, no UPDATE/DELETE for any role) — hash-chained log is tamper-evident at the DB layer, not just application code.
 --   2) submissions is deletable via explicit DELETE policy — direct deletes are allowed but controlled

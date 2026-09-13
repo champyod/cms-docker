@@ -100,10 +100,6 @@ write_section_block() {
 
   echo "### [${section}] ###"
   for key in "${keys[@]}"; do
-    # WHY: deprecated per-role passwords removed — single owner + backup roles remain; skip writing them to .env.
-    case "$key" in
-      POSTGRES_SERVICE_PASSWORD|POSTGRES_ADMIN_PASSWORD|POSTGRES_MONITOR_PASSWORD) continue ;;
-    esac
     local val="${__TOML["${section}.${key}"]:-}"
     echo "$key=$val"
   done
