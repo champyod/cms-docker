@@ -42,7 +42,7 @@
 </form>
 {% else %}
 
-You are already logged in. <a href="{{ url("logout") }}">Logout</a>
+You are already logged in. <form action="{{ url("logout") }}" method="POST" style="display:inline;">{{ xsrf_form_html|safe }}<button type="submit" class="button-link">Logout</button></form>
 or go to the <a href="{{ url() }}">overview</a>.
 
 {% endif %}
