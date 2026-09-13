@@ -9,23 +9,9 @@ fi
 # CMS Database Initialization & Patching Script
 ###############################################################################
 
-# Source shared helpers if present — guard for absence.
-if [[ -f "__lib/common.sh" ]]; then
-  # shellcheck source=/dev/null
-  source "__lib/common.sh"
-elif [[ -f "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh" ]]; then
-  # shellcheck source=/dev/null
-  source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
-fi
-if ! declare -F log_info >/dev/null 2>&1; then
-  log_info() { printf '[INFO] %s\n' "$*"; }
-fi
-if ! declare -F log_warn >/dev/null 2>&1; then
-  log_warn() { printf '[WARN] %s\n' "$*" >&2; }
-fi
-if ! declare -F log_die >/dev/null 2>&1; then
-  log_die() { printf '[FAIL] %s\n' "${1:-fatal}" >&2; exit "${2:-1}"; }
-fi
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__lib/common.sh"
 
 ENV_FILE=".env"
 if [[ ! -f "$ENV_FILE" ]]; then

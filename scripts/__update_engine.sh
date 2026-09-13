@@ -16,16 +16,9 @@ fi
 CMS_ROOT="${CMS_DOCKER_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 cd "$CMS_ROOT"
 
-if [[ -f "scripts/__lib/common.sh" ]]; then
-  # shellcheck source=/dev/null
-  source "scripts/__lib/common.sh"
-elif [[ -f "$(dirname "${BASH_SOURCE[0]}")/__lib/common.sh" ]]; then
-  # shellcheck source=/dev/null
-  source "$(dirname "${BASH_SOURCE[0]}")/__lib/common.sh"
-fi
-declare -F log_info >/dev/null 2>&1 || log_info() { printf '[INFO] %s\n' "$*"; }
-declare -F log_warn >/dev/null 2>&1 || log_warn() { printf '[WARN] %s\n' "$*" >&2; }
-declare -F log_die  >/dev/null 2>&1 || log_die()  { printf '[FAIL] %s\n' "${1:-fatal}" >&2; exit "${2:-1}"; }
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__lib/common.sh"
 declare -F is_default_secret >/dev/null 2>&1 || is_default_secret() {
   local v="${1:-}"
   [ -z "$v" ] && return 0
