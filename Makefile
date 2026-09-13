@@ -331,6 +331,8 @@ lint:
 	@bash scripts/__check_permission_parity.sh
 	@echo "→ RLS coverage"
 	@bash scripts/__check_rls_coverage.sh
+	@echo "→ lib contract"
+	@bash scripts/__check_lib_contract.sh
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		echo "→ shellcheck"; \
 		shellcheck scripts/*.sh; \
