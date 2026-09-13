@@ -12,6 +12,6 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         "System — Doctor/Smoke Test/Status/Monitor",
         "System operations: preflight, smoke test, live status, monitor, \
          update, contest. Use ↑/↓ or j/k to navigate, Enter to execute.",
-        "[↑/↓/j/k] Navigate   [Enter] Execute   [1-9] Switch page   [Esc] Back   [q] Quit",
+        "[↑/↓/j/k] Navigate [Enter] Execute [1-9] Switch page [0/l] Logs [Esc] Back [q] Quit",
     );
 }

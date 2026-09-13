@@ -4,6 +4,7 @@ pub mod config;
 pub mod dashboard;
 pub mod database;
 pub mod ingress;
+pub mod logs;
 pub mod page;
 pub mod stacks;
 pub mod system;
@@ -23,5 +24,6 @@ pub fn render_content(f: &mut Frame, area: Rect, app: &App) {
         Route::Backup => backup::render(f, area, app),
         Route::System => system::render(f, area, app),
         Route::Bootstrap => bootstrap::render(f, area, app),
+        Route::Logs => logs::render(f, area, app),
     }
 }
