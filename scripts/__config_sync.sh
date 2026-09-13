@@ -25,10 +25,10 @@ for arg in "$@"; do
   esac
 done
 
-# --- Logging helpers ---
-log_info()  { echo "[INFO] $*"; }
-log_warn()  { echo "[WARN] $*" >&2; }
-log_error() { echo "[ERROR] $*" >&2; }
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__lib/common.sh"
+log_error() { printf '[ERROR] %s\n' "$*" >&2; }
 
 # --- Secret generators (mirrors Makefile env: target) ---
 gen_hex32() { openssl rand -hex 32 2>/dev/null || echo "fallback_$(date +%s)"; }
