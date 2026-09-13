@@ -3,13 +3,8 @@ set -eu
 if (set -o pipefail 2>/dev/null); then set -o pipefail; fi
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
-if [ -f "${SCRIPT_DIR}/__lib/common.sh" ]; then
-  # shellcheck source=/dev/null
-  source "${SCRIPT_DIR}/__lib/common.sh"
-fi
-declare -F log_info >/dev/null 2>&1 || log_info() { printf '[INFO] %s\n' "$*"; }
-declare -F log_warn >/dev/null 2>&1 || log_warn() { printf '[WARN] %s\n' "$*" >&2; }
-declare -F log_die  >/dev/null 2>&1 || log_die()  { printf '[FAIL] %s\n' "${1:-fatal}" >&2; exit "${2:-1}"; }
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__lib/common.sh"
 
 SCHEMA="${REPO_ROOT}/admin-panel/prisma/schema.prisma"
 SQL_DIR="${REPO_ROOT}/admin-panel/prisma/sql"
