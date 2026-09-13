@@ -5,11 +5,14 @@ if (set -o pipefail 2>/dev/null); then
     set -o pipefail
 fi
 
-cd "$(dirname "$0")/.."
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+cd "$REPO_ROOT"
 
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__lib/common.sh"
 log()  { printf '%s [UPDATE] %s\n' "$(date +'%Y-%m-%d %H:%M:%S')" "$*"; }
 warn() { printf '%s [UPDATE][WARN] %s\n' "$(date +'%Y-%m-%d %H:%M:%S')" "$*" >&2; }
-die()  { warn "ERROR: $*"; exit 1; }
 
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 RECORD_FILE="/tmp/cms-update-${TIMESTAMP}.txt"
@@ -47,7 +50,7 @@ record_pre_update_state
 # ---------------------------------------------------------------------------
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     log "Pulling latest code..."
-    git pull --ff-only || die "git pull failed; resolve manually and re-run."
+    git pull --ff-only || log_die "git pull failed; resolve manually and re-run."
 else
     warn "Not a git repository; skipping code pull."
 fi
@@ -56,7 +59,7 @@ fi
 # (b) Regenerate environment files so new variables land
 # ---------------------------------------------------------------------------
 log "Regenerating environment files (make env)..."
-make env || die "make env failed."
+make env || log_die "make env failed."
 
 # ---------------------------------------------------------------------------
 # (b2) Ensure least-privilege DB roles exist BEFORE services restart with them
@@ -90,10 +93,10 @@ log "Detected deployment type: ${DEPLOY_TYPE}"
 # ---------------------------------------------------------------------------
 PREFLIGHT_SCRIPT="scripts/__preflight.sh"
 if [ ! -x "$PREFLIGHT_SCRIPT" ]; then
-    die "scripts/__preflight.sh not found or not executable; refusing to update."
+    log_die "scripts/__preflight.sh not found or not executable; refusing to update."
 fi
 log "Running preflight checks..."
-"$PREFLIGHT_SCRIPT" --stack all || die "Preflight failed; aborting update cleanly."
+"$PREFLIGHT_SCRIPT" --stack all || log_die "Preflight failed; aborting update cleanly."
 
 # ---------------------------------------------------------------------------
 # (d) Safety backup before mutating anything
@@ -101,7 +104,7 @@ log "Running preflight checks..."
 BACKUP_SCRIPT="scripts/__backup.sh"
 if [ -x "$BACKUP_SCRIPT" ]; then
     log "Running safety backup..."
-    "$BACKUP_SCRIPT" || die "Backup failed; aborting update."
+    "$BACKUP_SCRIPT" || log_die "Backup failed; aborting update."
 else
     warn "__backup.sh missing or not executable — SKIPPING SAFETY BACKUP."
     warn "Continuing WITHOUT a fresh backup. Consider Ctrl+C now."
@@ -200,8 +203,8 @@ else
 fi
 
 log "Syncing database schema..."
-make cms-init || die "make cms-init failed."
-make prisma-sync || die "make prisma-sync failed."
+make cms-init || log_die "make cms-init failed."
+make prisma-sync || log_die "make prisma-sync failed."
 
 # ---------------------------------------------------------------------------
 # (f) Post-update verification

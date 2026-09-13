@@ -21,22 +21,23 @@ set -eu
 if (set -o pipefail 2>/dev/null); then
     set -o pipefail
 fi
-cd "$(dirname "$0")/.."
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+cd "$REPO_ROOT"
 
 ADMIN_ENV=".env"
 DRY_RUN="${TS_DRY_RUN:-0}"
 
-log_info() { printf '[INFO] %s\n' "$*"; }
-log_warn() { printf '[WARN] %s\n' "$*" >&2; }
-die() { log_warn "ERROR: $*"; exit 1; }
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__lib/common.sh"
 
 env_val() {
   awk -F= -v k="$2" '$1==k {v=$0; sub(/^[^=]*=/,"",v); gsub(/^[ \t]+|[ \t\r]+$/,"",v); print v; exit}' "$1" 2>/dev/null || true
 }
 
 require_ts() {
-  command -v tailscale >/dev/null 2>&1 || die "tailscale CLI not found on host — install it and run 'tailscale up' first"
-  tailscale status >/dev/null 2>&1 || die "tailscale daemon not connected — run 'sudo tailscale up' first"
+  command -v tailscale >/dev/null 2>&1 || log_die "tailscale CLI not found on host — install it and run 'tailscale up' first"
+  tailscale status >/dev/null 2>&1 || log_die "tailscale daemon not connected — run 'sudo tailscale up' first"
 }
 
 ts_run() {  # try unprivileged first, fall back to sudo
@@ -79,7 +80,7 @@ cmd_setup() {
       printf '  would run: tailscale serve --bg --https=%s http://127.0.0.1:%s\n' "$hp" "$bp"
     else
       ts_run serve --bg --https="$hp" "http://127.0.0.1:$bp" \
-        || die "failed to register serve for $label (port $hp)"
+        || log_die "failed to register serve for $label (port $hp)"
     fi
   done < <(serve_map)
 
@@ -90,7 +91,7 @@ cmd_setup() {
 
   if [ "$hide" = 1 ]; then
     local toml="config.toml"
-    [ -f "$toml" ] || die "config.toml missing"
+    [ -f "$toml" ] || log_die "config.toml missing"
     if grep -qE '^ADMIN_NEXT_LISTEN_ADDRESS\s*=\s*"127\.0\.0\.1"' "$toml" \
        && grep -qE '^ADMIN_LISTEN_ADDRESS\s*=\s*"127\.0\.0\.1"' "$toml" \
        && grep -qE '^RANKING_LISTEN_ADDRESS\s*=\s*"127\.0\.0\.1"' "$toml"; then
@@ -136,7 +137,7 @@ cmd_remove() {
 }
 
 cmd_status() {
-  tailscale serve status 2>/dev/null || sudo tailscale serve status 2>/dev/null || die "unable to query tailscale serve status"
+  tailscale serve status 2>/dev/null || sudo tailscale serve status 2>/dev/null || log_die "unable to query tailscale serve status"
   echo ""
   echo "Planned mapping:"
   serve_map | while IFS='|' read -r hp bp label; do
@@ -149,5 +150,5 @@ case "${1:-setup}" in
     cmd_setup "${2:-}" "${3:-}" ;;
   remove) cmd_remove ;;
   status) cmd_status ;;
-  *) die "usage: $0 [setup [--hide-ports] [--redeploy]|remove|status]" ;;
+  *) log_die "usage: $0 [setup [--hide-ports] [--redeploy]|remove|status]" ;;
 esac
