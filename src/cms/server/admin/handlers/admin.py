@@ -25,7 +25,14 @@ from cms.db import Admin
 from cms.db.permissions import AdminGroup, Group
 from cmscommon.crypto import hash_password
 from cmscommon.datetime import make_datetime
-from .base import BaseHandler, SimpleHandler, require_permission
+from .base import (
+    BaseHandler,
+    SimpleHandler,
+    get_effective_permissions,
+    invalidate_permission_cache,
+    is_effective_superset,
+    require_permission,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -134,6 +141,28 @@ class AdminHandler(BaseHandler):
     @require_permission("admin:update", self_allowed=True)
     def post(self, admin_id: str):
         admin = self.safe_get_item(Admin, admin_id)
+        # WHY: password mutation must respect target superset — deny if target
+        # holds permissions the caller lacks.
+        if str(admin.id) != str(self.current_user.id):
+            try:
+                caller_eff = get_effective_permissions(
+                    self.current_user.id, self.sql_session)
+                target_eff = get_effective_permissions(
+                    admin.id, self.sql_session)
+                if not is_effective_superset(
+                    caller_eff, target_eff, self.sql_session):
+                    self.service.add_notification(
+                        make_datetime(), "Operation denied",
+                        "Cannot mutate an admin with permissions you do not hold.")
+                    self.redirect(self.url("admin", admin_id))
+                    return
+            except Exception:
+                logger.error("Failed superset check for admin %s.", admin_id)
+                self.service.add_notification(
+                    make_datetime(), "Operation denied",
+                    "Permission check failed.")
+                self.redirect(self.url("admin", admin_id))
+                return
 
         try:
             new_attrs = _admin_attrs(self)
@@ -187,6 +216,7 @@ class AdminHandler(BaseHandler):
             ]
 
         if self.try_commit():
+            invalidate_permission_cache(int(admin.id))
             logger.info("Admin %s updated.", admin.id)
             self.redirect(self.url("admins"))
         else:
@@ -195,6 +225,19 @@ class AdminHandler(BaseHandler):
     @require_permission("admin:delete")
     def delete(self, admin_id: str):
         admin = self.safe_get_item(Admin, admin_id)
+        try:
+            caller_eff = get_effective_permissions(
+                self.current_user.id, self.sql_session)
+            target_eff = get_effective_permissions(
+                admin.id, self.sql_session)
+            if not is_effective_superset(
+                caller_eff, target_eff, self.sql_session):
+                self.write("Cannot mutate an admin with permissions you do not hold.")
+                return
+        except Exception:
+            logger.error("Failed superset check for delete %s.", admin_id)
+            self.write("Permission check failed.")
+            return
 
         if _is_superadmin(admin):
             superadmin_gid = (
@@ -215,8 +258,10 @@ class AdminHandler(BaseHandler):
                 self.write("Cannot delete the last superadmin.")
                 return
 
+        deleted_id = int(admin.id)
         self.sql_session.delete(admin)
-        self.try_commit()
+        if self.try_commit():
+            invalidate_permission_cache(deleted_id)
 
         # Page to redirect to.
         self.write("../admins")

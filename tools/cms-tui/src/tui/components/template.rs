@@ -62,7 +62,8 @@ fn draw_breadcrumbs(f: &mut Frame, area: Rect, app: &App) {
 }
 
 fn draw_footer(f: &mut Frame, area: Rect) {
-    let footer_text = " [q] Quit   [Esc] Back   [1] Dashboard   [2] Stacks   [3] Database   [4] Worker   [5] Ingress   [6] Config   [7] Backup   [8] System   [9] Bootstrap ";
+    let footer_text =
+        " [q] Quit [Esc] Back [1] Dashboard [2] Stacks [3] Database [4] Worker [5] Ingress [6] Config [7] Backup [8] System [9] Bootstrap [0/l] Logs ";
     let footer = Paragraph::new(footer_text)
         .style(Style::default().fg(Color::DarkGray))
         .block(

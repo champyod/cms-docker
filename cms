@@ -79,8 +79,23 @@ CMDS
 
 # Run the Rust TUI/CLI — vendored binary first (no cargo needed on prod),
 # then local build, then cargo build. No gum fallback.
+# Locate a locally built cms-tui.
+# The target triple is pinned in tools/cms-tui/.cargo/config.toml (musl), so the
+# artefact lands under target/<triple>/release/ and not target/release/. Glob for
+# it rather than hardcoding one triple, so any configured target works.
+resolve_local_tui() {
+  local cand
+  for cand in tools/cms-tui/target/release/cms-tui tools/cms-tui/target/*/release/cms-tui; do
+    if [[ -x "$cand" ]]; then
+      printf '%s\n' "$cand"
+      return 0
+    fi
+  done
+  return 1
+}
+
 run_tui() {
-  local _tui_bin="tools/cms-tui/target/release/cms-tui"
+  local _tui_bin=""
   local _vendored=""
   case "$(uname -m)" in
     x86_64|amd64) _vendored=".tools/cms-tui/cms-tui-linux-x86_64" ;;
@@ -89,10 +104,12 @@ run_tui() {
   if [[ -n "$_vendored" && -x "$_vendored" ]]; then
     exec "$_vendored" "$@"
   fi
-  if [[ ! -x "$_tui_bin" ]] && command -v cargo >/dev/null 2>&1; then
+  _tui_bin="$(resolve_local_tui || true)"
+  if [[ -z "$_tui_bin" ]] && command -v cargo >/dev/null 2>&1; then
     (cd tools/cms-tui && cargo build --release) >&2
+    _tui_bin="$(resolve_local_tui || true)"
   fi
-  if [[ -x "$_tui_bin" ]]; then
+  if [[ -n "$_tui_bin" ]]; then
     exec "$_tui_bin" "$@"
   fi
   if [[ -n "$_vendored" && -f "$_vendored" ]]; then

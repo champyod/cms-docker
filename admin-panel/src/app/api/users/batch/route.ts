@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { apiError, verifyApiPermission } from '@/lib/api-utils';
+import { apiError, verifyApiAuth } from '@/lib/api-utils';
 import { cleanupExpiredCreds } from '@/lib/creds-file';
 import { handleApplyCredentials, handleExportCurrent, handleRegenerate } from './credentialActions';
 import { handleContest, handleTeam } from './enrollmentActions';
@@ -15,7 +15,12 @@ function parseUserIds(body: Record<string, unknown>): number[] {
 }
 
 export async function POST(req: NextRequest) {
-  const { authorized, response } = await verifyApiPermission('user:create');
+  // WHY authentication-only here: this route is a dispatcher. A batch may
+  // reveal passwords, create or delete enrolments, and update profiles, which
+  // are distinct permissions. A single route-level key cannot stand for all of
+  // them without granting the others, so each action enforces the permission
+  // matching its own behaviour.
+  const { authorized, response } = await verifyApiAuth();
   if (!authorized) return response;
 
   await cleanupExpiredCreds();

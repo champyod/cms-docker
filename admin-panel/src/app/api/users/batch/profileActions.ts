@@ -1,7 +1,7 @@
 import { revalidatePath } from 'next/cache';
 import type { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { apiError, apiSuccess } from '@/lib/api-utils';
+import { apiError, apiSuccess, verifyApiPermission } from '@/lib/api-utils';
 import type { BatchActionRequest } from './credentialActions';
 import { recordAudit } from '@/lib/audit';
 
@@ -9,6 +9,10 @@ const PROFILE_MODES = ['timezone', 'email-domain', 'clear-email'] as const;
 const EMAIL_DOMAIN_PATTERN = /^[a-z0-9.-]+\.[a-z]{2,}$/i;
 
 export async function handleProfile({ body, userIds }: BatchActionRequest): Promise<NextResponse> {
+  // WHY user:update: every mode here writes columns on users.
+  const { authorized, response } = await verifyApiPermission('user:update');
+  if (!authorized) return response;
+
   if (userIds.length === 0) {
     return apiError({ message: 'userIds is required', status: 400 });
   }

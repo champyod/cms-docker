@@ -11,35 +11,16 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
 
-# --- defensive source of common.sh (optional) ---
-if [[ -f "${SCRIPT_DIR}/__lib/common.sh" ]]; then
-  # shellcheck source=lib/common.sh
-  source "${SCRIPT_DIR}/__lib/common.sh"
-else
-  # Fallback definitions when lib absent
-  DISK_FLOOR_GB=3
-  DISK_WARN_GB=5
-  log_info() { printf '[INFO] %s\n' "$*"; }
-  log_warn() { printf '[WARN] %s\n' "$*" >&2; }
-  log_die() { local m="${1:-fatal}"; local c="${2:-1}"; printf '[FAIL] %s\n' "$m" >&2; exit "$c"; }
-  require_disk_free_gb() {
-    local tp="${1:?path}"; local floor="${2:-$DISK_FLOOR_GB}"; local warn="${3:-$DISK_WARN_GB}"
-    local raw avail
-    raw=$(df -BG --output=avail "$tp" 2>/dev/null | tail -n 1) || log_die "unable to determine disk space for: $tp" 2
-    raw=$(printf '%s' "$raw" | tr -d '[:space:]'); avail="${raw%G}"; avail="${avail%%.*}"
-    [[ "$avail" =~ ^[0-9]+$ ]] || log_die "unable to parse disk space value: $raw" 2
-    (( avail < floor )) && log_die "disk space ${avail}G < floor ${floor}G at ${tp}" 2
-    if (( avail < warn )); then log_warn "disk space low: ${avail}G < warn ${warn}G at ${tp}"; else log_info "disk space OK: ${avail}G available at ${tp}"; fi
-  }
-  is_default_secret() {
-    local v="${1:-}"; [[ -z "$v" ]] && return 0
-    case "$v" in cmspassword|usern4me|passw0rd|8e045a51e4b102ea803c06f92841a1fb|DEFAULT_SECRET_KEY) return 0;; esac
-    [[ "$v" == CHANGE_ME* ]] && return 0
-    [[ "$v" == YOUR_* ]] && return 0
-    [[ "$v" == *PASSWORD_HERE* ]] && return 0
-    return 1
-  }
-fi
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__lib/common.sh"
+declare -F is_default_secret >/dev/null 2>&1 || is_default_secret() {
+  local v="${1:-}"; [[ -z "$v" ]] && return 0
+  case "$v" in cmspassword|usern4me|passw0rd|8e045a51e4b102ea803c06f92841a1fb|DEFAULT_SECRET_KEY|admin) return 0;; esac
+  [[ "$v" == CHANGE_ME* ]] && return 0
+  [[ "$v" == YOUR_* ]] && return 0
+  [[ "$v" == *PASSWORD_HERE* ]] && return 0
+  return 1
+}
 
 # ---------------------------------------------------------------------------
 # Defaults / arg parsing

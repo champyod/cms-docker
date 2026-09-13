@@ -16,17 +16,8 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# ---------------------------------------------------------------------------
-# lib/common.sh contract: log_info/log_warn/log_die
-# ---------------------------------------------------------------------------
-if [[ -f "${SCRIPT_DIR}/__lib/common.sh" ]]; then
-  # shellcheck disable=SC1091
-  source "${SCRIPT_DIR}/__lib/common.sh"
-else
-  log_info()  { printf '[INFO] %s\n' "$*"; }
-  log_warn()  { printf '[WARN] %s\n' "$*" >&2; }
-  log_die()   { printf '[ERROR] %s\n' "$*" >&2; exit 1; }
-fi
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__lib/common.sh"
 
 # ---------------------------------------------------------------------------
 # Load env.  Do not override already-exported.

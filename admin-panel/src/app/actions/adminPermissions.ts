@@ -1,79 +1,62 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { prisma } from '@/lib/prisma';
 import { recordAudit } from '@/lib/audit';
-import { ensurePermission, invalidateAccessCache } from '@/lib/permissions';
+import {
+  fetchAdminAccess,
+  fetchAdminsAccessSummary,
+  fetchGroupsWithPermissions,
+} from '@/lib/admin-access-queries';
+import {
+  canCallerGrantResult,
+  effectiveAfterGroupChange,
+  effectiveAfterOverride,
+} from '@/lib/admin-permission-guards';
+import { ensurePermission, getPermissions, invalidateAccessCache } from '@/lib/permissions';
+import { prisma } from '@/lib/prisma';
 import type { OverrideEffect } from '@/lib/permission-engine';
+import type { ActionResult, AdminAccess, AdminAccessSummary, GroupWithPermissions } from '@/lib/admin-access-types';
 
-type ActionResult<T> = { success: true; data: T } | { success: false; error: string };
-
-export interface AdminAccessGroup {
-  id: number;
-  name: string;
-}
-
-export interface AdminAccessOverride {
-  permissionKey: string;
-  effect: OverrideEffect;
-  reason: string | null;
-}
-
-export interface AdminAccess {
-  groups: AdminAccessGroup[];
-  overrides: AdminAccessOverride[];
-}
-
-export interface GroupWithPermissions {
-  id: number;
-  name: string;
-  description: string | null;
-  is_seeded: boolean;
-  permissionKeys: string[];
-}
-
-export interface AdminAccessSummary {
-  adminId: number;
-  groupNames: string[];
-  overrideCount: number;
-}
-
-function normaliseEffect(effect: string): OverrideEffect {
-  // Why: a corrupt/legacy stored value must fail closed, so anything that is not an explicit "allow" is treated as a deny.
-  return effect === 'allow' ? 'allow' : 'deny';
-}
+export type {
+  ActionResult,
+  AdminAccess,
+  AdminAccessGroup,
+  AdminAccessOverride,
+  AdminAccessSummary,
+  GroupWithPermissions,
+} from '@/lib/admin-access-types';
 
 export async function getAdminAccess(adminId: number): Promise<ActionResult<AdminAccess>> {
   try {
     await ensurePermission('admin:read');
-    const admin = await prisma.admins.findUnique({
-      where: { id: adminId },
-      select: {
-        admin_groups: { select: { groups: { select: { id: true, name: true } } } },
-        permission_overrides: {
-          select: { effect: true, reason: true, permissions: { select: { key: true } } },
-        },
-      },
-    });
-    if (!admin) return { success: false, error: 'Admin not found' };
-
-    return {
-      success: true,
-      data: {
-        groups: admin.admin_groups.map((membership) => ({
-          id: membership.groups.id,
-          name: membership.groups.name,
-        })),
-        overrides: admin.permission_overrides.map((override) => ({
-          permissionKey: override.permissions.key,
-          effect: normaliseEffect(override.effect),
-          reason: override.reason,
-        })),
-      },
-    };
+    const data = await fetchAdminAccess(adminId);
+    if (!data) return { success: false, error: 'Admin not found' };
+    return { success: true, data };
   } catch (error) {
     return { success: false, error: (error as Error).message };
   }
+}
+
+async function assertGroupChangeAllowed(adminId: number, groupIds: number[]): Promise<string | null> {
+  // Why: check the resulting effective set, not the delta, so existing permissions cannot be laundered via partial changes
+  const callerEffective = await getPermissions();
+  const targetIds = Array.from(new Set(groupIds)).sort((a, b) => a - b);
+  const resultingEffective = await effectiveAfterGroupChange(adminId, targetIds);
+  if (resultingEffective && !canCallerGrantResult(callerEffective, resultingEffective)) {
+    return 'Cannot grant permissions you do not hold';
+  }
+  return null;
+}
+
+async function applyGroupChange(adminId: number, targetIds: number[]): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await tx.admin_groups.deleteMany({ where: { admin_id: adminId } });
+    if (targetIds.length > 0) {
+      await tx.admin_groups.createMany({
+        data: targetIds.map((groupId) => ({ admin_id: adminId, group_id: groupId })),
+      });
+    }
+  });
 }
 
 export async function setAdminGroups(
@@ -85,6 +68,9 @@ export async function setAdminGroups(
     await ensurePermission('group:assign');
     if (!reason.trim()) return { success: false, error: 'A reason is required to change group membership' };
 
+    const denied = await assertGroupChangeAllowed(adminId, groupIds);
+    if (denied) return { success: false, error: denied };
+
     const before = await prisma.admin_groups.findMany({
       where: { admin_id: adminId },
       select: { group_id: true },
@@ -92,14 +78,7 @@ export async function setAdminGroups(
     const beforeIds = before.map((row) => row.group_id).sort((a, b) => a - b);
     const targetIds = Array.from(new Set(groupIds)).sort((a, b) => a - b);
 
-    await prisma.$transaction(async (tx) => {
-      await tx.admin_groups.deleteMany({ where: { admin_id: adminId } });
-      if (targetIds.length > 0) {
-        await tx.admin_groups.createMany({
-          data: targetIds.map((groupId) => ({ admin_id: adminId, group_id: groupId })),
-        });
-      }
-    });
+    await applyGroupChange(adminId, targetIds);
 
     await recordAudit({
       verb: 'admin_groups:set',
@@ -118,6 +97,47 @@ export async function setAdminGroups(
   }
 }
 
+async function assertOverrideAllowed(
+  adminId: number,
+  permissionKey: string,
+  effect: OverrideEffect,
+): Promise<string | null> {
+  if (effect !== 'allow') return null;
+  const callerEffective = await getPermissions();
+  const resultingEffective = await effectiveAfterOverride(adminId, permissionKey, effect);
+  if (resultingEffective && !canCallerGrantResult(callerEffective, resultingEffective)) {
+    return 'Cannot grant permissions you do not hold';
+  }
+  return null;
+}
+
+async function writeOverride(
+  adminId: number,
+  permissionKey: string,
+  effect: OverrideEffect,
+  reason: string,
+  permissionId: number,
+): Promise<void> {
+  const before = await prisma.admin_permission_overrides.findUnique({
+    where: { admin_id_permission_id: { admin_id: adminId, permission_id: permissionId } },
+    select: { effect: true, reason: true },
+  });
+  await prisma.admin_permission_overrides.upsert({
+    where: { admin_id_permission_id: { admin_id: adminId, permission_id: permissionId } },
+    create: { admin_id: adminId, permission_id: permissionId, effect, reason },
+    update: { effect, reason },
+  });
+  await recordAudit({
+    verb: 'override:set',
+    entity: 'admin',
+    entityId: String(adminId),
+    beforeValues: before ?? { effect: null, reason: null },
+    afterValues: { permissionKey, effect, reason },
+    reason,
+    result: 'success',
+  });
+}
+
 export async function setAdminOverride(
   adminId: number,
   permissionKey: string,
@@ -128,32 +148,16 @@ export async function setAdminOverride(
     await ensurePermission('override:set');
     if (!reason.trim()) return { success: false, error: 'A reason is required for a permission override' };
 
+    const denied = await assertOverrideAllowed(adminId, permissionKey, effect);
+    if (denied) return { success: false, error: denied };
+
     const permission = await prisma.permissions.findUnique({
       where: { key: permissionKey },
       select: { id: true },
     });
     if (!permission) return { success: false, error: `Unknown permission "${permissionKey}"` };
 
-    const before = await prisma.admin_permission_overrides.findUnique({
-      where: { admin_id_permission_id: { admin_id: adminId, permission_id: permission.id } },
-      select: { effect: true, reason: true },
-    });
-
-    await prisma.admin_permission_overrides.upsert({
-      where: { admin_id_permission_id: { admin_id: adminId, permission_id: permission.id } },
-      create: { admin_id: adminId, permission_id: permission.id, effect, reason },
-      update: { effect, reason },
-    });
-
-    await recordAudit({
-      verb: 'override:set',
-      entity: 'admin',
-      entityId: String(adminId),
-      beforeValues: before ?? { effect: null, reason: null },
-      afterValues: { permissionKey, effect, reason },
-      reason,
-      result: 'success',
-    });
+    await writeOverride(adminId, permissionKey, effect, reason, permission.id);
     invalidateAccessCache(String(adminId));
     revalidatePath('/[locale]/admins', 'page');
     return { success: true, data: { adminId, permissionKey } };
@@ -203,26 +207,8 @@ export async function clearAdminOverride(
 export async function listGroupsWithPermissions(): Promise<ActionResult<GroupWithPermissions[]>> {
   try {
     await ensurePermission('group:read');
-    const rows = await prisma.groups.findMany({
-      orderBy: { name: 'asc' },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        is_seeded: true,
-        group_permissions: { select: { permissions: { select: { key: true } } } },
-      },
-    });
-    return {
-      success: true,
-      data: rows.map((group) => ({
-        id: group.id,
-        name: group.name,
-        description: group.description,
-        is_seeded: group.is_seeded,
-        permissionKeys: group.group_permissions.map((link) => link.permissions.key),
-      })),
-    };
+    const data = await fetchGroupsWithPermissions();
+    return { success: true, data };
   } catch (error) {
     return { success: false, error: (error as Error).message };
   }
@@ -232,22 +218,8 @@ export async function listGroupsWithPermissions(): Promise<ActionResult<GroupWit
 export async function listAdminsAccessSummary(): Promise<ActionResult<AdminAccessSummary[]>> {
   try {
     await ensurePermission('admin:read');
-    const rows = await prisma.admins.findMany({
-      orderBy: { username: 'asc' },
-      select: {
-        id: true,
-        admin_groups: { select: { groups: { select: { name: true } } } },
-        _count: { select: { permission_overrides: true } },
-      },
-    });
-    return {
-      success: true,
-      data: rows.map((admin) => ({
-        adminId: admin.id,
-        groupNames: admin.admin_groups.map((membership) => membership.groups.name),
-        overrideCount: admin._count.permission_overrides,
-      })),
-    };
+    const data = await fetchAdminsAccessSummary();
+    return { success: true, data };
   } catch (error) {
     return { success: false, error: (error as Error).message };
   }

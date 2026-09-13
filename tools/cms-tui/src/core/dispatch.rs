@@ -1,14 +1,9 @@
-//! Single source of truth mapping every CLI command to the script or make
-//! target it executes.
+//! Stable key and target types for command dispatch.
 //!
-//! The legacy `cms` bash dispatcher no longer declares these names itself — it
-//! delegates to this crate for the mapped commands — so each target literal
-//! lives in exactly one place. `cli::commands` and `core::docker` read this
-//! table instead of hardcoding script/make names.
-//!
-//! This module only declares names. `core::runner` is what actually spawns
-//! `sh`/`make` directly in the repo root; nothing here or in a caller invokes
-//! `./cms` itself, so delegation can never recurse.
+//! The legacy `cms` bash dispatcher delegates mapped commands to this crate,
+//! so target resolution goes through the single catalog table. This module
+//! owns the key type and delegates target lookup to `crate::core::catalog`
+//! where every literal lives exactly once.
 
 /// A concrete command invocation. Payload-free so it can serve as a stable,
 /// comparable table key (unlike `cli::Commands`, which carries per-invocation
@@ -109,132 +104,62 @@ pub enum DispatchTarget {
     Make(&'static str),
 }
 
-/// A row in the dispatch table binding a command to its target.
-pub struct DispatchEntry {
-    pub key: DispatchKey,
-    pub target: DispatchTarget,
-}
-
-impl DispatchEntry {
-    const fn script(key: DispatchKey, name: &'static str) -> Self {
-        Self {
-            key,
-            target: DispatchTarget::Script(name),
-        }
-    }
-
-    const fn make(key: DispatchKey, target: &'static str) -> Self {
-        Self {
-            key,
-            target: DispatchTarget::Make(target),
-        }
-    }
-}
-
-/// The authoritative command → target mapping. Every CLI command (and the
-/// fixed subcommand arities) is declared here and nowhere else.
-const TABLE: &[DispatchEntry] = &[
-    DispatchEntry::script(DispatchKey::Setup, "__update_engine.sh"),
-    DispatchEntry::script(DispatchKey::Update, "__update_engine.sh"),
-    DispatchEntry::script(DispatchKey::UpdateAll, "__update-server.sh"),
-    DispatchEntry::script(DispatchKey::Fix, "__update_engine.sh"),
-    DispatchEntry::make(DispatchKey::DbInit, "cms-init"),
-    DispatchEntry::make(DispatchKey::DbReset, "db-reset"),
-    DispatchEntry::make(DispatchKey::DbClean, "db-clean"),
-    DispatchEntry::make(DispatchKey::DbSync, "prisma-sync"),
-    DispatchEntry::make(DispatchKey::AdminCreate, "admin-create"),
-    DispatchEntry::script(DispatchKey::Status, "__status.sh"),
-    DispatchEntry::script(DispatchKey::Monitor, "__monitor.sh"),
-    DispatchEntry::make(DispatchKey::Backup, "backup"),
-    DispatchEntry::script(DispatchKey::BackupDrill, "__backup_drill.sh"),
-    DispatchEntry::script(DispatchKey::BackupOffsite, "__offsite-sync.sh"),
-    DispatchEntry::script(DispatchKey::Restore, "__restore.sh"),
-    DispatchEntry::script(DispatchKey::SecretsRotate, "__secrets-rotate.sh"),
-    DispatchEntry::script(DispatchKey::SecretsAudit, "__secrets-rotate.sh"),
-    DispatchEntry::script(DispatchKey::SecretsGenerate, "__secrets-rotate.sh"),
-    DispatchEntry::script(DispatchKey::Doctor, "__preflight.sh"),
-    DispatchEntry::script(DispatchKey::Test, "__smoke-test.sh"),
-    DispatchEntry::script(DispatchKey::WorkerEdit, "__worker_tui.sh"),
-    DispatchEntry::script(DispatchKey::WorkerDeploy, "__worker_tui.sh"),
-    DispatchEntry::script(DispatchKey::WorkerStop, "__worker_tui.sh"),
-    DispatchEntry::script(DispatchKey::WorkerList, "__worker_tui.sh"),
-    DispatchEntry::script(DispatchKey::WorkerAttach, "__worker_tui.sh"),
-    DispatchEntry::script(DispatchKey::WorkerCgroup, "__worker_cgroup_setup.sh"),
-    DispatchEntry::script(DispatchKey::TailscaleSetup, "__tailscale_serve.sh"),
-    DispatchEntry::script(DispatchKey::TailscaleStatus, "__tailscale_serve.sh"),
-    DispatchEntry::script(DispatchKey::TailscaleRemove, "__tailscale_serve.sh"),
-    DispatchEntry::script(DispatchKey::Expose, "__domain.sh"),
-    DispatchEntry::script(DispatchKey::FunnelSetup, "__funnel.sh"),
-    DispatchEntry::script(DispatchKey::FunnelPasswd, "__funnel.sh"),
-    DispatchEntry::script(DispatchKey::FunnelRemove, "__funnel.sh"),
-    DispatchEntry::script(DispatchKey::FunnelStatus, "__funnel.sh"),
-    DispatchEntry::script(DispatchKey::ContestCreate, "__create_contests.sh"),
-    DispatchEntry::script(DispatchKey::UpdateServer, "__update-server.sh"),
-    DispatchEntry::script(DispatchKey::DomainSetup, "__domain.sh"),
-    DispatchEntry::script(DispatchKey::DomainStatus, "__domain.sh"),
-    DispatchEntry::script(DispatchKey::DomainRenew, "__domain.sh"),
-    DispatchEntry::script(DispatchKey::DomainPreflight, "__domain.sh"),
-    DispatchEntry::script(DispatchKey::ConfigSync, "__config_sync.sh"),
-];
-
-/// Returns the declared target for `key`.
+/// Returns the declared target for `key` via the single catalog table.
 #[must_use]
 pub fn target(key: DispatchKey) -> Option<&'static DispatchTarget> {
-    TABLE
-        .iter()
-        .find(|entry| entry.key == key)
-        .map(|entry| &entry.target)
+    crate::core::catalog::spec_for(key).map(|spec| &spec.target)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    const ALL_KEYS: &[DispatchKey] = &[
+        DispatchKey::Setup,
+        DispatchKey::Update,
+        DispatchKey::UpdateAll,
+        DispatchKey::Fix,
+        DispatchKey::DbInit,
+        DispatchKey::DbReset,
+        DispatchKey::DbClean,
+        DispatchKey::DbSync,
+        DispatchKey::AdminCreate,
+        DispatchKey::Status,
+        DispatchKey::Monitor,
+        DispatchKey::Backup,
+        DispatchKey::BackupDrill,
+        DispatchKey::BackupOffsite,
+        DispatchKey::Restore,
+        DispatchKey::SecretsRotate,
+        DispatchKey::SecretsAudit,
+        DispatchKey::SecretsGenerate,
+        DispatchKey::Doctor,
+        DispatchKey::Test,
+        DispatchKey::WorkerEdit,
+        DispatchKey::WorkerDeploy,
+        DispatchKey::WorkerStop,
+        DispatchKey::WorkerList,
+        DispatchKey::WorkerAttach,
+        DispatchKey::WorkerCgroup,
+        DispatchKey::TailscaleSetup,
+        DispatchKey::TailscaleStatus,
+        DispatchKey::TailscaleRemove,
+        DispatchKey::Expose,
+        DispatchKey::FunnelSetup,
+        DispatchKey::FunnelPasswd,
+        DispatchKey::FunnelRemove,
+        DispatchKey::FunnelStatus,
+        DispatchKey::ContestCreate,
+        DispatchKey::UpdateServer,
+        DispatchKey::DomainSetup,
+        DispatchKey::DomainStatus,
+        DispatchKey::DomainRenew,
+        DispatchKey::DomainPreflight,
+        DispatchKey::ConfigSync,
+    ];
     #[test]
     fn every_key_resolves_to_a_target() {
-        for key in [
-            DispatchKey::Setup,
-            DispatchKey::Update,
-            DispatchKey::UpdateAll,
-            DispatchKey::Fix,
-            DispatchKey::DbInit,
-            DispatchKey::DbReset,
-            DispatchKey::DbClean,
-            DispatchKey::DbSync,
-            DispatchKey::AdminCreate,
-            DispatchKey::Status,
-            DispatchKey::Monitor,
-            DispatchKey::Backup,
-            DispatchKey::BackupDrill,
-            DispatchKey::BackupOffsite,
-            DispatchKey::Restore,
-            DispatchKey::SecretsRotate,
-            DispatchKey::SecretsAudit,
-            DispatchKey::SecretsGenerate,
-            DispatchKey::Doctor,
-            DispatchKey::Test,
-            DispatchKey::WorkerEdit,
-            DispatchKey::WorkerDeploy,
-            DispatchKey::WorkerStop,
-            DispatchKey::WorkerList,
-            DispatchKey::WorkerAttach,
-            DispatchKey::WorkerCgroup,
-            DispatchKey::TailscaleSetup,
-            DispatchKey::TailscaleStatus,
-            DispatchKey::TailscaleRemove,
-            DispatchKey::Expose,
-            DispatchKey::FunnelSetup,
-            DispatchKey::FunnelPasswd,
-            DispatchKey::FunnelRemove,
-            DispatchKey::FunnelStatus,
-            DispatchKey::ContestCreate,
-            DispatchKey::UpdateServer,
-            DispatchKey::DomainSetup,
-            DispatchKey::DomainStatus,
-            DispatchKey::DomainRenew,
-            DispatchKey::DomainPreflight,
-            DispatchKey::ConfigSync,
-        ] {
+        for key in ALL_KEYS.iter().copied() {
             assert!(target(key).is_some(), "no dispatch target for {key:?}");
         }
     }

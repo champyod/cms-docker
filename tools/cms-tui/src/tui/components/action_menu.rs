@@ -10,6 +10,9 @@ use ratatui::{
 pub struct MenuItem {
     pub label: String,
     pub description: String,
+    pub requires_tty: bool,
+    pub requires_sudo: bool,
+    pub capture_output: bool,
 }
 
 pub struct ActionMenu {
@@ -22,7 +25,33 @@ impl ActionMenu {
     pub fn new(items: Vec<(String, String)>) -> Self {
         let mapped: Vec<MenuItem> = items
             .into_iter()
-            .map(|(label, description)| MenuItem { label, description })
+            .map(|(label, description)| MenuItem {
+                label,
+                description,
+                requires_tty: false,
+                requires_sudo: false,
+                capture_output: false,
+            })
+            .collect();
+        Self {
+            items: mapped,
+            selected: 0,
+        }
+    }
+
+    #[must_use]
+    pub fn with_meta(items: Vec<(String, String, bool, bool, bool)>) -> Self {
+        let mapped: Vec<MenuItem> = items
+            .into_iter()
+            .map(
+                |(label, description, requires_tty, requires_sudo, capture_output)| MenuItem {
+                    label,
+                    description,
+                    requires_tty,
+                    requires_sudo,
+                    capture_output,
+                },
+            )
             .collect();
         Self {
             items: mapped,
@@ -63,6 +92,18 @@ impl ActionMenu {
             return "";
         }
         self.items[self.selected].label.as_str()
+    }
+
+    /// The command the selected item runs.
+    ///
+    /// Distinct from the label: the label is what the user reads, the command
+    /// is what gets executed. Consumers must run this, never the label.
+    #[must_use]
+    pub fn selected_command(&self) -> &str {
+        if self.items.is_empty() {
+            return "";
+        }
+        self.items[self.selected].description.as_str()
     }
 
     #[must_use]
@@ -122,7 +163,7 @@ impl ActionMenu {
 
 #[cfg(test)]
 mod tests {
-    use super::ActionMenu;
+    use super::{ActionMenu, MenuItem};
     use crossterm::event::KeyCode;
 
     fn sample_menu() -> ActionMenu {
@@ -222,6 +263,17 @@ mod tests {
         assert_eq!(menu.selected_label(), "Run Backup");
     }
 
+    /// Guards the label/command distinction: the menu shows a label, but the
+    /// runner must spawn the command. Running the label yields exit 127.
+    #[test]
+    fn selected_command_is_the_command_not_the_label() {
+        let mut menu: ActionMenu = sample_menu();
+        assert_ne!(menu.selected_command(), menu.selected_label());
+        assert_eq!(menu.selected_command(), sample_menu().selected_command());
+        menu.handle_key(KeyCode::Down);
+        assert_ne!(menu.selected_command(), menu.selected_label());
+    }
+
     #[test]
     fn empty_menu_behavior() {
         let mut menu: ActionMenu = ActionMenu::new(vec![]);
@@ -245,5 +297,28 @@ mod tests {
         assert_eq!(menu.handle_key(KeyCode::Char('x')), None);
         assert_eq!(menu.handle_key(KeyCode::Esc), None);
         assert_eq!(menu.selected(), 0);
+    }
+
+    #[test]
+    fn with_meta_preserves_tty_and_sudo_flags() {
+        let menu = ActionMenu::with_meta(vec![(
+            "Edit config.toml".to_string(),
+            "nano config.toml".to_string(),
+            true,
+            false,
+            false,
+        )]);
+        let item: &MenuItem = menu.get_item(0).unwrap();
+        assert!(item.requires_tty);
+        assert!(!item.requires_sudo);
+        assert!(!item.capture_output);
+    }
+
+    #[test]
+    fn new_defaults_to_non_tty() {
+        let menu = ActionMenu::new(vec![("Label".to_string(), "cmd".to_string())]);
+        let item: &MenuItem = menu.get_item(0).unwrap();
+        assert!(!item.requires_tty);
+        assert!(!item.requires_sudo);
     }
 }

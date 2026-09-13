@@ -1,5 +1,6 @@
 pub mod app;
 pub mod components;
+pub mod menus;
 pub mod pages;
 
 use app::App;
@@ -96,7 +97,19 @@ fn run_app<B: ratatui::backend::Backend>(
                         app.push_route(app::Route::Bootstrap);
                         continue;
                     }
+                    KeyCode::Char('0') | KeyCode::Char('l' | 'L') => {
+                        app.push_route(app::Route::Logs);
+                        continue;
+                    }
                     _ => {}
+                }
+
+                // Logs page owns its own scroll keys; avoid stealing them.
+                if *app.current_route() == app::Route::Logs {
+                    if app.log_viewer.handle_key(key.code) {
+                        app.pop_route();
+                    }
+                    continue;
                 }
 
                 // Page-specific keys (arrows, Enter) — only on non-Dashboard pages

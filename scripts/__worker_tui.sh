@@ -25,7 +25,9 @@ set -eu
 if (set -o pipefail 2>/dev/null); then
     set -o pipefail
 fi
-cd "$(dirname "$0")/.."
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+cd "$REPO_ROOT"
 
 CORE_ENV=".env"
 WORKER_ENV=".env"
@@ -35,12 +37,9 @@ CUR=0
 SELECTED=()
 
 # shellcheck disable=SC1091
-[ -f scripts/__lib/common.sh ] && source scripts/__lib/common.sh
+source "${SCRIPT_DIR}/__lib/common.sh"
 # shellcheck disable=SC1091
-[ -f scripts/__lib/form.sh ] && source scripts/__lib/form.sh
-log_info() { printf '[INFO] %s\n' "$*"; }
-log_warn() { printf '[WARN] %s\n' "$*" >&2; }
-die() { log_warn "ERROR: $*"; exit 1; }
+[ -f "${SCRIPT_DIR}/__lib/form.sh" ] && source "${SCRIPT_DIR}/__lib/form.sh"
 
 C_DIM=$'\033[2m'; C_G=$'\033[32m'; C_R=$'\033[31m'; C_Y=$'\033[33m'; C_B=$'\033[1m'; C_0=$'\033[0m'
 
@@ -78,7 +77,7 @@ fleet_load() {
 
 fleet_save() {  # updates config.toml [worker] with fleet rows, re-runs sync
   local toml="config.toml"
-  [ -f "$toml" ] || die "config.toml missing — run ./cms first"
+  [ -f "$toml" ] || log_die "config.toml missing — run ./cms first"
   local row s h p l m c
   local gm gc; gm="$(global_memory)"; gc="$(global_cpus)"
 
@@ -144,8 +143,8 @@ PYEOF
 }
 
 require_env_files() {
-  [ -f "$CORE_ENV" ] || die "$CORE_ENV missing — run ./cms config sync first"
-  [ -f "config.toml" ] || die "config.toml missing — run ./cms config sync first"
+  [ -f "$CORE_ENV" ] || log_die "$CORE_ENV missing — run ./cms config sync first"
+  [ -f "config.toml" ] || log_die "config.toml missing — run ./cms config sync first"
 }
 
 # ---------------------------------------------------------------------------
@@ -356,7 +355,7 @@ attach_entry() {  # [shard-spec host port-spec] — prompts when args are omitte
   require_env_files
   local spec="$1" host="$2" pspec="$3"
   if [ -z "$spec" ] || [ -z "$host" ] || [ -z "$pspec" ]; then
-    [ -t 0 ] && [ -t 1 ] || die "usage: $0 attach <shard-spec> <host> <port-spec>"
+    [ -t 0 ] && [ -t 1 ] || log_die "usage: $0 attach <shard-spec> <host> <port-spec>"
     printf 'Shards to attach (e.g. 4,5,6,7 or 4-7): '
     IFS= read -r spec || return 0
     printf 'Worker box host/IP for the core to reach it on: '
@@ -555,7 +554,7 @@ list_plain() {
 
 case "${1:-tui}" in
   tui)
-    [ -t 0 ] && [ -t 1 ] || die "interactive TUI needs a terminal — use: $0 deploy|stop|list"
+    [ -t 0 ] && [ -t 1 ] || log_die "interactive TUI needs a terminal — use: $0 deploy|stop|list"
     require_env_files
     tui_loop ;;
   attach)
@@ -564,5 +563,5 @@ case "${1:-tui}" in
   deploy) cmd_deploy "${2:-all}" ;;
   stop)   cmd_stop "${2:-all}" ;;
   list)   list_plain ;;
-  *) die "usage: $0 [tui|attach [spec host port-spec]|deploy [all|shard|spec]|stop [all|shard|spec]|list]" ;;
+  *) log_die "usage: $0 [tui|attach [spec host port-spec]|deploy [all|shard|spec]|stop [all|shard|spec]|list]" ;;
 esac

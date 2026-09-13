@@ -1,6 +1,7 @@
 use clap::{Subcommand, ValueEnum};
 
 pub mod commands;
+mod resolve;
 
 /// Database lifecycle subcommands (`db <init|reset|clean|sync>`).
 #[derive(ValueEnum, Clone, Debug)]

@@ -22,18 +22,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "$REPO_ROOT"
 
-# ---------------------------------------------------------------------------
-# lib/common.sh — source if present, else provide fallbacks.
-# ---------------------------------------------------------------------------
-if [[ -f "${SCRIPT_DIR}/__lib/common.sh" ]]; then
-  # shellcheck disable=SC1091
-  source "${SCRIPT_DIR}/__lib/common.sh"
-else
-  log_info()  { printf '[INFO] %s\n' "$*"; }
-  log_warn()  { printf '[WARN] %s\n' "$*" >&2; }
-  log_die()   { printf '[FAIL] %s\n' "${1:-fatal error}" >&2; exit "${2:-1}"; }
-  require_disk_free_gb() { :; }
-fi
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__lib/common.sh"
 
 env_val() {
   awk -F= -v k="$2" '$1==k {v=$0; sub(/^[^=]*=/,"",v); gsub(/^[ \t]+|[ \t\r]+$/,"",v); print v; exit}' "$1" 2>/dev/null || true

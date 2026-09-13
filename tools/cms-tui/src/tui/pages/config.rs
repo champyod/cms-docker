@@ -11,6 +11,6 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         &app.config_menu,
         "Config — Sync/Edit/Show/Secrets",
         "Manage configuration: sync from config.toml, edit, show, or manage secrets. Use ↑/↓ or j/k to navigate, Enter to execute.",
-        "[↑/↓/j/k] Navigate   [Enter] Execute   [1-9] Switch page   [Esc] Back   [q] Quit",
+        "[↑/↓/j/k] Navigate [Enter] Execute [1-9] Switch page [0/l] Logs [Esc] Back [q] Quit",
     );
 }
