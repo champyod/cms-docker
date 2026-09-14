@@ -92,5 +92,17 @@ Until Phase 6, every Python-side mutation is unaudited, and the hash chain silen
    session management local to the Python UI; the panel has its own auth. They are not
    admin-domain operations and need no panel route.
 3. **Is `file_cacher` the intended "large object" meaning?** Yes — it is the blob store backing
-   the same database large objects the panel writes via `lo_from_bytea`. No S3/object storage is
-   involved in these handlers.
+    the same database large objects the panel writes via `lo_from_bytea`. No S3/object storage is
+    involved in these handlers.
+
+## Known data issue — contest names with spaces (pre-existing)
+
+`contest.name` is used as both a cookie name (`<name>_login`) and a URL path segment.
+Whitespace is illegal in cookie-name tokens (RFC 6265), so any contest already stored
+with a name containing spaces has a silently broken login cookie today, independent of
+this refactor. The name rule `^[A-Za-z0-9_-]+$` was already enforced by the panel
+service layer and is now enforced in the Python admin and batch importer; shipped
+examples were fixed (`School Programming Championship` → `School_Programming_Championship`,
+`24-Hour Marathon 2024` → `24-Hour_Marathon_2024`). Production data should be audited
+for names outside that pattern and migrated (spaces → underscores or another safe
+codename) before relying on contest login.

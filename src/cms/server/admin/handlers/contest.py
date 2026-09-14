@@ -28,12 +28,18 @@
 
 """
 
+import re
+
 from cms import ServiceCoord, get_service_shards, get_service_address
 from cms.db import Contest, Participation, Submission
 from cmscommon.datetime import make_datetime
 
 from .base import BaseHandler, SimpleContestHandler, SimpleHandler, \
     require_permission
+
+# Contest name is used as cookie name and URL segment, so it must be
+# cookie-token and URL-path safe.
+_CONTEST_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 class AddContestHandler(
@@ -50,6 +56,8 @@ class AddContestHandler(
 
             self.get_string(attrs, "name", empty=None)
             assert attrs.get("name") is not None, "No contest name specified."
+            assert _CONTEST_NAME_RE.match(attrs["name"]), \
+                "Contest name must contain only letters, numbers, hyphens and underscores."
             attrs["description"] = attrs["name"]
 
             # Create the contest.
@@ -82,6 +90,12 @@ class ContestHandler(SimpleContestHandler("contest.html")):
             self.get_string(attrs, "description")
 
             assert attrs.get("name") is not None, "No contest name specified."
+            # Only enforce the safe-name rule when the name is being changed,
+            # so an existing contest with a legacy invalid name can still be
+            # edited (e.g. to fix the name) without being locked out.
+            if attrs["name"] != contest.name:
+                assert _CONTEST_NAME_RE.match(attrs["name"]), \
+                    "Contest name must contain only letters, numbers, hyphens and underscores."
 
             allowed_localizations: str = self.get_argument("allowed_localizations", "")
             if allowed_localizations:

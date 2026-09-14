@@ -123,7 +123,14 @@ create_contest() {
     local token_gen="${7:-30}"
     local max_sub="${8:-50}"
     local min_interval="${9:-60}"
-    
+
+    # Contest name is used as cookie name and URL path segment and must be
+    # cookie-token safe.
+    if ! printf '%s' "$name" | LC_ALL=C grep -Eq '^[A-Za-z0-9_-]+$'; then
+        echo -e "${RED}Error: invalid contest name '$name' — must match ^[A-Za-z0-9_-]+\$${NC}" >&2
+        exit 1
+    fi
+
     echo -e "${YELLOW}Creating contest: $name${NC}"
     
     if [ "$DRY_RUN" = true ]; then
@@ -143,9 +150,7 @@ from cms.db.filecacher import FileCacher
 
 with SessionGen() as session:
     contest = Contest(
-        # contest.name is stored in a codename-domain column ([A-Za-z0-9_-]+):
-        # spaces/other chars are rejected by the DB regardless of UI leniency.
-        name="$(printf '%s' "$name" | tr -c 'A-Za-z0-9_-' '_' )",
+        name="$name",
         description="$description",
         start=datetime.datetime.fromisoformat("${start_time}"),
         stop=datetime.datetime.fromisoformat("${end_time}"),
