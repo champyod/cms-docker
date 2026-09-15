@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { Fragment, useState } from 'react';
 import { ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { DASHBOARD_ITEM, DOCUMENTATION_ITEM, CONTEST_ITEMS, INFRASTRUCTURE_ITEMS, buildVisibility, type SidebarPermissions } from '@/components/layout/sidebar-nav';
+import { NAV_SECTIONS, DOCUMENTATION_ITEM, buildVisibility, type SidebarPermissions } from '@/components/layout/sidebar-nav';
 import { SidebarNavItem, SectionLabel } from '@/components/layout/SidebarNavItem';
 
 export const SIDEBAR_STORAGE_KEY = 'cms-sidebar-expanded';
@@ -85,19 +85,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ className, locale, permissions
     <aside className={cn('sticky top-0 relative flex h-screen shrink-0 flex-col border-r border-border bg-background/95 backdrop-blur transition-[width] duration-200', expanded ? 'w-56' : 'w-14', className)}>
       {expanded ? <ExpandedBrandRow onToggle={handleToggle} /> : <CollapsedBrandRow onToggle={handleToggle} />}
       <nav aria-label="Main navigation" className="flex-1 space-y-1 overflow-y-auto px-2 py-3 scrollbar-thin scrollbar-thumb-border hover:scrollbar-thumb-muted-foreground/40">
-        <SidebarNavItem item={DASHBOARD_ITEM} locale={locale} collapsed={!expanded} />
-        <SectionLabel label="Contest" collapsed={!expanded} />
-        {CONTEST_ITEMS.filter((item) => item.isVisible(visibility)).map((item) => (
-          <SidebarNavItem key={item.label} item={item} locale={locale} collapsed={!expanded} />
-        ))}
-        {visibility.superadmin && (
-          <>
-            <SectionLabel label="Infrastructure" collapsed={!expanded} />
-            {INFRASTRUCTURE_ITEMS.map((item) => (
-              <SidebarNavItem key={item.label} item={item} locale={locale} collapsed={!expanded} />
-            ))}
-          </>
-        )}
+        {NAV_SECTIONS.map((section) => {
+          if (section.superadminOnly && !visibility.superadmin) return null;
+          return (
+            <Fragment key={section.label ?? 'top'}>
+              {section.label !== null && <SectionLabel label={section.label} collapsed={!expanded} />}
+              {section.items
+                .filter((item) => item.isVisible(visibility))
+                .map((item) => (
+                  <SidebarNavItem key={item.label} item={item} locale={locale} collapsed={!expanded} />
+                ))}
+            </Fragment>
+          );
+        })}
       </nav>
       <div className="shrink-0 space-y-1 border-t border-border px-2 py-3">
         <SidebarNavItem item={DOCUMENTATION_ITEM} locale={locale} collapsed={!expanded} />

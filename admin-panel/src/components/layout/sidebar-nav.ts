@@ -79,3 +79,39 @@ export function buildVisibility(permissions?: SidebarPermissions): NavVisibility
     users: superadmin || (permissions?.permission_users ?? false),
   };
 }
+
+export interface NavSection {
+  label: string | null;
+  items: NavItemDef[];
+  superadminOnly?: boolean;
+}
+
+export const NAV_SECTIONS: NavSection[] = [
+  { label: null, items: [DASHBOARD_ITEM] },
+  { label: 'Contest', items: CONTEST_ITEMS },
+  { label: 'Infrastructure', items: INFRASTRUCTURE_ITEMS, superadminOnly: true },
+];
+
+export const MOBILE_PRIMARY_LABELS: readonly string[] = ['Dashboard', 'Contests', 'Tasks', 'Users', 'Submissions'];
+
+export const MOBILE_PRIMARY_MAX = 5;
+
+export function buildMobilePrimary(visibility: NavVisibility): NavItemDef[] {
+  const ordered: NavItemDef[] = [
+    DASHBOARD_ITEM,
+    ...CONTEST_ITEMS.filter((item) => item.isVisible(visibility)),
+    ...(visibility.superadmin ? INFRASTRUCTURE_ITEMS.filter((item) => item.isVisible(visibility)) : []),
+    DOCUMENTATION_ITEM,
+  ];
+  const byLabel = new Map(ordered.map((item) => [item.label, item]));
+  const primary: NavItemDef[] = [];
+  for (const label of MOBILE_PRIMARY_LABELS) {
+    const item = byLabel.get(label);
+    if (item && !primary.includes(item)) primary.push(item);
+  }
+  for (const item of ordered) {
+    if (primary.length >= MOBILE_PRIMARY_MAX) break;
+    if (!primary.includes(item)) primary.push(item);
+  }
+  return primary.slice(0, MOBILE_PRIMARY_MAX);
+}
