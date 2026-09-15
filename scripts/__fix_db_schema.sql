@@ -21,6 +21,7 @@
 -- See: admin-panel/prisma/sql/20260810120000_capture_legacy_permissions.sql
 
 -- Add missing admin annotation column used by EvaluationService
+-- WHY patch-owned intentionally: declared by the CMS ORM (src/cms/db/submission.py:770) and absent from admin-panel/prisma/schema.prisma; this script runs on every `make cms-init` for both fresh and existing databases.
 ALTER TABLE evaluations ADD COLUMN IF NOT EXISTS admin_text VARCHAR;
 
 -- Add contest-level queue fairness penalty (seconds)
