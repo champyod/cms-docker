@@ -119,7 +119,6 @@ export const Header: React.FC<{ className?: string; username?: string }> = ({ cl
           onFocus={() => setPaletteOpen(true)}
           className="h-9 w-64 cursor-pointer rounded-full border border-input bg-muted/50 pl-9 pr-14 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
         >
-          <Search className="h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
         </button>
         <kbd className="pointer-events-none absolute inset-y-0 right-2 my-auto hidden h-5 items-center rounded border border-border bg-muted px-1.5 font-mono text-xs font-semibold text-muted-foreground sm:inline-flex">
           ⌘K
