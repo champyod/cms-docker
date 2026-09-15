@@ -185,7 +185,6 @@ pub fn ingress_menu() -> ActionMenu {
             DispatchKey::TailscaleRemove,
             &["remove"],
         ),
-        catalog_entry("Expose Wizard", DispatchKey::Expose, &[]),
         catalog_entry("Funnel Setup", DispatchKey::FunnelSetup, &["setup"]),
         catalog_entry("Funnel Passwd", DispatchKey::FunnelPasswd, &["passwd"]),
         catalog_entry("Funnel Remove", DispatchKey::FunnelRemove, &["remove"]),

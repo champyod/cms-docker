@@ -88,15 +88,6 @@ pub const FLEET_CATALOG: &[CommandSpec] = &[
         capture_output: false,
     },
     CommandSpec {
-        key: DispatchKey::Expose,
-        target: DispatchTarget::Script(SCRIPT_DOMAIN),
-        args: ARGS_NONE,
-        about: "Pick access mode",
-        requires_tty: true,
-        requires_sudo: false,
-        capture_output: false,
-    },
-    CommandSpec {
         key: DispatchKey::FunnelSetup,
         target: DispatchTarget::Script(SCRIPT_FUNNEL),
         args: ARGS_FUNNEL,

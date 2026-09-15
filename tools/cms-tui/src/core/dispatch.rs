@@ -68,8 +68,6 @@ pub enum DispatchKey {
     TailscaleStatus,
     /// `./cms tailscale remove`
     TailscaleRemove,
-    /// `./cms expose`
-    Expose,
     /// `./cms funnel setup`
     FunnelSetup,
     /// `./cms funnel passwd`
@@ -144,7 +142,6 @@ mod tests {
         DispatchKey::TailscaleSetup,
         DispatchKey::TailscaleStatus,
         DispatchKey::TailscaleRemove,
-        DispatchKey::Expose,
         DispatchKey::FunnelSetup,
         DispatchKey::FunnelPasswd,
         DispatchKey::FunnelRemove,
