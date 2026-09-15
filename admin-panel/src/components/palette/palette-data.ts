@@ -1,20 +1,5 @@
-import {
-  Activity,
-  BookOpen,
-  Box,
-  FileCode,
-  Globe,
-  Home,
-  Rocket,
-  Settings,
-  Shield,
-  Trophy,
-  Users,
-  Wrench,
-  type LucideIcon,
-} from 'lucide-react';
-
 import { hasEffectivePermission } from '@/lib/permission-engine';
+import { NAV_REGISTRY, type NavGroup as RegistryGroup } from '@/lib/nav-registry';
 
 export interface NavVisibility {
   contests: boolean;
@@ -22,37 +7,31 @@ export interface NavVisibility {
   users: boolean;
 }
 
-export type NavGroup = 'general' | 'contest' | 'infrastructure';
+export type NavGroup = RegistryGroup;
 
 export interface PaletteNavItem {
   label: string;
-  icon: LucideIcon;
+  icon: (typeof NAV_REGISTRY)[number]['icon'];
   path: string;
   group: NavGroup;
   isVisible(effective: ReadonlySet<string>): boolean;
 }
 
-const alwaysVisible = (): boolean => true;
-
-export const PALETTE_NAV_ITEMS: PaletteNavItem[] = [
-  { label: 'Dashboard', icon: Home, path: '/', group: 'general', isVisible: alwaysVisible },
-  { label: 'Documentation', icon: BookOpen, path: '/docs', group: 'general', isVisible: alwaysVisible },
-  { label: 'Contests', icon: Trophy, path: '/contests', group: 'contest', isVisible: (effective) => hasEffectivePermission(effective, 'contest:list') },
-  { label: 'Tasks', icon: FileCode, path: '/tasks', group: 'contest', isVisible: (effective) => hasEffectivePermission(effective, 'task:list') },
-  { label: 'Submissions', icon: Activity, path: '/submissions', group: 'contest', isVisible: (effective) => hasEffectivePermission(effective, 'submission:list') },
-  { label: 'Users', icon: Users, path: '/users', group: 'contest', isVisible: (effective) => hasEffectivePermission(effective, 'user:list') },
-  { label: 'Teams', icon: Users, path: '/teams', group: 'contest', isVisible: (effective) => hasEffectivePermission(effective, 'team:list') },
-  { label: 'Active Contest', icon: Rocket, path: '/deployments', group: 'infrastructure', isVisible: (effective) => hasEffectivePermission(effective, 'deployment:list') },
-  { label: 'Admins', icon: Shield, path: '/admins', group: 'infrastructure', isVisible: (effective) => hasEffectivePermission(effective, 'admin:list') },
-  { label: 'Resources', icon: Activity, path: '/resources', group: 'infrastructure', isVisible: (effective) => hasEffectivePermission(effective, 'resource:list') },
-  { label: 'Containers', icon: Box, path: '/containers', group: 'infrastructure', isVisible: (effective) => hasEffectivePermission(effective, 'container:list') },
-  { label: 'Ranking', icon: Globe, path: '/ranking', group: 'infrastructure', isVisible: (effective) => hasEffectivePermission(effective, 'ranking:list') },
-  { label: 'Maintenance', icon: Wrench, path: '/maintenance', group: 'infrastructure', isVisible: (effective) => hasEffectivePermission(effective, 'maintenance:list') },
-  { label: 'Settings', icon: Settings, path: '/settings', group: 'infrastructure', isVisible: (effective) => hasEffectivePermission(effective, 'settings:list') },
-];
+// Why: palette navigation is a filtered view of the single registry so Groups/Audit/Appearance
+// and /search cannot drift between surfaces.
+export const PALETTE_NAV_ITEMS: PaletteNavItem[] = NAV_REGISTRY.filter((entry) =>
+  entry.exposeIn.includes('palette'),
+).map((entry) => ({
+  label: entry.label,
+  icon: entry.icon,
+  path: entry.path,
+  group: entry.group,
+  isVisible: (effective: ReadonlySet<string>): boolean =>
+    entry.permission === undefined || hasEffectivePermission(effective, entry.permission),
+}));
 
 export function buildNavVisibility(permissionKeys: readonly string[]): NavVisibility {
-  const effective = new Set(permissionKeys);
+  const effective: ReadonlySet<string> = new Set(permissionKeys);
   return {
     contests: hasEffectivePermission(effective, 'contest:list'),
     tasks: hasEffectivePermission(effective, 'task:list'),
@@ -75,7 +54,7 @@ export interface TeamRow {
 }
 
 export function filterTeams(teams: TeamRow[], query: string): TeamRow[] {
-  const needle = query.trim().toLowerCase();
+  const needle: string = query.trim().toLowerCase();
   if (!needle) return [];
   return teams.filter(
     (team) => team.name.toLowerCase().includes(needle) || team.code.toLowerCase().includes(needle),

@@ -11,7 +11,8 @@ import { activateContest, getAvailableContests } from '@/app/actions/contests';
 import { buildEntitySearchers } from './entity-searchers';
 import { useEntitySearch } from './useEntitySearch';
 import { MIN_QUERY_LENGTH } from './search-scheduler';
-import { buildNavVisibility, filterNavItems } from './palette-data';
+import { buildNavVisibility } from './palette-data';
+import { entriesByGroup } from '@/lib/nav-registry';
 import { NavigationItems, EntityItems, ActionItems } from './CommandPaletteItems';
 
 const PALETTE_TOGGLE_KEY = 'k';
@@ -29,7 +30,9 @@ export function CommandPalette({ open, onOpenChange, permissionKeys }: CommandPa
   const [availableContests, setAvailableContests] = useState<AvailableContestRow[]>([]);
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
   const visibility = useMemo(() => buildNavVisibility(permissionKeys), [permissionKeys]);
-  const navItems = filterNavItems(effective);
+  // Why: palette navigation is rendered from the single registry so /search and any future
+  // exposeIn:'palette' entries appear without touching the palette.
+  const navSections = useMemo(() => entriesByGroup(effective, 'palette'), [effective]);
   const searchers = useMemo(() => buildEntitySearchers(visibility), [visibility]);
   const { loading, hits } = useEntitySearch(open, query, searchers);
   const hasQuery = query.trim().length >= MIN_QUERY_LENGTH;
@@ -88,7 +91,7 @@ export function CommandPalette({ open, onOpenChange, permissionKeys }: CommandPa
         <Command shouldFilter={false} className={COMMAND_STYLING}>
           <CommandInput value={query} onValueChange={setQuery} placeholder="Search navigation, entities, actions..." />
           <CommandList>
-            <NavigationItems items={navItems} onSelect={(item) => navigateTo(item.path)} />
+            <NavigationItems sections={navSections} onSelect={(entry) => navigateTo(entry.path)} />
             <EntityItems loading={loading} hasQuery={hasQuery} hits={hits} onSelect={(hit) => navigateTo(hit.path)} />
             <ActionItems contestsEnabled={visibility.contests} availableContests={availableContests} onCreateContest={() => navigateTo('/contests')} onSwitchContest={(contestId) => void runSwitchContest(contestId)} onSignOut={runSignOut} />
           </CommandList>

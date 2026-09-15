@@ -43,7 +43,7 @@ describe('buildNavVisibility', () => {
 
 describe('filterNavItems', () => {
   it('shows general items only when nothing is permitted', () => {
-    expect(labelsFor([])).toEqual(['Dashboard', 'Documentation']);
+    expect(labelsFor([])).toEqual(['Dashboard', 'Documentation', 'Search']);
   });
 
   it('shows contest-scoped items for contest permission only', () => {
