@@ -99,36 +99,7 @@ impl AppState {
     }
 
     fn seed_services() -> Vec<Service> {
-        vec![
-            Service {
-                id: "postgres".to_string(),
-                name: "Postgres Database".to_string(),
-                env: Environment::Core,
-                status: ServiceStatus::Unknown,
-                version: "15".to_string(),
-            },
-            Service {
-                id: "logservice".to_string(),
-                name: "Log Service".to_string(),
-                env: Environment::Core,
-                status: ServiceStatus::Unknown,
-                version: "latest".to_string(),
-            },
-            Service {
-                id: "admin-web".to_string(),
-                name: "Admin Web Server".to_string(),
-                env: Environment::Admin,
-                status: ServiceStatus::Unknown,
-                version: "latest".to_string(),
-            },
-            Service {
-                id: "contest-web".to_string(),
-                name: "Contest Web Server".to_string(),
-                env: Environment::Contest,
-                status: ServiceStatus::Unknown,
-                version: "latest".to_string(),
-            },
-        ]
+        Vec::new()
     }
 
     fn seed_configs() -> Vec<ConfigFile> {
@@ -205,16 +176,12 @@ mod tests {
     }
 
     #[test]
-    fn app_state_seeds_services_across_environments() {
+    fn app_state_does_not_fabricate_service_status() {
         let state = AppState::new();
-        let envs: Vec<_> = state
-            .services
-            .iter()
-            .map(|service| service.env.to_string())
-            .collect();
-        assert!(envs.contains(&"Core".to_string()));
-        assert!(envs.contains(&"Admin".to_string()));
-        assert!(envs.contains(&"Contest".to_string()));
+        assert!(
+            state.services.is_empty(),
+            "dashboard must not invent service rows"
+        );
     }
 
     #[test]
