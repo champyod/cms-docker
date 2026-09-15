@@ -125,7 +125,9 @@ class AuditLog(Base):
     __tablename__ = "audit_log"
 
     id: int = Column(BigInteger, primary_key=True)
-    admin_id: int | None = Column(
+    # WHY: column is actor_id in the real table (admin-panel writes/reads
+    # actor_id); admin_id was dead — CMS never instantiates AuditLog.
+    actor_id: int | None = Column(
         Integer,
         ForeignKey("admins.id", onupdate="CASCADE", ondelete="SET NULL"),
         nullable=True)

@@ -106,8 +106,8 @@ from .usertest import UserTest, UserTestFile, UserTestManager, \
     UserTestResult, UserTestExecutable
 # WHY: must be imported before configure_mappers() below, otherwise the
 # Admin.admin_groups string reference cannot be resolved and every entry
-# point importing cms.db fails. Also keeps the tables in metadata so
-# cmsInitDB creates them.
+# point importing cms.db fails. Tables stay in metadata for mapper
+# resolution; Prisma migrations own their creation (cmsInitDB excludes them).
 from .permissions import Permission, Group, GroupPermission, AdminGroup, \
     AdminPermissionOverride, AuditLog
 
