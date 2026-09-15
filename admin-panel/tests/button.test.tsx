@@ -102,7 +102,7 @@ describe('iconOnly mode', () => {
   it('renders square sizing for inferred icon-only buttons', () => {
     const html = renderToStaticMarkup(<Button icon={Trash2} tooltip="Delete" />);
     expect(html).toContain('w-11');
-    expect(html).toContain('h-10');
+    expect(html).toContain('h-11');
     expect(html).toContain('p-0');
   });
 

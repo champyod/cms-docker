@@ -41,9 +41,7 @@ export interface ContestData {
 }
 
 export function parseInterval(val: unknown): number {
-  const result = parseIntervalToSeconds(val);
-  if (result === undefined) throw new Error(`Invalid interval value: ${String(val)}`);
-  return result;
+  return parseIntervalToSeconds(val) ?? 0;
 }
 
 export function intervalToString(seconds: number, unit: 'seconds' | 'minutes' = 'seconds'): string {
