@@ -14,6 +14,7 @@ interface StreamPayload {
   log: string;
   percent: number | null;
   error?: string;
+  warning?: string;
   success: boolean;
 }
 
@@ -72,7 +73,7 @@ export function useDeployStream(
           stopStreaming();
           dismissProgressToast();
           if (!mountedRef.current) return;
-          setState({ phase: 'timeout', contestId, operationId, status: 'timeout', error: 'Deploy timed out after 5 minutes without log output.', log: '', percent: null, startedAt: null });
+          setState({ phase: 'timeout', contestId, operationId, status: 'timeout', error: 'Deploy timed out after 5 minutes without log output.', warning: null, log: '', percent: null, startedAt: null });
           toast.error('Deploy timed out', { description: 'No log output for 5 minutes.' });
         }
       }, DEPLOY_POLL_MS);
@@ -91,7 +92,7 @@ export function useDeployStream(
           stopStreaming();
           dismissProgressToast();
           const phaseMap: Record<string, DeployState['phase']> = { completed: 'completed', failed: 'failed', timeout: 'timeout', not_found: 'failed' };
-          setState({ phase: phaseMap[data.status] ?? 'failed', contestId, operationId, status: data.status, error: data.error || null, log: data.log || '', percent: percent ?? (data.status === 'completed' ? 100 : null), startedAt: data.startedAt || null });
+          setState({ phase: phaseMap[data.status] ?? 'failed', contestId, operationId, status: data.status, error: data.error || null, warning: data.warning || null, log: data.log || '', percent: percent ?? (data.status === 'completed' ? 100 : null), startedAt: data.startedAt || null });
           showDeployResult(data.status, contestId, data.error);
           source.close();
           eventSourceRef.current = null;
