@@ -17,8 +17,8 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/__lib/common.sh"
 
-# WHY --pre-push: capture legacy permissions BEFORE prisma db push drops the columns.
-# In that mode apply ONLY the capture file and be tolerant (never abort the push).
+# WHY --pre-push: capture legacy permissions before the columns are dropped.
+# In that mode apply ONLY the capture file and be tolerant (never abort the caller).
 # WHY --bootstrap-roles: apply ONLY role-definition files BEFORE the restart so
 # cms_backup can connect with its real password; RLS/hardening are deferred to
 # the post-restart full apply after new code is running.
@@ -76,11 +76,12 @@ fi
 
 
 # Collect .sql files in filename order (lexicographic == timestamp order)
-# WHY --pre-push: only the capture file is applied before the push so legacy booleans
+# WHY --pre-push: only the capture file is applied so legacy booleans
 # are saved before they are dropped; missing file is a no-op (fresh clone may not have it yet).
 if [[ "$PRE_PUSH" -eq 1 ]]; then
-  CAPTURE_FILE="$SQL_DIR/20260810120000_capture_legacy_permissions.sql"
-  if [[ ! -f "$CAPTURE_FILE" ]]; then
+  CAPTURE_FILE=""
+  for _f in admin-panel/prisma/migrations/*_capture_legacy_permissions/migration.sql; do [[ -e "$_f" ]] || continue; CAPTURE_FILE="$_f"; break; done
+  if [[ -z "$CAPTURE_FILE" ]] || [[ ! -f "$CAPTURE_FILE" ]]; then
     log_warn "capture file not found at $CAPTURE_FILE — skipping --pre-push"
     exit 0
   fi
@@ -177,11 +178,12 @@ done
 
 # WHY post-apply RLS assertion: ENABLE/FORCE with a mistyped table succeeds silently (DO $$ guard) and leaves the table unprotected. Verify the RESULT, not just the apply exit code.
 # WHY full-apply only: --pre-push and --bootstrap-roles exit before this point; they apply only a subset (capture file / role files) where RLS is deliberately not yet complete, so a check there would false-fail and violate their tolerant contract. Full apply is the only mode where all RLS files have been applied.
-# WHY scope to expected set: the generated 20260820125500_rls_enable.sql enumerates exactly the application tables that must have RLS. Checking "all public tables" is brittle: a maintenance/legacy table without RLS would false-fail and abort `make prisma-sync`.
+# WHY scope to expected set: the generated *_rls_enable migration (admin-panel/prisma/migrations/*_rls_enable/migration.sql) enumerates exactly the application tables that must have RLS. Checking "all public tables" is brittle: a maintenance/legacy table without RLS would false-fail and abort `make prisma-sync`.
 log_info "verifying RLS (ENABLE + FORCE) on expected application tables..."
-_RLS_EXPECTED_FILE="$SQL_DIR/20260820125500_rls_enable.sql"
+_RLS_EXPECTED_FILE=""
+for _f in admin-panel/prisma/migrations/*_rls_enable/migration.sql; do [[ -e "$_f" ]] || continue; _RLS_EXPECTED_FILE="$_f"; break; done
 _RLS_EXPECTED_TABLES=()
-if [[ -f "$_RLS_EXPECTED_FILE" ]]; then
+if [[ -n "$_RLS_EXPECTED_FILE" ]] && [[ -f "$_RLS_EXPECTED_FILE" ]]; then
   # WHY grep source of truth: file contains `to_regclass('public.<name>')` guards per model
   while IFS= read -r _t; do _RLS_EXPECTED_TABLES+=("$_t"); done < <(grep -o "to_regclass('public\.[^']*')" "$_RLS_EXPECTED_FILE" | sed "s/.*public\.//;s/'.*//" | sort -u)
 fi
