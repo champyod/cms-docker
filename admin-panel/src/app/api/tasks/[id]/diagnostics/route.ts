@@ -1,19 +1,15 @@
-import { prisma } from '@/lib/prisma';
-import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { NextRequest } from 'next/server';
-import { computeTaskDiagnostics } from '@/lib/task-diagnostics';
+import { apiError, apiSuccess } from '@/lib/api-utils';
+import * as taskService from '@/lib/services/tasks';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<Response> {
-  const { authorized, response } = await verifyApiPermission('task:read');
-  if (!authorized) return response as Response;
   const id = parseInt((await params).id, 10);
-  if (Number.isNaN(id)) return apiError({ message: 'Invalid ID', status: 400 });
   try {
-    const task = await prisma.tasks.findUnique({ where: { id }, select: { id: true } });
-    if (!task) return apiError({ message: 'Task not found', status: 404 });
-    const diagnostics = await computeTaskDiagnostics(id);
+    const diagnostics = await taskService.getDiagnosticsForApi(id);
     return apiSuccess({ diagnostics });
-  } catch (error) {
+  } catch (error: unknown) {
+    const e = error as { status?: number; message?: string };
+    if (e.status === 401 || e.status === 403 || e.status === 400 || e.status === 404) return apiError({ message: e.message, status: e.status });
     return apiError(error);
   }
 }
