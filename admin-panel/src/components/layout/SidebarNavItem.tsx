@@ -6,7 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils';
 import type { NavItemDef } from '@/components/layout/sidebar-nav';
 
-function isActiveRoute(pathname: string, href: string, locale: string): boolean {
+export function isActiveRoute(pathname: string, href: string, locale: string): boolean {
   return pathname === href || (href !== `/${locale}` && pathname.startsWith(href));
 }
 
@@ -14,14 +14,15 @@ interface NavItemProps {
   item: NavItemDef;
   locale: string;
   collapsed: boolean;
+  onClick?: () => void;
 }
 
-export function SidebarNavItem({ item, locale, collapsed }: NavItemProps): React.JSX.Element {
+export function SidebarNavItem({ item, locale, collapsed, onClick }: NavItemProps): React.JSX.Element {
   const pathname = usePathname();
   const href = item.buildHref(locale);
   const isActive = isActiveRoute(pathname, href, locale);
   const link = (
-    <Link href={href} aria-current={isActive ? 'page' : undefined} className={cn('flex h-9 items-center rounded-lg px-2.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50', collapsed && 'w-9 justify-center px-0', isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground')}>
+    <Link href={href} onClick={onClick} aria-current={isActive ? 'page' : undefined} className={cn('flex h-9 items-center rounded-lg px-2.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50', collapsed && 'w-9 justify-center px-0', isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground')}>
       <item.icon className="size-4 shrink-0" aria-hidden />
       {!collapsed && <span className="ml-3 truncate">{item.label}</span>}
     </Link>
