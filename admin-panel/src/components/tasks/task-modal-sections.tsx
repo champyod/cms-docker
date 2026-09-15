@@ -55,7 +55,7 @@ export function GeneralTab({ formData, onChange }: TabProps): React.JSX.Element 
 export function GradingTab({ formData, onChange }: TabProps): React.JSX.Element {
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <div>
           <label className="block text-xs font-bold text-muted-foreground uppercase mb-2">
             Score Mode
@@ -105,7 +105,7 @@ export function GradingTab({ formData, onChange }: TabProps): React.JSX.Element 
 export function LimitsTab({ formData, onChange }: TabProps): React.JSX.Element {
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <div>
           <label className="block text-xs font-bold text-muted-foreground uppercase mb-2">
             Max Submissions

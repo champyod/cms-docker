@@ -47,13 +47,13 @@ export function AnnouncementsPanel({ announcements, showForm, subject, text, onS
         <div className="space-y-2">
           {announcements.map((ann) => (
             <div key={ann.id} className="rounded-lg bg-muted/30 p-3">
-              <div className="flex items-start justify-between">
+              <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="font-medium text-foreground">{ann.subject}</div>
                   <div className="mt-1 text-sm text-muted-foreground">{ann.text}</div>
                   <div className="mt-2 text-xs text-muted-foreground">{formatTime(ann.timestamp)} by {ann.admins?.username || 'System'}</div>
                 </div>
-                <button onClick={() => onDelete(ann.id)} aria-label={`Delete announcement ${ann.subject}`} className="rounded p-1 text-muted-foreground transition-colors hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
+                <button onClick={() => onDelete(ann.id)} aria-label={`Delete announcement ${ann.subject}`} title="Delete" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
               </div>
             </div>
           ))}

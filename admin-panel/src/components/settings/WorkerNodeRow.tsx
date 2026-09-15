@@ -73,10 +73,10 @@ function WorkerRowActions({ canRetry, onRetry, onStartEdit, onRemove }: WorkerRo
           <RefreshCw className="w-4 h-4" />
         </Button>
       )}
-      <Button variant="ghost" size="sm" onClick={onStartEdit} className="text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+      <Button variant="ghost" size="sm" onClick={onStartEdit} aria-label="Edit worker" className="size-9 shrink-0 text-muted-foreground hover:text-foreground">
         <Edit className="w-4 h-4" />
       </Button>
-      <Button variant="ghost" size="sm" onClick={onRemove} className="text-destructive/70 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity">
+      <Button variant="ghost" size="sm" onClick={onRemove} aria-label="Remove worker" className="size-9 shrink-0 text-destructive/70 hover:text-destructive">
         <Trash2 className="w-4 h-4" />
       </Button>
     </div>

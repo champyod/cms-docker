@@ -16,7 +16,7 @@ interface ContainerHeaderProps {
 
 export function ContainerHeader({ locale, loading, actionLoading, onUpAll, onRefresh }: ContainerHeaderProps): React.JSX.Element {
   return (
-    <div className="flex items-center justify-between">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <div className="flex items-center gap-3">
           <h1 className="text-3xl font-bold text-foreground tracking-tight">Container Control Center</h1>

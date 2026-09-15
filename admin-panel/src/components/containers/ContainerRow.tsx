@@ -135,12 +135,13 @@ export function ContainerRow({
               {container.state.toUpperCase()}
             </div>
 
-            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity" onClick={stopPropagation}>
+            <div className="flex items-center gap-2" onClick={stopPropagation}>
               <Button
                 size="sm"
                 variant="ghost"
                 icon={Terminal}
                 tooltip="View Logs"
+                className="size-9 shrink-0"
                 onClick={() => onViewLogs({ id: container.id, name: container.name })}
               />
               <Button
@@ -148,6 +149,7 @@ export function ContainerRow({
                 variant="ghost"
                 icon={Settings}
                 tooltip="Container Settings"
+                className="size-9 shrink-0"
                 onClick={() => onOpenSettings({ id: container.id, name: container.name })}
               />
               {container.state !== 'running' ? (
@@ -156,6 +158,7 @@ export function ContainerRow({
                   variant="positiveOutline"
                   icon={Play}
                   tooltip="Start Container"
+                  className="size-9 shrink-0"
                   onClick={() => onControl(container.id, 'start')}
                   disabled={actionLoading === container.id}
                 />
@@ -165,6 +168,7 @@ export function ContainerRow({
                   variant="negative"
                   icon={Square}
                   tooltip="Stop Container"
+                  className="size-9 shrink-0"
                   onClick={() => onControl(container.id, 'stop')}
                   disabled={actionLoading === container.id}
                 />
@@ -174,6 +178,7 @@ export function ContainerRow({
                 variant="positiveOutline"
                 icon={RotateCcw}
                 tooltip="Restart Container"
+                className="size-9 shrink-0"
                 onClick={() => onControl(container.id, 'restart')}
                 disabled={actionLoading === container.id}
               />
@@ -182,7 +187,7 @@ export function ContainerRow({
         </div>
 
         {container.isCmsContainer && (
-          <div className="flex items-center gap-3 ml-6 text-xs" onClick={stopPropagation}>
+          <div className="flex flex-wrap items-center gap-2 ml-6 text-xs" onClick={stopPropagation}>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => onToggleAutoRestart(container.id, autoRestartEnabled)}

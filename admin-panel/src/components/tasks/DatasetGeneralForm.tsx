@@ -43,7 +43,7 @@ export function DatasetGeneralForm({ formData, onChange, onSubmit, error }: Data
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <label className="block text-xs font-bold text-muted-foreground uppercase mb-1.5">Time Limit (s)</label>
             <input
@@ -67,7 +67,7 @@ export function DatasetGeneralForm({ formData, onChange, onSubmit, error }: Data
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <label className="block text-xs font-bold text-muted-foreground uppercase mb-1.5">Task Type</label>
             <select

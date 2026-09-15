@@ -53,7 +53,7 @@ function TabButton({
     <button
       onClick={onSelect}
       className={cn(
-        'flex w-full items-center justify-between rounded-xl px-4 py-3 text-sm font-medium transition-colors',
+        'flex w-full items-center justify-between rounded-xl px-4 py-3 text-sm font-medium transition-colors max-sm:w-auto max-sm:flex-1 max-sm:justify-center max-sm:gap-2 max-sm:rounded-full max-sm:px-3 max-sm:py-2 max-sm:text-xs',
         isActive
           ? 'bg-primary/10 text-primary ring-1 ring-ring/50'
           : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -76,7 +76,7 @@ function SidebarTabs({
   setActiveTab,
 }: Pick<ContestModalShellProps, 'validationErrors' | 'activeTab' | 'setActiveTab'>) {
   return (
-    <div className="w-64 shrink-0 space-y-2 overflow-y-auto border-r border-border bg-muted/20 p-4">
+    <div className="w-64 shrink-0 space-y-2 overflow-y-auto border-r border-border bg-muted/20 p-4 max-sm:flex max-sm:w-full max-sm:flex-row max-sm:flex-wrap max-sm:gap-1 max-sm:space-y-0 max-sm:overflow-x-auto max-sm:border-r-0 max-sm:border-b">
       {TABS.map(tab => (
         <TabButton
           key={tab.id}
@@ -153,9 +153,9 @@ function ShellBody({
   children,
 }: Pick<ContestModalShellProps, 'validationErrors' | 'error' | 'activeTab' | 'setActiveTab' | 'onSubmit' | 'children'>) {
   return (
-    <div className="flex min-h-0 flex-1 overflow-hidden">
+    <div className="flex min-h-0 flex-1 overflow-hidden max-sm:flex-col">
       <SidebarTabs validationErrors={validationErrors} activeTab={activeTab} setActiveTab={setActiveTab} />
-      <div className="relative flex-1 overflow-y-auto p-8">
+      <div className="relative flex-1 overflow-y-auto p-4 sm:p-8">
         <ContentBanners validationErrors={validationErrors} error={error} />
 
         <form id="contest-form" onSubmit={onSubmit} className="space-y-8 pb-20">
@@ -185,7 +185,7 @@ export function ContestModalShell({
       }}
       title={contest ? 'Edit Contest' : 'Create New Contest'}
       footer={<ShellFooter contest={contest} loading={loading} onClose={onClose} />}
-      className="flex h-96 w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl"
+      className="flex max-h-[70vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl"
     >
       <ShellBody
         validationErrors={validationErrors} error={error} activeTab={activeTab}

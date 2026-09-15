@@ -148,19 +148,19 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <h2 className="text-xl font-bold text-foreground">All Users</h2>
           <Link
             href={`/${locale}/docs#users`}
-            className="p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground"
+            className="inline-flex size-9 shrink-0 items-center justify-center hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground"
             title="View Documentation"
           >
             <HelpCircle className="w-4 h-4" />
           </Link>
         </div>
         {canManageUsers && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant="positiveOutline" icon={FileSpreadsheet} onClick={() => setIsBulkModalOpen(true)}>
               Bulk Add Users
             </Button>

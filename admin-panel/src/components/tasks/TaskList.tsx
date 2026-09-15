@@ -9,6 +9,7 @@ import { Edit2, Trash2, Plus, FileText, Database, ExternalLink, AlertTriangle } 
 import { cn } from '@/lib/utils';
 import { ROW_SELECTED_CLASSES } from '@/hooks/useShortcuts';
 import { EmptyState } from '@/components/core/EmptyState';
+import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
 import { TaskModal } from './TaskModal';
 import { apiClient } from '@/lib/apiClient';
 import type { TaskDiagnostic } from '@/lib/task-diagnostics';
@@ -74,7 +75,7 @@ export function TaskList({ initialTasks, permissions }: TaskListProps): React.JS
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-bold text-foreground">All Tasks</h2>
         {canManageTasks && (
           <Button variant="positive" icon={Plus} onClick={handleCreate}>
@@ -84,7 +85,23 @@ export function TaskList({ initialTasks, permissions }: TaskListProps): React.JS
       </div>
 
       <div className="border border-border rounded-xl overflow-hidden bg-card">
-        <Table>
+        <Table
+          mobileCards={tasks.map((task) => (
+            <MobileCard key={task.id}>
+              <MobileCardRow label="ID" value={`#${task.id}`} />
+              <MobileCardRow label="Name" value={task.name} />
+              <MobileCardRow label="Title" value={task.title} />
+              <MobileCardRow label="Contest" value={task.contests ? task.contests.name : 'Unassigned'} />
+              <MobileCardRow label="Submissions" value={task._count?.submissions ?? 0} />
+              {canManageTasks && (
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <Button variant="ghost" size="sm" icon={Edit2} iconOnly tooltip="Edit task" onClick={() => handleEdit(task)} className="text-muted-foreground hover:text-primary" />
+                  <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete task" onClick={() => handleDelete(task.id)} className="text-muted-foreground hover:text-destructive" />
+                </div>
+              )}
+            </MobileCard>
+          ))}
+        >
           <TableHeader>
             <TableRow className="border-b border-border hover:bg-muted/50">
               <TableHead className="text-muted-foreground">ID</TableHead>

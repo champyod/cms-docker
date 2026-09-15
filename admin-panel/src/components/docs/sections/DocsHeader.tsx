@@ -10,7 +10,7 @@ interface DocsHeaderProps {
 
 export function DocsHeader({ title, subtitle, officialDocsLabel }: DocsHeaderProps): React.JSX.Element {
   return (
-    <div className="flex items-center justify-between border-b border-border pb-6">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border pb-6">
       <div>
         <h1 className="text-3xl font-bold text-foreground mb-2">{title}</h1>
         <p className="text-muted-foreground">{subtitle}</p>

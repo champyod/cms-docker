@@ -271,7 +271,7 @@ export function ContainersClient() {
           onUpdate={loadContainers}
         />
       )}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-3xl font-bold text-foreground tracking-tight">Container Control Center</h1>
@@ -299,7 +299,7 @@ export function ContainersClient() {
       </div>
 
       {selectedCount > 0 && (
-        <div className="flex items-center justify-between p-3 bg-card border border-border rounded-xl shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-card border border-border rounded-xl shadow-sm">
           <div className="flex items-center gap-3">
             <span className="text-sm font-bold text-foreground">{selectedCount} selected</span>
             {isDiscordConfigured === false && (

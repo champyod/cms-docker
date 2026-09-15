@@ -1,6 +1,5 @@
 'use client';
 
-// Why: h-96 is the shared Card height token (384px) — replaces arbitrary viewport height so every modal reuses the same theme token
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Download, RefreshCw, Search } from 'lucide-react';
@@ -98,7 +97,7 @@ function LogDisplay({
   const displayText = filteredLogs || (searchTerm ? 'No logs match filter.' : 'No logs available.');
 
   return (
-    <div className="bg-background/80 p-4 relative overflow-hidden flex flex-col h-96 rounded-lg border border-border">
+    <div className="bg-background/80 p-4 relative flex flex-col max-h-[70vh] overflow-y-auto rounded-lg border border-border">
       <pre
         ref={logReference}
         className="flex-1 overflow-auto font-mono text-xs text-muted-foreground whitespace-pre-wrap break-all custom-scrollbar"
