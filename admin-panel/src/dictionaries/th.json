@@ -22,7 +22,28 @@
   "tasks": {
     "title": "งาน",
     "subtitle": "จัดการงาน คำชี้แจง และกรณีทดสอบ",
-    "allTasks": "งานทั้งหมด"
+    "allTasks": "งานทั้งหมด",
+    "statements": {
+      "title": "คำชี้แจง",
+      "upload": "อัปโหลดคำชี้แจง",
+      "languageLabel": "ภาษา",
+      "tableEmptyTitle": "ไม่มีคำชี้แจง",
+      "tableEmptyDescription": "ยังไม่มีการอัปโหลดคำชี้แจง",
+      "columns": {
+        "language": "ภาษา",
+        "filename": "ชื่อไฟล์",
+        "size": "ขนาด",
+        "uploadedAt": "วันที่อัปโหลด",
+        "actions": "การดำเนินการ"
+      },
+      "filters": {
+        "all": "ทั้งหมด",
+        "filterByLanguage": "กรองตามภาษา"
+      },
+      "download": "ดาวน์โหลด",
+      "delete": "ลบคำชี้แจง",
+      "uploadDialogTitle": "เพิ่มคำชี้แจง"
+    }
   },
   "users": {
     "title": "การจัดการผู้ใช้",
