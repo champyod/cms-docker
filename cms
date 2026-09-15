@@ -140,7 +140,7 @@ Usage: ./cms.sh [options]
 
 Options:
   --no-sample        Do not import examples/contests.yaml into an empty DB
-  --skip <a,b,...>   Skip steps: env,core,cms-init,prisma-sync,admin,
+  --skip <a,b,...>   Skip steps: env,core,cms-init,preflight,prisma-sync,admin,
                      contest,worker,monitor,admin-create,verify
   --yes              Non-interactive mode: skips tty-only prompts,
                      prints their manual commands instead
@@ -226,6 +226,30 @@ if ! is_skipped core; then
 fi
 
 is_skipped cms-init    || run_step cms-init    ""    'make cms-init'
+
+# WHY: cms_backup does not exist on current prod; migration 20260912000150_backup_grants
+# deliberately RAISES if the role is absent. Pre-flight before prisma-sync bootstraps
+# the roles or stops with an actionable message — migration 6 stays fail-loud as defence.
+if ! is_skipped preflight; then
+  printf '\n== [preflight] ==\n'
+  _PRE_ROLES="$(docker exec cms-database psql -U "${POSTGRES_USER:-cmsuser}" -d "${POSTGRES_DB:-cmsdb}" -tAc \
+    "SELECT string_agg(rolname, ',' ORDER BY rolname) FROM pg_roles WHERE rolname IN ('cmsuser','cms_backup')" 2>/dev/null | tr -d '[:space:]')" || _PRE_ROLES=""
+  _PRE_MISSING=()
+  [[ ",${_PRE_ROLES}," == *",cmsuser,"* ]]    || _PRE_MISSING+=("cmsuser")
+  [[ ",${_PRE_ROLES}," == *",cms_backup,"* ]] || _PRE_MISSING+=("cms_backup")
+  if [[ ${#_PRE_MISSING[@]} -gt 0 ]]; then
+    log_warn "preflight: missing role(s): ${_PRE_MISSING[*]} — bootstrapping via scripts/__apply_sql.sh --bootstrap-roles"
+    if ! bash scripts/__apply_sql.sh --bootstrap-roles; then
+      log_die "preflight: role bootstrap failed — fix DB roles then re-run (prisma-sync was NOT attempted)" 1
+    fi
+    log_info "preflight: role bootstrap completed"
+    record "preflight" "OK (bootstrapped: ${_PRE_MISSING[*]})"
+  else
+    log_info "preflight: required roles present (cmsuser, cms_backup)"
+    record "preflight" "OK"
+  fi
+fi
+
 is_skipped prisma-sync || run_step prisma-sync ""    'make prisma-sync'
 
 run_step admin "" 'make admin'
