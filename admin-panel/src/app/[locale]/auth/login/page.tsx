@@ -136,22 +136,26 @@ export default function LoginPage() {
   }, []);
 
   useEffect(() => {
-    void fetchCaptchaState();
+    queueMicrotask(() => void fetchCaptchaState());
   }, [fetchCaptchaState]);
 
   useEffect(() => {
     if (state?.captchaRequired) {
-      setCaptchaUi({
-        required: true,
-        enabled: true,
-        provider: (state.captchaProvider as CaptchaProvider) ?? 'turnstile',
-        siteKey: state.captchaSiteKey ?? captchaUi?.siteKey ?? '',
+      queueMicrotask(() => {
+        setCaptchaUi({
+          required: true,
+          enabled: true,
+          provider: (state.captchaProvider as CaptchaProvider) ?? 'turnstile',
+          siteKey: state.captchaSiteKey ?? captchaUi?.siteKey ?? '',
+        });
+        const username = usernameRef.current?.value ?? '';
+        if (username) void fetchCaptchaState(username);
       });
-      const username = usernameRef.current?.value ?? '';
-      if (username) void fetchCaptchaState(username);
     } else if (state?.error) {
-      const username = usernameRef.current?.value ?? '';
-      void fetchCaptchaState(username || undefined);
+      queueMicrotask(() => {
+        const username = usernameRef.current?.value ?? '';
+        void fetchCaptchaState(username || undefined);
+      });
     }
   }, [state, captchaUi?.siteKey, fetchCaptchaState]);
 
