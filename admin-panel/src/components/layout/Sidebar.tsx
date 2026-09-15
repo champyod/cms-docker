@@ -21,6 +21,33 @@ function persistExpandedPreference(expanded: boolean): void {
   document.cookie = `${SIDEBAR_STORAGE_KEY}=${value}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE_SECONDS}; samesite=lax`;
 }
 
+function ExpandedBrandRow({ onToggle }: { onToggle: () => void }): React.JSX.Element {
+  return (
+    <div className="flex h-16 shrink-0 items-center justify-between border-b border-border px-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary font-bold text-primary-foreground shadow-sm">C</div>
+        <span className="truncate font-display font-semibold tracking-wide">CMS Admin</span>
+      </div>
+      <Button variant="secondary" size="sm" iconOnly tooltip="Collapse sidebar" onClick={onToggle} className="size-8">
+        <ChevronLeft className="size-4" />
+      </Button>
+    </div>
+  );
+}
+
+function CollapsedBrandRow({ onToggle }: { onToggle: () => void }): React.JSX.Element {
+  return (
+    <div className="flex h-16 shrink-0 items-center justify-center border-b border-border px-0">
+      <div className="relative group">
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary font-bold text-primary-foreground shadow-sm">C</div>
+        <Button variant="secondary" size="sm" iconOnly tooltip="Expand sidebar" onClick={onToggle} className="absolute inset-0 flex items-center justify-center rounded-lg opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100">
+          <ChevronRight className="size-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function SignOutLink({ locale, collapsed }: { locale: string; collapsed: boolean }): React.JSX.Element {
   const anchor = (
     <a href={`/${locale}/auth/signout`} className={cn('flex h-9 items-center rounded-lg px-2.5 text-sm font-medium outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring/50', collapsed && 'w-9 justify-center px-0')}>
@@ -56,15 +83,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ className, locale, permissions
 
   return (
     <aside className={cn('sticky top-0 relative flex h-screen shrink-0 flex-col border-r border-border bg-background/95 backdrop-blur transition-[width] duration-200', expanded ? 'w-56' : 'w-14', className)}>
-      <div className="absolute top-20 -right-3 z-10">
-        <Button variant="secondary" size="sm" iconOnly tooltip={expanded ? 'Collapse sidebar' : 'Expand sidebar'} onClick={handleToggle} className="rounded-full border border-border shadow-md">
-          {expanded ? <ChevronLeft className="size-4" /> : <ChevronRight className="size-4" />}
-        </Button>
-      </div>
-      <div className={cn('flex h-16 shrink-0 items-center border-b border-border px-3', expanded ? 'gap-3' : 'justify-center px-0')}>
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary font-bold text-primary-foreground shadow-sm">C</div>
-        {expanded && <span className="truncate font-semibold">CMS Admin</span>}
-      </div>
+      {expanded ? <ExpandedBrandRow onToggle={handleToggle} /> : <CollapsedBrandRow onToggle={handleToggle} />}
       <nav aria-label="Main navigation" className="flex-1 space-y-1 overflow-y-auto px-2 py-3 scrollbar-thin scrollbar-thumb-border hover:scrollbar-thumb-muted-foreground/40">
         <SidebarNavItem item={DASHBOARD_ITEM} locale={locale} collapsed={!expanded} />
         <SectionLabel label="Contest" collapsed={!expanded} />
