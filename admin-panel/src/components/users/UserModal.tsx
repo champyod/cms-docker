@@ -11,6 +11,7 @@ import { useToast } from '@/components/providers/ToastProvider';
 import { apiClient } from '@/lib/apiClient';
 import { getFieldAccess, stripDisallowedFields } from '@/lib/field-permissions';
 import { cn } from '@/lib/utils';
+import { isKnownLanguageCode, normalizeLanguageCode } from '@/lib/constants/languages';
 import type { PasswordKind } from '@/lib/password-format';
 import type { UsersPageRow } from '@/lib/prisma-selects';
 
@@ -63,13 +64,44 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess, per
 
   const updateForm = (updates: Partial<UserFormState>) => setFormData({ ...formData, ...updates });
 
+  const [langDraft, setLangDraft] = useState<string>('');
+
+  function normalizePreferred(items: string[]): string[] {
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const raw of items) {
+      const code = normalizeLanguageCode(raw);
+      if (!code) continue;
+      if (seen.has(code)) continue;
+      seen.add(code);
+      result.push(code);
+    }
+    return result;
+  }
+
+  function addPreferredLanguage(): void {
+    const code = normalizeLanguageCode(langDraft);
+    if (!code) return;
+    const next = normalizePreferred([...formData.preferred_languages, code]);
+    updateForm({ preferred_languages: next });
+    setLangDraft('');
+  }
+
+  function removePreferredLanguage(code: string): void {
+    updateForm({ preferred_languages: formData.preferred_languages.filter((item) => item !== code) });
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     try {
-      const allowed = stripDisallowedFields('users', formData as unknown as Record<string, unknown>, effective);
+      const normalized = {
+        ...formData,
+        preferred_languages: normalizePreferred(formData.preferred_languages),
+      };
+      const allowed = stripDisallowedFields('users', normalized as unknown as Record<string, unknown>, effective);
       const payload: Record<string, unknown> = { ...allowed };
       if (payload.password === '') delete payload.password;
       if (!payload.password) delete payload.password;
@@ -216,6 +248,59 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess, per
             className={inputClassName}
             placeholder="Asia/Bangkok"
           />
+        </RestrictedField>
+        <RestrictedField
+          canRead={fieldAccess.preferred_languages.canRead}
+          canUpdate={fieldAccess.preferred_languages.canUpdate}
+          label="Preferred Languages"
+          lockHint="Read-only — you lack user:update"
+        >
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
+              {formData.preferred_languages.length === 0 ? (
+                <span className="text-xs text-muted-foreground">No languages selected.</span>
+              ) : (
+                formData.preferred_languages.map((code) => {
+                  const known = isKnownLanguageCode(code);
+                  return (
+                    <span key={code} className={cn('inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs', known ? 'border-border bg-muted' : 'border-amber-500/40 bg-amber-500/10 text-amber-700')}>
+                      <span className="font-mono">{code}</span>
+                      {!known ? <span className="text-[10px]">unknown</span> : null}
+                      {fieldAccess.preferred_languages.canUpdate ? (
+                        <button type="button" onClick={() => removePreferredLanguage(code)} className="ml-1 text-muted-foreground hover:text-foreground">×</button>
+                      ) : null}
+                    </span>
+                  );
+                })
+              )}
+            </div>
+            {fieldAccess.preferred_languages.canUpdate ? (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={langDraft}
+                  onChange={(e) => setLangDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addPreferredLanguage();
+                    }
+                  }}
+                  placeholder="en, th, fr…"
+                  className={cn(inputClassName, 'font-mono')}
+                />
+                <Button type="button" variant="secondary" onClick={addPreferredLanguage} disabled={!normalizeLanguageCode(langDraft)}>
+                  Add
+                </Button>
+              </div>
+            ) : null}
+            {(() => {
+              const pending = normalizeLanguageCode(langDraft);
+              if (!pending || isKnownLanguageCode(pending)) return null;
+              return <p className="text-xs text-amber-600">Unrecognised code — will be saved as “{pending}” but may not match any statement. Use a code from the shared languages list (languages.json).</p>;
+            })()}
+            <p className="text-xs text-muted-foreground">Stored normalized (trim + lowercase). Exact match against statement.language.</p>
+          </div>
         </RestrictedField>
         {!user && (
           <>
