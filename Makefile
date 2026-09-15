@@ -277,6 +277,18 @@ prisma-sync:
 	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
 	if [ "$$DEPLOY_TYPE" = "img" ] && docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-admin-panel-next$$'; then \
+		echo "Checking if baseline is needed (P3005 mitigation)..."; \
+		_need_baseline=0; \
+		if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-database$$'; then \
+			if docker exec -i -e PGPASSWORD="$$POSTGRES_PASSWORD" cms-database psql -U "$${POSTGRES_USER:-cmsuser}" -d "$${POSTGRES_DB:-cmsdb}" -tAc "SELECT (to_regclass('public._prisma_migrations') IS NULL AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public'))" 2>/dev/null | grep -q "t"; then _need_baseline=1; fi; \
+		fi; \
+		if [ "$$_need_baseline" = "1" ]; then \
+			echo "Baseline needed — marking 20260910000000_baseline_marker as applied..."; \
+			docker exec -e DATABASE_URL="$$OWNER_URL_NET" cms-admin-panel-next sh -lc "cd /repo-root/admin-panel && { ./node_modules/.bin/prisma migrate resolve --applied 20260910000000_baseline_marker || npx --yes prisma@6 migrate resolve --applied 20260910000000_baseline_marker; }"; \
+			st=$$?; if [ $$st -ne 0 ]; then echo "Baseline resolve failed — check logs above" >&2; exit $$st; fi; \
+		else \
+			echo "Baseline not needed (empty DB or already migrated)"; \
+		fi; \
 		echo "img mode -> running prisma migrate deploy inside cms-admin-panel-next (owner credentials)"; \
 		docker exec -e DATABASE_URL="$$OWNER_URL_NET" cms-admin-panel-next sh -lc "cd /repo-root/admin-panel && { ./node_modules/.bin/prisma migrate deploy || npx --yes prisma@6 migrate deploy; }"; \
 		st=$$?; \
@@ -285,8 +297,36 @@ prisma-sync:
 		echo "ERROR: admin-panel directory not found. Clone the repository with admin-panel/ or check your working directory." >&2; \
 		exit 1; \
 	elif command -v bun >/dev/null 2>&1; then \
+		echo "Checking if baseline is needed (P3005 mitigation)..."; \
+		_need_baseline=0; \
+		if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-database$$'; then \
+			if docker exec -i -e PGPASSWORD="$$POSTGRES_PASSWORD" cms-database psql -U "$${POSTGRES_USER:-cmsuser}" -d "$${POSTGRES_DB:-cmsdb}" -tAc "SELECT (to_regclass('public._prisma_migrations') IS NULL AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public'))" 2>/dev/null | grep -q "t"; then _need_baseline=1; fi; \
+		elif command -v psql >/dev/null 2>&1; then \
+			if PGPASSWORD="$$POSTGRES_PASSWORD" psql -h localhost -p "$${POSTGRES_PORT:-5432}" -U "$${POSTGRES_USER:-cmsuser}" -d "$${POSTGRES_DB:-cmsdb}" -tAc "SELECT (to_regclass('public._prisma_migrations') IS NULL AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public'))" 2>/dev/null | grep -q "t"; then _need_baseline=1; fi; \
+		fi; \
+		if [ "$$_need_baseline" = "1" ]; then \
+			echo "Baseline needed — marking 20260910000000_baseline_marker as applied..."; \
+			cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" bun x prisma@6 migrate resolve --applied 20260910000000_baseline_marker; \
+			st=$$?; if [ $$st -ne 0 ]; then echo "Baseline resolve failed — check logs above" >&2; exit $$st; fi; \
+		else \
+			echo "Baseline not needed (empty DB or already migrated)"; \
+		fi; \
 		cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" bun x prisma@6 migrate deploy; \
 	elif command -v npm >/dev/null 2>&1; then \
+		echo "Checking if baseline is needed (P3005 mitigation)..."; \
+		_need_baseline=0; \
+		if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-database$$'; then \
+			if docker exec -i -e PGPASSWORD="$$POSTGRES_PASSWORD" cms-database psql -U "$${POSTGRES_USER:-cmsuser}" -d "$${POSTGRES_DB:-cmsdb}" -tAc "SELECT (to_regclass('public._prisma_migrations') IS NULL AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public'))" 2>/dev/null | grep -q "t"; then _need_baseline=1; fi; \
+		elif command -v psql >/dev/null 2>&1; then \
+			if PGPASSWORD="$$POSTGRES_PASSWORD" psql -h localhost -p "$${POSTGRES_PORT:-5432}" -U "$${POSTGRES_USER:-cmsuser}" -d "$${POSTGRES_DB:-cmsdb}" -tAc "SELECT (to_regclass('public._prisma_migrations') IS NULL AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public'))" 2>/dev/null | grep -q "t"; then _need_baseline=1; fi; \
+		fi; \
+		if [ "$$_need_baseline" = "1" ]; then \
+			echo "Baseline needed — marking 20260910000000_baseline_marker as applied..."; \
+			cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" npx prisma@6 migrate resolve --applied 20260910000000_baseline_marker; \
+			st=$$?; if [ $$st -ne 0 ]; then echo "Baseline resolve failed — check logs above" >&2; exit $$st; fi; \
+		else \
+			echo "Baseline not needed (empty DB or already migrated)"; \
+		fi; \
 		cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" npx prisma@6 migrate deploy; \
 	else \
 		echo "ERROR: Neither 'bun' nor 'npm' found in PATH. Install Bun (https://bun.sh) or Node.js/npm, then run: make prisma-sync" >&2; \
