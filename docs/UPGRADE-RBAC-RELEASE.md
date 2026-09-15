@@ -29,11 +29,11 @@ Take a backup you can verify:
 
 ## Step 1 — get the new code
 
-The work is on `feat/requirements-catalog`. Either merge it to your deploy branch first, or check it out directly:
+The work is on `feat/migration-management`. Either merge it to your deploy branch first, or check it out directly:
 
 ```bash
 git fetch origin
-git checkout feat/requirements-catalog
+git checkout feat/migration-management
 ```
 
 ## Step 2 — run the upgrade
@@ -44,7 +44,7 @@ This is the whole migration. It pulls code, regenerates env, creates the DB role
 ./cms update-server
 ```
 
-Equivalent without the TUI: `make update-server` or `bash scripts/__update-server.sh`.
+Equivalent without the TUI: `./cms update-server` or `bash scripts/__update-server.sh`.
 
 What it does, in order, and why the order matters:
 
@@ -83,10 +83,11 @@ docker exec cms-database psql -U cmsuser -d cmsdb -tAc \
   "SELECT count(*) FROM information_schema.columns
    WHERE table_name='admins' AND column_name LIKE 'permission\_%';"   # expect 0
 
-# RLS is on everywhere
+# RLS is on everywhere (application tables; _prisma_migrations has no RLS — §7)
 docker exec cms-database psql -U cmsuser -d cmsdb -tAc \
   "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
    WHERE n.nspname='public' AND c.relkind='r'
+     AND c.relname <> '_prisma_migrations'
      AND (NOT c.relrowsecurity OR NOT c.relforcerowsecurity);"        # expect 0
 
 # backups work under the new RLS
