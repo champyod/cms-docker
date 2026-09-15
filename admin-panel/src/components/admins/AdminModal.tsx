@@ -36,11 +36,17 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
   const [passwordKind, setPasswordKind] = useState<PasswordKind>('bcrypt');
   const [reveal, setReveal] = useState<PasswordRevealState>({ state: 'none' });
 
-  useEffect(() => {
+  const sessionKey = `${isOpen}:${initialData?.id ?? 'new'}`;
+  const [renderedSession, setRenderedSession] = useState(sessionKey);
+  if (renderedSession !== sessionKey) {
+    setRenderedSession(sessionKey);
     setFormData(initialData ? formFromAdmin(initialData) : EMPTY_ADMIN_FORM);
     setError('');
     setPasswordKind('bcrypt');
     setReveal({ state: 'none' });
+  }
+
+  useEffect(() => {
     if (!initialData || !isOpen) return;
 
     let cancelled = false;

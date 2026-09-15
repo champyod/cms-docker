@@ -31,19 +31,26 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
   const [passwordKind, setPasswordKind] = useState<PasswordKind>('bcrypt');
   const [rows, setRows] = useState(selectedUsers);
   const [teamsOptions, setTeamsOptions] = useState<string[]>([]);
+  const [renderedUsers, setRenderedUsers] = useState<SelectedUser[] | null>(null);
+  if (renderedUsers !== selectedUsers) {
+    setRenderedUsers(selectedUsers);
+    setRows(selectedUsers.map((user) => ({ ...user, password: null })));
+  }
 
   const { revealedIds, revealingIds, allRevealed, revealRowPassword, toggleAllRevealed } = useBulkReveal(rows, setRows);
 
   useEffect(() => {
-    setRows(selectedUsers.map((user) => ({ ...user, password: null })));
-  }, [selectedUsers]);
-
-  useEffect(() => {
-    if (contests.length > 0 && !contests.find((contest) => contest.id === selectedContestId)) setSelectedContestId(contests[0].id);
+    if (contests.length === 0 || contests.some((contest) => contest.id === selectedContestId)) return;
+    queueMicrotask(() => {
+      setSelectedContestId(contests[0].id);
+    });
   }, [contests, selectedContestId]);
 
   useEffect(() => {
-    if (contests.length > 0 && !contests.find((contest) => contest.id === teamContestId)) setTeamContestId(contests[0].id);
+    if (contests.length === 0 || contests.some((contest) => contest.id === teamContestId)) return;
+    queueMicrotask(() => {
+      setTeamContestId(contests[0].id);
+    });
   }, [contests, teamContestId]);
 
   useEffect(() => {
