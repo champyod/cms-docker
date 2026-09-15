@@ -14,8 +14,10 @@ import {
 import {
   runDeployContest,
   fetchDeployStatus,
+  getActiveDeployOperation as getActiveDeployOperationLib,
 } from '@/lib/deploy-operations';
 import type {
+  ActiveDeployOperation,
   DeployContestResult,
   DeployStatusResult,
 } from '@/lib/deploy-operations';
@@ -109,6 +111,11 @@ export async function deployContest(contestId: number): Promise<DeployContestRes
 export async function getDeployStatus(operationId: string): Promise<DeployStatusResult> {
   await ensurePermission('all');
   return fetchDeployStatus(operationId);
+}
+
+export async function getActiveDeployOperation(): Promise<ActiveDeployOperation | null> {
+  await ensurePermission('all');
+  return getActiveDeployOperationLib();
 }
 
 export async function triggerManualBackup() {
