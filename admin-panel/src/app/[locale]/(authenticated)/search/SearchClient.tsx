@@ -16,19 +16,18 @@ export default function SearchClient() {
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
   const query = searchParams.get('q') || '';
-  const [results, setResults] = useState<SearchResults | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [resultForQuery, setResultForQuery] = useState<{ query: string; data: SearchResults } | null>(null);
+
+  const results = resultForQuery?.query === query ? resultForQuery.data : null;
+  const loading = query.length > 0 && resultForQuery?.query !== query;
 
   useEffect(() => {
-    if (!query) {
-      setResults(null);
-      return;
-    }
-    setLoading(true);
-    searchAll(query).then(data => {
-      setResults(data);
-      setLoading(false);
+    if (!query) return;
+    let cancelled = false;
+    searchAll(query).then((data) => {
+      if (!cancelled) setResultForQuery({ query, data });
     });
+    return () => { cancelled = true; };
   }, [query]);
 
   if (!query) return <div className="text-muted-foreground">Please enter a search term.</div>;

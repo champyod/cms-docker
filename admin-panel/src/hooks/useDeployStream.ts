@@ -27,7 +27,7 @@ export function useDeployStream(
   stopStreaming: () => void;
 } {
   const eventSourceRef = useRef<EventSource | null>(null);
-  const lastChangeAtRef = useRef<number>(Date.now());
+  const lastChangeAtRef = useRef<number>(0);
   const idleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const toastHelper = createDeployToast();
 
