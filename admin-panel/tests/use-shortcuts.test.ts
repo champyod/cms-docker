@@ -91,8 +91,28 @@ describe('g-chord sequencing', () => {
 
   it('covers every required navigation route', () => {
     const paths = NAVIGATION_BINDINGS.map((binding) => binding.path).sort();
+    // Why: chord must expose every exposeIn:'chord' entry so sidebar routes are reachable by g-chord.
     expect(paths).toEqual(
-      ['', '/containers', '/contests', '/deployments', '/resources', '/settings', '/submissions', '/tasks', '/teams', '/users'].sort()
+      [
+        '',
+        '/admins',
+        '/appearance',
+        '/audit',
+        '/containers',
+        '/contests',
+        '/deployments',
+        '/docs',
+        '/groups',
+        '/maintenance',
+        '/ranking',
+        '/resources',
+        '/search',
+        '/settings',
+        '/submissions',
+        '/tasks',
+        '/teams',
+        '/users',
+      ].sort()
     );
   });
 });

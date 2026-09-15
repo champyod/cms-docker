@@ -1,6 +1,8 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import { NAV_REGISTRY } from '@/lib/nav-registry';
+import { NAV_CHORD_KEY_BY_PATH } from '@/lib/nav-chord';
 
 export const CHORD_TIMEOUT_MS = 1000;
 export const CHORD_PREFIX_KEY = 'g';
@@ -14,18 +16,23 @@ export interface ShortcutRouteBinding {
   readonly path: string;
 }
 
-export const NAVIGATION_BINDINGS: readonly ShortcutRouteBinding[] = [
-  { key: 'c', label: 'Contests', path: '/contests' },
-  { key: 't', label: 'Tasks', path: '/tasks' },
-  { key: 'u', label: 'Users', path: '/users' },
-  { key: 'm', label: 'Teams', path: '/teams' },
-  { key: 's', label: 'Submissions', path: '/submissions' },
-  { key: 'd', label: 'Dashboard', path: '' },
-  { key: 'e', label: 'Settings', path: '/settings' },
-  { key: 'r', label: 'Resources', path: '/resources' },
-  { key: 'p', label: 'Deployments', path: '/deployments' },
-  { key: 'o', label: 'Containers', path: '/containers' },
-];
+function buildNavigationBindings(): readonly ShortcutRouteBinding[] {
+  const seenKeys = new Set<string>();
+  const bindings: ShortcutRouteBinding[] = [];
+  for (const entry of NAV_REGISTRY) {
+    if (!entry.exposeIn.includes('chord')) continue;
+    const mappedKey = NAV_CHORD_KEY_BY_PATH.get(entry.path);
+    if (!mappedKey) continue;
+    if (seenKeys.has(mappedKey)) continue;
+    seenKeys.add(mappedKey);
+    // Registry uses '/' for dashboard; chord navigation expects '' so locale href is /locale not /locale/
+    const path = entry.path === '/' ? '' : entry.path;
+    bindings.push({ key: mappedKey, label: entry.label, path });
+  }
+  return bindings;
+}
+
+export const NAVIGATION_BINDINGS: readonly ShortcutRouteBinding[] = buildNavigationBindings();
 
 const NAVIGATION_BY_KEY: ReadonlyMap<string, ShortcutRouteBinding> = new Map(
   NAVIGATION_BINDINGS.map((binding) => [binding.key, binding])
