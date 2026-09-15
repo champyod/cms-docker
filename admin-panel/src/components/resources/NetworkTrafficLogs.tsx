@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { getNetworkTrafficLogs } from '@/app/actions/docker-ops';
 import { Card } from '@/components/core/Card';
 import { SkeletonText } from '@/components/core/Skeleton';
@@ -20,7 +20,7 @@ export function NetworkTrafficLogs() {
   const [limit, setLimit] = useState(20);
   const [loading, setLoading] = useState(true);
 
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     try {
       const result = await getNetworkTrafficLogs(limit);
       if (result.success) {
@@ -31,13 +31,13 @@ export function NetworkTrafficLogs() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [limit]);
 
   useEffect(() => {
-    fetchLogs();
+    void fetchLogs();
     const interval = setInterval(fetchLogs, 5000);
     return () => clearInterval(interval);
-  }, [limit]);
+  }, [fetchLogs]);
 
   return (
     <Card className="p-6">

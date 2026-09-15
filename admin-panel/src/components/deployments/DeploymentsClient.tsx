@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { readEnvFile, updateEnvFile } from '@/app/actions/env';
 import { getAvailableContests } from '@/app/actions/contests';
@@ -47,7 +47,7 @@ export function DeploymentsClient() {
     const isDirty = JSON.stringify(globalSettings) !== originalGlobal;
     const hasChangedContest = selectedContestId !== null && selectedContestId !== activeContestId;
 
-    const applyEnvSnapshot = (envResult: Awaited<ReturnType<typeof readEnvFile>>) => {
+    const applyEnvSnapshot = useCallback((envResult: Awaited<ReturnType<typeof readEnvFile>>) => {
         let actualActiveId: number | null = null;
         if (envResult.success && envResult.config) {
             const activeId = parseInt(envResult.config.ACTIVE_CONTEST_ID || envResult.config.CONTEST_ID || '0');
@@ -62,9 +62,9 @@ export function DeploymentsClient() {
             setOriginalGlobal(JSON.stringify(globals));
         }
         return actualActiveId;
-    };
+    }, []);
 
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         setLoading(true);
         const [envResult, contestsResult, containerResult] = await Promise.all([
             readEnvFile('.env.contest'),
@@ -90,9 +90,11 @@ export function DeploymentsClient() {
         }
 
         setLoading(false);
-    };
+    }, [applyEnvSnapshot]);
 
-    useEffect(() => { loadData(); }, []);
+    useEffect(() => {
+        queueMicrotask(() => void loadData());
+    }, [loadData]);
 
     useEffect(() => {
         let cancelled = false;
@@ -132,7 +134,7 @@ export function DeploymentsClient() {
         } else if (deployState.phase === 'idle' && saving) {
             setSaving(false);
         }
-    }, [deployState.phase]);
+    }, [deployState.phase, deployState.contestId, availableContests, saving]);
 
     const handleSaveSettings = async () => {
         setSaving(true);

@@ -55,7 +55,7 @@ export function ContainersClient() {
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
 
-  const loadContainers = async () => {
+  const loadContainers = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getContainers();
@@ -86,7 +86,7 @@ export function ContainersClient() {
       });
     }
     setLoading(false);
-  };
+  }, [addToast]);
 
   const checkDiscordStatus = useCallback(async (): Promise<void> => {
     try {
@@ -98,11 +98,11 @@ export function ContainersClient() {
   }, []);
 
   useEffect(() => {
-    loadContainers();
-    checkDiscordStatus();
+    queueMicrotask(() => void loadContainers());
+    queueMicrotask(() => void checkDiscordStatus());
     const interval = setInterval(loadContainers, 10000);
     return () => clearInterval(interval);
-  }, [checkDiscordStatus]);
+  }, [loadContainers, checkDiscordStatus]);
 
   const handleToggleSelection = useCallback((containerId: string): void => {
     setSelectedIds((previous) => {
