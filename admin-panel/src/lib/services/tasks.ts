@@ -39,10 +39,63 @@ export async function listTasks(params: { page?: number; search?: string } = {})
   ]);
   return { tasks: rawTasks.map((t) => ({ ...t, diagnostics: buildDiagnosticsForLoadedTask(t) })), totalPages: Math.ceil(total / TASKS_PER_PAGE), total };
 }
-export async function getTask(id: number): Promise<Prisma.tasksGetPayload<{ include: { contests: { select: { id: true; name: true; start: true; stop: true; analysis_start: true; analysis_stop: true } }; statements: { select: { id: true; language: true } }; attachments: true; datasets_datasets_task_idTotasks: { include: { testcases: { select: { id: true; codename: true } }; managers: true } }; _count: { select: { submissions: true } } } }> | null> {
+type TaskDetailInclude = {
+  contests: { select: { id: true; name: true; start: true; stop: true; analysis_start: true; analysis_stop: true } };
+  statements: { select: { id: true; language: true; digest: true } };
+  attachments: true;
+  datasets_datasets_task_idTotasks: { include: { testcases: { select: { id: true; codename: true } }; managers: true } };
+  _count: { select: { submissions: true } };
+};
+export type EnrichedStatement = { id: number; language: string; digest: string; filename: string; size: number | null; uploadedAt: string | null };
+export type TaskWithStatements = Prisma.tasksGetPayload<{ include: TaskDetailInclude }> & { statements: EnrichedStatement[] };
+
+export async function getTask(id: number): Promise<TaskWithStatements | null> {
   await requirePermission('task:read');
-  return prisma.tasks.findUnique({ where: { id }, include: { contests: { select: { id: true, name: true, start: true, stop: true, analysis_start: true, analysis_stop: true } }, statements: { select: { id: true, language: true } }, attachments: true, datasets_datasets_task_idTotasks: { include: { testcases: { select: { id: true, codename: true } }, managers: true } }, _count: { select: { submissions: true } } } });
+  const include = {
+    contests: { select: { id: true, name: true, start: true, stop: true, analysis_start: true, analysis_stop: true } },
+    statements: { select: { id: true, language: true, digest: true } },
+    attachments: true,
+    datasets_datasets_task_idTotasks: { include: { testcases: { select: { id: true, codename: true } }, managers: true } },
+    _count: { select: { submissions: true } },
+  } as const;
+  const task = await prisma.tasks.findUnique({ where: { id }, include });
+  if (!task) return null;
+  const enriched = await enrichStatements(id, task.statements as Array<{ id: number; language: string; digest: string }>);
+  return { ...task, statements: enriched } as unknown as TaskWithStatements;
 }
+
+
+async function enrichStatements(taskId: number, statements: Array<{ id: number; language: string; digest: string }>): Promise<EnrichedStatement[]> {
+  if (statements.length === 0) return [];
+  const sizeMap = new Map<string, number>();
+  for (const s of statements) {
+    try {
+      const rows = await prisma.$queryRaw<Array<{ size: number }>>`SELECT octet_length(lo_get(lob_oid))::int AS size FROM fsobjects WHERE digest = ${s.digest}`;
+      if (rows.length > 0) sizeMap.set(s.digest, Number(rows[0].size));
+    } catch {}
+  }
+  const dateMap = new Map<string, string>();
+  try {
+    const audits = await prisma.audit_log.findMany({ where: { verb: 'statement:create', entity: 'statement' }, orderBy: { timestamp: 'desc' }, take: 100 });
+    for (const s of statements) {
+      const hit = audits.find((a) => {
+        const av = a.after_values as Record<string, unknown> | null;
+        if (!av) return false;
+        const t = String((av.taskId as unknown) ?? (av.task_id as unknown) ?? '');
+        const l = String((av.language as unknown) ?? '');
+        return t === String(taskId) && l === s.language;
+      });
+      if (hit) dateMap.set(s.language, hit.timestamp.toISOString());
+    }
+  } catch {}
+  return statements.map((s) => ({
+    ...s,
+    filename: `${s.language}.pdf`,
+    size: sizeMap.get(s.digest) ?? null,
+    uploadedAt: dateMap.get(s.language) ?? null,
+  }));
+}
+
 export async function getTaskDiagnostics(taskId: number): Promise<Awaited<ReturnType<typeof computeTaskDiagnostics>>> {
   await requirePermission('task:read');
   if (!taskId || Number.isNaN(taskId)) return [];
