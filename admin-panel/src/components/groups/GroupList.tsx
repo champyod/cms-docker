@@ -9,6 +9,7 @@ import { Card } from '@/components/core/Card';
 import { Dialog } from '@/components/core/Dialog';
 import { Input } from '@/components/core/Input';
 import { Badge } from '@/components/core/Badge';
+import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
 import {
   Table,
   TableHeader,
@@ -263,7 +264,38 @@ export function GroupList({
         )}
       </div>
 
-      <Table>
+      <Table
+        mobileCards={groups.map((group) => (
+          <MobileCard key={group.id}>
+            <MobileCardRow label={dict.name} value={group.name} />
+            <MobileCardRow label={dict.description} value={group.description ?? '—'} />
+            {group.is_seeded && <MobileCardRow label={dict.isSeeded} value={<Badge variant="cyan">{dict.isSeeded}</Badge>} />}
+            <MobileCardRow label={dict.permissions} value={group.permissionKeys.length} />
+            <div className="flex items-center justify-end gap-1 pt-2">
+              {canUpdate && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={Pencil}
+                  iconOnly
+                  tooltip={dict.editTooltip}
+                  onClick={() => handleOpenEdit(group)}
+                />
+              )}
+              {canDelete && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={Trash2}
+                  iconOnly
+                  tooltip={dict.deleteTooltip}
+                  onClick={() => handleOpenDelete(group)}
+                />
+              )}
+            </div>
+          </MobileCard>
+        ))}
+      >
         <TableHeader>
           <TableRow>
             <TableHead>{dict.name}</TableHead>
