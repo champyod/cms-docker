@@ -40,7 +40,7 @@ function TabBar({ active, onChange }: { active: TabKey; onChange: (k: TabKey) =>
           type="button"
           onClick={() => onChange(tab.key)}
           className={cn(
-            'rounded-lg px-4 py-1.5 text-sm font-medium transition-colors',
+            'rounded-lg px-4 py-2.5 sm:py-1.5 min-h-11 sm:min-h-0 text-sm font-medium transition-colors',
             active === tab.key ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
           )}
         >
