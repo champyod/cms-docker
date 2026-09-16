@@ -5,6 +5,7 @@ import path from 'path';
 import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
 import { recordAudit } from '@/lib/audit';
+import { validateNotificationEnvUpdates } from '@/lib/discord-webhook';
 
 const ALLOWED_ENV_FILES = new Set(['.env', '.env.contest']);
 
@@ -41,12 +42,17 @@ export async function readEnvFile(filename: string) {
 
 export async function updateEnvFile(filename: string, updates: Record<string, string>) {
   await ensurePermission('env:update');
+  const checked = validateNotificationEnvUpdates(updates);
+  if (!checked.ok) {
+    return { success: false, error: checked.error };
+  }
+  const validatedUpdates = checked.updates;
   try {
     const repoRoot = getRepoRoot();
     const envPath = resolveEnvPath(repoRoot, filename);
     let content = await fs.readFile(envPath, 'utf-8');
     
-    Object.entries(updates).forEach(([key, value]) => {
+    Object.entries(validatedUpdates).forEach(([key, value]) => {
       if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
         return;
       }
@@ -64,7 +70,7 @@ export async function updateEnvFile(filename: string, updates: Record<string, st
     await recordAudit({
       verb: 'env:update',
       entity: 'env',
-      afterValues: { filename, changedKeys: Object.keys(updates).filter((k) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(k)) },
+      afterValues: { filename, changedKeys: Object.keys(validatedUpdates).filter((k) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(k)) },
       result: 'success',
     });
     return { success: true };

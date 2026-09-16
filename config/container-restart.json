@@ -1,4 +1,5 @@
 {
   "// Note": "This file tracks container restart policies and counts",
-  "// Format": "{ containerId: { autoRestart: boolean, maxRestarts: number, currentRestarts: number } }"
+  "// Format": "{ containerId: { autoRestart: boolean, maxRestarts: number, currentRestarts: number, discordNotifications: boolean } }",
+  "// Readers": "scripts/__monitor.sh (should_suppress_notification) and the admin panel container settings; discordNotifications=false suppresses every alert for that container"
 }
