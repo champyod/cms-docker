@@ -40,17 +40,25 @@ function OverlayBody({ locale, permissionKeys, onClose }: { locale: string; perm
           {section.entries
             .filter((entry) => entry.path !== '/docs')
             .map((entry) => (
-              <SidebarNavItem key={entry.path} entry={entry} locale={locale} collapsed={false} onClick={onClose} />
+              <SidebarNavItem key={entry.path} entry={entry} locale={locale} collapsed={false} density="touch" onClick={onClose} />
             ))}
         </Fragment>
       ))}
-      {docsEntry && <SidebarNavItem entry={docsEntry} locale={locale} collapsed={false} onClick={onClose} />}
+      {docsEntry && <SidebarNavItem entry={docsEntry} locale={locale} collapsed={false} density="touch" onClick={onClose} />}
       <SignOutLink locale={locale} collapsed={false} />
     </div>
   );
 }
 
 export function FullScreenNavOverlay({ locale, permissionKeys, open, onClose }: FullScreenNavOverlayProps): React.JSX.Element | null {
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [open]);
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (event: KeyboardEvent): void => {
