@@ -215,6 +215,14 @@ jobs:
         working-directory: admin-panel
         run: bun install --frozen-lockfile
 
+      # WHY: the Prisma client is generated code and is not committed, so a clean
+      # checkout has no model types. Without this, every callback parameter infers
+      # as `any` and `@prisma/client` exports no `Prisma` namespace, producing a
+      # wall of type errors that say nothing about the change under review.
+      - name: Generate Prisma client
+        working-directory: admin-panel
+        run: bunx prisma generate
+
       - name: Type check
         working-directory: admin-panel
         run: bunx tsc --noEmit
