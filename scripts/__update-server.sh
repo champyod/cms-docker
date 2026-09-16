@@ -150,26 +150,18 @@ fi
 log "Detected active stacks: core=$HAS_CORE admin=$HAS_ADMIN contest=$HAS_CONTEST worker=$HAS_WORKER infra=$HAS_INFRA"
 
 update_worker_shards() {
-    local mode="$1" shard_name idx env_file
-    local shard_count
-    shard_count="$(docker ps -a --format '{{.Names}}' | grep -c '^cms-worker-[0-9]\+$' || true)"
-    shard_count="${shard_count:-0}"
-    if [ "$shard_count" -gt 0 ]; then
-        log "Updating $shard_count worker shard(s)..."
-        for shard_name in $(docker ps -a --format '{{.Names}}' | grep '^cms-worker-[0-9]\+$'); do
-            idx=${shard_name#cms-worker-}
-            env_file="workers/.env.worker.instance$idx"
-            if [ -f "$env_file" ]; then
-                log "Restarting shard $idx..."
-                if [ "$mode" = "img" ]; then
-                    docker compose --env-file "$env_file" -p "cms-worker-$idx" -f docker-compose.worker.yml up -d --no-build
-                else
-                    log "Restarting shard $idx (source build)..."
-                    docker compose --env-file "$env_file" -p "cms-worker-$idx" -f docker-compose.worker.yml up -d --build
-                fi
-            fi
-        done
-    elif [ "$mode" = "img" ]; then
+    # WHY delegate to the canonical deploy path instead of re-running compose
+    # here: shards are owned by per-shard compose projects (cw<N>) that only
+    # __worker_tui.sh creates. A re-deploy from this script under a different
+    # project name and compose file made compose treat the live containers as
+    # foreign and attempt to CREATE them again, aborting the whole update with
+    # a "container name already in use" conflict. Going through the same entry
+    # point as `make worker` keeps project name, compose file, the shard
+    # registry (which shards exist, which are remote-only) and pull/build mode
+    # in one place, so the update path can no longer drift from a normal
+    # deploy.
+    local mode="$1"
+    if [ "$mode" = "img" ]; then
         make worker-img
     else
         make worker
