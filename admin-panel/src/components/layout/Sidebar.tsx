@@ -49,9 +49,9 @@ function CollapsedBrandRow({ onToggle }: { onToggle: () => void }): React.JSX.El
   );
 }
 
-export function SignOutLink({ locale, collapsed }: { locale: string; collapsed: boolean }): React.JSX.Element {
+export function SignOutLink({ locale, collapsed, density = 'compact' }: { locale: string; collapsed: boolean; density?: 'compact' | 'touch' }): React.JSX.Element {
   const anchor = (
-    <a href={`/${locale}/auth/signout`} className={cn('flex h-9 items-center rounded-lg px-2.5 text-sm font-medium outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring/50', collapsed && 'w-9 justify-center px-0')}>
+    <a href={`/${locale}/auth/signout`} className={cn('flex items-center rounded-lg px-2.5 text-sm font-medium outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring/50', density === 'touch' ? 'h-11' : 'h-9', collapsed && 'w-9 justify-center px-0')}>
       <LogOut className="size-4 shrink-0" aria-hidden />
       {!collapsed && <span className="ml-3 truncate">Sign Out</span>}
     </a>

@@ -45,7 +45,7 @@ function OverlayBody({ locale, permissionKeys, onClose }: { locale: string; perm
         </Fragment>
       ))}
       {docsEntry && <SidebarNavItem entry={docsEntry} locale={locale} collapsed={false} density="touch" onClick={onClose} />}
-      <SignOutLink locale={locale} collapsed={false} />
+      <SignOutLink locale={locale} collapsed={false} density="touch" />
     </div>
   );
 }
