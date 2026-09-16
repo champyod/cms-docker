@@ -1,14 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { readEnvFile, updateEnvFile } from '@/app/actions/env';
 import { getAvailableContests } from '@/app/actions/contests';
 import { getContainerContestId } from '@/app/actions/docker';
+import { getActiveDeployOperation } from '@/app/actions/services';
 import { useDeployContest } from '@/hooks/useDeployContest';
 import { PageContent, PageHeader, Stack } from '@/components/core/Layout';
 import { Loading } from '@/components/core/Loading';
+import { Button } from '@/components/core/Button';
 import { useToast } from '@/components/providers/ToastProvider';
 import { MismatchBanner } from '@/components/deployments/MismatchBanner';
+import { DeployStatusPanel } from '@/components/deployments/DeployStatusPanel';
 import { ActiveContestCard, ContestOption } from '@/components/deployments/ActiveContestCard';
 import { ContestSettingsForm } from '@/components/deployments/ContestSettingsForm';
 import { WorkersPanel } from '@/components/deployments/WorkersPanel';
@@ -16,7 +20,7 @@ import { useDeployWorkers } from '@/components/deployments/useDeployWorkers';
 
 export function DeploymentsClient() {
     const { addToast } = useToast();
-    const { state: deployState, deploy: handleDeploy, cancel: cancelDeploy, reset: resetDeploy } = useDeployContest();
+    const { state: deployState, deploy: handleDeploy, cancel: cancelDeploy, reset: resetDeploy, resume: resumeDeploy } = useDeployContest();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [availableContests, setAvailableContests] = useState<ContestOption[]>([]);
@@ -43,7 +47,7 @@ export function DeploymentsClient() {
     const isDirty = JSON.stringify(globalSettings) !== originalGlobal;
     const hasChangedContest = selectedContestId !== null && selectedContestId !== activeContestId;
 
-    const applyEnvSnapshot = (envResult: Awaited<ReturnType<typeof readEnvFile>>) => {
+    const applyEnvSnapshot = useCallback((envResult: Awaited<ReturnType<typeof readEnvFile>>) => {
         let actualActiveId: number | null = null;
         if (envResult.success && envResult.config) {
             const activeId = parseInt(envResult.config.ACTIVE_CONTEST_ID || envResult.config.CONTEST_ID || '0');
@@ -58,9 +62,9 @@ export function DeploymentsClient() {
             setOriginalGlobal(JSON.stringify(globals));
         }
         return actualActiveId;
-    };
+    }, []);
 
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         setLoading(true);
         const [envResult, contestsResult, containerResult] = await Promise.all([
             readEnvFile('.env.contest'),
@@ -86,14 +90,28 @@ export function DeploymentsClient() {
         }
 
         setLoading(false);
-    };
+    }, [applyEnvSnapshot]);
 
-    useEffect(() => { loadData(); }, []);
+    useEffect(() => {
+        queueMicrotask(() => void loadData());
+    }, [loadData]);
+
+    useEffect(() => {
+        let cancelled = false;
+        getActiveDeployOperation().then((operation) => {
+            if (!cancelled && operation) resumeDeploy(operation.operationId, operation.contestId);
+        }).catch(() => {});
+        return () => { cancelled = true; };
+    }, [resumeDeploy]);
 
     const handleActivateAndRestart = () => {
         if (!selectedContestId || !hasChangedContest) return;
         setSaving(true);
         handleDeploy(selectedContestId);
+    };
+
+    const handleRefresh = () => {
+        loadData();
     };
 
     useEffect(() => {
@@ -109,17 +127,14 @@ export function DeploymentsClient() {
             getContainerContestId().then((res) => {
                 if (res.success) setContainerContestId(res.contestId);
             }).catch(() => {});
-            resetDeploy();
         } else if (deployState.phase === 'failed' || deployState.phase === 'timeout') {
             setSaving(false);
-            resetDeploy();
         } else if (deployState.phase === 'already_running') {
             setSaving(false);
-            resetDeploy();
         } else if (deployState.phase === 'idle' && saving) {
             setSaving(false);
         }
-    }, [deployState.phase]);
+    }, [deployState.phase, deployState.contestId, availableContests, saving]);
 
     const handleSaveSettings = async () => {
         setSaving(true);
@@ -154,7 +169,20 @@ export function DeploymentsClient() {
             <PageHeader
                 title="Active Contest Deployment"
                 description="Select, activate, and manage the currently deployed contest stack."
+                actions={
+                    <Button variant="secondary" size="sm" icon={RefreshCw} onClick={handleRefresh}>
+                        Refresh
+                    </Button>
+                }
             />
+
+            {deployState.phase !== 'idle' && (
+                <DeployStatusPanel
+                    state={deployState}
+                    onCancel={cancelDeploy}
+                    onReset={resetDeploy}
+                />
+            )}
 
             {hasMismatch && (
                 <MismatchBanner

@@ -21,7 +21,7 @@ import {
 import { hasEffectivePermission } from '@/lib/permission-engine';
 
 /** Where a navigation entry is allowed to appear. */
-export type NavSurface = 'sidebar' | 'palette' | 'chord';
+export type NavSurface = 'sidebar' | 'palette' | 'chord' | 'mobile';
 
 /** Sections are rendered in this order; a group absent from here is not rendered. */
 export const NAV_GROUP_ORDER = ['general', 'contest', 'infrastructure'] as const;
@@ -53,15 +53,15 @@ export interface NavEntry {
  * dictionaries this becomes the single place that needs converting.
  */
 export const NAV_REGISTRY: readonly NavEntry[] = [
-  { path: '/', label: 'Dashboard', icon: Home, group: 'general', exposeIn: ['sidebar', 'palette', 'chord'] },
+  { path: '/', label: 'Dashboard', icon: Home, group: 'general', exposeIn: ['sidebar', 'palette', 'chord', 'mobile'] },
   { path: '/docs', label: 'Documentation', icon: BookOpen, group: 'general', exposeIn: ['sidebar', 'palette', 'chord'] },
   { path: '/search', label: 'Search', icon: Search, group: 'general', exposeIn: ['palette', 'chord'] },
 
-  { path: '/contests', label: 'Contests', icon: Trophy, group: 'contest', permission: 'contest:list', exposeIn: ['sidebar', 'palette', 'chord'] },
-  { path: '/tasks', label: 'Tasks', icon: FileCode, group: 'contest', permission: 'task:list', exposeIn: ['sidebar', 'palette', 'chord'] },
-  { path: '/submissions', label: 'Submissions', icon: Activity, group: 'contest', permission: 'submission:list', exposeIn: ['sidebar', 'palette', 'chord'] },
-  { path: '/users', label: 'Users', icon: Users, group: 'contest', permission: 'user:list', exposeIn: ['sidebar', 'palette', 'chord'] },
-  { path: '/teams', label: 'Teams', icon: Users, group: 'contest', permission: 'team:list', exposeIn: ['sidebar', 'palette', 'chord'] },
+  { path: '/contests', label: 'Contests', icon: Trophy, group: 'contest', permission: 'contest:list', exposeIn: ['sidebar', 'palette', 'chord', 'mobile'] },
+  { path: '/tasks', label: 'Tasks', icon: FileCode, group: 'contest', permission: 'task:list', exposeIn: ['sidebar', 'palette', 'chord', 'mobile'] },
+  { path: '/submissions', label: 'Submissions', icon: Activity, group: 'contest', permission: 'submission:list', exposeIn: ['sidebar', 'palette', 'chord', 'mobile'] },
+  { path: '/users', label: 'Users', icon: Users, group: 'contest', permission: 'user:list', exposeIn: ['sidebar', 'palette', 'chord', 'mobile'] },
+  { path: '/teams', label: 'Teams', icon: Users, group: 'contest', permission: 'team:list', exposeIn: ['sidebar', 'palette', 'chord', 'mobile'] },
 
   { path: '/deployments', label: 'Active Contest', icon: Rocket, group: 'infrastructure', permission: 'deployment:list', exposeIn: ['sidebar', 'palette', 'chord'] },
   { path: '/admins', label: 'Admins', icon: Shield, group: 'infrastructure', permission: 'admin:list', exposeIn: ['sidebar', 'palette', 'chord'] },
@@ -97,4 +97,24 @@ export function entriesByGroup(
     group,
     entries: visible.filter((entry) => entry.group === group),
   })).filter((section) => section.entries.length > 0);
+}
+
+/** Mobile primary bar — ported from the deleted nav module; ordered by MOBILE_PRIMARY_LABELS. */
+export const MOBILE_PRIMARY_LABELS: readonly string[] = ['Dashboard', 'Contests', 'Tasks', 'Users', 'Submissions'];
+
+export const MOBILE_PRIMARY_MAX = 5;
+
+export function buildMobilePrimary(effective: ReadonlySet<string>): NavEntry[] {
+  const ordered = visibleEntries(effective, 'mobile');
+  const byLabel = new Map(ordered.map((entry) => [entry.label, entry]));
+  const primary: NavEntry[] = [];
+  for (const label of MOBILE_PRIMARY_LABELS) {
+    const entry = byLabel.get(label);
+    if (entry && !primary.includes(entry)) primary.push(entry);
+  }
+  for (const entry of ordered) {
+    if (primary.length >= MOBILE_PRIMARY_MAX) break;
+    if (!primary.includes(entry)) primary.push(entry);
+  }
+  return primary.slice(0, MOBILE_PRIMARY_MAX);
 }

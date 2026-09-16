@@ -5,6 +5,7 @@ import { useSyncedState } from '@/hooks/useSyncedState';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
+import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
 import { Edit2, Trash2, Plus, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { updateAdmin, deleteAdmin } from '@/app/actions/admins';
 import { listAdminsAccessSummary, type AdminAccessSummary } from '@/app/actions/adminPermissions';
@@ -84,7 +85,43 @@ export function AdminList({ initialAdmins, actionLabels }: AdminListProps) {
       </div>
 
       <div className="border border-border rounded-xl overflow-hidden bg-card/50">
-        <Table>
+        <Table
+          mobileCards={adminsList.map((admin) => {
+            const names = accessSummary[admin.id]?.groupNames ?? [];
+            const count = accessSummary[admin.id]?.overrideCount ?? 0;
+            const permLabel = names.length > 0 ? names.join(', ') + (count > 0 ? ` (+${count} override${count === 1 ? '' : 's'})` : '') : '—';
+            return (
+              <MobileCard key={admin.id}>
+                <MobileCardRow label="Username" value={admin.username} />
+                <MobileCardRow label="Name" value={admin.name} />
+                <MobileCardRow label="Groups" value={permLabel} />
+              <MobileCardRow label="Status" value={admin.enabled ? 'Enabled' : 'Disabled'} />
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  iconOnly
+                  tooltip={actionLabels.edit}
+                  onClick={() => startEdit(admin)}
+                  className="text-muted-foreground hover:text-primary"
+                >
+                  <Edit2 className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  iconOnly
+                  tooltip={actionLabels.delete}
+                  onClick={() => handleDelete(admin.id)}
+                  className="text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            </MobileCard>
+            );
+          })}
+        >
           <TableHeader>
             <TableRow className="border-b border-border">
               <TableHead className="text-muted-foreground">ID</TableHead>

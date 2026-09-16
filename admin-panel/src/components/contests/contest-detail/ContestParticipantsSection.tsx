@@ -33,10 +33,10 @@ function ParticipationChips({ participation }: { participation: Participation })
 
 function RowActions({ participation, onMarkAsTest, onOpenSettings, onRemove }: Pick<Props, 'onMarkAsTest' | 'onOpenSettings' | 'onRemove'> & { participation: Participation }) {
   return (
-    <div className="flex items-center gap-2">
-      <button onClick={() => onMarkAsTest(participation.id)} className="p-1.5 text-muted-foreground opacity-0 transition-colors hover:text-warning group-hover:opacity-100" title="Mark as Test User"><FlaskConical className="h-4 w-4" /></button>
-      <button onClick={() => onOpenSettings(participation.id, participation.users.username)} className="p-1.5 text-muted-foreground opacity-0 transition-colors hover:text-primary group-hover:opacity-100" title="Settings"><Settings className="h-4 w-4" /></button>
-      <button onClick={() => onRemove(participation.id)} className="p-1.5 text-muted-foreground opacity-0 transition-colors hover:text-destructive group-hover:opacity-100"><Trash2 className="h-4 w-4" /></button>
+    <div className="flex items-center gap-1">
+      <button onClick={() => onMarkAsTest(participation.id)} className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-warning" title="Mark as Test User"><FlaskConical className="h-4 w-4" /></button>
+      <button onClick={() => onOpenSettings(participation.id, participation.users.username)} className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-primary" title="Settings"><Settings className="h-4 w-4" /></button>
+      <button onClick={() => onRemove(participation.id)} aria-label={`Remove ${participation.users.username}`} className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
     </div>
   );
 }
@@ -56,7 +56,7 @@ export function ContestParticipantsSection({ participations, expanded, onToggle,
           </div>
           <div className="divide-y divide-border">
             {participations.map((participation) => (
-              <div key={participation.id} className="group flex items-center justify-between p-4 transition-colors hover:bg-muted/50">
+              <div key={participation.id} className="group flex flex-wrap items-center justify-between gap-3 p-4 transition-colors hover:bg-muted/50">
                 <div className="flex items-center gap-3">
                   <div className="flex h-8 w-8 items-center justify-center rounded-full bg-success/10 text-xs font-bold text-success">{participation.users.username.substring(0, 2).toUpperCase()}</div>
                   <div>
@@ -64,7 +64,7 @@ export function ContestParticipantsSection({ participations, expanded, onToggle,
                     <div className="text-xs text-muted-foreground">{participation.users.first_name} {participation.users.last_name}</div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <ParticipationChips participation={participation} />
                   <RowActions participation={participation} onMarkAsTest={onMarkAsTest} onOpenSettings={onOpenSettings} onRemove={onRemove} />
                 </div>

@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { Badge } from '@/components/core/Badge';
 import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
+import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { useSyncedState } from '@/hooks/useSyncedState';
 
@@ -53,7 +54,56 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage }: 
         </div>
       </div>
 
-      <Table>
+      <Table
+        mobileCards={submissions.map((submission) => {
+          const result = submission.submission_results[0];
+          const score = result?.score;
+          const compilationFailed = result?.compilation_outcome === 'fail';
+          const compiling = result?.compilation_outcome === null;
+          const evaluating = !compilationFailed && result?.evaluation_outcome === null;
+          return (
+            <MobileCard key={submission.id}>
+              <MobileCardRow label="ID" value={`#${submission.id}`} />
+              <MobileCardRow label="Time" value={formatDate(submission.timestamp)} />
+              <MobileCardRow label="User" value={submission.participations.users.username} />
+              <MobileCardRow label="Task" value={submission.tasks.name} />
+              <MobileCardRow label="Language" value={submission.language ?? '—'} />
+              <MobileCardRow
+                label="Status"
+                value={
+                  compilationFailed ? (
+                    <Badge variant="destructive">Compilation Failed</Badge>
+                  ) : compiling ? (
+                    <Badge variant="info" className="animate-pulse">Compiling</Badge>
+                  ) : evaluating ? (
+                    <Badge variant="indigo" className="animate-pulse">Evaluating</Badge>
+                  ) : score !== null && score !== undefined ? (
+                    <Badge variant={score > 0 ? 'success' : 'destructive'} className="font-mono">
+                      {score.toFixed(0)} / 100
+                    </Badge>
+                  ) : (
+                    <Badge variant="neutral">Pending</Badge>
+                  )
+                }
+              />
+              <MobileCardRow
+                label="Score"
+                value={score !== null && score !== undefined ? score.toFixed(0) : '—'}
+              />
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  onClick={() => handleView(submission)}
+                  aria-label={`View submission ${submission.id}`}
+                  title="View submission"
+                  className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-primary"
+                >
+                  <Eye className="h-4 w-4" />
+                </button>
+              </div>
+            </MobileCard>
+          );
+        })}
+      >
         <TableHeader>
           <TableRow>
             <TableHead className="w-24">ID</TableHead>

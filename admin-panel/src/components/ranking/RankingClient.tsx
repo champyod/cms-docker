@@ -27,16 +27,16 @@ export function RankingClient() {
 
   const rows = useRankingRows(snapshot);
 
-  const requestRankingApi = async (path: string, init: RequestInit | undefined, fallbackError: string): Promise<Record<string, unknown>> => {
+  const requestRankingApi = useCallback(async (path: string, init: RequestInit | undefined, fallbackError: string): Promise<Record<string, unknown>> => {
     const options: RequestInit = { ...(init ?? {}) };
     if (!options.method || options.method === 'GET') options.cache = 'no-store';
     const res = await fetch(`/api/ranking${path}`, options);
     const data = await res.json() as { success: boolean; error?: string } & Record<string, unknown>;
     if (!res.ok || !data.success) throw new Error(data.error || fallbackError);
     return data;
-  };
+  }, []);
 
-  const runWithLoading = async (setLoading: (value: boolean) => void, action: () => Promise<void>): Promise<void> => {
+  const runWithLoading = useCallback(async (setLoading: (value: boolean) => void, action: () => Promise<void>): Promise<void> => {
     setLoading(true);
     setErrorMessage('');
     try {
@@ -46,7 +46,7 @@ export function RankingClient() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const fetchSnapshot = () =>
     runWithLoading(setLoadingSnapshot, async () => {
@@ -54,7 +54,7 @@ export function RankingClient() {
       setSnapshot(data.snapshot as RankingSnapshot);
     });
 
-  const loadSession = () =>
+  const loadSession = useCallback(() =>
     runWithLoading(setLoadingSession, async () => {
       const data = await requestRankingApi('/auth', undefined, 'Failed to load ranking session');
       if (data.connected) {
@@ -62,7 +62,9 @@ export function RankingClient() {
         setBaseUrl((data.baseUrl as string) || '');
         setUsername((data.username as string) || '');
       }
-    });
+    }),
+    [runWithLoading, requestRankingApi],
+  );
 
   const connect = () =>
     runWithLoading(setLoadingSession, async () => {
@@ -124,8 +126,8 @@ export function RankingClient() {
   );
 
   useEffect(() => {
-    void loadSession();
-  }, []);
+    queueMicrotask(() => void loadSession());
+  }, [loadSession]);
 
   useEffect(() => {
     void fetchLogo();

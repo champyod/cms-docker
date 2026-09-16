@@ -104,12 +104,12 @@ export const Header: React.FC<{ className?: string; username?: string; permissio
   return (
     <header
       className={cn(
-        'sticky top-0 z-10 flex h-16 shrink-0 items-center justify-end gap-3 border-b border-border bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/75',
+        'sticky top-0 z-10 flex h-16 shrink-0 items-center justify-end gap-3 border-b border-border bg-background/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/75 sm:px-6',
         className
       )}
     >
       <div className="relative group">
-        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+        <div className="pointer-events-none absolute inset-y-0 left-0 flex w-11 items-center justify-center sm:w-auto sm:justify-start sm:pl-3">
           <Search className="h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
         </div>
         <button
@@ -117,9 +117,8 @@ export const Header: React.FC<{ className?: string; username?: string; permissio
           aria-label="Search navigation, entities, and actions (Control plus K)"
           onClick={() => setPaletteOpen(true)}
           onFocus={() => setPaletteOpen(true)}
-          className="h-9 w-64 cursor-pointer rounded-full border border-input bg-muted/50 pl-9 pr-14 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+          className="h-11 w-11 cursor-pointer rounded-full border border-input bg-muted/50 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 sm:h-9 sm:w-64 sm:pl-9 sm:pr-14"
         >
-          <Search className="h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
         </button>
         <kbd className="pointer-events-none absolute inset-y-0 right-2 my-auto hidden h-5 items-center rounded border border-border bg-muted px-1.5 font-mono text-xs font-semibold text-muted-foreground sm:inline-flex">
           ⌘K

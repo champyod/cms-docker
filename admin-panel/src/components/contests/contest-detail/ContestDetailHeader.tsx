@@ -15,7 +15,7 @@ interface Props {
 
 export function ContestDetailHeader({ name, description, isActive, saving, onSetActive, onSave }: Props) {
   return (
-    <div className="flex items-center justify-between">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <div className="flex items-center gap-3">
           <h1 className="text-3xl font-bold tracking-tight text-foreground">{name}</h1>
@@ -28,7 +28,7 @@ export function ContestDetailHeader({ name, description, isActive, saving, onSet
         </div>
         <p className="mt-1 text-muted-foreground">{description}</p>
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         {!isActive && (
           <Button variant="positiveOutline" icon={Rocket} onClick={onSetActive} disabled={saving}>
             Set as Active Contest

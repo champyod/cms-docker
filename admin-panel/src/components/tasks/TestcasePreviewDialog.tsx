@@ -35,7 +35,7 @@ export function TestcasePreviewDialog({ pair, onClose, onUpdateEncoding }: Previ
           </Button>
         </>
       }
-      className="flex h-96 w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
+      className="flex max-h-[70vh] w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-5xl"
     >
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-hidden lg:grid-cols-2">
         {[

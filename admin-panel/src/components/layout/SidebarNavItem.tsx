@@ -11,7 +11,7 @@ function buildHref(entry: NavEntry, locale: string): string {
   return `/${locale}${entry.path}`;
 }
 
-function isActiveRoute(pathname: string, href: string, locale: string): boolean {
+export function isActiveRoute(pathname: string, href: string, locale: string): boolean {
   return pathname === href || (href !== `/${locale}` && pathname.startsWith(href));
 }
 
@@ -19,14 +19,15 @@ interface NavItemProps {
   entry: NavEntry;
   locale: string;
   collapsed: boolean;
+  onClick?: () => void;
 }
 
-export function SidebarNavItem({ entry, locale, collapsed }: NavItemProps): React.JSX.Element {
+export function SidebarNavItem({ entry, locale, collapsed, onClick }: NavItemProps): React.JSX.Element {
   const pathname = usePathname();
   const href = buildHref(entry, locale);
   const isActive = isActiveRoute(pathname, href, locale);
   const link = (
-    <Link href={href} aria-current={isActive ? 'page' : undefined} className={cn('flex h-9 items-center rounded-lg px-2.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50', collapsed && 'w-9 justify-center px-0', isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground')}>
+    <Link href={href} onClick={onClick} aria-current={isActive ? 'page' : undefined} className={cn('flex h-9 items-center rounded-lg px-2.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50', collapsed && 'w-9 justify-center px-0', isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground')}>
       <entry.icon className="size-4 shrink-0" aria-hidden />
       {!collapsed && <span className="ml-3 truncate">{entry.label}</span>}
     </Link>

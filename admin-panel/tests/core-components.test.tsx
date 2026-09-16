@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Search } from 'lucide-react';
 import { EmptyState } from '@/components/core/EmptyState';
+import { Input } from '@/components/core/Input';
 import {
   STATUS_VARIANTS,
   mapStatusToVariant,
@@ -49,5 +50,19 @@ describe('StatusBadge variant mapping', () => {
     const html = renderToStaticMarkup(<StatusBadge status="degraded" running={2} total={3} />);
     expect(html).toContain('Degraded');
     expect(html).toContain('2/3 containers running');
+  });
+});
+
+describe('Input uncontrolled support', () => {
+  it('renders no value attribute when used uncontrolled', () => {
+    const html = renderToStaticMarkup(<Input name="username" label="Username" />);
+    expect(html).not.toContain('value=""');
+  });
+
+  it('passes value through when used controlled', () => {
+    const html = renderToStaticMarkup(
+      <Input name="username" label="Username" value="admin" onChange={() => undefined} />
+    );
+    expect(html).toContain('value="admin"');
   });
 });

@@ -98,8 +98,8 @@ function buildRegistry(): PermissionDefinition[] {
     definitions.push({ key, module, verb, description: describePermission(module, verb) });
   };
 
-  for (const module of MODULES) {
-    for (const verb of STANDARD_VERBS) push(module, verb);
+  for (const moduleName of MODULES) {
+    for (const verb of STANDARD_VERBS) push(moduleName, verb);
   }
   for (const { module, verb } of DOMAIN_VERBS) push(module, verb);
 
@@ -115,8 +115,8 @@ function buildRegistry(): PermissionDefinition[] {
 
 export const PERMISSION_REGISTRY: readonly PermissionDefinition[] = buildRegistry();
 
-function crud(module: string): string[] {
-  return STANDARD_VERBS.map((verb) => `${module}:${verb}`);
+function crud(moduleName: string): string[] {
+  return STANDARD_VERBS.map((verb) => `${moduleName}:${verb}`);
 }
 
 export const DEFAULT_GROUPS: readonly GroupDefinition[] = [

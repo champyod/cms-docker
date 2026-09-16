@@ -18,9 +18,11 @@ export function useEnvConfig(): EnvConfigController {
     clearRequiredRestarts: analysis.clearRequiredRestarts,
   });
 
+  const loadData = documents.loadData;
+
   useEffect(() => {
-    void documents.loadData();
-  }, []);
+    queueMicrotask(() => void loadData());
+  }, [loadData]);
 
   return { ...documents, ...analysis, ...persistence };
 }

@@ -69,6 +69,7 @@ export async function GET(
             fullLength: logLength,
             percent,
             error: result.error,
+            warning: result.warning,
             success: result.success,
           });
         }
@@ -87,6 +88,7 @@ export async function GET(
             fullLength: logLength,
             percent,
             error: 'Deploy timed out after 60 seconds without log output.',
+            warning: result.warning,
             success: false,
           });
           return true;

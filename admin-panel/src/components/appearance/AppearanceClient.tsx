@@ -82,7 +82,7 @@ function BrandingTab({
       </Card>
 
       <Card className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <h2 className="text-sm font-semibold text-foreground">Branding Fields (read-only preview — save edits to config.toml)</h2>
           <Button size="sm" icon={Save} loading={saving} onClick={onSave}>
             Save to config.toml

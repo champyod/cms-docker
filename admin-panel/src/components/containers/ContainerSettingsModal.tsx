@@ -80,7 +80,7 @@ export function ContainerSettingsModal({
       description={containerName}
       className="max-w-lg"
       footer={
-        <div className="flex items-center justify-between gap-3 w-full">
+        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end w-full">
           <Button variant="secondary" onClick={handleReset}>
             <RotateCcw className="w-4 h-4 mr-2" />
             Reset Restart Count

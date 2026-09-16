@@ -5,6 +5,7 @@ import { Edit2, Trash2, Users } from 'lucide-react';
 import { Badge } from '@/components/core/Badge';
 import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
+import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
 import { Skeleton } from '@/components/core/Skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { ROW_SELECTED_CLASSES } from '@/hooks/useShortcuts';
@@ -48,7 +49,37 @@ export function UserTable({
   const allSelected = users.length > 0 && users.every((user) => selectedIds.has(user.id));
 
   return (
-    <Table>
+    <Table
+      mobileCards={users.map((user) => (
+        <MobileCard key={user.id}>
+          <MobileCardRow label="Name" value={`${user.first_name} ${user.last_name}`} />
+          <MobileCardRow label="Username" value={user.username} />
+          <MobileCardRow label="Team" value={teamCodes(user)} />
+          <MobileCardRow label="Status" value={user.status ?? '—'} />
+          <MobileCardRow label="Contests" value={user._count?.participations ?? 0} />
+          {canManageUsers && (
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={Edit2}
+                iconOnly
+                tooltip={`Edit user ${user.username}`}
+                onClick={() => onEdit(user)}
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={Trash2}
+                iconOnly
+                tooltip={`Delete user ${user.username}`}
+                onClick={() => onDelete(user.id)}
+              />
+            </div>
+          )}
+        </MobileCard>
+      ))}
+    >
       <TableHeader>
         <TableRow>
           <TableHead className="w-10">

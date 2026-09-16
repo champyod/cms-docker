@@ -1,5 +1,7 @@
 'use client';
 
+import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
+
 export interface TaskCol { id: number; name: string; title: string; score_precision: number; }
 export interface RankingEntry { participationId: number; rank: number; user: { username: string }; taskScores: Record<string, number>; totalScore: number; }
 
@@ -7,10 +9,30 @@ interface Props {
   ranking: { ranking: RankingEntry[]; tasks: TaskCol[] } | null;
 }
 
-export function RankingTable({ ranking }: Props) {
-  if (!ranking) return null;
+function formatTaskScore(value: number | undefined, precision: number): string {
+  return value !== undefined ? value.toFixed(precision) : '-';
+}
+
+function RankingMobileList({ ranking }: { ranking: NonNullable<Props['ranking']> }): React.JSX.Element {
   return (
-    <div className="overflow-x-auto">
+    <div className="space-y-3 md:hidden">
+      {ranking.ranking.map((entry) => (
+        <MobileCard key={entry.participationId}>
+          <MobileCardRow label="#" value={entry.rank} />
+          <MobileCardRow label="User" value={entry.user.username} />
+          {ranking.tasks.map((task) => (
+            <MobileCardRow key={task.id} label={task.name} value={formatTaskScore(entry.taskScores[task.id], task.score_precision)} />
+          ))}
+          <MobileCardRow label="Total" value={entry.totalScore.toFixed(0)} />
+        </MobileCard>
+      ))}
+    </div>
+  );
+}
+
+function RankingDesktopTable({ ranking }: { ranking: NonNullable<Props['ranking']> }): React.JSX.Element {
+  return (
+    <div className="hidden overflow-x-auto md:block">
       <table className="min-w-max w-max text-sm">
         <thead>
           <tr className="border-b border-border text-left text-muted-foreground">
@@ -27,7 +49,7 @@ export function RankingTable({ ranking }: Props) {
               <td className="whitespace-nowrap p-2 font-medium text-foreground">{entry.user.username}</td>
               {ranking.tasks.map((t) => (
                 <td key={t.id} className="min-w-24 whitespace-nowrap p-2 text-center text-muted-foreground">
-                  {entry.taskScores[t.id] !== undefined ? entry.taskScores[t.id].toFixed(t.score_precision) : '-'}
+                  {formatTaskScore(entry.taskScores[t.id], t.score_precision)}
                 </td>
               ))}
               <td className="whitespace-nowrap p-2 text-right font-bold text-primary">{entry.totalScore.toFixed(0)}</td>
@@ -35,7 +57,17 @@ export function RankingTable({ ranking }: Props) {
           ))}
         </tbody>
       </table>
-      {ranking.ranking.length === 0 && <p className="py-4 text-center text-sm text-muted-foreground">No submissions yet.</p>}
     </div>
+  );
+}
+
+export function RankingTable({ ranking }: Props): React.JSX.Element | null {
+  if (!ranking) return null;
+  if (ranking.ranking.length === 0) return <p className="py-4 text-center text-sm text-muted-foreground">No submissions yet.</p>;
+  return (
+    <>
+      <RankingMobileList ranking={ranking} />
+      <RankingDesktopTable ranking={ranking} />
+    </>
   );
 }

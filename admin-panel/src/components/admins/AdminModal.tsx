@@ -70,7 +70,10 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
   const [loadingAccess, setLoadingAccess] = useState(false);
   const [accessError, setAccessError] = useState('');
 
-  useEffect(() => {
+  const sessionKey = `${isOpen}:${initialData?.id ?? 'new'}`;
+  const [renderedSession, setRenderedSession] = useState(sessionKey);
+  if (renderedSession !== sessionKey) {
+    setRenderedSession(sessionKey);
     setFormData(initialData ? formFromAdmin(initialData) : EMPTY_ADMIN_FORM);
     setError('');
     setPasswordKind('bcrypt');
@@ -82,6 +85,9 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
     setOriginalOverrides([]);
     setAccessReason('');
     setAccessError('');
+  }
+
+  useEffect(() => {
     if (!isOpen) return;
 
     let cancelled = false;

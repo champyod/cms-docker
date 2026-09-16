@@ -48,6 +48,7 @@ export interface DeployStatusResult {
   startedAt?: string;
   log?: string;
   error?: string;
+  warning?: string;
   percent?: number | null;
 }
 
@@ -163,19 +164,29 @@ async function finalizeCompletedDeploy(paths: DeployPaths, meta: DeployMeta, log
 
 type FailureKind = 'failed' | 'wall' | 'idle';
 
+async function rollbackContestId(contestId: number): Promise<string | null> {
+  try {
+    await updateConfigTomlContestId(contestId);
+    await runConfigSync();
+    return null;
+  } catch (error) {
+    return `Rollback to contest #${contestId} failed: ${(error as Error).message}`;
+  }
+}
+
 async function handleTerminalFailure(paths: DeployPaths, meta: DeployMeta, log: string, percent: number | null, kind: FailureKind, exitCode: string | null): Promise<DeployStatusResult> {
+  let warning: string | undefined;
   if (!meta.reverted && meta.previousContestId !== undefined) {
-    await updateConfigTomlContestId(meta.previousContestId).catch(() => {});
-    await runConfigSync().catch(() => {});
+    warning = (await rollbackContestId(meta.previousContestId)) ?? undefined;
     await updateDeployMeta(paths.metaPath, meta, { reverted: true });
   }
   await clearActiveOperation();
   if (kind === 'failed') {
     await logToDiscord('Contest Deploy Failed', `Contest ID **${meta.contestId}** deploy failed. Exit code: ${exitCode}`, 15158332, true);
-    return { success: false, status: 'failed', contestId: meta.contestId, startedAt: meta.startedAt, log, percent, error: `Docker process exited with code ${exitCode}.` };
+    return { success: false, status: 'failed', contestId: meta.contestId, startedAt: meta.startedAt, log, percent, error: `Docker process exited with code ${exitCode}.`, warning };
   }
   const message = kind === 'wall' ? 'Deploy timed out after 15 minutes (wall clock limit).' : 'Deploy timed out after 5 minutes without log output.';
-  return { success: false, status: 'timeout', contestId: meta.contestId, startedAt: meta.startedAt, log, percent, error: message };
+  return { success: false, status: 'timeout', contestId: meta.contestId, startedAt: meta.startedAt, log, percent, error: message, warning };
 }
 
 async function resolveDeployStatus(paths: DeployPaths, meta: DeployMeta, log: string): Promise<DeployStatusResult> {
@@ -208,6 +219,29 @@ export async function fetchDeployStatus(operationId: string): Promise<DeployStat
 
 export function getDeployOperationPathsForApi(operationId: string): DeployPaths {
   return getDeployOperationPaths(operationId);
+}
+
+export interface ActiveDeployOperation {
+  operationId: string;
+  contestId: number;
+  startedAt: string;
+  percent: number | null;
+}
+
+// Why: a page refresh must be able to rejoin an in-flight deploy; the lock is cleared only on a terminal result.
+export async function getActiveDeployOperation(): Promise<ActiveDeployOperation | null> {
+  const operationId = await getActiveOperationId();
+  if (operationId === null) return null;
+  const meta = await readDeployMeta(operationId);
+  if (meta === null) return null;
+  const status = await fetchDeployStatus(operationId);
+  if (status.status !== 'running') return null;
+  return {
+    operationId,
+    contestId: meta.contestId,
+    startedAt: meta.startedAt,
+    percent: status.percent ?? null,
+  };
 }
 
 export async function readDeployMeta(operationId: string): Promise<DeployMeta | null> {

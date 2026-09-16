@@ -107,7 +107,7 @@ export function EnvSectionCard({
 }: EnvSectionCardProps): ReactElement {
   return (
     <Card className="p-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <h2 className="text-xl font-bold text-foreground">{section.title}</h2>
           <p className="text-muted-foreground text-sm mt-1">Editing {section.filename}</p>

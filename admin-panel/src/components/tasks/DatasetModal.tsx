@@ -139,14 +139,14 @@ export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess }: Da
           )}
         </>
       }
-      className="flex h-96 w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
+      className="flex max-h-[70vh] w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-3xl"
     >
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="w-48 shrink-0 space-y-2 overflow-y-auto border-r border-border bg-muted/20 p-4">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden sm:flex-row">
+        <div className="w-full shrink-0 space-y-2 overflow-y-auto border-b border-border bg-muted/20 p-4 max-sm:flex max-sm:flex-row max-sm:flex-wrap max-sm:gap-1 max-sm:overflow-x-auto sm:w-48 sm:border-b-0 sm:border-r">
           <button
             onClick={() => setActiveTab('general')}
             className={cn(
-              'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+              'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors max-sm:flex-1 max-sm:justify-center max-sm:rounded-md max-sm:border max-sm:border-border',
               activeTab === 'general'
                 ? 'bg-primary/10 text-primary ring-1 ring-ring/50'
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -160,7 +160,7 @@ export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess }: Da
             disabled={!dataset}
             title={!dataset ? 'Save dataset first' : undefined}
             className={cn(
-              'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+              'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors max-sm:flex-1 max-sm:justify-center max-sm:rounded-md max-sm:border max-sm:border-border',
               activeTab === 'managers'
                 ? 'bg-primary/10 text-primary ring-1 ring-ring/50'
                 : !dataset

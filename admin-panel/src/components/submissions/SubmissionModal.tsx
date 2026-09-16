@@ -63,8 +63,8 @@ export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModal
       title={`Submission #${submission.id}`}
       className="sm:max-w-4xl"
     >
-        <div className="flex items-center justify-between gap-4 mb-6">
-            <div className="text-muted-foreground text-sm flex gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
+            <div className="text-muted-foreground text-sm flex flex-wrap gap-4">
                 <span>User: <span className="font-medium text-foreground">{submission.participations.users.username}</span></span>
                 <span>Task: <span className="font-medium text-foreground">{submission.tasks.name}</span></span>
                 <span>Time: {new Date(submission.timestamp).toLocaleString()}</span>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { apiClient } from '@/lib/apiClient';
 import { Button } from '@/components/core/Button';
 import { Dialog, DialogFooter } from '@/components/core/Dialog';
@@ -29,14 +29,13 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData, permissionK
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
   const fieldAccess = useMemo(() => getFieldAccess('teams', effective), [effective]);
 
-  useEffect(() => {
-    if (initialData) {
-      setFormData({ code: initialData.code, name: initialData.name });
-    } else {
-      setFormData({ code: '', name: '' });
-    }
+  const sessionKey = `${isOpen}:${initialData?.id ?? 'new'}`;
+  const [renderedSession, setRenderedSession] = useState(sessionKey);
+  if (renderedSession !== sessionKey) {
+    setRenderedSession(sessionKey);
+    setFormData(initialData ? { code: initialData.code, name: initialData.name } : { code: '', name: '' });
     setError('');
-  }, [initialData, isOpen]);
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

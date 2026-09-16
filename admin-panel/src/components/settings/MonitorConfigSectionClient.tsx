@@ -148,7 +148,7 @@ export function MonitorConfigSectionClient({
               <button
                 type="button"
                 onClick={() => handleToggle(target.id)}
-                className="text-neutral-400 hover:text-foreground transition-colors"
+                className="flex size-9 shrink-0 items-center justify-center rounded-lg text-neutral-400 hover:text-foreground transition-colors"
                 aria-label={target.enabled ? 'Disable target' : 'Enable target'}
               >
                 {target.enabled ? (

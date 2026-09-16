@@ -39,7 +39,7 @@ export function QuestionsPanel({ questions, replyingTo, replySubject, replyText,
     <div className="space-y-3">
       {questions.map((q) => (
         <div key={q.id} className={`rounded-lg p-3 ${q.ignored ? 'bg-muted/50' : 'bg-muted/30'}`}>
-          <div className="flex items-start justify-between">
+          <div className="flex items-start justify-between gap-3">
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 <span className="font-medium text-foreground">{q.subject}</span>
@@ -55,11 +55,11 @@ export function QuestionsPanel({ questions, replyingTo, replySubject, replyText,
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex shrink-0 items-center gap-1">
               {!q.reply_timestamp && (
-                <button onClick={() => onReplyingTo(replyingTo === q.id ? null : q.id)} aria-label={`Reply to ${q.subject}`} className="rounded p-1.5 text-primary transition-colors hover:bg-primary/20"><Reply className="h-4 w-4" /></button>
+                <button onClick={() => onReplyingTo(replyingTo === q.id ? null : q.id)} aria-label={`Reply to ${q.subject}`} title="Reply" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-primary transition-colors hover:bg-primary/20"><Reply className="h-4 w-4" /></button>
               )}
-              <button onClick={() => onIgnore(q.id, q.ignored)} aria-label={q.ignored ? 'Unignore question' : 'Ignore question'} className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted"><EyeOff className={q.ignored ? 'hidden' : 'h-4 w-4'} /><Eye className={q.ignored ? 'h-4 w-4' : 'hidden'} /></button>
+              <button onClick={() => onIgnore(q.id, q.ignored)} aria-label={q.ignored ? 'Unignore question' : 'Ignore question'} title={q.ignored ? 'Unignore' : 'Ignore'} className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted"><EyeOff className={q.ignored ? 'hidden' : 'h-4 w-4'} /><Eye className={q.ignored ? 'h-4 w-4' : 'hidden'} /></button>
             </div>
           </div>
           {replyingTo === q.id && (

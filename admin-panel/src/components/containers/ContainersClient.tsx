@@ -55,7 +55,7 @@ export function ContainersClient() {
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
 
-  const loadContainers = async () => {
+  const loadContainers = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getContainers();
@@ -86,7 +86,7 @@ export function ContainersClient() {
       });
     }
     setLoading(false);
-  };
+  }, [addToast]);
 
   const checkDiscordStatus = useCallback(async (): Promise<void> => {
     try {
@@ -98,11 +98,11 @@ export function ContainersClient() {
   }, []);
 
   useEffect(() => {
-    loadContainers();
-    checkDiscordStatus();
+    queueMicrotask(() => void loadContainers());
+    queueMicrotask(() => void checkDiscordStatus());
     const interval = setInterval(loadContainers, 10000);
     return () => clearInterval(interval);
-  }, [checkDiscordStatus]);
+  }, [loadContainers, checkDiscordStatus]);
 
   const handleToggleSelection = useCallback((containerId: string): void => {
     setSelectedIds((previous) => {
@@ -271,7 +271,7 @@ export function ContainersClient() {
           onUpdate={loadContainers}
         />
       )}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-3xl font-bold text-foreground tracking-tight">Container Control Center</h1>
@@ -299,7 +299,7 @@ export function ContainersClient() {
       </div>
 
       {selectedCount > 0 && (
-        <div className="flex items-center justify-between p-3 bg-card border border-border rounded-xl shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-card border border-border rounded-xl shadow-sm">
           <div className="flex items-center gap-3">
             <span className="text-sm font-bold text-foreground">{selectedCount} selected</span>
             {isDiscordConfigured === false && (

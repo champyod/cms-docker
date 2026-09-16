@@ -155,7 +155,7 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess, per
         </div>
       )}
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <RestrictedField
             canRead={fieldAccess.first_name.canRead}
             canUpdate={fieldAccess.first_name.canUpdate}

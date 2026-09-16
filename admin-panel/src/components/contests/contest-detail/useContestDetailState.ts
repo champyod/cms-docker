@@ -16,6 +16,7 @@ export function useContestDetailState(contest: ContestLike) {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({ info: true, participants: true, tasks: true, services: true });
   const [saving, setSaving] = useState(false);
   const deploy = useDeployContest();
+  const { state: deployState, deploy: launchDeploy, reset: resetDeploy } = deploy;
   const [showDeployModal, setShowDeployModal] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -32,14 +33,14 @@ export function useContestDetailState(contest: ContestLike) {
 
   const toggleSection = (section: string) => setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }));
   const handleSetActive = () => setShowDeployModal(true);
-  const confirmDeploy = () => deploy.deploy(contest.id);
+  const confirmDeploy = () => launchDeploy(contest.id);
 
   useEffect(() => {
-    const p = deploy.state.phase;
-    if (p === 'completed') { setShowDeployModal(false); deploy.reset(); window.location.reload(); }
-    else if (p === 'failed' || p === 'timeout') { setShowDeployModal(false); deploy.reset(); alert('Deploy failed: ' + (deploy.state.error || 'Unknown error')); }
-    else if (p === 'already_running') { setShowDeployModal(false); deploy.reset(); alert('Another deploy is already in progress.'); }
-  }, [deploy.state.phase, deploy.state.error, deploy.reset, deploy.state]);
+    const phase = deployState.phase;
+    if (phase === 'completed') { setShowDeployModal(false); resetDeploy(); window.location.reload(); }
+    else if (phase === 'failed' || phase === 'timeout') { setShowDeployModal(false); resetDeploy(); alert('Deploy failed: ' + (deployState.error || 'Unknown error')); }
+    else if (phase === 'already_running') { setShowDeployModal(false); resetDeploy(); alert('Another deploy is already in progress.'); }
+  }, [deployState.phase, deployState.error, resetDeploy]);
 
   const handleOpenParticipationSettings = (participationId: number, username: string) => {
     setSelectedParticipation({ id: participationId, username });
@@ -76,7 +77,7 @@ export function useContestDetailState(contest: ContestLike) {
     isTeamModalOpen, setIsTeamModalOpen,
     selectedParticipation, setSelectedParticipation,
     expandedSections, toggleSection, saving,
-    deployState: deploy.state, confirmDeploy, resetDeployState: deploy.reset, showDeployModal, setShowDeployModal, handleSetActive,
+    deployState, confirmDeploy, resetDeployState: resetDeploy, showDeployModal, setShowDeployModal, handleSetActive,
     formData, setFormData, handleSave,
     handleOpenParticipationSettings, handleMarkAsTest, handleRemoveTask, handleRemoveParticipant,
   };

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { useSyncedState } from '@/hooks/useSyncedState';
 import { cn } from '@/lib/utils';
 import { STATEMENT_LANGUAGES, isKnownLanguageCode, normalizeLanguageCode } from '@/lib/constants/languages';
 
@@ -47,7 +48,7 @@ export function LanguagePicker({
   label,
   id,
 }: LanguagePickerProps): React.JSX.Element {
-  const [draft, setDraft] = useState<string>(value);
+  const [draft, setDraft] = useSyncedState<string>(value);
   const [open, setOpen] = useState<boolean>(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -55,8 +56,6 @@ export function LanguagePicker({
   const filtered = useMemo(() => filterOptions(options, draft), [options, draft]);
   const normalized = useMemo(() => normalizeLanguageCode(draft), [draft]);
   const showWarning = draft.length > 0 && normalized.length > 0 && !isKnownLanguageCode(normalized);
-
-  useEffect(() => setDraft(value), [value]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent): void {
