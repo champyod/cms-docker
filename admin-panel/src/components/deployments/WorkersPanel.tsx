@@ -147,7 +147,7 @@ function WorkersPanelInner({
                                     {canManage && (
                                         <button
                                             onClick={() => onRemoveWorker(index)}
-                                            className="flex size-9 shrink-0 items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-colors"
+                                            className="flex size-11 shrink-0 items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-colors"
                                             aria-label={`Remove worker ${worker.host}`}
                                         >
                                             <Trash2 className="w-3.5 h-3.5" />
