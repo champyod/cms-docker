@@ -10,8 +10,8 @@ interface Props {
 }
 
 const PANEL_CLASSES = 'mt-3 rounded-lg border border-border bg-muted/40 p-3';
-const TAB_ACTIVE = 'rounded-lg border border-primary/30 bg-primary/20 px-3 py-1.5 text-xs font-medium text-primary transition-colors';
-const TAB_INACTIVE = 'rounded-lg border border-border bg-muted/50 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground';
+const TAB_ACTIVE = 'rounded-lg border border-primary/30 bg-primary/20 px-3 py-2.5 sm:py-1.5 min-h-11 sm:min-h-0 text-xs font-medium text-primary transition-colors';
+const TAB_INACTIVE = 'rounded-lg border border-border bg-muted/50 px-3 py-2.5 sm:py-1.5 min-h-11 sm:min-h-0 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground';
 const VALUE_CLASSES = 'rounded-lg border border-input bg-background px-3 py-2 text-sm';
 
 function RevealTabs({ revealTab, onTab }: Pick<Props, 'revealTab' | 'onTab'>) {
