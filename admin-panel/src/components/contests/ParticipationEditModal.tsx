@@ -13,7 +13,7 @@ interface ParticipationEditModalProps {
   adminId: number;
 }
 
-const TAB_BASE = 'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors';
+const TAB_BASE = 'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 sm:py-2 min-h-11 sm:min-h-0 text-sm font-medium transition-colors';
 const TAB_ACTIVE = 'bg-card text-foreground shadow-xs';
 const TAB_INACTIVE = 'text-muted-foreground hover:text-foreground';
 
