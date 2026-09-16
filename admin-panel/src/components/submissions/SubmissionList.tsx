@@ -95,7 +95,7 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage }: 
                   onClick={() => handleView(submission)}
                   aria-label={`View submission ${submission.id}`}
                   title="View submission"
-                  className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-primary"
+                  className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-primary"
                 >
                   <Eye className="h-4 w-4" />
                 </button>
