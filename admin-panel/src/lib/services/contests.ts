@@ -4,7 +4,7 @@ import { getFreshPermissions } from '@/lib/permissions';
 import type { PermissionKey } from '@/lib/permissions';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 import { stripDisallowedFields } from '@/lib/field-permissions';
-import { validateContestData } from '@/lib/contest-validation';
+import { validateContestData, CONTEST_NAME_MESSAGE, CONTEST_NAME_REGEX } from '@/lib/contest-validation';
 import { recordAudit } from '@/lib/audit';
 import {
   fetchContestsPage,
@@ -54,15 +54,14 @@ export async function createContest(data: ContestData): Promise<MutationResult> 
   const perms = await requirePermission('contest:create');
   const allowed = stripDisallowedFields('contests', data as unknown as Record<string, unknown>, perms) as unknown as ContestData;
   const rawName = (data as unknown as Record<string, unknown>).name;
-  const nameRegex = /^[A-Za-z0-9_-]+$/;
-  if (typeof rawName !== 'string' || !nameRegex.test(rawName)) {
+  if (typeof rawName !== 'string' || !CONTEST_NAME_REGEX.test(rawName)) {
     return {
       success: false,
-      error: 'Contest name must contain only letters, numbers, hyphens and underscores',
+      error: CONTEST_NAME_MESSAGE,
       errors: [
         {
           field: 'name',
-          message: 'Contest name must contain only letters, numbers, hyphens and underscores',
+          message: CONTEST_NAME_MESSAGE,
           code: 'invalid_name',
         },
       ],
@@ -84,7 +83,7 @@ export async function createContest(data: ContestData): Promise<MutationResult> 
 export async function updateContest(id: number, data: Partial<ContestData>): Promise<MutationResult> {
   const perms = await requirePermission('contest:update');
   const allowed = stripDisallowedFields('contests', data as unknown as Record<string, unknown>, perms) as unknown as Partial<ContestData>;
-  const validation = validateContestData(allowed as ContestData, true);
+  const validation = validateContestData(allowed as ContestData);
   if (!validation.valid) {
     return { success: false, errors: validation.errors, error: 'Validation failed' };
   }
