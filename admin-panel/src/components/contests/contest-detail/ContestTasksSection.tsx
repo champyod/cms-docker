@@ -39,8 +39,8 @@ export function ContestTasksSection({ tasks, expanded, locale, onToggle, onAddTa
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <a href={`/${locale}/tasks/${task.id}`} aria-label={`Open ${task.name}`} className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-primary"><Settings className="h-4 w-4" /></a>
-                  <button onClick={() => onRemoveTask(task.id)} aria-label={`Remove ${task.name}`} className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
+                  <a href={`/${locale}/tasks/${task.id}`} aria-label={`Open ${task.name}`} className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-primary"><Settings className="h-4 w-4" /></a>
+                  <button onClick={() => onRemoveTask(task.id)} aria-label={`Remove ${task.name}`} className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
                 </div>
               </div>
             ))}
