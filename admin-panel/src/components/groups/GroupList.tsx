@@ -279,6 +279,7 @@ export function GroupList({
                   icon={Pencil}
                   iconOnly
                   tooltip={dict.editTooltip}
+                  className="min-h-11 min-w-11"
                   onClick={() => handleOpenEdit(group)}
                 />
               )}
@@ -289,6 +290,7 @@ export function GroupList({
                   icon={Trash2}
                   iconOnly
                   tooltip={dict.deleteTooltip}
+                  className="min-h-11 min-w-11"
                   onClick={() => handleOpenDelete(group)}
                 />
               )}
