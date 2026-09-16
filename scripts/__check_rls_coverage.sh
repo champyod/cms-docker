@@ -6,6 +6,8 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/__lib/common.sh"
 
+# WHY: both sets below are compared with comm, so both sorts run under LC_ALL=C —
+# collation is machine-dependent, and a locale-ordered sort would mismatch them.
 SCHEMA="${REPO_ROOT}/admin-panel/prisma/schema.prisma"
 SQL_DIR="${REPO_ROOT}/admin-panel/prisma/sql"
 GENERATOR="${REPO_ROOT}/scripts/__generate_rls_sql.sh"
@@ -44,7 +46,7 @@ if ! awk '
     model=""
     next
   }
-' "$SCHEMA" | sort -u > "$tmp_schema"; then
+' "$SCHEMA" | LC_ALL=C sort -u > "$tmp_schema"; then
   log_die "failed to parse $SCHEMA" 1
 fi
 
@@ -55,7 +57,7 @@ fi
 # WHY: extract table set from ALTER TABLE public.<x> ENABLE ROW LEVEL SECURITY across ALL sql files — covers generated file plus hand-authored policies.
 if ! grep -hE 'ALTER TABLE public\.[A-Za-z_][A-Za-z0-9_]* ENABLE ROW LEVEL SECURITY' "$SQL_DIR"/*.sql 2>/dev/null \
   | sed -n 's/.*ALTER TABLE public\.\([A-Za-z_][A-Za-z0-9_]*\) ENABLE ROW LEVEL SECURITY.*/\1/p' \
-  | sort -u > "$tmp_sql"; then
+  | LC_ALL=C sort -u > "$tmp_sql"; then
   # WHY: grep exits 1 when no matches — that is a valid empty set, not a parse error.
   : > "$tmp_sql"
 fi

@@ -1,0 +1,510 @@
+name: CI
+
+# One workflow for the whole repository, so a push or pull request produces a
+# single check run and a single notification while every concern keeps its own
+# job for granularity. The triggers below are the union of the workflows this
+# replaces, and the parts that used to run on only some events are narrowed
+# again with a job-level `if:` — a check job stays off the manual-dispatch path,
+# and the image jobs follow the path filters of the `changes` job.
+on:
+  push:
+    branches: ["main", "major/admin-panel"]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'examples/**'
+      - '.gitignore'
+  pull_request:
+    branches: ["main", "major/admin-panel"]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      build_arm:
+        description: 'Build Worker for ARM (linux/arm64)'
+        required: false
+        type: boolean
+        default: false
+
+# A newer push to the same ref supersedes the run still in flight.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  changes:
+    name: Detect changed areas
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      core: ${{ steps.filter.outputs.core }}
+      worker: ${{ steps.filter.outputs.worker }}
+      admin: ${{ steps.filter.outputs.admin }}
+      monitor: ${{ steps.filter.outputs.monitor }}
+      rust: ${{ steps.filter.outputs.rust }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            core:
+              - 'Dockerfile'
+              - 'src/**'
+              - 'constraints.txt'
+            worker:
+              - 'Dockerfile'
+              - 'src/**'
+              - 'constraints.txt'
+            admin:
+              - 'admin-panel/**'
+            monitor:
+              - 'docker/monitor/**'
+              - 'scripts/__monitor.sh'
+            rust:
+              - 'tools/cms-tui/**'
+              - '.github/workflows/ci.yml'
+
+  lint:
+    name: Lint (shell, dockerfile, yaml, compose)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.event_name != 'workflow_dispatch'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install linters
+        run: |
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends shellcheck
+          fi
+          curl -fsSL -o /tmp/hadolint \
+            https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
+          sudo install -m 0755 /tmp/hadolint /usr/local/bin/hadolint
+          python3 -m pip install --upgrade pip
+          python3 -m pip install yamllint
+          shellcheck --version && hadolint --version
+
+      - name: ShellCheck
+        run: |
+          files=()
+          for pattern in 'scripts/*.sh' 'tools/*.sh' 'src/tools/*.sh' 'docker/*.sh' 'src/docker/*.sh'; do
+            for f in ${pattern}; do
+              [ -f "$f" ] && files+=("$f")
+            done
+          done
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No shell scripts found to lint."
+          else
+            printf 'Linting:\n'; printf '  %s\n' "${files[@]}"
+            shellcheck -S error -x "${files[@]}"
+          fi
+
+      - name: hadolint
+        run: hadolint Dockerfile docker/monitor/Dockerfile
+
+      - name: yamllint
+        run: |
+          set -- \
+            .yamllint.yml \
+            .github/workflows/ \
+            .github/dependabot.yml \
+            docker-compose*.yml \
+            docker/ \
+            examples/ \
+            src/.readthedocs.yml
+          yamllint -c .yamllint.yml "$@"
+
+      - name: Compose config validation
+        run: |
+          # Generate the env stand-in from the tracked config example
+          # (--no-secrets keeps CI logs free of random credentials)
+          cp -n config.toml.example config.toml 2>/dev/null || true
+          if bash scripts/__config_sync.sh --no-secrets >/dev/null 2>&1 && [ -f .env ]; then
+            ENV_ARGS=(--env-file .env)
+          else
+            echo "config sync failed; using dummy env vars"
+            export POSTGRES_PASSWORD=x AUTH_SECRET=x SECRET_KEY=x CONTEST_ID=1
+            ENV_ARGS=()
+          fi
+          # Overlay stacks reference services from a base stack
+          # (e.g. docker-compose.tailscale.yml depends on contest-web-server
+          # from docker-compose.contest.yml), so they must be validated
+          # merged with their base instead of standalone.
+          declare -A OVERLAY_BASE=(
+            [docker-compose.tailscale.yml]=docker-compose.contest.yml
+            [docker-compose.waf.yml]=docker-compose.contest.yml
+          )
+          for f in docker-compose*.yml docker/docker-compose*.yml; do
+            [ -f "$f" ] || continue
+            if [ -n "${OVERLAY_BASE[$f]:-}" ]; then
+              base="${OVERLAY_BASE[$f]}"
+              echo "::group::docker compose config -q -- $base + $f"
+              if [ "${#ENV_ARGS[@]}" -gt 0 ]; then
+                docker compose "${ENV_ARGS[@]}" -f "$base" -f "$f" config -q
+              else
+                docker compose -f "$base" -f "$f" config -q
+              fi
+            else
+              echo "::group::docker compose config -q -- $f"
+              if [ "${#ENV_ARGS[@]}" -gt 0 ]; then
+                docker compose "${ENV_ARGS[@]}" -f "$f" config -q
+              else
+                docker compose -f "$f" config -q
+              fi
+            fi
+            echo "::endgroup::"
+          done
+
+  # WHY a separate job: these gates read files the image build never looks at
+  # (admin-panel/prisma/schema.prisma and sql/, the permission registry, and the
+  # server actions and route handlers), so a panel-only change must still
+  # validate permission, audit and RLS coverage plus generator freshness.
+  gates:
+    name: Gates (spec parity, audit, permissions, RLS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.event_name != 'workflow_dispatch'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: VAR_SPEC parity
+        run: bash scripts/__check_spec_parity.sh
+
+      - name: Audit coverage
+        run: bash scripts/__check_audit_coverage.sh
+
+      - name: Permission parity
+        run: bash scripts/__check_permission_parity.sh
+
+      - name: RLS coverage
+        run: bash scripts/__check_rls_coverage.sh
+
+      - name: RLS SQL freshness
+        run: bash scripts/__generate_rls_sql.sh --check
+
+  # WHY a separate job: nothing else type-checks or tests the admin panel, so a
+  # type error or a failing unit test could reach main unnoticed. The secret
+  # scan rides here because it needs the full history this job already checks
+  # out.
+  panel:
+    name: Admin panel (types, tests, deps, secrets)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    if: github.event_name != 'workflow_dispatch'
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # The secret scan diffs the commits of this event, which needs them
+          # present locally instead of a single-commit shallow clone.
+          fetch-depth: 0
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        working-directory: admin-panel
+        run: bun install --frozen-lockfile
+
+      - name: Type check
+        working-directory: admin-panel
+        run: bunx tsc --noEmit
+
+      - name: Test
+        working-directory: admin-panel
+        run: bun run test
+
+      # WHY advisory: the pinned dependency tree already carries known advisories,
+      # so a blocking audit would fail every run for reasons unrelated to the
+      # change under review. The findings stay visible in the log and summary.
+      - name: Dependency audit
+        working-directory: admin-panel
+        continue-on-error: true
+        run: bun audit --audit-level=high
+
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Findings land in the log and job summary, so the job needs no write scopes.
+          GITLEAKS_ENABLE_COMMENTS: "false"
+
+  # WHY: nothing else in this repository builds or tests the TUI crate. Every
+  # other layer has a gate that fails on drift; this one did not, so the command
+  # menus, module sizes and the launcher contract all regressed without a signal.
+  rust:
+    name: Rust (fmt, clippy, build, test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: changes
+    if: github.event_name != 'workflow_dispatch' && needs.changes.outputs.rust == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      # The crate pins its target to musl in .cargo/config.toml, so the target
+      # must exist before any cargo command runs.
+      - name: Install musl target
+        run: rustup target add x86_64-unknown-linux-musl
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            tools/cms-tui/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('tools/cms-tui/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Format check
+        working-directory: tools/cms-tui
+        run: cargo fmt --check
+
+      - name: Clippy
+        working-directory: tools/cms-tui
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Build
+        working-directory: tools/cms-tui
+        run: cargo build
+
+      - name: Test
+        working-directory: tools/cms-tui
+        run: cargo test
+
+  # Each image builds as its own PARALLEL job (kept separate on purpose — the
+  # images are large and serialising them would multiply wall-clock time).
+  # Skipped areas show as skipped, not failed.
+  build-and-push-core:
+    name: Build core image
+    needs: changes
+    if: needs.changes.outputs.core == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # raphael.js is vendored in the repo; verify integrity instead of
+      # fetching it at build time (no network dependency in the build).
+      - name: Verify vendored ranking frontend assets
+        run: |
+          test -f src/cmsranking/static/lib/raphael.js || { echo "::error::src/cmsranking/static/lib/raphael.js is missing (expected vendor of https://cdnjs.cloudflare.com/ajax/libs/raphael/2.3.0/raphael.min.js)"; exit 1; }
+          echo "4da6e9aca75e3576d27ac0962ccadc6d6483cd486901d70d3dee50e77ae7f588  src/cmsranking/static/lib/raphael.js" | sha256sum --check --strict -
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the Container registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for CMS Core
+        id: meta-core
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-core
+          tags: |
+            type=ref,event=branch
+            type=sha,format=long
+            type=raw,value=latest,enable=${{ github.ref_name == 'main' || github.ref_name == 'major/admin-panel' }}
+
+      - name: Build and push CMS Core
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-core.outputs.tags }}
+          labels: ${{ steps.meta-core.outputs.labels }}
+          cache-from: type=gha,scope=core
+          cache-to: type=gha,mode=max,scope=core
+
+  build-and-push-worker:
+    name: Build worker image
+    needs: [changes]
+    if: needs.changes.outputs.worker == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify vendored ranking frontend assets
+        run: |
+          test -f src/cmsranking/static/lib/raphael.js || { echo "::error::src/cmsranking/static/lib/raphael.js is missing (expected vendor of https://cdnjs.cloudflare.com/ajax/libs/raphael/2.3.0/raphael.min.js)"; exit 1; }
+          echo "4da6e9aca75e3576d27ac0962ccadc6d6483cd486901d70d3dee50e77ae7f588  src/cmsranking/static/lib/raphael.js" | sha256sum --check --strict -
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the Container registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for CMS Worker
+        id: meta-worker
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-worker
+          tags: |
+            type=ref,event=branch
+            type=sha,format=long
+            type=raw,value=latest,enable=${{ github.ref_name == 'main' || github.ref_name == 'major/admin-panel' }}
+
+      - name: Determine platforms for Worker
+        id: determine-platforms
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.build_arm }}" = "true" ]; then
+            echo "platforms=linux/amd64,linux/arm64" >> "$GITHUB_OUTPUT"
+          else
+            echo "platforms=linux/amd64" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push CMS Worker
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: ${{ steps.determine-platforms.outputs.platforms }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-worker.outputs.tags }}
+          labels: ${{ steps.meta-worker.outputs.labels }}
+          cache-from: type=gha,scope=worker
+          cache-to: type=gha,mode=max,scope=worker
+
+  build-and-push-admin:
+    name: Build admin panel image
+    needs: changes
+    if: needs.changes.outputs.admin == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the Container registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Admin Panel (Next.js)
+        id: meta-admin
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-admin-panel
+          tags: |
+            type=ref,event=branch
+            type=sha,format=long
+            type=raw,value=latest,enable=${{ github.ref_name == 'main' || github.ref_name == 'major/admin-panel' }}
+
+      - name: Build and push Admin Panel
+        uses: docker/build-push-action@v5
+        with:
+          context: ./admin-panel
+          file: ./admin-panel/Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-admin.outputs.tags }}
+          labels: ${{ steps.meta-admin.outputs.labels }}
+          cache-from: type=gha,scope=admin
+          cache-to: type=gha,mode=max,scope=admin
+
+  build-and-push-monitor:
+    name: Build monitor image
+    needs: changes
+    if: needs.changes.outputs.monitor == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the Container registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Monitor
+        id: meta-monitor
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-monitor
+          tags: |
+            type=ref,event=branch
+            type=sha,format=long
+            type=raw,value=latest,enable=${{ github.ref_name == 'main' || github.ref_name == 'major/admin-panel' }}
+
+      - name: Build and push Monitor
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/monitor/Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-monitor.outputs.tags }}
+          labels: ${{ steps.meta-monitor.outputs.labels }}
+          cache-from: type=gha,scope=monitor
+          cache-to: type=gha,mode=max,scope=monitor
