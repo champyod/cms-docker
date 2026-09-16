@@ -6,7 +6,8 @@ if (set -o pipefail 2>/dev/null); then
 fi
 
 # __apply_sql.sh — apply every .sql file under admin-panel/prisma/sql/ in filename order.
-# WHY: prisma db push can drop/recreate tables, so roles and RLS need re-apply after every schema sync.
+# WHY: roles are limited to cmsuser (owner, NOBYPASSRLS) and cms_backup (BYPASSRLS, member of cmsuser)
+# for least privilege; post-restart schema sync runs prisma migrate deploy and re-applies roles/RLS.
 # Safe to re-run: each SQL file is idempotent (DO $$ guards / IF NOT EXISTS).
 
 CMS_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -16,11 +17,11 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/__lib/common.sh"
 
-# WHY --pre-push: capture legacy permissions BEFORE prisma db push drops the columns.
-# In that mode apply ONLY the capture file and be tolerant (never abort the push).
-# WHY --bootstrap-roles: apply ONLY role-definition files BEFORE the restart so new
-# containers (cms_admin/cms_monitor/cms_backup) can connect; RLS/hardening are
-# deliberately deferred to the post-restart full apply after new code is running.
+# WHY --pre-push: capture legacy permissions before the columns are dropped.
+# In that mode apply ONLY the capture file and be tolerant (never abort the caller).
+# WHY --bootstrap-roles: apply ONLY role-definition files BEFORE the restart so
+# cms_backup can connect with its real password; RLS/hardening are deferred to
+# the post-restart full apply after new code is running.
 PRE_PUSH=0
 BOOTSTRAP_ROLES=0
 if [[ "${1:-}" == "--pre-push" ]]; then
@@ -33,10 +34,14 @@ ENV_FILE=".env"
 SQL_DIR="admin-panel/prisma/sql"
 DB_CONTAINER="cms-database"
 
-# Resolve DB credentials from .env (exact key match via awk — avoids regex metachars)
+# Resolve DB credentials from .env (exact key match via awk — avoids regex metachars).
+# WHY env_unquote: __config_sync quotes a value that contains whitespace or a shell
+# metacharacter, so a password with a space would otherwise reach psql with its quotes
+# still attached (the previous inline gsub stripped quotes but not the escapes).
 get_env_val() {
-  local key="$1" file="$2"
-  awk -F= -v k="$key" '$1==k { v=$0; sub(/^[^=]*=/, "", v); gsub(/^"|"$/, "", v); gsub(/^\x27|\x27$/, "", v); print v; exit }' "$file" 2>/dev/null | tr -d '\r' || true
+  local key="$1" file="$2" raw
+  raw="$(awk -F= -v k="$key" '$1==k { v=$0; sub(/^[^=]*=/, "", v); print v; exit }' "$file" 2>/dev/null | tr -d '\r' || true)"
+  env_unquote "$raw"
 }
 
 if [[ ! -f "$ENV_FILE" ]]; then
@@ -54,13 +59,10 @@ if [[ -z "${DB_PASS:-}" ]]; then
 fi
 
 # Resolve role passwords (generated secrets in config.toml/.env)
-CMS_SERVICE_PASSWORD="$(get_env_val "POSTGRES_SERVICE_PASSWORD" "$ENV_FILE")"
-CMS_ADMIN_PASSWORD="$(get_env_val "POSTGRES_ADMIN_PASSWORD" "$ENV_FILE")"
-CMS_MONITOR_PASSWORD="$(get_env_val "POSTGRES_MONITOR_PASSWORD" "$ENV_FILE")"
 CMS_BACKUP_PASSWORD="$(get_env_val "POSTGRES_BACKUP_PASSWORD" "$ENV_FILE")"
-# Back-compat: if secrets not yet generated, warn but allow SQL files that tolerate empty
-if [[ -z "$CMS_SERVICE_PASSWORD" || -z "$CMS_ADMIN_PASSWORD" || -z "$CMS_MONITOR_PASSWORD" || -z "$CMS_BACKUP_PASSWORD" ]]; then
-  log_warn "one or more role passwords empty — run './cms config sync' to generate POSTGRES_*_PASSWORD; continuing with available values"
+# Back-compat: if secret not yet generated, warn but allow SQL files that tolerate empty
+if [[ -z "$CMS_BACKUP_PASSWORD" ]]; then
+  log_warn "POSTGRES_BACKUP_PASSWORD empty — run './cms config sync' to generate it; continuing with available values"
 fi
 
 # Fail loudly if DB container not running (tolerant in --pre-push / --bootstrap-roles so the update still runs)
@@ -78,11 +80,12 @@ fi
 
 
 # Collect .sql files in filename order (lexicographic == timestamp order)
-# WHY --pre-push: only the capture file is applied before the push so legacy booleans
+# WHY --pre-push: only the capture file is applied so legacy booleans
 # are saved before they are dropped; missing file is a no-op (fresh clone may not have it yet).
 if [[ "$PRE_PUSH" -eq 1 ]]; then
-  CAPTURE_FILE="$SQL_DIR/20260810120000_capture_legacy_permissions.sql"
-  if [[ ! -f "$CAPTURE_FILE" ]]; then
+  CAPTURE_FILE=""
+  for _f in admin-panel/prisma/migrations/*_capture_legacy_permissions/migration.sql; do [[ -e "$_f" ]] || continue; CAPTURE_FILE="$_f"; break; done
+  if [[ -z "$CAPTURE_FILE" ]] || [[ ! -f "$CAPTURE_FILE" ]]; then
     log_warn "capture file not found at $CAPTURE_FILE — skipping --pre-push"
     exit 0
   fi
@@ -90,9 +93,6 @@ if [[ "$PRE_PUSH" -eq 1 ]]; then
   if ! docker exec -i \
     -e PGPASSWORD="$DB_PASS" \
     "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 \
-    -v "cms_service_password=$CMS_SERVICE_PASSWORD" \
-    -v "cms_admin_password=$CMS_ADMIN_PASSWORD" \
-    -v "cms_monitor_password=$CMS_MONITOR_PASSWORD" \
     -v "cms_backup_password=$CMS_BACKUP_PASSWORD" \
     -f - < "$CAPTURE_FILE"; then
     log_warn "failed to apply $CAPTURE_FILE — continuing (prisma db push must still run)"
@@ -102,8 +102,8 @@ if [[ "$PRE_PUSH" -eq 1 ]]; then
   exit 0
 fi
 
-# WHY --bootstrap-roles: apply ONLY role-definition files BEFORE the restart so new
-# containers can connect; RLS/hardening are deliberately deferred to post-restart.
+# WHY --bootstrap-roles: apply ONLY role-definition files BEFORE the restart so
+# cms_backup can connect; RLS/hardening are deliberately deferred to post-restart.
 # WHY content-based selector: role files contain CREATE ROLE; RLS/hardening do not.
 # Future role migrations will also contain CREATE ROLE and be auto-included without
 # updating a hardcoded filename list. Additional exclusion of active RLS (CREATE POLICY
@@ -146,9 +146,6 @@ if [[ "$BOOTSTRAP_ROLES" -eq 1 ]]; then
     if ! docker exec -i \
       -e PGPASSWORD="$DB_PASS" \
       "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 \
-      -v "cms_service_password=$CMS_SERVICE_PASSWORD" \
-      -v "cms_admin_password=$CMS_ADMIN_PASSWORD" \
-      -v "cms_monitor_password=$CMS_MONITOR_PASSWORD" \
       -v "cms_backup_password=$CMS_BACKUP_PASSWORD" \
       -f - < "$sql_file"; then
       log_warn "failed to apply $sql_file — continuing (prisma-sync will retry after the restart)"
@@ -177,9 +174,6 @@ for sql_file in "${SQL_FILES[@]}"; do
   if ! docker exec -i \
     -e PGPASSWORD="$DB_PASS" \
     "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 \
-    -v "cms_service_password=$CMS_SERVICE_PASSWORD" \
-    -v "cms_admin_password=$CMS_ADMIN_PASSWORD" \
-    -v "cms_monitor_password=$CMS_MONITOR_PASSWORD" \
     -v "cms_backup_password=$CMS_BACKUP_PASSWORD" \
     -f - < "$sql_file"; then
     log_die "failed to apply $sql_file" 1
@@ -188,11 +182,12 @@ done
 
 # WHY post-apply RLS assertion: ENABLE/FORCE with a mistyped table succeeds silently (DO $$ guard) and leaves the table unprotected. Verify the RESULT, not just the apply exit code.
 # WHY full-apply only: --pre-push and --bootstrap-roles exit before this point; they apply only a subset (capture file / role files) where RLS is deliberately not yet complete, so a check there would false-fail and violate their tolerant contract. Full apply is the only mode where all RLS files have been applied.
-# WHY scope to expected set: the generated 20260820125500_rls_enable.sql enumerates exactly the application tables that must have RLS. Checking "all public tables" is brittle: a maintenance/legacy table without RLS would false-fail and abort `make prisma-sync`.
+# WHY scope to expected set: the generated *_rls_enable migration (admin-panel/prisma/migrations/*_rls_enable/migration.sql) enumerates exactly the application tables that must have RLS. Checking "all public tables" is brittle: a maintenance/legacy table without RLS would false-fail and abort `make prisma-sync`.
 log_info "verifying RLS (ENABLE + FORCE) on expected application tables..."
-_RLS_EXPECTED_FILE="$SQL_DIR/20260820125500_rls_enable.sql"
+_RLS_EXPECTED_FILE=""
+for _f in admin-panel/prisma/migrations/*_rls_enable/migration.sql; do [[ -e "$_f" ]] || continue; _RLS_EXPECTED_FILE="$_f"; break; done
 _RLS_EXPECTED_TABLES=()
-if [[ -f "$_RLS_EXPECTED_FILE" ]]; then
+if [[ -n "$_RLS_EXPECTED_FILE" ]] && [[ -f "$_RLS_EXPECTED_FILE" ]]; then
   # WHY grep source of truth: file contains `to_regclass('public.<name>')` guards per model
   while IFS= read -r _t; do _RLS_EXPECTED_TABLES+=("$_t"); done < <(grep -o "to_regclass('public\.[^']*')" "$_RLS_EXPECTED_FILE" | sed "s/.*public\.//;s/'.*//" | sort -u)
 fi

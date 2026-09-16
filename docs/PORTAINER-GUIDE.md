@@ -106,8 +106,6 @@ Deploy stacks in this order:
    RANKING_LISTEN_PORT=8890
    RANKING_PORT_EXTERNAL=8890
    RANKING_DOMAIN=ranking.cms.local
-   PRINTING_SERVICE_SHARD=0
-   PRINTING_ENABLED=false
    ```
 
 3. **Deploy Stack**

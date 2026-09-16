@@ -1,0 +1,171 @@
+'use server';
+
+import fs from 'fs/promises';
+import path from 'path';
+
+import { ensurePermission } from '@/lib/permissions';
+import { getRepoRoot } from '@/lib/repo-root';
+import { recordAudit } from '@/lib/audit';
+import { readEnvFile, updateEnvFile } from '@/app/actions/env';
+import {
+  buildDiscordAlertPayload,
+  postDiscordPayload,
+  readTomlValue,
+  upsertTomlValue,
+  validateDiscordRoleId,
+  validateDiscordWebhookUrl,
+} from '@/lib/discord-webhook';
+
+const CONFIG_TOML = 'config.toml';
+const ENV_FILE = '.env';
+const CONFIG_SECTION = 'infra';
+const WEBHOOK_KEY = 'DISCORD_WEBHOOK_URL';
+const ROLE_KEY = 'DISCORD_ROLE_ID';
+
+interface DiscordNotificationInput {
+  webhookUrl: string;
+  roleId: string;
+}
+
+async function readConfigToml(): Promise<string | null> {
+  try {
+    return await fs.readFile(path.join(getRepoRoot(), CONFIG_TOML), 'utf-8');
+  } catch {
+    // Absent config.toml is a normal state on a fresh worktree: callers decide what to do.
+    return null;
+  }
+}
+
+/**
+ * Reads the saved webhook settings from config.toml (source of truth) next to the value the
+ * running monitor actually consumes from .env, so the operator can see when they diverge.
+ */
+export async function getDiscordNotificationSettings() {
+  await ensurePermission('env:read');
+  try {
+    const configToml = await readConfigToml();
+    const envResult = await readEnvFile(ENV_FILE);
+    const envConfig = envResult.success && envResult.config ? envResult.config : {};
+
+    return {
+      success: true as const,
+      configTomlPresent: configToml !== null,
+      configWebhookUrl: configToml === null ? '' : readTomlValue(configToml, CONFIG_SECTION, WEBHOOK_KEY),
+      effectiveWebhookUrl: envConfig[WEBHOOK_KEY] ?? '',
+    };
+  } catch (error) {
+    return { success: false as const, error: (error as Error).message };
+  }
+}
+
+/**
+ * Persists the webhook settings to config.toml (so `./cms config sync` keeps them) and to
+ * .env (so the next container start picks them up immediately). Invalid values are rejected
+ * rather than stored: a wrong URL silently disables every alert.
+ */
+export async function saveDiscordNotificationSettings(input: DiscordNotificationInput) {
+  await ensurePermission('env:update');
+
+  const webhook = validateDiscordWebhookUrl(input.webhookUrl);
+  if (!webhook.ok) {
+    return { success: false as const, error: webhook.error };
+  }
+  const role = validateDiscordRoleId(input.roleId);
+  if (!role.ok) {
+    return { success: false as const, error: role.error };
+  }
+
+  try {
+    const configToml = await readConfigToml();
+    if (configToml === null) {
+      return {
+        success: false as const,
+        error: `Could not update ${CONFIG_TOML} — run './cms config sync' once so the value has a source of truth, then retry.`,
+      };
+    }
+
+    const updatedToml = upsertTomlValue(
+      upsertTomlValue(configToml, CONFIG_SECTION, WEBHOOK_KEY, webhook.value),
+      CONFIG_SECTION,
+      ROLE_KEY,
+      role.value,
+    );
+    await fs.writeFile(path.join(getRepoRoot(), CONFIG_TOML), updatedToml, 'utf-8');
+
+    const envResult = await updateEnvFile(ENV_FILE, {
+      [WEBHOOK_KEY]: webhook.value,
+      [ROLE_KEY]: role.value,
+    });
+    if (!envResult.success) {
+      return {
+        success: false as const,
+        error: `${CONFIG_TOML} was updated, but writing ${ENV_FILE} failed: ${envResult.error}`,
+      };
+    }
+
+    // Why: the webhook URL is a credential — record that it changed, never its value.
+    await recordAudit({
+      verb: 'env:update',
+      entity: 'discord_notification',
+      afterValues: {
+        configToml: CONFIG_TOML,
+        envFile: ENV_FILE,
+        webhookConfigured: webhook.value !== '',
+        roleIdSet: role.value !== '',
+      },
+      result: 'success',
+    });
+
+    return { success: true as const };
+  } catch (error) {
+    return { success: false as const, error: (error as Error).message };
+  }
+}
+
+/**
+ * Posts a real alert through the same payload shape the monitor sends and reports the HTTP
+ * result, so an operator can prove delivery without waiting for an incident.
+ */
+export async function sendTestDiscordAlert(input?: Partial<DiscordNotificationInput>) {
+  await ensurePermission('monitor:test');
+
+  const suppliedUrl = input?.webhookUrl ?? '';
+  let targetUrl = suppliedUrl.trim();
+
+  if (targetUrl === '') {
+    const envResult = await readEnvFile(ENV_FILE);
+    targetUrl = (envResult.success && envResult.config ? envResult.config[WEBHOOK_KEY] : '') ?? '';
+  }
+
+  const webhook = validateDiscordWebhookUrl(targetUrl);
+  if (!webhook.ok) {
+    return { success: false as const, error: webhook.error, status: 0 };
+  }
+  if (webhook.value === '') {
+    return {
+      success: false as const,
+      error: 'No webhook URL to test — enter one and save it, or set DISCORD_WEBHOOK_URL in config.toml [infra].',
+      status: 0,
+    };
+  }
+
+  const suppliedRole = input?.roleId ?? '';
+  const role = validateDiscordRoleId(suppliedRole.trim() === '' ? '' : suppliedRole);
+  if (!role.ok) {
+    return { success: false as const, error: role.error, status: 0 };
+  }
+
+  const payload = buildDiscordAlertPayload({
+    title: 'CMS Alert Test',
+    description:
+      'Test alert sent from the admin panel. Delivery is working — monitor alerts (CPU, memory, disk and container events) will arrive here.',
+    roleId: role.value,
+    footerText: 'CMS Admin Panel',
+  });
+
+  const delivery = await postDiscordPayload(webhook.value, payload);
+  if (!delivery.success) {
+    return { success: false as const, error: delivery.error ?? 'Delivery failed', status: delivery.status };
+  }
+  return { success: true as const, status: delivery.status };
+}

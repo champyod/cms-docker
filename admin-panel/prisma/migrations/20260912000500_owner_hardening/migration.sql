@@ -1,3 +1,6 @@
+-- 20260912000500_owner_hardening/migration.sql — migrated from admin-panel/prisma/sql/20260820140000_owner_hardening.sql
+-- Original header preserved below.
+
 -- 20260820140000_owner_hardening.sql — demote cmsuser so FORCE RLS actually binds
 -- WHY: PostgreSQL SUPERUSER and BYPASSRLS bypass RLS even when FORCE ROW LEVEL SECURITY is set, so the append-only guarantees on audit_log/submissions did not apply to cmsuser (the DB owner/app connection). Stripping those attributes closes the bypass.
 -- WHY: ownership is independent of the SUPERUSER flag — cmsuser still owns its tables/objects after demotion, so it retains implicit DDL rights (CREATE/ALTER/DROP) on schema public and on owned objects without needing SUPERUSER; no BYPASSRLS is ever granted because every path must satisfy the policies.

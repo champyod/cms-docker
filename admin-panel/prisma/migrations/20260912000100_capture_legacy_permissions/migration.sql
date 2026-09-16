@@ -1,4 +1,4 @@
--- 20260810120000_capture_legacy_permissions.sql — preserve legacy boolean columns before they are dropped.
+-- 20260912000100_capture_legacy_permissions/migration.sql — preserve legacy boolean columns before they are dropped.
 -- WHY: prisma db push with the new schema DROPs permission_all, permission_messaging,
 -- permission_tasks, permission_users, permission_contests from admins. Without a pre-push
 -- snapshot the data is lost and the later backfill (20260815120000) has nothing to read.

@@ -113,13 +113,39 @@ is_integer() {
     [[ "$1" =~ ^[0-9]+$ ]]
 }
 
+# WHY: an unset webhook is the silent-non-delivery failure mode — the operator believes
+# alerting is on while every message is dropped. Report it on stderr (docker logs) so it
+# reaches the surface the operator actually reads, and never abort the daemon loop.
+warn_webhook_unconfigured() {
+    echo "[WARN] DISCORD_WEBHOOK_URL is unset — dropped $1." >&2
+    echo "[WARN] Set it in config.toml [infra] then run './cms config sync', or from the admin panel (Maintenance → Discord Notifications), and recreate the monitor container." >&2
+}
+
+# Post a prepared payload and report a non-2xx response instead of discarding it.
+post_discord_payload() {
+    local payload_file="$1"
+    local context="$2"
+    local http_code
+    # curl reports an unreachable endpoint as 000, which the case below also catches.
+    http_code=$(curl -s -o /dev/null -w '%{http_code}' -H "Content-Type: application/json" -X POST -d "@${payload_file}" "$WEBHOOK_URL" || true)
+    case "$http_code" in
+        2??) ;;
+        *) echo "[WARN] Discord webhook delivery failed (HTTP ${http_code:-000}) — dropped $context." >&2 ;;
+    esac
+}
+
 send_discord_alert() {
     local status="$1"
     local message="$2"
     local color="$3"
     local mention="$4"
     local timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    
+
+    if [ -z "$WEBHOOK_URL" ]; then
+        warn_webhook_unconfigured "alert ($status)"
+        return 0
+    fi
+
     cat <<EOF > /tmp/discord_payload.json
 {
   "content": "$mention",
@@ -141,9 +167,7 @@ send_discord_alert() {
 }
 EOF
 
-    if [ -n "$WEBHOOK_URL" ]; then
-        curl -s -H "Content-Type: application/json" -X POST -d @/tmp/discord_payload.json "$WEBHOOK_URL" > /dev/null
-    fi
+    post_discord_payload /tmp/discord_payload.json "alert ($status)"
 }
 
 send_discord_notification() {
@@ -151,7 +175,12 @@ send_discord_notification() {
     local message="$2"
     local color="$3"
     local timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    
+
+    if [ -z "$WEBHOOK_URL" ]; then
+        warn_webhook_unconfigured "notification ($title)"
+        return 0
+    fi
+
     cat <<EOF > /tmp/discord_notif.json
 {
   "embeds": [
@@ -166,9 +195,20 @@ send_discord_notification() {
 }
 EOF
 
-    if [ -n "$WEBHOOK_URL" ]; then
-        curl -s -H "Content-Type: application/json" -X POST -d @/tmp/discord_notif.json "$WEBHOOK_URL" > /dev/null
+    post_discord_payload /tmp/discord_notif.json "notification ($title)"
+}
+
+# WHY: when the config file cannot be located the defaults below silently disarm every
+# per-container policy (autoRestart / maxRestarts / discordNotifications), so say it once
+# per process instead of quietly behaving as if nothing were configured.
+RESTART_CONFIG_NOTICE_SHOWN=false
+warn_restart_config_missing() {
+    if [ "$RESTART_CONFIG_NOTICE_SHOWN" = "true" ]; then
+        return 0
     fi
+    RESTART_CONFIG_NOTICE_SHOWN=true
+    echo "[WARN] container restart config not found at $1 — per-container autoRestart/maxRestarts/discordNotifications are ignored." >&2
+    echo "[WARN] When the monitor runs in a container set REPO_ROOT=/repo-root; config/ is mounted at /repo-root/config." >&2
 }
 
 get_container_restart_config() {
@@ -176,6 +216,7 @@ get_container_restart_config() {
     local config_file="${REPO_ROOT:-$(dirname "$0")/..}/config/container-restart.json"
 
     if [ ! -f "$config_file" ]; then
+        warn_restart_config_missing "$config_file"
         echo "false:5:0:true"
         return
     fi
@@ -185,7 +226,9 @@ get_container_restart_config() {
         local auto_restart=$(jq -r ".[\"$container_id\"].autoRestart // false" "$config_file" 2>/dev/null || echo "false")
         local max_restarts=$(jq -r ".[\"$container_id\"].maxRestarts // 5" "$config_file" 2>/dev/null || echo "5")
         local current_restarts=$(jq -r ".[\"$container_id\"].currentRestarts // 0" "$config_file" 2>/dev/null || echo "0")
-        local discord_notifications=$(jq -r ".[\"$container_id\"].discordNotifications // true" "$config_file" 2>/dev/null || echo "true")
+        # WHY: jq's // treats boolean false as "empty" too, so `.discordNotifications // true`
+        # always reported true and silently ignored a stored opt-out; has() keeps false intact.
+        local discord_notifications=$(jq -r "if (.[\"$container_id\"] | has(\"discordNotifications\")) then .[\"$container_id\"].discordNotifications else true end" "$config_file" 2>/dev/null || echo "true")
         echo "$auto_restart:$max_restarts:$current_restarts:$discord_notifications"
     else
         echo "false:5:0:true"
@@ -214,7 +257,10 @@ should_suppress_notification() {
     local restart_count=$(docker inspect "$container_id" --format='{{.RestartCount}}' 2>/dev/null || echo "0")
 
     # If auto-restart is disabled and container is dying/restarting, suppress after first notification
-    if [ "$auto_restart" = "false" ] && [ "$event_type" = "die" ] || [ "$event_type" = "restart" ]; then
+    # WHY braces: && and || bind equally and associate left to right, so the un-braced form
+    # reads as (A && B) || C — that made every restart event satisfy the guard on its own
+    # and suppress alerts the intent never covered (under-alerting).
+    if [ "$auto_restart" = "false" ] && { [ "$event_type" = "die" ] || [ "$event_type" = "restart" ]; }; then
         # Check if we already notified about this container being disabled
         if grep -q "^${container_name}:disabled:notified" "$NOTIF_CACHE" 2>/dev/null; then
             return 0  # Suppress
@@ -222,7 +268,9 @@ should_suppress_notification() {
     fi
 
     # If restart count exceeds max, suppress repeated die/restart notifications
-    if [ "$restart_count" -ge "$max_restarts" ] && [ "$event_type" = "die" ] || [ "$event_type" = "restart" ]; then
+    # WHY braces: same precedence trap as above — restart events must only be suppressed
+    # when the restart limit is genuinely reached, not unconditionally.
+    if [ "$restart_count" -ge "$max_restarts" ] && { [ "$event_type" = "die" ] || [ "$event_type" = "restart" ]; }; then
         # Check if we already notified about limit reached
         if grep -q "^${container_name}:limit:notified" "$NOTIF_CACHE" 2>/dev/null; then
             return 0  # Suppress
@@ -358,6 +406,18 @@ check_once() {
 PREV_STATE="OK"
 LAST_ALERT_TIME=0
 LAST_BACKUP_TIME=0
+
+# WHY: say up front whether this run can deliver anything — starting a monitor with no
+# webhook otherwise looks healthy while every alert is dropped.
+if [ -z "$WEBHOOK_URL" ]; then
+    echo "[WARN] ===========================================================" >&2
+    echo "[WARN] DISCORD_WEBHOOK_URL is unset — incidents will be detected" >&2
+    echo "[WARN] but NO alert will be delivered for this run." >&2
+    echo "[WARN] Set it in config.toml [infra] and run './cms config sync'," >&2
+    echo "[WARN] or use the admin panel Maintenance page, then recreate the" >&2
+    echo "[WARN] monitor container so it picks the value up." >&2
+    echo "[WARN] ===========================================================" >&2
+fi
 
 if [ "$DAEMON_MODE" = true ]; then
     listen_docker_events &

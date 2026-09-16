@@ -30,7 +30,9 @@ source "${SCRIPT_DIR}/__lib/common.sh"
 # Helpers
 # ---------------------------------------------------------------------------
 env_val() {
-  awk -F= -v k="$2" '$1==k {v=$0; sub(/^[^=]*=/,"",v); gsub(/^[ \t]+|[ \t\r]+$/,"",v); print v; exit}' "$1" 2>/dev/null || true
+  local file="$1" key="$2" raw
+  raw="$(awk -F= -v k="$key" '$1==k {v=$0; sub(/^[^=]*=/,"",v); gsub(/^[ \t]+|[ \t\r]+$/,"",v); print v; exit}' "$file" 2>/dev/null || true)"
+  env_unquote "$raw"
 }
 
 is_weak_secret() {
@@ -189,8 +191,9 @@ _audit_env_key() {
 
 _audit_env_file_key() {
   local file="$1" key="$2"
-  local val
-  val="$(awk -F= -v k="$2" '$1==k {v=$0; sub(/^[^=]*=/,"",v); gsub(/^[ \t]+|[ \t\r]+$/,"",v); print v; exit}' "$file" 2>/dev/null || true)"
+  local val raw
+  raw="$(awk -F= -v k="$2" '$1==k {v=$0; sub(/^[^=]*=/,"",v); gsub(/^[ \t]+|[ \t\r]+$/,"",v); print v; exit}' "$file" 2>/dev/null || true)"
+  val="$(env_unquote "$raw")"
   if is_weak_secret "$val"; then
     log_warn "WEAK: $key in $file — default/placeholder value"
     return 0

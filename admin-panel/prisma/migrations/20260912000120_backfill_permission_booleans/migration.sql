@@ -15,6 +15,28 @@
 -- ON CONFLICT DO NOTHING so re-runs never duplicate. State the actual precondition: safe
 -- to run before or after the boolean DROP, on fresh or upgraded databases, repeatedly.
 
+-- Ensure the 5 groups referenced by this backfill exist (prod-faithful: on a real
+-- upgrade the groups rows do not exist yet — the seed that creates them runs after
+-- the RBAC tables exist, i.e. after this migration; without this block the guard
+-- `IF EXISTS (SELECT 1 FROM groups WHERE name = ...)` makes the backfill a no-op).
+-- WHY seeded rows must match the seed: admin-panel/prisma/seed-permissions.ts
+-- upserts groups by name with (description, is_seeded=true); rows inserted here
+-- use the same shape so the later seed upsert updates them in place without
+-- duplication. Guarded to be idempotent when the seed already ran.
+DO $$
+BEGIN
+  IF to_regclass('public.groups') IS NOT NULL THEN
+    INSERT INTO groups (name, description, is_seeded)
+    VALUES
+      ('Superadmin', 'Unrestricted access to every permission in the registry.', true),
+      ('Problem Setter', 'Authors tasks, datasets, statements and test data.', true),
+      ('Contest Manager', 'Runs contests end to end, from creation through ranking.', true),
+      ('Messaging', 'Handles clarifications, messages and announcements.', true),
+      ('Viewer', 'Read-only access to public contest data.', true)
+    ON CONFLICT (name) DO NOTHING;
+  END IF;
+END $$;
+
 DO $$
 DECLARE
   _legacy_schema text;

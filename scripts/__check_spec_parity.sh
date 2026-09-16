@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/__lib/common.sh"
+# WHY: every sort below runs under LC_ALL=C because the resulting sets are compared with comm —
+# collation is machine-dependent, and a locale-ordered sort would report phantom differences.
 EXAMPLE="${REPO_ROOT}/config.toml.example"
 ENGINE="${REPO_ROOT}/scripts/__update_engine.sh"
 [ -f "$EXAMPLE" ] || log_die "missing $EXAMPLE" 1
@@ -15,12 +17,12 @@ awk '{
   line=$0; sub(/^[ \t]+/,"",line)
   if (line ~ /^\[[^]]+\]/) {sec=line; sub(/[#;].*/,"",sec); gsub(/^[ \t]+|[ \t\r]+$/,"",sec); cur=sec; next}
   if (line ~ /^[A-Z0-9_]+[ \t]*=/) {k=$1; gsub(/[^A-Z0-9_]/,"",k); if(cur!="") print cur"|"k}
-}' "$EXAMPLE" | sort -u > "$tmp_ex"
-grep -E '"[^"]+\|\[[^]]+\]\|[A-Z0-9_]+\|' "$ENGINE" | awk -F'|' '{gsub(/"/,"",$2); gsub(/"/,"",$3); gsub(/^[ \t]+|[ \t]+$/,"",$2); gsub(/^[ \t]+|[ \t]+$/,"",$3); print $2"|"$3}' | sort > "$tmp_sp"
-sort -u "$tmp_sp" > "$tmp_sp_u"
-if sort "$tmp_sp" | uniq -d | grep -q .; then
+}' "$EXAMPLE" | LC_ALL=C sort -u > "$tmp_ex"
+grep -E '"[^"]+\|\[[^]]+\]\|[A-Z0-9_]+\|' "$ENGINE" | awk -F'|' '{gsub(/"/,"",$2); gsub(/"/,"",$3); gsub(/^[ \t]+|[ \t]+$/,"",$2); gsub(/^[ \t]+|[ \t]+$/,"",$3); print $2"|"$3}' | LC_ALL=C sort > "$tmp_sp"
+LC_ALL=C sort -u "$tmp_sp" > "$tmp_sp_u"
+if LC_ALL=C sort "$tmp_sp" | uniq -d | grep -q .; then
   log_warn "duplicate VAR_SPEC entries (mirrors):"
-  sort "$tmp_sp" | uniq -d | while IFS= read -r d; do log_warn "  dup $d"; done
+  LC_ALL=C sort "$tmp_sp" | uniq -d | while IFS= read -r d; do log_warn "  dup $d"; done
 fi
 missing=$(comm -23 "$tmp_ex" "$tmp_sp_u" || true)
 unknown=$(comm -13 "$tmp_ex" "$tmp_sp_u" || true)

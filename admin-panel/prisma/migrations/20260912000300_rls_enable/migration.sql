@@ -1,3 +1,6 @@
+-- 20260912000300_rls_enable/migration.sql — migrated from admin-panel/prisma/sql/20260820125500_rls_enable.sql (GENERATED)
+-- Original GENERATED header preserved below.
+
 -- 20260820125500_rls_enable.sql — GENERATED — do not hand-edit
 -- Source: admin-panel/prisma/schema.prisma
 -- Generator: scripts/__generate_rls_sql.sh
@@ -169,12 +172,6 @@ DO $$ BEGIN
   END IF;
 END $$;
 DO $$ BEGIN
-  IF to_regclass('public.users') IS NOT NULL THEN
-    EXECUTE 'ALTER TABLE public.users ENABLE ROW LEVEL SECURITY';
-    EXECUTE 'ALTER TABLE public.users FORCE ROW LEVEL SECURITY';
-  END IF;
-END $$;
-DO $$ BEGIN
   IF to_regclass('public.user_test_executables') IS NOT NULL THEN
     EXECUTE 'ALTER TABLE public.user_test_executables ENABLE ROW LEVEL SECURITY';
     EXECUTE 'ALTER TABLE public.user_test_executables FORCE ROW LEVEL SECURITY';
@@ -202,5 +199,11 @@ DO $$ BEGIN
   IF to_regclass('public.user_tests') IS NOT NULL THEN
     EXECUTE 'ALTER TABLE public.user_tests ENABLE ROW LEVEL SECURITY';
     EXECUTE 'ALTER TABLE public.user_tests FORCE ROW LEVEL SECURITY';
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF to_regclass('public.users') IS NOT NULL THEN
+    EXECUTE 'ALTER TABLE public.users ENABLE ROW LEVEL SECURITY';
+    EXECUTE 'ALTER TABLE public.users FORCE ROW LEVEL SECURITY';
   END IF;
 END $$;

@@ -1,0 +1,9 @@
+-- Baseline marker for pre-existing schemas (P3005 mitigation).
+-- WHY: cmsInitDB (SQLAlchemy metadata.create_all) creates 26 tables, 5 enums, 5 domains
+-- and 46 CHECK constraints before Prisma ever runs. On any non-empty DB that lacks
+-- _prisma_migrations, `prisma migrate deploy` fails with P3005 ("database schema is
+-- not empty — baseline"). This marker gives `prisma migrate resolve --applied
+-- 20260910000000_baseline_marker` a target to baseline the existing schema without
+-- skipping the guarded statements in later migrations. No DDL — intentionally empty.
+-- Safe on fresh DBs (deploy applies it as a no-op) and on prod (resolve marks it
+-- applied before deploy runs the rest).

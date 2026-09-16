@@ -30,24 +30,32 @@ if [[ ! -f "$RANKING_CONFIG_FILE" ]]; then
   SKIP_RANKING=true
 fi
 
-# Exact key match via awk -F= (avoids regex metachars in key).
+# Exact key match via awk -F= (avoids regex metachars in key). Values are passed
+# through env_unquote because __config_sync quotes any value containing whitespace or
+# a shell metacharacter — without it a quoted password would be injected into
+# cms.toml (and a quoted RPC secret into [rpc]) with its quotes still attached.
 get_env_val() {
   local key="$1"
   local file="$ENV_FILE"
-  awk -F= -v k="$key" '$1==k { v=$0; sub(/^[^=]*=/, "", v); print v; exit }' "$file" 2>/dev/null | tr -d '\r' || true
+  local raw
+  raw="$(awk -F= -v k="$key" '$1==k { v=$0; sub(/^[^=]*=/, "", v); print v; exit }' "$file" 2>/dev/null | tr -d '\r' || true)"
+  env_unquote "$raw"
 }
 get_worker_env_val() {
   local key="$1"
   local file="$WORKER_ENV_FILE"
+  local raw
   [[ -f "$file" ]] || return 0
-  awk -F= -v k="$key" '$1==k { v=$0; sub(/^[^=]*=/, "", v); print v; exit }' "$file" 2>/dev/null | tr -d '\r' || true
+  raw="$(awk -F= -v k="$key" '$1==k { v=$0; sub(/^[^=]*=/, "", v); print v; exit }' "$file" 2>/dev/null | tr -d '\r' || true)"
+  env_unquote "$raw"
 }
 
 # Helper: exact match from arbitrary file (for .env.contest).
 get_kv_from_file() {
-  local key="$1" file="$2"
+  local key="$1" file="$2" raw
   [[ -f "$file" ]] || return 0
-  awk -F= -v k="$key" '$1==k { v=$0; sub(/^[^=]*=/, "", v); print v; exit }' "$file" 2>/dev/null | tr -d '\r' || true
+  raw="$(awk -F= -v k="$key" '$1==k { v=$0; sub(/^[^=]*=/, "", v); print v; exit }' "$file" 2>/dev/null | tr -d '\r' || true)"
+  env_unquote "$raw"
 }
 
 DB_USER="$(get_env_val "POSTGRES_USER")"
@@ -67,7 +75,9 @@ DB_NAME="${DB_NAME:-$(get_worker_env_val "POSTGRES_DB")}"
 DB_HOST="${DB_HOST:-$(get_worker_env_val "POSTGRES_HOST")}"
 DB_PORT="${DB_PORT:-$(get_worker_env_val "POSTGRES_PORT")}"
 
-# WHY: Python services stay on the owner role (cmsuser) — they need full DML and large-object lifecycle; cms_service is reserved for future least-privilege cutover, not auto-wired here to avoid breaking existing deployments.
+# WHY: Python services run as the owner role cmsuser — they need full DML and
+# large-object lifecycle; no additional DML role exists.
+
 DB_USER="${DB_USER:-cmsuser}"
 DB_PASS="${DB_PASS:-your_password_here}"
 DB_NAME="${DB_NAME:-cmsdb}"

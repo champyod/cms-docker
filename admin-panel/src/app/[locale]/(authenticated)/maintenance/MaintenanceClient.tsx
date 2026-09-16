@@ -3,19 +3,61 @@
 import { useState, useEffect } from 'react';
 import { Card } from '@/components/core/Card';
 import { readEnvFile, updateEnvFile } from '@/app/actions/env';
-import { triggerManualBackup } from '@/app/actions/services';
-import { Save, Database, Bell, Shield, Zap } from 'lucide-react';
+import { triggerManualBackup, restartServices } from '@/app/actions/services';
+import {
+  getDiscordNotificationSettings,
+  saveDiscordNotificationSettings,
+  sendTestDiscordAlert,
+} from '@/app/actions/notifications';
+import { Save, Database, Bell, Shield, Zap, Send, RefreshCw } from 'lucide-react';
 import { PageContent, PageHeader, Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
 import { Button } from '@/components/core/Button';
 import { Input } from '@/components/core/Input';
 import { Loading } from '@/components/core/Loading';
 
+interface DiscordSettings {
+  configTomlPresent: boolean;
+  configWebhookUrl: string;
+  effectiveWebhookUrl: string;
+}
+
+// Why: the source of truth (config.toml) and what the monitor actually reads (.env) can
+// drift, and a silent drift means alerts vanish — spell the state out instead of a badge.
+function describeDiscordState(settings: DiscordSettings): string {
+  if (!settings.configTomlPresent) {
+    return "config.toml not found — run './cms config sync' so saved values survive the next sync.";
+  }
+  if (settings.effectiveWebhookUrl === '' && settings.configWebhookUrl === '') {
+    return 'No webhook configured — monitor alerts are dropped.';
+  }
+  if (settings.effectiveWebhookUrl === '') {
+    return 'Saved in config.toml but not applied to .env yet — save and restart the monitor to apply it.';
+  }
+  if (settings.effectiveWebhookUrl !== settings.configWebhookUrl) {
+    return 'config.toml and .env disagree — save here so the next config sync keeps this value.';
+  }
+  return 'Webhook configured and matching config.toml.';
+}
+
 export default function MaintenanceClient() {
   const [data, setData] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
+  const [discordState, setDiscordState] = useState<string>('');
+  const [discordError, setDiscordError] = useState('');
+  const [discordSaving, setDiscordSaving] = useState(false);
+  const [discordTesting, setDiscordTesting] = useState(false);
+
+  const loadDiscordSettings = async (): Promise<void> => {
+    const result = await getDiscordNotificationSettings();
+    if (!result.success) {
+      setDiscordError(result.error);
+      return;
+    }
+    setDiscordState(describeDiscordState(result));
+  };
 
   useEffect(() => {
     void (async () => {
@@ -23,6 +65,7 @@ export default function MaintenanceClient() {
       if (result.success && result.config) {
         setData(result.config);
       }
+      await loadDiscordSettings();
       setLoading(false);
     })();
   }, []);
@@ -52,6 +95,54 @@ export default function MaintenanceClient() {
       alert('Failed: ' + result.error);
     }
     setBackingUp(false);
+  };
+
+  const persistDiscordSettings = async (applyToMonitor: boolean): Promise<void> => {
+    setDiscordSaving(true);
+    try {
+      const result = await saveDiscordNotificationSettings({
+        webhookUrl: data.DISCORD_WEBHOOK_URL ?? '',
+        roleId: data.DISCORD_ROLE_ID ?? '',
+      });
+      if (!result.success) {
+        setDiscordError(result.error);
+        alert('Notification settings not saved: ' + result.error);
+        return;
+      }
+      setDiscordError('');
+      await loadDiscordSettings();
+      if (!applyToMonitor) {
+        alert('Notification settings saved to config.toml and .env.');
+        return;
+      }
+      const restart = await restartServices('custom', ['monitor']);
+      if (restart.success) {
+        alert('Notification settings saved and the monitor was recreated.');
+      } else {
+        alert('Settings saved, but the monitor restart failed: ' + restart.error);
+      }
+    } finally {
+      setDiscordSaving(false);
+    }
+  };
+
+  const handleTestAlert = async (): Promise<void> => {
+    setDiscordTesting(true);
+    try {
+      const result = await sendTestDiscordAlert({
+        webhookUrl: data.DISCORD_WEBHOOK_URL ?? '',
+        roleId: data.DISCORD_ROLE_ID ?? '',
+      });
+      if (result.success) {
+        alert(`Test alert delivered (HTTP ${result.status}).`);
+        return;
+      }
+      const message = result.error ?? 'The test alert failed.';
+      setDiscordError(message);
+      alert('Test alert failed: ' + message);
+    } finally {
+      setDiscordTesting(false);
+    }
   };
 
   if (loading) return <Loading text="Loading maintenance..." fullScreen />;
@@ -159,6 +250,44 @@ export default function MaintenanceClient() {
                             className="font-mono text-sm"
                             placeholder="Role ID to tag in alerts"
                         />
+                    </Stack>
+
+                    <Stack gap={3} className="pt-4 border-t border-border">
+                        <Stack direction="row" gap={2} className="flex-wrap">
+                            <Button
+                                variant="positiveOutline"
+                                onClick={() => void persistDiscordSettings(false)}
+                                loading={discordSaving}
+                            >
+                                <Save className="w-4 h-4" />
+                                Save Notifications
+                            </Button>
+                            <Button
+                                variant="secondary"
+                                onClick={handleTestAlert}
+                                loading={discordTesting}
+                            >
+                                <Send className="w-4 h-4" />
+                                Send Test Alert
+                            </Button>
+                            <Button
+                                variant="positive"
+                                onClick={() => void persistDiscordSettings(true)}
+                                loading={discordSaving}
+                            >
+                                <RefreshCw className="w-4 h-4" />
+                                Save & Restart Monitor
+                            </Button>
+                        </Stack>
+                        {discordError && (
+                            <Text variant="small" color="text-destructive">{discordError}</Text>
+                        )}
+                        {!discordError && discordState && (
+                            <Text variant="small" color="text-muted-foreground">{discordState}</Text>
+                        )}
+                        <Text variant="small" color="text-muted-foreground" className="italic opacity-50">
+                            The test alert uses the URL in the field above, so you can verify before saving.
+                        </Text>
                     </Stack>
 
                     <Stack gap={2} className="p-4 bg-muted/50 rounded-xl border border-border">
