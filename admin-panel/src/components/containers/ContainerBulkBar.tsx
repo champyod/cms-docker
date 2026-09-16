@@ -34,7 +34,7 @@ export function ContainerBulkBar({
             Discord not configured
           </span>
         )}
-        <button onClick={onClear} className="p-1 hover:bg-accent rounded-full text-muted-foreground">
+        <button onClick={onClear} className="p-2.5 sm:p-1 min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 hover:bg-accent rounded-full text-muted-foreground">
           <X className="w-4 h-4" />
         </button>
       </div>
