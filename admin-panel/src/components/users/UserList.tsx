@@ -150,7 +150,7 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
           <h2 className="text-xl font-bold text-foreground">All Users</h2>
           <Link
             href={`/${locale}/docs#users`}
-            className="inline-flex size-9 shrink-0 items-center justify-center hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground"
+            className="inline-flex size-11 shrink-0 items-center justify-center hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground"
             title="View Documentation"
           >
             <HelpCircle className="w-4 h-4" />
