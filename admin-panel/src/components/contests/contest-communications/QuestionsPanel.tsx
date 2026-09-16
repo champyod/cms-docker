@@ -57,9 +57,9 @@ export function QuestionsPanel({ questions, replyingTo, replySubject, replyText,
             </div>
             <div className="flex shrink-0 items-center gap-1">
               {!q.reply_timestamp && (
-                <button onClick={() => onReplyingTo(replyingTo === q.id ? null : q.id)} aria-label={`Reply to ${q.subject}`} title="Reply" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-primary transition-colors hover:bg-primary/20"><Reply className="h-4 w-4" /></button>
+                <button onClick={() => onReplyingTo(replyingTo === q.id ? null : q.id)} aria-label={`Reply to ${q.subject}`} title="Reply" className="flex size-11 shrink-0 items-center justify-center rounded-lg text-primary transition-colors hover:bg-primary/20"><Reply className="h-4 w-4" /></button>
               )}
-              <button onClick={() => onIgnore(q.id, q.ignored)} aria-label={q.ignored ? 'Unignore question' : 'Ignore question'} title={q.ignored ? 'Unignore' : 'Ignore'} className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted"><EyeOff className={q.ignored ? 'hidden' : 'h-4 w-4'} /><Eye className={q.ignored ? 'h-4 w-4' : 'hidden'} /></button>
+              <button onClick={() => onIgnore(q.id, q.ignored)} aria-label={q.ignored ? 'Unignore question' : 'Ignore question'} title={q.ignored ? 'Unignore' : 'Ignore'} className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted"><EyeOff className={q.ignored ? 'hidden' : 'h-4 w-4'} /><Eye className={q.ignored ? 'h-4 w-4' : 'hidden'} /></button>
             </div>
           </div>
           {replyingTo === q.id && (
