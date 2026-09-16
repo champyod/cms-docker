@@ -4,33 +4,39 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import type { NavItemDef } from '@/components/layout/sidebar-nav';
+import type { NavEntry } from '@/lib/nav-registry';
 
-function isActiveRoute(pathname: string, href: string, locale: string): boolean {
+function buildHref(entry: NavEntry, locale: string): string {
+  if (entry.path === '/') return `/${locale}`;
+  return `/${locale}${entry.path}`;
+}
+
+export function isActiveRoute(pathname: string, href: string, locale: string): boolean {
   return pathname === href || (href !== `/${locale}` && pathname.startsWith(href));
 }
 
 interface NavItemProps {
-  item: NavItemDef;
+  entry: NavEntry;
   locale: string;
   collapsed: boolean;
+  onClick?: () => void;
 }
 
-export function SidebarNavItem({ item, locale, collapsed }: NavItemProps): React.JSX.Element {
+export function SidebarNavItem({ entry, locale, collapsed, onClick }: NavItemProps): React.JSX.Element {
   const pathname = usePathname();
-  const href = item.buildHref(locale);
+  const href = buildHref(entry, locale);
   const isActive = isActiveRoute(pathname, href, locale);
   const link = (
-    <Link href={href} aria-current={isActive ? 'page' : undefined} className={cn('flex h-9 items-center rounded-lg px-2.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50', collapsed && 'w-9 justify-center px-0', isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground')}>
-      <item.icon className="size-4 shrink-0" aria-hidden />
-      {!collapsed && <span className="ml-3 truncate">{item.label}</span>}
+    <Link href={href} onClick={onClick} aria-current={isActive ? 'page' : undefined} className={cn('flex h-9 items-center rounded-lg px-2.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50', collapsed && 'w-9 justify-center px-0', isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground')}>
+      <entry.icon className="size-4 shrink-0" aria-hidden />
+      {!collapsed && <span className="ml-3 truncate">{entry.label}</span>}
     </Link>
   );
   if (!collapsed) return link;
   return (
     <Tooltip>
       <TooltipTrigger asChild>{link}</TooltipTrigger>
-      <TooltipContent side="right">{item.label}</TooltipContent>
+      <TooltipContent side="right">{entry.label}</TooltipContent>
     </Tooltip>
   );
 }

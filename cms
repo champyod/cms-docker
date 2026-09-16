@@ -56,8 +56,7 @@ Commands:
   worker [edit|deploy|stop|list|attach]  fleet TUI / deploy / stop / show / attach remote worker box
   worker cgroup             set up sandbox cgroups for isolate (sudo)
   tailscale setup|status|remove
-                            tailnet HTTPS front for admin/ranking UIs
-  expose                    TUI: pick local/public/tailscale wiring per UI
+                             tailnet HTTPS front for admin/ranking UIs
   funnel setup|passwd|remove|status
                             public ts.net access behind basic auth (no tailnet)
   domain setup|status|renew|preflight

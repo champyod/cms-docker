@@ -83,6 +83,7 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Chakra Petch', 'Geist Sans', sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 

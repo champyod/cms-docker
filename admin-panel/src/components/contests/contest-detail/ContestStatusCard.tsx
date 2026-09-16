@@ -46,7 +46,7 @@ export function ContestStatusCard({ contest, formData, onChange }: Props) {
         </div>
         <StatusBadge contest={contest} />
       </div>
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <div>
           <label className={LABEL_CLASSES}>Contest Start</label>
           <input type="datetime-local" value={formData.start} onChange={(e) => onChange({ start: e.target.value })} className={FIELD_CLASSES} />

@@ -163,7 +163,6 @@ fn resolve_fleet(cmd: &Commands) -> Option<(DispatchKey, Vec<String>)> {
             let (key, verb) = tailscale_dispatch(sub.clone());
             Some((key, vec![verb.to_string()]))
         }
-        Commands::Expose => Some((DispatchKey::Expose, Vec::new())),
         Commands::Funnel { sub } => {
             let (key, verb) = funnel_dispatch(sub.clone());
             Some((key, vec![verb.to_string()]))

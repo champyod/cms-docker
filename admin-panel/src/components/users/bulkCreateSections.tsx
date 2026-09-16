@@ -2,6 +2,7 @@
 
 import { AlertTriangle, FileSpreadsheet, Table2, Upload, Wand2 } from 'lucide-react';
 import { Button } from '@/components/core/Button';
+import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
 import { cn } from '@/lib/utils';
 import { EXPECTED_FIELDS } from './csvTemplate';
 import type { GenerationMode, PreviewRow } from './csvPreview';
@@ -38,7 +39,8 @@ export function HeaderWarnings({ warnings }: HeaderWarningsProps) {
   );
 }
 
-const PREVIEW_COLUMNS = ['first_name', 'last_name', 'username', 'password', 'email', 'timezone', 'team'];
+const CARD_FIELDS = ['first_name', 'last_name', 'username', 'password', 'email', 'timezone', 'team'] as const;
+type CardField = (typeof CARD_FIELDS)[number];
 const MAX_VISIBLE_PREVIEW_ROWS = 100;
 
 const CHECKBOX_CLASS = 'size-4 accent-primary cursor-pointer';
@@ -55,65 +57,93 @@ export function PreviewTable({ rows, totalRowCount, selectedRowIndices, onSelect
   const rowsLeft = Math.max(totalRowCount - MAX_VISIBLE_PREVIEW_ROWS, 0);
 
   return (
-    <div className="border border-border rounded-lg overflow-hidden">
-      <div className="max-h-80 overflow-auto">
-        <table className="w-full text-xs">
-          <thead className="bg-muted/50 text-muted-foreground sticky top-0 z-10">
-            <tr>
-              <th className="text-left px-2 py-2 w-8">
+    <>
+      <div className="space-y-3 md:hidden">
+        {rows.length === 0 ? (
+          <MobileCard>
+            <div className="py-2 text-center text-xs text-muted-foreground">No preview rows yet</div>
+          </MobileCard>
+        ) : (
+          rows.map((row) => (
+            <MobileCard key={row.rowIndex}>
+              <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
-                  title="Select all rows"
+                  title={`Select row ${row.rowIndex}`}
                   className={CHECKBOX_CLASS}
-                  checked={selectedRowIndices.size > 0 && selectedRowIndices.size === totalRowCount}
-                  onChange={(e) => onSelectAll(e.target.checked)}
+                  checked={selectedRowIndices.has(row.rowIndex)}
+                  onChange={(e) => onToggleRow(row.rowIndex, e.target.checked)}
                 />
-              </th>
-              {PREVIEW_COLUMNS.map((column) => (
-                <th key={column} className="text-left px-2 py-2">{column}</th>
+                <span className="min-w-0 truncate font-medium">{row.first_name} {row.last_name}</span>
+              </label>
+              {CARD_FIELDS.map((field: CardField) => (
+                row[field] ? <MobileCardRow key={field} label={field} value={row[field]} /> : null
               ))}
-              <th className="text-left px-2 py-2">Issues</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">
-                  No preview rows yet
-                </td>
-              </tr>
-            ) : (
-              rows.map((row) => (
-                <tr key={row.rowIndex} className={cn('border-t border-border', selectedRowIndices.has(row.rowIndex) && 'bg-primary/10')}>
-                  <td className="px-2 py-2 text-center">
-                    <input
-                      type="checkbox"
-                      title={`Select row ${row.rowIndex}`}
-                      className={CHECKBOX_CLASS}
-                      checked={selectedRowIndices.has(row.rowIndex)}
-                      onChange={(e) => onToggleRow(row.rowIndex, e.target.checked)}
-                    />
-                  </td>
-                  <td className="px-2 py-2">{row.first_name}</td>
-                  <td className="px-2 py-2">{row.last_name}</td>
-                  <td className="px-2 py-2">{row.username}</td>
-                  <td className="px-2 py-2">{row.password}</td>
-                  <td className="px-2 py-2">{row.email}</td>
-                  <td className="px-2 py-2">{row.timezone}</td>
-                  <td className="px-2 py-2">{row.team}</td>
-                  <td className="px-2 py-2 text-warning">{row.issues.join(', ') || '-'}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              <MobileCardRow label="Issues" value={row.issues.join(', ') || '-'} />
+            </MobileCard>
+          ))
+        )}
       </div>
-      {rowsLeft > 0 && (
-        <div className="px-3 py-2 text-xs text-muted-foreground border-t border-border bg-muted/30">
-          ... {rowsLeft} rows left (showing first {MAX_VISIBLE_PREVIEW_ROWS})
+      <div className="hidden border border-border rounded-lg overflow-hidden md:block">
+        <div className="max-h-80 overflow-auto">
+          <table className="w-full text-xs">
+            <thead className="bg-muted/50 text-muted-foreground sticky top-0 z-10">
+              <tr>
+                <th className="text-left px-2 py-2 w-8">
+                  <input
+                    type="checkbox"
+                    title="Select all rows"
+                    className={CHECKBOX_CLASS}
+                    checked={selectedRowIndices.size > 0 && selectedRowIndices.size === totalRowCount}
+                    onChange={(e) => onSelectAll(e.target.checked)}
+                  />
+                </th>
+                {CARD_FIELDS.map((column: CardField) => (
+                  <th key={column} className="text-left px-2 py-2">{column}</th>
+                ))}
+                <th className="text-left px-2 py-2">Issues</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">
+                    No preview rows yet
+                  </td>
+                </tr>
+              ) : (
+                rows.map((row) => (
+                  <tr key={row.rowIndex} className={cn('border-t border-border', selectedRowIndices.has(row.rowIndex) && 'bg-primary/10')}>
+                    <td className="px-2 py-2 text-center">
+                      <input
+                        type="checkbox"
+                        title={`Select row ${row.rowIndex}`}
+                        className={CHECKBOX_CLASS}
+                        checked={selectedRowIndices.has(row.rowIndex)}
+                        onChange={(e) => onToggleRow(row.rowIndex, e.target.checked)}
+                      />
+                    </td>
+                    <td className="px-2 py-2">{row.first_name}</td>
+                    <td className="px-2 py-2">{row.last_name}</td>
+                    <td className="px-2 py-2">{row.username}</td>
+                    <td className="px-2 py-2">{row.password}</td>
+                    <td className="px-2 py-2">{row.email}</td>
+                    <td className="px-2 py-2">{row.timezone}</td>
+                    <td className="px-2 py-2">{row.team}</td>
+                    <td className="px-2 py-2 text-warning">{row.issues.join(', ') || '-'}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-      )}
-    </div>
+        {rowsLeft > 0 && (
+          <div className="px-3 py-2 text-xs text-muted-foreground border-t border-border bg-muted/30">
+            ... {rowsLeft} rows left (showing first {MAX_VISIBLE_PREVIEW_ROWS})
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -184,11 +214,11 @@ export function BulkCreateInputSection({
 }: BulkCreateInputSectionProps) {
   return (
     <>
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="min-w-0 flex-1 text-xs text-muted-foreground">
           First row must be header. Supported columns: {EXPECTED_FIELDS.join(', ')}. Team column is applied when a contest is selected.
         </p>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" size="sm" icon={Table2} onClick={onDownloadTemplate}>
             Download CSV Template
           </Button>

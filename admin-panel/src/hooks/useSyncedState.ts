@@ -1,15 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 
 export function useSyncedState<T>(value: T) {
   const [state, setState] = useState<T>(value);
-  const prevRef = useRef<T>(value);
+  const [prevValue, setPrevValue] = useState<T>(value);
 
-  useEffect(() => {
-    if (prevRef.current !== value) {
-      prevRef.current = value;
-      setState(value);
-    }
-  }, [value]);
+  if (prevValue !== value) {
+    setPrevValue(value);
+    setState(value);
+  }
 
   return [state, setState] as const;
 }

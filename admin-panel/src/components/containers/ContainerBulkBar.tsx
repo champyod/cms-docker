@@ -26,7 +26,7 @@ export function ContainerBulkBar({
   if (selectedCount === 0) return null;
 
   return (
-    <div className="flex items-center justify-between p-3 bg-card border border-border rounded-xl shadow-sm">
+    <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-card border border-border rounded-xl shadow-sm">
       <div className="flex items-center gap-3">
         <span className="text-sm font-bold text-foreground">{selectedCount} selected</span>
         {isDiscordConfigured === false && (
@@ -38,7 +38,7 @@ export function ContainerBulkBar({
           <X className="w-4 h-4" />
         </button>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button variant="positiveOutline" size="sm" onClick={onRestart} disabled={bulkLoading} tooltip="Restart selected containers">
           <motion.span
             animate={bulkLoading ? { rotate: 360 } : { rotate: 0 }}

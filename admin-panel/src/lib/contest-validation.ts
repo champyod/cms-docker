@@ -142,9 +142,21 @@ function validateTokenGenCap(data: ContestData, errors: ValidationError[]): void
   errors.push({ field: 'token_gen_max', message: getMsg('contests_check3'), code: 'contests_check3' });
 }
 
-export function validateContestData(data: ContestData, isUpdate = false): { valid: boolean; errors: Array<{ field: string; message: string; code: string }> } {
+export const CONTEST_NAME_REGEX = /^[A-Za-z0-9_-]+$/;
+
+export const CONTEST_NAME_MESSAGE =
+  'Contest name must contain only letters, numbers, hyphens and underscores';
+
+function validateName(data: ContestData, errors: ValidationError[]): void {
+  if (!isPresent(data, 'name')) return;
+  const name = (data as unknown as Record<string, unknown>).name;
+  if (typeof name === 'string' && CONTEST_NAME_REGEX.test(name)) return;
+  errors.push({ field: 'name', message: CONTEST_NAME_MESSAGE, code: 'invalid_name' });
+}
+
+export function validateContestData(data: ContestData): { valid: boolean; errors: Array<{ field: string; message: string; code: string }> } {
   const errors: ValidationError[] = [];
-  void isUpdate;
+  validateName(data, errors);
   validateDateOrdering(data, errors);
   applyNumericChecks(data, errors, NUMERIC_BEFORE);
   validateTokenGenCap(data, errors);

@@ -5,6 +5,7 @@ import { formatStoredPassword, isPasswordKind, DEFAULT_PASSWORD_KIND } from '@/l
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { recordAudit } from '@/lib/audit';
+import { normalizeLanguageCode } from '@/lib/constants/languages';
 
 const DEFAULT_USERS_PER_PAGE = 20;
 const MAX_USERS_PER_PAGE = 100;
@@ -70,6 +71,17 @@ export async function POST(req: NextRequest) {
 
     const passwordKind = isPasswordKind(data.passwordKind) ? data.passwordKind : DEFAULT_PASSWORD_KIND;
     const storedPassword = await formatStoredPassword(passwordKind, password);
+    // Why: accept caller-supplied preferred_languages but normalize to prevent silent mismatch with statement.language
+    const preferredLanguagesRaw = Array.isArray(data.preferred_languages) ? data.preferred_languages : [];
+    const seenPreferred = new Set<string>();
+    const preferredLanguages: string[] = [];
+    for (const raw of preferredLanguagesRaw) {
+      if (typeof raw !== 'string') continue;
+      const normalized = normalizeLanguageCode(raw);
+      if (!normalized || seenPreferred.has(normalized)) continue;
+      seenPreferred.add(normalized);
+      preferredLanguages.push(normalized);
+    }
 
     const created = await prisma.users.create({
       data: {
@@ -79,7 +91,7 @@ export async function POST(req: NextRequest) {
         email: typeof email === 'string' && email.trim().length > 0 ? email.trim() : null,
         password: storedPassword,
         timezone: typeof timezone === 'string' && timezone.trim().length > 0 ? timezone.trim() : null,
-        preferred_languages: [],
+        preferred_languages: preferredLanguages,
       },
     });
 

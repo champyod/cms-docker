@@ -186,16 +186,16 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
             </Button>
           </>
         }
-        className="flex h-96 w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl"
+        className="flex max-h-[70vh] w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-4xl"
       >
-        <div className="flex min-h-0 flex-1 overflow-hidden">
-          <div className="w-64 shrink-0 space-y-2 overflow-y-auto border-r border-border bg-muted/20 p-4">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden sm:flex-row">
+          <div className="w-full shrink-0 space-y-2 overflow-y-auto border-b border-border bg-muted/20 p-4 max-sm:flex max-sm:flex-row max-sm:flex-wrap max-sm:gap-1 max-sm:overflow-x-auto sm:w-64 sm:border-b-0 sm:border-r sm:block">
             {TAB_CONFIG.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  'flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors',
+                  'flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors max-sm:flex-1 max-sm:justify-center max-sm:rounded-md max-sm:border max-sm:border-border max-sm:px-3 max-sm:py-2',
                   activeTab === tab.id
                     ? 'bg-primary/10 text-primary ring-1 ring-ring/50'
                     : 'text-muted-foreground hover:bg-muted hover:text-foreground'

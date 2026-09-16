@@ -201,8 +201,6 @@ pub enum Commands {
         #[arg(value_enum)]
         sub: TailscaleSub,
     },
-    /// Pick local/public/tailscale access mode per UI.
-    Expose,
     /// Public ts.net access behind basic auth (`funnel <setup|passwd|remove|status>`).
     Funnel {
         #[arg(value_enum)]

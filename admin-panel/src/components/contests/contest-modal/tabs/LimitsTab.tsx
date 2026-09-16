@@ -105,7 +105,7 @@ function ScorePrecisionField({ formData, setFormData, validationErrors }: Limits
 export function LimitsTab(props: LimitsTabProps) {
   return (
     <div className="animate-in fade-in slide-in-from-right-4 space-y-6 duration-300">
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <MaxSubmissionsField {...props} />
         <MinSubmissionIntervalField {...props} />
         <MaxUserTestsField {...props} />

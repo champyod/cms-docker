@@ -11,7 +11,7 @@ import { getCaptchaEnv, getCaptchaPublicConfig, verifyCaptcha, type CaptchaProvi
 import { prisma } from '@/lib/prisma';
 import { safeAdminSelect, type SafeAdmin } from '@/lib/prisma-selects';
 import { redirect } from '@/lib/redirect';
-import { clearBucket, isRateLimited, loginBuckets, pruneExpiredLoginBuckets, recordFailedAttempt } from '@/lib/auth-rate-limit';
+import { clearBucket, isRateLimited, pruneExpiredLoginBuckets, recordFailedAttempt } from '@/lib/auth-rate-limit';
 import { buildCaptchaRequiredState, extractCaptchaToken, isCaptchaRequiredForIp, shouldRequireCaptcha } from '@/lib/auth-captcha-helpers';
 
 const DUMMY_BCRYPT_HASH = '$2a$10$C6UzMDM.H6dfI/f/IKcEeO7ZBpQz0l8Dp5uJHnKzTKmPqR3sWbGyq';

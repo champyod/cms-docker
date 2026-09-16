@@ -136,7 +136,7 @@ export function ResourceView() {
           </div>
           <div className="grid grid-cols-1 gap-6">
             <Card className="p-4">
-              <div className="grid grid-cols-3 gap-4 text-center">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 text-center">
                 <div>
                   <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Uptime</div>
                   <div className="text-lg font-mono text-foreground">{serverStats?.uptime || '-'}</div>

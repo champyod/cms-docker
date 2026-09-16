@@ -82,7 +82,7 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold">{team.name}</h1>
           <p className="text-muted-foreground mt-1">Team Code: <code className="text-primary">{team.code}</code></p>
@@ -146,7 +146,7 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
         {expandedSections.members && (
           <div className="divide-y divide-border">
             {team.members.map((member) => (
-              <div key={member.user.id} className="p-4 flex items-center justify-between hover:bg-accent/50 transition-colors">
+              <div key={member.user.id} className="p-4 flex flex-wrap items-center justify-between gap-3 hover:bg-accent/50 transition-colors">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center text-xs font-bold text-primary">
                     {member.user.username.substring(0, 2).toUpperCase()}
@@ -167,7 +167,7 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
                   )}
                   <a
                     href={`/${locale}/users/${member.user.id}`}
-                    className="p-1.5 text-muted-foreground hover:text-primary transition-colors"
+                    className="inline-flex size-9 shrink-0 items-center justify-center text-muted-foreground hover:text-primary transition-colors"
                   >
                     <ExternalLink className="w-4 h-4" />
                   </a>
@@ -197,7 +197,7 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
         {expandedSections.contests && (
           <div className="divide-y divide-border">
             {team.contests.map((contest) => (
-              <div key={contest.id} className="p-4 flex items-center justify-between hover:bg-accent/50 transition-colors">
+              <div key={contest.id} className="p-4 flex flex-wrap items-center justify-between gap-3 hover:bg-accent/50 transition-colors">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-lg bg-warning/10 border border-warning/20 flex items-center justify-center text-warning font-bold text-sm">
                     {contest.name.substring(0, 2).toUpperCase()}
@@ -209,7 +209,7 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
                 </div>
                 <a
                   href={`/${locale}/contests/${contest.id}`}
-                  className="p-1.5 text-muted-foreground hover:text-primary transition-colors"
+                  className="inline-flex size-9 shrink-0 items-center justify-center text-muted-foreground hover:text-primary transition-colors"
                 >
                   <ExternalLink className="w-4 h-4" />
                 </a>

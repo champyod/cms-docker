@@ -9,6 +9,7 @@ import { deleteTeam } from '@/app/actions/teams';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
+import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { useSyncedState } from '@/hooks/useSyncedState';
 import { TeamModal } from './TeamModal';
@@ -77,7 +78,27 @@ export function TeamList({ initialTeams, permissionKeys }: TeamListProps) {
         )}
       </div>
 
-      <Table>
+      <Table
+        mobileCards={teams.map((team) => (
+          <MobileCard key={team.id}>
+            <MobileCardRow label="Code" value={team.code} />
+            <MobileCardRow label="Name" value={team.name} />
+            <MobileCardRow label="Members" value={team._count?.participations ?? 0} />
+            <MobileCardRow label="Leader" value={team.leader ? `${team.leader.first_name} ${team.leader.last_name}`.trim() || team.leader.username : '—'} />
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <a href={`/${locale}/teams/${team.id}`}>
+                <Button variant="ghost" size="sm" icon={Users} iconOnly tooltip="View team members" />
+              </a>
+              {canManageUsers && (
+                <>
+                  <Button variant="ghost" size="sm" icon={Edit2} iconOnly tooltip="Edit team" onClick={() => startEdit(team)} />
+                  <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete team" onClick={() => handleDelete(team.id)} />
+                </>
+              )}
+            </div>
+          </MobileCard>
+        ))}
+      >
         <TableHeader>
           <TableRow>
             <TableHead>ID</TableHead>

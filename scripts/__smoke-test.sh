@@ -315,12 +315,11 @@ set -a
 source "${REPO_ROOT}/.env" 2>/dev/null || true
 set +a
 
-# .env.contest is a genuine per-contest override — source it too if present
-for _ef in "${REPO_ROOT}/.env.contest"; do
-  if [[ -f "$_ef" ]]; then
-    set -a; source "$_ef" 2>/dev/null || true; set +a
-  fi
-done
+# .env.contest is a per-contest override — source it if present
+_env_contest="${REPO_ROOT}/.env.contest"
+if [[ -f "$_env_contest" ]]; then
+  set -a; source "$_env_contest" 2>/dev/null || true; set +a
+fi
 
 env_preflight_fail=0
 check_secret_var() {

@@ -1,7 +1,6 @@
 'use client';
 
-// Why: h-96 is the shared Card height token (384px) — replaces arbitrary viewport height so every modal reuses the same theme token
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Download, RefreshCw, Search } from 'lucide-react';
 
@@ -98,7 +97,7 @@ function LogDisplay({
   const displayText = filteredLogs || (searchTerm ? 'No logs match filter.' : 'No logs available.');
 
   return (
-    <div className="bg-background/80 p-4 relative overflow-hidden flex flex-col h-96 rounded-lg border border-border">
+    <div className="bg-background/80 p-4 relative flex flex-col max-h-[70vh] overflow-y-auto rounded-lg border border-border">
       <pre
         ref={logReference}
         className="flex-1 overflow-auto font-mono text-xs text-muted-foreground whitespace-pre-wrap break-all custom-scrollbar"
@@ -135,7 +134,7 @@ function useContainerLogs(containerId: string, tail: number): { logs: string; is
   const [logs, setLogs] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  const refreshLogs = async (): Promise<void> => {
+  const refreshLogs = useCallback(async (): Promise<void> => {
     setIsLoading(true);
     const result = await getContainerLogs(containerId, tail);
     if (result.success) {
@@ -144,15 +143,15 @@ function useContainerLogs(containerId: string, tail: number): { logs: string; is
       setLogs(`Error fetching logs: ${result.error}`);
     }
     setIsLoading(false);
-  };
+  }, [containerId, tail]);
 
   useEffect(() => {
-    void refreshLogs();
+    queueMicrotask(() => void refreshLogs());
     const interval = setInterval(() => {
       void refreshLogs();
     }, 5000);
     return () => clearInterval(interval);
-  }, [containerId, tail]);
+  }, [refreshLogs]);
 
   return { logs, isLoading, refreshLogs };
 }

@@ -15,14 +15,20 @@ export function useContestListActions() {
 
   useEffect(() => {
     if (deployState.phase === 'completed') {
-      addToast({ type: 'success', title: 'Contest Deployed', message: `Contest #${deployState.contestId} is now active.` });
-      setDeployTarget(null); resetDeployState(); window.location.reload();
+      queueMicrotask(() => {
+        addToast({ type: 'success', title: 'Contest Deployed', message: `Contest #${deployState.contestId} is now active.` });
+        setDeployTarget(null); resetDeployState(); window.location.reload();
+      });
     } else if (deployState.phase === 'failed' || deployState.phase === 'timeout') {
-      addToast({ type: 'error', title: 'Deploy Failed', message: deployState.error || 'Deploy did not complete.' });
-      setDeployTarget(null); resetDeployState();
+      queueMicrotask(() => {
+        addToast({ type: 'error', title: 'Deploy Failed', message: deployState.error || 'Deploy did not complete.' });
+        setDeployTarget(null); resetDeployState();
+      });
     } else if (deployState.phase === 'already_running') {
-      addToast({ type: 'warning', title: 'Deploy Already Running', message: deployState.error || 'Another deploy is in progress.' });
-      setDeployTarget(null); resetDeployState();
+      queueMicrotask(() => {
+        addToast({ type: 'warning', title: 'Deploy Already Running', message: deployState.error || 'Another deploy is in progress.' });
+        setDeployTarget(null); resetDeployState();
+      });
     }
   }, [deployState.phase, deployState.contestId, deployState.error, addToast, resetDeployState]);
 

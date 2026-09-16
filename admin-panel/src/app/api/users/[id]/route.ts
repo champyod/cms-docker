@@ -5,6 +5,7 @@ import { formatStoredPassword, isPasswordKind, DEFAULT_PASSWORD_KIND } from '@/l
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { recordAudit } from '@/lib/audit';
+import { normalizeLanguageCode } from '@/lib/constants/languages';
 
 interface UserUpdateData {
   first_name: string;
@@ -12,6 +13,7 @@ interface UserUpdateData {
   email?: string | null;
   timezone?: string | null;
   password?: string;
+  preferred_languages?: string[];
 }
 
 export async function PUT(
@@ -39,6 +41,19 @@ export async function PUT(
     if (password) {
       const passwordKind = isPasswordKind(data.passwordKind) ? data.passwordKind : DEFAULT_PASSWORD_KIND;
       updateData.password = await formatStoredPassword(passwordKind, password);
+    }
+
+    if (Array.isArray(data.preferred_languages)) {
+      const seen = new Set<string>();
+      const normalized: string[] = [];
+      for (const raw of data.preferred_languages) {
+        if (typeof raw !== 'string') continue;
+        const code = normalizeLanguageCode(raw);
+        if (!code || seen.has(code)) continue;
+        seen.add(code);
+        normalized.push(code);
+      }
+      updateData.preferred_languages = normalized;
     }
 
     const beforeUser = await prisma.users.findUnique({ where: { id }, select: { first_name: true, last_name: true, username: true, email: true, timezone: true } });

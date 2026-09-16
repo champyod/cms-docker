@@ -11,6 +11,7 @@ export interface UserFormState {
   timezone: string;
   contestId: string;
   teamCode: string;
+  preferred_languages: string[];
 }
 
 export const EMPTY_USER_FORM: UserFormState = {
@@ -22,6 +23,7 @@ export const EMPTY_USER_FORM: UserFormState = {
   timezone: DEFAULT_TIMEZONE,
   contestId: '',
   teamCode: '',
+  preferred_languages: [],
 };
 
 export function formFromUser(user: UsersPageRow): UserFormState {
@@ -32,5 +34,6 @@ export function formFromUser(user: UsersPageRow): UserFormState {
     username: user.username,
     email: user.email ?? '',
     timezone: user.timezone ?? DEFAULT_TIMEZONE,
+    preferred_languages: Array.isArray(user.preferred_languages) ? [...user.preferred_languages] : [],
   };
 }

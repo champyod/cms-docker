@@ -73,7 +73,7 @@ export function ActiveContestCard({
                         <Rocket className="w-3 h-3" />
                         Select Contest to Deploy
                     </Text>
-                    <Stack direction="row" align="center" gap={3}>
+                    <Stack direction="row" align="center" gap={3} wrap>
                         <select
                             value={selectedContestId ?? ''}
                             onChange={(e) => onSelectContest(e.target.value ? parseInt(e.target.value) : null)}

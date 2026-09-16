@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { readEnvFile } from '@/app/actions/env';
 import {
   CONFIG_SECTIONS,
@@ -41,7 +41,7 @@ export function useEnvConfigDocuments(): EnvConfigDocuments {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const loadData = async (): Promise<void> => {
+  const loadData = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError('');
     try {
@@ -53,7 +53,7 @@ export function useEnvConfigDocuments(): EnvConfigDocuments {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const handleChange = (filename: string, key: string, value: string): void =>
     setData(prev => updateFileValue(prev, filename, key, value));

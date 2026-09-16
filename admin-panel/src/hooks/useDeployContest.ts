@@ -15,6 +15,7 @@ export interface DeployState {
   operationId: string | null;
   status: DeployStatus | null;
   error: string | null;
+  warning: string | null;
   log: string;
   percent: number | null;
   startedAt: string | null;
@@ -26,12 +27,13 @@ const initialState: DeployState = {
   operationId: null,
   status: null,
   error: null,
+  warning: null,
   log: '',
   percent: null,
   startedAt: null,
 };
 
-export function useDeployContest(): { state: DeployState; deploy: (contestId: number) => Promise<void>; cancel: () => void; reset: () => void } {
+export function useDeployContest(): { state: DeployState; deploy: (contestId: number) => Promise<void>; resume: (operationId: string, contestId: number) => void; cancel: () => void; reset: () => void } {
   const [state, setState] = useState<DeployState>(initialState);
   const toastIdRef = useRef<string | number | null>(null);
   const mountedRef = useRef(true);
@@ -58,20 +60,29 @@ export function useDeployContest(): { state: DeployState; deploy: (contestId: nu
       const result = await deployContest(contestId);
       if (!mountedRef.current) return;
       if (result.alreadyRunning) {
-        setState({ phase: 'already_running', contestId, operationId: null, status: null, error: result.error || 'A deploy is already in progress.', log: '', percent: null, startedAt: null });
+        setState({ phase: 'already_running', contestId, operationId: null, status: null, error: result.error || 'A deploy is already in progress.', warning: null, log: '', percent: null, startedAt: null });
         toast.warning('Deploy already running', { description: result.error || 'Another deployment is in progress.' });
         return;
       }
       if (!result.success || !result.operationId) {
-        setState({ phase: 'failed', contestId, operationId: null, status: null, error: result.error || 'Failed to start deploy', log: '', percent: null, startedAt: null });
+        setState({ phase: 'failed', contestId, operationId: null, status: null, error: result.error || 'Failed to start deploy', warning: null, log: '', percent: null, startedAt: null });
         toast.error('Deploy failed to start', { description: result.error || 'Could not initiate deployment.' });
         return;
       }
-      setState({ phase: 'polling', contestId, operationId: result.operationId, status: 'running', error: null, log: '', percent: null, startedAt: null });
+      setState({ phase: 'polling', contestId, operationId: result.operationId, status: 'running', error: null, warning: null, log: '', percent: null, startedAt: null });
       toastIdRef.current = toast.loading(`Deploying contest #${contestId}`, { description: 'Starting deployment...', duration: Infinity });
       startStreaming(result.operationId, contestId);
     },
     [stopStreaming, dismissProgressToast, startStreaming],
+  );
+
+  const resume = useCallback(
+    (operationId: string, contestId: number) => {
+      stopStreaming();
+      setState({ phase: 'polling', contestId, operationId, status: 'running', error: null, warning: null, log: '', percent: null, startedAt: null });
+      startStreaming(operationId, contestId);
+    },
+    [stopStreaming, startStreaming],
   );
 
   const cancel = useCallback(() => {
@@ -86,5 +97,5 @@ export function useDeployContest(): { state: DeployState; deploy: (contestId: nu
     setState(initialState);
   }, [stopStreaming, dismissProgressToast]);
 
-  return { state, deploy, cancel, reset };
+  return { state, deploy, resume, cancel, reset };
 }

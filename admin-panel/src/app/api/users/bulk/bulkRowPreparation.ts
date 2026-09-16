@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { randomToken } from '@/lib/creds-file';
+import { normalizeLanguageCode } from '@/lib/constants/languages';
 
 export type GenerationMode = 'none' | 'username' | 'password' | 'both';
 
@@ -12,6 +13,7 @@ export interface BulkUserRow {
   timezone?: string;
   team?: string;
   rowIndex?: number;
+  preferred_languages?: string | string[];
 }
 
 export interface PreparedRow {
@@ -24,6 +26,7 @@ export interface PreparedRow {
   timezone: string;
   teamCode: string;
   hadExplicitPassword: boolean;
+  preferredLanguages: string[];
 }
 
 export interface RowFailure {
@@ -72,7 +75,34 @@ function readRowFields(row: BulkUserRow, fallbackIndex: number) {
     timezone: (row.timezone ?? '').trim(),
     teamCode: (row.team ?? '').trim(),
     hadExplicitPassword: Boolean((row.password ?? '').trim()),
+    rawPreferredLanguages: row.preferred_languages,
   };
+}
+
+function parsePreferredLanguages(raw: string | string[] | undefined): string[] {
+  if (Array.isArray(raw)) {
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const entry of raw) {
+      const code = typeof entry === 'string' ? normalizeLanguageCode(entry) : '';
+      if (!code || seen.has(code)) continue;
+      seen.add(code);
+      result.push(code);
+    }
+    return result;
+  }
+  if (typeof raw === 'string' && raw.trim()) {
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const part of raw.split(',')) {
+      const code = normalizeLanguageCode(part);
+      if (!code || seen.has(code)) continue;
+      seen.add(code);
+      result.push(code);
+    }
+    return result;
+  }
+  return [];
 }
 
 async function generateMissingCredentials(
@@ -121,5 +151,5 @@ export async function prepareRow(
   }
   seenUsernames.add(username);
 
-  return { ...fields, username, plainPassword };
+  return { ...fields, username, plainPassword, preferredLanguages: parsePreferredLanguages(fields.rawPreferredLanguages) };
 }

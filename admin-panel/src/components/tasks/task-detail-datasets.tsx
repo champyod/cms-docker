@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { HelpCircle, ChevronDown, ChevronUp, Settings, Database, CheckCircle, Copy, Edit, ToggleLeft, ToggleRight, TestTube, Plus, Trash2, Upload, Paperclip } from 'lucide-react';
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
+import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/apiClient';
 
 interface Dataset {
@@ -79,7 +80,7 @@ export function DatasetsSection({
           <div className="space-y-4">
             {datasets.map((dataset) => (
               <div key={dataset.id} className="p-4 bg-muted/30 rounded-lg space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <Database className="w-4 h-4 text-warning" />
                     <span className="font-medium text-foreground">{dataset.description}</span>
@@ -95,7 +96,7 @@ export function DatasetsSection({
                     {dataset.id !== activeDatasetId && <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete" onClick={() => onDelete(dataset.id)} className="text-destructive hover:text-destructive" />}
                   </div>
                 </div>
-                <div className="grid grid-cols-4 gap-4 text-sm">
+                <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
                   <div><span className="text-muted-foreground text-xs uppercase">Type</span><div className="text-foreground text-xs">{dataset.task_type}</div></div>
                   <div><span className="text-muted-foreground text-xs uppercase">Time</span><div className="text-foreground text-xs">{dataset.time_limit ? `${dataset.time_limit}s` : '-'}</div></div>
                   <div><span className="text-muted-foreground text-xs uppercase">Memory</span><div className="text-foreground text-xs">{dataset.memory_limit ? `${Number(dataset.memory_limit) / (1024 * 1024)} MiB` : '-'}</div></div>
@@ -109,13 +110,13 @@ export function DatasetsSection({
                     </Button>
                   </div>
                   {dataset.testcases.length === 0 ? <p className="text-muted-foreground text-xs">No testcases yet.</p> : (
-                    <div className="grid grid-cols-6 gap-1">
+                    <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-6">
                       {dataset.testcases.slice(0, 12).map((tc) => (
                         <div key={tc.id} className="px-2 py-1 bg-muted/40 rounded text-xs text-muted-foreground flex items-center justify-between group">
                           <span className="truncate">{tc.codename}</span>
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => onTogglePublic(tc.id)} className={tc.public ? 'text-success' : 'text-muted-foreground'} title={tc.public ? 'Public' : 'Private'}>{tc.public ? 'P' : 'H'}</button>
-                            <button onClick={() => onDeleteTestcase(tc.id)} className="text-destructive">×</button>
+                          <div className="flex shrink-0 items-center gap-1">
+                            <button onClick={() => onTogglePublic(tc.id)} title={tc.public ? 'Public' : 'Private'} aria-label={tc.public ? 'Make testcase private' : 'Make testcase public'} className={cn('flex size-9 items-center justify-center rounded-md text-xs font-bold transition-colors', tc.public ? 'text-success' : 'text-muted-foreground')}>{tc.public ? 'P' : 'H'}</button>
+                            <button onClick={() => onDeleteTestcase(tc.id)} title="Delete testcase" aria-label="Delete testcase" className="flex size-9 items-center justify-center rounded-md text-destructive transition-colors hover:bg-destructive/10">×</button>
                           </div>
                         </div>
                       ))}
@@ -144,7 +145,7 @@ export function AttachmentsSection({ attachments, onUpload }: { attachments: Arr
           {attachments.map((att) => (
             <div key={att.id} className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg text-sm text-muted-foreground group">
               <Paperclip className="w-3 h-3 text-info" /><span className="truncate flex-1">{att.filename}</span>
-              <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete attachment" onClick={async () => { if (confirm('Delete this attachment?')) { await apiClient.delete(`/api/attachments/${att.id}`); window.location.reload(); } }} className="text-destructive opacity-0 group-hover:opacity-100" />
+              <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete attachment" onClick={async () => { if (confirm('Delete this attachment?')) { await apiClient.delete(`/api/attachments/${att.id}`); window.location.reload(); } }} className="text-destructive" />
             </div>
           ))}
         </div>

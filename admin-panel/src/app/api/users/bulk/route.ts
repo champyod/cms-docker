@@ -37,7 +37,7 @@ async function createUserWithParticipation(
       email: prepared.email || null,
       password: await formatStoredPassword(passwordKind, prepared.plainPassword),
       timezone: prepared.timezone || null,
-      preferred_languages: [],
+      preferred_languages: prepared.preferredLanguages,
     },
   });
 

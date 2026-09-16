@@ -134,7 +134,7 @@ function GenMaxCapField({ formData, setFormData, validationErrors }: TokensTabPr
 function FiniteOnlyFields(props: TokensTabProps) {
   return (
     <>
-        <div className="col-span-2 my-2 border-t border-border"></div>
+        <div className="col-span-full my-2 border-t border-border"></div>
         <InitialTokensField {...props} />
         <GenAmountField {...props} />
         <GenIntervalField {...props} />
@@ -146,7 +146,7 @@ function FiniteOnlyFields(props: TokensTabProps) {
 function TokenConfigFields(props: TokensTabProps) {
   const { formData } = props;
   return (
-    <div className="grid animate-in fade-in grid-cols-2 gap-6 duration-300">
+    <div className="grid animate-in fade-in grid-cols-1 gap-6 duration-300 md:grid-cols-2">
       <MaxTotalTokensField {...props} />
 
       <MinIntervalField {...props} field="token_min_interval" label="Min Interval (sec)" />

@@ -1,4 +1,4 @@
-import { getCaptchaEnv, getCaptchaPublicConfig, isCaptchaConfigured, type CaptchaProvider } from '@/lib/captcha';
+import { getCaptchaEnv, getCaptchaPublicConfig, isCaptchaConfigured } from '@/lib/captcha';
 import { loginBuckets } from '@/lib/auth-rate-limit';
 import type { LoginActionState } from '@/app/actions/auth';
 

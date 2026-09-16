@@ -22,7 +22,28 @@
   "tasks": {
     "title": "Tasks",
     "subtitle": "Manage programming tasks, statements, and test cases.",
-    "allTasks": "All Tasks"
+    "allTasks": "All Tasks",
+    "statements": {
+      "title": "Statements",
+      "upload": "Upload Statement",
+      "languageLabel": "Language",
+      "tableEmptyTitle": "No statements",
+      "tableEmptyDescription": "No statements uploaded yet.",
+      "columns": {
+        "language": "Language",
+        "filename": "Filename",
+        "size": "Size",
+        "uploadedAt": "Upload date",
+        "actions": "Actions"
+      },
+      "filters": {
+        "all": "All",
+        "filterByLanguage": "Filter by language"
+      },
+      "download": "Download",
+      "delete": "Delete statement",
+      "uploadDialogTitle": "Add Statement"
+    }
   },
   "users": {
     "title": "User Management",

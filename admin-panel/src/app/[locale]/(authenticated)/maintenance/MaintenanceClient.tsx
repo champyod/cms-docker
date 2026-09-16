@@ -17,17 +17,14 @@ export default function MaintenanceClient() {
   const [saving, setSaving] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
 
-  const loadData = async () => {
-    setLoading(true);
-    const result = await readEnvFile('.env');
-    if (result.success && result.config) {
-      setData(result.config);
-    }
-    setLoading(false);
-  };
-
   useEffect(() => {
-    loadData();
+    void (async () => {
+      const result = await readEnvFile('.env');
+      if (result.success && result.config) {
+        setData(result.config);
+      }
+      setLoading(false);
+    })();
   }, []);
 
   const handleChange = (key: string, val: string) => {

@@ -6,13 +6,30 @@ import { cn } from '@/lib/utils';
 interface TableProps extends React.TableHTMLAttributes<HTMLTableElement> {
   children: React.ReactNode;
   outerClassName?: string;
+  mobileCards?: React.ReactNode;
 }
 
 export const Table = React.forwardRef<HTMLTableElement, TableProps>(
-  ({ className, children, outerClassName, ...props }, ref) => {
+  ({ className, children, outerClassName, mobileCards, ...props }, ref) => {
     const isEmpty = children === null || children === undefined;
     if (isEmpty) {
       return <EmptyState title="No data available" description="Table has no rows to display" />;
+    }
+    if (mobileCards) {
+      return (
+        <>
+          <div className="space-y-3 md:hidden">{mobileCards}</div>
+          <div className={cn('w-full overflow-auto rounded-xl border border-border bg-card shadow-sm', mobileCards ? 'hidden md:block' : undefined, outerClassName)}>
+            <table
+              ref={ref}
+              className={cn("w-full caption-bottom text-sm text-left", className)}
+              {...props}
+            >
+              {children}
+            </table>
+          </div>
+        </>
+      );
     }
     return (
       <div className={cn("w-full overflow-auto rounded-xl border border-border bg-card shadow-sm", outerClassName)}>
