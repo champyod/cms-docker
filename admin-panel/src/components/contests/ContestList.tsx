@@ -65,16 +65,16 @@ function ContestMobileCard({ contest, locale, isSuperAdmin, canManage, onSetActi
       <MobileCardRow label="Tasks" value={contest._count?.tasks ?? 0} />
       <MobileCardRow label="Participants" value={contest._count?.participations ?? 0} />
       <div className="flex items-center justify-end gap-2 pt-2">
-        <Link href={`/${locale}/contests/${contest.id}`} aria-label={`View ${contest.name}`} className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-primary">
+        <Link href={`/${locale}/contests/${contest.id}`} aria-label={`View ${contest.name}`} className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-primary">
           <ExternalLink className="h-4 w-4" />
         </Link>
         {isSuperAdmin && !contest.is_active && (
-          <button onClick={() => onSetActive(contest.id)} aria-label={`Set contest ${contest.id} active`} title="Set Active" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-primary">
+          <button onClick={() => onSetActive(contest.id)} aria-label={`Set contest ${contest.id} active`} title="Set Active" className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-primary">
             <Rocket className="h-4 w-4" />
           </button>
         )}
         {canManage && (
-          <button onClick={handleDelete} aria-label={`Delete ${contest.name}`} title="Delete" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-destructive">
+          <button onClick={handleDelete} aria-label={`Delete ${contest.name}`} title="Delete" className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-destructive">
             <Trash2 className="h-4 w-4" />
           </button>
         )}
