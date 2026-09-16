@@ -34,6 +34,65 @@ log_error() { printf '[ERROR] %s\n' "$*" >&2; }
 gen_hex32() { openssl rand -hex 32 2>/dev/null || echo "fallback_$(date +%s)"; }
 gen_pw()    { openssl rand -base64 12 2>/dev/null | tr -d "=+/" | cut -c1-16; }
 
+# --- .env value quoting ---
+# Emit a value that survives every reader of the generated .env. There are three
+# kinds of reader and they do not agree on anything except that ONE layer of
+# quoting is removed:
+#   1. shell        — `set -a; . ./.env` (Makefile, scripts, cms): splits unquoted
+#                     values on whitespace, expands `$` and backticks, eats `\`,
+#                     and truncates nothing at `#`.
+#   2. docker       — `docker compose --env-file .env`: compose-go's dotenv parser
+#                     strips quotes, expands `$` in unquoted/double-quoted values,
+#                     cuts unquoted values at " #", and decodes \n \r \t \$ \" \\
+#                     in double-quoted values only.
+#   3. raw readers  — grep/cut/awk (Makefile DEPLOYMENT_TYPE, __inject_config.sh,
+#                     __apply_sql.sh, ...): see the file bytes, nothing else.
+# WHY an unquoted value is the defect: `FUNNEL_REALM=CMS restricted` sources as a
+# temporary assignment prefixed to the command `restricted`, so the command is not
+# found and FUNNEL_REALM is left UNSET (the value silently disappears); `$`, `#`,
+# `"` and `\` are mangled by the shell or by compose in the same way. A credential
+# with a space has no default to fall back on, so it is lost entirely.
+#
+# WHY this shape (quote only when needed):
+#   * values made only of the characters below stay BARE, so every raw reader that
+#     never learned about quoting keeps returning exactly the value it used to;
+#   * anything else is SINGLE-quoted, which is literal for the shell AND for compose
+#     (compose expands `$` only in unquoted/double-quoted values), so the bytes can
+#     be reproduced exactly and a raw reader only has to drop one quote layer;
+#   * single quotes cannot express a value that contains `'`, nor one that ends in
+#     `\` (compose reads `\'` inside single quotes as an escaped quote and never
+#     terminates the string), so those fall through to DOUBLE quotes with escapes
+#     that both the shell and compose decode identically.
+# KNOWN LIMIT: compose does not decode `\``, so a value that contains BOTH a
+# backtick and (`'` or a trailing `\`) cannot round-trip for compose and the shell
+# at once; the shell-correct form is written (the file is sourced far more often
+# than it is handed to compose) and compose reports it rather than silently
+# accepting a different value.
+env_quote() {
+  local v="${1-}"
+  [[ -z "$v" ]] && return 0
+  if [[ "$v" =~ ^[A-Za-z0-9_./:@%+,-]+$ ]]; then
+    printf '%s' "$v"
+    return 0
+  fi
+  # Single quotes are literal for both readers, but cannot express a value that
+  # contains `'` or that ends in `\` (see the KNOWN LIMIT note above).
+  case "$v" in
+    *"'"*|*\\)
+      # Not representable in single quotes — fall through to double quotes below.
+      ;;
+    *)
+      printf "'%s'" "$v"
+      return 0
+      ;;
+  esac
+  v="${v//\\/\\\\}"
+  v="${v//\"/\\\"}"
+  v="${v//\$/\\\$}"
+  v="${v//\`/\\\`}"
+  printf '"%s"' "$v"
+}
+
 # --- Pure-bash TOML parser: [section] + key = value only ---
 # Populates __TOML["section.key"]=value and ordered key arrays per section.
 declare -A __TOML
@@ -41,20 +100,62 @@ declare -A __TOML
 # when a TOML section has no keys.
 declare -a __CORE_KEYS=() __ADMIN_KEYS=() __CONTEST_KEYS=() __WORKER_KEYS=() __INFRA_KEYS=() __TAILSCALE_KEYS=() __RPC_KEYS=()
 
+# Trim surrounding whitespace (and a CR from a CRLF worktree) off one TOML line.
+# WHY not `xargs` (the previous trimming): xargs applies its own quote and backslash
+# processing and dies on an unbalanced quote, so a line whose value contains `#`
+# (whose tail is stripped before detection) could disappear entirely and its key be
+# considered missing and migrated in a second time.
+toml_trim() {
+  local s="${1%$'\r'}"
+  s="${s#"${s%%[![:space:]]*}"}"
+  printf '%s' "${s%"${s##*[![:space:]]}"}"
+}
+
+# Extract the value from a `key = value` line that has already been trimmed.
+# WHY this exists instead of `${line%%#*}` + quote stripping: TOML allows `#`, spaces
+# and backslashes INSIDE a quoted string, so a blind `#` cut truncates a legitimate
+# value (`KEY = "value # not a comment"`) and the old strip-the-outer-quotes step left
+# the escaped form intact. Values are decoded far enough to round-trip: `\"` and `\\`
+# inside a TOML basic string (the only escapes needed to express a `"` or a `\`), an
+# unquoted value cut at a real inline comment, and a TOML literal string verbatim.
+toml_value() {
+  local raw="$1" out="" ch rest
+  if [[ "$raw" == '"'* ]]; then
+    rest="${raw#\"}"
+    while [[ -n "$rest" ]]; do
+      ch="${rest:0:1}"
+      rest="${rest:1}"
+      case "$ch" in
+        '"') break ;;
+        \\)
+          case "${rest:0:1}" in
+            '"') out+='"'; rest="${rest:1}" ;;
+            \\) out+="\\"; rest="${rest:1}" ;;
+            *) out+="\\" ;;
+          esac
+          ;;
+        *) out+="$ch" ;;
+      esac
+    done
+  elif [[ "$raw" == "'"* ]]; then
+    out="${raw#\'}"
+    out="${out%%\'*}"
+  else
+    out="$(toml_trim "${raw%%#*}")"
+  fi
+  printf '%s' "$out"
+}
+
 parse_toml() {
   local file="$1" section="" line key val
   while IFS= read -r line || [[ -n "$line" ]]; do
-    # Strip inline comments: TOML allows # after values
-    line="${line%%#*}"
-    [[ -z "${line//[$'\t ']/}" ]] && continue
-    line="$(echo "$line" | xargs)"
-    if [[ "$line" =~ ^\[([a-zA-Z0-9_]+)\]$ ]]; then
+    line="$(toml_trim "$line")"
+    [[ -z "$line" || "$line" == '#'* ]] && continue
+    if [[ "$line" =~ ^\[([a-zA-Z0-9_]+)\][[:space:]]*(#.*)?$ ]]; then
       section="${BASH_REMATCH[1]}"
     elif [[ "$line" =~ ^([A-Za-z0-9_]+)[[:space:]]*=[[:space:]]*(.*)$ ]]; then
       key="${BASH_REMATCH[1]}"
-      val="${BASH_REMATCH[2]}"
-      val="${val#\"}"; val="${val%\"}"
-      val="${val#\'}"; val="${val%\'}"
+      val="$(toml_value "${BASH_REMATCH[2]}")"
       __TOML["${section}.${key}"]="$val"
       case "$section" in
         core)      __CORE_KEYS+=("$key") ;;
@@ -101,7 +202,9 @@ write_section_block() {
   echo "### [${section}] ###"
   for key in "${keys[@]}"; do
     local val="${__TOML["${section}.${key}"]:-}"
-    echo "$key=$val"
+    # WHY env_quote: writing the raw value makes the shell treat everything after a
+    # space as a command, and silently drops the variable (see env_quote above).
+    printf '%s=%s\n' "$key" "$(env_quote "$val")"
   done
   echo ""
 }
@@ -147,7 +250,7 @@ migrate_missing_keys() {
   local line sec="" key stripped trimmed
   while IFS= read -r line || [[ -n "$line" ]]; do
     stripped="${line%%#*}"
-    trimmed="$(echo "$stripped" | xargs 2>/dev/null || echo "")"
+    trimmed="$(toml_trim "$stripped")"
     [[ -z "$trimmed" ]] && continue
     if [[ "$trimmed" =~ ^\[([a-zA-Z0-9_]+)\]$ ]]; then
       sec="${BASH_REMATCH[1]}"
@@ -169,7 +272,7 @@ migrate_missing_keys() {
   sec=""
   while IFS= read -r line || [[ -n "$line" ]]; do
     stripped="${line%%#*}"
-    trimmed="$(echo "$stripped" | xargs 2>/dev/null || echo "")"
+    trimmed="$(toml_trim "$stripped")"
     if [[ "$trimmed" =~ ^\[([a-zA-Z0-9_]+)\]$ ]]; then
       sec="${BASH_REMATCH[1]}"
       if [[ -z "${seen_section[$sec]:-}" ]]; then
@@ -216,7 +319,7 @@ migrate_missing_keys() {
   local prev_sec="" header_sec="" is_header
   while IFS= read -r line || [[ -n "$line" ]]; do
     stripped="${line%%#*}"
-    trimmed="$(echo "$stripped" | xargs 2>/dev/null || echo "")"
+    trimmed="$(toml_trim "$stripped")"
     is_header=0
     header_sec=""
     if [[ "$trimmed" =~ ^\[([a-zA-Z0-9_]+)\]$ ]]; then
@@ -364,8 +467,10 @@ main() {
     # WHY: single owner role cmsuser owns large objects — admin panel connects as owner (PostgreSQL restricts large-object access to owner).
     {
       echo "# Auto-generated by ./cms config sync from config.toml."
-      echo "DATABASE_URL=\"postgresql://${db_user}:${db_pass}@localhost:${db_port}/${db_name}\""
-      [[ -n "$auth_secret" ]] && echo "AUTH_SECRET=${auth_secret}"
+      # WHY env_quote: db_pass comes from config.toml, so interpolating it straight
+      # into a double-quoted URL loses a password containing `"`, `$` or a backslash.
+      printf 'DATABASE_URL=%s\n' "$(env_quote "postgresql://${db_user}:${db_pass}@localhost:${db_port}/${db_name}")"
+      [[ -n "$auth_secret" ]] && printf 'AUTH_SECRET=%s\n' "$(env_quote "$auth_secret")"
     } > admin-panel/.env
     chmod 600 admin-panel/.env
   else

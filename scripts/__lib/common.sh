@@ -151,6 +151,43 @@ is_default_secret() {
 }
 
 # ---------------------------------------------------------------------------
+# env_unquote <value>
+# ---------------------------------------------------------------------------
+# Undo the quoting that scripts/__config_sync.sh's env_quote() writes into the
+# generated .env. WHY it is needed: a raw reader (awk/grep/cut) sees the file
+# bytes, so once a value is quoted to protect it from the shell it would come back
+# as `'CMS restricted'` — quotes included — where `set -a; . ./.env` and
+# `docker compose --env-file .env` both yield `CMS restricted`. Single-quoted
+# values are literal; double-quoted values carry exactly the escapes env_quote
+# emitted (\ \\ \" $ `). A bare value is returned unchanged, so a reader that never
+# meets a quoted value behaves exactly as it did before.
+env_unquote() {
+  local v="${1-}"
+  local body="" out="" ch=""
+
+  case "$v" in
+    '"'*'"') ;;                                        # double-quoted: decode below
+    "'"*"'") printf '%s' "${v:1:${#v}-2}"; return 0 ;; # single-quoted: literal
+    *) printf '%s' "$v"; return 0 ;;                   # bare: unchanged
+  esac
+
+  body="${v:1:${#v}-2}"
+  while [[ -n "$body" ]]; do
+    ch="${body:0:1}"
+    body="${body:1}"
+    # Left-to-right, so `\\\$` (an escaped backslash followed by an escaped dollar)
+    # decodes to `\$` and not to `$`.
+    if [[ -n "$body" && "$ch" == \\ ]]; then
+      case "${body:0:1}" in
+        \\|'"'|'$'|'\`') ch="${body:0:1}"; body="${body:1}" ;;
+      esac
+    fi
+    out+="$ch"
+  done
+  printf '%s' "$out"
+}
+
+# ---------------------------------------------------------------------------
 # ensure_docker_resource_network <name>
 # ---------------------------------------------------------------------------
 # Idempotently ensure a Docker network exists. Creates it if missing and logs

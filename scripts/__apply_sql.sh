@@ -34,10 +34,14 @@ ENV_FILE=".env"
 SQL_DIR="admin-panel/prisma/sql"
 DB_CONTAINER="cms-database"
 
-# Resolve DB credentials from .env (exact key match via awk — avoids regex metachars)
+# Resolve DB credentials from .env (exact key match via awk — avoids regex metachars).
+# WHY env_unquote: __config_sync quotes a value that contains whitespace or a shell
+# metacharacter, so a password with a space would otherwise reach psql with its quotes
+# still attached (the previous inline gsub stripped quotes but not the escapes).
 get_env_val() {
-  local key="$1" file="$2"
-  awk -F= -v k="$key" '$1==k { v=$0; sub(/^[^=]*=/, "", v); gsub(/^"|"$/, "", v); gsub(/^\x27|\x27$/, "", v); print v; exit }' "$file" 2>/dev/null | tr -d '\r' || true
+  local key="$1" file="$2" raw
+  raw="$(awk -F= -v k="$key" '$1==k { v=$0; sub(/^[^=]*=/, "", v); print v; exit }' "$file" 2>/dev/null | tr -d '\r' || true)"
+  env_unquote "$raw"
 }
 
 if [[ ! -f "$ENV_FILE" ]]; then

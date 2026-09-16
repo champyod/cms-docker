@@ -18,10 +18,13 @@ if [[ ! -f "$ENV_FILE" ]]; then
   log_die "Error: $ENV_FILE not found — run 'make env' or './cms config sync' first." 1
 fi
 
-# Exact key match via awk (escapes regex metachars).
+# Exact key match via awk (escapes regex metachars), then env_unquote so a password
+# that __config_sync had to quote (it contains whitespace or a shell metacharacter)
+# is read as the shell would read it instead of coming back wrapped in quotes.
 get_env_val() {
-  local key="$1" file="$2"
-  awk -F= -v k="$key" '$1==k { v=$0; sub(/^[^=]*=/, "", v); print v; exit }' "$file" 2>/dev/null | tr -d '\r' || true
+  local key="$1" file="$2" raw
+  raw="$(awk -F= -v k="$key" '$1==k { v=$0; sub(/^[^=]*=/, "", v); print v; exit }' "$file" 2>/dev/null | tr -d '\r' || true)"
+  env_unquote "$raw"
 }
 
 DB_USER="$(get_env_val "POSTGRES_USER" "$ENV_FILE")"
