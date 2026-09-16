@@ -51,7 +51,7 @@ if ! awk '
     model=""
     next
   }
-' "$SCHEMA" | sort -u > "$tmp_models"; then
+' "$SCHEMA" | LC_ALL=C sort -u > "$tmp_models"; then
   log_die "failed to parse $SCHEMA" 1
 fi
 
@@ -61,9 +61,11 @@ if [ ! -s "$tmp_models" ]; then
 fi
 
 count=$(wc -l < "$tmp_models" | tr -d ' ')
+# WHY LC_ALL=C throughout: collation is machine-dependent, so an unpinned sort emits a different
+# block order per locale and the freshness check fails wherever the locale differs from the author's.
 # WHY sanity: duplicate table names after @@map resolution would emit duplicate guards; fail instead of silently deduping.
-if [ "$(sort "$tmp_models" | uniq -d | wc -l | tr -d ' ')" -ne 0 ]; then
-  dup=$(sort "$tmp_models" | uniq -d | tr '\n' ' ')
+if [ "$(LC_ALL=C sort "$tmp_models" | uniq -d | wc -l | tr -d ' ')" -ne 0 ]; then
+  dup=$(LC_ALL=C sort "$tmp_models" | uniq -d | tr '\n' ' ')
   log_die "duplicate table names after @@map resolution: $dup" 1
 fi
 

@@ -169,12 +169,6 @@ DO $$ BEGIN
   END IF;
 END $$;
 DO $$ BEGIN
-  IF to_regclass('public.users') IS NOT NULL THEN
-    EXECUTE 'ALTER TABLE public.users ENABLE ROW LEVEL SECURITY';
-    EXECUTE 'ALTER TABLE public.users FORCE ROW LEVEL SECURITY';
-  END IF;
-END $$;
-DO $$ BEGIN
   IF to_regclass('public.user_test_executables') IS NOT NULL THEN
     EXECUTE 'ALTER TABLE public.user_test_executables ENABLE ROW LEVEL SECURITY';
     EXECUTE 'ALTER TABLE public.user_test_executables FORCE ROW LEVEL SECURITY';
@@ -202,5 +196,11 @@ DO $$ BEGIN
   IF to_regclass('public.user_tests') IS NOT NULL THEN
     EXECUTE 'ALTER TABLE public.user_tests ENABLE ROW LEVEL SECURITY';
     EXECUTE 'ALTER TABLE public.user_tests FORCE ROW LEVEL SECURITY';
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF to_regclass('public.users') IS NOT NULL THEN
+    EXECUTE 'ALTER TABLE public.users ENABLE ROW LEVEL SECURITY';
+    EXECUTE 'ALTER TABLE public.users FORCE ROW LEVEL SECURITY';
   END IF;
 END $$;
