@@ -115,8 +115,8 @@ export function DatasetsSection({
                         <div key={tc.id} className="px-2 py-1 bg-muted/40 rounded text-xs text-muted-foreground flex items-center justify-between group">
                           <span className="truncate">{tc.codename}</span>
                           <div className="flex shrink-0 items-center gap-1">
-                            <button onClick={() => onTogglePublic(tc.id)} title={tc.public ? 'Public' : 'Private'} aria-label={tc.public ? 'Make testcase private' : 'Make testcase public'} className={cn('flex size-9 items-center justify-center rounded-md text-xs font-bold transition-colors', tc.public ? 'text-success' : 'text-muted-foreground')}>{tc.public ? 'P' : 'H'}</button>
-                            <button onClick={() => onDeleteTestcase(tc.id)} title="Delete testcase" aria-label="Delete testcase" className="flex size-9 items-center justify-center rounded-md text-destructive transition-colors hover:bg-destructive/10">×</button>
+                            <button onClick={() => onTogglePublic(tc.id)} title={tc.public ? 'Public' : 'Private'} aria-label={tc.public ? 'Make testcase private' : 'Make testcase public'} className={cn('flex size-11 items-center justify-center rounded-md text-xs font-bold transition-colors', tc.public ? 'text-success' : 'text-muted-foreground')}>{tc.public ? 'P' : 'H'}</button>
+                            <button onClick={() => onDeleteTestcase(tc.id)} title="Delete testcase" aria-label="Delete testcase" className="flex size-11 items-center justify-center rounded-md text-destructive transition-colors hover:bg-destructive/10">×</button>
                           </div>
                         </div>
                       ))}
