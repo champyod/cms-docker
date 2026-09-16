@@ -268,6 +268,8 @@ cms-init:
 prisma-sync:
 	@echo "Synchronizing Admin Panel schema via Prisma Migrate (forcing Prisma v6)..."
 	@# WHY: schema sync is a migration operation that needs DDL, so it runs as the owner role — never the runtime DML role.
+	@# WHY: the Prisma CLI is resolved once per branch and probed before any migration runs — a deployment host has no admin-panel/node_modules, and a missing CLI must fail with a remedy instead of mid-migration.
+	@# WHY: the host call sites run in a subshell so the second one does not re-enter admin-panel/ and silently skip the deploy.
 	@bash scripts/__apply_sql.sh --bootstrap-roles || echo "WARN: role bootstrap failed — retry after restart" >&2;
 	@set -a; [ -f .env ] && . ./.env; set +a; \
 	OWNER_URL_NET="postgresql://$${POSTGRES_USER:-cmsuser}:$${POSTGRES_PASSWORD}@database:5432/$${POSTGRES_DB:-cmsdb}"; \
@@ -277,6 +279,22 @@ prisma-sync:
 	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
 	if [ "$$DEPLOY_TYPE" = "img" ] && docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-admin-panel-next$$'; then \
+		PRISMA_CMD=""; PRISMA_DIR="/app"; \
+		if docker exec cms-admin-panel-next test -x /app/node_modules/.bin/prisma 2>/dev/null; then \
+			PRISMA_CMD="/app/node_modules/.bin/prisma"; \
+		elif docker exec cms-admin-panel-next test -x /repo-root/admin-panel/node_modules/.bin/prisma 2>/dev/null; then \
+			PRISMA_CMD="/repo-root/admin-panel/node_modules/.bin/prisma"; \
+		elif docker exec cms-admin-panel-next sh -lc 'command -v npx >/dev/null 2>&1' 2>/dev/null; then \
+			PRISMA_CMD="npx --yes prisma@6"; \
+		fi; \
+		docker exec cms-admin-panel-next test -f /app/prisma/schema.prisma 2>/dev/null || PRISMA_DIR="/repo-root/admin-panel"; \
+		if [ -z "$$PRISMA_CMD" ] || ! docker exec cms-admin-panel-next sh -lc "cd $$PRISMA_DIR && $$PRISMA_CMD --version" >/dev/null 2>&1; then \
+			echo "ERROR: no usable Prisma CLI inside cms-admin-panel-next — refusing to run migrations." >&2; \
+			echo "  Checked in-container, in order: /app/node_modules/.bin/prisma, /repo-root/admin-panel/node_modules/.bin/prisma, npx." >&2; \
+			echo "  Remedy: rebuild the admin image so it ships the CLI (docker compose --profile core --profile admin up -d --build admin-panel-next), or publish and pull a newer IMG_TAG; the bind-mount and npx fallbacks need host node_modules / container registry access." >&2; \
+			exit 1; \
+		fi; \
+		echo "  Prisma CLI: $$PRISMA_CMD (cwd $$PRISMA_DIR)"; \
 		echo "Checking if baseline is needed (P3005 mitigation)..."; \
 		_need_baseline=0; \
 		if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-database$$'; then \
@@ -284,19 +302,28 @@ prisma-sync:
 		fi; \
 		if [ "$$_need_baseline" = "1" ]; then \
 			echo "Baseline needed — marking 20260910000000_baseline_marker as applied..."; \
-			docker exec -e DATABASE_URL="$$OWNER_URL_NET" cms-admin-panel-next sh -lc "cd /repo-root/admin-panel && { ./node_modules/.bin/prisma migrate resolve --applied 20260910000000_baseline_marker || npx --yes prisma@6 migrate resolve --applied 20260910000000_baseline_marker; }"; \
+			docker exec -e DATABASE_URL="$$OWNER_URL_NET" cms-admin-panel-next sh -lc "cd $$PRISMA_DIR && $$PRISMA_CMD migrate resolve --applied 20260910000000_baseline_marker --schema=./prisma/schema.prisma"; \
 			st=$$?; if [ $$st -ne 0 ]; then echo "Baseline resolve failed — check logs above" >&2; exit $$st; fi; \
 		else \
 			echo "Baseline not needed (empty DB or already migrated)"; \
 		fi; \
 		echo "img mode -> running prisma migrate deploy inside cms-admin-panel-next (owner credentials)"; \
-		docker exec -e DATABASE_URL="$$OWNER_URL_NET" cms-admin-panel-next sh -lc "cd /repo-root/admin-panel && { ./node_modules/.bin/prisma migrate deploy || npx --yes prisma@6 migrate deploy; }"; \
+		docker exec -e DATABASE_URL="$$OWNER_URL_NET" cms-admin-panel-next sh -lc "cd $$PRISMA_DIR && $$PRISMA_CMD migrate deploy --schema=./prisma/schema.prisma"; \
 		st=$$?; \
 		if [ $$st -ne 0 ]; then echo "Migration deploy failed — check logs above" >&2; exit $$st; fi; \
 	elif [ ! -d "admin-panel" ]; then \
 		echo "ERROR: admin-panel directory not found. Clone the repository with admin-panel/ or check your working directory." >&2; \
 		exit 1; \
 	elif command -v bun >/dev/null 2>&1; then \
+		PRISMA_CMD="./node_modules/.bin/prisma"; \
+		if [ ! -x admin-panel/node_modules/.bin/prisma ]; then PRISMA_CMD="bun x prisma@6"; fi; \
+		if ! (cd admin-panel && $$PRISMA_CMD --version) >/dev/null 2>&1; then \
+			echo "ERROR: no usable Prisma CLI for the bun branch — refusing to run migrations." >&2; \
+			echo "  Tried '$$PRISMA_CMD' from admin-panel/." >&2; \
+			echo "  Remedy: install the panel dependencies (cd admin-panel && bun install) so node_modules/.bin/prisma exists; the 'bun x prisma@6' fallback needs registry access to fetch the CLI." >&2; \
+			exit 1; \
+		fi; \
+		echo "  Prisma CLI: $$PRISMA_CMD (cwd admin-panel)"; \
 		echo "Checking if baseline is needed (P3005 mitigation)..."; \
 		_need_baseline=0; \
 		if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-database$$'; then \
@@ -306,13 +333,22 @@ prisma-sync:
 		fi; \
 		if [ "$$_need_baseline" = "1" ]; then \
 			echo "Baseline needed — marking 20260910000000_baseline_marker as applied..."; \
-			cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" bun x prisma@6 migrate resolve --applied 20260910000000_baseline_marker; \
+			(cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" $$PRISMA_CMD migrate resolve --applied 20260910000000_baseline_marker --schema=./prisma/schema.prisma); \
 			st=$$?; if [ $$st -ne 0 ]; then echo "Baseline resolve failed — check logs above" >&2; exit $$st; fi; \
 		else \
 			echo "Baseline not needed (empty DB or already migrated)"; \
 		fi; \
-		cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" bun x prisma@6 migrate deploy; \
+		(cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" $$PRISMA_CMD migrate deploy --schema=./prisma/schema.prisma); \
 	elif command -v npm >/dev/null 2>&1; then \
+		PRISMA_CMD="npx --yes prisma@6"; \
+		if [ -x admin-panel/node_modules/.bin/prisma ]; then PRISMA_CMD="./node_modules/.bin/prisma"; fi; \
+		if ! (cd admin-panel && $$PRISMA_CMD --version) >/dev/null 2>&1; then \
+			echo "ERROR: no usable Prisma CLI for the npm branch — refusing to run migrations." >&2; \
+			echo "  Tried '$$PRISMA_CMD' from admin-panel/." >&2; \
+			echo "  Remedy: install the panel dependencies (cd admin-panel && npm install) so node_modules/.bin/prisma exists; the 'npx --yes prisma@6' fallback needs registry access to fetch the CLI." >&2; \
+			exit 1; \
+		fi; \
+		echo "  Prisma CLI: $$PRISMA_CMD (cwd admin-panel)"; \
 		echo "Checking if baseline is needed (P3005 mitigation)..."; \
 		_need_baseline=0; \
 		if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-database$$'; then \
@@ -322,12 +358,12 @@ prisma-sync:
 		fi; \
 		if [ "$$_need_baseline" = "1" ]; then \
 			echo "Baseline needed — marking 20260910000000_baseline_marker as applied..."; \
-			cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" npx prisma@6 migrate resolve --applied 20260910000000_baseline_marker; \
+			(cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" $$PRISMA_CMD migrate resolve --applied 20260910000000_baseline_marker --schema=./prisma/schema.prisma); \
 			st=$$?; if [ $$st -ne 0 ]; then echo "Baseline resolve failed — check logs above" >&2; exit $$st; fi; \
 		else \
 			echo "Baseline not needed (empty DB or already migrated)"; \
 		fi; \
-		cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" npx prisma@6 migrate deploy; \
+		(cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" $$PRISMA_CMD migrate deploy --schema=./prisma/schema.prisma); \
 	else \
 		echo "ERROR: Neither 'bun' nor 'npm' found in PATH. Install Bun (https://bun.sh) or Node.js/npm, then run: make prisma-sync" >&2; \
 		echo "  Fix: curl -fsSL https://bun.sh/install | bash && export PATH=\"\$$HOME/.bun/bin:\$$PATH\"" >&2; \
