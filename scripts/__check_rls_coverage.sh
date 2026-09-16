@@ -6,6 +6,8 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/__lib/common.sh"
 
+# WHY: both sets below are compared with comm, so both sorts run under LC_ALL=C —
+# collation is machine-dependent, and a locale-ordered sort would mismatch them.
 SCHEMA="${REPO_ROOT}/admin-panel/prisma/schema.prisma"
 MIGRATIONS_DIR="${REPO_ROOT}/admin-panel/prisma/migrations"
 GENERATOR="${REPO_ROOT}/scripts/__generate_rls_sql.sh"
@@ -44,7 +46,7 @@ if ! awk '
     model=""
     next
   }
-' "$SCHEMA" | sort -u > "$tmp_schema"; then
+' "$SCHEMA" | LC_ALL=C sort -u > "$tmp_schema"; then
   log_die "failed to parse $SCHEMA" 1
 fi
 
@@ -53,16 +55,19 @@ if [ ! -s "$tmp_schema" ]; then
 fi
 
 # WHY: extract table set from ENABLE ROW LEVEL SECURITY across migration history.
+# WHY LC_ALL=C on these sorts and on the comms below: collation is machine-dependent, so unpinned
+# sort/comm disagree about ordering — comm only agrees with inputs sorted its own way — and the
+# check then passes locally and fails wherever the locale differs from the author's (a real CI failure).
 tmp_a=$(mktemp)
 tmp_b=$(mktemp)
 trap 'rm -f "$tmp_schema" "$tmp_mig" "$tmp_chk" "$tmp_a" "$tmp_b"' EXIT
-grep -h "to_regclass('public\." "$MIGRATIONS_DIR"/*/migration.sql 2>/dev/null | grep -o "to_regclass('public\.[^']*')" | sed "s/.*public\.//;s/'.*//" | sort -u > "$tmp_a" || : > "$tmp_a"
-grep -hE 'ALTER TABLE public\.[A-Za-z_][A-Za-z0-9_]* ENABLE ROW LEVEL SECURITY' "$MIGRATIONS_DIR"/*/migration.sql 2>/dev/null | sed -n 's/.*ALTER TABLE public\.\([A-Za-z_][A-Za-z0-9_]*\) ENABLE ROW LEVEL SECURITY.*/\1/p' | sort -u > "$tmp_b" || : > "$tmp_b"
-cat "$tmp_a" "$tmp_b" | sort -u > "$tmp_mig"
+grep -h "to_regclass('public\." "$MIGRATIONS_DIR"/*/migration.sql 2>/dev/null | grep -o "to_regclass('public\.[^']*')" | sed "s/.*public\.//;s/'.*//" | LC_ALL=C sort -u > "$tmp_a" || : > "$tmp_a"
+grep -hE 'ALTER TABLE public\.[A-Za-z_][A-Za-z0-9_]* ENABLE ROW LEVEL SECURITY' "$MIGRATIONS_DIR"/*/migration.sql 2>/dev/null | sed -n 's/.*ALTER TABLE public\.\([A-Za-z_][A-Za-z0-9_]*\) ENABLE ROW LEVEL SECURITY.*/\1/p' | LC_ALL=C sort -u > "$tmp_b" || : > "$tmp_b"
+cat "$tmp_a" "$tmp_b" | LC_ALL=C sort -u > "$tmp_mig"
 
 # WHY two-direction comm: missing = fail-open security hole (model has no RLS), extra = drift (RLS for a dropped table).
-missing=$(comm -23 "$tmp_schema" "$tmp_mig" || true)
-extra=$(comm -13 "$tmp_schema" "$tmp_mig" || true)
+missing=$(LC_ALL=C comm -23 "$tmp_schema" "$tmp_mig" || true)
+extra=$(LC_ALL=C comm -13 "$tmp_schema" "$tmp_mig" || true)
 
 rc=0
 # WHY also verify generator coverage: every model must be covered somewhere in migration history.

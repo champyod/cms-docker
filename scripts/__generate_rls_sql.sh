@@ -48,7 +48,7 @@ if ! awk '
     model=""
     next
   }
-' "$SCHEMA" | sort -u > "$tmp_models"; then
+' "$SCHEMA" | LC_ALL=C sort -u > "$tmp_models"; then
   log_die "failed to parse $SCHEMA" 1
 fi
 
@@ -56,8 +56,12 @@ if [ ! -s "$tmp_models" ]; then
   log_die "no models found in $SCHEMA — refusing to emit RLS guards" 1
 fi
 
-if [ "$(sort "$tmp_models" | uniq -d | wc -l | tr -d ' ')" -ne 0 ]; then
-  dup=$(sort "$tmp_models" | uniq -d | tr '\n' ' ')
+# WHY LC_ALL=C on every ordering command below: collation is machine-dependent, so an unpinned
+# sort/comm emits a different block order and a different coverage verdict per locale — the gate
+# then passes locally and fails wherever the locale differs from the author's (a real CI failure).
+# WHY sanity: duplicate table names after @@map resolution would emit duplicate guards; fail instead of silently deduping.
+if [ "$(LC_ALL=C sort "$tmp_models" | uniq -d | wc -l | tr -d ' ')" -ne 0 ]; then
+  dup=$(LC_ALL=C sort "$tmp_models" | uniq -d | tr '\n' ' ')
   log_die "duplicate table names after @@map resolution: $dup" 1
 fi
 
@@ -68,9 +72,11 @@ trap 'rm -f "$tmp_models" "$tmp_covered" "$tmp_a" "$tmp_b"' EXIT
 
 # WHY: collect every table with ENABLE ROW LEVEL SECURITY somewhere in migration history.
 # Handles both the to_regclass guard form and the direct ALTER TABLE form (including inside EXECUTE).
-grep -h "to_regclass('public\." "$MIGRATIONS_DIR"/*/migration.sql 2>/dev/null | grep -o "to_regclass('public\.[^']*')" | sed "s/.*public\.//;s/'.*//" | sort -u > "$tmp_a" || : > "$tmp_a"
-grep -hE 'ALTER TABLE public\.[A-Za-z_][A-Za-z0-9_]* ENABLE ROW LEVEL SECURITY' "$MIGRATIONS_DIR"/*/migration.sql 2>/dev/null | sed -n 's/.*ALTER TABLE public\.\([A-Za-z_][A-Za-z0-9_]*\) ENABLE ROW LEVEL SECURITY.*/\1/p' | sort -u > "$tmp_b" || : > "$tmp_b"
-cat "$tmp_a" "$tmp_b" | sort -u > "$tmp_covered"
+# WHY LC_ALL=C on these sorts: the committed migration history is emitted in C order, so anything
+# emitted below must use that same order, and comm only agrees with inputs sorted the same way.
+grep -h "to_regclass('public\." "$MIGRATIONS_DIR"/*/migration.sql 2>/dev/null | grep -o "to_regclass('public\.[^']*')" | sed "s/.*public\.//;s/'.*//" | LC_ALL=C sort -u > "$tmp_a" || : > "$tmp_a"
+grep -hE 'ALTER TABLE public\.[A-Za-z_][A-Za-z0-9_]* ENABLE ROW LEVEL SECURITY' "$MIGRATIONS_DIR"/*/migration.sql 2>/dev/null | sed -n 's/.*ALTER TABLE public\.\([A-Za-z_][A-Za-z0-9_]*\) ENABLE ROW LEVEL SECURITY.*/\1/p' | LC_ALL=C sort -u > "$tmp_b" || : > "$tmp_b"
+cat "$tmp_a" "$tmp_b" | LC_ALL=C sort -u > "$tmp_covered"
 
 count=$(wc -l < "$tmp_models" | tr -d ' ')
 
@@ -78,8 +84,8 @@ if [ "$CHECK" -eq 1 ]; then
   tmp_uncovered=$(mktemp)
   tmp_extra=$(mktemp)
   trap 'rm -f "$tmp_models" "$tmp_covered" "$tmp_a" "$tmp_b" "$tmp_uncovered" "$tmp_extra"' EXIT
-  comm -23 "$tmp_models" "$tmp_covered" > "$tmp_uncovered" || true
-  comm -13 "$tmp_models" "$tmp_covered" > "$tmp_extra" || true
+  LC_ALL=C comm -23 "$tmp_models" "$tmp_covered" > "$tmp_uncovered" || true
+  LC_ALL=C comm -13 "$tmp_models" "$tmp_covered" > "$tmp_extra" || true
   rc=0
   if [ -s "$tmp_uncovered" ]; then
     printf '[FAIL] RLS coverage gap — tables without ENABLE ROW LEVEL SECURITY in migration history:\n' >&2
@@ -104,7 +110,7 @@ fi
 
 tmp_uncovered=$(mktemp)
 trap 'rm -f "$tmp_models" "$tmp_covered" "$tmp_a" "$tmp_b" "$tmp_uncovered"' EXIT
-comm -23 "$tmp_models" "$tmp_covered" > "$tmp_uncovered" || true
+LC_ALL=C comm -23 "$tmp_models" "$tmp_covered" > "$tmp_uncovered" || true
 
 if [ ! -s "$tmp_uncovered" ]; then
   log_info "all $count tables already covered in migration history — nothing to emit" >&2
