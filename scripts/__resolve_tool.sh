@@ -7,9 +7,12 @@
 # long enough to get wrong, and Make escaping makes it near-impossible to read
 # or test. The Makefile calls this once per tool.
 #
-# Output on success: one line, "<dir>\t<command>", where <dir> is the working
-# directory the command must run from. On failure: the ordered list of what was
-# tried, on stderr, and exit 1.
+# Output on success: ONE line, three tab-separated fields —
+#     <where>\t<dir>\t<command>
+# where <where> is `container` or `host` — the caller must wrap the command
+# accordingly, because the database URL differs on each side — <dir> is the
+# working directory the command must run from, and <command> is the command.
+# On failure: the ordered list of what was tried, on stderr, and exit 1.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -66,7 +69,7 @@ try_container() {
   local dir="$1" cmd="$2" budget="${3:-$LOCAL_PROBE_TIMEOUT}"
   TRIED+=("container:$dir: $cmd")
   if probe_container "$dir" "$cmd" "$budget"; then
-    printf '%s\t%s\n' "$dir" "$cmd"
+    printf 'container\t%s\t%s\n' "$dir" "$cmd"
     exit 0
   fi
 }
@@ -75,7 +78,7 @@ try_host() {
   local dir="$1" cmd="$2" budget="${3:-$LOCAL_PROBE_TIMEOUT}"
   TRIED+=("host:$dir: $cmd")
   if probe_host "$dir" "$cmd" "$budget"; then
-    printf '%s\t%s\n' "$dir" "$cmd"
+    printf 'host\t%s\t%s\n' "$dir" "$cmd"
     exit 0
   fi
 }

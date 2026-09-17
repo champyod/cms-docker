@@ -268,156 +268,47 @@ cms-init:
 prisma-sync:
 	@echo "Synchronizing Admin Panel schema via Prisma Migrate (forcing Prisma v6)..."
 	@# WHY: schema sync is a migration operation that needs DDL, so it runs as the owner role — never the runtime DML role.
-	@# WHY: the Prisma CLI is resolved once per branch and probed before any migration runs — a deployment host has no admin-panel/node_modules, and a missing CLI must fail with a remedy instead of mid-migration.
-	@# WHY: the host call sites run in a subshell so the second one does not re-enter admin-panel/ and silently skip the deploy.
-	@# WHY: missing seed tooling must fail before migrations; probing its imports without running the seed catches incomplete images without touching the database.
-	@# WHY: seeding the permission registry is system initialisation, so it also runs as the owner — it must work even before the runtime roles exist.
+	@# WHY: both tools are located by scripts/__resolve_tool.sh, which walks every plausible location on both sides of the container boundary — the image, the host bind-mount, a global install, and the package runners the image already carries — and accepts the first candidate that actually runs. A deployment host has no admin-panel/node_modules and an out-of-date image carries no bundled runner, so a miss inside the container must fall through to the host: an inline probe that stops at the first miss leaves the update unable to finish.
+	@# WHY: the resolver reports which side it found the tool on, because the database is reached by service name from the container and by loopback from the host.
+	@# WHY: a failed migration and a failed seed are both fatal — without the seed the administrators hold groups that grant nothing.
+	@# WHY: seeding is system initialisation, so it also runs as the owner; it must work before the runtime roles exist.
 	@bash scripts/__apply_sql.sh --bootstrap-roles || echo "WARN: role bootstrap failed — retry after restart" >&2;
 	@set -a; [ -f .env ] && . ./.env; set +a; \
 	OWNER_URL_NET="postgresql://$${POSTGRES_USER:-cmsuser}:$${POSTGRES_PASSWORD}@database:5432/$${POSTGRES_DB:-cmsdb}"; \
 	OWNER_URL_LOCAL="postgresql://$${POSTGRES_USER:-cmsuser}:$${POSTGRES_PASSWORD}@localhost:5432/$${POSTGRES_DB:-cmsdb}"; \
-	export PATH="$(HOME)/.bun/bin:$(PATH)"; \
-	DEPLOY_TYPE="$${DEPLOYMENT_TYPE_OVERRIDE:-}"; \
-	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
-	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
-	SEED_CMD=""; SEED_DIR="admin-panel"; SEED_IN_CONTAINER=0; \
-	SEED_PROBE='require("@/lib/prisma"); require("@/lib/permission-registry");'; \
-	if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-admin-panel-next$$'; then \
-		SEED_IN_CONTAINER=1; SEED_DIR="/app"; \
-		if docker exec cms-admin-panel-next test -x /app/node_modules/.bin/tsx 2>/dev/null; then \
-			SEED_CMD="/app/node_modules/.bin/tsx"; \
-		elif docker exec cms-admin-panel-next test -x /repo-root/admin-panel/node_modules/.bin/tsx 2>/dev/null; then \
-			SEED_CMD="/repo-root/admin-panel/node_modules/.bin/tsx"; \
-		elif docker exec cms-admin-panel-next sh -lc 'command -v npx >/dev/null 2>&1' 2>/dev/null; then \
-			SEED_CMD="npx --yes tsx@4"; \
+	export PATH="$$HOME/.bun/bin:$$PATH"; \
+	run_tool() { \
+		if [ "$$1" = "container" ]; then \
+			docker exec -e DATABASE_URL="$$OWNER_URL_NET" cms-admin-panel-next sh -lc "cd $$2 && $$3"; \
+		else \
+			( cd "$$2" && DATABASE_URL="$$OWNER_URL_LOCAL" $$3 ); \
 		fi; \
-		docker exec cms-admin-panel-next test -f /app/prisma/seed-permissions.ts 2>/dev/null || SEED_DIR="/repo-root/admin-panel"; \
-		if [ -z "$$SEED_CMD" ] || ! docker exec -e DATABASE_URL="$$OWNER_URL_NET" cms-admin-panel-next sh -lc "cd $$SEED_DIR && test -f prisma/seed-permissions.ts && $$SEED_CMD --version && $$SEED_CMD -e '$$SEED_PROBE'" >/dev/null 2>&1; then \
-			echo "ERROR: no usable permission seed command inside cms-admin-panel-next — refusing to run migrations." >&2; \
-			echo "  Checked in-container, in order: /app/node_modules/.bin/tsx, /repo-root/admin-panel/node_modules/.bin/tsx, npx; seed script and Prisma/registry imports must also load." >&2; \
-			echo "  Remedy: rebuild the admin image so it ships tsx and the seed dependencies (docker compose --profile core --profile admin up -d --build admin-panel-next), or publish and pull a newer IMG_TAG; the bind-mount and npx fallbacks need host node_modules / container registry access." >&2; \
-			exit 1; \
-		fi; \
-	elif command -v bun >/dev/null 2>&1; then \
-		SEED_CMD="bun x tsx"; \
-		if ! (cd "$$SEED_DIR" && test -f prisma/seed-permissions.ts && $$SEED_CMD --version && DATABASE_URL="$$OWNER_URL_LOCAL" $$SEED_CMD -e "$$SEED_PROBE") >/dev/null 2>&1; then \
-			echo "ERROR: no usable permission seed command for the bun branch — refusing to run migrations." >&2; \
-			echo "  Tried '$$SEED_CMD' and the seed imports from admin-panel/." >&2; \
-			echo "  Remedy: install the panel dependencies (cd admin-panel && bun install && bun x prisma@6 generate); 'bun x tsx' needs registry access to fetch the runner." >&2; \
-			exit 1; \
-		fi; \
-	elif command -v npm >/dev/null 2>&1; then \
-		SEED_CMD="npx tsx"; \
-		if ! (cd "$$SEED_DIR" && test -f prisma/seed-permissions.ts && $$SEED_CMD --version && DATABASE_URL="$$OWNER_URL_LOCAL" $$SEED_CMD -e "$$SEED_PROBE") >/dev/null 2>&1; then \
-			echo "ERROR: no usable permission seed command for the npm branch — refusing to run migrations." >&2; \
-			echo "  Tried '$$SEED_CMD' and the seed imports from admin-panel/." >&2; \
-			echo "  Remedy: install the panel dependencies (cd admin-panel && npm install && npx --yes prisma@6 generate); 'npx tsx' needs registry access to fetch the runner." >&2; \
-			exit 1; \
-		fi; \
-	else \
-		echo "ERROR: no usable permission seed command — refusing to run migrations." >&2; \
-		echo "  Remedy: start the rebuilt admin container, or install Bun or Node.js/npm and the panel dependencies." >&2; \
-		exit 1; \
+	}; \
+	SEED_RESOLVE="$$(bash scripts/__resolve_tool.sh tsx)" || exit 1; \
+	IFS=$$'\t' read -r SEED_WHERE SEED_DIR SEED_CMD <<< "$$SEED_RESOLVE"; \
+	echo "  Permission seed: $$SEED_CMD prisma/seed-permissions.ts (cwd $$SEED_DIR, $$SEED_WHERE)"; \
+	PRISMA_RESOLVE="$$(bash scripts/__resolve_tool.sh prisma)" || exit 1; \
+	IFS=$$'\t' read -r PRISMA_WHERE PRISMA_DIR PRISMA_CMD <<< "$$PRISMA_RESOLVE"; \
+	echo "  Prisma CLI: $$PRISMA_CMD (cwd $$PRISMA_DIR, $$PRISMA_WHERE)"; \
+	echo "Checking if baseline is needed (P3005 mitigation)..."; \
+	_need_baseline=0; \
+	if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-database$$'; then \
+		if docker exec -i -e PGPASSWORD="$$POSTGRES_PASSWORD" cms-database psql -U "$${POSTGRES_USER:-cmsuser}" -d "$${POSTGRES_DB:-cmsdb}" -tAc "SELECT (to_regclass('public._prisma_migrations') IS NULL AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public'))" 2>/dev/null | grep -q "t"; then _need_baseline=1; fi; \
+	elif command -v psql >/dev/null 2>&1; then \
+		if PGPASSWORD="$$POSTGRES_PASSWORD" psql -h localhost -p "$${POSTGRES_PORT:-5432}" -U "$${POSTGRES_USER:-cmsuser}" -d "$${POSTGRES_DB:-cmsdb}" -tAc "SELECT (to_regclass('public._prisma_migrations') IS NULL AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public'))" 2>/dev/null | grep -q "t"; then _need_baseline=1; fi; \
 	fi; \
-	echo "  Permission seed: $$SEED_CMD prisma/seed-permissions.ts (cwd $$SEED_DIR)"; \
-	if [ "$$DEPLOY_TYPE" = "img" ] && docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-admin-panel-next$$'; then \
-		PRISMA_CMD=""; PRISMA_DIR="/app"; \
-		if docker exec cms-admin-panel-next test -x /app/node_modules/.bin/prisma 2>/dev/null; then \
-			PRISMA_CMD="/app/node_modules/.bin/prisma"; \
-		elif docker exec cms-admin-panel-next test -x /repo-root/admin-panel/node_modules/.bin/prisma 2>/dev/null; then \
-			PRISMA_CMD="/repo-root/admin-panel/node_modules/.bin/prisma"; \
-		elif docker exec cms-admin-panel-next sh -lc 'command -v npx >/dev/null 2>&1' 2>/dev/null; then \
-			PRISMA_CMD="npx --yes prisma@6"; \
-		fi; \
-		docker exec cms-admin-panel-next test -f /app/prisma/schema.prisma 2>/dev/null || PRISMA_DIR="/repo-root/admin-panel"; \
-		if [ -z "$$PRISMA_CMD" ] || ! docker exec cms-admin-panel-next sh -lc "cd $$PRISMA_DIR && $$PRISMA_CMD --version" >/dev/null 2>&1; then \
-			echo "ERROR: no usable Prisma CLI inside cms-admin-panel-next — refusing to run migrations." >&2; \
-			echo "  Checked in-container, in order: /app/node_modules/.bin/prisma, /repo-root/admin-panel/node_modules/.bin/prisma, npx." >&2; \
-			echo "  Remedy: rebuild the admin image so it ships the CLI (docker compose --profile core --profile admin up -d --build admin-panel-next), or publish and pull a newer IMG_TAG; the bind-mount and npx fallbacks need host node_modules / container registry access." >&2; \
-			exit 1; \
-		fi; \
-		echo "  Prisma CLI: $$PRISMA_CMD (cwd $$PRISMA_DIR)"; \
-		echo "Checking if baseline is needed (P3005 mitigation)..."; \
-		_need_baseline=0; \
-		if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-database$$'; then \
-			if docker exec -i -e PGPASSWORD="$$POSTGRES_PASSWORD" cms-database psql -U "$${POSTGRES_USER:-cmsuser}" -d "$${POSTGRES_DB:-cmsdb}" -tAc "SELECT (to_regclass('public._prisma_migrations') IS NULL AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public'))" 2>/dev/null | grep -q "t"; then _need_baseline=1; fi; \
-		fi; \
-		if [ "$$_need_baseline" = "1" ]; then \
-			echo "Baseline needed — marking 20260910000000_baseline_marker as applied..."; \
-			docker exec -e DATABASE_URL="$$OWNER_URL_NET" cms-admin-panel-next sh -lc "cd $$PRISMA_DIR && $$PRISMA_CMD migrate resolve --applied 20260910000000_baseline_marker --schema=./prisma/schema.prisma"; \
-			st=$$?; if [ $$st -ne 0 ]; then echo "Baseline resolve failed — check logs above" >&2; exit $$st; fi; \
-		else \
-			echo "Baseline not needed (empty DB or already migrated)"; \
-		fi; \
-		echo "img mode -> running prisma migrate deploy inside cms-admin-panel-next (owner credentials)"; \
-		docker exec -e DATABASE_URL="$$OWNER_URL_NET" cms-admin-panel-next sh -lc "cd $$PRISMA_DIR && $$PRISMA_CMD migrate deploy --schema=./prisma/schema.prisma"; \
-		st=$$?; \
-		if [ $$st -ne 0 ]; then echo "Migration deploy failed — check logs above" >&2; exit $$st; fi; \
-	elif [ ! -d "admin-panel" ]; then \
-		echo "ERROR: admin-panel directory not found. Clone the repository with admin-panel/ or check your working directory." >&2; \
-		exit 1; \
-	elif command -v bun >/dev/null 2>&1; then \
-		PRISMA_CMD="./node_modules/.bin/prisma"; \
-		if [ ! -x admin-panel/node_modules/.bin/prisma ]; then PRISMA_CMD="bun x prisma@6"; fi; \
-		if ! (cd admin-panel && $$PRISMA_CMD --version) >/dev/null 2>&1; then \
-			echo "ERROR: no usable Prisma CLI for the bun branch — refusing to run migrations." >&2; \
-			echo "  Tried '$$PRISMA_CMD' from admin-panel/." >&2; \
-			echo "  Remedy: install the panel dependencies (cd admin-panel && bun install) so node_modules/.bin/prisma exists; the 'bun x prisma@6' fallback needs registry access to fetch the CLI." >&2; \
-			exit 1; \
-		fi; \
-		echo "  Prisma CLI: $$PRISMA_CMD (cwd admin-panel)"; \
-		echo "Checking if baseline is needed (P3005 mitigation)..."; \
-		_need_baseline=0; \
-		if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-database$$'; then \
-			if docker exec -i -e PGPASSWORD="$$POSTGRES_PASSWORD" cms-database psql -U "$${POSTGRES_USER:-cmsuser}" -d "$${POSTGRES_DB:-cmsdb}" -tAc "SELECT (to_regclass('public._prisma_migrations') IS NULL AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public'))" 2>/dev/null | grep -q "t"; then _need_baseline=1; fi; \
-		elif command -v psql >/dev/null 2>&1; then \
-			if PGPASSWORD="$$POSTGRES_PASSWORD" psql -h localhost -p "$${POSTGRES_PORT:-5432}" -U "$${POSTGRES_USER:-cmsuser}" -d "$${POSTGRES_DB:-cmsdb}" -tAc "SELECT (to_regclass('public._prisma_migrations') IS NULL AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public'))" 2>/dev/null | grep -q "t"; then _need_baseline=1; fi; \
-		fi; \
-		if [ "$$_need_baseline" = "1" ]; then \
-			echo "Baseline needed — marking 20260910000000_baseline_marker as applied..."; \
-			(cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" $$PRISMA_CMD migrate resolve --applied 20260910000000_baseline_marker --schema=./prisma/schema.prisma); \
-			st=$$?; if [ $$st -ne 0 ]; then echo "Baseline resolve failed — check logs above" >&2; exit $$st; fi; \
-		else \
-			echo "Baseline not needed (empty DB or already migrated)"; \
-		fi; \
-		(cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" $$PRISMA_CMD migrate deploy --schema=./prisma/schema.prisma); \
-	elif command -v npm >/dev/null 2>&1; then \
-		PRISMA_CMD="npx --yes prisma@6"; \
-		if [ -x admin-panel/node_modules/.bin/prisma ]; then PRISMA_CMD="./node_modules/.bin/prisma"; fi; \
-		if ! (cd admin-panel && $$PRISMA_CMD --version) >/dev/null 2>&1; then \
-			echo "ERROR: no usable Prisma CLI for the npm branch — refusing to run migrations." >&2; \
-			echo "  Tried '$$PRISMA_CMD' from admin-panel/." >&2; \
-			echo "  Remedy: install the panel dependencies (cd admin-panel && npm install) so node_modules/.bin/prisma exists; the 'npx --yes prisma@6' fallback needs registry access to fetch the CLI." >&2; \
-			exit 1; \
-		fi; \
-		echo "  Prisma CLI: $$PRISMA_CMD (cwd admin-panel)"; \
-		echo "Checking if baseline is needed (P3005 mitigation)..."; \
-		_need_baseline=0; \
-		if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-database$$'; then \
-			if docker exec -i -e PGPASSWORD="$$POSTGRES_PASSWORD" cms-database psql -U "$${POSTGRES_USER:-cmsuser}" -d "$${POSTGRES_DB:-cmsdb}" -tAc "SELECT (to_regclass('public._prisma_migrations') IS NULL AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public'))" 2>/dev/null | grep -q "t"; then _need_baseline=1; fi; \
-		elif command -v psql >/dev/null 2>&1; then \
-			if PGPASSWORD="$$POSTGRES_PASSWORD" psql -h localhost -p "$${POSTGRES_PORT:-5432}" -U "$${POSTGRES_USER:-cmsuser}" -d "$${POSTGRES_DB:-cmsdb}" -tAc "SELECT (to_regclass('public._prisma_migrations') IS NULL AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public'))" 2>/dev/null | grep -q "t"; then _need_baseline=1; fi; \
-		fi; \
-		if [ "$$_need_baseline" = "1" ]; then \
-			echo "Baseline needed — marking 20260910000000_baseline_marker as applied..."; \
-			(cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" $$PRISMA_CMD migrate resolve --applied 20260910000000_baseline_marker --schema=./prisma/schema.prisma); \
-			st=$$?; if [ $$st -ne 0 ]; then echo "Baseline resolve failed — check logs above" >&2; exit $$st; fi; \
-		else \
-			echo "Baseline not needed (empty DB or already migrated)"; \
-		fi; \
-		(cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" $$PRISMA_CMD migrate deploy --schema=./prisma/schema.prisma); \
+	if [ "$$_need_baseline" = "1" ]; then \
+		echo "Baseline needed — marking 20260910000000_baseline_marker as applied..."; \
+		run_tool "$$PRISMA_WHERE" "$$PRISMA_DIR" "$$PRISMA_CMD migrate resolve --applied 20260910000000_baseline_marker --schema=./prisma/schema.prisma"; \
+		st=$$?; if [ $$st -ne 0 ]; then echo "Baseline resolve failed — check logs above" >&2; exit $$st; fi; \
 	else \
-		echo "ERROR: Neither 'bun' nor 'npm' found in PATH. Install Bun (https://bun.sh) or Node.js/npm, then run: make prisma-sync" >&2; \
-		echo "  Fix: curl -fsSL https://bun.sh/install | bash && export PATH=\"\$$HOME/.bun/bin:\$$PATH\"" >&2; \
-		exit 1; \
+		echo "Baseline not needed (empty DB or already migrated)"; \
 	fi; \
+	echo "Running prisma migrate deploy (owner credentials)..."; \
+	run_tool "$$PRISMA_WHERE" "$$PRISMA_DIR" "$$PRISMA_CMD migrate deploy --schema=./prisma/schema.prisma"; \
 	st=$$?; if [ $$st -ne 0 ]; then echo "Migration deploy failed — check logs above" >&2; exit $$st; fi; \
 	echo "Seeding permission groups and permissions..."; \
-	if [ "$$SEED_IN_CONTAINER" = "1" ]; then \
-		docker exec -e DATABASE_URL="$$OWNER_URL_NET" cms-admin-panel-next sh -lc "cd $$SEED_DIR && $$SEED_CMD prisma/seed-permissions.ts"; \
-	else \
-		(cd "$$SEED_DIR" && DATABASE_URL="$$OWNER_URL_LOCAL" $$SEED_CMD prisma/seed-permissions.ts); \
-	fi; \
+	run_tool "$$SEED_WHERE" "$$SEED_DIR" "$$SEED_CMD prisma/seed-permissions.ts"; \
 	st=$$?; if [ $$st -ne 0 ]; then echo "Permission seed failed — admins have no effective permissions until seeding succeeds; check logs above and rerun make prisma-sync." >&2; exit $$st; fi
 
 admin-create:
