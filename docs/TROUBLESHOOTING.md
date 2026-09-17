@@ -72,7 +72,7 @@ sudo ufw reload
 sudo lsof -i :8888
 
 # Kill the process or change CMS port
-# Edit .env.contest
+# Edit config.toml [contest], then: ./cms config sync
 CONTEST_PORT_EXTERNAL=8887
 ```
 
