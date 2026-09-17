@@ -4,10 +4,13 @@ import { useState, useCallback } from 'react';
 import { getAnnouncements, createAnnouncement, deleteAnnouncement } from '@/app/actions/announcements';
 import { getQuestions, replyToQuestion, ignoreQuestion, unignoreQuestion } from '@/app/actions/questions';
 import { getRanking } from '@/app/actions/ranking';
+import { useConfirm } from '@/hooks/useConfirm';
+import { destructiveConfirm } from '@/lib/confirmation-copy';
 
 export type CommTab = 'announcements' | 'questions' | 'ranking';
 
 export function useContestCommunications(contestId: number, adminId: number) {
+  const confirm = useConfirm();
   const [activeTab, setActiveTab] = useState<CommTab>('announcements');
   const [announcements, setAnnouncements] = useState<unknown[]>([]);
   const [questions, setQuestions] = useState<unknown[]>([]);
@@ -43,10 +46,9 @@ export function useContestCommunications(contestId: number, adminId: number) {
   };
 
   const handleDeleteAnnouncement = async (id: number) => {
-    if (confirm('Delete this announcement?')) {
-      await deleteAnnouncement(id);
-      void loadData('announcements');
-    }
+    if (!(await confirm(destructiveConfirm('announcement')))) return;
+    await deleteAnnouncement(id);
+    void loadData('announcements');
   };
 
   const handleReply = async (questionId: number) => {

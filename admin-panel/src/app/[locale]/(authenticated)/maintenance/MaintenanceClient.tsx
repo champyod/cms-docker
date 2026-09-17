@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { Card } from '@/components/core/Card';
 import { readConfigTomlValues, updateConfigTomlValues } from '@/app/actions/env';
 import { buildConfigTomlUpdates, type ConfigTomlKey } from '@/lib/config-toml';
+import { manualBackupConfirm } from '@/lib/confirmation-copy';
+import { useConfirm } from '@/hooks/useConfirm';
 import { triggerManualBackup, restartServices } from '@/app/actions/services';
 import {
   getDiscordNotificationSettings,
@@ -60,6 +62,7 @@ function describeDiscordState(settings: DiscordSettings): string {
 }
 
 export default function MaintenanceClient() {
+  const confirm = useConfirm();
   const [data, setData] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -118,7 +121,7 @@ export default function MaintenanceClient() {
   };
 
   const handleBackup = async () => {
-    if (!confirm('Trigger a manual backup of all submissions?')) return;
+    if (!(await confirm(manualBackupConfirm()))) return;
     setBackingUp(true);
     const result = await triggerManualBackup();
     if (result.success) {
@@ -244,7 +247,7 @@ export default function MaintenanceClient() {
                         <Button
                             variant="positiveOutline"
                             className="w-full"
-                            onClick={handleBackup}
+                            onClick={() => { void handleBackup(); }}
                             loading={backingUp}
                         >
                             <Zap className="w-4 h-4" />

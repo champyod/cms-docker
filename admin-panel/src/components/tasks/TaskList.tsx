@@ -14,6 +14,8 @@ import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
 import { TaskModal } from './TaskModal';
 import { apiClient } from '@/lib/apiClient';
 import { hasEffectivePermission } from '@/lib/permission-engine';
+import { useConfirm } from '@/hooks/useConfirm';
+import { destructiveConfirm } from '@/lib/confirmation-copy';
 import type { TaskDiagnostic } from '@/lib/task-diagnostics';
 
 interface TaskRow {
@@ -40,6 +42,7 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
   const [tasks] = useSyncedState(initialTasks);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
+  const confirm = useConfirm();
 
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
   const canCreateTasks = hasEffectivePermission(effective, 'task:create');
@@ -54,11 +57,10 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
 
   const handleDelete = async (id: number): Promise<void> => {
     if (!canDeleteTasks) return;
-    if (confirm('Are you sure you want to delete this task? This is IRREVERSIBLE.')) {
-      const result = await apiClient.delete(`/api/tasks/${id}`);
-      if (result.success) router.refresh();
-      else toast.error(`Failed to delete task: ${result.error}`);
-    }
+    if (!(await confirm(destructiveConfirm('task')))) return;
+    const result = await apiClient.delete(`/api/tasks/${id}`);
+    if (result.success) router.refresh();
+    else toast.error(`Failed to delete task: ${result.error}`);
   };
 
   const handleCreate = (): void => {
@@ -94,7 +96,7 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
               {canManageTasks && (
                 <div className="flex items-center justify-end gap-2 pt-2">
                   <Button variant="ghost" size="sm" icon={Edit2} iconOnly tooltip="Edit task" onClick={() => handleEdit(task)} className="text-muted-foreground hover:text-primary" />
-                  <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete task" onClick={() => handleDelete(task.id)} className="text-muted-foreground hover:text-destructive" />
+                  <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete task" onClick={() => { void handleDelete(task.id); }} className="text-muted-foreground hover:text-destructive" />
                 </div>
               )}
             </MobileCard>
@@ -168,7 +170,7 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
                         <Button variant="ghost" size="sm" icon={Edit2} iconOnly tooltip="Edit task" onClick={() => handleEdit(task)} className="text-muted-foreground hover:text-primary" />
                       )}
                       {canDeleteTasks && (
-                        <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete task" onClick={() => handleDelete(task.id)} className="text-muted-foreground hover:text-destructive" />
+                        <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete task" onClick={() => { void handleDelete(task.id); }} className="text-muted-foreground hover:text-destructive" />
                       )}
                     </div>
                   </TableCell>

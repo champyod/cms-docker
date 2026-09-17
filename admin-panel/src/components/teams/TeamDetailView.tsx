@@ -8,6 +8,8 @@ import { useState } from 'react';
 import { deleteTeam, updateTeam } from '@/app/actions/teams';
 import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
+import { useConfirm } from '@/hooks/useConfirm';
+import { destructiveConfirm } from '@/lib/confirmation-copy';
 
 interface TeamMember {
   user: {
@@ -41,6 +43,7 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
   const router = useRouter();
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
+  const confirm = useConfirm();
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
     code: team.code,
@@ -71,13 +74,12 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
   };
 
   const handleDelete = async () => {
-    if (confirm('Are you sure you want to delete this team? This cannot be undone.')) {
-      const result = await deleteTeam(team.id);
-      if (result.success) {
-        router.push(`/${locale}/teams`);
-      } else {
-        toast.error('Failed: ' + result.error);
-      }
+    if (!(await confirm(destructiveConfirm('team')))) return;
+    const result = await deleteTeam(team.id);
+    if (result.success) {
+      router.push(`/${locale}/teams`);
+    } else {
+      toast.error('Failed: ' + result.error);
     }
   };
 
@@ -89,7 +91,7 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
           <p className="text-muted-foreground mt-1">Team Code: <code className="text-primary">{team.code}</code></p>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="negativeOutline" icon={Trash2} onClick={handleDelete}>
+          <Button variant="negativeOutline" icon={Trash2} onClick={() => { void handleDelete(); }}>
             Delete Team
           </Button>
           <Button variant="positive" icon={Save} loading={saving} disabled={saving} onClick={handleSave}>

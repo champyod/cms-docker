@@ -9,6 +9,8 @@ import { recalculateSubmission, getSubmissionFieldAccess } from '@/app/actions/s
 import { Button } from '@/components/core/Button';
 import { Dialog, DialogFooter } from '@/components/core/Dialog';
 import { RestrictedField } from '@/components/core/RestrictedField';
+import { useConfirm } from '@/hooks/useConfirm';
+import { recalculateSubmissionConfirm } from '@/lib/confirmation-copy';
 import type { FieldAccess } from '@/lib/field-permissions';
 import { cn } from '@/lib/utils';
 
@@ -22,6 +24,7 @@ interface SubmissionModalProps {
 
 export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModalProps) {
   const router = useRouter();
+  const confirm = useConfirm();
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [fieldAccess, setFieldAccess] = useState<Record<string, FieldAccess> | null>(null);
 
@@ -44,7 +47,7 @@ export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModal
     const compilationFailed = result?.compilation_outcome === 'fail';
 
   const handleRecalculate = async (type: 'score' | 'evaluation' | 'full') => {
-      if (!confirm(`Are you sure you want to recalculate (${type})? This will clear current results.`)) return;
+      if (!(await confirm(recalculateSubmissionConfirm(type)))) return;
 
       setLoadingAction(type);
       try {
@@ -162,7 +165,7 @@ export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModal
                  <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => handleRecalculate('score')}
+                    onClick={() => { void handleRecalculate('score'); }}
                     disabled={!!loadingAction}
                  >
                     {loadingAction === 'score' && <Loader2 className="w-3 h-3 animate-spin mr-1"/>}
@@ -172,7 +175,7 @@ export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModal
                  <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => handleRecalculate('evaluation')}
+                    onClick={() => { void handleRecalculate('evaluation'); }}
                     disabled={!!loadingAction}
                  >
                     {loadingAction === 'evaluation' && <Loader2 className="w-3 h-3 animate-spin mr-1"/>}
@@ -182,7 +185,7 @@ export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModal
                  <Button
                     variant="negativeOutline"
                     size="sm"
-                    onClick={() => handleRecalculate('full')}
+                    onClick={() => { void handleRecalculate('full'); }}
                     disabled={!!loadingAction}
                  >
                     {loadingAction === 'full' && <Loader2 className="w-3 h-3 animate-spin mr-1"/>}

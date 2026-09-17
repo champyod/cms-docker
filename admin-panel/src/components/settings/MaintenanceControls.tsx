@@ -8,6 +8,13 @@ import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
 import { RefreshCw, Download, Package, ArrowUpCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { useConfirm } from '@/hooks/useConfirm';
+import {
+  fullServerUpdateConfirm,
+  pullImagesConfirm,
+  rebuildStackConfirm,
+  restartStackConfirm,
+} from '@/lib/confirmation-copy';
 
 export function ManualServiceControlCard(): ReactElement {
   return (
@@ -62,9 +69,10 @@ export function MaintenanceUpdatesCard(): ReactElement {
 
 function UpdateServerButton(): ReactElement {
   const [updating, setUpdating] = useState(false);
+  const confirm = useConfirm();
 
   const handleUpdate = async (): Promise<void> => {
-    if (!confirm('This will pull the latest images, restart all services, and update the database schema. The server will be unavailable for a few minutes. Continue?')) return;
+    if (!(await confirm(fullServerUpdateConfirm()))) return;
     setUpdating(true);
     try {
       const res = await updateServer();
@@ -91,9 +99,10 @@ function UpdateServerButton(): ReactElement {
 
 function RestartButton({ type, label }: { type: 'core' | 'admin' | 'worker' | 'all', label: string }): ReactElement {
   const [restarting, setRestarting] = useState(false);
+  const confirm = useConfirm();
 
   const handleRestart = async (): Promise<void> => {
-    if (!confirm(`Are you sure you want to ${label}? This will temporarily disrupt service.`)) return;
+    if (!(await confirm(restartStackConfirm(label)))) return;
     setRestarting(true);
     try {
       const res = await restartServices(type);
@@ -120,9 +129,10 @@ function RestartButton({ type, label }: { type: 'core' | 'admin' | 'worker' | 'a
 
 function PullImagesButton(): ReactElement {
   const [pulling, setPulling] = useState(false);
+  const confirm = useConfirm();
 
   const handlePull = async (): Promise<void> => {
-    if (!confirm('Pull latest images from registry? This may take several minutes.')) return;
+    if (!(await confirm(pullImagesConfirm()))) return;
     setPulling(true);
     try {
       const res = await pullLatestImages();
@@ -150,9 +160,10 @@ function PullImagesButton(): ReactElement {
 
 function RebuildButton({ stack, label }: { stack: 'core' | 'admin' | 'worker' | 'all', label: string }): ReactElement {
   const [rebuilding, setRebuilding] = useState(false);
+  const confirm = useConfirm();
 
   const handleRebuild = async (): Promise<void> => {
-    if (!confirm(`Rebuild ${label} stack from source? This may take 5-10 minutes.`)) return;
+    if (!(await confirm(rebuildStackConfirm(label)))) return;
     setRebuilding(true);
     try {
       const res = await rebuildImages(stack);

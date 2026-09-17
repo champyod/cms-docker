@@ -9,6 +9,8 @@ import { Button } from '@/components/core/Button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { EmptyState } from '@/components/core/EmptyState';
 import { apiClient } from '@/lib/apiClient';
+import { useConfirm } from '@/hooks/useConfirm';
+import { destructiveConfirm } from '@/lib/confirmation-copy';
 import { cn } from '@/lib/utils';
 
 interface TaskDetailConfigProps {
@@ -79,7 +81,14 @@ function formatDate(iso: string | null | undefined): string {
 
 export function StatementsSection({ statements, expanded, onToggle, onUpload }: StatementsSectionProps): React.JSX.Element {
   const router = useRouter();
+  const confirm = useConfirm();
   const [activeLanguage, setActiveLanguage] = useState<string | null>(null);
+
+  const handleDeleteStatement = async (statementId: number): Promise<void> => {
+    if (!(await confirm(destructiveConfirm('statement')))) return;
+    await apiClient.delete(`/api/statements/${statementId}`);
+    router.refresh();
+  };
 
   const languages = useMemo(() => Array.from(new Set(statements.map((s) => s.language))).sort(), [statements]);
   const filtered = useMemo(() => (activeLanguage ? statements.filter((s) => s.language === activeLanguage) : statements), [statements, activeLanguage]);
@@ -132,7 +141,7 @@ export function StatementsSection({ statements, expanded, onToggle, onUpload }: 
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
                             <a href={`/api/statements/${stmt.digest}`} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline">Download</a>
-                            <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete statement" onClick={async () => { if (confirm('Delete this statement?')) { await apiClient.delete(`/api/statements/${stmt.id}`); router.refresh(); } }} className="text-destructive" />
+                            <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete statement" onClick={() => { void handleDeleteStatement(stmt.id); }} className="text-destructive" />
                           </div>
                         </TableCell>
                       </TableRow>

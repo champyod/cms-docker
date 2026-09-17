@@ -11,6 +11,8 @@ import { TaskModal } from './TaskModal';
 import { TestcaseUploadModal } from './TestcaseUploadModal';
 import { ConfigSection, StatementsSection, TaskHeader } from './task-detail-sections';
 import { DatasetsSection, AttachmentsSection } from './task-detail-datasets';
+import { useConfirm } from '@/hooks/useConfirm';
+import { destructiveConfirm } from '@/lib/confirmation-copy';
 
 interface Dataset {
   id: number;
@@ -54,6 +56,7 @@ export function TaskDetailView({ task, permissionKeys }: TaskDetailViewProps): R
   const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
   const [isAttachmentModalOpen, setIsAttachmentModalOpen] = useState(false);
   const [currentDatasetId, setCurrentDatasetId] = useState<number | null>(null);
+  const confirm = useConfirm();
 
   const toggle = (section: string): void => setExpanded((prev) => ({ ...prev, [section]: !prev[section] }));
   const reload = (): void => router.refresh();
@@ -78,7 +81,7 @@ export function TaskDetailView({ task, permissionKeys }: TaskDetailViewProps): R
   };
 
   const handleDeleteDataset = async (datasetId: number): Promise<void> => {
-    if (!confirm('Delete this dataset? This cannot be undone.')) return;
+    if (!(await confirm(destructiveConfirm('dataset')))) return;
     const result = await apiClient.delete(`/api/datasets/${datasetId}`);
     if (!result.success) toast.error(result.error);
     else reload();
@@ -90,7 +93,7 @@ export function TaskDetailView({ task, permissionKeys }: TaskDetailViewProps): R
   };
 
   const handleDeleteTestcase = async (tcId: number): Promise<void> => {
-    if (!confirm('Delete this testcase?')) return;
+    if (!(await confirm(destructiveConfirm('testcase')))) return;
     await apiClient.delete(`/api/testcases/${tcId}`);
     reload();
   };

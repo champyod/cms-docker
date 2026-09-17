@@ -7,6 +7,8 @@ import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/apiClient';
+import { useConfirm } from '@/hooks/useConfirm';
+import { destructiveConfirm } from '@/lib/confirmation-copy';
 
 interface Dataset {
   id: number;
@@ -136,6 +138,14 @@ export function DatasetsSection({
 
 export function AttachmentsSection({ attachments, onUpload }: { attachments: Array<{ id: number; filename: string }>; onUpload: () => void }): React.JSX.Element {
   const router = useRouter();
+  const confirm = useConfirm();
+
+  const handleDeleteAttachment = async (attachmentId: number): Promise<void> => {
+    if (!(await confirm(destructiveConfirm('attachment')))) return;
+    await apiClient.delete(`/api/attachments/${attachmentId}`);
+    router.refresh();
+  };
+
   return (
     <Card className="border-border p-4">
       <div className="flex items-center justify-between mb-4">
@@ -147,7 +157,7 @@ export function AttachmentsSection({ attachments, onUpload }: { attachments: Arr
           {attachments.map((att) => (
             <div key={att.id} className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg text-sm text-muted-foreground group">
               <Paperclip className="w-3 h-3 text-info" /><span className="truncate flex-1">{att.filename}</span>
-              <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete attachment" onClick={async () => { if (confirm('Delete this attachment?')) { await apiClient.delete(`/api/attachments/${att.id}`); router.refresh(); } }} className="text-destructive" />
+              <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete attachment" onClick={() => { void handleDeleteAttachment(att.id); }} className="text-destructive" />
             </div>
           ))}
         </div>

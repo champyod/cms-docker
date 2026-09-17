@@ -9,6 +9,8 @@ import { Calendar, Clock, ExternalLink, Trash2, Rocket, CheckCircle2 } from 'luc
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/apiClient';
 import { ROW_SELECTED_CLASSES } from '@/hooks/useShortcuts';
+import { useConfirm } from '@/hooks/useConfirm';
+import { destructiveConfirm } from '@/lib/confirmation-copy';
 
 function formatDate(date: Date): string {
   return new Date(date).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -33,16 +35,16 @@ interface RowProps {
 
 export function ContestTableRow({ contest, locale, isSuperAdmin, canManage, onSetActive }: RowProps) {
   const router = useRouter();
+  const confirm = useConfirm();
   const status = getStatus(contest.start, contest.stop);
   const isActive = contest.is_active === true;
 
   const handleDelete = async (id: number) => {
     if (!canManage) return;
-    if (confirm('Are you sure you want to delete this contest? This is IRREVERSIBLE.')) {
-      const result = await apiClient.delete(`/api/contests/${id}`);
-      if (result.success) router.refresh();
-      else toast.error('Failed to delete contest: ' + result.error);
-    }
+    if (!(await confirm(destructiveConfirm('contest')))) return;
+    const result = await apiClient.delete(`/api/contests/${id}`);
+    if (result.success) router.refresh();
+    else toast.error('Failed to delete contest: ' + result.error);
   };
 
   return (
@@ -83,7 +85,7 @@ export function ContestTableRow({ contest, locale, isSuperAdmin, canManage, onSe
             <Button variant="ghost" size="sm" icon={Rocket} onClick={() => onSetActive(contest.id)}>Set Active</Button>
           )}
           {canManage && (
-            <Button variant="ghost" size="sm" icon={Trash2} tooltip="Delete" onClick={() => handleDelete(contest.id)} />
+            <Button variant="ghost" size="sm" icon={Trash2} tooltip="Delete" onClick={() => { void handleDelete(contest.id); }} />
           )}
         </div>
       </TableCell>

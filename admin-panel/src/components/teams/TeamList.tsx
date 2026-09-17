@@ -12,7 +12,9 @@ import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
 import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
+import { useConfirm } from '@/hooks/useConfirm';
 import { useSyncedState } from '@/hooks/useSyncedState';
+import { destructiveConfirm } from '@/lib/confirmation-copy';
 import { TeamModal } from './TeamModal';
 
 interface TeamWithCount {
@@ -35,6 +37,7 @@ export function TeamList({ initialTeams, permissionKeys }: TeamListProps) {
   const [editingTeam, setEditingTeam] = useState<TeamWithCount | null>(null);
   const pathname = usePathname();
   const router = useRouter();
+  const confirm = useConfirm();
   const locale = pathname.split('/')[1] || 'en';
 
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
@@ -44,13 +47,12 @@ export function TeamList({ initialTeams, permissionKeys }: TeamListProps) {
 
   const handleDelete = async (id: number) => {
     if (!canDeleteTeams) return;
-    if (confirm('Delete this team?')) {
-      const result = await deleteTeam(id);
-      if (result.success) {
-        router.refresh();
-      } else {
-        toast.error(result.error);
-      }
+    if (!(await confirm(destructiveConfirm('team')))) return;
+    const result = await deleteTeam(id);
+    if (result.success) {
+      router.refresh();
+    } else {
+      toast.error(result.error);
     }
   };
 
@@ -94,7 +96,7 @@ export function TeamList({ initialTeams, permissionKeys }: TeamListProps) {
               {canManageUsers && (
                 <>
                   <Button variant="ghost" size="sm" icon={Edit2} iconOnly tooltip="Edit team" onClick={() => startEdit(team)} />
-                  <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete team" onClick={() => handleDelete(team.id)} />
+                  <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete team" onClick={() => { void handleDelete(team.id); }} />
                 </>
               )}
             </div>
@@ -132,7 +134,7 @@ export function TeamList({ initialTeams, permissionKeys }: TeamListProps) {
                     <Button variant="ghost" size="sm" icon={Edit2} iconOnly tooltip="Edit team" onClick={() => startEdit(team)} />
                   )}
                   {canDeleteTeams && (
-                    <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete team" onClick={() => handleDelete(team.id)} />
+                    <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete team" onClick={() => { void handleDelete(team.id); }} />
                   )}
                 </div>
               </TableCell>

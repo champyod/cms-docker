@@ -16,8 +16,10 @@ import { UserModal } from './UserModal';
 import { UserTable } from './UserTable';
 import { TableToolbar } from '@/components/core/TableToolbar';
 import { TablePaginationControls } from '@/components/core/TablePaginationControls';
+import { useConfirm } from '@/hooks/useConfirm';
 import { useTable } from '@/hooks/useTable';
 import { useTableAutoRefresh } from '@/hooks/useTableAutoRefresh';
+import { destructiveConfirm } from '@/lib/confirmation-copy';
 import type { UsersPageRow } from '@/lib/prisma-selects';
 
 interface UserListProps {
@@ -51,6 +53,7 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
   const table = useTable({ initialPage: currentPage, initialPerPage: perPage, initialSearch });
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
+  const confirm = useConfirm();
 
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
   const canCreateUsers = hasEffectivePermission(effective, 'user:create');
@@ -104,13 +107,12 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
 
   const handleDelete = async (id: number) => {
     if (!canDeleteUsers) return;
-    if (confirm('Are you sure you want to delete this user?')) {
-      const result = await apiClient.delete(`/api/users/${id}`);
-      if (result.success) {
-        await fetchUsers();
-      } else {
-        toast.error('Failed to delete user');
-      }
+    if (!(await confirm(destructiveConfirm('user')))) return;
+    const result = await apiClient.delete(`/api/users/${id}`);
+    if (result.success) {
+      await fetchUsers();
+    } else {
+      toast.error('Failed to delete user');
     }
   };
 

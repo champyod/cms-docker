@@ -11,6 +11,8 @@ import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
 import { Edit2, Trash2, Plus, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { updateAdmin, deleteAdmin } from '@/app/actions/admins';
 import { listAdminsAccessSummary, type AdminAccessSummary } from '@/app/actions/adminPermissions';
+import { useConfirm } from '@/hooks/useConfirm';
+import { destructiveConfirm } from '@/lib/confirmation-copy';
 import { AdminModal } from './AdminModal';
 import type { AdminWithLogin } from '@/lib/prisma-selects';
 
@@ -25,6 +27,7 @@ export function AdminList({ initialAdmins, actionLabels }: AdminListProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAdmin, setEditingAdmin] = useState<AdminWithLogin | null>(null);
   const router = useRouter();
+  const confirm = useConfirm();
 
   useEffect(() => {
     let cancelled = false;
@@ -46,13 +49,12 @@ export function AdminList({ initialAdmins, actionLabels }: AdminListProps) {
   }, [adminsList]);
 
   const handleDelete = async (id: number) => {
-    if (confirm('Delete this admin?')) {
-      const result = await deleteAdmin(id);
-      if (result.success) {
-        router.refresh();
-      } else {
-        toast.error(result.error);
-      }
+    if (!(await confirm(destructiveConfirm('admin')))) return;
+    const result = await deleteAdmin(id);
+    if (result.success) {
+      router.refresh();
+    } else {
+      toast.error(result.error);
     }
   };
 
@@ -115,7 +117,7 @@ export function AdminList({ initialAdmins, actionLabels }: AdminListProps) {
                   size="sm"
                   iconOnly
                   tooltip={actionLabels.delete}
-                  onClick={() => handleDelete(admin.id)}
+                  onClick={() => { void handleDelete(admin.id); }}
                   className="text-muted-foreground hover:text-destructive"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -195,7 +197,7 @@ export function AdminList({ initialAdmins, actionLabels }: AdminListProps) {
                         size="sm"
                         iconOnly
                         tooltip={actionLabels.delete}
-                        onClick={() => handleDelete(admin.id)}
+                        onClick={() => { void handleDelete(admin.id); }}
                         className="text-muted-foreground hover:text-destructive"
                       >
                         <Trash2 className="w-4 h-4" />

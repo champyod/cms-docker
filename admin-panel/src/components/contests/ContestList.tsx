@@ -18,6 +18,8 @@ import { ContestTableRow } from './contest-list/ContestTableRows';
 import { useContestListActions } from './contest-list/useContestListActions';
 import type { ExistingContest } from './contest-modal/types';
 import { hasEffectivePermission } from '@/lib/permission-engine';
+import { useConfirm } from '@/hooks/useConfirm';
+import { destructiveConfirm } from '@/lib/confirmation-copy';
 
 interface ContestListProps {
   initialContests: Array<{ id: number; name: string; is_active: boolean; start: Date; stop: Date; _count?: { tasks: number; participations: number } }>;
@@ -48,13 +50,13 @@ interface CardProps {
 
 function ContestMobileCard({ contest, locale, isSuperAdmin, canManage, onSetActive }: CardProps): React.JSX.Element {
   const router = useRouter();
+  const confirm = useConfirm();
   const handleDelete = async (): Promise<void> => {
     if (!canManage) return;
-    if (confirm('Are you sure you want to delete this contest? This is IRREVERSIBLE.')) {
-      const result = await apiClient.delete(`/api/contests/${contest.id}`);
-      if (result.success) router.refresh();
-      else toast.error('Failed to delete contest: ' + result.error);
-    }
+    if (!(await confirm(destructiveConfirm('contest')))) return;
+    const result = await apiClient.delete(`/api/contests/${contest.id}`);
+    if (result.success) router.refresh();
+    else toast.error('Failed to delete contest: ' + result.error);
   };
   return (
     <MobileCard>
@@ -76,7 +78,7 @@ function ContestMobileCard({ contest, locale, isSuperAdmin, canManage, onSetActi
           </button>
         )}
         {canManage && (
-          <button onClick={handleDelete} aria-label={`Delete ${contest.name}`} title="Delete" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-destructive">
+          <button onClick={() => { void handleDelete(); }} aria-label={`Delete ${contest.name}`} title="Delete" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-destructive">
             <Trash2 className="h-4 w-4" />
           </button>
         )}

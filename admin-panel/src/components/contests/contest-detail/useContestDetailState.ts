@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import { updateContestSettings, removeParticipant, removeTaskFromContest } from '@/app/actions/contests';
 import { setTestUser } from '@/app/actions/participations';
 import { useDeployContest } from '@/hooks/useDeployContest';
+import { useConfirm } from '@/hooks/useConfirm';
+import { markTestUserConfirm, removeParticipantConfirm, removeTaskFromContestConfirm } from '@/lib/confirmation-copy';
 
 interface ContestLike { id: number; name: string; description: string; timezone: string | null; allow_questions: boolean; allow_user_tests: boolean; submissions_download_allowed: boolean; allow_password_authentication: boolean; allow_registration: boolean; analysis_enabled: boolean; token_mode: string; score_precision: number; start: string | Date | null; stop: string | Date | null; analysis_start: string | Date | null; analysis_stop: string | Date | null; }
 
@@ -19,6 +21,7 @@ export function useContestDetailState(contest: ContestLike) {
   const [saving, setSaving] = useState(false);
   const router = useRouter();
   const deploy = useDeployContest();
+  const confirm = useConfirm();
   const { state: deployState, deploy: launchDeploy, reset: resetDeploy } = deploy;
   const [showDeployModal, setShowDeployModal] = useState(false);
 
@@ -55,15 +58,16 @@ export function useContestDetailState(contest: ContestLike) {
   };
 
   const handleMarkAsTest = async (participationId: number) => {
-    if (confirm('Mark this user as a test user? (Hidden + Unrestricted)')) {
-      const result = await setTestUser(participationId);
-      if (result.success) router.refresh();
-      else toast.error('Failed: ' + result.error);
-    }
+    if (!(await confirm(markTestUserConfirm()))) return;
+    const result = await setTestUser(participationId);
+    if (result.success) router.refresh();
+    else toast.error('Failed: ' + result.error);
   };
 
   const handleRemoveTask = async (taskId: number) => {
-    if (confirm('Remove this task from the contest?')) { await removeTaskFromContest(taskId); router.refresh(); }
+    if (!(await confirm(removeTaskFromContestConfirm()))) return;
+    await removeTaskFromContest(taskId);
+    router.refresh();
   };
 
   const handleSave = async () => {
@@ -74,7 +78,9 @@ export function useContestDetailState(contest: ContestLike) {
   };
 
   const handleRemoveParticipant = async (participationId: number) => {
-    if (confirm('Remove this participant from the contest?')) { await removeParticipant(participationId); router.refresh(); }
+    if (!(await confirm(removeParticipantConfirm()))) return;
+    await removeParticipant(participationId);
+    router.refresh();
   };
 
   return {
