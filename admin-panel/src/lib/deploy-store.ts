@@ -195,8 +195,11 @@ async function finalizeContestActivation(contestId: number): Promise<void> {
  *
  * Why every settle goes through the claim and not straight to the effects: settling is reachable
  * concurrently from the status stream of every open tab, the 30s discovery lookup and the pre-guard
- * reconcile, and the effects below must happen once. The claim is what makes the second settler read
- * "someone else's" instead of activating, reverting, notifying and syncing alongside this one.
+ * reconcile, and the effects below must not run alongside a second settler's. The claim is what makes the
+ * second settler read "someone else's" instead of activating, reverting, notifying and syncing along with
+ * this one. It excludes them while it is held; it does not make them happen exactly once — a claim handed
+ * back to this caller when its settler never came back runs them again, deliberately (see
+ * `claimDeployOutcome`).
  *
  * Why a claim already on the record is still applied here: `claimDeployOutcome` hands the effects back
  * to this caller when the settler that took the claim never came back — the crash between the claim and
@@ -206,7 +209,17 @@ async function finalizeContestActivation(contestId: number): Promise<void> {
  */
 async function applyClaimedOutcome(operationId: string, meta: DeployMeta, log: string, outcome: DeployOutcome): Promise<DeployStatusResult> {
   const claim = await claimDeployOutcome(operationId, outcome);
-  if (claim.kind === 'reported') return settledStatus(meta, log, claim.outcome);
+  if (claim.kind === 'reported') {
+    // Why the guard is released here when the claim is applied: the effects are done, so nothing is owed
+    // and no deploy starts behind work in flight — and the state a crash between `markDeployOutcomeApplied`
+    // and the settle's own release leaves is exactly this one. Without it the guard holds until the
+    // cleanup ages the record out (`DEPLOY_STALE_MS`), refusing every deploy for that long. An *unapplied*
+    // claim releases nothing: its settler may be inside the effects right now, and the guard is what keeps
+    // a new deploy's config.toml write out of the revert's read-then-write window (see
+    // `clearActiveOperation`).
+    if (claim.applied) await clearActiveOperation(operationId);
+    return settledStatus(meta, log, claim.outcome);
+  }
   return claim.outcome.status === 'completed'
     ? applyCompletedOutcome(operationId, meta, log)
     : applyFailedOutcome(operationId, meta, log, claim.outcome.error ?? 'Deploy failed.');
@@ -375,10 +388,12 @@ async function resolveDeployStatus(operationId: string, meta: DeployMeta, log: s
   }
 
   if (meta.pid !== undefined) {
-    const verdict = await probeDeployProcess(meta);
+    const verdict = await probeDeployProcess(operationId, meta);
     // Why the unobservable verdict is 'running' and not a settle: the panel cannot see this record's
     // process table at all, so it has nothing that says the deploy ended. It also must not wait forever
-    // (see `probeDeployProcess`): past the bound the same verdict comes back as `presumed-gone`.
+    // (see `probeDeployProcess`): past the bound the same verdict comes back as `presumed-gone`, unless
+    // the operation's log is still being written to — which is the one piece of evidence this panel can
+    // get about a deploy in a process table it cannot look into.
     if (verdict === 'alive' || verdict === 'unobservable') return runningStatus(meta, log);
     // Gone and silent: its result never arrived, so nothing it did can be trusted. Nobody is working.
     return applyClaimedOutcome(operationId, meta, log, {

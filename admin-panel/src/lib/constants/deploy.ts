@@ -20,18 +20,33 @@ export const DEPLOY_STALE_MS = 30 * 60 * 1000;
 export const DEPLOY_STALE_LABEL = `${DEPLOY_STALE_MS / 60_000} minutes`;
 
 // How long an operation whose process this panel cannot see *at all* — its record names a pid namespace
-// that is not this panel's, i.e. the container that spawned the deploy is gone — still counts as
-// running before the panel admits the process ended. Why a bound at all: the child was a process of
-// that container, so it died with it, and without a bound the record reports running forever, holds
-// active.lock forever and refuses every later deploy with no way out of the UI. Why this long: nothing
-// observable separates "the container that owned it is gone" from "a second panel container of the same
-// service is building against the same logs directory right now" (nothing a freed pid namespace can be
-// asked either), so the wait is what has to do it — two hours is far past any plausible build of the
-// four contest services, and it does not *rule out* settling a deploy that is genuinely still running.
+// that is not this panel's — still counts as running before the panel may end it without a witness. Why a
+// bound at all: without one, a record whose process table is gone reports running forever, holds
+// active.lock forever and refuses every later deploy with no way out of the UI. What the bound cannot tell
+// apart, and why it stands in for evidence rather than being evidence: the container that spawned the
+// deploy being gone and a *second* panel container of the same service building against this shared logs
+// directory right now look identical from here — a freed pid namespace answers no questions, and the two
+// panels hold no lock that spans them. What the panel checks first, because it can: an operation whose log
+// was written to within DEPLOY_LOG_ACTIVITY_MS is still being fed output by the panel that owns that
+// process table, and stays running (see deploy-store's `probeDeployProcess`). What is left is this bound's
+// trade, stated plainly: an operation past this age whose log has been silent for longer than
+// DEPLOY_LOG_ACTIVITY_MS is settled as failed — config.toml reverted, the guard freed — even if a second
+// panel's build is still running, which then has no record left to report its result into.
 export const DEPLOY_UNOBSERVABLE_MS = 2 * 60 * 60 * 1000;
 
 // Derived for the same reason as DEPLOY_STALE_LABEL.
 export const DEPLOY_UNOBSERVABLE_LABEL = `${DEPLOY_UNOBSERVABLE_MS / 3_600_000} hours`;
+
+// How long an operation's log may go unwritten before this panel stops treating it as evidence that the
+// deploy is still being reported on. Why a log at all: an operation's log has exactly one writer — the
+// panel that spawned the deploy, which pipes the child's output into it (see deploy-store's
+// `launchDetachedDeploy`) — so a log written to recently is that panel alive with a deploy still
+// producing output, which is the one piece of evidence a panel that cannot see the process table can
+// still get. Why not shorter: a docker build step produces no output for minutes while working, and
+// reading that silence as an end is what reverts a live deploy's configuration. Why it bounds the
+// deferral rather than proving liveness: once the output stops for this long the deferral ends, so no
+// record can hold the deploy guard indefinitely through it.
+export const DEPLOY_LOG_ACTIVITY_MS = 30 * 60_000;
 
 // How long a claimed outcome's effects may stay unapplied before another settler may take them over.
 // Why a lease and not "unapplied means crashed": the winner of the claim performs the effects (a

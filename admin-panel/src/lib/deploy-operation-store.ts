@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 
-import { DEPLOY_EFFECT_LEASE_MS, DEPLOY_STALE_MS, DEPLOY_UNOBSERVABLE_MS } from '@/lib/constants/deploy';
+import { DEPLOY_EFFECT_LEASE_MS, DEPLOY_LOG_ACTIVITY_MS, DEPLOY_STALE_MS, DEPLOY_UNOBSERVABLE_MS } from '@/lib/constants/deploy';
 import { getRepoRoot } from '@/lib/repo-root';
 
 /** The four files one operation's lifecycle is recorded in. */
@@ -40,7 +40,9 @@ export type DeployMeta = {
   /**
    * Set once the outcome has been claimed, before its effects run. Why on disk and not in memory: the
    * settling has external effects (activating a contest, reverting config.toml, notifying Discord) that
-   * must not happen twice, and the panel that settles may not be the one that started the deploy.
+   * two concurrent settlers must not run alongside each other, and the panel that settles may not be the
+   * one that started the deploy. The claim is what excludes them while it is held; it is not a promise
+   * that the effects run exactly once — see `claimDeployOutcome` for what a crash lets them re-run.
    */
   outcome?: DeployOutcome;
   /**
@@ -99,11 +101,12 @@ export async function setActiveOperationId(operationId: string): Promise<void> {
  * Frees the deploy guard — and only while it is still this operation's.
  *
  * Why the check: the guard is what keeps a second deploy's `config.toml` write out of the one that is
- * settling, and every settle path releases it (the completed and failed settles, the spawn that never
- * started, the cleanup). Without the check, a settle of an operation the guard has already moved past
- * unlinks the *newer* operation's lock — after which that deploy can start while this one is still
- * inside the read-then-write window of its own revert (see deploy-store's `revertOwnedContestId`), and
- * its write is reverted to this operation's snapshot.
+ * settling, and every path that finishes with an operation releases it (the completed and failed settles,
+ * a lookup that reports an outcome whose effects already ran, the spawn that never started, the cleanup).
+ * Without the check, a settle of an operation the guard has already moved past unlinks the *newer*
+ * operation's lock — after which that deploy can start while this one is still inside the read-then-write
+ * window of its own revert (see deploy-store's `revertOwnedContestId`), and its write is reverted to this
+ * operation's snapshot.
  *
  * What this does not close: the read and the unlink are two filesystem calls, so a caller that reads
  * "the guard is mine" and loses it before the unlink still removes a newer operation's lock. No
@@ -201,34 +204,36 @@ export async function patchDeployMeta(operationId: string, patch: Partial<Deploy
  * - `yours`: nothing has claimed this operation, or the settler that did never finished and its lease
  *   has run out — the effects are this caller's to run, and `outcome` is what to run them for (the
  *   record's own outcome when taking over, not the caller's, so a recovery applies what was claimed);
- * - `reported`: the effects are done, or another settler's claim is still inside its lease. Report
- *   `outcome` and touch nothing: a second activation or rollback is what the claim exists to prevent.
+ * - `reported`: nothing is this caller's to run. `outcome` is the result to report. `applied` says which
+ *   of the two reasons applies: `true` — the effects are done; `false` — another settler's claim is still
+ *   inside its lease, so those effects may be running right now and must not be started alongside it.
  */
 export type OutcomeClaim =
   | { kind: 'yours'; outcome: DeployOutcome }
-  | { kind: 'reported'; outcome: DeployOutcome };
+  | { kind: 'reported'; outcome: DeployOutcome; applied: boolean };
 
 /**
- * Whether a claim's effects have been left unfinished for longer than any settler's effects can take.
- * A missing or unparseable timestamp counts as expired: a claim from a panel older than this field is
- * one whose effects may never have run, and re-running them is idempotent where it matters (see
- * `claimDeployOutcome`).
+ * When the claim on a record started running its effects, or null when the record cannot say. A missing
+ * stamp is a claim written by a panel older than the field; an unparseable one is a stamp this panel
+ * cannot read. Neither can be shown to have been abandoned, which is why `claimDeployOutcome` dates it
+ * rather than reading it as expired.
  */
-function isOutcomeLeaseExpired(meta: DeployMeta): boolean {
-  if (meta.outcomeClaimedAt === undefined) return true;
+function claimTimestamp(meta: DeployMeta): number | null {
+  if (meta.outcomeClaimedAt === undefined) return null;
   const claimedAt = Date.parse(meta.outcomeClaimedAt);
-  if (Number.isNaN(claimedAt)) return true;
-  return Date.now() - claimedAt > DEPLOY_EFFECT_LEASE_MS;
+  return Number.isNaN(claimedAt) ? null : claimedAt;
 }
 
 /**
  * Takes the claim on an operation's outcome — the only caller allowed to perform its side effects
  * (activating a contest, reverting config.toml, notifying Discord, running the config sync).
  *
- * Why the claim goes down before the effects: settling is reachable concurrently from the status stream
- * of every open tab, the 30s discovery lookup and the pre-guard reconcile, and the effects must happen
- * once. Writing the claim first is what makes a second settler read "someone else's" instead of
- * activating, notifying and syncing alongside this one.
+ * What the claim buys: settling is reachable concurrently from the status stream of every open tab, the
+ * 30s discovery lookup and the pre-guard reconcile, and writing the claim first is what makes a second
+ * settler read "someone else's" instead of activating, notifying and syncing alongside this one. That
+ * exclusion holds while the claim is held — it is not a promise that the effects run exactly once. A
+ * settler that crashes after claiming leaves them to be taken over (below), and taking one over runs them
+ * again; the last paragraph is why that is acceptable, and it is what a caller may rely on.
  *
  * Why a lease and not just "a claim is a claim": a crash between the claim and the effects leaves an
  * outcome on the record that nothing would ever apply — the contest never activated while every lookup
@@ -237,6 +242,13 @@ function isOutcomeLeaseExpired(meta: DeployMeta): boolean {
  * `DEPLOY_EFFECT_LEASE_MS`, which is far longer than the effects themselves and far shorter than an
  * operator's patience. Taking one over re-stamps the lease, which is what stops two concurrent lookups
  * in this process from both deciding they own the effects.
+ *
+ * Why a claim that cannot be dated is stamped instead of taken over: the record of an operation in flight
+ * across an upgrade carries no stamp, because the field did not exist when it was written. Reading that as
+ * expired hands the effects to whichever lookup asks first for *every* such record at once, repeating an
+ * activation (and its audit row), a revert, a config sync and a Discord notice for each of them. Stamping
+ * it with the first sighting starts its lease there instead: nothing is re-run on the way in, and the
+ * effects are still recovered one lease later if nobody ever finished them.
  *
  * What a taken-over claim can re-run, and why that is the lesser evil: an activation is a set, the
  * revert is guarded by the contest id the file still has to name (see `rollbackContestId`), and a
@@ -251,8 +263,13 @@ export async function claimDeployOutcome(operationId: string, outcome: DeployOut
     if (meta === null) return { kind: 'yours', outcome };
     const recorded = meta.outcome;
     if (recorded !== undefined) {
-      if (meta.outcomeAppliedAt !== undefined) return { kind: 'reported', outcome: recorded };
-      if (!isOutcomeLeaseExpired(meta)) return { kind: 'reported', outcome: recorded };
+      if (meta.outcomeAppliedAt !== undefined) return { kind: 'reported', outcome: recorded, applied: true };
+      const claimedAt = claimTimestamp(meta);
+      if (claimedAt === null) {
+        await writeDeployMeta(operationId, { ...meta, outcomeClaimedAt: new Date().toISOString() });
+        return { kind: 'reported', outcome: recorded, applied: false };
+      }
+      if (Date.now() - claimedAt <= DEPLOY_EFFECT_LEASE_MS) return { kind: 'reported', outcome: recorded, applied: false };
       await writeDeployMeta(operationId, { ...meta, outcomeClaimedAt: new Date().toISOString() });
       return { kind: 'yours', outcome: recorded };
     }
@@ -343,8 +360,10 @@ function pidAbsenceIsEvidence(spawnedNamespace: string | undefined, currentNames
  * - `alive`: the process exists and its command line is this deploy's own — the operation continues;
  * - `gone`: absence is evidence the recorded process ended, or there is no process to wait for;
  * - `unobservable`: the record names a process table this panel is not in, so nothing it can look at
- *   says whether the process ended, and the operation is still younger than `DEPLOY_UNOBSERVABLE_MS`;
- * - `presumed-gone`: the same, past that bound — the one admission of an end this panel cannot witness.
+ *   says whether the process ended — while the operation is younger than `DEPLOY_UNOBSERVABLE_MS`, or its
+ *   log says the deploy is still being reported on (see `logShowsWriterActive`);
+ * - `presumed-gone`: the same, past that bound and without that evidence — the one admission of an end
+ *   this panel cannot witness.
  */
 export type DeployProcessVerdict = 'alive' | 'gone' | 'unobservable' | 'presumed-gone';
 
@@ -355,6 +374,23 @@ export type DeployProcessVerdict = 'alive' | 'gone' | 'unobservable' | 'presumed
  */
 function waitedOutUnobservableBound(meta: DeployMeta): boolean {
   return Date.now() - new Date(meta.startedAt).getTime() > DEPLOY_UNOBSERVABLE_MS;
+}
+
+/**
+ * Whether something is still writing an operation's log, i.e. the deploy is still producing output.
+ *
+ * Why this is evidence, and whose: an operation's log has one writer — the panel that spawned the deploy,
+ * which pipes the child's output into it (deploy-store's `launchDetachedDeploy`). Its mtime moving means
+ * that panel is alive, which is the panel whose process table this record's pid came from, so the case the
+ * unobservable bound cannot see into is exactly the case this can: a *second* panel container building
+ * while this one holds an unobservable record for it. Why silence is not the mirror image of this — the
+ * build is not necessarily dead once its output stops (a step can work silently for minutes) — is why this
+ * only ever defers the bound and never ends an operation by itself.
+ */
+async function logShowsWriterActive(operationId: string): Promise<boolean> {
+  const stats = await fs.stat(getDeployOperationPaths(operationId).logPath).catch(() => null);
+  if (stats === null) return false;
+  return Date.now() - stats.mtimeMs <= DEPLOY_LOG_ACTIVITY_MS;
 }
 
 /**
@@ -381,13 +417,17 @@ function waitedOutUnobservableBound(meta: DeployMeta): boolean {
  *    belongs to the panel that is gone, and a build the docker daemon is still running looks exactly
  *    like a pid that ended;
  *  - that ESRCH with a foreign table: `unobservable` while the operation is younger than
- *    `DEPLOY_UNOBSERVABLE_MS`, `presumed-gone` past it. Both halves are deliberate: an indeterminate
- *    answer is never an immediate verdict, and the bound is what stops a record whose process table no
- *    longer exists from holding the guard for good — nothing else in the panel can end it;
+ *    `DEPLOY_UNOBSERVABLE_MS` *or* its log is still being written to, `presumed-gone` past the bound with
+ *    a silent log. Both halves are deliberate: an indeterminate answer is never an immediate verdict, and
+ *    the bound is what stops a record whose process table no longer exists from holding the guard for good
+ *    — nothing else in the panel can end it. The log is checked only there, at the bound, because it is
+ *    the one thing that separates "the container that owned this is gone" from "a second panel container
+ *    is building against this shared logs directory right now", which the bound on its own cannot tell
+ *    apart (see `DEPLOY_UNOBSERVABLE_MS` and `DEPLOY_LOG_ACTIVITY_MS`);
  *  - anything else the kernel reports (EACCES, EINVAL, ENOSYS…): `alive` — a probe we could not
  *    interpret is not evidence, and guessing "dead" here is what reverted a live deploy's config.
  */
-export async function probeDeployProcess(meta: DeployMeta): Promise<DeployProcessVerdict> {
+export async function probeDeployProcess(operationId: string, meta: DeployMeta): Promise<DeployProcessVerdict> {
   const pid = meta.pid;
   if (pid === undefined || !Number.isInteger(pid) || pid <= 0) return 'gone';
   const spawnedNamespace = meta.pidNamespace;
@@ -399,7 +439,8 @@ export async function probeDeployProcess(meta: DeployMeta): Promise<DeployProces
     if (code === 'EPERM') return 'alive';
     if (code === 'ESRCH') {
       if (pidAbsenceIsEvidence(spawnedNamespace, currentNamespace)) return 'gone';
-      return waitedOutUnobservableBound(meta) ? 'presumed-gone' : 'unobservable';
+      if (!waitedOutUnobservableBound(meta)) return 'unobservable';
+      return (await logShowsWriterActive(operationId)) ? 'unobservable' : 'presumed-gone';
     }
     return 'alive';
   }
@@ -426,19 +467,28 @@ export async function probeDeployProcess(meta: DeployMeta): Promise<DeployProces
  * still going to apply (see `claimDeployOutcome`).
  *
  * Why the probe's answer and not the record's age decides the rest: an aged record whose process table
- * this panel is not in is discarded only once the unobservable bound has passed (see
- * `probeDeployProcess`), because until then it is indistinguishable from a deploy that is still
- * building in a container this panel cannot look into.
+ * this panel is not in is discarded only once the unobservable bound has passed *and* its log has gone
+ * silent (see `probeDeployProcess`), because until then it is indistinguishable from a deploy that is
+ * still building in a container this panel cannot look into.
+ *
+ * Why the guard is released before the record it belongs to is unlinked: a crash between the two then
+ * leaves a record with no guard, which the next pass discards and which refuses nothing, instead of a
+ * guard naming a record that does not exist. The other order — the one this replaced — leaves the panel
+ * with no way back: this enumeration only ever sees `*.json`, so an orphaned guard is invisible to it,
+ * `runDeployContest` refuses every deploy while the guard is set, and the mount lookup reports no
+ * operation at all. The first pass below (`releaseGuardWithNoRecord`) is what recovers a guard already
+ * left in that state.
  */
 export async function cleanStaleOperations(): Promise<void> {
   const dir = getDeployLogsDir();
+  await releaseGuardWithNoRecord();
   const files = await fs.readdir(dir).catch(() => [] as string[]);
   for (const jsonFile of files.filter((file) => file.endsWith('.json'))) {
     const operationId = jsonFile.replace('.json', '');
     const meta = await readDeployMeta(operationId);
     if (meta === null) continue;
     if (Date.now() - new Date(meta.startedAt).getTime() <= DEPLOY_STALE_MS) continue;
-    const verdict = await probeDeployProcess(meta);
+    const verdict = await probeDeployProcess(operationId, meta);
     // Why both of the deferring verdicts exist here: `alive` is a deploy that is still building, and
     // `unobservable` is one this panel cannot rule out at all — the same two reasons the status
     // resolution keeps reporting it as running. `presumed-gone` is the bound's answer, not a witness's.
@@ -449,11 +499,33 @@ export async function cleanStaleOperations(): Promise<void> {
       const exists = async (file: string): Promise<boolean> => fs.access(file).then(() => true, () => false);
       if ((await exists(donePath)) || (await exists(errorPath))) continue;
     }
+    // Before the record goes, and ownership-checked inside, so a guard that has already moved on to a
+    // newer operation survives.
+    await clearActiveOperation(operationId);
     await fs.unlink(path.join(dir, `${operationId}.json`)).catch(() => {});
     await fs.unlink(path.join(dir, `${operationId}.log`)).catch(() => {});
     await fs.unlink(path.join(dir, `${operationId}.done`)).catch(() => {});
     await fs.unlink(path.join(dir, `${operationId}.error`)).catch(() => {});
-    // Ownership-checked inside, so a guard that has already moved on to a newer operation survives.
-    await clearActiveOperation(operationId);
   }
+}
+
+/**
+ * Frees the deploy guard when the operation it names has no record to guard.
+ *
+ * Why this exists: the guard and the record are released by two filesystem calls, so a panel that dies
+ * between them — or a container that is recreated there — leaves a guard naming an operation whose record
+ * is gone. Nothing else recovers from that state: the enumeration above only sees `*.json`, so it never
+ * finds the guard; `runDeployContest` refuses every deploy while any guard is set; and the mount lookup
+ * answers "no operation", because there is no metadata to report. The panel is then locked out with
+ * nothing in the UI to explain it, which is the state this whole path exists to keep out of reach.
+ *
+ * What counts as "no record": one that cannot be read, including one whose contents do not parse. Both
+ * leave the guard with nothing behind it and the panel equally unable to say what the operation was, and
+ * the alternative — leaving the guard set — is the lockout above.
+ */
+async function releaseGuardWithNoRecord(): Promise<void> {
+  const operationId = await getActiveOperationId();
+  if (operationId === null) return;
+  if ((await readDeployMeta(operationId)) !== null) return;
+  await clearActiveOperation(operationId);
 }

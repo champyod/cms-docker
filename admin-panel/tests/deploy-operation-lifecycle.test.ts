@@ -3,21 +3,23 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { DEPLOY_EFFECT_LEASE_MS, DEPLOY_STALE_MS, DEPLOY_UNOBSERVABLE_LABEL, DEPLOY_UNOBSERVABLE_MS, DEPLOY_WALL_TIMEOUT_MS } from '@/lib/constants/deploy';
+import { DEPLOY_EFFECT_LEASE_MS, DEPLOY_LOG_ACTIVITY_MS, DEPLOY_STALE_MS, DEPLOY_UNOBSERVABLE_LABEL, DEPLOY_UNOBSERVABLE_MS, DEPLOY_WALL_TIMEOUT_MS } from '@/lib/constants/deploy';
 import { claimDeployOutcome, cleanStaleOperations, patchDeployMeta, recordDeployOperationStart } from '@/lib/deploy-operation-store';
 import type { ContestDeployPlan } from '@/lib/deploy-store';
 
 /**
- * A `config.toml` read or write the store is holding, so a test can act in the window between the
- * settle's ownership check and its write — the window a settlement has to keep a deploy out of.
+ * A `config.toml` read or write, or a record unlink, that the store is holding, so a test can act
+ * inside the window between two steps the store cannot make one operation.
  */
 interface ConfigGate {
-  /** Resolves once the store is inside the call, i.e. past its ownership check. */
+  /** Resolves once the store is at the held call. */
   entered: Promise<void>;
   markEntered: () => void;
   /** Lets the held call through. */
   released: Promise<void>;
   release: () => void;
+  /** Whether this call is the one to hold; the gate lets the first `skip` matching calls through. */
+  shouldHold: () => boolean;
 }
 
 /**
@@ -37,9 +39,10 @@ const mocks = vi.hoisted(() => ({
   /** The script the store asked the fake spawn to run. */
   script: '',
   helpers: [] as Array<{ pid: number | undefined; kill: () => void; exited: Promise<void> }>,
-  /** Set by armConfigWritePause / armConfigReadPause, consumed by the mocked calls below. */
+  /** Set by armConfigWritePause / armConfigReadPause / armMetaUnlinkPause, consumed by the mocked calls below. */
   configWriteGate: null as null | ConfigGate,
   configReadGate: null as null | ConfigGate,
+  metaUnlinkGate: null as null | ConfigGate,
   /** Makes the mocked readlink below fail for this process's own pid namespace. */
   pidNamespaceReadFails: false,
 }));
@@ -81,21 +84,28 @@ vi.mock('child_process', async (importOriginal) => {
 });
 
 /**
- * Wraps the one filesystem call a test needs to hold: the store's write of `config.toml`.
+ * Wraps the three filesystem calls a test needs to hold: the store's write of `config.toml`, its read
+ * of it, and its unlink of an operation's record.
  *
- * Why this is the interposition point: the settle reads the file to decide the rollback is still its
- * to make, and writes it immediately after. Holding the write is the only way to observe what a
+ * Why the write is the interposition point: the settle reads the file to decide the rollback is still
+ * its to make, and writes it immediately after. Holding the write is the only way to observe what a
  * settlement does with the file once a newer deploy has taken it.
  *
  * The read side is wrapped for the same reason in the other direction: the store re-reads `config.toml`
- * just before it writes, so a test that holds that read can act in the window between the settle's
- * ownership check and its write — which is where a panel edit that is not guard-gated can land.
+ * just before it writes, so a test that holds *that* read acts in the window between the ownership check
+ * and the content the write is derived from — the window the store closes by re-reading instead of
+ * writing back the snapshot the ownership check took. The hold is before the read executes (the write's
+ * hold is likewise before the write), and `skip` selects which read of the settle is held: holding the
+ * earlier ownership check would test a window the store has already closed.
+ *
+ * The unlink is wrapped because that is where a record stops existing, which is one half of the
+ * guard-against-record ordering `cleanStaleOperations` has to get right.
  */
 vi.mock('fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('fs/promises')>();
   const writeFile = async (file: unknown, ...rest: unknown[]): Promise<void> => {
     const gate = mocks.configWriteGate;
-    if (gate !== null && typeof file === 'string' && file.endsWith('config.toml')) {
+    if (gate !== null && typeof file === 'string' && file.endsWith('config.toml') && gate.shouldHold()) {
       // Only the first gated write pauses: a released gate lets later writers through.
       mocks.configWriteGate = null;
       gate.markEntered();
@@ -105,15 +115,21 @@ vi.mock('fs/promises', async (importOriginal) => {
   };
   const readFile = async (file: unknown, ...rest: unknown[]): Promise<unknown> => {
     const gate = mocks.configReadGate;
-    if (gate !== null && typeof file === 'string' && file.endsWith('config.toml')) {
-      // The read completes first, so the paused caller holds the content it read *before* the pause.
-      const content = await (actual.readFile as (...args: unknown[]) => Promise<unknown>)(file, ...rest);
+    if (gate !== null && typeof file === 'string' && file.endsWith('config.toml') && gate.shouldHold()) {
       mocks.configReadGate = null;
       gate.markEntered();
       await gate.released;
-      return content;
     }
     return (actual.readFile as (...args: unknown[]) => Promise<unknown>)(file, ...rest);
+  };
+  const unlink = async (file: unknown): Promise<void> => {
+    const gate = mocks.metaUnlinkGate;
+    if (gate !== null && typeof file === 'string' && file.endsWith('.json') && gate.shouldHold()) {
+      mocks.metaUnlinkGate = null;
+      gate.markEntered();
+      await gate.released;
+    }
+    return (actual.unlink as (target: string) => Promise<void>)(String(file));
   };
   const readlink = async (file: unknown): Promise<string> => {
     if (mocks.pidNamespaceReadFails && file === '/proc/self/ns/pid') {
@@ -122,8 +138,16 @@ vi.mock('fs/promises', async (importOriginal) => {
     return (actual.readlink as (target: string) => Promise<string>)(String(file));
   };
   // Both import styles, because this runner resolves 'fs/promises' and 'node:fs/promises' to one
-  // module: only `config.toml` is gated, so the test file's own reads and writes pass untouched.
-  return { ...actual, writeFile, readFile, readlink, default: { ...actual, writeFile, readFile, readlink } };
+  // module: only `config.toml` and the `.json` record are gated, so the test file's own reads and
+  // writes pass untouched.
+  return {
+    ...actual,
+    writeFile,
+    readFile,
+    unlink,
+    readlink,
+    default: { ...actual, writeFile, readFile, unlink, readlink },
+  };
 });
 
 type DeployStore = typeof import('@/lib/deploy-store');
@@ -134,6 +158,7 @@ const originalCwd = process.cwd();
 
 const logsDir = (): string => path.join(repoRoot, 'logs', 'deploy');
 const metaPath = (operationId: string): string => path.join(logsDir(), `${operationId}.json`);
+const logPath = (operationId: string): string => path.join(logsDir(), `${operationId}.log`);
 const donePath = (operationId: string): string => path.join(logsDir(), `${operationId}.done`);
 const errorPath = (operationId: string): string => path.join(logsDir(), `${operationId}.error`);
 const lockPath = (): string => path.join(logsDir(), 'active.lock');
@@ -176,7 +201,24 @@ async function ageOperation(operationId: string, ageMs: number): Promise<void> {
   const startedAt = new Date(Date.now() - ageMs);
   const meta = JSON.parse(await fs.readFile(metaPath(operationId), 'utf-8'));
   await fs.writeFile(metaPath(operationId), JSON.stringify({ ...meta, startedAt: startedAt.toISOString() }));
-  await fs.utimes(path.join(logsDir(), `${operationId}.log`), startedAt, startedAt);
+  await fs.utimes(logPath(operationId), startedAt, startedAt);
+}
+
+/**
+ * Dates the log as if the panel that owns the deploy's process table had just written to it. Nothing
+ * else in the panel writes an operation's log, so a fresh mtime is that panel still reading the deploy's
+ * output — the one piece of evidence a panel that cannot see the process table can get (see
+ * `probeDeployProcess`).
+ */
+async function touchLog(operationId: string): Promise<void> {
+  const now = new Date();
+  await fs.utimes(logPath(operationId), now, now);
+}
+
+/** Backdates the log, i.e. the deploy has produced no output for `silenceMs`. */
+async function silenceLog(operationId: string, silenceMs: number): Promise<void> {
+  const writtenAt = new Date(Date.now() - silenceMs);
+  await fs.utimes(logPath(operationId), writtenAt, writtenAt);
 }
 
 const ageOperationBaseline = (operationId: string): Promise<void> =>
@@ -196,19 +238,37 @@ function armConfigWritePause(): ConfigGate {
   return armConfigPause('configWriteGate');
 }
 
-/** Holds the store's next `config.toml` read until the test releases it. */
-function armConfigReadPause(): ConfigGate {
-  return armConfigPause('configReadGate');
+/**
+ * Holds the store's `config.toml` read until the test releases it, letting the first `skip` reads of that
+ * file through. A settle makes two — the ownership check and the read *its write is derived from* — and
+ * the held read pauses before it executes, so `skip: 1` puts a test in the window between the ownership
+ * check and the write-path read.
+ */
+function armConfigReadPause(skip = 0): ConfigGate {
+  return armConfigPause('configReadGate', skip);
 }
 
-function armConfigPause(slot: 'configWriteGate' | 'configReadGate'): ConfigGate {
+/** Holds the store's next unlink of an operation record until the test releases it. */
+function armMetaUnlinkPause(): ConfigGate {
+  return armConfigPause('metaUnlinkGate');
+}
+
+function armConfigPause(slot: 'configWriteGate' | 'configReadGate' | 'metaUnlinkGate', skip = 0): ConfigGate {
   let markEntered = (): void => {};
   let release = (): void => {};
+  let remaining = skip;
   const gate: ConfigGate = {
     entered: new Promise<void>((resolve) => { markEntered = resolve; }),
     markEntered: () => { markEntered(); },
     released: new Promise<void>((resolve) => { release = resolve; }),
     release: () => { release(); },
+    shouldHold: (): boolean => {
+      if (remaining > 0) {
+        remaining -= 1;
+        return false;
+      }
+      return true;
+    },
   };
   mocks[slot] = gate;
   return gate;
@@ -294,11 +354,17 @@ afterEach(async () => {
   mocks.configWriteGate = null;
   mocks.configReadGate?.release();
   mocks.configReadGate = null;
+  mocks.metaUnlinkGate?.release();
+  mocks.metaUnlinkGate = null;
   await killDeployProcesses();
 });
 
 describe('contest deploy lifecycle', () => {
-  it('keeps a deploy whose process outlives the watch timeouts, then activates it on its marker', async () => {
+  it('still keeps a deploy whose process outlives the watch timeouts, and activates it on its marker', async () => {
+    // Regression guard, not a detector of the probe's bound: reverted to the previous probe, this test
+    // passes unchanged, because the property it asserts — a process this panel can see holds its
+    // operation however old it is — was already there. The "still" says what it is for: proving the
+    // bound did not take that property away.
     const started = await store.runDeployContest(12, plan);
     const operationId = started.operationId;
     expect(started.success).toBe(true);
@@ -428,17 +494,22 @@ describe('contest deploy lifecycle', () => {
     expect(await readOrNull(lockPath())).toBeNull();
   });
 
-  it('reverts only its own key, keeping an edit another writer made in the meantime', async () => {
+  it('reverts only its own key, keeping an edit another writer made before the write-path read', async () => {
     const started = await store.runDeployContest(12, plan);
     const operationId = started.operationId;
     expect(operationId).toBeDefined();
     if (operationId === undefined) return;
     await killDeployProcesses();
 
-    // The settle reads config.toml to decide the rollback is still its own, and then writes. That read
-    // is held here so an edit from another panel surface lands in the window between them — an
-    // env:update, which the deploy guard does not gate (only a deploy takes it).
-    const pause = armConfigReadPause();
+    // The settle reads config.toml twice: first to decide the rollback is still its own, then again just
+    // before the write, because the write is derived from that fresh content. This holds the *second* read
+    // (skip: 1) — the write path's, not the ownership check — and holds it before it executes, so the edit
+    // below lands in the window between the ownership check and that read. Keeping the edit is what that
+    // fresh read buys: a write built from the snapshot the ownership check took would lose every key
+    // another writer added in the meantime. What this does not cover is the window that remains open
+    // between the write-path read and the write, which `revertOwnedContestId` documents as the one it
+    // cannot close.
+    const pause = armConfigReadPause(1);
     const settle = store.fetchDeployStatus(operationId);
     await pause.entered;
     await fs.writeFile(
@@ -450,8 +521,8 @@ describe('contest deploy lifecycle', () => {
     const settled = await settle;
     expect(settled.status).toBe('failed');
     expect(await readConfigContestId()).toBe(10);
-    // Writing back the snapshot the ownership check read reverts the whole file to a state it never had,
-    // silently losing every key another writer put there.
+    // Writing back the snapshot the ownership check read would revert the whole file to a state it never
+    // had, silently losing every key another writer put there.
     expect(await fs.readFile(path.join(repoRoot, 'config.toml'), 'utf-8')).toContain('DISCORD_WEBHOOK_URL');
   });
 
@@ -563,7 +634,10 @@ describe('contest deploy lifecycle', () => {
     expect(recorded.outcome).toMatchObject({ status: 'completed' });
   });
 
-  it('does not take a pid this namespace cannot see as proof the deploy ended', async () => {
+  it('still does not take a pid this namespace cannot see as proof the deploy ended', async () => {
+    // The other regression guard: with the probe reverted to the previous one, this passes unchanged
+    // too — the record's pid namespace was already read against this panel's before the bound existed.
+    // What it guards is that the bound's addition did not make a foreign ESRCH evidence of an end.
     const started = await store.runDeployContest(12, plan);
     const operationId = started.operationId;
     expect(operationId).toBeDefined();
@@ -625,6 +699,42 @@ describe('contest deploy lifecycle', () => {
 
     // The freed guard is what an operator needs back: the next deploy starts.
     expect((await store.runDeployContest(13, plan)).success).toBe(true);
+  });
+
+  it('does not age out an unobservable record whose log is still being written to', async () => {
+    const started = await store.runDeployContest(12, plan);
+    const operationId = started.operationId;
+    expect(operationId).toBeDefined();
+    if (operationId === undefined) return;
+    await killDeployProcesses();
+    const recorded = await readRecordedMeta(operationId);
+    // A deploy in a *second* panel container's process table: this panel cannot see the process, and the
+    // record is already older than the bound.
+    await rewriteRecordedMeta(operationId, { ...recorded, pid: await gonePid(), pidNamespace: 'pid:[4026531000]' });
+    await ageOperation(operationId, DEPLOY_UNOBSERVABLE_MS + 60_000);
+    // Its log, though, is still being written — which is the panel that owns that process table reading
+    // the deploy's output, so the build this record belongs to is alive. The bound is a stand-in for
+    // evidence this panel cannot get, and this is evidence it can get.
+    await touchLog(operationId);
+
+    const stillRunning = await store.fetchDeployStatus(operationId);
+    expect(stillRunning.status).toBe('running');
+    expect(await readConfigContestId()).toBe(12);
+    expect(await readOrNull(lockPath())).toBe(operationId);
+
+    // And the cleanup does not discard the record it would have to revert the configuration of.
+    await cleanStaleOperations();
+    expect(await readOrNull(metaPath(operationId))).not.toBeNull();
+    expect(await readOrNull(lockPath())).toBe(operationId);
+
+    // The output stops and stays stopped: the bound is now all the panel has, and it ends the operation.
+    await silenceLog(operationId, DEPLOY_LOG_ACTIVITY_MS + 60_000);
+    const settled = await store.fetchDeployStatus(operationId);
+    expect(settled.status).toBe('failed');
+    expect(settled.error).toContain(DEPLOY_UNOBSERVABLE_LABEL);
+    expect(mocks.activateContest).not.toHaveBeenCalled();
+    expect(await readConfigContestId()).toBe(10);
+    expect(await readOrNull(lockPath())).toBeNull();
   });
 
   it('never strands a deploy whose process this panel can still see, however long it runs', async () => {
@@ -767,6 +877,32 @@ describe('contest deploy lifecycle', () => {
     expect(mocks.activateContest).toHaveBeenCalledTimes(1);
   });
 
+  it('releases the guard when it reports an outcome whose effects already ran', async () => {
+    const started = await store.runDeployContest(12, plan);
+    const operationId = started.operationId;
+    expect(operationId).toBeDefined();
+    if (operationId === undefined) return;
+    await killDeployProcesses();
+    await deployReportsExit(operationId, 0);
+
+    const completed = await store.fetchDeployStatus(operationId);
+    expect(completed.status).toBe('completed');
+    expect(mocks.activateContest).toHaveBeenCalledExactlyOnceWith(12);
+    expect(await readOrNull(lockPath())).toBeNull();
+
+    // The crash this path is the on-ramp to: the panel marked the effects applied — the activation ran —
+    // and then died before releasing the guard. Nothing is owed, so every later lookup reports the
+    // result and none of them used to touch the guard: it held until the cleanup aged the record out
+    // half an hour later, refusing every deploy in the meantime.
+    await fs.writeFile(lockPath(), operationId);
+
+    const reported = await store.fetchDeployStatus(operationId);
+    expect(reported.status).toBe('completed');
+    expect(await readOrNull(lockPath())).toBeNull();
+    // The result is repeated; the activation and its audit row are not.
+    expect(mocks.activateContest).toHaveBeenCalledTimes(1);
+  });
+
   it('recovers a failed outcome whose rollback never ran', async () => {
     const started = await store.runDeployContest(12, plan);
     const operationId = started.operationId;
@@ -804,6 +940,85 @@ describe('contest deploy lifecycle', () => {
     // impossible to find, and leaves config.toml naming a contest the database does not have.
     expect(await readOrNull(metaPath(operationId))).not.toBeNull();
     expect(await readOrNull(lockPath())).toBe(operationId);
+  });
+
+  it('treats a claim it cannot date as freshly claimed, so an upgrade does not re-run it', async () => {
+    const started = await store.runDeployContest(12, plan);
+    const operationId = started.operationId;
+    expect(operationId).toBeDefined();
+    if (operationId === undefined) return;
+    await killDeployProcesses();
+    await deployReportsExit(operationId, 0);
+
+    // A record the panel before this one wrote: an outcome was claimed, and the claim carries no stamp
+    // because the field did not exist. Reading that as an expired lease takes over every operation in
+    // flight across the upgrade at once, repeating the activation, its audit row, the revert, the config
+    // sync and the Discord notice for each of them.
+    const recorded = await readRecordedMeta(operationId);
+    const legacy: Record<string, unknown> = { ...recorded, outcome: { status: 'completed' } };
+    delete legacy.outcomeClaimedAt;
+    await rewriteRecordedMeta(operationId, legacy);
+
+    const held = await store.fetchDeployStatus(operationId);
+    expect(held.status).toBe('completed');
+    expect(mocks.activateContest).not.toHaveBeenCalled();
+    expect(await readOrNull(lockPath())).toBe(operationId);
+    // The first sighting is what starts its lease, so the effects are still recoverable — one lease
+    // later, by whichever panel asks next — instead of being handed to whoever asks first.
+    expect(typeof (await readRecordedMeta(operationId)).outcomeClaimedAt).toBe('string');
+
+    await crashedAfterClaiming(operationId, { status: 'completed' }, DEPLOY_EFFECT_LEASE_MS + 60_000);
+    expect(await store.getActiveDeployOperation()).toBeNull();
+    expect(mocks.activateContest).toHaveBeenCalledExactlyOnceWith(12);
+    expect(await readConfigContestId()).toBe(12);
+    expect(await readOrNull(lockPath())).toBeNull();
+  });
+
+  it('recovers a guard whose record is gone, instead of refusing every deploy behind it', async () => {
+    const started = await store.runDeployContest(12, plan);
+    const operationId = started.operationId;
+    expect(operationId).toBeDefined();
+    if (operationId === undefined) return;
+    await killDeployProcesses();
+    await ageOperation(operationId, DEPLOY_STALE_MS + 60_000);
+
+    // The crash window of `cleanStaleOperations` as it was: the record is unlinked and the guard that
+    // named it is left behind — the panel died, or its container was recreated, between the two. Nothing
+    // else in the panel can find it: the cleanup enumerates `*.json`, so it never sees the guard, and a
+    // guard whose record is gone is a deploy refused.
+    await fs.rm(metaPath(operationId));
+    expect(await readOrNull(lockPath())).toBe(operationId);
+
+    // The mount path an operator's browser uses sees no deploy at all — which is the other half of the
+    // symptom: the UI claims nothing is live while every deploy is refused.
+    expect(await store.getActiveDeployOperation()).toBeNull();
+    expect(await readOrNull(lockPath())).toBeNull();
+
+    // The freed guard is what the operator needs back.
+    expect((await store.runDeployContest(13, plan)).success).toBe(true);
+  });
+
+  it('frees the guard before it unlinks the record the guard belongs to', async () => {
+    const started = await store.runDeployContest(12, plan);
+    const operationId = started.operationId;
+    expect(operationId).toBeDefined();
+    if (operationId === undefined) return;
+    await killDeployProcesses();
+    await ageOperation(operationId, DEPLOY_STALE_MS + 60_000);
+
+    // Held on the record's unlink: the window is between the guard's release and the removal of the
+    // record that guard named, so at the unlink nothing may still name the operation.
+    const pause = armMetaUnlinkPause();
+    const cleanup = cleanStaleOperations();
+    await pause.entered;
+
+    expect(await readOrNull(lockPath())).toBeNull();
+    expect(await readOrNull(metaPath(operationId))).not.toBeNull();
+
+    pause.release();
+    await cleanup;
+    expect(await readOrNull(metaPath(operationId))).toBeNull();
+    expect(await readOrNull(lockPath())).toBeNull();
   });
 
   it('has the deploy report its own exit, so the outcome survives the panel that started it', async () => {
