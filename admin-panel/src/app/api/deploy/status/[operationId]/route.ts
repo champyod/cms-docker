@@ -1,5 +1,5 @@
 import { verifyApiPermission } from '@/lib/api-utils';
-import { DEPLOY_HEARTBEAT_MS, DEPLOY_IDLE_TIMEOUT_MS, DEPLOY_OPERATION_ID_REGEX, DEPLOY_POLL_MS, DEPLOY_TAIL_LENGTH } from '@/lib/constants/deploy';
+import { DEPLOY_HEARTBEAT_MS, DEPLOY_IDLE_TIMEOUT_LABEL, DEPLOY_IDLE_TIMEOUT_MS, DEPLOY_OPERATION_ID_REGEX, DEPLOY_POLL_MS, DEPLOY_TAIL_LENGTH } from '@/lib/constants/deploy';
 import { fetchDeployStatus } from '@/lib/deploy-store';
 
 export const dynamic = 'force-dynamic';
@@ -40,7 +40,7 @@ export async function GET(
         controller.enqueue(encoder.encode(`: heartbeat\n\n`));
       };
 
-      // Why idle 60 seconds from last log change: docker pull may run for minutes on slow links but always appends to log; timeout only when no change proves hung process, not elapsed wall time.
+      // Why idle DEPLOY_IDLE_TIMEOUT_MS from last log change: docker pull may run for minutes on slow links but always appends to log; timeout only when no change proves hung process, not elapsed wall time.
       const checkAndPush = async (): Promise<boolean> => {
         const result = await fetchDeployStatus(operationId);
         const logLength = result.log?.length ?? 0;
@@ -87,7 +87,7 @@ export async function GET(
             log: result.log ? result.log.slice(-DEPLOY_TAIL_LENGTH) : '',
             fullLength: logLength,
             percent,
-            error: 'Deploy timed out after 60 seconds without log output.',
+            error: `Deploy timed out after ${DEPLOY_IDLE_TIMEOUT_LABEL} without log output.`,
             warning: result.warning,
             success: false,
           });

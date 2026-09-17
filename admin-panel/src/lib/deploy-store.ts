@@ -7,7 +7,7 @@ import path from 'path';
 import util from 'util';
 
 import { parseDeployPercent, type DeployStatus } from '@/lib/deploy-percent.shared';
-import { DEPLOY_IDLE_TIMEOUT_MS, DEPLOY_OPERATION_ID_REGEX, DEPLOY_WALL_TIMEOUT_MS } from '@/lib/constants/deploy';
+import { DEPLOY_IDLE_TIMEOUT_LABEL, DEPLOY_IDLE_TIMEOUT_MS, DEPLOY_OPERATION_ID_REGEX, DEPLOY_WALL_TIMEOUT_LABEL, DEPLOY_WALL_TIMEOUT_MS } from '@/lib/constants/deploy';
 import { getRepoRoot } from '@/lib/repo-root';
 import { logToDiscord } from '@/lib/discord-notifier';
 import { readContestId, setContestId } from '@/lib/active-contest';
@@ -181,7 +181,7 @@ async function handleTerminalFailure(paths: DeployPaths, meta: DeployMeta, log: 
     await logToDiscord('Contest Deploy Failed', `Contest ID **${meta.contestId}** deploy failed. Exit code: ${exitCode}`, 15158332, true);
     return { success: false, status: 'failed', contestId: meta.contestId, startedAt: meta.startedAt, log, percent, error: `Docker process exited with code ${exitCode}.`, warning };
   }
-  const message = kind === 'wall' ? 'Deploy timed out after 15 minutes (wall clock limit).' : 'Deploy timed out after 5 minutes without log output.';
+  const message = kind === 'wall' ? `Deploy timed out after ${DEPLOY_WALL_TIMEOUT_LABEL} (wall clock limit).` : `Deploy timed out after ${DEPLOY_IDLE_TIMEOUT_LABEL} without log output.`;
   return { success: false, status: 'timeout', contestId: meta.contestId, startedAt: meta.startedAt, log, percent, error: message, warning };
 }
 

@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useRef, useEffect } from 'react';
 import { toast } from 'sonner';
 import { parseDeployPercent, type DeployStatus } from '@/lib/deploy-percent.shared';
-import { DEPLOY_IDLE_TIMEOUT_MS, DEPLOY_POLL_MS } from '@/lib/constants/deploy';
+import { DEPLOY_IDLE_TIMEOUT_LABEL, DEPLOY_IDLE_TIMEOUT_MS, DEPLOY_POLL_MS } from '@/lib/constants/deploy';
 import { createDeployToast, showDeployResult } from '@/lib/deployToast';
 import { useDictionary } from '@/hooks/useDictionary';
 import type { DeployState } from '@/hooks/useDeployContest';
@@ -70,7 +70,7 @@ export function useDeployStream(
           stopStreaming();
           dismissProgressToast();
           if (!mountedRef.current) return;
-          setState({ phase: 'timeout', contestId, operationId, status: 'timeout', error: 'Deploy timed out after 5 minutes without log output.', warning: null, log: '', percent: null, startedAt: null });
+          setState({ phase: 'timeout', contestId, operationId, status: 'timeout', error: `Deploy timed out after ${DEPLOY_IDLE_TIMEOUT_LABEL} without log output.`, warning: null, log: '', percent: null, startedAt: null });
           toast.error(toasts.timedOutTitle, { description: toasts.timedOutDescription });
         }
       }, DEPLOY_POLL_MS);
