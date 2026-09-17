@@ -29,6 +29,7 @@ MODE=""
 STACKS="core,admin"
 KEEP=0
 DRY_RUN=0
+WORKER_PROJECT=""
 
 print_usage() {
   cat <<'USAGE'
@@ -150,11 +151,19 @@ dump_logs() {
   fi
 }
 
+teardown_worker() {
+  # The smoke worker belongs to a separate project, so the stack down cannot remove it.
+  if [[ -n "$WORKER_PROJECT" ]]; then
+    docker compose -p "$WORKER_PROJECT" -f "$COMPOSE_FILE" --profile worker down --remove-orphans 2>&1 || log_warn "worker compose down returned non-zero (ignored)"
+  fi
+}
+
 teardown() {
   if [[ "$SMOKE_KEEP_UP" == "1" || "$KEEP" -eq 1 ]]; then
     log_info "teardown skipped (--keep / SMOKE_KEEP_UP=1); stack left up"
     return 0
   fi
+  teardown_worker
   log_info "teardown: compose down for profiles: ${STACKS_NORM[*]} (without -v, volumes preserved)"
   local pargs
   pargs=$(compose_profiles_args)
@@ -168,6 +177,7 @@ on_fail_teardown() {
     log_warn "failure path: keeping stack up (SMOKE_KEEP_UP=1)"
   else
     # Dump attempt already done by caller; now down
+    teardown_worker
     local pargs
     pargs=$(compose_profiles_args)
     # shellcheck disable=SC2086
@@ -504,9 +514,11 @@ fi
 # Worker/monitor explicit support
 if printf '%s\n' "${STACKS_NORM[@]}" | grep -qx "worker"; then
   log_info "up: worker profile (ISOLATE_CGROUP_CONTROL=0 override; real isolate needs host cgroup setup via scripts/__worker_cgroup_setup.sh)"
-  ISOLATE_CGROUP_CONTROL=0 docker compose -f "$COMPOSE_FILE" --profile worker up -d 2>&1 || fail_mid_flow "compose up worker failed"
-  # Health check for worker container(s) — name is cms-worker-${WORKER_SHARD:-0}
+  # Smoke tests need only the selected shard, not fleet seeding or a config.toml dependency.
   WORKER_SHARD_VAL="${WORKER_SHARD:-0}"
+  [[ "$WORKER_SHARD_VAL" =~ ^[0-9]+$ ]] || fail_mid_flow "WORKER_SHARD must be numeric"
+  WORKER_PROJECT="cw${WORKER_SHARD_VAL}"
+  ISOLATE_CGROUP_CONTROL=0 docker compose -p "$WORKER_PROJECT" -f "$COMPOSE_FILE" --profile worker up -d 2>&1 || fail_mid_flow "compose up worker failed"
   run_wait_healthy "cms-worker-${WORKER_SHARD_VAL}" 120 || true
 fi
 
