@@ -270,6 +270,8 @@ prisma-sync:
 	@# WHY: schema sync is a migration operation that needs DDL, so it runs as the owner role — never the runtime DML role.
 	@# WHY: the Prisma CLI is resolved once per branch and probed before any migration runs — a deployment host has no admin-panel/node_modules, and a missing CLI must fail with a remedy instead of mid-migration.
 	@# WHY: the host call sites run in a subshell so the second one does not re-enter admin-panel/ and silently skip the deploy.
+	@# WHY: missing seed tooling must fail before migrations; probing its imports without running the seed catches incomplete images without touching the database.
+	@# WHY: seeding the permission registry is system initialisation, so it also runs as the owner — it must work even before the runtime roles exist.
 	@bash scripts/__apply_sql.sh --bootstrap-roles || echo "WARN: role bootstrap failed — retry after restart" >&2;
 	@set -a; [ -f .env ] && . ./.env; set +a; \
 	OWNER_URL_NET="postgresql://$${POSTGRES_USER:-cmsuser}:$${POSTGRES_PASSWORD}@database:5432/$${POSTGRES_DB:-cmsdb}"; \
@@ -278,6 +280,46 @@ prisma-sync:
 	DEPLOY_TYPE="$${DEPLOYMENT_TYPE_OVERRIDE:-}"; \
 	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
+	SEED_CMD=""; SEED_DIR="admin-panel"; SEED_IN_CONTAINER=0; \
+	SEED_PROBE='require("@/lib/prisma"); require("@/lib/permission-registry");'; \
+	if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-admin-panel-next$$'; then \
+		SEED_IN_CONTAINER=1; SEED_DIR="/app"; \
+		if docker exec cms-admin-panel-next test -x /app/node_modules/.bin/tsx 2>/dev/null; then \
+			SEED_CMD="/app/node_modules/.bin/tsx"; \
+		elif docker exec cms-admin-panel-next test -x /repo-root/admin-panel/node_modules/.bin/tsx 2>/dev/null; then \
+			SEED_CMD="/repo-root/admin-panel/node_modules/.bin/tsx"; \
+		elif docker exec cms-admin-panel-next sh -lc 'command -v npx >/dev/null 2>&1' 2>/dev/null; then \
+			SEED_CMD="npx --yes tsx@4"; \
+		fi; \
+		docker exec cms-admin-panel-next test -f /app/prisma/seed-permissions.ts 2>/dev/null || SEED_DIR="/repo-root/admin-panel"; \
+		if [ -z "$$SEED_CMD" ] || ! docker exec -e DATABASE_URL="$$OWNER_URL_NET" cms-admin-panel-next sh -lc "cd $$SEED_DIR && test -f prisma/seed-permissions.ts && $$SEED_CMD --version && $$SEED_CMD -e '$$SEED_PROBE'" >/dev/null 2>&1; then \
+			echo "ERROR: no usable permission seed command inside cms-admin-panel-next — refusing to run migrations." >&2; \
+			echo "  Checked in-container, in order: /app/node_modules/.bin/tsx, /repo-root/admin-panel/node_modules/.bin/tsx, npx; seed script and Prisma/registry imports must also load." >&2; \
+			echo "  Remedy: rebuild the admin image so it ships tsx and the seed dependencies (docker compose --profile core --profile admin up -d --build admin-panel-next), or publish and pull a newer IMG_TAG; the bind-mount and npx fallbacks need host node_modules / container registry access." >&2; \
+			exit 1; \
+		fi; \
+	elif command -v bun >/dev/null 2>&1; then \
+		SEED_CMD="bun x tsx"; \
+		if ! (cd "$$SEED_DIR" && test -f prisma/seed-permissions.ts && $$SEED_CMD --version && DATABASE_URL="$$OWNER_URL_LOCAL" $$SEED_CMD -e "$$SEED_PROBE") >/dev/null 2>&1; then \
+			echo "ERROR: no usable permission seed command for the bun branch — refusing to run migrations." >&2; \
+			echo "  Tried '$$SEED_CMD' and the seed imports from admin-panel/." >&2; \
+			echo "  Remedy: install the panel dependencies (cd admin-panel && bun install && bun x prisma@6 generate); 'bun x tsx' needs registry access to fetch the runner." >&2; \
+			exit 1; \
+		fi; \
+	elif command -v npm >/dev/null 2>&1; then \
+		SEED_CMD="npx tsx"; \
+		if ! (cd "$$SEED_DIR" && test -f prisma/seed-permissions.ts && $$SEED_CMD --version && DATABASE_URL="$$OWNER_URL_LOCAL" $$SEED_CMD -e "$$SEED_PROBE") >/dev/null 2>&1; then \
+			echo "ERROR: no usable permission seed command for the npm branch — refusing to run migrations." >&2; \
+			echo "  Tried '$$SEED_CMD' and the seed imports from admin-panel/." >&2; \
+			echo "  Remedy: install the panel dependencies (cd admin-panel && npm install && npx --yes prisma@6 generate); 'npx tsx' needs registry access to fetch the runner." >&2; \
+			exit 1; \
+		fi; \
+	else \
+		echo "ERROR: no usable permission seed command — refusing to run migrations." >&2; \
+		echo "  Remedy: start the rebuilt admin container, or install Bun or Node.js/npm and the panel dependencies." >&2; \
+		exit 1; \
+	fi; \
+	echo "  Permission seed: $$SEED_CMD prisma/seed-permissions.ts (cwd $$SEED_DIR)"; \
 	if [ "$$DEPLOY_TYPE" = "img" ] && docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-admin-panel-next$$'; then \
 		PRISMA_CMD=""; PRISMA_DIR="/app"; \
 		if docker exec cms-admin-panel-next test -x /app/node_modules/.bin/prisma 2>/dev/null; then \
@@ -368,20 +410,15 @@ prisma-sync:
 		echo "ERROR: Neither 'bun' nor 'npm' found in PATH. Install Bun (https://bun.sh) or Node.js/npm, then run: make prisma-sync" >&2; \
 		echo "  Fix: curl -fsSL https://bun.sh/install | bash && export PATH=\"\$$HOME/.bun/bin:\$$PATH\"" >&2; \
 		exit 1; \
-	fi
-	@# WHY: seeding the permission registry is system initialisation, so it also runs as the owner — it must work even before the runtime roles exist.
-	@set -a; [ -f .env ] && . ./.env; set +a; \
-	OWNER_URL_NET="postgresql://$${POSTGRES_USER:-cmsuser}:$${POSTGRES_PASSWORD}@database:5432/$${POSTGRES_DB:-cmsdb}"; \
-	OWNER_URL_LOCAL="postgresql://$${POSTGRES_USER:-cmsuser}:$${POSTGRES_PASSWORD}@localhost:5432/$${POSTGRES_DB:-cmsdb}"; \
-	export PATH="$(HOME)/.bun/bin:$(PATH)"; \
+	fi; \
+	st=$$?; if [ $$st -ne 0 ]; then echo "Migration deploy failed — check logs above" >&2; exit $$st; fi; \
 	echo "Seeding permission groups and permissions..."; \
-	if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-admin-panel-next$$'; then \
-		docker exec -e DATABASE_URL="$$OWNER_URL_NET" cms-admin-panel-next sh -lc "cd /repo-root/admin-panel && bun x tsx prisma/seed-permissions.ts"; \
-	elif command -v bun >/dev/null 2>&1; then \
-		cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" bun x tsx prisma/seed-permissions.ts; \
-	elif command -v npm >/dev/null 2>&1; then \
-		cd admin-panel && DATABASE_URL="$$OWNER_URL_LOCAL" npx tsx prisma/seed-permissions.ts; \
-	fi
+	if [ "$$SEED_IN_CONTAINER" = "1" ]; then \
+		docker exec -e DATABASE_URL="$$OWNER_URL_NET" cms-admin-panel-next sh -lc "cd $$SEED_DIR && $$SEED_CMD prisma/seed-permissions.ts"; \
+	else \
+		(cd "$$SEED_DIR" && DATABASE_URL="$$OWNER_URL_LOCAL" $$SEED_CMD prisma/seed-permissions.ts); \
+	fi; \
+	st=$$?; if [ $$st -ne 0 ]; then echo "Permission seed failed — admins have no effective permissions until seeding succeeds; check logs above and rerun make prisma-sync." >&2; exit $$st; fi
 
 admin-create:
 	@echo "Creating first Superadmin account..."
