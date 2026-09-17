@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { getRepoRoot } from './repo-root';
+import { composeLocationFlags, type HostComposeLocation } from './compose-location';
 import { buildWorkerControlCommand } from './compose-command';
 import type { DeploymentMode } from './deployment-mode';
 
@@ -202,12 +203,23 @@ const ALL_RESTART: ComposeRestartTarget = {
  * `pull || true && up` also recreates, but it would swallow a failure of a preceding step (the
  * worker fleet in the 'all' plan) into `true` and still run the compose half against a broken fleet.
  */
-function buildComposeRestart(target: ComposeRestartTarget, files: string, mode: DeploymentMode): string {
+function buildComposeRestart(
+  target: ComposeRestartTarget,
+  files: string,
+  mode: DeploymentMode,
+  location: HostComposeLocation | null,
+): string {
   const profiles = target.profiles.length > 0
     ? ` ${target.profiles.map(profile => `--profile ${profile}`).join(' ')}`
     : '';
   const scope = target.services.length > 0 ? ` ${target.services.join(' ')}` : '';
-  const invocation = `docker compose ${files}${profiles}`;
+  // Why: the panel issues this compose from inside its own container, where a relative bind source
+  // would otherwise resolve against the container's /repo-root mount — a host path the daemon does
+  // not have. Leading the invocation with the host project directory (and the env file that belongs
+  // to it) makes the relative binds resolve as they do for the make targets. Empty on the host, so
+  // the command stays byte-for-byte what it was.
+  const globalFlags = composeLocationFlags(location);
+  const invocation = `docker compose ${globalFlags.length > 0 ? `${globalFlags} ` : ''}${files}${profiles}`;
   const recreate = [
     invocation,
     'up -d',
@@ -225,6 +237,7 @@ async function buildCustomRestartCommand(
   customList: string[],
   files: string,
   mode: DeploymentMode,
+  location: HostComposeLocation | null,
 ): Promise<RestartCommandPlan> {
   const needsContestStack = customList.includes('contest-stack') || customList.some(s => s.startsWith('cms-contest-web-server'));
   // Why: filter keeps only safe service names and strips contest-stack sentinel so docker compose receives valid service identifiers
@@ -247,12 +260,13 @@ async function buildCustomRestartCommand(
     commands.push(buildWorkerControlCommand('restart', allWorkers ? [] : workers.map(service => service.slice('cms-worker-'.length))));
   }
   if (needsContestStack) {
-    commands.push(buildComposeRestart(CONTEST_RESTART, files, mode));
+    commands.push(buildComposeRestart(CONTEST_RESTART, files, mode, location));
   } else if (scopedServices.length > 0) {
     commands.push(buildComposeRestart(
       { profiles: profilesForServices(scopedServices), upFlags: ['--force-recreate'], services: scopedServices },
       files,
       mode,
+      location,
     ));
   }
   return { skip: false, command: commands.join(' && ') };
@@ -263,20 +277,21 @@ export async function buildRestartCommand(
   customList: string[] | undefined,
   files: string,
   mode: DeploymentMode,
+  location: HostComposeLocation | null,
 ): Promise<RestartCommandPlan> {
   if (type === 'core') {
-    return { skip: false, command: buildComposeRestart(CORE_RESTART, files, mode) };
+    return { skip: false, command: buildComposeRestart(CORE_RESTART, files, mode, location) };
   }
   if (type === 'admin') {
-    return { skip: false, command: buildComposeRestart(ADMIN_RESTART, files, mode) };
+    return { skip: false, command: buildComposeRestart(ADMIN_RESTART, files, mode, location) };
   }
   if (type === 'worker') {
     return { skip: false, command: buildWorkerControlCommand('restart') };
   }
   if (type === 'custom' && customList && customList.length > 0) {
-    return buildCustomRestartCommand(customList, files, mode);
+    return buildCustomRestartCommand(customList, files, mode, location);
   }
   const workerCommand = buildWorkerControlCommand('restart');
-  const composeRestart = buildComposeRestart(ALL_RESTART, files, mode);
+  const composeRestart = buildComposeRestart(ALL_RESTART, files, mode, location);
   return { skip: false, command: `${workerCommand} && ${composeRestart}` };
 }

@@ -6,6 +6,7 @@ import { exec } from 'child_process';
 import util from 'util';
 import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
+import { resolveHostComposeLocation } from '@/lib/compose-location';
 import { logToDiscord } from '@/lib/discord-notifier';
 import { recordAudit } from '@/lib/audit';
 import { CONFIG_TOML_FILE } from '@/lib/config-toml';
@@ -104,7 +105,17 @@ export async function restartServices(type: 'all' | 'core' | 'admin' | 'worker' 
     // serves, so an image-mode pull against them can only fail.
     const files = await buildComposeFileFlags();
 
-    const plan = await buildRestartCommand(type, customList, files, (await readDeploymentModeSetting()).mode);
+    // Why: inside the panel container the repo is the /repo-root bind mount, so relative bind
+    // sources in docker-compose.yml would resolve to a host path the daemon does not have. Compose
+    // has to be told the host repository directory instead. Resolved once per restart and threaded
+    // through the planner like files/mode. On the host the resolution is null and the command is
+    // left as before; when it cannot be determined we refuse rather than compose against a guess.
+    const location = await resolveHostComposeLocation();
+    if (!location.ok) {
+      return { success: false, error: location.error };
+    }
+
+    const plan = await buildRestartCommand(type, customList, files, (await readDeploymentModeSetting()).mode, location.location);
     if (plan.skip) return { success: true, message: plan.message };
 
     await logToDiscord('Service Restart', `Admin triggered restart: **${type}** ${customList ? `(${customList.join(', ')})` : ''}`, 16753920, true);

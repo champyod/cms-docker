@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { COMPOSE_BASE_FILE, COMPOSE_OVERRIDE_FILE, buildComposeFileFlags, buildRestartCommand } from '../src/lib/restart-planner';
 import type { DeploymentMode } from '../src/lib/deployment-mode';
+import type { HostComposeLocation } from '../src/lib/compose-location';
 
 // What services.ts passes: the unified project the make targets and ./cms deploy. The partial
 // stack files are gone from the restart path — they declare locally-built image names that no
@@ -11,23 +12,28 @@ import type { DeploymentMode } from '../src/lib/deployment-mode';
 const files = '-f docker-compose.yml';
 const ALL_PROFILES = '--profile core --profile admin --profile contest --profile monitor';
 
+// The not-containerised case: the panel runs where the daemon does, so no host project directory is
+// threaded through and every command stays exactly as it was before the container fix. Written out
+// because buildRestartCommand takes the location the same way it takes files and mode.
+const HOST_LOCATION = null;
+
 describe('fleet worker restart commands', () => {
   it('restarts existing fleet containers without compose recreation', async (): Promise<void> => {
-    expect(await buildRestartCommand('worker', undefined, files, 'img')).toEqual({
+    expect(await buildRestartCommand('worker', undefined, files, 'img', HOST_LOCATION)).toEqual({
       skip: false,
       command: 'bash scripts/__admin_worker_control.sh restart',
     });
   });
 
   it('does not let the deployment mode change the fleet command', async (): Promise<void> => {
-    expect(await buildRestartCommand('worker', undefined, files, 'src')).toEqual({
+    expect(await buildRestartCommand('worker', undefined, files, 'src', HOST_LOCATION)).toEqual({
       skip: false,
       command: 'bash scripts/__admin_worker_control.sh restart',
     });
   });
 
   it('keeps fleet workers separate from the all-services compose project', async (): Promise<void> => {
-    expect(await buildRestartCommand('all', undefined, files, 'src')).toEqual({
+    expect(await buildRestartCommand('all', undefined, files, 'src', HOST_LOCATION)).toEqual({
       skip: false,
       command: `bash scripts/__admin_worker_control.sh restart && docker compose ${files} ${ALL_PROFILES} up -d --build`,
     });
@@ -69,14 +75,14 @@ const BRANCHES: BranchCase[] = [
 describe('restart follows DEPLOYMENT_TYPE', () => {
   for (const branch of BRANCHES) {
     it(`img: ${branch.name} pulls, then recreates without building`, async (): Promise<void> => {
-      expect(await buildRestartCommand(branch.type, undefined, files, 'img')).toEqual({
+      expect(await buildRestartCommand(branch.type, undefined, files, 'img', HOST_LOCATION)).toEqual({
         skip: false,
         command: branch.img,
       });
     });
 
     it(`src: ${branch.name} builds, then recreates`, async (): Promise<void> => {
-      expect(await buildRestartCommand(branch.type, undefined, files, 'src')).toEqual({
+      expect(await buildRestartCommand(branch.type, undefined, files, 'src', HOST_LOCATION)).toEqual({
         skip: false,
         command: branch.src,
       });
@@ -87,7 +93,7 @@ describe('restart follows DEPLOYMENT_TYPE', () => {
     const modes: readonly DeploymentMode[] = ['img', 'src'];
     for (const mode of modes) {
       for (const branch of BRANCHES) {
-        const plan = await buildRestartCommand(branch.type, undefined, files, mode);
+        const plan = await buildRestartCommand(branch.type, undefined, files, mode, HOST_LOCATION);
         expect(plan.skip).toBe(false);
         const command = plan.skip ? '' : plan.command;
         expect(command.includes('--build')).toBe(mode === 'src');
@@ -100,28 +106,28 @@ describe('restart follows DEPLOYMENT_TYPE', () => {
   // monitor, and the old partial-file command pulled a locally-named image (cms-monitor) that no
   // registry serves. The service is profile-gated, so the profile is what makes it resolvable.
   it('img: a custom service list is pulled and recreated without building', async (): Promise<void> => {
-    expect(await buildRestartCommand('custom', ['monitor'], files, 'img')).toEqual({
+    expect(await buildRestartCommand('custom', ['monitor'], files, 'img', HOST_LOCATION)).toEqual({
       skip: false,
       command: `(docker compose ${files} --profile monitor pull monitor || true) && docker compose ${files} --profile monitor up -d --no-build --force-recreate monitor`,
     });
   });
 
   it('src: a custom service list is built and recreated', async (): Promise<void> => {
-    expect(await buildRestartCommand('custom', ['monitor'], files, 'src')).toEqual({
+    expect(await buildRestartCommand('custom', ['monitor'], files, 'src', HOST_LOCATION)).toEqual({
       skip: false,
       command: `docker compose ${files} --profile monitor up -d --build --force-recreate monitor`,
     });
   });
 
   it('img: a contest-stack restart pulls and keeps the worker fleet out of the build', async (): Promise<void> => {
-    expect(await buildRestartCommand('custom', ['contest-stack'], files, 'img')).toEqual({
+    expect(await buildRestartCommand('custom', ['contest-stack'], files, 'img', HOST_LOCATION)).toEqual({
       skip: false,
       command: `bash scripts/__admin_worker_control.sh restart && (docker compose ${files} --profile core --profile contest pull || true) && docker compose ${files} --profile core --profile contest up -d --no-build --remove-orphans --force-recreate`,
     });
   });
 
   it('src: a contest-stack restart builds and recreates', async (): Promise<void> => {
-    expect(await buildRestartCommand('custom', ['contest-stack'], files, 'src')).toEqual({
+    expect(await buildRestartCommand('custom', ['contest-stack'], files, 'src', HOST_LOCATION)).toEqual({
       skip: false,
       command: `bash scripts/__admin_worker_control.sh restart && docker compose ${files} --profile core --profile contest up -d --build --remove-orphans --force-recreate`,
     });
@@ -162,14 +168,14 @@ const PROFILE_CASES: ProfileCase[] = [
 describe('a scoped restart enables the profiles its services live in', () => {
   for (const profileCase of PROFILE_CASES) {
     it(`img: ${profileCase.name}`, async (): Promise<void> => {
-      expect(await buildRestartCommand('custom', profileCase.requested, files, 'img')).toEqual({
+      expect(await buildRestartCommand('custom', profileCase.requested, files, 'img', HOST_LOCATION)).toEqual({
         skip: false,
         command: `(docker compose ${files} ${profileCase.profiles} pull ${profileCase.services} || true) && docker compose ${files} ${profileCase.profiles} up -d --no-build --force-recreate ${profileCase.services}`,
       });
     });
 
     it(`src: ${profileCase.name}`, async (): Promise<void> => {
-      expect(await buildRestartCommand('custom', profileCase.requested, files, 'src')).toEqual({
+      expect(await buildRestartCommand('custom', profileCase.requested, files, 'src', HOST_LOCATION)).toEqual({
         skip: false,
         command: `docker compose ${files} ${profileCase.profiles} up -d --build --force-recreate ${profileCase.services}`,
       });
@@ -188,7 +194,7 @@ describe('a scoped restart enables the profiles its services live in', () => {
     ];
     for (const mode of modes) {
       for (const call of calls) {
-        const plan = await buildRestartCommand(call.type, call.custom, files, mode);
+        const plan = await buildRestartCommand(call.type, call.custom, files, mode, HOST_LOCATION);
         expect(plan.skip).toBe(false);
         const command = plan.skip ? '' : plan.command;
         expect(command).toContain('-f docker-compose.yml');
@@ -221,5 +227,125 @@ describe('compose file flags mirror the Makefile wildcard', () => {
     const root = await makeTmpRoot();
     await fs.writeFile(path.join(root, COMPOSE_OVERRIDE_FILE), 'services: {}\n');
     expect(await buildComposeFileFlags(root)).toBe(`-f ${COMPOSE_BASE_FILE} -f ${COMPOSE_OVERRIDE_FILE}`);
+  });
+});
+
+// The containerised case: the panel issues compose from its own container, so every compose
+// invocation has to lead with the host project directory (and the env file that belongs to it), or
+// the relative bind sources in docker-compose.yml resolve to /repo-root paths the daemon lacks.
+const HOST_REPO = '/host/repo';
+const LOCATION_FLAGS = `--project-directory '${HOST_REPO}' --env-file '/repo-root/.env'`;
+const CONTAINERISED_LOCATION: HostComposeLocation = {
+  projectDirectory: HOST_REPO,
+  envFile: '/repo-root/.env',
+};
+
+describe('a containerised restart hands compose the host project directory', () => {
+  interface ContainerCase {
+    name: string;
+    type: 'core' | 'admin' | 'all';
+    img: string;
+    src: string;
+  }
+
+  // Pinned per branch, not derived from the implementation, so a branch that drops the location
+  // fails here instead of riding along in the shared builder.
+  const CONTAINER_BRANCHES: ContainerCase[] = [
+    {
+      name: 'core',
+      type: 'core',
+      img: `(docker compose ${LOCATION_FLAGS} ${files} --profile core pull || true) && docker compose ${LOCATION_FLAGS} ${files} --profile core up -d --no-build --force-recreate`,
+      src: `docker compose ${LOCATION_FLAGS} ${files} --profile core up -d --build --force-recreate`,
+    },
+    {
+      name: 'admin',
+      type: 'admin',
+      img: `(docker compose ${LOCATION_FLAGS} ${files} --profile core --profile admin pull || true) && docker compose ${LOCATION_FLAGS} ${files} --profile core --profile admin up -d --no-build --force-recreate`,
+      src: `docker compose ${LOCATION_FLAGS} ${files} --profile core --profile admin up -d --build --force-recreate`,
+    },
+    {
+      name: 'all',
+      type: 'all',
+      img: `bash scripts/__admin_worker_control.sh restart && (docker compose ${LOCATION_FLAGS} ${files} ${ALL_PROFILES} pull || true) && docker compose ${LOCATION_FLAGS} ${files} ${ALL_PROFILES} up -d --no-build`,
+      src: `bash scripts/__admin_worker_control.sh restart && docker compose ${LOCATION_FLAGS} ${files} ${ALL_PROFILES} up -d --build`,
+    },
+  ];
+
+  for (const branch of CONTAINER_BRANCHES) {
+    it(`img: ${branch.name} leads its compose steps with the host location`, async (): Promise<void> => {
+      expect(await buildRestartCommand(branch.type, undefined, files, 'img', CONTAINERISED_LOCATION)).toEqual({
+        skip: false,
+        command: branch.img,
+      });
+    });
+
+    it(`src: ${branch.name} leads its compose step with the host location`, async (): Promise<void> => {
+      expect(await buildRestartCommand(branch.type, undefined, files, 'src', CONTAINERISED_LOCATION)).toEqual({
+        skip: false,
+        command: branch.src,
+      });
+    });
+  }
+
+  it('img: a custom service list leads the pull and the recreate', async (): Promise<void> => {
+    expect(await buildRestartCommand('custom', ['monitor'], files, 'img', CONTAINERISED_LOCATION)).toEqual({
+      skip: false,
+      command: `(docker compose ${LOCATION_FLAGS} ${files} --profile monitor pull monitor || true) && docker compose ${LOCATION_FLAGS} ${files} --profile monitor up -d --no-build --force-recreate monitor`,
+    });
+  });
+
+  it('src: a custom service list leads the recreate', async (): Promise<void> => {
+    expect(await buildRestartCommand('custom', ['monitor'], files, 'src', CONTAINERISED_LOCATION)).toEqual({
+      skip: false,
+      command: `docker compose ${LOCATION_FLAGS} ${files} --profile monitor up -d --build --force-recreate monitor`,
+    });
+  });
+
+  it('img: a contest-stack restart leads its compose half, keeping the fleet out of it', async (): Promise<void> => {
+    expect(await buildRestartCommand('custom', ['contest-stack'], files, 'img', CONTAINERISED_LOCATION)).toEqual({
+      skip: false,
+      command: `bash scripts/__admin_worker_control.sh restart && (docker compose ${LOCATION_FLAGS} ${files} --profile core --profile contest pull || true) && docker compose ${LOCATION_FLAGS} ${files} --profile core --profile contest up -d --no-build --remove-orphans --force-recreate`,
+    });
+  });
+
+  it('src: a contest-stack restart leads its compose half', async (): Promise<void> => {
+    expect(await buildRestartCommand('custom', ['contest-stack'], files, 'src', CONTAINERISED_LOCATION)).toEqual({
+      skip: false,
+      command: `bash scripts/__admin_worker_control.sh restart && docker compose ${LOCATION_FLAGS} ${files} --profile core --profile contest up -d --build --remove-orphans --force-recreate`,
+    });
+  });
+
+  it('leaves the compose-free fleet command alone', async (): Promise<void> => {
+    expect(await buildRestartCommand('worker', undefined, files, 'src', CONTAINERISED_LOCATION)).toEqual({
+      skip: false,
+      command: 'bash scripts/__admin_worker_control.sh restart',
+    });
+  });
+
+  it('omits --env-file when the deployment generated none', async (): Promise<void> => {
+    const noEnvFile: HostComposeLocation = { projectDirectory: HOST_REPO, envFile: null };
+    expect(await buildRestartCommand('core', undefined, files, 'src', noEnvFile)).toEqual({
+      skip: false,
+      command: `docker compose --project-directory '${HOST_REPO}' ${files} --profile core up -d --build --force-recreate`,
+    });
+  });
+
+  it('never omits the host location from a compose branch', async (): Promise<void> => {
+    const modes: readonly DeploymentMode[] = ['img', 'src'];
+    const calls: readonly { type: 'core' | 'admin' | 'all' | 'custom'; custom?: string[] }[] = [
+      { type: 'core' },
+      { type: 'admin' },
+      { type: 'all' },
+      { type: 'custom', custom: ['monitor'] },
+      { type: 'custom', custom: ['contest-stack'] },
+    ];
+    for (const mode of modes) {
+      for (const call of calls) {
+        const plan = await buildRestartCommand(call.type, call.custom, files, mode, CONTAINERISED_LOCATION);
+        expect(plan.skip).toBe(false);
+        const command = plan.skip ? '' : plan.command;
+        expect(command).toContain(`--project-directory '${HOST_REPO}'`);
+      }
+    }
   });
 });
