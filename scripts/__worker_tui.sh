@@ -146,7 +146,9 @@ for j, fl in enumerate(fleet_lines):
 Path(toml_path).write_text('\n'.join(new_lines) + '\n')
 PYEOF
 
-  bash scripts/__config_sync.sh --no-secrets 2>/dev/null || log_warn "config sync after fleet_save failed"
+  # WHY not 2>/dev/null: that discards the sync's own [WARN]/[ERROR] lines and
+  # preflight failures, so a failure arrives with no stated cause.
+  bash scripts/__config_sync.sh --no-secrets || log_warn "config sync after fleet_save failed"
 }
 
 require_env_files() {
@@ -215,7 +217,6 @@ seed_if_empty() {
   WORKERS=("0|0.0.0.0|$p|1|$(global_memory || echo 512M)|$(global_cpus || echo 0.5)")
   fleet_save
   log_info "Seeded registry entry WORKER_0=0.0.0.0:$p into $CORE_ENV"
-  log_info "Run 'make env' next so config/cms.toml picks it up."
 }
 
 cmd_deploy() {
@@ -260,7 +261,7 @@ cmd_stop() {
 
 refresh_hint() {
   echo ""
-  log_info "Registry changed -> run 'make env' (or ./cms) to regenerate config/cms.toml."
+  log_info "Registry saved to config.toml — .env refreshed automatically (no manual step)."
 }
 
 next_free_shard() {
@@ -333,7 +334,7 @@ add_entry() {
     [[ "$s" =~ ^[0-9]+$ ]] || { log_warn "shard must be numeric"; return 0; }
     [[ "$p" =~ ^[0-9]+$ ]] || { log_warn "port must be numeric"; return 0; }
     fleet_load; WORKERS+=("$s|$h|$p|1|$m|$c"); fleet_save
-    log_info "Added shard $s ($h:$p). Run 'make env' to refresh cms.toml."
+    log_info "Added shard $s ($h:$p)."
   fi
 }
 
