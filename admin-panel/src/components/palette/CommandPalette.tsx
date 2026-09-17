@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { buildLocaleHref, extractLocale } from '@/hooks/useShortcuts';
 import { Command, CommandInput, CommandList } from '@/components/ui/command';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { useToast } from '../providers/ToastProvider';
+import { toast } from 'sonner';
 import { logout } from '@/app/actions/auth';
 import { activateContest, getAvailableContests } from '@/app/actions/contests';
 import { buildEntitySearchers } from './entity-searchers';
@@ -25,7 +25,6 @@ export function CommandPalette({ open, onOpenChange, permissionKeys }: CommandPa
   const router = useRouter();
   const pathname = usePathname();
   const locale = extractLocale(pathname ?? '');
-  const { addToast } = useToast();
   const [query, setQuery] = useState('');
   const [availableContests, setAvailableContests] = useState<AvailableContestRow[]>([]);
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
@@ -77,12 +76,12 @@ export function CommandPalette({ open, onOpenChange, permissionKeys }: CommandPa
     close();
     try {
       const result = await activateContest(contestId);
-      if (result.success) { addToast({ type: 'success', title: 'Active contest switched' }); router.refresh(); }
-      else addToast({ type: 'error', title: 'Failed to switch contest', message: result.error ?? 'Unknown error' });
-    } catch { addToast({ type: 'error', title: 'Failed to switch contest' }); }
+      if (result.success) { toast.success('Active contest switched'); router.refresh(); }
+      else toast.error('Failed to switch contest', { description: result.error ?? 'Unknown error' });
+    } catch { toast.error('Failed to switch contest'); }
   };
 
-  const runSignOut = (): void => { close(); logout().catch(() => { addToast({ type: 'error', title: 'Sign out failed' }); }); };
+  const runSignOut = (): void => { close(); logout().catch(() => { toast.error('Sign out failed'); }); };
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { Button } from '@/components/core/Button';
 import { PageContent, PageHeader, Stack } from '@/components/core/Layout';
-import { useToast } from '@/components/providers/ToastProvider';
+import { toast } from 'sonner';
 
 import { BrandingCard } from './BrandingCard';
 import { RankingConnectionCard } from './RankingConnectionCard';
@@ -23,7 +23,6 @@ export function RankingClient() {
   const [logoUrl, setLogoUrl] = useState('');
   const [uploading, setUploading] = useState(false);
   const [brandingError, setBrandingError] = useState<string | undefined>(undefined);
-  const { addToast } = useToast();
 
   const rows = useRankingRows(snapshot);
 
@@ -113,16 +112,16 @@ export function RankingClient() {
         if (!res.ok || !data.success) throw new Error(data.error ?? 'Failed to upload logo');
         const nextUrl = buildLogoUrl();
         setLogoUrl(nextUrl);
-        addToast({ type: 'success', title: 'Logo updated', message: 'Ranking logo hot reloaded' });
+        toast.success('Logo updated', { description: 'Ranking logo hot reloaded' });
       } catch (error) {
         const message = (error as Error).message;
         setBrandingError(message);
-        addToast({ type: 'error', title: 'Upload failed', message });
+        toast.error('Upload failed', { description: message });
       } finally {
         setUploading(false);
       }
     },
-    [addToast, buildLogoUrl],
+    [buildLogoUrl],
   );
 
   useEffect(() => {

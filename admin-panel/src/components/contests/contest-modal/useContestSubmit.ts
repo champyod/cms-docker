@@ -6,7 +6,7 @@ import { apiClient } from '@/lib/apiClient';
 import type { ApiResponse } from '@/lib/apiClient';
 import { validateContestData } from '@/lib/contest-validation';
 import type { ContestData } from '@/lib/contest-validation';
-import { useToast } from '@/components/providers/ToastProvider';
+import { toast } from 'sonner';
 import { buildPayload } from './contestFormMappers';
 import { FIELD_TO_TAB_MAP } from './types';
 import type { ApiFieldError, ContestFormData, ContestModalTab, ExistingContest } from './types';
@@ -19,12 +19,6 @@ interface SubmitContext {
   setActiveTab: (tab: ContestModalTab) => void;
   setValidationErrors: (errors: Map<string, string>) => void;
   setError: (message: string) => void;
-}
-
-type AddToastFn = ReturnType<typeof useToast>['addToast'];
-
-interface SubmitDeps extends SubmitContext {
-  addToast: AddToastFn;
 }
 
 function collectNameErrors(formData: ContestFormData): Map<string, string> {
@@ -47,7 +41,7 @@ function focusFirstErrorTab(errorsMap: Map<string, string>, setActiveTab: (tab: 
 }
 
 function hasBlockingValidationErrors(
-  deps: SubmitDeps,
+  deps: SubmitContext,
   payload: ContestData,
   tempErrors: Map<string, string>
 ): boolean {
@@ -61,17 +55,13 @@ function hasBlockingValidationErrors(
     focusFirstErrorTab(errorsMap, deps.setActiveTab);
 
     deps.setError('Please fix the validation errors before saving');
-    deps.addToast({
-      type: 'error',
-      title: 'Validation Error',
-      message: 'Please fix the errors before saving'
-    });
+    toast.error('Validation Error', { description: 'Please fix the errors before saving' });
     return true;
   }
   return false;
 }
 
-function applyApiFieldErrors(deps: SubmitDeps, result: ApiResponse): void {
+function applyApiFieldErrors(deps: SubmitContext, result: ApiResponse): void {
   if (result.errors && Array.isArray(result.errors)) {
     const apiErrorsMap = new Map<string, string>();
     result.errors.forEach((err: ApiFieldError) => {
@@ -82,16 +72,14 @@ function applyApiFieldErrors(deps: SubmitDeps, result: ApiResponse): void {
   }
 }
 
-async function submitToApi(deps: SubmitDeps, payload: ContestData): Promise<void> {
+async function submitToApi(deps: SubmitContext, payload: ContestData): Promise<void> {
   const result = deps.contest
     ? await apiClient.put(`/api/contests/${deps.contest.id}`, payload)
     : await apiClient.post('/api/contests', payload);
 
   if (result.success) {
-    deps.addToast({
-      type: 'success',
-      title: deps.contest ? 'Contest Updated' : 'Contest Created',
-      message: `Successfully ${deps.contest ? 'updated' : 'created'} contest "${deps.formData.name}"`
+    toast.success(deps.contest ? 'Contest Updated' : 'Contest Created', {
+      description: `Successfully ${deps.contest ? 'updated' : 'created'} contest "${deps.formData.name}"`,
     });
     deps.onSuccess();
     deps.onClose();
@@ -99,30 +87,19 @@ async function submitToApi(deps: SubmitDeps, payload: ContestData): Promise<void
     const msg = result.error || 'Operation failed';
     deps.setError(msg);
     applyApiFieldErrors(deps, result);
-    deps.addToast({
-      type: 'error',
-      title: 'Error',
-      message: msg
-    });
+    toast.error('Error', { description: msg });
   }
 }
 
-function reportUnexpectedError(deps: SubmitDeps): void {
+function reportUnexpectedError(deps: SubmitContext): void {
   const msg = 'An unexpected error occurred';
   deps.setError(msg);
-  deps.addToast({
-    type: 'error',
-    title: 'Error',
-    message: msg
-  });
+  toast.error('Error', { description: msg });
 }
 
 export function useContestSubmit(submitContext: SubmitContext) {
   const { formData, setError, setValidationErrors } = submitContext;
-  const { addToast } = useToast();
   const [loading, setLoading] = useState(false);
-
-  const deps: SubmitDeps = { ...submitContext, addToast };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -134,11 +111,11 @@ export function useContestSubmit(submitContext: SubmitContext) {
 
     try {
       const payload = buildPayload(formData);
-      if (!hasBlockingValidationErrors(deps, payload, tempErrors)) {
-        await submitToApi(deps, payload);
+      if (!hasBlockingValidationErrors(submitContext, payload, tempErrors)) {
+        await submitToApi(submitContext, payload);
       }
     } catch {
-      reportUnexpectedError(deps);
+      reportUnexpectedError(submitContext);
     } finally {
       setLoading(false);
     }

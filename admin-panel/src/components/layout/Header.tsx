@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { Bell, Search, User } from 'lucide-react';
-import { useToast } from '../providers/ToastProvider';
+import { toast } from 'sonner';
 import { getUnansweredQuestions } from '@/app/actions/questions';
 import { useRouter } from 'next/navigation';
 import { ThemeToggle } from './ThemeToggle';
@@ -16,7 +16,6 @@ export const Header: React.FC<{ className?: string; username?: string; permissio
   const lastCheckTimeRef = useRef(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const authenticationExpiredRef = useRef(false);
-  const { addToast } = useToast();
   const router = useRouter();
 
   const stopPolling = useCallback(() => {
@@ -58,10 +57,9 @@ export const Header: React.FC<{ className?: string; username?: string; permissio
           const qTime = new Date(latest.question_timestamp).getTime();
 
           if (qTime > lastCheckTimeRef.current) {
-            addToast({
-              type: 'warning',
-              title: 'New Question Received!',
-              message: `From ${latest.participations?.users?.username || 'User'}: ${latest.subject.substring(0, 30)}...`,
+            toast.warning('New Question Received!', {
+              // Why: the alert must survive until an admin acknowledges the question.
+              description: `From ${latest.participations?.users?.username || 'User'}: ${latest.subject.substring(0, 30)}...`,
               duration: Infinity
             });
             lastCheckTimeRef.current = Date.now();
@@ -94,7 +92,7 @@ export const Header: React.FC<{ className?: string; username?: string; permissio
       window.removeEventListener('cms-authentication-expired', handleExternalExpiration);
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [addToast, handleAuthenticationExpired, stopPolling]);
+  }, [handleAuthenticationExpired, stopPolling]);
 
   const handleNotificationsClick = () => {
     const locale = window.location.pathname.split('/')[1] || 'en';

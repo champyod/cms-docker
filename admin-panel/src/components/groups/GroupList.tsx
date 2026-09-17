@@ -18,7 +18,7 @@ import {
   TableCell,
 } from '@/components/core/Table';
 import { Text } from '@/components/core/Typography';
-import { useToast } from '@/components/providers/ToastProvider';
+import { toast } from 'sonner';
 import {
   hasEffectivePermission,
   resolveEffectivePermissions,
@@ -88,7 +88,6 @@ export function GroupList({
   dict,
 }: GroupListProps): React.JSX.Element {
   const router = useRouter();
-  const toast = useToast();
   const effective = useMemo(
     () => new Set(permissionKeys),
     [permissionKeys],
@@ -209,10 +208,7 @@ export function GroupList({
         return;
       }
 
-      toast.addToast({
-        type: 'success',
-        title: selectedGroup ? 'Group updated' : 'Group created',
-      });
+      toast.success(selectedGroup ? 'Group updated' : 'Group created');
       setIsModalOpen(false);
       router.refresh();
     } catch (failure) {
@@ -222,7 +218,7 @@ export function GroupList({
     } finally {
       setLoading(false);
     }
-  }, [formData, selectedGroup, router, toast]);
+  }, [formData, selectedGroup, router]);
 
   const handleDelete = useCallback(async () => {
     if (!selectedGroup) return;
@@ -240,7 +236,7 @@ export function GroupList({
         return;
       }
 
-      toast.addToast({ type: 'success', title: 'Group deleted' });
+      toast.success('Group deleted');
       setIsDeleteOpen(false);
       router.refresh();
     } catch (failure) {
@@ -250,7 +246,7 @@ export function GroupList({
     } finally {
       setLoading(false);
     }
-  }, [selectedGroup, deleteReason, router, toast]);
+  }, [selectedGroup, deleteReason, router]);
 
   return (
     <div className="space-y-6">

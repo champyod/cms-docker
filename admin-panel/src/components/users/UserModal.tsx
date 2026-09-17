@@ -7,7 +7,7 @@ import { Button } from '@/components/core/Button';
 import { Dialog, DialogFooter } from '@/components/core/Dialog';
 import { PasswordFieldWithKind, type PasswordRevealState } from '@/components/core/PasswordFieldWithKind';
 import { RestrictedField } from '@/components/core/RestrictedField';
-import { useToast } from '@/components/providers/ToastProvider';
+import { toast } from 'sonner';
 import { apiClient } from '@/lib/apiClient';
 import { getFieldAccess, stripDisallowedFields } from '@/lib/field-permissions';
 import { cn } from '@/lib/utils';
@@ -29,7 +29,6 @@ interface UserModalProps {
 export function UserModal({ isOpen, onClose, user, contests = [], onSuccess, permissionKeys }: UserModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { addToast } = useToast();
   const [formData, setFormData] = useState<UserFormState>(EMPTY_USER_FORM);
   const [passwordKind, setPasswordKind] = useState<PasswordKind>('bcrypt');
   const [reveal, setReveal] = useState<PasswordRevealState>({ state: 'none' });
@@ -116,10 +115,8 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess, per
           });
 
       if (result.success) {
-        addToast({
-          type: 'success',
-          title: user ? 'User updated' : 'User created',
-          message: formData.password
+        toast.success(user ? 'User updated' : 'User created', {
+          description: formData.password
             ? `${formData.username} saved — new password is active immediately.`
             : `${formData.username} saved.`,
         });
@@ -128,11 +125,11 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess, per
       } else {
         const msg = result.error || 'Operation failed';
         setError(msg);
-        addToast({ type: 'error', title: 'Save failed', message: msg });
+        toast.error('Save failed', { description: msg });
       }
     } catch {
       setError('An unexpected error occurred');
-      addToast({ type: 'error', title: 'Save failed', message: 'An unexpected error occurred' });
+      toast.error('Save failed', { description: 'An unexpected error occurred' });
     } finally {
       setLoading(false);
     }

@@ -22,7 +22,7 @@ import {
   analyzeContainerDependencies,
 } from '@/app/actions/services';
 import { getDiscordWebhookStatus } from '@/lib/discord-notifier';
-import { useToast } from '@/components/providers/ToastProvider';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { LogViewerModal } from '@/components/containers/LogViewerModal';
 import { ContainerSettingsModal } from '@/components/containers/ContainerSettingsModal';
@@ -51,7 +51,6 @@ export function ContainersClient() {
   const [showBulkLogsDialog, setShowBulkLogsDialog] = useState(false);
   const [restartPreview, setRestartPreview] = useState<string[]>([]);
   const [bulkLoading, setBulkLoading] = useState(false);
-  const { addToast } = useToast();
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
 
@@ -79,14 +78,10 @@ export function ContainersClient() {
       }
       setRestartCounts(counts);
     } catch {
-      addToast({
-        title: 'Error',
-        message: 'Permission denied. Requires superadmin access.',
-        type: 'error'
-      });
+      toast.error('Error', { description: 'Permission denied. Requires superadmin access.' });
     }
     setLoading(false);
-  }, [addToast]);
+  }, []);
 
   const checkDiscordStatus = useCallback(async (): Promise<void> => {
     try {
@@ -119,10 +114,10 @@ export function ContainersClient() {
 
   const maybeShowDiscordGuard = useCallback((): void => {
     if (isDiscordConfigured === false && !hasShownDiscordToast) {
-      addToast({ title: 'Discord not configured', message: 'Webhook is empty — notifications will be skipped until configured in settings.', type: 'warning' });
+      toast.warning('Discord not configured', { description: 'Webhook is empty — notifications will be skipped until configured in settings.' });
       setHasShownDiscordToast(true);
     }
-  }, [isDiscordConfigured, hasShownDiscordToast, addToast]);
+  }, [isDiscordConfigured, hasShownDiscordToast]);
 
   const handleOpenBulkRestart = async (): Promise<void> => {
     maybeShowDiscordGuard();
@@ -145,10 +140,10 @@ export function ContainersClient() {
     for (const id of ids) {
       const result = await controlContainer(id, 'restart');
       if (!result.success) {
-        addToast({ title: 'Error', message: result.error ?? 'Failed to restart container', type: 'error' });
+        toast.error('Error', { description: result.error ?? 'Failed to restart container' });
       }
     }
-    addToast({ title: 'Success', message: `Restart triggered for ${ids.length} containers`, type: 'success' });
+    toast.success('Success', { description: `Restart triggered for ${ids.length} containers` });
     setBulkLoading(false);
     setShowBulkRestartDialog(false);
     handleClearSelection();
@@ -162,10 +157,10 @@ export function ContainersClient() {
     for (const id of ids) {
       const result = await controlContainer(id, 'stop');
       if (!result.success) {
-        addToast({ title: 'Error', message: result.error ?? 'Failed to stop container', type: 'error' });
+        toast.error('Error', { description: result.error ?? 'Failed to stop container' });
       }
     }
-    addToast({ title: 'Success', message: `Stop triggered for ${ids.length} containers`, type: 'success' });
+    toast.success('Success', { description: `Stop triggered for ${ids.length} containers` });
     setBulkLoading(false);
     setShowBulkRemoveDialog(false);
     handleClearSelection();
@@ -184,10 +179,10 @@ export function ContainersClient() {
     setActionLoading(id);
     const res = await controlContainer(id, action);
     if (res.success) {
-      addToast({ title: 'Success', message: `Container ${action}ed successfully`, type: 'success' });
+      toast.success('Success', { description: `Container ${action}ed successfully` });
       loadContainers();
     } else {
-      addToast({ title: 'Error', message: res.error, type: 'error' });
+      toast.error('Error', { description: res.error });
     }
     setActionLoading(null);
   };
@@ -200,10 +195,10 @@ export function ContainersClient() {
     setActionLoading('compose');
     const res = await runCompose(action, serviceType);
     if (res.success) {
-      addToast({ title: 'Success', message: `Compose ${action} completed`, type: 'success' });
+      toast.success('Success', { description: `Compose ${action} completed` });
       loadContainers();
     } else {
-      addToast({ title: 'Error', message: res.error, type: 'error' });
+      toast.error('Error', { description: res.error });
     }
     setActionLoading(null);
   };
@@ -213,24 +208,20 @@ export function ContainersClient() {
       autoRestart: !currentValue,
     });
     if (res.success) {
-      addToast({
-        title: 'Success',
-        message: `Auto-restart ${!currentValue ? 'enabled' : 'disabled'}`,
-        type: 'success'
-      });
+      toast.success('Success', { description: `Auto-restart ${!currentValue ? 'enabled' : 'disabled'}` });
       loadContainers();
     } else {
-      addToast({ title: 'Error', message: res.error, type: 'error' });
+      toast.error('Error', { description: res.error });
     }
   };
 
   const handleResetRestartCount = async (containerId: string) => {
     const res = await resetRestartCount(containerId);
     if (res.success) {
-      addToast({ title: 'Success', message: 'Restart count reset', type: 'success' });
+      toast.success('Success', { description: 'Restart count reset' });
       loadContainers();
     } else {
-      addToast({ title: 'Error', message: res.error, type: 'error' });
+      toast.error('Error', { description: res.error });
     }
   };
 
@@ -239,14 +230,10 @@ export function ContainersClient() {
       discordNotifications: !currentValue,
     });
     if (res.success) {
-      addToast({
-        title: 'Success',
-        message: `Discord notifications ${!currentValue ? 'enabled' : 'disabled'}`,
-        type: 'success'
-      });
+      toast.success('Success', { description: `Discord notifications ${!currentValue ? 'enabled' : 'disabled'}` });
       loadContainers();
     } else {
-      addToast({ title: 'Error', message: res.error, type: 'error' });
+      toast.error('Error', { description: res.error });
     }
   };
 

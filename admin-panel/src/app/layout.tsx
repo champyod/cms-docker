@@ -39,7 +39,8 @@ export default function RootLayout({
       </head>
       <body className="font-sans antialiased">
         {children}
-        <Toaster richColors position="bottom-right" closeButton />
+        {/* Why: 5000ms is the admin panel's long-standing toast lifetime, kept as the single default now that sonner is the only system. */}
+        <Toaster richColors position="bottom-right" closeButton duration={5000} />
       </body>
     </html>
   );

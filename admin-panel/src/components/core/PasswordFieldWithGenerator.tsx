@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { Copy, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { Dialog } from './Dialog';
 import { Button } from './Button';
-import { useToast } from '@/components/providers/ToastProvider';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 type CaseMode = 'both' | 'upper' | 'lower';
@@ -42,7 +42,6 @@ export function PasswordFieldWithGenerator({
 }: PasswordFieldWithGeneratorProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
-  const { addToast } = useToast();
 
   const [length, setLength] = useState(8);
   const [includeLetters, setIncludeLetters] = useState(true);
@@ -92,21 +91,21 @@ export function PasswordFieldWithGenerator({
     try {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(value);
-        addToast({ type: 'success', title: 'Copied', message: 'Password copied to clipboard.' });
+        toast.success('Copied', { description: 'Password copied to clipboard.' });
         return;
       }
 
       if (fallbackCopy()) {
-        addToast({ type: 'success', title: 'Copied', message: 'Password copied to clipboard.' });
+        toast.success('Copied', { description: 'Password copied to clipboard.' });
       } else {
-        addToast({ type: 'error', title: 'Copy failed', message: 'Unable to copy password. Please copy manually.' });
+        toast.error('Copy failed', { description: 'Unable to copy password. Please copy manually.' });
       }
     } catch {
       const success = fallbackCopy();
       if (success) {
-        addToast({ type: 'success', title: 'Copied', message: 'Password copied to clipboard.' });
+        toast.success('Copied', { description: 'Password copied to clipboard.' });
       } else {
-        addToast({ type: 'error', title: 'Copy failed', message: 'Unable to copy password. Please copy manually.' });
+        toast.error('Copy failed', { description: 'Unable to copy password. Please copy manually.' });
       }
     }
   };

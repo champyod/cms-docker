@@ -10,7 +10,7 @@ import { useDeployContest } from '@/hooks/useDeployContest';
 import { PageContent, PageHeader, Stack } from '@/components/core/Layout';
 import { Loading } from '@/components/core/Loading';
 import { Button } from '@/components/core/Button';
-import { useToast } from '@/components/providers/ToastProvider';
+import { toast } from 'sonner';
 import { MismatchBanner } from '@/components/deployments/MismatchBanner';
 import { DeployStatusPanel } from '@/components/deployments/DeployStatusPanel';
 import { ActiveContestCard, ContestOption } from '@/components/deployments/ActiveContestCard';
@@ -30,7 +30,6 @@ const CONTEST_SETTINGS_KEYS: readonly ConfigTomlKey[] = [
 ];
 
 export function DeploymentsClient() {
-    const { addToast } = useToast();
     const { state: deployState, deploy: handleDeploy, cancel: cancelDeploy, reset: resetDeploy } = useDeployContest();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -142,14 +141,14 @@ export function DeploymentsClient() {
         try {
             const result = await updateConfigTomlValues(buildConfigTomlUpdates(globalSettings, CONTEST_SETTINGS_KEYS));
             if (!result.success) {
-                addToast({ type: 'error', title: 'Save Failed', message: result.error || 'Could not update config.toml' });
+                toast.error('Save Failed', { description: result.error || 'Could not update config.toml' });
                 setSaving(false);
                 return;
             }
             setOriginalGlobal(JSON.stringify(globalSettings));
-            addToast({ type: 'success', title: 'Settings Saved', message: 'Contest settings updated.' });
+            toast.success('Settings Saved', { description: 'Contest settings updated.' });
         } catch (error) {
-            addToast({ type: 'error', title: 'Unexpected Error', message: (error as Error).message });
+            toast.error('Unexpected Error', { description: (error as Error).message });
         } finally {
             setSaving(false);
         }

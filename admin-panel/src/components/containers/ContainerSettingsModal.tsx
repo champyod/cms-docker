@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { Power, RotateCcw, Bell, AlertTriangle } from 'lucide-react';
 import { updateContainerConfig, resetRestartCount } from '@/app/actions/containerConfig';
 import { getDiscordWebhookStatus } from '@/lib/discord-notifier';
-import { useToast } from '@/components/providers/ToastProvider';
+import { toast } from 'sonner';
 
 interface ContainerSettingsModalProps {
   containerId: string;
@@ -34,7 +34,6 @@ export function ContainerSettingsModal({
   const [discordNotifications, setDiscordNotifications] = useState(config.discordNotifications ?? true);
   const [saving, setSaving] = useState(false);
   const [isDiscordConfigured, setIsDiscordConfigured] = useState<boolean | null>(null);
-  const { addToast } = useToast();
 
   useEffect(() => {
     getDiscordWebhookStatus().then((status) => setIsDiscordConfigured(status.configured)).catch(() => setIsDiscordConfigured(false));
@@ -49,14 +48,14 @@ export function ContainerSettingsModal({
     });
 
     if (res.success) {
-      addToast({ title: 'Success', message: 'Container settings updated', type: 'success' });
+      toast.success('Success', { description: 'Container settings updated' });
       if (isDiscordConfigured === false && discordNotifications) {
-        addToast({ title: 'Discord not configured', message: 'Webhook is empty — notifications will be skipped until configured.', type: 'warning' });
+        toast.warning('Discord not configured', { description: 'Webhook is empty — notifications will be skipped until configured.' });
       }
       onUpdate();
       onClose();
     } else {
-      addToast({ title: 'Error', message: res.error, type: 'error' });
+      toast.error('Error', { description: res.error });
     }
     setSaving(false);
   };
@@ -64,11 +63,11 @@ export function ContainerSettingsModal({
   const handleReset = async () => {
     const res = await resetRestartCount(containerId);
     if (res.success) {
-      addToast({ title: 'Success', message: 'Restart count reset to 0', type: 'success' });
+      toast.success('Success', { description: 'Restart count reset to 0' });
       onUpdate();
       onClose();
     } else {
-      addToast({ title: 'Error', message: res.error, type: 'error' });
+      toast.error('Error', { description: res.error });
     }
   };
 

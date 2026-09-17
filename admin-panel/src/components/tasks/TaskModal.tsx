@@ -4,7 +4,7 @@ import { createContext, useContext, useMemo, useState, useEffect } from 'react';
 import { FileCode, Clock, Cpu, FileType, CheckSquare } from 'lucide-react';
 import type { TaskData } from '@/app/actions/tasks';
 import { apiClient } from '@/lib/apiClient';
-import { useToast } from '@/components/providers/ToastProvider';
+import { toast } from 'sonner';
 import { Dialog } from '@/components/core/Dialog';
 import { Button } from '@/components/core/Button';
 import { cn } from '@/lib/utils';
@@ -110,7 +110,6 @@ function mapTaskToForm(task: TaskRecord): TaskData {
 }
 
 export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: TaskModalProps): React.JSX.Element | null {
-  const { addToast } = useToast();
   const [activeTab, setActiveTab] = useState<Tab>('general');
   const [formData, setFormData] = useState<TaskData>(EMPTY_FORM);
   const [error, setError] = useState('');
@@ -136,10 +135,8 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
         ? await apiClient.put(`/api/tasks/${task.id}`, formData)
         : await apiClient.post('/api/tasks', formData);
       if (result.success) {
-        addToast({
-          type: 'success',
-          title: task ? 'Task updated' : 'Task created',
-          message: task ? 'Task updated successfully' : 'Task created successfully',
+        toast.success(task ? 'Task updated' : 'Task created', {
+          description: task ? 'Task updated successfully' : 'Task created successfully',
         });
         onSuccess();
         onClose();

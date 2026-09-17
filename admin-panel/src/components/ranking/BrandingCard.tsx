@@ -6,7 +6,7 @@ import { Loader2 } from 'lucide-react';
 import Image from 'next/image';
 
 import { Card } from '@/components/core/Card';
-import { useToast } from '@/components/providers/ToastProvider';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 const ACCEPTED_TYPES = '.png,.jpg,.jpeg,.gif,.bmp';
@@ -48,7 +48,6 @@ function LoadingOverlay() {
 
 export function BrandingCard({ previewUrl, loading, onUpload, error }: BrandingCardProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const { addToast } = useToast();
 
   const handleClick = useCallback(() => {
     if (loading) return;
@@ -64,10 +63,10 @@ export function BrandingCard({ previewUrl, loading, onUpload, error }: BrandingC
         await onUpload(file);
       } catch (err) {
         const message = (err as Error).message || 'Upload failed';
-        addToast({ type: 'error', title: 'Upload failed', message });
+        toast.error('Upload failed', { description: message });
       }
     },
-    [addToast, onUpload],
+    [onUpload],
   );
 
   return (

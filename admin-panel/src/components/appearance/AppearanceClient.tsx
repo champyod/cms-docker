@@ -7,7 +7,7 @@ import NextImage from 'next/image';
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
 import { PageContent, PageHeader } from '@/components/core/Layout';
-import { useToast } from '@/components/providers/ToastProvider';
+import { toast } from 'sonner';
 import { readConfigToml, updateConfigToml } from '@/app/actions/appearance';
 import { cn } from '@/lib/utils';
 
@@ -147,7 +147,6 @@ function ServicesTab({ values }: { values: Record<string, string> }) {
 
 export function AppearanceClient({ locale }: { locale: string }) {
   void locale;
-  const { addToast } = useToast();
   const [active, setActive] = useState<TabKey>('branding');
   const [values, setValues] = useState<Record<string, string>>({});
   const [branding, setBranding] = useState<BrandingFields>({ rankingLogoPath: '', rankingUsername: '', rankingPassword: '' });
@@ -186,21 +185,21 @@ export function AppearanceClient({ locale }: { locale: string }) {
       if (branding.rankingUsername) updates['RANKING_USERNAME'] = `"${branding.rankingUsername}"`;
       if (branding.rankingPassword) updates['RANKING_PASSWORD'] = `"${branding.rankingPassword}"`;
       if (Object.keys(updates).length === 0) {
-        addToast({ type: 'warning', title: 'Nothing to save', message: 'No branding fields changed.' });
+        toast.warning('Nothing to save', { description: 'No branding fields changed.' });
         return;
       }
       const result = await updateConfigToml(updates);
       if (result.success) {
-        addToast({ type: 'success', title: 'Saved', message: 'config.toml updated. Run config sync to apply.' });
+        toast.success('Saved', { description: 'config.toml updated. Run config sync to apply.' });
       } else {
-        addToast({ type: 'error', title: 'Save failed', message: result.error });
+        toast.error('Save failed', { description: result.error });
       }
     } catch (error) {
-      addToast({ type: 'error', title: 'Save failed', message: (error as Error).message });
+      toast.error('Save failed', { description: (error as Error).message });
     } finally {
       setSaving(false);
     }
-  }, [addToast, branding]);
+  }, [branding]);
 
   return (
     <PageContent>

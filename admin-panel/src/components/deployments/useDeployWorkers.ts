@@ -5,12 +5,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { getWorkers, updateWorkers } from '@/app/actions/workerConfig';
 import { getWorkersLiveStatus, WorkerLiveDetail } from '@/app/actions/workers';
 import { WorkerConfig } from '@/components/deployments/WorkersPanel';
-import { useToast } from '@/components/providers/ToastProvider';
+import { toast } from 'sonner';
 
 type SetSaving = React.Dispatch<React.SetStateAction<boolean>>;
 
 export function useDeployWorkers(setSaving: SetSaving) {
-    const { addToast } = useToast();
     const [workers, setWorkers] = useState<WorkerConfig[]>([]);
     const [originalWorkers, setOriginalWorkers] = useState<string>('[]');
     const [liveWorkers, setLiveWorkers] = useState<WorkerLiveDetail[]>([]);
@@ -52,18 +51,18 @@ export function useDeployWorkers(setSaving: SetSaving) {
         try {
             const result = await updateWorkers(workers);
             if (!result.success) {
-                addToast({ type: 'error', title: 'Worker Sync Failed', message: result.error || 'Could not sync worker config' });
+                toast.error('Worker Sync Failed', { description: result.error || 'Could not sync worker config' });
                 setSaving(false);
                 return;
             }
             setOriginalWorkers(JSON.stringify(workers));
-            addToast({ type: 'success', title: 'Workers Synced', message: 'Worker configuration updated.' });
+            toast.success('Workers Synced', { description: 'Worker configuration updated.' });
         } catch (error) {
-            addToast({ type: 'error', title: 'Unexpected Error', message: (error as Error).message });
+            toast.error('Unexpected Error', { description: (error as Error).message });
         } finally {
             setSaving(false);
         }
-    }, [workers, addToast, setSaving]);
+    }, [workers, setSaving]);
 
     const addGlobalWorker = useCallback(() => setWorkers((previous) => [...previous, { host: '', port: 26000 }]), []);
     const removeGlobalWorker = useCallback((index: number) => setWorkers((previous) => previous.filter((_, i) => i !== index)), []);

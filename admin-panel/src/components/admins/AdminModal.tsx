@@ -17,7 +17,7 @@ import { Button } from '@/components/core/Button';
 import { Input } from '@/components/core/Input';
 import { Card } from '@/components/core/Card';
 import { PasswordFieldWithKind } from '@/components/core/PasswordFieldWithKind';
-import { useToast } from '@/components/providers/ToastProvider';
+import { toast } from 'sonner';
 import type { PasswordRevealState } from '@/components/core/PasswordFieldWithKind';
 import type { PasswordKind } from '@/lib/password-format';
 import { resolveEffectivePermissions, type OverrideEffect } from '@/lib/permission-engine';
@@ -54,7 +54,6 @@ function sameIds(a: readonly number[], b: readonly number[]): boolean {
 }
 
 export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminModalProps) {
-  const toast = useToast();
   const [formData, setFormData] = useState<AdminFormState>(EMPTY_ADMIN_FORM);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -291,7 +290,7 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
       const accessFailure = await persistAccessChanges(account.adminId);
       if (accessFailure) {
         // Why: the account row is already saved, so surface the access failure without discarding the save.
-        toast.addToast({ type: 'error', title: 'Access update failed', message: accessFailure });
+        toast.error('Access update failed', { description: accessFailure });
         return;
       }
 
