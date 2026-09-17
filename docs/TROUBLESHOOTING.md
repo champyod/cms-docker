@@ -49,9 +49,9 @@ curl http://localhost:8890
 
 **A. Services not running:**
 ```bash
-# Restart services (the contest stack comes up from the unified project)
+# Restart services (every stack comes up from the unified project, by profile)
 docker compose -f docker-compose.yml --profile core --profile contest restart
-docker compose -f docker-compose.admin.yml restart
+docker compose -f docker-compose.yml --profile core --profile admin restart admin-panel-next admin-web-server ranking-web-server
 ```
 
 **B. Firewall blocking:**
@@ -213,8 +213,8 @@ docker exec cms-worker-0 ping cms-log-service
 docker network rm cms-network
 docker network create cms-network
 
-# Redeploy services
-docker compose -f docker-compose.core.yml up -d
+# Redeploy services (deployment mode decides pull+recreate vs build)
+make core
 ```
 
 ### DNS Resolution Fails
@@ -231,8 +231,8 @@ docker compose -f docker-compose.core.yml up -d
 sudo systemctl restart docker
 
 # Recreate containers
-docker compose -f docker-compose.core.yml down
-docker compose -f docker-compose.core.yml up -d
+make core-stop
+make core
 ```
 
 ### Remote Workers Can't Connect
@@ -308,7 +308,7 @@ docker exec cms-log-service cmsInitDB
 docker volume rm cms-db-data
 
 # Redeploy and reinitialize
-docker compose -f docker-compose.core.yml up -d
+make core
 sleep 30
 docker exec cms-log-service cmsInitDB
 ```
@@ -414,10 +414,10 @@ deploy:
 
 **C. Dependency not ready:**
 ```bash
-# Ensure services start in order
-docker compose -f docker-compose.core.yml up -d
+# Ensure services start in order (core first, then the stack that depends on it)
+make core
 sleep 30  # Wait for database
-docker compose -f docker-compose.admin.yml up -d
+make admin
 ```
 
 ### Service Not Responding
@@ -443,8 +443,8 @@ docker restart CONTAINER_NAME
 # Check logs for errors
 docker logs -f CONTAINER_NAME
 
-# Recreate container
-docker compose -f docker-compose.FILE.yml up -d --force-recreate
+# Recreate container (SERVICE_NAME is the compose service, e.g. log-service)
+docker compose -f docker-compose.yml --profile core up -d --force-recreate SERVICE_NAME
 ```
 
 ### Logs Show Errors
@@ -519,7 +519,7 @@ docker exec cms-worker-0 ping cms-log-service
 
 ```bash
 # Ensure privileged mode
-# In docker-compose.worker.yml:
+# In the worker service of docker-compose.yml:
 privileged: true
 security_opt:
   - seccomp:unconfined

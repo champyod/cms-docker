@@ -5,7 +5,10 @@ import util from 'util';
 import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
 import { recordAudit } from '@/lib/audit';
-import { buildComposeCommand } from '@/lib/compose-command';
+import { buildComposeCommand, type ComposeAction, type ComposeService } from '@/lib/compose-command';
+import { resolveHostComposeLocation } from '@/lib/compose-location';
+import { buildComposeFileFlags } from '@/lib/restart-planner';
+import { readDeploymentModeSetting } from '@/lib/deployment-mode-file';
 import { CONTAINER_ID_RE } from '@/lib/container-probes';
 
 const execPromise = util.promisify(exec);
@@ -66,11 +69,26 @@ export async function getContainerContestId(): Promise<{ success: true; contestI
   }
 }
 
-export async function runCompose(action: 'up' | 'down' | 'restart' | 'build', serviceType?: 'core' | 'admin' | 'contest' | 'worker'): Promise<{ success: true; output: string } | { success: false; error: string }> {
+export async function runCompose(action: ComposeAction, serviceType?: ComposeService): Promise<{ success: true; output: string } | { success: false; error: string }> {
   await ensurePermission('container:control');
   try {
     const repoRoot = getRepoRoot();
-    const cmd = buildComposeCommand(action, serviceType);
+    // Why the stack controls resolve the same three things a restart and a deploy do: the unified
+    // project's file list, the mode the deployment runs in, and — inside the panel container — the
+    // host repository path compose needs for the relative bind sources (see lib/compose-location.ts).
+    // Resolved here rather than in the builder so the page cannot run a different project than the
+    // deploy path. An undeterminable location is refused, never guessed: a wrong project directory
+    // mounts and builds the wrong files instead of failing.
+    const location = await resolveHostComposeLocation();
+    if (!location.ok) {
+      return { success: false, error: location.error };
+    }
+
+    const cmd = buildComposeCommand(action, serviceType, {
+      files: await buildComposeFileFlags(),
+      mode: (await readDeploymentModeSetting(repoRoot)).mode,
+      location: location.location,
+    });
 
     const { stdout, stderr } = await execPromise(cmd, { cwd: repoRoot });
     await recordAudit({

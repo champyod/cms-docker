@@ -1,6 +1,5 @@
 'use server';
 
-import fs from 'fs/promises';
 import path from 'path';
 import { exec } from 'child_process';
 import util from 'util';
@@ -9,8 +8,8 @@ import { getRepoRoot } from '@/lib/repo-root';
 import { resolveHostComposeLocation } from '@/lib/compose-location';
 import { logToDiscord } from '@/lib/discord-notifier';
 import { recordAudit } from '@/lib/audit';
-import { CONFIG_TOML_FILE } from '@/lib/config-toml';
-import { parseDeploymentMode, type DeploymentModeSetting } from '@/lib/deployment-mode';
+import { readDeploymentModeSetting } from '@/lib/deployment-mode-file';
+import type { DeploymentModeSetting } from '@/lib/deployment-mode';
 import {
   analyzeContainerDependencies as analyzeContainerDependenciesLib,
   buildComposeFileFlags,
@@ -29,19 +28,6 @@ import type {
 } from '@/lib/deploy-operations';
 
 const execPromise = util.promisify(exec);
-
-/**
- * Reads the mode from config.toml — the source of truth — and not from process.env, which only
- * carries the value a previous `./cms config sync` copied in and can therefore lag an edit.
- * A missing file is the same "cannot be determined" case as an unknown value and both fall back
- * to img, the mode that does not rebuild (see deployment-mode.ts).
- */
-async function readDeploymentModeSetting(): Promise<DeploymentModeSetting> {
-    const content = await fs
-        .readFile(path.join(getRepoRoot(), CONFIG_TOML_FILE), 'utf-8')
-        .catch(() => null);
-    return parseDeploymentMode(content);
-}
 
 /**
  * The mode the next restart uses, so the operator can see what that restart does before running it.
