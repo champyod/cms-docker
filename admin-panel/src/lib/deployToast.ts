@@ -39,6 +39,9 @@ export function createDeployToast(copy: DeployToastCopy): {
 export function showDeployResult(copy: DeployToastCopy, status: string, contestId: number, error?: string): void {
   if (status === 'completed') toast.success(copy.completedTitle, { description: interpolate(copy.completedDescription, { contestId }) });
   else if (status === 'failed') toast.error(copy.failedTitle, { description: error || copy.failedDescription });
-  else if (status === 'timeout') toast.error(copy.timedOutTitle, { description: error || copy.timedOutDescription });
+  // A 'timeout' is the panel's own watch ending while the deploy keeps running, so it is a warning
+  // about what the panel can no longer show — never the server's failure text, which would read as
+  // "the deploy died". Same reason it is not an error toast.
+  else if (status === 'timeout') toast.warning(copy.watchingStoppedTitle, { description: copy.watchingStoppedDescription });
   else if (status === 'not_found') toast.error(copy.notFoundTitle, { description: error || copy.notFoundDescription });
 }

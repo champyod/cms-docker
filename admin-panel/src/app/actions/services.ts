@@ -141,7 +141,21 @@ export async function restartServices(type: 'all' | 'core' | 'admin' | 'worker' 
 
 export async function deployContest(contestId: number): Promise<DeployContestResult> {
   await ensurePermission('deployment:deploy');
-  const result = await runDeployContest(contestId);
+
+  // Why the deploy resolves the same three things a restart does: the contest stack is the same
+  // project the make targets run, so it is brought up from the same file list, with the same
+  // deployment mode deciding pull + --no-build versus --build, and with the host repository path
+  // compose needs when this panel runs inside its container (see lib/compose-location.ts). Refusing
+  // an undeterminable location for the same reason as a restart: a wrong project directory mounts and
+  // builds the wrong files instead of failing.
+  const location = await resolveHostComposeLocation();
+  if (!location.ok) return { success: false, error: location.error };
+
+  const result = await runDeployContest(contestId, {
+    files: await buildComposeFileFlags(),
+    mode: (await readDeploymentModeSetting()).mode,
+    location: location.location,
+  });
   if (result.success) {
     await recordAudit({
       verb: 'deployment:deploy',

@@ -66,6 +66,8 @@ export function DeployContestProvider({ children }: { children: ReactNode }): Re
         return;
       }
       updateState({ ...initialState, phase: 'polling', contestId, operationId: result.operationId, status: 'running' });
+      // This panel watches it from here, so discovery must not hand the same operation back later.
+      recovery.invalidate(result.operationId);
       toastIdRef.current = toast.loading(interpolate(toasts.startedTitle, { contestId }), { description: toasts.startingDescription, duration: Infinity });
       startStreaming(result.operationId, contestId);
     } catch (error) {
@@ -77,7 +79,7 @@ export function DeployContestProvider({ children }: { children: ReactNode }): Re
   }, [recovery, stopStreaming, startStreaming, updateState, toastHelper, toasts]);
 
   const resume = useCallback((operationId: string, contestId: number): void => {
-    recovery.invalidate();
+    recovery.invalidate(operationId);
     if (stateRef.current.phase === 'deploying' || stateRef.current.phase === 'polling') return;
     requestRef.current += 1;
     toastHelper.dismiss(toastIdRef);
@@ -89,7 +91,9 @@ export function DeployContestProvider({ children }: { children: ReactNode }): Re
   useEffect(() => recovery.attach(resume), [recovery, resume]);
 
   const cancel = useCallback((): void => {
-    recovery.invalidate();
+    // Dismissing is about this panel, not about the deploy: the operation keeps running and the
+    // server settles it when its process exits, so discovery must not resurface it here.
+    recovery.invalidate(stateRef.current.operationId);
     // Ignore a deploy action that resolves after the user has stopped watching.
     requestRef.current += 1;
     stopStreaming();

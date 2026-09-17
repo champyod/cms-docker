@@ -1,8 +1,37 @@
 import { verifyApiPermission } from '@/lib/api-utils';
-import { DEPLOY_HEARTBEAT_MS, DEPLOY_IDLE_TIMEOUT_LABEL, DEPLOY_IDLE_TIMEOUT_MS, DEPLOY_OPERATION_ID_REGEX, DEPLOY_POLL_MS, DEPLOY_TAIL_LENGTH } from '@/lib/constants/deploy';
-import { fetchDeployStatus } from '@/lib/deploy-store';
+import { DEPLOY_HEARTBEAT_MS, DEPLOY_OPERATION_ID_REGEX, DEPLOY_POLL_MS, DEPLOY_TAIL_LENGTH, DEPLOY_WALL_TIMEOUT_MS } from '@/lib/constants/deploy';
+import { fetchDeployStatus, type DeployStatusResult, type DeployStatus } from '@/lib/deploy-store';
 
 export const dynamic = 'force-dynamic';
+
+/** The one frame shape both sides agree on: a full status snapshot, never a bare ping. */
+interface DeployFrame {
+  status: DeployStatus;
+  contestId?: number;
+  startedAt?: string;
+  log: string;
+  fullLength: number;
+  percent: number | null;
+  error?: string;
+  warning?: string;
+  success: boolean;
+}
+
+function snapshot(result: DeployStatusResult): DeployFrame {
+  const log = result.log ?? '';
+  // Tail last 4000 characters so the payload stays small while the toast and log viewer keep context.
+  return {
+    status: result.status,
+    contestId: result.contestId,
+    startedAt: result.startedAt,
+    log: log.slice(-DEPLOY_TAIL_LENGTH),
+    fullLength: log.length,
+    percent: result.percent ?? null,
+    error: result.error,
+    warning: result.warning,
+    success: result.success,
+  };
+}
 
 export async function GET(
   _request: Request,
@@ -24,120 +53,99 @@ export async function GET(
   let lastLogLength = -1;
   let lastStatus: string | null = null;
   let lastPercent: number | null = null;
-  let lastChangeAt = Date.now();
+  let startedAtMs: number | null = null;
   let closed = false;
+  let inFlight = false;
+  let pollTimer: ReturnType<typeof setInterval> | null = null;
+  let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
+  // Why the timers live out here: a client that goes away must take the watch with it, or every
+  // abandoned connection leaves two intervals polling the filesystem forever.
+  const stopTimers = (): void => {
+    if (pollTimer !== null) clearInterval(pollTimer);
+    if (heartbeatTimer !== null) clearInterval(heartbeatTimer);
+    pollTimer = null;
+    heartbeatTimer = null;
+  };
 
   const stream = new ReadableStream({
     async start(controller) {
-      const sendEvent = (payload: unknown) => {
+      const send = (frame: DeployFrame): void => {
         if (closed) return;
-        const data = JSON.stringify(payload);
-        controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(frame)}\n\n`));
       };
 
-      const sendHeartbeat = () => {
-        if (closed) return;
-        controller.enqueue(encoder.encode(`: heartbeat\n\n`));
-      };
-
-      // Why idle DEPLOY_IDLE_TIMEOUT_MS from last log change: docker pull may run for minutes on slow links but always appends to log; timeout only when no change proves hung process, not elapsed wall time.
-      const checkAndPush = async (): Promise<boolean> => {
+      /**
+       * Fetches the operation and, unless it is forced, only sends when something changed.
+       *
+       * Why the heartbeat is the *same* frame rather than an SSE comment: a comment does not dispatch
+       * the client's `onmessage`, so it could not reset its idle watchdog — a docker build step with
+       * quiet output then looked like a dead connection. Every frame the client receives is now a
+       * status snapshot it already knows how to read, and the timer below guarantees one arrives well
+       * inside the watchdog window while the deploy runs.
+       */
+      const push = async (force: boolean): Promise<boolean> => {
         const result = await fetchDeployStatus(operationId);
         const logLength = result.log?.length ?? 0;
         const percent = result.percent ?? null;
-        const statusChanged = result.status !== lastStatus;
-        const logChanged = logLength !== lastLogLength;
-        const percentChanged = percent !== lastPercent;
+        const changed = logLength !== lastLogLength || result.status !== lastStatus || percent !== lastPercent;
 
-        if (logChanged) {
-          lastChangeAt = Date.now();
-          lastLogLength = logLength;
-        }
-        if (percentChanged) lastPercent = percent;
-        if (statusChanged) lastStatus = result.status;
+        lastLogLength = logLength;
+        lastStatus = result.status;
+        lastPercent = percent;
+        if (result.startedAt) startedAtMs = new Date(result.startedAt).getTime();
 
-        const isTerminal = result.status !== 'running';
-
-        if (logChanged || statusChanged || percentChanged || isTerminal) {
-          // Tail last 4000 characters so payload stays small while toast and log viewer have recent context.
-          const tail = result.log ? result.log.slice(-DEPLOY_TAIL_LENGTH) : '';
-          sendEvent({
-            status: result.status,
-            contestId: result.contestId,
-            startedAt: result.startedAt,
-            log: tail,
-            fullLength: logLength,
-            percent,
-            error: result.error,
-            warning: result.warning,
-            success: result.success,
-          });
-        }
-
-        if (isTerminal) {
+        if (result.status !== 'running') {
+          send(snapshot(result));
           return true;
         }
 
-        const idleMs = Date.now() - lastChangeAt;
-        if (idleMs > DEPLOY_IDLE_TIMEOUT_MS) {
-          sendEvent({
-            status: 'timeout' as const,
-            contestId: result.contestId,
-            startedAt: result.startedAt,
-            log: result.log ? result.log.slice(-DEPLOY_TAIL_LENGTH) : '',
-            fullLength: logLength,
-            percent,
-            error: `Deploy timed out after ${DEPLOY_IDLE_TIMEOUT_LABEL} without log output.`,
-            warning: result.warning,
-            success: false,
-          });
+        // Why an absolute ceiling on watching and not on the deploy: the operation keeps its process
+        // and its guard (deploy-store settles it when that process exits), so all that ends here is
+        // this connection. The client is told, in the copy it shows for a 'timeout', that the deploy
+        // continues in the background — which is exactly what is happening.
+        if (startedAtMs !== null && Date.now() - startedAtMs > DEPLOY_WALL_TIMEOUT_MS) {
+          // `success: false` because a released watch is not a completed deploy, even though the
+          // operation behind the frame is still healthy and still running.
+          send({ ...snapshot(result), status: 'timeout', success: false });
           return true;
         }
 
+        if (changed || force) send(snapshot(result));
         return false;
       };
 
-      const interval = setInterval(async () => {
+      const tick = async (force: boolean): Promise<void> => {
+        // Skip rather than queue: two overlapping polls would interleave the bookkeeping above, and a
+        // fetch slow enough to overlap is not worth a second one.
+        if (inFlight || closed) return;
+        inFlight = true;
         try {
-          const done = await checkAndPush();
-          if (done) {
-            clearInterval(interval);
-            clearInterval(heartbeat);
+          if (await push(force)) {
+            stopTimers();
             closed = true;
             controller.close();
           }
         } catch {
-          clearInterval(interval);
-          clearInterval(heartbeat);
+          // The stream ends on a failed lookup; the client's EventSource reconnects and tries again.
+          stopTimers();
           if (!closed) {
             closed = true;
             controller.close();
           }
+        } finally {
+          inFlight = false;
         }
-      }, DEPLOY_POLL_MS);
+      };
 
-      const heartbeat = setInterval(sendHeartbeat, DEPLOY_HEARTBEAT_MS);
+      pollTimer = setInterval(() => { void tick(false); }, DEPLOY_POLL_MS);
+      heartbeatTimer = setInterval(() => { void tick(true); }, DEPLOY_HEARTBEAT_MS);
 
-      try {
-        const done = await checkAndPush();
-        if (done) {
-          clearInterval(interval);
-          clearInterval(heartbeat);
-          closed = true;
-          controller.close();
-        }
-      } catch {
-        clearInterval(interval);
-        clearInterval(heartbeat);
-        if (!closed) {
-          closed = true;
-          controller.close();
-        }
-      }
-
+      void tick(false);
     },
     cancel() {
       closed = true;
+      stopTimers();
     },
   });
 
