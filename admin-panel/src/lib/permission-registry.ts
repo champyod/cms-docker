@@ -284,6 +284,10 @@ export const DEFAULT_GROUPS: readonly GroupDefinition[] = [
       'deployment:list',
       'deployment:read',
       'deployment:deploy',
+      // Why: a deploy is only finished once it activates its contest, and activation is gated on
+      // contest:switch (lib/services/contests.ts). Whoever may deploy must therefore be able to
+      // activate, or the deploy succeeds and its activation fails.
+      'contest:switch',
       'resource:list',
       'resource:read',
       'resource:update',
