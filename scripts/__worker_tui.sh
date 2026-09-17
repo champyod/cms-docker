@@ -92,13 +92,20 @@ fleet_save() {  # updates config.toml [worker] with fleet rows, re-runs sync
     [ -n "$gc" ] && [ "$c" != "$gc" ] && fleet_block+="WORKER_SHARD${s}_CPU = \"${c}\"\n"
   done
 
-  # Update config.toml: remove old fleet entries, insert new ones under [worker]
-  python3 - "$toml" <<PYEOF
+  # Update config.toml: remove old fleet entries, insert new ones under [worker].
+  # WHY: fleet rows end in a double quote (WORKER_0 = "0.0.0.0:26000"), so embedding
+  # the block in a Python literal terminated that literal early and broke the deploy.
+  # Pass it as data through the environment (same channel the other scripts use for
+  # values — see __inject_config.sh: "secrets via env, never argv"), and quit the
+  # heredoc so the program is never subject to shell interpolation either.
+  FLEET_BLOCK="$(printf '%b' "$fleet_block")" python3 - "$toml" <<'PYEOF'
+import os
 import re
+import sys
 from pathlib import Path
 
-toml_path = "$toml"
-fleet_text = """$(printf '%b' "$fleet_block")"""
+toml_path = sys.argv[1]
+fleet_text = os.environ.get("FLEET_BLOCK", "")
 
 text = Path(toml_path).read_text()
 lines = text.splitlines()
