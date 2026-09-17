@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { RefreshCw } from 'lucide-react';
-import { readEnvFile, updateEnvFile } from '@/app/actions/env';
+import { readActiveContestId, readEnvFile, updateEnvFile } from '@/app/actions/env';
 import { getAvailableContests } from '@/app/actions/contests';
 import { getContainerContestId } from '@/app/actions/docker';
 import { useDeployContest } from '@/hooks/useDeployContest';
@@ -46,32 +46,31 @@ export function DeploymentsClient() {
     const isDirty = JSON.stringify(globalSettings) !== originalGlobal;
     const hasChangedContest = selectedContestId !== null && selectedContestId !== activeContestId;
 
-    const applyEnvSnapshot = useCallback((envResult: Awaited<ReturnType<typeof readEnvFile>>) => {
-        let actualActiveId: number | null = null;
+    const applyEnvSnapshot = useCallback((envResult: Awaited<ReturnType<typeof readEnvFile>>, activeId: number | null) => {
+        // The active id comes from config.toml (its source of truth); .env.contest only
+        // supplies the remaining per-contest settings fields.
+        setActiveContestId(activeId);
+        setSelectedContestId(activeId);
         if (envResult.success && envResult.config) {
-            const activeId = parseInt(envResult.config.ACTIVE_CONTEST_ID || envResult.config.CONTEST_ID || '0');
-            actualActiveId = activeId > 0 ? activeId : null;
-            setActiveContestId(actualActiveId);
-            setSelectedContestId(actualActiveId);
-
             const globals = { ...envResult.config };
             delete globals.ACTIVE_CONTEST_ID;
             delete globals.CONTEST_ID;
             setGlobalSettings(globals);
             setOriginalGlobal(JSON.stringify(globals));
         }
-        return actualActiveId;
+        return activeId;
     }, []);
 
     const loadData = useCallback(async () => {
         setLoading(true);
-        const [envResult, contestsResult, containerResult] = await Promise.all([
+        const [activeResult, envResult, contestsResult, containerResult] = await Promise.all([
+            readActiveContestId(),
             readEnvFile('.env.contest'),
             getAvailableContests(),
             getContainerContestId()
         ]);
 
-        const actualActiveId = applyEnvSnapshot(envResult);
+        const actualActiveId = applyEnvSnapshot(envResult, activeResult.success ? activeResult.contestId : null);
         setContainerContestId(containerResult.success ? containerResult.contestId : null);
 
         const databaseContests = contestsResult.success ? contestsResult.contests : [];

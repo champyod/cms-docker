@@ -6,8 +6,10 @@ import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
 import { recordAudit } from '@/lib/audit';
 import { validateNotificationEnvUpdates } from '@/lib/discord-webhook';
+import { CONTEST_ID_KEY, readContestId, setContestId } from '@/lib/active-contest';
 
 const ALLOWED_ENV_FILES = new Set(['.env', '.env.contest']);
+const CONFIG_TOML = 'config.toml';
 
 function resolveEnvPath(repoRoot: string, filename: string): string {
   if (!ALLOWED_ENV_FILES.has(filename)) {
@@ -82,19 +84,10 @@ export async function updateEnvFile(filename: string, updates: Record<string, st
 export async function readActiveContestId(): Promise<{ success: true; contestId: number | null } | { success: false; error: string }> {
   await ensurePermission('env:read');
   try {
-    const repoRoot = getRepoRoot();
-    const envPath = path.join(repoRoot, '.env.contest');
-    const content = await fs.readFile(envPath, 'utf-8');
-    
-    // Backward-compatible fallback to legacy CONTEST_ID
-    const matchActive = content.match(/^ACTIVE_CONTEST_ID=(\d+)/m);
-    const matchContest = content.match(/^CONTEST_ID=(\d+)/m);
-    const match = matchActive || matchContest;
-    
-    if (match) {
-      return { success: true, contestId: parseInt(match[1], 10) };
-    }
-    return { success: true, contestId: null };
+    // config.toml is the source of truth; reading the generated .env.contest here made the
+    // display lag the value the panel just wrote and drift from a config sync.
+    const content = await fs.readFile(path.join(getRepoRoot(), CONFIG_TOML), 'utf-8');
+    return { success: true, contestId: readContestId(content) };
   } catch (error) {
     return { success: false, error: (error as Error).message };
   }
@@ -103,28 +96,16 @@ export async function readActiveContestId(): Promise<{ success: true; contestId:
 export async function writeActiveContestId(id: number): Promise<{ success: true } | { success: false; error: string }> {
   await ensurePermission('env:update');
   try {
-    const repoRoot = getRepoRoot();
-    const envPath = path.join(repoRoot, '.env.contest');
-    let content = await fs.readFile(envPath, 'utf-8');
-    
-    if (content.match(/^ACTIVE_CONTEST_ID=/m)) {
-      content = content.replace(/^ACTIVE_CONTEST_ID=.*/m, `ACTIVE_CONTEST_ID=${id}`);
-    } else {
-      content += `\nACTIVE_CONTEST_ID=${id}`;
-    }
-    
-    // Also update CONTEST_ID for docker-compose compatibility
-    if (content.match(/^CONTEST_ID=/m)) {
-      content = content.replace(/^CONTEST_ID=.*/m, `CONTEST_ID=${id}`);
-    } else {
-      content += `\nCONTEST_ID=${id}`;
-    }
-    
-    await fs.writeFile(envPath, content);
+    const tomlPath = path.join(getRepoRoot(), CONFIG_TOML);
+    const content = await fs.readFile(tomlPath, 'utf-8');
+    // Persist to the source only. Reaching the running stack is the deploy path's job
+    // (config sync regenerates .env, then the contest services are recreated), so a sync
+    // can no longer erase this the way a write to the generated .env would be.
+    await fs.writeFile(tomlPath, setContestId(content, id));
     await recordAudit({
       verb: 'env:update',
-      entity: 'env',
-      afterValues: { filename: '.env.contest', changedKeys: ['ACTIVE_CONTEST_ID', 'CONTEST_ID'], contestId: id },
+      entity: 'config',
+      afterValues: { file: CONFIG_TOML, [CONTEST_ID_KEY]: id },
       result: 'success',
     });
     return { success: true };
@@ -139,24 +120,27 @@ export async function migrateFromMultiContest(): Promise<{ success: true; contes
     const repoRoot = getRepoRoot();
     const envPath = path.join(repoRoot, '.env.contest');
     let content = await fs.readFile(envPath, 'utf-8');
-    
+
     const deployConfigMatch = content.match(/^CONTESTS_DEPLOY_CONFIG=(.*)/m);
     if (!deployConfigMatch) {
       return { success: true, contestId: null, migrated: false };
     }
-    
+
     try {
       const deployConfig = JSON.parse(deployConfigMatch[1]);
       if (Array.isArray(deployConfig) && deployConfig.length > 0) {
         const firstContestId = deployConfig[0].id;
         if (typeof firstContestId === 'number') {
           content = content.replace(/^CONTESTS_DEPLOY_CONFIG=.*\n?/m, '');
-          content += `\n# Migrated from multi-contest format\nACTIVE_CONTEST_ID=${firstContestId}\nCONTEST_ID=${firstContestId}\n`;
           await fs.writeFile(envPath, content);
+          // The migrated id belongs in config.toml, not in the generated .env.contest.
+          const tomlPath = path.join(repoRoot, CONFIG_TOML);
+          const tomlContent = await fs.readFile(tomlPath, 'utf-8');
+          await fs.writeFile(tomlPath, setContestId(tomlContent, firstContestId));
           await recordAudit({
             verb: 'env:update',
-            entity: 'env',
-            afterValues: { filename: '.env.contest', changedKeys: ['ACTIVE_CONTEST_ID', 'CONTEST_ID', 'CONTESTS_DEPLOY_CONFIG'], contestId: firstContestId, migrated: true },
+            entity: 'config',
+            afterValues: { file: CONFIG_TOML, [CONTEST_ID_KEY]: firstContestId, removedFrom: 'CONTESTS_DEPLOY_CONFIG' },
             beforeValues: { migratedFrom: 'CONTESTS_DEPLOY_CONFIG' },
             result: 'success',
           });
@@ -165,7 +149,7 @@ export async function migrateFromMultiContest(): Promise<{ success: true; contes
       }
     } catch {
       }
-    
+
     return { success: true, contestId: null, migrated: false };
   } catch (error) {
     return { success: false, error: (error as Error).message };

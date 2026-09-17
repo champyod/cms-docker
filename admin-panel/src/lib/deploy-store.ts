@@ -10,6 +10,7 @@ import { parseDeployPercent, type DeployStatus } from '@/lib/deploy-percent.shar
 import { DEPLOY_IDLE_TIMEOUT_MS, DEPLOY_OPERATION_ID_REGEX, DEPLOY_WALL_TIMEOUT_MS } from '@/lib/constants/deploy';
 import { getRepoRoot } from '@/lib/repo-root';
 import { logToDiscord } from '@/lib/discord-notifier';
+import { readContestId, setContestId } from '@/lib/active-contest';
 import {
   cleanStaleOperations,
   clearActiveOperation,
@@ -27,9 +28,6 @@ const execPromise = util.promisify(exec);
 
 const dockerCompose = ['docker', 'compose', '-f', 'docker-compose.contest.yml', 'up', '-d', '--build', '--force-recreate'];
 const CONFIG_SYNC_COMMAND = 'bash scripts/__config_sync.sh';
-
-// Matches the CONTEST_ID line inside the [contest] section only, keeping any inline comment.
-const CONTEST_ID_LINE_RE = /^(\[contest\][\s\S]*?CONTEST_ID\s*=\s*)(\d+)(.*)$/m;
 
 export type { DeployStatus } from '@/lib/deploy-percent.shared';
 export { parseDeployPercent, DEPLOY_IDLE_TIMEOUT_MS } from '@/lib/deploy-percent.shared';
@@ -57,14 +55,12 @@ const getConfigTomlPath = (): string => path.join(getRepoRoot(), 'config.toml');
 async function readConfigTomlContestId(): Promise<number | null> {
   const content = await fs.readFile(getConfigTomlPath(), 'utf-8').catch(() => null);
   if (content === null) return null;
-  const match = content.match(CONTEST_ID_LINE_RE);
-  return match ? parseInt(match[2], 10) : null;
+  return readContestId(content);
 }
 
 async function updateConfigTomlContestId(contestId: number): Promise<void> {
   const content = await fs.readFile(getConfigTomlPath(), 'utf-8');
-  const updated = content.replace(CONTEST_ID_LINE_RE, (_match, head: string, _old: string, tail: string) => `${head}${contestId}${tail}`);
-  await fs.writeFile(getConfigTomlPath(), updated);
+  await fs.writeFile(getConfigTomlPath(), setContestId(content, contestId));
 }
 
 async function runConfigSync(): Promise<void> {
