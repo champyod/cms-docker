@@ -8,7 +8,7 @@ import { Button } from '@/components/core/Button';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/apiClient';
 import { useConfirm } from '@/hooks/useConfirm';
-import { destructiveConfirm } from '@/lib/confirmation-copy';
+import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 
 interface Dataset {
   id: number;
@@ -139,6 +139,7 @@ export function DatasetsSection({
 export function AttachmentsSection({ attachments, onUpload }: { attachments: Array<{ id: number; filename: string }>; onUpload: () => void }): React.JSX.Element {
   const router = useRouter();
   const confirm = useConfirm();
+  const { destructiveConfirm } = useConfirmationCopy();
 
   const handleDeleteAttachment = async (attachmentId: number): Promise<void> => {
     if (!(await confirm(destructiveConfirm('attachment')))) return;

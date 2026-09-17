@@ -19,7 +19,7 @@ import { TablePaginationControls } from '@/components/core/TablePaginationContro
 import { useConfirm } from '@/hooks/useConfirm';
 import { useTable } from '@/hooks/useTable';
 import { useTableAutoRefresh } from '@/hooks/useTableAutoRefresh';
-import { destructiveConfirm } from '@/lib/confirmation-copy';
+import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import type { UsersPageRow } from '@/lib/prisma-selects';
 
 interface UserListProps {
@@ -54,6 +54,7 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
   const confirm = useConfirm();
+  const { destructiveConfirm } = useConfirmationCopy();
 
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
   const canCreateUsers = hasEffectivePermission(effective, 'user:create');

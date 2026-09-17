@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/core/EmptyState';
 import { apiClient } from '@/lib/apiClient';
 import { readFileAsBase64 } from '@/lib/file-helpers';
 import { useConfirm } from '@/hooks/useConfirm';
-import { destructiveConfirm } from '@/lib/confirmation-copy';
+import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 
 interface Manager {
   id: number;
@@ -32,6 +32,7 @@ export function DatasetManagersTab({
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const confirm = useConfirm();
+  const { destructiveConfirm } = useConfirmationCopy();
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
     const file = e.target.files?.[0];
@@ -54,7 +55,7 @@ export function DatasetManagersTab({
   };
 
   const handleDelete = async (id: number): Promise<void> => {
-    if (!(await confirm(destructiveConfirm('manager file')))) return;
+    if (!(await confirm(destructiveConfirm('managerFile')))) return;
     try {
       const res = await apiClient.delete(`/api/managers/${id}`);
       if (res.success) onReload();

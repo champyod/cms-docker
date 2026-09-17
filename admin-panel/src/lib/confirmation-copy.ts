@@ -5,7 +5,14 @@
  * four different ways, so an admin could not tell a permanent deletion from a reversible edit.
  * Every gate now builds its copy with one of the builders below, which fixes the shape per kind:
  * a short question as the title plus one consequence line as the description.
+ *
+ * Why the builders take a dictionary: the sentences themselves live in `src/dictionaries`, so the
+ * Thai locale reaches a dialog the user has to act on. `buildConfirmationCopy` binds every builder
+ * to one dictionary, and `useConfirmationCopy` performs that binding for client components.
  */
+
+import { interpolate } from '@/lib/interpolate';
+import type { Dictionary } from '@/lib/dictionary';
 
 export const CONFIRMATION_KINDS = ['destructive', 'recoverable', 'operational'] as const;
 
@@ -16,6 +23,17 @@ export const CONFIRMATION_KINDS = ['destructive', 'recoverable', 'operational'] 
  */
 export type ConfirmationKind = (typeof CONFIRMATION_KINDS)[number];
 
+/** A kind/description/label triple as stored in the dictionary. */
+export type ConfirmationText = Dictionary['confirmations']['destructive'];
+
+export type ConfirmationDictionary = Dictionary['confirmations'];
+
+/** Nouns that complete 'Delete this …?', kept as keys so the noun is translated with the sentence. */
+export type DestructiveNoun = keyof ConfirmationDictionary['nouns'];
+export type RecalculateKind = keyof ConfirmationDictionary['recalculate']['types'];
+export type RestartStackKey = keyof ConfirmationDictionary['restartStack']['labels'];
+export type RebuildStackKey = keyof ConfirmationDictionary['rebuildStack']['labels'];
+
 export interface ConfirmationRequest {
   kind: ConfirmationKind;
   title: string;
@@ -23,108 +41,65 @@ export interface ConfirmationRequest {
   confirmLabel: string;
 }
 
-/** The one sentence every irreversible confirmation must end with. */
-export const IRREVERSIBLE_CONSEQUENCE = 'This cannot be undone.';
+/** Every confirmation the panel can ask, bound to one dictionary. */
+export interface ConfirmationCopy {
+  destructiveConfirm: (noun: DestructiveNoun) => ConfirmationRequest;
+  removeParticipantConfirm: () => ConfirmationRequest;
+  removeTaskFromContestConfirm: () => ConfirmationRequest;
+  markTestUserConfirm: () => ConfirmationRequest;
+  recalculateSubmissionConfirm: (type: RecalculateKind) => ConfirmationRequest;
+  fullServerUpdateConfirm: () => ConfirmationRequest;
+  restartStackConfirm: (stack: RestartStackKey) => ConfirmationRequest;
+  pullImagesConfirm: () => ConfirmationRequest;
+  rebuildStackConfirm: (stack: RebuildStackKey) => ConfirmationRequest;
+  manualBackupConfirm: () => ConfirmationRequest;
+}
 
-export type RecalculateKind = 'score' | 'evaluation' | 'full';
-
-/**
- * Deletion of one record. `noun` completes both the question and the consequence, which is what
- * keeps 'Delete this team?' and 'Delete this admin?' reading identically.
- */
-export function destructiveConfirm(noun: string): ConfirmationRequest {
+function request(
+  kind: ConfirmationKind,
+  text: ConfirmationText,
+  values: Record<string, string> = {},
+): ConfirmationRequest {
   return {
-    kind: 'destructive',
-    title: `Delete this ${noun}?`,
-    description: `This permanently deletes the ${noun}. ${IRREVERSIBLE_CONSEQUENCE}`,
-    confirmLabel: `Delete ${noun}`,
+    kind,
+    title: interpolate(text.title, values),
+    description: interpolate(text.description, values),
+    confirmLabel: interpolate(text.confirmLabel, values),
   };
 }
 
-/** Removing a participation destroys the participant's entry in the contest; it is a deletion too. */
-export function removeParticipantConfirm(): ConfirmationRequest {
+/** Binds the confirmation builders to one dictionary. */
+export function buildConfirmationCopy(copy: ConfirmationDictionary): ConfirmationCopy {
   return {
-    kind: 'destructive',
-    title: 'Remove this participant?',
-    description: `This permanently removes the participant's entry from this contest. ${IRREVERSIBLE_CONSEQUENCE}`,
-    confirmLabel: 'Remove participant',
-  };
-}
+    /**
+     * Deletion of one record. `noun` completes both the question and the consequence, which is what
+     * keeps 'Delete this team?' and 'Delete this admin?' reading identically.
+     */
+    destructiveConfirm: (noun) =>
+      request('destructive', copy.destructive, { noun: copy.nouns[noun] }),
 
-/** Unassigns the task (contest_id = null); the task itself survives. */
-export function removeTaskFromContestConfirm(): ConfirmationRequest {
-  return {
-    kind: 'recoverable',
-    title: 'Remove this task from the contest?',
-    description: 'The task is unassigned and is not deleted; it can be added to the contest again.',
-    confirmLabel: 'Remove task',
-  };
-}
+    /** Removing a participation destroys the participant's entry in the contest; it is a deletion too. */
+    removeParticipantConfirm: () => request('destructive', copy.removeParticipant),
 
-/** Writes the hidden and unrestricted flags, both of which stay editable in the participation settings. */
-export function markTestUserConfirm(): ConfirmationRequest {
-  return {
-    kind: 'recoverable',
-    title: 'Mark this user as a test user?',
-    description:
-      'The participant becomes hidden and unrestricted. Both flags can be changed back in the participation settings.',
-    confirmLabel: 'Mark as test user',
-  };
-}
+    /** Unassigns the task (contest_id = null); the task itself survives. */
+    removeTaskFromContestConfirm: () => request('recoverable', copy.removeTaskFromContest),
 
-export function recalculateSubmissionConfirm(type: RecalculateKind): ConfirmationRequest {
-  return {
-    kind: 'operational',
-    title: `Recalculate this submission (${type})?`,
-    description: 'Current results are cleared and recomputed from the submission, which is kept.',
-    confirmLabel: 'Recalculate',
-  };
-}
+    /** Writes the hidden and unrestricted flags, both of which stay editable in the participation settings. */
+    markTestUserConfirm: () => request('recoverable', copy.markTestUser),
 
-export function fullServerUpdateConfirm(): ConfirmationRequest {
-  return {
-    kind: 'operational',
-    title: 'Run a full server update?',
-    description:
-      'This pulls the latest images, restarts all services and updates the database schema. The server is unavailable for a few minutes.',
-    confirmLabel: 'Run update',
-  };
-}
+    recalculateSubmissionConfirm: (type) =>
+      request('operational', copy.recalculate, { type: copy.recalculate.types[type] }),
 
-export function restartStackConfirm(label: string): ConfirmationRequest {
-  return {
-    kind: 'operational',
-    title: `Restart ${label}?`,
-    description: 'The affected services restart and are unavailable until they come back up.',
-    confirmLabel: 'Restart',
-  };
-}
+    fullServerUpdateConfirm: () => request('operational', copy.fullServerUpdate),
 
-export function pullImagesConfirm(): ConfirmationRequest {
-  return {
-    kind: 'operational',
-    title: 'Pull the latest images?',
-    description:
-      'Images are downloaded from the registry without restarting the running services. This may take several minutes.',
-    confirmLabel: 'Pull images',
-  };
-}
+    restartStackConfirm: (stack) =>
+      request('operational', copy.restartStack, { label: copy.restartStack.labels[stack] }),
 
-export function rebuildStackConfirm(label: string): ConfirmationRequest {
-  return {
-    kind: 'operational',
-    title: `Rebuild ${label} images from source?`,
-    description:
-      'Images are rebuilt from the current source without restarting the running services. This may take 5-10 minutes.',
-    confirmLabel: 'Rebuild images',
-  };
-}
+    pullImagesConfirm: () => request('operational', copy.pullImages),
 
-export function manualBackupConfirm(): ConfirmationRequest {
-  return {
-    kind: 'operational',
-    title: 'Trigger a manual backup now?',
-    description: 'All submissions are backed up in the background; the server keeps running.',
-    confirmLabel: 'Trigger backup',
+    rebuildStackConfirm: (stack) =>
+      request('operational', copy.rebuildStack, { label: copy.rebuildStack.labels[stack] }),
+
+    manualBackupConfirm: () => request('operational', copy.manualBackup),
   };
 }

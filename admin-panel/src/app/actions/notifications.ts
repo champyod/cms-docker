@@ -7,6 +7,8 @@ import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
 import { recordAudit } from '@/lib/audit';
 import { readEnvFile, updateEnvFile } from '@/app/actions/env';
+import { getDictionary } from '@/i18n';
+import { interpolate } from '@/lib/interpolate';
 import {
   buildDiscordAlertPayload,
   postDiscordPayload,
@@ -62,9 +64,13 @@ export async function getDiscordNotificationSettings() {
  * Persists the webhook settings to config.toml (so `./cms config sync` keeps them) and to
  * .env (so the next container start picks them up immediately). Invalid values are rejected
  * rather than stored: a wrong URL silently disables every alert.
+ *
+ * `locale` comes from the calling panel page so the returned message is in the admin's language;
+ * an unknown locale falls back to English inside `getDictionary`.
  */
-export async function saveDiscordNotificationSettings(input: DiscordNotificationInput) {
+export async function saveDiscordNotificationSettings(input: DiscordNotificationInput, locale: string) {
   await ensurePermission('env:update');
+  const discordToasts = (await getDictionary(locale)).toasts.discord;
 
   const webhook = validateDiscordWebhookUrl(input.webhookUrl);
   if (!webhook.ok) {
@@ -80,7 +86,7 @@ export async function saveDiscordNotificationSettings(input: DiscordNotification
     if (configToml === null) {
       return {
         success: false as const,
-        error: `Could not update ${CONFIG_TOML} — run './cms config sync' once so the value has a source of truth, then retry.`,
+        error: interpolate(discordToasts.configTomlMissing, { configToml: CONFIG_TOML }),
       };
     }
 
@@ -99,7 +105,11 @@ export async function saveDiscordNotificationSettings(input: DiscordNotification
     if (!envResult.success) {
       return {
         success: false as const,
-        error: `${CONFIG_TOML} was updated, but writing ${ENV_FILE} failed: ${envResult.error}`,
+        error: interpolate(discordToasts.envWriteFailed, {
+          configToml: CONFIG_TOML,
+          envFile: ENV_FILE,
+          error: envResult.error,
+        }),
       };
     }
 
@@ -126,8 +136,9 @@ export async function saveDiscordNotificationSettings(input: DiscordNotification
  * Posts a real alert through the same payload shape the monitor sends and reports the HTTP
  * result, so an operator can prove delivery without waiting for an incident.
  */
-export async function sendTestDiscordAlert(input?: Partial<DiscordNotificationInput>) {
+export async function sendTestDiscordAlert(input: Partial<DiscordNotificationInput> | undefined, locale: string) {
   await ensurePermission('monitor:test');
+  const discordToasts = (await getDictionary(locale)).toasts.discord;
 
   const suppliedUrl = input?.webhookUrl ?? '';
   let targetUrl = suppliedUrl.trim();
@@ -144,7 +155,7 @@ export async function sendTestDiscordAlert(input?: Partial<DiscordNotificationIn
   if (webhook.value === '') {
     return {
       success: false as const,
-      error: 'No webhook URL to test — enter one and save it, or set DISCORD_WEBHOOK_URL in config.toml [infra].',
+      error: discordToasts.noWebhookUrl,
       status: 0,
     };
   }
@@ -156,16 +167,15 @@ export async function sendTestDiscordAlert(input?: Partial<DiscordNotificationIn
   }
 
   const payload = buildDiscordAlertPayload({
-    title: 'CMS Alert Test',
-    description:
-      'Test alert sent from the admin panel. Delivery is working — monitor alerts (CPU, memory, disk and container events) will arrive here.',
+    title: discordToasts.testAlertTitle,
+    description: discordToasts.testAlertDescription,
     roleId: role.value,
     footerText: 'CMS Admin Panel',
   });
 
   const delivery = await postDiscordPayload(webhook.value, payload);
   if (!delivery.success) {
-    return { success: false as const, error: delivery.error ?? 'Delivery failed', status: delivery.status };
+    return { success: false as const, error: delivery.error ?? discordToasts.deliveryFailed, status: delivery.status };
   }
   return { success: true as const, status: delivery.status };
 }

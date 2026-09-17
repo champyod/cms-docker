@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { EmptyState } from '@/components/core/EmptyState';
 import { apiClient } from '@/lib/apiClient';
 import { useConfirm } from '@/hooks/useConfirm';
-import { destructiveConfirm } from '@/lib/confirmation-copy';
+import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import { cn } from '@/lib/utils';
 
 interface TaskDetailConfigProps {
@@ -82,6 +82,7 @@ function formatDate(iso: string | null | undefined): string {
 export function StatementsSection({ statements, expanded, onToggle, onUpload }: StatementsSectionProps): React.JSX.Element {
   const router = useRouter();
   const confirm = useConfirm();
+  const { destructiveConfirm } = useConfirmationCopy();
   const [activeLanguage, setActiveLanguage] = useState<string | null>(null);
 
   const handleDeleteStatement = async (statementId: number): Promise<void> => {

@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/apiClient';
 import { ROW_SELECTED_CLASSES } from '@/hooks/useShortcuts';
 import { useConfirm } from '@/hooks/useConfirm';
-import { destructiveConfirm } from '@/lib/confirmation-copy';
+import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 
 function formatDate(date: Date): string {
   return new Date(date).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -36,6 +36,7 @@ interface RowProps {
 export function ContestTableRow({ contest, locale, isSuperAdmin, canManage, onSetActive }: RowProps) {
   const router = useRouter();
   const confirm = useConfirm();
+  const { destructiveConfirm } = useConfirmationCopy();
   const status = getStatus(contest.start, contest.stop);
   const isActive = contest.is_active === true;
 

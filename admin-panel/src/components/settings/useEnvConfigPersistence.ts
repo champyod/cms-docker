@@ -2,8 +2,13 @@
 
 import { updateConfigTomlValues } from '@/app/actions/env';
 import { restartServices } from '@/app/actions/services';
+import { useDictionary } from '@/hooks/useDictionary';
+import type { Dictionary } from '@/lib/dictionary';
+import { interpolate } from '@/lib/interpolate';
 import { EnvFilesData, collectRelevantUpdates } from './envConfigSections';
 import { toast } from 'sonner';
+
+type EnvConfigToasts = Dictionary['toasts']['envConfig'];
 
 interface PersistenceDeps {
   data: EnvFilesData;
@@ -21,12 +26,13 @@ async function saveFileUpdates(
   filename: string,
   data: EnvFilesData,
   setOriginalData: PersistenceDeps['setOriginalData'],
+  toasts: EnvConfigToasts,
 ): Promise<boolean> {
   const relevantUpdates = collectRelevantUpdates(filename, data);
   const result = await updateConfigTomlValues(relevantUpdates);
 
   if (!result.success) {
-    toast.error(`Failed to save ${filename}: ` + result.error);
+    toast.error(interpolate(toasts.saveFailed, { filename, error: result.error }));
     return false;
   }
 
@@ -45,33 +51,35 @@ async function saveFileUpdates(
 async function restartAffectedServices(
   requiredRestarts: string[],
   clearRequiredRestarts: () => void,
+  toasts: EnvConfigToasts,
 ): Promise<void> {
   const restartRes = await restartServices('custom', requiredRestarts);
   if (restartRes.success) {
-    toast.success(`Saved and restarted: ${requiredRestarts.join(', ')}`);
+    toast.success(interpolate(toasts.restarted, { services: requiredRestarts.join(', ') }));
     clearRequiredRestarts();
   } else {
     // Partial success: the file was written, so the operator must hear both facts.
-    toast.warning('Saved, but failed to restart: ' + restartRes.error);
+    toast.warning(interpolate(toasts.restartFailed, { error: restartRes.error }));
   }
 }
 
 export function useEnvConfigPersistence(deps: PersistenceDeps): EnvConfigPersistence {
   const { data, setOriginalData, setSaving, requiredRestarts, clearRequiredRestarts } = deps;
+  const toasts = useDictionary().toasts.envConfig;
 
   const persistChanges = async (filename: string, shouldRestart: boolean = false): Promise<void> => {
     setSaving(true);
     try {
-      const saved = await saveFileUpdates(filename, data, setOriginalData);
+      const saved = await saveFileUpdates(filename, data, setOriginalData, toasts);
       if (!saved) return;
 
       if (shouldRestart && requiredRestarts.length > 0) {
-        await restartAffectedServices(requiredRestarts, clearRequiredRestarts);
+        await restartAffectedServices(requiredRestarts, clearRequiredRestarts, toasts);
       } else {
-        toast.success(`Saved ${filename} successfully!`);
+        toast.success(interpolate(toasts.saved, { filename }));
       }
     } catch {
-      toast.error('An error occurred while saving.');
+      toast.error(toasts.unexpectedError);
     } finally {
       setSaving(false);
     }

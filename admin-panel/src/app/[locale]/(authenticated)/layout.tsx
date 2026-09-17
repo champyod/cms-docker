@@ -9,6 +9,9 @@ import { PageBackground } from "@/components/core/PageBackground";
 import { Stack } from "@/components/core/Layout";
 import { ShortcutLayer } from "@/components/layout/ShortcutOverlay";
 import { DeployContestProvider } from "@/components/providers/DeployContestProvider";
+import { DictionaryProvider } from "@/components/providers/DictionaryProvider";
+import { ConfirmProvider } from "@/components/providers/ConfirmProvider";
+import { getDictionary } from "@/i18n";
 
 export default async function AuthenticatedLayout({
   children,
@@ -34,27 +37,35 @@ export default async function AuthenticatedLayout({
 
   const sidebarExpanded = (await cookies()).get(SIDEBAR_STORAGE_KEY)?.value !== '0';
 
+  // Why: loaded here rather than in each page so the dialog and toast copy every client component
+  // renders shares one source, and the Thai locale reaches strings the user must act on.
+  const dict = await getDictionary(locale);
+
   // Why: Sidebar must reflect current database permissions not stale token claims
   const freshPermissions = await getFreshPermissions(session.userId);
   const permissionKeys: readonly string[] = freshPermissions ? Array.from(freshPermissions) : [];
 
   return (
-    <PageBackground className="flex h-screen overflow-hidden">
-      <Sidebar
-        className="z-20 hidden md:flex"
-        locale={locale}
-        permissionKeys={permissionKeys}
-        initialExpanded={sidebarExpanded}
-      />
-      <Stack as="main" className="flex-1 min-h-0 relative overflow-hidden" gap={0}>
-        <Header className="z-10" username={session.username} permissionKeys={permissionKeys} />
+    <DictionaryProvider dict={dict}>
+      <ConfirmProvider>
+        <PageBackground className="flex h-screen overflow-hidden">
+          <Sidebar
+            className="z-20 hidden md:flex"
+            locale={locale}
+            permissionKeys={permissionKeys}
+            initialExpanded={sidebarExpanded}
+          />
+          <Stack as="main" className="flex-1 min-h-0 relative overflow-hidden" gap={0}>
+            <Header className="z-10" username={session.username} permissionKeys={permissionKeys} />
 
-        <div className="flex-1 overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8 lg:pb-8 z-10 scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20">
-          <DeployContestProvider>{children}</DeployContestProvider>
-        </div>
-      </Stack>
-      <MobileNav locale={locale} permissionKeys={permissionKeys} />
-      <ShortcutLayer />
-    </PageBackground>
+            <div className="flex-1 overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8 lg:pb-8 z-10 scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20">
+              <DeployContestProvider>{children}</DeployContestProvider>
+            </div>
+          </Stack>
+          <MobileNav locale={locale} permissionKeys={permissionKeys} />
+          <ShortcutLayer />
+        </PageBackground>
+      </ConfirmProvider>
+    </DictionaryProvider>
   );
 }

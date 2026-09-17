@@ -154,5 +154,164 @@
     "title": "CMS Documentation",
     "subtitle": "Comprehensive guide to the Contest Management System.",
     "officialDocs": "CMS Official Docs"
+  },
+  "confirmations": {
+    "cancel": "Cancel",
+    "captions": {
+      "destructive": "Irreversible",
+      "recoverable": "Reversible",
+      "operational": "Service impact"
+    },
+    "nouns": {
+      "user": "user",
+      "contest": "contest",
+      "admin": "admin",
+      "announcement": "announcement",
+      "team": "team",
+      "task": "task",
+      "dataset": "dataset",
+      "testcase": "testcase",
+      "statement": "statement",
+      "managerFile": "manager file",
+      "attachment": "attachment"
+    },
+    "destructive": {
+      "title": "Delete this {noun}?",
+      "description": "This permanently deletes the {noun}. This cannot be undone.",
+      "confirmLabel": "Delete {noun}"
+    },
+    "removeParticipant": {
+      "title": "Remove this participant?",
+      "description": "This permanently removes the participant's entry from this contest. This cannot be undone.",
+      "confirmLabel": "Remove participant"
+    },
+    "removeTaskFromContest": {
+      "title": "Remove this task from the contest?",
+      "description": "The task is unassigned and is not deleted; it can be added to the contest again.",
+      "confirmLabel": "Remove task"
+    },
+    "markTestUser": {
+      "title": "Mark this user as a test user?",
+      "description": "The participant becomes hidden and unrestricted. Both flags can be changed back in the participation settings.",
+      "confirmLabel": "Mark as test user"
+    },
+    "recalculate": {
+      "title": "Recalculate this submission ({type})?",
+      "description": "Current results are cleared and recomputed from the submission, which is kept.",
+      "confirmLabel": "Recalculate",
+      "types": {
+        "score": "score",
+        "evaluation": "evaluation",
+        "full": "full"
+      }
+    },
+    "fullServerUpdate": {
+      "title": "Run a full server update?",
+      "description": "This pulls the latest images, restarts all services and updates the database schema. The server is unavailable for a few minutes.",
+      "confirmLabel": "Run update"
+    },
+    "restartStack": {
+      "title": "Restart {label}?",
+      "description": "The affected services restart and are unavailable until they come back up.",
+      "confirmLabel": "Restart",
+      "labels": {
+        "core": "Core Stack",
+        "admin": "Admin Stack",
+        "worker": "Worker Stack",
+        "all": "All Services"
+      }
+    },
+    "pullImages": {
+      "title": "Pull the latest images?",
+      "description": "Images are downloaded from the registry without restarting the running services. This may take several minutes.",
+      "confirmLabel": "Pull images"
+    },
+    "rebuildStack": {
+      "title": "Rebuild {label} images from source?",
+      "description": "Images are rebuilt from the current source without restarting the running services. This may take 5-10 minutes.",
+      "confirmLabel": "Rebuild images",
+      "labels": {
+        "core": "Core",
+        "admin": "Admin",
+        "worker": "Worker",
+        "all": "All"
+      }
+    },
+    "manualBackup": {
+      "title": "Trigger a manual backup now?",
+      "description": "All submissions are backed up in the background; the server keeps running.",
+      "confirmLabel": "Trigger backup"
+    }
+  },
+  "toasts": {
+    "deploy": {
+      "progressMessage": "Deploying contest #{contestId} — {percent}% pulling",
+      "progressStatusMessage": "Deploying contest #{contestId} — {status}",
+      "progressDescription": "Progress {percent}% pulling",
+      "waitingDescription": "Waiting for build output...",
+      "startedTitle": "Deploying contest #{contestId}",
+      "startingDescription": "Starting deployment...",
+      "alreadyRunningTitle": "Deploy already running",
+      "alreadyRunningDescription": "Another deployment is in progress.",
+      "startFailedTitle": "Deploy failed to start",
+      "startFailedDescription": "Could not initiate deployment.",
+      "timedOutTitle": "Deploy timed out",
+      "timedOutDescription": "No log output for 5 minutes.",
+      "completedTitle": "Contest deployed",
+      "completedDescription": "Contest #{contestId} is now active.",
+      "failedTitle": "Deploy failed",
+      "failedDescription": "Deployment did not complete.",
+      "notFoundTitle": "Deploy not found",
+      "notFoundDescription": "Operation unknown."
+    },
+    "maintenance": {
+      "saveFailed": "Failed to save: {error}",
+      "notificationSaveFailed": "Notification settings not saved: {error}",
+      "saved": "Maintenance settings saved successfully!",
+      "backupTriggered": "Backup triggered in background. Check Discord for status.",
+      "failed": "Failed: {error}",
+      "notificationsSaved": "Notification settings saved to config.toml and .env.",
+      "notificationsSavedMonitorRecreated": "Notification settings saved and the monitor was recreated.",
+      "monitorRestartFailed": "Settings saved, but the monitor restart failed: {error}",
+      "testAlertDelivered": "Test alert delivered (HTTP {status}).",
+      "testAlertFailedFallback": "The test alert failed.",
+      "testAlertFailed": "Test alert failed: {message}"
+    },
+    "serviceControl": {
+      "actionFailed": "Error: {error}",
+      "updateFailed": "Failed to trigger update",
+      "restartFailed": "Failed to restart",
+      "pullFailed": "Failed to pull images",
+      "rebuildFailed": "Failed to rebuild"
+    },
+    "envConfig": {
+      "saveFailed": "Failed to save {filename}: {error}",
+      "restarted": "Saved and restarted: {services}",
+      "restartFailed": "Saved, but failed to restart: {error}",
+      "saved": "Saved {filename} successfully!",
+      "unexpectedError": "An error occurred while saving."
+    },
+    "monitor": {
+      "errorTitle": "Error",
+      "urlRequiredDescription": "URL is required",
+      "addedTitle": "Added",
+      "addedDescription": "Monitor target added",
+      "failureDescription": "Failed",
+      "removedTitle": "Removed",
+      "removedDescription": "Target removed",
+      "testOkTitle": "OK",
+      "testMismatchTitle": "Mismatch",
+      "testFailedTitle": "Test Failed",
+      "connectionErrorDescription": "Connection error",
+      "resultDescription": "HTTP {status} (expected {expectedStatus}) — {latency}ms"
+    },
+    "discord": {
+      "testAlertTitle": "CMS Alert Test",
+      "testAlertDescription": "Test alert sent from the admin panel. Delivery is working — monitor alerts (CPU, memory, disk and container events) will arrive here.",
+      "configTomlMissing": "Could not update {configToml} — run './cms config sync' once so the value has a source of truth, then retry.",
+      "envWriteFailed": "{configToml} was updated, but writing {envFile} failed: {error}",
+      "noWebhookUrl": "No webhook URL to test — enter one and save it, or set DISCORD_WEBHOOK_URL in config.toml [infra].",
+      "deliveryFailed": "Delivery failed"
+    }
   }
 }

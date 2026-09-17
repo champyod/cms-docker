@@ -1,11 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { Card } from '@/components/core/Card';
 import { readConfigTomlValues, updateConfigTomlValues } from '@/app/actions/env';
 import { buildConfigTomlUpdates, type ConfigTomlKey } from '@/lib/config-toml';
-import { manualBackupConfirm } from '@/lib/confirmation-copy';
+import { interpolate } from '@/lib/interpolate';
+import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import { useConfirm } from '@/hooks/useConfirm';
+import { useDictionary } from '@/hooks/useDictionary';
 import { triggerManualBackup, restartServices } from '@/app/actions/services';
 import {
   getDiscordNotificationSettings,
@@ -62,7 +65,12 @@ function describeDiscordState(settings: DiscordSettings): string {
 }
 
 export default function MaintenanceClient() {
+  const toasts = useDictionary().toasts.maintenance;
   const confirm = useConfirm();
+  const { manualBackupConfirm } = useConfirmationCopy();
+  // Why from the pathname: server actions localise their own messages, and a client component has no
+  // other way to tell them which locale the admin is reading (same pattern the lists already use).
+  const locale = usePathname().split('/')[1] || 'en';
   const [data, setData] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -101,7 +109,7 @@ export default function MaintenanceClient() {
     try {
       const backupResult = await updateConfigTomlValues(buildConfigTomlUpdates(data, BACKUP_POLICY_KEYS));
       if (!backupResult.success) {
-        toast.error('Failed to save: ' + backupResult.error);
+        toast.error(interpolate(toasts.saveFailed, { error: backupResult.error }));
         return;
       }
       // The webhook goes through its own action: unlike a backup policy it is validated,
@@ -109,12 +117,12 @@ export default function MaintenanceClient() {
       const notificationResult = await saveDiscordNotificationSettings({
         webhookUrl: data.DISCORD_WEBHOOK_URL ?? '',
         roleId: data.DISCORD_ROLE_ID ?? '',
-      });
+      }, locale);
       if (!notificationResult.success) {
-        toast.error('Notification settings not saved: ' + notificationResult.error);
+        toast.error(interpolate(toasts.notificationSaveFailed, { error: notificationResult.error }));
         return;
       }
-      toast.success('Maintenance settings saved successfully!');
+      toast.success(toasts.saved);
     } finally {
       setSaving(false);
     }
@@ -125,9 +133,9 @@ export default function MaintenanceClient() {
     setBackingUp(true);
     const result = await triggerManualBackup();
     if (result.success) {
-      toast.success('Backup triggered in background. Check Discord for status.');
+      toast.success(toasts.backupTriggered);
     } else {
-      toast.error('Failed: ' + result.error);
+      toast.error(interpolate(toasts.failed, { error: result.error }));
     }
     setBackingUp(false);
   };
@@ -138,24 +146,24 @@ export default function MaintenanceClient() {
       const result = await saveDiscordNotificationSettings({
         webhookUrl: data.DISCORD_WEBHOOK_URL ?? '',
         roleId: data.DISCORD_ROLE_ID ?? '',
-      });
+      }, locale);
       if (!result.success) {
         setDiscordError(result.error);
-        toast.error('Notification settings not saved: ' + result.error);
+        toast.error(interpolate(toasts.notificationSaveFailed, { error: result.error }));
         return;
       }
       setDiscordError('');
       await loadDiscordSettings();
       if (!applyToMonitor) {
-        toast.success('Notification settings saved to config.toml and .env.');
+        toast.success(toasts.notificationsSaved);
         return;
       }
       const restart = await restartServices('custom', ['monitor']);
       if (restart.success) {
-        toast.success('Notification settings saved and the monitor was recreated.');
+        toast.success(toasts.notificationsSavedMonitorRecreated);
       } else {
         // Partial success: the settings were written, so the operator must hear both facts.
-        toast.warning('Settings saved, but the monitor restart failed: ' + restart.error);
+        toast.warning(interpolate(toasts.monitorRestartFailed, { error: restart.error }));
       }
     } finally {
       setDiscordSaving(false);
@@ -168,14 +176,14 @@ export default function MaintenanceClient() {
       const result = await sendTestDiscordAlert({
         webhookUrl: data.DISCORD_WEBHOOK_URL ?? '',
         roleId: data.DISCORD_ROLE_ID ?? '',
-      });
+      }, locale);
       if (result.success) {
-        toast.success(`Test alert delivered (HTTP ${result.status}).`);
+        toast.success(interpolate(toasts.testAlertDelivered, { status: result.status }));
         return;
       }
-      const message = result.error ?? 'The test alert failed.';
+      const message = result.error ?? toasts.testAlertFailedFallback;
       setDiscordError(message);
-      toast.error('Test alert failed: ' + message);
+      toast.error(interpolate(toasts.testAlertFailed, { message }));
     } finally {
       setDiscordTesting(false);
     }

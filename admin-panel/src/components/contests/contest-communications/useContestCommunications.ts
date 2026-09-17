@@ -5,12 +5,13 @@ import { getAnnouncements, createAnnouncement, deleteAnnouncement } from '@/app/
 import { getQuestions, replyToQuestion, ignoreQuestion, unignoreQuestion } from '@/app/actions/questions';
 import { getRanking } from '@/app/actions/ranking';
 import { useConfirm } from '@/hooks/useConfirm';
-import { destructiveConfirm } from '@/lib/confirmation-copy';
+import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 
 export type CommTab = 'announcements' | 'questions' | 'ranking';
 
 export function useContestCommunications(contestId: number, adminId: number) {
   const confirm = useConfirm();
+  const { destructiveConfirm } = useConfirmationCopy();
   const [activeTab, setActiveTab] = useState<CommTab>('announcements');
   const [announcements, setAnnouncements] = useState<unknown[]>([]);
   const [questions, setQuestions] = useState<unknown[]>([]);

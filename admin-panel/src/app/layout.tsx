@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
-import { ConfirmProvider } from '@/components/providers/ConfirmProvider';
 import { Toaster } from '@/components/ui/sonner';
 import { NO_FLASH_THEME_SCRIPT } from '@/lib/theme';
 import '@fontsource/chakra-petch/400.css';
@@ -39,7 +38,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: NO_FLASH_THEME_SCRIPT }} />
       </head>
       <body className="font-sans antialiased">
-        <ConfirmProvider>{children}</ConfirmProvider>
+        {children}
         {/* Why: 5000ms is the admin panel's long-standing toast lifetime, kept as the single default now that sonner is the only system. */}
         <Toaster richColors position="bottom-right" closeButton duration={5000} />
       </body>

@@ -154,5 +154,164 @@
     "title": "เอกสาร CMS",
     "subtitle": "คู่มือครอบคลุมสำหรับระบบจัดการการแข่งขัน",
     "officialDocs": "เอกสารทางการ CMS"
+  },
+  "confirmations": {
+    "cancel": "ยกเลิก",
+    "captions": {
+      "destructive": "ย้อนกลับไม่ได้",
+      "recoverable": "ย้อนกลับได้",
+      "operational": "กระทบบริการ"
+    },
+    "nouns": {
+      "user": "ผู้ใช้",
+      "contest": "การแข่งขัน",
+      "admin": "ผู้ดูแลระบบ",
+      "announcement": "ประกาศ",
+      "team": "ทีม",
+      "task": "งาน",
+      "dataset": "ชุดข้อมูล",
+      "testcase": "กรณีทดสอบ",
+      "statement": "คำชี้แจง",
+      "managerFile": "ไฟล์ตัวจัดการ",
+      "attachment": "ไฟล์แนบ"
+    },
+    "destructive": {
+      "title": "ลบ{noun}นี้หรือไม่?",
+      "description": "การดำเนินการนี้จะลบ{noun}อย่างถาวร ไม่สามารถย้อนกลับได้",
+      "confirmLabel": "ลบ{noun}"
+    },
+    "removeParticipant": {
+      "title": "นำผู้เข้าร่วมรายนี้ออกหรือไม่?",
+      "description": "การดำเนินการนี้จะนำรายการของผู้เข้าร่วมออกจากการแข่งขันนี้อย่างถาวร ไม่สามารถย้อนกลับได้",
+      "confirmLabel": "นำผู้เข้าร่วมออก"
+    },
+    "removeTaskFromContest": {
+      "title": "นำงานนี้ออกจากการแข่งขันหรือไม่?",
+      "description": "งานจะถูกยกเลิกการเชื่อมโยงกับโจทย์และไม่ถูกลบ จึงสามารถเพิ่มกลับเข้าสู่การแข่งขันได้อีกครั้ง",
+      "confirmLabel": "นำงานออก"
+    },
+    "markTestUser": {
+      "title": "ทำเครื่องหมายผู้ใช้นี้เป็นผู้ใช้ทดสอบหรือไม่?",
+      "description": "ผู้เข้าร่วมจะถูกซ่อนและไม่มีข้อจำกัด ทั้งสองสถานะเปลี่ยนกลับได้ในการตั้งค่าผู้เข้าร่วม",
+      "confirmLabel": "ทำเครื่องหมายเป็นผู้ใช้ทดสอบ"
+    },
+    "recalculate": {
+      "title": "คำนวณผลการส่งคำตอบนี้ใหม่ ({type}) หรือไม่?",
+      "description": "ผลลัพธ์ปัจจุบันจะถูกล้างและคำนวณใหม่จากคำตอบที่ยังคงเก็บไว้",
+      "confirmLabel": "คำนวณใหม่",
+      "types": {
+        "score": "คะแนน",
+        "evaluation": "การประเมิน",
+        "full": "ทั้งหมด"
+      }
+    },
+    "fullServerUpdate": {
+      "title": "อัปเดตเซิร์ฟเวอร์แบบเต็มรูปแบบหรือไม่?",
+      "description": "ระบบจะดึงอิมเมจล่าสุด รีสตาร์ทบริการทั้งหมด และอัปเดตโครงสร้างฐานข้อมูล เซิร์ฟเวอร์จะไม่พร้อมใช้งานเป็นเวลาหลายนาที",
+      "confirmLabel": "อัปเดต"
+    },
+    "restartStack": {
+      "title": "รีสตาร์ท{label}หรือไม่?",
+      "description": "บริการที่เกี่ยวข้องจะรีสตาร์ทและไม่พร้อมใช้งานจนกว่าจะกลับมาทำงาน",
+      "confirmLabel": "รีสตาร์ท",
+      "labels": {
+        "core": "สแตกหลัก",
+        "admin": "สแตกผู้ดูแลระบบ",
+        "worker": "สแตกเวิร์กเกอร์",
+        "all": "บริการทั้งหมด"
+      }
+    },
+    "pullImages": {
+      "title": "ดึงอิมเมจล่าสุดหรือไม่?",
+      "description": "อิมเมจจะถูกดาวน์โหลดจาก registry โดยไม่รีสตาร์ทบริการที่กำลังทำงาน อาจใช้เวลาหลายนาที",
+      "confirmLabel": "ดึงอิมเมจ"
+    },
+    "rebuildStack": {
+      "title": "สร้างอิมเมจ {label} ใหม่จากซอร์สหรือไม่?",
+      "description": "อิมเมจจะถูกสร้างใหม่จากซอร์สปัจจุบันโดยไม่รีสตาร์ทบริการที่กำลังทำงาน อาจใช้เวลา 5-10 นาที",
+      "confirmLabel": "สร้างอิมเมจใหม่",
+      "labels": {
+        "core": "หลัก",
+        "admin": "ผู้ดูแลระบบ",
+        "worker": "เวิร์กเกอร์",
+        "all": "ทั้งหมด"
+      }
+    },
+    "manualBackup": {
+      "title": "เริ่มสำรองข้อมูลด้วยตนเองตอนนี้หรือไม่?",
+      "description": "การส่งคำตอบทั้งหมดจะถูกสำรองข้อมูลอยู่เบื้องหลัง เซิร์ฟเวอร์ยังคงทำงานต่อ",
+      "confirmLabel": "เริ่มสำรองข้อมูล"
+    }
+  },
+  "toasts": {
+    "deploy": {
+      "progressMessage": "กำลังติดตั้งการแข่งขัน #{contestId} — ดึงข้อมูล {percent}%",
+      "progressStatusMessage": "กำลังติดตั้งการแข่งขัน #{contestId} — {status}",
+      "progressDescription": "ความคืบหน้าการดึงข้อมูล {percent}%",
+      "waitingDescription": "กำลังรอผลลัพธ์การ build...",
+      "startedTitle": "กำลังติดตั้งการแข่งขัน #{contestId}",
+      "startingDescription": "กำลังเริ่มการติดตั้ง...",
+      "alreadyRunningTitle": "มีการติดตั้งทำงานอยู่แล้ว",
+      "alreadyRunningDescription": "มีการติดตั้งอีกรายการกำลังดำเนินการอยู่",
+      "startFailedTitle": "เริ่มการติดตั้งไม่สำเร็จ",
+      "startFailedDescription": "ไม่สามารถเริ่มการติดตั้งได้",
+      "timedOutTitle": "การติดตั้งหมดเวลา",
+      "timedOutDescription": "ไม่มีบันทึกผลลัพธ์เป็นเวลา 5 นาที",
+      "completedTitle": "ติดตั้งการแข่งขันแล้ว",
+      "completedDescription": "การแข่งขัน #{contestId} เปิดใช้งานแล้ว",
+      "failedTitle": "การติดตั้งล้มเหลว",
+      "failedDescription": "การติดตั้งไม่เสร็จสมบูรณ์",
+      "notFoundTitle": "ไม่พบการติดตั้ง",
+      "notFoundDescription": "ไม่รู้จักการดำเนินการนี้"
+    },
+    "maintenance": {
+      "saveFailed": "บันทึกไม่สำเร็จ: {error}",
+      "notificationSaveFailed": "ไม่ได้บันทึกการตั้งค่าการแจ้งเตือน: {error}",
+      "saved": "บันทึกการตั้งค่าการบำรุงรักษาเรียบร้อยแล้ว!",
+      "backupTriggered": "เริ่มสำรองข้อมูลเบื้องหลังแล้ว ตรวจสอบสถานะได้ที่ Discord",
+      "failed": "ล้มเหลว: {error}",
+      "notificationsSaved": "บันทึกการตั้งค่าการแจ้งเตือนลง config.toml และ .env แล้ว",
+      "notificationsSavedMonitorRecreated": "บันทึกการตั้งค่าการแจ้งเตือนและสร้าง monitor ใหม่แล้ว",
+      "monitorRestartFailed": "บันทึกการตั้งค่าแล้ว แต่รีสตาร์ท monitor ไม่สำเร็จ: {error}",
+      "testAlertDelivered": "ส่งข้อความทดสอบสำเร็จ (HTTP {status})",
+      "testAlertFailedFallback": "การส่งข้อความทดสอบล้มเหลว",
+      "testAlertFailed": "ส่งข้อความทดสอบไม่สำเร็จ: {message}"
+    },
+    "serviceControl": {
+      "actionFailed": "ข้อผิดพลาด: {error}",
+      "updateFailed": "เริ่มการอัปเดตไม่สำเร็จ",
+      "restartFailed": "รีสตาร์ทไม่สำเร็จ",
+      "pullFailed": "ดึงอิมเมจไม่สำเร็จ",
+      "rebuildFailed": "สร้างอิมเมจใหม่ไม่สำเร็จ"
+    },
+    "envConfig": {
+      "saveFailed": "บันทึก {filename} ไม่สำเร็จ: {error}",
+      "restarted": "บันทึกและรีสตาร์ทแล้ว: {services}",
+      "restartFailed": "บันทึกแล้ว แต่รีสตาร์ทไม่สำเร็จ: {error}",
+      "saved": "บันทึก {filename} เรียบร้อยแล้ว!",
+      "unexpectedError": "เกิดข้อผิดพลาดระหว่างการบันทึก"
+    },
+    "monitor": {
+      "errorTitle": "ข้อผิดพลาด",
+      "urlRequiredDescription": "จำเป็นต้องระบุ URL",
+      "addedTitle": "เพิ่มแล้ว",
+      "addedDescription": "เพิ่มเป้าหมายการตรวจสอบแล้ว",
+      "failureDescription": "ล้มเหลว",
+      "removedTitle": "นำออกแล้ว",
+      "removedDescription": "นำเป้าหมายออกแล้ว",
+      "testOkTitle": "ปกติ",
+      "testMismatchTitle": "ไม่ตรงตามที่คาดหวัง",
+      "testFailedTitle": "การทดสอบล้มเหลว",
+      "connectionErrorDescription": "การเชื่อมต่อผิดพลาด",
+      "resultDescription": "HTTP {status} (คาดหวัง {expectedStatus}) — {latency}ms"
+    },
+    "discord": {
+      "testAlertTitle": "ทดสอบการแจ้งเตือน CMS",
+      "testAlertDescription": "ข้อความทดสอบส่งจากแผงผู้ดูแลระบบ การส่งข้อความทำงานปกติ การแจ้งเตือนจาก monitor (CPU, หน่วยความจำ, ดิสก์ และเหตุการณ์ของคอนเทนเนอร์) จะมาที่นี่",
+      "configTomlMissing": "ไม่สามารถอัปเดต {configToml} ได้ — รัน './cms config sync' หนึ่งครั้งเพื่อให้ค่านี้มีแหล่งข้อมูลอ้างอิง แล้วลองใหม่อีกครั้ง",
+      "envWriteFailed": "อัปเดต {configToml} แล้ว แต่เขียน {envFile} ไม่สำเร็จ: {error}",
+      "noWebhookUrl": "ไม่มี URL ของเว็บฮุกให้ทดสอบ — กรอกและบันทึกก่อน หรือตั้งค่า DISCORD_WEBHOOK_URL ใน config.toml [infra]",
+      "deliveryFailed": "การส่งล้มเหลว"
+    }
   }
 }

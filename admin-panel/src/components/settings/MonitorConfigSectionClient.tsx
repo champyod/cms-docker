@@ -6,6 +6,8 @@ import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
 import { Input } from '@/components/core/Input';
 import { toast } from 'sonner';
+import { useDictionary } from '@/hooks/useDictionary';
+import { interpolate } from '@/lib/interpolate';
 import {
   addMonitorTarget,
   removeMonitorTarget,
@@ -32,6 +34,7 @@ interface MonitorConfigSectionClientProps {
 export function MonitorConfigSectionClient({
   initialTargets,
 }: MonitorConfigSectionClientProps): React.ReactElement {
+  const toasts = useDictionary().toasts.monitor;
   const [targets, setTargets] = useState<MonitorTarget[]>(initialTargets);
   const [url, setUrl] = useState('');
   const [interval, setInterval_] = useState(60);
@@ -42,7 +45,7 @@ export function MonitorConfigSectionClient({
 
   const handleAdd = useCallback(async () => {
     if (!url.trim()) {
-      toast.error('Error', { description: 'URL is required' });
+      toast.error(toasts.errorTitle, { description: toasts.urlRequiredDescription });
       return;
     }
     setAdding(true);
@@ -59,26 +62,26 @@ export function MonitorConfigSectionClient({
         setInterval_(60);
         setTimeout_(5);
         setExpectedStatus(200);
-        toast.success('Added', { description: 'Monitor target added' });
+        toast.success(toasts.addedTitle, { description: toasts.addedDescription });
       } else {
-        toast.error('Error', { description: result.error ?? 'Failed' });
+        toast.error(toasts.errorTitle, { description: result.error ?? toasts.failureDescription });
       }
     } finally {
       setAdding(false);
     }
-  }, [url, interval, timeout, expectedStatus]);
+  }, [url, interval, timeout, expectedStatus, toasts]);
 
   const handleRemove = useCallback(
     async (id: string) => {
       const result = await removeMonitorTarget(id);
       if (result.success) {
         setTargets((prev) => prev.filter((t) => t.id !== id));
-        toast.success('Removed', { description: 'Target removed' });
+        toast.success(toasts.removedTitle, { description: toasts.removedDescription });
       } else {
-        toast.error('Error', { description: result.error ?? 'Failed' });
+        toast.error(toasts.errorTitle, { description: result.error ?? toasts.failureDescription });
       }
     },
-    [],
+    [toasts],
   );
 
   const handleToggle = useCallback(
@@ -89,10 +92,10 @@ export function MonitorConfigSectionClient({
           prev.map((t) => (t.id === id ? (result.data as MonitorTarget) : t)),
         );
       } else {
-        toast.error('Error', { description: result.error ?? 'Failed' });
+        toast.error(toasts.errorTitle, { description: result.error ?? toasts.failureDescription });
       }
     },
-    [],
+    [toasts],
   );
 
   const handleTest = useCallback(
@@ -108,17 +111,23 @@ export function MonitorConfigSectionClient({
             latency: number;
           };
           // sonner exposes one publisher per severity, so the dynamic type maps to a branch.
-          const description = `HTTP ${d.status} (expected ${d.expectedStatus}) — ${d.latency}ms`;
-          if (d.matched) toast.success('OK', { description });
-          else toast.warning('Mismatch', { description });
+          const description = interpolate(toasts.resultDescription, {
+            status: d.status,
+            expectedStatus: d.expectedStatus,
+            latency: d.latency,
+          });
+          if (d.matched) toast.success(toasts.testOkTitle, { description });
+          else toast.warning(toasts.testMismatchTitle, { description });
         } else {
-          toast.error('Test Failed', { description: result.error ?? 'Connection error' });
+          toast.error(toasts.testFailedTitle, {
+            description: result.error ?? toasts.connectionErrorDescription,
+          });
         }
       } finally {
         setTestingId(null);
       }
     },
-    [],
+    [toasts],
   );
 
   return (

@@ -15,7 +15,7 @@ import { TaskModal } from './TaskModal';
 import { apiClient } from '@/lib/apiClient';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 import { useConfirm } from '@/hooks/useConfirm';
-import { destructiveConfirm } from '@/lib/confirmation-copy';
+import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import type { TaskDiagnostic } from '@/lib/task-diagnostics';
 
 interface TaskRow {
@@ -43,6 +43,7 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
   const confirm = useConfirm();
+  const { destructiveConfirm } = useConfirmationCopy();
 
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
   const canCreateTasks = hasEffectivePermission(effective, 'task:create');

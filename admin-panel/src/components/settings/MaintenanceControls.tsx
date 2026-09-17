@@ -9,12 +9,9 @@ import { Button } from '@/components/core/Button';
 import { RefreshCw, Download, Package, ArrowUpCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useConfirm } from '@/hooks/useConfirm';
-import {
-  fullServerUpdateConfirm,
-  pullImagesConfirm,
-  rebuildStackConfirm,
-  restartStackConfirm,
-} from '@/lib/confirmation-copy';
+import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
+import { useDictionary } from '@/hooks/useDictionary';
+import { interpolate } from '@/lib/interpolate';
 
 export function ManualServiceControlCard(): ReactElement {
   return (
@@ -70,16 +67,19 @@ export function MaintenanceUpdatesCard(): ReactElement {
 function UpdateServerButton(): ReactElement {
   const [updating, setUpdating] = useState(false);
   const confirm = useConfirm();
+  const { fullServerUpdateConfirm } = useConfirmationCopy();
+  const toasts = useDictionary().toasts.serviceControl;
 
   const handleUpdate = async (): Promise<void> => {
     if (!(await confirm(fullServerUpdateConfirm()))) return;
     setUpdating(true);
     try {
       const res = await updateServer();
+      // The action's own message is server-side English; only the panel's fallbacks are localised here.
       if (res.success) toast.success(res.message);
-      else toast.error('Error: ' + res.error);
+      else toast.error(interpolate(toasts.actionFailed, { error: res.error }));
     } catch {
-      toast.error('Failed to trigger update');
+      toast.error(toasts.updateFailed);
     }
     setUpdating(false);
   };
@@ -100,16 +100,18 @@ function UpdateServerButton(): ReactElement {
 function RestartButton({ type, label }: { type: 'core' | 'admin' | 'worker' | 'all', label: string }): ReactElement {
   const [restarting, setRestarting] = useState(false);
   const confirm = useConfirm();
+  const { restartStackConfirm } = useConfirmationCopy();
+  const toasts = useDictionary().toasts.serviceControl;
 
   const handleRestart = async (): Promise<void> => {
-    if (!(await confirm(restartStackConfirm(label)))) return;
+    if (!(await confirm(restartStackConfirm(type)))) return;
     setRestarting(true);
     try {
       const res = await restartServices(type);
       if (res.success) toast.success(res.message);
-      else toast.error('Error: ' + res.error);
+      else toast.error(interpolate(toasts.actionFailed, { error: res.error }));
     } catch {
-      toast.error('Failed to restart');
+      toast.error(toasts.restartFailed);
     }
     setRestarting(false);
   };
@@ -130,6 +132,8 @@ function RestartButton({ type, label }: { type: 'core' | 'admin' | 'worker' | 'a
 function PullImagesButton(): ReactElement {
   const [pulling, setPulling] = useState(false);
   const confirm = useConfirm();
+  const { pullImagesConfirm } = useConfirmationCopy();
+  const toasts = useDictionary().toasts.serviceControl;
 
   const handlePull = async (): Promise<void> => {
     if (!(await confirm(pullImagesConfirm()))) return;
@@ -137,9 +141,9 @@ function PullImagesButton(): ReactElement {
     try {
       const res = await pullLatestImages();
       if (res.success) toast.success(res.message);
-      else toast.error('Error: ' + res.error);
+      else toast.error(interpolate(toasts.actionFailed, { error: res.error }));
     } catch {
-      toast.error('Failed to pull images');
+      toast.error(toasts.pullFailed);
     }
     setPulling(false);
   };
@@ -161,16 +165,18 @@ function PullImagesButton(): ReactElement {
 function RebuildButton({ stack, label }: { stack: 'core' | 'admin' | 'worker' | 'all', label: string }): ReactElement {
   const [rebuilding, setRebuilding] = useState(false);
   const confirm = useConfirm();
+  const { rebuildStackConfirm } = useConfirmationCopy();
+  const toasts = useDictionary().toasts.serviceControl;
 
   const handleRebuild = async (): Promise<void> => {
-    if (!(await confirm(rebuildStackConfirm(label)))) return;
+    if (!(await confirm(rebuildStackConfirm(stack)))) return;
     setRebuilding(true);
     try {
       const res = await rebuildImages(stack);
       if (res.success) toast.success(res.message);
-      else toast.error('Error: ' + res.error);
+      else toast.error(interpolate(toasts.actionFailed, { error: res.error }));
     } catch {
-      toast.error('Failed to rebuild');
+      toast.error(toasts.rebuildFailed);
     }
     setRebuilding(false);
   };

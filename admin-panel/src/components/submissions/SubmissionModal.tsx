@@ -10,7 +10,7 @@ import { Button } from '@/components/core/Button';
 import { Dialog, DialogFooter } from '@/components/core/Dialog';
 import { RestrictedField } from '@/components/core/RestrictedField';
 import { useConfirm } from '@/hooks/useConfirm';
-import { recalculateSubmissionConfirm } from '@/lib/confirmation-copy';
+import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import type { FieldAccess } from '@/lib/field-permissions';
 import { cn } from '@/lib/utils';
 
@@ -25,6 +25,7 @@ interface SubmissionModalProps {
 export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModalProps) {
   const router = useRouter();
   const confirm = useConfirm();
+  const { recalculateSubmissionConfirm } = useConfirmationCopy();
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [fieldAccess, setFieldAccess] = useState<Record<string, FieldAccess> | null>(null);
 

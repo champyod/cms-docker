@@ -19,7 +19,7 @@ import { useContestListActions } from './contest-list/useContestListActions';
 import type { ExistingContest } from './contest-modal/types';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 import { useConfirm } from '@/hooks/useConfirm';
-import { destructiveConfirm } from '@/lib/confirmation-copy';
+import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 
 interface ContestListProps {
   initialContests: Array<{ id: number; name: string; is_active: boolean; start: Date; stop: Date; _count?: { tasks: number; participations: number } }>;
@@ -51,6 +51,7 @@ interface CardProps {
 function ContestMobileCard({ contest, locale, isSuperAdmin, canManage, onSetActive }: CardProps): React.JSX.Element {
   const router = useRouter();
   const confirm = useConfirm();
+  const { destructiveConfirm } = useConfirmationCopy();
   const handleDelete = async (): Promise<void> => {
     if (!canManage) return;
     if (!(await confirm(destructiveConfirm('contest')))) return;

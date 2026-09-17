@@ -7,7 +7,7 @@ import { updateContestSettings, removeParticipant, removeTaskFromContest } from 
 import { setTestUser } from '@/app/actions/participations';
 import { useDeployContest } from '@/hooks/useDeployContest';
 import { useConfirm } from '@/hooks/useConfirm';
-import { markTestUserConfirm, removeParticipantConfirm, removeTaskFromContestConfirm } from '@/lib/confirmation-copy';
+import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 
 interface ContestLike { id: number; name: string; description: string; timezone: string | null; allow_questions: boolean; allow_user_tests: boolean; submissions_download_allowed: boolean; allow_password_authentication: boolean; allow_registration: boolean; analysis_enabled: boolean; token_mode: string; score_precision: number; start: string | Date | null; stop: string | Date | null; analysis_start: string | Date | null; analysis_stop: string | Date | null; }
 
@@ -22,6 +22,7 @@ export function useContestDetailState(contest: ContestLike) {
   const router = useRouter();
   const deploy = useDeployContest();
   const confirm = useConfirm();
+  const { markTestUserConfirm, removeParticipantConfirm, removeTaskFromContestConfirm } = useConfirmationCopy();
   const { state: deployState, deploy: launchDeploy, reset: resetDeploy } = deploy;
   const [showDeployModal, setShowDeployModal] = useState(false);
 

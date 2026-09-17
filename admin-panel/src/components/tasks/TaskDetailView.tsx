@@ -12,7 +12,7 @@ import { TestcaseUploadModal } from './TestcaseUploadModal';
 import { ConfigSection, StatementsSection, TaskHeader } from './task-detail-sections';
 import { DatasetsSection, AttachmentsSection } from './task-detail-datasets';
 import { useConfirm } from '@/hooks/useConfirm';
-import { destructiveConfirm } from '@/lib/confirmation-copy';
+import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 
 interface Dataset {
   id: number;
@@ -57,6 +57,7 @@ export function TaskDetailView({ task, permissionKeys }: TaskDetailViewProps): R
   const [isAttachmentModalOpen, setIsAttachmentModalOpen] = useState(false);
   const [currentDatasetId, setCurrentDatasetId] = useState<number | null>(null);
   const confirm = useConfirm();
+  const { destructiveConfirm } = useConfirmationCopy();
 
   const toggle = (section: string): void => setExpanded((prev) => ({ ...prev, [section]: !prev[section] }));
   const reload = (): void => router.refresh();

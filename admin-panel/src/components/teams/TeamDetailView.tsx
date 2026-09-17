@@ -9,7 +9,7 @@ import { deleteTeam, updateTeam } from '@/app/actions/teams';
 import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
 import { useConfirm } from '@/hooks/useConfirm';
-import { destructiveConfirm } from '@/lib/confirmation-copy';
+import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 
 interface TeamMember {
   user: {
@@ -44,6 +44,7 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
   const confirm = useConfirm();
+  const { destructiveConfirm } = useConfirmationCopy();
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
     code: team.code,

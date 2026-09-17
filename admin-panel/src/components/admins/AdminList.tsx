@@ -12,7 +12,7 @@ import { Edit2, Trash2, Plus, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { updateAdmin, deleteAdmin } from '@/app/actions/admins';
 import { listAdminsAccessSummary, type AdminAccessSummary } from '@/app/actions/adminPermissions';
 import { useConfirm } from '@/hooks/useConfirm';
-import { destructiveConfirm } from '@/lib/confirmation-copy';
+import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import { AdminModal } from './AdminModal';
 import type { AdminWithLogin } from '@/lib/prisma-selects';
 
@@ -28,6 +28,7 @@ export function AdminList({ initialAdmins, actionLabels }: AdminListProps) {
   const [editingAdmin, setEditingAdmin] = useState<AdminWithLogin | null>(null);
   const router = useRouter();
   const confirm = useConfirm();
+  const { destructiveConfirm } = useConfirmationCopy();
 
   useEffect(() => {
     let cancelled = false;

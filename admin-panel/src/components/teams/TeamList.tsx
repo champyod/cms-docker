@@ -13,8 +13,8 @@ import { EmptyState } from '@/components/core/EmptyState';
 import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { useConfirm } from '@/hooks/useConfirm';
+import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import { useSyncedState } from '@/hooks/useSyncedState';
-import { destructiveConfirm } from '@/lib/confirmation-copy';
 import { TeamModal } from './TeamModal';
 
 interface TeamWithCount {
@@ -38,6 +38,7 @@ export function TeamList({ initialTeams, permissionKeys }: TeamListProps) {
   const pathname = usePathname();
   const router = useRouter();
   const confirm = useConfirm();
+  const { destructiveConfirm } = useConfirmationCopy();
   const locale = pathname.split('/')[1] || 'en';
 
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
