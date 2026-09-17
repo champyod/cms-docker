@@ -4,15 +4,16 @@ import crypto from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 
-import { DEPLOY_STALE_MS } from '@/lib/constants/deploy';
+import { DEPLOY_EFFECT_LEASE_MS, DEPLOY_STALE_MS, DEPLOY_UNOBSERVABLE_MS } from '@/lib/constants/deploy';
 import { getRepoRoot } from '@/lib/repo-root';
 
-export interface DeployPaths {
+/** The four files one operation's lifecycle is recorded in. */
+type DeployOperationPaths = {
   metaPath: string;
   logPath: string;
   donePath: string;
   errorPath: string;
-}
+};
 
 /** The result the panel has already applied to an operation, with the copy it reported at the time. */
 export interface DeployOutcome {
@@ -37,11 +38,24 @@ export type DeployMeta = {
    */
   pidNamespace?: string;
   /**
-   * Set once the outcome has been applied. Why on disk and not in memory: the settling has external
-   * effects (activating a contest, reverting config.toml, notifying Discord) that must not happen
-   * twice, and the panel that settles may not be the one that started the deploy.
+   * Set once the outcome has been claimed, before its effects run. Why on disk and not in memory: the
+   * settling has external effects (activating a contest, reverting config.toml, notifying Discord) that
+   * must not happen twice, and the panel that settles may not be the one that started the deploy.
    */
   outcome?: DeployOutcome;
+  /**
+   * When the claim above was written: the lease its effects are running under. A claim whose effects are
+   * still absent this long after it was taken was made by a settler that is gone (see
+   * `claimDeployOutcome`), which is what keeps a crash between the claim and its effects recoverable
+   * instead of becoming a permanently unapplied outcome.
+   */
+  outcomeClaimedAt?: string;
+  /**
+   * Set once the claim's effects have finished — the completion marker, distinct from the claim. Its
+   * absence next to a claim is what says the effects are still owed, so a later panel can run them
+   * rather than reading "settled" and reporting a result that never happened.
+   */
+  outcomeAppliedAt?: string;
 };
 
 export interface DeployOperation {
@@ -59,7 +73,7 @@ export function generateOperationId(): string {
   return crypto.randomBytes(8).toString('hex');
 }
 
-export function getDeployOperationPaths(operationId: string): DeployPaths {
+export function getDeployOperationPaths(operationId: string): DeployOperationPaths {
   const logsDir = getDeployLogsDir();
   return {
     metaPath: path.join(logsDir, `${operationId}.json`),
@@ -81,7 +95,23 @@ export async function setActiveOperationId(operationId: string): Promise<void> {
   await fs.writeFile(path.join(getDeployLogsDir(), 'active.lock'), operationId, 'utf-8');
 }
 
-export async function clearActiveOperation(): Promise<void> {
+/**
+ * Frees the deploy guard — and only while it is still this operation's.
+ *
+ * Why the check: the guard is what keeps a second deploy's `config.toml` write out of the one that is
+ * settling, and every settle path releases it (the completed and failed settles, the spawn that never
+ * started, the cleanup). Without the check, a settle of an operation the guard has already moved past
+ * unlinks the *newer* operation's lock — after which that deploy can start while this one is still
+ * inside the read-then-write window of its own revert (see deploy-store's `revertOwnedContestId`), and
+ * its write is reverted to this operation's snapshot.
+ *
+ * What this does not close: the read and the unlink are two filesystem calls, so a caller that reads
+ * "the guard is mine" and loses it before the unlink still removes a newer operation's lock. No
+ * primitive here takes and releases the lock in one operation, and the writer that could win in
+ * between is another panel process (see `withMetaMutation`), not a concurrent request in this one.
+ */
+export async function clearActiveOperation(operationId: string): Promise<void> {
+  if ((await getActiveOperationId()) !== operationId) return;
   await fs.unlink(path.join(getDeployLogsDir(), 'active.lock')).catch(() => {});
 }
 
@@ -166,25 +196,83 @@ export async function patchDeployMeta(operationId: string, patch: Partial<Deploy
 }
 
 /**
- * Writes an operation's terminal outcome, unless one is already recorded.
+ * The answer to "may I run this outcome's effects, and for which outcome".
  *
- * Returns the outcome already on disk when another settler got there first, and `null` when this
- * caller won the claim — which is what makes it the only caller allowed to perform the operation's
- * side effects (activating a contest, reverting config.toml, notifying Discord, running the config
- * sync). The outcome goes down *before* those effects: a claim that is already on disk is what a
- * concurrent settler reads instead of starting a second rollback or a second activation.
- *
- * The claim records what is known before the effects run; the one effect whose result is its own
- * (a rollback that fails) is patched in by the winner afterwards, which is also the only writer of
- * that record from then on.
+ * - `yours`: nothing has claimed this operation, or the settler that did never finished and its lease
+ *   has run out — the effects are this caller's to run, and `outcome` is what to run them for (the
+ *   record's own outcome when taking over, not the caller's, so a recovery applies what was claimed);
+ * - `reported`: the effects are done, or another settler's claim is still inside its lease. Report
+ *   `outcome` and touch nothing: a second activation or rollback is what the claim exists to prevent.
  */
-export async function claimDeployOutcome(operationId: string, outcome: DeployOutcome): Promise<DeployOutcome | null> {
+export type OutcomeClaim =
+  | { kind: 'yours'; outcome: DeployOutcome }
+  | { kind: 'reported'; outcome: DeployOutcome };
+
+/**
+ * Whether a claim's effects have been left unfinished for longer than any settler's effects can take.
+ * A missing or unparseable timestamp counts as expired: a claim from a panel older than this field is
+ * one whose effects may never have run, and re-running them is idempotent where it matters (see
+ * `claimDeployOutcome`).
+ */
+function isOutcomeLeaseExpired(meta: DeployMeta): boolean {
+  if (meta.outcomeClaimedAt === undefined) return true;
+  const claimedAt = Date.parse(meta.outcomeClaimedAt);
+  if (Number.isNaN(claimedAt)) return true;
+  return Date.now() - claimedAt > DEPLOY_EFFECT_LEASE_MS;
+}
+
+/**
+ * Takes the claim on an operation's outcome — the only caller allowed to perform its side effects
+ * (activating a contest, reverting config.toml, notifying Discord, running the config sync).
+ *
+ * Why the claim goes down before the effects: settling is reachable concurrently from the status stream
+ * of every open tab, the 30s discovery lookup and the pre-guard reconcile, and the effects must happen
+ * once. Writing the claim first is what makes a second settler read "someone else's" instead of
+ * activating, notifying and syncing alongside this one.
+ *
+ * Why a lease and not just "a claim is a claim": a crash between the claim and the effects leaves an
+ * outcome on the record that nothing would ever apply — the contest never activated while every lookup
+ * reported success, or config.toml keeping a contest the rollback never reverted. Deleting the record
+ * later is not recovery. So an unapplied claim is taken over once it is older than
+ * `DEPLOY_EFFECT_LEASE_MS`, which is far longer than the effects themselves and far shorter than an
+ * operator's patience. Taking one over re-stamps the lease, which is what stops two concurrent lookups
+ * in this process from both deciding they own the effects.
+ *
+ * What a taken-over claim can re-run, and why that is the lesser evil: an activation is a set, the
+ * revert is guarded by the contest id the file still has to name (see `rollbackContestId`), and a
+ * Discord notice can repeat. The alternative — never applying what the record says happened — leaves
+ * the panel asserting a state the system is not in, which is what this module exists to prevent.
+ */
+export async function claimDeployOutcome(operationId: string, outcome: DeployOutcome): Promise<OutcomeClaim> {
   return withMetaMutation(operationId, async () => {
     const meta = await readDeployMeta(operationId);
-    if (meta === null) return null;
-    if (meta.outcome !== undefined) return meta.outcome;
-    await writeDeployMeta(operationId, { ...meta, outcome });
-    return null;
+    // The record is gone: there is nothing left to claim or to mark applied, and refusing to run the
+    // effects would drop an activation on the floor. Same answer the claim gave before this type existed.
+    if (meta === null) return { kind: 'yours', outcome };
+    const recorded = meta.outcome;
+    if (recorded !== undefined) {
+      if (meta.outcomeAppliedAt !== undefined) return { kind: 'reported', outcome: recorded };
+      if (!isOutcomeLeaseExpired(meta)) return { kind: 'reported', outcome: recorded };
+      await writeDeployMeta(operationId, { ...meta, outcomeClaimedAt: new Date().toISOString() });
+      return { kind: 'yours', outcome: recorded };
+    }
+    await writeDeployMeta(operationId, { ...meta, outcome, outcomeClaimedAt: new Date().toISOString() });
+    return { kind: 'yours', outcome };
+  });
+}
+
+/**
+ * Records that a claim's effects have finished, which is what a later panel reads instead of running
+ * them again. Called by the claim's owner only, and before it releases the deploy guard: the state that
+ * must not exist is a free guard over effects that have not landed.
+ *
+ * `outcome` replaces the claim when the effect's result is its own — a rollback that failed is the
+ * outcome, not a warning on the claim that preceded it.
+ */
+export async function markDeployOutcomeApplied(operationId: string, outcome?: DeployOutcome): Promise<void> {
+  await patchDeployMeta(operationId, {
+    outcomeAppliedAt: new Date().toISOString(),
+    ...(outcome === undefined ? {} : { outcome }),
   });
 }
 
@@ -202,8 +290,18 @@ export async function listDeployOperations(): Promise<DeployOperation[]> {
   return operations;
 }
 
-/** Marks our own command in a pid's argv, so a recycled pid cannot pass itself off as the deploy. */
-const DEPLOY_COMMAND_MARKER = 'docker';
+/**
+ * Marks our own command in a pid's argv, so a recycled pid cannot pass itself off as the deploy.
+ *
+ * Why this token and not `docker`: `docker` is in the argv of every compose invocation the panel makes
+ * — the restarts, the compose status lookups, an operator's own shell — so a recycled pid running any
+ * of them read as this deploy and kept a finished operation "running" behind it. `cms-deploy` is the
+ * argv0 the panel hands its own deploy child (`spawn('sh', ['-c', script, 'cms-deploy', done, error])`,
+ * see deploy-store's `launchDetachedDeploy`), which nothing else in the panel produces; the script that
+ * child runs is multi-line and ends in `exit`, so the shell does not exec the deploy command away and
+ * take that argv0 with it.
+ */
+const DEPLOY_COMMAND_MARKER = 'cms-deploy';
 
 /** The pid namespace this process runs in, e.g. `pid:[4026531836]`. Null where /proc has no answer. */
 async function readPidNamespace(): Promise<string | null> {
@@ -226,18 +324,41 @@ export async function recordDeployProcess(operationId: string, pid: number | und
 /**
  * Whether an ESRCH from `kill(pid, 0)` is evidence that the recorded process ended.
  *
- * Absence is meaningless for exactly one case: the record names the process table the pid came from
- * and it is *not* the one this panel is looking at — after its container is recreated, absence there
- * says nothing about a build the docker daemon is still running. Every other case leaves absence as
- * evidence: the tables match, the record predates this field (a deploy in flight across the upgrade),
- * or the platform has no /proc to name a table at all.
+ * Absence is evidence for exactly one of the two ways the two process tables can fail to line up: a
+ * record that names no table at all — written before the field existed, or on a platform with no /proc
+ * to name one — leaves absence as the only thing there is to go on, which is what the panel acted on
+ * before this field existed. A record that *does* name a table, read by a panel that cannot name its
+ * own, is indeterminate instead: the answer to "is that table this one" is unavailable, and an
+ * unavailable answer is not evidence of an end.
  */
 function pidAbsenceIsEvidence(spawnedNamespace: string | undefined, currentNamespace: string | null): boolean {
-  return spawnedNamespace === undefined || currentNamespace === null || spawnedNamespace === currentNamespace;
+  if (spawnedNamespace === undefined) return true;
+  if (currentNamespace === null) return false;
+  return spawnedNamespace === currentNamespace;
 }
 
 /**
- * Whether the process this operation recorded is still running.
+ * The liveness probe's answers.
+ *
+ * - `alive`: the process exists and its command line is this deploy's own — the operation continues;
+ * - `gone`: absence is evidence the recorded process ended, or there is no process to wait for;
+ * - `unobservable`: the record names a process table this panel is not in, so nothing it can look at
+ *   says whether the process ended, and the operation is still younger than `DEPLOY_UNOBSERVABLE_MS`;
+ * - `presumed-gone`: the same, past that bound — the one admission of an end this panel cannot witness.
+ */
+export type DeployProcessVerdict = 'alive' | 'gone' | 'unobservable' | 'presumed-gone';
+
+/**
+ * Whether an operation this panel cannot observe at all has waited past the bound that stands in for
+ * the evidence it cannot get. Measured from `startedAt` — the deploy's own clock, which every panel
+ * reads the same — rather than from the record's mtime, which each writer of the record moves.
+ */
+function waitedOutUnobservableBound(meta: DeployMeta): boolean {
+  return Date.now() - new Date(meta.startedAt).getTime() > DEPLOY_UNOBSERVABLE_MS;
+}
+
+/**
+ * What this panel can say about the process an operation recorded.
  *
  * Why the process at all: elapsed time and log silence cannot tell a working deploy from a dead one —
  * docker build spends minutes between output lines, and a full `up --build` can legitimately outlast
@@ -248,35 +369,43 @@ function pidAbsenceIsEvidence(spawnedNamespace: string | undefined, currentNames
  * process — a bare existence probe would then keep a finished operation "running" indefinitely. A pid
  * that exists but does not carry this command is therefore not ours.
  *
- * Which way each answer fails, because `false` is the answer that reverts config.toml and frees the
- * deploy guard, so only evidence of an actual end may produce it:
- *  - the process exists: alive, unless its command line names something else, which is a recycled pid
+ * Which way each answer fails, because a terminal answer reverts config.toml and frees the deploy
+ * guard, so only evidence of an actual end may produce one:
+ *  - no usable pid: `gone` — there is no process to wait for;
+ *  - the process exists: `alive`, unless its command line names something else, which is a recycled pid
  *    rather than this deploy. An unreadable `/proc/<pid>/cmdline` (a host without /proc) leaves
- *    existence as the only evidence and answers alive;
- *  - EPERM: alive — the process exists, we are just not allowed to signal it;
- *  - ESRCH: evidence, unless the record names the process table the pid came from and it is not this
- *    one (see `pidAbsenceIsEvidence`). After the panel's container is recreated, the recorded pid
+ *    existence as the only evidence and answers `alive`;
+ *  - EPERM: `alive` — the process exists, we are just not allowed to signal it;
+ *  - ESRCH: evidence, unless the record names the process table the pid came from and this panel is not
+ *    in it (see `pidAbsenceIsEvidence`). After the panel's container is recreated, the recorded pid
  *    belongs to the panel that is gone, and a build the docker daemon is still running looks exactly
  *    like a pid that ended;
- *  - anything else the kernel reports (EACCES, EINVAL, ENOSYS…): alive — a probe we could not
+ *  - that ESRCH with a foreign table: `unobservable` while the operation is younger than
+ *    `DEPLOY_UNOBSERVABLE_MS`, `presumed-gone` past it. Both halves are deliberate: an indeterminate
+ *    answer is never an immediate verdict, and the bound is what stops a record whose process table no
+ *    longer exists from holding the guard for good — nothing else in the panel can end it;
+ *  - anything else the kernel reports (EACCES, EINVAL, ENOSYS…): `alive` — a probe we could not
  *    interpret is not evidence, and guessing "dead" here is what reverted a live deploy's config.
  */
-export async function isDeployProcessAlive(meta: DeployMeta): Promise<boolean> {
+export async function probeDeployProcess(meta: DeployMeta): Promise<DeployProcessVerdict> {
   const pid = meta.pid;
-  if (pid === undefined || !Number.isInteger(pid) || pid <= 0) return false;
+  if (pid === undefined || !Number.isInteger(pid) || pid <= 0) return 'gone';
   const spawnedNamespace = meta.pidNamespace;
   const currentNamespace = await readPidNamespace();
   try {
     process.kill(pid, 0);
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'EPERM') return true;
-    if (code === 'ESRCH') return !pidAbsenceIsEvidence(spawnedNamespace, currentNamespace);
-    return true;
+    if (code === 'EPERM') return 'alive';
+    if (code === 'ESRCH') {
+      if (pidAbsenceIsEvidence(spawnedNamespace, currentNamespace)) return 'gone';
+      return waitedOutUnobservableBound(meta) ? 'presumed-gone' : 'unobservable';
+    }
+    return 'alive';
   }
   const commandLine = await fs.readFile(`/proc/${pid}/cmdline`, 'utf-8').catch(() => null);
-  if (commandLine === null) return true;
-  return commandLine.includes(DEPLOY_COMMAND_MARKER);
+  if (commandLine === null) return 'alive';
+  return commandLine.includes(DEPLOY_COMMAND_MARKER) ? 'alive' : 'gone';
 }
 
 /**
@@ -291,6 +420,15 @@ export async function isDeployProcessAlive(meta: DeployMeta): Promise<boolean> {
  * surviving evidence that the deploy ended, so discarding it loses the activation (or the revert)
  * the operation still owes — which is how a finished deploy left the contest inactive while
  * config.toml and its containers named it.
+ *
+ * Why an unapplied claim blocks it too: the record is the only thing that says the effects are still
+ * owed, so deleting it is not recovery — it is the loss of the activation or the revert the panel was
+ * still going to apply (see `claimDeployOutcome`).
+ *
+ * Why the probe's answer and not the record's age decides the rest: an aged record whose process table
+ * this panel is not in is discarded only once the unobservable bound has passed (see
+ * `probeDeployProcess`), because until then it is indistinguishable from a deploy that is still
+ * building in a container this panel cannot look into.
  */
 export async function cleanStaleOperations(): Promise<void> {
   const dir = getDeployLogsDir();
@@ -300,7 +438,12 @@ export async function cleanStaleOperations(): Promise<void> {
     const meta = await readDeployMeta(operationId);
     if (meta === null) continue;
     if (Date.now() - new Date(meta.startedAt).getTime() <= DEPLOY_STALE_MS) continue;
-    if (await isDeployProcessAlive(meta)) continue;
+    const verdict = await probeDeployProcess(meta);
+    // Why both of the deferring verdicts exist here: `alive` is a deploy that is still building, and
+    // `unobservable` is one this panel cannot rule out at all — the same two reasons the status
+    // resolution keeps reporting it as running. `presumed-gone` is the bound's answer, not a witness's.
+    if (verdict === 'alive' || verdict === 'unobservable') continue;
+    if (meta.outcome !== undefined && meta.outcomeAppliedAt === undefined) continue;
     if (meta.outcome === undefined) {
       const { donePath, errorPath } = getDeployOperationPaths(operationId);
       const exists = async (file: string): Promise<boolean> => fs.access(file).then(() => true, () => false);
@@ -310,6 +453,7 @@ export async function cleanStaleOperations(): Promise<void> {
     await fs.unlink(path.join(dir, `${operationId}.log`)).catch(() => {});
     await fs.unlink(path.join(dir, `${operationId}.done`)).catch(() => {});
     await fs.unlink(path.join(dir, `${operationId}.error`)).catch(() => {});
-    if ((await getActiveOperationId()) === operationId) await clearActiveOperation();
+    // Ownership-checked inside, so a guard that has already moved on to a newer operation survives.
+    await clearActiveOperation(operationId);
   }
 }

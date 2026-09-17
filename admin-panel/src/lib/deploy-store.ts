@@ -7,7 +7,7 @@ import path from 'path';
 import util from 'util';
 
 import { composeLocationFlags, type HostComposeLocation } from '@/lib/compose-location';
-import { DEPLOY_OPERATION_ID_REGEX, DEPLOY_STALE_LABEL, DEPLOY_STALE_MS } from '@/lib/constants/deploy';
+import { DEPLOY_OPERATION_ID_REGEX, DEPLOY_STALE_LABEL, DEPLOY_STALE_MS, DEPLOY_UNOBSERVABLE_LABEL } from '@/lib/constants/deploy';
 import { parseDeployPercent, type DeployStatus } from '@/lib/deploy-percent.shared';
 import { getRepoRoot } from '@/lib/repo-root';
 import { logToDiscord } from '@/lib/discord-notifier';
@@ -21,9 +21,9 @@ import {
   generateOperationId,
   getActiveOperationId,
   getDeployOperationPaths,
-  isDeployProcessAlive,
+  markDeployOutcomeApplied,
+  probeDeployProcess,
   listDeployOperations,
-  patchDeployMeta,
   readDeployMeta,
   recordDeployOperationStart,
   recordDeployProcess,
@@ -190,28 +190,42 @@ async function finalizeContestActivation(contestId: number): Promise<void> {
 }
 
 /**
- * Applies a deploy docker reported as successful: the contest is activated — the only place DB
- * is_active moves — and the operation is marked settled so no later lookup activates or notifies
- * twice.
+ * Applies the effects of the outcome this operation's record claims, outside-in: the record on disk
+ * decides, and it also says whether they still have to run at all.
  *
- * Why the claim comes first: settling is reachable concurrently from the status stream of every open
- * tab, the 30s discovery lookup and the pre-guard reconcile, and the effects below must happen once.
- * Writing the outcome before them is what makes the second settler read "already settled" instead of
- * activating, notifying and syncing alongside this one.
+ * Why every settle goes through the claim and not straight to the effects: settling is reachable
+ * concurrently from the status stream of every open tab, the 30s discovery lookup and the pre-guard
+ * reconcile, and the effects below must happen once. The claim is what makes the second settler read
+ * "someone else's" instead of activating, reverting, notifying and syncing alongside this one.
  *
- * Why an activation failure is recorded as the terminal result rather than left to retry: the
- * containers run this contest and config.toml names it, so nothing may be reverted. Left unsettled,
- * the operation would re-attempt the activation on every lookup, hold the deploy guard for good, and
- * lose both its record and its `.done` marker to the 30-minute cleanup — a contest that is never
- * activated while the configuration names it. A recorded failure is the honest state: the operator
- * sees it and can activate the contest from the contests page.
+ * Why a claim already on the record is still applied here: `claimDeployOutcome` hands the effects back
+ * to this caller when the settler that took the claim never came back — the crash between the claim and
+ * its effects. Treating every recorded outcome as done is what reports a result that never happened: a
+ * contest never activated while every lookup answers "completed", or a rollback that never ran while
+ * config.toml keeps the contest the deploy did not reach.
  */
-async function settleCompletedDeploy(operationId: string, meta: DeployMeta, log: string): Promise<DeployStatusResult> {
-  const percent = parseDeployPercent(log);
-  const base = { contestId: meta.contestId, startedAt: meta.startedAt, log, percent };
-  const alreadySettled = await claimDeployOutcome(operationId, { status: 'completed' });
-  if (alreadySettled !== null) return settledStatus(meta, log, alreadySettled);
+async function applyClaimedOutcome(operationId: string, meta: DeployMeta, log: string, outcome: DeployOutcome): Promise<DeployStatusResult> {
+  const claim = await claimDeployOutcome(operationId, outcome);
+  if (claim.kind === 'reported') return settledStatus(meta, log, claim.outcome);
+  return claim.outcome.status === 'completed'
+    ? applyCompletedOutcome(operationId, meta, log)
+    : applyFailedOutcome(operationId, meta, log, claim.outcome.error ?? 'Deploy failed.');
+}
 
+/**
+ * Applies a deploy docker reported as successful: the contest is activated — the only place the DB's
+ * is_active moves — and the claim is marked applied so no later lookup activates or notifies twice.
+ *
+ * Why an activation failure is recorded as the terminal result rather than left unapplied: the
+ * containers run this contest and config.toml names it, so nothing may be reverted. A recorded failure
+ * is the honest state: the operator sees it, and can activate the contest from the contests page.
+ *
+ * Why the claim is marked applied even then: an unapplied claim is one a later panel takes over and
+ * runs again (see `claimDeployOutcome`), which would re-attempt an activation this panel has already
+ * watched fail. The failure is this operation's outcome, not a state to retry.
+ */
+async function applyCompletedOutcome(operationId: string, meta: DeployMeta, log: string): Promise<DeployStatusResult> {
+  const base = { contestId: meta.contestId, startedAt: meta.startedAt, log, percent: parseDeployPercent(log) };
   try {
     await finalizeContestActivation(meta.contestId);
   } catch (error) {
@@ -219,61 +233,91 @@ async function settleCompletedDeploy(operationId: string, meta: DeployMeta, log:
       status: 'failed',
       error: `Deploy completed but contest activation failed: ${(error as Error).message}`,
     };
-    await patchDeployMeta(operationId, { outcome });
-    await clearActiveOperation();
+    await markDeployOutcomeApplied(operationId, outcome);
+    await clearActiveOperation(operationId);
     await logToDiscord('Contest Deploy Failed', `Contest ID **${meta.contestId}**: ${outcome.error}`, 15158332, true);
     return { success: false, status: 'failed', ...base, error: outcome.error };
   }
 
-  await clearActiveOperation();
+  await markDeployOutcomeApplied(operationId);
+  await clearActiveOperation(operationId);
   await logToDiscord('Contest Deploy Completed', `Contest ID **${meta.contestId}** deployed successfully.`, 3066993);
   return { success: true, status: 'completed', ...base };
 }
 
 /**
- * Applies a deploy that did not complete, and is the only place `config.toml` is reverted.
+ * Applies an outcome reported as a failure, and is the only place `config.toml` is reverted.
  *
  * Why only here: a revert contradicts the running containers the moment the deploy did succeed, which
  * is how the panel ended up with configuration, database and containers asserting three different
  * contests. So a revert waits for evidence that there is no success to lose — a non-zero exit docker
  * reported, or a process gone without reporting at all. A watch timing out is not that evidence.
  *
- * Why the claim comes first here too: the revert, the config sync and the Discord notice are the
- * effects a second settler must not repeat. The claimed outcome carries the error; the warning the
- * rollback produces is patched in by the winner, which is the only writer of this record from then on.
+ * The claimed outcome carries the error; the warning the rollback produces is written with it in the
+ * completion marker, so the record holds both in one step.
  */
-async function settleFailedDeploy(operationId: string, meta: DeployMeta, log: string, error: string): Promise<DeployStatusResult> {
-  const alreadySettled = await claimDeployOutcome(operationId, { status: 'failed', error });
-  if (alreadySettled !== null) return settledStatus(meta, log, alreadySettled);
-
+async function applyFailedOutcome(operationId: string, meta: DeployMeta, log: string, error: string): Promise<DeployStatusResult> {
   const percent = parseDeployPercent(log);
   const rollbackFailure = await rollbackContestId(meta);
   const warning = rollbackFailure ?? undefined;
-  await patchDeployMeta(operationId, { outcome: { status: 'failed', error, warning } });
-  await clearActiveOperation();
+  await markDeployOutcomeApplied(operationId, { status: 'failed', error, warning });
+  await clearActiveOperation(operationId);
   await logToDiscord('Contest Deploy Failed', `Contest ID **${meta.contestId}**: ${error}`, 15158332, true);
   return { success: false, status: 'failed', contestId: meta.contestId, startedAt: meta.startedAt, log, percent, error, warning };
 }
 
+/** Whether `config.toml` still names `contestId`, or null when the file cannot be read at all. */
+async function configTomlNamesContest(contestId: number): Promise<boolean | null> {
+  const content = await readConfigToml();
+  if (content === null) return null;
+  return readContestId(content) === contestId;
+}
+
 /**
- * Puts the configuration back on the contest this operation replaced — but only while the file still
- * holds the contest this operation set.
+ * Puts the active contest back to what this operation replaced, changing only the key this operation
+ * owns and re-reading the file as close to the write as the design allows.
  *
- * Why the condition: a revert is only correct while this operation is the file's last writer. A
- * `config.toml` that already names another contest belongs to a newer deploy, and reverting it would
- * leave the file and the database asserting different contests — the split this path exists to avoid.
- * That is also why the write is derived from the very content the check read: re-reading the file
- * inside the write would put a second await between "the file is mine" and "I own this write". The
- * window that remains is the read and the write themselves, which the filesystem does not let us make
- * one operation; no deploy can start in it, because the guard is still held until this settle ends.
+ * Why the content written is read here rather than taken from the ownership check that preceded it:
+ * anything another writer puts in config.toml in between — a webhook or a credential key from
+ * `env:update`, which the deploy guard does not gate because only a deploy takes it — would be
+ * reverted together with that snapshot, silently and undetectably. What remains is the window between
+ * this read and the write below, which the filesystem gives us no way to make one operation: it is one
+ * `await` wide, and closing it would take a lock file the whole project would have to honour.
+ *
+ * Why the ownership condition is repeated on this fresh read: the write is only correct while this
+ * operation is the file's last writer. A config.toml that already names another contest belongs to a
+ * newer deploy, and reverting it would leave the file and the database asserting different contests —
+ * the split this path exists to avoid. Repeating it here is also what keeps the check and the write
+ * from spanning an edit: the check before this call is about whether to try at all, this one is about
+ * what to write.
+ */
+async function revertOwnedContestId(expected: number, previous: number): Promise<'reverted' | 'not_ours' | 'unreadable'> {
+  const content = await readConfigToml();
+  if (content === null) return 'unreadable';
+  if (readContestId(content) !== expected) return 'not_ours';
+  await fs.writeFile(getConfigTomlPath(), setContestId(content, previous));
+  return 'reverted';
+}
+
+/**
+ * Reverts the configuration for a deploy that will not complete, and skips the revert when the file is
+ * no longer this operation's to touch.
+ *
+ * Why the check before the write: a revert is only correct while this operation is the file's last
+ * writer, so the file is read once to decide whether this settle should revert at all — and separately
+ * again inside `revertOwnedContestId`, which is the content the write is derived from.
  */
 async function rollbackContestId(meta: DeployMeta): Promise<string | null> {
   if (meta.previousContestId === undefined) return null;
-  const content = await readConfigToml();
-  if (content === null) return 'Could not read CONTEST_ID from config.toml during rollback.';
-  if (readContestId(content) !== meta.contestId) return null;
+  const owned = await configTomlNamesContest(meta.contestId);
+  if (owned === null) return 'Could not read CONTEST_ID from config.toml during rollback.';
+  if (!owned) return null;
   try {
-    await fs.writeFile(getConfigTomlPath(), setContestId(content, meta.previousContestId));
+    const reverted = await revertOwnedContestId(meta.contestId, meta.previousContestId);
+    if (reverted === 'unreadable') return 'Could not read CONTEST_ID from config.toml during rollback.';
+    // Lost the file to a newer deploy between the two reads: its contest is the one that stands, and
+    // the database already agrees with it.
+    if (reverted === 'not_ours') return null;
     await runConfigSync();
     return null;
   } catch (error) {
@@ -281,7 +325,10 @@ async function rollbackContestId(meta: DeployMeta): Promise<string | null> {
   }
 }
 
-/** The status of an operation whose outcome the panel has already applied; repeats no side effect. */
+/**
+ * The status of an outcome whose effects this caller must not run — they are done, or another settler
+ * is inside the lease that claimed them. Reports the result; repeats no side effect.
+ */
 function settledStatus(meta: DeployMeta, log: string, outcome: DeployOutcome): DeployStatusResult {
   const base = { contestId: meta.contestId, startedAt: meta.startedAt, log, percent: parseDeployPercent(log) };
   return outcome.status === 'completed'
@@ -304,28 +351,51 @@ async function fileExists(file: string): Promise<boolean> {
  * Why nothing else is consulted: elapsed time and log silence are properties of the *watch*, not of
  * the deploy — a docker build step is silent for minutes while working, and a legitimate deploy can
  * outlast any clock. That is why a timeout stops the watch (route, hook) and never reaches this state.
+ * The clocks that do appear below are not the watch's: each stands in for evidence this panel cannot
+ * get — a record with no process of its own to watch, or one whose process table is not this panel's.
  */
 async function resolveDeployStatus(operationId: string, meta: DeployMeta, log: string): Promise<DeployStatusResult> {
-  if (meta.outcome) return settledStatus(meta, log, meta.outcome);
+  // Why a settled-looking record still comes through here: the outcome is a claim, and the claim's
+  // effects are applied only when the completion marker beside it says they landed (see
+  // `applyClaimedOutcome`). Reporting a claim as settled is what left a crashed settle's contest
+  // inactive while every lookup answered "completed".
+  if (meta.outcome) return applyClaimedOutcome(operationId, meta, log, meta.outcome);
 
   const paths = getDeployOperationPaths(operationId);
-  if (await fileExists(paths.donePath)) return settleCompletedDeploy(operationId, meta, log);
+  if (await fileExists(paths.donePath)) {
+    return applyClaimedOutcome(operationId, meta, log, { status: 'completed' });
+  }
 
   const errorContent = await fs.readFile(paths.errorPath, 'utf-8').catch(() => null);
   if (errorContent !== null) {
-    return settleFailedDeploy(operationId, meta, log, `Docker process exited with code ${errorContent.trim()}.`);
+    return applyClaimedOutcome(operationId, meta, log, {
+      status: 'failed',
+      error: `Docker process exited with code ${errorContent.trim()}.`,
+    });
   }
 
   if (meta.pid !== undefined) {
-    if (await isDeployProcessAlive(meta)) return runningStatus(meta, log);
+    const verdict = await probeDeployProcess(meta);
+    // Why the unobservable verdict is 'running' and not a settle: the panel cannot see this record's
+    // process table at all, so it has nothing that says the deploy ended. It also must not wait forever
+    // (see `probeDeployProcess`): past the bound the same verdict comes back as `presumed-gone`.
+    if (verdict === 'alive' || verdict === 'unobservable') return runningStatus(meta, log);
     // Gone and silent: its result never arrived, so nothing it did can be trusted. Nobody is working.
-    return settleFailedDeploy(operationId, meta, log, 'Deploy process is gone without reporting a result.');
+    return applyClaimedOutcome(operationId, meta, log, {
+      status: 'failed',
+      error: verdict === 'gone'
+        ? 'Deploy process is gone without reporting a result.'
+        : `Deploy gave no result within ${DEPLOY_UNOBSERVABLE_LABEL}.`,
+    });
   }
 
   // No process recorded (a record written by an older panel). Existence cannot be checked, so the
   // stale bound decides, and it is deliberately generous: being wrong here reverts a live deploy.
   if (Date.now() - new Date(meta.startedAt).getTime() > DEPLOY_STALE_MS) {
-    return settleFailedDeploy(operationId, meta, log, `Deploy gave no result within ${DEPLOY_STALE_LABEL}.`);
+    return applyClaimedOutcome(operationId, meta, log, {
+      status: 'failed',
+      error: `Deploy gave no result within ${DEPLOY_STALE_LABEL}.`,
+    });
   }
   return runningStatus(meta, log);
 }
@@ -351,9 +421,11 @@ export async function fetchDeployStatus(operationId: string): Promise<DeployStat
  * request.
  */
 export async function reconcileDeployOperations(): Promise<void> {
-  for (const { operationId, meta } of await listDeployOperations()) {
+  for (const { operationId } of await listDeployOperations()) {
     // fetchDeployStatus is the one resolution rule; reconciliation only applies it to every record.
-    if (!meta.outcome) await fetchDeployStatus(operationId);
+    // Every record, including one that already has an outcome: that outcome is a claim, and this is
+    // where a claim whose effects never ran — the panel that took it is gone — gets them applied.
+    await fetchDeployStatus(operationId);
   }
   await cleanStaleOperations();
 }
@@ -392,8 +464,9 @@ export async function runDeployContest(contestId: number, plan: ContestDeployPla
     try {
       await launchDetachedDeploy(operationId, buildContestDeployCommand(plan));
     } catch (error) {
-      // Nothing was started, so there is no work to observe: give back the guard and the contest id.
-      await clearActiveOperation().catch(() => {});
+      // Nothing was started, so there is no work to observe: give back the guard this operation just
+      // took (checked inside `clearActiveOperation`) and the contest id.
+      await clearActiveOperation(operationId);
       await updateConfigTomlContestId(previousContestId).catch(() => {});
       return { success: false, error: (error as Error).message };
     }
