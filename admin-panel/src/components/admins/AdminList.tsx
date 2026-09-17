@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { useSyncedState } from '@/hooks/useSyncedState';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
@@ -48,7 +49,7 @@ export function AdminList({ initialAdmins, actionLabels }: AdminListProps) {
       if (result.success) {
         window.location.reload();
       } else {
-        alert(result.error);
+        toast.error(result.error);
       }
     }
   };
@@ -56,7 +57,7 @@ export function AdminList({ initialAdmins, actionLabels }: AdminListProps) {
   const handleToggleEnabled = async (admin: { id: number; enabled: boolean }) => {
     const result = await updateAdmin(admin.id, { enabled: !admin.enabled });
     if (!result.success) {
-      alert(result.error ?? 'Failed to update admin');
+      toast.error(result.error ?? 'Failed to update admin');
     }
     window.location.reload();
   };

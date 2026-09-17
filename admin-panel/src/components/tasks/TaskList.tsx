@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { useSyncedState } from '@/hooks/useSyncedState';
 import { useRouter, usePathname } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
@@ -56,7 +57,7 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
     if (confirm('Are you sure you want to delete this task? This is IRREVERSIBLE.')) {
       const result = await apiClient.delete(`/api/tasks/${id}`);
       if (result.success) window.location.reload();
-      else alert(`Failed to delete task: ${result.error}`);
+      else toast.error(`Failed to delete task: ${result.error}`);
     }
   };
 

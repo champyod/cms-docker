@@ -7,6 +7,7 @@ import type { ReactElement } from 'react';
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
 import { RefreshCw, Download, Package, ArrowUpCircle } from 'lucide-react';
+import { toast } from 'sonner';
 
 export function ManualServiceControlCard(): ReactElement {
   return (
@@ -67,10 +68,10 @@ function UpdateServerButton(): ReactElement {
     setUpdating(true);
     try {
       const res = await updateServer();
-      if (res.success) alert(res.message);
-      else alert('Error: ' + res.error);
+      if (res.success) toast.success(res.message);
+      else toast.error('Error: ' + res.error);
     } catch {
-      alert('Failed to trigger update');
+      toast.error('Failed to trigger update');
     }
     setUpdating(false);
   };
@@ -96,10 +97,10 @@ function RestartButton({ type, label }: { type: 'core' | 'admin' | 'worker' | 'a
     setRestarting(true);
     try {
       const res = await restartServices(type);
-      if (res.success) alert(res.message);
-      else alert('Error: ' + res.error);
+      if (res.success) toast.success(res.message);
+      else toast.error('Error: ' + res.error);
     } catch {
-      alert('Failed to restart');
+      toast.error('Failed to restart');
     }
     setRestarting(false);
   };
@@ -125,10 +126,10 @@ function PullImagesButton(): ReactElement {
     setPulling(true);
     try {
       const res = await pullLatestImages();
-      if (res.success) alert(res.message);
-      else alert('Error: ' + res.error);
+      if (res.success) toast.success(res.message);
+      else toast.error('Error: ' + res.error);
     } catch {
-      alert('Failed to pull images');
+      toast.error('Failed to pull images');
     }
     setPulling(false);
   };
@@ -155,10 +156,10 @@ function RebuildButton({ stack, label }: { stack: 'core' | 'admin' | 'worker' | 
     setRebuilding(true);
     try {
       const res = await rebuildImages(stack);
-      if (res.success) alert(res.message);
-      else alert('Error: ' + res.error);
+      if (res.success) toast.success(res.message);
+      else toast.error('Error: ' + res.error);
     } catch {
-      alert('Failed to rebuild');
+      toast.error('Failed to rebuild');
     }
     setRebuilding(false);
   };

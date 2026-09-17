@@ -1,6 +1,7 @@
 'use client';
 
 import { Edit2, HelpCircle, Plus, Trash2, Users } from 'lucide-react';
+import { toast } from 'sonner';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useMemo, useState } from 'react';
@@ -47,7 +48,7 @@ export function TeamList({ initialTeams, permissionKeys }: TeamListProps) {
       if (result.success) {
         window.location.reload();
       } else {
-        alert(result.error);
+        toast.error(result.error);
       }
     }
   };

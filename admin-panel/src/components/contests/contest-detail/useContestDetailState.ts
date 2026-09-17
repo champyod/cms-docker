@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { updateContestSettings, removeParticipant, removeTaskFromContest } from '@/app/actions/contests';
 import { setTestUser } from '@/app/actions/participations';
@@ -57,7 +58,7 @@ export function useContestDetailState(contest: ContestLike) {
     if (confirm('Mark this user as a test user? (Hidden + Unrestricted)')) {
       const result = await setTestUser(participationId);
       if (result.success) window.location.reload();
-      else alert('Failed: ' + result.error);
+      else toast.error('Failed: ' + result.error);
     }
   };
 

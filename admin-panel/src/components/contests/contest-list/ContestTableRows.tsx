@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import { TableCell, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
 import { Badge } from '@/components/core/Badge';
@@ -40,7 +41,7 @@ export function ContestTableRow({ contest, locale, isSuperAdmin, canManage, onSe
     if (confirm('Are you sure you want to delete this contest? This is IRREVERSIBLE.')) {
       const result = await apiClient.delete(`/api/contests/${id}`);
       if (result.success) window.location.reload();
-      else alert('Failed to delete contest: ' + result.error);
+      else toast.error('Failed to delete contest: ' + result.error);
     }
   };
 

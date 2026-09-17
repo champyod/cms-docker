@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { Upload, Check, AlertCircle, Archive, File as FileIcon, Settings } from 'lucide-react';
 import JSZip from 'jszip';
 import { batchUploadTestcases } from '@/app/actions/testcases';
@@ -47,7 +48,7 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
       setPairs(await buildPairs(sourceItems, inputPattern, outputPattern));
     } catch (error) {
       console.error(error);
-      alert('Failed to process files');
+      toast.error('Failed to process files');
     } finally {
       setProcessing(false);
     }
@@ -67,7 +68,7 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
       setPairs(await buildPairs(sourceItems, inputPattern, outputPattern));
     } catch (error) {
       console.error(error);
-      alert('Failed to process zip file');
+      toast.error('Failed to process zip file');
     } finally {
       setProcessing(false);
     }
@@ -102,11 +103,11 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
         onSuccess();
         onClose();
       } else {
-        alert(`Upload failed: ${result.error}`);
+        toast.error(`Upload failed: ${result.error}`);
       }
     } catch (error) {
       console.error(error);
-      alert('An unexpected error occurred.');
+      toast.error('An unexpected error occurred.');
     } finally {
       setLoading(false);
     }

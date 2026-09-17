@@ -15,6 +15,7 @@ import { Text } from '@/components/core/Typography';
 import { Button } from '@/components/core/Button';
 import { Input } from '@/components/core/Input';
 import { Loading } from '@/components/core/Loading';
+import { toast } from 'sonner';
 
 interface DiscordSettings {
   configTomlPresent: boolean;
@@ -78,9 +79,9 @@ export default function MaintenanceClient() {
     setSaving(true);
     const result = await updateEnvFile('.env', data);
     if (result.success) {
-      alert('Maintenance settings saved successfully!');
+      toast.success('Maintenance settings saved successfully!');
     } else {
-      alert('Failed to save: ' + result.error);
+      toast.error('Failed to save: ' + result.error);
     }
     setSaving(false);
   };
@@ -90,9 +91,9 @@ export default function MaintenanceClient() {
     setBackingUp(true);
     const result = await triggerManualBackup();
     if (result.success) {
-      alert('Backup triggered in background. Check Discord for status.');
+      toast.success('Backup triggered in background. Check Discord for status.');
     } else {
-      alert('Failed: ' + result.error);
+      toast.error('Failed: ' + result.error);
     }
     setBackingUp(false);
   };
@@ -106,20 +107,21 @@ export default function MaintenanceClient() {
       });
       if (!result.success) {
         setDiscordError(result.error);
-        alert('Notification settings not saved: ' + result.error);
+        toast.error('Notification settings not saved: ' + result.error);
         return;
       }
       setDiscordError('');
       await loadDiscordSettings();
       if (!applyToMonitor) {
-        alert('Notification settings saved to config.toml and .env.');
+        toast.success('Notification settings saved to config.toml and .env.');
         return;
       }
       const restart = await restartServices('custom', ['monitor']);
       if (restart.success) {
-        alert('Notification settings saved and the monitor was recreated.');
+        toast.success('Notification settings saved and the monitor was recreated.');
       } else {
-        alert('Settings saved, but the monitor restart failed: ' + restart.error);
+        // Partial success: the settings were written, so the operator must hear both facts.
+        toast.warning('Settings saved, but the monitor restart failed: ' + restart.error);
       }
     } finally {
       setDiscordSaving(false);
@@ -134,12 +136,12 @@ export default function MaintenanceClient() {
         roleId: data.DISCORD_ROLE_ID ?? '',
       });
       if (result.success) {
-        alert(`Test alert delivered (HTTP ${result.status}).`);
+        toast.success(`Test alert delivered (HTTP ${result.status}).`);
         return;
       }
       const message = result.error ?? 'The test alert failed.';
       setDiscordError(message);
-      alert('Test alert failed: ' + message);
+      toast.error('Test alert failed: ' + message);
     } finally {
       setDiscordTesting(false);
     }

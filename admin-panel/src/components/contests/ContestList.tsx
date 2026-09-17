@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { useSyncedState } from '@/hooks/useSyncedState';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { EmptyState } from '@/components/core/EmptyState';
@@ -51,7 +52,7 @@ function ContestMobileCard({ contest, locale, isSuperAdmin, canManage, onSetActi
     if (confirm('Are you sure you want to delete this contest? This is IRREVERSIBLE.')) {
       const result = await apiClient.delete(`/api/contests/${contest.id}`);
       if (result.success) window.location.reload();
-      else alert('Failed to delete contest: ' + result.error);
+      else toast.error('Failed to delete contest: ' + result.error);
     }
   };
   return (

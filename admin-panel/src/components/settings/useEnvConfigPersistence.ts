@@ -3,6 +3,7 @@
 import { updateEnvFile } from '@/app/actions/env';
 import { restartServices } from '@/app/actions/services';
 import { EnvFilesData, collectRelevantUpdates } from './envConfigSections';
+import { toast } from 'sonner';
 
 interface PersistenceDeps {
   data: EnvFilesData;
@@ -25,7 +26,7 @@ async function saveFileUpdates(
   const result = await updateEnvFile(filename, relevantUpdates);
 
   if (!result.success) {
-    alert(`Failed to save ${filename}: ` + result.error);
+    toast.error(`Failed to save ${filename}: ` + result.error);
     return false;
   }
 
@@ -42,10 +43,11 @@ async function restartAffectedServices(
 ): Promise<void> {
   const restartRes = await restartServices('custom', requiredRestarts);
   if (restartRes.success) {
-    alert(`Saved and restarted: ${requiredRestarts.join(', ')}`);
+    toast.success(`Saved and restarted: ${requiredRestarts.join(', ')}`);
     clearRequiredRestarts();
   } else {
-    alert('Saved, but failed to restart: ' + restartRes.error);
+    // Partial success: the file was written, so the operator must hear both facts.
+    toast.warning('Saved, but failed to restart: ' + restartRes.error);
   }
 }
 
@@ -61,10 +63,10 @@ export function useEnvConfigPersistence(deps: PersistenceDeps): EnvConfigPersist
       if (shouldRestart && requiredRestarts.length > 0) {
         await restartAffectedServices(requiredRestarts, clearRequiredRestarts);
       } else {
-        alert(`Saved ${filename} successfully!`);
+        toast.success(`Saved ${filename} successfully!`);
       }
     } catch {
-      alert('An error occurred while saving.');
+      toast.error('An error occurred while saving.');
     } finally {
       setSaving(false);
     }

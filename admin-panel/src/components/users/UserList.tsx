@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { FileSpreadsheet, HelpCircle, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -108,7 +109,7 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
       if (result.success) {
         await fetchUsers();
       } else {
-        alert('Failed to delete user');
+        toast.error('Failed to delete user');
       }
     }
   };

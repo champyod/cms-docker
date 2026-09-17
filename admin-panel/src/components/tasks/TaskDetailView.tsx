@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { usePathname } from 'next/navigation';
 import { apiClient } from '@/lib/apiClient';
 import { DatasetModal } from './DatasetModal';
@@ -78,7 +79,7 @@ export function TaskDetailView({ task, permissionKeys }: TaskDetailViewProps): R
   const handleDeleteDataset = async (datasetId: number): Promise<void> => {
     if (!confirm('Delete this dataset? This cannot be undone.')) return;
     const result = await apiClient.delete(`/api/datasets/${datasetId}`);
-    if (!result.success) alert(result.error);
+    if (!result.success) toast.error(result.error);
     else reload();
   };
 

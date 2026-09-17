@@ -37,11 +37,23 @@ RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" pnpm run build
 # Production image, copy all the files and run next
 FROM node:20-bookworm-slim AS release
 
-# Install Docker CLI and make to allow managing containers and running make commands
+# Install Docker CLI, make and python3 to allow managing containers, running make
+# commands, and running `make env` (./cms config sync) from inside the container.
+# WHY --no-install-recommends would otherwise drop curl's ca-certificates recommend,
+# which the docker install below needs for HTTPS, so list it explicitly.
 RUN apt-get update && \
-    apt-get install -y curl make && \
+    apt-get install -y --no-install-recommends ca-certificates curl make python3 && \
     curl -fsSL https://get.docker.com | sh && \
     rm -rf /var/lib/apt/lists/*
+
+# WHY: the panel runs `make env` (./cms config sync) inside this container, and
+# scripts/__inject_config.sh shells out to python3 via a heredoc. A missing
+# interpreter or stdlib module would otherwise only surface as a failed monitor
+# restart on a live deployment. Emulate the heredoc (python3 reading its program
+# from stdin) and resolve the exact stdlib imports the script uses.
+RUN python3 --version \
+ && printf 'import os, re, json\nimport urllib.parse\nfrom pathlib import Path\nPath("/tmp/cms-python-guard").write_text("ok")\nassert Path("/tmp/cms-python-guard").read_text() == "ok"\n' | python3 \
+ && rm -f /tmp/cms-python-guard
 
 WORKDIR /app
 

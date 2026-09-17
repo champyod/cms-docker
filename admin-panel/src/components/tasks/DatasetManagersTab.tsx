@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { FileText, Loader2, Trash2, Terminal, Upload } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
@@ -40,7 +41,7 @@ export function DatasetManagersTab({
         fileData: base64,
       });
       if (res.success) onReload();
-      else alert(res.error ?? 'Upload failed');
+      else toast.error(res.error ?? 'Upload failed');
     } catch (err) {
       console.error(err);
     } finally {

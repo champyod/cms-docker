@@ -1,6 +1,7 @@
 'use client';
 
 import { ChevronDown, ChevronUp, ExternalLink, Save, Settings, Trash2, Trophy, Users } from 'lucide-react';
+import { toast } from 'sonner';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 
@@ -62,7 +63,7 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
       if (result.success) {
         router.refresh();
       } else {
-        alert('Failed: ' + result.error);
+        toast.error('Failed: ' + result.error);
       }
     } finally {
       setSaving(false);
@@ -75,7 +76,7 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
       if (result.success) {
         router.push(`/${locale}/teams`);
       } else {
-        alert('Failed: ' + result.error);
+        toast.error('Failed: ' + result.error);
       }
     }
   };

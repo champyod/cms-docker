@@ -1,6 +1,7 @@
 'use client';
 
 import { AlertCircle, CheckCircle2, Loader2, Terminal, XCircle } from 'lucide-react';
+import { toast } from 'sonner';
 import { useState, useEffect } from 'react';
 
 import { recalculateSubmission, getSubmissionFieldAccess } from '@/app/actions/submissions';
@@ -48,7 +49,7 @@ export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModal
           await recalculateSubmission(submission.id, type);
           window.location.reload();
       } catch (error) {
-          alert('Error: ' + error);
+          toast.error('Error: ' + error);
       } finally {
           setLoadingAction(null);
       }
