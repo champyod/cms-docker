@@ -81,7 +81,6 @@ export async function restartServices(type: 'all' | 'core' | 'admin' | 'worker' 
     const files = [
       'docker-compose.core.yml',
       'docker-compose.admin.yml',
-      'docker-compose.worker.yml',
       contestComposeFile,
       'docker-compose.monitor.yml'
     ].map(f => `-f ${f}`).join(' ');

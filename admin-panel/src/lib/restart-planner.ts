@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { getRepoRoot } from './repo-root';
+import { buildWorkerControlCommand } from './compose-command';
 
 export interface RestartPolicies {
     dependencies: Record<string, string[]>;
@@ -74,17 +75,28 @@ async function buildCustomRestartCommand(customList: string[], files: string): P
   // Why: filter keeps only safe service names and strips contest-stack sentinel so docker compose receives valid service identifiers
   const filteredList = customList.filter(s => s !== 'contest-stack' && /^[a-zA-Z0-9_-]+$/.test(s));
 
-  if (needsContestStack) {
-    return { skip: false, command: `docker compose ${files} up -d --remove-orphans --force-recreate` };
-  }
-  if (filteredList.length === 0) {
+  if (filteredList.length === 0 && !needsContestStack) {
     return { skip: true, message: 'Nothing to restart.' };
   }
 
   const policies = await getRestartPolicies();
-  const contestServices = collectContestServices(filteredList, policies);
-
-  return { skip: false, command: `docker compose ${files} up -d --force-recreate ${contestServices.join(' ')}` };
+  const services = collectContestServices(filteredList, policies);
+  const isWorker = (service: string): boolean => /^(?:worker|cms-worker(?:-\d+)?)$/.test(service);
+  const workers = services.filter(isWorker);
+  const contestServices = services.filter(service => !isWorker(service));
+  const commands: string[] = [];
+  // A contest-stack recreation previously included workers through the merged
+  // files; keep that coverage without handing them to the non-fleet project.
+  if (needsContestStack || workers.length > 0) {
+    const allWorkers = needsContestStack || workers.some(service => service === 'worker' || service === 'cms-worker');
+    commands.push(buildWorkerControlCommand('restart', allWorkers ? [] : workers.map(service => service.slice('cms-worker-'.length))));
+  }
+  if (needsContestStack) {
+    commands.push(`docker compose ${files} up -d --remove-orphans --force-recreate`);
+  } else if (contestServices.length > 0) {
+    commands.push(`docker compose ${files} up -d --force-recreate ${contestServices.join(' ')}`);
+  }
+  return { skip: false, command: commands.join(' && ') };
 }
 
 export async function buildRestartCommand(
@@ -99,10 +111,10 @@ export async function buildRestartCommand(
     return { skip: false, command: 'docker compose -f docker-compose.admin.yml up -d --build --force-recreate' };
   }
   if (type === 'worker') {
-    return { skip: false, command: 'docker compose -f docker-compose.worker.yml up -d --build --force-recreate' };
+    return { skip: false, command: buildWorkerControlCommand('restart') };
   }
   if (type === 'custom' && customList && customList.length > 0) {
     return buildCustomRestartCommand(customList, files);
   }
-  return { skip: false, command: `docker compose ${files} up -d --build` };
+  return { skip: false, command: `${buildWorkerControlCommand('restart')} && docker compose ${files} up -d --build` };
 }

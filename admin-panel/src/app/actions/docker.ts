@@ -5,6 +5,7 @@ import util from 'util';
 import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
 import { recordAudit } from '@/lib/audit';
+import { buildComposeCommand } from '@/lib/compose-command';
 
 const execPromise = util.promisify(exec);
 
@@ -99,29 +100,17 @@ export async function getContainerContestId(): Promise<{ success: true; contestI
   }
 }
 
-export async function runCompose(action: 'up' | 'down' | 'restart' | 'build', serviceType?: 'core' | 'admin' | 'contest' | 'worker') {
+export async function runCompose(action: 'up' | 'down' | 'restart' | 'build', serviceType?: 'core' | 'admin' | 'contest' | 'worker'): Promise<{ success: true; output: string } | { success: false; error: string }> {
   await ensurePermission('container:control');
   try {
     const repoRoot = getRepoRoot();
-    let fileArgs = '';
-    
-    if (serviceType === 'core') fileArgs = '-f docker-compose.core.yml';
-    else if (serviceType === 'admin') fileArgs = '-f docker-compose.admin.yml';
-    else if (serviceType === 'contest') fileArgs = '-f docker-compose.contest.yml';
-    else if (serviceType === 'worker') fileArgs = '-f docker-compose.worker.yml';
-    else {
-      fileArgs = '-f docker-compose.core.yml -f docker-compose.admin.yml -f docker-compose.contest.yml -f docker-compose.worker.yml';
-    }
-
-    let cmd = `docker compose ${fileArgs} ${action}`;
-    if (action === 'up') cmd += ' -d';
-    if (action === 'build') cmd += ' --no-cache';
+    const cmd = buildComposeCommand(action, serviceType);
 
     const { stdout, stderr } = await execPromise(cmd, { cwd: repoRoot });
     await recordAudit({
       verb: 'container:control',
       entity: 'container',
-      afterValues: { action, serviceType: serviceType ?? 'all', command: `docker compose ${action}` },
+      afterValues: { action, serviceType: serviceType ?? 'all', command: cmd },
       result: 'success',
     });
     return { success: true, output: stdout || stderr };
