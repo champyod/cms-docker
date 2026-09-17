@@ -12,6 +12,7 @@ import { CONFIG_TOML_FILE } from '@/lib/config-toml';
 import { parseDeploymentMode, type DeploymentModeSetting } from '@/lib/deployment-mode';
 import {
   analyzeContainerDependencies as analyzeContainerDependenciesLib,
+  buildComposeFileFlags,
   buildRestartCommand,
   getRestartPolicies,
 } from '@/lib/restart-planner';
@@ -27,10 +28,6 @@ import type {
 } from '@/lib/deploy-operations';
 
 const execPromise = util.promisify(exec);
-
-async function getContestComposeFile(): Promise<string> {
-    return 'docker-compose.contest.yml';
-}
 
 /**
  * Reads the mode from config.toml — the source of truth — and not from process.env, which only
@@ -102,13 +99,10 @@ export async function restartServices(type: 'all' | 'core' | 'admin' | 'worker' 
     const rootDir = getRepoRoot();
     await execPromise('make env', { cwd: rootDir });
 
-    const contestComposeFile = await getContestComposeFile();
-    const files = [
-      'docker-compose.core.yml',
-      'docker-compose.admin.yml',
-      contestComposeFile,
-      'docker-compose.monitor.yml'
-    ].map(f => `-f ${f}`).join(' ');
+    // Why: the restart runs the same project the make targets and ./cms deploy. The partial stack
+    // files declare locally-built image names (cms-monitor, cms-admin-panel-next) that no registry
+    // serves, so an image-mode pull against them can only fail.
+    const files = await buildComposeFileFlags();
 
     const plan = await buildRestartCommand(type, customList, files, (await readDeploymentModeSetting()).mode);
     if (plan.skip) return { success: true, message: plan.message };
