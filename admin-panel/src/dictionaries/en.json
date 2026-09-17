@@ -318,5 +318,11 @@
       "noWebhookUrl": "No webhook URL to test — enter one and save it, or set DISCORD_WEBHOOK_URL in config.toml [infra].",
       "deliveryFailed": "Delivery failed"
     }
+  },
+  "live": {
+    "connecting": "Connecting…",
+    "connected": "Live",
+    "reconnecting": "Reconnecting…",
+    "paused": "Paused"
   }
 }

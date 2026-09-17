@@ -1,20 +1,12 @@
 'use client';
 
-import { useCallback, useState, useEffect } from 'react';
-import { getNetworkTrafficLogs } from '@/app/actions/docker-ops';
 import { Card } from '@/components/core/Card';
 import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
 import { SkeletonText } from '@/components/core/Skeleton';
 import { EmptyState } from '@/components/core/EmptyState';
 import { Network, Filter, Activity } from 'lucide-react';
-
-interface TrafficLog {
-  id: number;
-  timestamp: string;
-  container: string;
-  rx: string;
-  tx: string;
-}
+import { TRAFFIC_LOG_LIMIT_OPTIONS } from '@/lib/constants/live-stream';
+import type { TrafficLog } from '@/lib/live-frames';
 
 function TrafficMobileList({ logs }: { logs: TrafficLog[] }): React.JSX.Element {
   return (
@@ -55,27 +47,6 @@ function TrafficDesktopTable({ logs }: { logs: TrafficLog[] }): React.JSX.Elemen
   );
 }
 
-function useTrafficLogs(limit: number, setLogs: (logs: TrafficLog[]) => void, setLoading: (value: boolean) => void): () => void {
-  const fetchLogs = useCallback(async (): Promise<void> => {
-    try {
-      const result = await getNetworkTrafficLogs(limit);
-      if (result.success) setLogs(result.logs);
-    } catch (error) {
-      console.error('Failed to fetch network logs:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [limit, setLogs, setLoading]);
-
-  useEffect((): (() => void) => {
-    void fetchLogs();
-    const interval = setInterval(fetchLogs, 5000);
-    return (): void => clearInterval(interval);
-  }, [fetchLogs]);
-
-  return fetchLogs;
-}
-
 function TrafficHeader({ limit, onLimitChange }: { limit: number; onLimitChange: (value: number) => void }): React.JSX.Element {
   return (
     <div className="flex items-center justify-between mb-4">
@@ -95,10 +66,9 @@ function TrafficHeader({ limit, onLimitChange }: { limit: number; onLimitChange:
           onChange={(e) => onLimitChange(parseInt(e.target.value))}
           className="px-3 py-1.5 bg-muted border border-border rounded-lg text-foreground text-xs outline-none focus:border-cyan-500/50"
         >
-          <option value={10}>Last 10</option>
-          <option value={20}>Last 20</option>
-          <option value={30}>Last 30</option>
-          <option value={50}>Last 50</option>
+          {TRAFFIC_LOG_LIMIT_OPTIONS.map((option) => (
+            <option key={option} value={option}>Last {option}</option>
+          ))}
         </select>
       </div>
     </div>
@@ -116,14 +86,21 @@ function TrafficBody({ logs, loading }: { logs: TrafficLog[]; loading: boolean }
   );
 }
 
-export function NetworkTrafficLogs(): React.JSX.Element {
-  const [logs, setLogs] = useState<TrafficLog[]>([]);
-  const [limit, setLimit] = useState(20);
-  const [loading, setLoading] = useState(true);
-  useTrafficLogs(limit, setLogs, setLoading);
+interface NetworkTrafficLogsProps {
+  logs: TrafficLog[];
+  limit: number;
+  onLimitChange: (value: number) => void;
+  loading: boolean;
+}
+
+/**
+ * Why the page size is a prop: it is part of the stream's address, so changing it reopens the
+ * connection with the new size instead of starting a request of its own.
+ */
+export function NetworkTrafficLogs({ logs, limit, onLimitChange, loading }: NetworkTrafficLogsProps): React.JSX.Element {
   return (
     <Card className="p-6">
-      <TrafficHeader limit={limit} onLimitChange={setLimit} />
+      <TrafficHeader limit={limit} onLimitChange={onLimitChange} />
       <TrafficBody logs={logs} loading={loading} />
     </Card>
   );

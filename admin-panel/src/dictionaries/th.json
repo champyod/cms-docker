@@ -318,5 +318,11 @@
       "noWebhookUrl": "ไม่มี URL ของเว็บฮุกให้ทดสอบ — กรอกและบันทึกก่อน หรือตั้งค่า DISCORD_WEBHOOK_URL ใน config.toml [infra]",
       "deliveryFailed": "การส่งล้มเหลว"
     }
+  },
+  "live": {
+    "connecting": "กำลังเชื่อมต่อ…",
+    "connected": "เชื่อมต่อสด",
+    "reconnecting": "กำลังเชื่อมต่อใหม่…",
+    "paused": "หยุดชั่วคราว"
   }
 }

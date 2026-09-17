@@ -1,41 +1,22 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { getCoreServicesStatus } from '@/app/actions/docker-ops';
 import { Card } from '@/components/core/Card';
 import { SkeletonText } from '@/components/core/Skeleton';
 import { EmptyState } from '@/components/core/EmptyState';
 import { ShieldCheck, Circle, Server } from 'lucide-react';
+import type { CoreServiceStatus } from '@/lib/live-frames';
 
-interface ServiceStatus {
-  name: string;
-  status: string;
+interface CoreServicesStatusProps {
+  services: CoreServiceStatus[];
+  loading: boolean;
 }
 
-export function CoreServicesStatus() {
-  const [services, setServices] = useState<ServiceStatus[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const fetchStatus = async () => {
-    try {
-      const result = await getCoreServicesStatus();
-      if (result.success) {
-        setServices(result.services);
-      }
-    } catch (error) {
-      console.error('Failed to fetch core services status:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchStatus();
-    const interval = setInterval(fetchStatus, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const getStatusColor = (status: string) => {
+/**
+ * Why the list arrives as a prop: it is one section of the resources stream, so this card no longer
+ * owns a timer of its own — the page's single connection carries it.
+ */
+export function CoreServicesStatus({ services, loading }: CoreServicesStatusProps): React.JSX.Element {
+  const getStatusColor = (status: string): string => {
     switch (status) {
       case 'healthy':
       case 'running':
@@ -50,7 +31,7 @@ export function CoreServicesStatus() {
     }
   };
 
-  const getStatusLabel = (status: string) => {
+  const getStatusLabel = (status: string): string => {
     return status.toUpperCase();
   };
 

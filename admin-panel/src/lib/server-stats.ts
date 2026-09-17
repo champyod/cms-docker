@@ -1,15 +1,22 @@
-'use server';
-
 import os from 'os';
 import fs from 'fs';
-import { ensurePermission } from '@/lib/permissions';
-import { collectWorkerStats } from '@/lib/worker-stats';
+
+export interface ServerStats {
+  cpu: number;
+  memory: number;
+  uptime: string;
+  network: { rx: number; tx: number };
+  loadAvg: string[];
+  source: 'host' | 'container';
+}
 
 type CpuSample = {
   idle: number;
   total: number;
 };
 
+// Why module state: a CPU percentage needs two samples, so the previous one is carried between
+// callers — the same single instance serves every stream connection and any other sampler.
 let previousCpuSample: CpuSample | null = null;
 
 function readTextFileSafe(filePath: string): string | null {
@@ -103,8 +110,27 @@ function getProcBasePath(): '/host/proc' | '/proc' {
   return '/proc';
 }
 
-export async function getServerStats() {
-  await ensurePermission('all:all');
+function formatUptime(seconds: number): string {
+  const days = Math.floor(seconds / (24 * 3600));
+  const hours = Math.floor((seconds % (24 * 3600)) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+
+  const parts = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0) parts.push(`${minutes}m`);
+
+  return parts.length > 0 ? parts.join(' ') : '0m';
+}
+
+/**
+ * Reads the host counters behind the resource cards.
+ *
+ * Why it takes no permission argument and performs no check: this is pure collection. Callers that
+ * face a user authorise first — the actions did it per call, a stream does it once per connection,
+ * which is what keeps a per-second push from becoming a per-second permission query.
+ */
+export async function collectServerStats(): Promise<ServerStats> {
   const procBase = getProcBasePath();
 
   const cpus = os.cpus();
@@ -140,25 +166,7 @@ export async function getServerStats() {
     memory: Math.round(memoryUsage),
     uptime: formatUptime(uptime),
     network: networkStats,
-    loadAvg: loadAvg.map(l => l.toFixed(2)),
+    loadAvg: loadAvg.map((load) => load.toFixed(2)),
     source: procBase === '/host/proc' ? 'host' : 'container',
   };
-}
-
-export async function getWorkerStats(): Promise<ReturnType<typeof collectWorkerStats>> {
-  await ensurePermission('all:all');
-  return collectWorkerStats();
-}
-
-function formatUptime(seconds: number) {
-  const days = Math.floor(seconds / (24 * 3600));
-  const hours = Math.floor((seconds % (24 * 3600)) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-
-  const parts = [];
-  if (days > 0) parts.push(`${days}d`);
-  if (hours > 0) parts.push(`${hours}h`);
-  if (minutes > 0) parts.push(`${minutes}m`);
-
-  return parts.length > 0 ? parts.join(' ') : '0m';
 }

@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
 import { Dialog } from '@/components/core/Dialog';
@@ -8,12 +8,10 @@ import {
   Layers, HelpCircle, Trash2, Terminal, X
 } from 'lucide-react';
 import Link from 'next/link';
-import { getContainers, controlContainer, runCompose, ContainerInfo } from '@/app/actions/docker';
+import { controlContainer, runCompose, ContainerInfo } from '@/app/actions/docker';
 import {
-  getContainerConfig,
   updateContainerConfig,
   resetRestartCount,
-  getContainerRestartCount,
   syncContainerConfigWithDocker,
   ContainerRestartConfig
 } from '@/app/actions/containerConfig';
@@ -32,10 +30,13 @@ import { SystemLogsPanel } from '@/components/containers/SystemLogsPanel';
 import { ContainerRow } from '@/components/containers/ContainerRow';
 import { EmptyState } from '@/components/core/EmptyState';
 import { SkeletonTable } from '@/components/core/Skeleton';
+import { LiveIndicator } from '@/components/core/LiveIndicator';
+import { useLiveStream } from '@/hooks/useLiveStream';
+import type { ContainersFrame } from '@/lib/live-frames';
 import { usePathname } from 'next/navigation';
 import { motion } from 'motion/react';
 
-export function ContainersClient() {
+export function ContainersClient(): React.JSX.Element {
   const [containers, setContainers] = useState<ContainerInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -53,35 +54,34 @@ export function ContainersClient() {
   const [bulkLoading, setBulkLoading] = useState(false);
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
+  const syncedConfigIdsRef = useRef<Set<string>>(new Set());
 
-  const loadContainers = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await getContainers();
-      setContainers(data);
-
-      const config = await getContainerConfig();
-
-      for (const container of data) {
-        if (container.isCmsContainer && !config[container.id]) {
-          await syncContainerConfigWithDocker(container.id);
-        }
-      }
-
-      const updatedConfig = await getContainerConfig();
-      setContainerConfig(updatedConfig);
-
-      const counts: Record<string, number> = {};
-      for (const container of data) {
-        const count = await getContainerRestartCount(container.id);
-        counts[container.id] = count;
-      }
-      setRestartCounts(counts);
-    } catch {
-      toast.error('Error', { description: 'Permission denied. Requires superadmin access.' });
-    }
+  // Every field arrives on one connection, so the table, its restart counts and its config are
+  // replaced together — and a section that is missing (not readable, or its probe failed) leaves the
+  // panel showing what it already had instead of an empty table.
+  const onFrame = useCallback((frame: ContainersFrame): void => {
+    if (frame.containers) setContainers(frame.containers);
+    if (frame.config) setContainerConfig(frame.config);
+    if (frame.restartCounts) setRestartCounts(frame.restartCounts);
     setLoading(false);
   }, []);
+
+  const { status, refresh } = useLiveStream<ContainersFrame>({ url: '/api/containers/stream', onFrame });
+
+  // Why this is a one-shot per container and not part of a poll: the page used to fire this write on
+  // every tick for any cms container without a config entry. The snapshot shows which containers
+  // still lack one, so syncing each of them once — and reopening the stream to pick up the result —
+  // costs a request only when a container is genuinely new.
+  useEffect(() => {
+    for (const container of containers) {
+      if (!container.isCmsContainer || containerConfig[container.id]) continue;
+      if (syncedConfigIdsRef.current.has(container.id)) continue;
+      syncedConfigIdsRef.current.add(container.id);
+      void syncContainerConfigWithDocker(container.id).then((result) => {
+        if (result.success) refresh();
+      });
+    }
+  }, [containers, containerConfig, refresh]);
 
   const checkDiscordStatus = useCallback(async (): Promise<void> => {
     try {
@@ -93,11 +93,8 @@ export function ContainersClient() {
   }, []);
 
   useEffect(() => {
-    queueMicrotask(() => void loadContainers());
     queueMicrotask(() => void checkDiscordStatus());
-    const interval = setInterval(loadContainers, 10000);
-    return () => clearInterval(interval);
-  }, [loadContainers, checkDiscordStatus]);
+  }, [checkDiscordStatus]);
 
   const handleToggleSelection = useCallback((containerId: string): void => {
     setSelectedIds((previous) => {
@@ -147,7 +144,7 @@ export function ContainersClient() {
     setBulkLoading(false);
     setShowBulkRestartDialog(false);
     handleClearSelection();
-    loadContainers();
+    refresh();
   };
 
   const handleConfirmBulkRemove = async (): Promise<void> => {
@@ -164,7 +161,7 @@ export function ContainersClient() {
     setBulkLoading(false);
     setShowBulkRemoveDialog(false);
     handleClearSelection();
-    loadContainers();
+    refresh();
   };
 
   const handleConfirmBulkLogs = (): void => {
@@ -180,7 +177,7 @@ export function ContainersClient() {
     const res = await controlContainer(id, action);
     if (res.success) {
       toast.success('Success', { description: `Container ${action}ed successfully` });
-      loadContainers();
+      refresh();
     } else {
       toast.error('Error', { description: res.error });
     }
@@ -196,7 +193,7 @@ export function ContainersClient() {
     const res = await runCompose(action, serviceType);
     if (res.success) {
       toast.success('Success', { description: `Compose ${action} completed` });
-      loadContainers();
+      refresh();
     } else {
       toast.error('Error', { description: res.error });
     }
@@ -209,7 +206,7 @@ export function ContainersClient() {
     });
     if (res.success) {
       toast.success('Success', { description: `Auto-restart ${!currentValue ? 'enabled' : 'disabled'}` });
-      loadContainers();
+      refresh();
     } else {
       toast.error('Error', { description: res.error });
     }
@@ -219,7 +216,7 @@ export function ContainersClient() {
     const res = await resetRestartCount(containerId);
     if (res.success) {
       toast.success('Success', { description: 'Restart count reset' });
-      loadContainers();
+      refresh();
     } else {
       toast.error('Error', { description: res.error });
     }
@@ -231,7 +228,7 @@ export function ContainersClient() {
     });
     if (res.success) {
       toast.success('Success', { description: `Discord notifications ${!currentValue ? 'enabled' : 'disabled'}` });
-      loadContainers();
+      refresh();
     } else {
       toast.error('Error', { description: res.error });
     }
@@ -255,7 +252,7 @@ export function ContainersClient() {
           containerName={settingsContainer.name}
           config={containerConfig[settingsContainer.id] || { autoRestart: false, maxRestarts: 5, currentRestarts: 0 }}
           onClose={() => setSettingsContainer(null)}
-          onUpdate={loadContainers}
+          onUpdate={refresh}
         />
       )}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -268,7 +265,8 @@ export function ContainersClient() {
           </div>
           <p className="text-muted-foreground mt-1">Manage and monitor Docker services in real-time.</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex items-center gap-3">
+          <LiveIndicator status={status} />
           <Button
             onClick={() => handleCompose('up')}
             disabled={actionLoading === 'compose'}
@@ -277,7 +275,7 @@ export function ContainersClient() {
           </Button>
           <Button
             variant="secondary"
-            onClick={loadContainers}
+            onClick={refresh}
             disabled={loading}
           >
             <RefreshCw className={cn('w-4 h-4', loading && 'animate-spin')} />

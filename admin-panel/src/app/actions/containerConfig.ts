@@ -1,38 +1,28 @@
 'use server';
 
 import { ensurePermission } from '@/lib/permissions';
-import { getRepoRoot } from '@/lib/repo-root';
 import { recordAudit } from '@/lib/audit';
-import { readFile, writeFile } from 'fs/promises';
+import { writeFile } from 'fs/promises';
 import { exec } from 'child_process';
 import util from 'util';
-import path from 'path';
+import { CONTAINER_ID_RE } from '@/lib/container-probes';
+import {
+  containerRestartConfigPath,
+  readContainerRestartConfig,
+  type ContainerRestartConfig,
+} from '@/lib/container-restart-store';
 
 const execPromise = util.promisify(exec);
 
-const CONTAINER_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/;
 const RESTART_POLICY_RE = /^(?:no|always|unless-stopped|on-failure:(?:[0-9]|1[0-9]|20))$/;
 
-const CONFIG_PATH = () => path.join(getRepoRoot(), 'config', 'container-restart.json');
-
-export interface ContainerRestartConfig {
-  [containerId: string]: {
-    autoRestart: boolean;
-    maxRestarts: number;
-    currentRestarts: number;
-    lastRestartTime?: number;
-    discordNotifications: boolean;
-  };
-}
+// Why re-exported: the containers stream sends this shape with every snapshot, and the components
+// that render it keep importing it from where they always did.
+export type { ContainerRestartConfig };
 
 export async function getContainerConfig(): Promise<ContainerRestartConfig> {
   await ensurePermission('container:read');
-  try {
-    const data = await readFile(CONFIG_PATH(), 'utf-8');
-    return JSON.parse(data);
-  } catch {
-    return {};
-  }
+  return readContainerRestartConfig();
 }
 
 export async function updateContainerConfig(containerId: string, config: {
@@ -55,7 +45,7 @@ export async function updateContainerConfig(containerId: string, config: {
       discordNotifications: config.discordNotifications ?? currentConfig[containerId]?.discordNotifications ?? true,
     };
     currentConfig[containerId] = afterEntry;
-    await writeFile(CONFIG_PATH(), JSON.stringify(currentConfig, null, 2));
+    await writeFile(containerRestartConfigPath(), JSON.stringify(currentConfig, null, 2));
 
     if (config.autoRestart !== undefined) {
       await updateDockerRestartPolicy(containerId, currentConfig[containerId].autoRestart, currentConfig[containerId].maxRestarts);
@@ -85,7 +75,7 @@ export async function resetRestartCount(containerId: string) {
     const beforeRestarts = currentConfig[containerId]?.currentRestarts ?? null;
     if (currentConfig[containerId]) {
       currentConfig[containerId].currentRestarts = 0;
-      await writeFile(CONFIG_PATH(), JSON.stringify(currentConfig, null, 2));
+      await writeFile(containerRestartConfigPath(), JSON.stringify(currentConfig, null, 2));
     }
 
     if (hadEntry) {
@@ -127,19 +117,6 @@ async function updateDockerRestartPolicy(containerId: string, autoRestart: boole
   } catch (error) {
     console.error('Failed to update Docker restart policy:', error);
     throw error;
-  }
-}
-
-export async function getContainerRestartCount(containerId: string): Promise<number> {
-  await ensurePermission('container:read');
-  if (!CONTAINER_ID_RE.test(containerId)) {
-    return 0;
-  }
-  try {
-    const { stdout } = await execPromise(`docker inspect ${containerId} --format='{{.RestartCount}}'`);
-    return parseInt(stdout.trim()) || 0;
-  } catch {
-    return 0;
   }
 }
 

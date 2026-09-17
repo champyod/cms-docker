@@ -1,84 +1,39 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { getServerStats, getWorkerStats } from '@/app/actions/stats';
+import { useCallback, useState } from 'react';
 import { WorkerGrid } from '@/components/resources/WorkerGrid';
 import { CoreServicesStatus } from '@/components/resources/CoreServicesStatus';
 import { NetworkTrafficLogs } from '@/components/resources/NetworkTrafficLogs';
 import { Activity, Cpu, Database, Network } from 'lucide-react';
 import { Card } from '@/components/core/Card';
+import { LiveIndicator } from '@/components/core/LiveIndicator';
+import { useLiveStream } from '@/hooks/useLiveStream';
+import { TRAFFIC_LOG_LIMIT_DEFAULT } from '@/lib/constants/live-stream';
+import type { CoreServiceStatus, ResourceFrame, ServerStats, TrafficLog, WorkerStat } from '@/lib/live-frames';
 
-export function ResourceView() {
-  const [serverStats, setServerStats] = useState<Awaited<ReturnType<typeof getServerStats>> | null>(null);
-  const [workers, setWorkers] = useState<Awaited<ReturnType<typeof getWorkerStats>>>([]);
+export function ResourceView(): React.JSX.Element {
+  const [serverStats, setServerStats] = useState<ServerStats | null>(null);
+  const [workers, setWorkers] = useState<WorkerStat[]>([]);
+  const [services, setServices] = useState<CoreServiceStatus[]>([]);
+  const [traffic, setTraffic] = useState<TrafficLog[]>([]);
+  const [trafficLimit, setTrafficLimit] = useState<number>(TRAFFIC_LOG_LIMIT_DEFAULT);
   const [loading, setLoading] = useState(true);
-  const serverInFlightRef = useRef(false);
-  const workersInFlightRef = useRef(false);
 
-  const fetchServerStats = async () => {
-    if (serverInFlightRef.current) return;
-    serverInFlightRef.current = true;
-    try {
-      const sStats = await getServerStats();
-      setServerStats(sStats);
-    } catch (error) {
-      console.error('Failed to fetch server stats:', error);
-    } finally {
-      serverInFlightRef.current = false;
-      setLoading(false);
-    }
-  };
-
-  const fetchWorkerStats = async () => {
-    if (workersInFlightRef.current) return;
-    workersInFlightRef.current = true;
-    try {
-      const wStats = await getWorkerStats();
-      setWorkers(wStats);
-    } catch (error) {
-      console.error('Failed to fetch worker stats:', error);
-    } finally {
-      workersInFlightRef.current = false;
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const tickServer = async () => {
-      if (cancelled) return;
-      if (document.hidden) return;
-      await fetchServerStats();
-    };
-
-    const tickWorkers = async () => {
-      if (cancelled) return;
-      if (document.hidden) return;
-      await fetchWorkerStats();
-    };
-
-    void tickServer();
-    void tickWorkers();
-
-    const serverInterval = setInterval(() => { void tickServer(); }, 1000);
-    const workersInterval = setInterval(() => { void tickWorkers(); }, 5000);
-
-    const onVisibilityChange = () => {
-      if (!document.hidden) {
-        void tickServer();
-      }
-    };
-
-    document.addEventListener('visibilitychange', onVisibilityChange);
-
-    return () => {
-      cancelled = true;
-      clearInterval(serverInterval);
-      clearInterval(workersInterval);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-    };
+  // Why every section is optional in the frame: a section is left out when this viewer may not read
+  // it or when its probe failed, and the card must then keep the last reading it had rather than
+  // blanking out. The same handler covers all four cards because they arrive on one connection.
+  const onFrame = useCallback((frame: ResourceFrame): void => {
+    if (frame.server) setServerStats(frame.server);
+    if (frame.workers) setWorkers(frame.workers);
+    if (frame.services) setServices(frame.services);
+    if (frame.traffic) setTraffic(frame.traffic);
+    setLoading(false);
   }, []);
+
+  const { status } = useLiveStream<ResourceFrame>({
+    url: `/api/resources/stream?trafficLimit=${trafficLimit}`,
+    onFrame,
+  });
 
   if (loading && !serverStats) {
     return <div className="text-muted-foreground">Loading system metrics...</div>;
@@ -86,8 +41,11 @@ export function ResourceView() {
 
   return (
     <div className="space-y-8">
+      <div className="flex justify-end">
+        <LiveIndicator status={status} />
+      </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <CoreServicesStatus />
+          <CoreServicesStatus services={services} loading={loading} />
 
           <Card className="p-6 flex flex-col justify-center items-center text-center space-y-4">
             <div className="flex items-center gap-2 text-indigo-400 mb-2">
@@ -158,13 +116,13 @@ export function ResourceView() {
             </Card>
           </div>
         </div>
-        <NetworkTrafficLogs />
+        <NetworkTrafficLogs logs={traffic} limit={trafficLimit} onLimitChange={setTrafficLimit} loading={loading} />
       </div>
     </div>
   );
 }
 
-function formatBytes(bytes: number) {
+function formatBytes(bytes: number): string {
     if (bytes === 0) return '0 B';
     const k = 1024;
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];

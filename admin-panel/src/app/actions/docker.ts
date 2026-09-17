@@ -6,49 +6,15 @@ import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
 import { recordAudit } from '@/lib/audit';
 import { buildComposeCommand } from '@/lib/compose-command';
+import { CONTAINER_ID_RE } from '@/lib/container-probes';
 
 const execPromise = util.promisify(exec);
 
-const CONTAINER_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/;
 const CONTAINER_ACTIONS = ['start', 'stop', 'restart', 'pause', 'unpause'] as const;
 
-export interface ContainerInfo {
-  id: string;
-  name: string;
-  image: string;
-  status: string;
-  state: string;
-  created: string;
-  isCmsContainer: boolean;
-}
-
-export async function getContainers() {
-  await ensurePermission('container:read');
-  try {
-    const { stdout } = await execPromise('docker ps -a --format "{{json .}}"');
-    const lines = stdout.trim().split('\n');
-    if (!stdout.trim()) return [];
-
-    return lines.map(line => {
-      const parsed = JSON.parse(line);
-      const name = parsed.Names;
-      const isCmsContainer = name.startsWith('cms-') || name.includes('cms');
-
-      return {
-        id: parsed.ID,
-        name: name,
-        image: parsed.Image,
-        status: parsed.Status,
-        state: parsed.State,
-        created: parsed.CreatedAt,
-        isCmsContainer: isCmsContainer
-      } as ContainerInfo;
-    });
-  } catch (error) {
-    console.error('Failed to get containers:', error);
-    return [];
-  }
-}
+// Why re-exported: the container list is now read by the streaming route, and the components that
+// render it keep importing their shape from where they always did.
+export type { ContainerInfo } from '@/lib/container-probes';
 
 export async function controlContainer(id: string, action: 'start' | 'stop' | 'restart' | 'pause' | 'unpause') {
   await ensurePermission('container:control');
