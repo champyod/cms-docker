@@ -82,6 +82,75 @@ fn response_serializes_error_message_as_string() {
 }
 
 #[test]
+fn request_round_trip_preserves_integer_larger_than_u64_max() -> Result<(), serde_json::Error> {
+    let wire = r#"{"__id":"abc","__method":"echo","__data":{"n":18446744073709551617}}"#;
+    let decoded: Request = serde_json::from_str(wire)?;
+    assert_eq!(serde_json::to_string(&decoded)?, wire);
+    Ok(())
+}
+
+#[test]
+fn response_round_trip_preserves_integer_larger_than_u64_max() -> Result<(), serde_json::Error> {
+    let wire = r#"{"__id":"abc","__data":{"n":18446744073709551617},"__error":null}"#;
+    let decoded: Response = serde_json::from_str(wire)?;
+    assert_eq!(serde_json::to_string(&decoded)?, wire);
+    Ok(())
+}
+
+#[test]
+fn python_shaped_response_with_non_null_error_deserializes() -> Result<(), serde_json::Error> {
+    let python_json = r#"{
+        "__id": "6f9619ff8b86",
+        "__data": null,
+        "__error": "RPC authentication failed."
+    }"#;
+
+    let decoded: Response = serde_json::from_str(python_json).unwrap();
+    assert_eq!(decoded.id, "6f9619ff8b86");
+    assert_eq!(decoded.data, Value::Null);
+    assert_eq!(decoded.error, Some(json!("RPC authentication failed.")));
+    Ok(())
+}
+
+#[test]
+fn response_missing_required_keys_is_rejected() -> Result<(), serde_json::Error> {
+    let missing_data: Result<Response, _> =
+        serde_json::from_str(r#"{"__id": "abc", "__error": null}"#);
+    assert!(missing_data.is_err());
+
+    let missing_error: Result<Response, _> =
+        serde_json::from_str(r#"{"__id": "abc", "__data": null}"#);
+    assert!(missing_error.unwrap_err().to_string().contains("__error"));
+    let explicit_null: Response =
+        serde_json::from_str(r#"{"__id":"abc","__data":null,"__error":null}"#)?;
+    assert_eq!(explicit_null.data, Value::Null);
+    assert_eq!(explicit_null.error, None);
+    Ok(())
+}
+
+#[test]
+fn request_missing_required_keys_is_rejected() -> Result<(), serde_json::Error> {
+    let missing_data: Result<Request, _> =
+        serde_json::from_str(r#"{"__id": "abc", "__method": "echo"}"#);
+    assert!(missing_data.is_err());
+
+    let missing_method: Result<Request, _> =
+        serde_json::from_str(r#"{"__id": "abc", "__data": null}"#);
+    assert!(missing_method.unwrap_err().to_string().contains("__method"));
+    Ok(())
+}
+
+#[test]
+fn presented_empty_secret_is_preserved() -> Result<(), serde_json::Error> {
+    let wire = r#"{"__id":"abc","__method":"echo","__data":null,"__secret":""}"#;
+    let decoded: Request = serde_json::from_str(wire)?;
+    assert_eq!(decoded.secret.as_deref(), Some(""));
+    assert_eq!(serde_json::to_string(&decoded)?, wire);
+    assert_eq!(request("abc", "echo", Value::Null).secret, None);
+    Ok(())
+}
+
+#[test]
 fn request_round_trip_preserves_semantics() {
     let envelope = Request {
         data: json!({"nested": {"list": [1, 2.5, null, true]}, "text": "héllo"}),

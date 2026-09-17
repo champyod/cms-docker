@@ -40,7 +40,7 @@ pub struct Response {
 
     /// Always serialized: the Python side indexes this key and relies on
     /// it being present (null on success) rather than absent.
-    #[serde(rename = "__error")]
+    #[serde(rename = "__error", deserialize_with = "Option::<Value>::deserialize")]
     pub error: Option<Value>,
 }
 
