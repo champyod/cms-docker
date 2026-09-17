@@ -21,7 +21,7 @@ interface ParticipantModalProps {
   onSuccess: () => void;
 }
 
-export function ParticipantModal({ isOpen, onClose, contestId, availableUsers }: ParticipantModalProps) {
+export function ParticipantModal({ isOpen, onClose, contestId, availableUsers, onSuccess }: ParticipantModalProps) {
   const [search, setSearch] = useState('');
   const [adding, setAdding] = useState<number | null>(null);
 
@@ -35,7 +35,7 @@ export function ParticipantModal({ isOpen, onClose, contestId, availableUsers }:
     setAdding(userId);
     try {
       await addParticipant(contestId, userId);
-      window.location.reload();
+      onSuccess();
     } catch (error) {
       console.error('Failed to add participant:', error);
     } finally {

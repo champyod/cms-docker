@@ -1,6 +1,6 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { ParticipantModal } from './ParticipantModal';
 import { DeployConfirmModal } from './DeployConfirmModal';
 import { TaskSelectionModal } from './TaskSelectionModal';
@@ -30,6 +30,7 @@ interface ContestDetailViewProps {
 
 export function ContestDetailView({ contest, availableUsers, availableTasks, teams, user }: ContestDetailViewProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const locale = pathname.split('/')[1] || 'en';
   const s = useContestDetailState(contest);
   const participantUserIds = new Set(contest.participations.map((p: ContestDetailRow['participations'][number]) => p.user_id));
@@ -44,10 +45,10 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, tea
       <ContestTasksSection tasks={contest.tasks} expanded={s.expandedSections.tasks} locale={locale} onToggle={() => s.toggleSection('tasks')} onAddTask={() => s.setIsTaskModalOpen(true)} onRemoveTask={s.handleRemoveTask} />
       <ContestSettingsSection formData={s.formData} expanded={s.expandedSections.info} onToggle={() => s.toggleSection('info')} onChange={(p) => s.setFormData({ ...s.formData, ...p })} />
       <ContestCommunications contestId={contest.id} adminId={user.id} />
-      <ParticipantModal isOpen={s.isParticipantModalOpen} onClose={() => s.setIsParticipantModalOpen(false)} contestId={contest.id} availableUsers={nonParticipants} onSuccess={() => window.location.reload()} />
-      <TaskSelectionModal isOpen={s.isTaskModalOpen} onClose={() => s.setIsTaskModalOpen(false)} contestId={contest.id} availableTasks={availableForAdd} onSuccess={() => window.location.reload()} />
-      {s.selectedParticipation && <ParticipationModal isOpen={s.isParticipationModalOpen} onClose={() => { s.setIsParticipationModalOpen(false); s.setSelectedParticipation(null); }} participationId={s.selectedParticipation.id} username={s.selectedParticipation.username} teams={teams} onSuccess={() => window.location.reload()} />}
-      <TeamBulkAddModal isOpen={s.isTeamModalOpen} onClose={() => s.setIsTeamModalOpen(false)} contestId={contest.id} teams={teams} onSuccess={() => window.location.reload()} />
+      <ParticipantModal isOpen={s.isParticipantModalOpen} onClose={() => s.setIsParticipantModalOpen(false)} contestId={contest.id} availableUsers={nonParticipants} onSuccess={() => router.refresh()} />
+      <TaskSelectionModal isOpen={s.isTaskModalOpen} onClose={() => s.setIsTaskModalOpen(false)} contestId={contest.id} availableTasks={availableForAdd} onSuccess={() => router.refresh()} />
+      {s.selectedParticipation && <ParticipationModal isOpen={s.isParticipationModalOpen} onClose={() => { s.setIsParticipationModalOpen(false); s.setSelectedParticipation(null); }} participationId={s.selectedParticipation.id} username={s.selectedParticipation.username} teams={teams} onSuccess={() => router.refresh()} />}
+      <TeamBulkAddModal isOpen={s.isTeamModalOpen} onClose={() => s.setIsTeamModalOpen(false)} contestId={contest.id} teams={teams} onSuccess={() => router.refresh()} />
       <DeployConfirmModal isOpen={s.showDeployModal} phase={s.deployState.phase} targetLabel={contest.name} onClose={() => { s.setShowDeployModal(false); s.resetDeployState(); }} onConfirm={s.confirmDeploy} />
     </div>
   );

@@ -57,24 +57,24 @@ export function useContestDetailState(contest: ContestLike) {
   const handleMarkAsTest = async (participationId: number) => {
     if (confirm('Mark this user as a test user? (Hidden + Unrestricted)')) {
       const result = await setTestUser(participationId);
-      if (result.success) window.location.reload();
+      if (result.success) router.refresh();
       else toast.error('Failed: ' + result.error);
     }
   };
 
   const handleRemoveTask = async (taskId: number) => {
-    if (confirm('Remove this task from the contest?')) { await removeTaskFromContest(taskId); window.location.reload(); }
+    if (confirm('Remove this task from the contest?')) { await removeTaskFromContest(taskId); router.refresh(); }
   };
 
   const handleSave = async () => {
     setSaving(true);
-    try { await updateContestSettings(contest.id, formData); window.location.reload(); }
+    try { await updateContestSettings(contest.id, formData); router.refresh(); }
     catch (error) { console.error('Failed to save:', error); }
     finally { setSaving(false); }
   };
 
   const handleRemoveParticipant = async (participationId: number) => {
-    if (confirm('Remove this participant from the contest?')) { await removeParticipant(participationId); window.location.reload(); }
+    if (confirm('Remove this participant from the contest?')) { await removeParticipant(participationId); router.refresh(); }
   };
 
   return {

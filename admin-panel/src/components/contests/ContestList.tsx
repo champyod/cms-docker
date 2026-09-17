@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/core/EmptyState';
 import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
 import { Badge } from '@/components/core/Badge';
 import { ExternalLink, Rocket, Trash2, Trophy } from 'lucide-react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { apiClient } from '@/lib/apiClient';
 import { ContestModal } from './ContestModal';
@@ -47,11 +47,12 @@ interface CardProps {
 }
 
 function ContestMobileCard({ contest, locale, isSuperAdmin, canManage, onSetActive }: CardProps): React.JSX.Element {
+  const router = useRouter();
   const handleDelete = async (): Promise<void> => {
     if (!canManage) return;
     if (confirm('Are you sure you want to delete this contest? This is IRREVERSIBLE.')) {
       const result = await apiClient.delete(`/api/contests/${contest.id}`);
-      if (result.success) window.location.reload();
+      if (result.success) router.refresh();
       else toast.error('Failed to delete contest: ' + result.error);
     }
   };
@@ -90,6 +91,7 @@ export function ContestList({ initialContests, totalPages, permissionKeys }: Con
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedContest] = useState<ExistingContest | null>(null);
   const pathname = usePathname();
+  const router = useRouter();
   const locale = pathname.split('/')[1] || 'en';
   const actions = useContestListActions();
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
@@ -98,7 +100,7 @@ export function ContestList({ initialContests, totalPages, permissionKeys }: Con
   const canSwitchContests = hasEffectivePermission(effective, 'contest:switch');
 
   const handleCreate = () => { if (!canCreateContests) return; setIsModalOpen(true); };
-  const handleSuccess = () => window.location.reload();
+  const handleSuccess = () => router.refresh();
 
   return (
     <div className="space-y-6">

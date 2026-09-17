@@ -40,7 +40,7 @@ export function ContestTableRow({ contest, locale, isSuperAdmin, canManage, onSe
     if (!canManage) return;
     if (confirm('Are you sure you want to delete this contest? This is IRREVERSIBLE.')) {
       const result = await apiClient.delete(`/api/contests/${id}`);
-      if (result.success) window.location.reload();
+      if (result.success) router.refresh();
       else toast.error('Failed to delete contest: ' + result.error);
     }
   };

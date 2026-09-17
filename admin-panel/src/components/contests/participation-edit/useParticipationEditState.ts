@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { updateParticipation, sendMessage, revealParticipationPassword } from '@/app/actions/participations';
 import type { PasswordKind } from '@/lib/password-format';
 
@@ -9,6 +10,7 @@ export type RevealedState = { kind: 'plaintext'; value: string } | { kind: 'bcry
 interface ParticipationInput { id: number; hidden: boolean; unrestricted: boolean; password: string | null; users: { username: string; first_name: string; last_name: string }; }
 
 export function useParticipationEditState(isOpen: boolean, participation: ParticipationInput, adminId: number, onClose: () => void) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<'settings' | 'message'>('settings');
   const [formData, setFormData] = useState({ hidden: participation.hidden, unrestricted: participation.unrestricted, extra_time_minutes: 0, delay_time_minutes: 0, password: '', password_kind: 'plaintext' as PasswordKind });
   const [messageData, setMessageData] = useState({ subject: '', text: '' });
@@ -55,7 +57,7 @@ export function useParticipationEditState(isOpen: boolean, participation: Partic
       const result = await updateParticipation(participation.id, payload);
       if (result.success) {
         if (formData.password.trim().length > 0) { setRevealed({ kind: 'plaintext', value: formData.password }); setRevealTab('plain'); setRevealError(''); }
-        window.location.reload();
+        router.refresh();
       } else setError(result.error || 'Failed to update');
     } catch { setError('An error occurred'); }
     finally { setSaving(false); }

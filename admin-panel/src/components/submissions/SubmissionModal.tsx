@@ -3,6 +3,7 @@
 import { AlertCircle, CheckCircle2, Loader2, Terminal, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 import { recalculateSubmission, getSubmissionFieldAccess } from '@/app/actions/submissions';
 import { Button } from '@/components/core/Button';
@@ -20,6 +21,7 @@ interface SubmissionModalProps {
 }
 
 export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModalProps) {
+  const router = useRouter();
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [fieldAccess, setFieldAccess] = useState<Record<string, FieldAccess> | null>(null);
 
@@ -47,7 +49,7 @@ export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModal
       setLoadingAction(type);
       try {
           await recalculateSubmission(submission.id, type);
-          window.location.reload();
+          router.refresh();
       } catch (error) {
           toast.error('Error: ' + error);
       } finally {

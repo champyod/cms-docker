@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { useSyncedState } from '@/hooks/useSyncedState';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
@@ -23,6 +24,7 @@ export function AdminList({ initialAdmins, actionLabels }: AdminListProps) {
   const [accessSummary, setAccessSummary] = useState<Record<number, AdminAccessSummary>>({});
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAdmin, setEditingAdmin] = useState<AdminWithLogin | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     let cancelled = false;
@@ -47,7 +49,7 @@ export function AdminList({ initialAdmins, actionLabels }: AdminListProps) {
     if (confirm('Delete this admin?')) {
       const result = await deleteAdmin(id);
       if (result.success) {
-        window.location.reload();
+        router.refresh();
       } else {
         toast.error(result.error);
       }
@@ -59,7 +61,7 @@ export function AdminList({ initialAdmins, actionLabels }: AdminListProps) {
     if (!result.success) {
       toast.error(result.error ?? 'Failed to update admin');
     }
-    window.location.reload();
+    router.refresh();
   };
 
   const startEdit = (admin: AdminWithLogin) => {
@@ -218,7 +220,7 @@ export function AdminList({ initialAdmins, actionLabels }: AdminListProps) {
         isOpen={isModalOpen}
         onClose={handleClose}
         initialData={editingAdmin}
-        onSuccess={() => window.location.reload()}
+        onSuccess={() => router.refresh()}
       />
     </div>
   );

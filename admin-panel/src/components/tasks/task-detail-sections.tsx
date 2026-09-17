@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { HelpCircle, ChevronDown, ChevronUp, Settings, FileText, Trash2, Upload, ExternalLink } from 'lucide-react';
 import { Card } from '@/components/core/Card';
@@ -77,6 +78,7 @@ function formatDate(iso: string | null | undefined): string {
 }
 
 export function StatementsSection({ statements, expanded, onToggle, onUpload }: StatementsSectionProps): React.JSX.Element {
+  const router = useRouter();
   const [activeLanguage, setActiveLanguage] = useState<string | null>(null);
 
   const languages = useMemo(() => Array.from(new Set(statements.map((s) => s.language))).sort(), [statements]);
@@ -130,7 +132,7 @@ export function StatementsSection({ statements, expanded, onToggle, onUpload }: 
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
                             <a href={`/api/statements/${stmt.digest}`} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline">Download</a>
-                            <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete statement" onClick={async () => { if (confirm('Delete this statement?')) { await apiClient.delete(`/api/statements/${stmt.id}`); window.location.reload(); } }} className="text-destructive" />
+                            <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete statement" onClick={async () => { if (confirm('Delete this statement?')) { await apiClient.delete(`/api/statements/${stmt.id}`); router.refresh(); } }} className="text-destructive" />
                           </div>
                         </TableCell>
                       </TableRow>

@@ -56,7 +56,7 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
     if (!canDeleteTasks) return;
     if (confirm('Are you sure you want to delete this task? This is IRREVERSIBLE.')) {
       const result = await apiClient.delete(`/api/tasks/${id}`);
-      if (result.success) window.location.reload();
+      if (result.success) router.refresh();
       else toast.error(`Failed to delete task: ${result.error}`);
     }
   };
@@ -68,7 +68,7 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
   };
 
   const handleSuccess = (): void => {
-    window.location.reload();
+    router.refresh();
   };
 
   return (

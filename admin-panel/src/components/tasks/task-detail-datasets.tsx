@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { HelpCircle, ChevronDown, ChevronUp, Settings, Database, CheckCircle, Copy, Edit, ToggleLeft, ToggleRight, TestTube, Plus, Trash2, Upload, Paperclip } from 'lucide-react';
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
@@ -134,6 +135,7 @@ export function DatasetsSection({
 }
 
 export function AttachmentsSection({ attachments, onUpload }: { attachments: Array<{ id: number; filename: string }>; onUpload: () => void }): React.JSX.Element {
+  const router = useRouter();
   return (
     <Card className="border-border p-4">
       <div className="flex items-center justify-between mb-4">
@@ -145,7 +147,7 @@ export function AttachmentsSection({ attachments, onUpload }: { attachments: Arr
           {attachments.map((att) => (
             <div key={att.id} className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg text-sm text-muted-foreground group">
               <Paperclip className="w-3 h-3 text-info" /><span className="truncate flex-1">{att.filename}</span>
-              <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete attachment" onClick={async () => { if (confirm('Delete this attachment?')) { await apiClient.delete(`/api/attachments/${att.id}`); window.location.reload(); } }} className="text-destructive" />
+              <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete attachment" onClick={async () => { if (confirm('Delete this attachment?')) { await apiClient.delete(`/api/attachments/${att.id}`); router.refresh(); } }} className="text-destructive" />
             </div>
           ))}
         </div>

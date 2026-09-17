@@ -3,7 +3,7 @@
 import { Edit2, HelpCircle, Plus, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 
 import { deleteTeam } from '@/app/actions/teams';
@@ -34,6 +34,7 @@ export function TeamList({ initialTeams, permissionKeys }: TeamListProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<TeamWithCount | null>(null);
   const pathname = usePathname();
+  const router = useRouter();
   const locale = pathname.split('/')[1] || 'en';
 
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
@@ -46,7 +47,7 @@ export function TeamList({ initialTeams, permissionKeys }: TeamListProps) {
     if (confirm('Delete this team?')) {
       const result = await deleteTeam(id);
       if (result.success) {
-        window.location.reload();
+        router.refresh();
       } else {
         toast.error(result.error);
       }
@@ -156,7 +157,7 @@ export function TeamList({ initialTeams, permissionKeys }: TeamListProps) {
       <TeamModal
         isOpen={isModalOpen}
         onClose={() => { setIsModalOpen(false); setEditingTeam(null); }}
-        onSuccess={() => window.location.reload()}
+        onSuccess={() => router.refresh()}
         initialData={editingTeam}
         permissionKeys={permissionKeys}
       />

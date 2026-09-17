@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/apiClient';
 import { DatasetModal } from './DatasetModal';
 import { StatementModal } from './StatementModal';
@@ -45,6 +45,7 @@ interface TaskDetailViewProps {
 
 export function TaskDetailView({ task, permissionKeys }: TaskDetailViewProps): React.JSX.Element {
   const pathname = usePathname();
+  const router = useRouter();
   const locale = pathname.split('/')[1] ?? 'en';
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ info: true, statements: true, datasets: true });
   const [isTaskSettingsOpen, setIsTaskSettingsOpen] = useState(false);
@@ -55,7 +56,7 @@ export function TaskDetailView({ task, permissionKeys }: TaskDetailViewProps): R
   const [currentDatasetId, setCurrentDatasetId] = useState<number | null>(null);
 
   const toggle = (section: string): void => setExpanded((prev) => ({ ...prev, [section]: !prev[section] }));
-  const reload = (): void => window.location.reload();
+  const reload = (): void => router.refresh();
 
   const handleActivateDataset = async (datasetId: number): Promise<void> => {
     await apiClient.put(`/api/datasets/${datasetId}`, { action: 'activate' });

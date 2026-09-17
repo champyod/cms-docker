@@ -17,8 +17,12 @@ interface DeployConfirmModalProps {
   onConfirm: () => void;
 }
 
+// Why: deploying always replaces the active contest, so the consequence is the modal's default note —
+// callers may override it but can never forget it.
+const DEFAULT_EXTRA_NOTE = 'The previous active contest will be deactivated.';
+
 /** Phase-aware deploy dialog shared by ContestList and ContestDetailView. Close is locked while a deploy runs. */
-export function DeployConfirmModal({ isOpen, phase, targetLabel, extraNote, onClose, onConfirm }: DeployConfirmModalProps) {
+export function DeployConfirmModal({ isOpen, phase, targetLabel, extraNote = DEFAULT_EXTRA_NOTE, onClose, onConfirm }: DeployConfirmModalProps) {
   const busy = BUSY_PHASES.includes(phase);
 
   return (
@@ -32,7 +36,7 @@ export function DeployConfirmModal({ isOpen, phase, targetLabel, extraNote, onCl
             <>
               <p className="text-sm text-muted-foreground">
                 This will mark <strong className="text-foreground">{targetLabel}</strong> as the active contest,
-                update the .env file, and restart the contest stack.{extraNote ? ` ${extraNote}` : ''}
+                update the .env file, and restart the contest stack. {extraNote}
               </p>
               <DialogFooter>
                 <Button variant="ghost" onClick={onClose}>Cancel</Button>

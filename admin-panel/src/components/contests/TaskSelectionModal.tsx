@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Search } from 'lucide-react';
 import { addTaskToContest } from '@/app/actions/contests';
 import { Dialog } from '@/components/core/Dialog';
@@ -21,6 +22,7 @@ interface TaskSelectionModalProps {
 }
 
 export function TaskSelectionModal({ isOpen, onClose, contestId, availableTasks, onSuccess }: TaskSelectionModalProps) {
+  const router = useRouter();
   const [search, setSearch] = useState('');
   const [adding, setAdding] = useState<number | null>(null);
 
@@ -34,7 +36,7 @@ export function TaskSelectionModal({ isOpen, onClose, contestId, availableTasks,
     try {
       await addTaskToContest(contestId, taskId);
       if (onSuccess) onSuccess();
-      else window.location.reload();
+      else router.refresh();
     } catch (error) {
       console.error('Failed to add task:', error);
     } finally {
