@@ -49,8 +49,8 @@ curl http://localhost:8890
 
 **A. Services not running:**
 ```bash
-# Restart services
-docker compose -f docker-compose.contest.yml restart
+# Restart services (the contest stack comes up from the unified project)
+docker compose -f docker-compose.yml --profile core --profile contest restart
 docker compose -f docker-compose.admin.yml restart
 ```
 

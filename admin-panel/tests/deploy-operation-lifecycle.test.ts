@@ -3,8 +3,22 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { DEPLOY_WALL_TIMEOUT_MS } from '@/lib/constants/deploy';
+import { DEPLOY_STALE_MS, DEPLOY_WALL_TIMEOUT_MS } from '@/lib/constants/deploy';
+import { cleanStaleOperations, patchDeployMeta } from '@/lib/deploy-operation-store';
 import type { ContestDeployPlan } from '@/lib/deploy-store';
+
+/**
+ * A `config.toml` write the store is holding, so a test can act in the window between the settle's
+ * ownership check and its write — the window a settlement has to keep a deploy out of.
+ */
+interface ConfigWriteGate {
+  /** Resolves once the store is inside the write, i.e. past its ownership check. */
+  entered: Promise<void>;
+  markEntered: () => void;
+  /** Lets the held write through. */
+  released: Promise<void>;
+  release: () => void;
+}
 
 /**
  * The deploy store's lifecycle, driven through the real filesystem it records operations in.
@@ -23,6 +37,8 @@ const mocks = vi.hoisted(() => ({
   /** The script the store asked the fake spawn to run. */
   script: '',
   helpers: [] as Array<{ pid: number | undefined; kill: () => void; exited: Promise<void> }>,
+  /** Set by armConfigWritePause, consumed by the mocked writeFile below. */
+  configWriteGate: null as null | ConfigWriteGate,
 }));
 
 vi.mock('server-only', () => ({}));
@@ -58,6 +74,30 @@ vi.mock('child_process', async (importOriginal) => {
     };
   });
   return { ...actual, exec: mocks.exec, spawn: mocks.spawn };
+});
+
+/**
+ * Wraps the one filesystem call a test needs to hold: the store's write of `config.toml`.
+ *
+ * Why this is the interposition point: the settle reads the file to decide the rollback is still its
+ * to make, and writes it immediately after. Holding the write is the only way to observe what a
+ * settlement does with the file once a newer deploy has taken it.
+ */
+vi.mock('fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs/promises')>();
+  const writeFile = async (file: unknown, ...rest: unknown[]): Promise<void> => {
+    const gate = mocks.configWriteGate;
+    if (gate !== null && typeof file === 'string' && file.endsWith('config.toml')) {
+      // Only the first gated write pauses: a released gate lets later writers through.
+      mocks.configWriteGate = null;
+      gate.markEntered();
+      await gate.released;
+    }
+    return (actual.writeFile as (...args: unknown[]) => Promise<void>)(file, ...rest);
+  };
+  // Both import styles, because this runner resolves 'fs/promises' and 'node:fs/promises' to one
+  // module: only `config.toml` writes are gated, so the test file's own writes pass untouched.
+  return { ...actual, writeFile, default: { ...actual, writeFile } };
 });
 
 type DeployStore = typeof import('@/lib/deploy-store');
@@ -106,11 +146,52 @@ async function killDeployProcesses(): Promise<void> {
 }
 
 /** Ages the record and its log, so nothing under test can still be reacting to a fresh operation. */
-async function ageOperationBaseline(operationId: string): Promise<void> {
-  const startedAt = new Date(Date.now() - (DEPLOY_WALL_TIMEOUT_MS + 60_000));
+async function ageOperation(operationId: string, ageMs: number): Promise<void> {
+  const startedAt = new Date(Date.now() - ageMs);
   const meta = JSON.parse(await fs.readFile(metaPath(operationId), 'utf-8'));
   await fs.writeFile(metaPath(operationId), JSON.stringify({ ...meta, startedAt: startedAt.toISOString() }));
   await fs.utimes(path.join(logsDir(), `${operationId}.log`), startedAt, startedAt);
+}
+
+const ageOperationBaseline = (operationId: string): Promise<void> =>
+  ageOperation(operationId, DEPLOY_WALL_TIMEOUT_MS + 60_000);
+
+/** The record as it stands on disk, for the assertions that are about what the panel stored. */
+async function readRecordedMeta(operationId: string): Promise<Record<string, unknown>> {
+  return JSON.parse(await fs.readFile(metaPath(operationId), 'utf-8')) as Record<string, unknown>;
+}
+
+async function rewriteRecordedMeta(operationId: string, meta: Record<string, unknown>): Promise<void> {
+  await fs.writeFile(metaPath(operationId), JSON.stringify(meta));
+}
+
+/** Holds the store's next `config.toml` write until the test releases it. */
+function armConfigWritePause(): ConfigWriteGate {
+  let markEntered = (): void => {};
+  let release = (): void => {};
+  const gate: ConfigWriteGate = {
+    entered: new Promise<void>((resolve) => { markEntered = resolve; }),
+    markEntered: () => { markEntered(); },
+    released: new Promise<void>((resolve) => { release = resolve; }),
+    release: () => { release(); },
+  };
+  mocks.configWriteGate = gate;
+  return gate;
+}
+
+/** A pid this process table has seen exit, so probing it reports ESRCH rather than a live process. */
+async function gonePid(): Promise<number> {
+  const spawnReal = mocks.realSpawn;
+  if (spawnReal === null) throw new Error('the real spawn was not captured');
+  const child = spawnReal('sh', ['-c', 'true'], { stdio: 'ignore' });
+  if (child.pid === undefined) throw new Error('the helper process reported no pid');
+  await new Promise<void>((resolve) => { child.once('exit', () => resolve()); });
+  return child.pid;
+}
+
+/** The pid namespace this test runs in, i.e. the one a deploy spawned here is recorded against. */
+async function readPidNamespace(): Promise<string> {
+  return fs.readlink('/proc/self/ns/pid');
 }
 
 beforeAll(async () => {
@@ -140,6 +221,9 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  // A test that failed before releasing the held write must not leave the store waiting on it.
+  mocks.configWriteGate?.release();
+  mocks.configWriteGate = null;
   await killDeployProcesses();
 });
 
@@ -235,6 +319,165 @@ describe('contest deploy lifecycle', () => {
     const failed = await store.fetchDeployStatus(operationId);
     expect(failed.status).toBe('failed');
     expect(await readConfigContestId()).toBe(13);
+  });
+
+  it('keeps a deploy out of the window between a settle\'s ownership check and its config write', async () => {
+    const started = await store.runDeployContest(12, plan);
+    const operationId = started.operationId;
+    expect(operationId).toBeDefined();
+    if (operationId === undefined) return;
+    await killDeployProcesses();
+    const syncsBefore = mocks.exec.mock.calls.length;
+    const spawnsBefore = mocks.spawn.mock.calls.length;
+
+    // The settler holds `config.toml` after it decided the file is still its operation's to revert.
+    const pause = armConfigWritePause();
+    const settle = store.fetchDeployStatus(operationId);
+    await pause.entered;
+
+    // Everything the panel does concurrently reaches settling from here: another tab's status
+    // stream, the 30s discovery lookup, the pre-guard reconcile.
+    const secondSettle = store.fetchDeployStatus(operationId);
+    const deploy = await store.runDeployContest(13, plan);
+
+    // The settle claimed the operation before it touched anything, so the deploy is not started
+    // behind a rollback that is still in flight — which is how config.toml, the database and the
+    // containers used to end up naming different contests.
+    expect(deploy).toMatchObject({ success: false, alreadyRunning: true });
+    expect(mocks.spawn.mock.calls.length - spawnsBefore).toBe(0);
+
+    pause.release();
+    const [settled, repeated] = await Promise.all([settle, secondSettle]);
+    expect(settled.status).toBe('failed');
+    // The second settler repeats the claimed result instead of reverting a second time.
+    expect(repeated.status).toBe('failed');
+    expect(mocks.exec.mock.calls.length - syncsBefore).toBe(1);
+    expect(await readConfigContestId()).toBe(10);
+    expect(await readOrNull(lockPath())).toBeNull();
+  });
+
+  it('records a failed activation as a terminal result and gives the guard back', async () => {
+    const started = await store.runDeployContest(12, plan);
+    const operationId = started.operationId;
+    expect(operationId).toBeDefined();
+    if (operationId === undefined) return;
+    await deployReportsExit(operationId, 0);
+    await waitForFile(donePath(operationId));
+    // The deploy path needs `deployment:deploy`; activating the contest needs `contest:switch`, which
+    // the seeded registries grant to another role. So this is what a legitimate operator sees.
+    mocks.activateContest.mockRejectedValue(new Error('Permission denied: contest:switch'));
+
+    const failed = await store.fetchDeployStatus(operationId);
+    expect(failed.status).toBe('failed');
+    expect(failed.error).toContain('contest:switch');
+    // Nothing is reverted: the containers and config.toml already run this contest.
+    expect(await readConfigContestId()).toBe(12);
+    // Terminal and recorded, so no later lookup retries the activation while holding the guard.
+    expect((await readRecordedMeta(operationId)).outcome).toMatchObject({ status: 'failed' });
+    expect(await readOrNull(lockPath())).toBeNull();
+
+    const repeated = await store.fetchDeployStatus(operationId);
+    expect(repeated.status).toBe('failed');
+    expect(mocks.activateContest).toHaveBeenCalledTimes(1);
+    // The guard being free is what lets the operator try again.
+    expect((await store.runDeployContest(14, plan)).success).toBe(true);
+  });
+
+  it('never discards the marker of an outcome the panel has not applied', async () => {
+    const started = await store.runDeployContest(12, plan);
+    const operationId = started.operationId;
+    expect(operationId).toBeDefined();
+    if (operationId === undefined) return;
+    await killDeployProcesses();
+    await deployReportsExit(operationId, 0);
+    await ageOperation(operationId, DEPLOY_STALE_MS + 60_000);
+
+    await cleanStaleOperations();
+
+    // The record and its marker are the only surviving evidence that the deploy finished: discarding
+    // them here is what left the contest inactive while config.toml and the containers named it.
+    expect(await readOrNull(metaPath(operationId))).not.toBeNull();
+    expect(await readOrNull(donePath(operationId))).toBe('0');
+    expect(await readOrNull(lockPath())).toBe(operationId);
+
+    // And the surviving record still settles, so the contest reaches its activated state.
+    const completed = await store.fetchDeployStatus(operationId);
+    expect(completed.status).toBe('completed');
+    expect(mocks.activateContest).toHaveBeenCalledExactlyOnceWith(12);
+    expect(await readOrNull(lockPath())).toBeNull();
+  });
+
+  it('keeps both fields when the pid and the outcome are written together', async () => {
+    const started = await store.runDeployContest(12, plan);
+    const operationId = started.operationId;
+    expect(operationId).toBeDefined();
+    if (operationId === undefined) return;
+
+    // The two writers of one record, started together: the spawn records the process it just
+    // started while a status stream settles the operation. A read-merge-write that is not serialised
+    // drops whichever field landed first — a lost pid shunts the operation into the ageing branch, a
+    // lost outcome re-runs activation.
+    await Promise.all([
+      patchDeployMeta(operationId, { pid: 4_190_000 }),
+      patchDeployMeta(operationId, { outcome: { status: 'completed' } }),
+    ]);
+
+    const recorded = await readRecordedMeta(operationId);
+    expect(recorded.pid).toBe(4_190_000);
+    expect(recorded.outcome).toMatchObject({ status: 'completed' });
+  });
+
+  it('does not take a pid this namespace cannot see as proof the deploy ended', async () => {
+    const started = await store.runDeployContest(12, plan);
+    const operationId = started.operationId;
+    expect(operationId).toBeDefined();
+    if (operationId === undefined) return;
+    const recorded = await readRecordedMeta(operationId);
+    // The spawn records the process table the pid belongs to; that is what makes the probe below
+    // answerable after a panel restart.
+    expect(recorded.pidNamespace).toBe(await readPidNamespace());
+
+    const pid = await gonePid();
+    // The panel that started this deploy is gone (its container was recreated), so the record names a
+    // pid from another process table: probing it here reports ESRCH, which says nothing about the
+    // build. A probe that read this as "dead" is what reverted config.toml under a running build.
+    await rewriteRecordedMeta(operationId, { ...recorded, pid, pidNamespace: 'pid:[4026531000]' });
+
+    const status = await store.fetchDeployStatus(operationId);
+    expect(status.status).toBe('running');
+    expect(mocks.activateContest).not.toHaveBeenCalled();
+    expect(await readConfigContestId()).toBe(12);
+    expect(await readOrNull(lockPath())).toBe(operationId);
+
+    // In the namespace the pid was recorded in, the same ESRCH is evidence: this table has seen the
+    // shell that ran the deploy go away, so the operation settles and the file is reverted.
+    await rewriteRecordedMeta(operationId, { ...recorded, pid, pidNamespace: await readPidNamespace() });
+
+    const settled = await store.fetchDeployStatus(operationId);
+    expect(settled.status).toBe('failed');
+    expect(await readConfigContestId()).toBe(10);
+    expect(await readOrNull(lockPath())).toBeNull();
+  });
+
+  it('still settles an ESRCH for a record that cannot name its process table', async () => {
+    const started = await store.runDeployContest(12, plan);
+    const operationId = started.operationId;
+    expect(operationId).toBeDefined();
+    if (operationId === undefined) return;
+    await killDeployProcesses();
+
+    // A record written before the pid namespace was recorded (a deploy in flight across the upgrade),
+    // or one from a host with no /proc: absence is all the panel has, and it is what it acted on
+    // before this field existed.
+    const recorded = await readRecordedMeta(operationId);
+    const withoutNamespace: Record<string, unknown> = { ...recorded, pid: await gonePid() };
+    delete withoutNamespace.pidNamespace;
+    await rewriteRecordedMeta(operationId, withoutNamespace);
+
+    const settled = await store.fetchDeployStatus(operationId);
+    expect(settled.status).toBe('failed');
+    expect(await readConfigContestId()).toBe(10);
+    expect(await readOrNull(lockPath())).toBeNull();
   });
 
   it('runs the contest stack from the unified project, with the mode deciding build or pull', async () => {

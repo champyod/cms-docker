@@ -10,7 +10,6 @@ interface DeployFrame {
   contestId?: number;
   startedAt?: string;
   log: string;
-  fullLength: number;
   percent: number | null;
   error?: string;
   warning?: string;
@@ -25,7 +24,6 @@ function snapshot(result: DeployStatusResult): DeployFrame {
     contestId: result.contestId,
     startedAt: result.startedAt,
     log: log.slice(-DEPLOY_TAIL_LENGTH),
-    fullLength: log.length,
     percent: result.percent ?? null,
     error: result.error,
     warning: result.warning,

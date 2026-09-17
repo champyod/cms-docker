@@ -14,6 +14,7 @@ import { logToDiscord } from '@/lib/discord-notifier';
 import { readContestId, setContestId } from '@/lib/active-contest';
 import type { DeploymentMode } from '@/lib/deployment-mode';
 import {
+  claimDeployOutcome,
   cleanStaleOperations,
   clearActiveOperation,
   ensureDeployLogsDir,
@@ -25,9 +26,9 @@ import {
   patchDeployMeta,
   readDeployMeta,
   recordDeployOperationStart,
+  recordDeployProcess,
   type DeployMeta,
   type DeployOutcome,
-  type DeployPaths,
 } from '@/lib/deploy-operation-store';
 
 const execPromise = util.promisify(exec);
@@ -75,8 +76,13 @@ export interface DeployStatusResult {
 
 const getConfigTomlPath = (): string => path.join(getRepoRoot(), 'config.toml');
 
+/** The configuration file's content, or null when it cannot be read. */
+async function readConfigToml(): Promise<string | null> {
+  return fs.readFile(getConfigTomlPath(), 'utf-8').catch(() => null);
+}
+
 async function readConfigTomlContestId(): Promise<number | null> {
-  const content = await fs.readFile(getConfigTomlPath(), 'utf-8').catch(() => null);
+  const content = await readConfigToml();
   if (content === null) return null;
   return readContestId(content);
 }
@@ -172,8 +178,9 @@ async function launchDetachedDeploy(operationId: string, command: string): Promi
 
   child.unref();
 
-  // The pid is what lets a later process tell "still building" from "gone without a word".
-  await patchDeployMeta(operationId, { pid: child.pid });
+  // The pid is what lets a later process tell "still building" from "gone without a word"; the
+  // process table it was spawned in is what keeps that probe answerable after a panel restart.
+  await recordDeployProcess(operationId, child.pid);
 }
 
 async function finalizeContestActivation(contestId: number): Promise<void> {
@@ -187,24 +194,37 @@ async function finalizeContestActivation(contestId: number): Promise<void> {
  * is_active moves — and the operation is marked settled so no later lookup activates or notifies
  * twice.
  *
- * Why an activation failure leaves the operation unsettled: `.done` is on disk, so the next lookup
- * retries the activation instead of losing it. Nothing is reverted either: the containers already run
- * this contest, and reverting the configuration would make it disagree with them.
+ * Why the claim comes first: settling is reachable concurrently from the status stream of every open
+ * tab, the 30s discovery lookup and the pre-guard reconcile, and the effects below must happen once.
+ * Writing the outcome before them is what makes the second settler read "already settled" instead of
+ * activating, notifying and syncing alongside this one.
+ *
+ * Why an activation failure is recorded as the terminal result rather than left to retry: the
+ * containers run this contest and config.toml names it, so nothing may be reverted. Left unsettled,
+ * the operation would re-attempt the activation on every lookup, hold the deploy guard for good, and
+ * lose both its record and its `.done` marker to the 30-minute cleanup — a contest that is never
+ * activated while the configuration names it. A recorded failure is the honest state: the operator
+ * sees it and can activate the contest from the contests page.
  */
 async function settleCompletedDeploy(operationId: string, meta: DeployMeta, log: string): Promise<DeployStatusResult> {
   const percent = parseDeployPercent(log);
   const base = { contestId: meta.contestId, startedAt: meta.startedAt, log, percent };
+  const alreadySettled = await claimDeployOutcome(operationId, { status: 'completed' });
+  if (alreadySettled !== null) return settledStatus(meta, log, alreadySettled);
+
   try {
     await finalizeContestActivation(meta.contestId);
   } catch (error) {
-    return {
-      success: false,
+    const outcome: DeployOutcome = {
       status: 'failed',
-      ...base,
       error: `Deploy completed but contest activation failed: ${(error as Error).message}`,
     };
+    await patchDeployMeta(operationId, { outcome });
+    await clearActiveOperation();
+    await logToDiscord('Contest Deploy Failed', `Contest ID **${meta.contestId}**: ${outcome.error}`, 15158332, true);
+    return { success: false, status: 'failed', ...base, error: outcome.error };
   }
-  await patchDeployMeta(operationId, { outcome: { status: 'completed' } });
+
   await clearActiveOperation();
   await logToDiscord('Contest Deploy Completed', `Contest ID **${meta.contestId}** deployed successfully.`, 3066993);
   return { success: true, status: 'completed', ...base };
@@ -217,8 +237,15 @@ async function settleCompletedDeploy(operationId: string, meta: DeployMeta, log:
  * is how the panel ended up with configuration, database and containers asserting three different
  * contests. So a revert waits for evidence that there is no success to lose — a non-zero exit docker
  * reported, or a process gone without reporting at all. A watch timing out is not that evidence.
+ *
+ * Why the claim comes first here too: the revert, the config sync and the Discord notice are the
+ * effects a second settler must not repeat. The claimed outcome carries the error; the warning the
+ * rollback produces is patched in by the winner, which is the only writer of this record from then on.
  */
 async function settleFailedDeploy(operationId: string, meta: DeployMeta, log: string, error: string): Promise<DeployStatusResult> {
+  const alreadySettled = await claimDeployOutcome(operationId, { status: 'failed', error });
+  if (alreadySettled !== null) return settledStatus(meta, log, alreadySettled);
+
   const percent = parseDeployPercent(log);
   const rollbackFailure = await rollbackContestId(meta);
   const warning = rollbackFailure ?? undefined;
@@ -235,14 +262,18 @@ async function settleFailedDeploy(operationId: string, meta: DeployMeta, log: st
  * Why the condition: a revert is only correct while this operation is the file's last writer. A
  * `config.toml` that already names another contest belongs to a newer deploy, and reverting it would
  * leave the file and the database asserting different contests — the split this path exists to avoid.
+ * That is also why the write is derived from the very content the check read: re-reading the file
+ * inside the write would put a second await between "the file is mine" and "I own this write". The
+ * window that remains is the read and the write themselves, which the filesystem does not let us make
+ * one operation; no deploy can start in it, because the guard is still held until this settle ends.
  */
 async function rollbackContestId(meta: DeployMeta): Promise<string | null> {
   if (meta.previousContestId === undefined) return null;
-  const current = await readConfigTomlContestId();
-  if (current === null) return 'Could not read CONTEST_ID from config.toml during rollback.';
-  if (current !== meta.contestId) return null;
+  const content = await readConfigToml();
+  if (content === null) return 'Could not read CONTEST_ID from config.toml during rollback.';
+  if (readContestId(content) !== meta.contestId) return null;
   try {
-    await updateConfigTomlContestId(meta.previousContestId);
+    await fs.writeFile(getConfigTomlPath(), setContestId(content, meta.previousContestId));
     await runConfigSync();
     return null;
   } catch (error) {
@@ -286,7 +317,7 @@ async function resolveDeployStatus(operationId: string, meta: DeployMeta, log: s
   }
 
   if (meta.pid !== undefined) {
-    if (await isDeployProcessAlive(meta.pid)) return runningStatus(meta, log);
+    if (await isDeployProcessAlive(meta)) return runningStatus(meta, log);
     // Gone and silent: its result never arrived, so nothing it did can be trusted. Nobody is working.
     return settleFailedDeploy(operationId, meta, log, 'Deploy process is gone without reporting a result.');
   }
@@ -374,10 +405,6 @@ export async function runDeployContest(contestId: number, plan: ContestDeployPla
     // releases it itself. Clearing the lock from here could free a deploy that is still building.
     return { success: false, error: (error as Error).message };
   }
-}
-
-export function getDeployOperationPathsForApi(operationId: string): DeployPaths {
-  return getDeployOperationPaths(operationId);
 }
 
 export interface ActiveDeployOperation {
