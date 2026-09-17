@@ -7,6 +7,8 @@ import { DEPLOY_IDLE_TIMEOUT_MS, DEPLOY_POLL_MS } from '@/lib/constants/deploy';
 import { createDeployToast, showDeployResult } from '@/lib/deployToast';
 import type { DeployState } from '@/hooks/useDeployContest';
 
+const toastHelper = createDeployToast();
+
 interface StreamPayload {
   status: DeployStatus;
   contestId?: number;
@@ -29,9 +31,8 @@ export function useDeployStream(
   const eventSourceRef = useRef<EventSource | null>(null);
   const lastChangeAtRef = useRef<number>(0);
   const idleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const toastHelper = createDeployToast();
 
-  const stopStreaming = useCallback(() => {
+  const stopStreaming = useCallback((): void => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
@@ -53,13 +54,8 @@ export function useDeployStream(
     [toastHelper, toastIdRef],
   );
 
-  useEffect(
-    () => () => {
-      if (eventSourceRef.current) eventSourceRef.current.close();
-      if (idleTimerRef.current !== null) clearInterval(idleTimerRef.current);
-    },
-    [],
-  );
+  // The authenticated provider owns this hook, so page navigation never runs this cleanup.
+  useEffect(() => stopStreaming, [stopStreaming]);
 
   const startStreaming = useCallback(
     (operationId: string, contestId: number) => {
@@ -79,7 +75,7 @@ export function useDeployStream(
       }, DEPLOY_POLL_MS);
 
       source.onmessage = (event) => {
-        if (!mountedRef.current) return;
+        if (!mountedRef.current || eventSourceRef.current !== source) return;
         lastChangeAtRef.current = Date.now();
         try {
           const data = JSON.parse(event.data) as StreamPayload;
@@ -94,13 +90,9 @@ export function useDeployStream(
           const phaseMap: Record<string, DeployState['phase']> = { completed: 'completed', failed: 'failed', timeout: 'timeout', not_found: 'failed' };
           setState({ phase: phaseMap[data.status] ?? 'failed', contestId, operationId, status: data.status, error: data.error || null, warning: data.warning || null, log: data.log || '', percent: percent ?? (data.status === 'completed' ? 100 : null), startedAt: data.startedAt || null });
           showDeployResult(data.status, contestId, data.error);
-          source.close();
-          eventSourceRef.current = null;
-          if (idleTimerRef.current !== null) {
-            clearInterval(idleTimerRef.current);
-            idleTimerRef.current = null;
-          }
         } catch {
+          // Ignore malformed frames; the idle watchdog still bounds the connection lifetime.
+          return;
         }
       };
 

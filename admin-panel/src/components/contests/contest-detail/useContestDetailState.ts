@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { updateContestSettings, removeParticipant, removeTaskFromContest } from '@/app/actions/contests';
 import { setTestUser } from '@/app/actions/participations';
 import { useDeployContest } from '@/hooks/useDeployContest';
@@ -15,6 +16,7 @@ export function useContestDetailState(contest: ContestLike) {
   const [selectedParticipation, setSelectedParticipation] = useState<{ id: number; username: string } | null>(null);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({ info: true, participants: true, tasks: true, services: true });
   const [saving, setSaving] = useState(false);
+  const router = useRouter();
   const deploy = useDeployContest();
   const { state: deployState, deploy: launchDeploy, reset: resetDeploy } = deploy;
   const [showDeployModal, setShowDeployModal] = useState(false);
@@ -32,15 +34,19 @@ export function useContestDetailState(contest: ContestLike) {
   });
 
   const toggleSection = (section: string) => setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }));
-  const handleSetActive = () => setShowDeployModal(true);
+  const handleSetActive = (): void => {
+    if (deployState.phase !== 'deploying' && deployState.phase !== 'polling') resetDeploy();
+    setShowDeployModal(true);
+  };
   const confirmDeploy = () => launchDeploy(contest.id);
 
   useEffect(() => {
-    const phase = deployState.phase;
-    if (phase === 'completed') { setShowDeployModal(false); resetDeploy(); window.location.reload(); }
-    else if (phase === 'failed' || phase === 'timeout') { setShowDeployModal(false); resetDeploy(); alert('Deploy failed: ' + (deployState.error || 'Unknown error')); }
-    else if (phase === 'already_running') { setShowDeployModal(false); resetDeploy(); alert('Another deploy is already in progress.'); }
-  }, [deployState.phase, deployState.error, resetDeploy]);
+    // Refresh contest data without destroying the shared owner or consuming its result.
+    if (deployState.phase === 'completed') router.refresh();
+    if (['completed', 'failed', 'timeout', 'already_running'].includes(deployState.phase)) {
+      queueMicrotask((): void => setShowDeployModal(false));
+    }
+  }, [deployState.phase, router]);
 
   const handleOpenParticipationSettings = (participationId: number, username: string) => {
     setSelectedParticipation({ id: participationId, username });

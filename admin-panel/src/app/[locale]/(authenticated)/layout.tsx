@@ -8,6 +8,7 @@ import { cookies } from "next/headers";
 import { PageBackground } from "@/components/core/PageBackground";
 import { Stack } from "@/components/core/Layout";
 import { ShortcutLayer } from "@/components/layout/ShortcutOverlay";
+import { DeployContestProvider } from "@/components/providers/DeployContestProvider";
 
 export default async function AuthenticatedLayout({
   children,
@@ -49,7 +50,7 @@ export default async function AuthenticatedLayout({
         <Header className="z-10" username={session.username} permissionKeys={permissionKeys} />
 
         <div className="flex-1 overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8 lg:pb-8 z-10 scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20">
-          {children}
+          <DeployContestProvider>{children}</DeployContestProvider>
         </div>
       </Stack>
       <MobileNav locale={locale} permissionKeys={permissionKeys} />
