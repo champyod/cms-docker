@@ -662,11 +662,22 @@ services:
       - BACKUP_MAX_AGE_DAYS=${BACKUP_MAX_AGE_DAYS:-10}
       - BACKUP_MAX_SIZE_GB=${BACKUP_MAX_SIZE_GB:-5}
       - BACKUP_DIR=/app/backups
+      # Rotation of the cms-logs volume: the CMS services write <epoch>.log files
+      # there with no rotation of their own, so the monitor prunes them (age, then
+      # oldest-first to the size cap).
+      - CMS_LOG_DIR=${CMS_LOG_DIR:-/var/local/log/cms}
+      - CMS_LOG_MAX_AGE_DAYS=${CMS_LOG_MAX_AGE_DAYS:-7}
+      - CMS_LOG_MAX_SIZE_GB=${CMS_LOG_MAX_SIZE_GB:-5}
+      - CMS_LOG_PRUNE_INTERVAL_MINS=${CMS_LOG_PRUNE_INTERVAL_MINS:-60}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /:/host:ro # Mount host root to /host to check disk usage
       - ./backups:/app/backups
+      # WHY both scripts are bind-mounted: they are host-side maintenance code that
+      # changes between releases, so the running monitor must not lag the checkout
+      # (the image copy stays as the fallback).
       - ./scripts/__backup.sh:/usr/local/bin/cms-backup.sh:ro
+      - ./scripts/__monitor.sh:/usr/local/bin/monitor.sh:ro
       - ./config:/repo-root/config:ro # Mount config to read container restart settings
     networks:
       - cms-network

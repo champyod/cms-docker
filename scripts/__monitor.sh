@@ -28,6 +28,15 @@ DISK_THRESHOLD=${MONITOR_DISK_THRESHOLD:-80}
 BACKUP_INTERVAL_MINS=${BACKUP_INTERVAL_MINS:-1440}
 LAST_BACKUP_TIME=0
 
+# Log retention. The CMS services open a fresh <epoch>.log under CMS_LOG_DIR at
+# every start and never rotate it (src/cms/io/service.py, service/LogService.py),
+# so the volume grows without bound. Caps mirror the backup retention knobs.
+CMS_LOG_DIR=${CMS_LOG_DIR:-/var/local/log/cms}
+CMS_LOG_MAX_AGE_DAYS=${CMS_LOG_MAX_AGE_DAYS:-7}
+CMS_LOG_MAX_SIZE_GB=${CMS_LOG_MAX_SIZE_GB:-5}
+CMS_LOG_PRUNE_INTERVAL_MINS=${CMS_LOG_PRUNE_INTERVAL_MINS:-60}
+LAST_LOG_PRUNE_TIME=0
+
 # Mode
 DAEMON_MODE=false
 
@@ -280,6 +289,52 @@ should_suppress_notification() {
     return 1  # Don't suppress
 }
 
+# ---------------------------------------------------------------------------
+# Log retention
+# ---------------------------------------------------------------------------
+# WHY the prune runs inside the log-service container: that tree belongs to
+# cmsuser (uid 1001) with mode 750, while the monitor runs as uid 1000 and so
+# cannot unlink those files; the remedy documented in docs/TROUBLESHOOTING.md
+# writes into the same container for the same reason. Files past the age cap go
+# first, then oldest-first until the tree is back under the size cap.
+prune_cms_logs() {
+    local log_dir="$CMS_LOG_DIR"
+    local age_days="$CMS_LOG_MAX_AGE_DAYS"
+    local max_kb=$(( CMS_LOG_MAX_SIZE_GB * 1024 * 1024 ))
+    local container="cms-log-service"
+
+    if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$container"; then
+        echo "[WARN] log retention skipped: $container is not running." >&2
+        return 0
+    fi
+
+    docker exec "$container" sh -c '
+        dir="$1"; age_days="$2"; max_kb="$3"
+        [ -d "$dir" ] || exit 0
+        # Age first: a file no service writes to any more is the cheapest to drop.
+        find "$dir" -type f -name "*.log" -mtime +"$age_days" -delete 2>/dev/null
+        used_kb=$(du -sk "$dir" | cut -f1)
+        [ "$used_kb" -le "$max_kb" ] && exit 0
+        excess=$(( (used_kb - max_kb) * 1024 ))
+        listing=$(find "$dir" -type f -name "*.log" -exec stat -c "%Y %s %n" {} + 2>/dev/null | sort -n)
+        # The newest file is the one a service is still appending to. Unlinking it
+        # would keep its blocks until that service restarts, so when it is the only
+        # one left to pay the excess it is truncated in place instead (logrotate
+        # copytruncate): the space comes back now and the writer is undisturbed.
+        newest=$(printf "%s\n" "$listing" | tail -n 1 | cut -d" " -f3-)
+        printf "%s\n" "$listing" | while IFS=" " read -r _mtime size path; do
+            [ "$excess" -gt 0 ] || break
+            [ -n "$path" ] || continue
+            if [ "$path" = "$newest" ]; then
+                truncate -s 0 -- "$path" 2>/dev/null || : > "$path"
+            elif ! rm -f -- "$path"; then
+                continue
+            fi
+            excess=$(( excess - size ))
+        done
+    ' sh "$log_dir" "$age_days" "$max_kb" || echo "[WARN] log retention pass failed." >&2
+}
+
 listen_docker_events() {
     echo "Starting Docker event listener..."
     # Track last notification time per container to prevent spam
@@ -400,6 +455,14 @@ check_once() {
         fi
     elif [ "$BACKUP_INTERVAL_MINS" -gt 0 ] && [ "$LAST_BACKUP_TIME" -eq 0 ]; then
         LAST_BACKUP_TIME=$CURRENT_TIME
+    fi
+
+    # First pass prunes straight away, so a volume that is already over the cap
+    # is brought back under it without waiting for the interval to elapse.
+    if is_integer "$CMS_LOG_PRUNE_INTERVAL_MINS" && [ "$CMS_LOG_PRUNE_INTERVAL_MINS" -gt 0 ] \
+       && [ $((CURRENT_TIME - LAST_LOG_PRUNE_TIME)) -ge $((CMS_LOG_PRUNE_INTERVAL_MINS * 60)) ]; then
+        prune_cms_logs
+        LAST_LOG_PRUNE_TIME=$CURRENT_TIME
     fi
 }
 

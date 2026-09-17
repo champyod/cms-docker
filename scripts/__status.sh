@@ -22,12 +22,24 @@ stack_services() { # stack compose file -> comma separated service names
   printf '%s' "${services//$'\n'/,}"
 }
 
-stack_containers() { # stack compose file
+stack_containers() { # stack compose file [service ...]
   local compose_file="$1" services
   local -a name_filters=()
   local name
+  shift
 
-  services="$(stack_services "$compose_file")"
+  # A stack without a partial file of its own (monitor lives in
+  # docker-compose.yml) names its services: that file declares every stack, so
+  # reading its service list would repeat the tables printed above. The list is
+  # comma separated with no leading or trailing comma, which is what the label
+  # match below wraps in commas — a stray one would also match an unlabelled
+  # container (empty label).
+  if [ "$#" -gt 0 ]; then
+    local IFS=','
+    services="$*"
+  else
+    services="$(stack_services "$compose_file")"
+  fi
   if [ -z "$services" ]; then
     echo "  (cannot read the service list of $compose_file)"
     return 0
@@ -68,6 +80,10 @@ echo ""
 
 echo "Worker Services:"
 stack_containers docker-compose.worker.yml
+echo ""
+
+echo "Monitor Services:"
+stack_containers docker-compose.yml monitor
 echo ""
 
 echo "==================================================================="

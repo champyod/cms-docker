@@ -111,7 +111,9 @@ for key in ("ADMIN_NEXT_LISTEN_ADDRESS", "ADMIN_LISTEN_ADDRESS", "RANKING_LISTEN
         t += f'\n{replacement}\n'
 p.write_text(t)
 PYEOF
-      bash scripts/__config_sync.sh --no-secrets 2>/dev/null || log_warn "config sync after bind update failed"
+      # WHY not 2>/dev/null: that discards the sync's own [WARN]/[FAIL] lines and
+      # preflight failures, so a failure arrives here with no stated cause.
+      bash scripts/__config_sync.sh --no-secrets || log_warn "config sync after bind update failed"
       log_info "bind addresses moved to 127.0.0.1 in config.toml"
     fi
     if [ "$redeploy" = 1 ]; then

@@ -143,38 +143,48 @@ create_contest() {
         return 0
     fi
     
-    local python_script=$(cat <<EOF
+    # WHY: the contest fields are data, never program text. Embedding a value in
+    # the program broke on the quotes a description may contain and let whatever
+    # shell-ish text it carried run as Python, so the program is a quoted heredoc
+    # (no interpolation) and every value travels as an argument — the same channel
+    # __backup.sh and __check_permission_parity.sh use for their values.
+    local python_script
+    python_script=$(cat <<'PYEOF'
 import datetime
+import sys
 from cms.db import Contest, SessionGen
 from cms.db.filecacher import FileCacher
 
+name, description, start_time, end_time, token_mode = sys.argv[1:6]
+token_max, token_gen, max_sub, min_interval = (int(value) for value in sys.argv[6:10])
+
 with SessionGen() as session:
     contest = Contest(
-        name="$name",
-        description="$description",
-        start=datetime.datetime.fromisoformat("${start_time}"),
-        stop=datetime.datetime.fromisoformat("${end_time}"),
-        token_mode="$token_mode",
-        token_max_number=$token_max,
+        name=name,
+        description=description,
+        start=datetime.datetime.fromisoformat(start_time),
+        stop=datetime.datetime.fromisoformat(end_time),
+        token_mode=token_mode,
+        token_max_number=token_max,
         token_min_interval=datetime.timedelta(seconds=0),
-        token_gen_interval=datetime.timedelta(minutes=$token_gen),
+        token_gen_interval=datetime.timedelta(minutes=token_gen),
         token_gen_number=0,
-        max_submission_number=$max_sub,
-        max_user_test_number=$max_sub,
-        min_submission_interval=datetime.timedelta(seconds=$min_interval),
-        min_user_test_interval=datetime.timedelta(seconds=$min_interval),
+        max_submission_number=max_sub,
+        max_user_test_number=max_sub,
+        min_submission_interval=datetime.timedelta(seconds=min_interval),
+        min_user_test_interval=datetime.timedelta(seconds=min_interval),
         score_precision=2
     )
     session.add(contest)
     session.commit()
     print(f"✓ Created contest: {contest.name} (ID: {contest.id})")
-EOF
+PYEOF
     )
     
     if [ -z "$DOCKER_EXEC" ]; then
-        echo "$python_script" | python3
+        printf '%s' "$python_script" | python3 - "$name" "$description" "$start_time" "$end_time" "$token_mode" "$token_max" "$token_gen" "$max_sub" "$min_interval"
     else
-        echo "$python_script" | $DOCKER_EXEC python3
+        printf '%s' "$python_script" | $DOCKER_EXEC python3 - "$name" "$description" "$start_time" "$end_time" "$token_mode" "$token_max" "$token_gen" "$max_sub" "$min_interval"
     fi
 }
 

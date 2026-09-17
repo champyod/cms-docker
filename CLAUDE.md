@@ -818,7 +818,7 @@ docker-compose.core.yml              # DB, RPC services, evaluation
 docker-compose.admin.yml             # Admin panel (Next.js + Python)
 docker-compose.contests.generated.yml # Per-contest web servers (generated)
 docker-compose.worker.yml            # Sandboxed workers
-docker-compose.monitor.yml           # Backups, health monitoring
+# monitor                            # Backups, health monitoring (profile in docker-compose.yml)
 ```
 
 ### Makefile Targets
