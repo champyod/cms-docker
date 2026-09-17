@@ -98,7 +98,12 @@
   },
   "settings": {
     "title": "System Settings",
-    "subtitle": "Configure environment files and service restarts."
+    "subtitle": "Configure environment files and service restarts.",
+    "deploymentMode": {
+      "img": "Restart follows the image mode declared in config.toml: it pulls the latest images, then recreates the containers without rebuilding.",
+      "src": "Restart follows the source mode declared in config.toml: it rebuilds the images from source, then recreates the containers. This is much slower and replaces the images that are running.",
+      "unresolved": "config.toml [admin] does not declare a readable DEPLOYMENT_TYPE, so restart pulls images and does not rebuild. Set DEPLOYMENT_TYPE to \"img\" or \"src\" there to make this explicit."
+    }
   },
   "groups": {
     "title": "Groups Management",

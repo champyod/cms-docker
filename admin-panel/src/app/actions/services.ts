@@ -1,5 +1,6 @@
 'use server';
 
+import fs from 'fs/promises';
 import path from 'path';
 import { exec } from 'child_process';
 import util from 'util';
@@ -7,6 +8,8 @@ import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
 import { logToDiscord } from '@/lib/discord-notifier';
 import { recordAudit } from '@/lib/audit';
+import { CONFIG_TOML_FILE } from '@/lib/config-toml';
+import { parseDeploymentMode, type DeploymentModeSetting } from '@/lib/deployment-mode';
 import {
   analyzeContainerDependencies as analyzeContainerDependenciesLib,
   buildRestartCommand,
@@ -27,6 +30,28 @@ const execPromise = util.promisify(exec);
 
 async function getContestComposeFile(): Promise<string> {
     return 'docker-compose.contest.yml';
+}
+
+/**
+ * Reads the mode from config.toml — the source of truth — and not from process.env, which only
+ * carries the value a previous `./cms config sync` copied in and can therefore lag an edit.
+ * A missing file is the same "cannot be determined" case as an unknown value and both fall back
+ * to img, the mode that does not rebuild (see deployment-mode.ts).
+ */
+async function readDeploymentModeSetting(): Promise<DeploymentModeSetting> {
+    const content = await fs
+        .readFile(path.join(getRepoRoot(), CONFIG_TOML_FILE), 'utf-8')
+        .catch(() => null);
+    return parseDeploymentMode(content);
+}
+
+/**
+ * The mode the next restart uses, so the operator can see what that restart does before running it.
+ * Gated like the rest of the read-only service surface: this decides whether a restart pulls or rebuilds.
+ */
+export async function getDeploymentMode(): Promise<DeploymentModeSetting> {
+    await ensurePermission('service:read');
+    return readDeploymentModeSetting();
 }
 
 // Why: client components must not import the fs-backed planner directly —
@@ -85,7 +110,7 @@ export async function restartServices(type: 'all' | 'core' | 'admin' | 'worker' 
       'docker-compose.monitor.yml'
     ].map(f => `-f ${f}`).join(' ');
 
-    const plan = await buildRestartCommand(type, customList, files);
+    const plan = await buildRestartCommand(type, customList, files, (await readDeploymentModeSetting()).mode);
     if (plan.skip) return { success: true, message: plan.message };
 
     await logToDiscord('Service Restart', `Admin triggered restart: **${type}** ${customList ? `(${customList.join(', ')})` : ''}`, 16753920, true);

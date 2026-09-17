@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { restartServices, updateServer } from '@/app/actions/services';
+import { useEffect, useState } from 'react';
+import { getDeploymentMode, restartServices, updateServer } from '@/app/actions/services';
 import { pullLatestImages, rebuildImages } from '@/app/actions/docker-ops';
+import { FALLBACK_DEPLOYMENT_MODE, deploymentModeCopyKey, type DeploymentModeSetting } from '@/lib/deployment-mode';
 import type { ReactElement } from 'react';
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
@@ -12,6 +13,47 @@ import { useConfirm } from '@/hooks/useConfirm';
 import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import { useDictionary } from '@/hooks/useDictionary';
 import { interpolate } from '@/lib/interpolate';
+
+type DeploymentModeRead = { loaded: false } | { loaded: true; setting: DeploymentModeSetting };
+
+/**
+ * Why the panel reads config.toml for this instead of process.env: only `./cms config sync` copies
+ * the value into .env, so the environment can lag an edit made here, and the panel must describe the
+ * mode the next restart will actually use. A failed call is reported as unresolved (the state the
+ * server falls back on) rather than as a mode that was never read.
+ */
+function useDeploymentModeSetting(): DeploymentModeRead {
+  const [read, setRead] = useState<DeploymentModeRead>({ loaded: false });
+
+  useEffect(() => {
+    void (async () => {
+      const setting = await getDeploymentMode().catch((): DeploymentModeSetting => ({
+        mode: FALLBACK_DEPLOYMENT_MODE,
+        resolved: false,
+      }));
+      setRead({ loaded: true, setting });
+    })();
+  }, []);
+
+  return read;
+}
+
+/**
+ * States what a restart does in the deployment's own mode, because img (pull, no rebuild) and src
+ * (rebuild) differ in cost and in what ends up running. Renders nothing until the read lands, so it
+ * cannot claim a mode before it knows one.
+ */
+export function DeploymentModeNote(): ReactElement | null {
+  const read = useDeploymentModeSetting();
+  const copy = useDictionary().settings.deploymentMode;
+
+  if (!read.loaded) return null;
+  return (
+    <p className="text-sm text-muted-foreground" role="status">
+      {copy[deploymentModeCopyKey(read.setting)]}
+    </p>
+  );
+}
 
 export function ManualServiceControlCard(): ReactElement {
   return (

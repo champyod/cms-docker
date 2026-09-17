@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { getRepoRoot } from './repo-root';
 import { buildWorkerControlCommand } from './compose-command';
+import type { DeploymentMode } from './deployment-mode';
 
 export interface RestartPolicies {
     dependencies: Record<string, string[]>;
@@ -70,7 +71,61 @@ export async function analyzeContainerDependencies(containerNames: string[]): Pr
   return Array.from(expanded);
 }
 
-async function buildCustomRestartCommand(customList: string[], files: string): Promise<RestartCommandPlan> {
+/** One compose invocation the panel runs, described the way the Makefile's stack targets are. */
+interface ComposeRestartTarget {
+  /** The `-f` list the pull and the recreate run against. */
+  files: string;
+  /** Flags specific to this stack's recreate, in the order the panel already used them. */
+  upFlags: readonly string[];
+  /** Services both commands are scoped to; empty means the whole project. */
+  services: readonly string[];
+}
+
+const CORE_RESTART: ComposeRestartTarget = {
+  files: '-f docker-compose.core.yml',
+  upFlags: ['--force-recreate'],
+  services: [],
+};
+
+const ADMIN_RESTART: ComposeRestartTarget = {
+  files: '-f docker-compose.admin.yml',
+  upFlags: ['--force-recreate'],
+  services: [],
+};
+
+/**
+ * Renders one compose restart for a deployment mode, mirroring the Makefile's stack targets:
+ * img pulls then recreates with --no-build, src builds and recreates in one step. Building when
+ * the deployment meant to pull is what replaces a registry image with a local build, so the mode —
+ * not a hardcoded flag — decides.
+ *
+ * The pull is best-effort, exactly like the Makefile's `pull || true`: the host may already hold
+ * the image the stack should run, and the recreate is what the operator asked for, so a registry
+ * outage must not skip it. The pull is parenthesised so `&&` binds to the group — the flat form
+ * `pull || true && up` also recreates, but it would swallow a failure of a preceding step (the
+ * worker fleet in the 'all' plan) into `true` and still run the compose half against a broken fleet.
+ */
+function buildComposeRestart(target: ComposeRestartTarget, mode: DeploymentMode): string {
+  const scope = target.services.length > 0 ? ` ${target.services.join(' ')}` : '';
+  const recreate = [
+    'docker compose',
+    target.files,
+    'up -d',
+    mode === 'img' ? '--no-build' : '--build',
+    ...target.upFlags,
+  ].join(' ') + scope;
+
+  if (mode === 'src') {
+    return recreate;
+  }
+  return `(docker compose ${target.files} pull${scope} || true) && ${recreate}`;
+}
+
+async function buildCustomRestartCommand(
+  customList: string[],
+  files: string,
+  mode: DeploymentMode,
+): Promise<RestartCommandPlan> {
   const needsContestStack = customList.includes('contest-stack') || customList.some(s => s.startsWith('cms-contest-web-server'));
   // Why: filter keeps only safe service names and strips contest-stack sentinel so docker compose receives valid service identifiers
   const filteredList = customList.filter(s => s !== 'contest-stack' && /^[a-zA-Z0-9_-]+$/.test(s));
@@ -92,9 +147,9 @@ async function buildCustomRestartCommand(customList: string[], files: string): P
     commands.push(buildWorkerControlCommand('restart', allWorkers ? [] : workers.map(service => service.slice('cms-worker-'.length))));
   }
   if (needsContestStack) {
-    commands.push(`docker compose ${files} up -d --remove-orphans --force-recreate`);
+    commands.push(buildComposeRestart({ files, upFlags: ['--remove-orphans', '--force-recreate'], services: [] }, mode));
   } else if (contestServices.length > 0) {
-    commands.push(`docker compose ${files} up -d --force-recreate ${contestServices.join(' ')}`);
+    commands.push(buildComposeRestart({ files, upFlags: ['--force-recreate'], services: contestServices }, mode));
   }
   return { skip: false, command: commands.join(' && ') };
 }
@@ -102,19 +157,22 @@ async function buildCustomRestartCommand(customList: string[], files: string): P
 export async function buildRestartCommand(
   type: 'all' | 'core' | 'admin' | 'worker' | 'custom',
   customList: string[] | undefined,
-  files: string
+  files: string,
+  mode: DeploymentMode,
 ): Promise<RestartCommandPlan> {
   if (type === 'core') {
-    return { skip: false, command: 'docker compose -f docker-compose.core.yml up -d --build --force-recreate' };
+    return { skip: false, command: buildComposeRestart(CORE_RESTART, mode) };
   }
   if (type === 'admin') {
-    return { skip: false, command: 'docker compose -f docker-compose.admin.yml up -d --build --force-recreate' };
+    return { skip: false, command: buildComposeRestart(ADMIN_RESTART, mode) };
   }
   if (type === 'worker') {
     return { skip: false, command: buildWorkerControlCommand('restart') };
   }
   if (type === 'custom' && customList && customList.length > 0) {
-    return buildCustomRestartCommand(customList, files);
+    return buildCustomRestartCommand(customList, files, mode);
   }
-  return { skip: false, command: `${buildWorkerControlCommand('restart')} && docker compose ${files} up -d --build` };
+  const workerCommand = buildWorkerControlCommand('restart');
+  const composeRestart = buildComposeRestart({ files, upFlags: [], services: [] }, mode);
+  return { skip: false, command: `${workerCommand} && ${composeRestart}` };
 }

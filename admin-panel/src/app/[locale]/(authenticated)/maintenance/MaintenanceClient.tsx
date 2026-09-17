@@ -21,6 +21,7 @@ import { Text } from '@/components/core/Typography';
 import { Button } from '@/components/core/Button';
 import { Input } from '@/components/core/Input';
 import { Loading } from '@/components/core/Loading';
+import { DeploymentModeNote } from '@/components/settings/MaintenanceControls';
 import { toast } from 'sonner';
 
 interface DiscordSettings {
@@ -297,6 +298,8 @@ export default function MaintenanceClient() {
                     </Stack>
 
                     <Stack gap={3} className="pt-4 border-t border-border">
+                        {/* 'Save & Restart Monitor' runs the same deployment-mode-aware restart. */}
+                        <DeploymentModeNote />
                         <Stack direction="row" gap={2} className="flex-wrap">
                             <Button
                                 variant="positiveOutline"
