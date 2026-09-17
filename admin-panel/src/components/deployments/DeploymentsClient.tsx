@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { RefreshCw } from 'lucide-react';
-import { readActiveContestId, readEnvFile, updateEnvFile } from '@/app/actions/env';
+import { readActiveContestId, readConfigTomlValues, updateConfigTomlValues } from '@/app/actions/env';
+import { buildConfigTomlUpdates, type ConfigTomlKey } from '@/lib/config-toml';
 import { getAvailableContests } from '@/app/actions/contests';
 import { getContainerContestId } from '@/app/actions/docker';
 import { useDeployContest } from '@/hooks/useDeployContest';
@@ -16,6 +17,17 @@ import { ActiveContestCard, ContestOption } from '@/components/deployments/Activ
 import { ContestSettingsForm } from '@/components/deployments/ContestSettingsForm';
 import { WorkersPanel } from '@/components/deployments/WorkersPanel';
 import { useDeployWorkers } from '@/components/deployments/useDeployWorkers';
+
+// The contest settings this screen edits, all in config.toml [contest]. They used to be
+// read from and written to .env.contest, which compose never loads and no script generates:
+// the write never reached the running stack, and a config sync could not have kept it.
+const CONTEST_SETTINGS_KEYS: readonly ConfigTomlKey[] = [
+    { section: 'contest', key: 'CONTEST_WEB_CPU_LIMIT' },
+    { section: 'contest', key: 'CONTEST_WEB_MEMORY_LIMIT' },
+    { section: 'contest', key: 'COOKIE_DURATION' },
+    { section: 'contest', key: 'ENABLE_TLS' },
+    { section: 'contest', key: 'SUBMIT_LOCAL_COPY' },
+];
 
 export function DeploymentsClient() {
     const { addToast } = useToast();
@@ -46,31 +58,30 @@ export function DeploymentsClient() {
     const isDirty = JSON.stringify(globalSettings) !== originalGlobal;
     const hasChangedContest = selectedContestId !== null && selectedContestId !== activeContestId;
 
-    const applyEnvSnapshot = useCallback((envResult: Awaited<ReturnType<typeof readEnvFile>>, activeId: number | null) => {
-        // The active id comes from config.toml (its source of truth); .env.contest only
-        // supplies the remaining per-contest settings fields.
+    const applyContestSnapshot = useCallback((settings: Record<string, string>, activeId: number | null) => {
+        // Both the active id and the settings below come from config.toml, the file
+        // `./cms config sync` regenerates .env from — the id from [contest] CONTEST_ID,
+        // the settings from the same section.
         setActiveContestId(activeId);
         setSelectedContestId(activeId);
-        if (envResult.success && envResult.config) {
-            const globals = { ...envResult.config };
-            delete globals.ACTIVE_CONTEST_ID;
-            delete globals.CONTEST_ID;
-            setGlobalSettings(globals);
-            setOriginalGlobal(JSON.stringify(globals));
-        }
+        setGlobalSettings(settings);
+        setOriginalGlobal(JSON.stringify(settings));
         return activeId;
     }, []);
 
     const loadData = useCallback(async () => {
         setLoading(true);
-        const [activeResult, envResult, contestsResult, containerResult] = await Promise.all([
+        const [activeResult, settingsResult, contestsResult, containerResult] = await Promise.all([
             readActiveContestId(),
-            readEnvFile('.env.contest'),
+            readConfigTomlValues(CONTEST_SETTINGS_KEYS),
             getAvailableContests(),
             getContainerContestId()
         ]);
 
-        const actualActiveId = applyEnvSnapshot(envResult, activeResult.success ? activeResult.contestId : null);
+        const actualActiveId = applyContestSnapshot(
+            settingsResult.success ? settingsResult.values : {},
+            activeResult.success ? activeResult.contestId : null,
+        );
         setContainerContestId(containerResult.success ? containerResult.contestId : null);
 
         const databaseContests = contestsResult.success ? contestsResult.contests : [];
@@ -88,7 +99,7 @@ export function DeploymentsClient() {
         }
 
         setLoading(false);
-    }, [applyEnvSnapshot]);
+    }, [applyContestSnapshot]);
 
     useEffect(() => {
         queueMicrotask(() => void loadData());
@@ -129,9 +140,9 @@ export function DeploymentsClient() {
     const handleSaveSettings = async () => {
         setSaving(true);
         try {
-            const result = await updateEnvFile('.env.contest', globalSettings);
+            const result = await updateConfigTomlValues(buildConfigTomlUpdates(globalSettings, CONTEST_SETTINGS_KEYS));
             if (!result.success) {
-                addToast({ type: 'error', title: 'Save Failed', message: result.error || 'Could not update env file' });
+                addToast({ type: 'error', title: 'Save Failed', message: result.error || 'Could not update config.toml' });
                 setSaving(false);
                 return;
             }

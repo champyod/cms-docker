@@ -49,6 +49,8 @@ export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModal
       setLoadingAction(type);
       try {
           await recalculateSubmission(submission.id, type);
+          // The list re-derives this row from the refreshed props, so the modal stays open
+          // and shows the recalculated results instead of the ones it was opened with.
           router.refresh();
       } catch (error) {
           toast.error('Error: ' + error);

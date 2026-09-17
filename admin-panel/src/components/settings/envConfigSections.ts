@@ -1,5 +1,15 @@
+import {
+  CONFIG_TOML_FILE,
+  buildConfigTomlUpdates,
+  type ConfigTomlKey,
+  type ConfigTomlSection,
+  type ConfigTomlUpdate,
+} from '@/lib/config-toml';
+
 export interface EnvConfigField {
   key: string;
+  /** Where in config.toml this key lives — the panel writes it there, never into .env. */
+  tomlSection: ConfigTomlSection;
   label: string;
   description?: string;
   placeholder?: string;
@@ -7,6 +17,7 @@ export interface EnvConfigField {
 
 export interface EnvConfigSection {
   title: string;
+  /** The file these fields are stored in; the section they belong to is per field. */
   filename: string;
   fields: EnvConfigField[];
 }
@@ -16,37 +27,37 @@ export type EnvFilesData = Record<string, Record<string, string>>;
 export const CONFIG_SECTIONS: EnvConfigSection[] = [
   {
     title: 'Database Configuration',
-    filename: '.env',
+    filename: CONFIG_TOML_FILE,
     fields: [
-      { key: 'POSTGRES_DB', label: 'Database Name', description: 'PostgreSQL database name.' },
-      { key: 'POSTGRES_USER', label: 'Database User', description: 'PostgreSQL username.' },
-      { key: 'POSTGRES_PASSWORD', label: 'Database Password', description: 'PostgreSQL password.' },
+      { key: 'POSTGRES_DB', tomlSection: 'core', label: 'Database Name', description: 'PostgreSQL database name.' },
+      { key: 'POSTGRES_USER', tomlSection: 'core', label: 'Database User', description: 'PostgreSQL username.' },
+      { key: 'POSTGRES_PASSWORD', tomlSection: 'core', label: 'Database Password', description: 'PostgreSQL password.' },
     ]
   },
   {
     title: 'Network & Access',
-    filename: '.env',
+    filename: CONFIG_TOML_FILE,
     fields: [
-      { key: 'PUBLIC_IP', label: 'Public IP', description: 'Public facing IP address of this server.' },
-      { key: 'TAILSCALE_IP', label: 'Tailscale IP', description: 'Internal VPN IP (optional).' },
-      { key: 'APT_MIRROR', label: 'Ubuntu Mirror', description: 'Mirror for apt updates.' },
+      { key: 'PUBLIC_IP', tomlSection: 'core', label: 'Public IP', description: 'Public facing IP address of this server.' },
+      { key: 'TAILSCALE_IP', tomlSection: 'core', label: 'Tailscale IP', description: 'Internal VPN IP (optional).' },
+      { key: 'APT_MIRROR', tomlSection: 'core', label: 'Ubuntu Mirror', description: 'Mirror for apt updates.' },
     ]
   },
   {
     title: 'Admin Panel Config',
-    filename: '.env',
+    filename: CONFIG_TOML_FILE,
     fields: [
-      { key: 'VITE_API_URL', label: 'API URL', description: 'URL for the Admin API.' },
-      { key: 'ADMIN_LISTEN_PORT', label: 'Admin Port', description: 'Internal port for Admin Web Server.' },
+      { key: 'VITE_API_URL', tomlSection: 'admin', label: 'API URL', description: 'URL for the Admin API.' },
+      { key: 'ADMIN_LISTEN_PORT', tomlSection: 'admin', label: 'Admin Port', description: 'Internal port for Admin Web Server.' },
     ]
   },
   {
     title: 'Ranking Settings',
-    filename: '.env',
+    filename: CONFIG_TOML_FILE,
     fields: [
-      { key: 'RANKING_USERNAME', label: 'Ranking Username', description: 'Auth for scoreboard.' },
-      { key: 'RANKING_PASSWORD', label: 'Ranking Password', description: 'Auth for scoreboard.' },
-      { key: 'ADMIN_COOKIE_DURATION', label: 'Admin Session', description: 'Admin panel session length.' },
+      { key: 'RANKING_USERNAME', tomlSection: 'admin', label: 'Ranking Username', description: 'Auth for scoreboard.' },
+      { key: 'RANKING_PASSWORD', tomlSection: 'admin', label: 'Ranking Password', description: 'Auth for scoreboard.' },
+      { key: 'ADMIN_COOKIE_DURATION', tomlSection: 'admin', label: 'Admin Session', description: 'Admin panel session length.' },
     ]
   }
 ];
@@ -70,20 +81,21 @@ export function updateFileValue(
   };
 }
 
-export function collectRelevantUpdates(filename: string, data: EnvFilesData): Record<string, string> {
-  const relevantUpdates: Record<string, string> = {};
-  const sections = CONFIG_SECTIONS.filter(s => s.filename === filename);
+/** Every field the settings screen edits, for the config.toml read. */
+export function configTomlKeys(): ConfigTomlKey[] {
+  return CONFIG_SECTIONS.flatMap(section =>
+    section.fields.map(field => ({ section: field.tomlSection, key: field.key })),
+  );
+}
 
-  sections.forEach(section => {
-    section.fields.forEach(f => {
-      const value = data[filename]?.[f.key];
-      if (value !== undefined) {
-        relevantUpdates[f.key] = value;
-      }
-    });
-  });
-
-  return relevantUpdates;
+/** The edited values of one section, paired with the config.toml section that owns them. */
+export function collectRelevantUpdates(filename: string, data: EnvFilesData): ConfigTomlUpdate[] {
+  return CONFIG_SECTIONS.filter(s => s.filename === filename).flatMap(section =>
+    buildConfigTomlUpdates(
+      data[filename] ?? {},
+      section.fields.map(field => ({ section: field.tomlSection, key: field.key })),
+    ),
+  );
 }
 
 export function computeChangedKeys(data: EnvFilesData, originalData: EnvFilesData): string[] {

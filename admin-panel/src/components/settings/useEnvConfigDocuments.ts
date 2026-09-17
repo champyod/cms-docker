@@ -1,26 +1,14 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { readEnvFile } from '@/app/actions/env';
+import { readConfigTomlValues } from '@/app/actions/env';
+import { CONFIG_TOML_FILE } from '@/lib/config-toml';
 import {
-  CONFIG_SECTIONS,
-  EnvFilesData,
   deepCopyEnvData,
-  updateFileValue
+  configTomlKeys,
+  updateFileValue,
+  type EnvFilesData,
 } from './envConfigSections';
-
-async function fetchAllEnvConfigs(): Promise<EnvFilesData> {
-  const result: EnvFilesData = {};
-
-  for (const section of CONFIG_SECTIONS) {
-    if (result[section.filename]) continue;
-    const res = await readEnvFile(section.filename);
-    // Failed reads surface as an empty config instead of blocking the view
-    result[section.filename] = res.success && res.config ? res.config : {};
-  }
-
-  return result;
-}
 
 export interface EnvConfigDocuments {
   data: EnvFilesData;
@@ -41,11 +29,18 @@ export function useEnvConfigDocuments(): EnvConfigDocuments {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  // Reads config.toml rather than the .env it generates: the generated file lags the
+  // source until the next sync, so showing it would hide the value just saved here.
   const loadData = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError('');
     try {
-      const next = await fetchAllEnvConfigs();
+      const result = await readConfigTomlValues(configTomlKeys());
+      if (!result.success) {
+        setError('Failed to load configuration');
+        return;
+      }
+      const next: EnvFilesData = { [CONFIG_TOML_FILE]: result.values };
       setData(next);
       setOriginalData(deepCopyEnvData(next));
     } catch {

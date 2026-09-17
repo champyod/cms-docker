@@ -273,7 +273,7 @@ if ! is_skipped contest; then
       if [[ "$have" == "0" ]]; then
         log_info "DB has no contests — importing sample (examples/contests.yaml)"
         run_step sample-contest soft './scripts/__create_contests.sh -f examples/contests.yaml'
-        log_info "Set CONTEST_ID in .env.contest to the desired sample id, then: make env && make contest"
+        log_info "Set CONTEST_ID in config.toml [contest] to the desired sample id, then: make env && make contest"
       else
         record "sample-contest" "SKIPPED (contests exist: $have)"
       fi

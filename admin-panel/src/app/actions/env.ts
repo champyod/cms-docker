@@ -7,9 +7,17 @@ import { getRepoRoot } from '@/lib/repo-root';
 import { recordAudit } from '@/lib/audit';
 import { validateNotificationEnvUpdates } from '@/lib/discord-webhook';
 import { CONTEST_ID_KEY, readContestId, setContestId } from '@/lib/active-contest';
+import {
+  CONFIG_TOML_FILE,
+  applyConfigTomlUpdates,
+  extractConfigTomlValues,
+  isConfigTomlSection,
+  isValidConfigKey,
+  type ConfigTomlKey,
+  type ConfigTomlUpdate,
+} from '@/lib/config-toml';
 
 const ALLOWED_ENV_FILES = new Set(['.env', '.env.contest']);
-const CONFIG_TOML = 'config.toml';
 
 function resolveEnvPath(repoRoot: string, filename: string): string {
   if (!ALLOWED_ENV_FILES.has(filename)) {
@@ -81,12 +89,70 @@ export async function updateEnvFile(filename: string, updates: Record<string, st
   }
 }
 
+export async function readConfigTomlValues(
+  keys: readonly ConfigTomlKey[],
+): Promise<{ success: true; values: Record<string, string> } | { success: false; error: string }> {
+  await ensurePermission('env:read');
+  const invalid = describeInvalidKeys(keys);
+  if (invalid !== null) {
+    return { success: false, error: invalid };
+  }
+  try {
+    const content = await fs.readFile(path.join(getRepoRoot(), CONFIG_TOML_FILE), 'utf-8');
+    return { success: true, values: extractConfigTomlValues(content, keys) };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+/**
+ * Writes panel edits into config.toml, the file `./cms config sync` regenerates .env from.
+ * Deliberately does not mirror the values into .env: a second writable copy of a generated
+ * file is the drift this path exists to remove, and every restart runs the sync first.
+ */
+export async function updateConfigTomlValues(
+  updates: readonly ConfigTomlUpdate[],
+): Promise<{ success: true } | { success: false; error: string }> {
+  await ensurePermission('env:update');
+  const invalid = describeInvalidKeys(updates);
+  if (invalid !== null) {
+    return { success: false, error: invalid };
+  }
+  try {
+    const tomlPath = path.join(getRepoRoot(), CONFIG_TOML_FILE);
+    const content = await fs.readFile(tomlPath, 'utf-8');
+    await fs.writeFile(tomlPath, applyConfigTomlUpdates(content, updates));
+    await recordAudit({
+      verb: 'env:update',
+      entity: 'config',
+      // Keys only: the section holds credentials (POSTGRES_PASSWORD, RANKING_PASSWORD).
+      afterValues: { file: CONFIG_TOML_FILE, changedKeys: updates.map(({ key }) => key) },
+      result: 'success',
+    });
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+function describeInvalidKeys(keys: readonly ConfigTomlKey[]): string | null {
+  for (const { section, key } of keys) {
+    if (!isConfigTomlSection(section)) {
+      return `Not a config.toml section: ${section}`;
+    }
+    if (!isValidConfigKey(key)) {
+      return `Not a valid config key: ${key}`;
+    }
+  }
+  return null;
+}
+
 export async function readActiveContestId(): Promise<{ success: true; contestId: number | null } | { success: false; error: string }> {
   await ensurePermission('env:read');
   try {
     // config.toml is the source of truth; reading the generated .env.contest here made the
     // display lag the value the panel just wrote and drift from a config sync.
-    const content = await fs.readFile(path.join(getRepoRoot(), CONFIG_TOML), 'utf-8');
+    const content = await fs.readFile(path.join(getRepoRoot(), CONFIG_TOML_FILE), 'utf-8');
     return { success: true, contestId: readContestId(content) };
   } catch (error) {
     return { success: false, error: (error as Error).message };
@@ -96,7 +162,7 @@ export async function readActiveContestId(): Promise<{ success: true; contestId:
 export async function writeActiveContestId(id: number): Promise<{ success: true } | { success: false; error: string }> {
   await ensurePermission('env:update');
   try {
-    const tomlPath = path.join(getRepoRoot(), CONFIG_TOML);
+    const tomlPath = path.join(getRepoRoot(), CONFIG_TOML_FILE);
     const content = await fs.readFile(tomlPath, 'utf-8');
     // Persist to the source only. Reaching the running stack is the deploy path's job
     // (config sync regenerates .env, then the contest services are recreated), so a sync
@@ -105,7 +171,7 @@ export async function writeActiveContestId(id: number): Promise<{ success: true 
     await recordAudit({
       verb: 'env:update',
       entity: 'config',
-      afterValues: { file: CONFIG_TOML, [CONTEST_ID_KEY]: id },
+      afterValues: { file: CONFIG_TOML_FILE, [CONTEST_ID_KEY]: id },
       result: 'success',
     });
     return { success: true };
@@ -134,13 +200,13 @@ export async function migrateFromMultiContest(): Promise<{ success: true; contes
           content = content.replace(/^CONTESTS_DEPLOY_CONFIG=.*\n?/m, '');
           await fs.writeFile(envPath, content);
           // The migrated id belongs in config.toml, not in the generated .env.contest.
-          const tomlPath = path.join(repoRoot, CONFIG_TOML);
+          const tomlPath = path.join(repoRoot, CONFIG_TOML_FILE);
           const tomlContent = await fs.readFile(tomlPath, 'utf-8');
           await fs.writeFile(tomlPath, setContestId(tomlContent, firstContestId));
           await recordAudit({
             verb: 'env:update',
             entity: 'config',
-            afterValues: { file: CONFIG_TOML, [CONTEST_ID_KEY]: firstContestId, removedFrom: 'CONTESTS_DEPLOY_CONFIG' },
+            afterValues: { file: CONFIG_TOML_FILE, [CONTEST_ID_KEY]: firstContestId, removedFrom: 'CONTESTS_DEPLOY_CONFIG' },
             beforeValues: { migratedFrom: 'CONTESTS_DEPLOY_CONFIG' },
             result: 'success',
           });

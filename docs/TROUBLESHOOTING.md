@@ -687,7 +687,7 @@ docker exec cms-database psql -U cmsuser -c \
 
 # Regenerate secret keys
 openssl rand -hex 32
-# Update .env.contest files
+# Store them in config.toml (POSTGRES_PASSWORD, AUTH_SECRET, SECRET_KEY), then: ./cms config sync
 
 # Restrict firewall
 sudo ufw default deny incoming

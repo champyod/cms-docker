@@ -234,8 +234,6 @@ check_env() {
     local contest_issues=()
     local cid="${CONTEST_ID:-}"
     local skey="${SECRET_KEY:-}"
-    # Also check CONTEST_ID via ACTIVE_CONTEST_ID alias if needed — but spec
-    # says contest→CONTEST_ID; also check ACTIVE_CONTEST_ID emptiness as hint.
     if [[ -z "$cid" ]]; then
       contest_issues+=("CONTEST_ID empty (set CONTEST_ID numeric in config.toml [contest])")
     elif ! [[ "$cid" =~ ^[0-9]+$ ]]; then

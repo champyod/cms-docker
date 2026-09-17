@@ -878,7 +878,7 @@ The admin panel can:
 - **List/control containers** via Docker socket mount
 - **Edit .env files** on host via `/repo-root` mount
 - **Restart services** via `docker compose` commands
-- **Switch active contest** by editing `.env.contest` and rebuilding
+- **Switch active contest** by setting `CONTEST_ID` in `config.toml` `[contest]` and redeploying (the Deployments page writes it there, syncs, then recreates the contest stack)
 
 ---
 
@@ -1068,7 +1068,7 @@ Every runtime value lives in `config.toml` (seeded from `config.toml.example` on
 | `.env` | all compose services and shell scripts | every variable, grouped under `### [section] ###` headers |
 | `admin-panel/.env` | the Next.js server, run outside compose | `DATABASE_URL` (localhost DSN) + `AUTH_SECRET` |
 
-`.env.contest` remains a per-contest override written by the admin panel when switching active contests.
+`.env.contest` is not one of them: it is an optional, operator-maintained per-contest override for a few deploy scripts. `CONTEST_ID` — which contest the stack serves — lives in `config.toml` `[contest]`, and the admin panel writes it there, never into a generated file.
 
 Generated files are output-only: never edit them directly — the next `config sync` overwrites them. Change `config.toml` and re-run sync instead.
 
@@ -1216,7 +1216,7 @@ cms-docker/
 | Toast not showing | Ensure component is wrapped in `ToastProvider` |
 | Notification polling loop | Use `useRef` for mutable state in polling effects, not `useState` in deps |
 | `.env` not applied | Run `make env` to regenerate combined .env files |
-| Contest not switching | Check `.env.contest` format: `CONTESTS_DEPLOY_CONFIG=1:8888` |
+| Contest not switching | Check `CONTEST_ID` in `config.toml` `[contest]` is the wanted contest id, then run `./cms config sync` and redeploy the contest stack |
 
 ---
 

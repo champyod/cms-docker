@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { Card } from '@/components/core/Card';
-import { readEnvFile, updateEnvFile } from '@/app/actions/env';
+import { readConfigTomlValues, updateConfigTomlValues } from '@/app/actions/env';
+import { buildConfigTomlUpdates, type ConfigTomlKey } from '@/lib/config-toml';
 import { triggerManualBackup, restartServices } from '@/app/actions/services';
 import {
   getDiscordNotificationSettings,
@@ -22,6 +23,23 @@ interface DiscordSettings {
   configWebhookUrl: string;
   effectiveWebhookUrl: string;
 }
+
+// This screen edits config.toml [infra]: the generated .env is rewritten from it by
+// ./cms config sync (update-server runs one on every deploy), so a backup policy written
+// into .env alone would be gone before the monitor ever restarted with it.
+const BACKUP_POLICY_KEYS: readonly ConfigTomlKey[] = [
+  { section: 'infra', key: 'BACKUP_INTERVAL_MINS' },
+  { section: 'infra', key: 'BACKUP_MAX_COUNT' },
+  { section: 'infra', key: 'BACKUP_MAX_AGE_DAYS' },
+  { section: 'infra', key: 'BACKUP_MAX_SIZE_GB' },
+];
+
+const NOTIFICATION_KEYS: readonly ConfigTomlKey[] = [
+  { section: 'infra', key: 'DISCORD_WEBHOOK_URL' },
+  { section: 'infra', key: 'DISCORD_ROLE_ID' },
+];
+
+const MAINTENANCE_CONFIG_KEYS: readonly ConfigTomlKey[] = [...BACKUP_POLICY_KEYS, ...NOTIFICATION_KEYS];
 
 // Why: the source of truth (config.toml) and what the monitor actually reads (.env) can
 // drift, and a silent drift means alerts vanish — spell the state out instead of a badge.
@@ -62,9 +80,9 @@ export default function MaintenanceClient() {
 
   useEffect(() => {
     void (async () => {
-      const result = await readEnvFile('.env');
-      if (result.success && result.config) {
-        setData(result.config);
+      const result = await readConfigTomlValues(MAINTENANCE_CONFIG_KEYS);
+      if (result.success) {
+        setData(result.values);
       }
       await loadDiscordSettings();
       setLoading(false);
@@ -77,13 +95,26 @@ export default function MaintenanceClient() {
 
   const handleSave = async () => {
     setSaving(true);
-    const result = await updateEnvFile('.env', data);
-    if (result.success) {
+    try {
+      const backupResult = await updateConfigTomlValues(buildConfigTomlUpdates(data, BACKUP_POLICY_KEYS));
+      if (!backupResult.success) {
+        toast.error('Failed to save: ' + backupResult.error);
+        return;
+      }
+      // The webhook goes through its own action: unlike a backup policy it is validated,
+      // because a malformed URL silently drops every monitor alert.
+      const notificationResult = await saveDiscordNotificationSettings({
+        webhookUrl: data.DISCORD_WEBHOOK_URL ?? '',
+        roleId: data.DISCORD_ROLE_ID ?? '',
+      });
+      if (!notificationResult.success) {
+        toast.error('Notification settings not saved: ' + notificationResult.error);
+        return;
+      }
       toast.success('Maintenance settings saved successfully!');
-    } else {
-      toast.error('Failed to save: ' + result.error);
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   const handleBackup = async () => {

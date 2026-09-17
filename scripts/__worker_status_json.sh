@@ -2,9 +2,9 @@
 # Emit live worker detail as JSON for dashboards (admin panel /deployments).
 #
 # Sources (no phantom tables): docker inspect (state/health/uptime/restarts),
-# container logs (activity classification), .env.contest (assigned contest),
-# TCP probe (reachability incl. remote workers), cms.toml registry via
-# scripts/__worker_tui.sh fleet semantics (WORKER_N in .env).
+# container logs (activity classification), .env (assigned contest, from
+# config.toml [contest] CONTEST_ID), TCP probe (reachability incl. remote workers),
+# cms.toml registry via scripts/__worker_tui.sh fleet semantics (WORKER_N in .env).
 #
 # Usage:
 #   __worker_status_json.sh [--pretty]
@@ -17,7 +17,6 @@ fi
 cd "$(dirname "$0")/.."
 
 CORE_ENV=".env"
-CONTEST_ENV=".env.contest"
 
 env_val() { awk -F= -v k="$2" '$1==k {v=$0; sub(/^[^=]*=/,"",v); gsub(/^[ \t]+|[ \t\r]+$/,"",v); print v; exit}' "$1" 2>/dev/null || true; }
 
@@ -42,7 +41,7 @@ worker_row() { # shard host port
   local s="$1" h="$2" p="$3"
   local cname="cms-worker-$s"
   local raw st health started restarts uptime="" lastlog="" act="unknown" reach=false contest
-  contest="$(env_val "$CONTEST_ENV" CONTEST_ID)"
+  contest="$(env_val "$CORE_ENV" CONTEST_ID)"
   raw="$(docker inspect -f '{{.State.Status}}|{{if .Config.Healthcheck}}{{.State.Health.Status}}{{else}}none{{end}}|{{.State.StartedAt}}|{{.RestartCount}}' "$cname" 2>/dev/null || true)"
   if [ -z "$raw" ]; then st="absent"; health="none"; else
     IFS='|' read -r st health started restarts <<<"$raw"

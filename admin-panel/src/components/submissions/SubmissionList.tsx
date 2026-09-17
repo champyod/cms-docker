@@ -15,16 +15,21 @@ import { useSyncedState } from '@/hooks/useSyncedState';
 import { SubmissionListItem } from '@/types';
 
 import { SubmissionModal } from './SubmissionModal';
+import { selectSubmission } from './submissionSelection';
 
 export function SubmissionList({ initialSubmissions, totalPages, currentPage }: { initialSubmissions: SubmissionListItem[], totalPages: number, currentPage: number }) {
   const [submissions] = useSyncedState(initialSubmissions);
-  const [selectedSubmission, setSelectedSubmission] = useState<SubmissionListItem | null>(null);
+  const [selectedSubmissionId, setSelectedSubmissionId] = useState<number | null>(null);
+  // WHY the id and not the row: recalculateSubmission refreshes the list, so rendering a
+  // stored copy would keep the modal on the pre-recalculation results until it was closed
+  // and reopened. Deriving from the current list keeps it open and up to date.
+  const selectedSubmission = selectSubmission(submissions, selectedSubmissionId);
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
   const router = useRouter();
 
   const handleView = (submission: SubmissionListItem) => {
-    setSelectedSubmission(submission);
+    setSelectedSubmissionId(submission.id);
   };
 
   const formatDate = (date: Date) => {
@@ -230,7 +235,7 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage }: 
       {selectedSubmission && (
         <SubmissionModal
             isOpen={!!selectedSubmission}
-            onClose={() => setSelectedSubmission(null)}
+            onClose={() => setSelectedSubmissionId(null)}
             submission={selectedSubmission}
         />
       )}

@@ -1,6 +1,6 @@
 'use client';
 
-import { updateEnvFile } from '@/app/actions/env';
+import { updateConfigTomlValues } from '@/app/actions/env';
 import { restartServices } from '@/app/actions/services';
 import { EnvFilesData, collectRelevantUpdates } from './envConfigSections';
 import { toast } from 'sonner';
@@ -23,16 +23,21 @@ async function saveFileUpdates(
   setOriginalData: PersistenceDeps['setOriginalData'],
 ): Promise<boolean> {
   const relevantUpdates = collectRelevantUpdates(filename, data);
-  const result = await updateEnvFile(filename, relevantUpdates);
+  const result = await updateConfigTomlValues(relevantUpdates);
 
   if (!result.success) {
     toast.error(`Failed to save ${filename}: ` + result.error);
     return false;
   }
 
+  const savedValues: Record<string, string> = {};
+  for (const { key, value } of relevantUpdates) {
+    savedValues[key] = value;
+  }
+
   setOriginalData(prev => ({
     ...prev,
-    [filename]: { ...prev[filename], ...relevantUpdates }
+    [filename]: { ...prev[filename], ...savedValues }
   }));
   return true;
 }
