@@ -20,9 +20,10 @@ interface SubmissionModalProps {
   isOpen: boolean;
   onClose: () => void;
   submission: SubmissionListItem;
+  canRecompute: boolean;
 }
 
-export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModalProps) {
+export function SubmissionModal({ isOpen, onClose, submission, canRecompute }: SubmissionModalProps) {
   const router = useRouter();
   const confirm = useConfirm();
   const { recalculateSubmissionConfirm } = useConfirmationCopy();
@@ -162,7 +163,8 @@ export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModal
             </RestrictedField>
         </div>
         <DialogFooter className="mt-6 pt-4 border-t border-border">
-             <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+             {canRecompute && (
+              <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
                  <Button
                     variant="secondary"
                     size="sm"
@@ -192,7 +194,8 @@ export function SubmissionModal({ isOpen, onClose, submission }: SubmissionModal
                     {loadingAction === 'full' && <Loader2 className="w-3 h-3 animate-spin mr-1"/>}
                     Full Re-run
                  </Button>
-             </div>
+              </div>
+             )}
 
              <Button variant="positive" onClick={onClose}>
                  Close

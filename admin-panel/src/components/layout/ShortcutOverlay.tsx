@@ -2,7 +2,12 @@
 
 import type { ReactNode } from 'react';
 import { Dialog } from '@/components/core/Dialog';
-import { NAVIGATION_BINDINGS, useShortcuts } from '@/hooks/useShortcuts';
+import {
+  NAVIGATION_BINDINGS,
+  bindingsForPermissions,
+  useShortcuts,
+  type ShortcutRouteBinding,
+} from '@/hooks/useShortcuts';
 
 export interface ShortcutOverlayProps {
   open: boolean;
@@ -39,7 +44,7 @@ function ShortcutGroup({ title, children }: { title: string; children: ReactNode
   );
 }
 
-export function ShortcutOverlay({ open, onOpenChange }: ShortcutOverlayProps) {
+export function ShortcutOverlay({ open, onOpenChange, bindings = NAVIGATION_BINDINGS }: ShortcutOverlayProps & { bindings?: readonly ShortcutRouteBinding[] }) {
   return (
     <Dialog
       open={open}
@@ -62,7 +67,7 @@ export function ShortcutOverlay({ open, onOpenChange }: ShortcutOverlayProps) {
       </div>
       <ShortcutGroup title="Go to — press g, then key">
         <div className="grid gap-x-8 sm:grid-cols-2">
-          {NAVIGATION_BINDINGS.map((binding) => (
+          {bindings.map((binding) => (
             <ShortcutRow
               key={binding.key}
               keys={['g', binding.key.toUpperCase()]}
@@ -75,11 +80,13 @@ export function ShortcutOverlay({ open, onOpenChange }: ShortcutOverlayProps) {
   );
 }
 
-export function ShortcutLayer() {
-  const { isOverlayOpen, closeOverlay } = useShortcuts();
+export function ShortcutLayer({ permissionKeys }: { permissionKeys: readonly string[] }) {
+  const { isOverlayOpen, closeOverlay } = useShortcuts(permissionKeys);
+  const bindings = bindingsForPermissions(permissionKeys);
   return (
     <ShortcutOverlay
       open={isOverlayOpen}
+      bindings={bindings}
       onOpenChange={(next) => {
         if (!next) closeOverlay();
       }}

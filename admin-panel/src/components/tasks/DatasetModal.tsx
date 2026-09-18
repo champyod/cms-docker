@@ -30,6 +30,7 @@ interface DatasetModalProps {
   taskId: number;
   dataset?: DatasetRecord | null;
   onSuccess: () => void;
+  permissionKeys?: readonly string[];
 }
 
 interface DatasetFormData {
@@ -48,7 +49,7 @@ const DEFAULT_FORM: DatasetFormData = {
   score_type: 'Sum',
 };
 
-export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess }: DatasetModalProps): React.JSX.Element | null {
+export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess, permissionKeys = [] }: DatasetModalProps): React.JSX.Element | null {
   const [activeTab, setActiveTab] = useState<'general' | 'managers'>('general');
   const [formData, setFormData] = useState<DatasetFormData>(DEFAULT_FORM);
   const [error, setError] = useState('');
@@ -176,7 +177,7 @@ export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess }: Da
         <div className="flex-1 overflow-y-auto p-6">
           {activeTab === 'general' && <DatasetGeneralForm formData={formData} onChange={setFormData} onSubmit={handleSubmit} error={error} />}
           {activeTab === 'managers' && dataset && (
-            <DatasetManagersTab datasetId={dataset.id} managers={managers} loadingManagers={loadingManagers} onReload={loadManagers} />
+            <DatasetManagersTab datasetId={dataset.id} managers={managers} loadingManagers={loadingManagers} onReload={loadManagers} permissionKeys={permissionKeys} />
           )}
         </div>
       </div>

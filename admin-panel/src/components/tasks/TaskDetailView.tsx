@@ -135,7 +135,7 @@ export function TaskDetailView({ task, permissionKeys }: TaskDetailViewProps): R
       <AttachmentsSection attachments={task.attachments} onUpload={() => setIsAttachmentModalOpen(true)} />
 
       <TaskModal isOpen={isTaskSettingsOpen} onClose={() => setIsTaskSettingsOpen(false)} task={task as unknown as Parameters<typeof TaskModal>[0]['task']} onSuccess={reload} permissionKeys={permissionKeys} />
-      <DatasetModal isOpen={isDatasetModalOpen} onClose={() => setIsDatasetModalOpen(false)} taskId={task.id} dataset={editingDataset as unknown as Parameters<typeof DatasetModal>[0]['dataset']} onSuccess={reload} />
+      <DatasetModal isOpen={isDatasetModalOpen} onClose={() => setIsDatasetModalOpen(false)} taskId={task.id} dataset={editingDataset as unknown as Parameters<typeof DatasetModal>[0]['dataset']} onSuccess={reload} permissionKeys={permissionKeys} />
       <StatementModal isOpen={isStatementModalOpen} onClose={() => setIsStatementModalOpen(false)} taskId={task.id} existingLanguages={task.statements.map((s) => s.language)} onSuccess={reload} />
       <AttachmentModal isOpen={isAttachmentModalOpen} onClose={() => setIsAttachmentModalOpen(false)} taskId={task.id} onSuccess={reload} />
       {currentDatasetId && <TestcaseUploadModal isOpen={true} onClose={() => setCurrentDatasetId(null)} datasetId={currentDatasetId} onSuccess={reload} />}

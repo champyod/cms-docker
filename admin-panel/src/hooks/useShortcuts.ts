@@ -1,8 +1,9 @@
 'use client';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { NAV_REGISTRY } from '@/lib/nav-registry';
 import { NAV_CHORD_KEY_BY_PATH } from '@/lib/nav-chord';
+import { hasEffectivePermission } from '@/lib/permission-engine';
 
 export const CHORD_TIMEOUT_MS = 1000;
 export const CHORD_PREFIX_KEY = 'g';
@@ -68,6 +69,7 @@ export interface ShortcutHandlerDeps {
   toggleOverlay: () => void;
   chordState: { current: ChordState };
   selectedRowIndex: { current: number };
+  navigationByKey?: ReadonlyMap<string, ShortcutRouteBinding>;
 }
 
 export function extractLocale(pathname: string): string {
@@ -103,7 +105,8 @@ export function nextRowIndex(current: number, direction: 1 | -1, rowCount: numbe
 export function advanceChord(
   state: ChordState,
   key: string,
-  now: number
+  now: number,
+  byKey: ReadonlyMap<string, ShortcutRouteBinding> = NAVIGATION_BY_KEY
 ): { state: ChordState; decision: ChordDecision } {
   if (key === CHORD_PREFIX_KEY) {
     return {
@@ -117,7 +120,7 @@ export function advanceChord(
   if (now - state.startedAt > CHORD_TIMEOUT_MS) {
     return { state: IDLE_CHORD, decision: { action: 'reset' } };
   }
-  const binding = NAVIGATION_BY_KEY.get(key);
+  const binding = byKey.get(key);
   if (!binding) {
     return { state: IDLE_CHORD, decision: { action: 'reset' } };
   }
@@ -149,7 +152,7 @@ export function handleShortcutEvent(
     return;
   }
 
-  const result = advanceChord(deps.chordState.current, event.key, now);
+  const result = advanceChord(deps.chordState.current, event.key, now, deps.navigationByKey);
   deps.chordState.current = result.state;
   if (result.decision.action === 'navigate') {
     event.preventDefault();
@@ -157,7 +160,22 @@ export function handleShortcutEvent(
   }
 }
 
-export function useShortcuts(): { isOverlayOpen: boolean; closeOverlay: () => void } {
+// Why filtered here: a chord navigates straight to a page, so an unfiltered
+// chord reaches pages the sidebar already hides. Entries without a permission
+// stay visible to everyone, matching visibleEntries.
+export function bindingsForPermissions(
+  permissionKeys: readonly string[] | undefined,
+): readonly ShortcutRouteBinding[] {
+  if (permissionKeys === undefined) return NAVIGATION_BINDINGS;
+  const effective = new Set(permissionKeys);
+  return NAVIGATION_BINDINGS.filter((binding) => {
+    const registryPath = binding.path === '' ? '/' : binding.path;
+    const entry = NAV_REGISTRY.find((item) => item.path === registryPath);
+    return entry?.permission === undefined || hasEffectivePermission(effective, entry.permission);
+  });
+}
+
+export function useShortcuts(permissionKeys?: readonly string[]): { isOverlayOpen: boolean; closeOverlay: () => void } {
   const router = useRouter();
   const pathname = usePathname();
   const [isOverlayOpen, setIsOverlayOpen] = useState(false);
@@ -177,6 +195,10 @@ export function useShortcuts(): { isOverlayOpen: boolean; closeOverlay: () => vo
     pathnameRef.current = pathname;
   }, [pathname]);
 
+  const closeOverlay = useCallback(() => setIsOverlayOpen(false), []);
+  const bindings = useMemo(() => bindingsForPermissions(permissionKeys), [permissionKeys]);
+  const bindingsByKey = useMemo(() => new Map(bindings.map((binding) => [binding.key, binding])), [bindings]);
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => {
       handleShortcutEvent(event, {
@@ -186,13 +208,12 @@ export function useShortcuts(): { isOverlayOpen: boolean; closeOverlay: () => vo
         toggleOverlay: () => setIsOverlayOpen((open) => !open),
         chordState: chordStateRef,
         selectedRowIndex: selectedRowRef,
+        navigationByKey: bindingsByKey,
       });
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  const closeOverlay = useCallback(() => setIsOverlayOpen(false), []);
+  }, [bindingsByKey]);
 
   return { isOverlayOpen, closeOverlay };
 }

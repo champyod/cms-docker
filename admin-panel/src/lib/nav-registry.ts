@@ -70,9 +70,9 @@ export const NAV_REGISTRY: readonly NavEntry[] = [
   { path: '/resources', label: 'Resources', icon: Activity, group: 'infrastructure', permission: 'resource:list', exposeIn: ['sidebar', 'palette', 'chord'] },
   { path: '/containers', label: 'Containers', icon: Box, group: 'infrastructure', permission: 'container:list', exposeIn: ['sidebar', 'palette', 'chord'] },
   { path: '/ranking', label: 'Ranking', icon: Globe, group: 'infrastructure', permission: 'ranking:list', exposeIn: ['sidebar', 'palette', 'chord'] },
-  { path: '/appearance', label: 'Appearance', icon: Palette, group: 'infrastructure', permission: 'appearance:list', exposeIn: ['sidebar', 'palette', 'chord'] },
-  { path: '/maintenance', label: 'Maintenance', icon: Wrench, group: 'infrastructure', permission: 'maintenance:list', exposeIn: ['sidebar', 'palette', 'chord'] },
-  { path: '/settings', label: 'Settings', icon: Settings, group: 'infrastructure', permission: 'settings:list', exposeIn: ['sidebar', 'palette', 'chord'] },
+  { path: '/appearance', label: 'Appearance', icon: Palette, group: 'infrastructure', permission: 'appearance:update', exposeIn: ['sidebar', 'palette', 'chord'] },
+  { path: '/maintenance', label: 'Maintenance', icon: Wrench, group: 'infrastructure', permission: 'maintenance:update', exposeIn: ['sidebar', 'palette', 'chord'] },
+  { path: '/settings', label: 'Settings', icon: Settings, group: 'infrastructure', permission: 'settings:update', exposeIn: ['sidebar', 'palette', 'chord'] },
 ];
 
 /** Entries a caller is permitted to see. */

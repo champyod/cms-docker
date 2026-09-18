@@ -16,6 +16,7 @@ interface BrandingCardProps {
   loading: boolean;
   onUpload: (file: File) => Promise<void>;
   error?: string;
+  readOnly: boolean;
 }
 
 function PreviewImage({ previewUrl, onClick }: { previewUrl: string; onClick: () => void }) {
@@ -46,13 +47,13 @@ function LoadingOverlay() {
   );
 }
 
-export function BrandingCard({ previewUrl, loading, onUpload, error }: BrandingCardProps) {
+export function BrandingCard({ previewUrl, loading, onUpload, error, readOnly }: BrandingCardProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleClick = useCallback(() => {
-    if (loading) return;
+    if (loading || readOnly) return;
     inputRef.current?.click();
-  }, [loading]);
+  }, [loading, readOnly]);
 
   const handleChange = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -73,7 +74,9 @@ export function BrandingCard({ previewUrl, loading, onUpload, error }: BrandingC
     <Card className="space-y-4">
       <div>
         <h2 className="text-sm font-semibold tracking-tight text-foreground">Ranking Branding</h2>
-        <p className="text-xs text-muted-foreground">Click the preview to upload a new ranking logo. Accepted: png, jpg, jpeg, gif, bmp (max 5MB).</p>
+        {!readOnly && (
+          <p className="text-xs text-muted-foreground">Click the preview to upload a new ranking logo. Accepted: png, jpg, jpeg, gif, bmp (max 5MB).</p>
+        )}
       </div>
 
       <div className="relative">

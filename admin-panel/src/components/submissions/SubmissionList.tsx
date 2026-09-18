@@ -16,8 +16,16 @@ import { SubmissionListItem } from '@/types';
 
 import { SubmissionModal } from './SubmissionModal';
 import { selectSubmission } from './submissionSelection';
+import { hasEffectivePermission } from '@/lib/permission-engine';
 
-export function SubmissionList({ initialSubmissions, totalPages, currentPage }: { initialSubmissions: SubmissionListItem[], totalPages: number, currentPage: number }) {
+interface SubmissionListProps {
+  initialSubmissions: SubmissionListItem[];
+  totalPages: number;
+  currentPage: number;
+  permissionKeys: readonly string[];
+}
+
+export function SubmissionList({ initialSubmissions, totalPages, currentPage, permissionKeys }: SubmissionListProps) {
   const [submissions] = useSyncedState(initialSubmissions);
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<number | null>(null);
   // WHY the id and not the row: recalculateSubmission refreshes the list, so rendering a
@@ -237,6 +245,7 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage }: 
             isOpen={!!selectedSubmission}
             onClose={() => setSelectedSubmissionId(null)}
             submission={selectedSubmission}
+            canRecompute={hasEffectivePermission(new Set(permissionKeys), 'submission:recompute')}
         />
       )}
     </div>

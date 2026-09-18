@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_GROUPS, PERMISSION_REGISTRY } from '@/lib/permission-registry';
+import { DEFAULT_GROUPS, PERMISSION_REGISTRY, RESERVED_PERMISSIONS } from '@/lib/permission-registry';
 import {
   hasEffectivePermission,
   resolveEffectivePermissions,
@@ -174,6 +174,11 @@ describe('PERMISSION_REGISTRY', () => {
     expect(PERMISSION_REGISTRY.length).toBeGreaterThan(0);
   });
 
+  // Why pinned: MODULES / DOMAIN_VERBS edits must be deliberate, not silent.
+  it('holds exactly 200 keys', () => {
+    expect(PERMISSION_REGISTRY.length).toBe(200);
+  });
+
   it.each(PERMISSION_REGISTRY)('entry $key equals ${module}:${verb}', (definition) => {
     expect(definition.key).toBe(`${definition.module}:${definition.verb}`);
   });
@@ -190,6 +195,14 @@ describe('PERMISSION_REGISTRY', () => {
 
   it('contains the all:all entry', () => {
     expect(PERMISSION_REGISTRY.some((definition) => definition.key === 'all:all')).toBe(true);
+  });
+
+  it('reserves only documented registry keys', () => {
+    const registryKeys = new Set(PERMISSION_REGISTRY.map((definition) => definition.key));
+    for (const reserved of RESERVED_PERMISSIONS) {
+      expect(registryKeys.has(reserved.key)).toBe(true);
+      expect(reserved.reason.length).toBeGreaterThan(0);
+    }
   });
 });
 

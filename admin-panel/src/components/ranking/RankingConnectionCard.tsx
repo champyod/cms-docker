@@ -16,6 +16,7 @@ interface Props {
   onUsername: (v: string) => void;
   onPassword: (v: string) => void;
   onConnect: () => void;
+  canManage: boolean;
 }
 
 export function RankingConnectionCard({
@@ -29,19 +30,23 @@ export function RankingConnectionCard({
   onUsername,
   onPassword,
   onConnect,
+  canManage,
 }: Props) {
+  const locked = !canManage;
   return (
     <Card>
       <Stack direction="col" gap={4}>
-        <Input label="Ranking Base URL" value={baseUrl} onChange={(e) => onBaseUrl(e.target.value)} placeholder="http://<ranking-server>:8890" disabled={connected || loadingSession} />
+        <Input label="Ranking Base URL" value={baseUrl} onChange={(e) => onBaseUrl(e.target.value)} placeholder="http://<ranking-server>:8890" disabled={connected || loadingSession || locked} />
         <Stack direction="row" gap={4} className="w-full">
-          <Input label="Username" value={username} onChange={(e) => onUsername(e.target.value)} placeholder="rank" disabled={connected || loadingSession} />
-          <Input label="Password" type="password" value={password} onChange={(e) => onPassword(e.target.value)} placeholder="••••••••" disabled={connected || loadingSession} />
+          <Input label="Username" value={username} onChange={(e) => onUsername(e.target.value)} placeholder="rank" disabled={connected || loadingSession || locked} />
+          <Input label="Password" type="password" value={password} onChange={(e) => onPassword(e.target.value)} placeholder="••••••••" disabled={connected || loadingSession || locked} />
         </Stack>
         <Stack direction="row" gap={3} align="center">
-          <Button onClick={onConnect} loading={loadingSession} disabled={connected || !baseUrl || !username || !password}>
-            Connect
-          </Button>
+          {canManage && (
+            <Button onClick={onConnect} loading={loadingSession} disabled={connected || !baseUrl || !username || !password}>
+              Connect
+            </Button>
+          )}
           <span className="text-sm text-muted-foreground">
             Status: <span className={connected ? 'text-emerald-400' : 'text-amber-400'}>{connected ? 'Connected' : 'Disconnected'}</span>
           </span>

@@ -1,4 +1,4 @@
-import { checkPermission } from '@/lib/permissions';
+import { checkPermission, getPermissions } from '@/lib/permissions';
 import { notFound } from 'next/navigation';
 import MaintenanceClient from './MaintenanceClient';
 
@@ -15,5 +15,5 @@ export default async function MaintenancePage({
     notFound();
   }
 
-  return <MaintenanceClient />;
+  return <MaintenanceClient permissionKeys={[...(await getPermissions())]} />;
 }

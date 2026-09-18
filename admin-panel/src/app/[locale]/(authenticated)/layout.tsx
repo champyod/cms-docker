@@ -63,7 +63,7 @@ export default async function AuthenticatedLayout({
             </div>
           </Stack>
           <MobileNav locale={locale} permissionKeys={permissionKeys} />
-          <ShortcutLayer />
+          <ShortcutLayer permissionKeys={permissionKeys} />
         </PageBackground>
       </ConfirmProvider>
     </DictionaryProvider>
