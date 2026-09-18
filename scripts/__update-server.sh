@@ -251,7 +251,7 @@ if [ "$HAS_ADMIN" = true ]; then
 fi
 
 if [ "$HAS_CONTEST" = true ]; then
-    CONTEST_PORT="$(read_contest_port .env.contest)"
+    CONTEST_PORT="$(read_contest_port .env)"
     log "Checking contest interface on http://127.0.0.1:${CONTEST_PORT}/ ..."
     if http_ok "http://127.0.0.1:${CONTEST_PORT}/"; then CONTEST_RESULT="PASS"; else CONTEST_RESULT="FAIL"; fi
 fi

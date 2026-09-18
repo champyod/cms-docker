@@ -108,7 +108,7 @@ require_env() {
   if [[ -n "$source_file" ]]; then
     hint=" (expected in ${source_file})"
   else
-    hint=" (check .env / .env.* for ${var_name})"
+    hint=" (check .env — run './cms config sync')"
   fi
 
   log_die "required variable ${var_name} is empty or unset${hint}" 1

@@ -17,13 +17,25 @@ import {
   type ConfigTomlUpdate,
 } from '@/lib/config-toml';
 
-const ALLOWED_ENV_FILES = new Set(['.env', '.env.contest']);
+const ALLOWED_ENV_FILES = new Set(['.env']);
 
 function resolveEnvPath(repoRoot: string, filename: string): string {
   if (!ALLOWED_ENV_FILES.has(filename)) {
     throw new Error(`File not allowed: ${filename}`);
   }
   return path.join(repoRoot, filename);
+}
+
+/** Reads a file, returning null when it does not exist; any other failure is rethrown. */
+async function readFileIfPresent(filePath: string): Promise<string | null> {
+  try {
+    return await fs.readFile(filePath, 'utf-8');
+  } catch (error) {
+    if ((error as { code?: string }).code !== 'ENOENT') {
+      throw error;
+    }
+    return null;
+  }
 }
 
 export async function readEnvFile(filename: string) {
@@ -150,7 +162,7 @@ function describeInvalidKeys(keys: readonly ConfigTomlKey[]): string | null {
 export async function readActiveContestId(): Promise<{ success: true; contestId: number | null } | { success: false; error: string }> {
   await ensurePermission('env:read');
   try {
-    // config.toml is the source of truth; reading the generated .env.contest here made the
+    // config.toml is the source of truth; reading the generated env file here made the
     // display lag the value the panel just wrote and drift from a config sync.
     const content = await fs.readFile(path.join(getRepoRoot(), CONFIG_TOML_FILE), 'utf-8');
     return { success: true, contestId: readContestId(content) };
@@ -184,8 +196,14 @@ export async function migrateFromMultiContest(): Promise<{ success: true; contes
   await ensurePermission('env:update');
   try {
     const repoRoot = getRepoRoot();
-    const envPath = path.join(repoRoot, '.env.contest');
-    let content = await fs.readFile(envPath, 'utf-8');
+    // The generated env file is where a legacy multi-contest deployment kept this key.
+    const envPath = path.join(repoRoot, '.env');
+    const envContent = await readFileIfPresent(envPath);
+    // No generated env file yet — nothing legacy to migrate, and not a failure.
+    if (envContent === null) {
+      return { success: true, contestId: null, migrated: false };
+    }
+    let content = envContent;
 
     const deployConfigMatch = content.match(/^CONTESTS_DEPLOY_CONFIG=(.*)/m);
     if (!deployConfigMatch) {
@@ -199,7 +217,7 @@ export async function migrateFromMultiContest(): Promise<{ success: true; contes
         if (typeof firstContestId === 'number') {
           content = content.replace(/^CONTESTS_DEPLOY_CONFIG=.*\n?/m, '');
           await fs.writeFile(envPath, content);
-          // The migrated id belongs in config.toml, not in the generated .env.contest.
+          // The migrated id belongs in config.toml, not in the generated .env.
           const tomlPath = path.join(repoRoot, CONFIG_TOML_FILE);
           const tomlContent = await fs.readFile(tomlPath, 'utf-8');
           await fs.writeFile(tomlPath, setContestId(tomlContent, firstContestId));

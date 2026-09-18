@@ -14,6 +14,8 @@ cd "$CMS_ROOT"
 
 TOML_FILE="config.toml"
 TOML_EXAMPLE="config.toml.example"
+# The one env file compose and the scripts read; see migrate_split_env_files below.
+MERGED_ENV=".env"
 DRY_RUN=0
 NO_SECRETS=0
 
@@ -372,6 +374,284 @@ migrate_missing_keys() {
   log_info "migrated $total new config keys: ${summary%"; "}"
 }
 
+# --- Retired split env files ---
+# WHY: compose loads only the merged .env (no compose file declares `env_file:`), so a
+# value living in .env.core/.env.contest/.env.worker/.env.infra/.env.tailscale/.env.admin
+# was honoured by some scripts and ignored by the stack — the drift behind a false
+# configuration-mismatch report. Surviving values are folded into .env, then the split
+# file is removed. Absent files are a no-op, so fresh installs and re-runs are unaffected.
+SPLIT_ENV_FILES=(.env.core .env.contest .env.worker .env.infra .env.tailscale .env.admin)
+# The config.toml section each retired file fed, which is why the file existed: a value it
+# carried has to keep reaching .env from the source of truth once the file itself is gone.
+declare -A SPLIT_ENV_SECTIONS=(
+  [.env.core]=core
+  [.env.contest]=contest
+  [.env.worker]=worker
+  [.env.infra]=infra
+  [.env.tailscale]=tailscale
+  [.env.admin]=admin
+)
+declare -A SPLIT_VALUES=()
+declare -a SPLIT_KEYS=()
+
+# True when <file> holds a non-empty value for <key>. Presence alone is not enough: the
+# merged .env carries every config.toml key, most of them empty, and an empty generated
+# value must not displace the real value an operator kept in a split file.
+env_file_has_value() {
+  local key="$1" file="$2" raw
+  [[ -f "$file" ]] || return 1
+  raw="$(awk -F= -v k="$key" '$1==k { v=$0; sub(/^[^=]*=/, "", v); print v; exit }' "$file" 2>/dev/null | tr -d '\r' || true)"
+  [[ -n "$(env_unquote "$raw")" ]]
+}
+
+# Read one retired file into SPLIT_KEYS/SPLIT_VALUES: the keys .env carries no value for.
+# Values are copied verbatim; env_quote re-protects them for every reader when written.
+collect_split_env_keys() {
+  local src="$1" line key val
+  SPLIT_KEYS=(); SPLIT_VALUES=()
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    case "$line" in ''|'#'*) continue ;; esac
+    line="${line#export }"
+    [[ "$line" == *=* ]] || continue
+    key="${line%%=*}"
+    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+    val="$(env_unquote "${line#*=}")"
+    [[ -n "$val" ]] || continue
+    [[ -z "${SPLIT_VALUES[$key]:-}" ]] || continue
+    env_file_has_value "$key" "$MERGED_ENV" && continue
+    SPLIT_KEYS+=("$key")
+    SPLIT_VALUES["$key"]="$val"
+  done < "$src"
+}
+
+# Write the collected values into .env: a key .env already carries is replaced in place,
+# a key it lacks is appended. WHY replace rather than append: raw readers (awk/grep/cut)
+# take the FIRST match and the shell takes the LAST, so a duplicated key would leave the
+# two disagreeing about the same setting.
+apply_split_env_values() {
+  local tmp line key
+  (( ${#SPLIT_VALUES[@]} > 0 )) || return 0
+  declare -A pending=()
+  for key in "${!SPLIT_VALUES[@]}"; do pending["$key"]="${SPLIT_VALUES[$key]}"; done
+  tmp="$(mktemp)" || return 1
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    key="${line%%=*}"
+    if [[ "$line" == *=* && -n "${pending[$key]:-}" ]]; then
+      printf '%s=%s\n' "$key" "$(env_quote "${pending[$key]}")" >> "$tmp"
+      pending["$key"]=""
+    else
+      printf '%s\n' "$line" >> "$tmp"
+    fi
+  done < "$MERGED_ENV"
+  for key in "${SPLIT_KEYS[@]}"; do
+    [[ -n "${pending[$key]:-}" ]] || continue
+    printf '%s=%s\n' "$key" "$(env_quote "${pending[$key]}")" >> "$tmp"
+    pending["$key"]=""
+  done
+  # cat into the existing file keeps its inode and permissions (secrets: mode 600).
+  if ! cat "$tmp" > "$MERGED_ENV"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  rm -f "$tmp"
+}
+
+# --- Rescued keys get a durable home in config.toml ---
+# WHY: the next sync rebuilds .env from config.toml alone, so a value that only ever lived
+# in a split file survives the run that migrates it and is gone from the one after — the
+# silent loss behind dead Discord alerting, a missing tailnet front and an empty worker
+# fleet. Promoting the value into config.toml makes the migration survive that rebuild.
+# A key is only ever added to a section parse_toml reads, because a key written anywhere
+# else would be dropped by the next sync just the same.
+declare -a TOML_INSERT_KEYS=() TOML_FILL_KEYS=()
+# key → section, kept so the write log can still name the section after the write is done.
+declare -A TOML_INSERT_SECTION=() TOML_FILL_SECTION=()
+# key → section, the ledger of inserts a rewrite pass has not written yet.
+declare -A TOML_INSERT_PENDING=()
+
+# Escape a value for the TOML basic string it is written as. `\` and `"` are the two escapes
+# toml_value decodes, so the value comes back byte-identical on the next sync.
+toml_escape() {
+  local v="${1-}"
+  v="${v//\\/\\\\}"
+  printf '%s' "${v//\"/\\\"}"
+}
+
+# One `key = "value"` entry — the form the admin panel's own config.toml writer emits.
+# WHY no inline comment on it: the panel's reader takes everything after `=` as the value,
+# so a comment left on a written entry shows up as part of the value there and makes its
+# config.toml-vs-.env comparison report a drift that does not exist.
+toml_entry() {
+  printf '%s = "%s"' "$1" "$(toml_escape "$2")"
+}
+
+# Sort the rescued keys by what config.toml already says about them. WHAT it says is read
+# from the file, not from __TOML: that map also holds values derived at runtime
+# (DOMAIN_NAME), and no section can be written for a value the file never had.
+# A key the file already values keeps that value. A key the file defines empty is filled
+# where it is defined, so the section that owns it wins and the key is never duplicated.
+# Args: section_name split_file
+classify_split_keys() {
+  local section="$1" src="$2" key line trimmed sec=""
+  declare -A defined_in=() valued_in=()
+  TOML_INSERT_KEYS=(); TOML_FILL_KEYS=()
+  TOML_INSERT_SECTION=(); TOML_FILL_SECTION=()
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    trimmed="$(toml_trim "${line%%#*}")"
+    if [[ "$trimmed" =~ ^\[([a-zA-Z0-9_]+)\]$ ]]; then
+      sec="${BASH_REMATCH[1]}"
+    elif [[ "$trimmed" =~ ^([A-Za-z0-9_]+)[[:space:]]*=[[:space:]]*(.*)$ ]]; then
+      key="${BASH_REMATCH[1]}"
+      [[ -n "${SPLIT_VALUES[$key]+set}" ]] || continue
+      [[ -n "${defined_in[$key]:-}" ]] || defined_in["$key"]="$sec"
+      if [[ -z "${valued_in[$key]:-}" && -n "$(toml_value "${BASH_REMATCH[2]}")" ]]; then
+        valued_in["$key"]="$sec"
+      fi
+    fi
+  done < "$TOML_FILE"
+  for key in "${SPLIT_KEYS[@]}"; do
+    if [[ -n "${valued_in[$key]:-}" ]]; then
+      log_info "kept ${key} already set in [${valued_in[$key]}] — the value in ${src} was not needed"
+    elif [[ -n "${defined_in[$key]:-}" ]]; then
+      TOML_FILL_KEYS+=("$key")
+      TOML_FILL_SECTION["$key"]="${defined_in[$key]}"
+    else
+      TOML_INSERT_KEYS+=("$key")
+      TOML_INSERT_SECTION["$key"]="$section"
+    fi
+  done
+}
+
+# Write out the keys still waiting for <section> as that section ends, in the order the
+# split file listed them, so a re-run reproduces exactly the same lines. Whatever is still
+# waiting once the file has been read through had no section to go into.
+# Args: output_file section_name
+append_new_toml_keys() {
+  local out="$1" section="$2" key
+  (( ${#TOML_INSERT_PENDING[@]} > 0 )) || return 0
+  for key in "${TOML_INSERT_KEYS[@]}"; do
+    [[ "${TOML_INSERT_PENDING[$key]:-}" == "$section" ]] || continue
+    printf '%s\n' "$(toml_entry "$key" "${SPLIT_VALUES[$key]}")" >> "$out"
+    unset "TOML_INSERT_PENDING[$key]"
+  done
+}
+
+# Rewrite config.toml: fill the entries the classification marked in place, and append each
+# section's missing keys to the end of that section. Every other byte is copied through, so
+# comments, ordering and blank lines survive. Returns non-zero without touching the file
+# when a section a key needs is absent: the generator would not read a section it does not
+# know, so inventing one would hide the value rather than keep it.
+rewrite_config_toml() {
+  local tmp line trimmed key sec=""
+  TOML_INSERT_PENDING=()
+  for key in "${TOML_INSERT_KEYS[@]}"; do
+    TOML_INSERT_PENDING["$key"]="${TOML_INSERT_SECTION[$key]}"
+  done
+  tmp="$(mktemp)" || return 1
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    trimmed="$(toml_trim "${line%%#*}")"
+    if [[ "$trimmed" =~ ^\[([a-zA-Z0-9_]+)\]$ ]]; then
+      append_new_toml_keys "$tmp" "$sec"
+      sec="${BASH_REMATCH[1]}"
+    elif [[ "$trimmed" =~ ^([A-Za-z0-9_]+)[[:space:]]*= ]]; then
+      key="${BASH_REMATCH[1]}"
+      if [[ -n "${TOML_FILL_SECTION[$key]:-}" && "${TOML_FILL_SECTION[$key]}" == "$sec" ]]; then
+        printf '%s\n' "$(toml_entry "$key" "${SPLIT_VALUES[$key]}")" >> "$tmp"
+        continue
+      fi
+    fi
+    printf '%s\n' "$line" >> "$tmp"
+  done < "$TOML_FILE"
+  append_new_toml_keys "$tmp" "$sec"
+  if (( ${#TOML_INSERT_PENDING[@]} > 0 )); then
+    log_warn "no section to write these keys into: ${!TOML_INSERT_PENDING[*]}"
+    rm -f "$tmp"
+    return 1
+  fi
+  # cat into the existing file keeps its inode and permissions (secrets: mode 600).
+  if ! cat "$tmp" > "$TOML_FILE"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  rm -f "$tmp"
+}
+
+# Move the collected keys into config.toml, each into the section that owns it. Returns
+# non-zero when they could not be stored, so the caller keeps the split file instead of
+# deleting the only surviving copy.
+# Args: split_file section_name
+promote_split_keys_to_toml() {
+  local src="$1" section="$2" key
+  (( ${#SPLIT_KEYS[@]} > 0 )) || return 0
+  classify_split_keys "$section" "$src"
+  if (( ${#TOML_INSERT_KEYS[@]} == 0 && ${#TOML_FILL_KEYS[@]} == 0 )); then
+    return 0
+  fi
+  if ! rewrite_config_toml; then
+    log_warn "could not store the keys of ${src} in $TOML_FILE — ${src} kept"
+    return 1
+  fi
+  # Reported only now, so no log line claims a write that did not land.
+  for key in "${TOML_FILL_KEYS[@]}"; do
+    log_info "filled empty ${key} in $TOML_FILE [${TOML_FILL_SECTION[$key]}] from ${src}"
+  done
+  for key in "${TOML_INSERT_KEYS[@]}"; do
+    log_info "added ${key} to $TOML_FILE [${TOML_INSERT_SECTION[$key]}] from ${src}"
+  done
+}
+
+# Print exactly what a real run would write into .env and config.toml, and change nothing.
+# Args: split_file section_name
+report_split_env_dry_run() {
+  local src="$1" section="$2" key
+  classify_split_keys "$section" "$src"
+  for key in "${SPLIT_KEYS[@]}"; do
+    printf 'Would migrate %s from %s into %s\n' "$key" "$src" "$MERGED_ENV"
+  done
+  for key in "${TOML_FILL_KEYS[@]}"; do
+    printf 'Would fill the empty %s in %s [%s] with the value from %s\n' \
+      "$key" "$TOML_FILE" "${TOML_FILL_SECTION[$key]}" "$src"
+  done
+  for key in "${TOML_INSERT_KEYS[@]}"; do
+    printf 'Would add %s to %s [%s] from %s\n' \
+      "$key" "$TOML_FILE" "${TOML_INSERT_SECTION[$key]}" "$src"
+  done
+  printf 'Would delete retired split env file %s\n' "$src"
+}
+
+migrate_split_env_files() {
+  local src section key
+  for src in "${SPLIT_ENV_FILES[@]}"; do
+    [[ -f "$src" ]] || continue
+    section="${SPLIT_ENV_SECTIONS[$src]}"
+    collect_split_env_keys "$src"
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      report_split_env_dry_run "$src" "$section"
+      continue
+    fi
+    # Reported only after the write succeeded, so a failed file is never announced as
+    # migrated and never removed.
+    if ! apply_split_env_values; then
+      log_warn "migration of ${src} failed — $MERGED_ENV left untouched, ${src} kept"
+      continue
+    fi
+    for key in "${SPLIT_KEYS[@]}"; do
+      log_info "migrated ${key} from ${src} into $MERGED_ENV"
+    done
+    # The split file is removed only once its values live where the next sync looks for
+    # them again — every run rebuilds .env from config.toml.
+    if ! promote_split_keys_to_toml "$src" "$section"; then
+      continue
+    fi
+    if rm -f -- "$src"; then
+      log_info "deleted retired split env file ${src}"
+    else
+      log_warn "could not delete ${src} — remove it manually"
+    fi
+  done
+}
+
 # --- Main ---
 SECRETS_CHANGED=0
 
@@ -457,6 +737,10 @@ main() {
   else
     echo "Would write unified .env from config.toml (all sections)"
   fi
+
+  # Runs on the finished .env and before any consumer reads it, so a value that only
+  # existed in a split file is in place for this deploy rather than the next one.
+  migrate_split_env_files
 
   if [[ "$DRY_RUN" -eq 0 ]]; then
     local db_user="${__TOML[core.POSTGRES_USER]:-cmsuser}"

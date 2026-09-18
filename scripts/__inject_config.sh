@@ -50,14 +50,6 @@ get_worker_env_val() {
   env_unquote "$raw"
 }
 
-# Helper: exact match from arbitrary file (for .env.contest).
-get_kv_from_file() {
-  local key="$1" file="$2" raw
-  [[ -f "$file" ]] || return 0
-  raw="$(awk -F= -v k="$key" '$1==k { v=$0; sub(/^[^=]*=/, "", v); print v; exit }' "$file" 2>/dev/null | tr -d '\r' || true)"
-  env_unquote "$raw"
-}
-
 DB_USER="$(get_env_val "POSTGRES_USER")"
 DB_PASS="$(get_env_val "POSTGRES_PASSWORD")"
 DB_NAME="$(get_env_val "POSTGRES_DB")"
@@ -102,11 +94,16 @@ echo "  - DB Name: $DB_NAME"
 
 export DB_USER DB_PASS DB_NAME DB_HOST DB_PORT CMS_SECRET RPC_SECRET RPC_ALLOW_BACKDOOR TAILSCALE_IP CORE_SERVICES_IP
 
-# Ranking Scoreboard auth — exact-match reads, never via grep regex.
-R_USER="$(get_kv_from_file "RANKING_USERNAME" ".env.contest")"
-R_PASS="$(get_kv_from_file "RANKING_PASSWORD" ".env.contest")"
-R_USER="${R_USER:-usern4me}"
-R_PASS="${R_PASS:-passw0rd}"
+# Scoreboard auth for the ranking push and the ranking web UI — exact-match reads
+# (never grep regex) from the merged .env. A missing value aborts the run: a built-in
+# fallback would publish default credentials on a live ranking service.
+R_USER="$(get_env_val "RANKING_USERNAME")"
+R_PASS="$(get_env_val "RANKING_PASSWORD")"
+if [[ -z "$R_USER" || -z "$R_PASS" ]]; then
+  echo "Error: RANKING_USERNAME / RANKING_PASSWORD missing from $ENV_FILE." >&2
+  echo "Fix: set them in config.toml [admin], then run: ./cms config sync" >&2
+  exit 1
+fi
 export R_USER R_PASS
 
 # Perform replacements using Python for robustness — secrets via env, never argv.
@@ -147,8 +144,8 @@ cms_secret = os.environ.get("CMS_SECRET", "")
 if cms_secret:
     text = re.sub(r'^secret_key = ".*"', lambda m: f'secret_key = "{toml_escape(cms_secret)}"', text, flags=re.MULTILINE)
 
-r_user = os.environ.get("R_USER", "usern4me")
-r_pass = os.environ.get("R_PASS", "passw0rd")
+r_user = os.environ["R_USER"]
+r_pass = os.environ["R_PASS"]
 
 # Push target for score feed: same-network service by default. A remote
 # ranking node is only assumed when RANKING_REMOTE=1 (then RANKING_PUSH_HOST
@@ -264,7 +261,7 @@ fi
 echo "Building contest web server configuration..."
 CWS_ARRAY=""
 CWS_COUNT=0
-DEPLOY_CONFIG="$(get_kv_from_file "CONTESTS_DEPLOY_CONFIG" ".env.contest")"
+DEPLOY_CONFIG="$(get_env_val "CONTESTS_DEPLOY_CONFIG")"
 if [[ -n "${DEPLOY_CONFIG:-}" ]] && [[ "$DEPLOY_CONFIG" != "[]" ]]; then
   CWS_SECTION="$(DEPLOY_CONFIG="$DEPLOY_CONFIG" python3 - << 'PY'
 import json, os

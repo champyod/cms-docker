@@ -325,12 +325,6 @@ set -a
 source "${REPO_ROOT}/.env" 2>/dev/null || true
 set +a
 
-# .env.contest is a per-contest override — source it if present
-_env_contest="${REPO_ROOT}/.env.contest"
-if [[ -f "$_env_contest" ]]; then
-  set -a; source "$_env_contest" 2>/dev/null || true; set +a
-fi
-
 env_preflight_fail=0
 check_secret_var() {
   local var_name="$1"
@@ -356,7 +350,7 @@ for _v in POSTGRES_PASSWORD AUTH_SECRET SECRET_KEY; do
 done
 
 if [[ "$env_preflight_fail" -ne 0 ]]; then
-  printf '[FAIL] preflight env sanity failed — fix .env.* then run: make env\n' >&2
+  printf '[FAIL] preflight env sanity failed — fix config.toml then run: ./cms config sync\n' >&2
   exit 2
 fi
 log_info "preflight env sanity: POSTGRES_PASSWORD/AUTH_SECRET/SECRET_KEY OK"
