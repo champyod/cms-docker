@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { DeployStatusPanel } from '@/components/deployments/DeployStatusPanel';
+import { DeployStatusPanel, LOG_BOTTOM_THRESHOLD_PX, resolveLogFollow } from '@/components/deployments/DeployStatusPanel';
 import type { DeployState } from '@/hooks/useDeployContest';
 
 function makeState(overrides: Partial<DeployState>): DeployState {
@@ -88,5 +88,59 @@ describe('DeployStatusPanel', () => {
     );
     expect(html).toContain('Timed Out');
     expect(html).toContain('Deploy timed out after 15 minutes.');
+  });
+
+  it('offers the follow toggle over the build log once output exists', () => {
+    const html = renderToStaticMarkup(
+      <DeployStatusPanel
+        state={makeState({ phase: 'polling', status: 'running', log: 'Step 1/3\nBuilding image...' })}
+        onCancel={() => undefined}
+        onReset={() => undefined}
+      />
+    );
+    expect(html).toContain('Build Log');
+    expect(html).toContain('AUTO-SCROLL ON');
+    expect(html).toContain('aria-pressed="true"');
+  });
+
+  it('omits the follow toggle while there is no output to follow', () => {
+    const html = renderToStaticMarkup(
+      <DeployStatusPanel
+        state={makeState({ phase: 'completed', status: 'completed', log: '' })}
+        onCancel={() => undefined}
+        onReset={() => undefined}
+      />
+    );
+    expect(html).toContain('No log output available.');
+    expect(html).not.toContain('AUTO-SCROLL');
+  });
+});
+
+describe('resolveLogFollow', () => {
+  const overflow: { scrollHeight: number; clientHeight: number } = { scrollHeight: 500, clientHeight: 200 };
+  const bottom = overflow.scrollHeight - overflow.clientHeight;
+
+  it('follows new output while the view sits on the newest line', () => {
+    expect(resolveLogFollow({ ...overflow, scrollTop: bottom })).toBe(true);
+  });
+
+  it('stops following once the operator scrolls up into the history', () => {
+    expect(resolveLogFollow({ ...overflow, scrollTop: 120 })).toBe(false);
+  });
+
+  it('keeps following within the near-bottom slack', () => {
+    expect(resolveLogFollow({ ...overflow, scrollTop: bottom - LOG_BOTTOM_THRESHOLD_PX })).toBe(true);
+  });
+
+  it('stops following past the near-bottom slack', () => {
+    expect(resolveLogFollow({ ...overflow, scrollTop: bottom - LOG_BOTTOM_THRESHOLD_PX - 1 })).toBe(false);
+  });
+
+  it('treats fractional scroll positions on the last line as the bottom', () => {
+    expect(resolveLogFollow({ scrollTop: 299.5, scrollHeight: 499.6, clientHeight: 200 })).toBe(true);
+  });
+
+  it('follows when the log is shorter than the viewport', () => {
+    expect(resolveLogFollow({ scrollTop: 0, scrollHeight: 82, clientHeight: 200 })).toBe(true);
   });
 });
