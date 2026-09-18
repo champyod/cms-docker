@@ -90,7 +90,7 @@ export async function setAdminGroups(
       result: 'success',
     });
     invalidateAccessCache(String(adminId));
-    revalidatePath('/[locale]/admins', 'page');
+    revalidatePath('/[locale]/permissions', 'page');
     return { success: true, data: { adminId } };
   } catch (error) {
     return { success: false, error: (error as Error).message };
@@ -159,7 +159,7 @@ export async function setAdminOverride(
 
     await writeOverride(adminId, permissionKey, effect, reason, permission.id);
     invalidateAccessCache(String(adminId));
-    revalidatePath('/[locale]/admins', 'page');
+    revalidatePath('/[locale]/permissions', 'page');
     return { success: true, data: { adminId, permissionKey } };
   } catch (error) {
     return { success: false, error: (error as Error).message };
@@ -197,7 +197,7 @@ export async function clearAdminOverride(
       result: 'success',
     });
     invalidateAccessCache(String(adminId));
-    revalidatePath('/[locale]/admins', 'page');
+    revalidatePath('/[locale]/permissions', 'page');
     return { success: true, data: { adminId, permissionKey } };
   } catch (error) {
     return { success: false, error: (error as Error).message };

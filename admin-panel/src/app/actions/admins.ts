@@ -98,7 +98,7 @@ export async function createAdmin(data: CreateAdminInput): Promise<ActionResult>
       afterValues: { username: data.username, name: data.name },
       result: 'success',
     });
-    revalidatePath('/[locale]/admins', 'page');
+    revalidatePath('/[locale]/permissions', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;
@@ -146,7 +146,7 @@ async function handleAdminUpdateWrite(
     await recordPasswordChangeAudit(adminId);
   }
   invalidateAccessCache(String(adminId));
-  revalidatePath('/[locale]/admins', 'page');
+  revalidatePath('/[locale]/permissions', 'page');
 }
 
 export async function updateAdmin(adminId: number, data: UpdateAdminInput): Promise<ActionResult> {
@@ -225,7 +225,7 @@ export async function deleteAdmin(adminId: number): Promise<ActionResult> {
       result: 'success',
     });
     invalidateAccessCache(String(adminId));
-    revalidatePath('/[locale]/admins', 'page');
+    revalidatePath('/[locale]/permissions', 'page');
     return { success: true };
   } catch (error) {
     return { success: false, error: (error as Error).message };

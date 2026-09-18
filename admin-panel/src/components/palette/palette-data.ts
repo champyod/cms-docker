@@ -1,5 +1,5 @@
 import { hasEffectivePermission } from '@/lib/permission-engine';
-import { NAV_REGISTRY, type NavGroup as RegistryGroup } from '@/lib/nav-registry';
+import { NAV_REGISTRY, isEntryPermitted, type NavGroup as RegistryGroup } from '@/lib/nav-registry';
 
 export interface NavVisibility {
   contests: boolean;
@@ -17,7 +17,7 @@ export interface PaletteNavItem {
   isVisible(effective: ReadonlySet<string>): boolean;
 }
 
-// Why: palette navigation is a filtered view of the single registry so Groups/Audit/Appearance
+// Why: palette navigation is a filtered view of the single registry so Permissions/Audit/Appearance
 // and /search cannot drift between surfaces.
 export const PALETTE_NAV_ITEMS: PaletteNavItem[] = NAV_REGISTRY.filter((entry) =>
   entry.exposeIn.includes('palette'),
@@ -26,8 +26,7 @@ export const PALETTE_NAV_ITEMS: PaletteNavItem[] = NAV_REGISTRY.filter((entry) =
   icon: entry.icon,
   path: entry.path,
   group: entry.group,
-  isVisible: (effective: ReadonlySet<string>): boolean =>
-    entry.permission === undefined || hasEffectivePermission(effective, entry.permission),
+  isVisible: (effective: ReadonlySet<string>): boolean => isEntryPermitted(entry, effective),
 }));
 
 export function buildNavVisibility(permissionKeys: readonly string[]): NavVisibility {

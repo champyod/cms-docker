@@ -12,8 +12,9 @@ export const NAV_CHORD_KEY_BY_PATH: ReadonlyMap<string, string> = new Map<string
   ['/users', 'u'],
   ['/teams', 'm'],
   ['/deployments', 'p'],
-  ['/admins', 'a'],
-  ['/groups', 'h'],
+  // Why: /permissions absorbed the admins and groups pages, so it keeps 'a' — the chord operators
+  // already know for admin management — while 'g' stays the chord prefix and 'p' belongs to deployments.
+  ['/permissions', 'a'],
   ['/audit', 'i'],
   ['/resources', 'r'],
   ['/containers', 'o'],

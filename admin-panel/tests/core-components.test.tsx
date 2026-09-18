@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { Search } from 'lucide-react';
 import { EmptyState } from '@/components/core/EmptyState';
 import { Input } from '@/components/core/Input';
+import { Tabs, type TabItem } from '@/components/core/Tabs';
 import {
   STATUS_VARIANTS,
   mapStatusToVariant,
@@ -50,6 +51,36 @@ describe('StatusBadge variant mapping', () => {
     const html = renderToStaticMarkup(<StatusBadge status="degraded" running={2} total={3} />);
     expect(html).toContain('Degraded');
     expect(html).toContain('2/3 containers running');
+  });
+});
+
+describe('Tabs', () => {
+  const items: readonly TabItem[] = [
+    { id: 'admins', label: 'Admins', href: '/en/permissions?tab=admins' },
+    { id: 'groups', label: 'Groups', href: '/en/permissions?tab=groups' },
+  ];
+
+  it('marks only the active tab as the current page', () => {
+    const html = renderToStaticMarkup(
+      <Tabs items={items} activeId="groups" ariaLabel="Permission sections" />
+    );
+    expect(html).toContain('aria-label="Permission sections"');
+    expect(html.match(/aria-current="page"/g)).toHaveLength(1);
+    // Why: the selection lives in the URL, so the active marker must follow the id, not the first link.
+    expect(html).toMatch(/aria-current="page"[^>]*href="\/en\/permissions\?tab=groups"/);
+  });
+
+  it('renders every tab as a link, including inactive ones', () => {
+    const html = renderToStaticMarkup(
+      <Tabs items={items} activeId="admins" ariaLabel="Permission sections" />
+    );
+    expect(html).toContain('href="/en/permissions?tab=admins"');
+    expect(html).toContain('href="/en/permissions?tab=groups"');
+    expect(html).toContain('Groups');
+  });
+
+  it('renders nothing when no tab is permitted', () => {
+    expect(renderToStaticMarkup(<Tabs items={[]} activeId="" ariaLabel="Permission sections" />)).toBe('');
   });
 });
 

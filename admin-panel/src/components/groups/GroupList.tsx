@@ -32,7 +32,6 @@ import type { GroupWithPermissions } from '@/app/actions/adminPermissions';
 
 interface GroupsDict {
   title: string;
-  subtitle: string;
   createGroup: string;
   editGroup: string;
   name: string;

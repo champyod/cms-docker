@@ -52,7 +52,7 @@ describe('filterNavItems', () => {
     expect(labels).not.toContain('Tasks');
     expect(labels).not.toContain('Users');
     expect(labels).not.toContain('Teams');
-    expect(labels).not.toContain('Admins');
+    expect(labels).not.toContain('Permissions');
   });
 
   it('shows user-scoped items for user permission', () => {
@@ -63,6 +63,15 @@ describe('filterNavItems', () => {
 
   it('shows every item for superadmin', () => {
     expect(labelsFor(ALL_PERMISSIONS)).toHaveLength(PALETTE_NAV_ITEMS.length);
+  });
+
+  it('shows the merged Permissions entry for either of its list keys', () => {
+    expect(labelsFor(['admin:list'])).toContain('Permissions');
+    expect(labelsFor(['group:list'])).toContain('Permissions');
+  });
+
+  it('hides the merged Permissions entry without either list key', () => {
+    expect(labelsFor(['audit:read', 'appearance:list'])).not.toContain('Permissions');
   });
 });
 

@@ -86,13 +86,7 @@
   },
   "admins": {
     "title": "Administrators",
-    "subtitle": "Manage admin accounts and permissions.",
-    "panel": {
-      "title": "Admin Panel",
-      "addAdmin": "Add Admin",
-      "expand": "Expand the admin panel controls",
-      "collapse": "Collapse the admin panel controls"
-    },
+    "addAdmin": "Add Admin",
     "actions": {
       "edit": "Edit",
       "delete": "Delete"
@@ -113,7 +107,6 @@
   },
   "groups": {
     "title": "Groups Management",
-    "subtitle": "Create and manage permission groups.",
     "createGroup": "Create Group",
     "editGroup": "Edit Group",
     "name": "Name",
@@ -128,6 +121,19 @@
     "noGroupsDescription": "Create a group to get started.",
     "deleteTooltip": "Delete group",
     "editTooltip": "Edit group"
+  },
+  "permissions": {
+    "title": "Permissions",
+    "subtitle": "Manage administrator accounts and the groups that grant their access.",
+    "adminsRestricted": {
+      "title": "Administrators are not available",
+      "description": "You can open this section, but your account is not permitted to read admin records."
+    },
+    "tabs": {
+      "label": "Permission sections",
+      "admins": "Admins",
+      "groups": "Groups"
+    }
   },
   "audit": {
     "title": "Audit Log",

@@ -95,15 +95,14 @@ describe('g-chord sequencing', () => {
     expect(paths).toEqual(
       [
         '',
-        '/admins',
         '/appearance',
         '/audit',
         '/containers',
         '/contests',
         '/deployments',
         '/docs',
-        '/groups',
         '/maintenance',
+        '/permissions',
         '/ranking',
         '/resources',
         '/search',

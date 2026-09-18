@@ -8,35 +8,31 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
 import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
-import { ShieldCheck, ShieldAlert } from 'lucide-react';
+import { Text } from '@/components/core/Typography';
+import { Plus, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { updateAdmin, deleteAdmin } from '@/app/actions/admins';
 import { listAdminsAccessSummary, type AdminAccessSummary } from '@/app/actions/adminPermissions';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import { AdminModal } from './AdminModal';
-import {
-  AdminPanelCard,
-  AdminRowActions,
-  hasAdminControl,
-  type AdminCapabilities,
-  type AdminPanelLabels,
-} from './AdminPanelCard';
+import { AdminRowActions } from './AdminRowActions';
+import type { AdminCapabilities } from './adminCapabilities';
 import type { AdminWithLogin } from '@/lib/prisma-selects';
 
 interface AdminListProps {
   initialAdmins: AdminWithLogin[];
   callerPermissions: string[];
   capabilities: AdminCapabilities;
+  headerLabels: { title: string; addAdmin: string };
   actionLabels: { edit: string; delete: string };
-  panelLabels: AdminPanelLabels;
 }
 
 export function AdminList({
   initialAdmins,
   callerPermissions,
   capabilities,
+  headerLabels,
   actionLabels,
-  panelLabels,
 }: AdminListProps) {
   const [adminsList] = useSyncedState(initialAdmins);
   const [accessSummary, setAccessSummary] = useState<Record<number, AdminAccessSummary>>({});
@@ -216,13 +212,16 @@ export function AdminList({
 
   return (
     <div className="space-y-6">
-      {hasAdminControl(capabilities) ? (
-        <AdminPanelCard capabilities={capabilities} labels={panelLabels} onAdd={startCreate}>
-          {table}
-        </AdminPanelCard>
-      ) : (
-        table
-      )}
+      <div className="flex items-center justify-between gap-3">
+        <Text variant="h2">{headerLabels.title}</Text>
+        {capabilities.canCreate && (
+          <Button variant="positive" icon={Plus} onClick={startCreate}>
+            {headerLabels.addAdmin}
+          </Button>
+        )}
+      </div>
+
+      {table}
 
       <AdminModal
         isOpen={isModalOpen}

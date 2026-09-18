@@ -10,7 +10,6 @@ import {
   ScrollText,
   Search,
   Settings,
-  Shield,
   ShieldCheck,
   Trophy,
   Users,
@@ -36,6 +35,11 @@ export interface NavEntry {
   group: NavGroup;
   /** Permission required to see this entry; absent means always visible. */
   permission?: string;
+  /**
+   * Keys the caller needs any one of; use instead of `permission` for a page that serves several
+   * audiences, which is what makes a single tabbed route reachable from either set of keys.
+   */
+  permissions?: readonly string[];
   /** Which surfaces render this entry. */
   exposeIn: readonly NavSurface[];
   /** Registered only while this is true; used to hold an entry back deliberately. */
@@ -64,8 +68,7 @@ export const NAV_REGISTRY: readonly NavEntry[] = [
   { path: '/teams', label: 'Teams', icon: Users, group: 'contest', permission: 'team:list', exposeIn: ['sidebar', 'palette', 'chord', 'mobile'] },
 
   { path: '/deployments', label: 'Active Contest', icon: Rocket, group: 'infrastructure', permission: 'deployment:list', exposeIn: ['sidebar', 'palette', 'chord'] },
-  { path: '/admins', label: 'Admins', icon: Shield, group: 'infrastructure', permission: 'admin:list', exposeIn: ['sidebar', 'palette', 'chord'] },
-  { path: '/groups', label: 'Groups', icon: ShieldCheck, group: 'infrastructure', permission: 'group:list', exposeIn: ['sidebar', 'palette', 'chord'] },
+  { path: '/permissions', label: 'Permissions', icon: ShieldCheck, group: 'infrastructure', permissions: ['admin:list', 'group:list'], exposeIn: ['sidebar', 'palette', 'chord'] },
   { path: '/audit', label: 'Audit', icon: ScrollText, group: 'infrastructure', permission: 'audit:read', exposeIn: ['sidebar', 'palette', 'chord'] },
   { path: '/resources', label: 'Resources', icon: Activity, group: 'infrastructure', permission: 'resource:list', exposeIn: ['sidebar', 'palette', 'chord'] },
   { path: '/containers', label: 'Containers', icon: Box, group: 'infrastructure', permission: 'container:list', exposeIn: ['sidebar', 'palette', 'chord'] },
@@ -75,6 +78,20 @@ export const NAV_REGISTRY: readonly NavEntry[] = [
   { path: '/settings', label: 'Settings', icon: Settings, group: 'infrastructure', permission: 'settings:list', exposeIn: ['sidebar', 'palette', 'chord'] },
 ];
 
+/**
+ * Whether a caller holding `effective` satisfies this entry's permission requirement.
+ *
+ * Why one shared predicate: the sidebar, palette and chord all filter this registry, and a surface that
+ * re-implements the rule can drift — the palette reads this too, so an any-of entry cannot end up
+ * visible on one surface and hidden on another.
+ */
+export function isEntryPermitted(entry: NavEntry, effective: ReadonlySet<string>): boolean {
+  if (entry.permissions) {
+    return entry.permissions.some((key) => hasEffectivePermission(effective, key));
+  }
+  return entry.permission === undefined || hasEffectivePermission(effective, entry.permission);
+}
+
 /** Entries a caller is permitted to see. */
 export function visibleEntries(
   effective: ReadonlySet<string>,
@@ -83,7 +100,7 @@ export function visibleEntries(
   return NAV_REGISTRY.filter((entry) => {
     if (entry.enabled === false) return false;
     if (surface && !entry.exposeIn.includes(surface)) return false;
-    return entry.permission === undefined || hasEffectivePermission(effective, entry.permission);
+    return isEntryPermitted(entry, effective);
   });
 }
 

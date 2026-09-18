@@ -71,7 +71,7 @@ export async function createGroup(
       reason,
       result: 'success',
     });
-    revalidatePath('/[locale]/admins', 'page');
+    revalidatePath('/[locale]/permissions', 'page');
     return { success: true, data: { id: group.id } };
   } catch (error) {
     return { success: false, error: (error as Error).message };
@@ -141,7 +141,7 @@ export async function updateGroup(
       result: 'success',
     });
     invalidateAdmins(await affectedAdminIds(id));
-    revalidatePath('/[locale]/admins', 'page');
+    revalidatePath('/[locale]/permissions', 'page');
     return { success: true, data: { id } };
   } catch (error) {
     return { success: false, error: (error as Error).message };
@@ -192,7 +192,7 @@ export async function deleteGroup(id: number, reason: string): Promise<ActionRes
       result: 'success',
     });
     invalidateAdmins(adminIds);
-    revalidatePath('/[locale]/admins', 'page');
+    revalidatePath('/[locale]/permissions', 'page');
     return { success: true, data: { id } };
   } catch (error) {
     return { success: false, error: (error as Error).message };
