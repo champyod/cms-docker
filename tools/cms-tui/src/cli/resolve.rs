@@ -211,8 +211,12 @@ mod tests {
 
     #[test]
     fn config_sync_forwards_dry_run_and_no_secrets() {
-        let (key, args) = parse(&["cms", "config", "sync", "--dry-run", "--no-secrets"]).expect("resolves");
+        let (key, args) =
+            parse(&["cms", "config", "sync", "--dry-run", "--no-secrets"]).expect("resolves");
         assert_eq!(key, crate::core::dispatch::DispatchKey::ConfigSync);
-        assert_eq!(args, vec!["--dry-run".to_string(), "--no-secrets".to_string()]);
+        assert_eq!(
+            args,
+            vec!["--dry-run".to_string(), "--no-secrets".to_string()]
+        );
     }
 }
