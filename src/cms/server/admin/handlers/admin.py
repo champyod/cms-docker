@@ -60,10 +60,12 @@ def _admin_attrs(handler: BaseHandler) -> dict:
     assert attrs.get("name") is not None, "No admin name specified."
 
     # Get the password and translate it to an authentication, if present.
+    # A form that hides the password field sends no argument at all, which
+    # carries the same meaning as an empty one: no new password.
     handler.get_string(attrs, "password", empty=None)
-    if attrs["password"] is not None:
-        attrs["authentication"] = hash_password(attrs["password"])
-    del attrs["password"]
+    password = attrs.pop("password", None)
+    if password is not None:
+        attrs["authentication"] = hash_password(password)
 
     attrs["admin_groups"] = [
         int(gid) for gid in handler.get_arguments("admin_groups")
@@ -107,7 +109,7 @@ class AddAdminHandler(SimpleHandler("add_admin.html", permission="admin:create")
 class AdminsHandler(BaseHandler):
     """Page to see all admins."""
 
-    @require_permission(BaseHandler.AUTHENTICATED)
+    @require_permission("admin:list")
     def get(self):
         self.r_params = self.render_params()
         self.r_params["admins"] = (
@@ -122,8 +124,9 @@ class AdminsHandler(BaseHandler):
 class AdminHandler(BaseHandler):
     """Admin handler, with a POST method to edit the admin."""
 
-    # Fields that an admin can change themself, regardless of the
-    # permission bits.
+    # Fields that a caller without all:all may submit, regardless of the
+    # permission bits. "authentication" is kept only on top of
+    # admin:password:update, which post() enforces separately.
     SELF_MODIFIABLE_FIELDS = [
         "name",
         "username",
@@ -138,7 +141,8 @@ class AdminHandler(BaseHandler):
         self.r_params["admin_being_edited"] = admin
         self.render("admin.html", **self.r_params)
 
-    @require_permission("admin:update", self_allowed=True)
+    @require_permission(
+        ("admin:update", "admin:password:update"), self_allowed=True)
     def post(self, admin_id: str):
         admin = self.safe_get_item(Admin, admin_id)
         # WHY: password mutation must respect target superset — deny if target
@@ -174,6 +178,19 @@ class AdminHandler(BaseHandler):
             self.redirect(self.url("admin", admin_id))
             return
 
+        # WHY: a password hash is privilege-bearing, so writing one needs its
+        # own key even when the caller is editing their own account.
+        has_password_update = self.current_user.has_permission(
+            "admin:password:update")
+        if "authentication" in new_attrs and not has_password_update:
+            self.service.add_notification(
+                make_datetime(), "Operation denied",
+                "Cannot change an admin password without holding "
+                "admin:password:update."
+            )
+            self.redirect(self.url("admin", admin_id))
+            return
+
         # If the admin is allowed here because they are editing their own
         # details, they can only change a subset of the fields.
         group_ids = new_attrs.pop("admin_groups", [])
@@ -181,6 +198,17 @@ class AdminHandler(BaseHandler):
             for key in list(new_attrs.keys()):
                 if key not in AdminHandler.SELF_MODIFIABLE_FIELDS:
                     del new_attrs[key]
+            # WHY: admin:password:update alone is a credential grant, not a
+            # grant to alter another admin's identity, so name and username
+            # survive only for self-edits or callers holding admin:update.
+            if not self.current_user.has_permission("admin:update") \
+                    and str(admin.id) != str(self.current_user.id):
+                new_attrs.pop("name", None)
+                new_attrs.pop("username", None)
+            # WHY: defence in depth — the refusal above already stops such a
+            # caller, and this keeps the rule true for any future ordering.
+            if not has_password_update:
+                new_attrs.pop("authentication", None)
         admin.set_attrs(new_attrs)
 
         if self.current_user.has_permission("all:all"):

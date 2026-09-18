@@ -18,10 +18,12 @@
       <td>Username</td>
       <td><input type="text" name="username" value="{{ admin_username }}"/></td>
     </tr>
+    {% if admin_being_edited is not defined or admin.has_permission("admin:password:update") %}
     <tr>
       <td>Password</td>
       <td><input type="password" name="password" value=""/></td>
     </tr>
+    {% endif %}
     <tr>
       <td>Name</td>
       <td><input type="text" name="name" value="{{ admin_name }}"/></td>

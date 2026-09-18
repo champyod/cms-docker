@@ -306,18 +306,30 @@ def invalidate_permission_cache(admin_id: int) -> None:
     _effective_perms_cache.pop(admin_id, None)
 
 
-def require_permission(permission: str = "authenticated", self_allowed: bool = False):
-    """Return a decorator requiring a specific permission registry key.
+def require_permission(
+    permission: str | tuple[str, ...] | list[str] = "authenticated",
+    self_allowed: bool = False,
+):
+    """Return a decorator requiring one of the given permission keys.
 
     permission: a registry key of the form "module:verb" (e.g. "task:create"),
         "all:all" for full access, or "authenticated" for any logged-in admin
-        with no fine-grained check.
+        with no fine-grained check. A tuple or list of keys is accepted too
+        and is read as any-of: the caller has to hold at least one of them.
+        "authenticated" inside such a collection keeps its no-fine-grained-
+        check meaning.
     self_allowed: if true, allow the action when the first URL argument
         matches the current admin's id, regardless of permissions.
     """
     _P = typing.ParamSpec("_P")
     _R = typing.TypeVar("_R")
     _T = typing.TypeVar("_T", bound=BaseHandler)
+
+    # Normalise upfront: a plain string is iterable, so the request path must
+    # never iterate over the raw argument.
+    permissions: tuple[str, ...] = (
+        (permission,) if isinstance(permission, str) else tuple(permission)
+    )
 
     def decorator(
         func: Callable[typing.Concatenate[_T, _P], _R],
@@ -327,7 +339,7 @@ def require_permission(permission: str = "authenticated", self_allowed: bool = F
         def newfunc(self: _T, *args: _P.args, **kwargs: _P.kwargs):
             # AUTHENTICATED only requires a valid session (handled by
             # @tornado.web.authenticated above).
-            if permission == BaseHandler.AUTHENTICATED:
+            if BaseHandler.AUTHENTICATED in permissions:
                 return func(self, *args, **kwargs)
 
             user = self.current_user
@@ -343,7 +355,8 @@ def require_permission(permission: str = "authenticated", self_allowed: bool = F
                     pass
 
             effective = get_effective_permissions(user.id, self.sql_session)
-            if has_effective_permission(effective, permission):
+            if any(has_effective_permission(effective, key)
+                   for key in permissions):
                 return func(self, *args, **kwargs)
 
             raise tornado.web.HTTPError(403, "Admin is not authorized")
