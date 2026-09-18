@@ -219,9 +219,14 @@ pub enum Commands {
         sub: DomainCmd,
     },
     /// Config lifecycle (`config <sync|edit|show>`).
+    ///
+    /// `sync` forwards trailing flags (`--dry-run`, `--no-secrets`) to
+    /// `scripts/__config_sync.sh`; `edit`/`show` take none.
     Config {
         #[arg(value_enum)]
         sub: ConfigSub,
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 0..=2)]
+        args: Vec<String>,
     },
 }
 

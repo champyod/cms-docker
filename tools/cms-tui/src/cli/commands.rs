@@ -48,7 +48,7 @@ pub fn handle(cmd: Commands) -> Result<(), Box<dyn std::error::Error>> {
         Commands::Stop { stack } => run_docker_exit(&DockerClient::new()?, |c| c.stop(&stack)),
         Commands::Clean { stack } => run_docker_exit(&DockerClient::new()?, |c| c.clean(&stack)),
         Commands::Pull { stack } => run_docker_exit(&DockerClient::new()?, |c| c.pull(&stack)),
-        Commands::Config { sub } => handle_config(sub, &runner),
+        Commands::Config { sub, .. } => handle_config(sub, &runner),
         _ => unreachable!("catalog should have handled remaining command"),
     }
 }

@@ -172,8 +172,8 @@ fn resolve_fleet(cmd: &Commands) -> Option<(DispatchKey, Vec<String>)> {
         },
         Commands::UpdateServer => Some((DispatchKey::UpdateServer, Vec::new())),
         Commands::Domain { sub } => Some(domain_dispatch(sub)),
-        Commands::Config { sub } => match sub {
-            ConfigSub::Sync => Some((DispatchKey::ConfigSync, Vec::new())),
+        Commands::Config { sub, args } => match sub {
+            ConfigSub::Sync => Some((DispatchKey::ConfigSync, args.clone())),
             ConfigSub::Edit | ConfigSub::Show => None,
         },
         _ => None,
@@ -182,4 +182,37 @@ fn resolve_fleet(cmd: &Commands) -> Option<(DispatchKey, Vec<String>)> {
 
 pub(super) fn resolve_catalog(cmd: &Commands) -> Option<(DispatchKey, Vec<String>)> {
     resolve_basic(cmd).or_else(|| resolve_fleet(cmd))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_catalog;
+
+    // Parses a full `cms …` argv the same way `main` does, so the assertions
+    // exercise the real clap `Config` shape (trailing-var-arg forwarding).
+    fn parse(argv: &[&str]) -> Option<(crate::core::dispatch::DispatchKey, Vec<String>)> {
+        let args = <crate::Args as clap::Parser>::try_parse_from(argv).expect("parse ok");
+        resolve_catalog(&args.command.expect("has command"))
+    }
+
+    #[test]
+    fn config_sync_forwards_no_args() {
+        let (key, args) = parse(&["cms", "config", "sync"]).expect("resolves");
+        assert_eq!(key, crate::core::dispatch::DispatchKey::ConfigSync);
+        assert!(args.is_empty());
+    }
+
+    #[test]
+    fn config_sync_forwards_dry_run() {
+        let (key, args) = parse(&["cms", "config", "sync", "--dry-run"]).expect("resolves");
+        assert_eq!(key, crate::core::dispatch::DispatchKey::ConfigSync);
+        assert_eq!(args, vec!["--dry-run".to_string()]);
+    }
+
+    #[test]
+    fn config_sync_forwards_dry_run_and_no_secrets() {
+        let (key, args) = parse(&["cms", "config", "sync", "--dry-run", "--no-secrets"]).expect("resolves");
+        assert_eq!(key, crate::core::dispatch::DispatchKey::ConfigSync);
+        assert_eq!(args, vec!["--dry-run".to_string(), "--no-secrets".to_string()]);
+    }
 }
