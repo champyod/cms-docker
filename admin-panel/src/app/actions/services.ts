@@ -20,6 +20,7 @@ import {
   runDeployContest,
   fetchDeployStatus,
   getActiveDeployOperation as getActiveDeployOperationLib,
+  reconcileDeployOperations as reconcileDeployOperationsLib,
 } from '@/lib/deploy-operations';
 import type {
   ActiveDeployOperation,
@@ -157,6 +158,23 @@ export async function deployContest(contestId: number): Promise<DeployContestRes
 export async function getDeployStatus(operationId: string): Promise<DeployStatusResult> {
   await ensurePermission('deployment:read');
   return fetchDeployStatus(operationId);
+}
+
+/**
+ * Applies the outcome of any deploy whose effects are still owed, so a visit to the deploy page reaches
+ * the state that deploy actually left — the contest activated, or the configuration rolled back —
+ * without a client having watched the operation to its end. Reuses the same settle the deploy's own
+ * start runs (`reconcileDeployOperations`), which is what keeps it from double-applying an outcome: the
+ * operation's record holds the claim and whether its effects landed.
+ *
+ * Why the deploy page's own permission rather than a mutation key: this is the deploy the operator
+ * already ran reaching its end, not a new action, so whoever may look at the deploy page may let it
+ * finish. Why a server action and not the page's render: settling activates a contest, and that
+ * activation revalidates cached pages — which Next.js refuses from inside a render.
+ */
+export async function settleDeployOperations(): Promise<void> {
+  await ensurePermission('deployment:list');
+  await reconcileDeployOperationsLib();
 }
 
 export async function getActiveDeployOperation(): Promise<ActiveDeployOperation | null> {

@@ -398,6 +398,8 @@ describe('contest deploy lifecycle', () => {
     expect(mocks.activateContest).toHaveBeenCalledExactlyOnceWith(12);
     expect(await readConfigContestId()).toBe(12);
     expect(await readOrNull(lockPath())).toBeNull();
+    // What the operator reads off the artifacts: which contest the database was left on.
+    expect((await readRecordedMeta(operationId)).activatedContestId).toBe(12);
 
     // A settled operation repeats its result instead of repeating its effects.
     expect((await store.fetchDeployStatus(operationId)).status).toBe('completed');
@@ -423,6 +425,32 @@ describe('contest deploy lifecycle', () => {
     // And a settled leftover no longer blocks the next deploy.
     const next = await store.runDeployContest(14, plan);
     expect(next.success).toBe(true);
+  });
+
+  it('applies a finished-but-unapplied operation when the deploy page settles every record', async () => {
+    const started = await store.runDeployContest(12, plan);
+    const operationId = started.operationId;
+    expect(operationId).toBeDefined();
+    if (operationId === undefined) return;
+    // The deploy ended after the panel stopped watching its operation: the marker that says so is on
+    // disk and nothing has read it.
+    await killDeployProcesses();
+    await deployReportsExit(operationId, 0);
+    expect(mocks.activateContest).not.toHaveBeenCalled();
+
+    // What a visit to the deploy page runs before it reads the stack: every recorded operation is
+    // settled, so the contest is active by the time the screen's own read happens — no watching client
+    // and no discovery interval involved.
+    await store.reconcileDeployOperations();
+    expect(mocks.activateContest).toHaveBeenCalledExactlyOnceWith(12);
+    expect(await readConfigContestId()).toBe(12);
+    expect(await readOrNull(lockPath())).toBeNull();
+    expect((await readRecordedMeta(operationId)).activatedContestId).toBe(12);
+
+    // Idempotent: the claim and its applied marker on the record are what stop the next visit from
+    // activating the contest — and writing its audit row — a second time.
+    await store.reconcileDeployOperations();
+    expect(mocks.activateContest).toHaveBeenCalledTimes(1);
   });
 
   it('settles a deploy whose process is gone without a result, and reverts the configuration', async () => {
@@ -581,6 +609,8 @@ describe('contest deploy lifecycle', () => {
     expect(await readConfigContestId()).toBe(12);
     // Terminal and recorded, so no later lookup retries the activation while holding the guard.
     expect((await readRecordedMeta(operationId)).outcome).toMatchObject({ status: 'failed' });
+    // An activation that failed moved nothing, so no contest is recorded as the database's.
+    expect((await readRecordedMeta(operationId)).activatedContestId).toBeUndefined();
     expect(await readOrNull(lockPath())).toBeNull();
 
     const repeated = await store.fetchDeployStatus(operationId);

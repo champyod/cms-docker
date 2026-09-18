@@ -24,6 +24,7 @@ import {
   markDeployOutcomeApplied,
   probeDeployProcess,
   listDeployOperations,
+  patchDeployMeta,
   readDeployMeta,
   recordDeployOperationStart,
   recordDeployProcess,
@@ -236,6 +237,11 @@ async function applyClaimedOutcome(operationId: string, meta: DeployMeta, log: s
  * Why the claim is marked applied even then: an unapplied claim is one a later panel takes over and
  * runs again (see `claimDeployOutcome`), which would re-attempt an activation this panel has already
  * watched fail. The failure is this operation's outcome, not a state to retry.
+ *
+ * Why the activated id is recorded before the claim is marked applied: the field says which contest the
+ * database is on, so it has to be on the record by the time the record can no longer be re-run. An
+ * activation that fails writes none of it — the database was left as it was, and the terminal outcome's
+ * error is what says so.
  */
 async function applyCompletedOutcome(operationId: string, meta: DeployMeta, log: string): Promise<DeployStatusResult> {
   const base = { contestId: meta.contestId, startedAt: meta.startedAt, log, percent: parseDeployPercent(log) };
@@ -252,6 +258,7 @@ async function applyCompletedOutcome(operationId: string, meta: DeployMeta, log:
     return { success: false, status: 'failed', ...base, error: outcome.error };
   }
 
+  await patchDeployMeta(operationId, { activatedContestId: meta.contestId });
   await markDeployOutcomeApplied(operationId);
   await clearActiveOperation(operationId);
   await logToDiscord('Contest Deploy Completed', `Contest ID **${meta.contestId}** deployed successfully.`, 3066993);

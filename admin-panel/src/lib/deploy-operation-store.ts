@@ -58,6 +58,14 @@ export type DeployMeta = {
    * rather than reading "settled" and reporting a result that never happened.
    */
   outcomeAppliedAt?: string;
+  /**
+   * The contest the database was left on, written when a completed deploy's activation ran. Why on the
+   * record: `is_active` is moved by the activation and by nothing else this path can observe, so the
+   * operation's own artifacts are the only place an operator can read what is active in the database
+   * without querying it. Absent while the effects are owed, and absent for an operation that left the
+   * database alone — a rollback, or an activation that failed before it wrote.
+   */
+  activatedContestId?: number;
 };
 
 export interface DeployOperation {

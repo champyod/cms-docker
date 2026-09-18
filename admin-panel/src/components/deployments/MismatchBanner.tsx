@@ -10,8 +10,8 @@ interface MismatchBannerProps {
 
 function listDisagreeingSources(activeContestId: number | null, dbActiveContestId: number | null, containerContestId: number | null | undefined): string[] {
   const disagreeing: string[] = [];
-  if (activeContestId !== null && dbActiveContestId !== null && activeContestId !== dbActiveContestId) disagreeing.push('.env and database');
-  if (activeContestId !== null && containerContestId != null && activeContestId !== containerContestId) disagreeing.push('.env and running container');
+  if (activeContestId !== null && dbActiveContestId !== null && activeContestId !== dbActiveContestId) disagreeing.push('config.toml and database');
+  if (activeContestId !== null && containerContestId != null && activeContestId !== containerContestId) disagreeing.push('config.toml and running container');
   if (dbActiveContestId !== null && containerContestId != null && dbActiveContestId !== containerContestId) disagreeing.push('database and running container');
   return disagreeing;
 }
@@ -24,7 +24,7 @@ export function MismatchBanner({ activeContestId, activeContestName, dbActiveCon
             <div>
                 <Text variant="h3" color="text-warning">Configuration Mismatch</Text>
                 <Text variant="small" color="text-muted-foreground">
-                    The .env file points to contest <strong className="text-foreground">#{activeContestId}</strong>
+                    The config.toml <strong className="text-foreground">[contest] CONTEST_ID</strong> setting points to contest <strong className="text-foreground">#{activeContestId}</strong>
                     {activeContestName ? ` (${activeContestName})` : ''}
                     {dbActiveContestId !== null && (
                         <>

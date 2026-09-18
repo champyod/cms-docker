@@ -36,7 +36,7 @@ export function DeployConfirmModal({ isOpen, phase, targetLabel, extraNote = DEF
             <>
               <p className="text-sm text-muted-foreground">
                 This will mark <strong className="text-foreground">{targetLabel}</strong> as the active contest,
-                update the .env file, and restart the contest stack. {extraNote}
+                set CONTEST_ID in config.toml [contest], and restart the contest stack. {extraNote}
               </p>
               <DialogFooter>
                 <Button variant="ghost" onClick={onClose}>Cancel</Button>

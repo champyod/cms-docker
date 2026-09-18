@@ -5,6 +5,7 @@ import { RefreshCw } from 'lucide-react';
 import { readActiveContestId, readConfigTomlValues, updateConfigTomlValues } from '@/app/actions/env';
 import { buildConfigTomlUpdates, type ConfigTomlKey } from '@/lib/config-toml';
 import { getAvailableContests } from '@/app/actions/contests';
+import { settleDeployOperations } from '@/app/actions/services';
 import { getContainerContestId } from '@/app/actions/docker';
 import { useDeployContest } from '@/hooks/useDeployContest';
 import { PageContent, PageHeader, Stack } from '@/components/core/Layout';
@@ -68,8 +69,18 @@ export function DeploymentsClient() {
         return activeId;
     }, []);
 
-    const loadData = useCallback(async () => {
-        setLoading(true);
+    const loadData = useCallback(async (options?: { silent?: boolean }) => {
+        if (options?.silent !== true) setLoading(true);
+        try {
+            // Why the settle comes before the reads: a deploy that finished while nothing watched its
+            // operation still owes its activation (or its rollback), and the values read below are only
+            // the truth about the stack once that has run.
+            await settleDeployOperations();
+        } catch {
+            // A settle that could not run leaves what it owes on the operation's own record, which the
+            // next visit retries. Failing the screen instead would hide the deploy state the operator
+            // came to read.
+        }
         const [activeResult, settingsResult, contestsResult, containerResult] = await Promise.all([
             readActiveContestId(),
             readConfigTomlValues(CONTEST_SETTINGS_KEYS),
@@ -114,27 +125,32 @@ export function DeploymentsClient() {
         loadData();
     };
 
+    // Why only the spinner is handled here: the deploy's own toast comes from useDeployContest's status
+    // stream, and the values a terminal phase changes are re-read by the effect below. The deploy is
+    // over either way, so the button stops loading.
     useEffect(() => {
-        if (deployState.phase === 'completed') {
-            setSaving(false);
-            const cId = deployState.contestId;
-            if (cId !== null) {
-                setActiveContestId(cId);
-                const match = availableContests.find(c => c.id === cId);
-                if (match) setActiveContestName(match.name);
-            }
-            // Toast is handled inside useDeployContest via EventSource progress and completion
-            getContainerContestId().then((res) => {
-                if (res.success) setContainerContestId(res.contestId);
-            }).catch(() => {});
-        } else if (deployState.phase === 'failed' || deployState.phase === 'timeout') {
-            setSaving(false);
-        } else if (deployState.phase === 'already_running') {
-            setSaving(false);
-        } else if (deployState.phase === 'idle' && saving) {
-            setSaving(false);
-        }
-    }, [deployState.phase, deployState.contestId, availableContests, saving]);
+        const terminal = deployState.phase === 'completed'
+            || deployState.phase === 'failed'
+            || deployState.phase === 'timeout'
+            || deployState.phase === 'already_running';
+        if (terminal || (deployState.phase === 'idle' && saving)) setSaving(false);
+    }, [deployState.phase, saving]);
+
+    // Why every source is re-read at every terminal phase: the operation settles server side — activating
+    // its contest, or rolling the configuration back — and can settle after this panel last read the
+    // database. A value held from before that settle reports a mismatch the deploy has already resolved.
+    // loadData is that read, and it takes all three sources in one pass: config.toml [contest] CONTEST_ID,
+    // the database rows, and the id the running container serves.
+    useEffect(() => {
+        const ended = deployState.phase === 'completed' || deployState.phase === 'failed' || deployState.phase === 'timeout';
+        if (!ended) return;
+        // Why the id is applied before the read rather than after it: the card stays on the contest this
+        // panel just deployed while the reads are in flight, and the read — not this line — is what the
+        // values on screen come from once it answers. Only a completed deploy applies it: a failed one
+        // leaves config.toml on whatever its rollback restored, and the read is what says so.
+        if (deployState.phase === 'completed' && deployState.contestId !== null) setActiveContestId(deployState.contestId);
+        void loadData({ silent: true });
+    }, [deployState.phase, deployState.contestId, loadData]);
 
     const handleSaveSettings = async () => {
         setSaving(true);
