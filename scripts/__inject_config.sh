@@ -120,6 +120,29 @@ text = config_path.read_text()
 
 def toml_escape(v): return v.replace("\\", "\\\\").replace('"', '\\"')
 
+# Section-scoped: keys like num_proxies_used exist in multiple sections, so a
+# global sub would cross-contaminate them. Appends the key if absent.
+def set_section_key(text, section, key, value):
+    lines = text.splitlines()
+    out, in_section, replaced = [], False, False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith('[') and stripped.endswith(']'):
+            if in_section and not replaced:
+                out.append(f'{key} = {value}')
+                replaced = True
+            in_section = stripped == f'[{section}]'
+            out.append(line)
+            continue
+        if in_section and not replaced and re.match(rf'^{re.escape(key)}\s*=', line):
+            out.append(f'{key} = {value}')
+            replaced = True
+            continue
+        out.append(line)
+    if in_section and not replaced:
+        out.append(f'{key} = {value}')
+    return "\n".join(out)
+
 user = os.environ.get("DB_USER", "cmsuser")
 pw = os.environ.get("DB_PASS", "your_password_here")
 host = os.environ.get("DB_HOST", "database")
@@ -146,6 +169,19 @@ if cms_secret:
 
 r_user = os.environ["R_USER"]
 r_pass = os.environ["R_PASS"]
+
+# config.toml [contest] -> cms.toml [contest_web_server] (previously never synced,
+# so config.toml edits like NUM_PROXIES_USED never reached the CMS).
+def _set_contest(key, env_var):
+    raw = os.environ.get(env_var, "").strip()
+    if raw:
+        text = set_section_key(text, 'contest_web_server', key, raw)
+
+_set_contest('num_proxies_used', 'NUM_PROXIES_USED')
+_set_contest('cookie_duration', 'COOKIE_DURATION')
+_set_contest('max_submission_length', 'MAX_SUBMISSION_LENGTH')
+_set_contest('max_input_length', 'MAX_INPUT_LENGTH')
+_set_contest('submit_local_copy', 'SUBMIT_LOCAL_COPY')
 
 # Push target for score feed: same-network service by default. A remote
 # ranking node is only assumed when RANKING_REMOTE=1 (then RANKING_PUSH_HOST
