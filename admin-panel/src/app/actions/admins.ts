@@ -6,6 +6,7 @@ import { recordAudit } from '@/lib/audit';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import {
   getTargetEffectivePermissions,
+  hasEffectivePermission,
   isEffectiveSuperset,
 } from '@/lib/permission-engine';
 import { ensurePermission, getPermissions, invalidateAccessCache } from '@/lib/permissions';
@@ -109,6 +110,18 @@ export async function createAdmin(data: CreateAdminInput): Promise<ActionResult>
 }
 
 
+async function recordPasswordChangeAudit(adminId: number): Promise<void> {
+  // Why: a credential change is its own privilege (admin:password:update), so it gets its own verb;
+  // only the fact that the credential changed is recorded — never the value or its stored hash.
+  await recordAudit({
+    verb: 'admin:password:update',
+    entity: 'admin',
+    entityId: String(adminId),
+    afterValues: { passwordChanged: true },
+    result: 'success',
+  });
+}
+
 async function handleAdminUpdateWrite(
   adminId: number,
   allowed: Record<string, unknown>,
@@ -117,10 +130,8 @@ async function handleAdminUpdateWrite(
     where: { id: adminId },
     select: { name: true, enabled: true, username: true },
   });
-  await prisma.admins.update({
-    where: { id: adminId },
-    data: await buildAdminUpdateData(allowed as unknown as UpdateAdminInput),
-  });
+  const updateData = await buildAdminUpdateData(allowed as unknown as UpdateAdminInput);
+  await prisma.admins.update({ where: { id: adminId }, data: updateData });
   await recordAudit({
     verb: 'admin:update',
     entity: 'admin',
@@ -131,15 +142,27 @@ async function handleAdminUpdateWrite(
     afterValues: { changedKeys: Object.keys(allowed) },
     result: 'success',
   });
+  if (updateData.authentication !== undefined) {
+    await recordPasswordChangeAudit(adminId);
+  }
   invalidateAccessCache(String(adminId));
   revalidatePath('/[locale]/admins', 'page');
 }
 
 export async function updateAdmin(adminId: number, data: UpdateAdminInput): Promise<ActionResult> {
-  await ensurePermission('admin:update');
-  // Why: server-side guard — never write a field the caller cannot update, even if the client sends it
+  // Why: the write is gated per field rather than by one blanket key, so a caller holding only
+  // admin:password:update can still reset a credential while every other field is stripped below.
   const effectivePermissions = await getPermissions();
   const allowed = stripDisallowedFields('admins', data as Record<string, unknown>, effectivePermissions);
+
+  const mayUpdateAdmin = hasEffectivePermission(effectivePermissions, 'admin:update');
+  const mayUpdatePassword = hasEffectivePermission(effectivePermissions, 'admin:password:update');
+  if (!mayUpdateAdmin && !mayUpdatePassword) {
+    return { success: false, error: 'Not authorized' };
+  }
+  if (Object.keys(allowed).length === 0) {
+    return { success: false, error: 'You do not have permission to change these fields' };
+  }
 
   const session = await getSession();
   if (!session) {

@@ -55,6 +55,7 @@ const MODULES: readonly string[] = [
 // `${module}:${verb}`; verbs already covered by CRUD (audit:read, container:read)
 // are deduped during the build so the registry stays key-unique.
 const DOMAIN_VERBS: readonly { module: string; verb: string }[] = [
+  { module: 'admin', verb: 'password:update' },
   { module: 'contest', verb: 'switch' },
   { module: 'task', verb: 'switch_dataset' },
   { module: 'dataset', verb: 'switch' },

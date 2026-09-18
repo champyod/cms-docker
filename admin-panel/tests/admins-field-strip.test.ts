@@ -33,8 +33,30 @@ describe('admins field-permissions UPDATE contract', (): void => {
     expect(stripped).toEqual({});
   });
 
-  it('strips only keys with update permission and preserves values', (): void => {
+  it('requires admin:password:update for the credential fields', (): void => {
     const perms = new Set<string>(['admin:read', 'admin:update', 'password:reveal']);
+    const access = getFieldAccess('admins', perms);
+    expect(access['name'].canUpdate).toBe(true);
+    expect(access['password'].canUpdate).toBe(false);
+    expect(access['authentication'].canUpdate).toBe(false);
+
+    const stripped = stripDisallowedFields('admins', { name: 'Ada', password: 'secret', authentication: 'hash' }, perms);
+    expect(stripped).toEqual({ name: 'Ada' });
+  });
+
+  it('lets a password-only caller write the credential fields and nothing else', (): void => {
+    const perms = new Set<string>(['admin:password:update']);
+    const access = getFieldAccess('admins', perms);
+    expect(access['password'].canUpdate).toBe(true);
+    expect(access['authentication'].canUpdate).toBe(true);
+    expect(access['name'].canUpdate).toBe(false);
+
+    const stripped = stripDisallowedFields('admins', { name: 'Ada', enabled: true, password: 'secret' }, perms);
+    expect(stripped).toEqual({ password: 'secret' });
+  });
+
+  it('strips only keys with update permission and preserves values', (): void => {
+    const perms = new Set<string>(['admin:read', 'admin:update', 'admin:password:update', 'password:reveal']);
     const stripped = stripDisallowedFields(
       'admins',
       { name: 'Ada', username: 'ada', password: 'secret', authentication: 'hash', enabled: false, last_login_at: 'now' },
