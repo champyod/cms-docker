@@ -20,7 +20,7 @@ import { PasswordFieldWithKind } from '@/components/core/PasswordFieldWithKind';
 import { toast } from 'sonner';
 import type { PasswordRevealState } from '@/components/core/PasswordFieldWithKind';
 import type { PasswordKind } from '@/lib/password-format';
-import { resolveEffectivePermissions, type OverrideEffect } from '@/lib/permission-engine';
+import { hasEffectivePermission, resolveEffectivePermissions, type OverrideEffect } from '@/lib/permission-engine';
 import { PERMISSION_REGISTRY } from '@/lib/permission-registry';
 import type { AdminWithLogin } from '@/lib/prisma-selects';
 import { getFieldAccess, stripDisallowedFields } from '@/lib/field-permissions';
@@ -39,6 +39,8 @@ interface AdminModalProps {
   onClose: () => void;
   onSuccess: () => void;
   initialData?: AdminWithLogin | null;
+  callerPermissions: string[];
+  canRevealPassword: boolean;
 }
 
 interface OverrideDraft {
@@ -53,7 +55,7 @@ function sameIds(a: readonly number[], b: readonly number[]): boolean {
   return a.every((id) => lookup.has(id));
 }
 
-export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminModalProps) {
+export function AdminModal({ isOpen, onClose, onSuccess, initialData, callerPermissions, canRevealPassword }: AdminModalProps) {
   const [formData, setFormData] = useState<AdminFormState>(EMPTY_ADMIN_FORM);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -120,13 +122,17 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
             setAccessError(accessResult.error);
           }
 
-          const revealResult = await revealAdminPassword(initialData.id);
-          if (!cancelled && revealResult.success) {
-            setReveal(
-              revealResult.kind === 'plaintext'
-                ? { state: 'plaintext', value: revealResult.value }
-                : { state: 'bcrypt' },
-            );
+          // Why: without password:reveal the server action refuses the call and its rejection would be
+          // reported as a load failure, so the stored credential is not requested at all.
+          if (canRevealPassword) {
+            const revealResult = await revealAdminPassword(initialData.id);
+            if (!cancelled && revealResult.success) {
+              setReveal(
+                revealResult.kind === 'plaintext'
+                  ? { state: 'plaintext', value: revealResult.value }
+                  : { state: 'bcrypt' },
+              );
+            }
           }
         }
       } catch (loadFailure) {
@@ -141,7 +147,7 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
     return () => {
       cancelled = true;
     };
-  }, [initialData, isOpen]);
+  }, [canRevealPassword, initialData, isOpen]);
 
   // Why: the effective-access preview is computed on the client from the group permission keys and
   // override drafts so it updates instantly while editing, mirroring resolveEffectivePermissions (deny wins).
@@ -163,9 +169,20 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
     [groupPermissionKeys, overrides],
   );
 
+  // Why: what this caller may edit is decided by the caller's own keys; the target's resolved set
+  // above only feeds the "Effective access" preview, so editing a powerful admin cannot unlock fields.
+  const callerPermissionSet = useMemo(() => new Set(callerPermissions), [callerPermissions]);
+
   const fieldAccess = useMemo(
-    () => getFieldAccess('admins', effectivePermissions),
-    [effectivePermissions],
+    () => getFieldAccess('admins', callerPermissionSet),
+    [callerPermissionSet],
+  );
+
+  // Why: creating an admin is gated by admin:create on the server, so a create form is editable
+  // whenever the caller holds that key; the per-field update keys only govern editing an existing row.
+  const canCreate = useMemo(
+    () => hasEffectivePermission(callerPermissionSet, 'admin:create'),
+    [callerPermissionSet],
   );
 
   if (!isOpen) return null;
@@ -243,9 +260,8 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
   };
 
   const persistAccount = async (): Promise<{ success: boolean; error?: string; adminId: number | null }> => {
-    const allowed = stripDisallowedFields('admins', formData as unknown as Record<string, unknown>, effectivePermissions);
-
     if (initialData) {
+      const allowed = stripDisallowedFields('admins', formData as unknown as Record<string, unknown>, callerPermissionSet);
       const updated = await updateAdmin(initialData.id, {
         name: allowed.name as string | undefined,
         passwordKind,
@@ -254,10 +270,12 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
       return { success: updated.success, error: updated.error, adminId: initialData.id };
     }
 
+    // Why: the per-field update keys model the UPDATE contract, so a create payload is built straight
+    // from the validated form data — creation itself is gated by admin:create on the server.
     const created = await createAdmin({
-      name: allowed.name as string,
-      username: allowed.username as string,
-      password: allowed.password as string,
+      name: formData.name,
+      username: formData.username,
+      password: formData.password,
       passwordKind,
     });
     if (!created.success) return { success: false, error: created.error, adminId: null };
@@ -317,8 +335,8 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
       )}
       <form onSubmit={handleSubmit} className="space-y-4">
         <RestrictedField
-          canRead={fieldAccess.name.canRead}
-          canUpdate={fieldAccess.name.canUpdate}
+          canRead={initialData ? fieldAccess.name.canRead : canCreate}
+          canUpdate={initialData ? fieldAccess.name.canUpdate : canCreate}
           label="Display Name"
           lockHint="Read-only — you lack admin:update"
         >
@@ -330,8 +348,8 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
         </RestrictedField>
 
         <RestrictedField
-          canRead={fieldAccess.username.canRead}
-          canUpdate={fieldAccess.username.canUpdate}
+          canRead={initialData ? fieldAccess.username.canRead : canCreate}
+          canUpdate={initialData ? fieldAccess.username.canUpdate : canCreate}
           label="Username"
           lockHint="Immutable after creation"
         >
@@ -344,10 +362,10 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
         </RestrictedField>
 
         <RestrictedField
-          canRead={fieldAccess.password.canRead}
-          canUpdate={fieldAccess.password.canUpdate}
+          canRead={initialData ? fieldAccess.password.canRead : canCreate}
+          canUpdate={initialData ? fieldAccess.password.canUpdate : canCreate}
           label={`Password ${initialData ? '(Leave empty to keep current)' : ''}`}
-          lockHint="Read-only — you lack admin:update"
+          lockHint="Read-only — you lack admin:password:update"
         >
           <PasswordFieldWithKind
             label=""

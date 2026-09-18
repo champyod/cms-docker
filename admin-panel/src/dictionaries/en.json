@@ -87,6 +87,12 @@
   "admins": {
     "title": "Administrators",
     "subtitle": "Manage admin accounts and permissions.",
+    "panel": {
+      "title": "Admin Panel",
+      "addAdmin": "Add Admin",
+      "expand": "Expand the admin panel controls",
+      "collapse": "Collapse the admin panel controls"
+    },
     "actions": {
       "edit": "Edit",
       "delete": "Delete"
