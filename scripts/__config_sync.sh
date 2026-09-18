@@ -836,19 +836,29 @@ main() {
   }
   sync_ranking_logo || log_warn "Logo sync encountered issues (non-fatal)"
 
-  # Run config injection (generates config/cms.toml)
-  if [[ "$DRY_RUN" -eq 0 ]]; then
-    log_info "Running config injection..."
-    set -a; source .env 2>/dev/null || true; set +a
-    if [[ -f scripts/__inject_config.sh ]]; then
-      bash scripts/__inject_config.sh || { log_error "Config injection failed"; exit 1; }
-    else
-      log_warn "__inject_config.sh not found — skipping cms.toml generation"
-    fi
-  else
-    echo "Would run: bash scripts/__inject_config.sh"
-  fi
-
+   # Run config injection (generates config/cms.toml)
+   if [[ "$DRY_RUN" -eq 0 ]]; then
+     log_info "Running config injection..."
+     set -a; source .env 2>/dev/null || true; set +a
+     if [[ -f scripts/__inject_config.sh ]]; then
+       # Fail closed: if injection dies after rewriting .env, restore the
+       # previous .env so the live config doesn't drift from cms.toml.
+       _env_restore=""
+       [[ -f .env ]] && { _env_restore="$(mktemp)"; cp -p .env "$_env_restore"; }
+       bash scripts/__inject_config.sh || {
+         log_error "Config injection failed"
+         if [[ -n "$_env_restore" ]]; then mv "$_env_restore" .env; log_warn "Restored previous .env — cms.toml generation aborted, .env unchanged"; fi
+         rm -f "$_env_restore"
+         exit 1
+       }
+       rm -f "$_env_restore"
+     else
+       log_warn "__inject_config.sh not found — skipping cms.toml generation"
+     fi
+   else
+     log_info "Would run: bash scripts/__inject_config.sh"
+   fi
+ 
   # Ensure backups/.gitkeep exists (monitor mount needs host dir)
   if [[ "$DRY_RUN" -eq 0 ]]; then
     mkdir -p backups && touch backups/.gitkeep

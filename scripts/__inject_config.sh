@@ -173,6 +173,7 @@ r_pass = os.environ["R_PASS"]
 # config.toml [contest] -> cms.toml [contest_web_server] (previously never synced,
 # so config.toml edits like NUM_PROXIES_USED never reached the CMS).
 def _set_contest(key, env_var):
+    global text
     raw = os.environ.get(env_var, "").strip()
     if raw:
         text = set_section_key(text, 'contest_web_server', key, raw)
