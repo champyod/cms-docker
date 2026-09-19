@@ -233,9 +233,24 @@ seed_if_empty() {
   log_info "Seeded registry entry WORKER_0=0.0.0.0:$p into $CORE_ENV"
 }
 
+# Workers dial log-service at boot; refuse to start into a down core.
+wait_core_healthy() {
+  local timeout="${1:-120}" elapsed=0 state
+  while :; do
+    state=$(docker inspect -f '{{.State.Health.Status}}' cms-log-service 2>/dev/null || echo missing)
+    [ "$state" = healthy ] && return 0
+    [ "$elapsed" -ge "$timeout" ] && return 1
+    sleep 5; elapsed=$((elapsed + 5))
+  done
+}
+
 cmd_deploy() {
   require_env_files
   seed_if_empty
+  if ! wait_core_healthy 120; then
+    log_warn "cms-log-service is not healthy — start core first: make core (workers would only crash-loop on connect)"
+    return 1
+  fi
   local target="${1:-all}" rc=0 row s hit w_list
   local -a want=()
   if [ "$target" != "all" ]; then

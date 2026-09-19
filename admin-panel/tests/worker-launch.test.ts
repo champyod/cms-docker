@@ -146,10 +146,12 @@ interface ProfileCase {
 // name with the profile that gates it enabled, or compose answers "no such service".
 const PROFILE_CASES: ProfileCase[] = [
   {
+    // Why nginx-proxy rides along: restart_policies.json maps ranking-web-server
+    // (and admin-panel-next) to nginx, whose /ranking/ upstream goes stale.
     name: 'a container name of the admin profile, which core is required alongside',
     requested: ['cms-ranking-web-server'],
-    profiles: '--profile core --profile admin',
-    services: 'ranking-web-server',
+    profiles: '--profile core --profile admin --profile contest',
+    services: 'ranking-web-server nginx-proxy',
   },
   {
     name: 'the one container whose name is not its service behind a cms- prefix',
@@ -160,8 +162,8 @@ const PROFILE_CASES: ProfileCase[] = [
   {
     name: 'services from several profiles',
     requested: ['cms-ranking-web-server', 'monitor'],
-    profiles: '--profile core --profile admin --profile monitor',
-    services: 'ranking-web-server monitor',
+    profiles: '--profile core --profile admin --profile contest --profile monitor',
+    services: 'ranking-web-server nginx-proxy monitor',
   },
 ];
 

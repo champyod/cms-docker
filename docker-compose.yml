@@ -361,6 +361,13 @@ services:
         condition: service_healthy
       proxy-service:
         condition: service_healthy
+      # /ranking/ + funnel proxy into the admin profile; soft so contest-only bring-up skips them.
+      ranking-web-server:
+        condition: service_healthy
+        required: false
+      admin-panel-next:
+        condition: service_healthy
+        required: false
     environment:
       NGINX_HOST: ${CONTEST_DOMAIN:-contest.cms.local}
       CONTEST_LISTEN_PORT: ${CONTEST_LISTEN_PORT:-8888}

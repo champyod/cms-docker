@@ -15,6 +15,16 @@
     ],
     "cms-contest-web-server": [
       "cms-nginx-contest"
+    ],
+    "cms-evaluation-service": [
+      "cms-worker",
+      "cms-contest-web-server"
+    ],
+    "cms-ranking-web-server": [
+      "cms-nginx-contest"
+    ],
+    "cms-admin-panel-next": [
+      "cms-nginx-contest"
     ]
   },
   "env_triggers": {
