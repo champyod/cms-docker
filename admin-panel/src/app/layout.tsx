@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import { Toaster } from '@/components/ui/sonner';
 import { NO_FLASH_THEME_SCRIPT } from '@/lib/theme';
+import { NO_FLASH_DISPLAY_SCRIPT } from '@/lib/display-density';
 import '@fontsource/chakra-petch/400.css';
 import '@fontsource/chakra-petch/500.css';
 import '@fontsource/chakra-petch/600.css';
@@ -36,6 +37,7 @@ export default function RootLayout({
     <html lang="en" className={rootClassName} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: NO_FLASH_THEME_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: NO_FLASH_DISPLAY_SCRIPT }} />
       </head>
       <body className="font-sans antialiased">
         {children}

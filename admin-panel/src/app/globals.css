@@ -92,4 +92,23 @@
     @apply bg-background text-foreground antialiased;
     min-height: 100vh;
   }
+
+  /* Display density: compact shrinks the Tailwind spacing base so every
+     p-*/gap-*/m-* tightens systemically. Text sizes ride on rem, so spacing
+     follows the font size automatically. */
+  .density-compact {
+    --spacing: 0.2rem;
+  }
+
+  .text-size-small {
+    font-size: 14px;
+  }
+
+  .text-size-medium {
+    font-size: 16px;
+  }
+
+  .text-size-large {
+    font-size: 18px;
+  }
 }
