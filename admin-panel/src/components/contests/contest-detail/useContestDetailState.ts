@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { updateContestSettings, removeParticipant, removeTaskFromContest } from '@/app/actions/contests';
@@ -19,6 +19,12 @@ export function useContestDetailState(contest: ContestLike) {
   const [selectedParticipation, setSelectedParticipation] = useState<{ id: number; username: string } | null>(null);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({ info: true, participants: true, tasks: true, services: true });
   const [saving, setSaving] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+  }, []);
   const router = useRouter();
   const deploy = useDeployContest();
   const confirm = useConfirm();
@@ -73,8 +79,19 @@ export function useContestDetailState(contest: ContestLike) {
 
   const handleSave = async () => {
     setSaving(true);
-    try { await updateContestSettings(contest.id, formData); router.refresh(); }
-    catch (error) { console.error('Failed to save:', error); }
+    try {
+      const result = await updateContestSettings(contest.id, formData);
+      if (result.success) {
+        toast.success('Contest saved', { description: 'Settings updated successfully.' });
+        setJustSaved(true);
+        if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+        savedTimerRef.current = setTimeout(() => setJustSaved(false), 2000);
+        router.refresh();
+      } else {
+        toast.error('Save failed', { description: result.error ?? 'Validation failed.' });
+      }
+    }
+    catch (error) { toast.error('Save failed', { description: (error as Error).message }); }
     finally { setSaving(false); }
   };
 
@@ -90,7 +107,7 @@ export function useContestDetailState(contest: ContestLike) {
     isParticipationModalOpen, setIsParticipationModalOpen,
     isTeamModalOpen, setIsTeamModalOpen,
     selectedParticipation, setSelectedParticipation,
-    expandedSections, toggleSection, saving,
+    expandedSections, toggleSection, saving, justSaved,
     deployState, confirmDeploy, resetDeployState: resetDeploy, showDeployModal, setShowDeployModal, handleSetActive,
     formData, setFormData, handleSave,
     handleOpenParticipationSettings, handleMarkAsTest, handleRemoveTask, handleRemoveParticipant,

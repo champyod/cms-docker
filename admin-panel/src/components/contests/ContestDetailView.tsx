@@ -47,7 +47,7 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, tea
 
   return (
     <div className="space-y-6">
-      <ContestDetailHeader name={contest.name} description={contest.description} isActive={contest.is_active} saving={s.saving} canEdit={canUpdate} onSetActive={s.handleSetActive} onSave={s.handleSave} onEdit={() => setIsEditOpen(true)} />
+      <ContestDetailHeader name={contest.name} description={contest.description} isActive={contest.is_active} saving={s.saving} justSaved={s.justSaved} canEdit={canUpdate} onSetActive={s.handleSetActive} onSave={s.handleSave} onEdit={() => setIsEditOpen(true)} />
       <ContestStatusCard contest={contest} formData={{ start: s.formData.start, stop: s.formData.stop, analysis_start: s.formData.analysis_start, analysis_stop: s.formData.analysis_stop }} onChange={(p) => s.setFormData({ ...s.formData, ...p })} />
       <ContestParticipantsSection participations={contest.participations} expanded={s.expandedSections.participants} onToggle={() => s.toggleSection('participants')} onAddParticipant={() => s.setIsParticipantModalOpen(true)} onAddTeam={() => s.setIsTeamModalOpen(true)} onMarkAsTest={s.handleMarkAsTest} onOpenSettings={s.handleOpenParticipationSettings} onRemove={s.handleRemoveParticipant} />
       <ContestTasksSection tasks={contest.tasks} expanded={s.expandedSections.tasks} locale={locale} onToggle={() => s.toggleSection('tasks')} onAddTask={() => s.setIsTaskModalOpen(true)} onRemoveTask={s.handleRemoveTask} />

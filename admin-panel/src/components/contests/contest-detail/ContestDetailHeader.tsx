@@ -1,6 +1,7 @@
 'use client';
 
-import { Save, Rocket, Pencil } from 'lucide-react';
+import { Check, Save, Rocket, Pencil } from 'lucide-react';
+import { motion } from 'motion/react';
 import { Button } from '@/components/core/Button';
 import { Badge } from '@/components/core/Badge';
 
@@ -9,13 +10,19 @@ interface Props {
   description: string;
   isActive: boolean;
   saving: boolean;
+  justSaved: boolean;
   canEdit: boolean;
   onSetActive: () => void;
   onSave: () => void;
   onEdit: () => void;
 }
 
-export function ContestDetailHeader({ name, description, isActive, saving, canEdit, onSetActive, onSave, onEdit }: Props) {
+export function ContestDetailHeader({ name, description, isActive, saving, justSaved, canEdit, onSetActive, onSave, onEdit }: Props) {
+  const saveButton = (
+    <Button variant="positive" icon={justSaved ? Check : Save} onClick={onSave} loading={saving} disabled={saving}>
+      {saving ? 'Saving...' : justSaved ? 'Saved' : 'Save Changes'}
+    </Button>
+  );
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
@@ -41,9 +48,17 @@ export function ContestDetailHeader({ name, description, isActive, saving, canEd
             Set as Active Contest
           </Button>
         )}
-        <Button variant="positive" icon={Save} onClick={onSave} loading={saving} disabled={saving}>
-          {saving ? 'Saving...' : 'Save Changes'}
-        </Button>
+        {justSaved && !saving ? (
+          <motion.span
+            key="saved"
+            initial={{ scale: 0.9, opacity: 0.5 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: 'spring', stiffness: 500, damping: 22 }}
+            className="inline-flex"
+          >
+            {saveButton}
+          </motion.span>
+        ) : saveButton}
       </div>
     </div>
   );
