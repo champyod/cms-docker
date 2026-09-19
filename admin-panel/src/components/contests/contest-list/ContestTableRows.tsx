@@ -69,7 +69,7 @@ export function ContestTableRow({ contest, locale, isSuperAdmin, canManage, canU
         </button>
       </TableCell>
       <TableCell>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Badge variant={status.variant}>{status.label}</Badge>
           {isActive && <Badge>Deployed</Badge>}
         </div>
