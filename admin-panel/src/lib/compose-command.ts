@@ -101,7 +101,10 @@ function buildStackCommand(action: ComposeAction, stacks: readonly ComposeServic
 
   if (action === 'up') {
     const recreate = `${base} up -d ${invocation.mode === 'src' ? '--build' : '--no-build'}`;
-    return invocation.mode === 'src' ? recreate : `(${base} pull || true) && ${recreate}`;
+    const refreshed = stacks.includes('contest')
+      ? `${recreate} && bash scripts/__contest_dns_refresh.sh`
+      : recreate;
+    return invocation.mode === 'src' ? refreshed : `(${base} pull || true) && ${refreshed}`;
   }
   // An explicit build request is a full rebuild from the current source, so it neither pulls nor
   // takes the mode: the operator asked for a local image, whatever the deployment otherwise runs.

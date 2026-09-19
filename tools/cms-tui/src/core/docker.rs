@@ -50,6 +50,9 @@ impl DockerClient {
 
     /// Deploys the requested stack via `make`.
     ///
+    /// Contest deploys recreate the web server, so a successful contest
+    /// deploy refreshes nginx through the shared script (parity with `make`).
+    ///
     /// # Errors
     ///
     /// Returns `Err` if `stack` is unknown or empty.
@@ -67,6 +70,13 @@ impl DockerClient {
                 .run_make(&target, &envs)
                 .unwrap_or_else(|err| log_spawn_error(&target, &err));
             report.steps.push((target, code));
+        }
+        if matches!(stack, "contest" | "all") && report.is_success() {
+            let code = self
+                .runner
+                .run_sh("__contest_dns_refresh.sh", &[])
+                .unwrap_or_else(|err| log_spawn_error("nginx-refresh", &err));
+            report.steps.push(("nginx-refresh".to_string(), code));
         }
         Ok(report)
     }

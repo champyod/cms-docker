@@ -46,7 +46,7 @@ describe('the stack controls run the unified project in the deployment mode', ()
 
   it('src: the contest stack builds under core and contest', (): void => {
     expect(compose('up', 'contest', 'src')).toBe(
-      `docker compose ${FILES} --profile core --profile contest up -d --build`,
+      `docker compose ${FILES} --profile core --profile contest up -d --build && bash scripts/__contest_dns_refresh.sh`,
     );
   });
 
@@ -54,13 +54,13 @@ describe('the stack controls run the unified project in the deployment mode', ()
   // containers, so it is started through the fleet script rather than recreated by compose.
   it('src: an all-up starts the fleet, then builds every offered stack', (): void => {
     expect(compose('up', undefined, 'src')).toBe(
-      `bash scripts/__admin_worker_control.sh start && docker compose ${FILES} --profile core --profile admin --profile contest up -d --build`,
+      `bash scripts/__admin_worker_control.sh start && docker compose ${FILES} --profile core --profile admin --profile contest up -d --build && bash scripts/__contest_dns_refresh.sh`,
     );
   });
 
   it('img: an all-up starts the fleet, then pulls and recreates', (): void => {
     expect(compose('up', undefined, 'img')).toBe(
-      `bash scripts/__admin_worker_control.sh start && (docker compose ${FILES} --profile core --profile admin --profile contest pull || true) && docker compose ${FILES} --profile core --profile admin --profile contest up -d --no-build`,
+      `bash scripts/__admin_worker_control.sh start && (docker compose ${FILES} --profile core --profile admin --profile contest pull || true) && docker compose ${FILES} --profile core --profile admin --profile contest up -d --no-build && bash scripts/__contest_dns_refresh.sh`,
     );
   });
 });
@@ -122,7 +122,7 @@ describe('a containerised panel hands compose the host repository', () => {
 
   it('src: the recreate leads with the location', (): void => {
     expect(compose('up', 'contest', 'src', HOST_CONTAINERISED)).toBe(
-      `docker compose ${HOST_LOCATION_FLAGS} ${FILES} --profile core --profile contest up -d --build`,
+      `docker compose ${HOST_LOCATION_FLAGS} ${FILES} --profile core --profile contest up -d --build && bash scripts/__contest_dns_refresh.sh`,
     );
   });
 

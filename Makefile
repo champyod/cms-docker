@@ -106,6 +106,7 @@ contest:
 		echo "DEPLOYMENT_TYPE=src → building contest images..."; \
 		$(COMPOSE_CMD) $(COMPOSE_FLAGS) $(CONTEST_UP_PROFILES) up -d --build; \
 	fi
+	@bash scripts/__contest_dns_refresh.sh
 	@echo "Contest profile started (CONTEST_ID canonical)."
 
 worker:

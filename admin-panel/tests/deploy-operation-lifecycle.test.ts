@@ -860,6 +860,7 @@ describe('contest deploy lifecycle', () => {
     // Image deployments pull the registry images first, exactly as the Makefile's contest target does.
     expect(mocks.script).toContain(' pull evaluation-service proxy-service contest-web-server nginx-proxy || true) && docker compose');
     expect(mocks.script.indexOf('pull')).toBeLessThan(mocks.script.indexOf('up -d'));
+    expect(mocks.script).toContain('bash scripts/__contest_dns_refresh.sh');
     // The deploy writes its own outcome markers, from the paths handed to it as argv.
     expect(mocks.script).toContain('> "$1"');
     expect(mocks.script).toContain('> "$2"');
@@ -872,7 +873,7 @@ describe('contest deploy lifecycle', () => {
       location: { projectDirectory: '/host/repo', envFile: '/host/repo/.env' },
     });
     expect(command).toBe(
-      "docker compose --project-directory '/host/repo' --env-file '/host/repo/.env' -f docker-compose.yml -f docker-compose.override.yml --profile core --profile contest up -d --build --force-recreate evaluation-service proxy-service contest-web-server nginx-proxy",
+      "docker compose --project-directory '/host/repo' --env-file '/host/repo/.env' -f docker-compose.yml -f docker-compose.override.yml --profile core --profile contest up -d --build --force-recreate evaluation-service proxy-service contest-web-server nginx-proxy && bash scripts/__contest_dns_refresh.sh",
     );
   });
 

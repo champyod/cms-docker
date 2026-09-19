@@ -119,9 +119,12 @@ export function buildContestDeployCommand(plan: ContestDeployPlan): string {
     .join(' ');
   const scope = CONTEST_SERVICES.join(' ');
   const recreate = `${invocation} up -d ${plan.mode === 'src' ? '--build' : '--no-build'} --force-recreate ${scope}`;
+  // Refresh nginx after the web server is recreated (stale upstream DNS).
+  // Single source of truth: scripts/__contest_dns_refresh.sh.
+  const refreshed = `${recreate} && bash scripts/__contest_dns_refresh.sh`;
   // Best-effort pull, exactly like the Makefile's `pull || true`: the host may already hold the image
   // this deployment runs, and the recreate is what the operator asked for.
-  return plan.mode === 'src' ? recreate : `(${invocation} pull ${scope} || true) && ${recreate}`;
+  return plan.mode === 'src' ? refreshed : `(${invocation} pull ${scope} || true) && ${refreshed}`;
 }
 
 /**
