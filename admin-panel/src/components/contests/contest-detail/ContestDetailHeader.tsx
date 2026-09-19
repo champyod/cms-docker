@@ -1,6 +1,6 @@
 'use client';
 
-import { Rocket, Pencil } from 'lucide-react';
+import { Rocket, Power, Pencil } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { SaveButton } from '@/components/core/SaveButton';
 import { Badge } from '@/components/core/Badge';
@@ -39,9 +39,7 @@ export function ContestDetailHeader({ name, description, isActive, saving, justS
           </Button>
         )}
         {!isActive && (
-          <Button variant="positiveOutline" icon={Rocket} onClick={onSetActive} disabled={saving}>
-            Set as Active Contest
-          </Button>
+          <Button variant="positiveOutline" icon={Power} iconOnly tooltip="Set as Active Contest" onClick={onSetActive} disabled={saving} />
         )}
         <SaveButton saving={saving} justSaved={justSaved} idleLabel="Save Changes" disabled={saving} onClick={onSave} />
       </div>

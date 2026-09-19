@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { TableCell, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
 import { Badge } from '@/components/core/Badge';
-import { Calendar, Clock, ExternalLink, Pencil, Trash2, Rocket, CheckCircle2 } from 'lucide-react';
+import { Calendar, Clock, ExternalLink, Pencil, Trash2, Power, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/apiClient';
 import { ROW_SELECTED_CLASSES } from '@/hooks/useShortcuts';
@@ -90,7 +90,7 @@ export function ContestTableRow({ contest, locale, isSuperAdmin, canManage, canU
             <Button variant="ghost" size="sm" icon={Pencil} tooltip="Edit" aria-label={`Edit ${contest.name}`} onClick={() => onEdit(contest.id)} />
           )}
           {isSuperAdmin && !isActive && (
-            <Button variant="ghost" size="sm" icon={Rocket} onClick={() => onSetActive(contest.id)}>Set Active</Button>
+            <Button variant="ghost" size="sm" icon={Power} iconOnly tooltip="Set Active" onClick={() => onSetActive(contest.id)} />
           )}
           {canManage && (
             <Button variant="ghost" size="sm" icon={Trash2} tooltip="Delete" onClick={() => { void handleDelete(contest.id); }} />

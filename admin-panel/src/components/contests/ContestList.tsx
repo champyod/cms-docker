@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { EmptyState } from '@/components/core/EmptyState';
 import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
 import { Badge } from '@/components/core/Badge';
-import { ExternalLink, Pencil, Rocket, Trash2, Trophy } from 'lucide-react';
+import { ExternalLink, Pencil, Power, Trash2, Trophy } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { apiClient } from '@/lib/apiClient';
@@ -84,7 +84,7 @@ function ContestMobileCard({ contest, locale, isSuperAdmin, canManage, canUpdate
         )}
         {isSuperAdmin && !contest.is_active && (
           <button onClick={() => onSetActive(contest.id)} aria-label={`Set contest ${contest.id} active`} title="Set Active" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-primary">
-            <Rocket className="h-4 w-4" />
+            <Power className="h-4 w-4" />
           </button>
         )}
         {canManage && (
