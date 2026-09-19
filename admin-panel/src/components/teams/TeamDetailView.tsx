@@ -7,9 +7,11 @@ import { useState } from 'react';
 
 import { deleteTeam, updateTeam } from '@/app/actions/teams';
 import { Button } from '@/components/core/Button';
+import { SaveButton } from '@/components/core/SaveButton';
 import { Card } from '@/components/core/Card';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
+import { useJustSavedFlag } from '@/hooks/useJustSavedFlag';
 
 interface TeamMember {
   user: {
@@ -46,6 +48,7 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
   const confirm = useConfirm();
   const { destructiveConfirm } = useConfirmationCopy();
   const [saving, setSaving] = useState(false);
+  const { justSaved, flashSaved } = useJustSavedFlag();
   const [formData, setFormData] = useState({
     code: team.code,
     name: team.name,
@@ -66,6 +69,7 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
       const result = await updateTeam(team.id, formData);
       if (result.success) {
         toast.success('Team saved', { description: `${team.name} updated successfully.` });
+        flashSaved();
         router.refresh();
       } else {
         toast.error('Failed: ' + result.error);
@@ -93,12 +97,8 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
           <p className="text-muted-foreground mt-1">Team Code: <code className="text-primary">{team.code}</code></p>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="negativeOutline" icon={Trash2} onClick={() => { void handleDelete(); }}>
-            Delete Team
-          </Button>
-          <Button variant="positive" icon={Save} loading={saving} disabled={saving} onClick={handleSave}>
-            {saving ? 'Saving...' : 'Save Changes'}
-          </Button>
+          <Button variant="negativeOutline" icon={Trash2} iconOnly tooltip="Delete team" onClick={() => { void handleDelete(); }} />
+          <SaveButton saving={saving} justSaved={justSaved} idleLabel="Save Changes" disabled={saving} onClick={() => { void handleSave(); }} />
         </div>
       </div>
       <Card className="overflow-hidden">

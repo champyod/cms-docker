@@ -43,7 +43,7 @@ export function SettingsTab({ formData, onForm, revealed, revealTab, onRevealTab
       <div>
         <div className="mb-2 flex items-center justify-between">
           <label className="block text-xs font-bold uppercase tracking-widest text-muted-foreground">Password (optional)</label>
-          <Button type="button" size="sm" variant="secondary" icon={Eye} loading={revealing} disabled={revealing} onClick={onReveal}>{revealing ? 'Revealing…' : 'Reveal current'}</Button>
+          <Button type="button" size="sm" variant="secondary" icon={Eye} iconOnly tooltip="Reveal current password" loading={revealing} disabled={revealing} onClick={onReveal} />
         </div>
         <PasswordFieldWithKind label="" value={formData.password} onChange={(password) => onForm({ password })} placeholder="Leave blank to keep current password" kind={formData.password_kind} onKind={(password_kind) => onForm({ password_kind })} />
         {revealError && <p className="mt-2 text-xs text-destructive">{revealError}</p>}

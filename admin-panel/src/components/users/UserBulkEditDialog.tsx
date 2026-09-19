@@ -58,15 +58,9 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button variant="ghost" icon={Wand2} onClick={() => runRegenerate('username')} disabled={loading || rows.length === 0}>
-            Regenerate Username
-          </Button>
-          <Button variant="ghost" icon={Wand2} onClick={() => runRegenerate('password')} disabled={loading || rows.length === 0}>
-            Regenerate Password
-          </Button>
-          <Button variant="secondary" icon={Download} onClick={handleExportSelectedRows} disabled={rows.length === 0}>
-            Export CSV
-          </Button>
+          <Button variant="ghost" icon={Wand2} iconOnly tooltip="Regenerate Username" onClick={() => runRegenerate('username')} disabled={loading || rows.length === 0} />
+          <Button variant="ghost" icon={Wand2} iconOnly tooltip="Regenerate Password" onClick={() => runRegenerate('password')} disabled={loading || rows.length === 0} />
+          <Button variant="secondary" icon={Download} iconOnly tooltip="Export CSV" onClick={handleExportSelectedRows} disabled={rows.length === 0} />
         </div>
 
         <ContestSection

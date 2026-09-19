@@ -39,9 +39,9 @@ function SectionActions({
         onClick={() => void onPersist(section.filename, false)}
         disabled={saving}
         icon={Save}
-      >
-        Save Only
-      </Button>
+        iconOnly
+        tooltip="Save Only"
+      />
       {showRestartButton && (
         <Button
           size="sm"
@@ -49,9 +49,9 @@ function SectionActions({
           disabled={saving}
           loading={saving}
           icon={RefreshCw}
-        >
-          Save & Restart
-        </Button>
+          iconOnly
+          tooltip="Save & Restart"
+        />
       )}
     </div>
   );
