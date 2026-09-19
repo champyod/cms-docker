@@ -13,7 +13,7 @@
 #
 # Usage:
 #   scripts/__worker_tui.sh                              interactive TUI (tty)
-#   scripts/__worker_tui.sh attach [spec host port-spec] attach a remote
+#   scripts/__worker_tui.sh attach [spec host port-spec [main-ip]] attach a remote
 #                                    worker box: registry-only rows for
 #                                    spec "4", "4,5,6,7" or "4-7"
 #   scripts/__worker_tui.sh deploy [all|<shard>|<spec>]  non-interactive deploy
@@ -50,6 +50,20 @@ env_val() { # file key -> value (exact key match, first hit)
 global_memory() { env_val "$WORKER_ENV" WORKER_MEMORY_LIMIT || true; }
 global_cpus()   { env_val "$WORKER_ENV" WORKER_CPU_LIMIT   || true; }
 core_host_ip()  { env_val "$CORE_ENV"   CORE_SERVICES_HOST || true; }
+
+toml_val() { # key -> value from config.toml (first hit, quotes stripped)
+  sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*[\"']\\{0,1\\}\\([^\"'#]*\\)[\"']\\{0,1\\}.*/\\1/p" config.toml 2>/dev/null | head -n 1
+}
+
+# IP the workers must dial to reach this main server: explicit Tailscale IP
+# first, else the first non-loopback address. Empty when undeterminable.
+main_reachable_ip() {
+  local ip
+  ip="$(toml_val TAILSCALE_IP)"
+  if [ -n "$ip" ]; then printf '%s' "$ip"; return 0; fi
+  ip="$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -v '^127\.' | grep -v '^::1' | head -n 1 || true)"
+  printf '%s' "${ip:-}"
+}
 
 # ---------------------------------------------------------------------------
 # Registry persistence (.env WORKER_N block + optional flags in worker env)
@@ -359,17 +373,32 @@ edit_entry() {
 # Attach a remote worker box: write its shards into the registry as
 # registry-only (LOCAL=0) rows the core routes to, then print the block to
 # run on the worker box (same rows, no LOCAL override → deploy locally there).
-attach_entry() {  # [shard-spec host port-spec] — prompts when args are omitted
+attach_entry() {  # [shard-spec host port-spec [main-ip]] — prompts when args are omitted
   require_env_files
-  local spec="$1" host="$2" pspec="$3"
+  local spec="$1" host="$2" pspec="$3" main="$4"
   if [ -z "$spec" ] || [ -z "$host" ] || [ -z "$pspec" ]; then
-    [ -t 0 ] && [ -t 1 ] || log_die "usage: $0 attach <shard-spec> <host> <port-spec>"
+    [ -t 0 ] && [ -t 1 ] || log_die "usage: $0 attach <shard-spec> <host> <port-spec> [main-ip]"
     printf 'Shards to attach (e.g. 4,5,6,7 or 4-7): '
     IFS= read -r spec || return 0
     printf 'Worker box host/IP for the core to reach it on: '
     IFS= read -r host || return 0
     printf 'Ports (base e.g. 26004, or explicit 26004-26007): '
     IFS= read -r pspec || return 0
+  fi
+  if [ -z "$main" ]; then
+    local guess
+    guess="$(main_reachable_ip)"
+    if [ -t 0 ] && [ -t 1 ]; then
+      printf 'Main server IP the workers must dial [%s]: ' "$guess"
+      IFS= read -r main || return 0
+      [ -z "$main" ] && main="$guess"
+    else
+      main="$guess"
+    fi
+  fi
+  if [ -z "$main" ] || [[ "$main" =~ [[:space:]:] ]]; then
+    log_warn "main server IP required (no whitespace or ':') — set TAILSCALE_IP in config.toml or pass it explicitly"
+    return 1
   fi
   local s_list p_list
   s_list="$(expand_spec "$spec")" || { log_warn "bad shard spec: $spec"; return 1; }
@@ -394,7 +423,7 @@ attach_entry() {  # [shard-spec host port-spec] — prompts when args are omitte
     { [ "$p" -ge 1 ] && [ "$p" -le 65535 ]; } || { log_warn "port out of range: $p"; return 1; }
   done
   attach_write_rows "$host" "${shards[@]}" --- "${ports[@]}" || return 1
-  attach_print_block "$host" "${shards[@]}" --- "${ports[@]}"
+  attach_print_block "$main" "$host" "${shards[@]}" --- "${ports[@]}"
 }
 
 # Replace the given shards' registry rows with LOCAL=0 entries and save.
@@ -427,7 +456,12 @@ attach_write_rows() {
 }
 
 # Print the worker-side setup block (paste on the worker box).
+# Why sed-append instead of a heredoc: the file ends in [tailscale], so
+# appended WORKER lines would land in the wrong section (and a second
+# [worker] header duplicates it). Appending under the existing header keeps
+# every key in its section with no manual editing.
 attach_print_block() {
+  local main="$1"; shift
   local host="$1"; shift
   local -a shards=() ports=()
   while [ "$1" != "---" ]; do shards+=("$1"); shift; done
@@ -436,15 +470,20 @@ attach_print_block() {
   for arg in "$@"; do ports+=("$arg"); done
   local i
   echo ""
-  log_info "On the worker box ($host), from its cms-docker checkout:"
-  echo "  # Add these WORKER_N entries to config.toml [worker] section, then sync"
-  echo "  cat >> config.toml <<'FLEET'"
-  echo ""
-  echo "[worker]"
+  log_info "On the worker box ($host), from a fresh checkout of this repository:"
+  echo "  # 1) Point the worker at this main server (no manual editing)"
+  echo "  sed -i 's|^CORE_SERVICES_HOST.*|CORE_SERVICES_HOST = \"$main\"|' config.toml"
+  echo "  grep -q '^CORE_SERVICES_HOST' config.toml || echo 'CORE_SERVICES_HOST = \"$main\"' >> config.toml"
+  echo "  # 2) Register this box's shards (appended under [worker])"
+  printf '  sed -i \x27/^\\[worker\\]/a'
   for i in "${!shards[@]}"; do
-    printf 'WORKER_%s = "%s:%s"\n' "${shards[$i]}" "$host" "${ports[$i]}"
+    printf ' \\\n  WORKER_%s = \"%s:%s\"' "${shards[$i]}" "$host" "${ports[$i]}"
   done
-  echo "FLEET"
+  printf '\x27 config.toml\n'
+  echo "  # 3) Confirm the core ports are reachable from here (all six must say open)"
+  echo "  for p in 25000 28000 28500 29000 22000 28600; do timeout 3 bash -c \"</dev/tcp/$main/\$p\" && echo \"\$p open\" || echo \"\$p CLOSED\"; done"
+  echo "  # 4) Cgroups, then start and verify"
+  echo "  sudo ./scripts/__worker_cgroup_setup.sh /sys/fs/cgroup/cms-isolate"
   echo "  ./cms config sync && ./cms worker deploy all && ./cms worker list"
 }
 
@@ -567,7 +606,7 @@ case "${1:-tui}" in
     tui_loop ;;
   attach)
     shift
-    attach_entry "${1:-}" "${2:-}" "${3:-}" ;;
+    attach_entry "${1:-}" "${2:-}" "${3:-}" "${4:-}" ;;
   deploy) cmd_deploy "${2:-all}" ;;
   stop)   cmd_stop "${2:-all}" ;;
   list)   list_plain ;;

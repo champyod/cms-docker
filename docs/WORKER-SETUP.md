@@ -179,11 +179,15 @@ Recommended — the fleet flow generates it for you. On the **main server**,
 run:
 
 ```bash
-./cms worker attach <shard-spec> <this-box-ip> <port-spec>
+./cms worker attach <shard-spec> <this-box-ip> <port-spec> [main-ip]
 ```
 
 This registers the box as registry-only fleet rows and prints a block; on
-**this worker box** (this repository checked out), run that block — its
+**this worker box** (this repository checked out), run that block — it sets
+`CORE_SERVICES_HOST` to the main server (prompted with the Tailscale IP
+default, hard-fails when undeterminable), appends the `WORKER_N` rows under
+`[worker]`, checks all six core ports are reachable, then runs cgroup setup
+and deploys. No manual `config.toml` editing on either side. Its
 `./cms config sync` generates `config/cms.toml` with the core services
 pointed at the main server.
 
