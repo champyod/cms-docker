@@ -58,9 +58,15 @@ export function DatasetManagersTab({
     if (!(await confirm(destructiveConfirm('managerFile')))) return;
     try {
       const res = await apiClient.delete(`/api/managers/${id}`);
-      if (res.success) onReload();
+      if (res.success) {
+        toast.success('Manager file deleted');
+        onReload();
+      } else {
+        toast.error('Delete failed', { description: res.error });
+      }
     } catch (err) {
       console.error(err);
+      toast.error('Delete failed', { description: 'An unexpected error occurred' });
     }
   };
 

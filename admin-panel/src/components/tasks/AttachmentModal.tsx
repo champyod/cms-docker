@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { Upload } from 'lucide-react';
 import { Dialog } from '@/components/core/Dialog';
 import { Button } from '@/components/core/Button';
@@ -46,15 +47,19 @@ export function AttachmentModal({ isOpen, onClose, taskId, onSuccess }: Attachme
       const base64 = await readFileAsBase64(file);
       const result = await apiClient.post('/api/attachments', { taskId, filename, fileData: base64 });
       if (result.success) {
+        toast.success('Attachment uploaded', { description: `"${filename}" saved successfully.` });
         onSuccess();
         onClose();
         setFile(null);
         setCustomFilename('');
       } else {
-        setError(result.error ?? 'Failed to upload attachment');
+        const message = result.error ?? 'Failed to upload attachment';
+        setError(message);
+        toast.error('Upload failed', { description: message });
       }
     } catch {
       setError('An unexpected error occurred');
+      toast.error('Upload failed', { description: 'An unexpected error occurred' });
     } finally {
       setLoading(false);
     }

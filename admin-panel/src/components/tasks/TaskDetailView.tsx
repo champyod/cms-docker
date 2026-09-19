@@ -65,45 +65,78 @@ export function TaskDetailView({ task, permissionKeys }: TaskDetailViewProps): R
   const reload = (): void => router.refresh();
 
   const handleActivateDataset = async (datasetId: number): Promise<void> => {
-    await apiClient.put(`/api/datasets/${datasetId}`, { action: 'activate' });
-    reload();
+    const result = await apiClient.put(`/api/datasets/${datasetId}`, { action: 'activate' });
+    if (result.success) {
+      toast.success('Dataset activated', { description: 'It is now the live dataset.' });
+      reload();
+    } else {
+      toast.error('Activation failed', { description: result.error });
+    }
   };
 
   const handleCloneDataset = async (datasetId: number, description: string): Promise<void> => {
     const newName = prompt('Enter name for cloned dataset:', `${description} (copy)`);
     if (!newName) return;
-    await apiClient.post(`/api/datasets/${datasetId}/clone`, { newDescription: newName });
-    reload();
+    const result = await apiClient.post(`/api/datasets/${datasetId}/clone`, { newDescription: newName });
+    if (result.success) {
+      toast.success('Dataset cloned', { description: `"${newName}" created successfully.` });
+      reload();
+    } else {
+      toast.error('Clone failed', { description: result.error });
+    }
   };
 
   const handleRenameDataset = async (datasetId: number, currentDesc: string): Promise<void> => {
     const newName = prompt('Enter new name:', currentDesc);
     if (!newName || newName === currentDesc) return;
-    await apiClient.put(`/api/datasets/${datasetId}`, { action: 'rename', description: newName });
-    reload();
+    const result = await apiClient.put(`/api/datasets/${datasetId}`, { action: 'rename', description: newName });
+    if (result.success) {
+      toast.success('Dataset renamed', { description: `Renamed to "${newName}".` });
+      reload();
+    } else {
+      toast.error('Rename failed', { description: result.error });
+    }
   };
 
   const handleDeleteDataset = async (datasetId: number): Promise<void> => {
     if (!(await confirm(destructiveConfirm('dataset')))) return;
     const result = await apiClient.delete(`/api/datasets/${datasetId}`);
     if (!result.success) toast.error(result.error);
-    else reload();
+    else {
+      toast.success('Dataset deleted');
+      reload();
+    }
   };
 
   const handleToggleAutojudge = async (datasetId: number): Promise<void> => {
-    await apiClient.put(`/api/datasets/${datasetId}`, { action: 'toggle-autojudge' });
-    reload();
+    const result = await apiClient.put(`/api/datasets/${datasetId}`, { action: 'toggle-autojudge' });
+    if (result.success) {
+      toast.success('Autojudge toggled');
+      reload();
+    } else {
+      toast.error('Toggle failed', { description: result.error });
+    }
   };
 
   const handleDeleteTestcase = async (tcId: number): Promise<void> => {
     if (!(await confirm(destructiveConfirm('testcase')))) return;
-    await apiClient.delete(`/api/testcases/${tcId}`);
-    reload();
+    const result = await apiClient.delete(`/api/testcases/${tcId}`);
+    if (result.success) {
+      toast.success('Testcase deleted');
+      reload();
+    } else {
+      toast.error('Delete failed', { description: result.error });
+    }
   };
 
   const handleTogglePublic = async (tcId: number): Promise<void> => {
-    await apiClient.put(`/api/testcases/${tcId}`, { action: 'toggle-public' });
-    reload();
+    const result = await apiClient.put(`/api/testcases/${tcId}`, { action: 'toggle-public' });
+    if (result.success) {
+      toast.success('Visibility updated');
+      reload();
+    } else {
+      toast.error('Update failed', { description: result.error });
+    }
   };
 
   return (

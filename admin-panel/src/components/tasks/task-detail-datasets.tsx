@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import { HelpCircle, ChevronDown, ChevronUp, Settings, Database, CheckCircle, Copy, Edit, ToggleLeft, ToggleRight, TestTube, Plus, Trash2, Upload, Paperclip } from 'lucide-react';
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
@@ -145,8 +146,13 @@ export function AttachmentsSection({ attachments, onUpload }: { attachments: Arr
 
   const handleDeleteAttachment = async (attachmentId: number): Promise<void> => {
     if (!(await confirm(destructiveConfirm('attachment')))) return;
-    await apiClient.delete(`/api/attachments/${attachmentId}`);
-    router.refresh();
+    const result = await apiClient.delete(`/api/attachments/${attachmentId}`);
+    if (result.success) {
+      toast.success('Attachment deleted');
+      router.refresh();
+    } else {
+      toast.error('Delete failed', { description: result.error });
+    }
   };
 
   return (
