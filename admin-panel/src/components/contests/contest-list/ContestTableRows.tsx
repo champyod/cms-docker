@@ -58,10 +58,10 @@ export function ContestTableRow({ contest, locale, isSuperAdmin, canManage, canU
           {isActive && <CheckCircle2 className="h-3.5 w-3.5 text-primary" />}
         </div>
       </TableCell>
-      <TableCell className="max-w-48 font-medium">
+      <TableCell className="font-medium">
         <button
           onClick={() => router.push(`/${locale}/contests/${contest.id}`)}
-          className="flex items-center gap-2 truncate text-foreground transition-colors hover:text-primary"
+          className="flex w-full items-center gap-2 truncate text-foreground transition-colors hover:text-primary"
           title={contest.name}
         >
           {contest.name}

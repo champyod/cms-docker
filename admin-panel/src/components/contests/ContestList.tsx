@@ -130,19 +130,20 @@ export function ContestList({ initialContests, totalPages, permissionKeys }: Con
       <ContestListHeader locale={locale} canManage={canCreateContests} onCreate={handleCreate} />
       <div className="overflow-hidden rounded-xl border border-border bg-card">
         <Table
+          className="table-fixed"
           mobileCards={contests.map((contest) => (
             <ContestMobileCard key={contest.id} contest={contest} locale={locale} isSuperAdmin={canSwitchContests} canManage={canDeleteContests} canUpdate={canUpdateContests} onSetActive={actions.requestDeploy} onEdit={handleEdit} />
           ))}
         >
           <TableHeader>
             <TableRow>
-              <TableHead>ID</TableHead>
+              <TableHead className="w-16">ID</TableHead>
               <TableHead>Name</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Timeline</TableHead>
-              <TableHead>Tasks</TableHead>
-              <TableHead>Participants</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead className="w-28">Status</TableHead>
+              <TableHead className="w-60">Timeline</TableHead>
+              <TableHead className="w-20">Tasks</TableHead>
+              <TableHead className="w-28">Participants</TableHead>
+              <TableHead className="w-44 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
