@@ -1,6 +1,6 @@
 'use client';
 
-import { Save, Rocket } from 'lucide-react';
+import { Save, Rocket, Pencil } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { Badge } from '@/components/core/Badge';
 
@@ -9,11 +9,13 @@ interface Props {
   description: string;
   isActive: boolean;
   saving: boolean;
+  canEdit: boolean;
   onSetActive: () => void;
   onSave: () => void;
+  onEdit: () => void;
 }
 
-export function ContestDetailHeader({ name, description, isActive, saving, onSetActive, onSave }: Props) {
+export function ContestDetailHeader({ name, description, isActive, saving, canEdit, onSetActive, onSave, onEdit }: Props) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
@@ -29,6 +31,11 @@ export function ContestDetailHeader({ name, description, isActive, saving, onSet
         <p className="mt-1 text-muted-foreground">{description}</p>
       </div>
       <div className="flex flex-wrap items-center gap-3">
+        {canEdit && (
+          <Button variant="secondary" icon={Pencil} onClick={onEdit} disabled={saving}>
+            Edit Contest
+          </Button>
+        )}
         {!isActive && (
           <Button variant="positiveOutline" icon={Rocket} onClick={onSetActive} disabled={saving}>
             Set as Active Contest

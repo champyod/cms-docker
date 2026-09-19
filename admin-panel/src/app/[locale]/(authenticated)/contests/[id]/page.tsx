@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { notFound } from 'next/navigation';
 import { ContestDetailView } from '@/components/contests/ContestDetailView';
 import { getCurrentUser } from '@/app/actions/auth';
-import { checkPermission } from '@/lib/permissions';
+import { checkPermission, getPermissions } from '@/lib/permissions';
 import { contestDetailInclude } from '@/lib/prisma-selects';
 
 async function getContest(id: number) {
@@ -46,12 +46,13 @@ export default async function ContestDetailPage({
     notFound();
   }
 
-  const [contest, availableUsers, availableTasks, teams, user] = await Promise.all([
+  const [contest, availableUsers, availableTasks, teams, user, permissions] = await Promise.all([
     getContest(contestId),
     getAvailableUsers(),
     getAvailableTasks(),
     getTeams(),
-    getCurrentUser()
+    getCurrentUser(),
+    getPermissions()
   ]);
 
   if (!contest) {
@@ -71,6 +72,7 @@ export default async function ContestDetailPage({
         availableTasks={availableTasks}
         teams={teams}
         user={user}
+        permissionKeys={Array.from(permissions)}
       />
     </div>
   );
