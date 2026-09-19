@@ -19,7 +19,10 @@ HOSTNAME=$(hostname)
 
 # Settings
 CHECK_INTERVAL=${MONITOR_INTERVAL:-10}
-COOLDOWN=${MONITOR_COOLDOWN:-300}
+# Digest window: docker events arriving within this many seconds share one embed.
+EVENT_BATCH_WINDOW=${MONITOR_EVENT_WINDOW:-15}
+# Discord allows 25 fields per embed; a fuller window flushes and continues.
+EVENT_BATCH_MAX=25
 CPU_THRESHOLD=${MONITOR_CPU_THRESHOLD:-80}
 MEM_THRESHOLD=${MONITOR_MEM_THRESHOLD:-80}
 DISK_THRESHOLD=${MONITOR_DISK_THRESHOLD:-80}
@@ -41,18 +44,16 @@ LAST_LOG_PRUNE_TIME=0
 DAEMON_MODE=false
 
 usage() {
-    echo "Usage: $0 [-d] [-i interval] [-c cooldown]"
+    echo "Usage: $0 [-d] [-i interval]"
     echo "  -d          Daemon mode"
     echo "  -i seconds  Check interval"
-    echo "  -c seconds  Cooldown"
     exit 1
 }
 
-while getopts "di:c:h" opt; do
+while getopts "di:h" opt; do
     case $opt in
         d) DAEMON_MODE=true ;;
         i) CHECK_INTERVAL=$OPTARG ;;
-        c) COOLDOWN=$OPTARG ;;
         h) usage ;;
         *) usage ;;
     esac
@@ -335,77 +336,118 @@ prune_cms_logs() {
     ' sh "$log_dir" "$age_days" "$max_kb" || echo "[WARN] log retention pass failed." >&2
 }
 
+# Appends one docker event as a digest line: rank|color|name|value.
+# Rank picks the embed color (down outranks restarting outranks up).
+collect_docker_event() {
+    local event="$1" batch_file="$2"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Docker Event: $event"
+
+    local cont_name event_type
+    cont_name=$(echo "$event" | awk '{print $3}')
+    event_type=$(echo "$event" | awk '{print $1}')
+
+    if should_suppress_notification "$cont_name" "$event_type"; then
+        return 0
+    fi
+
+    local container_id restart_count config auto_restart max_restarts
+    container_id=$(docker ps -aqf "name=$cont_name" 2>/dev/null | head -1)
+    restart_count=$(docker inspect "$container_id" --format='{{.RestartCount}}' 2>/dev/null || echo "0")
+    config=$(get_container_restart_config "$container_id")
+    auto_restart=$(echo "$config" | cut -d: -f1)
+    max_restarts=$(echo "$config" | cut -d: -f2)
+
+    local stamp emoji status rank color detail
+    stamp=$(date '+[%d %m %Y - %H:%M:%S]')
+    rank=0; color=65280; emoji="🟢"; status="up"; detail="$event"
+    case "$event" in
+        *"die"*|*"stop"*)
+            rank=2; color=16711680; emoji="🔴"; status="down"
+            if [ "$auto_restart" = "false" ]; then
+                detail="$event (Auto-restart DISABLED)"
+                echo "${cont_name}:disabled:notified" >> "$NOTIF_CACHE"
+            elif [ "$restart_count" -ge "$max_restarts" ]; then
+                detail="$event (Restart limit $restart_count/$max_restarts)"
+                echo "${cont_name}:limit:notified" >> "$NOTIF_CACHE"
+            else
+                detail="$event (Restarts $restart_count/$max_restarts)"
+            fi
+            ;;
+        *"restart"*)
+            rank=1; color=16753920; emoji="🟠"; status="restarting"
+            if [ "$restart_count" -ge "$max_restarts" ]; then
+                detail="$event (Restart limit $restart_count/$max_restarts)"
+                echo "${cont_name}:limit:notified" >> "$NOTIF_CACHE"
+            else
+                detail="$event (Restarts $restart_count/$max_restarts)"
+            fi
+            ;;
+    esac
+    printf '%s|%s|%s %s|%s %s [%s]\n' "$rank" "$color" "$emoji" "$cont_name" "$stamp" "$detail" "$status" >> "$batch_file"
+}
+
+# Sends one embed for the collected batch; worst rank sets the embed color.
+flush_event_batch() {
+    local batch_file="$1"
+    [ -s "$batch_file" ] || return 0
+    local event_count
+    event_count=$(wc -l < "$batch_file")
+
+    local worst_rank worst_color rank color
+    worst_rank=-1; worst_color=3447003
+    while IFS='|' read -r rank color _ _; do
+        if [ "${rank:-0}" -gt "$worst_rank" ]; then
+            worst_rank=$rank; worst_color=$color
+        fi
+    done < "$batch_file"
+
+    if [ -z "$WEBHOOK_URL" ]; then
+        warn_webhook_unconfigured "docker event digest ($event_count events)"
+        return 0
+    fi
+
+    if command -v jq >/dev/null 2>&1; then
+        jq -n --rawfile lines "$batch_file" --argjson color "$worst_color" '
+            ($lines | split("\n") | map(select(length > 0)) | .[0:25]
+             | map(split("|") | {name: .[2], value: .[3], inline: false})) as $fields
+            | {embeds: [{title: "Docker Events", color: $color, fields: $fields}]}' \
+            > /tmp/discord_digest.json
+        post_discord_payload /tmp/discord_digest.json "docker event digest"
+    else
+        local joined
+        joined=$(cut -d'|' -f3- "$batch_file" | paste -sd' / ' -)
+        send_discord_notification "Docker Events ($event_count)" "$joined" "$worst_color"
+    fi
+}
+
 listen_docker_events() {
     echo "Starting Docker event listener..."
-    # Track last notification time per container to prevent spam
+    # One-shot markers for terminal states; every other event is digested.
     NOTIF_CACHE="/tmp/monitor_notif_cache"
     touch "$NOTIF_CACHE"
 
-    docker events --filter 'event=start' --filter 'event=stop' --filter 'event=die' --filter 'event=restart' --format '{{.Status}} container {{.Actor.Attributes.name}}' | while read -r event; do
-        # Log the event immediately (keep this first)
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Docker Event: $event"
-
-        # Cooldown Logic: Don't notify for the same container more than once every 60s
-        CONT_NAME=$(echo "$event" | awk '{print $3}')
-        EVENT_TYPE=$(echo "$event" | awk '{print $1}')
-        CURRENT_TIME=$(date +%s)
-        LAST_NOTIF=$(grep "^${CONT_NAME}:" "$NOTIF_CACHE" | grep -v ":disabled:" | grep -v ":limit:" | cut -d: -f2 | tail -1 || echo "0")
-
-        if should_suppress_notification "$CONT_NAME" "$EVENT_TYPE"; then
-            continue
+    docker events --filter 'event=start' --filter 'event=stop' --filter 'event=die' --filter 'event=restart' --format '{{.Status}} container {{.Actor.Attributes.name}}' | {
+    while true; do
+        batch_file=$(mktemp)
+        # First event blocks; the window runs from its arrival.
+        if ! IFS= read -r first_event; then
+            rm -f "$batch_file"
+            break
         fi
-
-        if [ $((CURRENT_TIME - LAST_NOTIF)) -lt 60 ]; then
-            continue
-        fi
-
-        local container_id=$(docker ps -aqf "name=$CONT_NAME" 2>/dev/null | head -1)
-        local restart_count=$(docker inspect "$container_id" --format='{{.RestartCount}}' 2>/dev/null || echo "0")
-        local config=$(get_container_restart_config "$container_id")
-        local auto_restart=$(echo "$config" | cut -d: -f1)
-        local max_restarts=$(echo "$config" | cut -d: -f2)
-
-        grep -v "^${CONT_NAME}:" "$NOTIF_CACHE" > "${NOTIF_CACHE}.tmp" || true
-        echo "${CONT_NAME}:${CURRENT_TIME}" >> "${NOTIF_CACHE}.tmp"
-        mv "${NOTIF_CACHE}.tmp" "$NOTIF_CACHE"
-
-        COLOR=3447003
-        MESSAGE="🔄 **$event**"
-
-        case "$event" in
-            *"start"*)
-                COLOR=65280
-                ;;
-            *"stop"*)
-                COLOR=16711680
-                ;;
-            *"die"*)
-                COLOR=16711680
-                # Add warning if auto-restart is disabled
-                if [ "$auto_restart" = "false" ]; then
-                    MESSAGE="🔴 **$event** (Auto-restart: DISABLED - requires manual intervention)"
-                    echo "${CONT_NAME}:disabled:notified" >> "$NOTIF_CACHE"
-                # Add warning if restart limit reached
-                elif [ "$restart_count" -ge "$max_restarts" ]; then
-                    MESSAGE="🚨 **$event** (Restart limit reached: $restart_count/$max_restarts - stopped auto-restart)"
-                    echo "${CONT_NAME}:limit:notified" >> "$NOTIF_CACHE"
-                else
-                    MESSAGE="⚠️ **$event** (Restarts: $restart_count/$max_restarts)"
-                fi
-                ;;
-            *"restart"*)
-                COLOR=16753920
-                if [ "$restart_count" -ge "$max_restarts" ]; then
-                    MESSAGE="🚨 **$event** (Restart limit reached: $restart_count/$max_restarts)"
-                    echo "${CONT_NAME}:limit:notified" >> "$NOTIF_CACHE"
-                else
-                    MESSAGE="🔄 **$event** (Restarts: $restart_count/$max_restarts)"
-                fi
-                ;;
-        esac
-
-        send_discord_notification "Docker Event" "$MESSAGE" $COLOR
+        collect_docker_event "$first_event" "$batch_file"
+        end_time=$(( $(date +%s) + EVENT_BATCH_WINDOW ))
+        event_count=1
+        while [ "$event_count" -lt "$EVENT_BATCH_MAX" ]; do
+            remaining=$(( end_time - $(date +%s) ))
+            [ "$remaining" -le 0 ] && break
+            IFS= read -r -t "$remaining" event || break
+            collect_docker_event "$event" "$batch_file"
+            event_count=$(( event_count + 1 ))
+        done
+        flush_event_batch "$batch_file"
+        rm -f "$batch_file"
     done
+    }
 }
 
 check_once() {
@@ -430,14 +472,9 @@ check_once() {
     if [ "$IS_ALERT" = true ]; then
         if [ "$PREV_STATE" = "OK" ]; then
             send_discord_alert "WARNING" "$FAIL_REASON" 16711680 "${ROLE_ID:+<@&$ROLE_ID>}"
-            LAST_ALERT_TIME=$CURRENT_TIME
             PREV_STATE="ALERT"
         elif [ "$PREV_STATE" = "ALERT" ]; then
-            TIME_DIFF=$((CURRENT_TIME - LAST_ALERT_TIME))
-            if [ "$TIME_DIFF" -ge "$COOLDOWN" ]; then
-                send_discord_alert "WARNING (Ongoing)" "$FAIL_REASON" 16711680 "${ROLE_ID:+<@&$ROLE_ID>}"
-                LAST_ALERT_TIME=$CURRENT_TIME
-            fi
+            send_discord_alert "WARNING (Ongoing)" "$FAIL_REASON" 16711680 "${ROLE_ID:+<@&$ROLE_ID>}"
         fi
     else
         if [ "$PREV_STATE" = "ALERT" ]; then
@@ -467,7 +504,6 @@ check_once() {
 }
 
 PREV_STATE="OK"
-LAST_ALERT_TIME=0
 LAST_BACKUP_TIME=0
 
 # WHY: say up front whether this run can deliver anything — starting a monitor with no

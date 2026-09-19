@@ -653,7 +653,6 @@ services:
       # it the mounted file below is never found and per-container policy silently no-ops.
       - REPO_ROOT=/repo-root
       - MONITOR_INTERVAL=5
-      - MONITOR_COOLDOWN=300
       - DISK_PATH=/host
       # WHY: monitor performs no database operations (__monitor.sh has no psql/pg_dump) — no DATABASE_URL needed; backups use cms_backup via __backup.sh.
       # DATABASE_URL removed — monitor needs no DB access

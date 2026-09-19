@@ -119,7 +119,6 @@ MONITOR_CPU_THRESHOLD = 80      # num; percent
 MONITOR_MEM_THRESHOLD = 80      # num
 MONITOR_DISK_THRESHOLD = 80     # num
 MONITOR_INTERVAL = 10           # num; seconds
-MONITOR_COOLDOWN = 300          # num; seconds
 DISK_PATH = "/host"             # str
 BACKUP_INTERVAL_MINS = 1440     # num
 BACKUP_MAX_COUNT = 50           # num
