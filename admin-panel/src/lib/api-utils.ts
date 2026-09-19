@@ -69,5 +69,6 @@ export function apiError(error: unknown): NextResponse {
 }
 
 export function apiSuccess(data?: object): NextResponse {
+  if (Array.isArray(data)) return NextResponse.json({ success: true, data });
   return NextResponse.json({ success: true, ...data });
 }
