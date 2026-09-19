@@ -7,9 +7,9 @@ import NextImage from 'next/image';
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
 import { PageContent, PageHeader } from '@/components/core/Layout';
+import { Tabs } from '@/components/core/Tabs';
 import { toast } from 'sonner';
 import { readConfigToml, updateConfigToml } from '@/app/actions/appearance';
-import { cn } from '@/lib/utils';
 
 type TabKey = 'branding' | 'services';
 
@@ -31,23 +31,14 @@ const SERVICE_GROUPS: { title: string; keys: string[] }[] = [
   { title: 'Infrastructure', keys: ['MONITOR_INTERVAL', 'BACKUP_INTERVAL_MINS', 'PROMETHEUS_PORT'] },
 ];
 
-function TabBar({ active, onChange }: { active: TabKey; onChange: (k: TabKey) => void }) {
+function AppearanceTabs({ active, onChange }: { active: TabKey; onChange: (key: TabKey) => void }) {
   return (
-    <div className="flex gap-2 rounded-xl bg-muted p-1 w-fit">
-      {TABS.map((tab) => (
-        <button
-          key={tab.key}
-          type="button"
-          onClick={() => onChange(tab.key)}
-          className={cn(
-            'rounded-lg px-4 py-1.5 text-sm font-medium transition-colors',
-            active === tab.key ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-          )}
-        >
-          {tab.label}
-        </button>
-      ))}
-    </div>
+    <Tabs
+      items={TABS.map((tab) => ({ id: tab.key, label: tab.label }))}
+      activeId={active}
+      ariaLabel="Appearance sections"
+      onSelect={(id) => onChange(id as TabKey)}
+    />
   );
 }
 
@@ -204,7 +195,7 @@ export function AppearanceClient({ locale }: { locale: string }) {
   return (
     <PageContent>
       <PageHeader title="Appearance" description="Branding and system service customization from config.toml (read-only preview, save edits where enabled)." />
-      <TabBar active={active} onChange={setActive} />
+      <AppearanceTabs active={active} onChange={setActive} />
       {active === 'branding' ? (
         <BrandingTab branding={branding} onFieldChange={handleFieldChange} onSave={handleSave} saving={saving} logoPreview={logoPreview} />
       ) : (
