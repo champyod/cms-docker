@@ -52,8 +52,19 @@ export function ContestTableRow({ contest, locale, isSuperAdmin, canManage, canU
     } else toast.error('Failed to delete contest: ' + result.error);
   };
 
+  const openDetail = () => router.push(`/${locale}/contests/${contest.id}`);
+
   return (
-    <TableRow key={contest.id} data-shortcut-row className={cn(isActive && 'bg-primary/5', ROW_SELECTED_CLASSES)}>
+    <TableRow
+      key={contest.id}
+      data-shortcut-row
+      onClick={openDetail}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' && event.target === event.currentTarget) openDetail();
+      }}
+      tabIndex={0}
+      className={cn(isActive && 'bg-primary/5', ROW_SELECTED_CLASSES, 'cursor-pointer')}
+    >
       <TableCell className="font-mono text-xs">
         <div className="flex items-center gap-2">
           <span className={isActive ? 'text-primary' : 'text-muted-foreground'}>#{contest.id}</span>
@@ -62,7 +73,10 @@ export function ContestTableRow({ contest, locale, isSuperAdmin, canManage, canU
       </TableCell>
       <TableCell className="font-medium">
         <button
-          onClick={() => router.push(`/${locale}/contests/${contest.id}`)}
+          onClick={(event) => {
+            event.stopPropagation();
+            router.push(`/${locale}/contests/${contest.id}`);
+          }}
           className="flex w-full items-center gap-2 truncate text-foreground transition-colors hover:text-primary"
           title={contest.name}
         >
@@ -85,7 +99,7 @@ export function ContestTableRow({ contest, locale, isSuperAdmin, canManage, canU
       <TableCell className="text-xs text-muted-foreground">{contest._count?.tasks ?? 0}</TableCell>
       <TableCell className="text-xs text-muted-foreground">{contest._count?.participations ?? 0}</TableCell>
       <TableCell className="text-right">
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex items-center justify-end gap-2" onClick={(event) => event.stopPropagation()}>
           {canUpdate && (
             <Button variant="ghost" size="sm" icon={Pencil} tooltip="Edit" aria-label={`Edit ${contest.name}`} onClick={() => onEdit(contest.id)} />
           )}
