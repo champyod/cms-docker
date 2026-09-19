@@ -448,6 +448,36 @@ check_worker_cgroup() {
 # ===========================================================================
 printf '=== CMS Preflight Checks (stack: %s) ===\n' "$STACK"
 
+check_config_stale() {
+  # Warn-only: a container started before config.toml last changed may run
+  # stale values (edits apply on recreate, not while running).
+  if [[ ! -f "$REPO_ROOT/config.toml" ]]; then
+    record_result "config freshness" "PASS" "no config.toml"
+    return 0
+  fi
+  if ! command -v docker >/dev/null 2>&1; then
+    record_result "config freshness" "PASS" "docker unavailable"
+    return 0
+  fi
+  local cfg_mtime stale_list name started started_epoch
+  cfg_mtime=$(stat -c %Y "$REPO_ROOT/config.toml" 2>/dev/null || echo 0)
+  stale_list=""
+  while read -r name _rest; do
+    [[ "$name" == cms-* ]] || continue
+    started=$(docker inspect -f '{{.State.StartedAt}}' "$name" 2>/dev/null || echo "")
+    [[ -n "$started" ]] || continue
+    started_epoch=$(date -d "$started" +%s 2>/dev/null || echo 0)
+    if [[ "$started_epoch" -lt "$cfg_mtime" ]]; then
+      stale_list="${stale_list:+$stale_list, }$name"
+    fi
+  done < <(docker ps --format '{{.Names}}' 2>/dev/null || true)
+  if [[ -n "$stale_list" ]]; then
+    record_result "config freshness" "WARN" "predates config.toml: $stale_list"
+  else
+    record_result "config freshness" "PASS" "containers newer than config"
+  fi
+}
+
 check_disk
 check_docker
 check_env
@@ -455,6 +485,7 @@ check_cms_toml
 check_secret_perms
 check_ports
 check_worker_cgroup
+check_config_stale
 
 # ===========================================================================
 # Summary table

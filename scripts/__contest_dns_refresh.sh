@@ -39,11 +39,26 @@ compose_flags() {
   printf '%s' "$flags"
 }
 
+# Restarting into a still-booting CWS resolves nothing (or fails nginx
+# startup), so wait for its health gate first.
+wait_cws_healthy() {
+  local timeout="${1:-120}" elapsed=0 state
+  while :; do
+    state=$(docker inspect -f '{{.State.Health.Status}}' cms-contest-web-server 2>/dev/null || echo missing)
+    [ "$state" = healthy ] && return 0
+    [ "$elapsed" -ge "$timeout" ] && return 1
+    sleep 5; elapsed=$((elapsed + 5))
+  done
+}
+
 refresh_restart() {
   local cmd flags
   if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-nginx-contest$'; then
     log_warn "cms-nginx-contest not running — skipping restart"
     return 0
+  fi
+  if ! wait_cws_healthy 120; then
+    log_warn "cms-contest-web-server not healthy — restarting nginx anyway (may need a second refresh)"
   fi
   cmd="$(compose_cmd)"
   flags="$(compose_flags)"

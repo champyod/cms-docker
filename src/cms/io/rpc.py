@@ -25,7 +25,9 @@ import functools
 import hmac
 import json
 import logging
+import random
 import socket
+import time
 import traceback
 from typing import Any
 import typing
@@ -529,6 +531,14 @@ class RemoteServiceClient(RemoteServiceBase):
     the reader loop should be started by calling run.
 
     """
+    # Reconnect policy: exponential backoff from auto_retry up to this cap.
+    RETRY_MAX_INTERVAL = 30.0
+    # Breaker: after this many consecutive capped waits, probe at cooldown pace.
+    BREAKER_CAPPED_WAITS = 3
+    BREAKER_COOLDOWN = 120.0
+    # Log every failure while fresh, then at most this often per target.
+    RETRY_LOG_INTERVAL = 60.0
+
     def __init__(
         self, remote_service_coord: ServiceCoord, auto_retry: float | None = None
     ):
@@ -537,8 +547,8 @@ class RemoteServiceClient(RemoteServiceBase):
         remote_service_coord: the coordinates (i.e. name
             and shard) of the service to which to send RPC requests.
         auto_retry: if a number is given then it's the
-            interval (in seconds) between attempts to reconnect to the
-            remote service in case the connection is lost; if not given
+            base interval (in seconds) for reconnect attempts with
+            exponential backoff up to RETRY_MAX_INTERVAL; if not given
             no automatic reconnection attempts will occur.
 
         raise (KeyError): if the coordinates are not specified in the
@@ -597,15 +607,47 @@ class RemoteServiceClient(RemoteServiceBase):
                 self.initialize(sock, self.remote_service_coord)
                 break
 
+    def _retry_delay(self, failures: int) -> float:
+        """Backoff for the n-th consecutive failure, capped with jitter."""
+        base = self.auto_retry if self.auto_retry else 0.0
+        delay = min(self.RETRY_MAX_INTERVAL, base * 2.0 ** max(failures - 1, 0))
+        return min(self.RETRY_MAX_INTERVAL, delay + random.uniform(0.0, base))
+
+    def _log_retry(self, failures: int, delay: float, now: float) -> float:
+        """Throttled reconnect notice; returns the last-log timestamp."""
+        last = getattr(self, "_last_retry_log", 0.0)
+        if failures <= 3 or now - last >= self.RETRY_LOG_INTERVAL:
+            logger.warning(
+                "Couldn't reach %s (%d consecutive failures, "
+                "next try in %.0fs).",
+                self._repr_remote(), failures, delay)
+            return now
+        return last
+
     def _run(self):
         """Maintain the connection up, if required.
 
         """
+        failures = 0
+        capped_waits = 0
         while True:
             self._connect()
-            while not self.connected and self.auto_retry is not None:
-                gevent.sleep(self.auto_retry)
-                self._connect()
+            if not self.connected and self.auto_retry is not None:
+                failures += 1
+                delay = self._retry_delay(failures)
+                if delay >= self.RETRY_MAX_INTERVAL:
+                    capped_waits += 1
+                else:
+                    capped_waits = 0
+                # Breaker: prolonged outage, probe at cooldown pace instead.
+                if capped_waits > self.BREAKER_CAPPED_WAITS:
+                    delay = self.BREAKER_COOLDOWN
+                now = time.monotonic()
+                self._last_retry_log = self._log_retry(failures, delay, now)
+                gevent.sleep(delay)
+                continue
+            failures = 0
+            capped_waits = 0
             if self.connected:
                 self.run()
             if self.auto_retry is None:
