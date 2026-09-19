@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import type { Prisma } from '@prisma/client';
 import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
@@ -9,7 +10,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (!authorized) return response;
 
   try {
-    const data = (await req.json()) as { taskId: number; description: string; time_limit?: number; memory_limit?: number; task_type?: string; score_type?: string };
+    const data = (await req.json()) as { taskId: number; description: string; time_limit?: number; memory_limit?: number; task_type?: string; score_type?: string; task_type_parameters?: unknown; score_type_parameters?: unknown };
     const { taskId, ...datasetData } = data;
 
     if (!Number.isInteger(taskId) || taskId <= 0) return apiError({ message: 'Valid task identifier is required', status: 400 });
@@ -32,9 +33,9 @@ export async function POST(req: NextRequest): Promise<Response> {
         time_limit: datasetData.time_limit || null,
         memory_limit: datasetData.memory_limit ? BigInt(datasetData.memory_limit * 1024 * 1024) : null,
         task_type: datasetData.task_type || 'Batch',
-        task_type_parameters: [],
+        task_type_parameters: (datasetData.task_type_parameters ?? []) as Prisma.InputJsonValue,
         score_type: datasetData.score_type || 'Sum',
-        score_type_parameters: [],
+        score_type_parameters: (datasetData.score_type_parameters ?? []) as Prisma.InputJsonValue,
         autojudge: false,
       }
     });

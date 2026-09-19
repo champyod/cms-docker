@@ -30,6 +30,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
        if (data.memory_limit !== undefined) updateData.memory_limit = data.memory_limit ? BigInt((data.memory_limit as number) * 1024 * 1024) : null;
        if (data.task_type) updateData.task_type = data.task_type as string;
        if (data.score_type) updateData.score_type = data.score_type as string;
+       if (data.score_type_parameters !== undefined) {
+         const scoreParams = data.score_type_parameters as unknown;
+         if (typeof scoreParams !== 'number' && !Array.isArray(scoreParams)) {
+           return apiError({ message: 'Score parameters must be a number or an array', status: 400 });
+         }
+         updateData.score_type_parameters = scoreParams;
+       }
+       if (data.task_type_parameters !== undefined) {
+         const taskParams = data.task_type_parameters as unknown;
+         if (!Array.isArray(taskParams)) {
+           return apiError({ message: 'Task type parameters must be an array', status: 400 });
+         }
+         updateData.task_type_parameters = taskParams;
+       }
        await prisma.datasets.update({ where: { id }, data: updateData });
     }
 

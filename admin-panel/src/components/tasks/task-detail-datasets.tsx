@@ -18,6 +18,8 @@ interface Dataset {
   memory_limit: string | null;
   score_type: string;
   autojudge: boolean;
+  task_type_parameters?: unknown;
+  score_type_parameters?: unknown;
   testcases: Array<{ id: number; codename: string; public: boolean }>;
 }
 

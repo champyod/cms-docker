@@ -22,7 +22,7 @@ export async function getDataset(id: number): Promise<Prisma.datasetsGetPayload<
 
 export async function createDataset(
   taskId: number,
-  data: { description: string; time_limit?: number; memory_limit?: number; task_type?: string; score_type?: string }
+  data: { description: string; time_limit?: number; memory_limit?: number; task_type?: string; score_type?: string; task_type_parameters?: unknown; score_type_parameters?: unknown }
 ): Promise<{ success: boolean; dataset?: Prisma.datasetsGetPayload<Record<string, never>>; error?: string }> {
   await ensurePermission('dataset:create');
   try {
@@ -33,6 +33,8 @@ export async function createDataset(
       memory_limit: data.memory_limit ?? null,
       task_type: data.task_type ?? null,
       score_type: data.score_type ?? null,
+      task_type_parameters: data.task_type_parameters ?? [],
+      score_type_parameters: data.score_type_parameters ?? [],
     }, effectivePermissions);
 
     const dataset = await prisma.datasets.create({
@@ -43,9 +45,9 @@ export async function createDataset(
         memory_limit: allowed.memory_limit !== undefined && allowed.memory_limit
           ? BigInt((allowed.memory_limit as number) * 1024 * 1024) : null,
         task_type: (allowed.task_type as string) ?? 'Batch',
-        task_type_parameters: [],
+        task_type_parameters: (allowed.task_type_parameters as Prisma.InputJsonValue) ?? [],
         score_type: (allowed.score_type as string) ?? 'Sum',
-        score_type_parameters: [],
+        score_type_parameters: (allowed.score_type_parameters as Prisma.InputJsonValue) ?? [],
         autojudge: false,
       },
     });
