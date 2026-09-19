@@ -1,4 +1,5 @@
 import fs from 'fs';
+import net from 'net';
 import path from 'path';
 import { exec } from 'child_process';
 import util from 'util';
@@ -6,6 +7,29 @@ import { prisma } from '@/lib/prisma';
 import { getRepoRoot } from './repo-root';
 
 const execPromise = util.promisify(exec);
+
+// Why 2s: matches the emitter's per-probe budget (`timeout 2` in
+// scripts/__worker_status_json.sh) so both surfaces agree on reachability.
+const REMOTE_PROBE_TIMEOUT_MS = 2000;
+
+export function probeReachable(host: string, port: number, timeoutMs: number = REMOTE_PROBE_TIMEOUT_MS): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (!host || !Number.isInteger(port) || port <= 0) {
+      resolve(false);
+      return;
+    }
+    const socket = new net.Socket();
+    const done = (ok: boolean): void => {
+      socket.destroy();
+      resolve(ok);
+    };
+    socket.setTimeout(timeoutMs);
+    socket.once('connect', () => done(true));
+    socket.once('timeout', () => done(false));
+    socket.once('error', () => done(false));
+    socket.connect(port, host);
+  });
+}
 
 export interface WorkerStat {
   id: string;
@@ -49,13 +73,19 @@ function isShardRunning(running: RunningShard[], shard: number): boolean {
   return running.some((r) => r.shard === shard && r.status.toLowerCase().includes('up'));
 }
 
-function describeConfiguredWorker(
+async function describeConfiguredWorker(
   worker: ConfiguredWorker,
   shardCounts: Record<number, number>,
   running: RunningShard[]
-): WorkerStat {
+): Promise<WorkerStat> {
   const taskCount = shardCounts[worker.shard] || 0;
-  const isLive = isShardRunning(running, worker.shard);
+  // Why probe container-absent shards: remote workers have no local docker
+  // entry, so docker-ps-only truth renders working remotes offline. A present
+  // but exited container stays offline (crashed local); only absent shards
+  // fall through to the reachability probe, so real outages still read offline.
+  const entry = running.find((r) => r.shard === worker.shard);
+  const containerUp = entry !== undefined && entry.status.toLowerCase().includes('up');
+  const isLive = containerUp || (entry === undefined && (await probeReachable(worker.host, worker.port)));
 
   return {
     id: `worker-${worker.shard}`,
@@ -115,7 +145,7 @@ export async function collectWorkerStats(): Promise<WorkerStat[]> {
       });
 
     if (configuredWorkers.length > 0) {
-      return configuredWorkers.map((worker) => describeConfiguredWorker(worker, shardCounts, running));
+      return Promise.all(configuredWorkers.map((worker) => describeConfiguredWorker(worker, shardCounts, running)));
     }
 
     if (!stdout.trim()) {
