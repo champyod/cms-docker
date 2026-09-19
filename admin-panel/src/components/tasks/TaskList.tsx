@@ -119,8 +119,18 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
           <TableBody>
             {tasks.map((task) => {
               const hasErrors = task.diagnostics.some((d) => d.type === 'error');
+              const openDetail = () => router.push(`/${locale}/tasks/${task.id}`);
               return (
-                <TableRow key={task.id} data-shortcut-row className={cn('border-b border-border hover:bg-muted/50 transition-colors', hasErrors && 'opacity-60', ROW_SELECTED_CLASSES)}>
+                <TableRow
+                  key={task.id}
+                  data-shortcut-row
+                  onClick={openDetail}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && event.target === event.currentTarget) openDetail();
+                  }}
+                  tabIndex={0}
+                  className={cn('border-b border-border hover:bg-muted/50 transition-colors cursor-pointer', hasErrors && 'opacity-60', ROW_SELECTED_CLASSES)}
+                >
                   <TableCell className="font-mono text-muted-foreground text-xs text-nowrap">#{task.id}</TableCell>
                   <TableCell className="font-medium text-foreground max-w-36">
                     <div className="flex items-center gap-2">
@@ -138,7 +148,7 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
                           </div>
                         </div>
                       )}
-                      <button onClick={() => router.push(`/${locale}/tasks/${task.id}`)} data-shortcut-primary className={cn('flex items-center gap-2 hover:text-primary transition-colors truncate', hasErrors && 'text-muted-foreground')}>
+                      <button onClick={(event) => { event.stopPropagation(); router.push(`/${locale}/tasks/${task.id}`); }} data-shortcut-primary className={cn('flex items-center gap-2 hover:text-primary transition-colors truncate', hasErrors && 'text-muted-foreground')}>
                         {task.name}
                         <ExternalLink className="w-3 h-3 opacity-50" />
                       </button>
@@ -168,7 +178,7 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{task._count?.submissions ?? 0}</TableCell>
                   <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
+                    <div className="flex items-center justify-end gap-2" onClick={(event) => event.stopPropagation()}>
                       {canManageTasks && (
                         <Button variant="ghost" size="sm" icon={Edit2} iconOnly tooltip="Edit task" onClick={() => handleEdit(task)} className="text-muted-foreground hover:text-primary" />
                       )}

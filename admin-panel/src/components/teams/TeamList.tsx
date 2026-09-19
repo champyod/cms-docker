@@ -117,8 +117,19 @@ export function TeamList({ initialTeams, permissionKeys }: TeamListProps) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {teams.map((team) => (
-            <TableRow key={team.id} data-shortcut-row={team.id} className="cursor-pointer">
+          {teams.map((team) => {
+            const openDetail = () => router.push(`/${locale}/teams/${team.id}`);
+            return (
+            <TableRow
+              key={team.id}
+              data-shortcut-row={team.id}
+              onClick={openDetail}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && event.target === event.currentTarget) openDetail();
+              }}
+              tabIndex={0}
+              className="cursor-pointer"
+            >
               <TableCell className="font-mono text-muted-foreground text-xs">#{team.id}</TableCell>
               <TableCell className="font-mono text-primary text-sm">{team.code}</TableCell>
               <TableCell className="font-medium">{team.name}</TableCell>
@@ -128,8 +139,8 @@ export function TeamList({ initialTeams, permissionKeys }: TeamListProps) {
                 {team.leader ? `${team.leader.first_name} ${team.leader.last_name}`.trim() || team.leader.username : '—'}
               </TableCell>
               <TableCell className="text-right">
-                <div className="flex items-center justify-end gap-2">
-                  <a href={`/${locale}/teams/${team.id}`}>
+                <div className="flex items-center justify-end gap-2" onClick={(event) => event.stopPropagation()}>
+                  <a href={`/${locale}/teams/${team.id}`} onClick={(event) => event.stopPropagation()}>
                     <Button variant="ghost" size="sm" icon={Users} iconOnly tooltip="View team members" data-shortcut-primary />
                   </a>
                   {canManageUsers && (
@@ -141,7 +152,8 @@ export function TeamList({ initialTeams, permissionKeys }: TeamListProps) {
                 </div>
               </TableCell>
             </TableRow>
-          ))}
+            );
+          })}
           {teams.length === 0 && (
             <TableRow>
               <TableCell colSpan={7} className="p-0">

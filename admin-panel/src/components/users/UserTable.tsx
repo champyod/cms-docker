@@ -109,9 +109,16 @@ export function UserTable({
           <TableRow
             key={user.id}
             data-shortcut-row={user.id}
+            onClick={() => {
+              if (canManageUsers) onEdit(user);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && event.target === event.currentTarget && canManageUsers) onEdit(user);
+            }}
+            tabIndex={0}
             className={cn('cursor-pointer', selectedIds.has(user.id) && ROW_SELECTED_CLASSES.join(' '))}
           >
-            <TableCell>
+            <TableCell onClick={(event) => event.stopPropagation()}>
               <input
                 type="checkbox"
                 title={`Select user ${user.id}`}
@@ -137,7 +144,7 @@ export function UserTable({
             <TableCell>{user.country ?? '—'}</TableCell>
             <TableCell>{user._count?.participations ?? 0}</TableCell>
             <TableCell className="text-right">
-              <div className="flex items-center justify-end gap-2">
+              <div className="flex items-center justify-end gap-2" onClick={(event) => event.stopPropagation()}>
                 {canManageUsers && (
                   <>
                     <Button

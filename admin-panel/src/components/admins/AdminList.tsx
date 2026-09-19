@@ -158,7 +158,18 @@ export function AdminList({
             const groupNames = accessSummary[admin.id]?.groupNames ?? [];
             const overrideCount = accessSummary[admin.id]?.overrideCount ?? 0;
             return (
-              <TableRow key={admin.id} data-shortcut-row={admin.id} className="border-b border-border hover:bg-muted/50 transition-colors">
+              <TableRow
+                key={admin.id}
+                data-shortcut-row={admin.id}
+                onClick={() => {
+                  if (capabilities.canUpdate || capabilities.canSetPassword) startEdit(admin);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && event.target === event.currentTarget && (capabilities.canUpdate || capabilities.canSetPassword)) startEdit(admin);
+                }}
+                tabIndex={0}
+                className="border-b border-border hover:bg-muted/50 transition-colors cursor-pointer"
+              >
                 <TableCell className="font-mono text-muted-foreground text-xs">#{admin.id}</TableCell>
                 <TableCell className="font-mono text-indigo-400 text-sm">{admin.username}</TableCell>
                 <TableCell className="font-medium text-foreground">{admin.name}</TableCell>
@@ -186,9 +197,9 @@ export function AdminList({
                     )}
                   </div>
                 </TableCell>
-                <TableCell>{renderStatusToggle(admin)}</TableCell>
+                <TableCell onClick={(event) => event.stopPropagation()}>{renderStatusToggle(admin)}</TableCell>
                 {showRowActions && (
-                  <TableCell className="text-right">
+                  <TableCell className="text-right" onClick={(event) => event.stopPropagation()}>
                     <AdminRowActions
                       capabilities={capabilities}
                       editLabel={actionLabels.edit}

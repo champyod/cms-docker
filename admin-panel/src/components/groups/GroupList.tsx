@@ -277,7 +277,17 @@ export function GroupList({
             </TableRow>
           ) : (
             groups.map((group) => (
-              <TableRow key={group.id}>
+              <TableRow
+                key={group.id}
+                onClick={() => {
+                  if (canUpdate) handleOpenEdit(group);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && event.target === event.currentTarget && canUpdate) handleOpenEdit(group);
+                }}
+                tabIndex={0}
+                className="cursor-pointer"
+              >
                 <TableCell className="font-medium">{group.name}</TableCell>
                 <TableCell className="max-w-xs truncate">
                   {group.description ?? '—'}
@@ -293,7 +303,7 @@ export function GroupList({
                   </span>
                 </TableCell>
                 <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-1">
+                  <div className="flex items-center justify-end gap-1" onClick={(event) => event.stopPropagation()}>
                     {canUpdate && (
                       <Button
                         variant="ghost"
