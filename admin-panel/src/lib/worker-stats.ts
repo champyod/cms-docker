@@ -1,35 +1,17 @@
 import fs from 'fs';
-import net from 'net';
 import path from 'path';
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import util from 'util';
 import { prisma } from '@/lib/prisma';
 import { getRepoRoot } from './repo-root';
 
 const execPromise = util.promisify(exec);
+const execFilePromise = util.promisify(execFile);
 
-// Why 2s: matches the emitter's per-probe budget (`timeout 2` in
-// scripts/__worker_status_json.sh) so both surfaces agree on reachability.
-const REMOTE_PROBE_TIMEOUT_MS = 2000;
-
-export function probeReachable(host: string, port: number, timeoutMs: number = REMOTE_PROBE_TIMEOUT_MS): Promise<boolean> {
-  return new Promise((resolve) => {
-    if (!host || !Number.isInteger(port) || port <= 0) {
-      resolve(false);
-      return;
-    }
-    const socket = new net.Socket();
-    const done = (ok: boolean): void => {
-      socket.destroy();
-      resolve(ok);
-    };
-    socket.setTimeout(timeoutMs);
-    socket.once('connect', () => done(true));
-    socket.once('timeout', () => done(false));
-    socket.once('error', () => done(false));
-    socket.connect(port, host);
-  });
-}
+// Why 12s: the emitter probes shards sequentially (2s each worst case), so a
+// tick must never stack overlapping runs on the 5s summary interval.
+const EMITTER_TIMEOUT_MS = 12000;
+const EMITTER_SCRIPT = ['scripts', '__worker_status_json.sh'];
 
 export interface WorkerStat {
   id: string;
@@ -37,6 +19,17 @@ export interface WorkerStat {
   status: string;
   tasks: number;
   load: number;
+  activity: string;
+  health: string;
+}
+
+interface EmitterRow {
+  shard?: unknown;
+  endpoint?: unknown;
+  state?: unknown;
+  health?: unknown;
+  activity?: unknown;
+  reachable?: unknown;
 }
 
 type ConfiguredWorker = { shard: number; host: string; port: number };
@@ -73,27 +66,39 @@ function isShardRunning(running: RunningShard[], shard: number): boolean {
   return running.some((r) => r.shard === shard && r.status.toLowerCase().includes('up'));
 }
 
-async function describeConfiguredWorker(
-  worker: ConfiguredWorker,
-  shardCounts: Record<number, number>,
-  running: RunningShard[]
-): Promise<WorkerStat> {
-  const taskCount = shardCounts[worker.shard] || 0;
-  // Why probe container-absent shards: remote workers have no local docker
-  // entry, so docker-ps-only truth renders working remotes offline. A present
-  // but exited container stays offline (crashed local); only absent shards
-  // fall through to the reachability probe, so real outages still read offline.
-  const entry = running.find((r) => r.shard === worker.shard);
-  const containerUp = entry !== undefined && entry.status.toLowerCase().includes('up');
-  const isLive = containerUp || (entry === undefined && (await probeReachable(worker.host, worker.port)));
+function textOf(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value ? value : fallback;
+}
 
-  return {
-    id: `worker-${worker.shard}`,
-    name: `${worker.host}:${worker.port}`,
-    status: isLive ? (taskCount > 0 ? 'busy' : 'online') : 'offline',
-    tasks: taskCount,
-    load: taskCount > 0 ? Math.min(100, (taskCount / 10) * 100) : 0
-  };
+export function mapEmitterRowsToStats(rows: EmitterRow[], shardCounts: Record<number, number>): WorkerStat[] {
+  return rows.map((row, index) => {
+    const shard = typeof row.shard === 'number' ? row.shard : index;
+    const taskCount = shardCounts[shard] || 0;
+    const state = textOf(row.state, 'unknown');
+    // Why reachable rescues absent: remote shards have no local container, so
+    // docker-only truth renders working remotes offline. Exited stays offline
+    // even if reachable; unreachable stays offline — real outages stay visible.
+    const isLive = state === 'running' || (state === 'absent' && row.reachable === true);
+    return {
+      id: `worker-${shard}`,
+      name: textOf(row.endpoint, `worker-${shard}`),
+      status: isLive ? (taskCount > 0 ? 'busy' : 'online') : 'offline',
+      tasks: taskCount,
+      load: taskCount > 0 ? Math.min(100, (taskCount / 10) * 100) : 0,
+      activity: textOf(row.activity, 'unknown'),
+      health: textOf(row.health, 'none'),
+    };
+  });
+}
+
+async function loadEmitterRows(): Promise<EmitterRow[]> {
+  const { stdout } = await execFilePromise(
+    'bash',
+    [path.join(getRepoRoot(), ...EMITTER_SCRIPT)],
+    { cwd: getRepoRoot(), timeout: EMITTER_TIMEOUT_MS }
+  );
+  const parsed: unknown = JSON.parse(stdout);
+  return Array.isArray(parsed) ? (parsed as EmitterRow[]) : [];
 }
 
 function parseContainerShard(name: string): number | null {
@@ -113,27 +118,41 @@ function describeContainerWorkers(containerLines: string[], shardCounts: Record<
       name: name,
       status: isRunning ? (tasks > 0 ? 'busy' : 'online') : 'offline',
       tasks,
-      load: tasks ? Math.min(100, (tasks / 10) * 100) : 0
+      load: tasks ? Math.min(100, (tasks / 10) * 100) : 0,
+      activity: 'unknown',
+      health: 'none',
     };
   });
 }
 
+async function loadShardCounts(): Promise<Record<number, number>> {
+  // Open evaluations per shard — the real busy/backlog signal.
+  const groups = await prisma.evaluations.groupBy({
+    by: ['evaluation_shard'],
+    where: { outcome: null },
+    _count: { _all: true }
+  });
+  const shardCounts: Record<number, number> = {};
+  for (const g of groups) {
+    if (g.evaluation_shard !== null) shardCounts[g.evaluation_shard] = g._count._all;
+  }
+  return shardCounts;
+}
+
 export async function collectWorkerStats(): Promise<WorkerStat[]> {
   try {
+    const shardCounts = await loadShardCounts();
+    try {
+      // Why the emitter first: it is the single service that pings every
+      // fleet shard (local docker state + TCP reachability incl. remotes).
+      return mapEmitterRowsToStats(await loadEmitterRows(), shardCounts);
+    } catch (emitterError) {
+      console.error('Emitter failed, falling back to docker ps:', emitterError);
+    }
+
     const configuredWorkers = loadConfiguredWorkers(path.join(getRepoRoot(), '.env'));
 
     const { stdout } = await execPromise('docker ps -a --filter "name=cms-worker" --format "{{.Names}}\t{{.Status}}"');
-
-    // Open evaluations per shard — the real busy/backlog signal.
-    const groups = await prisma.evaluations.groupBy({
-      by: ['evaluation_shard'],
-      where: { outcome: null },
-      _count: { _all: true }
-    });
-    const shardCounts: Record<number, number> = {};
-    for (const g of groups) {
-      if (g.evaluation_shard !== null) shardCounts[g.evaluation_shard] = g._count._all;
-    }
 
     const running: RunningShard[] = stdout
       .trim()
@@ -145,7 +164,19 @@ export async function collectWorkerStats(): Promise<WorkerStat[]> {
       });
 
     if (configuredWorkers.length > 0) {
-      return Promise.all(configuredWorkers.map((worker) => describeConfiguredWorker(worker, shardCounts, running)));
+      return configuredWorkers.map((worker) => {
+        const tasks = shardCounts[worker.shard] || 0;
+        const live = isShardRunning(running, worker.shard);
+        return {
+          id: `worker-${worker.shard}`,
+          name: `${worker.host}:${worker.port}`,
+          status: live ? (tasks > 0 ? 'busy' : 'online') : 'offline',
+          tasks,
+          load: tasks > 0 ? Math.min(100, (tasks / 10) * 100) : 0,
+          activity: 'unknown',
+          health: 'none',
+        };
+      });
     }
 
     if (!stdout.trim()) {

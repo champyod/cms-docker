@@ -15,6 +15,8 @@ interface WorkerStats {
   status: string;
   load: number;
   tasks: number;
+  activity: string;
+  health: string;
 }
 
 export function WorkerGrid({ workers }: { workers: WorkerStats[] }) {
@@ -84,11 +86,16 @@ export function WorkerGrid({ workers }: { workers: WorkerStats[] }) {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border">
-              <div className="flex flex-col">
-                <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest leading-tight">
-                  Active Tasks
-                </span>
+          <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+            <span className="font-bold uppercase tracking-widest">Activity: <span className="text-foreground">{worker.activity}</span></span>
+            <span className="font-bold uppercase tracking-widest">Health: <span className="text-foreground">{worker.health}</span></span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border">
+            <div className="flex flex-col">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest leading-tight">
+                Active Tasks
+              </span>
                 <span className="text-sm font-bold text-foreground font-mono">
                   {worker.tasks}
                 </span>

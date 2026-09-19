@@ -55,7 +55,7 @@ function stats(cpu: number): ServerStats {
 }
 
 function worker(): WorkerStat {
-  return { id: 'worker-0', name: 'w0', status: 'online', tasks: 0, load: 0 };
+  return { id: 'worker-0', name: 'w0', status: 'online', tasks: 0, load: 0, activity: 'idle', health: 'healthy' };
 }
 
 function traffic(rx: string): { id: number; timestamp: string; container: string; rx: string; tx: string }[] {
