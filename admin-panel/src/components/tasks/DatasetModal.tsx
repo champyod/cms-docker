@@ -130,7 +130,9 @@ export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess }: Da
     try {
       const payload = {
         ...formData,
-        memory_limit: formData.memory_limit * 1024 * 1024,
+        // Why megabytes here: the datasets routes validate 1-4096 MB and
+        // convert to bytes themselves, so sending bytes fails validation.
+        memory_limit: formData.memory_limit,
         task_type_parameters: taskTypeParameters,
         task_type_parameters_text: undefined,
       };
