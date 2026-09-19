@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { toast } from 'sonner';
 import { getParticipationDetails, updateParticipation } from '@/app/actions/participations';
 import type { PasswordKind } from '@/lib/password-format';
 
@@ -59,10 +60,18 @@ export function useParticipationForm(isOpen: boolean, participationId: number) {
         payload.passwordKind = formData.password_kind;
       }
       const result = await updateParticipation(participationId, payload);
-      if (result.success) { onSuccess(); onClose(); }
-      else setError(result.error || 'Failed to update participation');
+      if (result.success) {
+        toast.success('Participation saved', { description: 'Settings updated successfully.' });
+        onSuccess();
+        onClose();
+      } else {
+        const message = result.error || 'Failed to update participation';
+        setError(message);
+        toast.error('Save failed', { description: message });
+      }
     } catch {
       setError('An unexpected error occurred');
+      toast.error('Save failed', { description: 'An unexpected error occurred' });
     } finally {
       setSaving(false);
     }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { toast } from 'sonner';
 import { apiClient } from '@/lib/apiClient';
 import { Button } from '@/components/core/Button';
 import { Dialog, DialogFooter } from '@/components/core/Dialog';
@@ -54,10 +55,15 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData, permissionK
       : await apiClient.post('/api/teams', allowed);
 
     if (result.success) {
+      toast.success(initialData ? 'Team updated' : 'Team created', {
+        description: `${formData.name} saved successfully.`,
+      });
       onSuccess();
       onClose();
     } else {
-      setError(result.error || 'Operation failed');
+      const message = result.error || 'Operation failed';
+      setError(message);
+      toast.error('Save failed', { description: message });
     }
     setLoading(false);
   };

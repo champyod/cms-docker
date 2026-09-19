@@ -141,11 +141,14 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
         onSuccess();
         onClose();
       } else {
-        setError(result.error ?? 'An error occurred');
+        const message = result.error ?? 'An error occurred';
+        setError(message);
+        toast.error('Save failed', { description: message });
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'An unexpected error occurred';
       setError(message);
+      toast.error('Save failed', { description: message });
     } finally {
       setLoading(false);
     }

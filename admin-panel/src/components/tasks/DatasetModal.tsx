@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { toast } from 'sonner';
 import { Database, Save, Terminal } from 'lucide-react';
 import { Dialog } from '@/components/core/Dialog';
 import { Button } from '@/components/core/Button';
@@ -140,15 +141,21 @@ export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess }: Da
         ? await apiClient.put(`/api/datasets/${dataset.id}`, { action: 'update', ...payload })
         : await apiClient.post('/api/datasets', { taskId, ...payload });
       if (result.success) {
+        toast.success(dataset ? 'Dataset updated' : 'Dataset created', {
+          description: `${formData.description} saved successfully.`,
+        });
         onSuccess();
         onClose();
       } else {
-        setError(result.error ?? 'Operation failed');
+        const message = result.error ?? 'Operation failed';
+        setError(message);
+        toast.error('Save failed', { description: message });
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'An unexpected error occurred';
       console.error('Dataset operation error:', err);
       setError(message);
+      toast.error('Save failed', { description: message });
     } finally {
       setLoading(false);
     }

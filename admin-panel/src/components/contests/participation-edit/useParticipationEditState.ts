@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import { updateParticipation, sendMessage, revealParticipationPassword } from '@/app/actions/participations';
 import type { PasswordKind } from '@/lib/password-format';
 
@@ -57,9 +58,17 @@ export function useParticipationEditState(isOpen: boolean, participation: Partic
       const result = await updateParticipation(participation.id, payload);
       if (result.success) {
         if (formData.password.trim().length > 0) { setRevealed({ kind: 'plaintext', value: formData.password }); setRevealTab('plain'); setRevealError(''); }
+        toast.success('Participation saved', { description: 'Settings updated successfully.' });
         router.refresh();
-      } else setError(result.error || 'Failed to update');
-    } catch { setError('An error occurred'); }
+      } else {
+        const message = result.error || 'Failed to update';
+        setError(message);
+        toast.error('Save failed', { description: message });
+      }
+    } catch {
+      setError('An error occurred');
+      toast.error('Save failed', { description: 'An error occurred' });
+    }
     finally { setSaving(false); }
   };
 
@@ -68,9 +77,19 @@ export function useParticipationEditState(isOpen: boolean, participation: Partic
     setSaving(true);
     try {
       const result = await sendMessage(participation.id, adminId, messageData);
-      if (result.success) { setMessageData({ subject: '', text: '' }); handleClose(); }
-      else setError(result.error || 'Failed to send message');
-    } catch { setError('An error occurred'); }
+      if (result.success) {
+        toast.success('Message sent', { description: 'The participant will see it on their contest page.' });
+        setMessageData({ subject: '', text: '' });
+        handleClose();
+      } else {
+        const message = result.error || 'Failed to send message';
+        setError(message);
+        toast.error('Send failed', { description: message });
+      }
+    } catch {
+      setError('An error occurred');
+      toast.error('Send failed', { description: 'An error occurred' });
+    }
     finally { setSaving(false); }
   };
 
