@@ -79,7 +79,8 @@ export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess }: Da
     setLoadingManagers(true);
     try {
       const res = await apiClient.get(`/api/datasets/${dataset.id}/managers`);
-      if (res.success) setManagers(res.data as Manager[]);
+      const list: unknown = (res as { data?: unknown }).data;
+      if (res.success) setManagers(Array.isArray(list) ? (list as Manager[]) : []);
     } catch (err) {
       console.error(err);
     } finally {

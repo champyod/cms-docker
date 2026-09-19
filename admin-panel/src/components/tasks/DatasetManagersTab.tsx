@@ -100,7 +100,7 @@ export function DatasetManagersTab({
                 <FileText className="w-4 h-4 text-success" />
                 <div>
                   <div className="text-sm font-medium text-foreground">{manager.filename}</div>
-                  <div className="text-xs text-muted-foreground font-mono">{manager.digest.substring(0, 8)}...</div>
+                  <div className="text-xs text-muted-foreground font-mono">{manager.digest ? `${manager.digest.substring(0, 8)}...` : 'no digest'}</div>
                 </div>
               </div>
               <Button
