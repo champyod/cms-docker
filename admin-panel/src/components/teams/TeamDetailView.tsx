@@ -65,6 +65,7 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
     try {
       const result = await updateTeam(team.id, formData);
       if (result.success) {
+        toast.success('Team saved', { description: `${team.name} updated successfully.` });
         router.refresh();
       } else {
         toast.error('Failed: ' + result.error);
