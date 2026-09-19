@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseFilename } from '@/utils/filenameParser';
+import { parseFilename, validatePattern } from '@/utils/filenameParser';
 
 describe('parseFilename', () => {
   it('extracts a single-star id', () => {
@@ -33,5 +33,17 @@ describe('parseFilename', () => {
   it('anchors the match to the whole filename', () => {
     expect(parseFilename('prefix.task.1.in', 'task.*.in')).toBeNull();
     expect(parseFilename('task.1.in.suffix', 'task.*.in')).toBeNull();
+  });
+});
+
+describe('validatePattern', () => {
+  it('accepts star and double-star patterns', () => {
+    expect(validatePattern('*.in')).toBe('');
+    expect(validatePattern('prob_**.out')).toBe('');
+  });
+
+  it('rejects empty and starless patterns', () => {
+    expect(validatePattern('')).toContain('empty');
+    expect(validatePattern('fixed.txt')).toContain('*');
   });
 });

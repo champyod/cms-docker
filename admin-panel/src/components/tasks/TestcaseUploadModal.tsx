@@ -2,16 +2,17 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Upload, Check, AlertCircle, Archive, File as FileIcon, Settings } from 'lucide-react';
-import JSZip from 'jszip';
+import { Upload, Archive, File as FileIcon } from 'lucide-react';
 import { batchUploadTestcases } from '@/app/actions/testcases';
 import { Dialog } from '@/components/core/Dialog';
 import { Button } from '@/components/core/Button';
-import { cn } from '@/lib/utils';
-import { getEncodingLabel } from '@/lib/file-encoding';
 import type { FileEncoding } from '@/lib/file-encoding';
-import { buildPairs, readBlobBytes, pairToUploadData } from './testcase-helpers';
-import type { FilePair, SourceItem } from './testcase-helpers';
+import { validatePattern } from '@/utils/filenameParser';
+import { pairToUploadData } from './testcase-helpers';
+import { pairLocalFiles, pairZipFile } from './testcase-upload';
+import type { FilePair } from './testcase-helpers';
+import { TestcasePatternInputs } from './TestcasePatternInputs';
+import { TestcasePairsList } from './TestcasePairsList';
 import { TestcasePreviewDialog } from './TestcasePreviewDialog';
 
 interface TestcaseUploadModalProps {
@@ -26,11 +27,16 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
   const [uploadType, setUploadType] = useState<'files' | 'zip'>('files');
   const [inputPattern, setInputPattern] = useState('*.in');
   const [outputPattern, setOutputPattern] = useState('*.out');
+  const [inputPatternError, setInputPatternError] = useState('');
+  const [outputPatternError, setOutputPatternError] = useState('');
+  const [patternsPasted, setPatternsPasted] = useState(false);
   const [pairs, setPairs] = useState<FilePair[]>([]);
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [previewPairId, setPreviewPairId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pastedPatternsRef = useRef(false);
+  const selectedFilesRef = useRef<{ uploadType: 'files' | 'zip'; files: File[] } | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -39,13 +45,16 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
     setLoading(false);
     setProcessing(false);
     setPreviewPairId(null);
+    setInputPatternError('');
+    setOutputPatternError('');
+    setPatternsPasted(false);
+    selectedFilesRef.current = null;
   }, [isOpen]);
 
   const processFilesList = async (files: File[]): Promise<void> => {
     setProcessing(true);
     try {
-      const sourceItems: SourceItem[] = files.map((file) => ({ name: file.name, getBytes: () => readBlobBytes(file) }));
-      setPairs(await buildPairs(sourceItems, inputPattern, outputPattern));
+      setPairs(await pairLocalFiles(files, inputPattern, outputPattern));
     } catch (error) {
       console.error(error);
       toast.error('Failed to process files');
@@ -57,15 +66,7 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
   const processZip = async (file: File): Promise<void> => {
     setProcessing(true);
     try {
-      const zip = new JSZip();
-      const content = await zip.loadAsync(file);
-      const sourceItems: SourceItem[] = [];
-      for (const [filename, zipEntry] of Object.entries(content.files)) {
-        if (zipEntry.dir || filename.startsWith('__MACOSX')) continue;
-        const cleanName = filename.split('/').pop() ?? filename;
-        sourceItems.push({ name: cleanName, getBytes: async () => zipEntry.async('uint8array') });
-      }
-      setPairs(await buildPairs(sourceItems, inputPattern, outputPattern));
+      setPairs(await pairZipFile(file, inputPattern, outputPattern));
     } catch (error) {
       console.error(error);
       toast.error('Failed to process zip file');
@@ -76,9 +77,45 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>): void => {
     if (!e.target.files?.length) return;
-    if (uploadType === 'zip') void processZip(e.target.files[0]);
-    else void processFilesList(Array.from(e.target.files));
+    const files = Array.from(e.target.files);
+    selectedFilesRef.current = { uploadType, files };
+    if (uploadType === 'zip') void processZip(files[0]);
+    else void processFilesList(files);
   };
+
+  const handlePatternChange = (side: 'input' | 'output', value: string): void => {
+    const setValue = side === 'input' ? setInputPattern : setOutputPattern;
+    const setLint = side === 'input' ? setInputPatternError : setOutputPatternError;
+    if (pastedPatternsRef.current) {
+      pastedPatternsRef.current = false;
+      setPatternsPasted(true);
+      setValue(value);
+      setLint('');
+      return;
+    }
+    setPatternsPasted(false);
+    setValue(value);
+    setLint(validatePattern(value));
+  };
+
+  useEffect(() => {
+    const selection = selectedFilesRef.current;
+    if (!selection || inputPatternError || outputPatternError) return;
+    const rebuildPairs = async (): Promise<void> => {
+      setProcessing(true);
+      try {
+        setPairs(selection.uploadType === 'zip'
+          ? await pairZipFile(selection.files[0], inputPattern, outputPattern)
+          : await pairLocalFiles(selection.files, inputPattern, outputPattern));
+      } catch (error) {
+        console.error(error);
+        toast.error('Failed to process files');
+      } finally {
+        setProcessing(false);
+      }
+    };
+    void rebuildPairs();
+  }, [inputPattern, outputPattern, inputPatternError, outputPatternError]);
 
   const updatePairEncoding = (pairId: string, side: 'input' | 'output', encoding: FileEncoding): void => {
     setPairs((previous) =>
@@ -172,20 +209,17 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
             </div>
           ) : (
             <div className="flex min-h-0 flex-1 animate-in slide-in-from-right flex-col overflow-hidden duration-300">
-              <div className="flex flex-wrap items-end gap-4 border-b border-border bg-muted/20 p-4">
-                <div className="min-w-50 flex-1">
-                  <label className="mb-1.5 block text-xs font-bold uppercase text-muted-foreground">Input Pattern</label>
-                  <input type="text" value={inputPattern} onChange={(event) => setInputPattern(event.target.value)} className="w-full rounded border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground focus:border-ring focus:outline-none" placeholder="e.g. *.in" />
-                  <p className="mt-1 text-xs text-muted-foreground">Use * for number, ** for 2-digit number</p>
-                </div>
-                <div className="min-w-50 flex-1">
-                  <label className="mb-1.5 block text-xs font-bold uppercase text-muted-foreground">Output Pattern</label>
-                  <input type="text" value={outputPattern} onChange={(event) => setOutputPattern(event.target.value)} className="w-full rounded border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground focus:border-ring focus:outline-none" placeholder="e.g. *.out" />
-                </div>
-                <div className="pb-0.5">
-                  <button onClick={() => setStep(1)} className="text-xs text-muted-foreground underline hover:text-foreground">Change Method</button>
-                </div>
-              </div>
+              <TestcasePatternInputs
+                inputPattern={inputPattern}
+                outputPattern={outputPattern}
+                inputError={inputPatternError}
+                outputError={outputPatternError}
+                pastedNotice={patternsPasted}
+                onPasteCapture={() => { pastedPatternsRef.current = true; }}
+                onInputChange={(value) => handlePatternChange('input', value)}
+                onOutputChange={(value) => handlePatternChange('output', value)}
+                onBackToMethod={() => setStep(1)}
+              />
 
               <div className="flex-1 space-y-4 overflow-y-auto p-4">
                 <div onClick={() => fileInputRef.current?.click()} className="group flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border p-6 transition-all hover:bg-muted/50 hover:border-ring/50">
@@ -200,37 +234,7 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
                   </div>
                 )}
 
-                {!processing && pairs.length > 0 && (
-                  <div className="space-y-2">
-                    <div className="sticky top-0 z-10 flex items-center justify-between bg-card px-2 py-2 text-xs font-bold uppercase text-muted-foreground">
-                      <span>Matched Pairs ({pairs.length})</span>
-                      <span>Status</span>
-                    </div>
-                    {pairs.map((pair) => (
-                      <div key={pair.id} className="flex items-center justify-between gap-4 rounded-lg border border-border bg-muted/30 p-3">
-                        <div className="flex min-w-0 flex-1 items-center gap-3">
-                          <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold', pair.status === 'ready' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive')}>{pair.id}</div>
-                          <div className="flex min-w-0 flex-1 flex-col gap-1">
-                            <span className="truncate text-xs text-muted-foreground">In: <span className={pair.inputFile ? 'text-foreground' : 'text-destructive'}>{pair.inputFile?.name ?? 'Missing'}</span></span>
-                            <span className="truncate text-xs text-muted-foreground">Out: <span className={pair.outputFile ? 'text-foreground' : 'text-destructive'}>{pair.outputFile?.name ?? 'Missing'}</span></span>
-                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                              {pair.inputFile && <span>Input: <span className="text-info">{getEncodingLabel(pair.inputFile.selectedEncoding)}</span><span className="text-muted-foreground"> (detected {getEncodingLabel(pair.inputFile.detectedEncoding)})</span></span>}
-                              {pair.outputFile && <span>Output: <span className="text-info">{getEncodingLabel(pair.outputFile.selectedEncoding)}</span><span className="text-muted-foreground"> (detected {getEncodingLabel(pair.outputFile.detectedEncoding)})</span></span>}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          <button onClick={() => setPreviewPairId(pair.id)} className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/50 px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-accent">
-                            <Settings className="w-3.5 h-3.5" />
-                            Preview
-                          </button>
-                          {pair.status === 'ready' && <Check className="h-4 w-4 text-success" />}
-                          {(pair.status === 'missing_input' || pair.status === 'missing_output') && <AlertCircle className="h-4 w-4 text-destructive" />}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                {!processing && <TestcasePairsList pairs={pairs} onPreview={setPreviewPairId} />}
               </div>
             </div>
           )}

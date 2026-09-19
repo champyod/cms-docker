@@ -4,16 +4,29 @@ export interface ParsedFile {
   type: 'input' | 'output' | null;
 }
 
-export function parseFilename(filename: string, pattern: string): string | null {
+function toRegExpSource(pattern: string): string {
   const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
-  
-  const regexStr = '^' + escaped
+
+  return '^' + escaped
     .replace(/\*\*/g, '(\\d{2})')
     .replace(/\*/g, '(\\d+)') + '$';
-    
-  const regex = new RegExp(regexStr);
+}
+
+export function validatePattern(pattern: string): string {
+  if (pattern.trim() === '') return 'Pattern must not be empty.';
+  if (!pattern.includes('*')) return 'Pattern must contain * (number) or ** (2-digit number).';
+  try {
+    new RegExp(toRegExpSource(pattern));
+  } catch {
+    return 'Pattern is not a valid matcher.';
+  }
+  return '';
+}
+
+export function parseFilename(filename: string, pattern: string): string | null {
+  const regex = new RegExp(toRegExpSource(pattern));
   const match = filename.match(regex);
-  
+
   if (match && match[1]) {
      return match[1];
   }
