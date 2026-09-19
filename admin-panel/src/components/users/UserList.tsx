@@ -111,6 +111,7 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
     if (!(await confirm(destructiveConfirm('user')))) return;
     const result = await apiClient.delete(`/api/users/${id}`);
     if (result.success) {
+      toast.success('User deleted');
       await fetchUsers();
     } else {
       toast.error('Failed to delete user');

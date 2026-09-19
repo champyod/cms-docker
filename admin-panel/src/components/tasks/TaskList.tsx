@@ -60,8 +60,10 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
     if (!canDeleteTasks) return;
     if (!(await confirm(destructiveConfirm('task')))) return;
     const result = await apiClient.delete(`/api/tasks/${id}`);
-    if (result.success) router.refresh();
-    else toast.error(`Failed to delete task: ${result.error}`);
+    if (result.success) {
+      toast.success('Task deleted');
+      router.refresh();
+    } else toast.error(`Failed to delete task: ${result.error}`);
   };
 
   const handleCreate = (): void => {

@@ -51,6 +51,7 @@ export function TeamList({ initialTeams, permissionKeys }: TeamListProps) {
     if (!(await confirm(destructiveConfirm('team')))) return;
     const result = await deleteTeam(id);
     if (result.success) {
+      toast.success('Team deleted');
       router.refresh();
     } else {
       toast.error(result.error);

@@ -58,8 +58,10 @@ function ContestMobileCard({ contest, locale, isSuperAdmin, canManage, canUpdate
     if (!canManage) return;
     if (!(await confirm(destructiveConfirm('contest')))) return;
     const result = await apiClient.delete(`/api/contests/${contest.id}`);
-    if (result.success) router.refresh();
-    else toast.error('Failed to delete contest: ' + result.error);
+    if (result.success) {
+      toast.success('Contest deleted');
+      router.refresh();
+    } else toast.error('Failed to delete contest: ' + result.error);
   };
   return (
     <MobileCard>

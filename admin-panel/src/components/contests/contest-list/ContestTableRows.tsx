@@ -46,8 +46,10 @@ export function ContestTableRow({ contest, locale, isSuperAdmin, canManage, canU
     if (!canManage) return;
     if (!(await confirm(destructiveConfirm('contest')))) return;
     const result = await apiClient.delete(`/api/contests/${id}`);
-    if (result.success) router.refresh();
-    else toast.error('Failed to delete contest: ' + result.error);
+    if (result.success) {
+      toast.success('Contest deleted');
+      router.refresh();
+    } else toast.error('Failed to delete contest: ' + result.error);
   };
 
   return (

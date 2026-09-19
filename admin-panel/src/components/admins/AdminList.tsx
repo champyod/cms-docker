@@ -65,6 +65,7 @@ export function AdminList({
     if (!(await confirm(destructiveConfirm('admin')))) return;
     const result = await deleteAdmin(id);
     if (result.success) {
+      toast.success('Admin deleted');
       router.refresh();
     } else {
       toast.error(result.error);
@@ -75,6 +76,8 @@ export function AdminList({
     const result = await updateAdmin(admin.id, { enabled: !admin.enabled });
     if (!result.success) {
       toast.error(result.error ?? 'Failed to update admin');
+    } else {
+      toast.success(admin.enabled ? 'Admin disabled' : 'Admin enabled');
     }
     router.refresh();
   };
