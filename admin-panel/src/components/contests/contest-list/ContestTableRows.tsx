@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { TableCell, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
 import { Badge } from '@/components/core/Badge';
-import { Calendar, Clock, ExternalLink, Trash2, Rocket, CheckCircle2 } from 'lucide-react';
+import { Calendar, Clock, ExternalLink, Pencil, Trash2, Rocket, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/apiClient';
 import { ROW_SELECTED_CLASSES } from '@/hooks/useShortcuts';
@@ -30,10 +30,12 @@ interface RowProps {
   locale: string;
   isSuperAdmin: boolean;
   canManage: boolean;
+  canUpdate: boolean;
   onSetActive: (id: number) => void;
+  onEdit: (id: number) => void;
 }
 
-export function ContestTableRow({ contest, locale, isSuperAdmin, canManage, onSetActive }: RowProps) {
+export function ContestTableRow({ contest, locale, isSuperAdmin, canManage, canUpdate, onSetActive, onEdit }: RowProps) {
   const router = useRouter();
   const confirm = useConfirm();
   const { destructiveConfirm } = useConfirmationCopy();
@@ -82,6 +84,9 @@ export function ContestTableRow({ contest, locale, isSuperAdmin, canManage, onSe
       <TableCell className="text-xs text-muted-foreground">{contest._count?.participations ?? 0}</TableCell>
       <TableCell className="text-right">
         <div className="flex items-center justify-end gap-2">
+          {canUpdate && (
+            <Button variant="ghost" size="sm" icon={Pencil} tooltip="Edit" aria-label={`Edit ${contest.name}`} onClick={() => onEdit(contest.id)} />
+          )}
           {isSuperAdmin && !isActive && (
             <Button variant="ghost" size="sm" icon={Rocket} onClick={() => onSetActive(contest.id)}>Set Active</Button>
           )}

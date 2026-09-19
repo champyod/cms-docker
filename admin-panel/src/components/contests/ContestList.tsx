@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { EmptyState } from '@/components/core/EmptyState';
 import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
 import { Badge } from '@/components/core/Badge';
-import { ExternalLink, Rocket, Trash2, Trophy } from 'lucide-react';
+import { ExternalLink, Pencil, Rocket, Trash2, Trophy } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { apiClient } from '@/lib/apiClient';
@@ -45,10 +45,12 @@ interface CardProps {
   locale: string;
   isSuperAdmin: boolean;
   canManage: boolean;
+  canUpdate: boolean;
   onSetActive: (id: number) => void;
+  onEdit: (id: number) => void;
 }
 
-function ContestMobileCard({ contest, locale, isSuperAdmin, canManage, onSetActive }: CardProps): React.JSX.Element {
+function ContestMobileCard({ contest, locale, isSuperAdmin, canManage, canUpdate, onSetActive, onEdit }: CardProps): React.JSX.Element {
   const router = useRouter();
   const confirm = useConfirm();
   const { destructiveConfirm } = useConfirmationCopy();
@@ -73,6 +75,11 @@ function ContestMobileCard({ contest, locale, isSuperAdmin, canManage, onSetActi
         <Link href={`/${locale}/contests/${contest.id}`} aria-label={`View ${contest.name}`} className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-primary">
           <ExternalLink className="h-4 w-4" />
         </Link>
+        {canUpdate && (
+          <button onClick={() => onEdit(contest.id)} aria-label={`Edit ${contest.name}`} title="Edit" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-primary">
+            <Pencil className="h-4 w-4" />
+          </button>
+        )}
         {isSuperAdmin && !contest.is_active && (
           <button onClick={() => onSetActive(contest.id)} aria-label={`Set contest ${contest.id} active`} title="Set Active" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-primary">
             <Rocket className="h-4 w-4" />
@@ -92,7 +99,7 @@ export function ContestList({ initialContests, totalPages, permissionKeys }: Con
   void totalPages;
   const [contests] = useSyncedState(initialContests);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedContest] = useState<ExistingContest | null>(null);
+  const [selectedContest, setSelectedContest] = useState<ExistingContest | null>(null);
   const pathname = usePathname();
   const router = useRouter();
   const locale = pathname.split('/')[1] || 'en';
@@ -101,8 +108,21 @@ export function ContestList({ initialContests, totalPages, permissionKeys }: Con
   const canCreateContests = hasEffectivePermission(effective, 'contest:create');
   const canDeleteContests = hasEffectivePermission(effective, 'contest:delete');
   const canSwitchContests = hasEffectivePermission(effective, 'contest:switch');
+  const canUpdateContests = hasEffectivePermission(effective, 'contest:update');
 
-  const handleCreate = () => { if (!canCreateContests) return; setIsModalOpen(true); };
+  const handleCreate = () => { if (!canCreateContests) return; setSelectedContest(null); setIsModalOpen(true); };
+  const handleEdit = async (id: number) => {
+    if (!canUpdateContests) return;
+    const result = await apiClient.get<{ contest: ExistingContest }>(`/api/contests/${id}`);
+    const contest = result.contest as ExistingContest | undefined;
+    if (result.success && contest) {
+      setSelectedContest(contest);
+      setIsModalOpen(true);
+    } else {
+      toast.error('Failed to load contest: ' + result.error);
+    }
+  };
+  const handleClose = () => { setIsModalOpen(false); setSelectedContest(null); };
   const handleSuccess = () => router.refresh();
 
   return (
@@ -111,7 +131,7 @@ export function ContestList({ initialContests, totalPages, permissionKeys }: Con
       <div className="overflow-hidden rounded-xl border border-border bg-card">
         <Table
           mobileCards={contests.map((contest) => (
-            <ContestMobileCard key={contest.id} contest={contest} locale={locale} isSuperAdmin={canSwitchContests} canManage={canDeleteContests} onSetActive={actions.requestDeploy} />
+            <ContestMobileCard key={contest.id} contest={contest} locale={locale} isSuperAdmin={canSwitchContests} canManage={canDeleteContests} canUpdate={canUpdateContests} onSetActive={actions.requestDeploy} onEdit={handleEdit} />
           ))}
         >
           <TableHeader>
@@ -127,7 +147,7 @@ export function ContestList({ initialContests, totalPages, permissionKeys }: Con
           </TableHeader>
           <TableBody>
             {contests.map((contest) => (
-              <ContestTableRow key={contest.id} contest={contest} locale={locale} isSuperAdmin={canSwitchContests} canManage={canDeleteContests} onSetActive={actions.requestDeploy} />
+              <ContestTableRow key={contest.id} contest={contest} locale={locale} isSuperAdmin={canSwitchContests} canManage={canDeleteContests} canUpdate={canUpdateContests} onSetActive={actions.requestDeploy} onEdit={handleEdit} />
             ))}
             {contests.length === 0 && (
               <TableRow>
@@ -139,7 +159,7 @@ export function ContestList({ initialContests, totalPages, permissionKeys }: Con
           </TableBody>
         </Table>
       </div>
-      <ContestModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} contest={selectedContest} onSuccess={handleSuccess} permissionKeys={permissionKeys} />
+      <ContestModal isOpen={isModalOpen} onClose={handleClose} contest={selectedContest} onSuccess={handleSuccess} permissionKeys={permissionKeys} />
       <DeployConfirmModal isOpen={actions.deployTarget !== null} phase={actions.deployState.phase} targetLabel={`#${actions.deployTarget}`} extraNote="The previous active contest will be deactivated." onClose={actions.closeDeploy} onConfirm={actions.confirmDeploy} />
     </div>
   );
