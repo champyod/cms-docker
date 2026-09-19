@@ -3,7 +3,8 @@
 import path from 'path';
 import { exec } from 'child_process';
 import util from 'util';
-import { ensurePermission } from '@/lib/permissions';
+import { ensurePermission, getPermissions } from '@/lib/permissions';
+import { hasEffectivePermission } from '@/lib/permission-engine';
 import { getRepoRoot } from '@/lib/repo-root';
 import { resolveHostComposeLocation } from '@/lib/compose-location';
 import { logToDiscord } from '@/lib/discord-notifier';
@@ -183,14 +184,20 @@ export async function getActiveDeployOperation(): Promise<ActiveDeployOperation 
 }
 
 export async function triggerManualBackup() {
-    await ensurePermission('maintenance:enable');
+    // Why OR with maintenance:enable: deployments seeded before backup:*
+    // existed hold enable but not the new key; nobody loses access and
+    // nothing escalates — enable holders could already trigger backups.
+    const effective = await getPermissions();
+    if (!hasEffectivePermission(effective, 'backup:create') && !hasEffectivePermission(effective, 'maintenance:enable')) {
+        return { success: false, error: 'Unauthorized: Missing backup:create permission' };
+    }
     try {
         const rootDir = getRepoRoot();
         await logToDiscord('Manual Backup', 'Admin triggered a manual submissions backup.', 3447003);
         const cmd = 'docker exec -d cms-monitor bash /usr/local/bin/cms-backup.sh';
         await execPromise(cmd, { cwd: rootDir });
         await recordAudit({
-          verb: 'maintenance:enable',
+          verb: 'backup:create',
           entity: 'service',
           afterValues: { action: 'backup' },
           result: 'success',

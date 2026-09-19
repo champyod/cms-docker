@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { usePathname } from 'next/navigation';
 import { Card } from '@/components/core/Card';
 import { readConfigTomlValues, updateConfigTomlValues } from '@/app/actions/env';
@@ -10,6 +10,7 @@ import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useDictionary } from '@/hooks/useDictionary';
 import { triggerManualBackup, restartServices } from '@/app/actions/services';
+import { hasEffectivePermission } from '@/lib/permission-engine';
 import {
   getDiscordNotificationSettings,
   saveDiscordNotificationSettings,
@@ -65,8 +66,14 @@ function describeDiscordState(settings: DiscordSettings): string {
   return 'Webhook configured and matching config.toml.';
 }
 
-export default function MaintenanceClient() {
+export default function MaintenanceClient({ permissionKeys }: { permissionKeys: readonly string[] }) {
   const toasts = useDictionary().toasts.maintenance;
+  // Why OR with maintenance:enable: pre-seed deployments hold enable but not
+  // backup:create; the server action enforces the same pair, this only hides.
+  const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
+  const canTriggerBackup =
+    hasEffectivePermission(effective, 'backup:create') ||
+    hasEffectivePermission(effective, 'maintenance:enable');
   const confirm = useConfirm();
   const { manualBackupConfirm } = useConfirmationCopy();
   // Why from the pathname: server actions localise their own messages, and a client component has no
@@ -252,6 +259,7 @@ export default function MaintenanceClient() {
                         </div>
                     </Stack>
 
+                    {canTriggerBackup && (
                     <Stack gap={2} className="pt-4 border-t border-border">
                         <Button
                             variant="positiveOutline"
@@ -266,6 +274,7 @@ export default function MaintenanceClient() {
                             Manual backups also respect cleanup policies.
                         </Text>
                     </Stack>
+                    )}
                 </Stack>
             </Card>
         </Stack>

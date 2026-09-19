@@ -45,6 +45,7 @@ const MODULES: readonly string[] = [
   'deployment',
   'ranking',
   'maintenance',
+  'backup',
   'appearance',
   'env',
   'settings',
@@ -292,6 +293,12 @@ export const DEFAULT_GROUPS: readonly GroupDefinition[] = [
       'resource:list',
       'resource:read',
       'resource:update',
+      // Why no backup:delete here: deleted archives cannot be restored, so
+      // deletion stays Superadmin-only while operate keys are delegable.
+      'backup:list',
+      'backup:read',
+      'backup:create',
+      'backup:update',
     ],
   },
   {
