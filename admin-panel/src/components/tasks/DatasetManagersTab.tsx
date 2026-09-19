@@ -9,6 +9,7 @@ import { apiClient } from '@/lib/apiClient';
 import { readFileAsBase64 } from '@/lib/file-helpers';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
+import { hasEffectivePermission } from '@/lib/permission-engine';
 
 interface Manager {
   id: number;
@@ -21,6 +22,7 @@ interface DatasetManagersTabProps {
   managers: Manager[];
   loadingManagers: boolean;
   onReload: () => void;
+  permissionKeys: readonly string[];
 }
 
 export function DatasetManagersTab({
@@ -28,7 +30,13 @@ export function DatasetManagersTab({
   managers,
   loadingManagers,
   onReload,
+  permissionKeys,
 }: DatasetManagersTabProps): React.JSX.Element {
+  const effective = new Set(permissionKeys);
+  // Why these keys: the managers routes enforce manager:create on upload,
+  // manager:delete on removal, and manager:read on load.
+  const canUpload = hasEffectivePermission(effective, 'manager:create');
+  const canDelete = hasEffectivePermission(effective, 'manager:delete');
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const confirm = useConfirm();
@@ -79,6 +87,7 @@ export function DatasetManagersTab({
         </div>
         <div>
           <input type="file" ref={fileInputRef} className="hidden" onChange={handleUpload} />
+          {canUpload && (
           <Button
             variant="positiveOutline"
             size="sm"
@@ -89,6 +98,7 @@ export function DatasetManagersTab({
           >
             Upload File
           </Button>
+          )}
         </div>
       </div>
 
@@ -109,6 +119,7 @@ export function DatasetManagersTab({
                   <div className="text-xs text-muted-foreground font-mono">{manager.digest ? `${manager.digest.substring(0, 8)}...` : 'no digest'}</div>
                 </div>
               </div>
+              {canDelete && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -117,6 +128,7 @@ export function DatasetManagersTab({
                 tooltip="Delete manager file"
                 onClick={() => { void handleDelete(manager.id); }}
               />
+              )}
             </div>
           ))
         )}

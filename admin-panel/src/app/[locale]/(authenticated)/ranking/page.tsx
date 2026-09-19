@@ -1,4 +1,4 @@
-import { checkPermission } from '@/lib/permissions';
+import { checkPermission, getPermissions } from '@/lib/permissions';
 import { notFound } from 'next/navigation';
 import { RankingClient } from '@/components/ranking/RankingClient';
 
@@ -15,5 +15,5 @@ export default async function RankingPage({
     notFound();
   }
 
-  return <RankingClient />;
+  return <RankingClient permissionKeys={[...(await getPermissions())]} />;
 }

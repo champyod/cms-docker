@@ -79,6 +79,10 @@ export default function MaintenanceClient({ permissionKeys }: { permissionKeys: 
   // Why from the pathname: server actions localise their own messages, and a client component has no
   // other way to tell them which locale the admin is reading (same pattern the lists already use).
   const locale = usePathname().split('/')[1] || 'en';
+  // Why these keys: the backup action enforces maintenance:enable and the test
+  // alert enforces monitor:test, while the page gate is maintenance:update.
+  const canBackup = hasEffectivePermission(effective, 'maintenance:enable');
+  const canTestAlert = hasEffectivePermission(effective, 'monitor:test');
   const [data, setData] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -261,6 +265,7 @@ export default function MaintenanceClient({ permissionKeys }: { permissionKeys: 
 
                     {canTriggerBackup && (
                     <Stack gap={2} className="pt-4 border-t border-border">
+                        {canBackup && (
                         <Button
                             variant="positiveOutline"
                             className="w-full"
@@ -270,6 +275,7 @@ export default function MaintenanceClient({ permissionKeys }: { permissionKeys: 
                             <Zap className="w-4 h-4" />
                             Trigger Manual Backup Now
                         </Button>
+                        )}
                         <Text variant="small" color="text-muted-foreground" className="text-center italic opacity-50">
                             Manual backups also respect cleanup policies.
                         </Text>
@@ -318,6 +324,7 @@ export default function MaintenanceClient({ permissionKeys }: { permissionKeys: 
                                 <Save className="w-4 h-4" />
                                 Save Notifications
                             </Button>
+                            {canTestAlert && (
                             <Button
                                 variant="secondary"
                                 onClick={handleTestAlert}
@@ -326,6 +333,7 @@ export default function MaintenanceClient({ permissionKeys }: { permissionKeys: 
                                 <Send className="w-4 h-4" />
                                 Send Test Alert
                             </Button>
+                            )}
                             <Button
                                 variant="positive"
                                 onClick={() => void persistDiscordSettings(true)}

@@ -33,6 +33,7 @@ interface DatasetModalProps {
   taskId: number;
   dataset?: DatasetRecord | null;
   onSuccess: () => void;
+  permissionKeys?: readonly string[];
 }
 
 interface DatasetFormData {
@@ -65,7 +66,7 @@ function taskParamsToText(params: unknown): string {
   }
 }
 
-export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess }: DatasetModalProps): React.JSX.Element | null {
+export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess, permissionKeys = [] }: DatasetModalProps): React.JSX.Element | null {
   const [activeTab, setActiveTab] = useState<'general' | 'managers'>('general');
   const [formData, setFormData] = useState<DatasetFormData>(DEFAULT_FORM);
   const [error, setError] = useState('');
@@ -242,7 +243,7 @@ export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess }: Da
             />
           )}
           {activeTab === 'managers' && dataset && (
-            <DatasetManagersTab datasetId={dataset.id} managers={managers} loadingManagers={loadingManagers} onReload={loadManagers} />
+            <DatasetManagersTab datasetId={dataset.id} managers={managers} loadingManagers={loadingManagers} onReload={loadManagers} permissionKeys={permissionKeys} />
           )}
         </div>
       </div>

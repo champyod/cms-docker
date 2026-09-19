@@ -1,6 +1,6 @@
 import { getSubmissions } from '@/app/actions/submissions';
 import { SubmissionList } from '@/components/submissions/SubmissionList';
-import { checkPermission } from '@/lib/permissions';
+import { checkPermission, getPermissions } from '@/lib/permissions';
 import { getDictionary } from '@/i18n';
 import { notFound } from 'next/navigation';
 import { Stack } from '@/components/core/Layout';
@@ -26,6 +26,7 @@ export default async function SubmissionsPage({
   const page = Number(sParams.page) || 1;
 
   const { submissions, totalPages } = await getSubmissions({ page });
+  const permissionKeys = [...(await getPermissions())];
 
   return (
     <Stack gap={8}>
@@ -38,6 +39,7 @@ export default async function SubmissionsPage({
         initialSubmissions={submissions}
         totalPages={totalPages}
         currentPage={page}
+        permissionKeys={permissionKeys}
        />
     </Stack>
   );

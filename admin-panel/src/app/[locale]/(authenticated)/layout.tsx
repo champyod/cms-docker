@@ -65,7 +65,7 @@ export default async function AuthenticatedLayout({
             <ScrollReset containerId={MAIN_SCROLL_CONTAINER_ID} />
           </Stack>
           <MobileNav locale={locale} permissionKeys={permissionKeys} />
-          <ShortcutLayer />
+          <ShortcutLayer permissionKeys={permissionKeys} />
         </PageBackground>
       </ConfirmProvider>
     </DictionaryProvider>

@@ -1,7 +1,7 @@
 import { getTask } from '@/app/actions/tasks';
 import { notFound } from 'next/navigation';
 import { TaskDetailView } from '@/components/tasks/TaskDetailView';
-import { checkPermission } from '@/lib/permissions';
+import { checkPermission, getPermissions } from '@/lib/permissions';
 
 type DatasetRecord = {
   memory_limit: bigint | null;
@@ -65,7 +65,7 @@ export default async function TaskDetailPage({ params }: { params: Promise<{ id:
 
   return (
     <div className="space-y-8">
-      <TaskDetailView task={serializedTask as Parameters<typeof TaskDetailView>[0]['task']} />
+      <TaskDetailView task={serializedTask as Parameters<typeof TaskDetailView>[0]['task']} permissionKeys={[...(await getPermissions())]} />
     </div>
   );
 }

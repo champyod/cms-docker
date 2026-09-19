@@ -10,8 +10,14 @@ import { BrandingCard } from './BrandingCard';
 import { RankingConnectionCard } from './RankingConnectionCard';
 import { RankingScoreboard } from './RankingScoreboard';
 import { useRankingRows, type RankingSnapshot } from './useRankingRows';
+import { hasEffectivePermission } from '@/lib/permission-engine';
 
-export function RankingClient() {
+export function RankingClient({ permissionKeys }: { permissionKeys: readonly string[] }) {
+  const effective = new Set(permissionKeys);
+  // Why these keys: the snapshot route enforces ranking:snapshot while the
+  // auth/logo routes enforce ranking:update, so each control mirrors its route.
+  const canSnapshot = hasEffectivePermission(effective, 'ranking:snapshot');
+  const canManage = hasEffectivePermission(effective, 'ranking:update');
   const [baseUrl, setBaseUrl] = useState('');
   const [username, setUsername] = useState('rank');
   const [password, setPassword] = useState('');
@@ -139,17 +145,21 @@ export function RankingClient() {
         description="Server-side proxy for ranking data with protected credential session."
         actions={
           <Stack direction="row" gap={2}>
-            <Button variant="secondary" onClick={fetchSnapshot} loading={loadingSnapshot} disabled={!connected}>
-              Refresh Snapshot
-            </Button>
-            <Button variant="negative" onClick={disconnect} loading={loadingSession} disabled={!connected}>
-              Disconnect
-            </Button>
+            {canSnapshot && (
+              <Button variant="secondary" onClick={fetchSnapshot} loading={loadingSnapshot} disabled={!connected}>
+                Refresh Snapshot
+              </Button>
+            )}
+            {canManage && (
+              <Button variant="negative" onClick={disconnect} loading={loadingSession} disabled={!connected}>
+                Disconnect
+              </Button>
+            )}
           </Stack>
         }
       />
-      <BrandingCard previewUrl={logoUrl} loading={uploading} onUpload={handleLogoUpload} error={brandingError} />
-      <RankingConnectionCard baseUrl={baseUrl} username={username} password={password} connected={connected} loadingSession={loadingSession} errorMessage={errorMessage} onBaseUrl={setBaseUrl} onUsername={setUsername} onPassword={setPassword} onConnect={connect} />
+      <BrandingCard previewUrl={logoUrl} loading={uploading} onUpload={handleLogoUpload} error={brandingError} readOnly={!canManage} />
+      <RankingConnectionCard baseUrl={baseUrl} username={username} password={password} connected={connected} loadingSession={loadingSession} errorMessage={errorMessage} onBaseUrl={setBaseUrl} onUsername={setUsername} onPassword={setPassword} onConnect={connect} canManage={canManage} />
       <RankingScoreboard rows={rows} loadingSnapshot={loadingSnapshot} />
     </PageContent>
   );

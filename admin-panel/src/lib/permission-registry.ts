@@ -1,3 +1,7 @@
+// Key grammar: `${module}:${verb}`. Most keys come from MODULES x STANDARD_VERBS.
+// DOMAIN_VERBS adds compound verbs (`admin:password:update`) and domain-only
+// modules (`password`, `override`) that are deliberately absent from MODULES.
+// `all:all` is appended explicitly as the audited wildcard, not a bypass.
 export interface PermissionDefinition {
   key: string;
   module: string;
@@ -116,6 +120,46 @@ function buildRegistry(): PermissionDefinition[] {
 }
 
 export const PERMISSION_REGISTRY: readonly PermissionDefinition[] = buildRegistry();
+
+// Why this list exists: these keys describe capabilities no check enforces yet —
+// verified by grepping every gate call (ensurePermission, checkPermission,
+// verifyApiPermission, requirePermission, hasEffectivePermission) across src.
+// Granting a reserved key confers nothing until a check enforces it; existing
+// group grants are left untouched so wiring them later is additive, not a fix.
+// Whole modules are reserved because no backend path references any of their
+// keys; task:switch_dataset is reserved because the field map and the dataset
+// switch action both enforce dataset:switch instead.
+const RESERVED_MODULES: readonly { module: string; reason: string }[] = [
+  { module: 'evaluation', reason: 'No evaluation path checks these keys.' },
+  { module: 'executable', reason: 'No executable path checks these keys.' },
+  { module: 'file', reason: 'No file path checks these keys.' },
+  { module: 'submissionresult', reason: 'No submission-result path checks these keys.' },
+  { module: 'token', reason: 'No token path checks these keys.' },
+  { module: 'usertest', reason: 'No user-test path checks these keys.' },
+  { module: 'permission', reason: 'No permission-admin path checks these keys.' },
+];
+
+const RESERVED_KEYS: readonly { key: string; reason: string }[] = [
+  { key: 'token:issue', reason: 'No issuance path checks this key.' },
+  { key: 'token:revoke', reason: 'No revocation path checks this key.' },
+  { key: 'task:switch_dataset', reason: 'Superseded by dataset:switch.' },
+];
+
+export interface ReservedPermission {
+  key: string;
+  reason: string;
+}
+
+function buildReserved(): readonly ReservedPermission[] {
+  const reserved: ReservedPermission[] = [];
+  for (const { module, reason } of RESERVED_MODULES) {
+    for (const verb of STANDARD_VERBS) reserved.push({ key: `${module}:${verb}`, reason });
+  }
+  for (const entry of RESERVED_KEYS) reserved.push(entry);
+  return reserved;
+}
+
+export const RESERVED_PERMISSIONS: readonly ReservedPermission[] = buildReserved();
 
 function crud(moduleName: string): string[] {
   return STANDARD_VERBS.map((verb) => `${moduleName}:${verb}`);
