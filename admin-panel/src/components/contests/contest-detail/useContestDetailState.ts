@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
+import { useJustSavedFlag } from '@/hooks/useJustSavedFlag';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { updateContestSettings, removeParticipant, removeTaskFromContest } from '@/app/actions/contests';
@@ -19,12 +20,7 @@ export function useContestDetailState(contest: ContestLike) {
   const [selectedParticipation, setSelectedParticipation] = useState<{ id: number; username: string } | null>(null);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({ info: true, participants: true, tasks: true, services: true });
   const [saving, setSaving] = useState(false);
-  const [justSaved, setJustSaved] = useState(false);
-  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => () => {
-    if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
-  }, []);
+  const { justSaved, flashSaved } = useJustSavedFlag();
   const router = useRouter();
   const deploy = useDeployContest();
   const confirm = useConfirm();
@@ -83,9 +79,7 @@ export function useContestDetailState(contest: ContestLike) {
       const result = await updateContestSettings(contest.id, formData);
       if (result.success) {
         toast.success('Contest saved', { description: 'Settings updated successfully.' });
-        setJustSaved(true);
-        if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
-        savedTimerRef.current = setTimeout(() => setJustSaved(false), 2000);
+        flashSaved();
         router.refresh();
       } else {
         toast.error('Save failed', { description: result.error ?? 'Validation failed.' });
