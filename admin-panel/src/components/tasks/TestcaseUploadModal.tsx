@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Upload, Archive, File as FileIcon } from 'lucide-react';
 import { batchUploadTestcases } from '@/app/actions/testcases';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { Dialog } from '@/components/core/Dialog';
 import { Button } from '@/components/core/Button';
 import type { FileEncoding } from '@/lib/file-encoding';
@@ -129,22 +130,30 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
     );
   };
 
+  const runAction = useActionFeedback();
+
   const handleUpload = async (): Promise<void> => {
     const readyPairs = pairs.filter((pair) => pair.status === 'ready');
     if (readyPairs.length === 0) return;
     setLoading(true);
     try {
       const uploadData = await Promise.all(readyPairs.map((pair) => pairToUploadData(pair)));
-      const result = await batchUploadTestcases(datasetId, uploadData);
+      const result = await runAction(
+        {
+          pending: `Uploading ${readyPairs.length} testcases...`,
+          success: 'Testcases uploaded',
+          failure: 'Upload failed',
+          description: `${readyPairs.length} pairs saved successfully.`,
+        },
+        () => batchUploadTestcases(datasetId, uploadData)
+      );
+      if (!result) return;
       if (result.success) {
         onSuccess();
         onClose();
-      } else {
-        toast.error(`Upload failed: ${result.error}`);
       }
     } catch (error) {
       console.error(error);
-      toast.error('An unexpected error occurred.');
     } finally {
       setLoading(false);
     }

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useJustSavedFlag } from '@/hooks/useJustSavedFlag';
-import { toast } from 'sonner';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { useRouter } from 'next/navigation';
 import { updateContestSettings, removeParticipant, removeTaskFromContest } from '@/app/actions/contests';
 import { setTestUser } from '@/app/actions/participations';
@@ -60,39 +60,54 @@ export function useContestDetailState(contest: ContestLike) {
     setIsParticipationModalOpen(true);
   };
 
+  const runAction = useActionFeedback();
+
   const handleMarkAsTest = async (participationId: number) => {
     if (!(await confirm(markTestUserConfirm()))) return;
-    const result = await setTestUser(participationId);
-    if (result.success) router.refresh();
-    else toast.error('Failed: ' + result.error);
+    const result = await runAction(
+      { pending: 'Marking test user...', success: 'Marked as test user', failure: 'Mark failed' },
+      () => setTestUser(participationId)
+    );
+    if (result?.success) router.refresh();
   };
 
   const handleRemoveTask = async (taskId: number) => {
     if (!(await confirm(removeTaskFromContestConfirm()))) return;
-    await removeTaskFromContest(taskId);
-    router.refresh();
+    const result = await runAction(
+      { pending: 'Removing task...', success: 'Task removed', failure: 'Remove failed' },
+      () => removeTaskFromContest(taskId)
+    );
+    if (result?.success) router.refresh();
   };
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const result = await updateContestSettings(contest.id, formData);
+      const result = await runAction(
+        {
+          pending: 'Saving contest...',
+          success: 'Contest saved',
+          failure: 'Save failed',
+          description: 'Settings updated successfully.',
+        },
+        () => updateContestSettings(contest.id, formData)
+      );
+      if (!result) return;
       if (result.success) {
-        toast.success('Contest saved', { description: 'Settings updated successfully.' });
         flashSaved();
         router.refresh();
-      } else {
-        toast.error('Save failed', { description: result.error ?? 'Validation failed.' });
       }
     }
-    catch (error) { toast.error('Save failed', { description: (error as Error).message }); }
     finally { setSaving(false); }
   };
 
   const handleRemoveParticipant = async (participationId: number) => {
     if (!(await confirm(removeParticipantConfirm()))) return;
-    await removeParticipant(participationId);
-    router.refresh();
+    const result = await runAction(
+      { pending: 'Removing participant...', success: 'Participant removed', failure: 'Remove failed' },
+      () => removeParticipant(participationId)
+    );
+    if (result?.success) router.refresh();
   };
 
   return {

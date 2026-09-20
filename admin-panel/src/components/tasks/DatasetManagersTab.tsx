@@ -1,11 +1,11 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { toast } from 'sonner';
 import { FileText, Loader2, Trash2, FileCode, Upload } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
 import { apiClient } from '@/lib/apiClient';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { readFileAsBase64 } from '@/lib/file-helpers';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
@@ -41,6 +41,7 @@ export function DatasetManagersTab({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const confirm = useConfirm();
   const { destructiveConfirm } = useConfirmationCopy();
+  const runAction = useActionFeedback();
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
     const file = e.target.files?.[0];
@@ -48,12 +49,20 @@ export function DatasetManagersTab({
     setUploading(true);
     try {
       const base64 = await readFileAsBase64(file);
-      const res = await apiClient.post(`/api/datasets/${datasetId}/managers`, {
-        filename: file.name,
-        fileData: base64,
-      });
-      if (res.success) onReload();
-      else toast.error(res.error ?? 'Upload failed');
+      const res = await runAction(
+        {
+          pending: 'Uploading manager file...',
+          success: 'Manager file uploaded',
+          failure: 'Upload failed',
+          description: `"${file.name}" saved successfully.`,
+        },
+        () =>
+          apiClient.post(`/api/datasets/${datasetId}/managers`, {
+            filename: file.name,
+            fileData: base64,
+          })
+      );
+      if (res?.success) onReload();
     } catch (err) {
       console.error(err);
     } finally {
@@ -65,16 +74,13 @@ export function DatasetManagersTab({
   const handleDelete = async (id: number): Promise<void> => {
     if (!(await confirm(destructiveConfirm('managerFile')))) return;
     try {
-      const res = await apiClient.delete(`/api/managers/${id}`);
-      if (res.success) {
-        toast.success('Manager file deleted');
-        onReload();
-      } else {
-        toast.error('Delete failed', { description: res.error });
-      }
+      const res = await runAction(
+        { pending: 'Deleting manager file...', success: 'Manager file deleted', failure: 'Delete failed' },
+        () => apiClient.delete(`/api/managers/${id}`)
+      );
+      if (res?.success) onReload();
     } catch (err) {
       console.error(err);
-      toast.error('Delete failed', { description: 'An unexpected error occurred' });
     }
   };
 

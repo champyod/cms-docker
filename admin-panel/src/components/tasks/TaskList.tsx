@@ -1,8 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { toast } from 'sonner';
 import { useSyncedState } from '@/hooks/useSyncedState';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { useRouter, usePathname } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
@@ -56,14 +56,16 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
     setIsModalOpen(true);
   };
 
+  const runAction = useActionFeedback();
+
   const handleDelete = async (id: number): Promise<void> => {
     if (!canDeleteTasks) return;
     if (!(await confirm(destructiveConfirm('task')))) return;
-    const result = await apiClient.delete(`/api/tasks/${id}`);
-    if (result.success) {
-      toast.success('Task deleted');
-      router.refresh();
-    } else toast.error(`Failed to delete task: ${result.error}`);
+    const result = await runAction(
+      { pending: 'Deleting task...', success: 'Task deleted', failure: 'Failed to delete task' },
+      () => apiClient.delete(`/api/tasks/${id}`)
+    );
+    if (result?.success) router.refresh();
   };
 
   const handleCreate = (): void => {

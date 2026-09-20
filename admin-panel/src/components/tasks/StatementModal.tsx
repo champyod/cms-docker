@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { toast } from 'sonner';
 import { Upload } from 'lucide-react';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { Dialog } from '@/components/core/Dialog';
 import { Button } from '@/components/core/Button';
 import { LanguagePicker } from '@/components/core/LanguagePicker';
@@ -23,6 +23,7 @@ export function StatementModal({ isOpen, onClose, taskId, existingLanguages, onS
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
+  const runAction = useActionFeedback();
 
   if (!isOpen) return null;
 
@@ -46,20 +47,23 @@ export function StatementModal({ isOpen, onClose, taskId, existingLanguages, onS
     setError('');
     try {
       const base64 = await readFileAsBase64(file);
-      const result = await apiClient.post('/api/statements', { taskId, language: normalizedLanguage, fileData: base64 });
+      const result = await runAction(
+        {
+          pending: 'Uploading statement...',
+          success: 'Statement uploaded',
+          failure: 'Upload failed',
+          description: `Statement (${normalizedLanguage}) saved successfully.`,
+        },
+        () => apiClient.post('/api/statements', { taskId, language: normalizedLanguage, fileData: base64 })
+      );
+      if (!result) return;
       if (result.success) {
-        toast.success('Statement uploaded', { description: `Statement (${normalizedLanguage}) saved successfully.` });
         onSuccess();
         onClose();
         setFile(null);
       } else {
-        const message = result.error ?? 'Failed to upload statement';
-        setError(message);
-        toast.error('Upload failed', { description: message });
+        setError(result.error ?? 'Failed to upload statement');
       }
-    } catch {
-      setError('An unexpected error occurred');
-      toast.error('Upload failed', { description: 'An unexpected error occurred' });
     } finally {
       setLoading(false);
     }

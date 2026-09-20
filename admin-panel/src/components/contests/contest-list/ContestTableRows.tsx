@@ -1,8 +1,8 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
 import { TableCell, TableRow } from '@/components/core/Table';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { Button } from '@/components/core/Button';
 import { Badge } from '@/components/core/Badge';
 import { Calendar, Clock, ExternalLink, Pencil, Trash2, Power, CheckCircle2 } from 'lucide-react';
@@ -42,14 +42,16 @@ export function ContestTableRow({ contest, locale, isSuperAdmin, canManage, canU
   const status = getStatus(contest.start, contest.stop);
   const isActive = contest.is_active === true;
 
+  const runAction = useActionFeedback();
+
   const handleDelete = async (id: number) => {
     if (!canManage) return;
     if (!(await confirm(destructiveConfirm('contest')))) return;
-    const result = await apiClient.delete(`/api/contests/${id}`);
-    if (result.success) {
-      toast.success('Contest deleted');
-      router.refresh();
-    } else toast.error('Failed to delete contest: ' + result.error);
+    const result = await runAction(
+      { pending: 'Deleting contest...', success: 'Contest deleted', failure: 'Failed to delete contest' },
+      () => apiClient.delete(`/api/contests/${id}`)
+    );
+    if (result?.success) router.refresh();
   };
 
   const openDetail = () => router.push(`/${locale}/contests/${contest.id}`);

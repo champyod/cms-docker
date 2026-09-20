@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
 import { useSyncedState } from '@/hooks/useSyncedState';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
@@ -61,24 +61,26 @@ export function AdminList({
     };
   }, [adminsList]);
 
+  const runAction = useActionFeedback();
+
   const handleDelete = async (id: number) => {
     if (!(await confirm(destructiveConfirm('admin')))) return;
-    const result = await deleteAdmin(id);
-    if (result.success) {
-      toast.success('Admin deleted');
-      router.refresh();
-    } else {
-      toast.error(result.error);
-    }
+    const result = await runAction(
+      { pending: 'Deleting admin...', success: 'Admin deleted', failure: 'Delete failed' },
+      () => deleteAdmin(id)
+    );
+    if (result?.success) router.refresh();
   };
 
   const handleToggleEnabled = async (admin: { id: number; enabled: boolean }) => {
-    const result = await updateAdmin(admin.id, { enabled: !admin.enabled });
-    if (!result.success) {
-      toast.error(result.error ?? 'Failed to update admin');
-    } else {
-      toast.success(admin.enabled ? 'Admin disabled' : 'Admin enabled');
-    }
+    await runAction(
+      {
+        pending: admin.enabled ? 'Disabling admin...' : 'Enabling admin...',
+        success: admin.enabled ? 'Admin disabled' : 'Admin enabled',
+        failure: 'Failed to update admin',
+      },
+      () => updateAdmin(admin.id, { enabled: !admin.enabled })
+    );
     router.refresh();
   };
 

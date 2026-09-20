@@ -1,8 +1,8 @@
 'use client';
 
 import { ChevronDown, ChevronUp, ExternalLink, Save, Settings, Trash2, Trophy, Users } from 'lucide-react';
-import { toast } from 'sonner';
 import { usePathname, useRouter } from 'next/navigation';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { useState } from 'react';
 
 import { deleteTeam, updateTeam } from '@/app/actions/teams';
@@ -63,16 +63,24 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
 
+  const runAction = useActionFeedback();
+
   const handleSave = async () => {
     setSaving(true);
     try {
-      const result = await updateTeam(team.id, formData);
+      const result = await runAction(
+        {
+          pending: 'Saving team...',
+          success: 'Team saved',
+          failure: 'Save failed',
+          description: `${team.name} updated successfully.`,
+        },
+        () => updateTeam(team.id, formData)
+      );
+      if (!result) return;
       if (result.success) {
-        toast.success('Team saved', { description: `${team.name} updated successfully.` });
         flashSaved();
         router.refresh();
-      } else {
-        toast.error('Failed: ' + result.error);
       }
     } finally {
       setSaving(false);
@@ -81,12 +89,11 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
 
   const handleDelete = async () => {
     if (!(await confirm(destructiveConfirm('team')))) return;
-    const result = await deleteTeam(team.id);
-    if (result.success) {
-      router.push(`/${locale}/teams`);
-    } else {
-      toast.error('Failed: ' + result.error);
-    }
+    const result = await runAction(
+      { pending: 'Deleting team...', success: 'Team deleted', failure: 'Delete failed' },
+      () => deleteTeam(team.id)
+    );
+    if (result?.success) router.push(`/${locale}/teams`);
   };
 
   return (

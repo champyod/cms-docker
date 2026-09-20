@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
-import { toast } from 'sonner';
 import { FileSpreadsheet, HelpCircle, Plus } from 'lucide-react';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -106,16 +106,16 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
     setIsModalOpen(true);
   };
 
+  const runAction = useActionFeedback();
+
   const handleDelete = async (id: number) => {
     if (!canDeleteUsers) return;
     if (!(await confirm(destructiveConfirm('user')))) return;
-    const result = await apiClient.delete(`/api/users/${id}`);
-    if (result.success) {
-      toast.success('User deleted');
-      await fetchUsers();
-    } else {
-      toast.error('Failed to delete user');
-    }
+    const result = await runAction(
+      { pending: 'Deleting user...', success: 'User deleted', failure: 'Failed to delete user' },
+      () => apiClient.delete(`/api/users/${id}`)
+    );
+    if (result?.success) await fetchUsers();
   };
 
   const handleCreate = () => {

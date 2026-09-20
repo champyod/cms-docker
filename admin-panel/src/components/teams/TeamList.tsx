@@ -1,8 +1,8 @@
 'use client';
 
 import { Pencil, HelpCircle, Plus, Trash2, Users } from 'lucide-react';
-import { toast } from 'sonner';
 import Link from 'next/link';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { usePathname, useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 
@@ -46,16 +46,16 @@ export function TeamList({ initialTeams, permissionKeys }: TeamListProps) {
   const canManageUsers = hasEffectivePermission(effective, 'team:update');
   const canDeleteTeams = hasEffectivePermission(effective, 'team:delete');
 
+  const runAction = useActionFeedback();
+
   const handleDelete = async (id: number) => {
     if (!canDeleteTeams) return;
     if (!(await confirm(destructiveConfirm('team')))) return;
-    const result = await deleteTeam(id);
-    if (result.success) {
-      toast.success('Team deleted');
-      router.refresh();
-    } else {
-      toast.error(result.error);
-    }
+    const result = await runAction(
+      { pending: 'Deleting team...', success: 'Team deleted', failure: 'Delete failed' },
+      () => deleteTeam(id)
+    );
+    if (result?.success) router.refresh();
   };
 
   const startEdit = (team: TeamWithCount) => {

@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
 import Link from 'next/link';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { HelpCircle, ChevronDown, ChevronUp, Settings, FileText, Trash2, Upload, ExternalLink } from 'lucide-react';
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
@@ -86,15 +86,15 @@ export function StatementsSection({ statements, expanded, onToggle, onUpload }: 
   const { destructiveConfirm } = useConfirmationCopy();
   const [activeLanguage, setActiveLanguage] = useState<string | null>(null);
 
+  const runAction = useActionFeedback();
+
   const handleDeleteStatement = async (statementId: number): Promise<void> => {
     if (!(await confirm(destructiveConfirm('statement')))) return;
-    const result = await apiClient.delete(`/api/statements/${statementId}`);
-    if (result.success) {
-      toast.success('Statement deleted');
-      router.refresh();
-    } else {
-      toast.error('Delete failed', { description: result.error });
-    }
+    const result = await runAction(
+      { pending: 'Deleting statement...', success: 'Statement deleted', failure: 'Delete failed' },
+      () => apiClient.delete(`/api/statements/${statementId}`)
+    );
+    if (result?.success) router.refresh();
   };
 
   const languages = useMemo(() => Array.from(new Set(statements.map((s) => s.language))).sort(), [statements]);
