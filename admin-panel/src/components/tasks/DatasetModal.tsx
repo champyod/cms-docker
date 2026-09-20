@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { toast } from 'sonner';
 import { Database, Save, Terminal } from 'lucide-react';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { Dialog } from '@/components/core/Dialog';
 import { Button } from '@/components/core/Button';
 import { cn } from '@/lib/utils';
@@ -112,6 +112,8 @@ export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess, perm
     setActiveTab('general');
   }, [dataset, isOpen, loadManagers]);
 
+  const runAction = useActionFeedback();
+
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
     if (scoreParamsError || taskParamsError) {
@@ -138,25 +140,25 @@ export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess, perm
         task_type_parameters: taskTypeParameters,
         task_type_parameters_text: undefined,
       };
-      const result = dataset
-        ? await apiClient.put(`/api/datasets/${dataset.id}`, { action: 'update', ...payload })
-        : await apiClient.post('/api/datasets', { taskId, ...payload });
-      if (result.success) {
-        toast.success(dataset ? 'Dataset updated' : 'Dataset created', {
+      const result = await runAction(
+        {
+          pending: dataset ? 'Updating dataset...' : 'Creating dataset...',
+          success: dataset ? 'Dataset updated' : 'Dataset created',
+          failure: 'Save failed',
           description: `${formData.description} saved successfully.`,
-        });
+        },
+        () =>
+          dataset
+            ? apiClient.put(`/api/datasets/${dataset.id}`, { action: 'update', ...payload })
+            : apiClient.post('/api/datasets', { taskId, ...payload })
+      );
+      if (!result) return;
+      if (result.success) {
         onSuccess();
         onClose();
       } else {
-        const message = result.error ?? 'Operation failed';
-        setError(message);
-        toast.error('Save failed', { description: message });
+        setError(result.error ?? 'Operation failed');
       }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'An unexpected error occurred';
-      console.error('Dataset operation error:', err);
-      setError(message);
-      toast.error('Save failed', { description: message });
     } finally {
       setLoading(false);
     }

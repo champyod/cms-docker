@@ -4,7 +4,7 @@ import { createContext, useContext, useMemo, useState, useEffect } from 'react';
 import { FileCode, Clock, Cpu, FileType, CheckSquare } from 'lucide-react';
 import type { TaskData } from '@/app/actions/tasks';
 import { apiClient } from '@/lib/apiClient';
-import { toast } from 'sonner';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { Dialog } from '@/components/core/Dialog';
 import { Button } from '@/components/core/Button';
 import { cn } from '@/lib/utils';
@@ -126,29 +126,32 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
     setError('');
   }, [task, isOpen]);
 
+  const runAction = useActionFeedback();
+
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      const result = task
-        ? await apiClient.put(`/api/tasks/${task.id}`, formData)
-        : await apiClient.post('/api/tasks', formData);
-      if (result.success) {
-        toast.success(task ? 'Task updated' : 'Task created', {
+      const result = await runAction(
+        {
+          pending: task ? 'Updating task...' : 'Creating task...',
+          success: task ? 'Task updated' : 'Task created',
+          failure: 'Save failed',
           description: task ? 'Task updated successfully' : 'Task created successfully',
-        });
+        },
+        () =>
+          task
+            ? apiClient.put(`/api/tasks/${task.id}`, formData)
+            : apiClient.post('/api/tasks', formData)
+      );
+      if (!result) return;
+      if (result.success) {
         onSuccess();
         onClose();
       } else {
-        const message = result.error ?? 'An error occurred';
-        setError(message);
-        toast.error('Save failed', { description: message });
+        setError(result.error ?? 'An error occurred');
       }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'An unexpected error occurred';
-      setError(message);
-      toast.error('Save failed', { description: message });
     } finally {
       setLoading(false);
     }

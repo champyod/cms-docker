@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { toast } from 'sonner';
 import { apiClient } from '@/lib/apiClient';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { Button } from '@/components/core/Button';
 import { Dialog, DialogFooter } from '@/components/core/Dialog';
 import { RestrictedField } from '@/components/core/RestrictedField';
@@ -38,6 +38,8 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData, permissionK
     setError('');
   }
 
+  const runAction = useActionFeedback();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.code.trim() || !formData.name.trim()) {
@@ -50,20 +52,27 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData, permissionK
 
     const allowed = stripDisallowedFields('teams', formData as Record<string, unknown>, effective);
 
-    const result = (initialData && initialData.id)
-      ? await apiClient.put(`/api/teams/${initialData.id}`, allowed)
-      : await apiClient.post('/api/teams', allowed);
-
-    if (result.success) {
-      toast.success(initialData ? 'Team updated' : 'Team created', {
+    const result = await runAction(
+      {
+        pending: initialData ? 'Updating team...' : 'Creating team...',
+        success: initialData ? 'Team updated' : 'Team created',
+        failure: 'Save failed',
         description: `${formData.name} saved successfully.`,
-      });
+      },
+      () =>
+        initialData && initialData.id
+          ? apiClient.put(`/api/teams/${initialData.id}`, allowed)
+          : apiClient.post('/api/teams', allowed)
+    );
+    if (!result) {
+      setLoading(false);
+      return;
+    }
+    if (result.success) {
       onSuccess();
       onClose();
     } else {
-      const message = result.error || 'Operation failed';
-      setError(message);
-      toast.error('Save failed', { description: message });
+      setError(result.error || 'Operation failed');
     }
     setLoading(false);
   };

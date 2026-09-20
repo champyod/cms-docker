@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
 import { updateParticipation, sendMessage, revealParticipationPassword } from '@/app/actions/participations';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
 import type { PasswordKind } from '@/lib/password-format';
 
 export type RevealedState = { kind: 'plaintext'; value: string } | { kind: 'bcrypt' } | null;
@@ -44,6 +44,8 @@ export function useParticipationEditState(isOpen: boolean, participation: Partic
     finally { setRevealing(false); }
   };
 
+  const runAction = useActionFeedback();
+
   const handleSave = async () => {
     setSaving(true); setError('');
     try {
@@ -55,19 +57,20 @@ export function useParticipationEditState(isOpen: boolean, participation: Partic
         payload.password = formData.password;
         payload.passwordKind = formData.password_kind;
       }
-      const result = await updateParticipation(participation.id, payload);
+      const result = await runAction(
+        {
+          pending: 'Saving participation...',
+          success: 'Participation saved',
+          failure: 'Save failed',
+          description: 'Settings updated successfully.',
+        },
+        () => updateParticipation(participation.id, payload)
+      );
+      if (!result) return;
       if (result.success) {
         if (formData.password.trim().length > 0) { setRevealed({ kind: 'plaintext', value: formData.password }); setRevealTab('plain'); setRevealError(''); }
-        toast.success('Participation saved', { description: 'Settings updated successfully.' });
         router.refresh();
-      } else {
-        const message = result.error || 'Failed to update';
-        setError(message);
-        toast.error('Save failed', { description: message });
-      }
-    } catch {
-      setError('An error occurred');
-      toast.error('Save failed', { description: 'An error occurred' });
+      } else setError(result.error || 'Failed to update');
     }
     finally { setSaving(false); }
   };
@@ -76,19 +79,20 @@ export function useParticipationEditState(isOpen: boolean, participation: Partic
     if (!messageData.subject.trim() || !messageData.text.trim()) return;
     setSaving(true);
     try {
-      const result = await sendMessage(participation.id, adminId, messageData);
+      const result = await runAction(
+        {
+          pending: 'Sending message...',
+          success: 'Message sent',
+          failure: 'Send failed',
+          description: 'The participant will see it on their contest page.',
+        },
+        () => sendMessage(participation.id, adminId, messageData)
+      );
+      if (!result) return;
       if (result.success) {
-        toast.success('Message sent', { description: 'The participant will see it on their contest page.' });
         setMessageData({ subject: '', text: '' });
         handleClose();
-      } else {
-        const message = result.error || 'Failed to send message';
-        setError(message);
-        toast.error('Send failed', { description: message });
-      }
-    } catch {
-      setError('An error occurred');
-      toast.error('Send failed', { description: 'An error occurred' });
+      } else setError(result.error || 'Failed to send message');
     }
     finally { setSaving(false); }
   };
