@@ -1,6 +1,6 @@
 'use client';
 
-import { Edit2, HelpCircle, Plus, Trash2, Users } from 'lucide-react';
+import { Pencil, HelpCircle, Plus, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -97,7 +97,7 @@ export function TeamList({ initialTeams, permissionKeys }: TeamListProps) {
               </a>
               {canManageUsers && (
                 <>
-                  <Button variant="ghost" size="sm" icon={Edit2} iconOnly tooltip="Edit team" onClick={() => startEdit(team)} />
+                  <Button variant="ghost" size="sm" icon={Pencil} iconOnly tooltip="Edit team" onClick={() => startEdit(team)} />
                   <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete team" onClick={() => { void handleDelete(team.id); }} />
                 </>
               )}
@@ -144,7 +144,7 @@ export function TeamList({ initialTeams, permissionKeys }: TeamListProps) {
                     <Button variant="ghost" size="sm" icon={Users} iconOnly tooltip="View team members" data-shortcut-primary />
                   </a>
                   {canManageUsers && (
-                    <Button variant="ghost" size="sm" icon={Edit2} iconOnly tooltip="Edit team" onClick={() => startEdit(team)} />
+                    <Button variant="ghost" size="sm" icon={Pencil} iconOnly tooltip="Edit team" onClick={() => startEdit(team)} />
                   )}
                   {canDeleteTeams && (
                     <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete team" onClick={() => { void handleDelete(team.id); }} />

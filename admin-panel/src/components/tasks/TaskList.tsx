@@ -6,7 +6,7 @@ import { useSyncedState } from '@/hooks/useSyncedState';
 import { useRouter, usePathname } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
-import { Edit2, Trash2, Plus, FileText, Database, ExternalLink, AlertTriangle } from 'lucide-react';
+import { Pencil, Trash2, Plus, FileText, Database, ExternalLink, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ROW_SELECTED_CLASSES } from '@/hooks/useShortcuts';
 import { EmptyState } from '@/components/core/EmptyState';
@@ -98,7 +98,7 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
               <MobileCardRow label="Submissions" value={task._count?.submissions ?? 0} />
               {canManageTasks && (
                 <div className="flex items-center justify-end gap-2 pt-2">
-                  <Button variant="ghost" size="sm" icon={Edit2} iconOnly tooltip="Edit task" onClick={() => handleEdit(task)} className="text-muted-foreground hover:text-primary" />
+                  <Button variant="ghost" size="sm" icon={Pencil} iconOnly tooltip="Edit task" onClick={() => handleEdit(task)} className="text-muted-foreground hover:text-primary" />
                   <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete task" onClick={() => { void handleDelete(task.id); }} className="text-muted-foreground hover:text-destructive" />
                 </div>
               )}
@@ -180,7 +180,7 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2" onClick={(event) => event.stopPropagation()}>
                       {canManageTasks && (
-                        <Button variant="ghost" size="sm" icon={Edit2} iconOnly tooltip="Edit task" onClick={() => handleEdit(task)} className="text-muted-foreground hover:text-primary" />
+                        <Button variant="ghost" size="sm" icon={Pencil} iconOnly tooltip="Edit task" onClick={() => handleEdit(task)} className="text-muted-foreground hover:text-primary" />
                       )}
                       {canDeleteTasks && (
                         <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete task" onClick={() => { void handleDelete(task.id); }} className="text-muted-foreground hover:text-destructive" />

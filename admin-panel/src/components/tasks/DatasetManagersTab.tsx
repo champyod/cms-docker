@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { FileText, Loader2, Trash2, Terminal, Upload } from 'lucide-react';
+import { FileText, Loader2, Trash2, FileCode, Upload } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
 import { apiClient } from '@/lib/apiClient';
@@ -108,7 +108,7 @@ export function DatasetManagersTab({
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
         ) : managers.length === 0 ? (
-          <EmptyState icon={Terminal} title="No manager files uploaded" description="Upload files like `checker`, `grader`, `*.lib.h`." />
+          <EmptyState icon={FileCode} title="No manager files uploaded" description="Upload files like `checker`, `grader`, `*.lib.h`." />
         ) : (
           managers.map((manager) => (
             <div key={manager.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border border-border">

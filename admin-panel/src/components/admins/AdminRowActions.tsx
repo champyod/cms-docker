@@ -1,6 +1,6 @@
 'use client';
 
-import { Edit2, Trash2 } from 'lucide-react';
+import { Pencil, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/core/Button';
 import { cn } from '@/lib/utils';
@@ -44,7 +44,7 @@ export function AdminRowActions({
           onClick={onEdit}
           className="text-muted-foreground hover:text-primary"
         >
-          <Edit2 className="w-4 h-4" />
+          <Pencil className="w-4 h-4" />
         </Button>
       )}
       {capabilities.canDelete && (

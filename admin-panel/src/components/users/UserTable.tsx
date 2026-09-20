@@ -1,6 +1,6 @@
 'use client';
 
-import { Edit2, Trash2, Users } from 'lucide-react';
+import { Pencil, Trash2, Users } from 'lucide-react';
 
 import { Badge } from '@/components/core/Badge';
 import { Button } from '@/components/core/Button';
@@ -62,7 +62,7 @@ export function UserTable({
               <Button
                 variant="ghost"
                 size="sm"
-                icon={Edit2}
+                icon={Pencil}
                 iconOnly
                 tooltip={`Edit user ${user.username}`}
                 onClick={() => onEdit(user)}
@@ -150,7 +150,7 @@ export function UserTable({
                     <Button
                       variant="ghost"
                       size="sm"
-                      icon={Edit2}
+                      icon={Pencil}
                       iconOnly
                       tooltip={`Edit user ${user.username}`}
                       data-shortcut-primary
