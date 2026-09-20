@@ -162,27 +162,23 @@ update_worker_shards() {
     # deploy.
     local mode="$1"
     if [ "$mode" = "img" ]; then
-        make worker-img
+        make -e DEPLOYMENT_TYPE_OVERRIDE=img worker
     else
         make worker
     fi
 }
 
 if [ "$DEPLOY_TYPE" = "img" ]; then
-    log "Pulling latest images for active stacks..."
-    [ "$HAS_CORE" = true ] && make pull-core
-    [ "$HAS_ADMIN" = true ] && make pull-admin
-    [ "$HAS_CONTEST" = true ] && make pull-contest
-    [ "$HAS_WORKER" = true ] && make pull-worker
-    [ "$HAS_INFRA" = true ] && make pull-infra
+    log "Pulling latest images..."
+    make pull
 fi
 
 log "Restarting services..."
 if [ "$DEPLOY_TYPE" = "img" ]; then
-    [ "$HAS_CORE" = true ] && make core-img
-    [ "$HAS_INFRA" = true ] && make infra-img
-    [ "$HAS_ADMIN" = true ] && make admin-img
-    [ "$HAS_CONTEST" = true ] && make contest-img
+    [ "$HAS_CORE" = true ] && make -e DEPLOYMENT_TYPE_OVERRIDE=img core
+    [ "$HAS_INFRA" = true ] && make -e DEPLOYMENT_TYPE_OVERRIDE=img infra
+    [ "$HAS_ADMIN" = true ] && make -e DEPLOYMENT_TYPE_OVERRIDE=img admin
+    [ "$HAS_CONTEST" = true ] && make -e DEPLOYMENT_TYPE_OVERRIDE=img contest
     [ "$HAS_WORKER" = true ] && update_worker_shards img
 else
     [ "$HAS_CORE" = true ] && make core
@@ -280,8 +276,8 @@ Manual rollback steps:
        docker pull ghcr.io/<owner>/<image>@<old repo_digest>
      then pin that digest via IMG_TAG in .env / the shard env file
      (or check out the old commit and rebuild).
-  4. Bring stacks back up for every detected stack:
-       make core-img infra-img admin-img contest-img worker-img
+4. Bring stacks back up for every detected stack, e.g.:
+        make -e DEPLOYMENT_TYPE_OVERRIDE=img core infra admin contest worker
   5. Re-run ./cms update-server once the cause is fixed.
 ================================================================
 EOF

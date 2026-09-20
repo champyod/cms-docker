@@ -25,6 +25,8 @@ cd "$REPO_ROOT"
 
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/__lib/common.sh"
+# shellcheck disable=SC1091
+[ -f "${SCRIPT_DIR}/__lib/worker_secrets.sh" ] && source "${SCRIPT_DIR}/__lib/worker_secrets.sh"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -82,6 +84,8 @@ Modes:
 
 Options:
   --out <file>            Output file for --generate (default: .env.new)
+  --push user@host:/path  Push shared secrets to a worker box (repeatable,
+                          applied pre-restart so remotes cut over together)
   --help                  Show this help
 
 Audited secrets:
@@ -212,32 +216,22 @@ _audit_env_file_key() {
 _check_remote_worker_ref() {
   echo ""
   log_info "Remote worker RPC check"
-  local worker_host="${WORKER_HOST:-100.75.203.112}"
-
-  # Check if WORKER entries reference remote host
+  # Registry-derived: any fleet host that is not this box must be pushed.
+  local remote_hosts host
+  remote_hosts="$(awk -F= '/^WORKER_[0-9]+=/{v=$0; sub(/^[^=]*=/,"",v); print v}' .env 2>/dev/null | cut -d: -f1 | sort -u || true)"
   local remote_refs=0
-  if [[ -f ".env" ]]; then
-    local matches
-    matches="$(grep -c "$worker_host" ".env" 2>/dev/null || true)"
-    if (( matches > 0 )); then
-      log_warn "  .env references $worker_host ($matches lines) — rotation may break RPC"
-      remote_refs=1
-    fi
-  fi
-
-  # Check CORE_SERVICES_HOST
-  if [[ -n "${CORE_SERVICES_HOST:-}" ]]; then
-    if [[ "$CORE_SERVICES_HOST" == *"$worker_host"* ]]; then
-      log_warn "  CORE_SERVICES_HOST points to $worker_host — rotation requires worker update"
-      remote_refs=1
-    fi
-  fi
+  for host in $remote_hosts; do
+    case "$host" in
+      0.0.0.0|127.*|localhost|"") continue ;;
+    esac
+    log_warn "  fleet references remote $host — push new secrets or RPC breaks"
+    remote_refs=1
+  done
 
   if [[ "$remote_refs" -eq 0 ]]; then
     log_info "  No remote worker references found — rotation is safe"
   else
-    log_warn "  After rotation, update worker on $worker_host with new credentials"
-    log_warn "  SSH to $worker_host and update config.toml, then: cd /path/to/cms && ./cms config sync && make worker"
+    log_warn "  After rotation, push to each remote: --push user@host:/remote/repo/path (repeatable)"
   fi
 }
 
@@ -364,6 +358,16 @@ cmd_apply() {
     bash scripts/__config_sync.sh || log_warn "config sync failed — manual intervention may be needed"
   fi
 
+  # Grace ordering: remotes carry the new secrets before local stacks
+  # restart. Single-valid secrets (DB passwords) still have a cutover
+  # window — this narrows it to one command instead of manual copy.
+  if [[ "${#PUSH_TARGETS[@]}" -gt 0 ]] && declare -F push_worker_secrets >/dev/null; then
+    local target
+    for target in "${PUSH_TARGETS[@]}"; do
+      push_worker_secrets "$target" "" || log_warn "push to $target failed — update it manually before restarting"
+    done
+  fi
+
   # Restart core stack (database needs new password)
   log_info "Restarting core stack..."
   make core 2>/dev/null || log_warn "core stack restart failed"
@@ -384,7 +388,6 @@ cmd_apply() {
   _check_remote_worker_ref
 
   log_info "Secret rotation applied — verify services are healthy with: ./cms status"
-  log_info "IMPORTANT: Update worker on 100.75.203.112 if RPC is configured"
 }
 
 _update_config_toml() {
@@ -420,6 +423,7 @@ _update_env_file_key() {
 # ---------------------------------------------------------------------------
 MODE=""
 GENERATE_OUT=".env.new"
+PUSH_TARGETS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -427,6 +431,8 @@ while [[ $# -gt 0 ]]; do
     --generate) MODE="generate"; shift ;;
     --apply)    MODE="apply"; shift ;;
     --out)      GENERATE_OUT="$2"; shift 2 ;;
+    --push)     PUSH_TARGETS+=("$2"); shift 2 ;;
+    --push=*)   PUSH_TARGETS+=("${1#--push=}"); shift ;;
     --help|-h)  usage; exit 0 ;;
     *)          log_die "unknown option: $1 — see --help" 1 ;;
   esac

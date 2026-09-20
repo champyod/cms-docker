@@ -66,20 +66,23 @@ echo "                    CMS Services Status"
 echo "==================================================================="
 echo ""
 
+# Stacks read from the unified file with explicit service lists: the retired
+# per-stack files describe images nothing else builds, and profile-gated
+# services vanish from `config --services` unless core rides alongside.
 echo "Core Services:"
-stack_containers docker-compose.core.yml
+stack_containers docker-compose.yml database log-service resource-service scoring-service checker-service
 echo ""
 
 echo "Admin Services:"
-stack_containers docker-compose.admin.yml
+stack_containers docker-compose.yml admin-panel-next admin-web-server ranking-web-server
 echo ""
 
 echo "Contest Services:"
-stack_containers docker-compose.contest.yml
+stack_containers docker-compose.yml evaluation-service proxy-service contest-web-server nginx-proxy
 echo ""
 
 echo "Worker Services:"
-stack_containers docker-compose.worker.yml
+stack_containers docker-compose.yml worker
 echo ""
 
 echo "Monitor Services:"

@@ -13,7 +13,7 @@
 #
 # Usage:
 #   scripts/__worker_tui.sh                              interactive TUI (tty)
-#   scripts/__worker_tui.sh attach [spec host port-spec [main-ip]] attach a remote
+#   scripts/__worker_tui.sh attach [spec host port-spec [main-ip]] [--push user@host:/path] attach a remote
 #                                    worker box: registry-only rows for
 #                                    spec "4", "4,5,6,7" or "4-7"
 #   scripts/__worker_tui.sh deploy [all|<shard>|<spec>]  non-interactive deploy
@@ -40,6 +40,8 @@ SELECTED=()
 source "${SCRIPT_DIR}/__lib/common.sh"
 # shellcheck disable=SC1091
 [ -f "${SCRIPT_DIR}/__lib/form.sh" ] && source "${SCRIPT_DIR}/__lib/form.sh"
+# shellcheck disable=SC1091
+[ -f "${SCRIPT_DIR}/__lib/worker_secrets.sh" ] && source "${SCRIPT_DIR}/__lib/worker_secrets.sh"
 
 C_DIM=$'\033[2m'; C_G=$'\033[32m'; C_R=$'\033[31m'; C_Y=$'\033[33m'; C_B=$'\033[1m'; C_0=$'\033[0m'
 
@@ -68,9 +70,23 @@ main_reachable_ip() {
 # ---------------------------------------------------------------------------
 # Registry persistence (.env WORKER_N block + optional flags in worker env)
 # ---------------------------------------------------------------------------
+# Shared-registry rule: both boxes hold identical rows; each box binds the
+# rows addressed at itself and advertises the rest. An explicit LOCAL flag
+# still wins, so old per-box rows keep working unchanged.
+is_local_host() {
+  local h="$1" ip
+  case "$h" in
+    0.0.0.0|127.0.0.1|localhost) return 0 ;;
+  esac
+  [ "$h" = "$(hostname -s 2>/dev/null)" ] && return 0
+  [ "$h" = "$(hostname -f 2>/dev/null)" ] && return 0
+  for ip in $(hostname -I 2>/dev/null); do [ "$h" = "$ip" ] && return 0; done
+  return 1
+}
+
 fleet_load() {
   WORKERS=()
-  local tmp line key idx hp host port mem cpu loc
+  local tmp line key idx hp host port mem cpu loc explicit
   tmp="$(mktemp)"
   awk -F= '/^WORKER_[0-9]+=/ {print}' "$CORE_ENV" 2>/dev/null \
     | sort -t_ -k3,3n > "$tmp" || true
@@ -83,7 +99,14 @@ fleet_load() {
     if ! [[ "$port" =~ ^[0-9]+$ ]]; then log_warn "skipping bad port: $line"; continue; fi
     mem="$(env_val "$WORKER_ENV" "WORKER_SHARD${idx}_MEMORY")"; mem="${mem:-$(global_memory)}"; mem="${mem:-512M}"
     cpu="$(env_val "$WORKER_ENV" "WORKER_SHARD${idx}_CPU")";     cpu="${cpu:-$(global_cpus)}";     cpu="${cpu:-0.5}"
-    loc="$(env_val "$WORKER_ENV" "WORKER_SHARD${idx}_LOCAL")";   loc="${loc:-1}"
+    explicit="$(env_val "$WORKER_ENV" "WORKER_SHARD${idx}_LOCAL")"
+    if [ -n "$explicit" ]; then
+      loc="$explicit"
+    elif is_local_host "$host"; then
+      loc=1
+    else
+      loc=0
+    fi
     WORKERS+=("$idx|$host|$port|$loc|$mem|$cpu")
   done < "$tmp"
   rm -f "$tmp"
@@ -388,9 +411,19 @@ edit_entry() {
 # Attach a remote worker box: write its shards into the registry as
 # registry-only (LOCAL=0) rows the core routes to, then print the block to
 # run on the worker box (same rows, no LOCAL override → deploy locally there).
-attach_entry() {  # [shard-spec host port-spec [main-ip]] — prompts when args are omitted
+attach_entry() {  # [shard-spec host port-spec [main-ip]] [--push user@host:/path] — prompts when args are omitted
   require_env_files
-  local spec="$1" host="$2" pspec="$3" main="$4"
+  local spec="" host="" pspec="" main="" push_target=""
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      --push=*) push_target="${arg#--push=}" ;;
+      *) if [ -z "$spec" ]; then spec="$arg";
+         elif [ -z "$host" ]; then host="$arg";
+         elif [ -z "$pspec" ]; then pspec="$arg";
+         elif [ -z "$main" ]; then main="$arg"; fi ;;
+    esac
+  done
   if [ -z "$spec" ] || [ -z "$host" ] || [ -z "$pspec" ]; then
     [ -t 0 ] && [ -t 1 ] || log_die "usage: $0 attach <shard-spec> <host> <port-spec> [main-ip]"
     printf 'Shards to attach (e.g. 4,5,6,7 or 4-7): '
@@ -439,6 +472,9 @@ attach_entry() {  # [shard-spec host port-spec [main-ip]] — prompts when args 
   done
   attach_write_rows "$host" "${shards[@]}" --- "${ports[@]}" || return 1
   attach_print_block "$main" "$host" "${shards[@]}" --- "${ports[@]}"
+  if [ -n "$push_target" ]; then
+    push_worker_secrets "$push_target" "" || log_warn "secret push failed — copy shared secrets manually"
+  fi
 }
 
 # Replace the given shards' registry rows with LOCAL=0 entries and save.
