@@ -49,7 +49,6 @@ const MODULES: readonly string[] = [
   'deployment',
   'ranking',
   'maintenance',
-  'backup',
   'appearance',
   'env',
   'settings',
@@ -82,6 +81,12 @@ const DOMAIN_VERBS: readonly { module: string; verb: string }[] = [
   { module: 'ranking', verb: 'snapshot' },
   { module: 'maintenance', verb: 'enable' },
   { module: 'maintenance', verb: 'disable' },
+  // Why domain verbs, not a module: only list/read/create exist as actions.
+  // backup:update/delete are never minted, so no group — not even Superadmin
+  // via explicit grant — can hold them; destructive paths stay unbuilt.
+  { module: 'backup', verb: 'list' },
+  { module: 'backup', verb: 'read' },
+  { module: 'backup', verb: 'create' },
   { module: 'appearance', verb: 'update' },
   { module: 'monitor', verb: 'test' },
   { module: 'audit', verb: 'read' },
@@ -337,12 +342,11 @@ export const DEFAULT_GROUPS: readonly GroupDefinition[] = [
       'resource:list',
       'resource:read',
       'resource:update',
-      // Why no backup:delete here: deleted archives cannot be restored, so
-      // deletion stays Superadmin-only while operate keys are delegable.
+      // Why only live keys: update/delete are never minted (see above),
+      // so there is nothing to grant beyond list/read/create.
       'backup:list',
       'backup:read',
       'backup:create',
-      'backup:update',
     ],
   },
   {

@@ -10,7 +10,8 @@ import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useDictionary } from '@/hooks/useDictionary';
-import { triggerManualBackup, restartServices } from '@/app/actions/services';
+import { listBackups, triggerManualBackup, restartServices } from '@/app/actions/services';
+import type { BackupArchive } from '@/app/actions/services';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 import {
   getDiscordNotificationSettings,
@@ -69,20 +70,16 @@ function describeDiscordState(settings: DiscordSettings): string {
 
 export default function MaintenanceClient({ permissionKeys }: { permissionKeys: readonly string[] }) {
   const toasts = useDictionary().toasts.maintenance;
-  // Why OR with maintenance:enable: pre-seed deployments hold enable but not
-  // backup:create; the server action enforces the same pair, this only hides.
+  // Strict own key, mirroring triggerManualBackup; this only hides.
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
-  const canTriggerBackup =
-    hasEffectivePermission(effective, 'backup:create') ||
-    hasEffectivePermission(effective, 'maintenance:enable');
+  const canTriggerBackup = hasEffectivePermission(effective, 'backup:create');
   const confirm = useConfirm();
   const { manualBackupConfirm } = useConfirmationCopy();
   // Why from the pathname: server actions localise their own messages, and a client component has no
   // other way to tell them which locale the admin is reading (same pattern the lists already use).
   const locale = usePathname().split('/')[1] || 'en';
-  // Why these keys: the backup action enforces maintenance:enable and the test
-  // alert enforces monitor:test, while the page gate is maintenance:update.
-  const canBackup = hasEffectivePermission(effective, 'maintenance:enable');
+  const canBackup = hasEffectivePermission(effective, 'backup:create');
+  const canViewBackups = hasEffectivePermission(effective, 'backup:list');
   const canTestAlert = hasEffectivePermission(effective, 'monitor:test');
   const [data, setData] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -92,6 +89,8 @@ export default function MaintenanceClient({ permissionKeys }: { permissionKeys: 
   const [discordError, setDiscordError] = useState('');
   const [discordSaving, setDiscordSaving] = useState(false);
   const [discordTesting, setDiscordTesting] = useState(false);
+  const [archives, setArchives] = useState<BackupArchive[]>([]);
+  const [archivesLoading, setArchivesLoading] = useState(false);
 
   const loadDiscordSettings = async (): Promise<void> => {
     const result = await getDiscordNotificationSettings();
@@ -109,6 +108,7 @@ export default function MaintenanceClient({ permissionKeys }: { permissionKeys: 
         setData(result.values);
       }
       await loadDiscordSettings();
+      await loadArchives();
       setLoading(false);
     })();
   }, []);
@@ -143,6 +143,17 @@ export default function MaintenanceClient({ permissionKeys }: { permissionKeys: 
 
   const runAction = useActionFeedback();
 
+  const loadArchives = async () => {
+    if (!canViewBackups) return;
+    setArchivesLoading(true);
+    try {
+      const result = await listBackups();
+      if (result.success) setArchives(result.archives ?? []);
+    } finally {
+      setArchivesLoading(false);
+    }
+  };
+
   const handleBackup = async () => {
     if (!(await confirm(manualBackupConfirm()))) return;
     setBackingUp(true);
@@ -151,6 +162,7 @@ export default function MaintenanceClient({ permissionKeys }: { permissionKeys: 
         { pending: 'Starting backup...', success: toasts.backupTriggered, failure: toasts.failed },
         () => triggerManualBackup(),
       );
+      await loadArchives();
     } finally {
       setBackingUp(false);
     }
@@ -283,6 +295,22 @@ export default function MaintenanceClient({ permissionKeys }: { permissionKeys: 
                         <Text variant="small" color="text-muted-foreground" className="text-center italic opacity-50">
                             Manual backups also respect cleanup policies.
                         </Text>
+                    </Stack>
+                    )}
+                    {canViewBackups && (
+                    <Stack gap={2} className="pt-4 border-t border-border">
+                        <Text variant="h4">Archives ({archivesLoading ? '…' : archives.length})</Text>
+                        {archives.length === 0 && !archivesLoading && (
+                        <Text variant="small" color="text-muted-foreground">No archives found.</Text>
+                        )}
+                        {archives.map((archive) => (
+                        <div key={archive.name} className="flex items-center justify-between gap-2 text-xs">
+                            <span className="font-mono truncate">{archive.name}</span>
+                            <span className="text-muted-foreground shrink-0">
+                                {(archive.sizeBytes / 1048576).toFixed(1)} MB · {new Date(archive.modifiedIso).toLocaleString()}
+                            </span>
+                        </div>
+                        ))}
                     </Stack>
                     )}
                 </Stack>

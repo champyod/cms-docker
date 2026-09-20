@@ -1,10 +1,10 @@
 'use server';
 
+import fs from 'fs/promises';
 import path from 'path';
 import { exec } from 'child_process';
 import util from 'util';
-import { ensurePermission, getPermissions } from '@/lib/permissions';
-import { hasEffectivePermission } from '@/lib/permission-engine';
+import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
 import { resolveHostComposeLocation } from '@/lib/compose-location';
 import { logToDiscord } from '@/lib/discord-notifier';
@@ -184,13 +184,9 @@ export async function getActiveDeployOperation(): Promise<ActiveDeployOperation 
 }
 
 export async function triggerManualBackup() {
-    // Why OR with maintenance:enable: deployments seeded before backup:*
-    // existed hold enable but not the new key; nobody loses access and
-    // nothing escalates — enable holders could already trigger backups.
-    const effective = await getPermissions();
-    if (!hasEffectivePermission(effective, 'backup:create') && !hasEffectivePermission(effective, 'maintenance:enable')) {
-        return { success: false, error: 'Unauthorized: Missing backup:create permission' };
-    }
+    // Strict own key: no fallback to maintenance:enable. Re-seed
+    // (prisma-sync) grants backup:create to Storage Admin and Superadmin.
+    await ensurePermission('backup:create');
     try {
         const rootDir = getRepoRoot();
         await logToDiscord('Manual Backup', 'Admin triggered a manual submissions backup.', 3447003);
@@ -206,6 +202,40 @@ export async function triggerManualBackup() {
     } catch (error) {
         return { success: false, error: (error as Error).message };
     }
+}
+
+export interface BackupArchive {
+  name: string;
+  sizeBytes: number;
+  modifiedIso: string;
+}
+
+const MAX_ARCHIVES = 200;
+
+// Strict own key. Names come from the filesystem and are display-only;
+// no archive is ever executed or interpolated into a shell command here.
+export async function listBackups(): Promise<{ success: boolean; archives?: BackupArchive[]; error?: string }> {
+    await ensurePermission('backup:list');
+    const dir = process.env.BACKUP_DIR ?? path.join(getRepoRoot(), 'backups');
+    let entries;
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      return { success: true, archives: [] };
+    }
+    const archives: BackupArchive[] = [];
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      if (!/^[A-Za-z0-9._-]+\.(tar\.gz|tgz|sql|sql\.gz|dump|gpg)$/.test(entry.name)) continue;
+      try {
+        const stat = await fs.stat(path.join(dir, entry.name));
+        archives.push({ name: entry.name, sizeBytes: stat.size, modifiedIso: stat.mtime.toISOString() });
+      } catch {
+        continue;
+      }
+    }
+    archives.sort((a, b) => (a.modifiedIso < b.modifiedIso ? 1 : -1));
+    return { success: true, archives: archives.slice(0, MAX_ARCHIVES) };
 }
 
 export async function getServiceStatus() {
