@@ -70,7 +70,7 @@ async function enrichStatements(taskId: number, statements: Array<{ id: number; 
   const sizeMap = new Map<string, number>();
   for (const s of statements) {
     try {
-      const rows = await prisma.$queryRaw<Array<{ size: number }>>`SELECT octet_length(lo_get(lob_oid))::int AS size FROM fsobjects WHERE digest = ${s.digest}`;
+      const rows = await prisma.$queryRaw<Array<{ size: number }>>`SELECT octet_length(lo_get(loid))::int AS size FROM fsobjects WHERE digest = ${s.digest}`;
       if (rows.length > 0) sizeMap.set(s.digest, Number(rows[0].size));
     } catch {}
   }

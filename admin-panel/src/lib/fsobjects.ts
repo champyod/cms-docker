@@ -18,13 +18,13 @@ export async function storeFile(
   `;
 
   if (existing.length === 0) {
-    const result = await prisma.$queryRaw<{ lob_oid: number }[]>`
-      SELECT lo_from_bytea(0, ${data}::bytea) as lob_oid
+    const result = await prisma.$queryRaw<{ loid: number }[]>`
+      SELECT lo_from_bytea(0, ${data}::bytea) as loid
     `;
-    const lobOid = result[0].lob_oid;
+    const lobOid = result[0].loid;
 
     await prisma.$executeRaw`
-      INSERT INTO fsobjects (digest, lob_oid, description)
+      INSERT INTO fsobjects (digest, loid, description)
       VALUES (${digest}, ${lobOid}, ${description})
     `;
   }

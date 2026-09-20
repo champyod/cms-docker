@@ -141,7 +141,7 @@ export async function getFileByDigest(digest: string): Promise<{ data: string } 
 
   try {
     const result = await prisma.$queryRaw<{ data: Buffer }[]>`
-      SELECT lo_get(lob_oid) as data FROM fsobjects WHERE digest = ${digest}
+      SELECT lo_get(loid) as data FROM fsobjects WHERE digest = ${digest}
     `;
 
     if (result.length === 0) return null;
