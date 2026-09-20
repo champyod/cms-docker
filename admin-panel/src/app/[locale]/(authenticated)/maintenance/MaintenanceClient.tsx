@@ -6,6 +6,7 @@ import { Card } from '@/components/core/Card';
 import { readConfigTomlValues, updateConfigTomlValues } from '@/app/actions/env';
 import { buildConfigTomlUpdates, type ConfigTomlKey } from '@/lib/config-toml';
 import { interpolate } from '@/lib/interpolate';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useDictionary } from '@/hooks/useDictionary';
@@ -140,16 +141,19 @@ export default function MaintenanceClient({ permissionKeys }: { permissionKeys: 
     }
   };
 
+  const runAction = useActionFeedback();
+
   const handleBackup = async () => {
     if (!(await confirm(manualBackupConfirm()))) return;
     setBackingUp(true);
-    const result = await triggerManualBackup();
-    if (result.success) {
-      toast.success(toasts.backupTriggered);
-    } else {
-      toast.error(interpolate(toasts.failed, { error: result.error }));
+    try {
+      await runAction(
+        { pending: 'Starting backup...', success: toasts.backupTriggered, failure: toasts.failed },
+        () => triggerManualBackup(),
+      );
+    } finally {
+      setBackingUp(false);
     }
-    setBackingUp(false);
   };
 
   const persistDiscordSettings = async (applyToMonitor: boolean): Promise<void> => {

@@ -2,6 +2,7 @@
 
 import { updateWorkers } from '@/app/actions/workerConfig';
 import { toast } from 'sonner';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
 import type { WorkerNodesCollection } from './useWorkerNodesCollection';
 
 export interface WorkerNodeActions {
@@ -15,15 +16,18 @@ export function useWorkerNodeActions(collection: WorkerNodesCollection): WorkerN
     setTimeout(() => { void collection.loadWorkers(); }, 1000);
   };
 
+  const runAction = useActionFeedback();
+
   const saveWorkers = async (): Promise<void> => {
-    const res = await updateWorkers(collection.workers);
-    if (res.success) {
-      toast.success('Configuration Saved', {
-        description: 'Worker nodes updated in cms.toml. You need to restart services in Container Control Center to apply the changes.',
-      });
-    } else {
-      toast.error('Failed to Save', { description: res.error });
-    }
+    await runAction(
+      {
+        pending: 'Saving worker nodes...',
+        success: 'Configuration Saved',
+        failure: 'Failed to Save',
+        description: 'Worker nodes updated in cms.toml. Restart services in Container Control Center to apply.',
+      },
+      () => updateWorkers(collection.workers),
+    );
   };
 
   return { retryConnection, saveWorkers };

@@ -19,6 +19,7 @@ import { ContestTableRow } from './contest-list/ContestTableRows';
 import { useContestListActions } from './contest-list/useContestListActions';
 import type { ExistingContest } from './contest-modal/types';
 import { hasEffectivePermission } from '@/lib/permission-engine';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 
@@ -55,14 +56,15 @@ function ContestMobileCard({ contest, locale, isSuperAdmin, canManage, canUpdate
   const router = useRouter();
   const confirm = useConfirm();
   const { destructiveConfirm } = useConfirmationCopy();
+  const runAction = useActionFeedback();
   const handleDelete = async (): Promise<void> => {
     if (!canManage) return;
     if (!(await confirm(destructiveConfirm('contest')))) return;
-    const result = await apiClient.delete(`/api/contests/${contest.id}`);
-    if (result.success) {
-      toast.success('Contest deleted');
-      router.refresh();
-    } else toast.error('Failed to delete contest: ' + result.error);
+    const result = await runAction(
+      { pending: 'Deleting contest...', success: 'Contest deleted', failure: 'Failed to delete contest' },
+      () => apiClient.delete(`/api/contests/${contest.id}`),
+    );
+    if (result?.success) router.refresh();
   };
   return (
     <MobileCard>
