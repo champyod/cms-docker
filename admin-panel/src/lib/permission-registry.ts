@@ -174,7 +174,12 @@ export const DEFAULT_GROUPS: readonly GroupDefinition[] = [
   {
     name: 'Superadmin',
     description: 'Unrestricted access to every permission in the registry.',
-    permissions: PERMISSION_REGISTRY.map((definition) => definition.key),
+    // Why backup:* excluded: backup rights are manual-grant only (per-admin
+    // override or direct link), never inherited — not even here. The engine
+    // carve-out below keeps the all:all expansion from re-granting them.
+    permissions: PERMISSION_REGISTRY.map((definition) => definition.key).filter(
+      (key) => !key.startsWith('backup:'),
+    ),
   },
   {
     name: 'Contest Manager',
@@ -342,11 +347,8 @@ export const DEFAULT_GROUPS: readonly GroupDefinition[] = [
       'resource:list',
       'resource:read',
       'resource:update',
-      // Why only live keys: update/delete are never minted (see above),
-      // so there is nothing to grant beyond list/read/create.
-      'backup:list',
-      'backup:read',
-      'backup:create',
+      // No backup:* grants: backup rights are manual-grant only, so no
+      // default group carries them. Re-seed prunes stale backup links.
     ],
   },
   {

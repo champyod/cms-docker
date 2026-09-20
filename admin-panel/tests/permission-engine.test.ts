@@ -175,10 +175,9 @@ describe('PERMISSION_REGISTRY', () => {
   });
 
   // Why pinned: MODULES / DOMAIN_VERBS edits must be deliberate, not silent.
-  // 200 + 5 RESERVED keys (merged from migration-management; documented as
-  // unenforced placeholders, reviewed 2026-09-19).
-  it('holds exactly 205 keys', () => {
-    expect(PERMISSION_REGISTRY.length).toBe(205);
+  // 200 + 5 RESERVED keys, minus 5 retired, plus 3 backup keys = 203.
+  it('holds exactly 203 keys', () => {
+    expect(PERMISSION_REGISTRY.length).toBe(203);
   });
 
   it.each(PERMISSION_REGISTRY)('entry $key equals ${module}:${verb}', (definition) => {
@@ -222,10 +221,18 @@ describe('DEFAULT_GROUPS', () => {
     expect(missing).toEqual([]);
   });
 
-  it('grants Superadmin every registry key', () => {
+  it('grants Superadmin every registry key except backup:*', () => {
     const superadmin = DEFAULT_GROUPS.find((group) => group.name === 'Superadmin');
     expect(superadmin).toBeDefined();
-    expect(new Set(superadmin?.permissions ?? [])).toEqual(registryKeys);
+    const expected = new Set([...registryKeys].filter((key) => !key.startsWith('backup:')));
+    expect(new Set(superadmin?.permissions ?? [])).toEqual(expected);
+  });
+
+  it('never expands all:all into backup:*', () => {
+    const effective = resolveEffectivePermissions(['all:all'], []);
+    expect(hasEffectivePermission(effective, 'backup:create')).toBe(false);
+    expect(hasEffectivePermission(effective, 'backup:list')).toBe(false);
+    expect(hasEffectivePermission(effective, 'contest:list')).toBe(true);
   });
 
   it('includes the all:all key for Superadmin', () => {
