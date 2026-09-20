@@ -99,7 +99,7 @@ describe('DeployStatusPanel', () => {
       />
     );
     expect(html).toContain('Build Log');
-    expect(html).toContain('AUTO-SCROLL ON');
+    expect(html).toContain('Following latest logs');
     expect(html).toContain('aria-pressed="true"');
   });
 
