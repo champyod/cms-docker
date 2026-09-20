@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertCircle, Check, Settings } from 'lucide-react';
+import { AlertCircle, Check, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getEncodingLabel } from '@/lib/file-encoding';
 import type { FilePair } from './testcase-helpers';
@@ -33,7 +33,7 @@ export function TestcasePairsList({ pairs, onPreview }: PairsListProps): React.J
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <button onClick={() => onPreview(pair.id)} className="flex items-center gap-1.5 rounded-lg border border-border bg-muted/50 px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-accent">
-              <Settings className="w-3.5 h-3.5" />
+              <Eye className="w-3.5 h-3.5" />
               Preview
             </button>
             {pair.status === 'ready' && <Check className="h-4 w-4 text-success" />}

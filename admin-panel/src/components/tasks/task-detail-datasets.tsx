@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
-import { HelpCircle, ChevronDown, ChevronUp, Settings, Database, CheckCircle, Copy, Edit, ToggleLeft, ToggleRight, TestTube, Plus, Trash2, Upload, Paperclip } from 'lucide-react';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
+import { HelpCircle, ChevronDown, ChevronUp, Settings2, Database, CheckCircle, Copy, Edit, ToggleLeft, ToggleRight, TestTube, Plus, Trash2, Upload, Paperclip } from 'lucide-react';
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
 import { cn } from '@/lib/utils';
@@ -94,7 +94,7 @@ export function DatasetsSection({
                     {dataset.autojudge && <span className="px-2 py-0.5 text-xs bg-info/10 text-info rounded-full">Autojudge</span>}
                   </div>
                   <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="sm" icon={Settings} iconOnly tooltip="Settings" onClick={() => onEdit(dataset)} />
+                    <Button variant="ghost" size="sm" icon={Settings2} iconOnly tooltip="Dataset Settings" onClick={() => onEdit(dataset)} />
                     {dataset.id !== activeDatasetId && <Button variant="ghost" size="sm" icon={CheckCircle} iconOnly tooltip="Make Live" onClick={() => onActivate(dataset.id)} className="text-success hover:text-success" />}
                     <Button variant="ghost" size="sm" icon={Copy} iconOnly tooltip="Clone" onClick={() => onClone(dataset.id, dataset.description)} className="text-primary hover:text-primary" />
                     <Button variant="ghost" size="sm" icon={Edit} iconOnly tooltip="Rename" onClick={() => onRename(dataset.id, dataset.description)} />
@@ -143,16 +143,15 @@ export function AttachmentsSection({ attachments, onUpload }: { attachments: Arr
   const router = useRouter();
   const confirm = useConfirm();
   const { destructiveConfirm } = useConfirmationCopy();
+  const runAction = useActionFeedback();
 
   const handleDeleteAttachment = async (attachmentId: number): Promise<void> => {
     if (!(await confirm(destructiveConfirm('attachment')))) return;
-    const result = await apiClient.delete(`/api/attachments/${attachmentId}`);
-    if (result.success) {
-      toast.success('Attachment deleted');
-      router.refresh();
-    } else {
-      toast.error('Delete failed', { description: result.error });
-    }
+    const result = await runAction(
+      { pending: 'Deleting attachment...', success: 'Attachment deleted', failure: 'Delete failed' },
+      () => apiClient.delete(`/api/attachments/${attachmentId}`)
+    );
+    if (result?.success) router.refresh();
   };
 
   return (
