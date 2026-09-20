@@ -108,6 +108,23 @@ describe('getAppliedDisplay', () => {
     vi.stubGlobal('document', { documentElement: { classList: createFakeClassList([]) } });
     expect(getAppliedDisplay()).toEqual({ density: 'comfortable', textSize: 'medium' });
   });
+
+  it('returns the same reference while values are unchanged', () => {
+    vi.stubGlobal('document', {
+      documentElement: { classList: createFakeClassList(['density-compact', 'text-size-large']) },
+    });
+    expect(getAppliedDisplay()).toBe(getAppliedDisplay());
+  });
+
+  it('returns a new reference when values change', () => {
+    const classList = createFakeClassList(['density-compact', 'text-size-large']);
+    vi.stubGlobal('document', { documentElement: { classList } });
+    const before = getAppliedDisplay();
+    classList.remove('density-compact');
+    const after = getAppliedDisplay();
+    expect(before).not.toBe(after);
+    expect(after).toEqual({ density: 'comfortable', textSize: 'large' });
+  });
 });
 
 describe('subscribeToDisplay', () => {

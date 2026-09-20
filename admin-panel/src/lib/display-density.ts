@@ -89,6 +89,10 @@ export function subscribeToDisplay(onChange: () => void): () => void {
   return () => document.removeEventListener(DISPLAY_CHANGE_EVENT, onChange);
 }
 
+// Why cached: useSyncExternalStore re-renders whenever getSnapshot returns a
+// new reference; a fresh object per call would loop forever (React error #185).
+let cachedDisplay: DisplayPreferences | null = null;
+
 export function getAppliedDisplay(): DisplayPreferences | null {
   if (typeof document === 'undefined') return null;
   const rootClassList = document.documentElement.classList;
@@ -98,7 +102,15 @@ export function getAppliedDisplay(): DisplayPreferences | null {
     : rootClassList.contains('text-size-large')
       ? 'large'
       : 'medium';
-  return { density, textSize };
+  if (
+    cachedDisplay !== null &&
+    cachedDisplay.density === density &&
+    cachedDisplay.textSize === textSize
+  ) {
+    return cachedDisplay;
+  }
+  cachedDisplay = { density, textSize };
+  return cachedDisplay;
 }
 
 export const NO_FLASH_DISPLAY_SCRIPT = [
