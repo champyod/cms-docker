@@ -5,7 +5,7 @@ import { Button } from '@/components/core/Button';
 import { Dialog } from '@/components/core/Dialog';
 import {
   Box, RefreshCw, RotateCcw, CheckCircle2, AlertCircle,
-  Layers, HelpCircle, Trash2, Terminal, X
+  Layers, HelpCircle, Trash2, ScrollText, X
 } from 'lucide-react';
 import Link from 'next/link';
 import { controlContainer, runCompose, ContainerInfo } from '@/app/actions/docker';
@@ -306,7 +306,7 @@ export function ContainersClient(): React.JSX.Element {
               Remove
             </Button>
             <Button variant="secondary" size="sm" onClick={() => setShowBulkLogsDialog(true)} tooltip="View logs for selection">
-              <Terminal className="w-4 h-4" />
+              <ScrollText className="w-4 h-4" />
               Logs
             </Button>
           </div>
@@ -444,7 +444,7 @@ export function ContainersClient(): React.JSX.Element {
           <div className="flex justify-end gap-3 w-full">
             <Button variant="ghost" onClick={() => setShowBulkLogsDialog(false)}>Cancel</Button>
             <Button variant="secondary" onClick={handleConfirmBulkLogs}>
-              <Terminal className="w-4 h-4 mr-2" />
+              <ScrollText className="w-4 h-4 mr-2" />
               View Logs
             </Button>
           </div>

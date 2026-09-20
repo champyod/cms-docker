@@ -2,7 +2,7 @@
 import { Button } from '@/components/core/Button';
 import { cn } from '@/lib/utils';
 import { ContainerInfo } from '@/app/actions/docker';
-import { Play, Square, RotateCcw, Terminal, Settings, Bell, BellOff, Check } from 'lucide-react';
+import { Play, Square, RotateCcw, ScrollText, Settings, Bell, BellOff, Check } from 'lucide-react';
 
 type ContainerRef = { id: string; name: string };
 
@@ -71,7 +71,7 @@ function ContainerActions({
     <div className="flex flex-wrap items-center gap-2 sm:gap-4 sm:justify-end">
       <div className={cn('px-2 py-0.5 rounded text-xs font-bold border', getStatusColor(container.state))}>{container.state.toUpperCase()}</div>
       <div className="flex flex-wrap items-center gap-2" onClick={stopPropagation}>
-        <Button size="sm" variant="ghost" icon={Terminal} tooltip="View Logs" className="size-9 shrink-0" onClick={() => onViewLogs({ id: container.id, name: container.name })} />
+        <Button size="sm" variant="ghost" icon={ScrollText} tooltip="View Logs" className="size-9 shrink-0" onClick={() => onViewLogs({ id: container.id, name: container.name })} />
         <Button size="sm" variant="ghost" icon={Settings} tooltip="Container Settings" className="size-9 shrink-0" onClick={() => onOpenSettings({ id: container.id, name: container.name })} />
         {container.state !== 'running' ? (
           <Button size="sm" variant="positiveOutline" icon={Play} tooltip="Start Container" className="size-9 shrink-0" onClick={() => onControl(container.id, 'start')} disabled={actionLoading === container.id} />

@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-import { Activity, CheckCircle2, ChevronsDown, Clock3, OctagonAlert, TriangleAlert, XCircle, type LucideIcon } from 'lucide-react';
+import { Activity, CheckCircle2, Clock3, OctagonAlert, TriangleAlert, XCircle, type LucideIcon } from 'lucide-react';
 import { Button } from '@/components/core/Button';
+import { LogFollowButton } from '@/components/core/LogFollowButton';
 import { Card } from '@/components/core/Card';
 import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
@@ -96,16 +97,11 @@ function hasLogOutput(log: string): boolean {
 
 function LogFollowToggle({ autoScroll, onToggle }: { autoScroll: boolean; onToggle: () => void }): React.JSX.Element {
   return (
-    <Button
-      variant={autoScroll ? 'positive' : 'secondary'}
-      size="sm"
-      icon={ChevronsDown}
-      className="rounded-full text-xs font-bold tracking-wider uppercase"
-      aria-pressed={autoScroll}
+    <LogFollowButton
+      following={autoScroll}
       onClick={onToggle}
-    >
-      {autoScroll ? 'AUTO-SCROLL ON' : 'AUTO-SCROLL OFF'}
-    </Button>
+      className="relative"
+    />
   );
 }
 

@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/core/Button';
 import { Dialog } from '@/components/core/Dialog';
-import { RotateCcw, Trash2, Terminal } from 'lucide-react';
+import { RotateCcw, Trash2, ScrollText } from 'lucide-react';
 
 interface BulkDialogsProps {
   selectedCount: number;
@@ -100,7 +100,7 @@ export function BulkDialogs({
           <div className="flex justify-end gap-3 w-full">
             <Button variant="ghost" onClick={() => onCloseLogs(false)}>Cancel</Button>
             <Button variant="secondary" onClick={onConfirmLogs}>
-              <Terminal className="w-4 h-4 mr-2" />
+              <ScrollText className="w-4 h-4 mr-2" />
               View Logs
             </Button>
           </div>

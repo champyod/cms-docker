@@ -1,7 +1,7 @@
 'use client';
 
 import { Button } from '@/components/core/Button';
-import { RotateCcw, Trash2, Terminal, X } from 'lucide-react';
+import { RotateCcw, Trash2, ScrollText, X } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface ContainerBulkBarProps {
@@ -54,7 +54,7 @@ export function ContainerBulkBar({
           Remove
         </Button>
         <Button variant="secondary" size="sm" onClick={onLogs} tooltip="View logs for selection">
-          <Terminal className="w-4 h-4" />
+          <ScrollText className="w-4 h-4" />
           Logs
         </Button>
       </div>

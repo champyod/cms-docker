@@ -7,6 +7,7 @@ import { Download, RefreshCw, Search } from 'lucide-react';
 import { getContainerLogs } from '@/app/actions/docker';
 import { Button } from '@/components/core/Button';
 import { Dialog } from '@/components/core/Dialog';
+import { LogFollowButton } from '@/components/core/LogFollowButton';
 
 interface LogViewerModalProps {
   containerId: string;
@@ -104,28 +105,11 @@ function LogDisplay({
       >
         {displayText}
       </pre>
-      <button
+      <LogFollowButton
+        following={isAutoScroll}
         onClick={onToggleAutoScroll}
-        className={`absolute bottom-6 right-8 px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
-          isAutoScroll
-            ? 'bg-primary border-primary text-primary-foreground shadow-lg shadow-primary/30'
-            : 'bg-background/80 border-border text-muted-foreground hover:text-foreground'
-        }`}
-      >
-        {isAutoScroll ? 'AUTO-SCROLL ON' : 'AUTO-SCROLL OFF'}
-      </button>
-    </div>
-  );
-}
-
-function LogModalFooter(): React.JSX.Element {
-  return (
-    <div className="flex justify-between items-center w-full">
-      <div className="text-xs text-muted-foreground uppercase tracking-widest font-bold">Live Streaming Updates • Every 5s</div>
-      <div className="flex items-center gap-1.5">
-        <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-        <span className="text-xs text-success font-bold">MONITORING ACTIVE</span>
-      </div>
+        className="absolute bottom-4 right-4"
+      />
     </div>
   );
 }
@@ -166,7 +150,7 @@ export function LogViewerModal({ containerId, containerName, onClose }: LogViewe
     if (isAutoScroll && logReference.current) logReference.current.scrollTop = logReference.current.scrollHeight;
   }, [logs, isAutoScroll]);
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }} title={containerName} description={containerId} className="max-w-4xl" footer={<LogModalFooter />}>
+      <Dialog open onOpenChange={(open) => { if (!open) onClose(); }} title={containerName} description={containerId} className="max-w-4xl">
       <LogToolbar searchTerm={searchTerm} onSearchChange={setSearchTerm} tail={tail} onTailChange={setTail} onDownload={() => downloadLogsToFile(logs, containerName)} onRefresh={refreshLogs} isLoading={isLoading} />
       <LogDisplay logs={logs} searchTerm={searchTerm} isAutoScroll={isAutoScroll} onToggleAutoScroll={() => setIsAutoScroll(!isAutoScroll)} logReference={logReference} />
     </Dialog>
