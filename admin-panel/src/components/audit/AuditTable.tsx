@@ -202,7 +202,7 @@ export function AuditTable({
     <div className="space-y-4">
       <Card className="p-4">
         <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-[160px]">
+          <div className="min-w-40">
             <label className="block text-xs font-medium text-muted-foreground mb-1">{dict.filters.entity}</label>
             <select
               value={entityFilter}
@@ -216,7 +216,7 @@ export function AuditTable({
               ))}
             </select>
           </div>
-          <div className="min-w-[140px]">
+          <div className="min-w-35">
             <Input
               label={dict.filters.verb}
               value={verbFilter}
@@ -224,7 +224,7 @@ export function AuditTable({
               placeholder={dict.filters.verb}
             />
           </div>
-          <div className="min-w-[120px]">
+          <div className="min-w-30">
             <Input
               label={dict.filters.actorId}
               value={actorIdFilter}
@@ -232,7 +232,7 @@ export function AuditTable({
               placeholder="ID"
             />
           </div>
-          <div className="min-w-[160px]">
+          <div className="min-w-40">
             <Input
               label={dict.filters.fromDate}
               type="date"
@@ -240,7 +240,7 @@ export function AuditTable({
               onChange={(e) => setFromDateFilter(e.target.value)}
             />
           </div>
-          <div className="min-w-[160px]">
+          <div className="min-w-40">
             <Input
               label={dict.filters.toDate}
               type="date"
@@ -271,14 +271,14 @@ export function AuditTable({
           <Table>
             <TableHeader>
               <TableRow className="border-b border-border">
-                <TableHead className="text-muted-foreground w-[180px]">{dict.columns.timestamp}</TableHead>
-                <TableHead className="text-muted-foreground w-[80px]">{dict.columns.actor}</TableHead>
+                <TableHead className="text-muted-foreground w-45">{dict.columns.timestamp}</TableHead>
+                <TableHead className="text-muted-foreground w-20">{dict.columns.actor}</TableHead>
                 <TableHead className="text-muted-foreground">{dict.columns.verb}</TableHead>
                 <TableHead className="text-muted-foreground">{dict.columns.entity}</TableHead>
                 <TableHead className="text-muted-foreground">{dict.columns.entityId}</TableHead>
-                <TableHead className="text-muted-foreground w-[100px]">{dict.columns.result}</TableHead>
+                <TableHead className="text-muted-foreground w-25">{dict.columns.result}</TableHead>
                 <TableHead className="text-muted-foreground">{dict.columns.reason}</TableHead>
-                <TableHead className="text-muted-foreground w-[40px]" />
+                <TableHead className="text-muted-foreground w-10" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -378,7 +378,7 @@ function AuditRow({
         <TableCell>
           <Badge variant={resultBadgeVariant(entry.result)}>{entry.result}</Badge>
         </TableCell>
-        <TableCell className="text-sm text-muted-foreground max-w-[200px]">
+        <TableCell className="text-sm text-muted-foreground max-w-50">
           {truncate(entry.reason, 60)}
         </TableCell>
         <TableCell>
@@ -409,7 +409,7 @@ function AuditRow({
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-muted-foreground">{dict.entryHash}: </span>
-                      <span className="font-mono text-xs text-foreground truncate max-w-[240px]">
+                      <span className="font-mono text-xs text-foreground truncate max-w-60">
                         {expandedDetail.entry_hash ?? '—'}
                       </span>
                       {expandedDetail.entry_hash && (

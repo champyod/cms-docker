@@ -26,13 +26,13 @@ export function MobileBottomBar({ locale, permissionKeys, open, onToggle }: Mobi
           const href = entry.path === '/' ? `/${locale}` : `/${locale}${entry.path}`;
           const isActive = isActiveRoute(pathname, href, locale);
           return (
-            <Link key={entry.label} href={href} aria-current={isActive ? 'page' : undefined} className={cn('flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors', isActive ? 'text-primary' : 'text-muted-foreground hover:text-accent-foreground')}>
+            <Link key={entry.label} href={href} aria-current={isActive ? 'page' : undefined} className={cn('flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[0.625rem] font-medium transition-colors', isActive ? 'text-primary' : 'text-muted-foreground hover:text-accent-foreground')}>
               <entry.icon className="size-5 shrink-0" aria-hidden />
               <span className="max-w-full truncate">{entry.label}</span>
             </Link>
           );
         })}
-        <button type="button" aria-expanded={open} aria-label="More" onClick={onToggle} className={cn('flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors', open ? 'text-primary' : 'text-muted-foreground hover:text-accent-foreground')}>
+        <button type="button" aria-expanded={open} aria-label="More" onClick={onToggle} className={cn('flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[0.625rem] font-medium transition-colors', open ? 'text-primary' : 'text-muted-foreground hover:text-accent-foreground')}>
           <MoreHorizontal className="size-5" aria-hidden />
           <span>More</span>
         </button>

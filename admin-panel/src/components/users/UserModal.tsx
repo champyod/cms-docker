@@ -262,7 +262,7 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess, per
                   return (
                     <span key={code} className={cn('inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs', known ? 'border-border bg-muted' : 'border-amber-500/40 bg-amber-500/10 text-amber-700')}>
                       <span className="font-mono">{code}</span>
-                      {!known ? <span className="text-[10px]">unknown</span> : null}
+                      {!known ? <span className="text-[0.625rem]">unknown</span> : null}
                       {fieldAccess.preferred_languages.canUpdate ? (
                         <button type="button" onClick={() => removePreferredLanguage(code)} className="ml-1 text-muted-foreground hover:text-foreground">×</button>
                       ) : null}
