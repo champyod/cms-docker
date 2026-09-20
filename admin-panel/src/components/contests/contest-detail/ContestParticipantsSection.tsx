@@ -34,9 +34,9 @@ function ParticipationChips({ participation }: { participation: Participation })
 function RowActions({ participation, onMarkAsTest, onOpenSettings, onRemove }: Pick<Props, 'onMarkAsTest' | 'onOpenSettings' | 'onRemove'> & { participation: Participation }) {
   return (
     <div className="flex items-center gap-1">
-      <button onClick={() => onMarkAsTest(participation.id)} className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-warning" title="Mark as Test User"><FlaskConical className="h-4 w-4" /></button>
-      <button onClick={() => onOpenSettings(participation.id, participation.users.username)} className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-primary" title="Settings"><Settings className="h-4 w-4" /></button>
-      <button onClick={() => onRemove(participation.id)} aria-label={`Remove ${participation.users.username}`} className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
+      <Button variant="ghost" iconOnly icon={FlaskConical} tooltip="Mark as Test User" onClick={() => onMarkAsTest(participation.id)} className="size-9 shrink-0 rounded-lg hover:text-warning" />
+      <Button variant="ghost" iconOnly icon={Settings} tooltip="Settings" onClick={() => onOpenSettings(participation.id, participation.users.username)} className="size-9 shrink-0 rounded-lg hover:text-primary" />
+      <Button variant="ghost" iconOnly icon={Trash2} tooltip="Remove" aria-label={`Remove ${participation.users.username}`} onClick={() => onRemove(participation.id)} className="size-9 shrink-0 rounded-lg hover:text-destructive" />
     </div>
   );
 }

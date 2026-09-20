@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { EmptyState } from '@/components/core/EmptyState';
 import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
 import { Badge } from '@/components/core/Badge';
+import { Button } from '@/components/core/Button';
 import { ExternalLink, Pencil, Power, Trash2, Trophy } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -78,19 +79,13 @@ function ContestMobileCard({ contest, locale, isSuperAdmin, canManage, canUpdate
           <ExternalLink className="h-4 w-4" />
         </Link>
         {canUpdate && (
-          <button onClick={() => onEdit(contest.id)} aria-label={`Edit ${contest.name}`} title="Edit" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-primary">
-            <Pencil className="h-4 w-4" />
-          </button>
+          <Button variant="ghost" iconOnly icon={Pencil} tooltip="Edit" aria-label={`Edit ${contest.name}`} onClick={() => onEdit(contest.id)} className="size-9 shrink-0 rounded-lg hover:text-primary" />
         )}
         {isSuperAdmin && !contest.is_active && (
-          <button onClick={() => onSetActive(contest.id)} aria-label={`Set contest ${contest.id} active`} title="Set Active" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-primary">
-            <Power className="h-4 w-4" />
-          </button>
+          <Button variant="ghost" iconOnly icon={Power} tooltip="Set Active" aria-label={`Set contest ${contest.id} active`} onClick={() => onSetActive(contest.id)} className="size-9 shrink-0 rounded-lg hover:text-primary" />
         )}
         {canManage && (
-          <button onClick={() => { void handleDelete(); }} aria-label={`Delete ${contest.name}`} title="Delete" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-destructive">
-            <Trash2 className="h-4 w-4" />
-          </button>
+          <Button variant="ghost" iconOnly icon={Trash2} tooltip="Delete" aria-label={`Delete ${contest.name}`} onClick={() => { void handleDelete(); }} className="size-9 shrink-0 rounded-lg hover:text-destructive" />
         )}
       </div>
     </MobileCard>

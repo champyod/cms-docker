@@ -290,9 +290,7 @@ export function ContainersClient(): React.JSX.Element {
             {isDiscordConfigured === false && (
               <span className="px-2 py-1 bg-warning/10 border border-warning/20 text-warning text-xs font-bold rounded-full">Discord not configured</span>
             )}
-            <button onClick={handleClearSelection} className="p-1 hover:bg-accent rounded-full text-muted-foreground">
-              <X className="w-4 h-4" />
-            </button>
+            <Button variant="ghost" iconOnly icon={X} tooltip="Clear selection" aria-label="Clear selection" onClick={handleClearSelection} className="size-8 rounded-full" />
           </div>
           <div className="flex items-center gap-2">
             <Button variant="positiveOutline" size="sm" onClick={handleOpenBulkRestart} disabled={bulkLoading} tooltip="Restart selected containers">
