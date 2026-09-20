@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # Shared-secret distribution for remote worker boxes.
 # A remote box renders its own config, so secrets it must share with main
 # (DB passwords, signing keys) would otherwise diverge on every local sync.
