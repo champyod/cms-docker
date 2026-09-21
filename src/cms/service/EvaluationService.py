@@ -44,7 +44,7 @@ from cms.db.session import Session
 from cms.io.priorityqueue import QueueEntry, QueueEntryDict, QueueItem
 from cmscommon.datetime import make_timestamp
 from cms.db import SessionGen, Contest, Digest, Dataset, Evaluation, Participation, Submission, \
-    SubmissionResult, Testcase, UserTest, UserTestResult, get_submissions, \
+    SubmissionResult, Task, Testcase, UserTest, UserTestResult, get_submissions, \
     get_submission_results, get_datasets_to_judge
 from cms.grading.Job import Job, JobGroup
 from cms.io import Executor, TriggeredService, rpc_method
@@ -57,6 +57,22 @@ from .workerpool import WorkerPool
 
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_throttle_delay_seconds(
+    task_delay: int | None, contest_delay: int | None, legacy_penalty: int | None
+) -> float:
+    """Pick the fairness delay with new columns first, legacy as fallback.
+
+    Task override wins when set; otherwise the contest throttle delay wins
+    when positive; otherwise the legacy contest penalty applies.
+
+    """
+    if task_delay is not None:
+        return max(0.0, float(task_delay))
+    if contest_delay is not None and float(contest_delay) > 0:
+        return float(contest_delay)
+    return max(0.0, float(legacy_penalty or 0))
 
 
 class EvaluationExecutor(Executor[ESOperation]):
@@ -356,12 +372,20 @@ class EvaluationService(TriggeredService[ESOperation, EvaluationExecutor]):
             return timedelta(0)
 
         with SessionGen() as session:
-            penalty_seconds = session.query(Contest.queue_fairness_penalty_seconds)\
+            contest_row = session.query(
+                Contest.evaluation_throttle_delay_s,
+                Contest.queue_fairness_penalty_seconds)\
                 .join(Participation, Participation.contest_id == Contest.id)\
                 .filter(Participation.id == submission.participation_id)\
+                .first()
+            task_delay = session.query(Task.evaluation_throttle_delay_s)\
+                .filter(Task.id == submission.task_id)\
                 .scalar()
 
-            effective_penalty_seconds = float(penalty_seconds or 0)
+            contest_delay = contest_row[0] if contest_row is not None else None
+            legacy_penalty = contest_row[1] if contest_row is not None else None
+            effective_penalty_seconds = _resolve_throttle_delay_seconds(
+                task_delay, contest_delay, legacy_penalty)
             if effective_penalty_seconds <= 0:
                 return timedelta(0)
 
