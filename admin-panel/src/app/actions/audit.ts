@@ -3,12 +3,14 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { ensurePermission } from '@/lib/permissions';
+import { loadActorNames } from '@/lib/admin-names';
 
 const AUDIT_PAGE_SIZE = 50;
 
 export interface AuditLogRow {
   id: string;
   actor_id: number | null;
+  actor_name: string | null;
   timestamp: string;
   verb: string;
   entity: string;
@@ -44,19 +46,23 @@ interface ActionFailure {
 export type AuditLogResult = AuditLogSuccess | ActionFailure;
 export type AuditDetailResult = AuditDetailSuccess | ActionFailure;
 
-function serializeRow(row: {
-  id: bigint;
-  actor_id: number | null;
-  timestamp: Date;
-  verb: string;
-  entity: string;
-  entity_id: string | null;
-  result: string;
-  reason: string | null;
-}): AuditLogRow {
+function serializeRow(
+  row: {
+    id: bigint;
+    actor_id: number | null;
+    timestamp: Date;
+    verb: string;
+    entity: string;
+    entity_id: string | null;
+    result: string;
+    reason: string | null;
+  },
+  actorNames: ReadonlyMap<number, string>,
+): AuditLogRow {
   return {
     id: row.id.toString(),
     actor_id: row.actor_id,
+    actor_name: row.actor_id === null ? null : (actorNames.get(row.actor_id) ?? null),
     timestamp: row.timestamp.toISOString(),
     verb: row.verb,
     entity: row.entity,
@@ -72,6 +78,8 @@ export async function getAuditLog({
   actorId,
   entity,
   verb,
+  result,
+  search,
   fromDate,
   toDate,
 }: {
@@ -80,11 +88,14 @@ export async function getAuditLog({
   actorId?: string;
   entity?: string;
   verb?: string;
+  result?: string;
+  search?: string;
   fromDate?: string;
   toDate?: string;
 }): Promise<AuditLogResult> {
   try {
     await ensurePermission('audit:read');
+    await ensurePermission('audit:list');
 
     const where: Prisma.audit_logWhereInput = {};
     if (actorId) {
@@ -93,6 +104,11 @@ export async function getAuditLog({
     }
     if (entity) where.entity = entity;
     if (verb) where.verb = { contains: verb, mode: 'insensitive' };
+    if (result === 'success' || result === 'failure') where.result = result;
+    if (search) {
+      const contains = { contains: search, mode: 'insensitive' as const };
+      where.OR = [{ verb: contains }, { reason: contains }, { entity: contains }];
+    }
     if (fromDate || toDate) {
       where.timestamp = {};
       if (fromDate) where.timestamp.gte = new Date(fromDate);
@@ -123,11 +139,14 @@ export async function getAuditLog({
       }),
       prisma.audit_log.count({ where }),
     ]);
+    const actorNames = await loadActorNames(
+      rows.map((row) => row.actor_id).filter((id): id is number => id !== null),
+    );
 
     return {
       success: true,
       data: {
-        entries: rows.map(serializeRow),
+        entries: rows.map((row) => serializeRow(row, actorNames)),
         total,
         totalPages: Math.ceil(total / pageSize),
       },
@@ -141,6 +160,7 @@ export async function getAuditLog({
 export async function getDistinctEntities(): Promise<{ success: true; data: string[] } | ActionFailure> {
   try {
     await ensurePermission('audit:read');
+    await ensurePermission('audit:list');
     const rows = await prisma.audit_log.findMany({
       distinct: ['entity'],
       select: { entity: true },
@@ -153,9 +173,9 @@ export async function getDistinctEntities(): Promise<{ success: true; data: stri
   }
 }
 
-export async function getAuditEntry(id: number): Promise<AuditDetailResult> {
-  try {
+export async function getAuditEntry(id: number): Promise<AuditDetailResult> {  try {
     await ensurePermission('audit:read');
+    await ensurePermission('audit:list');
 
     const row = await prisma.audit_log.findUnique({
       where: { id: BigInt(id) },
@@ -165,10 +185,14 @@ export async function getAuditEntry(id: number): Promise<AuditDetailResult> {
       return { success: false, error: 'Audit entry not found' };
     }
 
+    const actorNames = await loadActorNames(
+      row.actor_id === null ? [] : [row.actor_id],
+    );
+
     return {
       success: true,
       data: {
-        ...serializeRow(row),
+        ...serializeRow(row, actorNames),
         before_values: row.before_values,
         after_values: row.after_values,
         ip: row.ip,

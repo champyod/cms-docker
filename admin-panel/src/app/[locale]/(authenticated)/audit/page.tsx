@@ -16,6 +16,8 @@ export default async function AuditPage({
     entity?: string;
     verb?: string;
     actorId?: string;
+    result?: string;
+    search?: string;
     fromDate?: string;
     toDate?: string;
   }>;
@@ -36,6 +38,8 @@ export default async function AuditPage({
     entity: sp.entity,
     verb: sp.verb,
     actorId: sp.actorId,
+    result: sp.result,
+    search: sp.search,
     fromDate: sp.fromDate,
     toDate: sp.toDate,
   });
@@ -69,6 +73,8 @@ export default async function AuditPage({
           entity: sp.entity,
           verb: sp.verb,
           actorId: sp.actorId,
+          result: sp.result,
+          search: sp.search,
           fromDate: sp.fromDate,
           toDate: sp.toDate,
         }}
