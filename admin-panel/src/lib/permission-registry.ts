@@ -92,6 +92,12 @@ const DOMAIN_VERBS: readonly { module: string; verb: string }[] = [
   { module: 'audit', verb: 'read' },
   { module: 'group', verb: 'assign' },
   { module: 'override', verb: 'set' },
+  // Why lane verbs: queue-time evaluation lane control, enforced by
+  // lane actions gated on their own keys (evaluation:lane_assign,
+  // evaluation:lane_move). No submission:create/delete here — those
+  // stay system-reserved per RESERVED_KEYS.
+  { module: 'evaluation', verb: 'lane_assign' },
+  { module: 'evaluation', verb: 'lane_move' },
 ];
 
 function describePermission(module: string, verb: string): string {
