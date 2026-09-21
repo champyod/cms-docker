@@ -7,6 +7,8 @@ import { recordAudit } from '@/lib/audit';
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<Response> {
   const { authorized, response } = await verifyApiPermission('manager:read');
   if (!authorized) return response as Response;
+  const listCheck = await verifyApiPermission('manager:list');
+  if (!listCheck.authorized) return listCheck.response as Response;
 
   const datasetId = parseInt((await params).id, 10);
   if (Number.isNaN(datasetId)) return apiError({ message: 'Invalid ID', status: 400 });

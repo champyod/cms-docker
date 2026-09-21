@@ -6,6 +6,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { recalculateSubmission, getSubmissionFieldAccess } from '@/app/actions/submissions';
+import { downloadSubmissionFiles } from '@/app/actions/related-reads';
+import { getFileByDigest } from '@/app/actions/statements';
 import { Button } from '@/components/core/Button';
 import { Dialog, DialogFooter } from '@/components/core/Dialog';
 import { RestrictedField } from '@/components/core/RestrictedField';
@@ -21,9 +23,10 @@ interface SubmissionModalProps {
   onClose: () => void;
   submission: SubmissionListItem;
   canRecompute: boolean;
+  canDownload: boolean;
 }
 
-export function SubmissionModal({ isOpen, onClose, submission, canRecompute }: SubmissionModalProps) {
+export function SubmissionModal({ isOpen, onClose, submission, canRecompute, canDownload }: SubmissionModalProps) {
   const router = useRouter();
   const confirm = useConfirm();
   const { recalculateSubmissionConfirm } = useConfirmationCopy();
@@ -57,6 +60,33 @@ export function SubmissionModal({ isOpen, onClose, submission, canRecompute }: S
           // The list re-derives this row from the refreshed props, so the modal stays open
           // and shows the recalculated results instead of the ones it was opened with.
           router.refresh();
+      } catch (error) {
+          toast.error('Error: ' + error);
+      } finally {
+          setLoadingAction(null);
+      }
+  };
+
+  const handleDownloadFiles = async () => {
+      setLoadingAction('download');
+      try {
+          const list = await downloadSubmissionFiles(submission.id);
+          if (!list.success || !list.files) {
+              toast.error('Error: ' + (list.error ?? 'download failed'));
+              return;
+          }
+          if (list.files.length === 0) {
+              toast.error('No stored files for this submission');
+              return;
+          }
+          for (const file of list.files) {
+              const content = await getFileByDigest(file.digest);
+              if (!content) continue;
+              const anchor = document.createElement('a');
+              anchor.href = `data:application/octet-stream;base64,${content.data}`;
+              anchor.download = file.filename;
+              anchor.click();
+          }
       } catch (error) {
           toast.error('Error: ' + error);
       } finally {
@@ -197,7 +227,18 @@ export function SubmissionModal({ isOpen, onClose, submission, canRecompute }: S
               </div>
              )}
 
-             <Button variant="positive" onClick={onClose}>
+             {canDownload && (
+                 <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => { void handleDownloadFiles(); }}
+                    disabled={!!loadingAction}
+                 >
+                    {loadingAction === 'download' && <Loader2 className="w-3 h-3 animate-spin mr-1"/>}
+                    Download files
+                 </Button>
+              )}
+              <Button variant="positive" onClick={onClose}>
                  Close
              </Button>
         </DialogFooter>

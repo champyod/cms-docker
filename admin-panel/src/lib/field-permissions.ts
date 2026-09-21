@@ -1,5 +1,6 @@
 import { hasEffectivePermission } from '@/lib/permission-engine';
 import type { PermissionKey } from '@/lib/permissions';
+import { EXTRA_FIELD_PERMISSION_MAP } from '@/lib/field-permission-tables';
 
 export type FieldAccess = { canRead: boolean; canUpdate: boolean };
 
@@ -31,6 +32,11 @@ export const FIELD_PERMISSION_MAP: Record<string, Record<string, FieldPermission
     language: { read: 'submission:read' },
     comment: { read: 'submission:read', update: 'submission:update' },
     official: { read: 'submission:read', update: 'submission:update' },
+    submission_results: { read: 'submissionresult:read' },
+    files: { read: 'file:read' },
+    evaluations: { read: 'evaluation:read' },
+    executables: { read: 'executable:read' },
+    tokens: { read: 'token:read' },
   },
   datasets: {
     id: { read: 'dataset:read' },
@@ -154,6 +160,7 @@ export const FIELD_PERMISSION_MAP: Record<string, Record<string, FieldPermission
     contest_id: { read: 'participation:read' },
     user_id: { read: 'participation:read' },
     team_id: { read: 'participation:read', update: 'participation:update' },
+    user_tests: { read: 'usertest:read' },
   },
   announcements: {
     id: { read: 'announcement:read' },
@@ -192,6 +199,7 @@ export const FIELD_PERMISSION_MAP: Record<string, Record<string, FieldPermission
     createdAt: { read: 'monitor:read' },
     updatedAt: { read: 'monitor:read' },
   },
+  ...EXTRA_FIELD_PERMISSION_MAP,
 };
 
 /** Returns per-field read/update booleans for the given entity, evaluated against effectivePermissions. */

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_GROUPS, PERMISSION_REGISTRY } from '@/lib/permission-registry';
+import { PERMISSION_REGISTRY } from '@/lib/permission-registry';
+import { DEFAULT_GROUPS } from '@/lib/permission-groups';
 
 /**
  * A deploy is gated on `deployment:deploy` (src/app/actions/services.ts) and ends by activating its

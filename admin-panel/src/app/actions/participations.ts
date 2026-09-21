@@ -230,6 +230,7 @@ export async function sendMessage(participationId: number, adminId: number, data
   text: string;
 }): Promise<ActionResult> {
   await ensurePermission('message:send');
+  await ensurePermission('message:create');
 
   try {
     const message = await prisma.messages.create({
@@ -257,6 +258,7 @@ export async function sendMessage(participationId: number, adminId: number, data
 
 export async function getMessages(participationId: number) {
   await ensurePermission('message:list');
+  await ensurePermission('message:read');
   return prisma.messages.findMany({
     where: { participation_id: participationId },
     include: { admins: { select: { username: true } } },

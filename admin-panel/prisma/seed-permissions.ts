@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
-import { DEFAULT_GROUPS, PERMISSION_REGISTRY } from '@/lib/permission-registry';
+import { PERMISSION_REGISTRY } from '@/lib/permission-registry';
+import { DEFAULT_GROUPS } from '@/lib/permission-groups';
 
 interface SeedSummary {
   permissionsUpserted: number;

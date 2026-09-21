@@ -40,6 +40,7 @@ async function readFileIfPresent(filePath: string): Promise<string | null> {
 
 export async function readEnvFile(filename: string) {
   await ensurePermission('env:read');
+  await ensurePermission('env:list');
   try {
     const repoRoot = getRepoRoot();
     const envPath = resolveEnvPath(repoRoot, filename);
@@ -105,6 +106,7 @@ export async function readConfigTomlValues(
   keys: readonly ConfigTomlKey[],
 ): Promise<{ success: true; values: Record<string, string> } | { success: false; error: string }> {
   await ensurePermission('env:read');
+  await ensurePermission('env:list');
   const invalid = describeInvalidKeys(keys);
   if (invalid !== null) {
     return { success: false, error: invalid };
@@ -161,6 +163,7 @@ function describeInvalidKeys(keys: readonly ConfigTomlKey[]): string | null {
 
 export async function readActiveContestId(): Promise<{ success: true; contestId: number | null } | { success: false; error: string }> {
   await ensurePermission('env:read');
+  await ensurePermission('env:list');
   try {
     // config.toml is the source of truth; reading the generated env file here made the
     // display lag the value the panel just wrote and drift from a config sync.

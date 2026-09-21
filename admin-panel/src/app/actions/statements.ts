@@ -78,6 +78,7 @@ export async function deleteStatement(statementId: number) {
 
 export async function getAttachments(taskId: number) {
   await ensurePermission('attachment:list');
+  await ensurePermission('attachment:read');
 
   return prisma.attachments.findMany({
     where: { task_id: taskId },

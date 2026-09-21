@@ -240,6 +240,7 @@ export async function listBackups(): Promise<{ success: boolean; archives?: Back
 
 export async function getServiceStatus() {
     await ensurePermission('service:read');
+    await ensurePermission('service:list');
     try {
         const { stdout } = await execPromise('docker ps -a --format "{{json .}}"');
         if (!stdout.trim()) return { status: 'down' as const, running: 0, total: 0 };

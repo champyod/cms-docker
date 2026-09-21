@@ -246,6 +246,7 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage, pe
             onClose={() => setSelectedSubmissionId(null)}
             submission={selectedSubmission}
             canRecompute={hasEffectivePermission(new Set(permissionKeys), 'submission:recompute')}
+            canDownload={hasEffectivePermission(new Set(permissionKeys), 'submission:download')}
         />
       )}
     </div>

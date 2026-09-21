@@ -29,6 +29,7 @@ export type {
 export async function getAdminAccess(adminId: number): Promise<ActionResult<AdminAccess>> {
   try {
     await ensurePermission('admin:read');
+    await ensurePermission('permission:read');
     const data = await fetchAdminAccess(adminId);
     if (!data) return { success: false, error: 'Admin not found' };
     return { success: true, data };
@@ -207,6 +208,8 @@ export async function clearAdminOverride(
 export async function listGroupsWithPermissions(): Promise<ActionResult<GroupWithPermissions[]>> {
   try {
     await ensurePermission('group:read');
+    await ensurePermission('permission:read');
+    await ensurePermission('group:list');
     const data = await fetchGroupsWithPermissions();
     return { success: true, data };
   } catch (error) {
@@ -218,6 +221,8 @@ export async function listGroupsWithPermissions(): Promise<ActionResult<GroupWit
 export async function listAdminsAccessSummary(): Promise<ActionResult<AdminAccessSummary[]>> {
   try {
     await ensurePermission('admin:read');
+    await ensurePermission('permission:read');
+    await ensurePermission('admin:list');
     const data = await fetchAdminsAccessSummary();
     return { success: true, data };
   } catch (error) {

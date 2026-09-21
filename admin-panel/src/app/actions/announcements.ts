@@ -20,6 +20,7 @@ export async function createAnnouncement(contestId: number, adminId: number, dat
   text: string;
 }) {
   await ensurePermission('announcement:create');
+  await ensurePermission('announcement:publish');
   const permissions = await getPermissions();
   const allowed = stripDisallowedFields('announcements', {
     subject: data.subject,

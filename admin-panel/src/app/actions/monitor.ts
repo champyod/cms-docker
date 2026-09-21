@@ -16,6 +16,7 @@ interface AddMonitorTargetInput {
 
 export async function getMonitorTargets() {
   await ensurePermission('monitor:read');
+  await ensurePermission('monitor:list');
   try {
     const targets = await prisma.monitor_targets.findMany({
       orderBy: { createdAt: 'desc' },

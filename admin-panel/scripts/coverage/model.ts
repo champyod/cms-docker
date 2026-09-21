@@ -50,6 +50,10 @@ export const ALLOWLIST: AllowEntry[] = [
   { id: "app/actions/auth.ts#getCurrentUser", reason: "Session-only read: returns the caller row, no permission key involved." },
   { id: "lib/redirect.ts#redirect", reason: "Redirect helper: preserves locale in a path, performs no data access." },
   { id: "app/actions/submissions.ts#getSubmissionFieldAccess", reason: "Static field metadata: describes columns, discloses no submission rows." },
+  { id: "app/actions/participation-sql.ts#executeParticipationUpdate", reason: "Raw-SQL helper: every caller gates participation:update before invoking." },
+  { id: "app/actions/participation-sql.ts#queryParticipationDetails", reason: "Read helper: every caller gates participation:read before invoking." },
+  { id: "app/actions/participation-sql.ts#parseIpAllowlist", reason: "Pure validator: parses IP strings, performs no data access." },
+  { id: "app/api/users/bulk/bulkRowPreparation.ts#prepareRow", reason: "Row prep helper: every caller gates user:create before invoking." },
 ];
 
 export interface FnInfo {

@@ -84,6 +84,7 @@ function parseWorkersFromEnvCore(content: string): Array<{ host: string; port: n
 
 export async function getWorkers() {
   await ensurePermission('settings:read');
+  await ensurePermission('settings:list');
 
   const configPath = await getCmsConfigPath();
 

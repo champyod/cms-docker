@@ -3,6 +3,7 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { ensurePermission, getPermissions } from '@/lib/permissions';
+import { hasEffectivePermission } from '@/lib/permission-engine';
 import { stripDisallowedFields, getFieldAccess, type FieldAccess } from '@/lib/field-permissions';
 import { submissionsListInclude } from '@/lib/prisma-selects';
 import { revalidatePath } from 'next/cache';
@@ -30,6 +31,7 @@ export async function getSubmissions({
     userId?: number;
 }) {
   await ensurePermission('submission:list');
+  const perms = await getPermissions();
 
   const skip = (page - 1) * SUBMISSIONS_PER_PAGE;
   const where = buildSubmissionsWhere({ contestId, taskId, userId });
@@ -45,8 +47,16 @@ export async function getSubmissions({
     prisma.submissions.count({ where }),
   ]);
 
+  // Why empty arrays instead of row removal: relation data the caller may not
+  // read is withheld while the row shape stays intact for the list type.
+  const canSeeResults = hasEffectivePermission(perms, 'submissionresult:read');
+  const canSeeFiles = hasEffectivePermission(perms, 'file:read');
   return {
-      submissions,
+      submissions: submissions.map((row) => ({
+        ...row,
+        submission_results: canSeeResults ? row.submission_results : [],
+        files: canSeeFiles ? row.files : [],
+      })),
     totalPages: Math.ceil(total / SUBMISSIONS_PER_PAGE),
     total,
   };
@@ -135,6 +145,11 @@ export async function toggleSubmissionOfficial(submissionId: number): Promise<Ac
 
 export async function recalculateSubmission(submissionId: number, type: RecalcType = 'score'): Promise<ActionResult & { message?: string }> {
   await ensurePermission('submission:recompute');
+  // Why three gates: requeueing regenerates the outcome rows it clears, so the
+  // caller needs the rejudge right plus delete rights on both cleared tables.
+  await ensurePermission('submission:rejudge');
+  await ensurePermission('evaluation:delete');
+  await ensurePermission('submissionresult:delete');
 
   try {
     const context = await getRecalcContext(submissionId);

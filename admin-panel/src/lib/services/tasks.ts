@@ -51,6 +51,7 @@ export type TaskWithStatements = Prisma.tasksGetPayload<{ include: TaskDetailInc
 
 export async function getTask(id: number): Promise<TaskWithStatements | null> {
   await requirePermission('task:read');
+  await requirePermission('dataset:list');
   const include = {
     contests: { select: { id: true, name: true, start: true, stop: true, analysis_start: true, analysis_stop: true } },
     statements: { select: { id: true, language: true, digest: true } },
@@ -208,5 +209,8 @@ export async function deleteTaskViaApi(id: number): Promise<MutationResult> {
 }
 export async function assignTaskToContest(taskId: number, contestId: number | null): Promise<MutationResult> {
   await requirePermission('task:update');
+  // Why both: moving a task between contests rewires its active dataset path,
+  // so the caller needs the dataset-switch right as well as task update.
+  await requirePermission('task:switch_dataset');
   try { let num: number | null = null; if (contestId) { const m = await prisma.tasks.aggregate({ where: { contest_id: contestId }, _max: { num: true } }); num = (m._max.num ?? 0) + 1; } await prisma.tasks.update({ where: { id: taskId }, data: { contest_id: contestId, num } }); await recordAudit({ verb: 'task:update', entity: 'task', entityId: String(taskId), afterValues: { contest_id: contestId, num }, result: 'success' }); return { success: true }; } catch (e) { return { success: false, error: (e as Error).message }; }
 }

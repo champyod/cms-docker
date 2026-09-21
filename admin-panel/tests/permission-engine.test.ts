@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_GROUPS, PERMISSION_REGISTRY, RESERVED_PERMISSIONS } from '@/lib/permission-registry';
+import { PERMISSION_REGISTRY, RESERVED_PERMISSIONS } from '@/lib/permission-registry';
+import { DEFAULT_GROUPS } from '@/lib/permission-groups';
 import {
   hasEffectivePermission,
   resolveEffectivePermissions,

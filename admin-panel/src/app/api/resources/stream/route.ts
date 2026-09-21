@@ -33,6 +33,8 @@ function parseTrafficLimit(request: Request): number {
 export async function GET(request: Request): Promise<Response> {
   const { authorized, response, session } = await verifyApiPermission('resource:list');
   if (!authorized) return response;
+  const readCheck = await verifyApiPermission('resource:read');
+  if (!readCheck.authorized) return readCheck.response;
 
   const effective = await getFreshPermissions(session.userId);
   const scope = {

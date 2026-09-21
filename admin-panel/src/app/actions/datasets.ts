@@ -140,6 +140,9 @@ export async function deleteDataset(datasetId: number): Promise<{ success: boole
 
 export async function activateDataset(datasetId: number): Promise<{ success: boolean; error?: string }> {
   await ensurePermission('dataset:switch');
+  // Why both: activating rewrites the task's active_dataset_id, which the
+  // field map guards with task:switch_dataset, so the action requires it too.
+  await ensurePermission('task:switch_dataset');
   try {
     const dataset = await prisma.datasets.findUnique({ where: { id: datasetId } });
     if (!dataset) return { success: false, error: 'Dataset not found' };
