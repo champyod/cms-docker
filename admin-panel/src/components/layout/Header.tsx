@@ -2,11 +2,13 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { cn } from '@/lib/utils';
+import { hasEffectivePermission } from '@/lib/permission-engine';
 import { Bell, Search, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { getUnansweredQuestions } from '@/app/actions/questions';
 import { useRouter } from 'next/navigation';
 import { ThemeToggle } from './ThemeToggle';
+import { NotificationBell } from './NotificationBell';
 import { Button } from '@/components/core/Button';
 import { CommandPalette } from '../palette/CommandPalette';
 
@@ -123,6 +125,7 @@ export const Header: React.FC<{ className?: string; username?: string; permissio
         </kbd>
       </div>
       <ThemeToggle />
+      {hasEffectivePermission(new Set(permissionKeys), 'audit:read') && <NotificationBell />}
       <Button variant="ghost" size="sm" iconOnly tooltip="Notifications" onClick={handleNotificationsClick}>
         <span className="relative flex">
           <Bell className="size-4" />

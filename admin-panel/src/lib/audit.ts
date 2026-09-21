@@ -126,6 +126,21 @@ export async function recordAudit(entry: AuditEntry): Promise<void> {
         prev_hash: previousHash,
       },
     });
+
+    // Why fire-and-forget here: one audit row produces exactly one dispatch decision,
+    // and the Discord helper never throws, so alerting can neither duplicate nor break logging.
+    const { isCriticalAuditEvent } = await import('@/lib/notification-events');
+    if (isCriticalAuditEvent(entry.verb, entry.result)) {
+      const { logToDiscord } = await import('@/lib/discord-notifier');
+      const target = entry.entityId === undefined ? entry.entity : `${entry.entity} #${entry.entityId}`;
+      const actor = actorId === undefined || actorId === null ? 'system' : `admin #${actorId}`;
+      void logToDiscord(
+        `Critical admin action: ${entry.verb}`,
+        `${actor} ran ${entry.verb} on ${target} (${entry.result})`,
+        15158332,
+        true,
+      );
+    }
   } catch (error) {
     const { logToDiscord } = await import('@/lib/discord-notifier');
     await logToDiscord(
