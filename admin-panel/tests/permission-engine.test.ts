@@ -175,9 +175,9 @@ describe('PERMISSION_REGISTRY', () => {
   });
 
   // Why pinned: MODULES / DOMAIN_VERBS edits must be deliberate, not silent.
-  // 200 + 5 RESERVED keys, minus 5 retired, plus 3 backup keys = 203.
-  it('holds exactly 203 keys', () => {
-    expect(PERMISSION_REGISTRY.length).toBe(203);
+  // 200 + 5 RESERVED keys, minus 5 retired, plus 3 backup keys, plus 2 lane keys = 205.
+  it('holds exactly 205 keys', () => {
+    expect(PERMISSION_REGISTRY.length).toBe(205);
   });
 
   it.each(PERMISSION_REGISTRY)('entry $key equals ${module}:${verb}', (definition) => {
@@ -238,5 +238,19 @@ describe('DEFAULT_GROUPS', () => {
   it('includes the all:all key for Superadmin', () => {
     const superadmin = DEFAULT_GROUPS.find((group) => group.name === 'Superadmin');
     expect(superadmin?.permissions).toContain('all:all');
+  });
+
+  it('grants lane keys to Contest Manager and Judge', () => {
+    for (const name of ['Contest Manager', 'Judge']) {
+      const group = DEFAULT_GROUPS.find((entry) => entry.name === name);
+      expect(group?.permissions).toContain('evaluation:lane_assign');
+      expect(group?.permissions).toContain('evaluation:lane_move');
+    }
+  });
+
+  it('keeps backup:* out of every default group', () => {
+    for (const group of DEFAULT_GROUPS) {
+      expect(group.permissions.filter((key) => key.startsWith('backup:'))).toEqual([]);
+    }
   });
 });
