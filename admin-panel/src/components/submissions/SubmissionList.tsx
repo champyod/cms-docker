@@ -247,6 +247,7 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage, pe
             submission={selectedSubmission}
             canRecompute={hasEffectivePermission(new Set(permissionKeys), 'submission:recompute')}
             canDownload={hasEffectivePermission(new Set(permissionKeys), 'submission:download')}
+            canAssignLane={hasEffectivePermission(new Set(permissionKeys), 'evaluation:lane_assign')}
         />
       )}
     </div>
