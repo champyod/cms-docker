@@ -5,7 +5,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { revealUserPassword } from '@/app/actions/users';
 import { Button } from '@/components/core/Button';
 import { Dialog, DialogFooter } from '@/components/core/Dialog';
-import { PasswordFieldWithKind, type PasswordRevealState } from '@/components/core/PasswordFieldWithKind';
+import { PasswordFieldWithKind } from '@/components/core/PasswordFieldWithKind';
+import { SavedSecretReveal } from '@/components/core/SavedSecretReveal';
 import { RestrictedField } from '@/components/core/RestrictedField';
 import { toast } from 'sonner';
 import { apiClient } from '@/lib/apiClient';
@@ -31,7 +32,6 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess, per
   const [error, setError] = useState('');
   const [formData, setFormData] = useState<UserFormState>(EMPTY_USER_FORM);
   const [passwordKind, setPasswordKind] = useState<PasswordKind>('bcrypt');
-  const [reveal, setReveal] = useState<PasswordRevealState>({ state: 'none' });
 
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
   const fieldAccess = useMemo(() => getFieldAccess('users', effective), [effective]);
@@ -39,26 +39,6 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess, per
   useEffect(() => {
     setFormData(user ? formFromUser(user) : EMPTY_USER_FORM);
     setPasswordKind('bcrypt');
-    setReveal({ state: 'none' });
-    if (!user || !isOpen) return;
-
-    let cancelled = false;
-    void (async () => {
-      try {
-        const result = await revealUserPassword(user.id);
-        if (cancelled || !result.success) return;
-        setReveal(
-          result.kind === 'plaintext'
-            ? { state: 'plaintext', value: result.value }
-            : { state: 'bcrypt' }
-        );
-      } catch {
-        if (!cancelled) setReveal({ state: 'none' });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
   }, [user, isOpen]);
 
   const updateForm = (updates: Partial<UserFormState>) => setFormData({ ...formData, ...updates });
@@ -229,8 +209,14 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess, per
             placeholder="••••••••"
             kind={passwordKind}
             onKind={setPasswordKind}
-            reveal={{ ...reveal, onReveal: () => undefined }}
           />
+          {user && (
+            <SavedSecretReveal
+              label="Saved password"
+              canReveal={fieldAccess.password.canRead}
+              onReveal={() => revealUserPassword(user.id)}
+            />
+          )}
         </RestrictedField>
         <RestrictedField
           canRead={fieldAccess.timezone.canRead}

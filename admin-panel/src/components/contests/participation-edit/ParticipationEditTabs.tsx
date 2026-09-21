@@ -1,10 +1,8 @@
 'use client';
 
-import { Eye } from 'lucide-react';
 import { PasswordFieldWithKind } from '@/components/core/PasswordFieldWithKind';
+import { SavedSecretReveal, type SavedSecretResult } from '@/components/core/SavedSecretReveal';
 import { Button } from '@/components/core/Button';
-import { PasswordRevealPanel } from './PasswordRevealPanel';
-import type { RevealedState } from './useParticipationEditState';
 import type { PasswordKind } from '@/lib/password-format';
 
 const LABEL_CLASSES = 'mb-2 block text-xs font-bold uppercase tracking-widest text-muted-foreground';
@@ -22,18 +20,14 @@ interface SettingsForm {
 interface SettingsProps {
   formData: SettingsForm;
   onForm: (p: Partial<SettingsForm>) => void;
-  revealed: RevealedState;
-  revealTab: 'plain' | 'stored';
-  onRevealTab: (t: 'plain' | 'stored') => void;
-  revealError: string;
-  revealing: boolean;
-  onReveal: () => void;
+  canRevealSecret: boolean;
+  onRevealSecret: () => Promise<SavedSecretResult>;
   onClose: () => void;
   onSave: () => void;
   saving: boolean;
 }
 
-export function SettingsTab({ formData, onForm, revealed, revealTab, onRevealTab, revealError, revealing, onReveal, onClose, onSave, saving }: SettingsProps) {
+export function SettingsTab({ formData, onForm, canRevealSecret, onRevealSecret, onClose, onSave, saving }: SettingsProps) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
@@ -43,11 +37,11 @@ export function SettingsTab({ formData, onForm, revealed, revealTab, onRevealTab
       <div>
         <div className="mb-2 flex items-center justify-between">
           <label className="block text-xs font-bold uppercase tracking-widest text-muted-foreground">Password (optional)</label>
-          <Button type="button" size="sm" variant="secondary" icon={Eye} iconOnly tooltip="Reveal current password" loading={revealing} disabled={revealing} onClick={onReveal} />
         </div>
         <PasswordFieldWithKind label="" value={formData.password} onChange={(password) => onForm({ password })} placeholder="Leave blank to keep current password" kind={formData.password_kind} onKind={(password_kind) => onForm({ password_kind })} />
-        {revealError && <p className="mt-2 text-xs text-destructive">{revealError}</p>}
-        <PasswordRevealPanel revealed={revealed} revealTab={revealTab} onTab={onRevealTab} />
+        <div className="mt-3">
+          <SavedSecretReveal label="Saved password" canReveal={canRevealSecret} onReveal={onRevealSecret} />
+        </div>
       </div>
       <div className="space-y-3">
         <div className="flex items-center justify-between"><div><label className="text-sm text-foreground">Hidden</label><p className="text-xs text-muted-foreground">User won&apos;t appear in ranking</p></div><input type="checkbox" checked={formData.hidden} onChange={(e) => onForm({ hidden: e.target.checked })} className="h-4 w-4 rounded" /></div>

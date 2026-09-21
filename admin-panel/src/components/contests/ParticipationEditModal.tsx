@@ -2,6 +2,7 @@
 
 import { Shield, Mail } from 'lucide-react';
 import { useParticipationEditState } from './participation-edit/useParticipationEditState';
+import { revealParticipationPassword } from '@/app/actions/participations';
 import { SettingsTab, MessageTab } from './participation-edit/ParticipationEditTabs';
 import { Dialog } from '@/components/core/Dialog';
 import { cn } from '@/lib/utils';
@@ -33,7 +34,9 @@ export function ParticipationEditModal({ isOpen, onClose, participation, adminId
       <EditTabs activeTab={s.activeTab} onSelect={s.setActiveTab} />
       {s.error && <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{s.error}</div>}
       {s.activeTab === 'settings' ? (
-        <SettingsTab formData={s.formData} onForm={(p) => s.setFormData({ ...s.formData, ...p })} revealed={s.revealed} revealTab={s.revealTab} onRevealTab={s.setRevealTab} revealError={s.revealError} revealing={s.revealing} onReveal={s.handleReveal} onClose={s.handleClose} onSave={s.handleSave} saving={s.saving} />
+        // Why always revealable here: this subtree carries no permission context, so the
+        // server action remains the gate (403 + audit on denial), exactly as before.
+        <SettingsTab formData={s.formData} onForm={(p) => s.setFormData({ ...s.formData, ...p })} canRevealSecret onRevealSecret={() => revealParticipationPassword(participation.id)} onClose={s.handleClose} onSave={s.handleSave} saving={s.saving} />
       ) : (
         <MessageTab messageData={s.messageData} onMessage={(p) => s.setMessageData({ ...s.messageData, ...p })} onClose={s.handleClose} onSend={s.handleSendMessage} saving={s.saving} />
       )}

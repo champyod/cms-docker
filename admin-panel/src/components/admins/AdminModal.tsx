@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { Plus, X, ShieldCheck } from 'lucide-react';
-import { createAdmin, updateAdmin, revealAdminPassword, getAdmins } from '@/app/actions/admins';
+import { createAdmin, updateAdmin, getAdmins, revealAdminPassword } from '@/app/actions/admins';
 import {
   getAdminAccess,
   setAdminGroups,
@@ -17,8 +17,8 @@ import { Button } from '@/components/core/Button';
 import { Input } from '@/components/core/Input';
 import { Card } from '@/components/core/Card';
 import { PasswordFieldWithKind } from '@/components/core/PasswordFieldWithKind';
+import { SavedSecretReveal } from '@/components/core/SavedSecretReveal';
 import { toast } from 'sonner';
-import type { PasswordRevealState } from '@/components/core/PasswordFieldWithKind';
 import type { PasswordKind } from '@/lib/password-format';
 import { hasEffectivePermission, resolveEffectivePermissions, type OverrideEffect } from '@/lib/permission-engine';
 import { PERMISSION_REGISTRY } from '@/lib/permission-registry';
@@ -60,7 +60,6 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData, callerPerm
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [passwordKind, setPasswordKind] = useState<PasswordKind>('bcrypt');
-  const [reveal, setReveal] = useState<PasswordRevealState>({ state: 'none' });
 
   const [groups, setGroups] = useState<GroupWithPermissions[]>([]);
   const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>([]);
@@ -78,7 +77,6 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData, callerPerm
     setFormData(initialData ? formFromAdmin(initialData) : EMPTY_ADMIN_FORM);
     setError('');
     setPasswordKind('bcrypt');
-    setReveal({ state: 'none' });
     setGroups([]);
     setSelectedGroupIds([]);
     setOriginalGroupIds([]);
@@ -120,19 +118,6 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData, callerPerm
             setOriginalOverrides(accessResult.data.overrides);
           } else {
             setAccessError(accessResult.error);
-          }
-
-          // Why: without password:reveal the server action refuses the call and its rejection would be
-          // reported as a load failure, so the stored credential is not requested at all.
-          if (canRevealPassword) {
-            const revealResult = await revealAdminPassword(initialData.id);
-            if (!cancelled && revealResult.success) {
-              setReveal(
-                revealResult.kind === 'plaintext'
-                  ? { state: 'plaintext', value: revealResult.value }
-                  : { state: 'bcrypt' },
-              );
-            }
           }
         }
       } catch (loadFailure) {
@@ -375,8 +360,14 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData, callerPerm
             placeholder="••••••••"
             kind={passwordKind}
             onKind={setPasswordKind}
-            reveal={{ ...reveal, onReveal: () => undefined }}
           />
+          {initialData && (
+            <SavedSecretReveal
+              label="Saved password"
+              canReveal={canRevealPassword}
+              onReveal={() => revealAdminPassword(initialData.id)}
+            />
+          )}
         </RestrictedField>
 
         <Card className="space-y-3">
