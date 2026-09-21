@@ -6,10 +6,23 @@ import { ensurePermission } from '@/lib/permissions';
 import { recordAudit } from '@/lib/audit';
 
 const MAX_LANE_NAME_LENGTH = 64;
+const MAX_REASON_LENGTH = 500;
 
 interface ActionResult {
   success: boolean;
   error?: string;
+  field?: 'reason' | 'lane' | 'submissionId' | 'contestId';
+}
+
+function validateReasonInput(reason: string): string | null {
+  const trimmed = reason.trim();
+  if (trimmed.length === 0) {
+    return 'Reason must not be empty';
+  }
+  if (trimmed.length > MAX_REASON_LENGTH) {
+    return `Reason must be at most ${MAX_REASON_LENGTH} characters`;
+  }
+  return null;
 }
 
 function validateLaneInput(submissionId: number, lane: string): string | null {
@@ -26,8 +39,13 @@ function validateLaneInput(submissionId: number, lane: string): string | null {
   return null;
 }
 
-export async function assignEvaluationLane(submissionId: number, lane: string): Promise<ActionResult> {
+export async function assignEvaluationLane(submissionId: number, lane: string, reason: string): Promise<ActionResult> {
   await ensurePermission('evaluation:lane_assign');
+
+  const reasonError = validateReasonInput(reason);
+  if (reasonError) {
+    return { success: false, error: reasonError, field: 'reason' };
+  }
 
   const validationError = validateLaneInput(submissionId, lane);
   if (validationError) {
@@ -49,7 +67,7 @@ export async function assignEvaluationLane(submissionId: number, lane: string): 
       verb: 'evaluation:lane_assign',
       entity: 'submission',
       entityId: String(submissionId),
-      afterValues: { lane: lane.trim(), assignedAt: new Date().toISOString() },
+      afterValues: { lane: lane.trim(), reason: reason.trim(), assignedAt: new Date().toISOString() },
       result: 'success',
     });
     revalidatePath('/[locale]/submissions');
@@ -59,8 +77,13 @@ export async function assignEvaluationLane(submissionId: number, lane: string): 
   }
 }
 
-export async function moveEvaluationLane(submissionId: number, lane: string): Promise<ActionResult> {
+export async function moveEvaluationLane(submissionId: number, lane: string, reason: string): Promise<ActionResult> {
   await ensurePermission('evaluation:lane_move');
+
+  const reasonError = validateReasonInput(reason);
+  if (reasonError) {
+    return { success: false, error: reasonError, field: 'reason' };
+  }
 
   const validationError = validateLaneInput(submissionId, lane);
   if (validationError) {
@@ -82,7 +105,7 @@ export async function moveEvaluationLane(submissionId: number, lane: string): Pr
       verb: 'evaluation:lane_move',
       entity: 'submission',
       entityId: String(submissionId),
-      afterValues: { lane: lane.trim(), movedAt: new Date().toISOString() },
+      afterValues: { lane: lane.trim(), reason: reason.trim(), movedAt: new Date().toISOString() },
       result: 'success',
     });
     revalidatePath('/[locale]/submissions');
@@ -92,8 +115,13 @@ export async function moveEvaluationLane(submissionId: number, lane: string): Pr
   }
 }
 
-export async function setFinalOpen(contestId: number, open: boolean): Promise<ActionResult> {
+export async function setFinalOpen(contestId: number, open: boolean, reason: string): Promise<ActionResult> {
   await ensurePermission('contest:update');
+
+  const reasonError = validateReasonInput(reason);
+  if (reasonError) {
+    return { success: false, error: reasonError, field: 'reason' };
+  }
 
   if (!Number.isInteger(contestId) || contestId <= 0) {
     return { success: false, error: 'Invalid contest id' };
@@ -121,7 +149,7 @@ export async function setFinalOpen(contestId: number, open: boolean): Promise<Ac
       verb: 'contest:update',
       entity: 'contest',
       entityId: String(contestId),
-      afterValues: { evaluation_final_open: open, openedAt: new Date().toISOString() },
+      afterValues: { evaluation_final_open: open, reason: reason.trim(), openedAt: new Date().toISOString() },
       result: 'success',
     });
     revalidatePath('/[locale]/contests', 'page');
