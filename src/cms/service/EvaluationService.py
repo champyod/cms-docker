@@ -374,7 +374,8 @@ class EvaluationService(TriggeredService[ESOperation, EvaluationExecutor]):
         with SessionGen() as session:
             contest_row = session.query(
                 Contest.evaluation_throttle_delay_s,
-                Contest.queue_fairness_penalty_seconds)\
+                Contest.queue_fairness_penalty_seconds,
+                Contest.evaluation_final_open)\
                 .join(Participation, Participation.contest_id == Contest.id)\
                 .filter(Participation.id == submission.participation_id)\
                 .first()
@@ -382,6 +383,10 @@ class EvaluationService(TriggeredService[ESOperation, EvaluationExecutor]):
                 .filter(Task.id == submission.task_id)\
                 .scalar()
 
+            # Final round keeps queue-time spacing off so last-minute
+            # submissions are not pushed back by the throttle delay.
+            if contest_row is not None and bool(contest_row[2]):
+                return timedelta(0)
             contest_delay = contest_row[0] if contest_row is not None else None
             legacy_penalty = contest_row[1] if contest_row is not None else None
             effective_penalty_seconds = _resolve_throttle_delay_seconds(
