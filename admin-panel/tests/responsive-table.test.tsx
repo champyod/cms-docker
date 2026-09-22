@@ -66,4 +66,24 @@ describe('ResponsiveTable', () => {
     const mobileCard = container.querySelector('.space-y-3.md\\:hidden > div');
     expect(mobileCard?.getAttribute('data-shortcut-row')).toBe('1');
   });
+
+  it('omits null column values from mobile cards but keeps the desktop cell', () => {
+    interface Item {
+      id: number;
+      name: string;
+    }
+    const columns: ResponsiveColumn<Item>[] = [
+      { key: 'name', header: 'Name', render: (row) => row.name },
+      { key: 'badge', header: 'Badge', render: () => null },
+    ];
+    const { container } = render(
+      <ResponsiveTable columns={columns} rows={[{ id: 1, name: 'Plain' }]} getRowKey={(row) => row.id} />
+    );
+    const mobile = container.querySelector('.space-y-3.md\\:hidden');
+    expect(mobile?.textContent).toContain('Plain');
+    expect(mobile?.textContent).not.toContain('Badge');
+    // Why: container-scoped — earlier renders in this file stay mounted
+    // (no auto-cleanup), so a global role query would match stale tables.
+    expect(container.querySelectorAll('table tbody td')).toHaveLength(2);
+  });
 });

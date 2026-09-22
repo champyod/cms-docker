@@ -57,15 +57,22 @@ function renderMobileCards<Row>(props: ResponsiveTableProps<Row>): React.ReactNo
   return rows.map((row, index) => {
     const actions = renderRowActions?.(row, index);
     const extraProps = getRowProps?.(row, index);
+    // Why: core-level null skip — a null/undefined column value means
+    // "no data" (e.g. non-seeded group badge), so mobile omits the row
+    // instead of rendering an empty label/value pair; desktop keeps the
+    // empty cell to preserve column alignment.
+    const cards = visible.flatMap((column) => {
+      const value = column.render(row);
+      if (value === null || value === undefined) return [];
+      return <MobileCardRow key={column.key} label={labelFor(column)} value={value} />;
+    });
     return (
       <MobileCard
         key={getRowKey(row, index)}
         {...extraProps}
         className={cn(getRowClassName?.(row, index), extraProps?.className)}
       >
-        {visible.map((column) => (
-          <MobileCardRow key={column.key} label={labelFor(column)} value={column.render(row)} />
-        ))}
+        {cards}
         {actions ? <div className="flex items-center justify-end gap-1 pt-2">{actions}</div> : null}
       </MobileCard>
     );
