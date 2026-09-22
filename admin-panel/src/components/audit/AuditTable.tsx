@@ -1,21 +1,17 @@
 'use client';
 
-import { useState, useEffect, useCallback, useTransition } from 'react';
+import { useState, useEffect, useCallback, useMemo, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
 import { Input } from '@/components/core/Input';
 import { Card } from '@/components/core/Card';
 import { Badge } from '@/components/core/Badge';
-import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
 import { EmptyState } from '@/components/core/EmptyState';
+import {
+  ResponsiveTable,
+  type ResponsiveColumn,
+  type ResponsiveRowProps,
+} from '@/components/core/ResponsiveTable';
 import { TablePaginationControls } from '@/components/core/TablePaginationControls';
 import { getAuditEntry, getDistinctEntities } from '@/app/actions/audit';
 import type { AuditLogRow, AuditDetailRow } from '@/app/actions/audit';
@@ -68,6 +64,85 @@ interface AuditTableProps {
   };
   dict: AuditDict;
   permissionKeys: string[];
+}
+
+interface AuditColumnHelpers {
+  formatTimestamp: (iso: string) => string;
+  truncate: (text: string | null, max: number) => string;
+  resultBadgeVariant: (result: string) => 'success' | 'destructive' | 'neutral';
+}
+
+function formatTimestamp(iso: string): string {
+  return new Date(iso).toLocaleString();
+}
+
+function truncate(text: string | null, max: number): string {
+  if (!text) return '—';
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
+function resultBadgeVariant(result: string): 'success' | 'destructive' | 'neutral' {
+  if (result === 'success') return 'success';
+  if (result === 'failure') return 'destructive';
+  return 'neutral';
+}
+
+// Why: one column definition drives desktop rows and mobile cards, so
+// the two layouts cannot drift apart.
+function buildAuditColumns(dict: AuditDict, helpers: AuditColumnHelpers): ResponsiveColumn<AuditLogRow>[] {
+  return [
+    {
+      key: 'timestamp',
+      header: dict.columns.timestamp,
+      render: (entry) => (
+        <span className="font-mono text-xs text-muted-foreground whitespace-nowrap">
+          {helpers.formatTimestamp(entry.timestamp)}
+        </span>
+      ),
+    },
+    {
+      key: 'actor',
+      header: dict.columns.actor,
+      render: (entry) => (
+        <span className="font-mono text-xs text-indigo-400">
+          {entry.actor_id !== null ? `#${entry.actor_id}` : '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'verb',
+      header: dict.columns.verb,
+      render: (entry) => <Badge variant="cyan">{entry.verb}</Badge>,
+    },
+    {
+      key: 'entity',
+      header: dict.columns.entity,
+      render: (entry) => <span className="text-sm text-foreground">{entry.entity}</span>,
+    },
+    {
+      key: 'entityId',
+      header: dict.columns.entityId,
+      render: (entry) => (
+        <span className="font-mono text-xs text-muted-foreground">{entry.entity_id ?? '—'}</span>
+      ),
+    },
+    {
+      key: 'result',
+      header: dict.columns.result,
+      render: (entry) => (
+        <Badge variant={helpers.resultBadgeVariant(entry.result)}>{entry.result}</Badge>
+      ),
+    },
+    {
+      key: 'reason',
+      header: dict.columns.reason,
+      render: (entry) => (
+        <span className="block max-w-[200px] text-sm text-muted-foreground">
+          {helpers.truncate(entry.reason, 60)}
+        </span>
+      ),
+    },
+  ];
 }
 
 export function AuditTable({
@@ -163,21 +238,44 @@ export function AuditTable({
     setTimeout(() => setCopiedField(null), 1500);
   };
 
-  const formatTimestamp = (iso: string): string => {
-    const d = new Date(iso);
-    return d.toLocaleString();
+  // Why: one column definition drives desktop rows and mobile cards, so
+  // the two layouts cannot drift apart.
+  const columns = useMemo(
+    () => buildAuditColumns(dict, { formatTimestamp, truncate, resultBadgeVariant }),
+    [dict],
+  );
+
+  const getRowProps = (entry: AuditLogRow): ResponsiveRowProps => ({
+    onClick: () => {
+      void handleRowClick(entry.id);
+    },
+    className: 'cursor-pointer',
+    'aria-expanded': expandedRowId === entry.id,
+  });
+
+  // Why: shared by desktop rows and mobile cards, with 44px targets kept
+  // in this fragment so both layouts stay touch-sized.
+  const renderRowActions = (entry: AuditLogRow) => {
+    const isExpanded = expandedRowId === entry.id;
+    return (
+      <button
+        type="button"
+        aria-expanded={isExpanded}
+        aria-label={`Toggle details for ${entry.verb} on ${entry.entity}`}
+        className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+        onClick={(e) => {
+          e.stopPropagation();
+          void handleRowClick(entry.id);
+        }}
+      >
+        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+      </button>
+    );
   };
 
-  const truncate = (text: string | null, max: number): string => {
-    if (!text) return '—';
-    return text.length > max ? `${text.slice(0, max)}…` : text;
-  };
-
-  const resultBadgeVariant = (result: string): 'success' | 'destructive' | 'neutral' => {
-    if (result === 'success') return 'success';
-    if (result === 'failure') return 'destructive';
-    return 'neutral';
-  };
+  const expandedEntry = expandedRowId === null
+    ? undefined
+    : entries.find((entry) => entry.id === expandedRowId);
 
   return (
     <div className="space-y-4">
@@ -245,60 +343,32 @@ export function AuditTable({
         {isPending && <span className="animate-pulse">Loading…</span>}
       </div>
 
-      {entries.length === 0 ? (
-        <EmptyState icon={Filter} title={dict.noEntries} />
-      ) : (
-        <div className="border border-border rounded-xl overflow-hidden bg-card/50">
-          <Table mobileCards={entries.map((entry) => (
-            <AuditMobileCard
-              key={entry.id}
-              entry={entry}
-              isExpanded={expandedRowId === entry.id}
-              expandedDetail={expandedRowId === entry.id ? expandedDetail : null}
-              loadingDetail={expandedRowId === entry.id && loadingDetail}
-              onToggle={handleRowClick}
-              formatTimestamp={formatTimestamp}
-              resultBadgeVariant={resultBadgeVariant}
+      <ResponsiveTable
+        columns={columns}
+        rows={entries}
+        getRowKey={(entry) => entry.id}
+        getRowProps={getRowProps}
+        renderRowActions={renderRowActions}
+        actionsHeader={<span className="sr-only">{dict.expandedDetails}</span>}
+        emptyState={<EmptyState icon={Filter} title={dict.noEntries} />}
+      />
+
+      {expandedEntry !== undefined && (loadingDetail || expandedDetail !== null) && (
+        <Card className="p-4 space-y-4">
+          {loadingDetail && (
+            <div className="text-sm text-muted-foreground animate-pulse">Loading details…</div>
+          )}
+          {expandedDetail && (
+            <AuditDetailContent
+              detail={expandedDetail}
               dict={dict}
               copiedField={copiedField}
-              onCopy={handleCopy}
+              onCopy={(text, field) => {
+                void handleCopy(text, field);
+              }}
             />
-          ))}>
-            <TableHeader>
-              <TableRow className="border-b border-border">
-                <TableHead className="text-muted-foreground w-[180px]">{dict.columns.timestamp}</TableHead>
-                <TableHead className="text-muted-foreground w-[80px]">{dict.columns.actor}</TableHead>
-                <TableHead className="text-muted-foreground">{dict.columns.verb}</TableHead>
-                <TableHead className="text-muted-foreground">{dict.columns.entity}</TableHead>
-                <TableHead className="text-muted-foreground">{dict.columns.entityId}</TableHead>
-                <TableHead className="text-muted-foreground w-[100px]">{dict.columns.result}</TableHead>
-                <TableHead className="text-muted-foreground">{dict.columns.reason}</TableHead>
-                <TableHead className="text-muted-foreground w-[40px]" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {entries.map((entry) => {
-                const isExpanded = expandedRowId === entry.id;
-                return (
-                  <AuditRow
-                    key={entry.id}
-                    entry={entry}
-                    isExpanded={isExpanded}
-                    expandedDetail={isExpanded ? expandedDetail : null}
-                    loadingDetail={isExpanded && loadingDetail}
-                    onRowClick={handleRowClick}
-                    formatTimestamp={formatTimestamp}
-                    truncate={truncate}
-                    resultBadgeVariant={resultBadgeVariant}
-                    dict={dict}
-                    copiedField={copiedField}
-                    handleCopy={handleCopy}
-                  />
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
+          )}
+        </Card>
       )}
 
       {totalPages > 1 && (
@@ -320,33 +390,6 @@ export function AuditTable({
       )}
     </div>
   );
-}
-
-interface AuditRowProps {
-  entry: AuditLogRow;
-  isExpanded: boolean;
-  expandedDetail: AuditDetailRow | null;
-  loadingDetail: boolean;
-  onRowClick: (id: string) => void;
-  formatTimestamp: (iso: string) => string;
-  truncate: (text: string | null, max: number) => string;
-  resultBadgeVariant: (result: string) => 'success' | 'destructive' | 'neutral';
-  dict: AuditDict;
-  copiedField: string | null;
-  handleCopy: (text: string, field: string) => void;
-}
-
-interface AuditMobileCardProps {
-  entry: AuditLogRow;
-  dict: AuditDict;
-  isExpanded: boolean;
-  loadingDetail: boolean;
-  expandedDetail: AuditDetailRow | null;
-  copiedField: string | null;
-  onToggle: (id: string) => void;
-  onCopy: (text: string, field: string) => void;
-  formatTimestamp: (iso: string) => string;
-  resultBadgeVariant: (result: string) => 'success' | 'destructive' | 'neutral';
 }
 
 interface AuditDetailContentProps {
@@ -436,123 +479,6 @@ function AuditDetailContent({ detail, dict, copiedField, onCopy }: AuditDetailCo
           <AuditJsonValue value={detail.after_values} label="after" copiedField={copiedField} onCopy={onCopy} />
         </div>
       </div>
-    </>
-  );
-}
-
-function AuditMobileCard({
-  entry,
-  dict,
-  isExpanded,
-  loadingDetail,
-  expandedDetail,
-  copiedField,
-  onToggle,
-  onCopy,
-  formatTimestamp,
-  resultBadgeVariant,
-}: AuditMobileCardProps): React.JSX.Element {
-  return (
-    <MobileCard data-testid={`audit-mobile-card-${entry.id}`}>
-      <div className="flex items-center justify-between gap-2">
-        <Badge variant="cyan">{entry.verb}</Badge>
-        <Badge variant={resultBadgeVariant(entry.result)}>{entry.result}</Badge>
-      </div>
-      <div className="mt-3">
-        <MobileCardRow label={dict.columns.timestamp} value={formatTimestamp(entry.timestamp)} />
-        <MobileCardRow label={dict.columns.actor} value={entry.actor_id !== null ? `#${entry.actor_id}` : '—'} />
-        <MobileCardRow label={dict.columns.entity} value={entry.entity} />
-        <MobileCardRow label={dict.columns.entityId} value={entry.entity_id ?? '—'} />
-        <MobileCardRow label={dict.columns.reason} value={entry.reason ?? '—'} />
-      </div>
-      {isExpanded && (
-        <div className="mt-3 border-t border-border pt-3">
-          {loadingDetail && (
-            <div className="text-sm text-muted-foreground animate-pulse">Loading details…</div>
-          )}
-          {expandedDetail && (
-            <AuditDetailContent detail={expandedDetail} dict={dict} copiedField={copiedField} onCopy={onCopy} />
-          )}
-        </div>
-      )}
-      <button
-        type="button"
-        aria-expanded={isExpanded}
-        aria-label={`Toggle details for ${entry.verb} on ${entry.entity}`}
-        className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-        onClick={() => onToggle(entry.id)}
-      >
-        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-      </button>
-    </MobileCard>
-  );
-}
-
-function AuditRow({
-  entry,
-  isExpanded,
-  expandedDetail,
-  loadingDetail,
-  onRowClick,
-  formatTimestamp,
-  truncate,
-  resultBadgeVariant,
-  dict,
-  copiedField,
-  handleCopy,
-}: AuditRowProps): React.JSX.Element {
-  return (
-    <>
-      <TableRow
-        className="border-b border-border cursor-pointer hover:bg-muted/50 transition-colors"
-        onClick={() => onRowClick(entry.id)}
-      >
-        <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap">
-          {formatTimestamp(entry.timestamp)}
-        </TableCell>
-        <TableCell className="font-mono text-xs text-indigo-400">
-          {entry.actor_id !== null ? `#${entry.actor_id}` : '—'}
-        </TableCell>
-        <TableCell>
-          <Badge variant="cyan">{entry.verb}</Badge>
-        </TableCell>
-        <TableCell className="text-sm text-foreground">{entry.entity}</TableCell>
-        <TableCell className="font-mono text-xs text-muted-foreground">
-          {entry.entity_id ?? '—'}
-        </TableCell>
-        <TableCell>
-          <Badge variant={resultBadgeVariant(entry.result)}>{entry.result}</Badge>
-        </TableCell>
-        <TableCell className="text-sm text-muted-foreground max-w-[200px]">
-          {truncate(entry.reason, 60)}
-        </TableCell>
-        <TableCell>
-          {isExpanded ? (
-            <ChevronUp className="w-4 h-4 text-muted-foreground" />
-          ) : (
-            <ChevronDown className="w-4 h-4 text-muted-foreground" />
-          )}
-        </TableCell>
-      </TableRow>
-      {isExpanded && (
-        <TableRow className="bg-muted/30 border-b border-border">
-          <TableCell colSpan={8} className="p-0">
-            <div className="p-4 space-y-4">
-              {loadingDetail && (
-                <div className="text-sm text-muted-foreground animate-pulse">Loading details…</div>
-              )}
-              {expandedDetail && (
-                <AuditDetailContent
-                  detail={expandedDetail}
-                  dict={dict}
-                  copiedField={copiedField}
-                  onCopy={handleCopy}
-                />
-              )}
-            </div>
-          </TableCell>
-        </TableRow>
-      )}
     </>
   );
 }
