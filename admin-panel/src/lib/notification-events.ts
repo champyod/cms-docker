@@ -26,6 +26,13 @@ const SENSITIVE_FAILURE_VERBS: ReadonlySet<string> = new Set([
   'admin:delete',
 ]);
 
+// Verbs whose every occurrence also pages Discord. Everything else critical
+// stays on the web bell so deploys and restarts do not page anyone.
+export const DISCORD_SENSITIVE_VERBS: ReadonlySet<string> = new Set([
+  ...SENSITIVE_FAILURE_VERBS,
+  'override:clear',
+]);
+
 export const SUBMIT_BURST_PER_MINUTE = 20;
 export const REVEAL_BURST_COUNT = 5;
 export const REVEAL_BURST_WINDOW_MINUTES = 5;
@@ -44,6 +51,20 @@ export function isCriticalAuditEvent(verb: string, result: AuditResult): boolean
   if (result === 'success' && CRITICAL_AUDIT_VERBS.has(verb)) return true;
   if (result === 'failure' && SENSITIVE_FAILURE_VERBS.has(verb)) return true;
   return false;
+}
+
+/** True when an audit row belongs on the web bell (all critical, both results). */
+export function isWebNotify(verb: string, result: AuditResult): boolean {
+  if (CRITICAL_AUDIT_VERBS.has(verb)) return true;
+  if (result === 'failure' && verb === 'password:reveal') return true;
+  return false;
+}
+
+/** True when an audit row must also page Discord (sensitive only). */
+export function isDiscordNotify(verb: string, result: AuditResult): boolean {
+  if (!DISCORD_SENSITIVE_VERBS.has(verb)) return false;
+  if (verb === 'password:reveal') return result === 'failure';
+  return true;
 }
 
 /** Human frame for a critical audit row; null when the row is not push-worthy. */
@@ -68,6 +89,28 @@ export function classifyAuditEvent(
     level: 'critical',
     title: `Critical action: ${verb}`,
     detail: `${actor} ran ${verb} on ${target}`,
+  };
+}
+
+/** Name-aware frame for a published row; null when the row stays off the bell. */
+export function classifyAuditEventWithNames(
+  verb: string,
+  result: AuditResult,
+  actorName: string,
+  targetName: string,
+): NotificationEvent | null {
+  if (!isWebNotify(verb, result)) return null;
+  if (result === 'failure') {
+    return {
+      level: 'critical',
+      title: `Failed critical action: ${verb}`,
+      detail: `${actorName} failed ${verb} on ${targetName}`,
+    };
+  }
+  return {
+    level: 'critical',
+    title: `Critical action: ${verb}`,
+    detail: `${actorName} ran ${verb} on ${targetName}`,
   };
 }
 

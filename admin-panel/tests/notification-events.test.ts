@@ -3,7 +3,9 @@ import {
   CRITICAL_AUDIT_VERBS,
   classifyAuditEvent,
   isCriticalAuditEvent,
+  isDiscordNotify,
   isSubmitBurst,
+  isWebNotify,
   SUBMIT_BURST_PER_MINUTE,
 } from '@/lib/notification-events';
 
@@ -36,6 +38,23 @@ describe('notification events', () => {
   it('detects submit bursts at the threshold', () => {
     expect(isSubmitBurst(SUBMIT_BURST_PER_MINUTE)).toBe(true);
     expect(isSubmitBurst(SUBMIT_BURST_PER_MINUTE - 1)).toBe(false);
+  });
+
+  it('sends all critical verbs to web on both results', () => {
+    expect(isWebNotify('deployment:deploy', 'success')).toBe(true);
+    expect(isWebNotify('deployment:deploy', 'failure')).toBe(true);
+  });
+
+  it('keeps password reveal failure on web, success off web', () => {
+    expect(isWebNotify('password:reveal', 'failure')).toBe(true);
+    expect(isWebNotify('password:reveal', 'success')).toBe(false);
+  });
+
+  it('restricts discord to the sensitive set', () => {
+    expect(isDiscordNotify('deployment:deploy', 'success')).toBe(false);
+    expect(isDiscordNotify('override:set', 'success')).toBe(true);
+    expect(isDiscordNotify('password:reveal', 'failure')).toBe(true);
+    expect(isDiscordNotify('password:reveal', 'success')).toBe(false);
   });
 
   it('keeps every critical verb inside the registry or documents it as audit-only', async () => {
