@@ -86,6 +86,50 @@ function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/**
+ * Publishes one named frame for a freshly written audit row: web bell when the
+ * row is push-worthy, Discord only when it is sensitive. Name lookups fall back
+ * to `#id` text, and the whole step never throws, so alerting can neither
+ * duplicate nor break logging.
+ */
+async function publishFrame(
+  entry: AuditEntry,
+  actorId: number | null,
+  rowId: bigint,
+  timestamp: Date,
+): Promise<void> {
+  try {
+    const { classifyAuditEventWithNames, isDiscordNotify } = await import('@/lib/notification-events');
+    const { prisma } = await import('@/lib/prisma');
+    let actorName = 'system';
+    if (actorId !== null) {
+      const admin = await prisma.admins.findUnique({ where: { id: actorId }, select: { name: true, username: true } });
+      actorName = admin?.name ?? admin?.username ?? `admin #${actorId}`;
+    }
+    let targetName = entry.entityId === undefined ? entry.entity : `${entry.entity} #${entry.entityId}`;
+    if (entry.entityId !== undefined && ['deployment', 'contest'].includes(entry.entity)) {
+      const contest = await prisma.contests.findUnique({ where: { id: Number(entry.entityId) }, select: { name: true } });
+      if (contest) targetName = contest.name;
+    }
+    if (entry.entityId !== undefined && entry.entity === 'admin') {
+      const target = await prisma.admins.findUnique({ where: { id: Number(entry.entityId) }, select: { name: true, username: true } });
+      if (target) targetName = target.name ?? target.username;
+    }
+    const framed = classifyAuditEventWithNames(entry.verb, entry.result, actorName, targetName);
+    if (framed !== null) {
+      const { publishNotification } = await import('@/lib/notification-queue');
+      publishNotification({ ...framed, id: `audit-${String(rowId)}`, timestamp: timestamp.toISOString() });
+    }
+    if (isDiscordNotify(entry.verb, entry.result)) {
+      const { logToDiscord } = await import('@/lib/discord-notifier');
+      const detail = framed?.detail ?? `${actorName} ran ${entry.verb} on ${targetName}`;
+      void logToDiscord(`Critical admin action: ${entry.verb}`, `${detail} (${entry.result})`, 15158332, true);
+    }
+  } catch {
+    return;
+  }
+}
+
 export async function recordAudit(entry: AuditEntry): Promise<void> {
   try {
     const { getSession } = await import('@/lib/auth');
@@ -110,7 +154,7 @@ export async function recordAudit(entry: AuditEntry): Promise<void> {
     const previousHash = previous?.entry_hash ?? null;
     const entryHash = computeEntryHash(previousHash, canonicaliseEntry(entry));
 
-    await prisma.audit_log.create({
+    const created = await prisma.audit_log.create({
       data: {
         actor_id: actorId ?? null,
         verb: entry.verb,
@@ -127,20 +171,7 @@ export async function recordAudit(entry: AuditEntry): Promise<void> {
       },
     });
 
-    // Why fire-and-forget here: one audit row produces exactly one dispatch decision,
-    // and the Discord helper never throws, so alerting can neither duplicate nor break logging.
-    const { isCriticalAuditEvent } = await import('@/lib/notification-events');
-    if (isCriticalAuditEvent(entry.verb, entry.result)) {
-      const { logToDiscord } = await import('@/lib/discord-notifier');
-      const target = entry.entityId === undefined ? entry.entity : `${entry.entity} #${entry.entityId}`;
-      const actor = actorId === undefined || actorId === null ? 'system' : `admin #${actorId}`;
-      void logToDiscord(
-        `Critical admin action: ${entry.verb}`,
-        `${actor} ran ${entry.verb} on ${target} (${entry.result})`,
-        15158332,
-        true,
-      );
-    }
+    await publishFrame(entry, actorId ?? null, created.id, created.timestamp);
   } catch (error) {
     const { logToDiscord } = await import('@/lib/discord-notifier');
     await logToDiscord(
