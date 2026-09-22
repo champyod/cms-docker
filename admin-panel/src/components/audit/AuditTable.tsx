@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useTransition } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import {
   Table,
   TableBody,
@@ -14,6 +14,7 @@ import { Button } from '@/components/core/Button';
 import { Input } from '@/components/core/Input';
 import { Card } from '@/components/core/Card';
 import { Badge } from '@/components/core/Badge';
+import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
 import { EmptyState } from '@/components/core/EmptyState';
 import { TablePaginationControls } from '@/components/core/TablePaginationControls';
 import { getAuditEntry, getDistinctEntities } from '@/app/actions/audit';
@@ -78,7 +79,6 @@ export function AuditTable({
   dict,
 }: AuditTableProps): React.JSX.Element {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
 
   const [entityFilter, setEntityFilter] = useState(filters.entity ?? '');
@@ -179,25 +179,6 @@ export function AuditTable({
     return 'neutral';
   };
 
-  const renderJsonValue = (value: unknown, label: string): React.JSX.Element => {
-    const formatted = value ? JSON.stringify(value, null, 2) : 'null';
-    return (
-      <div className="relative group">
-        <pre className="bg-muted/60 rounded-lg p-4 text-xs font-mono overflow-auto max-h-80 whitespace-pre-wrap break-all text-foreground border border-border">
-          {formatted}
-        </pre>
-        <button
-          type="button"
-          onClick={() => handleCopy(formatted, label)}
-          className="absolute top-2 right-2 p-1 rounded bg-muted opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
-          aria-label={`Copy ${label}`}
-        >
-          {copiedField === label ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-        </button>
-      </div>
-    );
-  };
-
   return (
     <div className="space-y-4">
       <Card className="p-4">
@@ -268,7 +249,21 @@ export function AuditTable({
         <EmptyState icon={Filter} title={dict.noEntries} />
       ) : (
         <div className="border border-border rounded-xl overflow-hidden bg-card/50">
-          <Table>
+          <Table mobileCards={entries.map((entry) => (
+            <AuditMobileCard
+              key={entry.id}
+              entry={entry}
+              isExpanded={expandedRowId === entry.id}
+              expandedDetail={expandedRowId === entry.id ? expandedDetail : null}
+              loadingDetail={expandedRowId === entry.id && loadingDetail}
+              onToggle={handleRowClick}
+              formatTimestamp={formatTimestamp}
+              resultBadgeVariant={resultBadgeVariant}
+              dict={dict}
+              copiedField={copiedField}
+              onCopy={handleCopy}
+            />
+          ))}>
             <TableHeader>
               <TableRow className="border-b border-border">
                 <TableHead className="text-muted-foreground w-[180px]">{dict.columns.timestamp}</TableHead>
@@ -295,7 +290,6 @@ export function AuditTable({
                     formatTimestamp={formatTimestamp}
                     truncate={truncate}
                     resultBadgeVariant={resultBadgeVariant}
-                    renderJsonValue={renderJsonValue}
                     dict={dict}
                     copiedField={copiedField}
                     handleCopy={handleCopy}
@@ -337,10 +331,161 @@ interface AuditRowProps {
   formatTimestamp: (iso: string) => string;
   truncate: (text: string | null, max: number) => string;
   resultBadgeVariant: (result: string) => 'success' | 'destructive' | 'neutral';
-  renderJsonValue: (value: unknown, label: string) => React.JSX.Element;
   dict: AuditDict;
   copiedField: string | null;
   handleCopy: (text: string, field: string) => void;
+}
+
+interface AuditMobileCardProps {
+  entry: AuditLogRow;
+  dict: AuditDict;
+  isExpanded: boolean;
+  loadingDetail: boolean;
+  expandedDetail: AuditDetailRow | null;
+  copiedField: string | null;
+  onToggle: (id: string) => void;
+  onCopy: (text: string, field: string) => void;
+  formatTimestamp: (iso: string) => string;
+  resultBadgeVariant: (result: string) => 'success' | 'destructive' | 'neutral';
+}
+
+interface AuditDetailContentProps {
+  detail: AuditDetailRow;
+  dict: AuditDict;
+  copiedField: string | null;
+  onCopy: (text: string, field: string) => void;
+}
+
+interface AuditJsonValueProps {
+  value: unknown;
+  label: string;
+  copiedField: string | null;
+  onCopy: (text: string, field: string) => void;
+}
+
+function AuditJsonValue({ value, label, copiedField, onCopy }: AuditJsonValueProps): React.JSX.Element {
+  const formatted = value ? JSON.stringify(value, null, 2) : 'null';
+  return (
+    <div className="relative group">
+      <pre className="bg-muted/60 rounded-lg p-4 text-xs font-mono overflow-auto max-h-80 whitespace-pre-wrap break-all text-foreground border border-border">
+        {formatted}
+      </pre>
+      <button
+        type="button"
+        onClick={() => onCopy(formatted, label)}
+        className="absolute top-2 right-2 p-1 rounded bg-muted text-muted-foreground hover:text-foreground transition-colors"
+        aria-label={`Copy ${label}`}
+      >
+        {copiedField === label ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+      </button>
+    </div>
+  );
+}
+
+function AuditDetailContent({ detail, dict, copiedField, onCopy }: AuditDetailContentProps): React.JSX.Element {
+  return (
+    <>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div>
+          <span className="text-muted-foreground">{dict.ip}: </span>
+          <span className="font-mono text-foreground">{detail.ip ?? '—'}</span>
+        </div>
+        <div>
+          <span className="text-muted-foreground">{dict.sessionId}: </span>
+          <span className="font-mono text-foreground">{detail.session_id ?? '—'}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground">{dict.entryHash}: </span>
+          <span className="font-mono text-xs text-foreground truncate max-w-[240px]">
+            {detail.entry_hash ?? '—'}
+          </span>
+          {detail.entry_hash && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCopy(detail.entry_hash ?? '', 'hash');
+              }}
+              className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Copy entry hash"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {detail.reason && (
+        <div className="text-sm">
+          <span className="text-muted-foreground">{dict.columns.reason}: </span>
+          <span className="text-foreground">{detail.reason}</span>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">
+            {dict.beforeValues}
+          </h4>
+          <AuditJsonValue value={detail.before_values} label="before" copiedField={copiedField} onCopy={onCopy} />
+        </div>
+        <div>
+          <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">
+            {dict.afterValues}
+          </h4>
+          <AuditJsonValue value={detail.after_values} label="after" copiedField={copiedField} onCopy={onCopy} />
+        </div>
+      </div>
+    </>
+  );
+}
+
+function AuditMobileCard({
+  entry,
+  dict,
+  isExpanded,
+  loadingDetail,
+  expandedDetail,
+  copiedField,
+  onToggle,
+  onCopy,
+  formatTimestamp,
+  resultBadgeVariant,
+}: AuditMobileCardProps): React.JSX.Element {
+  return (
+    <MobileCard data-testid={`audit-mobile-card-${entry.id}`}>
+      <div className="flex items-center justify-between gap-2">
+        <Badge variant="cyan">{entry.verb}</Badge>
+        <Badge variant={resultBadgeVariant(entry.result)}>{entry.result}</Badge>
+      </div>
+      <div className="mt-3">
+        <MobileCardRow label={dict.columns.timestamp} value={formatTimestamp(entry.timestamp)} />
+        <MobileCardRow label={dict.columns.actor} value={entry.actor_id !== null ? `#${entry.actor_id}` : '—'} />
+        <MobileCardRow label={dict.columns.entity} value={entry.entity} />
+        <MobileCardRow label={dict.columns.entityId} value={entry.entity_id ?? '—'} />
+        <MobileCardRow label={dict.columns.reason} value={entry.reason ?? '—'} />
+      </div>
+      {isExpanded && (
+        <div className="mt-3 border-t border-border pt-3">
+          {loadingDetail && (
+            <div className="text-sm text-muted-foreground animate-pulse">Loading details…</div>
+          )}
+          {expandedDetail && (
+            <AuditDetailContent detail={expandedDetail} dict={dict} copiedField={copiedField} onCopy={onCopy} />
+          )}
+        </div>
+      )}
+      <button
+        type="button"
+        aria-expanded={isExpanded}
+        aria-label={`Toggle details for ${entry.verb} on ${entry.entity}`}
+        className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+        onClick={() => onToggle(entry.id)}
+      >
+        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+      </button>
+    </MobileCard>
+  );
 }
 
 function AuditRow({
@@ -352,8 +497,8 @@ function AuditRow({
   formatTimestamp,
   truncate,
   resultBadgeVariant,
-  renderJsonValue,
   dict,
+  copiedField,
   handleCopy,
 }: AuditRowProps): React.JSX.Element {
   return (
@@ -397,59 +542,12 @@ function AuditRow({
                 <div className="text-sm text-muted-foreground animate-pulse">Loading details…</div>
               )}
               {expandedDetail && (
-                <>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">{dict.ip}: </span>
-                      <span className="font-mono text-foreground">{expandedDetail.ip ?? '—'}</span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">{dict.sessionId}: </span>
-                      <span className="font-mono text-foreground">{expandedDetail.session_id ?? '—'}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-muted-foreground">{dict.entryHash}: </span>
-                      <span className="font-mono text-xs text-foreground truncate max-w-[240px]">
-                        {expandedDetail.entry_hash ?? '—'}
-                      </span>
-                      {expandedDetail.entry_hash && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void handleCopy(expandedDetail.entry_hash ?? '', 'hash');
-                          }}
-                          className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
-                          aria-label="Copy entry hash"
-                        >
-                          <Copy className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {expandedDetail.reason && (
-                    <div className="text-sm">
-                      <span className="text-muted-foreground">{dict.columns.reason}: </span>
-                      <span className="text-foreground">{expandedDetail.reason}</span>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">
-                        {dict.beforeValues}
-                      </h4>
-                      {renderJsonValue(expandedDetail.before_values, 'before')}
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">
-                        {dict.afterValues}
-                      </h4>
-                      {renderJsonValue(expandedDetail.after_values, 'after')}
-                    </div>
-                  </div>
-                </>
+                <AuditDetailContent
+                  detail={expandedDetail}
+                  dict={dict}
+                  copiedField={copiedField}
+                  onCopy={handleCopy}
+                />
               )}
             </div>
           </TableCell>
