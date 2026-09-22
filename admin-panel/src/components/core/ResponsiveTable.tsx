@@ -54,7 +54,7 @@ function renderMobileCards<Row>(props: ResponsiveTableProps<Row>): React.ReactNo
         {visible.map((column) => (
           <MobileCardRow key={column.key} label={labelFor(column)} value={column.render(row)} />
         ))}
-        {actions ? <div className="flex items-center justify-end gap-2 pt-2">{actions}</div> : null}
+        {actions ? <div className="flex items-center justify-end gap-1 pt-2">{actions}</div> : null}
       </MobileCard>
     );
   });
@@ -89,7 +89,7 @@ function renderDesktopRows<Row>(props: ResponsiveTableProps<Row>): React.ReactNo
           ))}
           {hasActions ? (
             <TableCell className="text-right">
-              <div className="flex items-center justify-end gap-2">{renderRowActions?.(row, index)}</div>
+              <div className="flex items-center justify-end gap-1">{renderRowActions?.(row, index)}</div>
             </TableCell>
           ) : null}
         </TableRow>
