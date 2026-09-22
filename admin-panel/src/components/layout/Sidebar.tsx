@@ -29,7 +29,7 @@ function ExpandedBrandRow({ onToggle }: { onToggle: () => void }): React.JSX.Ele
         <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary font-bold text-primary-foreground shadow-sm">C</div>
         <span className="truncate font-display font-semibold tracking-wide">CMS Admin</span>
       </div>
-      <Button variant="secondary" size="sm" iconOnly tooltip="Collapse sidebar" onClick={onToggle} className="size-8">
+      <Button variant="secondary" size="sm" iconOnly tooltip="Collapse sidebar" onClick={onToggle}>
         <ChevronLeft className="size-4" />
       </Button>
     </div>
