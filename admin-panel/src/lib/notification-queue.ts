@@ -17,6 +17,15 @@ export function isNewFrame(seen: ReadonlySet<string>, id: string): boolean {
   return !seen.has(id);
 }
 
+/** Advances a `?since=` cursor past stable `audit-<n>` frame ids only. */
+export function cursorFromFrameId(lastId: number, frameId: string): number {
+  const match = /^audit-(\d+)$/.exec(frameId);
+  if (match === null) return lastId;
+  const rowId = Number(match[1]);
+  if (!Number.isFinite(rowId)) return lastId;
+  return Math.max(lastId, rowId);
+}
+
 /** Fans one frame out to live subscribers and the reconnect backlog. */
 export function publishNotification(frame: QueuedNotification): void {
   try {

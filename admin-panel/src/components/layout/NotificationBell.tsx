@@ -1,10 +1,11 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { BellRing } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/core/Button';
 import { useLiveStream } from '@/hooks/useLiveStream';
+import { cursorFromFrameId, isNewFrame } from '@/lib/notification-queue';
 
 interface AlertFrame {
   id: string;
@@ -21,16 +22,27 @@ export function NotificationBell(): React.JSX.Element {
   const [events, setEvents] = useState<AlertFrame[]>([]);
   const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState(0);
+  const [lastId, setLastId] = useState(0);
+  const seenIdsRef = useRef<Set<string>>(new Set());
 
   const handleFrame = useCallback((frame: AlertFrame) => {
     if (!frame || typeof frame.id !== 'string') return;
-    setEvents((prev) => (prev.some((e) => e.id === frame.id) ? prev : [frame, ...prev].slice(0, MAX_EVENTS)));
+    // Why the guard sits before every side effect: a reconnect replays the
+    // backlog, and the list dedup below used to swallow the repeat while the
+    // toast and unread count still fired a second time.
+    if (!isNewFrame(seenIdsRef.current, frame.id)) return;
+    seenIdsRef.current.add(frame.id);
+    setLastId((previous) => cursorFromFrameId(previous, frame.id));
+    setEvents((prev) => [frame, ...prev].slice(0, MAX_EVENTS));
     setUnread((count) => count + 1);
     if (frame.level === 'critical') toast.error(frame.title, { description: frame.detail });
     else toast.warning(frame.title, { description: frame.detail });
   }, []);
 
-  useLiveStream<AlertFrame>({ url: '/api/notifications/stream', onFrame: handleFrame });
+  // Why the cursor travels in the url: the stream replays its backlog on every
+  // (re)connect, and `since` narrows that replay to frames this viewer is
+  // still missing — which is what stops focus toggles from re-toasting.
+  useLiveStream<AlertFrame>({ url: `/api/notifications/stream?since=${lastId}`, onFrame: handleFrame });
 
   const toggle = (): void => {
     setOpen((v) => !v);
