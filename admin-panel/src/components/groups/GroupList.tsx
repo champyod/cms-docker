@@ -9,15 +9,11 @@ import { Card } from '@/components/core/Card';
 import { Dialog } from '@/components/core/Dialog';
 import { Input } from '@/components/core/Input';
 import { Badge } from '@/components/core/Badge';
-import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
+import { EmptyState } from '@/components/core/EmptyState';
 import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from '@/components/core/Table';
+  ResponsiveTable,
+  type ResponsiveColumn,
+} from '@/components/core/ResponsiveTable';
 import { Text } from '@/components/core/Typography';
 import { useToast } from '@/components/providers/ToastProvider';
 import {
@@ -69,6 +65,42 @@ const EMPTY_FORM: GroupFormData = {
   permissionKeys: [],
   reason: '',
 };
+
+function buildColumns(dict: GroupsDict): ResponsiveColumn<GroupWithPermissions>[] {
+  return [
+    {
+      key: 'name',
+      header: dict.name,
+      render: (group) => <span className="font-medium">{group.name}</span>,
+    },
+    {
+      key: 'description',
+      header: dict.description,
+      render: (group) => (
+        <span className="block max-w-xs truncate">
+          {group.description ?? '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'isSeeded',
+      header: dict.isSeeded,
+      render: (group) =>
+        group.is_seeded ? (
+          <Badge variant="cyan">{dict.isSeeded}</Badge>
+        ) : null,
+    },
+    {
+      key: 'permissions',
+      header: dict.permissions,
+      render: (group) => (
+        <span className="px-2 py-0.5 text-xs rounded-full bg-indigo-500/20 text-indigo-400">
+          {group.permissionKeys.length}
+        </span>
+      ),
+    },
+  ];
+}
 
 function groupPermissionsByModule(): Map<string, PermissionDefinition[]> {
   const grouped = new Map<string, PermissionDefinition[]>();
@@ -253,6 +285,38 @@ export function GroupList({
     }
   }, [selectedGroup, deleteReason, router, toast]);
 
+  // Why: one column definition drives desktop rows and mobile cards, so
+  // the two layouts cannot drift apart.
+  const columns = useMemo(() => buildColumns(dict), [dict]);
+
+  const renderRowActions = useCallback(
+    (group: GroupWithPermissions) => (
+      <>
+        {canUpdate && (
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={Pencil}
+            iconOnly
+            tooltip={dict.editTooltip}
+            onClick={() => handleOpenEdit(group)}
+          />
+        )}
+        {canDelete && (
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={Trash2}
+            iconOnly
+            tooltip={dict.deleteTooltip}
+            onClick={() => handleOpenDelete(group)}
+          />
+        )}
+      </>
+    ),
+    [canUpdate, canDelete, dict, handleOpenEdit, handleOpenDelete],
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -264,102 +328,18 @@ export function GroupList({
         )}
       </div>
 
-      <Table
-        mobileCards={groups.map((group) => (
-          <MobileCard key={group.id}>
-            <MobileCardRow label={dict.name} value={group.name} />
-            <MobileCardRow label={dict.description} value={group.description ?? '—'} />
-            {group.is_seeded && <MobileCardRow label={dict.isSeeded} value={<Badge variant="cyan">{dict.isSeeded}</Badge>} />}
-            <MobileCardRow label={dict.permissions} value={group.permissionKeys.length} />
-            <div className="flex items-center justify-end gap-1 pt-2">
-              {canUpdate && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  icon={Pencil}
-                  iconOnly
-                  tooltip={dict.editTooltip}
-                  className="min-h-11 min-w-11"
-                  onClick={() => handleOpenEdit(group)}
-                />
-              )}
-              {canDelete && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  icon={Trash2}
-                  iconOnly
-                  tooltip={dict.deleteTooltip}
-                  className="min-h-11 min-w-11"
-                  onClick={() => handleOpenDelete(group)}
-                />
-              )}
-            </div>
-          </MobileCard>
-        ))}
-      >
-        <TableHeader>
-          <TableRow>
-            <TableHead>{dict.name}</TableHead>
-            <TableHead>{dict.description}</TableHead>
-            <TableHead>{dict.isSeeded}</TableHead>
-            <TableHead>{dict.permissions}</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {groups.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                {dict.noGroups}
-              </TableCell>
-            </TableRow>
-          ) : (
-            groups.map((group) => (
-              <TableRow key={group.id}>
-                <TableCell className="font-medium">{group.name}</TableCell>
-                <TableCell className="max-w-xs truncate">
-                  {group.description ?? '—'}
-                </TableCell>
-                <TableCell>
-                  {group.is_seeded && (
-                    <Badge variant="cyan">{dict.isSeeded}</Badge>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <span className="px-2 py-0.5 text-xs rounded-full bg-indigo-500/20 text-indigo-400">
-                    {group.permissionKeys.length}
-                  </span>
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    {canUpdate && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        icon={Pencil}
-                        iconOnly
-                        tooltip={dict.editTooltip}
-                        onClick={() => handleOpenEdit(group)}
-                      />
-                    )}
-                    {canDelete && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        icon={Trash2}
-                        iconOnly
-                        tooltip={dict.deleteTooltip}
-                        onClick={() => handleOpenDelete(group)}
-                      />
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
+      <ResponsiveTable
+        columns={columns}
+        rows={groups}
+        getRowKey={(group) => group.id}
+        renderRowActions={renderRowActions}
+        emptyState={
+          <EmptyState
+            title={dict.noGroups}
+            description={dict.noGroupsDescription}
+          />
+        }
+      />
 
       <Dialog
         open={isModalOpen}
