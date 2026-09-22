@@ -56,4 +56,14 @@ describe('ResponsiveTable', () => {
     );
     expect(getByText('No people yet')).toBeTruthy();
   });
+
+  it('spreads getRowProps onto desktop rows and mobile cards', () => {
+    const { container } = render(
+      <ResponsiveTable {...baseProps()} getRowProps={(row) => ({ 'data-shortcut-row': row.id })} />
+    );
+    const desktopRow = container.querySelector('tbody tr');
+    expect(desktopRow?.getAttribute('data-shortcut-row')).toBe('1');
+    const mobileCard = container.querySelector('.space-y-3.md\\:hidden > div');
+    expect(mobileCard?.getAttribute('data-shortcut-row')).toBe('1');
+  });
 });

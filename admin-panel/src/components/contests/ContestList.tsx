@@ -9,7 +9,7 @@ import { ResponsiveTable } from '@/components/core/ResponsiveTable';
 import { ContestModal } from './ContestModal';
 import { DeployConfirmModal } from './DeployConfirmModal';
 import { ContestListHeader } from './contest-list/ContestListHeader';
-import { ContestRowActions, buildContestColumns, getContestRowClassName, type ContestRowData } from './contest-list/ContestTableRows';
+import { ContestRowActions, buildContestColumns, getContestRowClassName, getContestRowProps, type ContestRowData } from './contest-list/ContestTableRows';
 import { useContestListActions } from './contest-list/useContestListActions';
 import type { ExistingContest } from './contest-modal/types';
 import { hasEffectivePermission } from '@/lib/permission-engine';
@@ -68,6 +68,7 @@ export function ContestList({ initialContests, totalPages, permissionKeys }: Con
         rows={contests}
         getRowKey={(contest) => contest.id}
         getRowClassName={getContestRowClassName}
+        getRowProps={getContestRowProps}
         renderRowActions={renderRowActions}
         emptyState={
           <EmptyState icon={Trophy} title="No contests found" description="Create your first contest to get started." />

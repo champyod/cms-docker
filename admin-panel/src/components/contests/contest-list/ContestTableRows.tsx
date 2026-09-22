@@ -2,7 +2,7 @@
 
 import { Badge } from '@/components/core/Badge';
 import { Button } from '@/components/core/Button';
-import type { ResponsiveColumn } from '@/components/core/ResponsiveTable';
+import type { ResponsiveColumn, ResponsiveRowProps } from '@/components/core/ResponsiveTable';
 import { Calendar, CheckCircle2, Clock, ExternalLink, Rocket, Trash2 } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
 
@@ -94,6 +94,12 @@ export function buildContestColumns(onOpenContest: (id: number) => void): Respon
 
 export function getContestRowClassName(contest: ContestRowData): string | undefined {
   return contest.is_active === true ? 'bg-primary/5' : undefined;
+}
+
+// Why: j/k navigation queries [data-shortcut-row]; without this prop
+// the migrated contest list is invisible to the shortcut handler.
+export function getContestRowProps(contest: ContestRowData): ResponsiveRowProps {
+  return { 'data-shortcut-row': contest.id };
 }
 
 interface ContestRowActionsProps {

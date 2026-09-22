@@ -23,10 +23,17 @@ export interface ResponsiveColumn<Row> {
   hideOnMobile?: boolean;
 }
 
+// Why: extra attributes (e.g. data-shortcut-row for j/k nav) must land
+// on both layouts, so keyboard selection cannot die on migration.
+export type ResponsiveRowProps = React.HTMLAttributes<HTMLElement> & {
+  [dataAttribute: `data-${string}`]: string | number | undefined;
+};
+
 export interface ResponsiveTableProps<Row> {
   columns: ResponsiveColumn<Row>[];
   rows: Row[];
   getRowKey: (row: Row, index: number) => React.Key;
+  getRowProps?: (row: Row, index: number) => ResponsiveRowProps | undefined;
   emptyState?: React.ReactNode;
   renderRowActions?: (row: Row, index: number) => React.ReactNode;
   actionsHeader?: React.ReactNode;
@@ -45,12 +52,17 @@ function visibleOnMobile<Row>(columns: ResponsiveColumn<Row>[]): ResponsiveColum
 }
 
 function renderMobileCards<Row>(props: ResponsiveTableProps<Row>): React.ReactNode {
-  const { columns, rows, getRowKey, getRowClassName, renderRowActions } = props;
+  const { columns, rows, getRowKey, getRowClassName, getRowProps, renderRowActions } = props;
   const visible = visibleOnMobile(columns);
   return rows.map((row, index) => {
     const actions = renderRowActions?.(row, index);
+    const extraProps = getRowProps?.(row, index);
     return (
-      <MobileCard key={getRowKey(row, index)} className={getRowClassName?.(row, index)}>
+      <MobileCard
+        key={getRowKey(row, index)}
+        {...extraProps}
+        className={cn(getRowClassName?.(row, index), extraProps?.className)}
+      >
         {visible.map((column) => (
           <MobileCardRow key={column.key} label={labelFor(column)} value={column.render(row)} />
         ))}
@@ -78,12 +90,14 @@ function renderDesktopHeader<Row>(
 }
 
 function renderDesktopRows<Row>(props: ResponsiveTableProps<Row>): React.ReactNode {
-  const { columns, rows, getRowKey, getRowClassName, renderRowActions } = props;
+  const { columns, rows, getRowKey, getRowClassName, getRowProps, renderRowActions } = props;
   const hasActions = typeof renderRowActions === 'function';
   return (
     <TableBody>
-      {rows.map((row, index) => (
-        <TableRow key={getRowKey(row, index)} className={cn(getRowClassName?.(row, index))}>
+      {rows.map((row, index) => {
+        const extraProps = getRowProps?.(row, index);
+        return (
+        <TableRow key={getRowKey(row, index)} {...extraProps} className={cn(getRowClassName?.(row, index), extraProps?.className)}>
           {columns.map((column) => (
             <TableCell key={column.key}>{column.render(row)}</TableCell>
           ))}
@@ -93,7 +107,8 @@ function renderDesktopRows<Row>(props: ResponsiveTableProps<Row>): React.ReactNo
             </TableCell>
           ) : null}
         </TableRow>
-      ))}
+        );
+      })}
     </TableBody>
   );
 }
