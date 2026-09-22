@@ -99,20 +99,25 @@ async function publishFrame(
   timestamp: Date,
 ): Promise<void> {
   try {
-    const { classifyAuditEventWithNames, isDiscordNotify } = await import('@/lib/notification-events');
+    const { classifyAuditEventWithNames, isDiscordNotify, isWebNotify } = await import('@/lib/notification-events');
+    const web = isWebNotify(entry.verb, entry.result);
+    const discord = isDiscordNotify(entry.verb, entry.result);
+    if (!web && !discord) return;
     const { prisma } = await import('@/lib/prisma');
     let actorName = 'system';
     if (actorId !== null) {
       const admin = await prisma.admins.findUnique({ where: { id: actorId }, select: { name: true, username: true } });
       actorName = admin?.name ?? admin?.username ?? `admin #${actorId}`;
     }
+    const numericId = entry.entityId === undefined ? null : Number(entry.entityId);
+    const targetId = numericId !== null && Number.isFinite(numericId) ? numericId : null;
     let targetName = entry.entityId === undefined ? entry.entity : `${entry.entity} #${entry.entityId}`;
-    if (entry.entityId !== undefined && ['deployment', 'contest'].includes(entry.entity)) {
-      const contest = await prisma.contests.findUnique({ where: { id: Number(entry.entityId) }, select: { name: true } });
+    if (targetId !== null && ['deployment', 'contest'].includes(entry.entity)) {
+      const contest = await prisma.contests.findUnique({ where: { id: targetId }, select: { name: true } });
       if (contest) targetName = contest.name;
     }
-    if (entry.entityId !== undefined && entry.entity === 'admin') {
-      const target = await prisma.admins.findUnique({ where: { id: Number(entry.entityId) }, select: { name: true, username: true } });
+    if (targetId !== null && entry.entity === 'admin') {
+      const target = await prisma.admins.findUnique({ where: { id: targetId }, select: { name: true, username: true } });
       if (target) targetName = target.name ?? target.username;
     }
     const framed = classifyAuditEventWithNames(entry.verb, entry.result, actorName, targetName);
@@ -120,11 +125,10 @@ async function publishFrame(
       const { publishNotification } = await import('@/lib/notification-queue');
       publishNotification({ ...framed, id: `audit-${String(rowId)}`, timestamp: timestamp.toISOString() });
     }
-    if (isDiscordNotify(entry.verb, entry.result)) {
-      const { logToDiscord } = await import('@/lib/discord-notifier');
-      const detail = framed?.detail ?? `${actorName} ran ${entry.verb} on ${targetName}`;
-      void logToDiscord(`Critical admin action: ${entry.verb}`, `${detail} (${entry.result})`, 15158332, true);
-    }
+    if (!discord) return;
+    const { logToDiscord } = await import('@/lib/discord-notifier');
+    const detail = framed?.detail ?? `${actorName} ran ${entry.verb} on ${targetName}`;
+    void logToDiscord(`Critical admin action: ${entry.verb}`, `${detail} (${entry.result})`, 15158332, true);
   } catch {
     return;
   }
