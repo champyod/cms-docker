@@ -98,12 +98,10 @@
     min-height: 100vh;
   }
 
-  /* Display density: compact shrinks the Tailwind spacing base so every
-     p-*/gap-*/m-* tightens systemically. Text sizes ride on rem, so spacing
-     follows the font size automatically. */
-  .density-compact {
-    --spacing: 0.2rem;
-  }
+  /* Display density: components carry `density:` classes (custom variant
+     below) because overriding tailwind internals from author CSS does not
+     survive the production minifier. */
+  @custom-variant density (&:where(.density-compact, .density-compact *));
 
   .text-size-small {
     font-size: 14px;
