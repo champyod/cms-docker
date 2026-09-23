@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { usePathname } from 'next/navigation';
+import { useAppRouter } from './useAppRouter';
 import { NAV_REGISTRY } from '@/lib/nav-registry';
 import { NAV_CHORD_KEY_BY_PATH } from '@/lib/nav-chord';
 import { hasEffectivePermission } from '@/lib/permission-engine';
@@ -176,7 +177,7 @@ export function bindingsForPermissions(
 }
 
 export function useShortcuts(permissionKeys?: readonly string[]): { isOverlayOpen: boolean; closeOverlay: () => void } {
-  const router = useRouter();
+  const router = useAppRouter();
   const pathname = usePathname();
   const [isOverlayOpen, setIsOverlayOpen] = useState(false);
   const chordStateRef = useRef<ChordState>(IDLE_CHORD);
