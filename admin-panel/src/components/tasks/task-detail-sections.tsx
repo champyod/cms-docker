@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { HelpCircle, ChevronDown, ChevronUp, Settings, FileText, Trash2, Upload, ExternalLink } from 'lucide-react';
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
+import { ResponsiveTable, type ResponsiveColumn } from '@/components/core/ResponsiveTable';
 import { EmptyState } from '@/components/core/EmptyState';
 import { apiClient } from '@/lib/apiClient';
 import { cn } from '@/lib/utils';
@@ -76,11 +76,40 @@ function formatDate(iso: string | null | undefined): string {
   }
 }
 
+async function deleteStatement(id: number): Promise<void> {
+  if (!confirm('Delete this statement?')) return;
+  await apiClient.delete(`/api/statements/${id}`);
+  window.location.reload();
+}
+
+// Why: one fragment drives desktop rows and mobile cards, with 44px
+// targets kept here so both layouts stay touch-sized.
+function renderStatementActions(stmt: StatementRow): React.JSX.Element {
+  return (
+    <>
+      <a href={`/api/statements/${stmt.digest}`} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center px-2 text-xs text-primary hover:underline">Download</a>
+      <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete statement" onClick={() => void deleteStatement(stmt.id)} className="text-destructive" />
+    </>
+  );
+}
+
+// Why: one column definition drives desktop rows and mobile cards, so
+// the two layouts cannot drift apart.
+function buildStatementColumns(): ResponsiveColumn<StatementRow>[] {
+  return [
+    { key: 'language', header: 'Language', render: (stmt) => <span className="font-mono text-sm">{stmt.language}</span> },
+    { key: 'filename', header: 'Filename', render: (stmt) => <span className="text-sm">{stmt.filename ?? `${stmt.language}.pdf`}</span> },
+    { key: 'size', header: 'Size', render: (stmt) => <span className="text-sm">{formatSize(stmt.size)}</span> },
+    { key: 'uploadedAt', header: 'Upload date', render: (stmt) => <span className="text-sm">{formatDate(stmt.uploadedAt)}</span> },
+  ];
+}
+
 export function StatementsSection({ statements, expanded, onToggle, onUpload }: StatementsSectionProps): React.JSX.Element {
   const [activeLanguage, setActiveLanguage] = useState<string | null>(null);
 
   const languages = useMemo(() => Array.from(new Set(statements.map((s) => s.language))).sort(), [statements]);
   const filtered = useMemo(() => (activeLanguage ? statements.filter((s) => s.language === activeLanguage) : statements), [statements, activeLanguage]);
+  const columns = useMemo(() => buildStatementColumns(), []);
 
   return (
     <Card className="border-border overflow-hidden">
@@ -105,39 +134,13 @@ export function StatementsSection({ statements, expanded, onToggle, onUpload }: 
                   <button key={lang} type="button" onClick={() => setActiveLanguage(lang)} className={cn('rounded-full px-3 py-1 text-xs font-mono border transition-colors', activeLanguage === lang ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted text-muted-foreground border-border hover:bg-accent')}>{lang}</button>
                 ))}
               </div>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Language</TableHead>
-                    <TableHead>Filename</TableHead>
-                    <TableHead>Size</TableHead>
-                    <TableHead>Upload date</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filtered.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground">No statements for &quot;{activeLanguage}&quot;.</TableCell>
-                    </TableRow>
-                  ) : (
-                    filtered.map((stmt) => (
-                      <TableRow key={stmt.id}>
-                        <TableCell className="font-mono text-sm">{stmt.language}</TableCell>
-                        <TableCell className="text-sm">{stmt.filename ?? `${stmt.language}.pdf`}</TableCell>
-                        <TableCell className="text-sm">{formatSize(stmt.size)}</TableCell>
-                        <TableCell className="text-sm">{formatDate(stmt.uploadedAt)}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <a href={`/api/statements/${stmt.digest}`} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline">Download</a>
-                            <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete statement" onClick={async () => { if (confirm('Delete this statement?')) { await apiClient.delete(`/api/statements/${stmt.id}`); window.location.reload(); } }} className="text-destructive" />
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+              <ResponsiveTable
+                columns={columns}
+                rows={filtered}
+                getRowKey={(stmt) => stmt.id}
+                renderRowActions={renderStatementActions}
+                emptyState={<p className="text-center text-sm text-muted-foreground">No statements for &quot;{activeLanguage}&quot;.</p>}
+              />
             </>
           )}
         </div>
