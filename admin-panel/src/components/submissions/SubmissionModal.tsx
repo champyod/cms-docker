@@ -25,10 +25,12 @@ interface SubmissionModalProps {
   submission: SubmissionListItem;
   canRecompute: boolean;
   canDownload: boolean;
+  // Why kept: legacy callers still pass this; visibility now follows canMoveLane.
   canAssignLane: boolean;
+  canMoveLane: boolean;
 }
 
-export function SubmissionModal({ isOpen, onClose, submission, canRecompute, canDownload, canAssignLane }: SubmissionModalProps) {
+export function SubmissionModal({ isOpen, onClose, submission, canRecompute, canDownload, canMoveLane }: SubmissionModalProps) {
   const router = useRouter();
   const confirm = useConfirm();
   const { recalculateSubmissionConfirm } = useConfirmationCopy();
@@ -202,7 +204,7 @@ export function SubmissionModal({ isOpen, onClose, submission, canRecompute, can
               submissionId={submission.id}
               lanes={[]}
               allowCreate
-              canMove={canAssignLane}
+              canMove={canMoveLane}
             />
         </div>
         <DialogFooter className="mt-6 pt-4 border-t border-border">
