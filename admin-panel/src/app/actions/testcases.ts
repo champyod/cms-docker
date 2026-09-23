@@ -6,6 +6,7 @@ import { ensurePermission, getPermissions } from '@/lib/permissions';
 import { recordAudit } from '@/lib/audit';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { storeFile } from '@/lib/fsobjects';
+import { MAX_BULK_TESTCASES, MAX_TESTCASE_FILE_BYTES } from '@/lib/testcase-limits';
 
 interface TestcaseInput {
   codename: string;
@@ -224,9 +225,6 @@ async function createTestcaseSafely(datasetId: number, tc: TestcaseInput): Promi
     return 'skipped';
   }
 }
-
-export const MAX_BULK_TESTCASES = 100;
-export const MAX_TESTCASE_FILE_BYTES = 2_097_152;
 
 export interface BulkItemResult {
   codename: string;

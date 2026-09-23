@@ -81,7 +81,8 @@ describe('batchUploadTestcases', () => {
   });
 
   it('rejects more than the per-upload limit', async () => {
-    const { batchUploadTestcases, MAX_BULK_TESTCASES } = await import('@/app/actions/testcases');
+    const { batchUploadTestcases } = await import('@/app/actions/testcases');
+    const { MAX_BULK_TESTCASES } = await import('@/lib/testcase-limits');
     const many = Array.from({ length: MAX_BULK_TESTCASES + 1 }, (_, i) => item(`t${i}`));
     const result = await batchUploadTestcases(3, many);
     expect(result.success).toBe(false);
@@ -89,7 +90,8 @@ describe('batchUploadTestcases', () => {
   });
 
   it('rejects files over the per-file limit', async () => {
-    const { batchUploadTestcases, MAX_TESTCASE_FILE_BYTES } = await import('@/app/actions/testcases');
+    const { batchUploadTestcases } = await import('@/app/actions/testcases');
+    const { MAX_TESTCASE_FILE_BYTES } = await import('@/lib/testcase-limits');
     const result = await batchUploadTestcases(3, [item('big', MAX_TESTCASE_FILE_BYTES + 1)]);
     expect(result.success).toBe(false);
     expect(result.error).toContain('exceeds the 2 MB per-file limit');

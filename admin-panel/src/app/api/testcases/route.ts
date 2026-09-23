@@ -4,7 +4,7 @@ import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { storeFile } from '@/lib/fsobjects';
 import { recordAudit } from '@/lib/audit';
-import { MAX_BULK_TESTCASES, MAX_TESTCASE_FILE_BYTES } from '@/app/actions/testcases';
+import { MAX_BULK_TESTCASES, MAX_TESTCASE_FILE_BYTES } from '@/lib/testcase-limits';
 
 export async function POST(req: NextRequest): Promise<Response> {
   const { authorized, response } = await verifyApiPermission('testcase:create');
