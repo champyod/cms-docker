@@ -45,6 +45,7 @@ export const DEFAULT_GROUPS: readonly GroupDefinition[] = [
       'statement:update',
       'submission:list',
       'submission:read',
+      'evaluation:list',
       'evaluation:lane_assign',
       'evaluation:lane_move',
       'submissionresult:list',
