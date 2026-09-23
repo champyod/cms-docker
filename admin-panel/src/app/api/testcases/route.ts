@@ -4,6 +4,7 @@ import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { storeFile } from '@/lib/fsobjects';
 import { recordAudit } from '@/lib/audit';
+import { MAX_BULK_TESTCASES, MAX_TESTCASE_FILE_BYTES } from '@/app/actions/testcases';
 
 export async function POST(req: NextRequest): Promise<Response> {
   const { authorized, response } = await verifyApiPermission('testcase:create');
@@ -20,28 +21,68 @@ export async function POST(req: NextRequest): Promise<Response> {
     };
     const { datasetId, testcases } = data;
 
-    if (Array.isArray(testcases)) {
-         for (const tc of testcases) {
-          const inputBuffer = Buffer.from(tc.inputBase64, 'base64');
-          const inputDigest = await storeFile(inputBuffer, 'Uploaded via Admin API');
-          const outputBuffer = Buffer.from(tc.outputBase64, 'base64');
-          const outputDigest = await storeFile(outputBuffer, 'Uploaded via Admin API');
+    if (!Number.isInteger(datasetId)) return apiError({ message: 'Invalid dataset', status: 400 });
+    const dataset = await prisma.datasets.findUnique({ where: { id: datasetId }, select: { id: true } });
+    if (!dataset) return apiError({ message: 'Dataset not found', status: 404 });
 
-          try {
-            await prisma.testcases.create({
-              data: {
-                dataset_id: datasetId,
-                codename: tc.codename,
-                input: inputDigest,
-                output: outputDigest,
-                public: tc.isPublic,
-              },
-            });
-          } catch (e) {
-            const msg = e instanceof Error ? e.message : 'Unknown error';
-            console.warn(`Testcase ${tc.codename} already exists or error:`, msg);
-          }
-       }
+    if (Array.isArray(testcases)) {
+      if (testcases.length === 0) return apiError({ message: 'No testcases provided', status: 400 });
+      if (testcases.length > MAX_BULK_TESTCASES) {
+        return apiError({ message: `Too many testcases: limit is ${MAX_BULK_TESTCASES} per upload`, status: 400 });
+      }
+      let created = 0;
+      let skipped = 0;
+      for (const tc of testcases) {
+        if (typeof tc.codename !== 'string' || tc.codename.length === 0) {
+          return apiError({ message: 'Every testcase needs a codename', status: 400 });
+        }
+        let inputBuffer: Buffer;
+        let outputBuffer: Buffer;
+        try {
+          inputBuffer = Buffer.from(tc.inputBase64, 'base64');
+          outputBuffer = Buffer.from(tc.outputBase64, 'base64');
+        } catch {
+          return apiError({ message: `Testcase "${tc.codename}" has invalid file data`, status: 400 });
+        }
+        if (inputBuffer.length > MAX_TESTCASE_FILE_BYTES || outputBuffer.length > MAX_TESTCASE_FILE_BYTES) {
+          return apiError({ message: `Testcase "${tc.codename}" exceeds the 2 MB per-file limit`, status: 400 });
+        }
+        const existing = await prisma.testcases.findUnique({
+          where: { dataset_id_codename: { dataset_id: datasetId, codename: tc.codename } },
+          select: { id: true },
+        });
+        if (existing) {
+          skipped += 1;
+          continue;
+        }
+        const inputDigest = await storeFile(inputBuffer, 'Uploaded via Admin API');
+        const outputDigest = await storeFile(outputBuffer, 'Uploaded via Admin API');
+
+        try {
+          await prisma.testcases.create({
+            data: {
+              dataset_id: datasetId,
+              codename: tc.codename,
+              input: inputDigest,
+              output: outputDigest,
+              public: tc.isPublic,
+            },
+          });
+          created += 1;
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : 'Unknown error';
+          console.warn(`Testcase ${tc.codename} already exists or error:`, msg);
+          skipped += 1;
+        }
+      }
+      await recordAudit({
+        verb: 'testcase:create',
+        entity: 'testcase',
+        afterValues: { datasetId, created, skipped },
+        result: 'success',
+      });
+      revalidatePath('/[locale]/tasks', 'page');
+      return apiSuccess({ message: 'Testcase(s) uploaded successfully', created, skipped });
     } else {
        const { codename, inputDigest, outputDigest, isPublic } = data;
        if (!codename || !inputDigest || !outputDigest) return apiError({ message: 'Missing testcase data', status: 400 });
@@ -59,11 +100,11 @@ export async function POST(req: NextRequest): Promise<Response> {
     await recordAudit({
       verb: 'testcase:create',
       entity: 'testcase',
-      afterValues: { datasetId, codename: (data as { codename?: string }).codename ?? null, bulkCount: Array.isArray(testcases) ? testcases.length : 1 },
+      afterValues: { datasetId, codename: (data as { codename?: string }).codename ?? null },
       result: 'success',
     });
     revalidatePath('/[locale]/tasks', 'page');
-    return apiSuccess({ message: 'Testcase(s) uploaded successfully' });
+    return apiSuccess({ message: 'Testcase uploaded successfully' });
   } catch (error) {
     return apiError(error);
   }

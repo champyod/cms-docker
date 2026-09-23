@@ -7,9 +7,7 @@ import { useTheme } from '@/hooks/useTheme';
 
 export function ThemeToggle(): React.JSX.Element {
   const { theme, toggleTheme } = useTheme();
-  // Why a fixed placeholder while theme is null: server and hydration both
-  // render Moon/"Switch theme" so no text mismatch; the real Sun/Moon only
-  // appears in a post-hydration update which React does not compare.
+  // Placeholder while the theme is unresolved; the real icon renders after mount.
   if (theme === null) {
     return (
       <Button variant="ghost" size="sm" iconOnly tooltip="Switch theme" onClick={toggleTheme}>

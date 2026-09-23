@@ -19,10 +19,8 @@ export interface UseThemeResult {
 
 const SERVER_SNAPSHOT = (): ThemePreference | null => null;
 
-// Why module-scope mount store: useState+useEffect mount flags violate the
-// set-state-in-effect lint rule. A mount-only external store (never notifies,
-// server false / client true) keeps hydration on the server snapshot, then
-// flips post-hydration without an effect.
+// Mount flag as an external store (server false, client true) so the theme
+// value stays on the server snapshot during hydration and resolves after mount.
 function subscribeMount(): () => void {
   return () => undefined;
 }
@@ -32,10 +30,6 @@ const MOUNTED_SERVER_SNAPSHOT = (): boolean => false;
 
 export function useTheme(): UseThemeResult {
   const storeTheme = useSyncExternalStore(subscribeToTheme, getAppliedTheme, SERVER_SNAPSHOT);
-  // Why mounted gates the store value: the server snapshot is null and the
-  // no-flash script may already have set .dark before hydration, so reading
-  // the store during hydration renders Sun against server Moon (React #418).
-  // Holding null until after mount keeps hydration identical, then resolves.
   const mounted = useSyncExternalStore(subscribeMount, MOUNTED_CLIENT_SNAPSHOT, MOUNTED_SERVER_SNAPSHOT);
   const theme = mounted ? storeTheme : null;
 

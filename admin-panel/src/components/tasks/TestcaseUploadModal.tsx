@@ -149,6 +149,10 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
       );
       if (!result) return;
       if (result.success) {
+        const skipped = result.details?.filter((d) => d.status === 'skipped').length ?? 0;
+        if (skipped > 0) {
+          toast.warning(`${skipped} pairs skipped`, { description: 'They already exist in this dataset.' });
+        }
         onSuccess();
         onClose();
       }
