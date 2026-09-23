@@ -45,7 +45,7 @@ export function buildAuditColumns(
       header: dict.columns.actor,
       render: (entry) => (
         <span className="font-mono text-xs text-indigo-400">
-          {entry.actor_id !== null ? `#${entry.actor_id}` : '—'}
+          {entry.actor_name ?? (entry.actor_id !== null ? `#${entry.actor_id}` : '—')}
         </span>
       ),
     },
@@ -61,9 +61,11 @@ export function buildAuditColumns(
     },
     {
       key: 'entityId',
-      header: dict.columns.entityId,
+      header: dict.columns.entityName,
       render: (entry) => (
-        <span className="font-mono text-xs text-muted-foreground">{entry.entity_id ?? '—'}</span>
+        <span className="text-sm text-foreground">
+          {entry.entity_name ?? (entry.entity_id !== null ? `#${entry.entity_id}` : '—')}
+        </span>
       ),
     },
     {
