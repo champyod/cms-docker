@@ -3,7 +3,12 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Design tokens: neutral SaaS zinc + single indigo accent, soft-medium radius */
+/* Design tokens: neutral SaaS zinc + single indigo accent, soft-medium radius
+   Why :root carries the light tokens: the server renders <html> with no
+   theme class and the no-flash script adds .light/.dark just before paint.
+   Without defaults every bg-background/text-foreground var is undefined on
+   first paint (black on white) and the toggle hydrates Moon vs Sun. */
+:root,
 .light {
   --background: oklch(1 0 0);
   --foreground: oklch(0.141 0.005 285.823);
