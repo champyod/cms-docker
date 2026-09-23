@@ -3,6 +3,7 @@
 import type { ComponentType, FormEvent, ReactNode } from 'react';
 import { Button } from '@/components/core/Button';
 import { Dialog } from '@/components/core/Dialog';
+import { ResponsiveModalShell } from '@/components/core/ResponsiveModalShell';
 import { Calendar, Shield, Cpu, Clock, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { FIELD_TO_TAB_MAP } from './types';
@@ -76,7 +77,7 @@ function SidebarTabs({
   setActiveTab,
 }: Pick<ContestModalShellProps, 'validationErrors' | 'activeTab' | 'setActiveTab'>) {
   return (
-    <div className="w-64 shrink-0 space-y-2 overflow-y-auto border-r border-border bg-muted/20 p-4 max-sm:flex max-sm:w-full max-sm:flex-row max-sm:flex-wrap max-sm:gap-1 max-sm:space-y-0 max-sm:overflow-x-auto max-sm:border-r-0 max-sm:border-b">
+    <>
       {TABS.map(tab => (
         <TabButton
           key={tab.id}
@@ -86,7 +87,7 @@ function SidebarTabs({
           onSelect={() => setActiveTab(tab.id)}
         />
       ))}
-    </div>
+    </>
   );
 }
 
@@ -153,16 +154,17 @@ function ShellBody({
   children,
 }: Pick<ContestModalShellProps, 'validationErrors' | 'error' | 'activeTab' | 'setActiveTab' | 'onSubmit' | 'children'>) {
   return (
-    <div className="flex min-h-0 flex-1 overflow-hidden max-sm:flex-col">
-      <SidebarTabs validationErrors={validationErrors} activeTab={activeTab} setActiveTab={setActiveTab} />
-      <div className="relative flex-1 overflow-y-auto p-4 sm:p-8">
+    <ResponsiveModalShell
+      sidebar={<SidebarTabs validationErrors={validationErrors} activeTab={activeTab} setActiveTab={setActiveTab} />}
+    >
+      <div className="p-4 sm:p-8">
         <ContentBanners validationErrors={validationErrors} error={error} />
 
         <form id="contest-form" onSubmit={onSubmit} className="space-y-8 pb-20">
           {children}
         </form>
       </div>
-    </div>
+    </ResponsiveModalShell>
   );
 }
 
