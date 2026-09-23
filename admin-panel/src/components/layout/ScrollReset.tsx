@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useLayoutEffect } from 'react';
 import { usePathname } from 'next/navigation';
 
 interface ScrollableElement {
@@ -23,7 +23,10 @@ export function resetScrollContainer(doc: ScrollDocument, containerId: string): 
 export function ScrollReset({ containerId = MAIN_SCROLL_CONTAINER_ID }: { containerId?: string }): null {
   const pathname = usePathname();
 
-  useEffect(() => {
+  // Layout effect (browser only): reset before paint so the next page never
+  // flashes at the previous scroll offset.
+  const usePositionReset = typeof window === 'undefined' ? useEffect : useLayoutEffect;
+  usePositionReset(() => {
     if (typeof document === 'undefined') return;
     resetScrollContainer(document, containerId);
   }, [pathname, containerId]);

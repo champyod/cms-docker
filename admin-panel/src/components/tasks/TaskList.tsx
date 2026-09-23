@@ -121,7 +121,7 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
           <TableBody>
             {tasks.map((task) => {
               const hasErrors = task.diagnostics.some((d) => d.type === 'error');
-              const openDetail = () => router.push(`/${locale}/tasks/${task.id}`);
+              const openDetail = () => router.push(`/${locale}/tasks/${task.id}`, { scroll: false });
               return (
                 <TableRow
                   key={task.id}
@@ -150,7 +150,7 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
                           </div>
                         </div>
                       )}
-                      <button onClick={(event) => { event.stopPropagation(); router.push(`/${locale}/tasks/${task.id}`); }} data-shortcut-primary className={cn('flex items-center gap-2 hover:text-primary transition-colors truncate', hasErrors && 'text-muted-foreground')}>
+                      <button onClick={(event) => { event.stopPropagation(); router.push(`/${locale}/tasks/${task.id}`, { scroll: false }); }} data-shortcut-primary className={cn('flex items-center gap-2 hover:text-primary transition-colors truncate', hasErrors && 'text-muted-foreground')}>
                         {task.name}
                         <ExternalLink className="w-3 h-3 opacity-50" />
                       </button>
