@@ -142,8 +142,8 @@ export const FIELD_PERMISSION_MAP: Record<string, Record<string, FieldPermission
     dataset_id: { read: 'testcase:read' },
     codename: { read: 'testcase:read', update: 'testcase:update' },
     public: { read: 'testcase:read', update: 'testcase:update' },
-    input: { read: 'testcase:read' },
-    output: { read: 'testcase:read' },
+    input: { read: 'testcase:read', update: 'testcase:update' },
+    output: { read: 'testcase:read', update: 'testcase:update' },
   },
   participations: {
     id: { read: 'participation:read' },
