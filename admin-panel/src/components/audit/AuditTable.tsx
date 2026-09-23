@@ -48,6 +48,7 @@ export function AuditTable({
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [expandedDetail, setExpandedDetail] = useState<AuditDetailRow | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   const [entities, setEntities] = useState<string[]>([]);
   const [pageInput, setPageInput] = useState(String(currentPage));
@@ -115,15 +116,19 @@ export function AuditTable({
     if (expandedRowId === id) {
       setExpandedRowId(null);
       setExpandedDetail(null);
+      setDetailError(null);
       return;
     }
     setExpandedRowId(id);
     setExpandedDetail(null);
+    setDetailError(null);
     setLoadingDetail(true);
     const result = await getAuditEntry(Number(id));
     setLoadingDetail(false);
     if (result.success) {
       setExpandedDetail(result.data);
+    } else {
+      setDetailError(result.error);
     }
   };
 
@@ -222,10 +227,15 @@ export function AuditTable({
         emptyState={<EmptyState icon={Filter} title={dict.noEntries} />}
       />
 
-      {expandedEntry !== undefined && (loadingDetail || expandedDetail !== null) && (
+      {expandedEntry !== undefined && (loadingDetail || expandedDetail !== null || detailError !== null) && (
         <Card className="p-4 space-y-4">
           {loadingDetail && (
             <div className="text-sm text-muted-foreground animate-pulse">Loading details…</div>
+          )}
+          {detailError !== null && (
+            <div className="text-sm text-destructive">
+              {dict.detailLoadFailed}: {detailError}
+            </div>
           )}
           {expandedDetail && (
             <AuditDetailContent
