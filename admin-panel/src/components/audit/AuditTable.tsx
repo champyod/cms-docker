@@ -2,148 +2,27 @@
 
 import { useState, useEffect, useCallback, useMemo, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button } from '@/components/core/Button';
-import { Input } from '@/components/core/Input';
 import { Card } from '@/components/core/Card';
-import { Badge } from '@/components/core/Badge';
 import { EmptyState } from '@/components/core/EmptyState';
 import {
   ResponsiveTable,
-  type ResponsiveColumn,
   type ResponsiveRowProps,
 } from '@/components/core/ResponsiveTable';
 import { TablePaginationControls } from '@/components/core/TablePaginationControls';
 import { getAuditEntry, getDistinctEntities } from '@/app/actions/audit';
 import type { AuditLogRow, AuditDetailRow } from '@/app/actions/audit';
-import { Search, Filter, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react';
+import { Filter, ChevronDown, ChevronUp } from 'lucide-react';
+import { AuditFilters } from './AuditFilters';
+import { AuditDetailContent } from './AuditDetail';
+import {
+  buildAuditColumns,
+  formatTimestamp,
+  truncate,
+  resultBadgeVariant,
+} from './auditColumns';
+import type { AuditTableProps } from './auditTypes';
 
-interface AuditDict {
-  title: string;
-  subtitle: string;
-  columns: {
-    timestamp: string;
-    actor: string;
-    verb: string;
-    entity: string;
-    entityId: string;
-    result: string;
-    reason: string;
-  };
-  filters: {
-    entity: string;
-    verb: string;
-    actorId: string;
-    fromDate: string;
-    toDate: string;
-    apply: string;
-    clear: string;
-    allEntities: string;
-  };
-  noEntries: string;
-  pageInfo: string;
-  expandedDetails: string;
-  beforeValues: string;
-  afterValues: string;
-  ip: string;
-  sessionId: string;
-  entryHash: string;
-  prevHash: string;
-}
-
-interface AuditTableProps {
-  entries: AuditLogRow[];
-  total: number;
-  totalPages: number;
-  currentPage: number;
-  filters: {
-    entity?: string;
-    verb?: string;
-    actorId?: string;
-    fromDate?: string;
-    toDate?: string;
-  };
-  dict: AuditDict;
-  permissionKeys: string[];
-}
-
-interface AuditColumnHelpers {
-  formatTimestamp: (iso: string) => string;
-  truncate: (text: string | null, max: number) => string;
-  resultBadgeVariant: (result: string) => 'success' | 'destructive' | 'neutral';
-}
-
-function formatTimestamp(iso: string): string {
-  return new Date(iso).toLocaleString();
-}
-
-function truncate(text: string | null, max: number): string {
-  if (!text) return '—';
-  return text.length > max ? `${text.slice(0, max)}…` : text;
-}
-
-function resultBadgeVariant(result: string): 'success' | 'destructive' | 'neutral' {
-  if (result === 'success') return 'success';
-  if (result === 'failure') return 'destructive';
-  return 'neutral';
-}
-
-// Why: one column definition drives desktop rows and mobile cards, so
-// the two layouts cannot drift apart.
-function buildAuditColumns(dict: AuditDict, helpers: AuditColumnHelpers): ResponsiveColumn<AuditLogRow>[] {
-  return [
-    {
-      key: 'timestamp',
-      header: dict.columns.timestamp,
-      render: (entry) => (
-        <span className="font-mono text-xs text-muted-foreground whitespace-nowrap">
-          {helpers.formatTimestamp(entry.timestamp)}
-        </span>
-      ),
-    },
-    {
-      key: 'actor',
-      header: dict.columns.actor,
-      render: (entry) => (
-        <span className="font-mono text-xs text-indigo-400">
-          {entry.actor_id !== null ? `#${entry.actor_id}` : '—'}
-        </span>
-      ),
-    },
-    {
-      key: 'verb',
-      header: dict.columns.verb,
-      render: (entry) => <Badge variant="cyan">{entry.verb}</Badge>,
-    },
-    {
-      key: 'entity',
-      header: dict.columns.entity,
-      render: (entry) => <span className="text-sm text-foreground">{entry.entity}</span>,
-    },
-    {
-      key: 'entityId',
-      header: dict.columns.entityId,
-      render: (entry) => (
-        <span className="font-mono text-xs text-muted-foreground">{entry.entity_id ?? '—'}</span>
-      ),
-    },
-    {
-      key: 'result',
-      header: dict.columns.result,
-      render: (entry) => (
-        <Badge variant={helpers.resultBadgeVariant(entry.result)}>{entry.result}</Badge>
-      ),
-    },
-    {
-      key: 'reason',
-      header: dict.columns.reason,
-      render: (entry) => (
-        <span className="block max-w-[200px] text-sm text-muted-foreground">
-          {helpers.truncate(entry.reason, 60)}
-        </span>
-      ),
-    },
-  ];
-}
+export type { AuditTableProps } from './auditTypes';
 
 export function AuditTable({
   entries,
@@ -279,64 +158,26 @@ export function AuditTable({
 
   return (
     <div className="space-y-4">
-      <Card className="p-4">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-[160px]">
-            <label className="block text-xs font-medium text-muted-foreground mb-1">{dict.filters.entity}</label>
-            <select
-              value={entityFilter}
-              onChange={(e) => setEntityFilter(e.target.value)}
-              title={dict.filters.entity}
-              className="h-11 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm text-foreground outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-            >
-              <option value="">{dict.filters.allEntities}</option>
-              {entities.map((ent) => (
-                <option key={ent} value={ent}>{ent}</option>
-              ))}
-            </select>
-          </div>
-          <div className="min-w-[140px]">
-            <Input
-              label={dict.filters.verb}
-              value={verbFilter}
-              onChange={(e) => setVerbFilter(e.target.value)}
-              placeholder={dict.filters.verb}
-            />
-          </div>
-          <div className="min-w-[120px]">
-            <Input
-              label={dict.filters.actorId}
-              value={actorIdFilter}
-              onChange={(e) => setActorIdFilter(e.target.value)}
-              placeholder="ID"
-            />
-          </div>
-          <div className="min-w-[160px]">
-            <Input
-              label={dict.filters.fromDate}
-              type="date"
-              value={fromDateFilter}
-              onChange={(e) => setFromDateFilter(e.target.value)}
-            />
-          </div>
-          <div className="min-w-[160px]">
-            <Input
-              label={dict.filters.toDate}
-              type="date"
-              value={toDateFilter}
-              onChange={(e) => setToDateFilter(e.target.value)}
-            />
-          </div>
-          <div className="flex gap-2 pb-0.5">
-            <Button variant="positive" size="sm" onClick={handleApplyFilters} icon={Search}>
-              {dict.filters.apply}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={handleClearFilters}>
-              {dict.filters.clear}
-            </Button>
-          </div>
-        </div>
-      </Card>
+      <AuditFilters
+        dict={dict}
+        values={{
+          entity: entityFilter,
+          verb: verbFilter,
+          actorId: actorIdFilter,
+          fromDate: fromDateFilter,
+          toDate: toDateFilter,
+        }}
+        entities={entities}
+        onValuesChange={(patch) => {
+          if (patch.entity !== undefined) setEntityFilter(patch.entity);
+          if (patch.verb !== undefined) setVerbFilter(patch.verb);
+          if (patch.actorId !== undefined) setActorIdFilter(patch.actorId);
+          if (patch.fromDate !== undefined) setFromDateFilter(patch.fromDate);
+          if (patch.toDate !== undefined) setToDateFilter(patch.toDate);
+        }}
+        onApply={handleApplyFilters}
+        onClear={handleClearFilters}
+      />
 
       <div className="flex items-center justify-between text-sm text-muted-foreground px-1">
         <span>{dict.pageInfo.replace('{total}', String(total))}</span>
@@ -389,96 +230,5 @@ export function AuditTable({
         />
       )}
     </div>
-  );
-}
-
-interface AuditDetailContentProps {
-  detail: AuditDetailRow;
-  dict: AuditDict;
-  copiedField: string | null;
-  onCopy: (text: string, field: string) => void;
-}
-
-interface AuditJsonValueProps {
-  value: unknown;
-  label: string;
-  copiedField: string | null;
-  onCopy: (text: string, field: string) => void;
-}
-
-function AuditJsonValue({ value, label, copiedField, onCopy }: AuditJsonValueProps): React.JSX.Element {
-  const formatted = value ? JSON.stringify(value, null, 2) : 'null';
-  return (
-    <div className="relative group">
-      <pre className="bg-muted/60 rounded-lg p-4 text-xs font-mono overflow-auto max-h-80 whitespace-pre-wrap break-all text-foreground border border-border">
-        {formatted}
-      </pre>
-      <button
-        type="button"
-        onClick={() => onCopy(formatted, label)}
-        className="absolute top-2 right-2 p-1 rounded bg-muted text-muted-foreground hover:text-foreground transition-colors"
-        aria-label={`Copy ${label}`}
-      >
-        {copiedField === label ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-      </button>
-    </div>
-  );
-}
-
-function AuditDetailContent({ detail, dict, copiedField, onCopy }: AuditDetailContentProps): React.JSX.Element {
-  return (
-    <>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-        <div>
-          <span className="text-muted-foreground">{dict.ip}: </span>
-          <span className="font-mono text-foreground">{detail.ip ?? '—'}</span>
-        </div>
-        <div>
-          <span className="text-muted-foreground">{dict.sessionId}: </span>
-          <span className="font-mono text-foreground">{detail.session_id ?? '—'}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-muted-foreground">{dict.entryHash}: </span>
-          <span className="font-mono text-xs text-foreground truncate max-w-[240px]">
-            {detail.entry_hash ?? '—'}
-          </span>
-          {detail.entry_hash && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onCopy(detail.entry_hash ?? '', 'hash');
-              }}
-              className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
-              aria-label="Copy entry hash"
-            >
-              <Copy className="w-3 h-3" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {detail.reason && (
-        <div className="text-sm">
-          <span className="text-muted-foreground">{dict.columns.reason}: </span>
-          <span className="text-foreground">{detail.reason}</span>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">
-            {dict.beforeValues}
-          </h4>
-          <AuditJsonValue value={detail.before_values} label="before" copiedField={copiedField} onCopy={onCopy} />
-        </div>
-        <div>
-          <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">
-            {dict.afterValues}
-          </h4>
-          <AuditJsonValue value={detail.after_values} label="after" copiedField={copiedField} onCopy={onCopy} />
-        </div>
-      </div>
-    </>
   );
 }
