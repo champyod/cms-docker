@@ -6,6 +6,7 @@ import type { TaskData } from '@/app/actions/tasks';
 import { apiClient } from '@/lib/apiClient';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { Dialog } from '@/components/core/Dialog';
+import { ResponsiveModalShell } from '@/components/core/ResponsiveModalShell';
 import { Button } from '@/components/core/Button';
 import { cn } from '@/lib/utils';
 import { parseIntervalToSeconds } from '@/lib/task-intervals';
@@ -191,26 +192,28 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
         }
         className="flex max-h-[70vh] w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-4xl"
       >
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden sm:flex-row">
-          <div className="w-full shrink-0 space-y-2 overflow-y-auto border-b border-border bg-muted/20 p-4 max-sm:flex max-sm:flex-row max-sm:flex-wrap max-sm:gap-1 max-sm:overflow-x-auto sm:w-64 sm:border-b-0 sm:border-r sm:block">
-            {TAB_CONFIG.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={cn(
-                  'flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors max-sm:flex-1 max-sm:justify-center max-sm:rounded-md max-sm:border max-sm:border-border max-sm:px-3 max-sm:py-2',
-                  activeTab === tab.id
-                    ? 'bg-primary/10 text-primary ring-1 ring-ring/50'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                )}
-              >
-                <tab.icon className="h-4 w-4" />
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="relative flex-1 overflow-y-auto p-8">
+        <ResponsiveModalShell
+          sidebar={
+            <>
+              {TAB_CONFIG.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={cn(
+                    'flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors max-sm:flex-1 max-sm:justify-center max-sm:rounded-md max-sm:border max-sm:border-border max-sm:px-3 max-sm:py-2',
+                    activeTab === tab.id
+                      ? 'bg-primary/10 text-primary ring-1 ring-ring/50'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  )}
+                >
+                  <tab.icon className="h-4 w-4" />
+                  {tab.label}
+                </button>
+              ))}
+            </>
+          }
+        >
+          <div className="p-8">
             <form id="task-form" onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
               {error && <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
               {activeTab === 'general' && <GeneralTab formData={formData} onChange={setFormData} />}
@@ -222,7 +225,7 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
               )}
             </form>
           </div>
-        </div>
+        </ResponsiveModalShell>
       </Dialog>
     </FieldAccessContext.Provider>
   );

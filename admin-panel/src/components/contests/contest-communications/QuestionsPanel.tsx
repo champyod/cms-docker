@@ -57,9 +57,9 @@ export function QuestionsPanel({ questions, replyingTo, replySubject, replyText,
             </div>
             <div className="flex shrink-0 items-center gap-1">
               {!q.reply_timestamp && (
-                <Button variant="ghost" iconOnly icon={Reply} tooltip="Reply" aria-label={`Reply to ${q.subject}`} onClick={() => onReplyingTo(replyingTo === q.id ? null : q.id)} className="size-9 shrink-0 rounded-lg text-primary hover:bg-primary/20" />
+                <Button variant="ghost" iconOnly icon={Reply} tooltip="Reply" aria-label={`Reply to ${q.subject}`} onClick={() => onReplyingTo(replyingTo === q.id ? null : q.id)} className="shrink-0 rounded-lg text-primary hover:bg-primary/20" />
               )}
-              <Button variant="ghost" iconOnly icon={q.ignored ? Eye : EyeOff} tooltip={q.ignored ? 'Unignore' : 'Ignore'} aria-label={q.ignored ? 'Unignore question' : 'Ignore question'} onClick={() => onIgnore(q.id, q.ignored)} className="size-9 shrink-0 rounded-lg" />
+              <Button variant="ghost" iconOnly icon={q.ignored ? Eye : EyeOff} tooltip={q.ignored ? 'Unignore' : 'Ignore'} aria-label={q.ignored ? 'Unignore question' : 'Ignore question'} onClick={() => onIgnore(q.id, q.ignored)} className="shrink-0 rounded-lg" />
             </div>
           </div>
           {replyingTo === q.id && (

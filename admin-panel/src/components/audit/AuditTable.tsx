@@ -1,41 +1,29 @@
 'use client';
 
-import { useState, useEffect, useCallback, useTransition } from 'react';
+import { useState, useEffect, useCallback, useMemo, useTransition } from 'react';
 import { useAppRouter } from '@/hooks/useAppRouter';
-import {
-  Table,
-  TableBody,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/core/Table';
+import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
+import {
+  ResponsiveTable,
+  type ResponsiveRowProps,
+} from '@/components/core/ResponsiveTable';
 import { TablePaginationControls } from '@/components/core/TablePaginationControls';
 import { getAuditEntry, getDistinctEntities } from '@/app/actions/audit';
 import type { AuditLogRow, AuditDetailRow } from '@/app/actions/audit';
-import { Filter } from 'lucide-react';
+import { Filter, ChevronDown, ChevronUp } from 'lucide-react';
 import { AuditFilters } from './AuditFilters';
-import { AuditRow } from './AuditRow';
 import { AuditToolbar } from './AuditToolbar';
-import type { AuditDict } from './audit-dict';
+import { AuditDetailContent } from './AuditDetail';
+import {
+  buildAuditColumns,
+  formatTimestamp,
+  truncate,
+  resultBadgeVariant,
+} from './auditColumns';
+import type { AuditTableProps } from './auditTypes';
 
-interface AuditTableProps {
-  entries: AuditLogRow[];
-  total: number;
-  totalPages: number;
-  currentPage: number;
-  filters: {
-    entity?: string;
-    verb?: string;
-    actorId?: string;
-    result?: string;
-    search?: string;
-    fromDate?: string;
-    toDate?: string;
-  };
-  dict: AuditDict;
-  permissionKeys: string[];
-}
+export type { AuditTableProps } from './auditTypes';
 
 export function AuditTable({
   entries,
@@ -63,6 +51,7 @@ export function AuditTable({
 
   const [entities, setEntities] = useState<string[]>([]);
   const [pageInput, setPageInput] = useState(String(currentPage));
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   useEffect(() => {
     if (!autoRefresh) return;
@@ -138,6 +127,51 @@ export function AuditTable({
     }
   };
 
+  const handleCopy = async (text: string, field: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopiedField(field);
+    setTimeout(() => setCopiedField(null), 1500);
+  };
+
+  // Why: one column definition drives desktop rows and mobile cards, so
+  // the two layouts cannot drift apart.
+  const columns = useMemo(
+    () => buildAuditColumns(dict, { formatTimestamp, truncate, resultBadgeVariant }),
+    [dict],
+  );
+
+  const getRowProps = (entry: AuditLogRow): ResponsiveRowProps => ({
+    onClick: () => {
+      void handleRowClick(entry.id);
+    },
+    className: 'cursor-pointer',
+    'aria-expanded': expandedRowId === entry.id,
+  });
+
+  // Why: shared by desktop rows and mobile cards, with 44px targets kept
+  // in this fragment so both layouts stay touch-sized.
+  const renderRowActions = (entry: AuditLogRow) => {
+    const isExpanded = expandedRowId === entry.id;
+    return (
+      <button
+        type="button"
+        aria-expanded={isExpanded}
+        aria-label={`Toggle details for ${entry.verb} on ${entry.entity}`}
+        className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+        onClick={(e) => {
+          e.stopPropagation();
+          void handleRowClick(entry.id);
+        }}
+      >
+        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+      </button>
+    );
+  };
+
+  const expandedEntry = expandedRowId === null
+    ? undefined
+    : entries.find((entry) => entry.id === expandedRowId);
+
   return (
     <div className="space-y-4">
       <AuditFilters
@@ -178,41 +212,32 @@ export function AuditTable({
         }}
       />
 
-      {entries.length === 0 ? (
-        <EmptyState icon={Filter} title={dict.noEntries} />
-      ) : (
-        <div className="border border-border rounded-xl overflow-hidden bg-card/50">
-          <Table>
-            <TableHeader>
-              <TableRow className="border-b border-border">
-                <TableHead className="text-muted-foreground w-45">{dict.columns.timestamp}</TableHead>
-                <TableHead className="text-muted-foreground w-20">{dict.columns.actor}</TableHead>
-                <TableHead className="text-muted-foreground">{dict.columns.verb}</TableHead>
-                <TableHead className="text-muted-foreground">{dict.columns.entity}</TableHead>
-                <TableHead className="text-muted-foreground">{dict.columns.entityId}</TableHead>
-                <TableHead className="text-muted-foreground w-25">{dict.columns.result}</TableHead>
-                <TableHead className="text-muted-foreground">{dict.columns.reason}</TableHead>
-                <TableHead className="text-muted-foreground w-10" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {entries.map((entry) => {
-                const isExpanded = expandedRowId === entry.id;
-                return (
-                  <AuditRow
-                    key={entry.id}
-                    entry={entry}
-                    isExpanded={isExpanded}
-                    expandedDetail={isExpanded ? expandedDetail : null}
-                    loadingDetail={isExpanded && loadingDetail}
-                    onRowClick={handleRowClick}
-                    dict={dict}
-                  />
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
+      <ResponsiveTable
+        columns={columns}
+        rows={entries}
+        getRowKey={(entry) => entry.id}
+        getRowProps={getRowProps}
+        renderRowActions={renderRowActions}
+        actionsHeader={<span className="sr-only">{dict.expandedDetails}</span>}
+        emptyState={<EmptyState icon={Filter} title={dict.noEntries} />}
+      />
+
+      {expandedEntry !== undefined && (loadingDetail || expandedDetail !== null) && (
+        <Card className="p-4 space-y-4">
+          {loadingDetail && (
+            <div className="text-sm text-muted-foreground animate-pulse">Loading details…</div>
+          )}
+          {expandedDetail && (
+            <AuditDetailContent
+              detail={expandedDetail}
+              dict={dict}
+              copiedField={copiedField}
+              onCopy={(text, field) => {
+                void handleCopy(text, field);
+              }}
+            />
+          )}
+        </Card>
       )}
 
       {totalPages > 1 && (

@@ -180,7 +180,7 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
                   )}
                   <a
                     href={`/${locale}/users/${member.user.id}`}
-                    className="inline-flex size-9 shrink-0 items-center justify-center text-muted-foreground hover:text-primary transition-colors"
+                    className="inline-flex size-11 shrink-0 items-center justify-center text-muted-foreground hover:text-primary transition-colors"
                   >
                     <ExternalLink className="w-4 h-4" />
                   </a>
@@ -222,7 +222,7 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
                 </div>
                 <a
                   href={`/${locale}/contests/${contest.id}`}
-                  className="inline-flex size-9 shrink-0 items-center justify-center text-muted-foreground hover:text-primary transition-colors"
+                  className="inline-flex size-11 shrink-0 items-center justify-center text-muted-foreground hover:text-primary transition-colors"
                 >
                   <ExternalLink className="w-4 h-4" />
                 </a>

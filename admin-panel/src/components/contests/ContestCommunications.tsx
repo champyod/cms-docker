@@ -14,7 +14,7 @@ interface ContestCommunicationsProps {
   adminId: number;
 }
 
-const TAB_BASE = 'flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors';
+const TAB_BASE = 'flex flex-none items-center gap-2 whitespace-nowrap px-4 py-3 text-sm font-medium transition-colors';
 const TAB_ACTIVE = 'border-b-2 border-primary text-primary';
 const TAB_INACTIVE = 'border-b-2 border-transparent text-muted-foreground hover:text-foreground';
 
@@ -27,7 +27,7 @@ export function ContestCommunications({ contestId, adminId }: ContestCommunicati
 
   return (
     <Card className="overflow-hidden">
-      <div className="flex border-b border-border">
+      <div className="flex overflow-x-auto border-b border-border">
         <button onClick={() => setActiveTab('announcements')} className={cn(TAB_BASE, activeTab === 'announcements' ? TAB_ACTIVE : TAB_INACTIVE)}>
           <Megaphone className="h-4 w-4" />Announcements
         </button>

@@ -69,13 +69,13 @@ function LogToolbar({
           value={searchTerm}
           onChange={(event) => onSearchChange(event.target.value)}
           placeholder="Filter logs..."
-          className="bg-background/80 border border-border rounded-lg pl-9 pr-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-ring/60 w-48 transition-all"
+          className="bg-background/80 border border-border rounded-lg pl-9 pr-3 py-2.5 sm:py-1.5 min-h-11 sm:min-h-0 text-xs text-foreground focus:outline-none focus:border-ring/60 w-48 transition-all"
         />
       </div>
       <select
         value={tail}
         onChange={(event) => onTailChange(Number(event.target.value))}
-        className="bg-background/80 border border-border rounded-lg px-2 py-1.5 text-xs text-foreground focus:outline-none"
+        className="bg-background/80 border border-border rounded-lg px-2 py-2.5 sm:py-1.5 min-h-11 sm:min-h-0 text-xs text-foreground focus:outline-none"
       >
         <option value={100}>Last 100</option>
         <option value={500}>Last 500</option>

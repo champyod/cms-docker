@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Database, Save, Terminal } from 'lucide-react';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { Dialog } from '@/components/core/Dialog';
+import { ResponsiveModalShell } from '@/components/core/ResponsiveModalShell';
 import { Button } from '@/components/core/Button';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/apiClient';
@@ -195,8 +196,10 @@ export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess, perm
       }
       className="flex max-h-[70vh] w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-3xl"
     >
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden sm:flex-row">
-        <div className="w-full shrink-0 space-y-2 overflow-y-auto border-b border-border bg-muted/20 p-4 max-sm:flex max-sm:flex-row max-sm:flex-wrap max-sm:gap-1 max-sm:overflow-x-auto sm:w-48 sm:border-b-0 sm:border-r">
+      <ResponsiveModalShell
+        sidebarWidthClass="sm:w-48"
+        sidebar={
+          <>
           <button
             onClick={() => setActiveTab('general')}
             className={cn(
@@ -225,9 +228,10 @@ export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess, perm
             <Terminal className="w-4 h-4" />
             Managers
           </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-6">
+          </>
+        }
+      >
+        <div className="p-6">
           {activeTab === 'general' && (
             <DatasetGeneralForm
               formData={formData}
@@ -248,7 +252,7 @@ export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess, perm
             <DatasetManagersTab datasetId={dataset.id} managers={managers} loadingManagers={loadingManagers} onReload={loadManagers} permissionKeys={permissionKeys} />
           )}
         </div>
-      </div>
+      </ResponsiveModalShell>
     </Dialog>
   );
 }

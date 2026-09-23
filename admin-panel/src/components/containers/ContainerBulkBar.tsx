@@ -34,7 +34,7 @@ export function ContainerBulkBar({
             Discord not configured
           </span>
         )}
-        <Button variant="ghost" iconOnly icon={X} tooltip="Clear selection" aria-label="Clear selection" onClick={onClear} className="size-8 rounded-full" />
+        <Button variant="ghost" iconOnly icon={X} tooltip="Clear selection" aria-label="Clear selection" onClick={onClear} className="rounded-full" />
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="positiveOutline" size="sm" onClick={onRestart} disabled={bulkLoading} tooltip="Restart selected containers">

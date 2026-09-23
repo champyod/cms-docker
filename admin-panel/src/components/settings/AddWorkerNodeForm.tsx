@@ -22,7 +22,7 @@ export function AddWorkerNodeForm({ form }: AddWorkerNodeFormProps): ReactElemen
           <X className="w-3.5 h-3.5" />
         </button>
       </div>
-      <div className="flex gap-4 items-end">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="flex-1">
           <label className="block text-xs uppercase text-muted-foreground font-bold mb-1.5">Hostname or IP Address</label>
           <input
@@ -32,7 +32,7 @@ export function AddWorkerNodeForm({ form }: AddWorkerNodeFormProps): ReactElemen
           />
           <p className="text-xs text-muted-foreground/70 mt-1 italic">Supports local container names or remote server IPs.</p>
         </div>
-        <div className="w-32">
+        <div className="w-full sm:w-32">
           <label className="block text-xs uppercase text-muted-foreground font-bold mb-1.5">Port</label>
           <input
             value={form.newPort}
@@ -41,7 +41,7 @@ export function AddWorkerNodeForm({ form }: AddWorkerNodeFormProps): ReactElemen
             className="w-full bg-background/80 border border-border rounded-lg px-4 py-2 text-foreground text-sm font-mono focus:outline-none focus:border-ring/60"
           />
         </div>
-        <Button onClick={form.handleAdd} size="sm">
+        <Button onClick={form.handleAdd} size="sm" className="w-full sm:w-auto">
           Add Node
         </Button>
       </div>

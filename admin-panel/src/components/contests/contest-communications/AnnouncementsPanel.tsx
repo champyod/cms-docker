@@ -53,7 +53,7 @@ export function AnnouncementsPanel({ announcements, showForm, subject, text, onS
                   <div className="mt-1 text-sm text-muted-foreground">{ann.text}</div>
                   <div className="mt-2 text-xs text-muted-foreground">{formatTime(ann.timestamp)} by {ann.admins?.username || 'System'}</div>
                 </div>
-                <Button variant="ghost" iconOnly icon={Trash2} tooltip="Delete" aria-label={`Delete announcement ${ann.subject}`} onClick={() => onDelete(ann.id)} className="size-9 shrink-0 rounded-lg hover:text-destructive" />
+                <Button variant="ghost" iconOnly icon={Trash2} tooltip="Delete" aria-label={`Delete announcement ${ann.subject}`} onClick={() => onDelete(ann.id)} className="shrink-0 rounded-lg hover:text-destructive" />
               </div>
             </div>
           ))}
