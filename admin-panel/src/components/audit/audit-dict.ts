@@ -7,7 +7,7 @@ export interface AuditDict {
     actor: string;
     verb: string;
     entity: string;
-    entityId: string;
+    entityName: string;
     result: string;
     reason: string;
   };
@@ -30,6 +30,7 @@ export interface AuditDict {
   noEntries: string;
   pageInfo: string;
   expandedDetails: string;
+  detailLoadFailed: string;
   beforeValues: string;
   afterValues: string;
   ip: string;

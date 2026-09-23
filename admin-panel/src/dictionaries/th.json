@@ -143,7 +143,7 @@
       "actor": "ผู้กระทำ",
       "verb": "การกระทำ",
       "entity": "เอนทิตี",
-      "entityId": "รหัสเอนทิตี",
+      "entityName": "ชื่อ / หัวข้อ",
       "result": "ผลลัพธ์",
       "reason": "เหตุผล"
     },
@@ -166,6 +166,7 @@
     "autoRefresh": "รีเฟรชอัตโนมัติ",
     "pageInfo": "ทั้งหมด {total} รายการ",
     "expandedDetails": "รายละเอียด",
+    "detailLoadFailed": "ไม่สามารถโหลดรายละเอียดได้",
     "beforeValues": "ก่อน",
     "afterValues": "หลัง",
     "ip": "ที่อยู่ IP",

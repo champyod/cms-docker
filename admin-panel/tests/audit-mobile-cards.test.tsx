@@ -21,7 +21,7 @@ const DICT = {
     actor: 'Actor',
     verb: 'Verb',
     entity: 'Entity',
-    entityId: 'Entity ID',
+    entityName: 'Name / Title',
     result: 'Result',
     reason: 'Reason',
   },
@@ -44,6 +44,7 @@ const DICT = {
   noEntries: 'No audit entries found.',
   pageInfo: '{total} entries total',
   expandedDetails: 'Details',
+  detailLoadFailed: 'Could not load details',
   beforeValues: 'Before',
   afterValues: 'After',
   ip: 'IP Address',
@@ -61,6 +62,7 @@ function makeEntry(overrides: Partial<AuditLogRow>): AuditLogRow {
     verb: 'task:update',
     entity: 'task',
     entity_id: '12',
+    entity_name: 'Practice Round',
     result: 'success',
     reason: 'Fix limits',
     ...overrides,
@@ -86,7 +88,7 @@ describe('AuditTable mobile cards', () => {
     expect(getAllByText('task:update').length).toBeGreaterThan(0);
     expect(getAllByText('failure').length).toBeGreaterThan(0);
     expect(getAllByText('Fix limits').length).toBeGreaterThan(0);
-    expect(getAllByText('#7').length).toBeGreaterThan(0);
-    expect(getAllByText('12').length).toBeGreaterThan(0);
+    expect(getAllByText('Admin').length).toBeGreaterThan(0);
+    expect(getAllByText('Practice Round').length).toBeGreaterThan(0);
   });
 });
