@@ -2,10 +2,9 @@
 
 import { AlertCircle, CheckCircle2, Loader2, Terminal, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { assignEvaluationLane } from '@/app/actions/evaluationLanes';
 import { recalculateSubmission, getSubmissionFieldAccess } from '@/app/actions/submissions';
 import { downloadSubmissionFiles } from '@/app/actions/related-reads';
 import { getFileByDigest } from '@/app/actions/statements';
@@ -13,11 +12,11 @@ import { Button } from '@/components/core/Button';
 import { Dialog, DialogFooter } from '@/components/core/Dialog';
 import { RestrictedField } from '@/components/core/RestrictedField';
 import { useConfirm } from '@/hooks/useConfirm';
-import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import type { FieldAccess } from '@/lib/field-permissions';
 import { cn } from '@/lib/utils';
 
+import { MoveLaneSelector } from './MoveLaneSelector';
 import { SubmissionListItem } from '@/types';
 
 interface SubmissionModalProps {
@@ -29,21 +28,12 @@ interface SubmissionModalProps {
   canAssignLane: boolean;
 }
 
-const FIELD_CLASSES = 'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20';
-const MAX_REASON_LENGTH = 500;
-const MAX_LANE_LENGTH = 64;
-
 export function SubmissionModal({ isOpen, onClose, submission, canRecompute, canDownload, canAssignLane }: SubmissionModalProps) {
   const router = useRouter();
   const confirm = useConfirm();
-  const runAction = useActionFeedback();
   const { recalculateSubmissionConfirm } = useConfirmationCopy();
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [fieldAccess, setFieldAccess] = useState<Record<string, FieldAccess> | null>(null);
-  const [lane, setLane] = useState('');
-  const [reason, setReason] = useState('');
-  const [reasonError, setReasonError] = useState<string | null>(null);
-  const reasonInputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -59,12 +49,6 @@ export function SubmissionModal({ isOpen, onClose, submission, canRecompute, can
     })();
     return () => { cancelled = true; };
   }, [isOpen]);
-
-  useEffect(() => {
-    setLane('');
-    setReason('');
-    setReasonError(null);
-  }, [submission.id]);
 
   const result = submission.submission_results[0];
     const compilationFailed = result?.compilation_outcome === 'fail';
@@ -107,26 +91,6 @@ export function SubmissionModal({ isOpen, onClose, submission, canRecompute, can
           }
       } catch (error) {
           toast.error('Error: ' + error);
-      } finally {
-          setLoadingAction(null);
-      }
-  };
-
-  const handleAssignLane = async () => {
-      setReasonError(null);
-      setLoadingAction('lane');
-      try {
-          const outcome = await runAction(
-              { pending: 'Assigning evaluation lane…', success: 'Lane assigned', failure: 'Lane assignment failed' },
-              () => assignEvaluationLane(submission.id, lane.trim(), reason.trim()),
-          );
-          if (outcome?.field === 'reason') {
-              setReasonError(outcome.error ?? 'Invalid reason');
-              reasonInputRef.current?.focus();
-          } else if (outcome?.success) {
-              setReason('');
-              router.refresh();
-          }
       } finally {
           setLoadingAction(null);
       }
@@ -229,64 +193,17 @@ export function SubmissionModal({ isOpen, onClose, submission, canRecompute, can
             )}
 
             </RestrictedField>
-            {canAssignLane && (
-              <div className="rounded-xl border border-border bg-muted/40 p-4 space-y-3">
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Evaluation lane</h3>
-                <div className="space-y-1.5">
-                  <label htmlFor="lane-name" className="text-sm font-medium text-foreground ml-1">Lane</label>
-                  <input
-                    id="lane-name"
-                    type="text"
-                    value={lane}
-                    onChange={(e) => setLane(e.target.value)}
-                    maxLength={MAX_LANE_LENGTH}
-                    placeholder="e.g. final"
-                    disabled={loadingAction !== null}
-                    className={FIELD_CLASSES}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label htmlFor="lane-reason" className="text-sm font-medium text-foreground ml-1">
-                    Reason <span aria-hidden="true">*</span>
-                  </label>
-                  <textarea
-                    ref={reasonInputRef}
-                    id="lane-reason"
-                    value={reason}
-                    onChange={(e) => {
-                      setReason(e.target.value);
-                      if (reasonError) setReasonError(null);
-                    }}
-                    rows={3}
-                    maxLength={MAX_REASON_LENGTH}
-                    placeholder="Why is this submission assigned to this lane?"
-                    disabled={loadingAction !== null}
-                    aria-invalid={reasonError ? true : undefined}
-                    aria-describedby={reasonError ? 'lane-reason-error lane-reason-hint' : 'lane-reason-hint'}
-                    title={reasonError ?? undefined}
-                    className={cn(FIELD_CLASSES, 'min-h-20')}
-                  />
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      {reasonError && (
-                        <p id="lane-reason-error" role="alert" className="text-xs text-destructive ml-1">{reasonError}</p>
-                      )}
-                      <p id="lane-reason-hint" className="text-xs text-muted-foreground ml-1">Required — recorded with the lane assignment.</p>
-                    </div>
-                    <span className="text-xs text-muted-foreground tabular-nums shrink-0" aria-hidden="true">{reason.length}/{MAX_REASON_LENGTH}</span>
-                  </div>
-                </div>
-                <Button
-                  variant="positive"
-                  size="sm"
-                  loading={loadingAction === 'lane'}
-                  disabled={loadingAction !== null}
-                  onClick={() => { void handleAssignLane(); }}
-                >
-                  Assign lane
-                </Button>
-              </div>
-            )}
+            {/* Why shared selector: the board and the popup use one move button +
+                selector, so lane + reason behavior stays identical in both places. */}
+            {/* Why empty lanes + allowCreate: no lane names exist in this render
+                path, so the field stays free-text until names are plumbed through. */}
+            <MoveLaneSelector
+              key={submission.id}
+              submissionId={submission.id}
+              lanes={[]}
+              allowCreate
+              canMove={canAssignLane}
+            />
         </div>
         <DialogFooter className="mt-6 pt-4 border-t border-border">
              {canRecompute && (
