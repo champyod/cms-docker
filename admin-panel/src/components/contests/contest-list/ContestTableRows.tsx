@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useAppRouter } from '@/hooks/useAppRouter';
 import { TableCell, TableRow } from '@/components/core/Table';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { Button } from '@/components/core/Button';
@@ -36,7 +36,7 @@ interface RowProps {
 }
 
 export function ContestTableRow({ contest, locale, isSuperAdmin, canManage, canUpdate, onSetActive, onEdit }: RowProps) {
-  const router = useRouter();
+  const router = useAppRouter();
   const confirm = useConfirm();
   const { destructiveConfirm } = useConfirmationCopy();
   const status = getStatus(contest.start, contest.stop);

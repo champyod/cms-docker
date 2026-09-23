@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
+import { useAppRouter } from '@/hooks/useAppRouter';
 import {
   Table,
   TableBody,
@@ -45,7 +45,7 @@ export function AuditTable({
   filters,
   dict,
 }: AuditTableProps): React.JSX.Element {
-  const router = useRouter();
+  const router = useAppRouter();
   const [isPending, startTransition] = useTransition();
 
   const [entityFilter, setEntityFilter] = useState(filters.entity ?? '');

@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
+import { useAppRouter } from '@/hooks/useAppRouter';
 import { buildLocaleHref, extractLocale } from '@/hooks/useShortcuts';
 import { Command, CommandInput, CommandList } from '@/components/ui/command';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -22,7 +23,7 @@ interface AvailableContestRow { id: number; name: string; is_active: boolean; }
 interface CommandPaletteProps { open: boolean; onOpenChange: (open: boolean) => void; permissionKeys: readonly string[]; }
 
 export function CommandPalette({ open, onOpenChange, permissionKeys }: CommandPaletteProps): React.JSX.Element {
-  const router = useRouter();
+  const router = useAppRouter();
   const pathname = usePathname();
   const locale = extractLocale(pathname ?? '');
   const [query, setQuery] = useState('');

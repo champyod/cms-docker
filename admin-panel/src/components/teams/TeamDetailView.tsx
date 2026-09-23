@@ -1,7 +1,8 @@
 'use client';
 
 import { ChevronDown, ChevronUp, ExternalLink, Save, Settings, Trash2, Trophy, Users } from 'lucide-react';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
+import { useAppRouter } from '@/hooks/useAppRouter';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { useState } from 'react';
 
@@ -42,7 +43,7 @@ interface TeamDetailViewProps {
 }
 
 export function TeamDetailView({ team }: TeamDetailViewProps) {
-  const router = useRouter();
+  const router = useAppRouter();
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
   const confirm = useConfirm();

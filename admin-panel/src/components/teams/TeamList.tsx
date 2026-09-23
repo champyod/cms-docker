@@ -3,7 +3,8 @@
 import { Pencil, HelpCircle, Plus, Trash2, Users } from 'lucide-react';
 import Link from 'next/link';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
+import { useAppRouter } from '@/hooks/useAppRouter';
 import { useMemo, useState } from 'react';
 
 import { deleteTeam } from '@/app/actions/teams';
@@ -36,7 +37,7 @@ export function TeamList({ initialTeams, permissionKeys }: TeamListProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<TeamWithCount | null>(null);
   const pathname = usePathname();
-  const router = useRouter();
+  const router = useAppRouter();
   const confirm = useConfirm();
   const { destructiveConfirm } = useConfirmationCopy();
   const locale = pathname.split('/')[1] || 'en';

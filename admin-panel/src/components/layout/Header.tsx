@@ -6,7 +6,7 @@ import { hasEffectivePermission } from '@/lib/permission-engine';
 import { Bell, Search, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { getUnansweredQuestions } from '@/app/actions/questions';
-import { useRouter } from 'next/navigation';
+import { useAppRouter } from '@/hooks/useAppRouter';
 import { ThemeToggle } from './ThemeToggle';
 import { NotificationBell } from './NotificationBell';
 import { Button } from '@/components/core/Button';
@@ -18,7 +18,7 @@ export const Header: React.FC<{ className?: string; username?: string; permissio
   const lastCheckTimeRef = useRef(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const authenticationExpiredRef = useRef(false);
-  const router = useRouter();
+  const router = useAppRouter();
 
   const stopPolling = useCallback(() => {
     if (intervalRef.current) {

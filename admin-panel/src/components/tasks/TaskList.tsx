@@ -3,7 +3,8 @@
 import { useMemo, useState } from 'react';
 import { useSyncedState } from '@/hooks/useSyncedState';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
-import { useRouter, usePathname } from 'next/navigation';
+import { usePathname } from 'next/navigation';
+import { useAppRouter } from '@/hooks/useAppRouter';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
 import { Pencil, Trash2, Plus, FileText, Database, ExternalLink, AlertTriangle } from 'lucide-react';
@@ -36,7 +37,7 @@ interface TaskListProps {
 }
 
 export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React.JSX.Element {
-  const router = useRouter();
+  const router = useAppRouter();
   const pathname = usePathname();
   const locale = pathname.split('/')[1] ?? 'en';
   const [tasks] = useSyncedState(initialTasks);
@@ -121,7 +122,7 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
           <TableBody>
             {tasks.map((task) => {
               const hasErrors = task.diagnostics.some((d) => d.type === 'error');
-              const openDetail = () => router.push(`/${locale}/tasks/${task.id}`, { scroll: false });
+              const openDetail = () => router.push(`/${locale}/tasks/${task.id}`);
               return (
                 <TableRow
                   key={task.id}
@@ -150,7 +151,7 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
                           </div>
                         </div>
                       )}
-                      <button onClick={(event) => { event.stopPropagation(); router.push(`/${locale}/tasks/${task.id}`, { scroll: false }); }} data-shortcut-primary className={cn('flex items-center gap-2 hover:text-primary transition-colors truncate', hasErrors && 'text-muted-foreground')}>
+                      <button onClick={(event) => { event.stopPropagation(); router.push(`/${locale}/tasks/${task.id}`); }} data-shortcut-primary className={cn('flex items-center gap-2 hover:text-primary transition-colors truncate', hasErrors && 'text-muted-foreground')}>
                         {task.name}
                         <ExternalLink className="w-3 h-3 opacity-50" />
                       </button>

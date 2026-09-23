@@ -2,7 +2,8 @@
 
 import { Clock, Eye, FileCode, HelpCircle, User as UserIcon } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
+import { useAppRouter } from '@/hooks/useAppRouter';
 import { useState } from 'react';
 
 import { Badge } from '@/components/core/Badge';
@@ -34,7 +35,7 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage, pe
   const selectedSubmission = selectSubmission(submissions, selectedSubmissionId);
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
-  const router = useRouter();
+  const router = useAppRouter();
 
   const handleView = (submission: SubmissionListItem) => {
     setSelectedSubmissionId(submission.id);
