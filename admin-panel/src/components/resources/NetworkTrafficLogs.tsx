@@ -34,16 +34,34 @@ function TrafficDesktopTable({ logs }: { logs: TrafficLog[] }): React.JSX.Elemen
           </tr>
         </thead>
         <tbody>
-          {logs.map((log) => (
+          {logs.map((log, index) => (
             <tr key={log.id} className="border-b border-border hover:bg-muted/50 transition-colors">
-              <td className="py-2 px-3 font-mono text-xs text-foreground">{log.container}</td>
-              <td className="py-2 px-3 text-right font-mono text-xs text-emerald-400">{log.rx}</td>
-              <td className="py-2 px-3 text-right font-mono text-xs text-indigo-400">{log.tx}</td>
+              <TrafficCells log={log} index={index} />
             </tr>
           ))}
         </tbody>
       </table>
     </div>
+  );
+}
+
+/** Single cell renderer shared by every traffic row; colors live here once. */
+function TrafficCells({ log, index }: { log: TrafficLog; index: number }): React.JSX.Element {
+  const values = [
+    'font-mono text-xs text-foreground',
+    'font-mono text-xs text-emerald-400',
+    'font-mono text-xs text-indigo-400',
+  ];
+  const fields = [log.container, log.rx, log.tx];
+  const align = ['', 'text-right', 'text-right'];
+  return (
+    <>
+      {fields.map((field, position) => (
+        <td key={`${log.id}-${index}-${position}`} className={`py-2 density:py-1 px-3 ${align[position]} ${values[position]}`}>
+          {field}
+        </td>
+      ))}
+    </>
   );
 }
 
