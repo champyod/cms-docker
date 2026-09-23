@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import { WorkerGrid } from '@/components/resources/WorkerGrid';
 import { CoreServicesStatus } from '@/components/resources/CoreServicesStatus';
 import { NetworkTrafficLogs } from '@/components/resources/NetworkTrafficLogs';
+import { GaugeCard } from '@/components/resources/GaugeCard';
 import { Activity, Cpu, Database, Network } from 'lucide-react';
 import { Card } from '@/components/core/Card';
 import { LiveIndicator } from '@/components/core/LiveIndicator';
@@ -40,42 +41,28 @@ export function ResourceView(): React.JSX.Element {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 density:space-y-4">
       <div className="flex justify-end">
         <LiveIndicator status={status} />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <CoreServicesStatus services={services} loading={loading} />
 
-          <Card className="p-6 flex flex-col justify-center items-center text-center space-y-4">
-            <div className="flex items-center gap-2 text-indigo-400 mb-2">
-                <Cpu className="w-4 h-4" />
-              <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">CPU Usage {serverStats?.source === 'host' ? '(Host)' : '(Container)'}</span>
-            </div>
-            <div className="text-4xl font-bold text-foreground font-mono">{serverStats?.cpu || 0}%</div>
-            <div className="w-full h-1.5 bg-muted/50 rounded-full overflow-hidden">
-                <div 
-                    className={`h-full transition-all duration-1000 ${
-                        (serverStats?.cpu || 0) > 80 ? 'bg-red-500' : (serverStats?.cpu || 0) > 50 ? 'bg-amber-500' : 'bg-indigo-500'
-                    }`}
-                    style={{ width: `${serverStats?.cpu || 0}%` }} 
-                />
-            </div>
-          </Card>
+          <GaugeCard
+            icon={<Cpu className="w-4 h-4 text-indigo-400" />}
+            label="CPU Usage"
+            source={serverStats?.source === 'host' ? '(Host)' : '(Container)'}
+            percent={serverStats?.cpu || 0}
+            tone="auto"
+          />
 
-           <Card className="p-6 flex flex-col justify-center items-center text-center space-y-4">
-            <div className="flex items-center gap-2 text-cyan-400 mb-2">
-                <Database className="w-4 h-4" />
-              <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">RAM Usage {serverStats?.source === 'host' ? '(Host)' : '(Container)'}</span>
-            </div>
-            <div className="text-4xl font-bold text-foreground font-mono">{serverStats?.memory || 0}%</div>
-            <div className="w-full h-1.5 bg-muted/50 rounded-full overflow-hidden">
-                <div 
-                    className="h-full bg-cyan-500 transition-all duration-1000" 
-                    style={{ width: `${serverStats?.memory || 0}%` }} 
-                />
-            </div>
-          </Card>
+          <GaugeCard
+            icon={<Database className="w-4 h-4 text-cyan-400" />}
+            label="RAM Usage"
+            source={serverStats?.source === 'host' ? '(Host)' : '(Container)'}
+            percent={serverStats?.memory || 0}
+            tone="info"
+          />
       </div>
 
       <div className="space-y-4">
@@ -92,32 +79,38 @@ export function ResourceView(): React.JSX.Element {
             <Network className="w-5 h-5 text-cyan-400" />
             <h2 className="text-xl font-bold">System Metrics</h2>
           </div>
-          <div className="grid grid-cols-1 gap-6">
-            <Card className="p-4">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 text-center">
-                <div>
-                  <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Uptime</div>
-                  <div className="text-lg font-mono text-foreground">{serverStats?.uptime || '-'}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Load Avg</div>
-                  <div className="text-lg font-mono text-foreground">{serverStats?.loadAvg?.[0] || '-'}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Network Total</div>
-                  <div className="text-xs font-mono text-emerald-400">
-                    {serverStats?.network ? `↓ ${formatBytes(serverStats.network.rx)}` : '-'}
-                  </div>
-                  <div className="text-xs font-mono text-indigo-400">
-                    {serverStats?.network ? `↑ ${formatBytes(serverStats.network.tx)}` : '-'}
-                  </div>
-                </div>
-              </div>
-            </Card>
-          </div>
+          <MetricsCard serverStats={serverStats} />
         </div>
         <NetworkTrafficLogs logs={traffic} limit={trafficLimit} onLimitChange={setTrafficLimit} loading={loading} />
       </div>
+    </div>
+  );
+}
+
+export function MetricsCard({ serverStats }: { serverStats: ServerStats | null }): React.JSX.Element {
+  return (
+    <div className="grid grid-cols-1 gap-6">
+      <Card className="p-4 density:p-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 text-center">
+          <div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Uptime</div>
+            <div className="text-lg font-mono text-foreground">{serverStats?.uptime || '-'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Load Avg</div>
+            <div className="text-lg font-mono text-foreground">{serverStats?.loadAvg?.[0] || '-'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Network Total</div>
+            <div className="text-xs font-mono text-emerald-400">
+              {serverStats?.network ? `↓ ${formatBytes(serverStats.network.rx)}` : '-'}
+            </div>
+            <div className="text-xs font-mono text-indigo-400">
+              {serverStats?.network ? `↑ ${formatBytes(serverStats.network.tx)}` : '-'}
+            </div>
+          </div>
+        </div>
+      </Card>
     </div>
   );
 }
