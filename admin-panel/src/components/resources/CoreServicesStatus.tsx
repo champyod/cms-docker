@@ -3,7 +3,8 @@
 import { Card } from '@/components/core/Card';
 import { SkeletonText } from '@/components/core/Skeleton';
 import { EmptyState } from '@/components/core/EmptyState';
-import { ShieldCheck, Circle, Server } from 'lucide-react';
+import { StatusPill } from '@/components/core/StatusPill';
+import { ShieldCheck, Server } from 'lucide-react';
 import type { CoreServiceStatus } from '@/lib/live-frames';
 
 interface CoreServicesStatusProps {
@@ -16,27 +17,8 @@ interface CoreServicesStatusProps {
  * owns a timer of its own — the page's single connection carries it.
  */
 export function CoreServicesStatus({ services, loading }: CoreServicesStatusProps): React.JSX.Element {
-  const getStatusColor = (status: string): string => {
-    switch (status) {
-      case 'healthy':
-      case 'running':
-        return 'text-emerald-400';
-      case 'starting':
-        return 'text-blue-400';
-      case 'unhealthy':
-        return 'text-amber-400';
-      case 'stopped':
-      default:
-        return 'text-red-400';
-    }
-  };
-
-  const getStatusLabel = (status: string): string => {
-    return status.toUpperCase();
-  };
-
   return (
-    <Card className="p-6">
+    <Card className="p-6 density:p-4">
       <div className="flex items-center gap-3 mb-4">
         <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400">
           <ShieldCheck className="w-5 h-5" />
@@ -44,21 +26,16 @@ export function CoreServicesStatus({ services, loading }: CoreServicesStatusProp
         <h2 className="text-lg font-bold text-foreground">Core Services</h2>
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-2 density:space-y-1">
         {loading ? (
           <div className="py-4"><SkeletonText lines={4} /></div>
         ) : services.length === 0 ? (
           <EmptyState icon={Server} title="No services found" />
         ) : (
           services.map((service) => (
-            <div key={service.name} className="flex justify-between items-center text-sm py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors">
+            <div key={service.name} className="flex justify-between items-center text-sm py-2 density:py-1 px-3 density:px-2 rounded-lg hover:bg-muted/50 transition-colors">
               <span className="text-muted-foreground text-xs font-mono truncate flex-1">{service.name.replace('cms-', '')}</span>
-              <div className="flex items-center gap-2">
-                <Circle className={`w-2 h-2 fill-current ${getStatusColor(service.status)}`} />
-                <span className={`font-medium text-xs ${getStatusColor(service.status)}`}>
-                  {getStatusLabel(service.status)}
-                </span>
-              </div>
+              <StatusPill status={service.status} />
             </div>
           ))
         )}
