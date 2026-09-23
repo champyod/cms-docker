@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { ensurePermission } from '@/lib/permissions';
 import { loadActorNames } from '@/lib/admin-names';
+import { loadEntityNames, entityNameKey } from '@/lib/entity-names';
 
 const AUDIT_PAGE_SIZE = 50;
 
@@ -15,6 +16,7 @@ export interface AuditLogRow {
   verb: string;
   entity: string;
   entity_id: string | null;
+  entity_name: string | null;
   result: string;
   reason: string | null;
 }
@@ -58,6 +60,7 @@ function serializeRow(
     reason: string | null;
   },
   actorNames: ReadonlyMap<number, string>,
+  entityNames: ReadonlyMap<string, string>,
 ): AuditLogRow {
   return {
     id: row.id.toString(),
@@ -67,6 +70,7 @@ function serializeRow(
     verb: row.verb,
     entity: row.entity,
     entity_id: row.entity_id,
+    entity_name: row.entity_id === null ? null : (entityNames.get(entityNameKey(row.entity, row.entity_id)) ?? null),
     result: row.result,
     reason: row.reason,
   };
@@ -142,11 +146,14 @@ export async function getAuditLog({
     const actorNames = await loadActorNames(
       rows.map((row) => row.actor_id).filter((id): id is number => id !== null),
     );
+    const entityNames = await loadEntityNames(
+      rows.map((row) => ({ entity: row.entity, entity_id: row.entity_id })),
+    );
 
     return {
       success: true,
       data: {
-        entries: rows.map((row) => serializeRow(row, actorNames)),
+        entries: rows.map((row) => serializeRow(row, actorNames, entityNames)),
         total,
         totalPages: Math.ceil(total / pageSize),
       },
@@ -188,11 +195,12 @@ export async function getAuditEntry(id: number): Promise<AuditDetailResult> {  t
     const actorNames = await loadActorNames(
       row.actor_id === null ? [] : [row.actor_id],
     );
+    const entityNames = await loadEntityNames([{ entity: row.entity, entity_id: row.entity_id }]);
 
     return {
       success: true,
       data: {
-        ...serializeRow(row, actorNames),
+        ...serializeRow(row, actorNames, entityNames),
         before_values: row.before_values,
         after_values: row.after_values,
         ip: row.ip,
