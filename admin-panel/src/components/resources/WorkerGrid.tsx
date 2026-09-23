@@ -8,18 +8,17 @@ import {
 } from 'lucide-react';
 import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
+import { StatusPill, statusTone } from '@/components/core/StatusPill';
+import type { WorkerStat } from '@/lib/live-frames';
 
-interface WorkerStats {
-  id: string;
-  name: string;
-  status: string;
-  load: number;
-  tasks: number;
-  activity: string;
-  health: string;
-}
+const ICON_TONE: Record<string, string> = {
+  emerald: 'bg-emerald-500/10 text-emerald-400',
+  amber: 'bg-amber-500/10 text-amber-400',
+  blue: 'bg-blue-500/10 text-blue-400',
+  red: 'bg-red-500/10 text-red-400',
+};
 
-export function WorkerGrid({ workers }: { workers: WorkerStats[] }) {
+export function WorkerGrid({ workers }: { workers: WorkerStat[] }) {
   if (!workers || workers.length === 0) {
     return (
       <Card className="p-8">
@@ -37,14 +36,11 @@ export function WorkerGrid({ workers }: { workers: WorkerStats[] }) {
       {workers.map((worker) => (
         <Card
           key={worker.id}
-          className="p-5 hover:border-primary/30 transition-all group"
+          className="p-5 density:p-3 hover:border-primary/30 transition-all group"
         >
           <div className="flex justify-between items-start mb-4">
             <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-lg ${worker.status === 'online' ? 'bg-emerald-500/10 text-emerald-400' :
-                  worker.status === 'busy' ? 'bg-amber-500/10 text-amber-400' :
-                    'bg-red-500/10 text-red-400'
-                }`}>
+              <div className={`p-2 rounded-lg ${ICON_TONE[statusTone(worker.status)]}`}>
                 <Server className="w-5 h-5" />
               </div>
               <div>
@@ -56,15 +52,7 @@ export function WorkerGrid({ workers }: { workers: WorkerStats[] }) {
                 </span>
               </div>
             </div>
-            <div className="flex items-center gap-1">
-              <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${worker.status === 'online' ? 'bg-emerald-500' :
-                  worker.status === 'busy' ? 'bg-amber-500' : 
-                'bg-red-500'
-              }`} />
-              <span className="text-xs font-bold text-muted-foreground uppercase">
-                {worker.status}
-              </span>
-            </div>
+            <StatusPill status={worker.status} />
           </div>
 
           <div className="space-y-4">
@@ -77,11 +65,11 @@ export function WorkerGrid({ workers }: { workers: WorkerStats[] }) {
                 <span>{worker.load}%</span>
               </div>
               <div className="h-1 bg-muted/50 rounded-full overflow-hidden">
-                <div 
+                <div
                   className={`h-full transition-all duration-1000 ${
                     worker.load > 80 ? 'bg-red-500' : worker.load > 50 ? 'bg-amber-500' : 'bg-indigo-500'
                   }`}
-                  style={{ width: `${worker.load}%` }} 
+                  style={{ width: `${worker.load}%` }}
                 />
               </div>
             </div>
@@ -102,7 +90,7 @@ export function WorkerGrid({ workers }: { workers: WorkerStats[] }) {
               </div>
               <div className="flex flex-col items-end">
                 <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest leading-tight">
-                  Status
+                  Liveness
                 </span>
                 <div className="flex items-center gap-1">
                   {worker.tasks > 0 ? (
@@ -110,8 +98,8 @@ export function WorkerGrid({ workers }: { workers: WorkerStats[] }) {
                   ) : (
                     <CheckCircle2 className="w-3 h-3 text-emerald-400" />
                   )}
-                  <span className={`text-xs font-bold ${worker.tasks > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
-                    {worker.tasks > 0 ? 'Busy' : 'Idle'}
+                  <span className="text-xs font-bold text-muted-foreground">
+                    {worker.tasks > 0 ? `${worker.tasks} running` : 'drained'}
                   </span>
                 </div>
               </div>
