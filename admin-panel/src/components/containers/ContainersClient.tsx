@@ -25,8 +25,7 @@ import { cn } from '@/lib/utils';
 import { LogViewerModal } from '@/components/containers/LogViewerModal';
 import { ContainerSettingsModal } from '@/components/containers/ContainerSettingsModal';
 import { StatsCard } from '@/components/containers/StatsCard';
-import { StackActionButton } from '@/components/containers/StackActionButton';
-import { SystemLogsPanel } from '@/components/containers/SystemLogsPanel';
+import { ContainerStackControls } from '@/components/containers/ContainerStackControls';
 import { ContainerRow } from '@/components/containers/ContainerRow';
 import { EmptyState } from '@/components/core/EmptyState';
 import { SkeletonTable } from '@/components/core/Skeleton';
@@ -360,20 +359,7 @@ export function ContainersClient(): React.JSX.Element {
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card className="p-6 space-y-4">
-              <h3 className="font-bold text-foreground">Stack Controls</h3>
-              <p className="text-sm text-muted-foreground">Manage complete service groups via Docker Compose.</p>
-              <div className="grid grid-cols-2 gap-3">
-                  <StackActionButton label="All Services" onRestart={() => handleCompose('restart')} onUp={() => handleCompose('up')} onBuild={() => handleCompose('build')} isLoading={actionLoading === 'compose'} />
-                  <StackActionButton label="Core Stack" onRestart={() => handleCompose('restart', 'core')} onUp={() => handleCompose('up', 'core')} onBuild={() => handleCompose('build', 'core')} isLoading={actionLoading === 'compose'} />
-                  <StackActionButton label="Admin Stack" onRestart={() => handleCompose('restart', 'admin')} onUp={() => handleCompose('up', 'admin')} onBuild={() => handleCompose('build', 'admin')} isLoading={actionLoading === 'compose'} />
-                  <StackActionButton label="Worker Stack" onRestart={() => handleCompose('restart', 'worker')} onUp={() => handleCompose('up', 'worker')} onBuild={() => handleCompose('build', 'worker')} isLoading={actionLoading === 'compose'} />
-              </div>
-          </Card>
-
-          <SystemLogsPanel containers={containers} />
-      </div>
+      <ContainerStackControls containers={containers} actionLoading={actionLoading} onCompose={handleCompose} />
 
       <Dialog
         open={showBulkRestartDialog}
