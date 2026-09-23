@@ -2,9 +2,7 @@
 
 import {
   Server,
-  Cpu,
-  CheckCircle2,
-  Clock
+  Cpu
 } from 'lucide-react';
 import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
@@ -36,23 +34,26 @@ export function WorkerGrid({ workers }: { workers: WorkerStat[] }) {
       {workers.map((worker) => (
         <Card
           key={worker.id}
-          className="p-5 density:p-3 hover:border-primary/30 transition-all group"
+          className="p-5 density:p-3 hover:border-primary/30 transition-all group min-w-0"
         >
-          <div className="flex justify-between items-start mb-4">
-            <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-lg ${ICON_TONE[statusTone(worker.status)]}`}>
+          <div className="flex justify-between items-start gap-2 mb-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className={`p-2 rounded-lg shrink-0 ${ICON_TONE[statusTone(worker.status)]}`}>
                 <Server className="w-5 h-5" />
               </div>
-              <div>
-                <h3 className="text-sm font-bold text-foreground group-hover:text-indigo-400 transition-colors">
+              <div className="min-w-0">
+                <h3
+                  title={worker.name}
+                  className="text-sm font-bold text-foreground group-hover:text-indigo-400 transition-colors truncate"
+                >
                   {worker.name}
                 </h3>
-                <span className="text-xs text-muted-foreground font-mono uppercase tracking-wider">
+                <span className="block text-xs text-muted-foreground font-mono uppercase tracking-wider truncate">
                   {worker.id}
                 </span>
               </div>
             </div>
-            <StatusPill status={worker.status} />
+            <StatusPill status={worker.status} className="shrink-0" />
           </div>
 
           <div className="space-y-4">
@@ -75,35 +76,11 @@ export function WorkerGrid({ workers }: { workers: WorkerStat[] }) {
             </div>
 
           <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-            <span className="font-bold uppercase tracking-widest">Activity: <span className="text-foreground">{worker.activity}</span></span>
-            <span className="font-bold uppercase tracking-widest">Health: <span className="text-foreground">{worker.health}</span></span>
+            <span className="font-bold uppercase tracking-widest truncate">
+              {worker.tasks > 0 ? `${worker.tasks} tasks` : 'no tasks'} · {worker.activity} · {worker.health}
+            </span>
+            <span className="font-mono shrink-0">{worker.load}%</span>
           </div>
-
-          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border">
-            <div className="flex flex-col">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest leading-tight">
-                Active Tasks
-              </span>
-                <span className="text-sm font-bold text-foreground font-mono">
-                  {worker.tasks}
-                </span>
-              </div>
-              <div className="flex flex-col items-end">
-                <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest leading-tight">
-                  Liveness
-                </span>
-                <div className="flex items-center gap-1">
-                  {worker.tasks > 0 ? (
-                    <Clock className="w-3 h-3 text-amber-400" />
-                  ) : (
-                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                  )}
-                  <span className="text-xs font-bold text-muted-foreground">
-                    {worker.tasks > 0 ? `${worker.tasks} running` : 'drained'}
-                  </span>
-                </div>
-              </div>
-            </div>
           </div>
         </Card>
       ))}
