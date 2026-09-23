@@ -108,22 +108,21 @@ export const Header: React.FC<{ className?: string; username?: string; permissio
         className
       )}
     >
-      <div className="relative group">
-        <div className="pointer-events-none absolute inset-y-0 left-0 flex w-11 items-center justify-center sm:w-auto sm:justify-start sm:pl-3">
-          <Search className="h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
-        </div>
-        <button
-          type="button"
-          aria-label="Search navigation, entities, and actions (Control plus K)"
-          onClick={() => setPaletteOpen(true)}
-          onFocus={() => setPaletteOpen(true)}
-          className="h-11 w-11 cursor-pointer rounded-full border border-input bg-muted/50 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 sm:h-9 sm:w-64 sm:pl-9 sm:pr-14"
-        >
-        </button>
-        <kbd className="pointer-events-none absolute inset-y-0 right-2 my-auto hidden h-5 items-center rounded border border-border bg-muted px-1.5 font-mono text-xs font-semibold text-muted-foreground sm:inline-flex">
+      <button
+        type="button"
+        aria-label="Search navigation, entities, and actions (Control plus K)"
+        onClick={() => setPaletteOpen(true)}
+        onFocus={() => setPaletteOpen(true)}
+        className="group flex h-11 w-11 cursor-pointer items-center justify-center gap-2 rounded-full border border-input bg-muted/50 text-sm text-foreground outline-none transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 sm:h-9 sm:w-64 sm:justify-start sm:px-3"
+      >
+        <Search className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-focus-visible:text-primary" aria-hidden />
+        <span className="hidden flex-1 truncate text-left text-muted-foreground sm:inline" aria-hidden>
+          Search…
+        </span>
+        <kbd className="ml-auto hidden h-5 items-center rounded border border-border bg-muted px-1.5 font-mono text-xs font-semibold text-muted-foreground sm:inline-flex" aria-hidden>
           ⌘K
         </kbd>
-      </div>
+      </button>
       <ThemeToggle />
       {hasEffectivePermission(new Set(permissionKeys), 'audit:read') && <NotificationBell />}
       <Button variant="ghost" size="sm" iconOnly tooltip="Notifications" onClick={handleNotificationsClick}>
