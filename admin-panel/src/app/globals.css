@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
+@custom-variant density (&:where(.density-compact, .density-compact *));
 
 /* Design tokens: neutral SaaS zinc + single indigo accent, soft-medium radius.
    :root carries the light tokens so first paint has values before .dark applies. */
@@ -98,7 +99,6 @@
   /* Display density: components carry `density:` classes (custom variant
      below) because overriding tailwind internals from author CSS does not
      survive the production minifier. */
-  @custom-variant density (&:where(.density-compact, .density-compact *));
 
   .text-size-small {
     font-size: 14px;
