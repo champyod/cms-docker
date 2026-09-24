@@ -35,7 +35,7 @@ export function buildAuditColumns(
       key: 'timestamp',
       header: dict.columns.timestamp,
       render: (entry) => (
-        <span className="font-mono text-xs text-muted-foreground whitespace-nowrap">
+        <span className="font-mono text-xs text-muted-foreground md:whitespace-nowrap">
           {helpers.formatTimestamp(entry.timestamp)}
         </span>
       ),

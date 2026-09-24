@@ -18,7 +18,7 @@ export function LogFollowButton({ following, onClick, className }: LogFollowButt
       aria-pressed={following}
       title={following ? 'Following latest logs — click to pause' : 'Paused — click to jump to latest and resume'}
       className={cn(
-        'flex size-9 items-center justify-center rounded-full border shadow-lg transition-all',
+        'flex size-11 items-center justify-center rounded-full border shadow-lg transition-all',
         following
           ? 'border-primary/40 bg-primary/15 text-primary'
           : 'animate-bounce border-border bg-background/90 text-foreground hover:border-primary/60',

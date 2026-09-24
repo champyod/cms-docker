@@ -12,6 +12,7 @@ import { TablePaginationControls } from '@/components/core/TablePaginationContro
 import { getAuditEntry, getDistinctEntities } from '@/app/actions/audit';
 import type { AuditLogRow, AuditDetailRow } from '@/app/actions/audit';
 import { Filter, ChevronDown, ChevronUp } from 'lucide-react';
+import { toast } from 'sonner';
 import { AuditFilters } from './AuditFilters';
 import { AuditToolbar } from './AuditToolbar';
 import { AuditDetailContent } from './AuditDetail';
@@ -24,6 +25,8 @@ import {
 import type { AuditTableProps } from './auditTypes';
 
 export type { AuditTableProps } from './auditTypes';
+
+const COPY_FEEDBACK_DURATION_MS = 1500;
 
 export function AuditTable({
   entries,
@@ -123,19 +126,31 @@ export function AuditTable({
     setExpandedDetail(null);
     setDetailError(null);
     setLoadingDetail(true);
-    const result = await getAuditEntry(Number(id));
-    setLoadingDetail(false);
-    if (result.success) {
-      setExpandedDetail(result.data);
-    } else {
-      setDetailError(result.error);
+    try {
+      const result = await getAuditEntry(Number(id));
+      if (result.success) {
+        setExpandedDetail(result.data);
+      } else {
+        setDetailError(result.error);
+      }
+    } catch (error) {
+      // The action body reports failures via the result; only transport-level
+      // rejections reach here, and they must still clear the spinner.
+      setDetailError(error instanceof Error ? error.message : 'Request failed');
+    } finally {
+      setLoadingDetail(false);
     }
   };
 
   const handleCopy = async (text: string, field: string) => {
-    await navigator.clipboard.writeText(text);
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      toast.error('Copy failed. Select the text to copy it manually.');
+      return;
+    }
     setCopiedField(field);
-    setTimeout(() => setCopiedField(null), 1500);
+    setTimeout(() => setCopiedField(null), COPY_FEEDBACK_DURATION_MS);
   };
 
   // Why: one column definition drives desktop rows and mobile cards, so

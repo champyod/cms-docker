@@ -103,8 +103,10 @@ function ContainerMainRow(props: {
 function RestartToggle({ containerId, enabled, onToggle }: { containerId: string; enabled: boolean; onToggle: (id: string, value: boolean) => void }): React.JSX.Element {
   return (
     <div className="flex items-center gap-2">
-      <button onClick={() => onToggle(containerId, enabled)} className={cn('relative inline-flex h-4 w-7 items-center rounded-full transition-colors', enabled ? 'bg-success' : 'bg-muted')} title={`Auto-restart: ${enabled ? 'Enabled' : 'Disabled'}`}>
-        <span className={cn('inline-block h-3 w-3 transform rounded-full bg-card transition-transform', enabled ? 'translate-x-3.5' : 'translate-x-0.5')} />
+      <button type="button" role="switch" aria-checked={enabled} aria-label={`Auto-restart ${enabled ? 'enabled' : 'disabled'} — click to ${enabled ? 'disable' : 'enable'}`} onClick={() => onToggle(containerId, enabled)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1" title={`Auto-restart: ${enabled ? 'Enabled' : 'Disabled'}`}>
+        <span className={cn('pointer-events-none relative inline-flex h-4 w-7 items-center rounded-full transition-colors', enabled ? 'bg-success' : 'bg-muted')}>
+          <span className={cn('inline-block h-3 w-3 transform rounded-full bg-card transition-transform', enabled ? 'translate-x-3.5' : 'translate-x-0.5')} />
+        </span>
       </button>
       <span className="text-muted-foreground">Auto-restart: <span className={enabled ? 'text-success' : 'text-muted-foreground'}>{enabled ? 'ON' : 'OFF'}</span></span>
     </div>
@@ -113,7 +115,7 @@ function RestartToggle({ containerId, enabled, onToggle }: { containerId: string
 
 function DiscordToggle({ containerId, enabled, onToggle }: { containerId: string; enabled: boolean; onToggle: (id: string, value: boolean) => void }): React.JSX.Element {
   return (
-    <button onClick={() => onToggle(containerId, enabled)} className={cn('flex items-center gap-1 px-2 py-1 rounded transition-colors', enabled ? 'bg-info/10 text-info hover:bg-info/20' : 'bg-muted text-muted-foreground hover:bg-accent')} title={`Discord notifications: ${enabled ? 'Enabled' : 'Disabled'}`}>
+    <button type="button" onClick={() => onToggle(containerId, enabled)} className={cn('flex items-center gap-1 px-2 min-h-11 rounded transition-colors', enabled ? 'bg-info/10 text-info hover:bg-info/20' : 'bg-muted text-muted-foreground hover:bg-accent')} title={`Discord notifications: ${enabled ? 'Enabled' : 'Disabled'}`}>
       {enabled ? <Bell className="w-3 h-3" /> : <BellOff className="w-3 h-3" />}
       <span className="text-xs font-bold">Discord</span>
     </button>
@@ -166,7 +168,7 @@ function SelectionCheckbox({ name, isSelected, onToggle }: { name: string; isSel
     onToggle(name);
   };
   return (
-    <button type="button" aria-label={`Select ${name}`} aria-checked={isSelected} role="checkbox" onClick={handleClick} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1">
+    <button type="button" aria-label={`Select ${name}`} aria-checked={isSelected} role="checkbox" onClick={handleClick} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1">
       <span className={cn('flex h-5 w-5 items-center justify-center rounded border-2 transition-colors', isSelected ? 'bg-primary border-primary text-primary-foreground ring-2 ring-primary/20' : 'border-border bg-transparent hover:border-muted-foreground/30')}>
         {isSelected && <Check className="h-3 w-3" aria-hidden />}
       </span>

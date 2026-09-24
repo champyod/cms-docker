@@ -150,7 +150,7 @@ export function LogViewerModal({ containerId, containerName, onClose }: LogViewe
     if (isAutoScroll && logReference.current) logReference.current.scrollTop = logReference.current.scrollHeight;
   }, [logs, isAutoScroll]);
   return (
-      <Dialog open onOpenChange={(open) => { if (!open) onClose(); }} title={containerName} description={containerId} className="max-w-4xl">
+      <Dialog open onOpenChange={(open) => { if (!open) onClose(); }} title={containerName} description={`${containerId.slice(0, 12)}…`} className="max-w-4xl">
       <LogToolbar searchTerm={searchTerm} onSearchChange={setSearchTerm} tail={tail} onTailChange={setTail} onDownload={() => downloadLogsToFile(logs, containerName)} onRefresh={refreshLogs} isLoading={isLoading} />
       <LogDisplay logs={logs} searchTerm={searchTerm} isAutoScroll={isAutoScroll} onToggleAutoScroll={() => setIsAutoScroll(!isAutoScroll)} logReference={logReference} />
     </Dialog>

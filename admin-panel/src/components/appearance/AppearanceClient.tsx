@@ -111,7 +111,7 @@ function BrandingTab({
         </div>
         <div className="flex justify-center rounded-xl bg-black/20 p-4">
           {logoPreview ? (
-            <NextImage alt="Ranking logo preview" src={logoPreview} width={320} height={112} className="max-h-28 w-auto object-contain" unoptimized />
+            <NextImage alt="Ranking logo preview" src={logoPreview} width={320} height={112} className="max-h-28 max-w-full h-auto w-auto object-contain" unoptimized />
           ) : (
             <span className="text-sm text-muted-foreground">No logo configured — upload on the Ranking page</span>
           )}
