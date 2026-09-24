@@ -248,4 +248,8 @@ describe('permission coverage', () => {
     expect(source).toContain("verifyApiPermission('dataset:switch')");
     expect(source).toContain("verifyApiPermission('task:switch_dataset')");
   });
+  it('applies testcase field permissions in the API path', (): void => {
+    const source = fs.readFileSync(path.join(API_DIR, 'testcases/route.ts'), 'utf8');
+    expect(source).toContain('stripDisallowedFields');
+  });
 });

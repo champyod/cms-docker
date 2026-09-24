@@ -5,6 +5,8 @@ import { revalidatePath } from 'next/cache';
 import { storeFile } from '@/lib/fsobjects';
 import { recordAudit } from '@/lib/audit';
 import { MAX_BULK_TESTCASES, MAX_TESTCASE_FILE_BYTES } from '@/lib/testcase-limits';
+import { getPermissions } from '@/lib/permissions';
+import { stripDisallowedFields } from '@/lib/field-permissions';
 
 export async function POST(req: NextRequest): Promise<Response> {
   const { authorized, response } = await verifyApiPermission('testcase:create');
@@ -24,6 +26,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     if (!Number.isInteger(datasetId)) return apiError({ message: 'Invalid dataset', status: 400 });
     const dataset = await prisma.datasets.findUnique({ where: { id: datasetId }, select: { id: true } });
     if (!dataset) return apiError({ message: 'Dataset not found', status: 404 });
+    const permissions = await getPermissions();
 
     if (Array.isArray(testcases)) {
       if (testcases.length === 0) return apiError({ message: 'No testcases provided', status: 400 });
@@ -36,6 +39,11 @@ export async function POST(req: NextRequest): Promise<Response> {
         if (typeof tc.codename !== 'string' || tc.codename.length === 0) {
           return apiError({ message: 'Every testcase needs a codename', status: 400 });
         }
+        const fieldGate = stripDisallowedFields('testcases', { codename: tc.codename, input: '', output: '', public: tc.isPublic }, permissions);
+        if (fieldGate.codename === undefined || fieldGate.input === undefined || fieldGate.output === undefined) {
+          return apiError({ message: 'Insufficient testcase field permissions', status: 403 });
+        }
+
         let inputBuffer: Buffer;
         let outputBuffer: Buffer;
         try {
