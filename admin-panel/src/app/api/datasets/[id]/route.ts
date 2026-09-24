@@ -3,6 +3,8 @@ import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { recordAudit } from '@/lib/audit';
+import { getFieldAccess } from '@/lib/field-permissions';
+import { getPermissions } from '@/lib/permissions';
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<Response> {
   const { authorized, response } = await verifyApiPermission('dataset:update');
@@ -13,14 +15,30 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   try {
     const data = (await req.json()) as Record<string, unknown>;
-    
+    const access = getFieldAccess('datasets', await getPermissions());
+    const canUpdate = (field: string): boolean => access[field]?.canUpdate === true;
+    const fieldDenied = (field: string): Response | null => {
+      if (canUpdate(field)) return null;
+      return apiError({ message: `Permission denied for  field`, status: 403 });
+    };
+
     if (data.action === 'rename') {
+      if (!canUpdate('description') || typeof data.description !== 'string') {
+        return apiError({ message: 'Permission denied for dataset description', status: 403 });
+      }
        await prisma.datasets.update({ where: { id }, data: { description: data.description as string } });
     } else if (data.action === 'activate') {
+       const switchAuth = await verifyApiPermission('dataset:switch');
+       if (!switchAuth.authorized) return switchAuth.response as Response;
+       const taskSwitchAuth = await verifyApiPermission('task:switch_dataset');
+       if (!taskSwitchAuth.authorized) return taskSwitchAuth.response as Response;
        const d = await prisma.datasets.findUnique({ where: { id } });
        if (!d) return apiError({ message: 'Dataset not found', status: 404 });
        await prisma.tasks.update({ where: { id: d.task_id }, data: { active_dataset_id: id } });
     } else if (data.action === 'toggle-autojudge') {
+       if (!canUpdate('autojudge')) {
+         return apiError({ message: 'Permission denied for autojudge field', status: 403 });
+       }
        const d = await prisma.datasets.findUnique({ where: { id } });
        if (!d) return apiError({ message: 'Dataset not found', status: 404 });
        await prisma.datasets.update({ where: { id }, data: { autojudge: !d.autojudge } });

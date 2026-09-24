@@ -243,4 +243,9 @@ describe('permission coverage', () => {
     }
     expect(offenders).toEqual([]);
   });
+  it('requires compound permissions for dataset activation', (): void => {
+    const source = fs.readFileSync(path.join(API_DIR, 'datasets/[id]/route.ts'), 'utf8');
+    expect(source).toContain("verifyApiPermission('dataset:switch')");
+    expect(source).toContain("verifyApiPermission('task:switch_dataset')");
+  });
 });
