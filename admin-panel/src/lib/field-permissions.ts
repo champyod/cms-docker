@@ -221,6 +221,23 @@ export function getFieldAccess(
   return result;
 }
 
+/** Returns only the keys of data that the caller has read permission for. */
+export function filterReadableFields<T extends Record<string, unknown>>(
+  entity: string,
+  data: T,
+  effectivePermissions: ReadonlySet<string>,
+): Partial<T> {
+  const map = FIELD_PERMISSION_MAP[entity];
+  if (!map) return {};
+
+  const access = getFieldAccess(entity, effectivePermissions);
+  const result: Record<string, unknown> = {};
+  for (const key of Object.keys(data)) {
+    if (access[key]?.canRead) result[key] = data[key];
+  }
+  return result as Partial<T>;
+}
+
 /** Returns only the keys of data that the caller has update permission for. */
 export function stripDisallowedFields<T extends Record<string, unknown>>(
   entity: string,

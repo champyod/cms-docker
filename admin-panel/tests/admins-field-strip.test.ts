@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getFieldAccess, stripDisallowedFields } from '@/lib/field-permissions';
+import { filterReadableFields, getFieldAccess, stripDisallowedFields } from '@/lib/field-permissions';
 
 describe('admins field-permissions UPDATE contract', (): void => {
   it('excludes username from updatable fields while including name and enabled', (): void => {
@@ -65,5 +65,14 @@ describe('admins field-permissions UPDATE contract', (): void => {
     expect(stripped).toEqual({ name: 'Ada', password: 'secret', authentication: 'hash', enabled: false });
     expect('username' in stripped).toBe(false);
     expect('last_login_at' in stripped).toBe(false);
+  });
+});
+
+describe('users field-permissions READ contract', (): void => {
+  it('strips unreadable user fields from list results', (): void => {
+    const perms = new Set<string>(['user:list']);
+    const filtered = filterReadableFields('users', { id: 7, username: 'ada', email: 'ada.test', status: 'active' }, perms);
+
+    expect(filtered).toEqual({});
   });
 });

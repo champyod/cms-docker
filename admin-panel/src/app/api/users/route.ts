@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/prisma';
 import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
-import { buildUserSearchWhere, safeUserSelect, usersPageSelect } from '@/lib/prisma-selects';
+import { getPermissions } from '@/lib/permissions';
+import { filterReadableFields } from '@/lib/field-permissions';
+import { buildUserSearchWhere, safeUserSelect, usersPageSelect, type UsersPageRow } from '@/lib/prisma-selects';
 import { formatStoredPassword, isPasswordKind, DEFAULT_PASSWORD_KIND } from '@/lib/password-format';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
@@ -34,8 +36,13 @@ export async function GET(req: NextRequest) {
       prisma.users.count({ where }),
     ]);
 
+    const permissions = await getPermissions();
+    const visibleUsers = users.map((user) =>
+      filterReadableFields('users', user as unknown as Record<string, unknown>, permissions) as unknown as UsersPageRow,
+    );
+
     return apiSuccess({
-      users,
+      users: visibleUsers,
       total,
       totalPages: Math.max(Math.ceil(total / perPage), 1),
       currentPage: page,
