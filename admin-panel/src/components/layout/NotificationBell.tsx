@@ -62,7 +62,7 @@ export function NotificationBell(): React.JSX.Element {
         </span>
       </Button>
       {open && (
-        <div className="absolute right-0 mt-2 w-80 max-h-96 overflow-y-auto rounded-xl border border-border bg-card shadow-xl z-50">
+        <div className="absolute right-0 mt-2 w-[min(80vw,20rem)] max-w-[calc(100vw_-_1.5rem)] max-h-96 overflow-y-auto rounded-xl border border-border bg-card shadow-xl z-50">
           <div className="flex items-center justify-between px-3 py-2 border-b border-border">
             <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">System alerts</span>
             <button type="button" onClick={() => setEvents([])} className="text-xs text-muted-foreground hover:text-foreground">

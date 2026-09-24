@@ -91,7 +91,7 @@ function WorkersPanelInner({
     const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
     return (
         <Stack gap={6}>
-            <Stack direction="row" align="center" gap={2} className="px-2">
+            <Stack direction="row" align="center" gap={2} className="px-2 flex-wrap">
                 <Text variant="h2">Worker Nodes</Text>
                 {workersDirty && (
                     <Button
@@ -128,8 +128,8 @@ function WorkersPanelInner({
                         const setExpanded = (v: boolean) => setExpandedIndex(v ? index : null);
                         return (
                             <Stack key={index} gap={1} data-shortcut-row className="bg-muted/30 p-3 rounded-lg border border-border relative group">
-                                <Stack direction="row" align="center" justify="between" className="mb-1">
-                                    <Stack direction="row" align="center" gap={1.5}>
+                                <Stack direction="row" align="center" justify="between" className="mb-1 flex-wrap gap-y-2">
+                                    <Stack direction="row" align="center" gap={1.5} className="flex-wrap gap-x-1.5 gap-y-1">
                                         <div className={`w-2 h-2 rounded-full ${dot.cls}`} />
                                         <Text variant="label" className="text-xs uppercase font-bold tracking-widest" color={dot.tone}>
                                             {dot.label}
