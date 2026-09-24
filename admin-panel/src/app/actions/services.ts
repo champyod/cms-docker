@@ -179,7 +179,7 @@ export async function settleDeployOperations(): Promise<void> {
 }
 
 export async function getActiveDeployOperation(): Promise<ActiveDeployOperation | null> {
-  await ensurePermission('all:all');
+  await ensurePermission('deployment:read');
   return getActiveDeployOperationLib();
 }
 

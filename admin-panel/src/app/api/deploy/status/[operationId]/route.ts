@@ -37,7 +37,7 @@ export async function GET(
 ) {
   const { operationId } = await params;
 
-  const { authorized, response } = await verifyApiPermission('all:all');
+  const { authorized, response } = await verifyApiPermission('deployment:read');
   if (!authorized) return response;
 
   if (!DEPLOY_OPERATION_ID_REGEX.test(operationId)) {

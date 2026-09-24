@@ -85,6 +85,13 @@ afterEach(() => {
 });
 
 describe('deploy status watch', () => {
+  it('uses the deployment read permission for status streaming', async () => {
+    const reader = await openStream();
+
+    expect(mocks.verifyApiPermission).toHaveBeenCalledWith('deployment:read');
+    await reader.cancel();
+  });
+
   it('keeps a quiet build watched, on frames the client can actually receive', async () => {
     const reader = await openStream();
     await vi.advanceTimersByTimeAsync(0);
