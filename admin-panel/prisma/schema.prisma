@@ -89,6 +89,11 @@ model contests {
   min_submission_interval_grace_period             Unsupported("interval")?
   min_user_test_interval                           Unsupported("interval")?
   queue_fairness_penalty_seconds                   Int                      @default(0)
+  evaluation_throttle_delay_s                    Int                      @default(0)
+  evaluation_throttle_window_s                   Int                      @default(0)
+  evaluation_throttle_max                        Int                      @default(0)
+  evaluation_final_open                          Boolean                  @default(false)
+  evaluation_final_open_at                       DateTime?                @db.Timestamp(6)
   is_active                                        Boolean                  @default(false)
   score_precision                                  Int
   announcements                                    announcements[]
@@ -129,6 +134,7 @@ model evaluations {
   testcase_id                Int
   outcome                    String?            @db.VarChar
   text                       String[]           @db.VarChar
+  admin_text                 String?            @db.VarChar
   execution_time             Float?
   execution_wall_clock_time  Float?
   execution_memory           BigInt?
@@ -334,6 +340,7 @@ model tasks {
   feedback_level                                feedback_level
   score_precision                               Int
   score_mode                                    score_mode
+  evaluation_throttle_delay_s                    Int?
   active_dataset_id                             Int?
   attachments                                   attachments[]
   datasets_datasets_task_idTotasks              datasets[]               @relation("datasets_task_idTotasks")
