@@ -19,7 +19,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const canUpdate = (field: string): boolean => access[field]?.canUpdate === true;
     const fieldDenied = (field: string): Response | null => {
       if (canUpdate(field)) return null;
-      return apiError({ message: `Permission denied for  field`, status: 403 });
+      return apiError({ message: 'Permission denied for ' + field + ' field', status: 403 });
     };
 
     if (data.action === 'rename') {
@@ -44,18 +44,38 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
        await prisma.datasets.update({ where: { id }, data: { autojudge: !d.autojudge } });
     } else {
        const updateData: Record<string, unknown> = {};
-       if (data.time_limit !== undefined) updateData.time_limit = data.time_limit as number | null;
-       if (data.memory_limit !== undefined) updateData.memory_limit = data.memory_limit ? BigInt((data.memory_limit as number) * 1024 * 1024) : null;
-       if (data.task_type) updateData.task_type = data.task_type as string;
-       if (data.score_type) updateData.score_type = data.score_type as string;
-       if (data.score_type_parameters !== undefined) {
+        if (data.time_limit !== undefined) {
+          const denied = fieldDenied('time_limit');
+          if (denied) return denied;
+          updateData.time_limit = data.time_limit as number | null;
+        }
+        if (data.memory_limit !== undefined) {
+          const denied = fieldDenied('memory_limit');
+          if (denied) return denied;
+          updateData.memory_limit = data.memory_limit ? BigInt((data.memory_limit as number) * 1024 * 1024) : null;
+        }
+        if (data.task_type) {
+          const denied = fieldDenied('task_type');
+          if (denied) return denied;
+          updateData.task_type = data.task_type as string;
+        }
+        if (data.score_type) {
+          const denied = fieldDenied('score_type');
+          if (denied) return denied;
+          updateData.score_type = data.score_type as string;
+        }
+        if (data.score_type_parameters !== undefined) {
+          const denied = fieldDenied('score_type_parameters');
+          if (denied) return denied;
          const scoreParams = data.score_type_parameters as unknown;
          if (typeof scoreParams !== 'number' && !Array.isArray(scoreParams)) {
            return apiError({ message: 'Score parameters must be a number or an array', status: 400 });
          }
          updateData.score_type_parameters = scoreParams;
        }
-       if (data.task_type_parameters !== undefined) {
+        if (data.task_type_parameters !== undefined) {
+          const denied = fieldDenied('task_type_parameters');
+          if (denied) return denied;
          const taskParams = data.task_type_parameters as unknown;
          if (!Array.isArray(taskParams)) {
            return apiError({ message: 'Task type parameters must be an array', status: 400 });
