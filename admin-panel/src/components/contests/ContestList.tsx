@@ -25,7 +25,7 @@ interface ContestListProps {
 interface ContestPermissions {
   canCreate: boolean;
   canDelete: boolean;
-  canSwitch: boolean;
+  canDeploy: boolean;
   canUpdate: boolean;
 }
 
@@ -34,7 +34,7 @@ function resolveContestPermissions(permissionKeys: readonly string[]): ContestPe
   return {
     canCreate: hasEffectivePermission(effective, 'contest:create'),
     canDelete: hasEffectivePermission(effective, 'contest:delete'),
-    canSwitch: hasEffectivePermission(effective, 'contest:switch'),
+    canDeploy: hasEffectivePermission(effective, 'deployment:deploy'),
     canUpdate: hasEffectivePermission(effective, 'contest:update'),
   };
 }
@@ -73,8 +73,8 @@ export function ContestList({ initialContests, totalPages, permissionKeys }: Con
   const columns = useMemo(() => buildContestColumns(handleOpenContest), [handleOpenContest]);
 
   const renderRowActions = useCallback((contest: ContestRowData) => (
-    <ContestRowActions contest={contest} isSuperAdmin={permissions.canSwitch} canManage={permissions.canDelete} canUpdate={permissions.canUpdate} onSetActive={actions.requestDeploy} onEdit={(id) => { void handleEdit(id); }} />
-  ), [permissions.canSwitch, permissions.canDelete, permissions.canUpdate, actions.requestDeploy, handleEdit]);
+    <ContestRowActions contest={contest} isSuperAdmin={permissions.canDeploy} canManage={permissions.canDelete} canUpdate={permissions.canUpdate} onSetActive={actions.requestDeploy} onEdit={(id) => { void handleEdit(id); }} />
+  ), [permissions.canDeploy, permissions.canDelete, permissions.canUpdate, actions.requestDeploy, handleEdit]);
 
   return (
     <div className="space-y-6">
