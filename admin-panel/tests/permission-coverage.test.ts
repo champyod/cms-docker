@@ -252,4 +252,8 @@ describe('permission coverage', () => {
     const source = fs.readFileSync(path.join(API_DIR, 'testcases/route.ts'), 'utf8');
     expect(source).toContain('stripDisallowedFields');
   });
+  it('loads testcase visibility for task detail', (): void => {
+    const source = fs.readFileSync(path.join(SRC_DIR, 'lib/services/tasks.ts'), 'utf8');
+    expect(source).toContain('codename: true, public: true');
+  });
 });

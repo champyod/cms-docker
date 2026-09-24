@@ -56,7 +56,7 @@ export async function getTask(id: number): Promise<TaskWithStatements | null> {
     contests: { select: { id: true, name: true, start: true, stop: true, analysis_start: true, analysis_stop: true } },
     statements: { select: { id: true, language: true, digest: true } },
     attachments: true,
-    datasets_datasets_task_idTotasks: { include: { testcases: { select: { id: true, codename: true } }, managers: true } },
+    datasets_datasets_task_idTotasks: { include: { testcases: { select: { id: true, codename: true, public: true } }, managers: true } },
     _count: { select: { submissions: true } },
   } as const;
   const task = await prisma.tasks.findUnique({ where: { id }, include });
