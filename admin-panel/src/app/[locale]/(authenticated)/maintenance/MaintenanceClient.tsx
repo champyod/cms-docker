@@ -110,12 +110,20 @@ export default function MaintenanceClient({ permissionKeys }: { permissionKeys: 
           if (result.success) setData(result.values);
           await loadDiscordSettings();
         }
-        await loadArchives();
+        if (canViewBackups) {
+          setArchivesLoading(true);
+          try {
+            const result = await listBackups();
+            if (result.success) setArchives(result.archives ?? []);
+          } finally {
+            setArchivesLoading(false);
+          }
+        }
       } finally {
         setLoading(false);
       }
     })();
-  }, [canConfigure]);
+  }, [canConfigure, canViewBackups]);
 
   const handleChange = (key: string, val: string) => {
     setData(prev => ({ ...prev, [key]: val }));
