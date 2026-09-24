@@ -219,6 +219,9 @@ describe('permission coverage', () => {
       for (const key of entry.permissions ?? []) {
         if (!registryKeys.has(key)) offenders.push(`${entry.path} -> ${key}`);
       }
+      for (const key of entry.requiredPermissions ?? []) {
+        if (!registryKeys.has(key)) offenders.push(`${entry.path} -> ${key}`);
+      }
     }
     for (const [tab, key] of Object.entries(PERMISSION_TAB_LIST_KEY)) {
       if (!registryKeys.has(key)) offenders.push(`tab:${tab} -> ${key}`);
@@ -231,6 +234,7 @@ describe('permission coverage', () => {
     for (const entry of visibleEntries(empty)) {
       expect(entry.permission).toBeUndefined();
       expect(entry.permissions).toBeUndefined();
+      expect(entry.requiredPermissions).toBeUndefined();
     }
     expect(permittedTabs(empty)).toEqual([]);
   });
