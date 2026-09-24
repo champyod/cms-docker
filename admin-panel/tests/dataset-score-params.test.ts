@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { getFieldAccess } from '@/lib/field-permissions';
 import {
   convertScoreParams,
   lintSubtaskRows,
@@ -57,5 +58,9 @@ describe('convertScoreParams', () => {
 
   it('adds a default threshold when switching to GroupThreshold', () => {
     expect(convertScoreParams([[40, 3]], 'GroupMin', 'GroupThreshold')).toEqual([[40, 3, 1]]);
+  });
+  it('maps task-type parameters to dataset update permission', (): void => {
+    const access = getFieldAccess('datasets', new Set(['dataset:update', 'dataset:read']));
+    expect(access.task_type_parameters).toEqual({ canRead: true, canUpdate: true });
   });
 });
