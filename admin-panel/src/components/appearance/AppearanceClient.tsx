@@ -219,13 +219,9 @@ export function AppearanceClient({ locale }: { locale: string }) {
     setSaving(true);
     try {
       const updates: Record<string, string> = {};
-      if (branding.rankingLogoPath) updates['RANKING_LOGO_PATH'] = `"${branding.rankingLogoPath}"`;
-      if (branding.rankingUsername) updates['RANKING_USERNAME'] = `"${branding.rankingUsername}"`;
-      if (branding.rankingPassword) updates['RANKING_PASSWORD'] = `"${branding.rankingPassword}"`;
-      if (Object.keys(updates).length === 0) {
-        toast.warning('Nothing to save', { description: 'No branding fields changed.' });
-        return;
-      }
+      updates['RANKING_LOGO_PATH'] = `"${branding.rankingLogoPath}"`;
+      updates['RANKING_USERNAME'] = `"${branding.rankingUsername}"`;
+      updates['RANKING_PASSWORD'] = `"${branding.rankingPassword}"`;
       const result = await updateConfigToml(updates);
       if (result.success) {
         toast.success('Saved', { description: 'config.toml updated. Run config sync to apply.' });
