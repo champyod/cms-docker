@@ -28,7 +28,7 @@ async function resolvePermissionIds(permissionKeys: readonly string[]): Promise<
 async function assertCanGrant(permissionKeys: readonly string[]): Promise<void> {
   const effective = await getPermissions();
   const denied = permissionKeys.filter((key) => !hasEffectivePermission(effective, key));
-  if (denied.length > 0) throw new Error(`Cannot grant permissions you do not hold: `);
+  if (denied.length > 0) throw new Error('Cannot grant permissions you do not hold: ' + denied.join(', '));
 }
 
 async function affectedAdminIds(groupId: number): Promise<number[]> {
