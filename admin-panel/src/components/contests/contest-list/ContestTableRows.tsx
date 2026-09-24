@@ -100,7 +100,7 @@ export function getContestRowProps(contest: ContestRowData): ResponsiveRowProps 
 
 interface ContestRowActionsProps {
   contest: ContestRowData;
-  isSuperAdmin: boolean;
+  canDeploy: boolean;
   canManage: boolean;
   canUpdate: boolean;
   onSetActive: (id: number) => void;
@@ -109,7 +109,7 @@ interface ContestRowActionsProps {
 
 // Why: shared by desktop rows and mobile cards, with 44px targets kept
 // in this fragment so both layouts stay touch-sized.
-export function ContestRowActions({ contest, isSuperAdmin, canManage, canUpdate, onSetActive, onEdit }: ContestRowActionsProps): React.JSX.Element {
+export function ContestRowActions({ contest, canDeploy, canManage, canUpdate, onSetActive, onEdit }: ContestRowActionsProps): React.JSX.Element {
   const router = useAppRouter();
   const confirm = useConfirm();
   const { destructiveConfirm } = useConfirmationCopy();
@@ -129,7 +129,7 @@ export function ContestRowActions({ contest, isSuperAdmin, canManage, canUpdate,
       {canUpdate && (
         <Button variant="ghost" size="sm" icon={Pencil} tooltip="Edit" aria-label={`Edit ${contest.name}`} onClick={() => onEdit(contest.id)} className="min-h-11 min-w-11" />
       )}
-      {isSuperAdmin && contest.is_active !== true && (
+      {canDeploy && contest.is_active !== true && (
         <Button variant="ghost" size="sm" icon={Power} iconOnly tooltip="Set Active" onClick={() => onSetActive(contest.id)} className="min-h-11 min-w-11" />
       )}
       {canManage && (

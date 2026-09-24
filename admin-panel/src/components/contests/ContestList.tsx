@@ -73,7 +73,7 @@ export function ContestList({ initialContests, totalPages, permissionKeys }: Con
   const columns = useMemo(() => buildContestColumns(handleOpenContest), [handleOpenContest]);
 
   const renderRowActions = useCallback((contest: ContestRowData) => (
-    <ContestRowActions contest={contest} isSuperAdmin={permissions.canDeploy} canManage={permissions.canDelete} canUpdate={permissions.canUpdate} onSetActive={actions.requestDeploy} onEdit={(id) => { void handleEdit(id); }} />
+    <ContestRowActions contest={contest} canDeploy={permissions.canDeploy} canManage={permissions.canDelete} canUpdate={permissions.canUpdate} onSetActive={actions.requestDeploy} onEdit={(id) => { void handleEdit(id); }} />
   ), [permissions.canDeploy, permissions.canDelete, permissions.canUpdate, actions.requestDeploy, handleEdit]);
 
   return (
