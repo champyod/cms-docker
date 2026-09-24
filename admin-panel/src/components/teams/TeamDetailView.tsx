@@ -179,7 +179,7 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
                     <span className="text-xs text-muted-foreground">+{member.contests.length - 3} more</span>
                   )}
                   <a
-                    href={`/${locale}/users/${member.user.id}`}
+                    href={`/${locale}/users?search=${encodeURIComponent(member.user.username)}`}
                     className="inline-flex size-11 shrink-0 items-center justify-center text-muted-foreground hover:text-primary transition-colors"
                   >
                     <ExternalLink className="w-4 h-4" />

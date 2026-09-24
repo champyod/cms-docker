@@ -65,6 +65,7 @@ export const NAV_REGISTRY: readonly NavEntry[] = [
   { path: '/contests', label: 'Contests', icon: Trophy, group: 'contest', permission: 'contest:list', exposeIn: ['sidebar', 'palette', 'chord', 'mobile'] },
   { path: '/tasks', label: 'Tasks', icon: FileCode, group: 'contest', permission: 'task:list', exposeIn: ['sidebar', 'palette', 'chord', 'mobile'] },
   { path: '/submissions', label: 'Submissions', icon: Activity, group: 'contest', permission: 'submission:list', exposeIn: ['sidebar', 'palette', 'chord', 'mobile'] },
+  { path: '/submissions/lanes', label: 'Evaluation Lanes', icon: Activity, group: 'contest', permission: 'evaluation:lane_move', exposeIn: ['sidebar', 'palette', 'chord'] },
   { path: '/users', label: 'Users', icon: Users, group: 'contest', permission: 'user:list', exposeIn: ['sidebar', 'palette', 'chord', 'mobile'] },
   { path: '/teams', label: 'Teams', icon: Users, group: 'contest', permission: 'team:list', exposeIn: ['sidebar', 'palette', 'chord', 'mobile'] },
 

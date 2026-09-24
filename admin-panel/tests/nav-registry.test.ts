@@ -83,4 +83,9 @@ describe('visibleEntries after merging the permissions pages', () => {
     expect(sidebarPaths(['ranking:list'])).not.toContain('/ranking');
     expect(sidebarPaths(['ranking:list', 'ranking:read'])).toContain('/ranking');
   });
+
+  it('exposes evaluation lanes to operators who can move them', () => {
+    expect(sidebarPaths(['evaluation:lane_move'])).toContain('/submissions/lanes');
+    expect(sidebarPaths(['submission:list'])).not.toContain('/submissions/lanes');
+  });
 });
