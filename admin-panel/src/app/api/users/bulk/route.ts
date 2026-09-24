@@ -145,6 +145,13 @@ export async function POST(req: NextRequest) {
 
     const generationMode: GenerationMode = body?.generationMode ?? 'none';
     const contestId = Number(body?.contestId || 0);
+    if (!Number.isInteger(contestId) || contestId < 0) {
+      return apiError({ message: 'Invalid contestId', status: 400 });
+    }
+    if (contestId > 0) {
+      const participationAuth = await verifyApiPermission('participation:create');
+      if (!participationAuth.authorized) return participationAuth.response;
+    }
     const passwordKind = isPasswordKind(body?.passwordKind) ? body.passwordKind : DEFAULT_PASSWORD_KIND;
     const outcome = await processBulkRows(rows, generationMode, contestId, passwordKind);
 

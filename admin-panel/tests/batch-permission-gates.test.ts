@@ -16,6 +16,11 @@ describe('batch permission gates (static)', () => {
     expect(src).not.toContain('verifyApiPermission("user:create")');
   });
 
+  it('bulk enrollment requires participation:create', () => {
+    const src = read('src/app/api/users/bulk/route.ts');
+    expect(src).toContain("verifyApiPermission('participation:create')");
+  });
+
   it('handleExportCurrent is gated on password:reveal and audits password:reveal', () => {
     const src = read('src/app/api/users/batch/credentialActions.ts');
     // handleExportCurrent block must contain password:reveal both as gate and audit verb
