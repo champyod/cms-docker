@@ -73,6 +73,7 @@ export default function MaintenanceClient({ permissionKeys }: { permissionKeys: 
   // Strict own key, mirroring triggerManualBackup; this only hides.
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
   const canTriggerBackup = hasEffectivePermission(effective, 'backup:create');
+  const canConfigure = hasEffectivePermission(effective, 'maintenance:update');
   const confirm = useConfirm();
   const { manualBackupConfirm } = useConfirmationCopy();
   // Why from the pathname: server actions localise their own messages, and a client component has no
@@ -103,15 +104,18 @@ export default function MaintenanceClient({ permissionKeys }: { permissionKeys: 
 
   useEffect(() => {
     void (async () => {
-      const result = await readConfigTomlValues(MAINTENANCE_CONFIG_KEYS);
-      if (result.success) {
-        setData(result.values);
+      try {
+        if (canConfigure) {
+          const result = await readConfigTomlValues(MAINTENANCE_CONFIG_KEYS);
+          if (result.success) setData(result.values);
+          await loadDiscordSettings();
+        }
+        await loadArchives();
+      } finally {
+        setLoading(false);
       }
-      await loadDiscordSettings();
-      await loadArchives();
-      setLoading(false);
     })();
-  }, []);
+  }, [canConfigure]);
 
   const handleChange = (key: string, val: string) => {
     setData(prev => ({ ...prev, [key]: val }));
@@ -224,12 +228,12 @@ export default function MaintenanceClient({ permissionKeys }: { permissionKeys: 
       <PageHeader 
         title="Maintenance & Backups"
         description="Configure automated backups and system notifications."
-        actions={
+        actions={canConfigure ? (
           <Button variant="positive" onClick={handleSave} loading={saving}>
             <Save className="w-4 h-4" />
             {saving ? 'Saving...' : 'Save Settings'}
           </Button>
-        }
+        ) : null}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -351,6 +355,7 @@ export default function MaintenanceClient({ permissionKeys }: { permissionKeys: 
                             <Button
                                 variant="positiveOutline"
                                 onClick={() => void persistDiscordSettings(false)}
+                                 disabled={!canConfigure}
                                 loading={discordSaving}
                             >
                                 <Save className="w-4 h-4" />
@@ -360,6 +365,7 @@ export default function MaintenanceClient({ permissionKeys }: { permissionKeys: 
                             <Button
                                 variant="secondary"
                                 onClick={handleTestAlert}
+                                 disabled={!canConfigure}
                                 loading={discordTesting}
                             >
                                 <Send className="w-4 h-4" />
@@ -369,6 +375,7 @@ export default function MaintenanceClient({ permissionKeys }: { permissionKeys: 
                             <Button
                                 variant="positive"
                                 onClick={() => void persistDiscordSettings(true)}
+                                 disabled={!canConfigure}
                                 loading={discordSaving}
                             >
                                 <RefreshCw className="w-4 h-4" />

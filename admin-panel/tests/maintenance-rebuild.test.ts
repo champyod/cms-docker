@@ -69,4 +69,12 @@ describe('the rebuild command stays inside what the Makefile offers', () => {
   it('uses the switch the Makefile reads', async (): Promise<void> => {
     expect(await readMakefile()).toContain('DEPLOYMENT_TYPE_OVERRIDE');
   });
+  it('does not load configuration for backup-only operators', async (): Promise<void> => {
+    const source = await fs.readFile(
+      path.join(repoRoot, 'admin-panel/src/app/[locale]/(authenticated)/maintenance/MaintenanceClient.tsx'),
+      'utf-8',
+    );
+    expect(source).toContain("hasEffectivePermission(effective, 'maintenance:update')");
+    expect(source).toContain('if (canConfigure)');
+  });
 });
