@@ -106,18 +106,26 @@ export function ContainerSettingsModal({
               </p>
             </div>
             <button
+              type="button"
+              role="switch"
+              aria-checked={autoRestart}
+              aria-label={`Auto-restart ${autoRestart ? 'enabled' : 'disabled'} — click to ${autoRestart ? 'disable' : 'enable'}`}
               onClick={() => setAutoRestart(!autoRestart)}
-              className={cn(
-                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                autoRestart ? 'bg-success' : 'bg-muted'
-              )}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
             >
               <span
                 className={cn(
-                  'inline-block h-4 w-4 transform rounded-full bg-card transition-transform',
-                  autoRestart ? 'translate-x-6' : 'translate-x-1'
+                  'pointer-events-none relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                  autoRestart ? 'bg-success' : 'bg-muted'
                 )}
-              />
+              >
+                <span
+                  className={cn(
+                    'inline-block h-4 w-4 transform rounded-full bg-card transition-transform',
+                    autoRestart ? 'translate-x-6' : 'translate-x-1'
+                  )}
+                />
+              </span>
             </button>
           </div>
 
@@ -165,18 +173,26 @@ export function ContainerSettingsModal({
               </p>
             </div>
             <button
+              type="button"
+              role="switch"
+              aria-checked={discordNotifications}
+              aria-label={`Discord notifications ${discordNotifications ? 'enabled' : 'disabled'} — click to ${discordNotifications ? 'disable' : 'enable'}`}
               onClick={() => setDiscordNotifications(!discordNotifications)}
-              className={cn(
-                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                discordNotifications ? 'bg-info' : 'bg-muted'
-              )}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
             >
               <span
                 className={cn(
-                  'inline-block h-4 w-4 transform rounded-full bg-card transition-transform',
-                  discordNotifications ? 'translate-x-6' : 'translate-x-1'
+                  'pointer-events-none relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                  discordNotifications ? 'bg-info' : 'bg-muted'
                 )}
-              />
+              >
+                <span
+                  className={cn(
+                    'inline-block h-4 w-4 transform rounded-full bg-card transition-transform',
+                    discordNotifications ? 'translate-x-6' : 'translate-x-1'
+                  )}
+                />
+              </span>
             </button>
           </div>
 
