@@ -18,12 +18,21 @@ describe('NotificationBell dropdown', () => {
     expect(view.getByText('No alerts yet.')).toBeTruthy();
   });
 
-  it('clamps the dropdown to the viewport on small screens', () => {
+  it('uses viewport insets on phones and restores the anchored dropdown at sm', () => {
     const view = render(<NotificationBell />);
     fireEvent.click(view.getByRole('button', { name: 'System alerts' }));
     const dropdown = view.getByText('No alerts yet.').parentElement as HTMLElement;
-    expect(dropdown.className).toContain('w-[min(80vw,20rem)]');
-    expect(dropdown.className).toContain('max-w-[calc(100vw_-_1.5rem)]');
-    expect(dropdown.className).not.toContain('w-80');
+    expect(dropdown.className).toContain('fixed');
+    expect(dropdown.className).toContain('inset-x-3');
+    expect(dropdown.className).toContain('top-16');
+    expect(dropdown.className).toContain('sm:absolute');
+    expect(dropdown.className).toContain('sm:left-auto');
+    expect(dropdown.className).toContain('sm:right-0');
+    expect(dropdown.className).toContain('sm:top-auto');
+    expect(dropdown.className).toContain('sm:mt-2');
+    expect(dropdown.className).toContain('sm:w-80');
+    expect(dropdown.className).toContain('sm:max-w-none');
+    expect(dropdown.className).not.toContain('w-[min(80vw,20rem)]');
+    expect(dropdown.className).not.toContain('max-w-[calc(100vw_-_1.5rem)]');
   });
 });
