@@ -59,7 +59,7 @@ const DICT = {
   prevHash: 'Previous Hash',
 };
 
-function makeEntry(overrides: Partial<AuditLogRow>): AuditLogRow {
+function makeEntry(overrides: Partial<AuditLogRow> = {}): AuditLogRow {
   return {
     id: '1',
     actor_id: 7,

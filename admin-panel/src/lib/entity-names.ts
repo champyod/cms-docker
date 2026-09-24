@@ -16,12 +16,12 @@ export function entityNameKey(entity: string, entityId: string): string {
 type NameLoader = (ids: readonly number[]) => Promise<ReadonlyMap<number, string>>;
 
 interface SelectorSpec<Row> {
-  load(ids: readonly number[]): Promise<readonly Row[]>;
+  load(ids: number[]): Promise<readonly Row[]>;
   pick(row: Row): [number, string];
 }
 
 async function runSelector<Row>(spec: SelectorSpec<Row>, ids: readonly number[]): Promise<ReadonlyMap<number, string>> {
-  const rows = await spec.load(ids);
+  const rows = await spec.load([...ids]);
   return new Map(rows.map((row) => spec.pick(row)));
 }
 
