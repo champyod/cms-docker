@@ -38,7 +38,7 @@ export async function GET(request: Request): Promise<Response> {
 
   const effective = await getFreshPermissions(session.userId);
   const scope = {
-    stats: effective !== null && hasEffectivePermission(effective, 'all:all'),
+    stats: effective !== null && hasEffectivePermission(effective, 'resource:read'),
     services: effective !== null && hasEffectivePermission(effective, 'service:read'),
     traffic: effective !== null && hasEffectivePermission(effective, 'container:read'),
   };

@@ -47,8 +47,8 @@ vi.mock('@/lib/container-restart-store', () => ({ readContainerRestartConfig: mo
 // while the streams' own timers are driven by hand.
 const realSetTimeout = globalThis.setTimeout.bind(globalThis);
 
-const EVERY_PERMISSION = ['all:all', 'service:read', 'container:read', 'container:list', 'resource:list'];
-const STATS_ONLY = ['resource:list', 'all:all'];
+const EVERY_PERMISSION = ['all:all', 'service:read', 'container:read', 'container:list', 'resource:list', 'resource:read'];
+const STATS_ONLY = ['resource:list', 'resource:read'];
 
 function stats(cpu: number): ServerStats {
   return { cpu, memory: 40, uptime: '3d', network: { rx: 100, tx: 200 }, loadAvg: ['0.10', '0.20', '0.30'], source: 'host' };
