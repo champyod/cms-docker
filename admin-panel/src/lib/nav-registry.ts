@@ -69,7 +69,7 @@ export const NAV_REGISTRY: readonly NavEntry[] = [
 
   { path: '/deployments', label: 'Active Contest', icon: Rocket, group: 'infrastructure', permission: 'deployment:list', exposeIn: ['sidebar', 'palette', 'chord'] },
   { path: '/permissions', label: 'Permissions', icon: ShieldCheck, group: 'infrastructure', permissions: ['admin:list', 'group:list'], exposeIn: ['sidebar', 'palette', 'chord'] },
-  { path: '/audit', label: 'Audit', icon: ScrollText, group: 'infrastructure', permission: 'audit:read', exposeIn: ['sidebar', 'palette', 'chord'] },
+  { path: '/audit', label: 'Audit', icon: ScrollText, group: 'infrastructure', permission: 'audit:list', exposeIn: ['sidebar', 'palette', 'chord'] },
   { path: '/resources', label: 'Resources', icon: Activity, group: 'infrastructure', permission: 'resource:read', exposeIn: ['sidebar', 'palette', 'chord'] },
   { path: '/containers', label: 'Containers', icon: Box, group: 'infrastructure', permission: 'container:list', exposeIn: ['sidebar', 'palette', 'chord'] },
   { path: '/ranking', label: 'Ranking', icon: Globe, group: 'infrastructure', permission: 'ranking:list', exposeIn: ['sidebar', 'palette', 'chord'] },

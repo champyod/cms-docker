@@ -24,7 +24,7 @@ export default async function AuditPage({
 }): Promise<React.JSX.Element> {
   const { locale } = await params;
   const dict = await getDictionary(locale);
-  const hasPermission = await checkPermission('audit:read', false);
+  const hasPermission = await checkPermission('audit:list', false);
 
   if (!hasPermission) {
     notFound();

@@ -71,4 +71,9 @@ describe('visibleEntries after merging the permissions pages', () => {
     expect(adminOnly).not.toContain('/audit');
     expect(adminOnly).not.toContain('/settings');
   });
+
+  it('requires audit:list for the audit page', () => {
+    expect(sidebarPaths(['audit:read'])).not.toContain('/audit');
+    expect(sidebarPaths(['audit:list'])).toContain('/audit');
+  });
 });
