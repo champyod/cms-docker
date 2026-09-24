@@ -59,7 +59,7 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage, pe
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-3">
           <h2 className="text-xl font-bold">All Submissions</h2>
-          <Link href={`/${locale}/docs#submissions`} className="p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-primary" title="View Documentation">
+          <Link href={`/${locale}/docs#submissions`} className="flex h-11 w-11 items-center justify-center p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-primary" title="View Documentation">
             <HelpCircle className="w-4 h-4" />
           </Link>
         </div>

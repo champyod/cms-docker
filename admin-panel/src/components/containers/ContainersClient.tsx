@@ -258,7 +258,7 @@ export function ContainersClient(): React.JSX.Element {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-3xl font-bold text-foreground tracking-tight">Container Control Center</h1>
-            <Link href={`/${locale}/docs#services`} className="p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground" title="View Documentation">
+            <Link href={`/${locale}/docs#services`} className="flex h-11 w-11 items-center justify-center p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground" title="View Documentation">
               <HelpCircle className="w-5 h-5" />
             </Link>
           </div>

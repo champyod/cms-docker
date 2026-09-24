@@ -16,17 +16,17 @@ export function StackActionButton({ label, onRestart, onUp, onBuild, isLoading =
             <div className="text-xs font-bold text-muted-foreground truncate">{label}</div>
             <div className="flex flex-wrap gap-1">
                 {/* Why: RotateCcw is globally understood for restart (80% threshold met), animated on hover/loading for feedback without text clutter */}
-                <Button variant="positiveOutline" size="sm" onClick={onRestart} disabled={isLoading} className="flex-1 min-w-0" tooltip="Restart Stack" aria-label={`Restart ${label}`}>
+                <Button variant="positiveOutline" size="sm" onClick={onRestart} disabled={isLoading} className="min-w-11 flex-1" tooltip="Restart Stack" aria-label={`Restart ${label}`}>
                     <motion.span animate={isLoading ? { rotate: 360 } : { rotate: 0 }} transition={isLoading ? { repeat: Infinity, duration: 1, ease: 'linear' } : { duration: 0.3 }}>
                         <RotateCcw className="h-4 w-4 shrink-0" />
                     </motion.span>
                     <span className="hidden sm:inline">Restart</span>
                 </Button>
-                <Button variant="positiveOutline" size="sm" onClick={onUp} disabled={isLoading} className="flex-1 min-w-0" tooltip="Start Stack" aria-label={`Start ${label}`}>
+                <Button variant="positiveOutline" size="sm" onClick={onUp} disabled={isLoading} className="flex-1 min-w-11" tooltip="Start Stack" aria-label={`Start ${label}`}>
                     <ArrowUp className="h-4 w-4 shrink-0" />
                     <span className="hidden sm:inline">Up</span>
                 </Button>
-                <Button variant="secondary" size="sm" onClick={onBuild} disabled={isLoading} className="flex-1 min-w-0" tooltip="Build Stack" aria-label={`Build ${label}`}>
+                <Button variant="secondary" size="sm" onClick={onBuild} disabled={isLoading} className="flex-1 min-w-11" tooltip="Build Stack" aria-label={`Build ${label}`}>
                     <Hammer className="h-4 w-4 shrink-0" />
                     <span className="hidden sm:inline">Build</span>
                 </Button>

@@ -12,7 +12,7 @@ export function ContestsSection(): React.JSX.Element {
           <Trophy className="h-6 w-6 text-amber-400" />
           {docs.sections.contests.title}
         </h2>
-        <a href={docs.sections.contests.docsUrl} target="_blank" className="text-xs text-indigo-400 hover:text-indigo-300">Official Docs →</a>
+        <a href={docs.sections.contests.docsUrl} target="_blank" className="inline-flex min-h-11 items-center text-xs text-indigo-400 hover:text-indigo-300">Official Docs →</a>
       </div>
       <Card className="p-6">
         <p className="text-foreground mb-4">A contest is the main container for tasks and users. You can define start and stop times, allowed languages, and participation rules.</p>

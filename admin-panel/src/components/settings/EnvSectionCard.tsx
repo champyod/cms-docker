@@ -79,7 +79,7 @@ function ConfigFieldRow({ field, value, onChange }: FieldRowProps): ReactElement
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={field.placeholder}
-          className="w-full px-4 py-2 bg-card/50 border border-input rounded-lg text-foreground text-sm focus:outline-none focus:border-ring/60"
+          className="h-11 w-full px-4 py-2 bg-card/50 border border-input rounded-lg text-foreground text-sm focus:outline-none focus:border-ring/60"
         />
       </div>
     </div>

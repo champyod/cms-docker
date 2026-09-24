@@ -13,7 +13,7 @@ export function ContestListHeader({ locale, canManage, onCreate }: Props) {
         <h2 className="text-xl font-bold tracking-tight text-foreground">All Contests</h2>
         <Link
           href={`/${locale}/docs#contests`}
-          className="rounded-full p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="flex h-11 w-11 items-center justify-center rounded-full p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           title="View Documentation"
         >
           <HelpCircle className="h-4 w-4" />

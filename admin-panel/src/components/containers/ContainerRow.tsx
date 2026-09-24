@@ -151,7 +151,7 @@ function ContainerMetaRow({
       {maxRestartsReached && (
         <>
           <div className="text-destructive">• Limit reached!</div>
-          <button onClick={() => onResetRestartCount(container.id)} className="text-primary hover:text-primary/80 underline">Reset</button>
+          <button onClick={() => onResetRestartCount(container.id)} className="inline-flex min-h-11 min-w-11 items-center justify-center text-primary hover:text-primary/80 underline">Reset</button>
         </>
       )}
       <div className="text-muted-foreground">•</div>

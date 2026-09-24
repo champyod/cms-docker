@@ -27,7 +27,7 @@ export function TableToolbar({
           onChange={(event) => onSearchTextChange(event.target.value)}
           placeholder={searchPlaceholder}
           title="Search"
-          className="min-w-0 flex-1 sm:w-72 sm:flex-none max-w-3xl rounded-md border border-input bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+          className="h-11 min-w-0 flex-1 sm:w-72 sm:flex-none max-w-3xl rounded-md border border-input bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
         />
         <Button variant="ghost" type="button" onClick={onSearchSubmit}>Search</Button>
       </div>

@@ -12,7 +12,7 @@ export function TasksSection(): React.JSX.Element {
           <Code className="h-6 w-6 text-indigo-400" />
           {docs.sections.tasks.title}
         </h2>
-        <a href={docs.sections.tasks.docsUrl} target="_blank" className="text-xs text-indigo-400 hover:text-indigo-300">Official Docs →</a>
+        <a href={docs.sections.tasks.docsUrl} target="_blank" className="inline-flex min-h-11 items-center text-xs text-indigo-400 hover:text-indigo-300">Official Docs →</a>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card className="p-6">

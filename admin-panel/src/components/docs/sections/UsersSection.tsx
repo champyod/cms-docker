@@ -12,7 +12,7 @@ export function UsersSection(): React.JSX.Element {
           <Users className="h-6 w-6 text-cyan-400" />
           {docs.sections.users.title}
         </h2>
-        <a href={docs.sections.users.docsUrl} target="_blank" className="text-xs text-indigo-400 hover:text-indigo-300">Official Docs →</a>
+        <a href={docs.sections.users.docsUrl} target="_blank" className="inline-flex min-h-11 items-center text-xs text-indigo-400 hover:text-indigo-300">Official Docs →</a>
       </div>
       <Card className="p-6 space-y-4">
         <div>

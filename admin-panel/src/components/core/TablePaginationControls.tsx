@@ -27,11 +27,23 @@ export function TablePaginationControls({
 }: TablePaginationControlsProps) {
   return (
     <div className="flex flex-wrap items-center justify-center gap-2 text-sm text-neutral-300">
-      <Button variant="ghost" size="sm" disabled={currentPage <= 1} onClick={onPrev}>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-11 w-11"
+        disabled={currentPage <= 1}
+        onClick={onPrev}
+      >
         {'<-'}
       </Button>
       <span>{currentPage}/{totalPages}</span>
-      <Button variant="ghost" size="sm" disabled={currentPage >= totalPages} onClick={onNext}>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-11 w-11"
+        disabled={currentPage >= totalPages}
+        onClick={onNext}
+      >
         {'->'}
       </Button>
 
@@ -44,7 +56,7 @@ export function TablePaginationControls({
         title="Page number"
         placeholder="Page"
         onChange={(event) => onPageInputChange(event.target.value)}
-        className="w-20 rounded-md border border-input bg-transparent px-2 py-1 text-sm text-foreground outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+        className="min-h-11 w-20 rounded-md border border-input bg-transparent px-2 py-1 text-sm text-foreground outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
       />
       <Button variant="ghost" size="sm" onClick={onPageGo}>Go</Button>
 
@@ -53,7 +65,7 @@ export function TablePaginationControls({
         value={perPage}
         title="Rows per page"
         onChange={(event) => onPerPageChange(Number(event.target.value) || 20)}
-        className="rounded-md border border-input bg-card px-2 py-1 text-sm text-foreground outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+        className="min-h-11 rounded-md border border-input bg-card px-2 py-1 text-sm text-foreground outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
       >
         {[10, 20, 50, 100].map((value) => (
           <option key={value} value={value}>{value}</option>
