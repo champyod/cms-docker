@@ -3,7 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { recordAudit, assertReasonForDestructive } from '@/lib/audit';
-import { ensurePermission, invalidateAccessCache } from '@/lib/permissions';
+import { ensurePermission, getPermissions, invalidateAccessCache } from '@/lib/permissions';
+import { hasEffectivePermission } from '@/lib/permission-engine';
 
 type ActionResult<T> = { success: true; data: T } | { success: false; error: string };
 
@@ -22,6 +23,12 @@ async function resolvePermissionIds(permissionKeys: readonly string[]): Promise<
     select: { id: true },
   });
   return rows.map((row) => row.id);
+}
+
+async function assertCanGrant(permissionKeys: readonly string[]): Promise<void> {
+  const effective = await getPermissions();
+  const denied = permissionKeys.filter((key) => !hasEffectivePermission(effective, key));
+  if (denied.length > 0) throw new Error(`Cannot grant permissions you do not hold: `);
 }
 
 async function affectedAdminIds(groupId: number): Promise<number[]> {
@@ -46,6 +53,7 @@ export async function createGroup(
 ): Promise<ActionResult<{ id: number }>> {
   try {
     await ensurePermission('group:create');
+    await assertCanGrant(permissionKeys);
     const trimmedName = name.trim();
     if (!trimmedName) return { success: false, error: 'A group name is required' };
 
@@ -87,6 +95,7 @@ export async function updateGroup(
 ): Promise<ActionResult<{ id: number }>> {
   try {
     await ensurePermission('group:update');
+    await assertCanGrant(permissionKeys);
     const trimmedName = name.trim();
     if (!trimmedName) return { success: false, error: 'A group name is required' };
 

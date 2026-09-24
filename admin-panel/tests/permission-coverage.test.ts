@@ -256,4 +256,9 @@ describe('permission coverage', () => {
     const source = fs.readFileSync(path.join(SRC_DIR, 'lib/services/tasks.ts'), 'utf8');
     expect(source).toContain('codename: true, public: true');
   });
+  it('prevents group editors from granting powers they lack', (): void => {
+    const source = fs.readFileSync(path.join(SRC_DIR, 'app/actions/groups.ts'), 'utf8');
+    expect(source).toContain('hasEffectivePermission');
+    expect(source).toContain('Cannot grant permissions you do not hold');
+  });
 });
