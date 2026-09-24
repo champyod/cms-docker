@@ -19,6 +19,7 @@ export const Header: React.FC<{ className?: string; username?: string; permissio
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const authenticationExpiredRef = useRef(false);
   const router = useAppRouter();
+  const canReadQuestions = hasEffectivePermission(new Set(permissionKeys), 'question:list');
 
   const stopPolling = useCallback(() => {
     if (intervalRef.current) {
@@ -42,6 +43,7 @@ export const Header: React.FC<{ className?: string; username?: string; permissio
 
   useEffect(() => {
     const checkNotifications = async () => {
+      if (!canReadQuestions) return;
       if (authenticationExpiredRef.current) {
         if (intervalRef.current) {
           clearInterval(intervalRef.current);
@@ -94,7 +96,7 @@ export const Header: React.FC<{ className?: string; username?: string; permissio
       window.removeEventListener('cms-authentication-expired', handleExternalExpiration);
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [handleAuthenticationExpired, stopPolling]);
+  }, [canReadQuestions, handleAuthenticationExpired, stopPolling]);
 
   const handleNotificationsClick = () => {
     const locale = window.location.pathname.split('/')[1] || 'en';
@@ -125,6 +127,7 @@ export const Header: React.FC<{ className?: string; username?: string; permissio
       </button>
       <ThemeToggle />
       {hasEffectivePermission(new Set(permissionKeys), 'audit:read') && <NotificationBell />}
+      {canReadQuestions && (
       <Button variant="ghost" size="sm" iconOnly tooltip="Notifications" onClick={handleNotificationsClick}>
         <span className="relative flex">
           <Bell className="size-4" />
@@ -133,6 +136,7 @@ export const Header: React.FC<{ className?: string; username?: string; permissio
           )}
         </span>
       </Button>
+      )}
       <div className="flex items-center gap-3 pl-4 border-l border-border">
         <div className="text-right hidden md:block">
           <p className="text-sm font-medium text-foreground">{username || 'Admin User'}</p>
