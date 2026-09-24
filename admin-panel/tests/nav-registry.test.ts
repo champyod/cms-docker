@@ -76,4 +76,11 @@ describe('visibleEntries after merging the permissions pages', () => {
     expect(sidebarPaths(['audit:read'])).not.toContain('/audit');
     expect(sidebarPaths(['audit:list'])).toContain('/audit');
   });
+
+  it('requires read permissions for appearance and ranking', () => {
+    expect(sidebarPaths(['appearance:update'])).not.toContain('/appearance');
+    expect(sidebarPaths(['appearance:update', 'appearance:read', 'appearance:list'])).toContain('/appearance');
+    expect(sidebarPaths(['ranking:list'])).not.toContain('/ranking');
+    expect(sidebarPaths(['ranking:list', 'ranking:read'])).toContain('/ranking');
+  });
 });

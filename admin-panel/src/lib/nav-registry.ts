@@ -40,6 +40,7 @@ export interface NavEntry {
    * audiences, which is what makes a single tabbed route reachable from either set of keys.
    */
   permissions?: readonly string[];
+  requiredPermissions?: readonly string[];
   /** Which surfaces render this entry. */
   exposeIn: readonly NavSurface[];
   /** Registered only while this is true; used to hold an entry back deliberately. */
@@ -72,8 +73,8 @@ export const NAV_REGISTRY: readonly NavEntry[] = [
   { path: '/audit', label: 'Audit', icon: ScrollText, group: 'infrastructure', permission: 'audit:list', exposeIn: ['sidebar', 'palette', 'chord'] },
   { path: '/resources', label: 'Resources', icon: Activity, group: 'infrastructure', permission: 'resource:read', exposeIn: ['sidebar', 'palette', 'chord'] },
   { path: '/containers', label: 'Containers', icon: Box, group: 'infrastructure', permission: 'container:list', exposeIn: ['sidebar', 'palette', 'chord'] },
-  { path: '/ranking', label: 'Ranking', icon: Globe, group: 'infrastructure', permission: 'ranking:list', exposeIn: ['sidebar', 'palette', 'chord'] },
-  { path: '/appearance', label: 'Appearance', icon: Palette, group: 'infrastructure', permission: 'appearance:update', exposeIn: ['sidebar', 'palette', 'chord'] },
+  { path: '/ranking', label: 'Ranking', icon: Globe, group: 'infrastructure', requiredPermissions: ['ranking:list', 'ranking:read'], exposeIn: ['sidebar', 'palette', 'chord'] },
+  { path: '/appearance', label: 'Appearance', icon: Palette, group: 'infrastructure', requiredPermissions: ['appearance:read', 'appearance:list', 'appearance:update'], exposeIn: ['sidebar', 'palette', 'chord'] },
   { path: '/maintenance', label: 'Maintenance', icon: Wrench, group: 'infrastructure', permission: 'maintenance:update', exposeIn: ['sidebar', 'palette', 'chord'] },
   { path: '/settings', label: 'Settings', icon: Settings, group: 'infrastructure', permission: 'settings:update', exposeIn: ['sidebar', 'palette', 'chord'] },
 ];
@@ -86,6 +87,9 @@ export const NAV_REGISTRY: readonly NavEntry[] = [
  * visible on one surface and hidden on another.
  */
 export function isEntryPermitted(entry: NavEntry, effective: ReadonlySet<string>): boolean {
+  if (entry.requiredPermissions) {
+    return entry.requiredPermissions.every((key) => hasEffectivePermission(effective, key));
+  }
   if (entry.permissions) {
     return entry.permissions.some((key) => hasEffectivePermission(effective, key));
   }
