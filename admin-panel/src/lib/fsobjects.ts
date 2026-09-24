@@ -4,7 +4,7 @@ import crypto from 'crypto';
 export const DEFAULT_FILE_DESCRIPTION = 'Uploaded via Admin Panel';
 
 export function calculateDigest(data: Buffer): string {
-  return crypto.createHash('sha256').update(data).digest('hex');
+  return crypto.createHash('sha1').update(data).digest('hex');
 }
 
 export async function storeFile(
