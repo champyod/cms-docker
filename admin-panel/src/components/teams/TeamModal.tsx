@@ -6,6 +6,7 @@ import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { Button } from '@/components/core/Button';
 import { Dialog, DialogFooter } from '@/components/core/Dialog';
 import { RestrictedField } from '@/components/core/RestrictedField';
+import type { Dictionary } from '@/lib/dictionary';
 import { getFieldAccess, stripDisallowedFields } from '@/lib/field-permissions';
 
 interface TeamData {
@@ -20,9 +21,10 @@ interface TeamModalProps {
   onSuccess: () => void;
   initialData?: TeamData | null;
   permissionKeys: readonly string[];
+  navigation: Dictionary['navigation'];
 }
 
-export function TeamModal({ isOpen, onClose, onSuccess, initialData, permissionKeys }: TeamModalProps) {
+export function TeamModal({ isOpen, onClose, onSuccess, initialData, permissionKeys, navigation }: TeamModalProps) {
   const [formData, setFormData] = useState({ code: '', name: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -86,6 +88,7 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData, permissionK
         if (!open) onClose();
       }}
       title={initialData ? 'Edit Team' : 'Add Team'}
+      description={navigation.people.teams.label}
       className="sm:max-w-md"
     >
       <form onSubmit={handleSubmit} className="space-y-4">

@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       afterValues: { code, name },
       result: 'success',
     });
-    revalidatePath('/[locale]/teams', 'page');
+    revalidatePath('/[locale]/people/teams', 'page');
     return apiSuccess({ message: 'Team created successfully' });
   } catch (error) {
     const e = error as { message?: string };

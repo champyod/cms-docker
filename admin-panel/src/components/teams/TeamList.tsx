@@ -8,7 +8,10 @@ import { useAppRouter } from '@/hooks/useAppRouter';
 import { useMemo, useState } from 'react';
 
 import { deleteTeam } from '@/app/actions/teams';
+import type { Dictionary } from '@/lib/dictionary';
+import { buildRoute } from '@/lib/navigation/routes';
 import { hasEffectivePermission } from '@/lib/permission-engine';
+import type { TeamSummary } from '@/lib/people-read-model-types';
 import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
 import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
@@ -18,24 +21,21 @@ import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import { useSyncedState } from '@/hooks/useSyncedState';
 import { TeamModal } from './TeamModal';
 
-interface TeamWithCount {
-  id: number;
-  code: string;
-  name: string;
-  organization?: string | null;
-  leader?: { username: string; first_name: string; last_name: string } | null;
-  _count?: { participations: number };
+export interface TeamListProps {
+  readonly initialTeams: readonly TeamSummary[];
+  readonly permissionKeys: readonly string[];
+  readonly navigation: Dictionary['navigation'];
 }
 
-interface TeamListProps {
-  initialTeams: TeamWithCount[];
-  permissionKeys: readonly string[];
+function leaderName(team: TeamSummary): string {
+  if (!team.leader) return '—';
+  return `${team.leader.firstName} ${team.leader.lastName}`.trim() || team.leader.username;
 }
 
-export function TeamList({ initialTeams, permissionKeys }: TeamListProps) {
+export function TeamList({ initialTeams, permissionKeys, navigation }: TeamListProps) {
   const [teams] = useSyncedState(initialTeams);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingTeam, setEditingTeam] = useState<TeamWithCount | null>(null);
+  const [editingTeam, setEditingTeam] = useState<TeamSummary | null>(null);
   const pathname = usePathname();
   const router = useAppRouter();
   const confirm = useConfirm();
@@ -44,7 +44,7 @@ export function TeamList({ initialTeams, permissionKeys }: TeamListProps) {
 
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
   const canCreateTeams = hasEffectivePermission(effective, 'team:create');
-  const canManageUsers = hasEffectivePermission(effective, 'team:update');
+  const canManageTeams = hasEffectivePermission(effective, 'team:update');
   const canDeleteTeams = hasEffectivePermission(effective, 'team:delete');
 
   const runAction = useActionFeedback();
@@ -59,27 +59,26 @@ export function TeamList({ initialTeams, permissionKeys }: TeamListProps) {
     if (result?.success) router.refresh();
   };
 
-  const startEdit = (team: TeamWithCount) => {
-    if (!canManageUsers) return;
+  const startEdit = (team: TeamSummary) => {
+    if (!canManageTeams) return;
     setEditingTeam(team);
     setIsModalOpen(true);
   };
 
+  const recordHref = (team: TeamSummary) => buildRoute(locale, 'people.team-record', { id: team.id });
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div className="flex items-center gap-3">
-          <h2 className="text-xl font-bold">All Teams</h2>
-          <Link href={`/${locale}/docs#users`} className="flex h-11 w-11 items-center justify-center p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-primary" title="View Documentation">
-            <HelpCircle className="w-4 h-4" />
-          </Link>
-        </div>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <Link
+          href={`/${locale}/docs#users`}
+          className="flex h-11 w-11 items-center justify-center p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-primary"
+          title="View Documentation"
+        >
+          <HelpCircle className="w-4 h-4" />
+        </Link>
         {canCreateTeams && (
-          <Button
-            variant="positive"
-            icon={Plus}
-            onClick={() => setIsModalOpen(true)}
-          >
+          <Button variant="positive" icon={Plus} onClick={() => setIsModalOpen(true)}>
             Add Team
           </Button>
         )}
@@ -90,17 +89,17 @@ export function TeamList({ initialTeams, permissionKeys }: TeamListProps) {
           <MobileCard key={team.id}>
             <MobileCardRow label="Code" value={team.code} />
             <MobileCardRow label="Name" value={team.name} />
-            <MobileCardRow label="Members" value={team._count?.participations ?? 0} />
-            <MobileCardRow label="Leader" value={team.leader ? `${team.leader.first_name} ${team.leader.last_name}`.trim() || team.leader.username : '—'} />
+            <MobileCardRow label="Members" value={team.participationCount} />
+            <MobileCardRow label="Leader" value={leaderName(team)} />
             <div className="flex items-center justify-end gap-2 pt-2">
-              <a href={`/${locale}/teams/${team.id}`}>
+              <a href={recordHref(team)}>
                 <Button variant="ghost" size="sm" icon={Users} iconOnly tooltip="View team members" />
               </a>
-              {canManageUsers && (
-                <>
-                  <Button variant="ghost" size="sm" icon={Pencil} iconOnly tooltip="Edit team" onClick={() => startEdit(team)} />
-                  <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete team" onClick={() => { void handleDelete(team.id); }} />
-                </>
+              {canManageTeams && (
+                <Button variant="ghost" size="sm" icon={Pencil} iconOnly tooltip="Edit team" onClick={() => startEdit(team)} />
+              )}
+              {canDeleteTeams && (
+                <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete team" onClick={() => { void handleDelete(team.id); }} />
               )}
             </div>
           </MobileCard>
@@ -119,7 +118,7 @@ export function TeamList({ initialTeams, permissionKeys }: TeamListProps) {
         </TableHeader>
         <TableBody>
           {teams.map((team) => {
-            const openDetail = () => router.push(`/${locale}/teams/${team.id}`);
+            const openDetail = () => router.push(recordHref(team));
             return (
             <TableRow
               key={team.id}
@@ -134,17 +133,15 @@ export function TeamList({ initialTeams, permissionKeys }: TeamListProps) {
               <TableCell className="font-mono text-muted-foreground text-xs">#{team.id}</TableCell>
               <TableCell className="font-mono text-primary text-sm">{team.code}</TableCell>
               <TableCell className="font-medium">{team.name}</TableCell>
-              <TableCell className="text-muted-foreground text-sm">{team._count?.participations ?? 0}</TableCell>
+              <TableCell className="text-muted-foreground text-sm">{team.participationCount}</TableCell>
               <TableCell className="text-muted-foreground text-sm">{team.organization ?? '—'}</TableCell>
-              <TableCell className="text-muted-foreground text-sm">
-                {team.leader ? `${team.leader.first_name} ${team.leader.last_name}`.trim() || team.leader.username : '—'}
-              </TableCell>
+              <TableCell className="text-muted-foreground text-sm">{leaderName(team)}</TableCell>
               <TableCell className="text-right">
                 <div className="flex items-center justify-end gap-2" onClick={(event) => event.stopPropagation()}>
-                  <a href={`/${locale}/teams/${team.id}`} onClick={(event) => event.stopPropagation()}>
+                  <a href={recordHref(team)} onClick={(event) => event.stopPropagation()}>
                     <Button variant="ghost" size="sm" icon={Users} iconOnly tooltip="View team members" data-shortcut-primary />
                   </a>
-                  {canManageUsers && (
+                  {canManageTeams && (
                     <Button variant="ghost" size="sm" icon={Pencil} iconOnly tooltip="Edit team" onClick={() => startEdit(team)} />
                   )}
                   {canDeleteTeams && (
@@ -177,6 +174,7 @@ export function TeamList({ initialTeams, permissionKeys }: TeamListProps) {
         onSuccess={() => router.refresh()}
         initialData={editingTeam}
         permissionKeys={permissionKeys}
+        navigation={navigation}
       />
     </div>
   );

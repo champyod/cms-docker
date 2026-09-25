@@ -95,7 +95,7 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
       { pending: 'Deleting team...', success: 'Team deleted', failure: 'Delete failed' },
       () => deleteTeam(team.id)
     );
-    if (result?.success) router.push(`/${locale}/teams`);
+    if (result?.success) router.push(buildRoute(locale, 'people.teams'));
   };
 
   return (
@@ -222,7 +222,7 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
                   </div>
                 </div>
                 <a
-                  href={`/${locale}/contests/${contest.id}`}
+                  href={buildRoute(locale, 'contests.tabs.overview', { id: contest.id })}
                   className="inline-flex size-11 shrink-0 items-center justify-center text-muted-foreground hover:text-primary transition-colors"
                 >
                   <ExternalLink className="w-4 h-4" />

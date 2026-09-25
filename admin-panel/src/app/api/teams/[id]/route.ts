@@ -33,7 +33,7 @@ export async function PUT(
       afterValues: { code: data.code, name: data.name },
       result: 'success',
     });
-    revalidatePath('/[locale]/teams', 'page');
+    revalidatePath('/[locale]/people/teams', 'page');
     return apiSuccess({ message: 'Team updated successfully' });
   } catch (error) {
     return apiError(error);
@@ -60,7 +60,7 @@ export async function DELETE(
       beforeValues: beforeDeleteTeam ? { code: beforeDeleteTeam.code, name: beforeDeleteTeam.name } : undefined,
       result: 'success',
     });
-    revalidatePath('/[locale]/teams', 'page');
+    revalidatePath('/[locale]/people/teams', 'page');
     return apiSuccess({ message: 'Team deleted successfully' });
   } catch (error) {
     return apiError(error);

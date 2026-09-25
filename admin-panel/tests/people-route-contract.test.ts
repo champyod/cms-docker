@@ -36,3 +36,35 @@ describe('People route contracts', () => {
     expect(resolveLegacyRedirect('en', '/users', new Set(['team:list']))).toBeNull();
   });
 });
+
+const canonicalTeamPaths = [
+  'src/app/[locale]/(authenticated)/people/teams/page.tsx',
+  'src/app/[locale]/(authenticated)/people/teams/[id]/layout.tsx',
+  'src/app/[locale]/(authenticated)/people/teams/[id]/overview/page.tsx',
+  'src/app/[locale]/(authenticated)/people/teams/[id]/members/page.tsx',
+  'src/app/[locale]/(authenticated)/people/teams/[id]/contests/page.tsx',
+  'src/components/teams/TeamOverviewTab.tsx',
+  'src/components/teams/TeamMembersTab.tsx',
+  'src/components/teams/TeamContestsTab.tsx',
+];
+
+describe('People Team route contracts', () => {
+  it('fails until canonical Team routes and client components exist', () => {
+    for (const path of canonicalTeamPaths) {
+      expect(existsSync(join(process.cwd(), path)), path).toBe(true);
+    }
+  });
+
+  it('builds the Team landing and every nested tab with the frozen builder', () => {
+    expect(buildRoute('th', 'people.teams')).toBe('/th/people/teams');
+    expect(buildRoute('en', 'people.team-record', { id: 4 })).toBe('/en/people/teams/4');
+    expect(buildRoute('en', 'people.team-tabs.overview', { id: 4 })).toBe('/en/people/teams/4/overview');
+    expect(buildRoute('th', 'people.team-tabs.members', { id: 4 })).toBe('/th/people/teams/4/members');
+    expect(buildRoute('en', 'people.team-tabs.contests', { id: 4 })).toBe('/en/people/teams/4/contests');
+  });
+
+  it('resolves the old /teams path through the frozen redirect helper', () => {
+    expect(resolveLegacyRedirect('th', '/teams', new Set(['team:list']))).toBe('/th/people/teams');
+    expect(resolveLegacyRedirect('en', '/teams', new Set(['user:list']))).toBeNull();
+  });
+});

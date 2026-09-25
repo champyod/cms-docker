@@ -159,6 +159,11 @@ describe('surface non-ownership', () => {
     for (const relativePath of [
       'src/lib/navigation/types.ts',
       'src/lib/navigation/registry.ts',
+      'src/lib/navigation/registry-descriptors.ts',
+      'src/lib/navigation/registry-competition.ts',
+      'src/lib/navigation/registry-people.ts',
+      'src/lib/navigation/registry-evaluation.ts',
+      'src/lib/navigation/registry-platform.ts',
       'src/lib/navigation/permissions.ts',
       'src/lib/navigation/routes.ts',
       'src/lib/navigation/redirects.ts',
@@ -180,7 +185,7 @@ describe('foundation cutover state', () => {
     }
   });
 
-  it('enables the direct three plus the Contest, Task, and User records and tabs after Task 4', () => {
+  it('enables the direct three plus the Contest, Task, User, and Team records and tabs after Task 4', () => {
     for (const directRoute of DIRECT_ROUTE_CASES) {
       const physicalPath = join(ROOT, directRoute.physicalPath);
       expect(existsSync(physicalPath), directRoute.physicalPath).toBe(true);
@@ -188,9 +193,9 @@ describe('foundation cutover state', () => {
       expect(pageSource).toContain('getDictionary(locale)');
       expect(pageSource).toContain(directRoute.pageLabelKey);
     }
-    // Why: Task 2 proved the physical User routes, so the users page, the
-    // record landing and its three tabs join the direct three, the Contest
-    // routes and the Task routes in registry order — every other migration
+    // Why: Task 3 proved the physical Team routes, so the teams page, the
+    // record landing and its three tabs join the direct three, the Contest,
+    // Task, and User routes in registry order — every other migration
     // descriptor stays disabled until its own task proves its routes.
     const enabledIds = [
       'home',
@@ -212,6 +217,11 @@ describe('foundation cutover state', () => {
       'people.user-tabs.profile',
       'people.user-tabs.teams',
       'people.user-tabs.history',
+      'people.teams',
+      'people.team-record',
+      'people.team-tabs.overview',
+      'people.team-tabs.members',
+      'people.team-tabs.contests',
     ];
     const enabledIdSet = new Set<string>(enabledIds);
     expect(ROUTE_REGISTRY.filter((route) => route.enabled).map((route) => route.id)).toEqual(enabledIds);

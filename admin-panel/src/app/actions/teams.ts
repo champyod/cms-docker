@@ -39,7 +39,7 @@ export async function createTeam(data: { code: string; name: string }) {
       afterValues: allowed,
       result: 'success',
     });
-    revalidatePath('/[locale]/teams', 'page');
+    revalidatePath('/[locale]/people/teams', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;
@@ -67,7 +67,7 @@ export async function updateTeam(teamId: number, data: { code?: string; name?: s
       afterValues: allowed,
       result: 'success',
     });
-    revalidatePath('/[locale]/teams', 'page');
+    revalidatePath('/[locale]/people/teams', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;
@@ -94,7 +94,7 @@ export async function deleteTeam(teamId: number) {
       beforeValues,
       result: 'success',
     });
-    revalidatePath('/[locale]/teams', 'page');
+    revalidatePath('/[locale]/people/teams', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;
