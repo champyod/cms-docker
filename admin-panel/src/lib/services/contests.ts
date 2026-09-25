@@ -1,8 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { getSession } from '@/lib/auth';
-import { getFreshPermissions } from '@/lib/permissions';
-import type { PermissionKey } from '@/lib/permissions';
-import { hasEffectivePermission } from '@/lib/permission-engine';
+import { requirePermission } from '@/lib/server/authorization';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { validateContestData, CONTEST_NAME_MESSAGE, CONTEST_NAME_REGEX } from '@/lib/contest-validation';
 import { recordAudit } from '@/lib/audit';
@@ -22,28 +19,6 @@ type ContestListResult = Awaited<ReturnType<typeof fetchContestsPage>>;
 type MutationResult = { success: boolean; error?: string; errors?: Array<{ field: string; message: string; code: string }> };
 type AvailableResult = { success: boolean; contests: Array<{ id: number; name: string; is_active: boolean }>; error?: string };
 type ActiveResult = { success: boolean; contest?: unknown; error?: string };
-
-// Why: permission failure must surface as a thrown error so adapters can map to
-// their transport (throw for actions, 401/403 JSON for routes) without duplicating the check.
-async function requirePermission(permission: PermissionKey): Promise<ReadonlySet<string>> {
-  const session = await getSession();
-  if (!session) {
-    const error = new Error('Unauthorized') as Error & { status: number };
-    error.status = 401;
-    throw error;
-  }
-  const perms = await getFreshPermissions(session.userId);
-  if (!perms || !hasEffectivePermission(perms, permission)) {
-    const error = new Error(`Unauthorized: Missing ${permission} permission`) as Error & {
-      status: number;
-      permission: string;
-    };
-    error.status = 403;
-    error.permission = permission;
-    throw error;
-  }
-  return perms;
-}
 
 export async function listContests(params: ContestListParams = {}): Promise<ContestListResult> {
   await requirePermission('contest:list');

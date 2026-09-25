@@ -1,8 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { getSession } from '@/lib/auth';
-import { getFreshPermissions } from '@/lib/permissions';
-import type { PermissionKey } from '@/lib/permissions';
-import { hasEffectivePermission } from '@/lib/permission-engine';
+import { requirePermission } from '@/lib/server/authorization';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { recordAudit } from '@/lib/audit';
 import { sanitize } from '@/lib/api-utils';
@@ -21,14 +18,6 @@ export interface TaskData {
 const TASKS_PER_PAGE = 20;
 type MutationResult = { success: boolean; error?: string };
 type TasksListResult = { tasks: Array<Prisma.tasksGetPayload<{ include: { contests: { select: { id: true; name: true } }; statements: { select: { id: true } }; datasets_datasets_task_idTotasks: { select: { id: true; description: true; _count: { select: { testcases: true } } } }; _count: { select: { submissions: true } } } }> & { diagnostics: ReturnType<typeof buildDiagnosticsForLoadedTask> }>; totalPages: number; total: number; };
-// Why: permission failure as thrown error lets adapters map to throw vs 401/403 JSON without duplicating checks.
-async function requirePermission(p: PermissionKey): Promise<ReadonlySet<string>> {
-  const s = await getSession();
-  if (!s) { const e = new Error('Unauthorized') as Error & { status: number }; e.status = 401; throw e; }
-  const perms = await getFreshPermissions(s.userId);
-  if (!perms || !hasEffectivePermission(perms, p)) { const e = new Error(`Unauthorized: Missing ${p} permission`) as Error & { status: number; permission: string }; e.status = 403; (e as unknown as { permission: string }).permission = p; throw e; }
-  return perms;
-}
 export async function listTasks(params: { page?: number; search?: string } = {}): Promise<TasksListResult> {
   await requirePermission('task:list');
   const skip = ((params.page ?? 1) - 1) * TASKS_PER_PAGE;
