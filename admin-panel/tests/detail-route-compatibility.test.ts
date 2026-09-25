@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildRoute } from '@/lib/navigation/routes';
 import { parseRecordId } from '@/lib/queries/record-access';
@@ -15,6 +15,19 @@ const taskKeys = ['tasks.tabs.overview', 'tasks.tabs.datasets', 'tasks.tabs.file
 
 function readSource(relativePath: string): string {
   return readFileSync(resolve(__dirname, '..', relativePath), 'utf8');
+}
+
+function listTreeFiles(relativeDir: string): string[] {
+  const found: string[] = [];
+  const visit = (absoluteDir: string): void => {
+    for (const entry of readdirSync(absoluteDir)) {
+      const absoluteEntry = join(absoluteDir, entry);
+      if (statSync(absoluteEntry).isDirectory()) visit(absoluteEntry);
+      else if (entry.endsWith('.ts') || entry.endsWith('.tsx')) found.push(absoluteEntry);
+    }
+  };
+  visit(resolve(__dirname, '..', relativeDir));
+  return found;
 }
 
 describe('legacy record bookmarks', () => {
@@ -63,10 +76,14 @@ describe('detail landing route files', () => {
   const taskPage = readSource('src/app/[locale]/(authenticated)/tasks/[id]/page.tsx');
 
   it('redirects the Contest landing through the frozen Overview route', () => {
+    expect(contestPage).toContain('await params');
+    expect(contestPage).toContain('const { locale');
     expect(contestPage).toContain("redirect(buildRoute(locale, 'contests.tabs.overview', { id: contestId }))");
   });
 
   it('redirects the Task landing through the frozen Overview route', () => {
+    expect(taskPage).toContain('await params');
+    expect(taskPage).toContain('const { locale');
     expect(taskPage).toContain("redirect(buildRoute(locale, 'tasks.tabs.overview', { id: taskId }))");
   });
 
@@ -80,8 +97,14 @@ describe('detail landing route files', () => {
     expect(taskPage).not.toContain('ContestDetailView');
   });
 
-  it('keeps query-string tabs out of the migrated landing files', () => {
-    expect(contestPage).not.toContain('?tab=');
-    expect(taskPage).not.toContain('?tab=');
+  it('keeps query-string tabs out of every migrated Contest/Task detail file', () => {
+    const detailFiles = [
+      ...listTreeFiles('src/app/[locale]/(authenticated)/contests/[id]'),
+      ...listTreeFiles('src/app/[locale]/(authenticated)/tasks/[id]'),
+    ];
+    expect(detailFiles.length).toBeGreaterThan(0);
+    for (const file of detailFiles) {
+      expect(readFileSync(file, 'utf8')).not.toContain('?tab=');
+    }
   });
 });

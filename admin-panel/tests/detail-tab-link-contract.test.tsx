@@ -57,6 +57,8 @@ describe('detail tab link contract', () => {
     for (const locale of ['en', 'th'] as const) {
       const contestHrefs = anchorHrefs(renderTabs(tabsFor(locale, contestKeys, 7)));
       const taskHrefs = anchorHrefs(renderTabs(tabsFor(locale, taskKeys, 7)));
+      expect(contestHrefs.length).toBeGreaterThan(0);
+      expect(taskHrefs.length).toBeGreaterThan(0);
       for (const href of [...contestHrefs, ...taskHrefs]) expect(href.startsWith(`/${locale}/`)).toBe(true);
     }
   });
