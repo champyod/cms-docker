@@ -102,13 +102,13 @@ describe('target route registry', () => {
     }
   });
 
-  it('enables the direct three plus the Contest and Task records and tabs after Task 4', () => {
+  it('enables the direct three plus the Contest, Task, and User records and tabs after Task 4', () => {
     expect(ROUTE_REGISTRY).toHaveLength(43);
     const directIds = DIRECT_ROUTE_CASES.map(({ routeId }) => routeId);
-    // Why: Task 4 proved the physical Task routes, so the Task record
-    // landing and its four tabs join the direct three and the Contest routes
-    // in registry order — every other migration descriptor stays disabled
-    // until its own task proves its routes.
+    // Why: Task 2 proved the physical User routes, so the users page, the
+    // record landing and its three tabs join the direct three, the Contest
+    // routes and the Task routes in registry order — every other migration
+    // descriptor stays disabled until its own task proves its routes.
     const enabledIds = [
       'home',
       'contests.list',
@@ -124,11 +124,18 @@ describe('target route registry', () => {
       'tasks.tabs.datasets',
       'tasks.tabs.files',
       'tasks.tabs.settings',
+      'people.users',
+      'people.user-record',
+      'people.user-tabs.profile',
+      'people.user-tabs.teams',
+      'people.user-tabs.history',
     ];
     const enabledIdSet = new Set<string>(enabledIds);
     expect(ROUTE_REGISTRY.filter((route) => route.enabled).map((route) => route.id)).toEqual(enabledIds);
     expect(ROUTE_REGISTRY.filter((route) => !enabledIdSet.has(route.id)).every((route) => !route.enabled)).toBe(true);
-    expect(visibleRoutes(new Set(['all:all']), 'sidebar').map((route) => route.id)).toEqual(directIds);
+    // Why: page surfaces are group-scoped, so the enabled users page is the
+    // only People entry the sidebar surface can resolve for a full reader.
+    expect(visibleRoutes(new Set(['all:all']), 'sidebar').map((route) => route.id)).toEqual([...directIds, 'people.users']);
   });
 
   it('uses stable unique IDs and unique canonical patterns', () => {

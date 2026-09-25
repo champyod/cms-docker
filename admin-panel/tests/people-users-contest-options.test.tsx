@@ -7,7 +7,12 @@ import { prisma } from '@/lib/prisma';
 
 vi.mock('@/app/actions/users', () => ({ getUsers: vi.fn() }));
 vi.mock('@/components/users/UserList', () => ({ UserList: vi.fn(() => null) }));
-vi.mock('@/i18n', () => ({ getDictionary: vi.fn(async () => ({ users: { title: 'Users', subtitle: 'Manage users' } })) }));
+vi.mock('@/i18n', () => ({
+  getDictionary: vi.fn(async () => ({
+    users: { title: 'Users', subtitle: 'Manage users' },
+    navigation: { people: { users: { label: 'Users' } } },
+  })),
+}));
 vi.mock('@/lib/prisma', () => ({ prisma: { contests: { findMany: vi.fn() } } }));
 
 const mockGetUsers = vi.mocked(getUsers);

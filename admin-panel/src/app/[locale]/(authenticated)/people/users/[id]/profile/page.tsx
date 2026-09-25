@@ -5,7 +5,7 @@ import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import type { RouteId } from '@/lib/navigation/types';
 import { getDictionary } from '@/i18n';
 import { getUserProfile, getUserSummary } from '@/lib/people-read-models';
-import { readRecordOrNotFound } from '@/lib/queries/record-access';
+import { readRecordOrNotFound, parseRecordId } from '@/lib/queries/record-access';
 import { UserProfileTab } from '@/components/users/UserProfileTab';
 
 async function authorizeUserTab(routeId: RouteId): Promise<ReadonlySet<string>> {
@@ -24,8 +24,8 @@ async function authorizeUserTab(routeId: RouteId): Promise<ReadonlySet<string>> 
 
 export default async function UserProfilePage({ params }: { params: Promise<{ locale: string; id: string }> }): Promise<React.JSX.Element> {
   const { locale, id: rawId } = await params;
-  const id = Number(rawId);
-  if (!Number.isInteger(id) || id <= 0) notFound();
+  const id = parseRecordId(rawId);
+  if (id === null) notFound();
   const effective = await authorizeUserTab('people.user-tabs.profile');
   const dictionary = await getDictionary(locale);
   const [profile, summary] = await Promise.all([

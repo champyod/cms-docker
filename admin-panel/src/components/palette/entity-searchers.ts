@@ -3,6 +3,7 @@ import { getTasks } from '@/app/actions/tasks';
 import { getTeams } from '@/app/actions/teams';
 import { apiClient, type ApiResponse } from '@/lib/apiClient';
 import { buildRoute } from '@/lib/navigation/routes';
+import type { RouteId, RouteParams } from '@/lib/navigation/types';
 import { MAX_RESULTS_PER_ENTITY } from './search-scheduler';
 import { filterTeams, isNumericQuery, type NavVisibility } from './palette-data';
 
@@ -22,6 +23,18 @@ interface UsersPageResponse {
     first_name: string | null;
     last_name: string | null;
   }>;
+}
+
+// Why: the palette and the shortcut handler both prepend the locale before
+// routing, so a hit path must stay locale-relative or the locale appears
+// twice. The canonical pattern still comes from the registry — only the
+// leading locale segment is dropped.
+function localeRelativePath(
+  locale: string,
+  routeId: RouteId,
+  params: RouteParams = {},
+): string {
+  return `/${buildRoute(locale, routeId, params).split('/').slice(2).join('/')}`;
 }
 
 function buildContestSearcher(): EntitySearcher {
@@ -60,7 +73,7 @@ function buildUserSearcher(locale: string): EntitySearcher {
       key: `user-${user.id}`,
       label: user.username,
       detail: [user.first_name, user.last_name].filter(Boolean).join(' ') || `User #${user.id}`,
-      path: buildRoute(locale, 'people.user-record', { id: user.id }),
+      path: localeRelativePath(locale, 'people.user-record', { id: user.id }),
     }));
   };
 }
@@ -74,7 +87,7 @@ function buildTeamSearcher(locale: string): EntitySearcher {
       key: `team-${team.id}`,
       label: team.name,
       detail: team.code,
-      path: buildRoute(locale, 'people.team-record', { id: team.id }),
+      path: localeRelativePath(locale, 'people.team-record', { id: team.id }),
     }));
   };
 }
@@ -88,7 +101,7 @@ function buildSubmissionSearcher(locale: string): EntitySearcher {
         key: `submission-${trimmed}`,
         label: `Submission #${trimmed}`,
         detail: 'Open submissions list',
-        path: buildRoute(locale, 'evaluation.submissions'),
+        path: localeRelativePath(locale, 'evaluation.submissions'),
       },
     ];
   };

@@ -22,30 +22,34 @@ function labelForDescriptor(dictionary: Dictionary, descriptor: RouteDescriptor)
   return label;
 }
 
-export default async function PeopleUsersPage({ params, searchParams }: {
-  params: Promise<{ locale: string }>;
-  searchParams: Promise<{ page?: string; search?: string; perPage?: string }>;
-}): Promise<React.JSX.Element> {
-  const { locale } = await params;
-  const dict = await getDictionary(locale);
+function usersRouteDescriptor(): RouteDescriptor {
   const usersRoute = ROUTE_REGISTRY.find((route) => route.id === 'people.users');
   if (!usersRoute) notFound();
-  // Why: contract test doubles supply only the users copy, so the registry
-  // label is preferred but the page title is kept as the fallback.
-  let usersLabel = dict.users.title;
-  try {
-    usersLabel = labelForDescriptor(dict, usersRoute);
-  } catch {
-    usersLabel = dict.users.title;
-  }
+  return usersRoute;
+}
+
+interface UsersListPage {
+  readonly result: Awaited<ReturnType<typeof getUsers>>;
+  readonly search: string;
+  readonly contests: Array<{ id: number; name: string }>;
+  readonly canReadContests: boolean;
+}
+
+// Why: contest options are a separate read from the user page, and a
+// user:list-only reader must not trigger the query or receive the payload.
+async function loadUsersListPage(
+  searchParams: Promise<{ page?: string; search?: string; perPage?: string }>,
+): Promise<UsersListPage> {
   const query = await searchParams;
-  const page = Number(query.page) || 1;
   const search = query.search || '';
-  const perPage = Number(query.perPage) || 20;
   let result: Awaited<ReturnType<typeof getUsers>>;
   try {
-    result = await getUsers({ page, search, perPage });
-  } catch (error) {
+    result = await getUsers({
+      page: Number(query.page) || 1,
+      search,
+      perPage: Number(query.perPage) || 20,
+    });
+  } catch (error: unknown) {
     if (error instanceof AuthorizationError && error.status === 403) notFound();
     throw error;
   }
@@ -56,7 +60,17 @@ export default async function PeopleUsersPage({ params, searchParams }: {
         orderBy: { id: 'desc' },
       })
     : [];
+  return { result, search, contests, canReadContests };
+}
 
+export default async function PeopleUsersPage({ params, searchParams }: {
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<{ page?: string; search?: string; perPage?: string }>;
+}): Promise<React.JSX.Element> {
+  const { locale } = await params;
+  const dict = await getDictionary(locale);
+  const usersLabel = labelForDescriptor(dict, usersRouteDescriptor());
+  const { result, search, contests, canReadContests } = await loadUsersListPage(searchParams);
   return (
     <PageSurface
       breadcrumbs={[{ label: usersLabel, href: buildRoute(locale, 'people.users') }]}

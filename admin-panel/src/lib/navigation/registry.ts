@@ -160,18 +160,21 @@ export const ROUTE_REGISTRY: readonly RouteDescriptor[] = [
   { ...tabRoute('tasks.tabs.files', '/tasks/[id]/files', 'tasks.record', { all: ['task:read', 'attachment:read'] }), enabled: true },
   { ...tabRoute('tasks.tabs.settings', '/tasks/[id]/settings', 'tasks.record', { all: ['task:read'] }), enabled: true },
 
-  pageRoute('people.users', '/people/users', { all: ['user:list'] }, ['/users']),
-  recordRoute(
+  // Why: Task 2 ships the physical User routes, so the users page, the record
+  // landing and its three tabs join the enabled set — the Team descriptors
+  // stay disabled until Task 3 proves their routes.
+  { ...pageRoute('people.users', '/people/users', { all: ['user:list'] }, ['/users']), enabled: true },
+  { ...recordRoute(
     'people.user-record',
     '/people/users/[id]',
     'people.users',
     { all: ['user:read'] },
     ['people.user-tabs.profile', 'people.user-tabs.teams', 'people.user-tabs.history'],
     'people.user-tabs.profile',
-  ),
-  tabRoute('people.user-tabs.profile', '/people/users/[id]/profile', 'people.user-record', { all: ['user:read'] }),
-  tabRoute('people.user-tabs.teams', '/people/users/[id]/teams', 'people.user-record', { all: ['user:read', 'participation:list', 'team:read'] }),
-  tabRoute('people.user-tabs.history', '/people/users/[id]/history', 'people.user-record', { all: ['user:read', 'participation:list', 'submission:read'] }),
+  ), enabled: true },
+  { ...tabRoute('people.user-tabs.profile', '/people/users/[id]/profile', 'people.user-record', { all: ['user:read'] }), enabled: true },
+  { ...tabRoute('people.user-tabs.teams', '/people/users/[id]/teams', 'people.user-record', { all: ['user:read', 'participation:list', 'team:read'] }), enabled: true },
+  { ...tabRoute('people.user-tabs.history', '/people/users/[id]/history', 'people.user-record', { all: ['user:read', 'participation:list', 'submission:read'] }), enabled: true },
   pageRoute('people.teams', '/people/teams', { all: ['team:list'] }, ['/teams']),
   recordRoute(
     'people.team-record',

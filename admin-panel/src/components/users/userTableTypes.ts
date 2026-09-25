@@ -1,4 +1,18 @@
+import type { Dictionary } from '@/lib/dictionary';
 import type { UsersPageRow } from '@/lib/prisma-selects';
+
+export interface UserListProps {
+  initialUsers: UsersPageRow[];
+  totalPages: number;
+  currentPage: number;
+  perPage: number;
+  initialSearch: string;
+  contests: Array<{ id: number; name: string }>;
+  canReadContests: boolean;
+  navigation: Dictionary['navigation'];
+  permissionKeys: readonly string[];
+  locale: 'en' | 'th';
+}
 
 export interface UserTableProps {
   users: UsersPageRow[];

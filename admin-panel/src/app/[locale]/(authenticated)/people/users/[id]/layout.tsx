@@ -9,6 +9,7 @@ import { buildRoute } from '@/lib/navigation/routes';
 import type { BreadcrumbItem, RouteDescriptor, RouteId, RouteTab } from '@/lib/navigation/types';
 import { getUserSummary } from '@/lib/people-read-models';
 import type { UserSummary } from '@/lib/people-read-model-types';
+import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access';
 import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
 
 function labelForKey(dictionary: Dictionary, key: string): string {
@@ -26,14 +27,22 @@ function labelForDescriptor(dictionary: Dictionary, descriptor: RouteDescriptor)
   return labelForKey(dictionary, descriptor.labelKey);
 }
 
-function buildUserTabs(
+function findRoute(routeId: RouteId): RouteDescriptor {
+  const route = ROUTE_REGISTRY.find((candidate) => candidate.id === routeId);
+  if (!route) notFound();
+  return route;
+}
+
+// Why: a tab the reader may not open is omitted entirely rather than rendered
+// disabled, so the record rail never advertises a route that would 404.
+export function buildUserTabs(
   locale: string,
   userId: number,
   effective: ReadonlySet<string>,
   dictionary: Dictionary,
 ): readonly RouteTab[] {
-  const record: RouteDescriptor | undefined = ROUTE_REGISTRY.find((route) => route.id === 'people.user-record');
-  if (!record || !record.enabled || !isRoutePermitted(record, effective)) notFound();
+  const record = findRoute('people.user-record');
+  if (!record.enabled || !isRoutePermitted(record, effective)) notFound();
   return record.tabIds.flatMap((routeId: RouteId) => {
     const route = ROUTE_REGISTRY.find((candidate) => candidate.id === routeId);
     if (!route || !route.enabled || !isRoutePermitted(route, effective)) return [];
@@ -45,6 +54,31 @@ function buildUserTabs(
   });
 }
 
+function userRecordBreadcrumbs(
+  locale: string,
+  userId: number,
+  dictionary: Dictionary,
+): readonly BreadcrumbItem[] {
+  return [
+    { label: labelForDescriptor(dictionary, findRoute('people.users')), href: buildRoute(locale, 'people.users') },
+    { label: labelForDescriptor(dictionary, findRoute('people.user-record')), href: buildRoute(locale, 'people.user-record', { id: userId }) },
+  ];
+}
+
+async function loadUserRecord(userId: number): Promise<{
+  readonly effective: ReadonlySet<string>;
+  readonly summary: UserSummary;
+}> {
+  let effective: ReadonlySet<string>;
+  try {
+    effective = await requirePermission('user:read');
+  } catch (error: unknown) {
+    if (error instanceof AuthorizationError && error.status === 403) notFound();
+    throw error;
+  }
+  return { effective, summary: await readRecordOrNotFound(() => getUserSummary(userId)) };
+}
+
 export default async function UserRecordLayout({
   children,
   params,
@@ -54,34 +88,16 @@ export default async function UserRecordLayout({
 }): Promise<React.JSX.Element> {
   const { locale, id: rawId } = await params;
   const dictionary = await getDictionary(locale);
-  const id = Number(rawId);
-  if (!Number.isInteger(id) || id <= 0) notFound();
-  let effective: ReadonlySet<string>;
-  try {
-    effective = await requirePermission('user:read');
-  } catch (error) {
-    if (error instanceof AuthorizationError && error.status === 403) notFound();
-    throw error;
-  }
-  let summary: UserSummary | null = null;
-  try {
-    summary = await getUserSummary(id);
-  } catch (error) {
-    if (error instanceof AuthorizationError && error.status === 403) notFound();
-    throw error;
-  }
-  if (!summary) notFound();
-
-  const usersRoute = ROUTE_REGISTRY.find((route) => route.id === 'people.users');
-  const userRecordRoute = ROUTE_REGISTRY.find((route) => route.id === 'people.user-record');
-  if (!usersRoute || !userRecordRoute) notFound();
-  const breadcrumbs: readonly BreadcrumbItem[] = [
-    { label: labelForDescriptor(dictionary, usersRoute), href: buildRoute(locale, 'people.users') },
-    { label: labelForDescriptor(dictionary, userRecordRoute), href: buildRoute(locale, 'people.user-record', { id }) },
-  ];
-  const tabs = buildUserTabs(locale, id, effective, dictionary);
+  const id = parseRecordId(rawId);
+  if (id === null) notFound();
+  const { effective, summary } = await loadUserRecord(id);
   return (
-    <DetailSurface breadcrumbs={breadcrumbs} title={summary.username} description={<UserDetailFrame summary={summary} />} tabs={tabs}>
+    <DetailSurface
+      breadcrumbs={userRecordBreadcrumbs(locale, id, dictionary)}
+      title={summary.username}
+      description={<UserDetailFrame summary={summary} />}
+      tabs={buildUserTabs(locale, id, effective, dictionary)}
+    >
       {children}
     </DetailSurface>
   );

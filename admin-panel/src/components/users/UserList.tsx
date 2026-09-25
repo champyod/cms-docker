@@ -9,7 +9,6 @@ import { Button } from '@/components/core/Button';
 import { apiClient, type ApiResponse } from '@/lib/apiClient';
 import { buildRoute } from '@/lib/navigation/routes';
 import { hasEffectivePermission } from '@/lib/permission-engine';
-import type { Dictionary } from '@/lib/dictionary';
 
 import { UserBulkCreateCsv } from './UserBulkCreateCsv';
 import { UserBulkEditDialog } from './UserBulkEditDialog';
@@ -23,19 +22,7 @@ import { useTable } from '@/hooks/useTable';
 import { useTableAutoRefresh } from '@/hooks/useTableAutoRefresh';
 import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import type { UsersPageRow } from '@/lib/prisma-selects';
-
-interface UserListProps {
-  initialUsers: UsersPageRow[];
-  totalPages: number;
-  currentPage: number;
-  perPage: number;
-  initialSearch: string;
-  contests: Array<{ id: number; name: string }>;
-  canReadContests: boolean;
-  navigation: Dictionary['navigation'];
-  permissionKeys: readonly string[];
-  locale: 'en' | 'th';
-}
+import type { UserListProps } from './userTableTypes';
 
 function mergeIntoCache(prev: Record<number, UsersPageRow>, users: UsersPageRow[]): Record<number, UsersPageRow> {
   const next = { ...prev };
