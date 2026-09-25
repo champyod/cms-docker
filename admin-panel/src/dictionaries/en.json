@@ -345,7 +345,7 @@
     "paused": "Paused"
   },
   "navigation": {
-    "groups": { "direct": "Direct" },
+    "groups": { "direct": "Direct", "people": "People", "evaluation": "Evaluation" },
     "home": { "label": "Dashboard" },
     "contests": {
       "list": { "label": "Contests" },
@@ -358,6 +358,8 @@
         "settings": { "label": "Settings" }
       }
     },
-    "tasks": { "list": { "label": "Tasks" }, "record": { "label": "Task" }, "tabs": { "overview": { "label": "Overview" }, "datasets": { "label": "Datasets" }, "files": { "label": "Files" }, "settings": { "label": "Settings" } } }
+    "tasks": { "list": { "label": "Tasks" }, "record": { "label": "Task" }, "tabs": { "overview": { "label": "Overview" }, "datasets": { "label": "Datasets" }, "files": { "label": "Files" }, "settings": { "label": "Settings" } } },
+    "people": { "users": { "label": "Users" }, "user-record": { "label": "User" }, "user-tabs": { "profile": { "label": "Profile" }, "teams": { "label": "Teams" }, "history": { "label": "History" } }, "teams": { "label": "Teams" }, "team-record": { "label": "Team" }, "team-tabs": { "overview": { "label": "Overview" }, "members": { "label": "Members" }, "contests": { "label": "Contests" } } },
+    "evaluation": { "submissions": { "label": "Submissions" }, "submission-record": { "label": "Submission" }, "submission-tabs": { "summary": { "label": "Summary" }, "results": { "label": "Results" }, "logs": { "label": "Logs" }, "evaluation": { "label": "Evaluation" } }, "lanes": { "label": "Lanes" } }
   }
 }

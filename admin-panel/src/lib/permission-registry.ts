@@ -202,6 +202,7 @@ const RESERVED_KEYS: readonly { key: string; reason: string }[] = [
   { key: 'settings:delete', reason: 'Fixed config keys updated in place; no delete path exists.' },
   { key: 'submission:create', reason: 'Contestants submit; admins never create submissions.' },
   { key: 'submission:delete', reason: 'Submissions are immutable; admins never delete them.' },
+  { key: 'submissionresult:list', reason: 'No admin list path exists; results are read through the Results tab under submissionresult:read.' },
   { key: 'maintenance:enable', reason: 'Enable fallback retired; triggerManualBackup enforces strict backup:create instead.' },
   { key: 'backup:read', reason: 'Backup rows listed via backup:list; no single-read path exists.' },
 ];

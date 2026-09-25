@@ -4,18 +4,11 @@ import { prisma } from '@/lib/prisma';
 import { ensurePermission } from '@/lib/permissions';
 import { recordAudit } from '@/lib/audit';
 
-// Why this file: evaluations, executables, files, results, tokens, user tests
-// and permission rows had granted keys but no dedicated read path. Each reader
-// below binds one list/read key to its table so every granted key is enforced.
+// Why this file: executables, files, tokens, user tests and permission rows
+// had granted keys but no dedicated read path. Each reader below binds one
+// list/read key to its table so every granted key is enforced. Submission
+// results and evaluations moved to the typed evaluation read models.
 // Writes stay with workers, the contest flow or the seed (see RESERVED_KEYS).
-
-export async function getSubmissionEvaluations(submissionId: number) {
-  await ensurePermission('evaluation:list');
-  return prisma.evaluations.findMany({
-    where: { submission_id: submissionId },
-    orderBy: { testcase_id: 'asc' },
-  });
-}
 
 export async function getSubmissionExecutables(submissionId: number) {
   await ensurePermission('executable:list');
@@ -30,14 +23,6 @@ export async function getSubmissionFiles(submissionId: number) {
   return prisma.files.findMany({
     where: { submission_id: submissionId },
     orderBy: { filename: 'asc' },
-  });
-}
-
-export async function getSubmissionResults(submissionId: number) {
-  await ensurePermission('submissionresult:list');
-  return prisma.submission_results.findMany({
-    where: { submission_id: submissionId },
-    orderBy: { dataset_id: 'asc' },
   });
 }
 
