@@ -30,6 +30,7 @@ export function ContestTasksTab({ data }: ContestTasksTabProps): React.JSX.Eleme
         tasks={[...data.tasks]}
         expanded={expanded}
         locale={locale}
+        permissionKeys={data.permissionKeys}
         onToggle={() => setExpanded((previous) => !previous)}
         onAddTask={() => actions.setIsTaskModalOpen(true)}
         onRemoveTask={(taskId) => { void actions.handleRemoveTask(taskId); }}

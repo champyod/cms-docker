@@ -16,20 +16,27 @@ interface FormState {
 interface Props {
   formData: FormState;
   expanded: boolean;
+  disabled?: boolean;
+  canEdit?: boolean;
   onToggle: () => void;
   onChange: (patch: Partial<FormState>) => void;
 }
 
-function ToggleRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+function ToggleRow({ label, checked, disabled, onChange }: { label: string; checked: boolean; disabled: boolean; onChange: (v: boolean) => void }): React.JSX.Element {
   return (
     <div className="flex items-center justify-between">
       <label className="text-sm text-foreground">{label}</label>
-      <ToggleSwitch checked={checked} onToggle={() => onChange(!checked)} />
+      {disabled
+        ? <ToggleSwitch checked={checked} onToggle={() => undefined} />
+        : <ToggleSwitch checked={checked} onToggle={() => onChange(!checked)} />}
     </div>
   );
 }
 
-export function ContestSettingsSection({ formData, expanded, onToggle, onChange }: Props) {
+export function ContestSettingsSection({ formData, expanded, disabled = false, canEdit = true, onToggle, onChange }: Props): React.JSX.Element {
+  // Why: a read-only caller must never see an editable form — either flag
+  // locks every input so no false save affordance reaches the reader.
+  const readOnly = disabled || !canEdit;
   return (
     <Card className="overflow-hidden">
       <button onClick={onToggle} className="flex w-full items-center justify-between p-4 transition-colors hover:bg-muted/50">
@@ -41,24 +48,24 @@ export function ContestSettingsSection({ formData, expanded, onToggle, onChange 
           <div className="space-y-4">
             <div>
               <label className={LABEL_CLASSES}>Name</label>
-              <input type="text" value={formData.name} onChange={(e) => onChange({ name: e.target.value })} className={FIELD_CLASSES} />
+              <input type="text" value={formData.name} disabled={readOnly} onChange={(e) => onChange({ name: e.target.value })} className={FIELD_CLASSES} />
             </div>
             <div>
               <label className={LABEL_CLASSES}>Description</label>
-              <textarea value={formData.description} onChange={(e) => onChange({ description: e.target.value })} rows={2} className={FIELD_CLASSES} />
+              <textarea value={formData.description} disabled={readOnly} onChange={(e) => onChange({ description: e.target.value })} rows={2} className={FIELD_CLASSES} />
             </div>
             <div>
               <label className={LABEL_CLASSES}>Timezone</label>
-              <input type="text" value={formData.timezone} onChange={(e) => onChange({ timezone: e.target.value })} placeholder="Asia/Bangkok" className={FIELD_CLASSES} />
+              <input type="text" value={formData.timezone} disabled={readOnly} onChange={(e) => onChange({ timezone: e.target.value })} placeholder="Asia/Bangkok" className={FIELD_CLASSES} />
             </div>
           </div>
           <div className="space-y-3">
-            <ToggleRow label="Allow Questions" checked={formData.allow_questions} onChange={(v) => onChange({ allow_questions: v })} />
-            <ToggleRow label="Allow User Tests" checked={formData.allow_user_tests} onChange={(v) => onChange({ allow_user_tests: v })} />
-            <ToggleRow label="Allow Submissions Download" checked={formData.submissions_download_allowed} onChange={(v) => onChange({ submissions_download_allowed: v })} />
-            <ToggleRow label="Allow Password Auth" checked={formData.allow_password_authentication} onChange={(v) => onChange({ allow_password_authentication: v })} />
-            <ToggleRow label="Allow Registration" checked={formData.allow_registration} onChange={(v) => onChange({ allow_registration: v })} />
-            <ToggleRow label="Analysis Mode" checked={formData.analysis_enabled} onChange={(v) => onChange({ analysis_enabled: v })} />
+            <ToggleRow label="Allow Questions" checked={formData.allow_questions} disabled={readOnly} onChange={(v) => onChange({ allow_questions: v })} />
+            <ToggleRow label="Allow User Tests" checked={formData.allow_user_tests} disabled={readOnly} onChange={(v) => onChange({ allow_user_tests: v })} />
+            <ToggleRow label="Allow Submissions Download" checked={formData.submissions_download_allowed} disabled={readOnly} onChange={(v) => onChange({ submissions_download_allowed: v })} />
+            <ToggleRow label="Allow Password Auth" checked={formData.allow_password_authentication} disabled={readOnly} onChange={(v) => onChange({ allow_password_authentication: v })} />
+            <ToggleRow label="Allow Registration" checked={formData.allow_registration} disabled={readOnly} onChange={(v) => onChange({ allow_registration: v })} />
+            <ToggleRow label="Analysis Mode" checked={formData.analysis_enabled} disabled={readOnly} onChange={(v) => onChange({ analysis_enabled: v })} />
           </div>
         </div>
       )}

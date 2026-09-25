@@ -16,6 +16,8 @@ interface Props {
   showForm: boolean;
   subject: string;
   text: string;
+  canPublish?: boolean;
+  canDelete?: boolean;
   onShowForm: (v: boolean) => void;
   onSubject: (v: string) => void;
   onText: (v: string) => void;
@@ -29,11 +31,11 @@ function formatTime(date: Date | string): string {
   return new Date(date).toLocaleString();
 }
 
-export function AnnouncementsPanel({ announcements, showForm, subject, text, onShowForm, onSubject, onText, onCreate, onDelete }: Props) {
+export function AnnouncementsPanel({ announcements, showForm, subject, text, canPublish = true, canDelete = true, onShowForm, onSubject, onText, onCreate, onDelete }: Props): React.JSX.Element {
   return (
     <div className="space-y-4">
-      <Button variant="positiveOutline" size="sm" icon={Plus} onClick={() => onShowForm(true)}>New Announcement</Button>
-      {showForm && (
+      {canPublish && <Button variant="positiveOutline" size="sm" icon={Plus} onClick={() => onShowForm(true)}>New Announcement</Button>}
+      {canPublish && showForm && (
         <div className="space-y-3 rounded-lg bg-muted/30 p-4">
           <input type="text" value={subject} onChange={(e) => onSubject(e.target.value)} placeholder="Subject" className={FIELD_CLASSES} />
           <textarea value={text} onChange={(e) => onText(e.target.value)} placeholder="Message content..." rows={3} className={FIELD_CLASSES} />
@@ -53,7 +55,7 @@ export function AnnouncementsPanel({ announcements, showForm, subject, text, onS
                   <div className="mt-1 text-sm text-muted-foreground">{ann.text}</div>
                   <div className="mt-2 text-xs text-muted-foreground">{formatTime(ann.timestamp)} by {ann.admins?.username || 'System'}</div>
                 </div>
-                <Button variant="ghost" iconOnly icon={Trash2} tooltip="Delete" aria-label={`Delete announcement ${ann.subject}`} onClick={() => onDelete(ann.id)} className="shrink-0 rounded-lg hover:text-destructive" />
+                {canDelete && <Button variant="ghost" iconOnly icon={Trash2} tooltip="Delete" aria-label={`Delete announcement ${ann.subject}`} onClick={() => onDelete(ann.id)} className="shrink-0 rounded-lg hover:text-destructive" />}
               </div>
             </div>
           ))}

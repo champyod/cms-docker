@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { SaveButton } from '@/components/core/SaveButton';
 import type { ContestData } from '@/lib/contests-repo';
+import { hasEffectivePermission } from '@/lib/permission-engine';
 import type { ContestSettingsData } from '@/lib/queries/contest-detail';
 import { ContestSettingsSection } from './ContestSettingsSection';
 import {
@@ -37,6 +38,9 @@ function buildSettingsPayload(form: ContestSettingsFormState): Partial<ContestDa
 
 export function ContestSettingsTab({ data }: ContestSettingsTabProps): React.JSX.Element {
   const [expanded, setExpanded] = useState(true);
+  // Why: the settings reader carries only contest:read — without
+  // contest:update the form locks and the save affordance never appears.
+  const canEdit = hasEffectivePermission(new Set(data.permissionKeys), 'contest:update');
   const { formData, updateForm, saving, justSaved, handleSave } = useContestSettingsState(
     data.contestId,
     toSettingsFormState(data.fields),
@@ -47,12 +51,15 @@ export function ContestSettingsTab({ data }: ContestSettingsTabProps): React.JSX
       <ContestSettingsSection
         formData={formData}
         expanded={expanded}
+        canEdit={canEdit}
         onToggle={() => setExpanded((previous) => !previous)}
         onChange={(patch) => updateForm(patch)}
       />
-      <div className="flex justify-end">
-        <SaveButton saving={saving} justSaved={justSaved} idleLabel="Save Changes" disabled={saving} onClick={() => { void handleSave(); }} />
-      </div>
+      {canEdit && (
+        <div className="flex justify-end">
+          <SaveButton saving={saving} justSaved={justSaved} idleLabel="Save Changes" disabled={saving} onClick={() => { void handleSave(); }} />
+        </div>
+      )}
     </div>
   );
 }

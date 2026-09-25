@@ -21,7 +21,7 @@ interface DeployConfirmModalProps {
 // callers may override it but can never forget it.
 const DEFAULT_EXTRA_NOTE = 'The previous active contest will be deactivated.';
 
-/** Phase-aware deploy dialog shared by ContestList and ContestDetailView. Close is locked while a deploy runs. */
+/** Phase-aware deploy dialog shared by ContestList and the Contest record header. Close is locked while a deploy runs. */
 export function DeployConfirmModal({ isOpen, phase, targetLabel, extraNote = DEFAULT_EXTRA_NOTE, onClose, onConfirm }: DeployConfirmModalProps) {
   const busy = BUSY_PHASES.includes(phase);
 

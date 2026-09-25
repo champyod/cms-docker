@@ -20,6 +20,8 @@ interface Props {
   replyingTo: number | null;
   replySubject: string;
   replyText: string;
+  canReply?: boolean;
+  canIgnore?: boolean;
   onReplyingTo: (id: number | null) => void;
   onReplySubject: (v: string) => void;
   onReplyText: (v: string) => void;
@@ -33,7 +35,7 @@ function formatTime(date: Date | string): string {
   return new Date(date).toLocaleString();
 }
 
-export function QuestionsPanel({ questions, replyingTo, replySubject, replyText, onReplyingTo, onReplySubject, onReplyText, onReply, onIgnore }: Props) {
+export function QuestionsPanel({ questions, replyingTo, replySubject, replyText, canReply = true, canIgnore = true, onReplyingTo, onReplySubject, onReplyText, onReply, onIgnore }: Props): React.JSX.Element {
   if (questions.length === 0) return <p className="text-sm text-muted-foreground">No questions from contestants.</p>;
   return (
     <div className="space-y-3">
@@ -56,10 +58,12 @@ export function QuestionsPanel({ questions, replyingTo, replySubject, replyText,
               )}
             </div>
             <div className="flex shrink-0 items-center gap-1">
-              {!q.reply_timestamp && (
+              {canReply && !q.reply_timestamp && (
                 <Button variant="ghost" iconOnly icon={Reply} tooltip="Reply" aria-label={`Reply to ${q.subject}`} onClick={() => onReplyingTo(replyingTo === q.id ? null : q.id)} className="shrink-0 rounded-lg text-primary hover:bg-primary/20" />
               )}
-              <Button variant="ghost" iconOnly icon={q.ignored ? Eye : EyeOff} tooltip={q.ignored ? 'Unignore' : 'Ignore'} aria-label={q.ignored ? 'Unignore question' : 'Ignore question'} onClick={() => onIgnore(q.id, q.ignored)} className="shrink-0 rounded-lg" />
+              {canIgnore && (
+                <Button variant="ghost" iconOnly icon={q.ignored ? Eye : EyeOff} tooltip={q.ignored ? 'Unignore' : 'Ignore'} aria-label={q.ignored ? 'Unignore question' : 'Ignore question'} onClick={() => onIgnore(q.id, q.ignored)} className="shrink-0 rounded-lg" />
+              )}
             </div>
           </div>
           {replyingTo === q.id && (

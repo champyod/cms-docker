@@ -26,11 +26,18 @@ function useInviteCandidates(data: ContestParticipantsData): ContestParticipants
   );
 }
 
-// Why: the section renders usernames unconditionally while the reader types
-// user as nullable — rows without a user cannot render, so they are hidden.
-function useSectionParticipations(data: ContestParticipantsData): ContestParticipantsData['participations'] {
+// Why: the section renders usernames itself with a fallback for rows whose
+// user relation is null — the tab passes every row through untouched.
+function useSectionParticipations(data: ContestParticipantsData): { id: number; user_id: number; unrestricted: boolean; hidden: boolean; users: { username: string; first_name: string; last_name: string } | null; teams?: { code: string } | null }[] {
   return useMemo(
-    () => data.participations.filter((participation) => participation.user !== null),
+    () => data.participations.map((participation) => ({
+      id: participation.id,
+      user_id: participation.user_id,
+      unrestricted: participation.unrestricted,
+      hidden: participation.hidden,
+      users: participation.user,
+      teams: participation.team,
+    })),
     [data],
   );
 }
@@ -85,11 +92,9 @@ export function ContestParticipantsTab({ data }: ContestParticipantsTabProps): R
   return (
     <div className="space-y-6">
       <ContestParticipantsSection
-        participations={sectionParticipations.map((participation) => ({
-          ...participation,
-          users: participation.user ?? { username: '', first_name: '', last_name: '' },
-        }))}
+        participations={sectionParticipations}
         expanded={expanded}
+        permissionKeys={data.permissionKeys}
         onToggle={() => setExpanded((previous) => !previous)}
         onAddParticipant={() => actions.setIsParticipantModalOpen(true)}
         onAddTeam={() => actions.setIsTeamModalOpen(true)}
