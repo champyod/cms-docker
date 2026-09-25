@@ -343,5 +343,11 @@
     "connected": "เชื่อมต่อสด",
     "reconnecting": "กำลังเชื่อมต่อใหม่…",
     "paused": "หยุดชั่วคราว"
+  },
+  "navigation": {
+    "groups": { "direct": "การแข่งขัน" },
+    "home": { "label": "แดชบอร์ด" },
+    "contests": { "list": { "label": "การแข่งขัน" } },
+    "tasks": { "list": { "label": "งาน" } }
   }
 }

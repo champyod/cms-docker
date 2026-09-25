@@ -343,5 +343,11 @@
     "connected": "Live",
     "reconnecting": "Reconnecting…",
     "paused": "Paused"
+  },
+  "navigation": {
+    "groups": { "direct": "Direct" },
+    "home": { "label": "Dashboard" },
+    "contests": { "list": { "label": "Contests" } },
+    "tasks": { "list": { "label": "Tasks" } }
   }
 }
