@@ -180,9 +180,7 @@ describe('foundation cutover state', () => {
     }
   });
 
-  it('enables only the direct three after filesystem and label contracts pass', () => {
-    const directIds = DIRECT_ROUTE_CASES.map(({ routeId }) => routeId);
-    const directIdSet = new Set<string>(directIds);
+  it('enables the direct three plus the Contest record and tabs after Task 2', () => {
     for (const directRoute of DIRECT_ROUTE_CASES) {
       const physicalPath = join(ROOT, directRoute.physicalPath);
       expect(existsSync(physicalPath), directRoute.physicalPath).toBe(true);
@@ -190,8 +188,23 @@ describe('foundation cutover state', () => {
       expect(pageSource).toContain('getDictionary(locale)');
       expect(pageSource).toContain(directRoute.pageLabelKey);
     }
-    expect(ROUTE_REGISTRY.filter((route) => route.enabled).map((route) => route.id)).toEqual(directIds);
-    expect(ROUTE_REGISTRY.filter((route) => !directIdSet.has(route.id)).every((route) => !route.enabled)).toBe(true);
+    // Why: Task 2 proved the physical Contest routes, so the record landing
+    // and its five tabs join the direct three in registry order — every other
+    // migration descriptor stays disabled until its own task proves its routes.
+    const enabledIds = [
+      'home',
+      'contests.list',
+      'contests.record',
+      'contests.tabs.overview',
+      'contests.tabs.tasks',
+      'contests.tabs.participants',
+      'contests.tabs.communications',
+      'contests.tabs.settings',
+      'tasks.list',
+    ];
+    const enabledIdSet = new Set<string>(enabledIds);
+    expect(ROUTE_REGISTRY.filter((route) => route.enabled).map((route) => route.id)).toEqual(enabledIds);
+    expect(ROUTE_REGISTRY.filter((route) => !enabledIdSet.has(route.id)).every((route) => !route.enabled)).toBe(true);
   });
 
   it('keeps Sidebar, palette, and mobile on the old registry', () => {

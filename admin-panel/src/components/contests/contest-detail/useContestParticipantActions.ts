@@ -1,10 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { useConfirm } from '@/hooks/useConfirm';
+import { useConfirm, type Confirm } from '@/hooks/useConfirm';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { removeParticipant } from '@/app/actions/contests';
 import { setTestUser } from '@/app/actions/participations';
+import type { ConfirmationCopy } from '@/lib/confirmation-copy';
 import { useTabConfirmationCopy, useTabRefresh } from './useContestSettingsState';
 
 export interface SelectedParticipation {
@@ -45,24 +46,15 @@ function useParticipantDialogState(): {
   };
 }
 
-export function useContestParticipantActions(): {
-  isParticipantModalOpen: boolean;
-  setIsParticipantModalOpen: (open: boolean) => void;
-  isTeamModalOpen: boolean;
-  setIsTeamModalOpen: (open: boolean) => void;
-  isParticipationModalOpen: boolean;
-  selectedParticipation: SelectedParticipation | null;
-  handleOpenParticipationSettings: (participationId: number, username: string) => void;
-  closeParticipationModal: () => void;
+function useParticipantMutations(
+  confirm: Confirm,
+  copy: ConfirmationCopy,
+  runAction: ReturnType<typeof useActionFeedback>,
+  refresh: () => void,
+): {
   handleMarkAsTest: (participationId: number) => Promise<void>;
   handleRemoveParticipant: (participationId: number) => Promise<void>;
 } {
-  const dialogs = useParticipantDialogState();
-  const confirm = useConfirm();
-  const copy = useTabConfirmationCopy();
-  const runAction = useActionFeedback();
-  const refresh = useTabRefresh();
-
   const handleMarkAsTest = async (participationId: number): Promise<void> => {
     if (!(await confirm(copy.markTestUserConfirm()))) return;
     const result = await runAction(
@@ -81,8 +73,30 @@ export function useContestParticipantActions(): {
     if (result?.success) refresh();
   };
 
+  return { handleMarkAsTest, handleRemoveParticipant };
+}
+
+export function useContestParticipantActions(): {
+  isParticipantModalOpen: boolean;
+  setIsParticipantModalOpen: (open: boolean) => void;
+  isTeamModalOpen: boolean;
+  setIsTeamModalOpen: (open: boolean) => void;
+  isParticipationModalOpen: boolean;
+  selectedParticipation: SelectedParticipation | null;
+  handleOpenParticipationSettings: (participationId: number, username: string) => void;
+  closeParticipationModal: () => void;
+  handleMarkAsTest: (participationId: number) => Promise<void>;
+  handleRemoveParticipant: (participationId: number) => Promise<void>;
+} {
+  const dialogs = useParticipantDialogState();
+  const confirm = useConfirm();
+  const copy = useTabConfirmationCopy();
+  const runAction = useActionFeedback();
+  const refresh = useTabRefresh();
+  const mutations = useParticipantMutations(confirm, copy, runAction, refresh);
+
   return {
     ...dialogs,
-    handleMarkAsTest, handleRemoveParticipant,
+    ...mutations,
   };
 }

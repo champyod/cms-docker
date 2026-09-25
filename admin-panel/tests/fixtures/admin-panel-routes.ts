@@ -16,12 +16,12 @@ type RouteFixture = Pick<
 export const EXPECTED_ROUTE_MANIFEST: readonly RouteFixture[] = [
   { id: 'home', path: '/', kind: 'page', tabIds: [], legacyPaths: [], enabled: true },
   { id: 'contests.list', path: '/contests', kind: 'page', tabIds: [], legacyPaths: [], enabled: true },
-  { id: 'contests.record', path: '/contests/[id]', kind: 'record-landing', parentId: 'contests.list', defaultChildId: 'contests.tabs.overview', tabIds: ['contests.tabs.overview', 'contests.tabs.tasks', 'contests.tabs.participants', 'contests.tabs.communications', 'contests.tabs.settings'], legacyPaths: [], enabled: false },
-  { id: 'contests.tabs.overview', path: '/contests/[id]/overview', kind: 'nested-tab', parentId: 'contests.record', tabIds: [], legacyPaths: [], enabled: false },
-  { id: 'contests.tabs.tasks', path: '/contests/[id]/tasks', kind: 'nested-tab', parentId: 'contests.record', tabIds: [], legacyPaths: [], enabled: false },
-  { id: 'contests.tabs.participants', path: '/contests/[id]/participants', kind: 'nested-tab', parentId: 'contests.record', tabIds: [], legacyPaths: [], enabled: false },
-  { id: 'contests.tabs.communications', path: '/contests/[id]/communications', kind: 'nested-tab', parentId: 'contests.record', tabIds: [], legacyPaths: [], enabled: false },
-  { id: 'contests.tabs.settings', path: '/contests/[id]/settings', kind: 'nested-tab', parentId: 'contests.record', tabIds: [], legacyPaths: [], enabled: false },
+  { id: 'contests.record', path: '/contests/[id]', kind: 'record-landing', parentId: 'contests.list', defaultChildId: 'contests.tabs.overview', tabIds: ['contests.tabs.overview', 'contests.tabs.tasks', 'contests.tabs.participants', 'contests.tabs.communications', 'contests.tabs.settings'], legacyPaths: [], enabled: true },
+  { id: 'contests.tabs.overview', path: '/contests/[id]/overview', kind: 'nested-tab', parentId: 'contests.record', tabIds: [], legacyPaths: [], enabled: true },
+  { id: 'contests.tabs.tasks', path: '/contests/[id]/tasks', kind: 'nested-tab', parentId: 'contests.record', tabIds: [], legacyPaths: [], enabled: true },
+  { id: 'contests.tabs.participants', path: '/contests/[id]/participants', kind: 'nested-tab', parentId: 'contests.record', tabIds: [], legacyPaths: [], enabled: true },
+  { id: 'contests.tabs.communications', path: '/contests/[id]/communications', kind: 'nested-tab', parentId: 'contests.record', tabIds: [], legacyPaths: [], enabled: true },
+  { id: 'contests.tabs.settings', path: '/contests/[id]/settings', kind: 'nested-tab', parentId: 'contests.record', tabIds: [], legacyPaths: [], enabled: true },
 
   { id: 'tasks.list', path: '/tasks', kind: 'page', tabIds: [], legacyPaths: [], enabled: true },
   { id: 'tasks.record', path: '/tasks/[id]', kind: 'record-landing', parentId: 'tasks.list', defaultChildId: 'tasks.tabs.overview', tabIds: ['tasks.tabs.overview', 'tasks.tabs.datasets', 'tasks.tabs.files', 'tasks.tabs.settings'], legacyPaths: [], enabled: false },

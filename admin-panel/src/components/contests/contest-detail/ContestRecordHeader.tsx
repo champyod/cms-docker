@@ -22,6 +22,57 @@ export type ContestRecordHeaderProps = {
 
 // Why: the layout already renders the record title and description, so the
 // header owns only the status badge and the gated Edit / Set Active actions.
+function useRecordEdit(contestId: number): {
+  isEditOpen: boolean;
+  editContest: ExistingContest | null;
+  closeEdit: () => void;
+  openEdit: () => Promise<void>;
+} {
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editContest, setEditContest] = useState<ExistingContest | null>(null);
+
+  const openEdit = async (): Promise<void> => {
+    const editData = await getContestEditData(contestId);
+    if (!editData) return;
+    setEditContest(editData.contest as unknown as ExistingContest);
+    setIsEditOpen(true);
+  };
+
+  return { isEditOpen, editContest, closeEdit: () => setIsEditOpen(false), openEdit };
+}
+
+function useRecordDeploy(contestId: number): {
+  showDeployModal: boolean;
+  deployPhase: DeployPhase;
+  requestDeploy: () => void;
+  closeDeploy: () => void;
+  confirmDeploy: () => void;
+} {
+  const [showDeployModal, setShowDeployModal] = useState(false);
+  const { state: deployState, deploy, reset } = useDeployContest();
+  const refresh = useTabRefresh();
+
+  useEffect(() => {
+    if (deployState.phase === 'completed') refresh();
+    if (deployState.phase === 'completed' || deployState.phase === 'failed' || deployState.phase === 'timeout' || deployState.phase === 'already_running') {
+      queueMicrotask((): void => setShowDeployModal(false));
+    }
+  }, [deployState.phase, refresh]);
+
+  const requestDeploy = (): void => {
+    if (deployState.phase !== 'deploying' && deployState.phase !== 'polling') reset();
+    setShowDeployModal(true);
+  };
+
+  return {
+    showDeployModal,
+    deployPhase: deployState.phase,
+    requestDeploy,
+    closeDeploy: () => { setShowDeployModal(false); reset(); },
+    confirmDeploy: () => { void deploy(contestId); },
+  };
+}
+
 function useRecordHeaderState(contestId: number, permissionKeys: readonly string[]): {
   canEdit: boolean;
   canDeploy: boolean;
@@ -36,42 +87,14 @@ function useRecordHeaderState(contestId: number, permissionKeys: readonly string
   confirmDeploy: () => void;
 } {
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
-  const [isEditOpen, setIsEditOpen] = useState(false);
-  const [editContest, setEditContest] = useState<ExistingContest | null>(null);
-  const [showDeployModal, setShowDeployModal] = useState(false);
-  const { state: deployState, deploy, reset } = useDeployContest();
-  const refresh = useTabRefresh();
-
-  useEffect(() => {
-    if (deployState.phase === 'completed') refresh();
-    if (deployState.phase === 'completed' || deployState.phase === 'failed' || deployState.phase === 'timeout' || deployState.phase === 'already_running') {
-      queueMicrotask((): void => setShowDeployModal(false));
-    }
-  }, [deployState.phase, refresh]);
-
-  const openEdit = async (): Promise<void> => {
-    const editData = await getContestEditData(contestId);
-    if (!editData) return;
-    setEditContest(editData.contest as unknown as ExistingContest);
-    setIsEditOpen(true);
-  };
-
-  const requestDeploy = (): void => {
-    if (deployState.phase !== 'deploying' && deployState.phase !== 'polling') reset();
-    setShowDeployModal(true);
-  };
+  const edit = useRecordEdit(contestId);
+  const deploy = useRecordDeploy(contestId);
 
   return {
     canEdit: hasEffectivePermission(effective, 'contest:update'),
     canDeploy: hasEffectivePermission(effective, 'deployment:deploy'),
-    isEditOpen, editContest,
-    closeEdit: () => setIsEditOpen(false),
-    openEdit,
-    showDeployModal,
-    deployPhase: deployState.phase,
-    requestDeploy,
-    closeDeploy: () => { setShowDeployModal(false); reset(); },
-    confirmDeploy: () => { void deploy(contestId); },
+    ...edit,
+    ...deploy,
   };
 }
 
