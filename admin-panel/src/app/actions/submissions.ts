@@ -102,7 +102,7 @@ export async function updateSubmissionComment(submissionId: number, comment: str
           afterValues: { comment: allowed.comment },
           result: 'success',
         });
-        revalidatePath('/[locale]/submissions');
+        revalidatePath('/[locale]/evaluation/submissions');
       return { success: true };
   } catch (error) {
       const e = error as Error;
@@ -135,7 +135,7 @@ export async function toggleSubmissionOfficial(submissionId: number): Promise<Ac
           afterValues: { official: !sub.official },
           result: 'success',
         });
-        revalidatePath('/[locale]/submissions');
+        revalidatePath('/[locale]/evaluation/submissions');
         return { success: true };
   } catch (error) {
       const e = error as Error;
@@ -171,7 +171,7 @@ export async function recalculateSubmission(submissionId: number, type: RecalcTy
       afterValues: { type },
       result: 'success',
     });
-    revalidatePath('/[locale]/submissions');
+    revalidatePath('/[locale]/evaluation/submissions');
     return { success: true, message: 'Submission queued for recalculation' };
   } catch (error) {
     const e = error as Error;

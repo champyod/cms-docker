@@ -102,13 +102,13 @@ describe('target route registry', () => {
     }
   });
 
-  it('enables the direct three plus the Contest, Task, User, and Team records and tabs after Task 4', () => {
+  it('enables the direct three plus the Contest, Task, User, Team, and Evaluation page routes', () => {
     expect(ROUTE_REGISTRY).toHaveLength(43);
     const directIds = DIRECT_ROUTE_CASES.map(({ routeId }) => routeId);
-    // Why: Task 3 proved the physical Team routes, so the teams page, the
-    // record landing and its three tabs join the direct three, the Contest,
-    // Task, and User routes in registry order — every other migration
-    // descriptor stays disabled until its own task proves its routes.
+    // Why: the Evaluation shell proves the Submission list and the lane module,
+    // so those two page descriptors join the direct three and the Contest,
+    // Task, User, and Team routes in registry order — the Submission record
+    // landing and its four tabs stay disabled until their own routes exist.
     const enabledIds = [
       'home',
       'contests.list',
@@ -134,13 +134,22 @@ describe('target route registry', () => {
       'people.team-tabs.overview',
       'people.team-tabs.members',
       'people.team-tabs.contests',
+      'evaluation.submissions',
+      'evaluation.lanes',
     ];
     const enabledIdSet = new Set<string>(enabledIds);
     expect(ROUTE_REGISTRY.filter((route) => route.enabled).map((route) => route.id)).toEqual(enabledIds);
     expect(ROUTE_REGISTRY.filter((route) => !enabledIdSet.has(route.id)).every((route) => !route.enabled)).toBe(true);
-    // Why: page surfaces are group-scoped, so the enabled users and teams pages
-    // are the only People entries the sidebar surface can resolve for a full reader.
-    expect(visibleRoutes(new Set(['all:all']), 'sidebar').map((route) => route.id)).toEqual([...directIds, 'people.users', 'people.teams']);
+    // Why: page surfaces are group-scoped, so the enabled users, teams,
+    // submissions, and lanes pages are the only People and Evaluation entries
+    // the sidebar surface can resolve for a full reader.
+    expect(visibleRoutes(new Set(['all:all']), 'sidebar').map((route) => route.id)).toEqual([
+      ...directIds,
+      'people.users',
+      'people.teams',
+      'evaluation.submissions',
+      'evaluation.lanes',
+    ]);
   });
 
   it('uses stable unique IDs and unique canonical patterns', () => {

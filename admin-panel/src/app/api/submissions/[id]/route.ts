@@ -54,6 +54,6 @@ export async function PUT(
     afterValues: { action: (data as { action?: string }).action, submissionId: id },
     result: 'success',
   });
-  revalidatePath('/[locale]/submissions', 'page');
+  revalidatePath('/[locale]/evaluation/submissions', 'page');
   return apiSuccess({ message: 'Submission updated successfully' });
 }

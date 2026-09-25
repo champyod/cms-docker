@@ -185,7 +185,7 @@ describe('foundation cutover state', () => {
     }
   });
 
-  it('enables the direct three plus the Contest, Task, User, and Team records and tabs after Task 4', () => {
+  it('enables the direct three plus the Contest, Task, User, Team, and Evaluation page routes', () => {
     for (const directRoute of DIRECT_ROUTE_CASES) {
       const physicalPath = join(ROOT, directRoute.physicalPath);
       expect(existsSync(physicalPath), directRoute.physicalPath).toBe(true);
@@ -193,10 +193,10 @@ describe('foundation cutover state', () => {
       expect(pageSource).toContain('getDictionary(locale)');
       expect(pageSource).toContain(directRoute.pageLabelKey);
     }
-    // Why: Task 3 proved the physical Team routes, so the teams page, the
-    // record landing and its three tabs join the direct three, the Contest,
-    // Task, and User routes in registry order — every other migration
-    // descriptor stays disabled until its own task proves its routes.
+    // Why: the Evaluation shell proves the Submission list and the lane module,
+    // so those two page descriptors join the direct three and the Contest,
+    // Task, User, and Team routes in registry order — the Submission record
+    // landing and its four tabs stay disabled until their own routes exist.
     const enabledIds = [
       'home',
       'contests.list',
@@ -222,6 +222,8 @@ describe('foundation cutover state', () => {
       'people.team-tabs.overview',
       'people.team-tabs.members',
       'people.team-tabs.contests',
+      'evaluation.submissions',
+      'evaluation.lanes',
     ];
     const enabledIdSet = new Set<string>(enabledIds);
     expect(ROUTE_REGISTRY.filter((route) => route.enabled).map((route) => route.id)).toEqual(enabledIds);

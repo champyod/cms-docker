@@ -4,7 +4,6 @@ import { Clock, Eye, FileCode, HelpCircle, User as UserIcon } from 'lucide-react
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAppRouter } from '@/hooks/useAppRouter';
-import { useState } from 'react';
 
 import { Badge } from '@/components/core/Badge';
 import { Button } from '@/components/core/Button';
@@ -13,58 +12,54 @@ import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { useSyncedState } from '@/hooks/useSyncedState';
 
-import { SubmissionListItem } from '@/types';
+import type { Dictionary } from '@/lib/dictionary';
+import { buildRoute } from '@/lib/navigation/routes';
+import type { SubmissionListItem } from '@/types';
 
-import { SubmissionModal } from './SubmissionModal';
-import { selectSubmission } from './submissionSelection';
-import { hasEffectivePermission } from '@/lib/permission-engine';
-
-interface SubmissionListProps {
-  initialSubmissions: SubmissionListItem[];
-  totalPages: number;
-  currentPage: number;
-  permissionKeys: readonly string[];
+export interface SubmissionListProps {
+  readonly initialSubmissions: readonly SubmissionListItem[];
+  readonly totalPages: number;
+  readonly currentPage: number;
+  readonly navigation: Dictionary['navigation'];
 }
 
-export function SubmissionList({ initialSubmissions, totalPages, currentPage, permissionKeys }: SubmissionListProps) {
+function formatDate(date: Date): string {
+  return new Date(date).toLocaleString(undefined, {
+    month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit'
+  });
+}
+
+export function SubmissionList({ initialSubmissions, totalPages, currentPage, navigation }: SubmissionListProps) {
   const [submissions] = useSyncedState(initialSubmissions);
-  const [selectedSubmissionId, setSelectedSubmissionId] = useState<number | null>(null);
-  // WHY the id and not the row: recalculateSubmission refreshes the list, so rendering a
-  // stored copy would keep the modal on the pre-recalculation results until it was closed
-  // and reopened. Deriving from the current list keeps it open and up to date.
-  const selectedSubmission = selectSubmission(submissions, selectedSubmissionId);
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
   const router = useAppRouter();
+  // Why the generated record label: the row action opens the submission record,
+  // so its accessible name comes from the same bilingual key the record uses.
+  const recordLabel = navigation.evaluation['submission-record'].label;
 
-  const handleView = (submission: SubmissionListItem) => {
-    setSelectedSubmissionId(submission.id);
+  const recordHref = (submission: SubmissionListItem): string =>
+    buildRoute(locale, 'evaluation.submission-record', { id: submission.id });
+
+  const openRecord = (submission: SubmissionListItem): void => {
+    router.push(recordHref(submission));
   };
 
-  const formatDate = (date: Date) => {
-     return new Date(date).toLocaleString(undefined, {
-        month: 'short', day: 'numeric',
-        hour: '2-digit', minute: '2-digit', second: '2-digit'
-     });
-  };
-
-  const handlePageChange = (newPage: number) => {
-      const url = new URL(window.location.href);
-      url.searchParams.set('page', newPage.toString());
-      router.push(url.toString());
+  const handlePageChange = (newPage: number): void => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('page', newPage.toString());
+    router.push(url.toString());
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div className="flex items-center gap-3">
-          <h2 className="text-xl font-bold">All Submissions</h2>
-          <Link href={`/${locale}/docs#submissions`} className="flex h-11 w-11 items-center justify-center p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-primary" title="View Documentation">
-            <HelpCircle className="w-4 h-4" />
-          </Link>
-        </div>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <Link href={`/${locale}/docs#submissions`} className="flex h-11 w-11 items-center justify-center p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-primary" title="View Documentation">
+          <HelpCircle className="w-4 h-4" />
+        </Link>
         <div className="text-sm text-muted-foreground">
-            Page {currentPage} of {totalPages}
+          Page {currentPage} of {totalPages}
         </div>
       </div>
 
@@ -105,14 +100,14 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage, pe
                 value={score !== null && score !== undefined ? score.toFixed(0) : '—'}
               />
               <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  onClick={() => handleView(submission)}
-                  aria-label={`View submission ${submission.id}`}
-                  title="View submission"
+                <a
+                  href={recordHref(submission)}
+                  aria-label={`${recordLabel} ${submission.id}`}
+                  title={recordLabel}
                   className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-primary"
                 >
                   <Eye className="h-4 w-4" />
-                </button>
+                </a>
               </div>
             </MobileCard>
           );
@@ -143,7 +138,11 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage, pe
                 key={submission.id}
                 data-shortcut-row={submission.id}
                 className="cursor-pointer"
-                onClick={() => handleView(submission)}
+                tabIndex={0}
+                onClick={() => openRecord(submission)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && event.target === event.currentTarget) openRecord(submission);
+                }}
               >
                   <TableCell className="font-mono text-muted-foreground text-xs">#{submission.id}</TableCell>
                   <TableCell>
@@ -191,16 +190,17 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage, pe
                       )}
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex items-center justify-end">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        icon={Eye}
-                        iconOnly
-                        tooltip="View submission"
-                        data-shortcut-primary
-                        onClick={() => handleView(submission)}
-                      />
+                    <div className="flex items-center justify-end" onClick={(event) => event.stopPropagation()}>
+                      <a href={recordHref(submission)} aria-label={`${recordLabel} ${submission.id}`}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          icon={Eye}
+                          iconOnly
+                          tooltip={recordLabel}
+                          data-shortcut-primary
+                        />
+                      </a>
                     </div>
                   </TableCell>
               </TableRow>
@@ -240,18 +240,6 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage, pe
               Next
           </Button>
       </div>
-
-      {selectedSubmission && (
-        <SubmissionModal
-            isOpen={!!selectedSubmission}
-            onClose={() => setSelectedSubmissionId(null)}
-            submission={selectedSubmission}
-            canRecompute={hasEffectivePermission(new Set(permissionKeys), 'submission:recompute')}
-            canDownload={hasEffectivePermission(new Set(permissionKeys), 'submission:download')}
-            canAssignLane={hasEffectivePermission(new Set(permissionKeys), 'evaluation:lane_assign')}
-            canMoveLane={hasEffectivePermission(new Set(permissionKeys), 'evaluation:lane_move')}
-        />
-      )}
     </div>
   );
 }

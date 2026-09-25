@@ -71,7 +71,7 @@ export async function assignEvaluationLane(submissionId: number, lane: string, r
       afterValues: { lane: lane.trim(), reason: reason.trim(), assignedAt: new Date().toISOString() },
       result: 'success',
     });
-    revalidatePath('/[locale]/submissions');
+    revalidatePath('/[locale]/evaluation/submissions');
     return { success: true };
   } catch (error) {
     return { success: false, error: (error as Error).message };
@@ -109,7 +109,7 @@ export async function moveEvaluationLane(submissionId: number, lane: string, rea
       afterValues: { lane: lane.trim(), reason: reason.trim(), movedAt: new Date().toISOString() },
       result: 'success',
     });
-    revalidatePath('/[locale]/submissions');
+    revalidatePath('/[locale]/evaluation/submissions');
     return { success: true };
   } catch (error) {
     return { success: false, error: (error as Error).message };

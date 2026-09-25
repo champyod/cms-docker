@@ -100,8 +100,8 @@ function buildSubmissionSearcher(locale: string): EntitySearcher {
       {
         key: `submission-${trimmed}`,
         label: `Submission #${trimmed}`,
-        detail: 'Open submissions list',
-        path: localeRelativePath(locale, 'evaluation.submissions'),
+        detail: 'Open submission record',
+        path: localeRelativePath(locale, 'evaluation.submission-tabs.summary', { id: Number(trimmed) }),
       },
     ];
   };

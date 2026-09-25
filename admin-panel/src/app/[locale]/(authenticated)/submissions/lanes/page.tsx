@@ -1,31 +1,17 @@
-import { notFound } from 'next/navigation';
+import { redirect, notFound } from 'next/navigation';
+import { resolveLegacyRedirect } from '@/lib/navigation/redirects';
+import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
 
-import { getLaneBoard } from '@/app/actions/evaluationLanes';
-import { LaneBoard } from '@/components/submissions/LaneBoard';
-import { Stack } from '@/components/core/Layout';
-import { Text } from '@/components/core/Typography';
-import { checkPermission, getPermissions } from '@/lib/permissions';
-
-export default async function SubmissionLanesPage() {
-  // Why evaluation:list: the board is built from lane audit rows, and
-  // getLaneBoard enforces that key — gating here matches the list-page
-  // convention (404 so forbidden looks like a missing page).
-  const hasPermission = await checkPermission('evaluation:list', false);
-  if (!hasPermission) {
-    notFound();
+export default async function LegacySubmissionLanesPage({ params }: { params: Promise<{ locale: string }> }): Promise<never> {
+  const { locale } = await params;
+  let effective: ReadonlySet<string>;
+  try {
+    effective = await requirePermission('evaluation:list');
+  } catch (error: unknown) {
+    if (error instanceof AuthorizationError && error.status === 403) notFound();
+    throw error;
   }
-
-  const board = await getLaneBoard();
-  const permissionKeys = [...(await getPermissions())];
-
-  return (
-    <Stack gap={8}>
-      <Stack gap={2}>
-        <Text variant="h1">Evaluation lanes</Text>
-        <Text variant="muted">Drag submissions between lanes or move them with a reason.</Text>
-      </Stack>
-
-      <LaneBoard board={board} permissionKeys={permissionKeys} />
-    </Stack>
-  );
+  const target = resolveLegacyRedirect(locale, '/submissions/lanes', effective);
+  if (!target) notFound();
+  redirect(target);
 }

@@ -360,6 +360,6 @@
     },
     "tasks": { "list": { "label": "งาน" }, "record": { "label": "งาน" }, "tabs": { "overview": { "label": "ภาพรวม" }, "datasets": { "label": "ชุดข้อมูล" }, "files": { "label": "ไฟล์" }, "settings": { "label": "การตั้งค่า" } } },
     "people": { "users": { "label": "ผู้ใช้" }, "user-record": { "label": "ผู้ใช้" }, "user-tabs": { "profile": { "label": "โปรไฟล์" }, "teams": { "label": "ทีม" }, "history": { "label": "ประวัติ" } }, "teams": { "label": "ทีม" }, "team-record": { "label": "ทีม" }, "team-tabs": { "overview": { "label": "ภาพรวม" }, "members": { "label": "สมาชิก" }, "contests": { "label": "การแข่งขัน" } } },
-    "evaluation": { "submissions": { "label": "การส่งคำตอบ" }, "submission-record": { "label": "การส่งคำตอบ" }, "submission-tabs": { "summary": { "label": "สรุป" }, "results": { "label": "ผลลัพธ์" }, "logs": { "label": "บันทึก" }, "evaluation": { "label": "การประเมิน" } }, "lanes": { "label": "เลน" } }
+    "evaluation": { "submissions": { "label": "การส่งคำตอบ" }, "submission-record": { "label": "การส่งคำตอบ" }, "submission-tabs": { "summary": { "label": "สรุป" }, "results": { "label": "ผลลัพธ์" }, "logs": { "label": "บันทึก" }, "evaluation": { "label": "การประเมิน" } }, "lanes": { "label": "แถวประเมิน" } }
   }
 }

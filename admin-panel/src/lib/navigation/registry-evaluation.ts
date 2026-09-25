@@ -1,10 +1,11 @@
 import { pageRoute, recordRoute, tabRoute } from '@/lib/navigation/registry-descriptors';
 import type { RouteDescriptor } from '@/lib/navigation/types';
 
-// Why: the Evaluation slice ships with Task 4, so every descriptor here stays
-// disabled until that task creates and tests the physical Submission routes.
+// Why: the Evaluation shell ships with the canonical Submission list and lane
+// module, so those two descriptors are enabled; the record landing and its
+// four tabs stay disabled until their physical routes are created and tested.
 export const EVALUATION_ROUTES: readonly RouteDescriptor[] = [
-  pageRoute('evaluation.submissions', '/evaluation/submissions', { all: ['submission:list'] }, ['/submissions']),
+  { ...pageRoute('evaluation.submissions', '/evaluation/submissions', { all: ['submission:list'] }, ['/submissions']), enabled: true },
   recordRoute(
     'evaluation.submission-record',
     '/evaluation/submissions/[id]',
@@ -17,5 +18,5 @@ export const EVALUATION_ROUTES: readonly RouteDescriptor[] = [
   tabRoute('evaluation.submission-tabs.results', '/evaluation/submissions/[id]/results', 'evaluation.submission-record', { all: ['submission:read', 'submissionresult:read', 'file:read'] }),
   tabRoute('evaluation.submission-tabs.logs', '/evaluation/submissions/[id]/logs', 'evaluation.submission-record', { all: ['submission:read', 'submissionresult:read'] }),
   tabRoute('evaluation.submission-tabs.evaluation', '/evaluation/submissions/[id]/evaluation', 'evaluation.submission-record', { all: ['submission:read', 'evaluation:read'] }),
-  pageRoute('evaluation.lanes', '/evaluation/lanes', { all: ['evaluation:list'] }, ['/submissions/lanes']),
+  { ...pageRoute('evaluation.lanes', '/evaluation/lanes', { all: ['evaluation:list'] }, ['/submissions/lanes']), enabled: true },
 ];

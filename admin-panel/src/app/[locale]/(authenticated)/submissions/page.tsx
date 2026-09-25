@@ -1,46 +1,17 @@
-import { getSubmissions } from '@/app/actions/submissions';
-import { SubmissionList } from '@/components/submissions/SubmissionList';
-import { checkPermission, getPermissions } from '@/lib/permissions';
-import { getDictionary } from '@/i18n';
-import { notFound } from 'next/navigation';
-import { Stack } from '@/components/core/Layout';
-import { Text } from '@/components/core/Typography';
+import { redirect, notFound } from 'next/navigation';
+import { resolveLegacyRedirect } from '@/lib/navigation/redirects';
+import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
 
-export default async function SubmissionsPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ locale: string }>;
-  searchParams: Promise<{ page?: string; search?: string }>;
-}) {
+export default async function LegacySubmissionsPage({ params }: { params: Promise<{ locale: string }> }): Promise<never> {
   const { locale } = await params;
-  const dict = await getDictionary(locale);
-  const hasPermission = await checkPermission('submission:list', false);
-
-  // Why: return 404 for forbidden access so existence is indistinguishable from missing page
-  if (!hasPermission) {
-    notFound();
+  let effective: ReadonlySet<string>;
+  try {
+    effective = await requirePermission('submission:list');
+  } catch (error: unknown) {
+    if (error instanceof AuthorizationError && error.status === 403) notFound();
+    throw error;
   }
-
-  const sParams = await searchParams;
-  const page = Number(sParams.page) || 1;
-
-  const { submissions, totalPages } = await getSubmissions({ page });
-  const permissionKeys = [...(await getPermissions())];
-
-  return (
-    <Stack gap={8}>
-      <Stack gap={2}>
-        <Text variant="h1">{dict.submissions.title}</Text>
-        <Text variant="muted">{dict.submissions.subtitle}</Text>
-      </Stack>
-
-      <SubmissionList
-        initialSubmissions={submissions}
-        totalPages={totalPages}
-        currentPage={page}
-        permissionKeys={permissionKeys}
-       />
-    </Stack>
-  );
+  const target = resolveLegacyRedirect(locale, '/submissions', effective);
+  if (!target) notFound();
+  redirect(target);
 }
