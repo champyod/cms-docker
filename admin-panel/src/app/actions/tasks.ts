@@ -10,14 +10,16 @@ export async function getTasks(params: { page?: number; search?: string } = {}):
   return taskService.listTasks(params);
 }
 
-export async function getTask(id: number): Promise<Awaited<ReturnType<typeof taskService.getTask>>> {
-  return taskService.getTask(id);
-}
-
 // Why: on-demand dialog read — the Task settings dialog fetches its record
-// through this wrapper instead of the legacy all-in-one getTask service.
+// through this tab-owned wrapper instead of a legacy all-in-one read.
 export async function getTaskSettings(id: number): Promise<Awaited<ReturnType<typeof taskDetail.getTaskSettings>>> {
   return taskDetail.getTaskSettings(id);
+}
+
+// Why: tab-owned datasets read — the retired all-in-one service gated
+// dataset:list, so this wrapper keeps that key enforced on an entry chain.
+export async function getTaskDatasets(taskId: number): Promise<Awaited<ReturnType<typeof taskDetail.getTaskDatasets>>> {
+  return taskDetail.getTaskDatasets(taskId);
 }
 
 export async function getTaskDiagnostics(taskId: number): Promise<Awaited<ReturnType<typeof taskService.getTaskDiagnostics>>> {

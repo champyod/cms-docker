@@ -87,8 +87,8 @@ async function fetchStatementUploadDates(taskId: number, statements: readonly Ra
   return dates;
 }
 
-// Why: enrichment moved here from the all-in-one getTask service so the
-// overview read keeps digest/file metadata without importing that service.
+// Why: enrichment lives here so the overview read keeps digest/file
+// metadata without depending on the task mutation service.
 async function enrichStatements(taskId: number, statements: readonly RawStatement[]): Promise<TaskStatementSummary[]> {
   if (statements.length === 0) return [];
   const [sizes, dates] = await Promise.all([fetchStatementSizes(statements), fetchStatementUploadDates(taskId, statements)]);
@@ -180,8 +180,8 @@ function toDatasetSummary(dataset: DatasetEntry, permissions: ReadonlySet<string
 }
 
 export async function getTaskDatasets(taskId: number): Promise<TaskDatasetsData | null> {
-  const permissions = new Set<string>([...await requirePermission('task:read'), ...await requirePermission('dataset:read')]);
-  // Why: testcases need testcase:read — without it each dataset carries testcases: [].
+  // Why: dataset:list is inherited from the retired all-in-one read; testcases still need testcase:read.
+  const permissions = new Set<string>([...await requirePermission('task:read'), ...await requirePermission('dataset:read'), ...await requirePermission('dataset:list')]);
   const datasetSelect = {
     id: true, description: true, time_limit: true, memory_limit: true, task_type: true,
     score_type: true, autojudge: true, task_type_parameters: true, score_type_parameters: true,

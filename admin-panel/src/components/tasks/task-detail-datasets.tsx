@@ -8,6 +8,7 @@ import { Button } from '@/components/core/Button';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/apiClient';
 import { useConfirm } from '@/hooks/useConfirm';
+import { buildRoute } from '@/lib/navigation/routes';
 import { useTaskConfirmationCopy, useTaskTabRefresh } from './task-detail/useTaskTabRefresh';
 
 interface Dataset {
@@ -67,7 +68,7 @@ export function DatasetsSection({
           <span className="text-xs bg-accent px-2 py-0.5 rounded-full text-muted-foreground">{datasets.length}</span>
         </div>
         <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
-          <Link href={`/${locale}/docs#datasets`} className="p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground" title="View Documentation">
+          <Link href={`${buildRoute(locale, 'system.docs')}#datasets`} className="p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground" title="View Documentation">
             <HelpCircle className="w-4 h-4" />
           </Link>
           <button onClick={onToggle} className="p-1">{expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}</button>
@@ -138,7 +139,7 @@ export function DatasetsSection({
   );
 }
 
-export function AttachmentsSection({ attachments, onUpload }: { attachments: Array<{ id: number; filename: string }>; onUpload: () => void }): React.JSX.Element {
+export function AttachmentsSection({ attachments, onUpload, onDeleteAttachment }: { attachments: Array<{ id: number; filename: string }>; onUpload: () => void; onDeleteAttachment?: (attachmentId: number) => Promise<void> }): React.JSX.Element {
   const refresh = useTaskTabRefresh();
   const confirm = useConfirm();
   const { destructiveConfirm } = useTaskConfirmationCopy();
@@ -153,6 +154,10 @@ export function AttachmentsSection({ attachments, onUpload }: { attachments: Arr
     if (result?.success) refresh();
   };
 
+  // Why: the files tab owns attachment deletion — the section keeps its own
+  // active-path handler only so a bare render still deletes safely.
+  const deleteAttachment = onDeleteAttachment ?? handleDeleteAttachment;
+
   return (
     <Card className="border-border p-4">
       <div className="flex items-center justify-between mb-4">
@@ -164,7 +169,7 @@ export function AttachmentsSection({ attachments, onUpload }: { attachments: Arr
           {attachments.map((att) => (
             <div key={att.id} className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg text-sm text-muted-foreground group">
               <Paperclip className="w-3 h-3 text-info" /><span className="truncate flex-1">{att.filename}</span>
-              <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete attachment" onClick={() => { void handleDeleteAttachment(att.id); }} className="text-destructive" />
+              <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete attachment" onClick={() => { void deleteAttachment(att.id); }} className="text-destructive" />
             </div>
           ))}
         </div>

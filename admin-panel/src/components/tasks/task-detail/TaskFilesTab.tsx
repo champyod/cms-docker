@@ -13,12 +13,13 @@ export function TaskFilesTab({ data }: TaskFilesTabProps): React.JSX.Element {
     <div className="space-y-6">
       <AttachmentsSection
         attachments={[...data.attachments]}
-        onUpload={() => actions.setIsAttachmentModalOpen(true)}
+        onUpload={actions.openUpload}
+        onDeleteAttachment={actions.deleteAttachment}
       />
-      {actions.isAttachmentModalOpen && (
+      {actions.isUploadOpen && (
         <AttachmentModal
           isOpen
-          onClose={() => actions.setIsAttachmentModalOpen(false)}
+          onClose={actions.closeUpload}
           taskId={data.taskId}
           onSuccess={actions.refresh}
         />

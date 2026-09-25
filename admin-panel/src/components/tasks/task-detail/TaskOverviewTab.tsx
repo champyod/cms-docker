@@ -37,12 +37,13 @@ export function TaskOverviewTab({ data }: TaskOverviewTabProps): React.JSX.Eleme
         statements={[...data.statements]}
         expanded={state.statementsExpanded}
         onToggle={() => state.toggleSection('statements')}
-        onUpload={() => state.setIsStatementModalOpen(true)}
+        onUpload={state.openUpload}
+        onDeleteStatement={state.deleteStatement}
       />
-      {state.isStatementModalOpen && (
+      {state.isUploadOpen && (
         <StatementModal
           isOpen
-          onClose={() => state.setIsStatementModalOpen(false)}
+          onClose={state.closeUpload}
           taskId={data.task.id}
           existingLanguages={data.statements.map((statement) => statement.language)}
           onSuccess={state.refresh}

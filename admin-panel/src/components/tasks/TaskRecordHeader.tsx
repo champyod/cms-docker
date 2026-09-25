@@ -5,6 +5,7 @@ import { ExternalLink, Settings } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { getTaskSettings } from '@/app/actions/tasks';
 import { Button } from '@/components/core/Button';
+import { buildRoute } from '@/lib/navigation/routes';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 import type { TaskSettingsRecord } from '@/lib/queries/task-detail';
 import { TaskModal } from './TaskModal';
@@ -51,7 +52,7 @@ export function TaskRecordHeader({ taskId, title, contest, permissionKeys }: Tas
   return (
     <div className="flex flex-wrap items-center gap-3">
       {contest && (
-        <a href={`/${locale}/contests/${contest.id}`} className="flex items-center gap-1 text-sm text-primary hover:underline">
+        <a href={buildRoute(locale, 'contests.tabs.overview', { id: contest.id })} className="flex items-center gap-1 text-sm text-primary hover:underline">
           Contest: {contest.name}
           <ExternalLink className="h-3 w-3" />
         </a>

@@ -30,26 +30,26 @@ export function TaskDatasetsTab({ data }: TaskDatasetsTabProps): React.JSX.Eleme
         activeDatasetId={data.activeDatasetId}
         expanded={actions.expanded}
         onToggle={actions.toggleExpanded}
-        onCreate={actions.startCreateDataset}
-        onEdit={(dataset) => actions.startEditDataset({
+        onCreate={actions.openCreate}
+        onEdit={(dataset) => actions.openEdit({
           ...dataset,
           task_type_parameters: dataset.task_type_parameters ?? {},
           score_type_parameters: dataset.score_type_parameters ?? {},
         })}
-        onActivate={(datasetId) => { void actions.handleActivateDataset(datasetId); }}
-        onClone={(datasetId, description) => { void actions.handleCloneDataset(datasetId, description); }}
-        onRename={(datasetId, description) => { void actions.handleRenameDataset(datasetId, description); }}
-        onToggleAutojudge={(datasetId) => { void actions.handleToggleAutojudge(datasetId); }}
-        onDelete={(datasetId) => { void actions.handleDeleteDataset(datasetId); }}
-        onOpenTestcaseUpload={(datasetId) => actions.setUploadTargetDatasetId(datasetId)}
-        onDeleteTestcase={(testcaseId) => { void actions.handleDeleteTestcase(testcaseId); }}
-        onTogglePublic={(testcaseId) => { void actions.handleTogglePublic(testcaseId); }}
+        onActivate={(datasetId) => { void actions.activate(datasetId); }}
+        onClone={(datasetId, description) => { void actions.clone(datasetId, description); }}
+        onRename={(datasetId, description) => { void actions.rename(datasetId, description); }}
+        onToggleAutojudge={(datasetId) => { void actions.toggleAutojudge(datasetId); }}
+        onDelete={(datasetId) => { void actions.removeDataset(datasetId); }}
+        onOpenTestcaseUpload={(datasetId) => actions.openTestcaseUpload(datasetId)}
+        onDeleteTestcase={(testcaseId) => { void actions.removeTestcase(testcaseId); }}
+        onTogglePublic={(testcaseId) => { void actions.togglePublic(testcaseId); }}
         locale={locale}
       />
       {actions.isDatasetModalOpen && (
         <DatasetModal
           isOpen
-          onClose={actions.closeDatasetModal}
+          onClose={actions.closeDataset}
           taskId={data.taskId}
           dataset={actions.editingDataset}
           onSuccess={refresh}
@@ -59,7 +59,7 @@ export function TaskDatasetsTab({ data }: TaskDatasetsTabProps): React.JSX.Eleme
       {actions.uploadTargetDatasetId !== null && (
         <TestcaseUploadModal
           isOpen
-          onClose={() => actions.setUploadTargetDatasetId(null)}
+          onClose={() => actions.closeTestcaseUpload()}
           datasetId={actions.uploadTargetDatasetId}
           onSuccess={refresh}
         />

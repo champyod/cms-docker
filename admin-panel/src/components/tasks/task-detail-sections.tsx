@@ -1,15 +1,16 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
-import { HelpCircle, ChevronDown, ChevronUp, Settings, FileText, Trash2, Upload, ExternalLink } from 'lucide-react';
+import { HelpCircle, ChevronDown, ChevronUp, Settings, FileText, Trash2, Upload } from 'lucide-react';
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
 import { ResponsiveTable, type ResponsiveColumn } from '@/components/core/ResponsiveTable';
 import { EmptyState } from '@/components/core/EmptyState';
 import { apiClient } from '@/lib/apiClient';
 import { useConfirm } from '@/hooks/useConfirm';
+import { buildRoute } from '@/lib/navigation/routes';
 import { useTaskConfirmationCopy, useTaskTabRefresh } from './task-detail/useTaskTabRefresh';
 import { cn } from '@/lib/utils';
 
@@ -29,7 +30,7 @@ export function ConfigSection({ task, expanded, onToggle, locale }: TaskDetailCo
           <span className="font-bold text-foreground">Configuration</span>
         </div>
         <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
-          <Link href={`/${locale}/docs#task-types`} className="p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground" title="View Documentation">
+          <Link href={`${buildRoute(locale, 'system.docs')}#task-types`} className="p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground" title="View Documentation">
             <HelpCircle className="w-4 h-4" />
           </Link>
           <button onClick={onToggle} className="p-1">{expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}</button>
@@ -61,6 +62,7 @@ interface StatementsSectionProps {
   expanded: boolean;
   onToggle: () => void;
   onUpload: () => void;
+  onDeleteStatement?: (statementId: number) => Promise<void>;
 }
 
 function formatSize(bytes: number | null | undefined): string {
@@ -79,19 +81,13 @@ function formatDate(iso: string | null | undefined): string {
   }
 }
 
-async function deleteStatement(id: number): Promise<void> {
-  if (!confirm('Delete this statement?')) return;
-  await apiClient.delete(`/api/statements/${id}`);
-  window.location.reload();
-}
-
 // Why: one fragment drives desktop rows and mobile cards, with 44px
 // targets kept here so both layouts stay touch-sized.
-function renderStatementActions(stmt: StatementRow): React.JSX.Element {
+function renderStatementActions(stmt: StatementRow, onDelete: (statementId: number) => void): React.JSX.Element {
   return (
     <>
       <a href={`/api/statements/${stmt.digest}`} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center px-2 text-xs text-primary hover:underline">Download</a>
-      <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete statement" onClick={() => void deleteStatement(stmt.id)} className="text-destructive" />
+      <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete statement" onClick={() => onDelete(stmt.id)} className="text-destructive" />
     </>
   );
 }
@@ -107,7 +103,7 @@ function buildStatementColumns(): ResponsiveColumn<StatementRow>[] {
   ];
 }
 
-export function StatementsSection({ statements, expanded, onToggle, onUpload }: StatementsSectionProps): React.JSX.Element {
+export function StatementsSection({ statements, expanded, onToggle, onUpload, onDeleteStatement }: StatementsSectionProps): React.JSX.Element {
   const refresh = useTaskTabRefresh();
   const confirm = useConfirm();
   const { destructiveConfirm } = useTaskConfirmationCopy();
@@ -115,18 +111,27 @@ export function StatementsSection({ statements, expanded, onToggle, onUpload }: 
 
   const runAction = useActionFeedback();
 
-  const handleDeleteStatement = async (statementId: number): Promise<void> => {
+  const handleDeleteStatement = useCallback(async (statementId: number): Promise<void> => {
     if (!(await confirm(destructiveConfirm('statement')))) return;
     const result = await runAction(
       { pending: 'Deleting statement...', success: 'Statement deleted', failure: 'Delete failed' },
       () => apiClient.delete(`/api/statements/${statementId}`)
     );
     if (result?.success) refresh();
-  };
+  }, [confirm, destructiveConfirm, runAction, refresh]);
+
+  // Why: the overview tab owns statement deletion — the section keeps its
+  // own active-path handler only so a bare render still deletes safely.
+  const deleteStatement = onDeleteStatement ?? handleDeleteStatement;
 
   const languages = useMemo(() => Array.from(new Set(statements.map((s) => s.language))).sort(), [statements]);
   const filtered = useMemo(() => (activeLanguage ? statements.filter((s) => s.language === activeLanguage) : statements), [statements, activeLanguage]);
   const columns = useMemo(() => buildStatementColumns(), []);
+  const renderActions = useCallback(
+    (stmt: StatementRow): React.JSX.Element =>
+      renderStatementActions(stmt, (statementId: number): void => { void deleteStatement(statementId); }),
+    [deleteStatement],
+  );
 
   return (
     <Card className="border-border overflow-hidden">
@@ -155,7 +160,7 @@ export function StatementsSection({ statements, expanded, onToggle, onUpload }: 
                 columns={columns}
                 rows={filtered}
                 getRowKey={(stmt) => stmt.id}
-                renderRowActions={renderStatementActions}
+                renderRowActions={renderActions}
                 emptyState={<p className="text-center text-sm text-muted-foreground">No statements for &quot;{activeLanguage}&quot;.</p>}
               />
             </>
@@ -166,21 +171,3 @@ export function StatementsSection({ statements, expanded, onToggle, onUpload }: 
   );
 }
 
-interface TaskHeaderProps {
-  task: { id: number; title: string; name: string; contests: { id: number; name: string } | null };
-  locale: string;
-  onOpenSettings: () => void;
-}
-
-export function TaskHeader({ task, locale, onOpenSettings }: TaskHeaderProps): React.JSX.Element {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">{task.title}</h1>
-        <p className="text-muted-foreground mt-1 font-mono text-sm">{task.name}</p>
-        {task.contests ? <a href={`/${locale}/contests/${task.contests.id}`} className="text-primary text-sm hover:underline flex items-center gap-1 mt-2">Contest: {task.contests.name}<ExternalLink className="w-3 h-3" /></a> : null}
-      </div>
-      <Button variant="positiveOutline" icon={Settings} onClick={onOpenSettings}>Task Settings</Button>
-    </div>
-  );
-}

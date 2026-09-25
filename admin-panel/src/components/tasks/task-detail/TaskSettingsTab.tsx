@@ -24,7 +24,7 @@ export function TaskSettingsTab({ data }: TaskSettingsTabProps): React.JSX.Eleme
             <span className="font-bold text-foreground">Task Settings</span>
           </div>
           {canEdit && (
-            <Button variant="positiveOutline" icon={Settings} onClick={() => state.setIsSettingsModalOpen(true)}>
+            <Button variant="positiveOutline" icon={Settings} onClick={state.open}>
               Edit Task
             </Button>
           )}
@@ -36,10 +36,10 @@ export function TaskSettingsTab({ data }: TaskSettingsTabProps): React.JSX.Eleme
           <div className="rounded-lg border border-border bg-muted/30 p-3"><label className="mb-1 block text-xs font-bold uppercase text-muted-foreground">Token Mode</label><div className="text-sm capitalize text-foreground">{data.task.token_mode.replace(/_/g, ' ')}</div></div>
         </div>
       </Card>
-      {state.isSettingsModalOpen && (
+      {state.isOpen && (
         <TaskModal
           isOpen
-          onClose={() => state.setIsSettingsModalOpen(false)}
+          onClose={state.close}
           task={data.task}
           onSuccess={state.refresh}
           permissionKeys={data.permissionKeys}

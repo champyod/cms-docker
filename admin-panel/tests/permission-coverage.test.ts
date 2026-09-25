@@ -257,7 +257,7 @@ describe('permission coverage', () => {
     expect(source).toContain('stripDisallowedFields');
   });
   it('loads testcase visibility for task detail', (): void => {
-    const source = fs.readFileSync(path.join(SRC_DIR, 'lib/services/tasks.ts'), 'utf8');
+    const source = fs.readFileSync(path.join(SRC_DIR, 'lib/queries/task-detail.ts'), 'utf8');
     expect(source).toContain('codename: true, public: true');
   });
   it('prevents group editors from granting powers they lack', (): void => {
