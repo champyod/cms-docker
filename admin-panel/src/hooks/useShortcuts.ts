@@ -2,9 +2,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useAppRouter } from './useAppRouter';
-import { NAV_REGISTRY } from '@/lib/nav-registry';
+import { NAV_REGISTRY, isEntryPermitted } from '@/lib/nav-registry';
 import { NAV_CHORD_KEY_BY_PATH } from '@/lib/nav-chord';
-import { hasEffectivePermission } from '@/lib/permission-engine';
 
 export const CHORD_TIMEOUT_MS = 1000;
 export const CHORD_PREFIX_KEY = 'g';
@@ -172,7 +171,7 @@ export function bindingsForPermissions(
   return NAVIGATION_BINDINGS.filter((binding) => {
     const registryPath = binding.path === '' ? '/' : binding.path;
     const entry = NAV_REGISTRY.find((item) => item.path === registryPath);
-    return entry?.permission === undefined || hasEffectivePermission(effective, entry.permission);
+    return entry !== undefined && isEntryPermitted(entry, effective);
   });
 }
 

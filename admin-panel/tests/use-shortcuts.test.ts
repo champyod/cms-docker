@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  bindingsForPermissions,
   CHORD_TIMEOUT_MS,
   IDLE_CHORD,
   NAVIGATION_BINDINGS,
@@ -216,5 +217,32 @@ describe('locale-safe hrefs', () => {
     handleShortcutEvent(keyEvent('g'), h.deps(), 0);
     handleShortcutEvent(keyEvent('d'), h.deps(), 100);
     expect(h.navigated).toEqual(['/th']);
+  });
+});
+
+describe('shortcut permission parity', () => {
+  it('keeps the old any-of Permissions route for either permitted key', () => {
+    expect(bindingsForPermissions(['admin:list']).map((binding) => binding.path)).toContain(
+      '/permissions',
+    );
+    expect(bindingsForPermissions(['group:list']).map((binding) => binding.path)).toContain(
+      '/permissions',
+    );
+  });
+
+  it('removes the old any-of Permissions route when neither key is granted', () => {
+    expect(bindingsForPermissions(['settings:list']).map((binding) => binding.path)).not.toContain(
+      '/permissions',
+    );
+  });
+
+  it('keeps the any-of route for the audited all:all bypass', () => {
+    expect(bindingsForPermissions(['all:all']).map((binding) => binding.path)).toContain(
+      '/permissions',
+    );
+  });
+
+  it('returns all bindings only when the caller supplies no permission list', () => {
+    expect(bindingsForPermissions(undefined)).toEqual(NAVIGATION_BINDINGS);
   });
 });
