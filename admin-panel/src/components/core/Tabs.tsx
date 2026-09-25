@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 
 export interface TabItem {
   id: string;
-  label: string;
+  label: React.ReactNode;
   href?: string;
 }
 
