@@ -4,6 +4,7 @@ import { Download, Wand2 } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { Dialog, DialogFooter } from '@/components/core/Dialog';
 import { PasswordKindSelector } from '@/components/core/PasswordFieldWithKind';
+import type { Dictionary } from '@/lib/dictionary';
 import { BulkEditPreviewTable, ContestSection, ProfileSection, TeamSection } from './bulkEditSections';
 import { buildEditExportCsv, type ContestOption, type SelectedUser } from './bulkEditActions';
 import { useBulkEditActions } from './useBulkEditActions';
@@ -13,10 +14,12 @@ interface UserBulkEditDialogProps {
   onClose: () => void;
   selectedUsers: SelectedUser[];
   contests: ContestOption[];
+  canReadContests: boolean;
+  navigation: Dictionary['navigation'];
   onSuccess: () => void;
 }
 
-export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, onSuccess }: UserBulkEditDialogProps) {
+export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, canReadContests, navigation, onSuccess }: UserBulkEditDialogProps) {
   const {
     loading, statusMessage, errorMessage,
     selectedContestId, setSelectedContestId,
@@ -45,6 +48,7 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
         if (!open) onClose();
       }}
       title="Edit Selected Users"
+      description={navigation.people.users.label}
       className="sm:max-w-6xl"
     >
       <div className="space-y-4">
@@ -63,27 +67,31 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
           <Button variant="secondary" icon={Download} iconOnly tooltip="Export CSV" onClick={handleExportSelectedRows} disabled={rows.length === 0} />
         </div>
 
-        <ContestSection
-          contests={contests}
-          selectedContestId={selectedContestId}
-          loading={loading}
-          hasRows={rows.length > 0}
-          onContestIdChange={setSelectedContestId}
-          onRunContestMutation={runContestMutation}
-        />
+        {canReadContests && (
+          <ContestSection
+            contests={contests}
+            selectedContestId={selectedContestId}
+            loading={loading}
+            hasRows={rows.length > 0}
+            onContestIdChange={setSelectedContestId}
+            onRunContestMutation={runContestMutation}
+          />
+        )}
 
-        <TeamSection
-          contests={contests}
-          teamContestId={teamContestId}
-          teamCode={teamCode}
-          teamsOptions={teamsOptions}
-          loading={loading}
-          hasRows={rows.length > 0}
-          onTeamContestIdChange={setTeamContestId}
-          onTeamCodeChange={setTeamCode}
-          onRunTeamSet={runTeamSet}
-          onRunTeamRemoveAny={runTeamRemoveAny}
-        />
+        {canReadContests && (
+          <TeamSection
+            contests={contests}
+            teamContestId={teamContestId}
+            teamCode={teamCode}
+            teamsOptions={teamsOptions}
+            loading={loading}
+            hasRows={rows.length > 0}
+            onTeamContestIdChange={setTeamContestId}
+            onTeamCodeChange={setTeamCode}
+            onRunTeamSet={runTeamSet}
+            onRunTeamRemoveAny={runTeamRemoveAny}
+          />
+        )}
 
         <ProfileSection
           timezone={timezone}

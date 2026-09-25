@@ -10,7 +10,7 @@ const CONTEST_MODES = ['add', 'remove'] as const;
 const TEAM_MODES = ['set', 'remove-any'] as const;
 
 function revalidateUserContestPages(): void {
-  revalidatePath('/[locale]/users', 'page');
+  revalidatePath('/[locale]/people/users', 'page');
   revalidatePath('/[locale]/contests', 'page');
 }
 

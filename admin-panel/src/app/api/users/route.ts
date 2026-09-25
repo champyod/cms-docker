@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
       afterValues: { username: usernameTrimmed, first_name: firstNameTrimmed, last_name: lastNameTrimmed },
       result: 'success',
     });
-    revalidatePath('/[locale]/users', 'page');
+    revalidatePath('/[locale]/people/users', 'page');
     return apiSuccess({ user });
   } catch (error) {
     const e = error as { code?: string };

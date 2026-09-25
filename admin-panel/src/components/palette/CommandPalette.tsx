@@ -33,7 +33,7 @@ export function CommandPalette({ open, onOpenChange, permissionKeys }: CommandPa
   // Why: palette navigation is rendered from the single registry so /search and any future
   // exposeIn:'palette' entries appear without touching the palette.
   const navSections = useMemo(() => entriesByGroup(effective, 'palette'), [effective]);
-  const searchers = useMemo(() => buildEntitySearchers(visibility), [visibility]);
+  const searchers = useMemo(() => buildEntitySearchers(visibility, locale), [visibility, locale]);
   const { loading, hits } = useEntitySearch(open, query, searchers);
   const hasQuery = query.trim().length >= MIN_QUERY_LENGTH;
 

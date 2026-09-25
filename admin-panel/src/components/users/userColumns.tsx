@@ -114,20 +114,24 @@ export function buildUserColumns(args: BuildUserColumnsArgs): ResponsiveColumn<U
 
 // Why: j/k navigation queries [data-shortcut-row]; without this prop
 // the migrated users list is invisible to the shortcut handler.
-// Row click opens edit for managers; inner controls stop propagation.
+// Row click opens the record for every readable row; inner controls stop
+// propagation. A row stripped of `id` stays non-navigable instead of
+// exposing an identifier the caller may not read.
 export function getUserRowProps(
   row: UserRow,
-  canManage: boolean,
-  onEdit: (user: UserRow['user']) => void,
+  onOpen: (user: UserRow['user']) => void,
 ): ResponsiveRowProps {
-  if (!canManage) return { 'data-shortcut-row': row.user.id, className: 'cursor-pointer' };
+  if (typeof row.user.id !== 'number') return { 'data-shortcut-row': 0, className: 'cursor-pointer' };
   return {
     'data-shortcut-row': row.user.id,
     className: 'cursor-pointer',
     tabIndex: 0,
-    onClick: () => onEdit(row.user),
+    onClick: (event: React.MouseEvent) => {
+      if (event.target !== event.currentTarget) return;
+      onOpen(row.user);
+    },
     onKeyDown: (event: React.KeyboardEvent) => {
-      if (event.key === 'Enter' && event.target === event.currentTarget) onEdit(row.user);
+      if (event.key === 'Enter' && event.target === event.currentTarget) onOpen(row.user);
     },
   };
 }

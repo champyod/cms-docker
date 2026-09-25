@@ -4,11 +4,12 @@ import { useCallback, useMemo, useState } from 'react';
 import { FileSpreadsheet, HelpCircle, Plus } from 'lucide-react';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 
 import { Button } from '@/components/core/Button';
 import { apiClient, type ApiResponse } from '@/lib/apiClient';
+import { buildRoute } from '@/lib/navigation/routes';
 import { hasEffectivePermission } from '@/lib/permission-engine';
+import type { Dictionary } from '@/lib/dictionary';
 
 import { UserBulkCreateCsv } from './UserBulkCreateCsv';
 import { UserBulkEditDialog } from './UserBulkEditDialog';
@@ -17,6 +18,7 @@ import { UserTable } from './UserTable';
 import { TableToolbar } from '@/components/core/TableToolbar';
 import { TablePaginationControls } from '@/components/core/TablePaginationControls';
 import { useConfirm } from '@/hooks/useConfirm';
+import { useAppRouter } from '@/hooks/useAppRouter';
 import { useTable } from '@/hooks/useTable';
 import { useTableAutoRefresh } from '@/hooks/useTableAutoRefresh';
 import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
@@ -29,7 +31,10 @@ interface UserListProps {
   perPage: number;
   initialSearch: string;
   contests: Array<{ id: number; name: string }>;
+  canReadContests: boolean;
+  navigation: Dictionary['navigation'];
   permissionKeys: readonly string[];
+  locale: 'en' | 'th';
 }
 
 function mergeIntoCache(prev: Record<number, UsersPageRow>, users: UsersPageRow[]): Record<number, UsersPageRow> {
@@ -38,7 +43,7 @@ function mergeIntoCache(prev: Record<number, UsersPageRow>, users: UsersPageRow[
   return next;
 }
 
-export function UserList({ initialUsers, totalPages, currentPage, perPage, initialSearch, contests, permissionKeys }: UserListProps) {
+export function UserList({ initialUsers, totalPages, currentPage, perPage, initialSearch, contests, canReadContests, navigation, permissionKeys, locale }: UserListProps) {
   const [usersList, setUsersList] = useState(initialUsers);
   const [userCache, setUserCache] = useState<Record<number, UsersPageRow>>(() => mergeIntoCache({}, initialUsers));
   const [totalPagesState, setTotalPagesState] = useState(totalPages);
@@ -51,8 +56,7 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
   const [selectedUser, setSelectedUser] = useState<UsersPageRow | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const table = useTable({ initialPage: currentPage, initialPerPage: perPage, initialSearch });
-  const pathname = usePathname();
-  const locale = pathname.split('/')[1] || 'en';
+  const router = useAppRouter();
   const confirm = useConfirm();
   const { destructiveConfirm } = useConfirmationCopy();
 
@@ -124,10 +128,6 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
     setIsModalOpen(true);
   };
 
-  const handleSuccess = () => {
-    fetchUsers();
-  };
-
   const toggleAll = (checked: boolean) => {
     setSelectedIds((previous) => {
       const next = new Set(previous);
@@ -150,26 +150,23 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <h2 className="text-xl font-bold text-foreground">All Users</h2>
-          <Link
-            href={`/${locale}/docs#users`}
-            className="inline-flex size-11 shrink-0 items-center justify-center hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground"
-            title="View Documentation"
-          >
-            <HelpCircle className="w-4 h-4" />
-          </Link>
-        </div>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <Link
+          href={`/${locale}/docs#users`}
+          className="inline-flex size-11 shrink-0 items-center justify-center hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground"
+          title="View Documentation"
+        >
+          <HelpCircle className="w-4 h-4" />
+        </Link>
         {canCreateUsers && (
-          <div className="flex flex-wrap items-center gap-2">
+          <>
             <Button variant="positiveOutline" icon={FileSpreadsheet} onClick={() => setIsBulkModalOpen(true)}>
               Bulk Add Users
             </Button>
             <Button variant="positive" icon={Plus} onClick={handleCreate}>
               Create User
             </Button>
-          </div>
+          </>
         )}
       </div>
 
@@ -196,6 +193,7 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
         perPage={table.perPage}
         onToggleAll={toggleAll}
         onToggleOne={toggleOne}
+        onOpen={(user) => router.push(buildRoute(locale, 'people.user-record', { id: user.id }))}
         onEdit={handleEdit}
         onDelete={handleDelete}
       />
@@ -221,7 +219,9 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
         onClose={() => setIsModalOpen(false)}
         user={selectedUser}
         contests={contests}
-        onSuccess={handleSuccess}
+        canReadContests={canReadContests}
+        navigation={navigation}
+        onSuccess={() => { void fetchUsers(); }}
         permissionKeys={permissionKeys}
       />
 
@@ -230,7 +230,9 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
           isOpen={isBulkModalOpen}
           onClose={() => setIsBulkModalOpen(false)}
           contests={contests}
-          onSuccess={handleSuccess}
+          canReadContests={canReadContests}
+          navigation={navigation}
+          onSuccess={() => { void fetchUsers(); }}
         />
       )}
 
@@ -240,7 +242,9 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
           onClose={() => setIsBulkEditOpen(false)}
           selectedUsers={selectedUsers}
           contests={contests}
-          onSuccess={handleSuccess}
+          canReadContests={canReadContests}
+          navigation={navigation}
+          onSuccess={() => { void fetchUsers(); }}
         />
       )}
     </div>

@@ -2,6 +2,7 @@ import { getContests } from '@/app/actions/contests';
 import { getTasks } from '@/app/actions/tasks';
 import { getTeams } from '@/app/actions/teams';
 import { apiClient, type ApiResponse } from '@/lib/apiClient';
+import { buildRoute } from '@/lib/navigation/routes';
 import { MAX_RESULTS_PER_ENTITY } from './search-scheduler';
 import { filterTeams, isNumericQuery, type NavVisibility } from './palette-data';
 
@@ -49,7 +50,7 @@ function buildTaskSearcher(): EntitySearcher {
   };
 }
 
-function buildUserSearcher(): EntitySearcher {
+function buildUserSearcher(locale: string): EntitySearcher {
   return async (query, signal) => {
     const params = new URLSearchParams({ search: query, perPage: String(MAX_RESULTS_PER_ENTITY), page: '1' });
     const result = await apiClient.get(`/api/users?${params.toString()}`, { signal });
@@ -59,12 +60,12 @@ function buildUserSearcher(): EntitySearcher {
       key: `user-${user.id}`,
       label: user.username,
       detail: [user.first_name, user.last_name].filter(Boolean).join(' ') || `User #${user.id}`,
-      path: '/users',
+      path: buildRoute(locale, 'people.user-record', { id: user.id }),
     }));
   };
 }
 
-function buildTeamSearcher(): EntitySearcher {
+function buildTeamSearcher(locale: string): EntitySearcher {
   return async (query, signal) => {
     const teams = await getTeams();
     if (signal.aborted) return [];
@@ -73,12 +74,12 @@ function buildTeamSearcher(): EntitySearcher {
       key: `team-${team.id}`,
       label: team.name,
       detail: team.code,
-      path: `/teams/${team.id}`,
+      path: buildRoute(locale, 'people.team-record', { id: team.id }),
     }));
   };
 }
 
-function buildSubmissionSearcher(): EntitySearcher {
+function buildSubmissionSearcher(locale: string): EntitySearcher {
   return async (query, signal) => {
     const trimmed = query.trim();
     if (!isNumericQuery(trimmed) || signal.aborted) return [];
@@ -87,16 +88,16 @@ function buildSubmissionSearcher(): EntitySearcher {
         key: `submission-${trimmed}`,
         label: `Submission #${trimmed}`,
         detail: 'Open submissions list',
-        path: '/submissions',
+        path: buildRoute(locale, 'evaluation.submissions'),
       },
     ];
   };
 }
 
-export function buildEntitySearchers(visibility: NavVisibility): EntitySearcher[] {
+export function buildEntitySearchers(visibility: NavVisibility, locale: string): EntitySearcher[] {
   const searchers: EntitySearcher[] = [];
-  if (visibility.contests) searchers.push(buildContestSearcher(), buildSubmissionSearcher());
+  if (visibility.contests) searchers.push(buildContestSearcher(), buildSubmissionSearcher(locale));
   if (visibility.tasks) searchers.push(buildTaskSearcher());
-  if (visibility.users) searchers.push(buildUserSearcher(), buildTeamSearcher());
+  if (visibility.users) searchers.push(buildUserSearcher(locale), buildTeamSearcher(locale));
   return searchers;
 }

@@ -7,6 +7,7 @@ import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { useState } from 'react';
 
 import { deleteTeam, updateTeam } from '@/app/actions/teams';
+import { buildRoute } from '@/lib/navigation/routes';
 import { Button } from '@/components/core/Button';
 import { SaveButton } from '@/components/core/SaveButton';
 import { Card } from '@/components/core/Card';
@@ -179,7 +180,7 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
                     <span className="text-xs text-muted-foreground">+{member.contests.length - 3} more</span>
                   )}
                   <a
-                    href={`/${locale}/users?search=${encodeURIComponent(member.user.username)}`}
+                    href={buildRoute(locale, 'people.user-tabs.profile', { id: member.user.id })}
                     className="inline-flex size-11 shrink-0 items-center justify-center text-muted-foreground hover:text-primary transition-colors"
                   >
                     <ExternalLink className="w-4 h-4" />

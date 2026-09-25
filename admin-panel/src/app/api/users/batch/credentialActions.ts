@@ -133,7 +133,7 @@ export async function handleRegenerate({ body, userIds }: BatchActionRequest): P
     afterValues: { action: 'batch-regenerate', mode, count: updated.length, userIds },
     result: 'success',
   });
-  revalidatePath('/[locale]/users', 'page');
+  revalidatePath('/[locale]/people/users', 'page');
 
   return resolveRegenerateResponse(updated, mode, Boolean(body.export));
 }
@@ -165,7 +165,7 @@ export async function handleExportCurrent({ userIds }: BatchActionRequest): Prom
     afterValues: { action: 'batch-export-current', userIds, plainCount, totalCount: users.length },
     result: 'success',
   });
-  revalidatePath('/[locale]/users', 'page');
+  revalidatePath('/[locale]/people/users', 'page');
 
   if (plainCount === 0) {
     return apiSuccess({
@@ -239,7 +239,7 @@ export async function handleApplyCredentials({ body }: BatchActionRequest): Prom
     afterValues: { action: 'batch-apply-credentials', count: updated.length, failedCount: failed.length },
     result: 'success',
   });
-  revalidatePath('/[locale]/users', 'page');
+  revalidatePath('/[locale]/people/users', 'page');
 
   if (updated.length === 0) {
     return apiSuccess({ success: true, count: 0, failed });

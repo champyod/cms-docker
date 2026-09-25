@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { apiClient } from '@/lib/apiClient';
 import { getFieldAccess, stripDisallowedFields } from '@/lib/field-permissions';
 import { cn } from '@/lib/utils';
+import type { Dictionary } from '@/lib/dictionary';
 import { isKnownLanguageCode, normalizeLanguageCode } from '@/lib/constants/languages';
 import type { PasswordKind } from '@/lib/password-format';
 import type { UsersPageRow } from '@/lib/prisma-selects';
@@ -23,11 +24,13 @@ interface UserModalProps {
   onClose: () => void;
   user?: UsersPageRow | null;
   contests?: Array<{ id: number; name: string }>;
+  canReadContests: boolean;
+  navigation: Dictionary['navigation'];
   onSuccess: () => void;
   permissionKeys: readonly string[];
 }
 
-export function UserModal({ isOpen, onClose, user, contests = [], onSuccess, permissionKeys }: UserModalProps) {
+export function UserModal({ isOpen, onClose, user, contests = [], canReadContests, navigation, onSuccess, permissionKeys }: UserModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [formData, setFormData] = useState<UserFormState>(EMPTY_USER_FORM);
@@ -124,6 +127,7 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess, per
         if (!open) onClose();
       }}
       title={user ? 'Edit User' : 'Create New User'}
+      description={navigation.people.users.label}
       className="sm:max-w-md"
     >
       {error && (
@@ -285,7 +289,7 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess, per
             <p className="text-xs text-muted-foreground">Stored normalized (trim + lowercase). Exact match against statement.language.</p>
           </div>
         </RestrictedField>
-        {!user && (
+        {!user && canReadContests && (
           <>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Contest (Optional)</label>

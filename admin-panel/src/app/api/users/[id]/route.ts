@@ -72,7 +72,7 @@ export async function PUT(
       afterValues: { changedKeys: Object.keys(updateData).filter((k) => k !== 'password') },
       result: 'success',
     });
-    revalidatePath('/[locale]/users', 'page');
+    revalidatePath('/[locale]/people/users', 'page');
     return apiSuccess({ user });
   } catch (error) {
     return apiError(error);
@@ -99,7 +99,7 @@ export async function DELETE(
       beforeValues: beforeDeleteUser ? { username: beforeDeleteUser.username, first_name: beforeDeleteUser.first_name, last_name: beforeDeleteUser.last_name } : undefined,
       result: 'success',
     });
-    revalidatePath('/[locale]/users', 'page');
+    revalidatePath('/[locale]/people/users', 'page');
     return apiSuccess({ message: 'User deleted successfully' });
   } catch (error) {
     return apiError(error);

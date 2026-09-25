@@ -21,6 +21,7 @@ export function UserTable({
   perPage,
   onToggleAll,
   onToggleOne,
+  onOpen,
   onEdit,
   onDelete,
 }: UserTableProps) {
@@ -117,7 +118,7 @@ export function UserTable({
       columns={columns}
       rows={rows}
       getRowKey={(row) => row.user.id}
-      getRowProps={(row) => getUserRowProps(row, canManageUsers, onEdit)}
+      getRowProps={(row) => getUserRowProps(row, onOpen)}
       getRowClassName={getRowClassName}
       renderRowActions={renderRowActions}
       emptyState={

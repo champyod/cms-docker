@@ -16,6 +16,7 @@ interface UsersPageResult {
   currentPage: number;
   perPage: number;
   total: number;
+  effectivePermissions: ReadonlySet<string>;
 }
 
 export async function getUsers({ page = 1, search = '', perPage = USERS_PER_PAGE }: { page?: number; search?: string; perPage?: number }): Promise<UsersPageResult> {
@@ -50,6 +51,7 @@ export async function getUsers({ page = 1, search = '', perPage = USERS_PER_PAGE
     currentPage: safePage,
     perPage: safePerPage,
     total,
+    effectivePermissions: perms,
   };
 }
 

@@ -77,6 +77,7 @@ export function SubmitResultBanner({ result, onDownloadCredentials }: SubmitResu
 interface BulkCreateInputSectionProps {
   contests: Array<{ id: number; name: string }>;
   contestId: number;
+  canReadContests: boolean;
   csvText: string;
   placeholder: string;
   onContestIdChange: (contestId: number) => void;
@@ -94,6 +95,7 @@ const LABEL_BUTTON_CLASS = 'inline-flex items-center gap-2 h-8 px-3 rounded-lg b
 export function BulkCreateInputSection({
   contests,
   contestId,
+  canReadContests,
   csvText,
   placeholder,
   onContestIdChange,
@@ -126,20 +128,22 @@ export function BulkCreateInputSection({
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        <label className="text-xs text-muted-foreground">Contest for team mapping:</label>
-        <select
-          value={contestId}
-          onChange={(event) => onContestIdChange(Number(event.target.value) || 0)}
-          className={SELECT_CLASS}
-          title="Contest for team mapping"
-        >
-          <option value={0}>No contest</option>
-          {contests.map((contest) => (
-            <option key={contest.id} value={contest.id}>#{contest.id} - {contest.name}</option>
-          ))}
-        </select>
-      </div>
+      {canReadContests && (
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-muted-foreground">Contest for team mapping:</label>
+          <select
+            value={contestId}
+            onChange={(event) => onContestIdChange(Number(event.target.value) || 0)}
+            className={SELECT_CLASS}
+            title="Contest for team mapping"
+          >
+            <option value={0}>No contest</option>
+            {contests.map((contest) => (
+              <option key={contest.id} value={contest.id}>#{contest.id} - {contest.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <textarea
         value={csvText}

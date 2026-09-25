@@ -161,7 +161,7 @@ export async function POST(req: NextRequest) {
       afterValues: { bulkCount: outcome.created.length, failedCount: outcome.failed.length, contestId: contestId || null },
       result: 'success',
     });
-    revalidatePath('/[locale]/users', 'page');
+    revalidatePath('/[locale]/people/users', 'page');
     if (contestId) {
       revalidatePath('/[locale]/contests', 'page');
     }

@@ -7,6 +7,7 @@ import { Button } from '@/components/core/Button';
 import { Dialog, DialogFooter } from '@/components/core/Dialog';
 import { PasswordKindSelector } from '@/components/core/PasswordFieldWithKind';
 import { apiClient } from '@/lib/apiClient';
+import type { Dictionary } from '@/lib/dictionary';
 import type { PasswordKind } from '@/lib/password-format';
 import {
   buildPreviewRows,
@@ -28,6 +29,8 @@ interface UserBulkCreateCsvProps {
   onClose: () => void;
   onSuccess: () => void;
   contests: Array<{ id: number; name: string }>;
+  canReadContests: boolean;
+  navigation: Dictionary['navigation'];
 }
 
 function downloadCsv(filename: string, content: string): void {
@@ -44,7 +47,7 @@ function downloadCsv(filename: string, content: string): void {
   URL.revokeObjectURL(url);
 }
 
-export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests }: UserBulkCreateCsvProps) {
+export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests, canReadContests, navigation }: UserBulkCreateCsvProps) {
   const [csvText, setCsvText] = useState('');
   const [headerWarnings, setHeaderWarnings] = useState<string[]>([]);
   const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
@@ -155,6 +158,7 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests }: User
         if (!open) onClose();
       }}
       title="Bulk Add Users (CSV)"
+      description={navigation.people.users.label}
       className="sm:max-w-6xl"
     >
       <div className="space-y-4">
@@ -164,8 +168,9 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests }: User
         </div>
 
         <BulkCreateInputSection
-          contests={contests}
+          contests={canReadContests ? contests : []}
           contestId={contestId}
+          canReadContests={canReadContests}
           csvText={csvText}
           placeholder={placeholder}
           onContestIdChange={setContestId}

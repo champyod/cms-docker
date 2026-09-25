@@ -50,7 +50,7 @@ async function applyTimezone(body: Record<string, unknown>, userIds: number[]) {
     afterValues: { action: 'batch-profile-timezone', timezone, userIds, updatedCount: result.count },
     result: 'success',
   });
-  revalidatePath('/[locale]/users', 'page');
+  revalidatePath('/[locale]/people/users', 'page');
   return apiSuccess({ success: true, updatedCount: result.count });
 }
 
@@ -66,7 +66,7 @@ async function applyClearEmail(userIds: number[]) {
     afterValues: { action: 'batch-profile-clear-email', userIds, updatedCount: result.count },
     result: 'success',
   });
-  revalidatePath('/[locale]/users', 'page');
+  revalidatePath('/[locale]/people/users', 'page');
   return apiSuccess({ success: true, updatedCount: result.count });
 }
 
@@ -97,6 +97,6 @@ async function applyEmailDomain(body: Record<string, unknown>, userIds: number[]
     afterValues: { action: 'batch-profile-email-domain', emailDomain, userIds, updatedCount },
     result: 'success',
   });
-  revalidatePath('/[locale]/users', 'page');
+  revalidatePath('/[locale]/people/users', 'page');
   return apiSuccess({ success: true, updatedCount });
 }

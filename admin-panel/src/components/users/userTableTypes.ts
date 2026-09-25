@@ -9,6 +9,7 @@ export interface UserTableProps {
   perPage: number;
   onToggleAll: (checked: boolean) => void;
   onToggleOne: (userId: number, checked: boolean) => void;
+  onOpen: (user: UsersPageRow) => void;
   onEdit: (user: UsersPageRow) => void;
   onDelete: (id: number) => void;
 }
