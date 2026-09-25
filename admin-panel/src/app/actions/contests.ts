@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import * as contestService from '@/lib/services/contests';
+import * as contestDetail from '@/lib/queries/contest-detail';
 import type { ContestData } from '@/lib/contests-repo';
 
 export type { ContestData } from '@/lib/contests-repo';
@@ -70,4 +71,10 @@ export async function activateContest(id: number): Promise<Awaited<ReturnType<ty
 
 export async function getActiveContest(): Promise<Awaited<ReturnType<typeof contestService.getActiveContest>>> {
   return contestService.getActiveContest();
+}
+
+// Why: on-demand dialog read — the record layout never loads full edit
+// fields, so the Edit Contest dialog fetches them through this wrapper.
+export async function getContestEditData(id: number): Promise<Awaited<ReturnType<typeof contestDetail.getContestEditData>>> {
+  return contestDetail.getContestEditData(id);
 }

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import * as taskService from '@/lib/services/tasks';
+import * as taskDetail from '@/lib/queries/task-detail';
 
 export type { TaskData, TaskDiagnostic } from '@/lib/services/tasks';
 
@@ -11,6 +12,12 @@ export async function getTasks(params: { page?: number; search?: string } = {}):
 
 export async function getTask(id: number): Promise<Awaited<ReturnType<typeof taskService.getTask>>> {
   return taskService.getTask(id);
+}
+
+// Why: on-demand dialog read — the Task settings dialog fetches its record
+// through this wrapper instead of the legacy all-in-one getTask service.
+export async function getTaskSettings(id: number): Promise<Awaited<ReturnType<typeof taskDetail.getTaskSettings>>> {
+  return taskDetail.getTaskSettings(id);
 }
 
 export async function getTaskDiagnostics(taskId: number): Promise<Awaited<ReturnType<typeof taskService.getTaskDiagnostics>>> {

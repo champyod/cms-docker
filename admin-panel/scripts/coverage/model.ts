@@ -11,6 +11,8 @@ export const API_DIR = path.join(SRC_DIR, "app", "api");
 export const FOLLOW_FILES = [
   path.join(SRC_DIR, "lib", "services", "contests.ts"),
   path.join(SRC_DIR, "lib", "services", "tasks.ts"),
+  path.join(SRC_DIR, "lib", "queries", "contest-detail.ts"),
+  path.join(SRC_DIR, "lib", "queries", "task-detail.ts"),
   path.join(SRC_DIR, "lib", "deploy-store.ts"),
   path.join(SRC_DIR, "lib", "deploy-operations.ts"),
   path.join(SRC_DIR, "lib", "field-permissions.ts"),
