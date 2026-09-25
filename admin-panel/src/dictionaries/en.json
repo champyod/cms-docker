@@ -347,7 +347,17 @@
   "navigation": {
     "groups": { "direct": "Direct" },
     "home": { "label": "Dashboard" },
-    "contests": { "list": { "label": "Contests" } },
+    "contests": {
+      "list": { "label": "Contests" },
+      "record": { "label": "Contest" },
+      "tabs": {
+        "overview": { "label": "Overview" },
+        "tasks": { "label": "Tasks" },
+        "participants": { "label": "Participants" },
+        "communications": { "label": "Communications" },
+        "settings": { "label": "Settings" }
+      }
+    },
     "tasks": { "list": { "label": "Tasks" } }
   }
 }

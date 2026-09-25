@@ -347,7 +347,17 @@
   "navigation": {
     "groups": { "direct": "การแข่งขัน" },
     "home": { "label": "แดชบอร์ด" },
-    "contests": { "list": { "label": "การแข่งขัน" } },
+    "contests": {
+      "list": { "label": "การแข่งขัน" },
+      "record": { "label": "การแข่งขัน" },
+      "tabs": {
+        "overview": { "label": "ภาพรวม" },
+        "tasks": { "label": "งาน" },
+        "participants": { "label": "ผู้เข้าร่วม" },
+        "communications": { "label": "การสื่อสาร" },
+        "settings": { "label": "การตั้งค่า" }
+      }
+    },
     "tasks": { "list": { "label": "งาน" } }
   }
 }

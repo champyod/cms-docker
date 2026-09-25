@@ -134,19 +134,22 @@ function searchRoute(
 export const ROUTE_REGISTRY: readonly RouteDescriptor[] = [
   directPageRoute('home', '/', {}, [], DIRECT_PAGE_SURFACES),
   directPageRoute('contests.list', '/contests', { all: ['contest:list'] }, []),
-  recordRoute(
+  // Why: Task 2 ships the physical Contest detail routes, so the record
+  // landing and its five tabs are the only migration descriptors enabled —
+  // every other migration descriptor stays disabled until its own task.
+  { ...recordRoute(
     'contests.record',
     '/contests/[id]',
     'contests.list',
     { all: ['contest:read'] },
     ['contests.tabs.overview', 'contests.tabs.tasks', 'contests.tabs.participants', 'contests.tabs.communications', 'contests.tabs.settings'],
     'contests.tabs.overview',
-  ),
-  tabRoute('contests.tabs.overview', '/contests/[id]/overview', 'contests.record', { all: ['contest:read'] }),
-  tabRoute('contests.tabs.tasks', '/contests/[id]/tasks', 'contests.record', { all: ['contest:read', 'task:read'] }),
-  tabRoute('contests.tabs.participants', '/contests/[id]/participants', 'contests.record', { all: ['contest:read', 'participation:read', 'user:read'] }),
-  tabRoute('contests.tabs.communications', '/contests/[id]/communications', 'contests.record', { all: ['contest:read', 'announcement:read', 'question:read', 'ranking:read'] }),
-  tabRoute('contests.tabs.settings', '/contests/[id]/settings', 'contests.record', { all: ['contest:read'] }),
+  ), enabled: true },
+  { ...tabRoute('contests.tabs.overview', '/contests/[id]/overview', 'contests.record', { all: ['contest:read'] }), enabled: true },
+  { ...tabRoute('contests.tabs.tasks', '/contests/[id]/tasks', 'contests.record', { all: ['contest:read', 'task:read'] }), enabled: true },
+  { ...tabRoute('contests.tabs.participants', '/contests/[id]/participants', 'contests.record', { all: ['contest:read', 'participation:read', 'user:read'] }), enabled: true },
+  { ...tabRoute('contests.tabs.communications', '/contests/[id]/communications', 'contests.record', { all: ['contest:read', 'announcement:read', 'question:read', 'ranking:read'] }), enabled: true },
+  { ...tabRoute('contests.tabs.settings', '/contests/[id]/settings', 'contests.record', { all: ['contest:read'] }), enabled: true },
 
   directPageRoute('tasks.list', '/tasks', { all: ['task:list'] }, []),
   recordRoute(
