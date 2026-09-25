@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { HelpCircle, ChevronDown, ChevronUp, Settings, FileText, Trash2, Upload, ExternalLink } from 'lucide-react';
@@ -11,7 +10,7 @@ import { ResponsiveTable, type ResponsiveColumn } from '@/components/core/Respon
 import { EmptyState } from '@/components/core/EmptyState';
 import { apiClient } from '@/lib/apiClient';
 import { useConfirm } from '@/hooks/useConfirm';
-import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
+import { useTaskConfirmationCopy, useTaskTabRefresh } from './task-detail/useTaskTabRefresh';
 import { cn } from '@/lib/utils';
 
 interface TaskDetailConfigProps {
@@ -109,9 +108,9 @@ function buildStatementColumns(): ResponsiveColumn<StatementRow>[] {
 }
 
 export function StatementsSection({ statements, expanded, onToggle, onUpload }: StatementsSectionProps): React.JSX.Element {
-  const router = useRouter();
+  const refresh = useTaskTabRefresh();
   const confirm = useConfirm();
-  const { destructiveConfirm } = useConfirmationCopy();
+  const { destructiveConfirm } = useTaskConfirmationCopy();
   const [activeLanguage, setActiveLanguage] = useState<string | null>(null);
 
   const runAction = useActionFeedback();
@@ -122,7 +121,7 @@ export function StatementsSection({ statements, expanded, onToggle, onUpload }: 
       { pending: 'Deleting statement...', success: 'Statement deleted', failure: 'Delete failed' },
       () => apiClient.delete(`/api/statements/${statementId}`)
     );
-    if (result?.success) router.refresh();
+    if (result?.success) refresh();
   };
 
   const languages = useMemo(() => Array.from(new Set(statements.map((s) => s.language))).sort(), [statements]);

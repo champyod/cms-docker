@@ -152,18 +152,13 @@ export const ROUTE_REGISTRY: readonly RouteDescriptor[] = [
   { ...tabRoute('contests.tabs.settings', '/contests/[id]/settings', 'contests.record', { all: ['contest:read'] }), enabled: true },
 
   directPageRoute('tasks.list', '/tasks', { all: ['task:list'] }, []),
-  recordRoute(
-    'tasks.record',
-    '/tasks/[id]',
-    'tasks.list',
-    { all: ['task:read'] },
-    ['tasks.tabs.overview', 'tasks.tabs.datasets', 'tasks.tabs.files', 'tasks.tabs.settings'],
-    'tasks.tabs.overview',
-  ),
-  tabRoute('tasks.tabs.overview', '/tasks/[id]/overview', 'tasks.record', { all: ['task:read', 'statement:read'] }),
-  tabRoute('tasks.tabs.datasets', '/tasks/[id]/datasets', 'tasks.record', { all: ['task:read', 'dataset:read'] }),
-  tabRoute('tasks.tabs.files', '/tasks/[id]/files', 'tasks.record', { all: ['task:read', 'attachment:read'] }),
-  tabRoute('tasks.tabs.settings', '/tasks/[id]/settings', 'tasks.record', { all: ['task:read'] }),
+  // Why: Task 4 proved the physical Task routes, so the record and its four
+  // tabs join the enabled set — all other migration descriptors stay disabled.
+  { ...recordRoute('tasks.record', '/tasks/[id]', 'tasks.list', { all: ['task:read'] }, ['tasks.tabs.overview', 'tasks.tabs.datasets', 'tasks.tabs.files', 'tasks.tabs.settings'], 'tasks.tabs.overview'), enabled: true },
+  { ...tabRoute('tasks.tabs.overview', '/tasks/[id]/overview', 'tasks.record', { all: ['task:read', 'statement:read'] }), enabled: true },
+  { ...tabRoute('tasks.tabs.datasets', '/tasks/[id]/datasets', 'tasks.record', { all: ['task:read', 'dataset:read'] }), enabled: true },
+  { ...tabRoute('tasks.tabs.files', '/tasks/[id]/files', 'tasks.record', { all: ['task:read', 'attachment:read'] }), enabled: true },
+  { ...tabRoute('tasks.tabs.settings', '/tasks/[id]/settings', 'tasks.record', { all: ['task:read'] }), enabled: true },
 
   pageRoute('people.users', '/people/users', { all: ['user:list'] }, ['/users']),
   recordRoute(

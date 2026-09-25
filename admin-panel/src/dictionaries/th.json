@@ -358,6 +358,6 @@
         "settings": { "label": "การตั้งค่า" }
       }
     },
-    "tasks": { "list": { "label": "งาน" } }
+    "tasks": { "list": { "label": "งาน" }, "record": { "label": "งาน" }, "tabs": { "overview": { "label": "ภาพรวม" }, "datasets": { "label": "ชุดข้อมูล" }, "files": { "label": "ไฟล์" }, "settings": { "label": "การตั้งค่า" } } }
   }
 }

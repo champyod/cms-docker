@@ -24,11 +24,11 @@ export const EXPECTED_ROUTE_MANIFEST: readonly RouteFixture[] = [
   { id: 'contests.tabs.settings', path: '/contests/[id]/settings', kind: 'nested-tab', parentId: 'contests.record', tabIds: [], legacyPaths: [], enabled: true },
 
   { id: 'tasks.list', path: '/tasks', kind: 'page', tabIds: [], legacyPaths: [], enabled: true },
-  { id: 'tasks.record', path: '/tasks/[id]', kind: 'record-landing', parentId: 'tasks.list', defaultChildId: 'tasks.tabs.overview', tabIds: ['tasks.tabs.overview', 'tasks.tabs.datasets', 'tasks.tabs.files', 'tasks.tabs.settings'], legacyPaths: [], enabled: false },
-  { id: 'tasks.tabs.overview', path: '/tasks/[id]/overview', kind: 'nested-tab', parentId: 'tasks.record', tabIds: [], legacyPaths: [], enabled: false },
-  { id: 'tasks.tabs.datasets', path: '/tasks/[id]/datasets', kind: 'nested-tab', parentId: 'tasks.record', tabIds: [], legacyPaths: [], enabled: false },
-  { id: 'tasks.tabs.files', path: '/tasks/[id]/files', kind: 'nested-tab', parentId: 'tasks.record', tabIds: [], legacyPaths: [], enabled: false },
-  { id: 'tasks.tabs.settings', path: '/tasks/[id]/settings', kind: 'nested-tab', parentId: 'tasks.record', tabIds: [], legacyPaths: [], enabled: false },
+  { id: 'tasks.record', path: '/tasks/[id]', kind: 'record-landing', parentId: 'tasks.list', defaultChildId: 'tasks.tabs.overview', tabIds: ['tasks.tabs.overview', 'tasks.tabs.datasets', 'tasks.tabs.files', 'tasks.tabs.settings'], legacyPaths: [], enabled: true },
+  { id: 'tasks.tabs.overview', path: '/tasks/[id]/overview', kind: 'nested-tab', parentId: 'tasks.record', tabIds: [], legacyPaths: [], enabled: true },
+  { id: 'tasks.tabs.datasets', path: '/tasks/[id]/datasets', kind: 'nested-tab', parentId: 'tasks.record', tabIds: [], legacyPaths: [], enabled: true },
+  { id: 'tasks.tabs.files', path: '/tasks/[id]/files', kind: 'nested-tab', parentId: 'tasks.record', tabIds: [], legacyPaths: [], enabled: true },
+  { id: 'tasks.tabs.settings', path: '/tasks/[id]/settings', kind: 'nested-tab', parentId: 'tasks.record', tabIds: [], legacyPaths: [], enabled: true },
 
   { id: 'people.users', path: '/people/users', kind: 'page', tabIds: [], legacyPaths: ['/users'], enabled: false },
   { id: 'people.user-record', path: '/people/users/[id]', kind: 'record-landing', parentId: 'people.users', defaultChildId: 'people.user-tabs.profile', tabIds: ['people.user-tabs.profile', 'people.user-tabs.teams', 'people.user-tabs.history'], legacyPaths: [], enabled: false },

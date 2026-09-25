@@ -180,7 +180,7 @@ describe('foundation cutover state', () => {
     }
   });
 
-  it('enables the direct three plus the Contest record and tabs after Task 2', () => {
+  it('enables the direct three plus the Contest and Task records and tabs after Task 4', () => {
     for (const directRoute of DIRECT_ROUTE_CASES) {
       const physicalPath = join(ROOT, directRoute.physicalPath);
       expect(existsSync(physicalPath), directRoute.physicalPath).toBe(true);
@@ -188,9 +188,10 @@ describe('foundation cutover state', () => {
       expect(pageSource).toContain('getDictionary(locale)');
       expect(pageSource).toContain(directRoute.pageLabelKey);
     }
-    // Why: Task 2 proved the physical Contest routes, so the record landing
-    // and its five tabs join the direct three in registry order — every other
-    // migration descriptor stays disabled until its own task proves its routes.
+    // Why: Task 4 proved the physical Task routes, so the Task record
+    // landing and its four tabs join the direct three and the Contest routes
+    // in registry order — every other migration descriptor stays disabled
+    // until its own task proves its routes.
     const enabledIds = [
       'home',
       'contests.list',
@@ -201,6 +202,11 @@ describe('foundation cutover state', () => {
       'contests.tabs.communications',
       'contests.tabs.settings',
       'tasks.list',
+      'tasks.record',
+      'tasks.tabs.overview',
+      'tasks.tabs.datasets',
+      'tasks.tabs.files',
+      'tasks.tabs.settings',
     ];
     const enabledIdSet = new Set<string>(enabledIds);
     expect(ROUTE_REGISTRY.filter((route) => route.enabled).map((route) => route.id)).toEqual(enabledIds);

@@ -358,6 +358,6 @@
         "settings": { "label": "Settings" }
       }
     },
-    "tasks": { "list": { "label": "Tasks" } }
+    "tasks": { "list": { "label": "Tasks" }, "record": { "label": "Task" }, "tabs": { "overview": { "label": "Overview" }, "datasets": { "label": "Datasets" }, "files": { "label": "Files" }, "settings": { "label": "Settings" } } }
   }
 }

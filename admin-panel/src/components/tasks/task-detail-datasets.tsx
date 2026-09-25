@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { HelpCircle, ChevronDown, ChevronUp, Settings2, Database, CheckCircle, Copy, Edit, ToggleLeft, ToggleRight, TestTube, Plus, Trash2, Upload, Paperclip } from 'lucide-react';
 import { Card } from '@/components/core/Card';
@@ -9,7 +8,7 @@ import { Button } from '@/components/core/Button';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/apiClient';
 import { useConfirm } from '@/hooks/useConfirm';
-import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
+import { useTaskConfirmationCopy, useTaskTabRefresh } from './task-detail/useTaskTabRefresh';
 
 interface Dataset {
   id: number;
@@ -140,9 +139,9 @@ export function DatasetsSection({
 }
 
 export function AttachmentsSection({ attachments, onUpload }: { attachments: Array<{ id: number; filename: string }>; onUpload: () => void }): React.JSX.Element {
-  const router = useRouter();
+  const refresh = useTaskTabRefresh();
   const confirm = useConfirm();
-  const { destructiveConfirm } = useConfirmationCopy();
+  const { destructiveConfirm } = useTaskConfirmationCopy();
   const runAction = useActionFeedback();
 
   const handleDeleteAttachment = async (attachmentId: number): Promise<void> => {
@@ -151,7 +150,7 @@ export function AttachmentsSection({ attachments, onUpload }: { attachments: Arr
       { pending: 'Deleting attachment...', success: 'Attachment deleted', failure: 'Delete failed' },
       () => apiClient.delete(`/api/attachments/${attachmentId}`)
     );
-    if (result?.success) router.refresh();
+    if (result?.success) refresh();
   };
 
   return (
