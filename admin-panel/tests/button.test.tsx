@@ -1,11 +1,38 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Trash2 } from 'lucide-react';
-import { Button, LEGACY_VARIANT_MAP, resolveVariant } from '@/components/core/Button';
+import {
+  BUTTON_VARIANT_TO_ADAPTER,
+  BUTTON_VARIANTS,
+  Button,
+  LEGACY_VARIANT_MAP,
+  resolveVariant,
+} from '@/components/core/Button';
+import { buttonVariants } from '@/components/ui/button';
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
+});
+
+describe('public to adapter variant map', () => {
+  it('maps every public variant, so a new one cannot skip the adapter', () => {
+    expect(Object.keys(BUTTON_VARIANT_TO_ADAPTER).sort()).toEqual([...BUTTON_VARIANTS].sort());
+  });
+
+  it('keeps the public positive/negative names mapped onto the adapter vocabulary', () => {
+    expect(BUTTON_VARIANT_TO_ADAPTER.positive).toBe('default');
+    expect(BUTTON_VARIANT_TO_ADAPTER.positiveOutline).toBe('primaryOutline');
+    expect(BUTTON_VARIANT_TO_ADAPTER.negative).toBe('destructive');
+    expect(BUTTON_VARIANT_TO_ADAPTER.negativeOutline).toBe('destructiveOutline');
+  });
+
+  it('resolves every mapped variant to its own look, never the adapter default', () => {
+    const looks = BUTTON_VARIANTS.map((variant) =>
+      buttonVariants({ variant: BUTTON_VARIANT_TO_ADAPTER[variant] })
+    );
+    expect(new Set(looks).size).toBe(BUTTON_VARIANTS.length);
+  });
 });
 
 describe('legacy variant mapping', () => {

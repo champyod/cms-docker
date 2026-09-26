@@ -69,3 +69,14 @@ export function Dialog({
 }
 
 export { UIDialogFooter as DialogFooter };
+
+// Why the raw parts are re-exported here: a consumer that assembles its own
+// dialog body (a command palette, a confirm modal) still has to reach the
+// adapter through core rather than importing the adapter itself.
+export {
+  Dialog as DialogRoot,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+};

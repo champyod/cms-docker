@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/core/Tooltip';
 import type { ShellNavItem } from '@/components/navigation/shell-nav';
 import { cn } from '@/lib/utils';
 

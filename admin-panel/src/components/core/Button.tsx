@@ -2,12 +2,12 @@
 
 import React from 'react';
 
-import { cva } from 'class-variance-authority';
 import { Loader2, type LucideIcon } from 'lucide-react';
 import { motion, type HTMLMotionProps } from 'motion/react';
 
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/core/Tooltip';
 import { EmptyState } from '@/components/core/EmptyState';
+import { buttonVariants, type ButtonVariantName } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 export const BUTTON_VARIANTS = [
@@ -30,40 +30,25 @@ export const LEGACY_VARIANT_MAP: Record<LegacyButtonVariant, ButtonVariant> = {
   danger: 'negative',
 };
 
+// Why this map is exhaustive over BUTTON_VARIANTS: a public name with no entry
+// would silently fall back to the adapter default, so a renamed product variant
+// has to be given an adapter name here or fail to type-check.
+export const BUTTON_VARIANT_TO_ADAPTER: Record<ButtonVariant, ButtonVariantName> = {
+  positive: 'default',
+  positiveOutline: 'primaryOutline',
+  negative: 'destructive',
+  negativeOutline: 'destructiveOutline',
+  secondary: 'secondary',
+  ghost: 'ghost',
+  link: 'link',
+};
+
 export function resolveVariant(variant?: ButtonVariantInput): ButtonVariant {
   if (!variant) return 'positive';
   if (variant === 'primary') return LEGACY_VARIANT_MAP.primary;
   if (variant === 'danger') return LEGACY_VARIANT_MAP.danger;
   return variant;
 }
-
-const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0",
-  {
-    variants: {
-      variant: {
-        positive: 'bg-primary text-primary-foreground shadow-xs hover:bg-primary/90',
-        positiveOutline: 'border border-primary/50 bg-transparent text-primary hover:bg-primary/10',
-        negative:
-          'bg-destructive text-foreground shadow-xs hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40',
-        negativeOutline:
-          'border border-destructive/50 bg-transparent text-destructive hover:bg-destructive/10',
-        secondary: 'bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80',
-        ghost: 'hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50',
-        link: 'text-primary underline-offset-4 hover:underline',
-      },
-      size: {
-        sm: 'h-11 gap-1.5 px-3 text-sm rounded-lg',
-        md: 'h-11 px-4 py-2 rounded-xl',
-        lg: 'h-12 px-6 text-lg rounded-2xl',
-      },
-    },
-    defaultVariants: {
-      variant: 'positive',
-      size: 'md',
-    },
-  }
-);
 
 const ICON_ONLY_SIZE: Record<ButtonSize, string> = {
   sm: 'h-11 w-11 p-0',
@@ -140,7 +125,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         whileHover={{ scale: 1.02, filter: 'brightness(1.05)' }}
         whileTap={{ scale: 0.97 }}
         transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-        className={cn(buttonVariants({ variant: resolvedVariant, size }), isIconOnly && ICON_ONLY_SIZE[size], className)}
+        className={cn(buttonVariants({ variant: BUTTON_VARIANT_TO_ADAPTER[resolvedVariant], size }), isIconOnly && ICON_ONLY_SIZE[size], className)}
         {...props}
       >
         <LeadingIcon icon={icon} loading={loading} />

@@ -3,7 +3,7 @@
 import React, { Fragment, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
 import { Button } from '@/components/core/Button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/core/Tooltip';
 import { cn } from '@/lib/utils';
 import { useDictionary } from '@/hooks/useDictionary';
 import {

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
-import { Toaster } from '@/components/ui/sonner';
+import { Toaster } from '@/components/core/Toaster';
 import { NO_FLASH_THEME_SCRIPT } from '@/lib/theme';
 import { NO_FLASH_DISPLAY_SCRIPT } from '@/lib/display-density';
 import '@fontsource/chakra-petch/400.css';

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Search } from 'lucide-react';
+import { Badge } from '@/components/core/Badge';
+import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
 import { Input } from '@/components/core/Input';
 import { Tabs, type TabItem } from '@/components/core/Tabs';
@@ -10,6 +12,39 @@ import {
   StatusBadge,
   type StatusType,
 } from '@/components/core/StatusBadge';
+
+describe('Badge', () => {
+  it('renders the tone the adapter recipe declares', () => {
+    const html = renderToStaticMarkup(<Badge variant="success">healthy</Badge>);
+    expect(html).toContain('text-success');
+    expect(html).toContain('border-success/20');
+  });
+
+  it('falls back to a neutral tone when the value is empty', () => {
+    const html = renderToStaticMarkup(<Badge variant="success">{''}</Badge>);
+    expect(html).toContain('No value');
+    expect(html).toContain('text-muted-foreground');
+  });
+});
+
+describe('Card', () => {
+  it('layers the product padding over the adapter surface', () => {
+    const html = renderToStaticMarkup(<Card>body</Card>);
+    expect(html).toContain('bg-card');
+    expect(html).toContain('shadow-sm');
+    expect(html).toContain('p-6');
+  });
+
+  it('marks the active card with the product ring', () => {
+    const html = renderToStaticMarkup(<Card active>body</Card>);
+    expect(html).toContain('ring-ring/20');
+  });
+
+  it('replaces an empty card with the shared empty state', () => {
+    const html = renderToStaticMarkup(<Card>{null}</Card>);
+    expect(html).toContain('No content available');
+  });
+});
 
 describe('EmptyState', () => {
   it('renders title and description', () => {

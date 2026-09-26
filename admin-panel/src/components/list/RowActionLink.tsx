@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/core/Tooltip';
 import { cn } from '@/lib/utils';
 
 export interface RowActionLinkProps {

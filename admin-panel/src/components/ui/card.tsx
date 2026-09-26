@@ -2,28 +2,28 @@ import * as React from 'react';
 
 import { cn } from '@/lib/utils';
 
-function Card({ className, children, ...props }: React.ComponentProps<'div'>) {
-  const isEmpty = children === null || children === undefined;
-  if (isEmpty) {
+// Why the surface lives here: this is the only place a card's base look is
+// written, so a core wrapper adds product policy on top instead of restating it.
+const CARD_SURFACE = 'rounded-xl border bg-card text-card-foreground shadow-sm';
+
+const Card = React.forwardRef<HTMLDivElement, React.ComponentProps<'div'>>(
+  ({ className, children, ...props }, ref) => {
+    const isEmpty = children === null || children === undefined;
+    if (isEmpty) {
+      return (
+        <div ref={ref} data-slot="card" className={cn(CARD_SURFACE, 'p-6', className)} {...props}>
+          <div className="text-sm text-muted-foreground text-center">No content available</div>
+        </div>
+      );
+    }
     return (
-      <div data-slot="card" className={cn('bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm', className)} {...props}>
-        <div className="px-6 text-sm text-muted-foreground text-center">No content available</div>
+      <div ref={ref} data-slot="card" className={cn(CARD_SURFACE, className)} {...props}>
+        {children}
       </div>
     );
   }
-  return (
-    <div
-      data-slot="card"
-      className={cn(
-        'bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm',
-        className
-      )}
-      {...props}
-    >
-      {children}
-    </div>
-  );
-}
+);
+Card.displayName = 'Card';
 
 function CardHeader({ className, ...props }: React.ComponentProps<'div'>) {
   return (

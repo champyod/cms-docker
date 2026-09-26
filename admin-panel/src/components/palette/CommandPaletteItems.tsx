@@ -1,7 +1,7 @@
 'use client';
 
 import { Check, LogOut, PlusCircle, Repeat } from 'lucide-react';
-import { CommandGroup, CommandItem } from '@/components/ui/command';
+import { CommandGroup, CommandItem } from '@/components/core/Command';
 import type { ShellNavItem } from '@/components/navigation/shell-nav';
 import type { EntityHit } from '@/components/palette/entity-searchers';
 

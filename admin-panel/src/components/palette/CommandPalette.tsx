@@ -4,8 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import { extractLocale } from '@/hooks/useShortcuts';
-import { Command, CommandInput, CommandList } from '@/components/ui/command';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Command, CommandInput, CommandList } from '@/components/core/Command';
+import {
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogRoot,
+  DialogTitle,
+} from '@/components/core/Dialog';
 import { toast } from 'sonner';
 import { logout } from '@/app/actions/auth';
 import { activateContest, getAvailableContests } from '@/app/actions/contests';
@@ -89,7 +95,7 @@ export function CommandPalette({ open, onOpenChange, permissionKeys }: CommandPa
   const runSignOut = (): void => { close(); logout().catch(() => { toast.error('Sign out failed'); }); };
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <DialogRoot open={open} onOpenChange={handleOpenChange}>
       <DialogContent showCloseButton={false} className="overflow-hidden p-0">
         <DialogHeader className="sr-only"><DialogTitle>Command Palette</DialogTitle><DialogDescription>Type a command or search...</DialogDescription></DialogHeader>
         <Command shouldFilter={false} className={COMMAND_STYLING}>
@@ -101,6 +107,6 @@ export function CommandPalette({ open, onOpenChange, permissionKeys }: CommandPa
           </CommandList>
         </Command>
       </DialogContent>
-    </Dialog>
+    </DialogRoot>
   );
 }

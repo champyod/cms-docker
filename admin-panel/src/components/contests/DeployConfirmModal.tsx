@@ -1,7 +1,12 @@
 'use client';
 
-import { Dialog as UIDialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { DialogFooter } from '@/components/core/Dialog';
+import {
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogRoot,
+  DialogTitle,
+} from '@/components/core/Dialog';
 import { Button } from '@/components/core/Button';
 import { CheckCircle2, Loader2, Rocket } from 'lucide-react';
 import type { DeployPhase } from '@/hooks/useDeployContest';
@@ -26,7 +31,7 @@ export function DeployConfirmModal({ isOpen, phase, targetLabel, extraNote = DEF
   const busy = BUSY_PHASES.includes(phase);
 
   return (
-    <UIDialog open={isOpen} onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
+    <DialogRoot open={isOpen} onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
       <DialogContent showCloseButton={!busy} className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{busy ? 'Deploying Contest...' : 'Confirm Deploy'}</DialogTitle>
@@ -60,6 +65,6 @@ export function DeployConfirmModal({ isOpen, phase, targetLabel, extraNote = DEF
           )}
         </div>
       </DialogContent>
-    </UIDialog>
+    </DialogRoot>
   );
 }
