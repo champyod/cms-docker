@@ -11,8 +11,8 @@ import { getFieldAccess, stripDisallowedFields } from '@/lib/field-permissions';
 
 interface TeamData {
   id?: number;
-  code: string;
-  name: string;
+  code: string | null;
+  name: string | null;
 }
 
 interface TeamModalProps {
@@ -36,7 +36,7 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData, permissionK
   const [renderedSession, setRenderedSession] = useState(sessionKey);
   if (renderedSession !== sessionKey) {
     setRenderedSession(sessionKey);
-    setFormData(initialData ? { code: initialData.code, name: initialData.name } : { code: '', name: '' });
+    setFormData(initialData ? { code: initialData.code ?? '', name: initialData.name ?? '' } : { code: '', name: '' });
     setError('');
   }
 

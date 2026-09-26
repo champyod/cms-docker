@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterReadableFields, getFieldAccess, stripDisallowedFields } from '@/lib/field-permissions';
+import { filterReadableFields, getFieldAccess, stripDisallowedFields, type FieldAccessEntity } from '@/lib/field-permissions';
 
 describe('admins field-permissions UPDATE contract', (): void => {
   it('excludes username from updatable fields while including name and enabled', (): void => {
@@ -17,9 +17,12 @@ describe('admins field-permissions UPDATE contract', (): void => {
 
   it('returns empty for unknown entity (deny-by-default)', (): void => {
     const perms = new Set<string>(['admin:read', 'admin:update']);
-    expect(getFieldAccess('__unknown__', perms)).toEqual({});
-    expect(stripDisallowedFields('__unknown__', { foo: 'bar' }, perms)).toEqual({});
-    expect(stripDisallowedFields('__unknown__', { foo: 'bar', baz: 1 }, new Set<string>())).toEqual({});
+    // Why the cast: the entity union rejects an unmapped name at compile time, so
+    // this pins that the runtime guard behind the type still denies by default.
+    const unmapped = '__unknown__' as FieldAccessEntity;
+    expect(getFieldAccess(unmapped, perms)).toEqual({});
+    expect(stripDisallowedFields(unmapped, { foo: 'bar' }, perms)).toEqual({});
+    expect(stripDisallowedFields(unmapped, { foo: 'bar', baz: 1 }, new Set<string>())).toEqual({});
   });
 
   it('yields nothing updatable without admin:update', (): void => {

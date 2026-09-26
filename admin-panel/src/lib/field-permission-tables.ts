@@ -2,7 +2,7 @@ import type { FieldPermissionDef } from '@/lib/field-permissions';
 
 // Why a separate file: field-permissions.ts must stay under 250 lines.
 // These tables merge into FIELD_PERMISSION_MAP there; importers keep one path.
-export const EXTRA_FIELD_PERMISSION_MAP: Record<string, Record<string, FieldPermissionDef>> = {
+export const EXTRA_FIELD_PERMISSION_MAP = {
   evaluations: {
     id: { read: 'evaluation:read' },
     submission_id: { read: 'evaluation:read' },
@@ -105,4 +105,4 @@ export const EXTRA_FIELD_PERMISSION_MAP: Record<string, Record<string, FieldPerm
     analysis_start: { read: 'contest:read', update: 'contest:update' },
     analysis_stop: { read: 'contest:read', update: 'contest:update' },
   },
-};
+} as const satisfies Record<string, Record<string, FieldPermissionDef>>;

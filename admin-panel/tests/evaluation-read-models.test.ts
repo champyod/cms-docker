@@ -1,8 +1,11 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import {
+  toSubmissionEvaluationRow,
+  toSubmissionFileRow,
+  toSubmissionLogRow,
   toSubmissionResultRow,
 } from '@/lib/evaluation-read-model-projections';
-import { getFieldAccess } from '@/lib/field-permissions';
+import { getFieldAccess, type FieldAccessTable } from '@/lib/field-permissions';
 import {
   getSubmissionEvaluation,
   getSubmissionLogs,
@@ -186,5 +189,73 @@ describe('Evaluation result field filtering', () => {
     const row = toSubmissionResultRow({ ...RESULT_ROW, compilation_memory: BigInt(2) ** BigInt(70) }, RESULT_ACCESS);
 
     expect(row.compilationMemoryBytes).toBeNull();
+  });
+
+  it('reads every projected column for a caller holding all:all', () => {
+    const row = toSubmissionResultRow(RESULT_ROW, getFieldAccess('submission_results', new Set(['all:all'])));
+
+    expect(row).toMatchObject({ compilationOutcome: 'ok', score: 80, scoredAt: '2026-02-03T04:05:06.000Z' });
+  });
+});
+
+const LOG_ROW = {
+  compilation_outcome: 'ok',
+  compilation_text: ['warning: unused'],
+  compilation_stdout: 'out',
+  compilation_stderr: 'err',
+} as const;
+
+const FILE_ROW = { id: 5, filename: 'a.cpp', digest: 'abc123' } as const;
+
+const EVALUATION_ROW = {
+  id: 7,
+  dataset_id: 1,
+  testcase_id: 2,
+  outcome: 'correct',
+  text: ['ok'],
+  execution_time: 0.5,
+  execution_memory: BigInt(1048576),
+  codename: 'test-2',
+} as const;
+
+const LOG_READER = new Set(['submission:read', 'submissionresult:read']);
+const FILE_READER = new Set(['submission:read', 'file:read']);
+const EVALUATION_READER = new Set(['submission:read', 'evaluation:read']);
+
+describe('Evaluation file, log and evaluation field filtering', () => {
+  it.each([
+    ['toSubmissionLogRow', () => toSubmissionLogRow(LOG_ROW, getFieldAccess('submission_results', LOG_READER)), { compilationOutcome: 'ok', compilationText: ['warning: unused'], compilationStdout: 'out', compilationStderr: 'err' }],
+    ['toSubmissionLogRow without submissionresult:read', () => toSubmissionLogRow(LOG_ROW, getFieldAccess('submission_results', FILE_READER)), { compilationOutcome: null, compilationText: [], compilationStdout: null, compilationStderr: null }],
+    ['toSubmissionFileRow', () => toSubmissionFileRow(FILE_ROW, getFieldAccess('files', FILE_READER)), { filename: 'a.cpp', digest: 'abc123' }],
+    ['toSubmissionFileRow without file:read', () => toSubmissionFileRow(FILE_ROW, getFieldAccess('files', LOG_READER)), { filename: '', digest: '' }],
+    ['toSubmissionEvaluationRow', () => toSubmissionEvaluationRow(EVALUATION_ROW, getFieldAccess('evaluations', EVALUATION_READER)), { outcome: 'correct', text: ['ok'], executionTime: 0.5, executionMemory: '1048576' }],
+    ['toSubmissionEvaluationRow without evaluation:read', () => toSubmissionEvaluationRow(EVALUATION_ROW, getFieldAccess('evaluations', LOG_READER)), { outcome: null, text: [], executionTime: null, executionMemory: null }],
+  ])('%s projects only the columns the caller may read', (_name, project, expected) => {
+    expect(project()).toMatchObject(expected);
+  });
+
+  it('keeps the identity columns a partial reader may not read out of the payload', () => {
+    const file = toSubmissionFileRow(FILE_ROW, getFieldAccess('files', LOG_READER));
+    const evaluation = toSubmissionEvaluationRow(EVALUATION_ROW, getFieldAccess('evaluations', LOG_READER));
+
+    expect(file).toEqual({ id: 5, filename: '', digest: '' });
+    expect(evaluation).toMatchObject({ id: 7, datasetId: 1, testcaseId: 2, testcaseName: 'test-2' });
+  });
+});
+
+// Why: the brand is the whole point — an unbranded table made the files projection
+// accept the results table, so this stops compiling the moment the brand is dropped.
+type IsExactly<Left, Right> = (<Value>() => Value extends Left ? 1 : 2) extends (<Value>() => Value extends Right ? 1 : 2) ? true : false;
+const tablesAreNotInterchangeable: IsExactly<FieldAccessTable<'files'>, FieldAccessTable<'submission_results'>> = false;
+
+describe('Field access table branding', () => {
+  it('keeps one entity access table from standing in for another', () => {
+    expect(tablesAreNotInterchangeable).toBe(false);
+  });
+
+  it('brands a table without changing what the table enumerates', () => {
+    const access = getFieldAccess('files', FILE_READER);
+
+    expect(Object.keys(access)).toEqual(['id', 'submission_id', 'filename', 'digest']);
   });
 });

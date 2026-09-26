@@ -14,6 +14,8 @@ export interface UserTeamsTabProps {
   readonly locale: 'en' | 'th';
 }
 
+const EMPTY_VALUE = '—';
+
 function MembershipRow({ membership, copy, locale }: {
   readonly membership: UserTeamMembership;
   readonly copy: Dictionary['users'];
@@ -22,9 +24,9 @@ function MembershipRow({ membership, copy, locale }: {
   return (
     <div className="p-4 flex flex-wrap items-center justify-between gap-3">
       <div>
-        <div className="font-medium">{membership.contestName}</div>
+        <div className="font-medium">{membership.contestName ?? EMPTY_VALUE}</div>
         <div className="text-xs text-muted-foreground">
-          {interpolate(copy.teamsTab.contestLabel, { id: membership.contestId })}
+          {interpolate(copy.teamsTab.contestLabel, { id: membership.contestId ?? EMPTY_VALUE })}
         </div>
       </div>
       {membership.teamId !== null && membership.teamCode !== null ? (

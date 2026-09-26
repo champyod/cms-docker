@@ -9,9 +9,18 @@ export interface FieldPermissionDef {
   update?: PermissionKey;
 }
 
+// Why a brand: an access table only means anything for the entity it was built
+// from, and an unbranded Record<string, FieldAccess> let one entity's table reach
+// another entity's projection with neither tsc nor a test objecting.
+const FIELD_ACCESS_ENTITY = Symbol('field-access-entity');
+
+export type FieldAccessTable<Entity extends string> = Record<string, FieldAccess> & {
+  readonly [FIELD_ACCESS_ENTITY]: Entity;
+};
+
 // Why: defines which permission keys gate read and update access for each field of each entity.
 // Other entities (users, contests, …) adopt this same pattern by adding their own top-level entry.
-export const FIELD_PERMISSION_MAP: Record<string, Record<string, FieldPermissionDef>> = {
+const FIELD_PERMISSION_TABLE = {
   admins: {
     id: { read: 'admin:read' },
     name: { read: 'admin:read', update: 'admin:update' },
@@ -162,25 +171,36 @@ export const FIELD_PERMISSION_MAP: Record<string, Record<string, FieldPermission
     updatedAt: { read: 'monitor:read' },
   },
   ...EXTRA_FIELD_PERMISSION_MAP,
-};
+} as const satisfies Record<string, Record<string, FieldPermissionDef>>;
+
+// Why the wide alias: consumers iterate the map as a plain record, while
+// getFieldAccess indexes the const table so an entity stays a literal union.
+export const FIELD_PERMISSION_MAP: Record<string, Record<string, FieldPermissionDef>> = FIELD_PERMISSION_TABLE;
+
+/** Every entity the field map governs; an unknown entity cannot be requested. */
+export type FieldAccessEntity = keyof typeof FIELD_PERMISSION_TABLE;
 
 /** Returns per-field read/update booleans for the given entity, evaluated against effectivePermissions. */
-export function getFieldAccess(
-  entity: string,
+export function getFieldAccess<Entity extends FieldAccessEntity>(
+  entity: Entity,
   effectivePermissions: ReadonlySet<string>,
-): Record<string, FieldAccess> {
-  const map = FIELD_PERMISSION_MAP[entity];
-  if (!map) return {};
-
+): FieldAccessTable<Entity> {
+  const map: Record<string, FieldPermissionDef> | undefined = FIELD_PERMISSION_TABLE[entity];
   const result: Record<string, FieldAccess> = {};
-  for (const field of Object.keys(map)) {
-    const def = map[field];
-    result[field] = {
-      canRead: hasEffectivePermission(effectivePermissions, def.read),
-      canUpdate: def.update ? hasEffectivePermission(effectivePermissions, def.update) : false,
-    };
+  if (map) {
+    for (const field of Object.keys(map)) {
+      const def = map[field];
+      result[field] = {
+        canRead: hasEffectivePermission(effectivePermissions, def.read),
+        canUpdate: def.update ? hasEffectivePermission(effectivePermissions, def.update) : false,
+      };
+    }
   }
-  return result;
+  const branded = { ...result, [FIELD_ACCESS_ENTITY]: entity };
+  // Why non-enumerable: the brand identifies the entity for the type system, so
+  // Object.keys, spreading and serializing the table stay exactly as before.
+  Object.defineProperty(branded, FIELD_ACCESS_ENTITY, { enumerable: false });
+  return branded;
 }
 
 function pickAllowedFields<T extends Record<string, unknown>>(
@@ -196,8 +216,8 @@ function pickAllowedFields<T extends Record<string, unknown>>(
 }
 
 /** Returns only the keys of data that the caller has read permission for. */
-export function filterReadableFields<T extends Record<string, unknown>>(
-  entity: string,
+export function filterReadableFields<Entity extends FieldAccessEntity, T extends Record<string, unknown>>(
+  entity: Entity,
   data: T,
   effectivePermissions: ReadonlySet<string>,
 ): Partial<T> {
@@ -205,16 +225,16 @@ export function filterReadableFields<T extends Record<string, unknown>>(
 }
 
 /** Returns the readable keys of data from an access table the caller already built for the batch. */
-export function filterReadableFieldsWith<T extends Record<string, unknown>>(
-  access: Record<string, FieldAccess>,
+export function filterReadableFieldsWith<Entity extends string, T extends Record<string, unknown>>(
+  access: FieldAccessTable<Entity>,
   data: T,
 ): Partial<T> {
   return pickAllowedFields(data, access, 'canRead');
 }
 
 /** Returns only the keys of data that the caller has update permission for. */
-export function stripDisallowedFields<T extends Record<string, unknown>>(
-  entity: string,
+export function stripDisallowedFields<Entity extends FieldAccessEntity, T extends Record<string, unknown>>(
+  entity: Entity,
   data: T,
   effectivePermissions: ReadonlySet<string>,
 ): Partial<T> {

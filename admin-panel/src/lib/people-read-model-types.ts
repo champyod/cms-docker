@@ -28,8 +28,8 @@ export interface UserProfile {
 
 export interface UserTeamMembership {
   id: number;
-  contestId: number;
-  contestName: string;
+  contestId: number | null;
+  contestName: string | null;
   teamId: number | null;
   teamCode: string | null;
   teamName: string | null;
@@ -71,8 +71,8 @@ export interface UserHistory {
 
 export interface TeamSummary {
   id: number;
-  code: string;
-  name: string;
+  code: string | null;
+  name: string | null;
   organization: string | null;
   leaderId: number | null;
   leader: { id: number; username: string; firstName: string; lastName: string } | null;
@@ -84,7 +84,7 @@ export interface TeamMember {
   username: string | null;
   firstName: string | null;
   lastName: string | null;
-  contests: readonly { id: number; name: string }[];
+  contests: readonly { id: number | null; name: string | null }[];
 }
 
 export interface TeamContest {

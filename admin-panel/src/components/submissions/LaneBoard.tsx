@@ -9,8 +9,8 @@ import { useRouter } from 'next/navigation';
 import { moveEvaluationLane, type LaneBoard as LaneBoardData, type LaneBoardItem } from '@/app/actions/evaluationLanes';
 import { Badge } from '@/components/core/Badge';
 import { Button } from '@/components/core/Button';
-import { Dialog } from '@/components/core/Dialog';
 import { EmptyState } from '@/components/core/EmptyState';
+import { CreateLaneDialog } from './CreateLaneDialog';
 import { MoveLaneSelector } from './MoveLaneSelector';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { hasEffectivePermission } from '@/lib/permission-engine';
@@ -201,52 +201,5 @@ function DropConfirm({ pending, onDone, onCancel }: { pending: PendingDrop; onDo
         <Button variant="ghost" size="sm" disabled={busy} onClick={onCancel}>Cancel</Button>
       </div>
     </div>
-  );
-}
-
-function CreateLaneDialog({ items, laneNames, onClose, onDone }: { items: LaneBoardItem[]; laneNames: string[]; onClose: () => void; onDone: () => void }): React.ReactNode {
-  const runAction = useActionFeedback();
-  const [name, setName] = useState('');
-  const [submissionId, setSubmissionId] = useState(items[0]?.submissionId.toString() ?? '');
-  const [reason, setReason] = useState('');
-  const [busy, setBusy] = useState(false);
-  const handleCreate = async (): Promise<void> => {
-    setBusy(true);
-    try {
-      // Why a seed submission is required: lanes persist only as audit rows, so a
-      // lane with no submission cannot be recorded — creation is a move to a new name.
-      const outcome = await runAction(
-        { pending: 'Creating lane…', success: 'Lane created', failure: 'Lane creation failed' },
-        () => moveEvaluationLane(Number(submissionId), name.trim(), reason.trim()),
-      );
-      if (outcome?.success) onDone();
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <Dialog open={true} onOpenChange={(open) => { if (!open) onClose(); }} title="Create lane" description="New lane names apply to a chosen submission via the move flow.">
-      <div className="space-y-3">
-        <div className="space-y-1.5">
-          <label htmlFor="create-lane-name" className="text-sm font-medium ml-1">Lane name</label>
-          <input id="create-lane-name" type="text" value={name} onChange={(e) => setName(e.target.value)} maxLength={64} placeholder="e.g. final" list="create-lane-existing" disabled={busy} className={FIELD_CLASSES} />
-          <datalist id="create-lane-existing">{laneNames.map((lane) => <option key={lane} value={lane} />)}</datalist>
-        </div>
-        <div className="space-y-1.5">
-          <label htmlFor="create-lane-submission" className="text-sm font-medium ml-1">Submission</label>
-          <select id="create-lane-submission" value={submissionId} onChange={(e) => setSubmissionId(e.target.value)} disabled={busy} className={FIELD_CLASSES}>
-            {items.map((item) => <option key={item.submissionId} value={item.submissionId}>#{item.submissionId} {item.username} — {item.taskName}</option>)}
-          </select>
-        </div>
-        <div className="space-y-1.5">
-          <label htmlFor="create-lane-reason" className="text-sm font-medium ml-1">Reason *</label>
-          <textarea id="create-lane-reason" value={reason} onChange={(e) => setReason(e.target.value)} rows={3} maxLength={500} placeholder="Why is this lane created?" disabled={busy} className={FIELD_CLASSES} />
-        </div>
-        <div className="flex gap-2">
-          <Button variant="positive" size="sm" loading={busy} disabled={busy || name.trim().length === 0 || reason.trim().length === 0 || submissionId === ''} onClick={() => { void handleCreate(); }}>Create</Button>
-          <Button variant="ghost" size="sm" disabled={busy} onClick={onClose}>Cancel</Button>
-        </div>
-      </div>
-    </Dialog>
   );
 }

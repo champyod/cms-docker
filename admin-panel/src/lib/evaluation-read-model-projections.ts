@@ -1,4 +1,4 @@
-import { filterReadableFields, filterReadableFieldsWith, type FieldAccess } from '@/lib/field-permissions';
+import { filterReadableFields, filterReadableFieldsWith, type FieldAccessTable } from '@/lib/field-permissions';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 import type {
   SubmissionEvaluationModel,
@@ -123,7 +123,7 @@ export interface SubmissionEvaluationRow {
  */
 export function toSubmissionResultRow(
   row: SubmissionResultRow,
-  access: Record<string, FieldAccess>,
+  access: FieldAccessTable<'submission_results'>,
 ): SubmissionResultsModel['results'][number] {
   const visible = filterReadableFieldsWith(access, {
     compilation_outcome: row.compilation_outcome,
@@ -148,7 +148,7 @@ export function toSubmissionResultRow(
 
 export function toSubmissionLogRow(
   row: SubmissionLogRow,
-  access: Record<string, FieldAccess>,
+  access: FieldAccessTable<'submission_results'>,
 ): Omit<SubmissionLogsModel, 'submissionId'> {
   const visible = filterReadableFieldsWith(access, {
     compilation_outcome: row.compilation_outcome,
@@ -166,7 +166,7 @@ export function toSubmissionLogRow(
 
 export function toSubmissionFileRow(
   row: SubmissionFileRow,
-  access: Record<string, FieldAccess>,
+  access: FieldAccessTable<'files'>,
 ): SubmissionResultsModel['files'][number] {
   const visible = filterReadableFieldsWith(access, { filename: row.filename, digest: row.digest });
   return { id: row.id, filename: visible.filename ?? '', digest: visible.digest ?? '' };
@@ -174,7 +174,7 @@ export function toSubmissionFileRow(
 
 export function toSubmissionEvaluationRow(
   row: SubmissionEvaluationRow,
-  access: Record<string, FieldAccess>,
+  access: FieldAccessTable<'evaluations'>,
 ): SubmissionEvaluationModel['evaluations'][number] {
   const visible = filterReadableFieldsWith(access, {
     outcome: row.outcome,

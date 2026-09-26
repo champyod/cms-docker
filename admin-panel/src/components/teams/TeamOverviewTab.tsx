@@ -67,7 +67,10 @@ function useTeamOverviewForm(team: TeamSummary, canUpdateTeam: boolean, refresh:
   const runAction = useActionFeedback();
   const { justSaved, flashSaved } = useJustSavedFlag();
   const [saving, setSaving] = useState(false);
-  const [formData, setFormData] = useState<TeamFormData>({ code: team.code, name: team.name });
+  // Why the empty seed: the overview route requires team:read, so both values are
+  // present there, and an unreadable field stays empty rather than showing a
+  // value the caller was never given.
+  const [formData, setFormData] = useState<TeamFormData>({ code: team.code ?? '', name: team.name ?? '' });
 
   const changeField = (id: keyof TeamFormData, value: string): void => {
     setFormData((previous) => ({ ...previous, [id]: value }));

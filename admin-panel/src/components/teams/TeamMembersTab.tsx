@@ -40,9 +40,9 @@ function MemberRow({ member, locale, copy }: {
         </div>
       </div>
       <div className="flex items-center gap-2">
-        {member.contests.slice(0, 3).map((contest) => (
-          <span key={contest.id} className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">
-            {contest.name}
+        {member.contests.slice(0, 3).map((contest, index) => (
+          <span key={`${contest.id ?? contest.name ?? 'contest'}-${index}`} className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">
+            {contest.name ?? '—'}
           </span>
         ))}
         {member.contests.length > 3 && (

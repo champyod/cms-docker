@@ -15,6 +15,19 @@ export interface RestartAnalysis {
   clearRequiredRestarts: () => void;
 }
 
+// Why null for a failure: a rejected analysis must not clear the restarts a
+// previous successful pass reported, and the caller decides when to stop.
+async function collectRequiredRestarts(changedKeys: string[]): Promise<string[] | null> {
+  if (changedKeys.length === 0) return [];
+  try {
+    const result = await analyzeRestartRequirements(changedKeys);
+    return result.requiredRestarts;
+  } catch (error) {
+    console.error('Failed to analyze restarts', error);
+    return null;
+  }
+}
+
 export function useRestartAnalysis(data: EnvFilesData, originalData: EnvFilesData): RestartAnalysis {
   const [requiredRestarts, setRequiredRestarts] = useState<string[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -33,21 +46,11 @@ export function useRestartAnalysis(data: EnvFilesData, originalData: EnvFilesDat
 
     scheduler.schedule(async (signal) => {
       setIsAnalyzing(true);
-      if (changedKeys.length === 0) {
-        setRequiredRestarts([]);
-        setIsAnalyzing(false);
-        return;
-      }
-      try {
-        const result = await analyzeRestartRequirements(changedKeys);
-        // Why re-check the signal: a newer edit scheduled while this awaited would
-        // otherwise be overwritten by this older result.
-        if (signal.aborted) return;
-        setRequiredRestarts(result.requiredRestarts);
-      } catch (error) {
-        console.error('Failed to analyze restarts', error);
-      }
+      const restarts = await collectRequiredRestarts(changedKeys);
+      // Why re-check the signal: a newer edit scheduled while this awaited would
+      // otherwise be overwritten by this older result.
       if (signal.aborted) return;
+      if (restarts !== null) setRequiredRestarts(restarts);
       setIsAnalyzing(false);
     });
   }, [data, originalData]);
