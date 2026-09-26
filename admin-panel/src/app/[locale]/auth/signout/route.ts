@@ -19,7 +19,7 @@ export async function GET(
   const { locale: candidate } = await params;
   const locale = resolveLocale(candidate);
 
-  (await cookies()).delete('session');
+  (await cookies()).delete({ name: 'session', path: '/' });
 
   return NextResponse.redirect(new URL(`/${locale}/auth/login`, request.url));
 }

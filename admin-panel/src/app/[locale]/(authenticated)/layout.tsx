@@ -1,7 +1,7 @@
 import { Sidebar, SIDEBAR_STORAGE_KEY } from "@/components/layout/Sidebar";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { Header } from "@/components/layout/Header";
-import { getSession, refreshSession } from "@/lib/auth";
+import { getSession, readSessionStatus } from "@/lib/auth";
 import { getFreshPermissions } from "@/lib/permissions";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
@@ -30,9 +30,11 @@ export default async function AuthenticatedLayout({
     redirect(`/${locale}/auth/login`);
   }
 
-  // Why: refresh validates session liveness and clears cookie if disabled; failure means timeout so redirect once
-  const refreshedSessionToken = await refreshSession(session);
-  if (!refreshedSessionToken) {
+  // Why: liveness is read-only here because rendering cannot write cookies; the session
+  // slide and the disabled-admin clear happen on the proxy response. Anything but active
+  // means timeout or revoked, so redirect once.
+  const sessionStatus = await readSessionStatus(session.userId);
+  if (sessionStatus.state !== "active") {
     redirect(`/${locale}/auth/login`);
   }
 
