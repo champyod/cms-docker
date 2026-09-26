@@ -6,6 +6,14 @@
 //! request, and two requests that tie are dispatched in the order they were
 //! enqueued. [`QueueKey`] reproduces the tuple so the two implementations
 //! make the same choice at the top of the queue.
+//!
+//! The three types are deliberately separate. [`QueueKey`] is the in-memory
+//! ordering key, while [`QueueEntryDto`] and [`JobGroup`] are the payloads a
+//! service reads from or writes to the wire; a queue status reply cannot
+//! reproduce the key, because it carries no enqueue index.
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 /// Priority of an operation dispatched before every lower one.
 ///
@@ -39,12 +47,10 @@ pub const PRIORITY_EXTRA_LOW: i32 = 4;
 /// has to hand out operations in Python's order stores
 /// [`std::cmp::Reverse`] of this key.
 ///
-/// This is the in-memory key, not the wire form of a queue entry: the RPC
-/// `queue_status` reply carries no index and sends the timestamp as floating
-/// point seconds, so a key that claimed to serialize into that shape would
-/// either drop `index` or lose the microsecond resolution the order is
-/// defined on.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// This is the in-memory key and not a wire type: the queue status reply
+/// ([`QueueEntryDto`]) has no enqueue index to break ties, and its timestamp is
+/// a float, which has no place in a total order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct QueueKey {
     /// Discrete priority level; a smaller value is dispatched earlier.
     pub priority: i32,
@@ -56,4 +62,41 @@ pub struct QueueKey {
     /// operations that tie on priority and timestamp still have a defined
     /// order, and the one that arrived first goes out first.
     pub index: u64,
+}
+
+/// One entry of a queue, in the form a service reports it over RPC.
+///
+/// Mirrors `priorityqueue.QueueEntryDict`, the value `get_status` fills in and
+/// the `queue_status` RPC returns: the queued item, its priority, and the time
+/// the operation was first requested as the float seconds
+/// `cmscommon.datetime.make_timestamp` computes. There is no index on the
+/// wire, so an entry cannot stand in for a [`QueueKey`] when the order of two
+/// otherwise equal operations has to be decided.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct QueueEntryDto {
+    /// The queued operation, in the shape the owning service's queue item
+    /// exports. Every service queues its own item type, so the payload stays
+    /// opaque here and is read by the service that enqueued it.
+    pub item: Value,
+
+    /// Dispatch priority, on the same levels as [`QueueKey::priority`].
+    pub priority: i32,
+
+    /// Seconds since the Unix epoch, as the Python side sends them.
+    pub timestamp: f64,
+}
+
+/// The batch of jobs a worker reports after performing operations.
+///
+/// Mirrors `JobGroup.export_to_dict`, the payload a worker hands to
+/// `EvaluationService.action_finished`; the receiving service rebuilds it with
+/// `import_from_dict`, which reads the `jobs` key.
+///
+/// A job is a compilation or an evaluation and the two carry different keys, so
+/// each one stays opaque here and is decoded by the service that acts on its
+/// results, the same rule the envelope keeps for its `__data` payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JobGroup {
+    /// The jobs of the batch, in the order the worker ran them.
+    pub jobs: Vec<Value>,
 }

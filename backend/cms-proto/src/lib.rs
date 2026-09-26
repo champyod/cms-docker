@@ -28,7 +28,8 @@ pub use guards::{
     MESSAGE_TERMINATOR_LEN,
 };
 pub use jobs::{
-    QueueKey, PRIORITY_EXTRA_HIGH, PRIORITY_EXTRA_LOW, PRIORITY_HIGH, PRIORITY_LOW, PRIORITY_MEDIUM,
+    JobGroup, QueueEntryDto, QueueKey, PRIORITY_EXTRA_HIGH, PRIORITY_EXTRA_LOW, PRIORITY_HIGH,
+    PRIORITY_LOW, PRIORITY_MEDIUM,
 };
 
 /// Shown in place of the secret wherever a `Request` is formatted.
