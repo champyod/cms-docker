@@ -1,12 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
+import { SectionCard } from '@/components/core/SectionCard';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 import { buildRoute } from '@/lib/navigation/routes';
-import { ClipboardList, Plus, Trash2, Settings, ChevronDown, ChevronUp } from 'lucide-react';
+import { ClipboardList, Plus, Trash2, Settings } from 'lucide-react';
 
 interface Task { id: number; name: string; title: string; }
 
@@ -56,26 +56,24 @@ function TaskRow({ task, locale, canManage, onRemoveTask }: { task: Task; locale
 export function ContestTasksSection({ tasks, expanded, locale, permissionKeys, onToggle, onAddTask, onRemoveTask }: Props): React.JSX.Element {
   const canManage = useCanManageTasks(permissionKeys);
   return (
-    <Card className="overflow-hidden">
-      <button onClick={onToggle} className="flex w-full items-center justify-between p-4 transition-colors hover:bg-muted/50">
-        <div className="flex items-center gap-3"><ClipboardList className="h-5 w-5 text-warning" /><span className="font-bold text-foreground">Tasks ({tasks.length})</span></div>
-        {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-      </button>
-      {expanded && (
-        <div>
-          {canManage && (
-            <div className="flex justify-end border-b border-border bg-muted/20 p-4">
-              <Button variant="positiveOutline" size="sm" icon={Plus} onClick={onAddTask}>Add Task</Button>
-            </div>
-          )}
-          <div className="divide-y divide-border">
-            {tasks.map((task) => (
-              <TaskRow key={task.id} task={task} locale={locale} canManage={canManage} onRemoveTask={onRemoveTask} />
-            ))}
-            {tasks.length === 0 && <EmptyState icon={ClipboardList} title="No tasks assigned to this contest" />}
-          </div>
+    <SectionCard
+      title="Tasks"
+      icon={<ClipboardList className="h-5 w-5 text-warning" />}
+      count={tasks.length}
+      expanded={expanded}
+      onToggle={onToggle}
+    >
+      {canManage && (
+        <div className="flex justify-end border-b border-border bg-muted/20 p-4">
+          <Button variant="positiveOutline" size="sm" icon={Plus} onClick={onAddTask}>Add Task</Button>
         </div>
       )}
-    </Card>
+      <div className="divide-y divide-border">
+        {tasks.map((task) => (
+          <TaskRow key={task.id} task={task} locale={locale} canManage={canManage} onRemoveTask={onRemoveTask} />
+        ))}
+        {tasks.length === 0 && <EmptyState icon={ClipboardList} title="No tasks assigned to this contest" />}
+      </div>
+    </SectionCard>
   );
 }

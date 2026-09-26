@@ -19,8 +19,6 @@ export function EmptyState({
   onAction,
   className,
 }: EmptyStateProps) {
-  const safeTitle = title ?? 'No data available';
-  const safeDescription = description ?? undefined;
   return (
     <div
       role="status"
@@ -35,9 +33,9 @@ export function EmptyState({
           <Icon className="size-6" aria-hidden />
         </div>
       )}
-      <p className="text-base font-semibold">{safeTitle}</p>
-      {safeDescription && (
-        <p className="max-w-sm text-sm text-muted-foreground">{safeDescription}</p>
+      <p className="text-base font-semibold">{title}</p>
+      {description && (
+        <p className="max-w-sm text-sm text-muted-foreground">{description}</p>
       )}
       {actionLabel && onAction && (
         <Button variant="secondary" size="sm" onClick={onAction} aria-label={actionLabel}>

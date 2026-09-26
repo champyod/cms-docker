@@ -68,6 +68,13 @@ describe('EmptyState', () => {
     expect(html).toContain('<button');
     expect(html).toContain('Add item');
   });
+
+  it('renders the title it was given rather than substituting one', () => {
+    // Why pinned: a fallback title on a required prop silently renames an
+    // intentionally terse state, so the prop is rendered exactly as passed.
+    const html = renderToStaticMarkup(<EmptyState title="" />);
+    expect(html).not.toContain('No data available');
+  });
 });
 
 describe('StatusBadge variant mapping', () => {

@@ -3,9 +3,9 @@
 import { useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
-import { HelpCircle, ChevronDown, ChevronUp, Settings, FileText, Trash2, Upload } from 'lucide-react';
-import { Card } from '@/components/core/Card';
+import { HelpCircle, Settings, FileText, Trash2, Upload } from 'lucide-react';
 import { Button } from '@/components/core/Button';
+import { SectionCard } from '@/components/core/SectionCard';
 import { ResponsiveTable, type ResponsiveColumn } from '@/components/core/ResponsiveTable';
 import { EmptyState } from '@/components/core/EmptyState';
 import { apiClient } from '@/lib/apiClient';
@@ -24,30 +24,31 @@ interface TaskDetailConfigProps {
   docsLinkLabel: Dictionary['docs']['viewDocumentation'];
 }
 
+function DocsLink({ href, label }: { href: string; label: string }): React.JSX.Element {
+  return (
+    <Link href={href} className="p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground" title={label}>
+      <HelpCircle className="w-4 h-4" />
+    </Link>
+  );
+}
+
 export function ConfigSection({ task, expanded, onToggle, locale, docsLinkLabel }: TaskDetailConfigProps): React.JSX.Element {
   return (
-    <Card className="border-border overflow-hidden">
-      <div className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors cursor-pointer" onClick={onToggle}>
-        <div className="flex items-center gap-3">
-          <Settings className="w-5 h-5 text-primary" />
-          <span className="font-bold text-foreground">Configuration</span>
-        </div>
-        <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
-          <Link href={`${buildRoute(locale, 'system.docs')}#task-types`} className="p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground" title={docsLinkLabel}>
-            <HelpCircle className="w-4 h-4" />
-          </Link>
-          <button onClick={onToggle} className="p-1">{expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}</button>
-        </div>
+    <SectionCard
+      className="border-border"
+      title="Configuration"
+      icon={<Settings className="w-5 h-5 text-primary" />}
+      expanded={expanded}
+      onToggle={onToggle}
+      actions={<DocsLink href={`${buildRoute(locale, 'system.docs')}#task-types`} label={docsLinkLabel} />}
+    >
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-muted/30 p-3 rounded-lg border border-border"><label className="block text-xs font-bold text-muted-foreground uppercase mb-1">Score Precision</label><div className="text-foreground text-sm">{task.score_precision}</div></div>
+        <div className="bg-muted/30 p-3 rounded-lg border border-border"><label className="block text-xs font-bold text-muted-foreground uppercase mb-1">Score Mode</label><div className="text-foreground text-sm capitalize">{task.score_mode.replace(/_/g, ' ')}</div></div>
+        <div className="bg-muted/30 p-3 rounded-lg border border-border"><label className="block text-xs font-bold text-muted-foreground uppercase mb-1">Feedback</label><div className="text-foreground text-sm capitalize">{task.feedback_level.replace(/_/g, ' ')}</div></div>
+        <div className="bg-muted/30 p-3 rounded-lg border border-border"><label className="block text-xs font-bold text-muted-foreground uppercase mb-1">Submissions</label><div className="text-foreground text-sm">{task._count.submissions}</div></div>
       </div>
-      {expanded ? (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-muted/30 p-3 rounded-lg border border-border"><label className="block text-xs font-bold text-muted-foreground uppercase mb-1">Score Precision</label><div className="text-foreground text-sm">{task.score_precision}</div></div>
-          <div className="bg-muted/30 p-3 rounded-lg border border-border"><label className="block text-xs font-bold text-muted-foreground uppercase mb-1">Score Mode</label><div className="text-foreground text-sm capitalize">{task.score_mode.replace(/_/g, ' ')}</div></div>
-          <div className="bg-muted/30 p-3 rounded-lg border border-border"><label className="block text-xs font-bold text-muted-foreground uppercase mb-1">Feedback</label><div className="text-foreground text-sm capitalize">{task.feedback_level.replace(/_/g, ' ')}</div></div>
-          <div className="bg-muted/30 p-3 rounded-lg border border-border"><label className="block text-xs font-bold text-muted-foreground uppercase mb-1">Submissions</label><div className="text-foreground text-sm">{task._count.submissions}</div></div>
-        </div>
-      ) : null}
-    </Card>
+    </SectionCard>
   );
 }
 
@@ -137,40 +138,37 @@ export function StatementsSection({ statements, expanded, onToggle, onUpload, on
   );
 
   return (
-    <Card className="border-border overflow-hidden">
-      <button onClick={onToggle} className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors">
-        <div className="flex items-center gap-3">
-          <FileText className="w-5 h-5 text-success" />
-          <span className="font-bold text-foreground">Statements</span>
-          <span className="text-xs bg-accent px-2 py-0.5 rounded-full text-muted-foreground">{statements.length}</span>
-        </div>
-        {expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-      </button>
-      {expanded ? (
-        <div className="p-4 pt-0 space-y-4">
-          <Button variant="positiveOutline" size="sm" icon={Upload} onClick={onUpload}>Upload Statement</Button>
-          {statements.length === 0 ? (
-            <EmptyState title="No statements" description="No statements uploaded yet." />
-          ) : (
-            <>
-              <div className="flex flex-wrap items-center gap-2">
-                <button type="button" onClick={() => setActiveLanguage(null)} className={cn('rounded-full px-3 py-1 text-xs font-medium border transition-colors', activeLanguage === null ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted text-muted-foreground border-border hover:bg-accent')}>All</button>
-                {languages.map((lang) => (
-                  <button key={lang} type="button" onClick={() => setActiveLanguage(lang)} className={cn('rounded-full px-3 py-1 text-xs font-mono border transition-colors', activeLanguage === lang ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted text-muted-foreground border-border hover:bg-accent')}>{lang}</button>
-                ))}
-              </div>
-              <ResponsiveTable
-                columns={columns}
-                rows={filtered}
-                getRowKey={(stmt) => stmt.id}
-                renderRowActions={renderActions}
-                emptyState={<p className="text-center text-sm text-muted-foreground">No statements for &quot;{activeLanguage}&quot;.</p>}
-              />
-            </>
-          )}
-        </div>
-      ) : null}
-    </Card>
+    <SectionCard
+      className="border-border"
+      title="Statements"
+      icon={<FileText className="w-5 h-5 text-success" />}
+      count={statements.length}
+      expanded={expanded}
+      onToggle={onToggle}
+    >
+      <div className="p-4 pt-0 space-y-4">
+        <Button variant="positiveOutline" size="sm" icon={Upload} onClick={onUpload}>Upload Statement</Button>
+        {statements.length === 0 ? (
+          <EmptyState title="No statements" description="No statements uploaded yet." />
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={() => setActiveLanguage(null)} className={cn('rounded-full px-3 py-1 text-xs font-medium border transition-colors', activeLanguage === null ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted text-muted-foreground border-border hover:bg-accent')}>All</button>
+              {languages.map((lang) => (
+                <button key={lang} type="button" onClick={() => setActiveLanguage(lang)} className={cn('rounded-full px-3 py-1 text-xs font-mono border transition-colors', activeLanguage === lang ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted text-muted-foreground border-border hover:bg-accent')}>{lang}</button>
+              ))}
+            </div>
+            <ResponsiveTable
+              columns={columns}
+              rows={filtered}
+              getRowKey={(stmt) => stmt.id}
+              renderRowActions={renderActions}
+              emptyState={<p className="text-center text-sm text-muted-foreground">No statements for &quot;{activeLanguage}&quot;.</p>}
+            />
+          </>
+        )}
+      </div>
+    </SectionCard>
   );
 }
 

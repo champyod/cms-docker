@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-import { Activity, CheckCircle2, Clock3, OctagonAlert, TriangleAlert, XCircle, type LucideIcon } from 'lucide-react';
+import { Activity, CheckCircle2, Clock3, OctagonAlert, XCircle, type LucideIcon } from 'lucide-react';
 import { Button } from '@/components/core/Button';
+import { InlineAlert } from '@/components/core/InlineAlert';
 import { LogFollowButton } from '@/components/core/LogFollowButton';
 import { Card } from '@/components/core/Card';
 import { Stack } from '@/components/core/Layout';
@@ -198,21 +199,11 @@ export function DeployStatusPanel({ state, onCancel, onReset }: DeployStatusPane
         </Stack>
 
         {phase !== 'idle' && state.error && (
-          <div className="rounded-lg border border-destructive/25 bg-destructive/10 p-3">
-            <Stack direction="row" gap={3} align="start">
-              <TriangleAlert className="h-5 w-5 shrink-0 text-destructive" aria-hidden />
-              <Text variant="small" color="text-foreground">{state.error}</Text>
-            </Stack>
-          </div>
+          <InlineAlert tone="destructive" title={state.error}>{null}</InlineAlert>
         )}
 
         {state.warning && (
-          <div className="rounded-lg border border-warning/25 bg-warning/10 p-3">
-            <Stack direction="row" gap={3} align="start">
-              <OctagonAlert className="h-5 w-5 shrink-0 text-warning" aria-hidden />
-              <Text variant="small" color="text-foreground">{state.warning}</Text>
-            </Stack>
-          </div>
+          <InlineAlert tone="warning" title={state.warning}>{null}</InlineAlert>
         )}
 
         <LogTail log={state.log} active={active} />

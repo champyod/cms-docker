@@ -50,6 +50,11 @@ export interface ResponsiveTableProps<Row> {
   className?: string;
 }
 
+// Why one class string for both layouts: the mobile card and the desktop cell
+// are the same action cluster, and hand-written twice they drift into a
+// differently spaced row depending on the viewport.
+const ROW_ACTIONS_CLASS = 'flex items-center justify-end gap-1';
+
 function labelFor<Row>(column: ResponsiveColumn<Row>): string {
   if (column.mobileLabel) return column.mobileLabel;
   return typeof column.header === 'string' ? column.header : column.key;
@@ -98,7 +103,7 @@ function renderMobileCards<Row>(props: ResponsiveTableProps<Row>): React.ReactNo
         className={cn(getRowClassName?.(row, index), extraProps?.className)}
       >
         {cards}
-        {actions ? <div className="flex items-center justify-end gap-1 pt-2">{actions}</div> : null}
+        {actions ? <div className={cn(ROW_ACTIONS_CLASS, 'pt-2')}>{actions}</div> : null}
       </MobileCard>
     );
   });
@@ -135,7 +140,7 @@ function renderDesktopRows<Row>(props: ResponsiveTableProps<Row>): React.ReactNo
           ))}
           {hasActions ? (
             <TableCell className="text-right">
-              <div className="flex items-center justify-end gap-1">{renderRowActions?.(row, index)}</div>
+              <div className={ROW_ACTIONS_CLASS}>{renderRowActions?.(row, index)}</div>
             </TableCell>
           ) : null}
         </TableRow>

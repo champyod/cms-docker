@@ -2,9 +2,11 @@
 
 import Link from 'next/link';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
-import { HelpCircle, ChevronDown, ChevronUp, Settings2, Database, CheckCircle, Copy, Edit, ToggleLeft, ToggleRight, TestTube, Plus, Trash2, Upload, Paperclip } from 'lucide-react';
+import { HelpCircle, Database, CheckCircle, Copy, Edit, ToggleLeft, ToggleRight, TestTube, Plus, Trash2, Upload, Paperclip, Settings2 } from 'lucide-react';
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
+import { RowActions, type RowAction } from '@/components/core/RowActions';
+import { SectionCard } from '@/components/core/SectionCard';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/apiClient';
 import { useConfirm } from '@/hooks/useConfirm';
@@ -45,6 +47,32 @@ interface DatasetsSectionProps {
   docsLinkLabel: Dictionary['docs']['viewDocumentation'];
 }
 
+// Why one builder per dataset: the cluster is a permission-shaped list, and
+// inline JSX made each affordance's visibility a separate reading task.
+function buildDatasetActions(
+  dataset: Dataset,
+  isActive: boolean,
+  handlers: DatasetHandlers,
+): readonly RowAction[] {
+  return [
+    { key: 'settings', label: 'Dataset Settings', icon: Settings2, onClick: () => handlers.onEdit(dataset) },
+    { key: 'live', label: 'Make Live', icon: CheckCircle, onClick: () => handlers.onActivate(dataset.id), isVisible: !isActive },
+    { key: 'clone', label: 'Clone', icon: Copy, onClick: () => handlers.onClone(dataset.id, dataset.description) },
+    { key: 'rename', label: 'Rename', icon: Edit, onClick: () => handlers.onRename(dataset.id, dataset.description) },
+    { key: 'autojudge', label: 'Toggle Autojudge', icon: dataset.autojudge ? ToggleRight : ToggleLeft, onClick: () => handlers.onToggleAutojudge(dataset.id) },
+    { key: 'delete', label: 'Delete', icon: Trash2, onClick: () => handlers.onDelete(dataset.id), isVisible: !isActive },
+  ];
+}
+
+interface DatasetHandlers {
+  onEdit: (ds: Dataset) => void;
+  onActivate: (id: number) => void;
+  onClone: (id: number, desc: string) => void;
+  onRename: (id: number, desc: string) => void;
+  onToggleAutojudge: (id: number) => void;
+  onDelete: (id: number) => void;
+}
+
 export function DatasetsSection({
   datasets,
   activeDatasetId,
@@ -63,49 +91,44 @@ export function DatasetsSection({
   locale,
   docsLinkLabel,
 }: DatasetsSectionProps): React.JSX.Element {
+  const handlers: DatasetHandlers = { onEdit, onActivate, onClone, onRename, onToggleAutojudge, onDelete };
   return (
-    <Card className="border-border overflow-hidden">
-      <div className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors cursor-pointer" onClick={onToggle}>
-        <div className="flex items-center gap-3">
-          <Database className="w-5 h-5 text-warning" />
-          <span className="font-bold text-foreground">Datasets</span>
-          <span className="text-xs bg-accent px-2 py-0.5 rounded-full text-muted-foreground">{datasets.length}</span>
+    <SectionCard
+      className="border-border"
+      title="Datasets"
+      icon={<Database className="w-5 h-5 text-warning" />}
+      count={datasets.length}
+      expanded={expanded}
+      onToggle={onToggle}
+      actions={
+        <Link href={`${buildRoute(locale, 'system.docs')}#datasets`} className="p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground" title={docsLinkLabel}>
+          <HelpCircle className="w-4 h-4" />
+        </Link>
+      }
+    >
+      <div className="p-4 pt-0">
+        <div className="mb-4">
+          <button onClick={onCreate} className="flex items-center gap-2 px-3 py-1.5 bg-warning/10 text-warning rounded-lg text-sm hover:bg-warning/20 transition-colors">
+            <Plus className="w-4 h-4" />
+            {datasets.length === 0 ? 'Create Dataset' : 'New Dataset'}
+          </button>
+          {datasets.length === 0 && <p className="text-muted-foreground text-sm mt-2">No datasets created yet. Create one to add testcases.</p>}
         </div>
-        <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
-          <Link href={`${buildRoute(locale, 'system.docs')}#datasets`} className="p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground" title={docsLinkLabel}>
-            <HelpCircle className="w-4 h-4" />
-          </Link>
-          <button onClick={onToggle} className="p-1">{expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}</button>
-        </div>
-      </div>
-      {expanded && (
-        <div className="p-4 pt-0">
-          <div className="mb-4">
-            <button onClick={onCreate} className="flex items-center gap-2 px-3 py-1.5 bg-warning/10 text-warning rounded-lg text-sm hover:bg-warning/20 transition-colors">
-              <Plus className="w-4 h-4" />
-              {datasets.length === 0 ? 'Create Dataset' : 'New Dataset'}
-            </button>
-            {datasets.length === 0 && <p className="text-muted-foreground text-sm mt-2">No datasets created yet. Create one to add testcases.</p>}
-          </div>
-          <div className="space-y-4">
-            {datasets.map((dataset) => (
-              <div key={dataset.id} className="p-4 bg-muted/30 rounded-lg space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <Database className="w-4 h-4 text-warning" />
-                    <span className="font-medium text-foreground">{dataset.description}</span>
-                    {dataset.id === activeDatasetId && <span className="px-2 py-0.5 text-xs bg-success/10 text-success rounded-full">Active</span>}
-                    {dataset.autojudge && <span className="px-2 py-0.5 text-xs bg-info/10 text-info rounded-full">Autojudge</span>}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="sm" icon={Settings2} iconOnly tooltip="Dataset Settings" onClick={() => onEdit(dataset)} />
-                    {dataset.id !== activeDatasetId && <Button variant="ghost" size="sm" icon={CheckCircle} iconOnly tooltip="Make Live" onClick={() => onActivate(dataset.id)} className="text-success hover:text-success" />}
-                    <Button variant="ghost" size="sm" icon={Copy} iconOnly tooltip="Clone" onClick={() => onClone(dataset.id, dataset.description)} className="text-primary hover:text-primary" />
-                    <Button variant="ghost" size="sm" icon={Edit} iconOnly tooltip="Rename" onClick={() => onRename(dataset.id, dataset.description)} />
-                    <Button variant="ghost" size="sm" icon={dataset.autojudge ? ToggleRight : ToggleLeft} iconOnly tooltip="Toggle Autojudge" onClick={() => onToggleAutojudge(dataset.id)} className="text-info hover:text-info" />
-                    {dataset.id !== activeDatasetId && <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete" onClick={() => onDelete(dataset.id)} className="text-destructive hover:text-destructive" />}
-                  </div>
+        <div className="space-y-4">
+          {datasets.map((dataset) => (
+            <div key={dataset.id} className="p-4 bg-muted/30 rounded-lg space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <Database className="w-4 h-4 text-warning" />
+                  <span className="font-medium text-foreground">{dataset.description}</span>
+                  {dataset.id === activeDatasetId && <span className="px-2 py-0.5 text-xs bg-success/10 text-success rounded-full">Active</span>}
+                  {dataset.autojudge && <span className="px-2 py-0.5 text-xs bg-info/10 text-info rounded-full">Autojudge</span>}
                 </div>
+                <RowActions
+                  ariaLabel="Datasets"
+                  actions={buildDatasetActions(dataset, dataset.id === activeDatasetId, handlers)}
+                />
+              </div>
                 <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
                   <div><span className="text-muted-foreground text-xs uppercase">Type</span><div className="text-foreground text-xs">{dataset.task_type}</div></div>
                   <div><span className="text-muted-foreground text-xs uppercase">Time</span><div className="text-foreground text-xs">{dataset.time_limit ? `${dataset.time_limit}s` : '-'}</div></div>
@@ -138,8 +161,7 @@ export function DatasetsSection({
             ))}
           </div>
         </div>
-      )}
-    </Card>
+    </SectionCard>
   );
 }
 

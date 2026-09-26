@@ -2,7 +2,7 @@
 
 import type { ReactElement } from 'react';
 import { Card } from '@/components/core/Card';
-import { Button } from '@/components/core/Button';
+import { RowActions } from '@/components/core/RowActions';
 import { Save, RefreshCw } from 'lucide-react';
 import {
   EnvConfigField,
@@ -19,6 +19,10 @@ interface SectionActionsProps {
   onPersist: (filename: string, shouldRestart?: boolean) => Promise<void>;
 }
 
+function hasPendingChange(section: EnvConfigSection, data: EnvFilesData, originalData: EnvFilesData): boolean {
+  return section.fields.some((field) => data[section.filename]?.[field.key] !== originalData[section.filename]?.[field.key]);
+}
+
 function SectionActions({
   section,
   data,
@@ -27,33 +31,14 @@ function SectionActions({
   hasPendingRestarts,
   onPersist,
 }: SectionActionsProps): ReactElement {
-  const showRestartButton = hasPendingRestarts && section.fields.some(f => {
-    return data[section.filename]?.[f.key] !== originalData[section.filename]?.[f.key];
-  });
-
   return (
-    <div className="flex gap-2">
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={() => void onPersist(section.filename, false)}
-        disabled={saving}
-        icon={Save}
-        iconOnly
-        tooltip="Save Only"
-      />
-      {showRestartButton && (
-        <Button
-          size="sm"
-          onClick={() => void onPersist(section.filename, true)}
-          disabled={saving}
-          loading={saving}
-          icon={RefreshCw}
-          iconOnly
-          tooltip="Save & Restart"
-        />
-      )}
-    </div>
+    <RowActions
+      ariaLabel={section.title}
+      actions={[
+        { key: 'save', label: 'Save Only', icon: Save, onClick: () => { void onPersist(section.filename, false); }, disabled: saving },
+        { key: 'restart', label: 'Save & Restart', icon: RefreshCw, onClick: () => { void onPersist(section.filename, true); }, disabled: saving, loading: saving, isVisible: hasPendingRestarts && hasPendingChange(section, data, originalData) },
+      ]}
+    />
   );
 }
 

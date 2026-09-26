@@ -50,6 +50,18 @@ describe('ResponsiveTable', () => {
     expect(container.querySelector('.space-y-3.md\\:hidden')?.textContent).toContain('Edit 1');
   });
 
+  it('spaces the action cluster identically in both layouts', () => {
+    // Why pinned: the cluster wrapper used to be written out twice, so a change
+    // to one layout's spacing silently left the other at the old value.
+    const { container } = render(
+      <ResponsiveTable {...baseProps()} renderRowActions={(row) => <button>Edit {row.id}</button>} />
+    );
+    const clusters = Array.from(container.querySelectorAll('div')).filter(
+      (node) => node.className === 'flex items-center justify-end gap-1 pt-2' || node.className === 'flex items-center justify-end gap-1'
+    );
+    expect(clusters).toHaveLength(2);
+  });
+
   it('passes a custom empty state through when rows are empty', () => {
     const { getByText } = render(
       <ResponsiveTable {...baseProps()} rows={[]} emptyState={<p>No people yet</p>} />
