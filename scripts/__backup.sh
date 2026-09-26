@@ -273,10 +273,11 @@ run_backup() {
   # Ensure container tmp is cleaned on failure
   local cleanup_done=0
   cleanup_container_tmp() {
-    if (( cleanup_done == 0 )); then
-      docker exec "$CONTAINER_DB" rm -f "$db_tmp" 2>/dev/null || true
+    if (( ${cleanup_done:-0} == 0 )); then
+      docker exec "$CONTAINER_DB" rm -f "${db_tmp:-}" 2>/dev/null || true
     fi
   }
+  # WHY ${cleanup_done:-0} / ${db_tmp:-}: the EXIT trap can fire after run_backup returned and its locals are out of scope, so a bare reference would die on set -u and mask the real error.
   trap cleanup_container_tmp EXIT
 
   # 1) Full logical backup — credentials via docker exec -e PGPASSWORD (never on host argv)
