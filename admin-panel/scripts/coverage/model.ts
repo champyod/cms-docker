@@ -59,6 +59,10 @@ export const ALLOWLIST: AllowEntry[] = [
 ];
 
 export interface FnInfo {
+  // Why the body is retained: resolve.ts derives implied field keys from it once
+  // per reachable node, and re-slicing the source there re-reads and re-parses
+  // the whole file for every node of every entry.
+  body: string;
   keys: string[];
   sessionOnly: boolean;
   callees: string[];

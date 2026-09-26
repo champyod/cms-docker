@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { ALLOWLIST, STRIP_FIELDS_RE, type AllowEntry, type FileInfo } from "./model";
-import { bodyFromMatch, sliceBody } from "./scan";
+import { sliceBody } from "./scan";
 
 export function tableUpdateKeys(fieldPermSource: string): Map<string, string[]> {
   const tables = new Map<string, string[]>();
@@ -72,15 +72,6 @@ export function impliedFieldKeys(body: string, tables: Map<string, string[]>): s
   return [...keys];
 }
 
-export function fnBodyOf(file: string, fn: string): string {
-  const source = fs.readFileSync(file, "utf8");
-  const re = new RegExp(`(?:export\\s+)?async\\s+function\\s+${fn}\\s*\\(`);
-  const found = re.exec(source);
-  if (found === null) return "";
-  const body = bodyFromMatch(source, found.index + found[0].length - 1);
-  return body ?? "";
-}
-
 export function resolveDemanded(
   entryFile: string,
   entryFn: string,
@@ -99,7 +90,7 @@ export function resolveDemanded(
     const info = files.get(file)?.fns.get(fn);
     if (info === undefined) continue;
     for (const key of info.keys) demanded.add(key);
-    for (const key of impliedFieldKeys(fnBodyOf(file, fn), tables)) demanded.add(key);
+    for (const key of impliedFieldKeys(info.body, tables)) demanded.add(key);
     for (const raw of info.callees) {
       for (const target of resolveTargets(file, raw, files)) stack.push(target);
     }

@@ -7,7 +7,7 @@ import { FIELD_PERMISSION_MAP } from '@/lib/field-permissions';
 import { hasEffectivePermission, resolveEffectivePermissions } from '@/lib/permission-engine';
 import { NAV_REGISTRY, visibleEntries } from '@/lib/nav-registry';
 import { ROUTE_REGISTRY, visibleRoutes } from '@/lib/navigation/registry';
-import { ACTIONS_DIR, API_DIR, FOLLOW_FILES, SRC_DIR } from '../scripts/coverage/model';
+import { ACTIONS_DIR, API_DIR, FOLLOW_FILES, SRC_DIR, type FileInfo } from '../scripts/coverage/model';
 import { parseFile, listFilesRecursive } from '../scripts/coverage/scan';
 import { resolveDemanded, tableUpdateKeys, isAllowlisted } from '../scripts/coverage/resolve';
 
@@ -23,36 +23,80 @@ interface Entry {
   fn: string;
 }
 
-function exportedFunctions(abs: string): string[] {
-  const source = fs.readFileSync(abs, 'utf8');
+interface EntryScan {
+  entries: Entry[];
+  demandedByEntry: Map<string, string[]>;
+}
+
+/**
+ * Why a memo and not a recompute: every scan below reads the same immutable
+ * `src` tree, so running one per assertion multiplied a read-only walk by the
+ * assertion count. Consumers only read the result, so a single shared snapshot
+ * holds and the first caller pays the walk.
+ */
+function once<T>(compute: () => T): () => T {
+  let slot: { value: T } | null = null;
+  return (): T => {
+    slot ??= { value: compute() };
+    return slot.value;
+  };
+}
+
+/**
+ * Why one shared snapshot: the frontend, page, and strip walks below all
+ * traverse overlapping parts of `src`, and `app` is read by two of them. A
+ * process-wide source cache turns each file into a single read for the run.
+ */
+const readSource = once((): ((abs: string) => string) => {
+  const cache = new Map<string, string>();
+  return (abs: string): string => {
+    const hit = cache.get(abs);
+    if (hit !== undefined) return hit;
+    const source = fs.readFileSync(abs, 'utf8');
+    cache.set(abs, source);
+    return source;
+  };
+});
+
+function exportedFunctions(source: string): string[] {
   const names: string[] = [];
+  EXPORT_FN_RE.lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = EXPORT_FN_RE.exec(source)) !== null) names.push(match[1]);
   return names;
 }
 
-function collectEntries(): { entries: Entry[]; demandedByEntry: Map<string, string[]> } {
-  const supportFiles = [...listFilesRecursive(ACTIONS_DIR, '.ts'), ...listFilesRecursive(API_DIR, '.ts'), ...FOLLOW_FILES];
-  const parsed = new Map();
-  for (const abs of supportFiles) parsed.set(abs, parseFile(abs));
-  const fieldSource =
+const entryFiles = (): string[] => [
+  ...listFilesRecursive(ACTIONS_DIR, '.ts'),
+  ...listFilesRecursive(API_DIR, '.ts'),
+];
+
+function fieldPermissionSources(): string {
+  return (
     fs.readFileSync(path.join(SRC_DIR, 'lib', 'field-permissions.ts'), 'utf8') +
-    fs.readFileSync(path.join(SRC_DIR, 'lib', 'field-permission-tables.ts'), 'utf8');
-  const tables = tableUpdateKeys(fieldSource);
+    fs.readFileSync(path.join(SRC_DIR, 'lib', 'field-permission-tables.ts'), 'utf8')
+  );
+}
+
+const collectEntries = once((): EntryScan => {
+  const entryPaths = new Set(entryFiles());
+  const parsed = new Map<string, FileInfo>();
+  for (const abs of [...entryPaths, ...FOLLOW_FILES]) parsed.set(abs, parseFile(abs));
+  const tables = tableUpdateKeys(fieldPermissionSources());
   const entries: Entry[] = [];
   const demandedByEntry = new Map<string, string[]>();
-  for (const abs of [...listFilesRecursive(ACTIONS_DIR, '.ts'), ...listFilesRecursive(API_DIR, '.ts')]) {
-    const info = parsed.get(abs) as { rel: string };
-    for (const fn of exportedFunctions(abs)) {
+  for (const [abs, info] of parsed) {
+    if (!entryPaths.has(abs)) continue;
+    for (const fn of exportedFunctions(info.source)) {
       const id = `${info.rel}#${fn}`;
       entries.push({ id, file: abs, fn });
       demandedByEntry.set(id, resolveDemanded(abs, fn, parsed, tables));
     }
   }
   return { entries, demandedByEntry };
-}
+});
 
-function fieldMapKeys(): Set<string> {
+const fieldMapKeys = once((): Set<string> => {
   const keys = new Set<string>();
   for (const fields of Object.values(FIELD_PERMISSION_MAP)) {
     for (const def of Object.values(fields)) {
@@ -61,9 +105,9 @@ function fieldMapKeys(): Set<string> {
     }
   }
   return keys;
-}
+});
 
-function componentGateKeys(): Map<string, string[]> {
+const componentGateKeys = once((): Map<string, string[]> => {
   const found = new Map<string, string[]>();
   const dirs = ['components', 'hooks', 'lib', 'app'].map((d) => path.join(SRC_DIR, d));
   const re = /hasEffectivePermission\s*\([^,]+,\s*'([^']+)'/g;
@@ -73,8 +117,9 @@ function componentGateKeys(): Map<string, string[]> {
       const abs = path.join(dir, entry.name);
       if (entry.isDirectory()) { walk(abs); continue; }
       if (!abs.endsWith('.ts') && !abs.endsWith('.tsx')) continue;
-      const source = fs.readFileSync(abs, 'utf8');
+      const source = readSource()(abs);
       const keys: string[] = [];
+      re.lastIndex = 0;
       let match: RegExpExecArray | null;
       while ((match = re.exec(source)) !== null) keys.push(match[1]);
       if (keys.length > 0) found.set(path.relative(SRC_DIR, abs), [...new Set(keys)]);
@@ -82,7 +127,7 @@ function componentGateKeys(): Map<string, string[]> {
   };
   for (const dir of dirs) walk(dir);
   return found;
-}
+});
 
 // Why page gates count: app/[locale] pages are server components, so a
 // permission check there is server-side enforcement, not a UX hint. The
@@ -90,29 +135,30 @@ function componentGateKeys(): Map<string, string[]> {
 // page that gates with the typed reader is enforcing, not hinting.
 const PAGE_GATE_RE = /\b(?:ensurePermission|checkPermission|requirePermission)\s*\(\s*['"`]([^'"`]+)['"`]/g;
 
-function pageGateKeys(): Set<string> {
+const pageGateKeys = once((): Set<string> => {
   const keys = new Set<string>();
   const walk = (dir: string): void => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const abs = path.join(dir, entry.name);
       if (entry.isDirectory()) { walk(abs); continue; }
       if (!abs.endsWith('.tsx')) continue;
-      const source = fs.readFileSync(abs, 'utf8');
+      const source = readSource()(abs);
+      PAGE_GATE_RE.lastIndex = 0;
       let match: RegExpExecArray | null;
       while ((match = PAGE_GATE_RE.exec(source)) !== null) keys.add(match[1]);
     }
   };
   walk(path.join(SRC_DIR, 'app'));
   return keys;
-}
+});
 
-function enforcedKeys(): Set<string> {
+const enforcedKeys = once((): Set<string> => {
   const { demandedByEntry } = collectEntries();
-  const enforced = fieldMapKeys();
+  const enforced = new Set(fieldMapKeys());
   for (const keys of demandedByEntry.values()) for (const key of keys) enforced.add(key);
   for (const key of pageGateKeys()) enforced.add(key);
   return enforced;
-}
+});
 
 describe('permission coverage', () => {
   it('gates every server action and API entry (or allowlists it with a reason)', () => {
@@ -190,14 +236,15 @@ describe('permission coverage', () => {
     const offenders: string[] = [];
     const re = /stripDisallowedFields\s*\(\s*'([^']+)'/g;
     const srcDir = SRC_DIR;
+    const source = readSource();
     const walk = (dir: string): void => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const abs = path.join(dir, entry.name);
         if (entry.isDirectory()) { walk(abs); continue; }
         if (!abs.endsWith('.ts')) continue;
-        const source = fs.readFileSync(abs, 'utf8');
+        re.lastIndex = 0;
         let match: RegExpExecArray | null;
-        while ((match = re.exec(source)) !== null) {
+        while ((match = re.exec(source(abs))) !== null) {
           if (!entities.has(match[1])) offenders.push(`${path.relative(srcDir, abs)} -> ${match[1]}`);
         }
       }

@@ -220,6 +220,7 @@ function parseFunctions(
       callees.add(imported ?? `local#${callee}`);
     }
     fns.set(name, {
+      body,
       keys: collectKeys(body),
       sessionOnly: SESSION_ONLY_RE.test(body),
       callees: [...callees],
