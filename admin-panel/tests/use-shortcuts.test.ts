@@ -4,15 +4,10 @@ import {
   CHORD_PREFIX_KEY,
   CHORD_TIMEOUT_MS,
   IDLE_CHORD,
-  OVERLAY_TOGGLE_KEY,
-  clampRowIndex,
-  extractLocale,
-  handleShortcutEvent,
-  isEditableTarget,
-  nextRowIndex,
-  type ShortcutHandlerDeps,
-  type ShortcutKeyEvent,
-} from '@/hooks/useShortcuts';
+} from '@/hooks/shortcut-chord';
+import { OVERLAY_TOGGLE_KEY, extractLocale, handleShortcutEvent, isEditableTarget } from '@/hooks/useShortcuts';
+import { clampRowIndex, nextRowIndex } from '@/hooks/shortcut-rows';
+import type { ShortcutHandlerDeps, ShortcutKeyEvent } from '@/hooks/useShortcuts';
 import { visibleRoutes } from '@/lib/navigation/registry';
 
 const ALL_PERMISSIONS: readonly string[] = ['all:all'];

@@ -37,7 +37,7 @@ function OverlayHeader({ onClose }: { onClose: () => void }): React.JSX.Element 
 function OverlayGroup({ section, onClose }: { section: ShellNavSection; onClose: () => void }): React.JSX.Element {
   return (
     <Fragment>
-      <SectionLabel label={section.label} collapsed={false} />
+      {section.label && <SectionLabel label={section.label} collapsed={false} />}
       {section.items.map((item) => (
         <SidebarNavItem key={item.id} item={item} collapsed={false} density="touch" onClick={onClose} />
       ))}
@@ -45,7 +45,7 @@ function OverlayGroup({ section, onClose }: { section: ShellNavSection; onClose:
   );
 }
 
-function OverlayBody({ locale, permissionKeys, onClose }: FullScreenNavOverlayProps): React.JSX.Element {
+function OverlayBody({ locale, permissionKeys, onClose }: Omit<FullScreenNavOverlayProps, 'open'>): React.JSX.Element {
   const dictionary = useDictionary();
   const sections = useMemo(
     () => buildShellSections(new Set(permissionKeys), 'mobile-more', locale, dictionary),
@@ -54,7 +54,7 @@ function OverlayBody({ locale, permissionKeys, onClose }: FullScreenNavOverlayPr
   return (
     <div className="flex-1 overflow-y-auto space-y-1 p-4 scrollbar-thin">
       {sections.map((section) => (
-        <OverlayGroup key={section.group.id} section={section} onClose={onClose} />
+        <OverlayGroup key={section.groupId ?? 'ungrouped'} section={section} onClose={onClose} />
       ))}
       <div className={ROW_CLASSES}>
         <SignOutLink locale={locale} collapsed={false} density="touch" />
@@ -84,7 +84,7 @@ export function FullScreenNavOverlay({ locale, permissionKeys, open, onClose }: 
   return (
     <div role="dialog" aria-modal="true" aria-label="Navigation" className="fixed inset-0 z-50 flex flex-col bg-background md:hidden">
       <OverlayHeader onClose={onClose} />
-      <OverlayBody locale={locale} permissionKeys={permissionKeys} open={open} onClose={onClose} />
+      <OverlayBody locale={locale} permissionKeys={permissionKeys} onClose={onClose} />
     </div>
   );
 }

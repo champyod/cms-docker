@@ -26,6 +26,7 @@ import type {
   NavigationSurface,
   RouteDescriptor,
   RouteId,
+  RouteKind,
 } from '@/lib/navigation/types';
 import type { Dictionary } from '@/lib/dictionary';
 
@@ -61,6 +62,33 @@ const ROUTE_ICONS: ReadonlyMap<RouteId, LucideIcon> = new Map<RouteId, LucideIco
   ['system.search', Search],
 ]);
 
+/**
+ * The only route kinds a shell surface can link without knowing a record id.
+ *
+ * Why this filter is the single gate: `buildRoute` throws on an unresolved `[id]`
+ * segment, and the palette/search/breadcrumb surfaces carry record landings and
+ * nested tabs alongside pages. The shell has no record to address, so a
+ * parameterized route is not a shell destination at all. Deciding that once here
+ * means no future surface, caller, or icon map can reintroduce the throw — a
+ * render-phase crash in the palette takes down every authenticated page, because
+ * the header mounts it unconditionally.
+ */
+const SHELL_ADDRESSABLE_KINDS: ReadonlySet<RouteKind> = new Set<RouteKind>([
+  'page',
+  'search',
+]);
+
+/**
+ * The group whose heading is deliberately not rendered.
+ *
+ * Why: Home, Contests, and Tasks are the shell's primary destinations, and the
+ * sidebar has never labelled them as a section — a heading there adds a word that
+ * means nothing to a reader. The Thai value of `navigation.groups.direct` also
+ * collides semantically with the Contests label, so a translated heading would be
+ * actively confusing rather than merely redundant.
+ */
+const UNLABELLED_GROUP_ID = 'direct';
+
 export type ShellGroupId = NavigationGroupDescriptor['id'];
 
 export interface ShellNavItem {
@@ -68,13 +96,18 @@ export interface ShellNavItem {
   readonly label: string;
   readonly href: string;
   readonly icon: LucideIcon;
-  readonly groupId: ShellGroupId;
+  readonly groupId: ShellGroupId | null;
 }
 
 export interface ShellNavSection {
-  readonly group: NavigationGroupDescriptor;
-  readonly label: string;
+  readonly groupId: ShellGroupId | null;
+  /** The resolved group label, or null when the section renders no heading. */
+  readonly label: string | null;
   readonly items: readonly ShellNavItem[];
+}
+
+function isShellAddressable(descriptor: RouteDescriptor): boolean {
+  return SHELL_ADDRESSABLE_KINDS.has(descriptor.kind);
 }
 
 function resolveLabel(dictionary: Dictionary, labelKey: string): string {
@@ -88,31 +121,12 @@ function resolveLabel(dictionary: Dictionary, labelKey: string): string {
   return value;
 }
 
-/**
- * The client-side twin of the server module's label resolver.
- *
- * Why it exists: `module-nav.ts` resolves the same key for module rails, but it
- * also exports the session-reading helpers, so importing it from a client
- * component would pull server code into the browser bundle. Both sides walk the
- * same `labelKey` the registry declares, and both fail loud on a missing key, so
- * a rail and a shell item can never show one route under two names — or under no
- * name at all.
- */
-export function navigationLabel(dictionary: Dictionary, labelKey: string): string {
-  return resolveLabel(dictionary, labelKey);
-}
-
-export function navigationGroupLabel(
-  dictionary: Dictionary,
-  group: NavigationGroupDescriptor,
-): string {
-  return resolveLabel(dictionary, group.labelKey);
-}
-
-function groupFor(id: RouteId): ShellGroupId {
-  const group = NAVIGATION_GROUPS.find((item) => item.routeIds.includes(id));
-  if (!group) throw new Error(`Route is in no navigation group: ${id}`);
-  return group.id;
+function groupFor(id: RouteId): ShellGroupId | null {
+  // Why a null and not a throw: a route may legitimately belong to no group —
+  // `system.search` is a capability surfaced through the palette and the search
+  // page, not a member of the System module. Rendering it under no heading is
+  // correct; refusing to render it would remove a destination the reader owns.
+  return NAVIGATION_GROUPS.find((item) => item.routeIds.includes(id))?.id ?? null;
 }
 
 function iconFor(id: RouteId): LucideIcon {
@@ -121,35 +135,39 @@ function iconFor(id: RouteId): LucideIcon {
   return icon;
 }
 
-/** Permitted routes for one surface, in registry declaration order. */
+/** Permitted, linkable routes for one surface, in registry declaration order. */
 export function buildShellItems(
   effective: ReadonlySet<string>,
   surface: NavigationSurface,
   locale: string,
   dictionary: Dictionary,
 ): ShellNavItem[] {
-  return visibleRoutes(effective, surface).map((descriptor: RouteDescriptor) => ({
-    id: descriptor.id,
-    label: navigationLabel(dictionary, descriptor.labelKey),
-    href: buildRoute(locale, descriptor.id),
-    icon: iconFor(descriptor.id),
-    groupId: groupFor(descriptor.id),
-  }));
+  return visibleRoutes(effective, surface)
+    .filter(isShellAddressable)
+    .map((descriptor) => ({
+      id: descriptor.id,
+      label: resolveLabel(dictionary, descriptor.labelKey),
+      href: buildRoute(locale, descriptor.id),
+      icon: iconFor(descriptor.id),
+      groupId: groupFor(descriptor.id),
+    }));
 }
 
 /** The label a frozen route is shown under, for a surface that carries no icon. */
 export function shellItemLabel(dictionary: Dictionary, routeId: RouteId): string {
   const descriptor = ROUTE_REGISTRY.find((route) => route.id === routeId);
   if (!descriptor) throw new Error(`Unknown route: ${routeId}`);
-  return navigationLabel(dictionary, descriptor.labelKey);
+  return resolveLabel(dictionary, descriptor.labelKey);
 }
 
 /**
- * Permitted routes for one surface, bucketed in the registry's own group order.
+ * Permitted, linkable routes for one surface, bucketed in the registry's group
+ * order, with any route that belongs to no group collected into a final section.
  *
  * Why empty groups disappear: a group whose routes are all denied or disabled has
  * nothing to disclose, and rendering its heading would advertise a module the
- * reader cannot open.
+ * reader cannot open. Why the ungrouped tail exists: dropping it would silently
+ * delete a destination the reader is entitled to.
  */
 export function buildShellSections(
   effective: ReadonlySet<string>,
@@ -158,22 +176,17 @@ export function buildShellSections(
   dictionary: Dictionary,
 ): ShellNavSection[] {
   const items = buildShellItems(effective, surface, locale, dictionary);
-  return NAVIGATION_GROUPS.flatMap((group) => {
+  const grouped = NAVIGATION_GROUPS.flatMap((group) => {
     const groupItems = items.filter((item) => item.groupId === group.id);
-    return groupItems.length > 0
-      ? [{ group, label: navigationGroupLabel(dictionary, group), items: groupItems }]
-      : [];
+    if (groupItems.length === 0) return [];
+    return [{
+      groupId: group.id,
+      label: group.id === UNLABELLED_GROUP_ID ? null : resolveLabel(dictionary, group.labelKey),
+      items: groupItems,
+    }];
   });
-}
-
-/** The first permitted route of a group, or null when the reader may open none. */
-export function firstPermittedRoute(
-  effective: ReadonlySet<string>,
-  groupId: ShellGroupId,
-): RouteId | null {
-  const permitted = new Set(
-    visibleRoutes(effective, 'mobile-primary').map((route) => route.id),
-  );
-  const group = NAVIGATION_GROUPS.find((item) => item.id === groupId);
-  return group?.routeIds.find((id) => permitted.has(id)) ?? null;
+  const ungrouped = items.filter((item) => item.groupId === null);
+  return ungrouped.length > 0
+    ? [...grouped, { groupId: null, label: null, items: ungrouped }]
+    : grouped;
 }

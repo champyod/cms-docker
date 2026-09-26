@@ -49,15 +49,22 @@ describe('navigation dictionary parity', () => {
     }
   });
 
-  it('gives every navigation label key the same shape in both dictionaries', () => {
-    const shapes: readonly (readonly [string, (key: string) => string])[] = [
-      ['en', (key) => readDictionaryLabel(en, key)],
-      ['th', (key) => readDictionaryLabel(th, key)],
-    ];
-    for (const labelKey of REQUIRED_LABEL_KEYS) {
-      const widths = shapes.map(([, read]) => read(labelKey).length > 0);
-      expect(new Set(widths).size, labelKey).toBe(1);
+  it('keeps the two dictionaries structurally identical', () => {
+    // Why a shape walk and not a label check: a key that exists in one locale and
+    // not the other renders an empty string in the missing locale, which the
+    // per-label assertion above would never see because it only walks keys the
+    // registry already declares.
+    function keyPaths(value: unknown, prefix: string): string[] {
+      if (typeof value !== 'object' || value === null) return [prefix];
+      return Object.entries(value as Record<string, unknown>).flatMap(([key, child]) =>
+        keyPaths(child, `${prefix}.${key}`),
+      );
     }
+
+    const enPaths = new Set(keyPaths(en, ''));
+    const thPaths = new Set(keyPaths(th, ''));
+    expect([...enPaths].filter((path) => !thPaths.has(path)).sort()).toEqual([]);
+    expect([...thPaths].filter((path) => !enPaths.has(path)).sort()).toEqual([]);
   });
 
   it('carries no hard-coded replacement label in a shell consumer', () => {

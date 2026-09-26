@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/core/Button';
 import { Pencil, Trash2, Plus, FileText, Database, ExternalLink, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ROW_SELECTED_CLASSES } from '@/hooks/useShortcuts';
+import { ROW_SELECTED_CLASSES } from '@/hooks/shortcut-rows';
 import { EmptyState } from '@/components/core/EmptyState';
 import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
 import { TaskModal } from './TaskModal';

@@ -1,16 +1,45 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { useMemo } from 'react';
+import { usePathname } from 'next/navigation';
 import { Dialog } from '@/components/core/Dialog';
-import {
-  useShortcutBindings,
-  useShortcuts,
-  type ShortcutRouteBinding,
-} from '@/hooks/useShortcuts';
+import { shellItemLabel } from '@/components/navigation/shell-nav';
+import { useDictionary } from '@/hooks/useDictionary';
+import { bindingsForPermissions } from '@/hooks/shortcut-chord';
+import { extractLocale, useShortcuts } from '@/hooks/useShortcuts';
+import { buildRoute } from '@/lib/navigation/routes';
 
 export interface ShortcutOverlayProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+}
+
+/** A permitted chord destination, resolved for display. */
+export interface ShortcutRouteBinding {
+  readonly key: string;
+  readonly label: string;
+  readonly href: string;
+}
+
+// Why the join lives here and not in the hook: the chord layer knows only the key
+// and the frozen route id, because a module under `hooks/` must not reach into
+// `components/` to resolve a label. This is the one component that renders a
+// chord list, so this is the one place the presentation needs resolving.
+function useShortcutBindings(
+  permissionKeys: readonly string[],
+): readonly ShortcutRouteBinding[] {
+  const dictionary = useDictionary();
+  const locale = extractLocale(usePathname() ?? '');
+  return useMemo(
+    () =>
+      bindingsForPermissions(permissionKeys).map((entry) => ({
+        key: entry.key,
+        label: shellItemLabel(dictionary, entry.routeId),
+        href: buildRoute(locale, entry.routeId),
+      })),
+    [permissionKeys, locale, dictionary],
+  );
 }
 
 function Kbd({ children }: { children: ReactNode }) {

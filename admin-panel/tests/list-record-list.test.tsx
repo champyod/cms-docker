@@ -6,7 +6,8 @@ import { Pencil } from 'lucide-react';
 import { EmptyState } from '@/components/core/EmptyState';
 import { RecordList } from '@/components/list/RecordList';
 import { RowActionLink } from '@/components/list/RowActionLink';
-import { handleShortcutEvent, IDLE_CHORD, type ShortcutHandlerDeps } from '@/hooks/useShortcuts';
+import { IDLE_CHORD } from '@/hooks/shortcut-chord';
+import { handleShortcutEvent, type ShortcutHandlerDeps } from '@/hooks/useShortcuts';
 
 // Why: globals are disabled in vitest.config.ts, so @testing-library/react's
 // automatic afterEach cleanup does not run; without it, later row queries

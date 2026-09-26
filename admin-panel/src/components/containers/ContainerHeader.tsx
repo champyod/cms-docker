@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { HelpCircle, Layers, RefreshCw } from 'lucide-react';
 
 import { Button } from '@/components/core/Button';
-import { useDictionary } from '@/hooks/useDictionary';
 import { buildRoute } from '@/lib/navigation/routes';
 import { cn } from '@/lib/utils';
 
@@ -17,13 +16,12 @@ interface ContainerHeaderProps {
 }
 
 export function ContainerHeader({ locale, loading, actionLoading, onUpAll, onRefresh }: ContainerHeaderProps): React.JSX.Element {
-  const dict = useDictionary();
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <div className="flex items-center gap-3">
           <h1 className="text-3xl font-bold text-foreground tracking-tight">Container Control Center</h1>
-          <Link href={`${buildRoute(locale, 'system.docs')}#services`} className="flex h-11 w-11 items-center justify-center p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground" title={dict.docs.viewDocumentation}>
+          <Link href={`${buildRoute(locale, 'system.docs')}#services`} className="flex h-11 w-11 items-center justify-center p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground" title="View Documentation">
             <HelpCircle className="w-5 h-5" />
           </Link>
         </div>

@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/core/EmptyState';
 import { ResponsiveTable } from '@/components/core/ResponsiveTable';
 import { Skeleton } from '@/components/core/Skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
-import { ROW_SELECTED_CLASSES } from '@/hooks/useShortcuts';
+import { ROW_SELECTED_CLASSES } from '@/hooks/shortcut-rows';
 import { CHECKBOX_CLASS, buildUserColumns, getUserRowProps } from './userColumns';
 import type { UserRow, UserTableProps } from './userTableTypes';
 

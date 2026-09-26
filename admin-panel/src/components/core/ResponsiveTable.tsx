@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/core/Table';
-import { SHORTCUT_ROW_ATTRIBUTE } from '@/hooks/useShortcuts';
+import { SHORTCUT_ROW_ATTRIBUTE } from '@/hooks/shortcut-rows';
 import { cn } from '@/lib/utils';
 
 // Why: one column definition drives both layouts, so callers stop

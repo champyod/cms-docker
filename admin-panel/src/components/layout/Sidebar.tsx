@@ -72,7 +72,7 @@ export function SignOutLink({ locale, collapsed, density = 'compact' }: { locale
 function NavGroup({ section, collapsed }: { section: ShellNavSection; collapsed: boolean }): React.JSX.Element {
   return (
     <Fragment>
-      <SectionLabel label={section.label} collapsed={collapsed} />
+      {section.label && <SectionLabel label={section.label} collapsed={collapsed} />}
       {section.items.map((item: ShellNavItem) => (
         <SidebarNavItem key={item.id} item={item} collapsed={collapsed} />
       ))}
@@ -84,7 +84,7 @@ function SidebarMainNav({ sections, collapsed }: { sections: readonly ShellNavSe
   return (
     <nav aria-label="Main navigation" className="flex-1 space-y-1 overflow-y-auto px-2 py-3 scrollbar-thin scrollbar-thumb-border hover:scrollbar-thumb-muted-foreground/40">
       {sections.map((section) => (
-        <NavGroup key={section.group.id} section={section} collapsed={collapsed} />
+        <NavGroup key={section.groupId ?? 'ungrouped'} section={section} collapsed={collapsed} />
       ))}
     </nav>
   );
