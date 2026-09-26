@@ -61,7 +61,19 @@ export async function revealUserPassword(id: number): Promise<
   await ensurePermission('password:reveal');
   try {
     const row = await prisma.users.findUnique({ where: { id }, select: { password: true } });
-    if (!row) return { success: false, error: 'User not found' };
+    if (!row) {
+      await recordAudit({
+        verb: 'password:reveal',
+        entity: 'user',
+        entityId: String(id),
+        beforeValues: { userId: id },
+        // A named reason, not a message: this path failed before any secret was read, and the
+        // reason belongs in the log while whatever the driver said does not.
+        afterValues: { error: 'NotFound' },
+        result: 'failure',
+      });
+      return { success: false, error: 'User not found' };
+    }
     const parsed = parseStoredPassword(row.password);
     await recordAudit({
       verb: 'password:reveal',
@@ -73,7 +85,18 @@ export async function revealUserPassword(id: number): Promise<
     });
     if (parsed.kind === 'bcrypt') return { success: true, kind: 'bcrypt' };
     return { success: true, kind: 'plaintext', value: parsed.value };
-  } catch {
+  } catch (error) {
+    // Why this row exists: a reveal that fails is the shape a break-in attempt takes, and
+    // password:reveal is already a verb whose failure pages Discord. The error name is the whole
+    // payload — a message here can carry the query that was refused.
+    await recordAudit({
+      verb: 'password:reveal',
+      entity: 'user',
+      entityId: String(id),
+      beforeValues: { userId: id },
+      afterValues: { error: error instanceof Error ? error.name : 'UnknownError' },
+      result: 'failure',
+    });
     return { success: false, error: 'Unable to load password' };
   }
 }
