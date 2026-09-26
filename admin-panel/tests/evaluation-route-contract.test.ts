@@ -10,6 +10,12 @@ const canonicalEvaluationPaths = [
   'src/app/[locale]/(authenticated)/evaluation/error.tsx',
   'src/app/[locale]/(authenticated)/evaluation/not-found.tsx',
   'src/app/[locale]/(authenticated)/evaluation/submissions/page.tsx',
+  'src/app/[locale]/(authenticated)/evaluation/submissions/[id]/layout.tsx',
+  'src/app/[locale]/(authenticated)/evaluation/submissions/[id]/page.tsx',
+  'src/app/[locale]/(authenticated)/evaluation/submissions/[id]/summary/page.tsx',
+  'src/app/[locale]/(authenticated)/evaluation/submissions/[id]/results/page.tsx',
+  'src/app/[locale]/(authenticated)/evaluation/submissions/[id]/logs/page.tsx',
+  'src/app/[locale]/(authenticated)/evaluation/submissions/[id]/evaluation/page.tsx',
   'src/app/[locale]/(authenticated)/evaluation/lanes/page.tsx',
   'src/app/[locale]/(authenticated)/submissions/page.tsx',
   'src/app/[locale]/(authenticated)/submissions/lanes/page.tsx',
@@ -34,6 +40,20 @@ describe('Evaluation route contracts', () => {
     expect(buildRoute('en', 'evaluation.submission-tabs.results', { id: 19 })).toBe('/en/evaluation/submissions/19/results');
     expect(buildRoute('th', 'evaluation.submission-tabs.logs', { id: 19 })).toBe('/th/evaluation/submissions/19/logs');
     expect(buildRoute('th', 'evaluation.submission-tabs.evaluation', { id: 19 })).toBe('/th/evaluation/submissions/19/evaluation');
+  });
+
+  it('keeps the same record context across the four submission tabs', () => {
+    expect([
+      buildRoute('en', 'evaluation.submission-tabs.summary', { id: 19 }),
+      buildRoute('en', 'evaluation.submission-tabs.results', { id: 19 }),
+      buildRoute('en', 'evaluation.submission-tabs.logs', { id: 19 }),
+      buildRoute('en', 'evaluation.submission-tabs.evaluation', { id: 19 }),
+    ]).toEqual([
+      '/en/evaluation/submissions/19/summary',
+      '/en/evaluation/submissions/19/results',
+      '/en/evaluation/submissions/19/logs',
+      '/en/evaluation/submissions/19/evaluation',
+    ]);
   });
 
   it('resolves old Evaluation paths with the frozen redirect helper', () => {

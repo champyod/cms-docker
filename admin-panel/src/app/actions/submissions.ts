@@ -36,7 +36,7 @@ export async function updateSubmissionComment(submissionId: number, comment: str
           afterValues: { comment: allowed.comment },
           result: 'success',
         });
-        revalidatePath('/[locale]/evaluation/submissions');
+        revalidateSubmissionSurfaces();
       return { success: true };
   } catch (error) {
       const e = error as Error;
@@ -69,7 +69,7 @@ export async function toggleSubmissionOfficial(submissionId: number): Promise<Ac
           afterValues: { official: !sub.official },
           result: 'success',
         });
-        revalidatePath('/[locale]/evaluation/submissions');
+        revalidateSubmissionSurfaces();
         return { success: true };
   } catch (error) {
       const e = error as Error;
@@ -105,7 +105,7 @@ export async function recalculateSubmission(submissionId: number, type: RecalcTy
       afterValues: { type },
       result: 'success',
     });
-    revalidatePath('/[locale]/evaluation/submissions');
+    revalidateSubmissionSurfaces();
     return { success: true, message: 'Submission queued for recalculation' };
   } catch (error) {
     const e = error as Error;
@@ -147,6 +147,13 @@ async function invalidateViaRpc(submissionId: number, datasetId: number | null, 
   } catch {
     return false;
   }
+}
+
+// Why both paths: a write here changes the list row and the record tabs, so
+// revalidating only the list left every open tab showing the previous outcome.
+function revalidateSubmissionSurfaces(): void {
+  revalidatePath('/[locale]/evaluation/submissions', 'page');
+  revalidatePath('/[locale]/evaluation/submissions/[id]', 'page');
 }
 
 async function clearRecalculatedTables(submissionId: number, type: RecalcType): Promise<void> {

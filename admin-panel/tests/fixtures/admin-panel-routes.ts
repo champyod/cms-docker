@@ -42,11 +42,11 @@ export const EXPECTED_ROUTE_MANIFEST: readonly RouteFixture[] = [
   { id: 'people.team-tabs.contests', path: '/people/teams/[id]/contests', kind: 'nested-tab', parentId: 'people.team-record', tabIds: [], legacyPaths: [], enabled: true },
 
   { id: 'evaluation.submissions', path: '/evaluation/submissions', kind: 'page', tabIds: [], legacyPaths: ['/submissions'], enabled: true },
-  { id: 'evaluation.submission-record', path: '/evaluation/submissions/[id]', kind: 'record-landing', parentId: 'evaluation.submissions', defaultChildId: 'evaluation.submission-tabs.summary', tabIds: ['evaluation.submission-tabs.summary', 'evaluation.submission-tabs.results', 'evaluation.submission-tabs.logs', 'evaluation.submission-tabs.evaluation'], legacyPaths: [], enabled: false },
-  { id: 'evaluation.submission-tabs.summary', path: '/evaluation/submissions/[id]/summary', kind: 'nested-tab', parentId: 'evaluation.submission-record', tabIds: [], legacyPaths: [], enabled: false },
-  { id: 'evaluation.submission-tabs.results', path: '/evaluation/submissions/[id]/results', kind: 'nested-tab', parentId: 'evaluation.submission-record', tabIds: [], legacyPaths: [], enabled: false },
-  { id: 'evaluation.submission-tabs.logs', path: '/evaluation/submissions/[id]/logs', kind: 'nested-tab', parentId: 'evaluation.submission-record', tabIds: [], legacyPaths: [], enabled: false },
-  { id: 'evaluation.submission-tabs.evaluation', path: '/evaluation/submissions/[id]/evaluation', kind: 'nested-tab', parentId: 'evaluation.submission-record', tabIds: [], legacyPaths: [], enabled: false },
+  { id: 'evaluation.submission-record', path: '/evaluation/submissions/[id]', kind: 'record-landing', parentId: 'evaluation.submissions', defaultChildId: 'evaluation.submission-tabs.summary', tabIds: ['evaluation.submission-tabs.summary', 'evaluation.submission-tabs.results', 'evaluation.submission-tabs.logs', 'evaluation.submission-tabs.evaluation'], legacyPaths: [], enabled: true },
+  { id: 'evaluation.submission-tabs.summary', path: '/evaluation/submissions/[id]/summary', kind: 'nested-tab', parentId: 'evaluation.submission-record', tabIds: [], legacyPaths: [], enabled: true },
+  { id: 'evaluation.submission-tabs.results', path: '/evaluation/submissions/[id]/results', kind: 'nested-tab', parentId: 'evaluation.submission-record', tabIds: [], legacyPaths: [], enabled: true },
+  { id: 'evaluation.submission-tabs.logs', path: '/evaluation/submissions/[id]/logs', kind: 'nested-tab', parentId: 'evaluation.submission-record', tabIds: [], legacyPaths: [], enabled: true },
+  { id: 'evaluation.submission-tabs.evaluation', path: '/evaluation/submissions/[id]/evaluation', kind: 'nested-tab', parentId: 'evaluation.submission-record', tabIds: [], legacyPaths: [], enabled: true },
   { id: 'evaluation.lanes', path: '/evaluation/lanes', kind: 'page', tabIds: [], legacyPaths: ['/submissions/lanes'], enabled: true },
 
   { id: 'administration.admins', path: '/administration/admins', kind: 'page', tabIds: [], legacyPaths: ['/admins'], enabled: false },

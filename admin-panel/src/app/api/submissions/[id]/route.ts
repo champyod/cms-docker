@@ -55,5 +55,6 @@ export async function PUT(
     result: 'success',
   });
   revalidatePath('/[locale]/evaluation/submissions', 'page');
+  revalidatePath('/[locale]/evaluation/submissions/[id]', 'page');
   return apiSuccess({ message: 'Submission updated successfully' });
 }

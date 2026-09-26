@@ -102,13 +102,13 @@ describe('target route registry', () => {
     }
   });
 
-  it('enables the direct three plus the Contest, Task, User, Team, and Evaluation page routes', () => {
+  it('enables the direct three plus the Contest, Task, User, Team, and Evaluation routes', () => {
     expect(ROUTE_REGISTRY).toHaveLength(43);
     const directIds = DIRECT_ROUTE_CASES.map(({ routeId }) => routeId);
-    // Why: the Evaluation shell proves the Submission list and the lane module,
-    // so those two page descriptors join the direct three and the Contest,
-    // Task, User, and Team routes in registry order — the Submission record
-    // landing and its four tabs stay disabled until their own routes exist.
+    // Why: the Evaluation shell proves the Submission list, the lane module, and
+    // the Submission record landing with its four tabs, so those descriptors join
+    // the direct three and the Contest, Task, User, and Team routes in registry
+    // order.
     const enabledIds = [
       'home',
       'contests.list',
@@ -135,6 +135,11 @@ describe('target route registry', () => {
       'people.team-tabs.members',
       'people.team-tabs.contests',
       'evaluation.submissions',
+      'evaluation.submission-record',
+      'evaluation.submission-tabs.summary',
+      'evaluation.submission-tabs.results',
+      'evaluation.submission-tabs.logs',
+      'evaluation.submission-tabs.evaluation',
       'evaluation.lanes',
     ];
     const enabledIdSet = new Set<string>(enabledIds);
