@@ -226,7 +226,8 @@
   "docs": {
     "title": "CMS Documentation",
     "subtitle": "Comprehensive guide to the Contest Management System.",
-    "officialDocs": "CMS Official Docs"
+    "officialDocs": "CMS Official Docs",
+    "viewDocumentation": "View Documentation"
   },
   "confirmations": {
     "cancel": "Cancel",

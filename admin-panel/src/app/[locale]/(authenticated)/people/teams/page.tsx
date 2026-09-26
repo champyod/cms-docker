@@ -57,7 +57,7 @@ export default async function PeopleTeamsPage({ params }: {
         permissionKeys={[...effectivePermissions]}
         navigation={dict.navigation}
         copy={dict.teams}
-        docsTitle={dict.docs.title}
+        docsLinkLabel={dict.docs.viewDocumentation}
       />
     </PageSurface>
   );

@@ -226,7 +226,8 @@
   "docs": {
     "title": "เอกสาร CMS",
     "subtitle": "คู่มือครอบคลุมสำหรับระบบจัดการการแข่งขัน",
-    "officialDocs": "เอกสารทางการ CMS"
+    "officialDocs": "เอกสารทางการ CMS",
+    "viewDocumentation": "ดูเอกสาร"
   },
   "confirmations": {
     "cancel": "ยกเลิก",

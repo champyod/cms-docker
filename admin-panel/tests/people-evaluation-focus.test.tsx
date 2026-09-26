@@ -70,7 +70,7 @@ function renderTeamList(): HTMLElement {
         permissionKeys={['team:list']}
         navigation={en.navigation}
         copy={en.teams}
-        docsTitle={en.docs.title}
+        docsLinkLabel={en.docs.viewDocumentation}
       />
     </DictionaryProvider>,
   );

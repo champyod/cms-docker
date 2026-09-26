@@ -10,6 +10,7 @@ import { UserHistoryTab } from '@/components/users/UserHistoryTab';
 import { UserProfileTab } from '@/components/users/UserProfileTab';
 import { UserTeamsTab } from '@/components/users/UserTeamsTab';
 import { TeamContestsTab } from '@/components/teams/TeamContestsTab';
+import { TeamListHeader } from '@/components/teams/TeamListHeader';
 import { TeamMembersTab } from '@/components/teams/TeamMembersTab';
 import { TeamOverviewTab } from '@/components/teams/TeamOverviewTab';
 import { buildConfirmationCopy } from '@/lib/confirmation-copy';
@@ -128,6 +129,33 @@ describe('User record tab copy', () => {
     expect(body).toContain(th.users.history.sections.participations.title);
     expect(body).toContain(th.users.history.sections.recentActivity.title);
     expect(body).toContain(th.users.history.sections.contests.empty);
+  });
+});
+
+describe('docs affordance label', () => {
+  it('keeps the original English wording instead of the documentation name', () => {
+    expect(en.docs.viewDocumentation).toBe('View Documentation');
+    expect(en.docs.viewDocumentation).not.toBe(en.docs.title);
+  });
+
+  it('translates the affordance as a verb phrase rather than the documentation name', () => {
+    expect(th.docs.viewDocumentation.trim()).not.toBe('');
+    expect(th.docs.viewDocumentation).not.toBe(th.docs.title);
+    expect(th.docs.viewDocumentation).not.toBe(en.docs.viewDocumentation);
+  });
+
+  it('labels the Team list docs link with the affordance in both locales', () => {
+    const renderHeader = (dict: typeof en): string | null => {
+      const { container } = render(
+        <DictionaryProvider dict={dict}>
+          <TeamListHeader locale="en" canCreate onCreate={vi.fn()} copy={dict.teams} docsLinkLabel={dict.docs.viewDocumentation} />
+        </DictionaryProvider>,
+      );
+      return container.querySelector('a[title]')?.getAttribute('title') ?? null;
+    };
+
+    expect(renderHeader(en)).toBe(en.docs.viewDocumentation);
+    expect(renderHeader(th)).toBe(th.docs.viewDocumentation);
   });
 });
 

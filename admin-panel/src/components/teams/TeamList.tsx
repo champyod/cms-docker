@@ -17,7 +17,7 @@ function recordHref(locale: string, team: TeamSummary): string {
   return buildRoute(locale, 'people.team-record', { id: team.id });
 }
 
-export function TeamList({ initialTeams, permissionKeys, navigation, copy, docsTitle }: TeamListProps): React.JSX.Element {
+export function TeamList({ initialTeams, permissionKeys, navigation, copy, docsLinkLabel }: TeamListProps): React.JSX.Element {
   const [teams] = useSyncedState(initialTeams);
   const dialogs = useTeamDialogs();
   const pathname = usePathname();
@@ -31,7 +31,7 @@ export function TeamList({ initialTeams, permissionKeys, navigation, copy, docsT
 
   return (
     <div className="space-y-6">
-      <TeamListHeader locale={locale} canCreate={capabilities.canCreate} onCreate={dialogs.openCreate} copy={copy} docsTitle={docsTitle} />
+      <TeamListHeader locale={locale} canCreate={capabilities.canCreate} onCreate={dialogs.openCreate} copy={copy} docsLinkLabel={docsLinkLabel} />
       <TeamListTable
         teams={teams}
         recordHref={(team) => recordHref(locale, team)}

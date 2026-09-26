@@ -13,16 +13,17 @@ export interface TeamListHeaderProps {
   readonly canCreate: boolean;
   readonly onCreate: () => void;
   readonly copy: TeamListCopy;
-  readonly docsTitle: Dictionary['docs']['title'];
+  /** The affordance label for the docs link, not the documentation's own name. */
+  readonly docsLinkLabel: Dictionary['docs']['viewDocumentation'];
 }
 
-export function TeamListHeader({ locale, canCreate, onCreate, copy, docsTitle }: TeamListHeaderProps): React.JSX.Element {
+export function TeamListHeader({ locale, canCreate, onCreate, copy, docsLinkLabel }: TeamListHeaderProps): React.JSX.Element {
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
       <Link
         href={`/${locale}/docs#users`}
         className="flex h-11 w-11 items-center justify-center p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-primary"
-        title={docsTitle}
+        title={docsLinkLabel}
       >
         <HelpCircle className="w-4 h-4" />
       </Link>

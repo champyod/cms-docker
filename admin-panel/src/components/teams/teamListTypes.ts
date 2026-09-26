@@ -8,5 +8,6 @@ export interface TeamListProps {
   readonly permissionKeys: readonly string[];
   readonly navigation: Dictionary['navigation'];
   readonly copy: TeamListCopy;
-  readonly docsTitle: Dictionary['docs']['title'];
+  /** The affordance label for the docs link, not the documentation's own name. */
+  readonly docsLinkLabel: Dictionary['docs']['viewDocumentation'];
 }

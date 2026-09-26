@@ -44,8 +44,12 @@ export function Dialog({
 
   const restoreInvoker = useCallback((event: Event): void => {
     event.preventDefault();
-    invokeRef.current?.focus();
+    const invoker = invokeRef.current;
     invokeRef.current = null;
+    // Why this guard: a row action that opened the dialog can unmount while it is
+    // open — a delete that removes the row, a filter that drops it — and focusing a
+    // detached node is a silent no-op that would strand focus on the document body.
+    if (invoker?.isConnected === true) invoker.focus();
   }, []);
 
   return (
