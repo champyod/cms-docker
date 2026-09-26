@@ -459,7 +459,18 @@ check_worker_cgroup() {
 # counts only when its octal digit carries write and execute together — 3 or 7.
 backup_root_write_rule() {
   local owner_uid="$1" group_gid="$2" mode="$3" container_uid="$4" container_gid="$5"
-  local perms="${mode: -3}"
+  local perms="$mode"
+  # WHY pad: stat -c %a prints the minimal octal form, so a mode below 100
+  # arrives shorter than the three columns indexed below and every offset
+  # slice of it would come back empty. Zeros are prefixed and the last three
+  # digits kept, which left-pads short modes and still trims a setuid or
+  # sticky digit, and it never parses the value as a number, so a leading
+  # zero in <mode> survives. A non-numeric mode is left untouched and the
+  # column tests below reject it.
+  if [[ "$perms" =~ ^[0-9]+$ ]]; then
+    perms="000${perms}"
+  fi
+  perms="${perms: -3}"
   if [[ "$owner_uid" == "$container_uid" && "${perms:0:1}" =~ [37] ]]; then
     printf 'owner uid %s\n' "$owner_uid"
     return 0
