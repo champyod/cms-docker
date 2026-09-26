@@ -90,6 +90,15 @@ pub struct Framer {
 
     /// Offset of the first undecoded byte.
     start: usize,
+
+    /// Offset into `buffer` where the search for a terminator resumes.
+    ///
+    /// Everything from `start` up to `scan` is already known to hold no line
+    /// feed, so `start <= scan <= buffer.len()` holds at every observable
+    /// point and a frame that arrives one chunk at a time is scanned once in
+    /// total rather than once per chunk. [`Self::consume_through`] is the only
+    /// thing that moves it.
+    scan: usize,
 }
 
 impl Framer {
@@ -161,16 +170,30 @@ impl Framer {
     /// worth of dead bytes for the life of the connection.
     fn consume_through(&mut self, end: usize) {
         self.start += end;
+        // WHY: the region just consumed ended on a line feed and held none
+        // before it, so resuming the scan at the new `start` can neither miss
+        // a terminator nor look at a byte twice.
+        self.scan = self.start;
         if self.start < self.pending_len() {
             return;
         }
         self.buffer.drain(..self.start);
         self.start = 0;
+        self.scan = 0;
     }
 
-    /// Offset of the first undecoded line feed, relative to it.
-    fn line_feed_offset(&self) -> Option<usize> {
-        self.pending().iter().position(|byte| *byte == LINE_FEED)
+    /// Offset of the first undecoded line feed, relative to `start`.
+    ///
+    /// Resumes at `scan` rather than at the first undecoded byte, and leaves
+    /// `scan` on the line feed it found so a caller that reads the same frame
+    /// twice is answered the same way both times.
+    fn line_feed_offset(&mut self) -> Option<usize> {
+        let line_feed = self.buffer[self.scan..]
+            .iter()
+            .position(|byte| *byte == LINE_FEED)
+            .map(|offset| self.scan + offset);
+        self.scan = line_feed.unwrap_or(self.buffer.len());
+        line_feed.map(|found| found - self.start)
     }
 
     /// Bytes read but not yet decoded.

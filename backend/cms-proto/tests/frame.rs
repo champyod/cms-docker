@@ -18,6 +18,10 @@ const LARGEST_PAYLOAD: usize = MAX_MESSAGE_SIZE - MESSAGE_TERMINATOR_LEN;
 /// One byte more than a frame may carry.
 const OVERSIZE_PAYLOAD: usize = LARGEST_PAYLOAD + 1;
 
+/// Bytes the largest frame is dribbled in, so trickling it costs thousands of
+/// reads rather than one.
+const TRICKLE_CHUNK: usize = 512;
+
 /// An error string shaped like the one the Python side builds: a message and a
 /// traceback, both full of newlines.
 const MULTILINE_ERROR: &str =
@@ -130,18 +134,21 @@ fn an_error_string_of_several_lines_stays_one_frame() {
 }
 
 #[test]
-fn a_frame_split_across_reads_decodes_whole() {
-    let wire = encode(&ok("abc", json!("done"))).expect("reply frames");
-    let mut framer = Framer::default();
-    for byte in &wire {
-        framer
-            .push(std::slice::from_ref(byte))
-            .expect("every prefix fits");
+fn a_frame_trickled_in_small_chunks_decodes_as_it_does_in_one_read() {
+    let mut wire = payload_of_size(LARGEST_PAYLOAD);
+    wire.extend_from_slice(b"\r\n");
+    let mut whole = framer_holding(&wire);
+
+    let mut trickled = Framer::default();
+    for chunk in wire.chunks(TRICKLE_CHUNK) {
+        trickled.push(chunk).expect("every prefix fits the limit");
     }
 
-    let frame = only_frame(&mut framer);
-    assert_eq!(frame.value["__data"], json!("done"));
-    assert_eq!(frame.payload_len, wire.len() - MESSAGE_TERMINATOR_LEN);
+    let from_chunks = only_frame(&mut trickled);
+    let from_one_read = only_frame(&mut whole);
+    assert_eq!(from_chunks.payload_len, from_one_read.payload_len);
+    assert_eq!(from_chunks.value, from_one_read.value);
+    assert!(trickled.next_frame().expect("nothing left").is_none());
 }
 
 #[test]
