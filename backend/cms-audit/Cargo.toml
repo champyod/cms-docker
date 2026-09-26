@@ -1,0 +1,13 @@
+[package]
+name = "cms-audit"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+chrono = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
