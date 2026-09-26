@@ -53,6 +53,7 @@ export interface ConfirmationCopy {
   pullImagesConfirm: () => ConfirmationRequest;
   rebuildStackConfirm: (stack: RebuildStackKey) => ConfirmationRequest;
   manualBackupConfirm: () => ConfirmationRequest;
+  toggleOfficialConfirm: () => ConfirmationRequest;
 }
 
 function request(
@@ -101,5 +102,8 @@ export function buildConfirmationCopy(copy: ConfirmationDictionary): Confirmatio
       request('operational', copy.rebuildStack, { label: copy.rebuildStack.labels[stack] }),
 
     manualBackupConfirm: () => request('operational', copy.manualBackup),
+
+    /** The official flag is a reversible write on an untouched submission, so the flag alone is what changes. */
+    toggleOfficialConfirm: () => request('recoverable', copy.toggleOfficial),
   };
 }

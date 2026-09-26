@@ -60,7 +60,40 @@
     "bulkEditTitle": "แก้ไขผู้ใช้ที่เลือก",
     "bulkCreateTemplate": "ดาวน์โหลดเทมเพลต CSV",
     "bulkCreateParse": "แยกวิเคราะห์และแสดงตัวอย่าง",
-    "bulkOverwriteApply": "ใช้ข้อมูลรับรอง"
+    "bulkOverwriteApply": "ใช้ข้อมูลรับรอง",
+    "profile": {
+      "username": "ชื่อผู้ใช้",
+      "name": "ชื่อ-นามสกุล",
+      "email": "อีเมล",
+      "timezone": "เขตเวลา",
+      "languages": "ภาษา",
+      "status": "สถานะ",
+      "organization": "องค์กร",
+      "country": "ประเทศ",
+      "participations": "การเข้าร่วม",
+      "teams": "ทีม",
+      "savedPassword": "รหัสผ่านที่บันทึกไว้"
+    },
+    "teamsTab": {
+      "emptyTitle": "ไม่พบทีม",
+      "emptyDescription": "ผู้ใช้นี้ยังไม่ได้รับการมอบหมายให้กับทีมใด",
+      "noTeam": "ไม่มีทีม",
+      "contestLabel": "การแข่งขัน #{id}"
+    },
+    "history": {
+      "accountAccess": "การเข้าถึงบัญชี",
+      "lastLogin": "เข้าสู่ระบบล่าสุด: {value}",
+      "contestLabel": "การแข่งขัน #{id}",
+      "taskLabel": "งาน #{id}",
+      "teamLabel": "ทีม #{id}",
+      "sections": {
+        "contests": { "title": "การแข่งขัน", "empty": "ไม่มีกิจกรรมการแข่งขัน" },
+        "participations": { "title": "การเข้าร่วม", "empty": "ไม่มีการเข้าร่วม" },
+        "teams": { "title": "ทีม", "empty": "ไม่มีทีม" },
+        "submissions": { "title": "การส่งคำตอบ", "empty": "ไม่มีการส่งคำตอบ" },
+        "recentActivity": { "title": "กิจกรรมล่าสุด", "empty": "ไม่มีกิจกรรมล่าสุด" }
+      }
+    }
   },
   "teams": {
     "title": "ทีม",
@@ -73,7 +106,22 @@
     "editTeamTooltip": "แก้ไขทีม",
     "deleteTeamTooltip": "ลบทีม",
     "tableEmptyTitle": "ไม่พบทีม",
-    "tableEmptyDescription": "ทีมจะปรากฏที่นี่เมื่อสร้างแล้ว"
+    "tableEmptyDescription": "ทีมจะปรากฏที่นี่เมื่อสร้างแล้ว",
+    "overview": {
+      "code": "รหัสทีม",
+      "name": "ชื่อทีม",
+      "readOnlyHint": "อ่านอย่างเดียว — คุณไม่มีสิทธิ์ team:update",
+      "saveChanges": "บันทึกการเปลี่ยนแปลง"
+    },
+    "members": {
+      "emptyTitle": "ยังไม่มีสมาชิกในทีมนี้",
+      "emptyDescription": "เพิ่มสมาชิกโดยกำหนดทีมนี้ให้กับการเข้าร่วมในการแข่งขัน",
+      "moreCount": "เพิ่มอีก {count} รายการ"
+    },
+    "contests": {
+      "emptyTitle": "ไม่พบการแข่งขัน",
+      "emptyDescription": "ทีมนี้ยังไม่ได้เข้าร่วมการแข่งขันใด"
+    }
   },
   "submissions": {
     "title": "การส่งคำตอบ",
@@ -82,7 +130,8 @@
     "readOnlyBadge": "อ่านอย่างเดียว",
     "tableEmptyTitle": "ไม่พบการส่งคำตอบ",
     "tableEmptyDescription": "การส่งคำตอบจะปรากฏที่นี่เมื่อผู้เข้าแข่งขันเริ่มส่ง",
-    "viewSubmission": "ดูการส่งคำตอบ"
+    "viewSubmission": "ดูการส่งคำตอบ",
+    "lanesDescription": "ลากการส่งคำตอบระหว่างแถว หรือย้ายแถวพร้อมระบุเหตุผล"
   },
   "admins": {
     "title": "ผู้ดูแลระบบ",
@@ -265,6 +314,11 @@
       "title": "เริ่มสำรองข้อมูลด้วยตนเองตอนนี้หรือไม่?",
       "description": "การส่งคำตอบทั้งหมดจะถูกสำรองข้อมูลอยู่เบื้องหลัง เซิร์ฟเวอร์ยังคงทำงานต่อ",
       "confirmLabel": "เริ่มสำรองข้อมูล"
+    },
+    "toggleOfficial": {
+      "title": "เปลี่ยนสถานะทางการหรือไม่?",
+      "description": "มีเพียงสถานะทางการที่เปลี่ยน ตัวการส่งคำตอบเองไม่ถูกแก้ไข และเปลี่ยนสถานะกลับได้",
+      "confirmLabel": "เปลี่ยนสถานะทางการ"
     }
   },
   "toasts": {
@@ -343,6 +397,33 @@
     "connected": "เชื่อมต่อสด",
     "reconnecting": "กำลังเชื่อมต่อใหม่…",
     "paused": "หยุดชั่วคราว"
+  },
+  "states": {
+    "retry": {
+      "label": "ลองอีกครั้ง",
+      "description": "ไม่สามารถโหลดข้อมูลได้ กรุณาลองอีกครั้ง"
+    },
+    "loading": {
+      "people": "กำลังโหลดข้อมูลบุคคล...",
+      "evaluation": "กำลังโหลดข้อมูลการประเมิน...",
+      "userProfile": "กำลังโหลดโปรไฟล์ผู้ใช้...",
+      "userTeams": "กำลังโหลดทีมของผู้ใช้...",
+      "userHistory": "กำลังโหลดประวัติผู้ใช้...",
+      "teamOverview": "กำลังโหลดภาพรวมทีม...",
+      "teamMembers": "กำลังโหลดสมาชิกทีม...",
+      "teamContests": "กำลังโหลดการแข่งขันของทีม...",
+      "submissionSummary": "กำลังโหลดสรุปการส่งคำตอบ...",
+      "submissionResults": "กำลังโหลดผลลัพธ์การส่งคำตอบ...",
+      "submissionLogs": "กำลังโหลดบันทึกการส่งคำตอบ...",
+      "submissionEvaluation": "กำลังโหลดการประเมินการส่งคำตอบ..."
+    },
+    "error": {
+      "people": "ไม่สามารถโหลดข้อมูลบุคคลได้",
+      "evaluation": "ไม่สามารถโหลดข้อมูลการประเมินได้",
+      "userRecord": "ไม่สามารถโหลดข้อมูลผู้ใช้นี้ได้",
+      "teamRecord": "ไม่สามารถโหลดข้อมูลทีมนี้ได้",
+      "submissionRecord": "ไม่สามารถโหลดข้อมูลการส่งคำตอบนี้ได้"
+    }
   },
   "navigation": {
     "groups": { "direct": "การแข่งขัน", "people": "บุคคล", "evaluation": "การประเมิน" },

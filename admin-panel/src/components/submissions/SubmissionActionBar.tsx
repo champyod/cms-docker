@@ -12,7 +12,6 @@ import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
-import type { ConfirmationRequest } from '@/lib/confirmation-copy';
 import type { Dictionary } from '@/lib/dictionary';
 import type { SubmissionSummary } from '@/lib/evaluation-read-model-types';
 
@@ -28,16 +27,6 @@ const RECOMPUTE_CHOICES: readonly { kind: RecomputeKind; label: string }[] = [
   { kind: 'evaluation', label: 'Re-evaluate' },
   { kind: 'full', label: 'Full Re-run' },
 ];
-
-// Why a hand-built request: the official flag is a reversible write like the
-// other recoverable confirmations, but the shared builders interpolate a
-// deletion noun, so the same policy shape is supplied directly instead.
-const OFFICIAL_CONFIRMATION: ConfirmationRequest = {
-  kind: 'recoverable',
-  title: 'Change the official flag?',
-  description: 'Only the official flag changes; the submission itself is untouched and the flag can be changed back.',
-  confirmLabel: 'Change official flag',
-};
 
 export interface SubmissionActionBarProps {
   readonly submissionId: number;
@@ -89,9 +78,10 @@ function useSubmissionDownload(submissionId: number, refresh: () => void): {
 
 function useOfficialToggle(submissionId: number, refresh: () => void): () => Promise<void> {
   const confirm = useConfirm();
+  const { toggleOfficialConfirm } = useConfirmationCopy();
   const runAction = useActionFeedback();
   return async (): Promise<void> => {
-    if (!(await confirm(OFFICIAL_CONFIRMATION))) return;
+    if (!(await confirm(toggleOfficialConfirm()))) return;
     const outcome = await runAction(
       { pending: 'Saving official flag...', success: 'Official flag saved', failure: 'Official flag update failed' },
       () => toggleSubmissionOfficial(submissionId),

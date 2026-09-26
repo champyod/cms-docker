@@ -32,5 +32,5 @@ export default async function UserProfilePage({ params }: { params: Promise<{ lo
     readRecordOrNotFound(() => getUserProfile(id)),
     readRecordOrNotFound(() => getUserSummary(id)),
   ]);
-  return <UserProfileTab profile={profile} summary={summary} navigation={dictionary.navigation} permissionKeys={[...effective]} />;
+  return <UserProfileTab profile={profile} summary={summary} navigation={dictionary.navigation} copy={dictionary.users} permissionKeys={[...effective]} />;
 }

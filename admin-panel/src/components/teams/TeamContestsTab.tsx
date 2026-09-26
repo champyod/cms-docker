@@ -10,6 +10,7 @@ import type { TeamContest } from '@/lib/people-read-model-types';
 export interface TeamContestsTabProps {
   readonly contests: readonly TeamContest[];
   readonly navigation: Dictionary['navigation'];
+  readonly copy: Dictionary['teams'];
   readonly locale: 'en' | 'th';
 }
 
@@ -42,9 +43,15 @@ function ContestRow({ contest, locale }: { readonly contest: TeamContest; readon
   );
 }
 
-export function TeamContestsTab({ contests, navigation, locale }: TeamContestsTabProps): React.JSX.Element {
+export function TeamContestsTab({ contests, navigation, copy, locale }: TeamContestsTabProps): React.JSX.Element {
   if (contests.length === 0) {
-    return <EmptyState icon={Trophy} title="No contests found." description="This team is not participating in any contests yet." />;
+    return (
+      <EmptyState
+        icon={Trophy}
+        title={copy.contests.emptyTitle}
+        description={copy.contests.emptyDescription}
+      />
+    );
   }
   return (
     <Card className="overflow-hidden">

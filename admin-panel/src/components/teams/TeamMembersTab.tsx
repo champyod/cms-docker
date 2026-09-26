@@ -4,12 +4,14 @@ import { ExternalLink, Users } from 'lucide-react';
 import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
 import type { Dictionary } from '@/lib/dictionary';
+import { interpolate } from '@/lib/interpolate';
 import { buildRoute } from '@/lib/navigation/routes';
 import type { TeamMember } from '@/lib/people-read-model-types';
 
 export interface TeamMembersTabProps {
   readonly members: readonly TeamMember[];
   readonly navigation: Dictionary['navigation'];
+  readonly copy: Dictionary['teams'];
   readonly locale: 'en' | 'th';
 }
 
@@ -20,7 +22,11 @@ function memberProfileHref(locale: 'en' | 'th', member: TeamMember): string | nu
   return buildRoute(locale, 'people.user-tabs.profile', { id: member.userId });
 }
 
-function MemberRow({ member, locale }: { readonly member: TeamMember; readonly locale: 'en' | 'th' }): React.JSX.Element {
+function MemberRow({ member, locale, copy }: {
+  readonly member: TeamMember;
+  readonly locale: 'en' | 'th';
+  readonly copy: Dictionary['teams'];
+}): React.JSX.Element {
   const href = memberProfileHref(locale, member);
   return (
     <div className="p-4 flex flex-wrap items-center justify-between gap-3">
@@ -40,7 +46,9 @@ function MemberRow({ member, locale }: { readonly member: TeamMember; readonly l
           </span>
         ))}
         {member.contests.length > 3 && (
-          <span className="text-xs text-muted-foreground">{`+${member.contests.length - 3} more`}</span>
+          <span className="text-xs text-muted-foreground">
+            {interpolate(copy.members.moreCount, { count: member.contests.length - 3 })}
+          </span>
         )}
         {href && (
           <Link href={href} className="inline-flex size-11 shrink-0 items-center justify-center text-muted-foreground hover:text-primary transition-colors" aria-label={member.username ?? undefined}>
@@ -52,9 +60,15 @@ function MemberRow({ member, locale }: { readonly member: TeamMember; readonly l
   );
 }
 
-export function TeamMembersTab({ members, navigation, locale }: TeamMembersTabProps): React.JSX.Element {
+export function TeamMembersTab({ members, navigation, copy, locale }: TeamMembersTabProps): React.JSX.Element {
   if (members.length === 0) {
-    return <EmptyState icon={Users} title="No members in this team yet." description="Add members by assigning this team to a participation in a contest." />;
+    return (
+      <EmptyState
+        icon={Users}
+        title={copy.members.emptyTitle}
+        description={copy.members.emptyDescription}
+      />
+    );
   }
   return (
     <Card className="overflow-hidden">
@@ -65,7 +79,7 @@ export function TeamMembersTab({ members, navigation, locale }: TeamMembersTabPr
         {members.map((member, index) => (
           // Why: an unreadable user id leaves only the row position to
           // distinguish two members, so it joins the readable key.
-          <MemberRow key={`${member.userId ?? member.username ?? 'member'}-${index}`} member={member} locale={locale} />
+          <MemberRow key={`${member.userId ?? member.username ?? 'member'}-${index}`} member={member} locale={locale} copy={copy} />
         ))}
       </div>
     </Card>

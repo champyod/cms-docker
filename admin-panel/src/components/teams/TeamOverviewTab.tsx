@@ -23,6 +23,7 @@ export interface TeamOverviewTabProps {
   readonly team: TeamSummary;
   readonly permissionKeys: readonly string[];
   readonly navigation: Dictionary['navigation'];
+  readonly copy: Dictionary['teams'];
   readonly locale: 'en' | 'th';
 }
 
@@ -37,11 +38,12 @@ interface TeamFormFieldProps {
   readonly access: FieldAccess;
   readonly value: string;
   readonly onChange: (value: string) => void;
+  readonly lockHint: string;
 }
 
-function TeamFormField({ id, label, access, value, onChange }: TeamFormFieldProps): React.JSX.Element {
+function TeamFormField({ id, label, access, value, onChange, lockHint }: TeamFormFieldProps): React.JSX.Element {
   return (
-    <RestrictedField canRead={access.canRead} canUpdate={access.canUpdate} label={label} lockHint="Read-only — you lack team:update">
+    <RestrictedField canRead={access.canRead} canUpdate={access.canUpdate} label={label} lockHint={lockHint}>
       <input
         id={id}
         type="text"
@@ -103,7 +105,7 @@ function useTeamDeletion(team: TeamSummary, locale: 'en' | 'th', push: (href: st
   };
 }
 
-export function TeamOverviewTab({ team, permissionKeys, navigation, locale }: TeamOverviewTabProps): React.JSX.Element {
+export function TeamOverviewTab({ team, permissionKeys, navigation, copy, locale }: TeamOverviewTabProps): React.JSX.Element {
   const router = useAppRouter();
   const effective = new Set(permissionKeys);
   const fieldAccess = getFieldAccess('teams', effective);
@@ -111,19 +113,20 @@ export function TeamOverviewTab({ team, permissionKeys, navigation, locale }: Te
   const canDeleteTeam = hasEffectivePermission(effective, 'team:delete');
   const { formData, saving, justSaved, changeField, save } = useTeamOverviewForm(team, canUpdateTeam, router.refresh);
   const removeTeam = useTeamDeletion(team, locale, router.push);
+  const fields = copy.overview;
   return (
     <Card className="p-4 space-y-4">
       <h2 className="font-bold">{navigation.people['team-tabs'].overview.label}</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <TeamFormField id="code" label="Team Code" access={fieldAccess.code} value={formData.code} onChange={(value) => changeField('code', value)} />
-        <TeamFormField id="name" label="Team Name" access={fieldAccess.name} value={formData.name} onChange={(value) => changeField('name', value)} />
+        <TeamFormField id="code" label={fields.code} access={fieldAccess.code} value={formData.code} onChange={(value) => changeField('code', value)} lockHint={fields.readOnlyHint} />
+        <TeamFormField id="name" label={fields.name} access={fieldAccess.name} value={formData.name} onChange={(value) => changeField('name', value)} lockHint={fields.readOnlyHint} />
       </div>
       <div className="flex items-center justify-end gap-3">
         {canDeleteTeam && (
-          <Button variant="negativeOutline" icon={Trash2} iconOnly tooltip="Delete team" onClick={() => { void removeTeam(); }} />
+          <Button variant="negativeOutline" icon={Trash2} iconOnly tooltip={copy.deleteTeamTooltip} onClick={() => { void removeTeam(); }} />
         )}
         {canUpdateTeam && (
-          <SaveButton saving={saving} justSaved={justSaved} idleLabel="Save Changes" disabled={saving} onClick={() => { void save(); }} />
+          <SaveButton saving={saving} justSaved={justSaved} idleLabel={fields.saveChanges} disabled={saving} onClick={() => { void save(); }} />
         )}
       </div>
     </Card>

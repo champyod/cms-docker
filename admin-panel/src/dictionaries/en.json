@@ -60,7 +60,40 @@
     "bulkEditTitle": "Edit Selected Users",
     "bulkCreateTemplate": "Download CSV Template",
     "bulkCreateParse": "Parse & Preview",
-    "bulkOverwriteApply": "Apply Credentials"
+    "bulkOverwriteApply": "Apply Credentials",
+    "profile": {
+      "username": "Username",
+      "name": "Name",
+      "email": "Email",
+      "timezone": "Timezone",
+      "languages": "Languages",
+      "status": "Status",
+      "organization": "Organization",
+      "country": "Country",
+      "participations": "Participations",
+      "teams": "Teams",
+      "savedPassword": "Saved password"
+    },
+    "teamsTab": {
+      "emptyTitle": "No teams found.",
+      "emptyDescription": "This user is not assigned to any team yet.",
+      "noTeam": "No team",
+      "contestLabel": "Contest #{id}"
+    },
+    "history": {
+      "accountAccess": "Account Access",
+      "lastLogin": "Last login: {value}",
+      "contestLabel": "Contest #{id}",
+      "taskLabel": "Task #{id}",
+      "teamLabel": "Team #{id}",
+      "sections": {
+        "contests": { "title": "Contests", "empty": "No contest activity." },
+        "participations": { "title": "Participations", "empty": "No participations." },
+        "teams": { "title": "Teams", "empty": "No teams." },
+        "submissions": { "title": "Submissions", "empty": "No submissions." },
+        "recentActivity": { "title": "Recent Activity", "empty": "No recent activity." }
+      }
+    }
   },
   "teams": {
     "title": "Teams",
@@ -73,7 +106,22 @@
     "editTeamTooltip": "Edit team",
     "deleteTeamTooltip": "Delete team",
     "tableEmptyTitle": "No teams found",
-    "tableEmptyDescription": "Teams will appear here once created."
+    "tableEmptyDescription": "Teams will appear here once created.",
+    "overview": {
+      "code": "Team Code",
+      "name": "Team Name",
+      "readOnlyHint": "Read-only — you lack team:update",
+      "saveChanges": "Save Changes"
+    },
+    "members": {
+      "emptyTitle": "No members in this team yet.",
+      "emptyDescription": "Add members by assigning this team to a participation in a contest.",
+      "moreCount": "+{count} more"
+    },
+    "contests": {
+      "emptyTitle": "No contests found.",
+      "emptyDescription": "This team is not participating in any contests yet."
+    }
   },
   "submissions": {
     "title": "Submissions",
@@ -82,7 +130,8 @@
     "readOnlyBadge": "Read-only",
     "tableEmptyTitle": "No submissions found",
     "tableEmptyDescription": "Submissions will appear here once contestants start submitting.",
-    "viewSubmission": "View submission"
+    "viewSubmission": "View submission",
+    "lanesDescription": "Drag submissions between lanes or move them with a reason."
   },
   "admins": {
     "title": "Administrators",
@@ -265,6 +314,11 @@
       "title": "Trigger a manual backup now?",
       "description": "All submissions are backed up in the background; the server keeps running.",
       "confirmLabel": "Trigger backup"
+    },
+    "toggleOfficial": {
+      "title": "Change the official flag?",
+      "description": "Only the official flag changes; the submission itself is untouched and the flag can be changed back.",
+      "confirmLabel": "Change official flag"
     }
   },
   "toasts": {
@@ -343,6 +397,33 @@
     "connected": "Live",
     "reconnecting": "Reconnecting…",
     "paused": "Paused"
+  },
+  "states": {
+    "retry": {
+      "label": "Retry",
+      "description": "The data could not be loaded. Retry the request."
+    },
+    "loading": {
+      "people": "Loading people...",
+      "evaluation": "Loading evaluation...",
+      "userProfile": "Loading user profile...",
+      "userTeams": "Loading user teams...",
+      "userHistory": "Loading user history...",
+      "teamOverview": "Loading team overview...",
+      "teamMembers": "Loading team members...",
+      "teamContests": "Loading team contests...",
+      "submissionSummary": "Loading submission summary...",
+      "submissionResults": "Loading submission results...",
+      "submissionLogs": "Loading submission logs...",
+      "submissionEvaluation": "Loading submission evaluation..."
+    },
+    "error": {
+      "people": "People could not be loaded",
+      "evaluation": "Evaluation could not be loaded",
+      "userRecord": "This user could not be loaded",
+      "teamRecord": "This team could not be loaded",
+      "submissionRecord": "This submission could not be loaded"
+    }
   },
   "navigation": {
     "groups": { "direct": "Direct", "people": "People", "evaluation": "Evaluation" },

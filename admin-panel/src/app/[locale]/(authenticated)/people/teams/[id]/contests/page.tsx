@@ -31,5 +31,5 @@ export default async function TeamContestsPage({ params }: { params: Promise<{ l
   await authorizeTeamTab('people.team-tabs.contests');
   const dictionary = await getDictionary(locale);
   const contests = await readRecordOrNotFound(async () => ((await getTeamContests(id)) ?? null));
-  return <TeamContestsTab contests={contests} navigation={dictionary.navigation} locale={locale as 'en' | 'th'} />;
+  return <TeamContestsTab contests={contests} navigation={dictionary.navigation} copy={dictionary.teams} locale={locale as 'en' | 'th'} />;
 }

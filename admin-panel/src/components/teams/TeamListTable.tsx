@@ -4,11 +4,14 @@ import { Users } from 'lucide-react';
 
 import { EmptyState } from '@/components/core/EmptyState';
 import { RecordList } from '@/components/list/RecordList';
+import type { Dictionary } from '@/lib/dictionary';
 import type { TeamSummary } from '@/lib/people-read-model-types';
 
 import { TeamRowActions } from './TeamRowActions';
 import { buildTeamColumns } from './teamColumns';
 import type { TeamCapabilities } from './useTeamListActions';
+
+export type TeamListCopy = Pick<Dictionary['teams'], 'addTeam' | 'tableEmptyTitle' | 'tableEmptyDescription'>;
 
 export interface TeamListTableProps {
   readonly teams: readonly TeamSummary[];
@@ -17,6 +20,7 @@ export interface TeamListTableProps {
   readonly onEdit: (team: TeamSummary) => void;
   readonly onDelete: (teamId: number) => void;
   readonly onCreate: () => void;
+  readonly copy: TeamListCopy;
 }
 
 export function TeamListTable({
@@ -26,6 +30,7 @@ export function TeamListTable({
   onEdit,
   onDelete,
   onCreate,
+  copy,
 }: TeamListTableProps): React.JSX.Element {
   return (
     <RecordList
@@ -46,9 +51,9 @@ export function TeamListTable({
       emptyState={
         <EmptyState
           icon={Users}
-          title="No teams found"
-          description="Teams will appear here once created."
-          actionLabel={capabilities.canCreate ? 'Add Team' : undefined}
+          title={copy.tableEmptyTitle}
+          description={copy.tableEmptyDescription}
+          actionLabel={capabilities.canCreate ? copy.addTeam : undefined}
           onAction={capabilities.canCreate ? onCreate : undefined}
         />
       }

@@ -1,7 +1,8 @@
 'use client';
 
-import { EmptyState } from '@/components/core/EmptyState';
+import { RecordTabError } from '@/components/shared/RecordTabError';
+import { useDictionary } from '@/hooks/useDictionary';
 
 export default function Error({ reset }: { error: Error & { digest?: string }; reset: () => void }): React.JSX.Element {
-  return <EmptyState title="Evaluation could not be loaded" description="The data could not be loaded. Retry the request." actionLabel="Retry" onAction={reset} />;
+  return <RecordTabError title={useDictionary().states.error.evaluation} reset={reset} />;
 }

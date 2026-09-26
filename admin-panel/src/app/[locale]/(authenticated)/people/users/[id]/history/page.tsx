@@ -29,5 +29,5 @@ export default async function UserHistoryPage({ params }: { params: Promise<{ lo
   await authorizeUserTab('people.user-tabs.history');
   const dictionary = await getDictionary(locale);
   const history = await readRecordOrNotFound(() => getUserHistory(id));
-  return <UserHistoryTab history={history} navigation={dictionary.navigation} />;
+  return <UserHistoryTab history={history} navigation={dictionary.navigation} copy={dictionary.users} />;
 }

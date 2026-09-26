@@ -29,5 +29,5 @@ export default async function UserTeamsPage({ params }: { params: Promise<{ loca
   await authorizeUserTab('people.user-tabs.teams');
   const dictionary = await getDictionary(locale);
   const memberships = await readRecordOrNotFound(async () => ((await getUserTeams(id)) ?? null));
-  return <UserTeamsTab memberships={memberships} navigation={dictionary.navigation} locale={locale as 'en' | 'th'} />;
+  return <UserTeamsTab memberships={memberships} navigation={dictionary.navigation} copy={dictionary.users} locale={locale as 'en' | 'th'} />;
 }

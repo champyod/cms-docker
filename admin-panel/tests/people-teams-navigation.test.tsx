@@ -35,6 +35,8 @@ function renderList(permissionKeys: readonly string[]) {
         initialTeams={[TEAM_ROW]}
         permissionKeys={permissionKeys}
         navigation={en.navigation}
+        copy={en.teams}
+        docsTitle={en.docs.title}
       />
     </DictionaryProvider>,
   );

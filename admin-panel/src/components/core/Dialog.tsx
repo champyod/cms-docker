@@ -1,5 +1,6 @@
 'use client';
 
+import { useCallback, useRef } from 'react';
 import {
   Dialog as UIDialog,
   DialogContent,
@@ -29,10 +30,27 @@ export function Dialog({
   children,
   className,
 }: DialogProps) {
+  const invokeRef = useRef<HTMLElement | null>(null);
   const isContentEmpty = children === null || children === undefined;
+
+  // Why this capture: every dialog in the panel is opened from a controlled
+  // `open` flag, so Radix has no trigger to return focus to and a close would
+  // otherwise drop focus on the document body mid-record.
+  const rememberInvoker = useCallback((): void => {
+    if (invokeRef.current === null && document.activeElement instanceof HTMLElement) {
+      invokeRef.current = document.activeElement;
+    }
+  }, []);
+
+  const restoreInvoker = useCallback((event: Event): void => {
+    event.preventDefault();
+    invokeRef.current?.focus();
+    invokeRef.current = null;
+  }, []);
+
   return (
     <UIDialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={className}>
+      <DialogContent className={className} onOpenAutoFocus={rememberInvoker} onCloseAutoFocus={restoreInvoker}>
         {(title || description) && (
           <DialogHeader>
             {title && <DialogTitle>{title}</DialogTitle>}

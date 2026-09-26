@@ -53,7 +53,7 @@ export default async function EvaluationLanesPage({
     <PageSurface
       breadcrumbs={[{ label: lanesLabel, href: buildRoute(locale, 'evaluation.lanes') }]}
       title={lanesLabel}
-      description="Drag submissions between lanes or move them with a reason."
+      description={dict.submissions.lanesDescription}
     >
       <LaneBoard board={board} permissionKeys={permissionKeys} />
     </PageSurface>

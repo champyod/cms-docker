@@ -56,6 +56,8 @@ export default async function PeopleTeamsPage({ params }: {
         initialTeams={teams}
         permissionKeys={[...effectivePermissions]}
         navigation={dict.navigation}
+        copy={dict.teams}
+        docsTitle={dict.docs.title}
       />
     </PageSurface>
   );

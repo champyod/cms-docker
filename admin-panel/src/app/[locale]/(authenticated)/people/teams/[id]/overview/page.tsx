@@ -36,6 +36,7 @@ export default async function TeamOverviewPage({ params }: { params: Promise<{ l
       team={summary}
       permissionKeys={[...effective]}
       navigation={dictionary.navigation}
+      copy={dictionary.teams}
       locale={locale as 'en' | 'th'}
     />
   );
