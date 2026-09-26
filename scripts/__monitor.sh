@@ -506,6 +506,26 @@ check_once() {
 PREV_STATE="OK"
 LAST_BACKUP_TIME=0
 
+# WHY: the backup script sources __lib/common.sh, so a container that never received
+# the lib aborts every backup cycle at that source. Warn loudly but keep looping —
+# alerting, disk checks and log pruning are all still useful without backups.
+CMS_BACKUP_SCRIPT="/usr/local/bin/cms-backup.sh"
+CMS_BACKUP_LIB="${CMS_BACKUP_SCRIPT%/*}/__lib/common.sh"
+if ! grep -q '__lib/' "$CMS_BACKUP_SCRIPT" 2>/dev/null || [ ! -r "$CMS_BACKUP_LIB" ]; then
+    echo "[WARN] ===========================================================" >&2
+    if ! grep -q '__lib/' "$CMS_BACKUP_SCRIPT" 2>/dev/null; then
+        echo "[WARN] $CMS_BACKUP_SCRIPT is missing or unreadable, so no backup" >&2
+        echo "[WARN] will run in this container." >&2
+    else
+        echo "[WARN] $CMS_BACKUP_LIB is missing or unreadable, so every backup" >&2
+        echo "[WARN] cycle will abort at its source line." >&2
+    fi
+    echo "[WARN] Mount or copy scripts/__lib next to the backup script, then" >&2
+    echo "[WARN] recreate the monitor container so it picks the lib up." >&2
+    echo "[WARN] Monitoring continues without backups." >&2
+    echo "[WARN] ===========================================================" >&2
+fi
+
 # WHY: say up front whether this run can deliver anything — starting a monitor with no
 # webhook otherwise looks healthy while every alert is dropped.
 if [ -z "$WEBHOOK_URL" ]; then
