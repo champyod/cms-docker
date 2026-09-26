@@ -133,14 +133,17 @@ describe('User record tab copy', () => {
 });
 
 describe('docs affordance label', () => {
+  // Why the literals, not a contrast against docs.title: that key had no reader
+  // left once the Docs header was removed, so the affordance is pinned outright
+  // to the verb-phrase wording in each locale.
   it('keeps the original English wording instead of the documentation name', () => {
     expect(en.docs.viewDocumentation).toBe('View Documentation');
-    expect(en.docs.viewDocumentation).not.toBe(en.docs.title);
+    expect(en.docs.viewDocumentation).not.toBe('CMS Documentation');
   });
 
   it('translates the affordance as a verb phrase rather than the documentation name', () => {
-    expect(th.docs.viewDocumentation.trim()).not.toBe('');
-    expect(th.docs.viewDocumentation).not.toBe(th.docs.title);
+    expect(th.docs.viewDocumentation).toBe('ดูเอกสาร');
+    expect(th.docs.viewDocumentation).not.toBe('เอกสาร CMS');
     expect(th.docs.viewDocumentation).not.toBe(en.docs.viewDocumentation);
   });
 
