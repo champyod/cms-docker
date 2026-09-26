@@ -26,6 +26,7 @@
 mod codec;
 mod guards;
 mod jobs;
+mod queue;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -40,6 +41,7 @@ pub use jobs::{
     JobGroup, QueueEntryDto, QueueKey, PRIORITY_EXTRA_HIGH, PRIORITY_EXTRA_LOW, PRIORITY_HIGH,
     PRIORITY_LOW, PRIORITY_MEDIUM,
 };
+pub use queue::{now_micros, IndexedQueue, QueueEntry, QueueError};
 
 /// Shown in place of the secret wherever a `Request` is formatted.
 const SECRET_REDACTED: &str = "<redacted>";
