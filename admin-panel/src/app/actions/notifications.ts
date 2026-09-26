@@ -6,7 +6,7 @@ import path from 'path';
 import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
 import { recordAudit } from '@/lib/audit';
-import { readEnvFile, updateEnvFile } from '@/app/actions/env';
+import { readEnvFile, readEnvFileCore, updateEnvFile } from '@/app/actions/env';
 import { getDictionary } from '@/i18n';
 import { interpolate } from '@/lib/interpolate';
 import {
@@ -46,6 +46,8 @@ export async function getDiscordNotificationSettings() {
   await ensurePermission('env:read');
   try {
     const configToml = await readConfigToml();
+    // The audited read, unlike the test-alert path below: this is the settings screen showing the
+    // operator the effective webhook URL, so the disclosure is the point of the call.
     const envResult = await readEnvFile(ENV_FILE);
     const envConfig = envResult.success && envResult.config ? envResult.config : {};
 
@@ -144,7 +146,9 @@ export async function sendTestDiscordAlert(input: Partial<DiscordNotificationInp
   let targetUrl = suppliedUrl.trim();
 
   if (targetUrl === '') {
-    const envResult = await readEnvFile(ENV_FILE);
+    // Unaudited on purpose: this is the alert action resolving the URL it needs, not a read of
+    // the env file, and the test alert it goes on to send is the recorded act.
+    const envResult = await readEnvFileCore(ENV_FILE);
     targetUrl = (envResult.success && envResult.config ? envResult.config[WEBHOOK_KEY] : '') ?? '';
   }
 

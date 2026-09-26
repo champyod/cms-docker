@@ -38,25 +38,46 @@ async function readFileIfPresent(filePath: string): Promise<string | null> {
   }
 }
 
+/** Reads and parses the env file. Throws on any failure, so each caller decides how to report it. */
+async function loadEnvFile(filename: string): Promise<{ content: string; config: Record<string, string> }> {
+  const repoRoot = getRepoRoot();
+  const envPath = resolveEnvPath(repoRoot, filename);
+  const content = await fs.readFile(envPath, 'utf-8');
+
+  const lines = content.split('\n');
+  const config: Record<string, string> = {};
+
+  lines.forEach(line => {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+      const [key, ...values] = trimmed.split('=');
+      config[key.trim()] = values.join('=').trim();
+    }
+  });
+
+  return { content, config };
+}
+
+/**
+ * The parsed env file, unaudited, for a caller that reads it to act rather than to show it: the
+ * test-alert path resolves the webhook from it and then records its own action. A row here would
+ * name a read the operator never asked for, next to the row for the action they did.
+ */
+export async function readEnvFileCore(filename: string) {
+  await ensurePermission('env:read');
+  await ensurePermission('env:list');
+  try {
+    return { success: true as const, ...(await loadEnvFile(filename)) };
+  } catch (error) {
+    return { success: false as const, error: (error as Error).message };
+  }
+}
+
 export async function readEnvFile(filename: string) {
   await ensurePermission('env:read');
   await ensurePermission('env:list');
   try {
-    const repoRoot = getRepoRoot();
-    const envPath = resolveEnvPath(repoRoot, filename);
-    const content = await fs.readFile(envPath, 'utf-8');
-    
-    const lines = content.split('\n');
-    const config: Record<string, string> = {};
-    
-    lines.forEach(line => {
-      const trimmed = line.trim();
-      if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
-        const [key, ...values] = trimmed.split('=');
-        config[key.trim()] = values.join('=').trim();
-      }
-    });
-
+    const { content, config } = await loadEnvFile(filename);
     await recordAudit({
       verb: 'env:view',
       entity: 'env',
@@ -65,7 +86,7 @@ export async function readEnvFile(filename: string) {
       afterValues: { filename, requestedKeys: Object.keys(config) },
       result: 'success',
     });
-    return { success: true, content, config };
+    return { success: true as const, content, config };
   } catch (error) {
     await recordAudit({
       verb: 'env:view',
@@ -73,7 +94,7 @@ export async function readEnvFile(filename: string) {
       afterValues: { filename, error: error instanceof Error ? error.name : 'UnknownError' },
       result: 'failure',
     });
-    return { success: false, error: (error as Error).message };
+    return { success: false as const, error: (error as Error).message };
   }
 }
 
