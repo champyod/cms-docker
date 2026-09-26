@@ -199,11 +199,21 @@ export async function settleDeployOperations(): Promise<void> {
   await reconcileDeployOperationsLib();
 }
 
-export async function getActiveDeployOperation(): Promise<ActiveDeployOperation | null> {
+/**
+ * The active deploy operation, unaudited. Reattachability discovery calls this every
+ * DEPLOY_DISCOVERY_INTERVAL_MS per mounted tab to notice a deploy another tab started, so a row
+ * per call would be thousands a day from a panel doing nothing but sitting open — and the lookup
+ * reconciles server side, which is why it cannot be skipped and must not be mistaken for a read.
+ */
+export async function fetchActiveDeployOperation(): Promise<ActiveDeployOperation | null> {
   await ensurePermission('deployment:read');
-  const active = await getActiveDeployOperationLib();
-  // A null result is a real answer (nothing in flight) and is recorded as one, so a page that
-  // keeps asking for a live deploy leaves the same trail whichever way it came back.
+  return getActiveDeployOperationLib();
+}
+
+export async function getActiveDeployOperation(): Promise<ActiveDeployOperation | null> {
+  const active = await fetchActiveDeployOperation();
+  // A null result is a real answer (nothing in flight) and is recorded as one, so a panel that
+  // looks leaves the same trail whichever way the lookup came back.
   await recordAudit({
     verb: 'deployment:view',
     entity: 'deployment',

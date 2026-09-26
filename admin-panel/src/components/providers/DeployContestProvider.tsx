@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { toast } from 'sonner';
-import { deployContest, getActiveDeployOperation } from '@/app/actions/services';
+import { deployContest, fetchActiveDeployOperation } from '@/app/actions/services';
 import { DeployContestContext, type DeployState } from '@/hooks/useDeployContest';
 import { useDeployStream } from '@/hooks/useDeployStream';
 import { useDictionary } from '@/hooks/useDictionary';
@@ -21,7 +21,9 @@ export function DeployContestProvider({ children }: { children: ReactNode }): Re
   const toastIdRef = useRef<string | number | null>(null);
   const mountedRef = useRef(true);
   const requestRef = useRef(0);
-  const [recovery] = useState(() => createDeployReattachment(getActiveDeployOperation));
+  // Why the unaudited lookup: this discovery repeats for as long as the tab is open, so an
+  // audited read here would fill the log with a panel doing nothing.
+  const [recovery] = useState(() => createDeployReattachment(fetchActiveDeployOperation));
   const toasts = useDictionary().toasts.deploy;
   const toastHelper = useMemo(() => createDeployToast(toasts), [toasts]);
 
