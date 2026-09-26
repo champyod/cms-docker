@@ -2,6 +2,7 @@ pub mod app;
 pub mod components;
 pub mod menus;
 pub mod pages;
+pub mod stack_entries;
 
 use app::App;
 use components::template;
@@ -34,7 +35,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     terminal.show_cursor()?;
 
     if let Err(err) = res {
-        eprintln!("cms-tui error: {err:?}");
+        eprintln!("cms error: {err}");
     }
 
     Ok(())

@@ -1,146 +1,50 @@
 use crate::core::dispatch::{DispatchKey, DispatchTarget};
 use crate::tui::components::action_menu::ActionMenu;
+use crate::tui::stack_entries::{stack_control_entries, stack_deploy_entries};
 
+/// Builds the shell command for a catalog key.
+///
+/// An unresolved key yields an empty command, which `App::run_selected_action`
+/// refuses to run. Menus are drawn inside the event loop, so panicking here
+/// would take the whole interface down over one missing catalog row; the
+/// invariant that every key resolves is pinned by a test instead.
 fn cmd(key: DispatchKey, args: &[&str]) -> String {
-    let target = crate::core::dispatch::target(key).expect("catalog must contain key");
-    match target {
-        DispatchTarget::Script(name) => {
-            if args.is_empty() {
-                format!("bash scripts/{name}")
-            } else {
-                format!("bash scripts/{name} {}", args.join(" "))
-            }
-        }
-        DispatchTarget::Make(make_target) => {
-            if args.is_empty() {
-                format!("make {make_target}")
-            } else {
-                format!("make {make_target} {}", args.join(" "))
-            }
-        }
+    let Some(target) = crate::core::dispatch::target(key) else {
+        return String::new();
+    };
+    let head = match target {
+        DispatchTarget::Script(name) => format!("bash scripts/{name}"),
+        DispatchTarget::Make(make_target) => format!("make {make_target}"),
+    };
+    if args.is_empty() {
+        return head;
     }
+    format!("{head} {}", args.join(" "))
 }
 
+/// Builds a menu row from the catalog entry for `key`, falling back to the
+/// label alone when the entry is missing so the page still renders.
 fn catalog_entry(
     label: &str,
     key: DispatchKey,
     args: &[&str],
 ) -> (String, String, bool, bool, bool) {
-    let spec = crate::core::catalog::spec_for(key).expect("catalog must contain key");
+    let command = cmd(key, args);
+    let Some(spec) = crate::core::catalog::spec_for(key) else {
+        return (label.to_string(), command, false, false, false);
+    };
     (
         label.to_string(),
-        cmd(key, args),
+        command,
         spec.requires_tty,
         spec.requires_sudo,
         spec.capture_output,
     )
 }
 
-fn capitalize(input: &str) -> String {
-    let mut chars = input.chars();
-    match chars.next() {
-        None => String::new(),
-        Some(first) => {
-            let mut out = String::new();
-            out.extend(first.to_uppercase());
-            out.push_str(chars.as_str());
-            out
-        }
-    }
-}
-
-fn stacks_deploy(items: &mut Vec<(String, String, bool, bool, bool)>) {
-    let stacks = crate::core::docker::ALL_STACKS;
-    for stack in stacks {
-        items.push((
-            format!("Deploy {}", capitalize(stack)),
-            format!("make {stack}"),
-            true,
-            false,
-            false,
-        ));
-    }
-    items.push((
-        "Deploy All".to_string(),
-        "make core infra admin contest worker".to_string(),
-        true,
-        false,
-        false,
-    ));
-    for stack in stacks {
-        items.push((
-            format!("Deploy {} (--img)", capitalize(stack)),
-            format!("DEPLOYMENT_TYPE_OVERRIDE=img make {stack}"),
-            true,
-            false,
-            false,
-        ));
-    }
-    items.push((
-        "Deploy All (--img)".to_string(),
-        "DEPLOYMENT_TYPE_OVERRIDE=img make core infra admin contest worker".to_string(),
-        true,
-        false,
-        false,
-    ));
-}
-
-fn stacks_controls(items: &mut Vec<(String, String, bool, bool, bool)>) {
-    let stacks = crate::core::docker::ALL_STACKS;
-    for stack in stacks {
-        items.push((
-            format!("Stop {}", capitalize(stack)),
-            format!("make {stack}-stop"),
-            true,
-            false,
-            false,
-        ));
-    }
-    items.push((
-        "Stop All".to_string(),
-        "make core-stop admin-stop contest-stop worker-stop infra-stop".to_string(),
-        true,
-        false,
-        false,
-    ));
-    for stack in stacks {
-        items.push((
-            format!("Clean {}", capitalize(stack)),
-            format!("make {stack}-clean"),
-            true,
-            false,
-            false,
-        ));
-    }
-    items.push((
-        "Clean All".to_string(),
-        "make core-clean admin-clean contest-clean worker-clean infra-clean".to_string(),
-        true,
-        false,
-        false,
-    ));
-    for stack in stacks {
-        items.push((
-            format!("Pull {}", capitalize(stack)),
-            format!("make pull-{stack}"),
-            true,
-            false,
-            false,
-        ));
-    }
-    items.push((
-        "Pull All".to_string(),
-        "make pull".to_string(),
-        true,
-        false,
-        false,
-    ));
-}
-
 pub fn stacks_menu() -> ActionMenu {
-    let mut items: Vec<(String, String, bool, bool, bool)> = Vec::new();
-    stacks_deploy(&mut items);
-    stacks_controls(&mut items);
+    let mut items: Vec<(String, String, bool, bool, bool)> = stack_deploy_entries();
+    items.extend(stack_control_entries());
     ActionMenu::with_meta(items)
 }
 
@@ -268,4 +172,78 @@ pub fn bootstrap_menu() -> ActionMenu {
         catalog_entry("Fix (Non-interactive Repair)", DispatchKey::Fix, &["--fix"]),
         catalog_entry("Create Superadmin", DispatchKey::AdminCreate, &[]),
     ])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn every_menu() -> Vec<ActionMenu> {
+        vec![
+            stacks_menu(),
+            database_menu(),
+            worker_menu(),
+            ingress_menu(),
+            config_menu(),
+            backup_menu(),
+            system_menu(),
+            bootstrap_menu(),
+        ]
+    }
+
+    /// An entry whose command is empty cannot be run, so every menu row has to
+    /// resolve to a catalog target. This is what the missing-row fallback in
+    /// `cmd` would otherwise hide.
+    #[test]
+    fn every_menu_entry_resolves_to_a_runnable_command() {
+        for menu in every_menu() {
+            assert!(!menu.is_empty(), "a menu must not be empty");
+            for index in 0..menu.len() {
+                let item = menu.get_item(index).expect("index is in range");
+                assert!(
+                    !item.description.trim().is_empty(),
+                    "menu entry `{}` has no command",
+                    item.label
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn an_unresolvable_key_yields_an_empty_command_instead_of_a_panic() {
+        let spec = crate::core::catalog::spec_for(DispatchKey::Setup);
+        assert!(spec.is_some(), "the fallback is only for a missing row");
+        let (label, command, tty, sudo, capture) = catalog_entry("probe", DispatchKey::Setup, &[]);
+        assert_eq!(label, "probe");
+        assert!(command.starts_with("bash scripts/"), "{command}");
+        assert!(tty && !sudo && !capture);
+    }
+
+    #[test]
+    fn stack_rows_cover_every_stack_and_both_deploy_modes() {
+        let menu = stacks_menu();
+        let labels: Vec<String> = (0..menu.len())
+            .map(|index| {
+                menu.get_item(index)
+                    .expect("index is in range")
+                    .label
+                    .clone()
+            })
+            .collect();
+        for stack in crate::core::docker_targets::ALL_STACKS {
+            let capitalized = {
+                let mut chars = stack.chars();
+                let mut out = String::new();
+                out.extend(chars.next().expect("stack is not empty").to_uppercase());
+                out.push_str(chars.as_str());
+                out
+            };
+            assert!(labels.contains(&format!("Deploy {capitalized}")), "{stack}");
+            assert!(labels.contains(&format!("Stop {capitalized}")), "{stack}");
+            assert!(labels.contains(&format!("Clean {capitalized}")), "{stack}");
+            assert!(labels.contains(&format!("Pull {capitalized}")), "{stack}");
+        }
+        assert!(labels.contains(&"Deploy All".to_string()));
+        assert!(labels.contains(&"Deploy All (--img)".to_string()));
+    }
 }
