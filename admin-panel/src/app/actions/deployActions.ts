@@ -7,14 +7,12 @@ import { readDeploymentModeSetting } from '@/lib/deployment-mode-file';
 import { buildComposeFileFlags } from '@/lib/restart-planner';
 import {
   runDeployContest,
-  fetchDeployStatus,
   getActiveDeployOperation as getActiveDeployOperationLib,
   reconcileDeployOperations as reconcileDeployOperationsLib,
 } from '@/lib/deploy-operations';
 import type {
   ActiveDeployOperation,
   DeployContestResult,
-  DeployStatusResult,
 } from '@/lib/deploy-operations';
 
 /**
@@ -52,21 +50,6 @@ export async function deployContest(contestId: number): Promise<DeployContestRes
   return result;
 }
 
-export async function getDeployStatus(operationId: string): Promise<DeployStatusResult> {
-  await ensurePermission('deployment:read');
-  const result = await fetchDeployStatus(operationId);
-  // Why the status but not the rest: the returned log and error carry compose output verbatim,
-  // so the row names the operation, its state and its contest and stops there.
-  await recordAudit({
-    verb: 'deployment:view',
-    entity: 'deployment',
-    entityId: operationId,
-    afterValues: { operationId, status: result.status, contestId: result.contestId ?? null },
-    result: 'success',
-  });
-  return result;
-}
-
 /**
  * Applies the outcome of any deploy whose effects are still owed, so a visit to the deploy page reaches
  * the state that deploy actually left — the contest activated, or the configuration rolled back —
@@ -96,6 +79,9 @@ export async function fetchActiveDeployOperation(): Promise<ActiveDeployOperatio
 }
 
 export async function getActiveDeployOperation(): Promise<ActiveDeployOperation | null> {
+  // Gated here as well as in the fetch above, so the check this action relies on is visible where
+  // the action is rather than only in the function it happens to call.
+  await ensurePermission('deployment:read');
   const active = await fetchActiveDeployOperation();
   // A null result is a real answer (nothing in flight) and is recorded as one, so a panel that
   // looks leaves the same trail whichever way the lookup came back.
