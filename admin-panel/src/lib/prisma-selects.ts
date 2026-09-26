@@ -60,17 +60,15 @@ export const submissionsListInclude = {
       contests: { select: { name: true } }
     }
   },
+  // Why these three only: the list columns read the score and the two outcome
+  // columns of the first result. The remaining result columns were selected and
+  // shipped to a client component without being rendered, which also let the
+  // BigInt compilation_memory column reach the server-to-client boundary.
   submission_results: {
     select: {
       score: true,
-      dataset_id: true,
       compilation_outcome: true,
-      evaluation_outcome: true,
-      compilation_time: true,
-      compilation_memory: true,
-      compilation_text: true,
-      compilation_stdout: true,
-      compilation_stderr: true
+      evaluation_outcome: true
     }
   },
   files: { select: { filename: true, digest: true } }

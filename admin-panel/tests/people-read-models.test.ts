@@ -1,13 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getUserHistory, getUserSummary } from '@/lib/people-read-models';
+import { getSubmissions, getUserHistory, getUserSummary } from '@/lib/people-read-models';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import { requirePermission } from '@/lib/server/authorization';
 import { prisma } from '@/lib/prisma';
+import { submissionsListInclude } from '@/lib/prisma-selects';
 
 vi.mock('@/lib/server/authorization', () => ({ requirePermission: vi.fn() }));
 vi.mock('@/lib/prisma', () => ({
-  prisma: { users: { findUnique: vi.fn() } },
+  prisma: {
+    users: { findUnique: vi.fn() },
+    submissions: { findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn() },
+  },
 }));
 
 const mockRequirePermission = vi.mocked(requirePermission);
@@ -74,5 +78,83 @@ describe('People read models', () => {
         expect(isRoutePermitted({ ...route, enabled: true }, new Set(partialKeys))).toBe(false);
       }
     }
+  });
+});
+
+// Why: a non-null memory column is the shape that made a BigInt reachable, and the
+// non-null values are exactly the ones the existing list fixture never sets.
+const SUBMISSION_ROW = {
+  id: 19,
+  timestamp: new Date('2026-02-03T04:05:06.000Z'),
+  language: 'cpp',
+  comment: '',
+  official: false,
+  tasks: { id: 3, name: 'sum', title: 'Sum' },
+  participations: { users: { username: 'ada' }, contests: { name: 'Thailand Cup' } },
+  submission_results: [
+    {
+      score: 80,
+      dataset_id: 1,
+      compilation_outcome: 'ok',
+      evaluation_outcome: 'ok',
+      compilation_time: 12.5,
+      compilation_memory: BigInt(3145728),
+      compilation_text: ['ok'],
+      compilation_stdout: 'out',
+      compilation_stderr: 'err',
+    },
+  ],
+  files: [{ filename: 'a.cpp', digest: 'abc' }],
+};
+
+// Why: the driver returns only the selected columns, so the fixture projects the
+// full row through the real select instead of hand-writing the narrowed shape.
+function prismaSubmissionsRow(): unknown {
+  const select = submissionsListInclude.submission_results.select as Record<string, boolean>;
+  const [stored] = SUBMISSION_ROW.submission_results;
+  const projected = Object.fromEntries(
+    Object.entries(stored).filter(([key]) => select[key] === true),
+  );
+  return { ...SUBMISSION_ROW, submission_results: [projected] };
+}
+
+function containsBigInt(value: unknown): boolean {
+  if (typeof value === 'bigint') return true;
+  if (Array.isArray(value)) return value.some(containsBigInt);
+  if (typeof value === 'object' && value !== null) {
+    return Object.values(value).some(containsBigInt);
+  }
+  return false;
+}
+
+async function loadListPayload(): Promise<Awaited<ReturnType<typeof getSubmissions>>> {
+  mockRequirePermission.mockResolvedValue(new Set(['submission:list', 'submissionresult:read', 'file:read']));
+  vi.mocked(prisma.submissions.findMany).mockResolvedValue([prismaSubmissionsRow()] as never);
+  vi.mocked(prisma.submissions.count).mockResolvedValue(1 as never);
+  return getSubmissions({ page: 1 });
+}
+
+describe('Submissions list payload', () => {
+  it('carries only the result columns the list UI reads', async () => {
+    const result = await loadListPayload();
+    const [entry] = result.submissions[0].submission_results;
+
+    expect(Object.keys(entry).sort()).toEqual(['compilation_outcome', 'evaluation_outcome', 'score']);
+  });
+
+  it('never puts a bigint on a server-to-client boundary', async () => {
+    const result = await loadListPayload();
+    const [entry] = result.submissions[0].submission_results;
+
+    expect(containsBigInt(result)).toBe(false);
+    expect(JSON.parse(JSON.stringify(entry))).toEqual(entry);
+  });
+
+  it('keeps the BigInt and log columns out of the select the list query runs', () => {
+    expect(Object.keys(submissionsListInclude.submission_results.select)).toEqual([
+      'score',
+      'compilation_outcome',
+      'evaluation_outcome',
+    ]);
   });
 });

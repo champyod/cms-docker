@@ -149,10 +149,11 @@ async function invalidateViaRpc(submissionId: number, datasetId: number | null, 
   }
 }
 
-// Why the list path: a write here changes the list row, so a reader who navigates
-// back to the list must not see the previous outcome. The open record tab is
-// re-rendered by the caller's client-side router.refresh() after a successful
-// action, so this function does not reach the record sub-paths.
+// Why the list path and the record path: a write here changes the list row and
+// the record landing page, and a `page`-typed revalidatePath on the record path is
+// a working invalidation for that page. It does not invalidate the pages beneath
+// it, and the four tabs sit beneath `/[id]`, so an open tab is refreshed by the
+// caller's client-side router.refresh() once the action succeeds.
 function revalidateSubmissionSurfaces(): void {
   revalidatePath('/[locale]/evaluation/submissions', 'page');
   revalidatePath('/[locale]/evaluation/submissions/[id]', 'page');
