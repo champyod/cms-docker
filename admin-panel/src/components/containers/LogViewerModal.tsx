@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Download, RefreshCw, Search } from 'lucide-react';
 
@@ -94,7 +94,7 @@ function LogDisplay({
   onToggleAutoScroll,
   logReference,
 }: DisplayProperties): React.JSX.Element {
-  const filteredLogs = filterLogsByTerm(logs, searchTerm);
+  const filteredLogs = useMemo(() => filterLogsByTerm(logs, searchTerm), [logs, searchTerm]);
   const displayText = filteredLogs || (searchTerm ? 'No logs match filter.' : 'No logs available.');
 
   return (

@@ -41,9 +41,14 @@ export function ContestDetailView({ contest, availableUsers, availableTasks, tea
   const [isEditOpen, setIsEditOpen] = useState(false);
   const effective = useMemo(() => new Set(permissionKeys ?? []), [permissionKeys]);
   const canUpdate = hasEffectivePermission(effective, 'contest:update');
-  const participantUserIds = new Set(contest.participations.map((p: ContestDetailRow['participations'][number]) => p.user_id));
-  const nonParticipants = availableUsers.filter((u: AvailableUserRow) => !participantUserIds.has(u.id));
-  const availableForAdd = availableTasks.filter((t: AvailableTaskRow) => !contest.tasks.find((ct: ContestDetailRow['tasks'][number]) => ct.id === t.id));
+  const { nonParticipants, availableForAdd } = useMemo(() => {
+    const participantUserIds = new Set(contest.participations.map((p) => p.user_id));
+    const contestTaskIds = new Set(contest.tasks.map((t) => t.id));
+    return {
+      nonParticipants: availableUsers.filter((u) => !participantUserIds.has(u.id)),
+      availableForAdd: availableTasks.filter((t) => !contestTaskIds.has(t.id)),
+    };
+  }, [contest.participations, contest.tasks, availableUsers, availableTasks]);
 
   return (
     <div className="space-y-6">
