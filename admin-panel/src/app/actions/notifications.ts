@@ -138,46 +138,86 @@ export async function saveDiscordNotificationSettings(input: DiscordNotification
  * Posts a real alert through the same payload shape the monitor sends and reports the HTTP
  * result, so an operator can prove delivery without waiting for an incident.
  */
-export async function sendTestDiscordAlert(input: Partial<DiscordNotificationInput> | undefined, locale: string) {
-  await ensurePermission('monitor:test');
-  const discordToasts = (await getDictionary(locale)).toasts.discord;
+type TestAlertTarget =
+  | { ok: true; webhook: string; usedConfiguredWebhook: boolean; hasRoleId: boolean }
+  | { ok: false; error: string; usedConfiguredWebhook: boolean; hasRoleId: boolean };
 
+/**
+ * Works out where a test alert would go, without sending anything. A webhook the caller supplies
+ * wins over the configured one, so the flag records which of the two an attempt would have used.
+ */
+async function resolveTestAlertTarget(
+  input: Partial<DiscordNotificationInput> | undefined,
+  noWebhookUrlMessage: string,
+): Promise<TestAlertTarget> {
   const suppliedUrl = input?.webhookUrl ?? '';
   let targetUrl = suppliedUrl.trim();
+  let usedConfiguredWebhook = false;
 
   if (targetUrl === '') {
     // Unaudited on purpose: this is the alert action resolving the URL it needs, not a read of
-    // the env file, and the test alert it goes on to send is the recorded act.
+    // the env file, and the alert it goes on to send is the recorded act.
     const envResult = await readEnvFileCore(ENV_FILE);
     targetUrl = (envResult.success && envResult.config ? envResult.config[WEBHOOK_KEY] : '') ?? '';
+    usedConfiguredWebhook = true;
   }
 
   const webhook = validateDiscordWebhookUrl(targetUrl);
   if (!webhook.ok) {
-    return { success: false as const, error: webhook.error, status: 0 };
+    return { ok: false, error: webhook.error, usedConfiguredWebhook, hasRoleId: false };
   }
   if (webhook.value === '') {
-    return {
-      success: false as const,
-      error: discordToasts.noWebhookUrl,
-      status: 0,
-    };
+    return { ok: false, error: noWebhookUrlMessage, usedConfiguredWebhook, hasRoleId: false };
   }
 
-  const suppliedRole = input?.roleId ?? '';
-  const role = validateDiscordRoleId(suppliedRole.trim() === '' ? '' : suppliedRole);
+  const suppliedRole = (input?.roleId ?? '').trim();
+  const role = validateDiscordRoleId(suppliedRole === '' ? '' : suppliedRole);
   if (!role.ok) {
-    return { success: false as const, error: role.error, status: 0 };
+    return { ok: false, error: role.error, usedConfiguredWebhook, hasRoleId: false };
+  }
+
+  return { ok: true, webhook: webhook.value, usedConfiguredWebhook, hasRoleId: suppliedRole !== '' };
+}
+
+/**
+ * The test alert's own row. Why it is recorded at all: this is the one action that makes the panel
+ * post to an external service on demand, so "who sent a test alert, whose webhook, did it arrive"
+ * is a question the log has to answer. Booleans and the delivery status only — the webhook URL is
+ * a secret, and a role id is somebody else's mention permission.
+ */
+async function recordTestAlert(delivered: boolean, target: TestAlertTarget, status: number): Promise<void> {
+  await recordAudit({
+    verb: 'notification:test',
+    entity: 'notification',
+    afterValues: {
+      delivered,
+      usedConfiguredWebhook: target.usedConfiguredWebhook,
+      hasRoleId: target.hasRoleId,
+      status,
+    },
+    result: delivered ? 'success' : 'failure',
+  });
+}
+
+export async function sendTestDiscordAlert(input: Partial<DiscordNotificationInput> | undefined, locale: string) {
+  await ensurePermission('monitor:test');
+  const discordToasts = (await getDictionary(locale)).toasts.discord;
+
+  const target = await resolveTestAlertTarget(input, discordToasts.noWebhookUrl);
+  if (!target.ok) {
+    await recordTestAlert(false, target, 0);
+    return { success: false as const, error: target.error, status: 0 };
   }
 
   const payload = buildDiscordAlertPayload({
     title: discordToasts.testAlertTitle,
     description: discordToasts.testAlertDescription,
-    roleId: role.value,
+    roleId: (input?.roleId ?? '').trim(),
     footerText: 'CMS Admin Panel',
   });
 
-  const delivery = await postDiscordPayload(webhook.value, payload);
+  const delivery = await postDiscordPayload(target.webhook, payload);
+  await recordTestAlert(delivery.success, target, delivery.status);
   if (!delivery.success) {
     return { success: false as const, error: delivery.error ?? discordToasts.deliveryFailed, status: delivery.status };
   }
