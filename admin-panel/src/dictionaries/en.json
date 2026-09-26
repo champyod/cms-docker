@@ -503,7 +503,22 @@
       "userRecord": "This user could not be loaded",
       "teamRecord": "This team could not be loaded",
       "submissionRecord": "This submission could not be loaded"
+    },
+    "status": {
+      "healthy": "Healthy",
+      "degraded": "Degraded",
+      "offline": "Offline",
+      "unknown": "Unknown"
     }
+  },
+  "rowActions": {
+    "admins": "Administrator actions",
+    "contests": "Contest actions",
+    "containers": "Container actions",
+    "groups": "Group actions",
+    "questions": "Question actions",
+    "tasks": "Task actions",
+    "users": "User actions"
   },
   "navigation": {
     "groups": { "direct": "Direct", "people": "People", "evaluation": "Evaluation", "administration": "Administration", "infrastructure": "Infrastructure", "system": "System" },
