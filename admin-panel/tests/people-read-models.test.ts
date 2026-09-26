@@ -11,6 +11,7 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     users: { findUnique: vi.fn() },
     submissions: { findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn() },
+    $queryRaw: vi.fn(),
   },
 }));
 
@@ -156,5 +157,55 @@ describe('Submissions list payload', () => {
       'compilation_outcome',
       'evaluation_outcome',
     ]);
+  });
+});
+
+// Why: a score arrives on the submission_results relation, which the field map
+// gates behind submissionresult:read — a key getUserHistory never requires.
+const HISTORY_ROW = {
+  last_login_at: null,
+  participations: [
+    {
+      id: 5,
+      contest_id: 2,
+      team_id: null,
+      starting_time: new Date('2026-01-05T00:00:00.000Z'),
+      contests: { id: 2, name: 'Thailand Cup', start: new Date('2026-01-01T00:00:00.000Z'), stop: new Date('2026-01-03T00:00:00.000Z') },
+      teams: null,
+      submissions: [
+        {
+          id: 19,
+          timestamp: new Date('2026-02-03T04:05:06.000Z'),
+          language: 'cpp',
+          official: true,
+          task_id: 3,
+          tasks: { id: 3, name: 'sum' },
+          submission_results: [{ score: 80 }],
+        },
+      ],
+    },
+  ],
+};
+
+const HISTORY_READER_KEYS = ['user:read', 'participation:list', 'submission:read'];
+
+async function loadHistoryWith(keys: readonly string[]): Promise<Awaited<ReturnType<typeof getUserHistory>>> {
+  mockRequirePermission.mockResolvedValue(new Set(keys));
+  vi.mocked(prisma.$queryRaw).mockResolvedValue([] as never);
+  vi.mocked(prisma.users.findUnique).mockResolvedValue(HISTORY_ROW as never);
+  return getUserHistory(7);
+}
+
+describe('User history score gating', () => {
+  it('withholds the score from a submission:read-only caller and keeps the submission fields', async () => {
+    const history = await loadHistoryWith(HISTORY_READER_KEYS);
+
+    expect(history?.submissions[0]).toMatchObject({ id: 19, language: 'cpp', official: true, score: null });
+  });
+
+  it('carries the score for a caller that also holds submissionresult:read', async () => {
+    const history = await loadHistoryWith([...HISTORY_READER_KEYS, 'submissionresult:read']);
+
+    expect(history?.submissions[0]).toMatchObject({ id: 19, language: 'cpp', official: true, score: 80 });
   });
 });
