@@ -7,7 +7,6 @@ import { buildLocaleHref, extractLocale } from '@/hooks/useShortcuts';
 import { Command, CommandInput, CommandList } from '@/components/ui/command';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { logout } from '@/app/actions/auth';
 import { activateContest, getAvailableContests } from '@/app/actions/contests';
 import { buildEntitySearchers } from './entity-searchers';
 import { useEntitySearch } from './useEntitySearch';
@@ -17,6 +16,7 @@ import { entriesByGroup } from '@/lib/nav-registry';
 import { NavigationItems, EntityItems, ActionItems } from './CommandPaletteItems';
 
 const PALETTE_TOGGLE_KEY = 'k';
+const SIGNOUT_PATH = '/auth/signout';
 const COMMAND_STYLING = '[&_[cmdk-group-heading]]:text-muted-foreground **:data-[slot=command-input-wrapper]:h-12 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group]]:px-2 [&_[cmdk-input-wrapper]_svg]:size-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:size-5';
 
 interface AvailableContestRow { id: number; name: string; is_active: boolean; }
@@ -82,7 +82,16 @@ export function CommandPalette({ open, onOpenChange, permissionKeys }: CommandPa
     } catch { toast.error('Failed to switch contest'); }
   };
 
-  const runSignOut = (): void => { close(); logout().catch(() => { toast.error('Sign out failed'); }); };
+  // Why: the route handler owns both the cookie clear and the locale-correct redirect, so the
+  // palette hands off to it instead of posting a Server Action from the page it is leaving
+  const runSignOut = (): void => {
+    close();
+    try {
+      router.push(buildLocaleHref(locale, SIGNOUT_PATH));
+    } catch {
+      toast.error('Sign out failed');
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>

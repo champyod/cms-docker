@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES, type Locale } from '@/lib/locales';
 
 type CookieDeleteOptions = { readonly name?: string; readonly path?: string };
@@ -6,6 +8,10 @@ type CookieStore = { readonly delete: (options: CookieDeleteOptions) => void };
 type SignoutRoute = typeof import('@/app/[locale]/auth/signout/route');
 
 const ORIGIN = 'http://localhost:3000';
+const PALETTE_SOURCE = readFileSync(
+  join(__dirname, '..', 'src', 'components', 'palette', 'CommandPalette.tsx'),
+  'utf8',
+);
 
 beforeAll(() => {
   // Pinned so the auth module takes the configured-secret branch and the suite emits no warning
@@ -26,10 +32,32 @@ function createCookieRecorder(): { deletes: CookieDeleteOptions[]; store: Cookie
   return { deletes, store };
 }
 
+function mockPrisma(): void {
+  vi.doMock('@/lib/prisma', () => ({
+    prisma: {
+      admins: { findUnique: vi.fn(async () => ({ username: 'ada', enabled: false })) },
+    },
+  }));
+}
+
 async function loadSignoutRoute(store: CookieStore): Promise<SignoutRoute> {
   vi.resetModules();
+  vi.doUnmock('@/lib/auth');
+  mockPrisma();
   vi.doMock('next/headers', () => ({ cookies: async () => store }));
   return await import('@/app/[locale]/auth/signout/route');
+}
+
+async function loadSignoutRouteOverSpyingAuth(): Promise<{ route: SignoutRoute; deleteSession: () => Promise<void> }> {
+  vi.resetModules();
+  const deleteSession = vi.fn(async () => undefined);
+  vi.doMock('@/lib/auth', () => ({ deleteSession }));
+  vi.doMock('next/headers', () => ({
+    cookies: async () => {
+      throw new Error('the signout route must clear the cookie through deleteSession');
+    },
+  }));
+  return { route: await import('@/app/[locale]/auth/signout/route'), deleteSession };
 }
 
 async function callSignout(route: SignoutRoute, locale: string) {
@@ -103,6 +131,27 @@ describe('signout cookie clear', () => {
 
     expect(deletes).toEqual([{ name: 'session', path: '/' }]);
   });
+
+  it('routes the clear through deleteSession instead of its own cookie literal', async () => {
+    const { route, deleteSession } = await loadSignoutRouteOverSpyingAuth();
+
+    const response = await callSignout(route, 'th');
+
+    expect(deleteSession).toHaveBeenCalledTimes(1);
+    expect(redirectPathname(response.headers)).toBe('/th/auth/login');
+  });
+});
+
+describe('palette sign-out handoff', () => {
+  it('no longer imports the logout Server Action', () => {
+    expect(PALETTE_SOURCE).not.toContain('@/app/actions/auth');
+    expect(PALETTE_SOURCE).not.toMatch(/\blogout\b/);
+  });
+
+  it('navigates to the locale-scoped sign-out route through the shared locale helper', () => {
+    expect(PALETTE_SOURCE).toContain("const SIGNOUT_PATH = '/auth/signout';");
+    expect(PALETTE_SOURCE).toMatch(/buildLocaleHref\(locale, SIGNOUT_PATH\)/);
+  });
 });
 
 describe('proxy session sliding', () => {
@@ -142,11 +191,7 @@ describe('slideSessionCookie path-aware clear', () => {
   async function loadAuth() {
     vi.resetModules();
     vi.doUnmock('@/lib/auth');
-    vi.doMock('@/lib/prisma', () => ({
-      prisma: {
-        admins: { findUnique: vi.fn(async () => ({ username: 'ada', enabled: false })) },
-      },
-    }));
+    mockPrisma();
     return await import('@/lib/auth');
   }
 

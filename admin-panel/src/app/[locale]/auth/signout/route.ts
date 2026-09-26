@@ -1,5 +1,5 @@
-import { cookies } from 'next/headers';
 import { NextResponse, type NextRequest } from 'next/server';
+import { deleteSession } from '@/lib/auth';
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES, type Locale } from '@/lib/locales';
 
 function isLocale(value: string): value is Locale {
@@ -19,7 +19,7 @@ export async function GET(
   const { locale: candidate } = await params;
   const locale = resolveLocale(candidate);
 
-  (await cookies()).delete({ name: 'session', path: '/' });
+  await deleteSession();
 
   return NextResponse.redirect(new URL(`/${locale}/auth/login`, request.url));
 }
