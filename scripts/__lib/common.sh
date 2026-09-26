@@ -221,6 +221,92 @@ backup_dir_writable_by_container() {
 }
 
 # ---------------------------------------------------------------------------
+# backup_dir_group_writable <mode>
+# ---------------------------------------------------------------------------
+# Returns 0 when the owning-group class of <mode> is 7.
+# WHY exactly 7 and not "carries write": the class is entered by search too, since
+# creating an archive inside the root also needs the search bit — the reason
+# backup_dir_writable_by_container counts only 3 or 7 — so read, write and search
+# have to travel together or a group that looks writable is not enterable.
+# <mode> is read on its last three octal digits, so the setgid digit this repair
+# sets cannot shift the group column, and a non-numeric mode is rejected rather
+# than guessed at.
+backup_dir_group_writable() {
+  local perms="${1:-}"
+  if [[ "$perms" =~ ^[0-9]+$ ]]; then
+    perms="000${perms}"
+  fi
+  perms="${perms: -3}"
+  [[ "${perms:1:1}" == "7" ]]
+}
+
+# ---------------------------------------------------------------------------
+# backup_dir_dual_writable <"owner_uid group_gid mode"> <container_uid>
+# ---------------------------------------------------------------------------
+# Returns 0 when BOTH writers reach the backup root: the container through the
+# three-rule table in backup_dir_writable_by_container — the preflight gate's
+# authority, called here rather than restated — and the host operator through the
+# owning group, which after the ownership transfer is the only class left that
+# reaches them.
+# WHY both: the container's three rules alone are not the target state, and
+# treating them as one is what produced a container-owned 700 tree the operator
+# could no longer enter. A root the container reaches only through `other` is
+# likewise not enough, because what a repaired root is asked to guarantee is the
+# group.
+backup_dir_dual_writable() {
+  local owner_uid group_gid mode
+  read -r owner_uid group_gid mode <<<"${1:-0 0 0}"
+  backup_dir_writable_by_container "$owner_uid" "$group_gid" "$mode" "$2" "$2" \
+    && backup_dir_group_writable "$mode"
+}
+
+# ---------------------------------------------------------------------------
+# backup_dir_repair <root> <container_uid>
+# ---------------------------------------------------------------------------
+# Moves the tree to <container_uid>, keeps every group it already carries, and makes
+# each directory rwx for its owning group with the setgid bit set, so entries the
+# container creates inherit the group that reaches the host operator.
+# WHY the group is left as it is: the operator's handle on the tree is the group
+# they already belong to, so handing the group to the container gid would trade one
+# lockout for another.
+# WHY files are not touched: a backup archive carries database credentials, so the
+# group is granted no write on the data and every file keeps the mode it was created
+# with. The operator still removes archives, because unlinking needs write on the
+# parent directory, which the group now has.
+# Runs directly as root and otherwise behind one `sudo -v` followed by one
+# privileged pass — one prompt, never a loop, never an assumed passwordless sudo.
+backup_dir_repair() {
+  local root="$1" uid="$2"
+  if [[ "$(id -u)" -eq 0 ]]; then
+    chown -R "$uid" "$root" || return 1
+    find "$root" -type d -exec chmod g+rwx,g+s {} +
+    return
+  fi
+  sudo -v 2>/dev/null || return 1
+  sudo chown -R "$uid" "$root" || return 1
+  sudo find "$root" -type d -exec chmod g+rwx,g+s {} +
+}
+
+# ---------------------------------------------------------------------------
+# backup_dir_announce <root> <before_state> <after_state>
+# ---------------------------------------------------------------------------
+# Prints the change as before/after owner:group and mode.
+# WHY loud: moving the owner off the operator's own uid is visible on a box someone
+# is using, and the group that keeps them writing afterwards is the handle they are
+# left with. The two states on consecutive lines are the record that survives a
+# scrolled-back terminal, and the setgid note says why archives the container
+# creates stay reachable instead of quietly turning private again.
+backup_dir_announce() {
+  local before_uid before_gid before_mode after_uid after_gid after_mode
+  read -r before_uid before_gid before_mode <<<"$2"
+  read -r after_uid after_gid after_mode <<<"$3"
+  log_info "backup root repaired for both writers: $1"
+  log_info "  before: ${before_uid}:${before_gid} ${before_mode}"
+  log_info "  after:  ${after_uid}:${after_gid} ${after_mode}"
+  log_info "  owner is the monitor uid; the host operator writes through group ${after_gid}, setgid on directories"
+}
+
+# ---------------------------------------------------------------------------
 # ensure_backup_dir_perms
 # ---------------------------------------------------------------------------
 # WHY: the monitor container runs as ${DOCKER_UID:-1000} and writes archives under
@@ -229,14 +315,19 @@ backup_dir_writable_by_container() {
 # container then cannot create an archive, while the host shell that owns the
 # directory still sees the path as writable, so ownership and mode are read from
 # the filesystem and repaired here rather than only reported.
-# A missing root is created, a root that already grants the container write access
-# returns silently so a repeat call costs and prints nothing, the repair runs
-# directly as root or behind one `sudo -v` and one privileged run (one prompt,
-# never a loop, never an assumed passwordless sudo), and an unprivileged failure
-# prints the exact commands to run by hand and returns 1 without exiting — the
+# The target is two writers, not the container alone: ownership moves to the
+# container uid and every directory gains group rwx with setgid, because once the
+# owner changed the operator is reachable only through the preserved group.
+# Converging on owner-only modes is what locked an operator out of a container-owned
+# 700 tree, so a root only the container passes is not finished and gets repaired on
+# the next call too.
+# A missing root is created, a root where both writers already pass returns
+# silently so a repeat call costs and prints nothing, the repair runs directly as
+# root or behind one `sudo -v` and one privileged run, and a repair that does not
+# take prints the exact commands to run by hand and returns 1 without exiting — the
 # caller decides if that is fatal.
 ensure_backup_dir_perms() {
-  local repo_root root uid stat_line owner_uid group_gid mode
+  local repo_root root uid state before
 
   repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
   root="${BACKUP_DIR:-${repo_root}/backups}"
@@ -248,32 +339,29 @@ ensure_backup_dir_perms() {
     mkdir -p "$root" || { log_warn "cannot create backup root: ${root}"; return 1; }
   fi
 
-  stat_line="$(stat -c '%u %g %a' "$root" 2>/dev/null || true)"
-  [[ -n "$stat_line" ]] || {
+  before="$(stat -c '%u %g %a' "$root" 2>/dev/null || true)"
+  [[ -n "$before" ]] || {
     log_warn "cannot read ownership of backup root: ${root}"; return 1
   }
-  read -r owner_uid group_gid mode <<<"$stat_line"
-  if backup_dir_writable_by_container "$owner_uid" "$group_gid" "$mode" "$uid" "$uid"; then
+  if backup_dir_dual_writable "$before" "$uid"; then
     return 0
   fi
 
-  if [[ "$(id -u)" -eq 0 ]]; then
-    chown -R "$uid" "$root" && find "$root" -type d -exec chmod u+rwx {} +
-  elif sudo -v 2>/dev/null; then
-    sudo chown -R "$uid" "$root" && sudo find "$root" -type d -exec chmod u+rwx {} +
-  fi
-
-  stat_line="$(stat -c '%u %g %a' "$root" 2>/dev/null || true)"
-  read -r owner_uid group_gid mode <<<"${stat_line:-0 0 0}"
-  if backup_dir_writable_by_container "$owner_uid" "$group_gid" "$mode" "$uid" "$uid"; then
-    log_info "backup root repaired for uid ${uid}: ${root}"
-    return 0
-  fi
-
-  log_warn "monitor (uid ${uid}) cannot write ${root} — run these as a user with sudo:
+  # WHY the repair's own exit status is dropped: the outcome is read back off the
+  # filesystem, so a privileged pass that was never allowed and one that changed
+  # half the tree are judged by the same measured state instead of by how a command
+  # happened to exit.
+  backup_dir_repair "$root" "$uid" || true
+  state="$(stat -c '%u %g %a' "$root" 2>/dev/null || true)"
+  if ! backup_dir_dual_writable "$state" "$uid"; then
+    log_warn "monitor (uid ${uid}) and the host operator cannot both write ${root} — run these as a user with sudo:
     sudo chown -R ${uid} ${root}
-    sudo find ${root} -type d -exec chmod u+rwx {} +"
-  return 1
+    sudo find ${root} -type d -exec chmod g+rwx,g+s {} +"
+    return 1
+  fi
+
+  backup_dir_announce "$root" "$before" "$state"
+  return 0
 }
 
 # ---------------------------------------------------------------------------
