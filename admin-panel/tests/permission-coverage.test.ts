@@ -7,6 +7,7 @@ import { FIELD_PERMISSION_MAP } from '@/lib/field-permissions';
 import { hasEffectivePermission, resolveEffectivePermissions } from '@/lib/permission-engine';
 import { NAV_REGISTRY, visibleEntries } from '@/lib/nav-registry';
 import { ROUTE_REGISTRY, visibleRoutes } from '@/lib/navigation/registry';
+import type { PermissionRequirement } from '@/lib/navigation/types';
 import { ACTIONS_DIR, API_DIR, FOLLOW_FILES, SRC_DIR, type FileInfo } from '../scripts/coverage/model';
 import { parseFile, listFilesRecursive } from '../scripts/coverage/scan';
 import { resolveDemanded, tableUpdateKeys, isAllowlisted } from '../scripts/coverage/resolve';
@@ -140,8 +141,35 @@ const PAGE_GATE_RE = /\b(?:ensurePermission|checkPermission|requirePermission)\s
 // so the descriptor is the enforcement site and the source holds only the id.
 const ROUTE_GATE_RE = /\bauthorizeRoutePage\s*\(\s*['"`]([^'"`]+)['"`]/g;
 
-const descriptorGateKeys = once((): Set<string> => {
+/** The descriptor fields a page gate reads: its id, its enabled state, and its requirement. */
+interface GateDescriptor {
+  readonly id: string;
+  readonly enabled: boolean;
+  readonly permission: PermissionRequirement;
+}
+
+// Why the enabled check mirrors `authorizeRoutePage`: it 404s a missing or
+// disabled descriptor before it reads a permission, so a page gating one never
+// reaches a permission check. Counting its keys would let a dead route keep a
+// registry key looking enforced and hide it from the gate below.
+function enforcedKeysForGatedRoutes(
+  gatedRouteIds: readonly string[],
+  registry: readonly GateDescriptor[],
+): Set<string> {
   const keys = new Set<string>();
+  for (const routeId of gatedRouteIds) {
+    const descriptor = registry.find((route) => route.id === routeId);
+    if (!descriptor) throw new Error(`Gated page names an undeclared route: ${routeId}`);
+    if (!descriptor.enabled) continue;
+    for (const key of [...(descriptor.permission.all ?? []), ...(descriptor.permission.any ?? [])]) {
+      keys.add(key);
+    }
+  }
+  return keys;
+}
+
+const descriptorGateKeys = once((): Set<string> => {
+  const gatedRouteIds: string[] = [];
   const walk = (dir: string): void => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const abs = path.join(dir, entry.name);
@@ -150,17 +178,11 @@ const descriptorGateKeys = once((): Set<string> => {
       const source = readSource()(abs);
       ROUTE_GATE_RE.lastIndex = 0;
       let match: RegExpExecArray | null;
-      while ((match = ROUTE_GATE_RE.exec(source)) !== null) {
-        const descriptor = ROUTE_REGISTRY.find((route) => route.id === match?.[1]);
-        if (!descriptor) throw new Error(`Gated page names an undeclared route: ${match[1]}`);
-        for (const key of [...(descriptor.permission.all ?? []), ...(descriptor.permission.any ?? [])]) {
-          keys.add(key);
-        }
-      }
+      while ((match = ROUTE_GATE_RE.exec(source)) !== null) gatedRouteIds.push(match[1]);
     }
   };
   walk(path.join(SRC_DIR, 'app'));
-  return keys;
+  return enforcedKeysForGatedRoutes(gatedRouteIds, ROUTE_REGISTRY);
 });
 
 const pageGateKeys = once((): Set<string> => {
@@ -218,6 +240,25 @@ describe('permission coverage', () => {
       (key) => key !== 'all:all' && !demanded.has(key) && !mapped.has(key) && !reserved.has(key),
     );
     expect(ignored).toEqual([]);
+  });
+
+  it('leaves a disabled descriptor key unenforced so the registry gate still fires', () => {
+    const key = 'system:disabled-probe';
+    const registry: readonly GateDescriptor[] = [
+      { id: 'system.enabled-probe', enabled: true, permission: { all: [key] } },
+      { id: 'system.disabled-probe', enabled: false, permission: { all: [key] } },
+    ];
+    // Why the enabled twin: it holds descriptor.enabled as the only difference,
+    // so the disabled case cannot pass by counting nothing at all.
+    expect([...enforcedKeysForGatedRoutes(['system.enabled-probe'], registry)]).toEqual([key]);
+
+    const enforced = enforcedKeys();
+    for (const contributed of enforcedKeysForGatedRoutes(['system.disabled-probe'], registry)) {
+      enforced.add(contributed);
+    }
+    // A key no enforcing site covers is exactly what the gate above reports, so
+    // a page gated only by a disabled descriptor leaves its requirement visible.
+    expect(enforced.has(key)).toBe(false);
   });
 
   it('grants every enforced key to at least one group', () => {
