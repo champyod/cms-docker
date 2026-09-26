@@ -1,9 +1,5 @@
-# WHY this file exists: gitleaks runs with default config in CI
-# (see the "Secret scan" step) and flags the deliberate canary fixtures in
-# admin-panel/tests/audit-payload-harness.ts (canary-env-secret-*, ...).
-# That harness exists to plant fake secrets and assert they never reach audit
-# rows, so its contents are fixtures by design, not leaks. This allowlist
-# covers that one documented-canary file only; everything else still scans.
+# WHY: the audit leak harness plants fake canary secrets by design, so its
+# fixtures trip the default secret scan. Exempt that one file only.
 [allowlist]
 description = "deliberate canary fixtures for audit leak assertions"
 paths = ['''admin-panel/tests/audit-payload-harness\.ts''']
