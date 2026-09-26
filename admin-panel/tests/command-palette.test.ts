@@ -1,12 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  PALETTE_NAV_ITEMS,
   buildNavVisibility,
-  filterNavItems,
   filterTeams,
   isNumericQuery,
 } from '@/components/palette/palette-data';
 import { createSearchScheduler } from '@/components/palette/search-scheduler';
+import { visibleRoutes } from '@/lib/navigation/registry';
 
 const ALL_PERMISSIONS: readonly string[] = ['all:all'];
 
@@ -14,8 +13,8 @@ const CONTEST_PERMISSIONS: readonly string[] = ['contest:list', 'submission:list
 
 const USER_PERMISSIONS: readonly string[] = ['user:list', 'team:list'];
 
-function labelsFor(permissionKeys: readonly string[]): string[] {
-  return filterNavItems(new Set(permissionKeys)).map((item) => item.label);
+function paletteRouteIds(permissionKeys: readonly string[]): string[] {
+  return visibleRoutes(new Set(permissionKeys), 'palette').map((route) => route.id);
 }
 
 describe('buildNavVisibility', () => {
@@ -41,37 +40,45 @@ describe('buildNavVisibility', () => {
   });
 });
 
-describe('filterNavItems', () => {
-  it('shows general items only when nothing is permitted', () => {
-    expect(labelsFor([])).toEqual(['Dashboard', 'Documentation', 'Search']);
+describe('palette navigation destinations', () => {
+  it('shows the requirement-free routes only when nothing is permitted', () => {
+    expect(paletteRouteIds([])).toEqual(['home', 'system.docs']);
   });
 
-  it('shows contest-scoped items for contest permission only', () => {
-    const labels = labelsFor(CONTEST_PERMISSIONS);
-    expect(labels).toEqual(expect.arrayContaining(['Dashboard', 'Documentation', 'Contests', 'Submissions']));
-    expect(labels).not.toContain('Tasks');
-    expect(labels).not.toContain('Users');
-    expect(labels).not.toContain('Teams');
-    expect(labels).not.toContain('Permissions');
+  it('shows contest-scoped routes for contest permission only', () => {
+    const ids = paletteRouteIds(CONTEST_PERMISSIONS);
+    expect(ids).toEqual(
+      expect.arrayContaining(['home', 'system.docs', 'contests.list', 'evaluation.submissions']),
+    );
+    expect(ids).not.toContain('tasks.list');
+    expect(ids).not.toContain('people.users');
+    expect(ids).not.toContain('people.teams');
   });
 
-  it('shows user-scoped items for user permission', () => {
-    const labels = labelsFor(USER_PERMISSIONS);
-    expect(labels).toEqual(expect.arrayContaining(['Users', 'Teams']));
-    expect(labels).not.toContain('Contests');
+  it('shows user-scoped routes for user permission', () => {
+    const ids = paletteRouteIds(USER_PERMISSIONS);
+    expect(ids).toEqual(expect.arrayContaining(['people.users', 'people.teams']));
+    expect(ids).not.toContain('contests.list');
   });
 
-  it('shows every item for superadmin', () => {
-    expect(labelsFor(ALL_PERMISSIONS)).toHaveLength(PALETTE_NAV_ITEMS.length);
+  it('shows every permitted route for superadmin', () => {
+    expect(paletteRouteIds(ALL_PERMISSIONS)).toEqual(
+      visibleRoutes(new Set(ALL_PERMISSIONS), 'palette').map((route) => route.id),
+    );
   });
 
-  it('shows the merged Permissions entry for either of its list keys', () => {
-    expect(labelsFor(['admin:list'])).toContain('Permissions');
-    expect(labelsFor(['group:list'])).toContain('Permissions');
+  it('keeps Admins and Groups independently gated', () => {
+    expect(paletteRouteIds(['admin:list', 'admin:read'])).toContain('administration.admins');
+    expect(paletteRouteIds(['admin:list', 'admin:read'])).not.toContain('administration.groups');
+    expect(paletteRouteIds(['group:list', 'group:read'])).toContain('administration.groups');
+    expect(paletteRouteIds(['group:list', 'group:read'])).not.toContain('administration.admins');
   });
 
-  it('hides the merged Permissions entry without either list key', () => {
-    expect(labelsFor(['audit:read', 'appearance:list'])).not.toContain('Permissions');
+  it('hides the Administration group without either list key', () => {
+    const ids = paletteRouteIds(['audit:list', 'audit:read', 'appearance:read', 'appearance:list']);
+    expect(ids).toContain('administration.audit');
+    expect(ids).not.toContain('administration.admins');
+    expect(ids).not.toContain('administration.groups');
   });
 });
 

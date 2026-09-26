@@ -17,14 +17,14 @@ const task = {
 
 describe('Task tab components', () => {
   it('renders overview without a datasets property', () => {
-    const html = renderToStaticMarkup(<TaskOverviewTab data={{ task, statements: [], permissionKeys: ['task:read'] }} />);
+    const html = renderToStaticMarkup(<TaskOverviewTab docsLinkLabel="View Documentation" data={{ task, statements: [], permissionKeys: ['task:read'] }} />);
     expect(html).toContain('Configuration');
     expect(html).toContain('Statements');
     expect(html).not.toContain('datasets');
   });
 
   it('renders dataset empty state and current action labels', () => {
-    const html = renderToStaticMarkup(<TaskDatasetsTab data={{ taskId: 9, activeDatasetId: null, datasets: [], permissionKeys: ['task:read', 'dataset:read', 'dataset:create', 'testcase:read'] }} />);
+    const html = renderToStaticMarkup(<TaskDatasetsTab docsLinkLabel="View Documentation" data={{ taskId: 9, activeDatasetId: null, datasets: [], permissionKeys: ['task:read', 'dataset:read', 'dataset:create', 'testcase:read'] }} />);
     expect(html).toContain('Datasets');
     expect(html).toContain('Create Dataset');
   });

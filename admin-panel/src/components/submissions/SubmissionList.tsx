@@ -9,6 +9,7 @@ import { RecordList } from '@/components/list/RecordList';
 import { RecordListPager } from '@/components/list/RecordListPager';
 import { RowActionLink } from '@/components/list/RowActionLink';
 import { useAppRouter } from '@/hooks/useAppRouter';
+import { useDictionary } from '@/hooks/useDictionary';
 import { useSyncedState } from '@/hooks/useSyncedState';
 import type { Dictionary } from '@/lib/dictionary';
 import { buildRoute } from '@/lib/navigation/routes';
@@ -32,9 +33,10 @@ function SubmissionListHeader({ locale, currentPage, totalPages }: {
   currentPage: number;
   totalPages: number;
 }): React.JSX.Element {
+  const dict = useDictionary();
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      <Link href={`/${locale}/docs#submissions`} className="flex h-11 w-11 items-center justify-center p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-primary" title="View Documentation">
+      <Link href={`${buildRoute(locale, 'system.docs')}#submissions`} className="flex h-11 w-11 items-center justify-center p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-primary" title={dict.docs.viewDocumentation}>
         <HelpCircle className="w-4 h-4" />
       </Link>
       <div className="text-sm text-muted-foreground">

@@ -49,7 +49,7 @@ async function hitsFor(locale: string): Promise<EntityHit[]> {
 }
 
 describe('command palette entity hits', () => {
-  it('resolves a user hit to the canonical record without the locale segment', async () => {
+  it('resolves a user hit to the canonical record href', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({
       success: true,
       users: [{ id: 17, username: 'ada', first_name: 'Ada', last_name: 'Lovelace' }],
@@ -57,14 +57,15 @@ describe('command palette entity hits', () => {
 
     const [hit] = await hitsFor('en');
 
-    expect(hit.path).toBe('/people/users/17');
+    // Why the full href: the palette receives a ready-to-push href from the single
+    // route builder, so a hit is the canonical URL rather than a path the caller
+    // must prefix — a second prefix here is what produced /en/en/....
+    expect(hit.path).toBe(buildRoute('en', 'people.user-record', { id: 17 }));
+    expect(hit.path).toBe('/en/people/users/17');
     expect(hit.path).not.toContain('/en/en');
-    // Why: the palette and the shortcut handler prepend the locale themselves,
-    // so a locale-prefixed hit would resolve to /en/en/people/users/17.
-    expect(`/${'en'}${hit.path}`).toBe(buildRoute('en', 'people.user-record', { id: 17 }));
   });
 
-  it('keeps the hit path locale-relative for every supported locale', async () => {
+  it('builds the hit href from the requested locale', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({
       success: true,
       users: [{ id: 17, username: 'ada', first_name: 'Ada', last_name: 'Lovelace' }],
@@ -72,7 +73,7 @@ describe('command palette entity hits', () => {
 
     for (const locale of ['en', 'th'] as const) {
       const [hit] = await hitsFor(locale);
-      expect(hit.path).toBe('/people/users/17');
+      expect(hit.path).toBe(buildRoute(locale, 'people.user-record', { id: 17 }));
     }
   });
 });

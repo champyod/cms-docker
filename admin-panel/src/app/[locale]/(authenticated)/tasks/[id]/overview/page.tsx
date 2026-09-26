@@ -5,6 +5,7 @@ import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import type { RouteId } from '@/lib/navigation/types';
 import { getTaskOverview } from '@/lib/queries/task-detail';
 import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access';
+import { getDictionary } from '@/i18n';
 import { TaskOverviewTab } from '@/components/tasks/task-detail/TaskOverviewTab';
 
 type TaskRouteProps = {
@@ -28,10 +29,13 @@ async function authorizeTaskTab(routeId: RouteId): Promise<ReadonlySet<string>> 
 }
 
 export default async function TaskOverviewPage({ params }: TaskRouteProps): Promise<React.JSX.Element> {
-  const { id } = await params;
+  const { locale, id } = await params;
   const taskId = parseRecordId(id);
   if (taskId === null) notFound();
   await authorizeTaskTab('tasks.tabs.overview');
-  const data = await readRecordOrNotFound(() => getTaskOverview(taskId));
-  return <TaskOverviewTab data={data} />;
+  const [data, dict] = await Promise.all([
+    readRecordOrNotFound(() => getTaskOverview(taskId)),
+    getDictionary(locale),
+  ]);
+  return <TaskOverviewTab data={data} docsLinkLabel={dict.docs.viewDocumentation} />;
 }

@@ -9,6 +9,8 @@ import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/apiClient';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useTaskConfirmationCopy, useTaskTabRefresh } from './task-detail/useTaskTabRefresh';
+import { buildRoute } from '@/lib/navigation/routes';
+import type { Dictionary } from '@/lib/dictionary';
 
 interface Dataset {
   id: number;
@@ -39,6 +41,8 @@ interface DatasetsSectionProps {
   onDeleteTestcase: (id: number) => void;
   onTogglePublic: (id: number) => void;
   locale: string;
+  /** The affordance label for the docs link, not the documentation's own name. */
+  docsLinkLabel: Dictionary['docs']['viewDocumentation'];
 }
 
 export function DatasetsSection({
@@ -57,6 +61,7 @@ export function DatasetsSection({
   onDeleteTestcase,
   onTogglePublic,
   locale,
+  docsLinkLabel,
 }: DatasetsSectionProps): React.JSX.Element {
   return (
     <Card className="border-border overflow-hidden">
@@ -67,7 +72,7 @@ export function DatasetsSection({
           <span className="text-xs bg-accent px-2 py-0.5 rounded-full text-muted-foreground">{datasets.length}</span>
         </div>
         <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
-          <Link href={`/${locale}/docs#datasets`} className="p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground" title="View Documentation">
+          <Link href={`${buildRoute(locale, 'system.docs')}#datasets`} className="p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground" title={docsLinkLabel}>
             <HelpCircle className="w-4 h-4" />
           </Link>
           <button onClick={onToggle} className="p-1">{expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}</button>

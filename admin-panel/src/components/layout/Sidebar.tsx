@@ -5,8 +5,12 @@ import { ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { entriesByGroup } from '@/lib/nav-registry';
-import type { NavEntry } from '@/lib/nav-registry';
+import { useDictionary } from '@/hooks/useDictionary';
+import {
+  buildShellSections,
+  type ShellNavItem,
+  type ShellNavSection,
+} from '@/components/navigation/shell-nav';
 import { SectionLabel, SidebarNavItem } from '@/components/layout/SidebarNavItem';
 
 export const SIDEBAR_STORAGE_KEY = 'cms-sidebar-expanded';
@@ -65,43 +69,23 @@ export function SignOutLink({ locale, collapsed, density = 'compact' }: { locale
   );
 }
 
-function entriesForGroup(sections: ReturnType<typeof entriesByGroup>, group: string): NavEntry[] {
-  return sections.find((section) => section.group === group)?.entries ?? [];
+function NavGroup({ section, collapsed }: { section: ShellNavSection; collapsed: boolean }): React.JSX.Element {
+  return (
+    <Fragment>
+      <SectionLabel label={section.label} collapsed={collapsed} />
+      {section.items.map((item: ShellNavItem) => (
+        <SidebarNavItem key={item.id} item={item} collapsed={collapsed} />
+      ))}
+    </Fragment>
+  );
 }
 
-interface SidebarGroups {
-  dashboardEntry: NavEntry | undefined;
-  docsEntry: NavEntry | undefined;
-  contestEntries: NavEntry[];
-  infraEntries: NavEntry[];
-}
-
-function resolveSidebarGroups(sections: ReturnType<typeof entriesByGroup>): SidebarGroups {
-  const general = entriesForGroup(sections, 'general');
-  return {
-    dashboardEntry: general.find((entry) => entry.path === '/'),
-    docsEntry: general.find((entry) => entry.path === '/docs'),
-    contestEntries: entriesForGroup(sections, 'contest'),
-    infraEntries: entriesForGroup(sections, 'infrastructure'),
-  };
-}
-
-function SidebarMainNav({ locale, collapsed, contestEntries, infraEntries, dashboardEntry }: { locale: string; collapsed: boolean; contestEntries: NavEntry[]; infraEntries: NavEntry[]; dashboardEntry: NavEntry | undefined }): React.JSX.Element {
+function SidebarMainNav({ sections, collapsed }: { sections: readonly ShellNavSection[]; collapsed: boolean }): React.JSX.Element {
   return (
     <nav aria-label="Main navigation" className="flex-1 space-y-1 overflow-y-auto px-2 py-3 scrollbar-thin scrollbar-thumb-border hover:scrollbar-thumb-muted-foreground/40">
-      {dashboardEntry && <SidebarNavItem entry={dashboardEntry} locale={locale} collapsed={collapsed} />}
-      <SectionLabel label="Contest" collapsed={collapsed} />
-      {contestEntries.map((entry) => (
-        <SidebarNavItem key={entry.path} entry={entry} locale={locale} collapsed={collapsed} />
+      {sections.map((section) => (
+        <NavGroup key={section.group.id} section={section} collapsed={collapsed} />
       ))}
-      {infraEntries.length > 0 && (
-        <>
-          <SectionLabel label="Infrastructure" collapsed={collapsed} />
-          {infraEntries.map((entry) => (
-            <SidebarNavItem key={entry.path} entry={entry} locale={locale} collapsed={collapsed} />
-          ))}
-        </>
-      )}
     </nav>
   );
 }
@@ -115,9 +99,11 @@ export interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ className, locale, permissionKeys, initialExpanded = true }) => {
   const [expanded, setExpanded] = useState<boolean>(initialExpanded);
-  const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
-  const sections = useMemo(() => entriesByGroup(effective, 'sidebar'), [effective]);
-  const { dashboardEntry, docsEntry, contestEntries, infraEntries } = useMemo(() => resolveSidebarGroups(sections), [sections]);
+  const dictionary = useDictionary();
+  const sections = useMemo(
+    () => buildShellSections(new Set(permissionKeys), 'sidebar', locale, dictionary),
+    [permissionKeys, locale, dictionary],
+  );
 
   function handleToggle(): void {
     const next = !expanded;
@@ -128,9 +114,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ className, locale, permissionK
   return (
     <aside className={cn('sticky top-0 relative flex h-screen shrink-0 flex-col border-r border-border bg-background/95 backdrop-blur transition-[width] duration-200', expanded ? 'w-56' : 'w-14', className)}>
       {expanded ? <ExpandedBrandRow onToggle={handleToggle} /> : <CollapsedBrandRow onToggle={handleToggle} />}
-      <SidebarMainNav locale={locale} collapsed={!expanded} contestEntries={contestEntries} infraEntries={infraEntries} dashboardEntry={dashboardEntry} />
-      <div className="shrink-0 space-y-1 border-t border-border px-2 py-3">
-        {docsEntry && <SidebarNavItem entry={docsEntry} locale={locale} collapsed={!expanded} />}
+      <SidebarMainNav sections={sections} collapsed={!expanded} />
+      <div className="shrink-0 border-t border-border px-2 py-3">
         <SignOutLink locale={locale} collapsed={!expanded} />
       </div>
     </aside>

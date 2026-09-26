@@ -62,7 +62,7 @@ export const EXPECTED_ROUTE_MANIFEST: readonly RouteFixture[] = [
   { id: 'system.maintenance', path: '/system/maintenance', kind: 'page', tabIds: [], legacyPaths: ['/maintenance'], enabled: true },
   { id: 'system.settings', path: '/system/settings', kind: 'page', tabIds: [], legacyPaths: ['/settings'], enabled: true },
   { id: 'system.docs', path: '/system/docs', kind: 'page', tabIds: [], legacyPaths: ['/docs'], enabled: true },
-  { id: 'system.search', path: '/search', kind: 'search', tabIds: [], legacyPaths: [], enabled: false },
+  { id: 'system.search', path: '/search', kind: 'search', tabIds: [], legacyPaths: [], enabled: true },
 ];
 
 export const EXPECTED_ROUTE_PERMISSIONS = {

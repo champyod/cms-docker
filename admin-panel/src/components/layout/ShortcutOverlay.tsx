@@ -3,8 +3,7 @@
 import type { ReactNode } from 'react';
 import { Dialog } from '@/components/core/Dialog';
 import {
-  NAVIGATION_BINDINGS,
-  bindingsForPermissions,
+  useShortcutBindings,
   useShortcuts,
   type ShortcutRouteBinding,
 } from '@/hooks/useShortcuts';
@@ -44,7 +43,7 @@ function ShortcutGroup({ title, children }: { title: string; children: ReactNode
   );
 }
 
-export function ShortcutOverlay({ open, onOpenChange, bindings = NAVIGATION_BINDINGS }: ShortcutOverlayProps & { bindings?: readonly ShortcutRouteBinding[] }) {
+export function ShortcutOverlay({ open, onOpenChange, bindings = [] }: ShortcutOverlayProps & { bindings?: readonly ShortcutRouteBinding[] }) {
   return (
     <Dialog
       open={open}
@@ -82,7 +81,7 @@ export function ShortcutOverlay({ open, onOpenChange, bindings = NAVIGATION_BIND
 
 export function ShortcutLayer({ permissionKeys }: { permissionKeys: readonly string[] }) {
   const { isOverlayOpen, closeOverlay } = useShortcuts(permissionKeys);
-  const bindings = bindingsForPermissions(permissionKeys);
+  const bindings = useShortcutBindings(permissionKeys);
   return (
     <ShortcutOverlay
       open={isOverlayOpen}

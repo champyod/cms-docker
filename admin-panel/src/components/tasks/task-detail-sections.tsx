@@ -11,6 +11,8 @@ import { EmptyState } from '@/components/core/EmptyState';
 import { apiClient } from '@/lib/apiClient';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useTaskConfirmationCopy, useTaskTabRefresh } from './task-detail/useTaskTabRefresh';
+import { buildRoute } from '@/lib/navigation/routes';
+import type { Dictionary } from '@/lib/dictionary';
 import { cn } from '@/lib/utils';
 
 interface TaskDetailConfigProps {
@@ -18,9 +20,11 @@ interface TaskDetailConfigProps {
   expanded: boolean;
   onToggle: () => void;
   locale: string;
+  /** The affordance label for the docs link, not the documentation's own name. */
+  docsLinkLabel: Dictionary['docs']['viewDocumentation'];
 }
 
-export function ConfigSection({ task, expanded, onToggle, locale }: TaskDetailConfigProps): React.JSX.Element {
+export function ConfigSection({ task, expanded, onToggle, locale, docsLinkLabel }: TaskDetailConfigProps): React.JSX.Element {
   return (
     <Card className="border-border overflow-hidden">
       <div className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors cursor-pointer" onClick={onToggle}>
@@ -29,7 +33,7 @@ export function ConfigSection({ task, expanded, onToggle, locale }: TaskDetailCo
           <span className="font-bold text-foreground">Configuration</span>
         </div>
         <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
-          <Link href={`/${locale}/docs#task-types`} className="p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground" title="View Documentation">
+          <Link href={`${buildRoute(locale, 'system.docs')}#task-types`} className="p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground" title={docsLinkLabel}>
             <HelpCircle className="w-4 h-4" />
           </Link>
           <button onClick={onToggle} className="p-1">{expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}</button>

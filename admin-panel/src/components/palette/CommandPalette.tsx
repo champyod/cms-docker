@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useAppRouter } from '@/hooks/useAppRouter';
-import { buildLocaleHref, extractLocale } from '@/hooks/useShortcuts';
+import { extractLocale } from '@/hooks/useShortcuts';
 import { Command, CommandInput, CommandList } from '@/components/ui/command';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
@@ -13,7 +13,9 @@ import { buildEntitySearchers } from './entity-searchers';
 import { useEntitySearch } from './useEntitySearch';
 import { MIN_QUERY_LENGTH } from './search-scheduler';
 import { buildNavVisibility } from './palette-data';
-import { entriesByGroup } from '@/lib/nav-registry';
+import { useDictionary } from '@/hooks/useDictionary';
+import { buildShellItems } from '@/components/navigation/shell-nav';
+import { buildRoute } from '@/lib/navigation/routes';
 import { NavigationItems, EntityItems, ActionItems } from './CommandPaletteItems';
 
 const PALETTE_TOGGLE_KEY = 'k';
@@ -26,13 +28,15 @@ export function CommandPalette({ open, onOpenChange, permissionKeys }: CommandPa
   const router = useAppRouter();
   const pathname = usePathname();
   const locale = extractLocale(pathname ?? '');
+  const dictionary = useDictionary();
   const [query, setQuery] = useState('');
   const [availableContests, setAvailableContests] = useState<AvailableContestRow[]>([]);
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
   const visibility = useMemo(() => buildNavVisibility(permissionKeys), [permissionKeys]);
-  // Why: palette navigation is rendered from the single registry so /search and any future
-  // exposeIn:'palette' entries appear without touching the palette.
-  const navSections = useMemo(() => entriesByGroup(effective, 'palette'), [effective]);
+  const navItems = useMemo(
+    () => buildShellItems(effective, 'palette', locale, dictionary),
+    [effective, locale, dictionary],
+  );
   const searchers = useMemo(() => buildEntitySearchers(visibility, locale), [visibility, locale]);
   const { loading, hits } = useEntitySearch(open, query, searchers);
   const hasQuery = query.trim().length >= MIN_QUERY_LENGTH;
@@ -71,7 +75,7 @@ export function CommandPalette({ open, onOpenChange, permissionKeys }: CommandPa
   }, [open]);
 
   const close = useCallback(() => handleOpenChange(false), [handleOpenChange]);
-  const navigateTo = useCallback((path: string) => { close(); router.push(buildLocaleHref(locale, path)); }, [close, locale, router]);
+  const navigateTo = useCallback((href: string) => { close(); router.push(href); }, [close, router]);
 
   const runSwitchContest = async (contestId: number): Promise<void> => {
     close();
@@ -91,9 +95,9 @@ export function CommandPalette({ open, onOpenChange, permissionKeys }: CommandPa
         <Command shouldFilter={false} className={COMMAND_STYLING}>
           <CommandInput value={query} onValueChange={setQuery} placeholder="Search navigation, entities, actions..." />
           <CommandList>
-            <NavigationItems sections={navSections} onSelect={(entry) => navigateTo(entry.path)} />
+            <NavigationItems items={navItems} onSelect={(item) => navigateTo(item.href)} />
             <EntityItems loading={loading} hasQuery={hasQuery} hits={hits} onSelect={(hit) => navigateTo(hit.path)} />
-            <ActionItems contestsEnabled={visibility.contests} availableContests={availableContests} onCreateContest={() => navigateTo('/contests')} onSwitchContest={(contestId) => void runSwitchContest(contestId)} onSignOut={runSignOut} />
+            <ActionItems contestsEnabled={visibility.contests} availableContests={availableContests} onCreateContest={() => navigateTo(buildRoute(locale, 'contests.list'))} onSwitchContest={(contestId) => void runSwitchContest(contestId)} onSignOut={runSignOut} />
           </CommandList>
         </Command>
       </DialogContent>

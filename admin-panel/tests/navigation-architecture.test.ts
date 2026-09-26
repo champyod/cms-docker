@@ -254,11 +254,11 @@ describe('foundation cutover state', () => {
     expectModuleState(MODULE_ROUTE_IDS);
   });
 
-  it('keeps Sidebar, palette, and mobile on the old registry', () => {
+  it('keeps Sidebar, palette, and mobile on the frozen registry', () => {
     for (const relativePath of ACTIVE_SHELL_FILES) {
       const source = read(relativePath);
-      expect(source).toContain("@/lib/nav-registry");
-      expect(source).not.toContain("@/lib/navigation/registry");
+      expect(source).toContain("@/components/navigation/shell-nav");
+      expect(source).not.toContain("@/lib/nav-registry");
     }
   });
 

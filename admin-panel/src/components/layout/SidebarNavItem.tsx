@@ -3,41 +3,35 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import type { ShellNavItem } from '@/components/navigation/shell-nav';
 import { cn } from '@/lib/utils';
-import type { NavEntry } from '@/lib/nav-registry';
-
-function buildHref(entry: NavEntry, locale: string): string {
-  if (entry.path === '/') return `/${locale}`;
-  return `/${locale}${entry.path}`;
-}
 
 export function isActiveRoute(pathname: string, href: string, locale: string): boolean {
   return pathname === href || (href !== `/${locale}` && pathname.startsWith(href));
 }
 
 interface NavItemProps {
-  entry: NavEntry;
-  locale: string;
+  item: ShellNavItem;
   collapsed: boolean;
   density?: 'compact' | 'touch';
   onClick?: () => void;
 }
 
-export function SidebarNavItem({ entry, locale, collapsed, density = 'compact', onClick }: NavItemProps): React.JSX.Element {
+export function SidebarNavItem({ item, collapsed, density = 'compact', onClick }: NavItemProps): React.JSX.Element {
   const pathname = usePathname();
-  const href = buildHref(entry, locale);
-  const isActive = isActiveRoute(pathname, href, locale);
+  const locale = pathname?.split('/')[1] || 'en';
+  const isActive = isActiveRoute(pathname ?? '', item.href, locale);
   const link = (
-    <Link href={href} onClick={onClick} aria-current={isActive ? 'page' : undefined} className={cn('flex items-center rounded-lg px-2.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50', density === 'touch' ? 'h-11' : 'h-9', collapsed && 'w-9 justify-center px-0', isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground')}>
-      <entry.icon className="size-4 shrink-0" aria-hidden />
-      {!collapsed && <span className="ml-3 truncate">{entry.label}</span>}
+    <Link href={item.href} onClick={onClick} aria-current={isActive ? 'page' : undefined} className={cn('flex items-center rounded-lg px-2.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50', density === 'touch' ? 'h-11' : 'h-9', collapsed && 'w-9 justify-center px-0', isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground')}>
+      <item.icon className="size-4 shrink-0" aria-hidden />
+      {!collapsed && <span className="ml-3 truncate">{item.label}</span>}
     </Link>
   );
   if (!collapsed) return link;
   return (
     <Tooltip>
       <TooltipTrigger asChild>{link}</TooltipTrigger>
-      <TooltipContent side="right">{entry.label}</TooltipContent>
+      <TooltipContent side="right">{item.label}</TooltipContent>
     </Tooltip>
   );
 }

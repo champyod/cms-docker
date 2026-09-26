@@ -14,6 +14,7 @@ import { ContestRowActions, buildContestColumns, getContestRowClassName, getCont
 import { useContestListActions } from './contest-list/useContestListActions';
 import type { ExistingContest } from './contest-modal/types';
 import { hasEffectivePermission } from '@/lib/permission-engine';
+import { buildRoute } from '@/lib/navigation/routes';
 import { apiClient } from '@/lib/apiClient';
 
 interface ContestListProps {
@@ -65,7 +66,7 @@ export function ContestList({ initialContests, totalPages, permissionKeys }: Con
   const handleClose = () => { setIsModalOpen(false); setSelectedContest(null); };
   const handleSuccess = () => router.refresh();
   const handleOpenContest = useCallback((id: number) => {
-    router.push(`/${locale}/contests/${id}`);
+    router.push(buildRoute(locale, 'contests.record', { id }));
   }, [router, locale]);
 
   // Why: one column definition drives desktop rows and mobile cards, so

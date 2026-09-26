@@ -7,6 +7,7 @@ import { Bell, Search, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { getUnansweredQuestions } from '@/app/actions/questions';
 import { useAppRouter } from '@/hooks/useAppRouter';
+import { buildRoute } from '@/lib/navigation/routes';
 import { ThemeToggle } from './ThemeToggle';
 import { NotificationBell } from './NotificationBell';
 import { Button } from '@/components/core/Button';
@@ -100,7 +101,7 @@ export const Header: React.FC<{ className?: string; username?: string; permissio
 
   const handleNotificationsClick = () => {
     const locale = window.location.pathname.split('/')[1] || 'en';
-    router.push(`/${locale}/contests`);
+    router.push(buildRoute(locale, 'contests.list'));
   };
 
   return (

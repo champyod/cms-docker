@@ -159,6 +159,7 @@ describe('target route registry', () => {
       ...ADMINISTRATION_ROUTE_IDS,
       ...INFRASTRUCTURE_ROUTE_IDS,
       ...SYSTEM_ROUTE_IDS,
+      'system.search',
     ];
     const enabledIdSet = new Set<string>(enabledIds);
     expect(ROUTE_REGISTRY.filter((route) => route.enabled).map((route) => route.id)).toEqual(enabledIds);

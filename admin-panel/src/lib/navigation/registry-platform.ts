@@ -3,8 +3,9 @@ import type { RouteDescriptor } from '@/lib/navigation/types';
 
 // Why: the platform slice groups the administration, infrastructure, and system
 // modules; every descriptor here is enabled because its physical route landed in
-// the same commit. Search stays the one exception — it answers from the palette
-// and the search page rather than a module shell.
+// the same commit. Search is the retained deep-link capability and is answered
+// from the palette and the search page, so it declares no sidebar or mobile
+// surface and reaches the reader only where they already opted in.
 export const PLATFORM_ROUTES: readonly RouteDescriptor[] = [
   enabledPageRoute('administration.admins', '/administration/admins', { all: ['admin:list', 'admin:read'] }, ['/admins']),
   enabledPageRoute('administration.groups', '/administration/groups', { all: ['group:list', 'group:read'] }, ['/groups']),
@@ -19,5 +20,5 @@ export const PLATFORM_ROUTES: readonly RouteDescriptor[] = [
   enabledPageRoute('system.maintenance', '/system/maintenance', { any: ['maintenance:update', 'backup:create'] }, ['/maintenance']),
   enabledPageRoute('system.settings', '/system/settings', { all: ['env:read', 'env:list', 'monitor:read', 'monitor:list'] }, ['/settings']),
   enabledPageRoute('system.docs', '/system/docs', {}, ['/docs']),
-  searchRoute('system.search', '/search', { all: ['all:all'] }, [], ['palette', 'search', 'shortcuts']),
+  { ...searchRoute('system.search', '/search', { all: ['all:all'] }, [], ['palette', 'search', 'shortcuts']), enabled: true },
 ];

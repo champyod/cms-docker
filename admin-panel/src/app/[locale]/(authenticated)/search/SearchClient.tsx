@@ -58,7 +58,7 @@ export default function SearchClient() {
                     <SectionHeader title="Tasks" count={results.tasks.length} icon={ClipboardList} iconColor="text-emerald-400" />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {results.tasks.map((t: SearchResults['tasks'][number]) => (
-                            <Link href={`/${locale}/tasks/${t.id}`} key={t.id}>
+                            <Link href={buildRoute(locale, 'tasks.record', { id: t.id })} key={t.id}>
                                 <SearchResultCard title={t.name} subtitle={t.title} />
                             </Link>
                         ))}
@@ -70,7 +70,7 @@ export default function SearchClient() {
                      <SectionHeader title="Contests" count={results.contests.length} icon={Trophy} iconColor="text-amber-400" />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {results.contests.map((c: SearchResults['contests'][number]) => (
-                            <Link href={`/${locale}/contests/${c.id}`} key={c.id}>
+                            <Link href={buildRoute(locale, 'contests.record', { id: c.id })} key={c.id}>
                                 <SearchResultCard title={c.name} subtitle={c.description} />
                             </Link>
                         ))}

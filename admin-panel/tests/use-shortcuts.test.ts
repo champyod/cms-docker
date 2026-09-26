@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   bindingsForPermissions,
+  CHORD_PREFIX_KEY,
   CHORD_TIMEOUT_MS,
   IDLE_CHORD,
-  NAVIGATION_BINDINGS,
-  buildLocaleHref,
+  OVERLAY_TOGGLE_KEY,
   clampRowIndex,
   extractLocale,
   handleShortcutEvent,
@@ -13,6 +13,13 @@ import {
   type ShortcutHandlerDeps,
   type ShortcutKeyEvent,
 } from '@/hooks/useShortcuts';
+import { visibleRoutes } from '@/lib/navigation/registry';
+
+const ALL_PERMISSIONS: readonly string[] = ['all:all'];
+
+function chordRouteIds(permissionKeys: readonly string[] | undefined): string[] {
+  return bindingsForPermissions(permissionKeys).map((entry) => entry.routeId);
+}
 
 function keyEvent(key: string, overrides: Partial<ShortcutKeyEvent> = {}): ShortcutKeyEvent {
   return {
@@ -90,30 +97,24 @@ describe('g-chord sequencing', () => {
     expect(h.chordState.current).toEqual(IDLE_CHORD);
   });
 
-  it('covers every required navigation route', () => {
-    const paths = NAVIGATION_BINDINGS.map((binding) => binding.path).sort();
-    // Why: chord must expose every exposeIn:'chord' entry so sidebar routes are reachable by g-chord.
-    expect(paths).toEqual(
-      [
-        '',
-        '/appearance',
-        '/audit',
-        '/containers',
-        '/contests',
-        '/deployments',
-        '/docs',
-        '/maintenance',
-        '/permissions',
-        '/ranking',
-        '/resources',
-        '/search',
-        '/settings',
-        '/submissions',
-        '/tasks',
-        '/teams',
-        '/users',
-      ].sort()
+  it('covers every route on the shortcuts surface exactly once', () => {
+    // Why: a chord navigates straight to a page, so every route another surface
+    // exposes must be reachable by key too — and a duplicated key would make one
+    // of them unreachable without any visible failure.
+    expect(chordRouteIds(undefined).sort()).toEqual(
+      visibleRoutes(new Set(ALL_PERMISSIONS), 'shortcuts')
+        .map((route) => route.id)
+        .sort(),
     );
+    const keys = bindingsForPermissions(undefined).map((entry) => entry.key);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it('keeps the chord prefix, row keys, and overlay key free as destinations', () => {
+    const keys = bindingsForPermissions(undefined).map((entry) => entry.key);
+    for (const reserved of [CHORD_PREFIX_KEY, 'j', 'k', OVERLAY_TOGGLE_KEY]) {
+      expect(keys).not.toContain(reserved);
+    }
   });
 });
 
@@ -206,12 +207,6 @@ describe('locale-safe hrefs', () => {
     expect(extractLocale('/')).toBe('en');
   });
 
-  it('builds hrefs from the live locale without hardcoding one', () => {
-    expect(buildLocaleHref('th', '/contests')).toBe('/th/contests');
-    expect(buildLocaleHref('en', '')).toBe('/en');
-    expect(buildLocaleHref('de', '/tasks')).toBe('/de/tasks');
-  });
-
   it('routes through the harness locale, never a literal /en/', () => {
     const h = makeHarness('th');
     handleShortcutEvent(keyEvent('g'), h.deps(), 0);
@@ -221,28 +216,31 @@ describe('locale-safe hrefs', () => {
 });
 
 describe('shortcut permission parity', () => {
-  it('keeps the old any-of Permissions route for either permitted key', () => {
-    expect(bindingsForPermissions(['admin:list']).map((binding) => binding.path)).toContain(
-      '/permissions',
-    );
-    expect(bindingsForPermissions(['group:list']).map((binding) => binding.path)).toContain(
-      '/permissions',
-    );
+  it('keeps Admins and Groups independently reachable by their own keys', () => {
+    expect(chordRouteIds(['admin:list', 'admin:read'])).toContain('administration.admins');
+    expect(chordRouteIds(['admin:list', 'admin:read'])).not.toContain('administration.groups');
+    expect(chordRouteIds(['group:list', 'group:read'])).toContain('administration.groups');
+    expect(chordRouteIds(['group:list', 'group:read'])).not.toContain('administration.admins');
   });
 
-  it('removes the old any-of Permissions route when neither key is granted', () => {
-    expect(bindingsForPermissions(['settings:list']).map((binding) => binding.path)).not.toContain(
-      '/permissions',
-    );
+  it('hides the Administration group when neither list key is granted', () => {
+    const ids = chordRouteIds(['settings:list']);
+    expect(ids).not.toContain('administration.admins');
+    expect(ids).not.toContain('administration.groups');
+    expect(ids).not.toContain('administration.audit');
   });
 
-  it('keeps the any-of route for the audited all:all bypass', () => {
-    expect(bindingsForPermissions(['all:all']).map((binding) => binding.path)).toContain(
-      '/permissions',
-    );
+  it('grants the whole shortcut surface through the audited all:all bypass', () => {
+    expect(chordRouteIds(ALL_PERMISSIONS).sort()).toEqual(chordRouteIds(undefined).sort());
   });
 
-  it('returns all bindings only when the caller supplies no permission list', () => {
-    expect(bindingsForPermissions(undefined)).toEqual(NAVIGATION_BINDINGS);
+  it('matches the registry shortcuts surface for the same caller', () => {
+    for (const keys of [['contest:list'], ['task:list'], ['user:list'], ['team:list']]) {
+      expect(chordRouteIds(keys).sort()).toEqual(
+        visibleRoutes(new Set(keys), 'shortcuts')
+          .map((route) => route.id)
+          .sort(),
+      );
+    }
   });
 });

@@ -3,7 +3,11 @@
 import { Fragment, useEffect, useMemo } from 'react';
 import { X } from 'lucide-react';
 import { Button } from '@/components/core/Button';
-import { entriesByGroup, visibleEntries } from '@/lib/nav-registry';
+import { useDictionary } from '@/hooks/useDictionary';
+import {
+  buildShellSections,
+  type ShellNavSection,
+} from '@/components/navigation/shell-nav';
 import { SidebarNavItem, SectionLabel } from '@/components/layout/SidebarNavItem';
 import { SignOutLink } from '@/components/layout/Sidebar';
 
@@ -14,6 +18,8 @@ interface FullScreenNavOverlayProps {
   onClose: () => void;
 }
 
+const ROW_CLASSES = 'flex h-11 min-h-11 items-center';
+
 function OverlayHeader({ onClose }: { onClose: () => void }): React.JSX.Element {
   return (
     <div className="flex h-16 shrink-0 items-center justify-between border-b border-border px-4">
@@ -22,30 +28,37 @@ function OverlayHeader({ onClose }: { onClose: () => void }): React.JSX.Element 
         <span className="truncate font-display font-semibold tracking-wide">CMS Admin</span>
       </div>
       <Button variant="secondary" size="sm" iconOnly tooltip="Close" onClick={onClose} className="size-11">
-        <X className="size-4" />
+        <X className="w-4 h-4" />
       </Button>
     </div>
   );
 }
 
-function OverlayBody({ locale, permissionKeys, onClose }: { locale: string; permissionKeys: readonly string[]; onClose: () => void }): React.JSX.Element {
-  const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
-  const sections = useMemo(() => entriesByGroup(effective, 'sidebar'), [effective]);
-  const docsEntry = useMemo(() => visibleEntries(effective, 'sidebar').find((entry) => entry.path === '/docs'), [effective]);
+function OverlayGroup({ section, onClose }: { section: ShellNavSection; onClose: () => void }): React.JSX.Element {
+  return (
+    <Fragment>
+      <SectionLabel label={section.label} collapsed={false} />
+      {section.items.map((item) => (
+        <SidebarNavItem key={item.id} item={item} collapsed={false} density="touch" onClick={onClose} />
+      ))}
+    </Fragment>
+  );
+}
+
+function OverlayBody({ locale, permissionKeys, onClose }: FullScreenNavOverlayProps): React.JSX.Element {
+  const dictionary = useDictionary();
+  const sections = useMemo(
+    () => buildShellSections(new Set(permissionKeys), 'mobile-more', locale, dictionary),
+    [permissionKeys, locale, dictionary],
+  );
   return (
     <div className="flex-1 overflow-y-auto space-y-1 p-4 scrollbar-thin">
       {sections.map((section) => (
-        <Fragment key={section.group}>
-          {section.group !== 'general' && <SectionLabel label={section.group === 'contest' ? 'Contest' : 'Infrastructure'} collapsed={false} />}
-          {section.entries
-            .filter((entry) => entry.path !== '/docs')
-            .map((entry) => (
-              <SidebarNavItem key={entry.path} entry={entry} locale={locale} collapsed={false} density="touch" onClick={onClose} />
-            ))}
-        </Fragment>
+        <OverlayGroup key={section.group.id} section={section} onClose={onClose} />
       ))}
-      {docsEntry && <SidebarNavItem entry={docsEntry} locale={locale} collapsed={false} density="touch" onClick={onClose} />}
-      <SignOutLink locale={locale} collapsed={false} density="touch" />
+      <div className={ROW_CLASSES}>
+        <SignOutLink locale={locale} collapsed={false} density="touch" />
+      </div>
     </div>
   );
 }
@@ -71,7 +84,7 @@ export function FullScreenNavOverlay({ locale, permissionKeys, open, onClose }: 
   return (
     <div role="dialog" aria-modal="true" aria-label="Navigation" className="fixed inset-0 z-50 flex flex-col bg-background md:hidden">
       <OverlayHeader onClose={onClose} />
-      <OverlayBody locale={locale} permissionKeys={permissionKeys} onClose={onClose} />
+      <OverlayBody locale={locale} permissionKeys={permissionKeys} open={open} onClose={onClose} />
     </div>
   );
 }

@@ -2,11 +2,16 @@
 
 import { useParams } from 'next/navigation';
 import type { TaskOverviewData } from '@/lib/queries/task-detail';
+import type { Dictionary } from '@/lib/dictionary';
 import { StatementModal } from '../StatementModal';
 import { ConfigSection, StatementsSection } from '../task-detail-sections';
 import { useTaskOverviewState } from './useTaskOverviewState';
 
-export type TaskOverviewTabProps = { data: TaskOverviewData };
+export type TaskOverviewTabProps = {
+  data: TaskOverviewData;
+  /** The affordance label for the docs link, not the documentation's own name. */
+  docsLinkLabel: Dictionary['docs']['viewDocumentation'];
+};
 
 // Why: the tab contract carries no locale, so docs links resolve it from
 // the route — useParams is null-safe without a provider, so unit tests fall
@@ -17,7 +22,7 @@ function useTabLocale(): string {
   return typeof candidate === 'string' && candidate.length > 0 ? candidate : 'en';
 }
 
-export function TaskOverviewTab({ data }: TaskOverviewTabProps): React.JSX.Element {
+export function TaskOverviewTab({ data, docsLinkLabel }: TaskOverviewTabProps): React.JSX.Element {
   const state = useTaskOverviewState();
   const locale = useTabLocale();
   return (
@@ -32,6 +37,7 @@ export function TaskOverviewTab({ data }: TaskOverviewTabProps): React.JSX.Eleme
         expanded={state.infoExpanded}
         onToggle={() => state.toggleSection('info')}
         locale={locale}
+        docsLinkLabel={docsLinkLabel}
       />
       <StatementsSection
         statements={[...data.statements]}

@@ -5,7 +5,6 @@ import { PERMISSION_REGISTRY, RESERVED_PERMISSIONS } from '@/lib/permission-regi
 import { DEFAULT_GROUPS } from '@/lib/permission-groups';
 import { FIELD_PERMISSION_MAP } from '@/lib/field-permissions';
 import { hasEffectivePermission, resolveEffectivePermissions } from '@/lib/permission-engine';
-import { NAV_REGISTRY, visibleEntries } from '@/lib/nav-registry';
 import { ROUTE_REGISTRY, visibleRoutes } from '@/lib/navigation/registry';
 import type { PermissionRequirement } from '@/lib/navigation/types';
 import { ACTIONS_DIR, API_DIR, FOLLOW_FILES, SRC_DIR, type FileInfo } from '../scripts/coverage/model';
@@ -338,18 +337,9 @@ describe('permission coverage', () => {
     expect(hasEffectivePermission(new Set(), 'task:read')).toBe(false);
   });
 
-  it('gates every nav entry on a registry key', () => {
+  it('gates every route descriptor on a registry key', () => {
     const registryKeys = new Set(PERMISSION_REGISTRY.map((d) => d.key));
     const offenders: string[] = [];
-    for (const entry of NAV_REGISTRY) {
-      if (entry.permission && !registryKeys.has(entry.permission)) offenders.push(`${entry.path} -> ${entry.permission}`);
-      for (const key of entry.permissions ?? []) {
-        if (!registryKeys.has(key)) offenders.push(`${entry.path} -> ${key}`);
-      }
-      for (const key of entry.requiredPermissions ?? []) {
-        if (!registryKeys.has(key)) offenders.push(`${entry.path} -> ${key}`);
-      }
-    }
     for (const route of ROUTE_REGISTRY) {
       for (const key of [...(route.permission.all ?? []), ...(route.permission.any ?? [])]) {
         if (!registryKeys.has(key)) offenders.push(`${route.id} -> ${key}`);
@@ -360,11 +350,6 @@ describe('permission coverage', () => {
 
   it('hides every gated surface from a keyless caller', () => {
     const empty = new Set<string>();
-    for (const entry of visibleEntries(empty)) {
-      expect(entry.permission).toBeUndefined();
-      expect(entry.permissions).toBeUndefined();
-      expect(entry.requiredPermissions).toBeUndefined();
-    }
     // Why the ID set and not the per-route shape: visibleRoutes already filters on
     // isRoutePermitted, and a requirement-free route is permitted for anyone, so
     // asserting an empty requirement per visible route holds by construction. The

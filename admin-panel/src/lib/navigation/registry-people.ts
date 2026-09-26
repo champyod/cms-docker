@@ -1,11 +1,24 @@
 import { pageRoute, recordRoute, tabRoute } from '@/lib/navigation/registry-descriptors';
-import type { RouteDescriptor } from '@/lib/navigation/types';
+import type { NavigationSurface, RouteDescriptor } from '@/lib/navigation/types';
+
+// Why: the users page is the People group's entry point, so it is the one group
+// route the mobile bar shows directly instead of only through More. Surfaces only
+// — the route itself is a group page in every other respect.
+const PEOPLE_LANDING_SURFACES: readonly NavigationSurface[] = [
+  'sidebar',
+  'mobile-primary',
+  'mobile-more',
+  'palette',
+  'search',
+  'shortcuts',
+  'breadcrumbs',
+];
 
 // Why: a descriptor is enabled only where its physical route already exists,
 // so the People set here is the users page, the teams page, both record
 // landings, and their tabs. Every other slice keeps its own enablement.
 export const PEOPLE_ROUTES: readonly RouteDescriptor[] = [
-  { ...pageRoute('people.users', '/people/users', { all: ['user:list'] }, ['/users']), enabled: true },
+  { ...pageRoute('people.users', '/people/users', { all: ['user:list'] }, ['/users'], PEOPLE_LANDING_SURFACES), enabled: true },
   { ...recordRoute(
     'people.user-record',
     '/people/users/[id]',

@@ -2,24 +2,22 @@
 
 import { Check, LogOut, PlusCircle, Repeat } from 'lucide-react';
 import { CommandGroup, CommandItem } from '@/components/ui/command';
-import type { NavEntry, NavGroup } from '@/lib/nav-registry';
+import type { ShellNavItem } from '@/components/navigation/shell-nav';
 import type { EntityHit } from '@/components/palette/entity-searchers';
 
 export function NavigationItems({
-  sections,
+  items,
   onSelect,
 }: {
-  sections: Array<{ group: NavGroup; entries: NavEntry[] }>;
-  onSelect: (entry: NavEntry) => void;
+  items: readonly ShellNavItem[];
+  onSelect: (item: ShellNavItem) => void;
 }): React.JSX.Element {
-  // Why: navigation comes from entriesByGroup so any exposeIn:'palette' entry appears here.
-  const entries: NavEntry[] = sections.flatMap((section) => section.entries);
   return (
     <CommandGroup heading="Navigation">
-      {entries.map((entry) => (
-        <CommandItem key={entry.path} value={`nav-${entry.label}`} onSelect={() => onSelect(entry)}>
-          <entry.icon className="text-muted-foreground" />
-          <span>{entry.label}</span>
+      {items.map((item) => (
+        <CommandItem key={item.id} value={`nav-${item.id}`} onSelect={() => onSelect(item)}>
+          <item.icon className="text-muted-foreground" />
+          <span>{item.label}</span>
         </CommandItem>
       ))}
     </CommandGroup>

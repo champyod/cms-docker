@@ -1,5 +1,4 @@
 import { hasEffectivePermission } from '@/lib/permission-engine';
-import { NAV_REGISTRY, isEntryPermitted, type NavGroup as RegistryGroup } from '@/lib/nav-registry';
 
 export interface NavVisibility {
   contests: boolean;
@@ -7,28 +6,14 @@ export interface NavVisibility {
   users: boolean;
 }
 
-export type NavGroup = RegistryGroup;
-
-export interface PaletteNavItem {
-  label: string;
-  icon: (typeof NAV_REGISTRY)[number]['icon'];
-  path: string;
-  group: NavGroup;
-  isVisible(effective: ReadonlySet<string>): boolean;
-}
-
-// Why: palette navigation is a filtered view of the single registry so Permissions/Audit/Appearance
-// and /search cannot drift between surfaces.
-export const PALETTE_NAV_ITEMS: PaletteNavItem[] = NAV_REGISTRY.filter((entry) =>
-  entry.exposeIn.includes('palette'),
-).map((entry) => ({
-  label: entry.label,
-  icon: entry.icon,
-  path: entry.path,
-  group: entry.group,
-  isVisible: (effective: ReadonlySet<string>): boolean => isEntryPermitted(entry, effective),
-}));
-
+/**
+ * Entity-search capability, not navigation.
+ *
+ * Why it stays separate from the route registry: a searcher answers "which
+ * entities may this reader look up", which is a subset question the registry
+ * never asked, so the palette derives its navigation destinations from
+ * `visibleRoutes` and keeps only this lookup gate here.
+ */
 export function buildNavVisibility(permissionKeys: readonly string[]): NavVisibility {
   const effective: ReadonlySet<string> = new Set(permissionKeys);
   return {
@@ -36,10 +21,6 @@ export function buildNavVisibility(permissionKeys: readonly string[]): NavVisibi
     tasks: hasEffectivePermission(effective, 'task:list'),
     users: hasEffectivePermission(effective, 'user:list'),
   };
-}
-
-export function filterNavItems(effective: ReadonlySet<string>): PaletteNavItem[] {
-  return PALETTE_NAV_ITEMS.filter((item) => item.isVisible(effective));
 }
 
 export function isNumericQuery(query: string): boolean {

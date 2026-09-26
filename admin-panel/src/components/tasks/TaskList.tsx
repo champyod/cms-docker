@@ -15,6 +15,7 @@ import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
 import { TaskModal } from './TaskModal';
 import { apiClient } from '@/lib/apiClient';
 import { hasEffectivePermission } from '@/lib/permission-engine';
+import { buildRoute } from '@/lib/navigation/routes';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import type { TaskDiagnostic } from '@/lib/task-diagnostics';
@@ -122,7 +123,7 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
           <TableBody>
             {tasks.map((task) => {
               const hasErrors = task.diagnostics.some((d) => d.type === 'error');
-              const openDetail = () => router.push(`/${locale}/tasks/${task.id}`);
+              const openDetail = () => router.push(buildRoute(locale, 'tasks.record', { id: task.id }));
               return (
                 <TableRow
                   key={task.id}
@@ -151,7 +152,7 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
                           </div>
                         </div>
                       )}
-                      <button onClick={(event) => { event.stopPropagation(); router.push(`/${locale}/tasks/${task.id}`); }} data-shortcut-primary className={cn('flex items-center gap-2 hover:text-primary transition-colors truncate', hasErrors && 'text-muted-foreground')}>
+                      <button onClick={(event) => { event.stopPropagation(); router.push(buildRoute(locale, 'tasks.record', { id: task.id })); }} data-shortcut-primary className={cn('flex items-center gap-2 hover:text-primary transition-colors truncate', hasErrors && 'text-muted-foreground')}>
                         {task.name}
                         <ExternalLink className="w-3 h-3 opacity-50" />
                       </button>

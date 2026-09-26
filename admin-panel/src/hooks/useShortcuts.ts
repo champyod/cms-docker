@@ -2,8 +2,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useAppRouter } from './useAppRouter';
-import { NAV_REGISTRY, isEntryPermitted } from '@/lib/nav-registry';
-import { NAV_CHORD_KEY_BY_PATH } from '@/lib/nav-chord';
+import { useDictionary } from '@/hooks/useDictionary';
+import { shellItemLabel } from '@/components/navigation/shell-nav';
+import { buildRoute } from '@/lib/navigation/routes';
+import { visibleRoutes } from '@/lib/navigation/registry';
+import type { RouteId } from '@/lib/navigation/types';
 
 export const CHORD_TIMEOUT_MS = 1000;
 export const CHORD_PREFIX_KEY = 'g';
@@ -11,32 +14,62 @@ export const OVERLAY_TOGGLE_KEY = '?';
 export const SHORTCUT_ROW_ATTRIBUTE = 'data-shortcut-row';
 export const ROW_SELECTED_CLASSES = ['ring-2', 'ring-ring/70', 'ring-inset', 'bg-accent/40'] as const;
 
+/**
+ * Keyboard metadata only: which `g`-chord key opens which frozen route.
+ *
+ * Why a map and not a registry field: a key binding is a local affordance of the
+ * shortcut hook, so it must not widen the descriptor shape or become a second
+ * place a path or a permission is declared. Every entry here is a `RouteId`; the
+ * href and the gate both come from the registry at read time.
+ *
+ * Why Admins takes `a` and Groups takes `h`: the old single Permissions entry kept
+ * `a` because the chord operators already knew it for admin management, and `g`
+ * cannot be a destination because it is the chord prefix itself. `h` is the next
+ * free letter, and every key here also avoids `j`/`k`, which belong to row
+ * selection, and `?`, which toggles the overlay.
+ */
+const CHORD_KEY_BY_ROUTE: ReadonlyMap<RouteId, string> = new Map<RouteId, string>([
+  ['home', 'd'],
+  ['contests.list', 'c'],
+  ['tasks.list', 't'],
+  ['evaluation.submissions', 's'],
+  ['evaluation.lanes', 'l'],
+  ['people.users', 'u'],
+  ['people.teams', 'm'],
+  ['infrastructure.deployments', 'p'],
+  ['administration.admins', 'a'],
+  ['administration.groups', 'h'],
+  ['administration.audit', 'i'],
+  ['infrastructure.resources', 'r'],
+  ['infrastructure.containers', 'o'],
+  ['infrastructure.ranking', 'n'],
+  ['system.appearance', 'v'],
+  ['system.maintenance', 'w'],
+  ['system.settings', 'e'],
+  ['system.docs', 'b'],
+  ['system.search', 'f'],
+]);
+
 export interface ShortcutRouteBinding {
   readonly key: string;
   readonly label: string;
-  readonly path: string;
+  readonly href: string;
 }
 
-function buildNavigationBindings(): readonly ShortcutRouteBinding[] {
-  const seenKeys = new Set<string>();
-  const bindings: ShortcutRouteBinding[] = [];
-  for (const entry of NAV_REGISTRY) {
-    if (!entry.exposeIn.includes('chord')) continue;
-    const mappedKey = NAV_CHORD_KEY_BY_PATH.get(entry.path);
-    if (!mappedKey) continue;
-    if (seenKeys.has(mappedKey)) continue;
-    seenKeys.add(mappedKey);
-    // Registry uses '/' for dashboard; chord navigation expects '' so locale href is /locale not /locale/
-    const path = entry.path === '/' ? '' : entry.path;
-    bindings.push({ key: mappedKey, label: entry.label, path });
-  }
-  return bindings;
+// Why an id is carried alongside the key: `bindingsForPermissions` filters the
+// chord per caller, and resolving the href needs the frozen route id rather than
+// a path string the hook would have to reverse-parse.
+export interface ChordEntry {
+  readonly key: string;
+  readonly routeId: RouteId;
 }
 
-export const NAVIGATION_BINDINGS: readonly ShortcutRouteBinding[] = buildNavigationBindings();
+const CHORD_ENTRIES: readonly ChordEntry[] = [...CHORD_KEY_BY_ROUTE].map(
+  ([routeId, key]) => ({ key, routeId }),
+);
 
-const NAVIGATION_BY_KEY: ReadonlyMap<string, ShortcutRouteBinding> = new Map(
-  NAVIGATION_BINDINGS.map((binding) => [binding.key, binding])
+const CHORD_ENTRIES_BY_KEY: ReadonlyMap<string, ChordEntry> = new Map(
+  CHORD_ENTRIES.map((entry) => [entry.key, entry]),
 );
 
 export interface ChordState {
@@ -46,7 +79,7 @@ export interface ChordState {
 
 export type ChordDecision =
   | { readonly action: 'pending' }
-  | { readonly action: 'navigate'; readonly binding: ShortcutRouteBinding }
+  | { readonly action: 'navigate'; readonly routeId: RouteId }
   | { readonly action: 'reset' }
   | { readonly action: 'none' };
 
@@ -69,15 +102,11 @@ export interface ShortcutHandlerDeps {
   toggleOverlay: () => void;
   chordState: { current: ChordState };
   selectedRowIndex: { current: number };
-  navigationByKey?: ReadonlyMap<string, ShortcutRouteBinding>;
+  chordByKey?: ReadonlyMap<string, ChordEntry>;
 }
 
 export function extractLocale(pathname: string): string {
   return pathname.split('/')[1] || 'en';
-}
-
-export function buildLocaleHref(locale: string, path: string): string {
-  return `/${locale}${path}`;
 }
 
 export function isEditableTarget(target: unknown): boolean {
@@ -106,7 +135,7 @@ export function advanceChord(
   state: ChordState,
   key: string,
   now: number,
-  byKey: ReadonlyMap<string, ShortcutRouteBinding> = NAVIGATION_BY_KEY
+  byKey: ReadonlyMap<string, ChordEntry> = CHORD_ENTRIES_BY_KEY
 ): { state: ChordState; decision: ChordDecision } {
   if (key === CHORD_PREFIX_KEY) {
     return {
@@ -120,11 +149,11 @@ export function advanceChord(
   if (now - state.startedAt > CHORD_TIMEOUT_MS) {
     return { state: IDLE_CHORD, decision: { action: 'reset' } };
   }
-  const binding = byKey.get(key);
-  if (!binding) {
+  const entry = byKey.get(key);
+  if (!entry) {
     return { state: IDLE_CHORD, decision: { action: 'reset' } };
   }
-  return { state: IDLE_CHORD, decision: { action: 'navigate', binding } };
+  return { state: IDLE_CHORD, decision: { action: 'navigate', routeId: entry.routeId } };
 }
 
 export function handleShortcutEvent(
@@ -152,27 +181,49 @@ export function handleShortcutEvent(
     return;
   }
 
-  const result = advanceChord(deps.chordState.current, event.key, now, deps.navigationByKey);
+  const result = advanceChord(deps.chordState.current, event.key, now, deps.chordByKey);
   deps.chordState.current = result.state;
   if (result.decision.action === 'navigate') {
     event.preventDefault();
-    deps.navigate(buildLocaleHref(deps.getLocale(), result.decision.binding.path));
+    deps.navigate(buildRoute(deps.getLocale(), result.decision.routeId));
   }
 }
 
-// Why filtered here: a chord navigates straight to a page, so an unfiltered
-// chord reaches pages the sidebar already hides. Entries without a permission
-// stay visible to everyone, matching visibleEntries.
+// Why filtered here: a chord navigates straight to a page, so an unfiltered chord
+// would reach pages the sidebar already hides. The gate is the registry's own
+// `shortcuts` surface, so a chord can never reach a destination another surface
+// has declared private.
 export function bindingsForPermissions(
   permissionKeys: readonly string[] | undefined,
+): readonly ChordEntry[] {
+  if (permissionKeys === undefined) return CHORD_ENTRIES;
+  const permitted = new Set(
+    visibleRoutes(new Set(permissionKeys), 'shortcuts').map((route) => route.id),
+  );
+  return CHORD_ENTRIES.filter((entry) => permitted.has(entry.routeId));
+}
+
+/**
+ * The permitted `g`-chord destinations, labelled and linked.
+ *
+ * Why a hook: the key list is local metadata, but its label and href come from the
+ * frozen registry, and a client component may only read the dictionary through the
+ * provider hook — so the join happens here rather than in each consumer.
+ */
+export function useShortcutBindings(
+  permissionKeys: readonly string[] | undefined,
 ): readonly ShortcutRouteBinding[] {
-  if (permissionKeys === undefined) return NAVIGATION_BINDINGS;
-  const effective = new Set(permissionKeys);
-  return NAVIGATION_BINDINGS.filter((binding) => {
-    const registryPath = binding.path === '' ? '/' : binding.path;
-    const entry = NAV_REGISTRY.find((item) => item.path === registryPath);
-    return entry !== undefined && isEntryPermitted(entry, effective);
-  });
+  const dictionary = useDictionary();
+  const locale = extractLocale(usePathname() ?? '');
+  return useMemo(
+    () =>
+      bindingsForPermissions(permissionKeys).map((entry) => ({
+        key: entry.key,
+        label: shellItemLabel(dictionary, entry.routeId),
+        href: buildRoute(locale, entry.routeId),
+      })),
+    [permissionKeys, locale, dictionary],
+  );
 }
 
 export function useShortcuts(permissionKeys?: readonly string[]): { isOverlayOpen: boolean; closeOverlay: () => void } {
@@ -196,8 +247,11 @@ export function useShortcuts(permissionKeys?: readonly string[]): { isOverlayOpe
   }, [pathname]);
 
   const closeOverlay = useCallback(() => setIsOverlayOpen(false), []);
-  const bindings = useMemo(() => bindingsForPermissions(permissionKeys), [permissionKeys]);
-  const bindingsByKey = useMemo(() => new Map(bindings.map((binding) => [binding.key, binding])), [bindings]);
+  const chordEntries = useMemo(() => bindingsForPermissions(permissionKeys), [permissionKeys]);
+  const chordByKey = useMemo(
+    () => new Map(chordEntries.map((entry) => [entry.key, entry])),
+    [chordEntries],
+  );
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => {
@@ -208,12 +262,12 @@ export function useShortcuts(permissionKeys?: readonly string[]): { isOverlayOpe
         toggleOverlay: () => setIsOverlayOpen((open) => !open),
         chordState: chordStateRef,
         selectedRowIndex: selectedRowRef,
-        navigationByKey: bindingsByKey,
+        chordByKey,
       });
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [bindingsByKey]);
+  }, [chordByKey]);
 
   return { isOverlayOpen, closeOverlay };
 }
