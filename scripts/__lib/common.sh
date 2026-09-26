@@ -191,6 +191,36 @@ env_unquote() {
 }
 
 # ---------------------------------------------------------------------------
+# backup_dir_writable_by_container
+# ---------------------------------------------------------------------------
+# <owner_uid> <group_gid> <mode> <container_uid> <container_gid> — returns 0 when
+# one of the three ownership rules grants the container write access.
+# WHY: backup_root_write_rule in scripts/__preflight.sh is the authority on that
+# question — chowning a root which already satisfies its owner, group or other
+# rule repairs nothing and costs a sudo password, so the same three rules, the
+# same three-column mode parse and the same container-gid derivation apply here.
+# A class counts only when its octal digit carries write and execute together
+# (3 or 7), because creating an archive inside the root also needs the search bit.
+backup_dir_writable_by_container() {
+  local owner_uid="$1" group_gid="$2" container_uid="$4" container_gid="$5"
+  local perms="$3"
+  if [[ "$perms" =~ ^[0-9]+$ ]]; then
+    perms="000${perms}"
+  fi
+  perms="${perms: -3}"
+  if [[ "$owner_uid" == "$container_uid" && "${perms:0:1}" =~ [37] ]]; then
+    return 0
+  fi
+  if [[ "$group_gid" == "$container_gid" && "${perms:1:1}" =~ [37] ]]; then
+    return 0
+  fi
+  if [[ "${perms:2:1}" =~ [37] ]]; then
+    return 0
+  fi
+  return 1
+}
+
+# ---------------------------------------------------------------------------
 # ensure_backup_dir_perms
 # ---------------------------------------------------------------------------
 # WHY: the monitor container runs as ${DOCKER_UID:-1000} and writes archives under
@@ -199,32 +229,31 @@ env_unquote() {
 # container then cannot create an archive, while the host shell that owns the
 # directory still sees the path as writable, so ownership and mode are read from
 # the filesystem and repaired here rather than only reported.
-# A missing root is created, an already-correct root returns silently so a repeat
-# call costs and prints nothing, the repair runs directly as root or behind one
-# `sudo -v` and one privileged run (one prompt, never a loop, never an assumed
-# passwordless sudo), and an unprivileged failure prints the exact commands to
-# run by hand and returns 1 without exiting — the caller decides if that is fatal.
-# WHY 0300: the monitor must enter the directory (owner execute) and create an
-# archive inside it (owner write); the mask reads the owner column whatever setuid
-# or sticky digits stat -c %a prints in front of it.
+# A missing root is created, a root that already grants the container write access
+# returns silently so a repeat call costs and prints nothing, the repair runs
+# directly as root or behind one `sudo -v` and one privileged run (one prompt,
+# never a loop, never an assumed passwordless sudo), and an unprivileged failure
+# prints the exact commands to run by hand and returns 1 without exiting — the
+# caller decides if that is fatal.
 ensure_backup_dir_perms() {
-  local repo_root root uid stat_line owner_uid mode
+  local repo_root root uid stat_line owner_uid group_gid mode
 
   repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
   root="${BACKUP_DIR:-${repo_root}/backups}"
+  # WHY ${DOCKER_UID} and not ${DOCKER_GID} for the container gid: the monitor image
+  # builds its group with addgroup -g ${DOCKER_UID}, so the gid equals the uid.
   uid="${DOCKER_UID:-1000}"
 
   if [[ ! -d "$root" ]]; then
     mkdir -p "$root" || { log_warn "cannot create backup root: ${root}"; return 1; }
   fi
 
-  stat_line="$(stat -c '%u %a' "$root" 2>/dev/null || true)"
-  if [[ -z "$stat_line" ]]; then
-    log_warn "cannot read ownership of backup root: ${root}"
-    return 1
-  fi
-  read -r owner_uid mode <<<"$stat_line"
-  if [[ "$owner_uid" == "$uid" ]] && (( (8#$mode & 0300) == 0300 )); then
+  stat_line="$(stat -c '%u %g %a' "$root" 2>/dev/null || true)"
+  [[ -n "$stat_line" ]] || {
+    log_warn "cannot read ownership of backup root: ${root}"; return 1
+  }
+  read -r owner_uid group_gid mode <<<"$stat_line"
+  if backup_dir_writable_by_container "$owner_uid" "$group_gid" "$mode" "$uid" "$uid"; then
     return 0
   fi
 
@@ -234,9 +263,9 @@ ensure_backup_dir_perms() {
     sudo chown -R "$uid" "$root" && sudo find "$root" -type d -exec chmod u+rwx {} +
   fi
 
-  stat_line="$(stat -c '%u %a' "$root" 2>/dev/null || true)"
-  read -r owner_uid mode <<<"${stat_line:-0 0}"
-  if [[ "$owner_uid" == "$uid" ]] && (( (8#$mode & 0300) == 0300 )); then
+  stat_line="$(stat -c '%u %g %a' "$root" 2>/dev/null || true)"
+  read -r owner_uid group_gid mode <<<"${stat_line:-0 0 0}"
+  if backup_dir_writable_by_container "$owner_uid" "$group_gid" "$mode" "$uid" "$uid"; then
     log_info "backup root repaired for uid ${uid}: ${root}"
     return 0
   fi
