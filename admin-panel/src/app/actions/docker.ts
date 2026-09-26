@@ -15,6 +15,24 @@ const execPromise = util.promisify(exec);
 
 const CONTAINER_ACTIONS = ['start', 'stop', 'restart', 'pause', 'unpause'] as const;
 
+const DEFAULT_LOG_TAIL = 100;
+const MAX_LOG_TAIL = 1000;
+const INVALID_LOG_REQUEST = 'Invalid container id or action';
+
+export type ContainerLogResult = { success: true; logs: string } | { success: false; error: string };
+
+/** Both log reads coerce the tail the same way, so both report the same line count in a row. */
+function coerceLogTail(tail: number): number {
+  const value = Number(tail);
+  return Number.isInteger(value) && value >= 1 && value <= MAX_LOG_TAIL ? value : DEFAULT_LOG_TAIL;
+}
+
+/** The one place that shells out to docker logs; it throws so each caller reports it its own way. */
+async function readContainerLogOutput(id: string, coercedTail: number): Promise<string> {
+  const { stdout, stderr } = await execPromise(`docker logs --tail ${coercedTail} ${id}`);
+  return stdout || stderr;
+}
+
 // Why re-exported: the container list is now read by the streaming route, and the components that
 // render it keep importing their shape from where they always did.
 export type { ContainerInfo } from '@/lib/container-probes';
@@ -41,14 +59,40 @@ export async function controlContainer(id: string, action: 'start' | 'stop' | 'r
   }
 }
 
-export async function getContainerLogs(id: string, tail: number = 100) {
+/**
+ * The log output, unaudited. The log viewer polls this every few seconds for as long as it stays
+ * open, so a row per call would fill the audit page faster than anyone could read it — watching a
+ * log scroll by is not a disclosure; asking for the output again is.
+ */
+export async function fetchContainerLogs(id: string, tail: number = DEFAULT_LOG_TAIL): Promise<ContainerLogResult> {
   await ensurePermission('container:read');
-  const coercedTail = Number.isInteger(Number(tail)) && Number(tail) >= 1 && Number(tail) <= 1000 ? Number(tail) : 100;
+  const coercedTail = coerceLogTail(tail);
   if (!CONTAINER_ID_RE.test(id)) {
-    return { success: false, error: 'Invalid container id or action' };
+    return { success: false, error: INVALID_LOG_REQUEST };
   }
   try {
-    const { stdout, stderr } = await execPromise(`docker logs --tail ${coercedTail} ${id}`);
+    return { success: true, logs: await readContainerLogOutput(id, coercedTail) };
+  } catch (error) {
+    console.error(`Failed to get logs for container ${id}:`, error);
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+/**
+ * The same output, recorded. Kept beside the unaudited read rather than wrapping it because the
+ * failure row needs the error's name, and the unaudited read has already turned the error into a
+ * message by the time a wrapper would see it.
+ */
+export async function getContainerLogs(id: string, tail: number = DEFAULT_LOG_TAIL): Promise<ContainerLogResult> {
+  // Gated here as well as in the read above: this action does not call that one (it needs the
+  // error itself for the row), so the check cannot be inherited and has to be its own.
+  await ensurePermission('container:read');
+  const coercedTail = coerceLogTail(tail);
+  if (!CONTAINER_ID_RE.test(id)) {
+    return { success: false, error: INVALID_LOG_REQUEST };
+  }
+  try {
+    const logs = await readContainerLogOutput(id, coercedTail);
     await recordAudit({
       verb: 'container:view',
       entity: 'container',
@@ -58,7 +102,7 @@ export async function getContainerLogs(id: string, tail: number = 100) {
       afterValues: { containerId: id, tail: coercedTail },
       result: 'success',
     });
-    return { success: true, logs: stdout || stderr };
+    return { success: true, logs };
   } catch (error) {
     console.error(`Failed to get logs for container ${id}:`, error);
     await recordAudit({

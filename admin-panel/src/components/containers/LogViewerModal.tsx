@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Download, RefreshCw, Search } from 'lucide-react';
 
-import { getContainerLogs } from '@/app/actions/docker';
+import { fetchContainerLogs, getContainerLogs, type ContainerLogResult } from '@/app/actions/docker';
 import { Button } from '@/components/core/Button';
 import { Dialog } from '@/components/core/Dialog';
 import { LogFollowButton } from '@/components/core/LogFollowButton';
@@ -118,24 +118,35 @@ function useContainerLogs(containerId: string, tail: number): { logs: string; is
   const [logs, setLogs] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  const refreshLogs = useCallback(async (): Promise<void> => {
-    setIsLoading(true);
-    const result = await getContainerLogs(containerId, tail);
+  const applyResult = useCallback((result: ContainerLogResult): void => {
     if (result.success) {
-      setLogs(result.logs ?? 'No logs found.');
+      setLogs(result.logs);
     } else {
       setLogs(`Error fetching logs: ${result.error}`);
     }
     setIsLoading(false);
-  }, [containerId, tail]);
+  }, []);
+
+  // Why the tick reads without auditing: it repeats every few seconds for as long as the viewer
+  // is open, and a row per tick is hundreds an hour of a panel that is only being watched.
+  const loadLatest = useCallback(async (): Promise<void> => {
+    setIsLoading(true);
+    applyResult(await fetchContainerLogs(containerId, tail));
+  }, [containerId, tail, applyResult]);
+
+  // The button is a person asking for the output again, so that one is recorded.
+  const refreshLogs = useCallback(async (): Promise<void> => {
+    setIsLoading(true);
+    applyResult(await getContainerLogs(containerId, tail));
+  }, [containerId, tail, applyResult]);
 
   useEffect(() => {
-    queueMicrotask(() => void refreshLogs());
+    queueMicrotask(() => void loadLatest());
     const interval = setInterval(() => {
-      void refreshLogs();
+      void loadLatest();
     }, 5000);
     return () => clearInterval(interval);
-  }, [refreshLogs]);
+  }, [loadLatest]);
 
   return { logs, isLoading, refreshLogs };
 }
