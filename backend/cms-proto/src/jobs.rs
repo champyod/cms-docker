@@ -17,9 +17,31 @@
 //! priority change repair the heap in place instead of rebuilding it. Only the
 //! key and the payloads belong to the protocol; the heap, the index behind it,
 //! and the container of queued items are the queue's own business.
+//!
+//! The other half of this module is the batch a worker reports through
+//! [`FinishedCall`]. A job stays opaque in [`JobGroup::jobs`] because the
+//! Python side writes two different shapes into that list, so which keys a job
+//! must carry is decided by the `type` it names: `keys` pins the sets and
+//! `isolation` decodes a batch one job at a time, so a single job that cannot
+//! be read costs only itself instead of the whole batch.
+
+mod isolation;
+mod job;
+mod keys;
+mod operation;
+mod refusal;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+pub use isolation::{FinishedCall, IsolatedBatch, JobOutcome};
+pub use job::{DecodedJob, EvaluationOutcome, KindExtras};
+pub use keys::{
+    key_set_for, DigestMap, JobKind, COMPILATION_KEYS, COMPILATION_TYPE, DIGEST_MAP_KEYS,
+    EVALUATION_EXECUTION_KEYS, EVALUATION_KEYS, EVALUATION_TYPE, OPERATION_KEYS, OPERATION_TYPES,
+};
+pub use operation::{Operation, OperationKind, Shard};
+pub use refusal::{JobError, Quarantine, Requeue};
 
 /// Priority of an operation dispatched before every lower one.
 ///
