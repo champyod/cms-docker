@@ -1,5 +1,6 @@
 use clap::Parser;
 use std::error::Error;
+use std::process::ExitCode;
 
 pub mod cli;
 pub mod core;
@@ -14,7 +15,20 @@ struct Args {
     command: Option<cli::Commands>,
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> ExitCode {
+    match run() {
+        Ok(()) => ExitCode::SUCCESS,
+        // WHY: returning `Err` from `main` prints the `Debug` form, which for a
+        // typed error exposes variant names (`StepsFailed { failed: [...] }`)
+        // instead of the message the user needs.
+        Err(err) => {
+            eprintln!("cms error: {err}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn run() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
     match args.command {

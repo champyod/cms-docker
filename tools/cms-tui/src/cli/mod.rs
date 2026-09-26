@@ -231,7 +231,9 @@ pub enum Commands {
 ///
 /// # Errors
 ///
-/// Returns `Err` when the command execution fails.
-pub fn handle_command(cmd: Commands) -> Result<(), Box<dyn std::error::Error>> {
+/// Returns `Err` with the reason a command could not run: an unresolvable
+/// repository root, a missing script or make target, a failing subprocess, or
+/// a command the catalog does not describe.
+pub fn handle_command(cmd: Commands) -> Result<(), commands::CliError> {
     commands::handle(cmd)
 }
