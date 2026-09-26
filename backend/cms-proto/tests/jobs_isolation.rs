@@ -7,8 +7,8 @@
 //! here rather than in production.
 
 use cms_proto::{
-    key_set_for, DigestMap, FinishedCall, IsolatedBatch, JobError, JobKind, KindExtras,
-    OperationKind, Quarantine, Requeue, Shard, COMPILATION_KEYS, DIGEST_MAP_KEYS,
+    key_set_for, DigestMap, EvaluationOutcome, FinishedCall, IsolatedBatch, JobError, JobKind,
+    KindExtras, OperationKind, Quarantine, Requeue, Shard, COMPILATION_KEYS, DIGEST_MAP_KEYS,
     EVALUATION_EXECUTION_KEYS, EVALUATION_KEYS, OPERATION_KEYS,
 };
 use serde_json::{json, Value};
@@ -29,8 +29,12 @@ const EVALUATION_JOB: &str = r#"{
   "multithreaded_sandbox": false, "archive_sandbox": false, "shard": 3, "keep_sandbox": false,
   "sandboxes": [], "sandbox_digests": {}, "info": "Evaluation", "success": true, "text": "ok",
   "admin_text": "", "files": {}, "managers": {}, "executables": {}, "type": "evaluation",
-  "input": null, "output": "4\n", "time_limit": 2.0, "memory_limit": 262144.0, "outcome": "correct",
+  "input": null, "output": "4\n", "time_limit": 2.0, "memory_limit": 262144, "outcome": "correct",
   "user_output": "", "plus": {}, "only_execution": false, "get_output": false}"#;
+
+/// A memory limit above 2^53 and a whole number of mebibytes, so it is a limit
+/// the dataset accepts and a float could not hold: one bit past the mantissa.
+const EXACT_MEMORY_LIMIT: i64 = 9_007_200_303_259_568;
 
 fn job(kind: JobKind) -> Value {
     let literal = match kind {
@@ -99,6 +103,24 @@ fn quarantined(jobs: Vec<Value>) -> Quarantine {
 /// The reason the one compilation job of these is refused for.
 fn refused(job: Value) -> JobError {
     quarantined(vec![job]).reason
+}
+
+/// The evaluation outcome of the one job of these carrying `key` set to
+/// `value`, or the reason that one job was refused for.
+fn evaluated(key: &str, value: Value) -> Result<EvaluationOutcome, JobError> {
+    let mut job = job(JobKind::Evaluation);
+    job.as_object_mut()
+        .expect("an object")
+        .insert(key.to_owned(), value);
+    let batch = reported(vec![job], 3, None).expect("one job never fails the batch");
+    if let Some(quarantine) = batch.quarantined().first() {
+        return Err(quarantine.reason.clone());
+    }
+    let extras = &batch.committed()[0].extras;
+    let KindExtras::Evaluation(outcome) = extras else {
+        panic!("an evaluation job carries the evaluation fields");
+    };
+    Ok(outcome.clone())
 }
 
 #[test]
@@ -189,10 +211,8 @@ fn a_decoded_job_carries_what_the_receiving_service_files() {
     };
 
     assert_eq!(outcome.outcome.as_deref(), Some("correct"));
-    assert_eq!(
-        [outcome.time_limit, outcome.memory_limit],
-        [Some(2.0), Some(262144.0)]
-    );
+    assert_eq!(outcome.time_limit, Some(2.0));
+    assert_eq!(outcome.memory_limit, Some(262_144));
     assert_eq!(outcome.input.as_deref(), None);
     assert_eq!(outcome.get_output, Some(false));
     assert_eq!(
@@ -325,4 +345,47 @@ fn the_two_whole_batch_failures_are_not_a_single_job() {
         "a reported failure loses the batch before any job is read"
     );
     assert!(matches!(not_a_group, Err(JobError::MalformedBatch { .. })));
+}
+
+#[test]
+fn a_memory_limit_is_the_integer_the_python_side_declares() {
+    let exact = evaluated("memory_limit", json!(EXACT_MEMORY_LIMIT));
+    let refused = evaluated("memory_limit", json!(262_144.0));
+    let none = evaluated("memory_limit", Value::Null).expect("null must decode");
+
+    assert_eq!(none.memory_limit, None);
+    assert_eq!(
+        exact.expect("an integer must decode").memory_limit,
+        Some(EXACT_MEMORY_LIMIT),
+        "a float field would round this last bit away"
+    );
+    assert!(
+        matches!(refused, Err(JobError::WrongValue { key, .. }) if key == "memory_limit"),
+        "a float is not the form the constructor declares"
+    );
+}
+
+#[test]
+fn a_null_sandbox_list_is_the_empty_list_the_python_side_normalizes_to() {
+    let mut none = job(JobKind::Compilation);
+    none["sandboxes"] = Value::Null;
+    let mut two = job(JobKind::Evaluation);
+    two["sandboxes"] = json!(["/sandbox/0", "/sandbox/1"]);
+
+    let batch = reported(vec![none, two], 3, None).expect("null must not fail a job");
+    let lists: Vec<Vec<String>> = batch
+        .committed()
+        .iter()
+        .map(|job| job.sandboxes.clone())
+        .collect();
+
+    assert!(batch.quarantined().is_empty(), "a null names no sandbox");
+    assert_eq!(
+        lists,
+        vec![
+            Vec::new(),
+            vec!["/sandbox/0".to_owned(), "/sandbox/1".to_owned()]
+        ],
+        "normalizing null must not flatten the paths a job does name"
+    );
 }

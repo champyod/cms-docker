@@ -171,12 +171,16 @@ impl FinishedCall {
                 call: self.shard,
             });
         }
+        let sandboxes = match object.get("sandboxes") {
+            Some(Value::Null) => Vec::new(),
+            _ => field(object, "sandboxes")?,
+        };
         Ok(DecodedJob {
             kind,
             operation: operation.cloned(),
             success: field(object, "success")?,
             shard,
-            sandboxes: field(object, "sandboxes")?,
+            sandboxes,
             files: field(object, "files")?,
             managers: field(object, "managers")?,
             executables: field(object, "executables")?,

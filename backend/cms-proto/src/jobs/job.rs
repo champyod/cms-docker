@@ -25,7 +25,9 @@ pub struct DecodedJob {
     pub success: Option<bool>,
     /// The shard that ran the job, which must be the shard the call released.
     pub shard: Shard,
-    /// Sandbox paths, which `action_finished` names when a job failed.
+    /// Sandbox paths, which `action_finished` names when a job failed. A job
+    /// carrying null has no sandbox rather than an unreadable one, because
+    /// `Job.__init__` turns a null it is given into the empty list.
     pub sandboxes: Vec<String>,
     /// Files the user submitted, by name, as the digests the result stores.
     pub files: DigestMap,
@@ -68,8 +70,10 @@ pub struct EvaluationOutcome {
     pub output: Option<String>,
     /// User time limit in seconds, null when the job defined none.
     pub time_limit: Option<f64>,
-    /// Memory limit in bytes, null when the job defined none.
-    pub memory_limit: Option<f64>,
+    /// Memory limit in bytes, null when the job defined none. An integer,
+    /// because `EvaluationJob.__init__` declares one and a limit is a whole
+    /// number of bytes: a float would round a limit above 2^53.
+    pub memory_limit: Option<i64>,
     /// The outcome the score is computed from, null when the output was not
     /// compared against the reference solution.
     pub outcome: Option<String>,
