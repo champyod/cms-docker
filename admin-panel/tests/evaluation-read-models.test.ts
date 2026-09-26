@@ -1,5 +1,8 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import {
+  toSubmissionResultRow,
+} from '@/lib/evaluation-read-model-projections';
+import {
   getSubmissionEvaluation,
   getSubmissionLogs,
   getSubmissionSummary,
@@ -114,5 +117,70 @@ describe('Evaluation read models', () => {
     expect(mockEvaluationsFindMany).toHaveBeenCalledTimes(1);
     expect(mockResultsFindMany).not.toHaveBeenCalled();
     expect(mockFilesFindMany).not.toHaveBeenCalled();
+  });
+});
+
+const RESULT_ROW = {
+  dataset_id: 1,
+  compilation_outcome: 'ok',
+  evaluation_outcome: 'ok',
+  compilation_time: 12.5,
+  compilation_memory: BigInt(3145728),
+  score: 80,
+  public_score: 60,
+  scored_at: new Date('2026-02-03T04:05:06.000Z'),
+} as const;
+
+const RESULT_READER = new Set(['submission:read', 'submissionresult:read', 'file:read']);
+
+describe('Evaluation result field filtering', () => {
+  it('reads every projected field for a caller holding submissionresult:read', () => {
+    const row = toSubmissionResultRow(RESULT_ROW, RESULT_READER);
+
+    expect(row).toMatchObject({
+      datasetId: 1,
+      compilationOutcome: 'ok',
+      evaluationOutcome: 'ok',
+      compilationTime: 12.5,
+      score: 80,
+      publicScore: 60,
+      scoredAt: '2026-02-03T04:05:06.000Z',
+    });
+  });
+
+  it.each([
+    'compilationTime',
+    'scoredAt',
+    'compilationMemoryBytes',
+  ] as const)('nulls %s when the projection strips its column', (modelField) => {
+    const row = toSubmissionResultRow(RESULT_ROW, new Set(['submission:read', 'file:read']));
+
+    expect(row[modelField]).toBeNull();
+  });
+
+  it('keeps only the identity column a partial reader may not read out of the payload', () => {
+    const row = toSubmissionResultRow(RESULT_ROW, new Set(['submission:read', 'file:read']));
+
+    expect(row.datasetId).toBe(1);
+    expect(row.compilationOutcome).toBeNull();
+    expect(row.evaluationOutcome).toBeNull();
+    expect(row.score).toBeNull();
+    expect(row.publicScore).toBeNull();
+  });
+
+  it('serializes the BigInt memory column as a byte count', () => {
+    expect(toSubmissionResultRow(RESULT_ROW, RESULT_READER).compilationMemoryBytes).toBe(3145728);
+  });
+
+  it('reports a null memory column as null', () => {
+    const row = toSubmissionResultRow({ ...RESULT_ROW, compilation_memory: null }, RESULT_READER);
+
+    expect(row.compilationMemoryBytes).toBeNull();
+  });
+
+  it('refuses to round a memory column past the safe integer range', () => {
+    const row = toSubmissionResultRow({ ...RESULT_ROW, compilation_memory: BigInt(2) ** BigInt(70) }, RESULT_READER);
+
+    expect(row.compilationMemoryBytes).toBeNull();
   });
 });

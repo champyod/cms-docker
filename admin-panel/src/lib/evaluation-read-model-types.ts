@@ -11,7 +11,6 @@ export interface SubmissionSummary {
     canUpdate: boolean;
     canRecompute: boolean;
     canDownload: boolean;
-    canAssignLane: boolean;
     canMoveLane: boolean;
   };
 }
@@ -23,6 +22,7 @@ export interface SubmissionResultsModel {
     compilationOutcome: string | null;
     evaluationOutcome: string | null;
     compilationTime: number | null;
+    compilationMemoryBytes: number | null;
     score: number | null;
     publicScore: number | null;
     scoredAt: string | null;

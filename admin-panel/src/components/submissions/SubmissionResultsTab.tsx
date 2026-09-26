@@ -68,6 +68,9 @@ function ResultCard({ result }: { readonly result: ResultRow }): React.JSX.Eleme
       </div>
       <div className="flex flex-wrap gap-4 text-xs text-muted-foreground font-mono">
         {result.compilationTime !== null && <span>{`Time: ${result.compilationTime.toFixed(3)}s`}</span>}
+        {result.compilationMemoryBytes !== null && (
+          <span>{`Memory: ${(result.compilationMemoryBytes / 1024 / 1024).toFixed(2)} MB`}</span>
+        )}
         {result.publicScore !== null && <span>{`Public: ${result.publicScore.toFixed(1)}`}</span>}
         {result.scoredAt !== null && <span>{`Scored: ${new Date(result.scoredAt).toLocaleString()}`}</span>}
       </div>

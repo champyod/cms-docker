@@ -18,13 +18,34 @@ export interface SubmissionCommentDialogProps {
   readonly navigation: Dictionary['navigation'];
 }
 
-export function SubmissionCommentDialog({ submissionId, comment, navigation }: SubmissionCommentDialogProps): React.JSX.Element {
+function CommentEditor({ value, saving, onChange }: {
+  readonly value: string;
+  readonly saving: boolean;
+  readonly onChange: (value: string) => void;
+}): React.JSX.Element {
+  return (
+    <>
+      <label htmlFor="submission-comment" className="text-sm font-medium text-foreground ml-1">Comment</label>
+      <textarea
+        id="submission-comment"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        rows={4}
+        maxLength={MAX_COMMENT_LENGTH}
+        disabled={saving}
+        className={FIELD_CLASSES}
+      />
+    </>
+  );
+}
+
+function useCommentSave(submissionId: number, value: string, onSaved: () => void): {
+  readonly saving: boolean;
+  readonly save: () => Promise<void>;
+} {
   const router = useAppRouter();
   const runAction = useActionFeedback();
-  const [open, setOpen] = useState(false);
-  const [value, setValue] = useState(comment);
   const [saving, setSaving] = useState(false);
-
   const save = async (): Promise<void> => {
     setSaving(true);
     try {
@@ -33,13 +54,20 @@ export function SubmissionCommentDialog({ submissionId, comment, navigation }: S
         () => updateSubmissionComment(submissionId, value),
       );
       if (outcome?.success) {
-        setOpen(false);
+        onSaved();
         router.refresh();
       }
     } finally {
       setSaving(false);
     }
   };
+  return { saving, save };
+}
+
+export function SubmissionCommentDialog({ submissionId, comment, navigation }: SubmissionCommentDialogProps): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState(comment);
+  const { saving, save } = useCommentSave(submissionId, value, () => setOpen(false));
 
   return (
     <>
@@ -52,16 +80,7 @@ export function SubmissionCommentDialog({ submissionId, comment, navigation }: S
         title={`Edit comment — ${navigation.evaluation['submission-record'].label} #${submissionId}`}
         description="The comment is stored on the submission and is visible to every reader who may open it."
       >
-        <label htmlFor="submission-comment" className="text-sm font-medium text-foreground ml-1">Comment</label>
-        <textarea
-          id="submission-comment"
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          rows={4}
-          maxLength={MAX_COMMENT_LENGTH}
-          disabled={saving}
-          className={FIELD_CLASSES}
-        />
+        <CommentEditor value={value} saving={saving} onChange={setValue} />
         <DialogFooter>
           <Button variant="secondary" size="sm" onClick={() => setOpen(false)} disabled={saving}>
             Cancel

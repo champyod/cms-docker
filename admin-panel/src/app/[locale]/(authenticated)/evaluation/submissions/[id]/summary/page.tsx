@@ -26,10 +26,10 @@ export default async function SubmissionSummaryPage({ params }: { params: Promis
   const { locale, id: rawId } = await params;
   const id = parseRecordId(rawId);
   if (id === null) notFound();
-  const dictionary = await getDictionary(locale);
   // Why the keys reach the tab: the summary renders links to the outcome tabs, so
   // it must know which of them this caller may open.
   const effective = await authorizeSubmissionTab('evaluation.submission-tabs.summary');
+  const dictionary = await getDictionary(locale);
   const summary = await readRecordOrNotFound(() => getSubmissionSummary(id));
   return (
     <SubmissionSummaryTab

@@ -21,7 +21,6 @@ const NO_CAPABILITIES: Capabilities = {
   canUpdate: false,
   canRecompute: false,
   canDownload: false,
-  canAssignLane: false,
   canMoveLane: false,
 };
 
@@ -29,7 +28,6 @@ const ALL_CAPABILITIES: Capabilities = {
   canUpdate: true,
   canRecompute: true,
   canDownload: true,
-  canAssignLane: true,
   canMoveLane: true,
 };
 
@@ -131,9 +129,11 @@ function anchorHrefs(container: HTMLElement): string[] {
   return [...container.querySelectorAll('a')].map((anchor) => anchor.getAttribute('href') ?? '');
 }
 
+const COMPLETE_KEYS = ['submission:read', 'submissionresult:read', 'file:read', 'evaluation:read'];
+
 describe('SubmissionSummaryTab tab links', () => {
   it('links to the outcome tabs a complete reader may open', () => {
-    const hrefs = anchorHrefs(renderSummary(['submission:read', 'submissionresult:read', 'file:read', 'evaluation:read']));
+    const hrefs = anchorHrefs(renderSummary(COMPLETE_KEYS));
     expect(hrefs).toContain('/en/evaluation/submissions/19/results');
     expect(hrefs).toContain('/en/evaluation/submissions/19/evaluation');
   });
@@ -144,5 +144,22 @@ describe('SubmissionSummaryTab tab links', () => {
     [['submission:read'], '/en/evaluation/submissions/19/results'],
   ])('omits the outcome link the reader set %s cannot open', (permissionKeys, forbiddenHref) => {
     expect(anchorHrefs(renderSummary(permissionKeys))).not.toContain(forbiddenHref);
+  });
+});
+
+describe('SubmissionSummaryTab status presentation', () => {
+  it('shows no status card whose body is not a status', () => {
+    expect(renderSummary(COMPLETE_KEYS).textContent).not.toContain('Detailed Status');
+  });
+
+  it('never runs a loader next to a static link', () => {
+    expect(renderSummary(COMPLETE_KEYS).querySelectorAll('.animate-spin')).toHaveLength(0);
+  });
+
+  it('leaves the status derivation to the Results tab', () => {
+    const container = renderSummary(COMPLETE_KEYS);
+    for (const status of ['Compiling', 'Compilation Failed', 'Evaluating', 'Scoring', 'Done']) {
+      expect(container.textContent, status).not.toContain(status);
+    }
   });
 });

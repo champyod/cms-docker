@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, ArrowRight } from 'lucide-react';
 
 import { Card } from '@/components/core/Card';
 import type { Dictionary } from '@/lib/dictionary';
@@ -40,6 +40,26 @@ function relationLinks(summary: SubmissionSummary, locale: 'en' | 'th'): React.J
   );
 }
 
+function SummaryIdentity({ summary, locale }: {
+  readonly summary: SubmissionSummary;
+  readonly locale: 'en' | 'th';
+}): React.JSX.Element {
+  return (
+    <Card className="space-y-4">
+      <div className="text-muted-foreground text-sm flex flex-wrap gap-4">
+        <span>Time: {new Date(summary.timestamp).toLocaleString()}</span>
+        <span>Language: <span className="font-medium text-foreground">{summary.language ?? '—'}</span></span>
+        <span>Official: <span className="font-medium text-foreground">{summary.official ? 'Yes' : 'No'}</span></span>
+      </div>
+      {relationLinks(summary, locale)}
+      <div className="text-sm">
+        <span className="text-muted-foreground">Comment: </span>
+        <span className="text-foreground">{summary.comment || '—'}</span>
+      </div>
+    </Card>
+  );
+}
+
 // Why the descriptor check: the outcome tabs need their own reader keys, and a
 // link to a tab the caller cannot open would lead straight to the concealed view.
 function reachableTabHref(
@@ -53,28 +73,24 @@ function reachableTabHref(
   return buildRoute(locale, routeId, { id: submissionId });
 }
 
-// Why the link: the outcome columns need reader keys this route does not grant,
-// so the state is only reachable on the tab that owns it — and only when that
-// tab is reachable for this caller.
+// Why a link and not a status: the outcome columns need reader keys this route
+// does not grant, so this card offers the tab that owns the state and shows no
+// state of its own. The icon is a navigation affordance, never a spinner.
 function OutcomeCard({ title, href }: { readonly title: string; readonly href: string | null }): React.JSX.Element {
   return (
     <div className="bg-muted/40 rounded-xl p-4 border border-border">
       <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{title}</h3>
-      <div className="flex items-center gap-2">
-        {href ? (
-          <>
-            <Loader2 className="text-info w-5 h-5 animate-spin shrink-0" />
-            <Link className="font-medium" href={href}>
-              Open {title.toLowerCase()}
-            </Link>
-          </>
-        ) : (
-          <>
-            <AlertCircle className="text-muted-foreground w-5 h-5 shrink-0" />
-            <span className="text-sm text-muted-foreground font-medium">{title} not readable</span>
-          </>
-        )}
-      </div>
+      {href ? (
+        <Link className="font-medium inline-flex items-center gap-2" href={href}>
+          Open {title.toLowerCase()}
+          <ArrowRight className="w-4 h-4" aria-hidden="true" />
+        </Link>
+      ) : (
+        <span className="text-sm text-muted-foreground font-medium inline-flex items-center gap-2">
+          <AlertCircle className="w-5 h-5" aria-hidden="true" />
+          {title} not readable
+        </span>
+      )}
     </div>
   );
 }
@@ -82,20 +98,8 @@ function OutcomeCard({ title, href }: { readonly title: string; readonly href: s
 export function SubmissionSummaryTab({ summary, permissionKeys, navigation, locale }: SubmissionSummaryTabProps): React.JSX.Element {
   return (
     <div className="space-y-6">
-      <Card className="space-y-4">
-        <div className="text-muted-foreground text-sm flex flex-wrap gap-4">
-          <span>Time: {new Date(summary.timestamp).toLocaleString()}</span>
-          <span>Language: <span className="font-medium text-foreground">{summary.language ?? '—'}</span></span>
-          <span>Official: <span className="font-medium text-foreground">{summary.official ? 'Yes' : 'No'}</span></span>
-        </div>
-        {relationLinks(summary, locale)}
-        <div className="text-sm">
-          <span className="text-muted-foreground">Comment: </span>
-          <span className="text-foreground">{summary.comment || '—'}</span>
-        </div>
-      </Card>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <SummaryIdentity summary={summary} locale={locale} />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <OutcomeCard
           title="Compilation"
           href={reachableTabHref('evaluation.submission-tabs.results', locale, summary.id, permissionKeys)}
@@ -104,15 +108,7 @@ export function SubmissionSummaryTab({ summary, permissionKeys, navigation, loca
           title="Evaluation"
           href={reachableTabHref('evaluation.submission-tabs.evaluation', locale, summary.id, permissionKeys)}
         />
-        <div className="bg-muted/40 rounded-xl p-4 border border-border">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Detailed Status</h3>
-          <span className="font-medium flex items-center gap-2">
-            <AlertCircle className="text-muted-foreground w-5 h-5" />
-            {`${navigation.evaluation['submission-record'].label} #${summary.id}`}
-          </span>
-        </div>
       </div>
-
       <SubmissionActionBar
         submissionId={summary.id}
         capabilities={summary.capabilities}

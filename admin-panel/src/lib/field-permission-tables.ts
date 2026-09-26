@@ -26,6 +26,9 @@ export const EXTRA_FIELD_PERMISSION_MAP: Record<string, Record<string, FieldPerm
     filename: { read: 'file:read' },
     digest: { read: 'file:read' },
   },
+  // Why these three: they are result columns of this same entity, so the key that
+  // already opens the Results tab governs them. Leaving them out of the map would
+  // strip them for every caller, and the read models then report null forever.
   submission_results: {
     submission_id: { read: 'submissionresult:read' },
     dataset_id: { read: 'submissionresult:read' },
@@ -33,6 +36,9 @@ export const EXTRA_FIELD_PERMISSION_MAP: Record<string, Record<string, FieldPerm
     public_score: { read: 'submissionresult:read' },
     compilation_outcome: { read: 'submissionresult:read' },
     evaluation_outcome: { read: 'submissionresult:read' },
+    compilation_time: { read: 'submissionresult:read' },
+    compilation_memory: { read: 'submissionresult:read' },
+    scored_at: { read: 'submissionresult:read' },
     compilation_text: { read: 'submissionresult:read' },
     compilation_stdout: { read: 'submissionresult:read' },
     compilation_stderr: { read: 'submissionresult:read' },

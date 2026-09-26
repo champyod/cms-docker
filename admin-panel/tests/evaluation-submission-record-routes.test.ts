@@ -1,16 +1,20 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import en from '@/dictionaries/en.json';
-import { buildSubmissionTabs } from '@/app/[locale]/(authenticated)/evaluation/submissions/[id]/layout';
+import SubmissionRecordLayout, { buildSubmissionTabs } from '@/app/[locale]/(authenticated)/evaluation/submissions/[id]/layout';
 import SubmissionLandingPage from '@/app/[locale]/(authenticated)/evaluation/submissions/[id]/page';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import { buildRoute } from '@/lib/navigation/routes';
 import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
+import { getSubmissionSummary } from '@/lib/evaluation-read-models';
 
 vi.mock('next/navigation', () => ({
   notFound: vi.fn(() => { throw new Error('NEXT_NOT_FOUND'); }),
   redirect: vi.fn((target: string) => { throw new Error(`NEXT_REDIRECT:${target}`); }),
+  usePathname: () => '/en/evaluation/submissions/19/summary',
 }));
 
 vi.mock('@/lib/server/authorization', () => ({
@@ -149,6 +153,52 @@ describe('Submission record tab rail', () => {
   it('conceals the whole rail from a caller without submission:read', () => {
     expect(() => buildSubmissionTabs('en', 19, new Set(['submissionresult:read', 'file:read', 'evaluation:read']), en))
       .toThrow('NEXT_NOT_FOUND');
+  });
+});
+
+let recordHtml = '';
+
+beforeAll(async () => {
+  grant(COMPLETE_RECORD_READER);
+  vi.mocked(getSubmissionSummary).mockResolvedValue({
+    id: 19,
+    timestamp: '2026-02-03T04:05:06.000Z',
+    language: 'cpp',
+    comment: '',
+    official: false,
+    user: null,
+    contest: null,
+    task: null,
+    capabilities: {
+      canUpdate: true,
+      canRecompute: true,
+      canDownload: true,
+      canMoveLane: true,
+    },
+  });
+  const element = await SubmissionRecordLayout({
+    children: createElement('div', null, 'Record body'),
+    params: Promise.resolve({ locale: 'en', id: '19' }),
+  });
+  recordHtml = renderToStaticMarkup(element);
+});
+
+function breadcrumbHrefs(html: string): string[] {
+  const nav = html.slice(html.indexOf('<nav'), html.indexOf('</nav>'));
+  return [...nav.matchAll(/<a[^>]*href="([^"]*)"/g)].map((match) => match[1]);
+}
+
+describe('Submission record breadcrumbs', () => {
+  it('renders two crumbs like the User and Team record layouts', () => {
+    expect(breadcrumbHrefs(recordHtml)).toEqual([
+      '/en/evaluation/submissions',
+      '/en/evaluation/submissions/19',
+    ]);
+  });
+
+  it('never points two crumbs at one URL', () => {
+    const hrefs = breadcrumbHrefs(recordHtml);
+    expect(new Set(hrefs).size).toBe(hrefs.length);
   });
 });
 

@@ -69,7 +69,6 @@ const SUMMARY_STUB: SubmissionSummary = {
     canUpdate: true,
     canRecompute: true,
     canDownload: true,
-    canAssignLane: true,
     canMoveLane: true,
   },
 };

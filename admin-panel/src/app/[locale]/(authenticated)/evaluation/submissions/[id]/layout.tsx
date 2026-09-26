@@ -52,19 +52,19 @@ export function buildSubmissionTabs(
   });
 }
 
+// Why two crumbs: the group label owns the list URL and the record label owns
+// the record URL, which is the shape the User and Team record layouts emit. A
+// third crumb would have to repeat one of those two URLs.
 function submissionRecordBreadcrumbs(
   locale: string,
   submissionId: number,
   dictionary: Dictionary,
 ): readonly BreadcrumbItem[] {
   const evaluationGroup = NAVIGATION_GROUPS.find((group) => group.id === 'evaluation');
-  const submissionsRoute = findRoute('evaluation.submissions');
-  const recordRoute = findRoute('evaluation.submission-record');
   if (!evaluationGroup) notFound();
   return [
     { label: labelForKey(dictionary, evaluationGroup.labelKey), href: buildRoute(locale, 'evaluation.submissions') },
-    { label: labelForDescriptor(dictionary, submissionsRoute), href: buildRoute(locale, 'evaluation.submissions') },
-    { label: labelForDescriptor(dictionary, recordRoute), href: buildRoute(locale, 'evaluation.submission-record', { id: submissionId }) },
+    { label: labelForDescriptor(dictionary, findRoute('evaluation.submission-record')), href: buildRoute(locale, 'evaluation.submission-record', { id: submissionId }) },
   ];
 }
 

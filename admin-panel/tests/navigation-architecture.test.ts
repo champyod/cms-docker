@@ -193,10 +193,7 @@ describe('foundation cutover state', () => {
       expect(pageSource).toContain('getDictionary(locale)');
       expect(pageSource).toContain(directRoute.pageLabelKey);
     }
-    // Why: the Evaluation shell proves the Submission list, the lane module, and
-    // the Submission record landing with its four tabs, so those descriptors join
-    // the direct three and the Contest, Task, User, and Team routes in registry
-    // order.
+    // Why: the Submission record landing and its four tabs have physical routes now.
     const enabledIds = [
       'home',
       'contests.list',
