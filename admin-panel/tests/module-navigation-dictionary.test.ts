@@ -56,6 +56,14 @@ describe('module navigation dictionary parity', () => {
       'navigation.infrastructure.resources.description',
       'navigation.infrastructure.ranking.label',
       'navigation.infrastructure.ranking.description',
+      'navigation.system.appearance.label',
+      'navigation.system.appearance.description',
+      'navigation.system.maintenance.label',
+      'navigation.system.maintenance.description',
+      'navigation.system.settings.label',
+      'navigation.system.settings.description',
+      'navigation.system.docs.label',
+      'navigation.system.docs.description',
     ]) {
       expectLabel(en, key);
       expectLabel(th, key);
@@ -83,6 +91,7 @@ describe('module navigation dictionary parity', () => {
   it.each([
     'src/app/[locale]/(authenticated)/administration/layout.tsx',
     'src/app/[locale]/(authenticated)/infrastructure/layout.tsx',
+    'src/app/[locale]/(authenticated)/system/layout.tsx',
   ])('%s wires its group to the shared module rail', (relativePath) => {
     const source = readSource(relativePath);
     expect(source).toContain('getDictionary(locale)');
@@ -101,6 +110,9 @@ describe('module navigation dictionary parity', () => {
     'src/app/[locale]/(authenticated)/infrastructure/loading.tsx',
     'src/app/[locale]/(authenticated)/infrastructure/error.tsx',
     'src/app/[locale]/(authenticated)/infrastructure/not-found.tsx',
+    'src/app/[locale]/(authenticated)/system/loading.tsx',
+    'src/app/[locale]/(authenticated)/system/error.tsx',
+    'src/app/[locale]/(authenticated)/system/not-found.tsx',
   ])('%s reaches the dictionary without the server-only loader', (relativePath) => {
     const source = readSource(relativePath);
     expect(source).toContain('useDictionary()');

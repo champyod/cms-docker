@@ -135,8 +135,36 @@ const componentGateKeys = once((): Map<string, string[]> => {
 // page that gates with the typed reader is enforcing, not hinting.
 const PAGE_GATE_RE = /\b(?:ensurePermission|checkPermission|requirePermission)\s*\(\s*['"`]([^'"`]+)['"`]/g;
 
-const pageGateKeys = once((): Set<string> => {
+// Why descriptor gates count: a module page that authorizes through
+// authorizeRoutePage enforces the requirement its registry descriptor declares,
+// so the descriptor is the enforcement site and the source holds only the id.
+const ROUTE_GATE_RE = /\bauthorizeRoutePage\s*\(\s*['"`]([^'"`]+)['"`]/g;
+
+const descriptorGateKeys = once((): Set<string> => {
   const keys = new Set<string>();
+  const walk = (dir: string): void => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const abs = path.join(dir, entry.name);
+      if (entry.isDirectory()) { walk(abs); continue; }
+      if (!abs.endsWith('.tsx')) continue;
+      const source = readSource()(abs);
+      ROUTE_GATE_RE.lastIndex = 0;
+      let match: RegExpExecArray | null;
+      while ((match = ROUTE_GATE_RE.exec(source)) !== null) {
+        const descriptor = ROUTE_REGISTRY.find((route) => route.id === match?.[1]);
+        if (!descriptor) throw new Error(`Gated page names an undeclared route: ${match[1]}`);
+        for (const key of [...(descriptor.permission.all ?? []), ...(descriptor.permission.any ?? [])]) {
+          keys.add(key);
+        }
+      }
+    }
+  };
+  walk(path.join(SRC_DIR, 'app'));
+  return keys;
+});
+
+const pageGateKeys = once((): Set<string> => {
+  const keys = descriptorGateKeys();
   const walk = (dir: string): void => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const abs = path.join(dir, entry.name);
@@ -300,8 +328,9 @@ describe('permission coverage', () => {
     // isRoutePermitted, and a requirement-free route is permitted for anyone, so
     // asserting an empty requirement per visible route holds by construction. The
     // exact visible ID set is the form that can actually fail when a route is
-    // enabled whose gate does not reach the sidebar surface.
-    expect(visibleRoutes(empty, 'sidebar').map((route) => route.id)).toEqual(['home']);
+    // enabled whose gate does not reach the sidebar surface. Home and Docs are the
+    // two authenticated-public targets, so a keyless caller sees exactly those.
+    expect(visibleRoutes(empty, 'sidebar').map((route) => route.id)).toEqual(['home', 'system.docs']);
   });
 
   it('uses only registry keys in frontend permission checks', () => {

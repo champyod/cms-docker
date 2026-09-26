@@ -116,8 +116,18 @@ describe('permittedNavItems', () => {
     expect(items.map((item) => item.id)).toEqual(['administration.admins']);
   });
 
-  it('omits every route of a group whose descriptors are still disabled', () => {
-    expect(permittedNavItems('system', 'en', en, new Set(['all:all']))).toEqual([]);
+  it('builds the system rail from the same helper, Docs last', () => {
+    expect(permittedNavItems('system', 'en', en, new Set(['all:all']))).toEqual([
+      { id: 'system.appearance', label: en.navigation.system.appearance.label, href: '/en/system/appearance' },
+      { id: 'system.maintenance', label: en.navigation.system.maintenance.label, href: '/en/system/maintenance' },
+      { id: 'system.settings', label: en.navigation.system.settings.label, href: '/en/system/settings' },
+      { id: 'system.docs', label: en.navigation.system.docs.label, href: '/en/system/docs' },
+    ]);
+  });
+
+  it('omits a gated system route the reader may not open while keeping public Docs', () => {
+    const items = permittedNavItems('system', 'en', en, new Set(['backup:create']));
+    expect(items.map((item) => item.id)).toEqual(['system.maintenance', 'system.docs']);
   });
 });
 

@@ -58,10 +58,10 @@ export const EXPECTED_ROUTE_MANIFEST: readonly RouteFixture[] = [
   { id: 'infrastructure.resources', path: '/infrastructure/resources', kind: 'page', tabIds: [], legacyPaths: ['/resources'], enabled: true },
   { id: 'infrastructure.ranking', path: '/infrastructure/ranking', kind: 'page', tabIds: [], legacyPaths: ['/ranking'], enabled: true },
 
-  { id: 'system.appearance', path: '/system/appearance', kind: 'page', tabIds: [], legacyPaths: ['/appearance'], enabled: false },
-  { id: 'system.maintenance', path: '/system/maintenance', kind: 'page', tabIds: [], legacyPaths: ['/maintenance'], enabled: false },
-  { id: 'system.settings', path: '/system/settings', kind: 'page', tabIds: [], legacyPaths: ['/settings'], enabled: false },
-  { id: 'system.docs', path: '/system/docs', kind: 'page', tabIds: [], legacyPaths: ['/docs'], enabled: false },
+  { id: 'system.appearance', path: '/system/appearance', kind: 'page', tabIds: [], legacyPaths: ['/appearance'], enabled: true },
+  { id: 'system.maintenance', path: '/system/maintenance', kind: 'page', tabIds: [], legacyPaths: ['/maintenance'], enabled: true },
+  { id: 'system.settings', path: '/system/settings', kind: 'page', tabIds: [], legacyPaths: ['/settings'], enabled: true },
+  { id: 'system.docs', path: '/system/docs', kind: 'page', tabIds: [], legacyPaths: ['/docs'], enabled: true },
   { id: 'system.search', path: '/search', kind: 'search', tabIds: [], legacyPaths: [], enabled: false },
 ];
 

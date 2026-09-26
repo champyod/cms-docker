@@ -250,16 +250,8 @@ describe('foundation cutover state', () => {
     }
   });
 
-  it('enables Administration and Infrastructure module descriptors in Task 2', () => {
-    expectModuleState([
-      'administration.admins',
-      'administration.groups',
-      'administration.audit',
-      'infrastructure.deployments',
-      'infrastructure.containers',
-      'infrastructure.resources',
-      'infrastructure.ranking',
-    ]);
+  it('enables all 11 module descriptors after Task 3', () => {
+    expectModuleState(MODULE_ROUTE_IDS);
   });
 
   it('keeps Sidebar, palette, and mobile on the old registry', () => {

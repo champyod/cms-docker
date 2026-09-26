@@ -78,6 +78,13 @@ const INFRASTRUCTURE_ROUTE_IDS = [
   'infrastructure.ranking',
 ] as const satisfies readonly RouteId[];
 
+const SYSTEM_ROUTE_IDS = [
+  'system.appearance',
+  'system.maintenance',
+  'system.settings',
+  'system.docs',
+] as const satisfies readonly RouteId[];
+
 function tabIdsVisibleTo(effective: ReadonlySet<string>): string[] {
   return ROUTE_REGISTRY
     .filter((route) => route.kind === 'nested-tab')
@@ -114,9 +121,9 @@ describe('target route registry', () => {
     const directIds = DIRECT_ROUTE_CASES.map(({ routeId }) => routeId);
     // Why: the Evaluation shell proves the Submission list, the lane module, and
     // the Submission record landing with its four tabs, and the Administration
-    // group proves Admins, Groups, and Audit, so those descriptors join the
-    // direct three and the Contest, Task, User, and Team routes in registry
-    // order.
+    // and System groups prove Admins, Groups, Audit, Appearance, Maintenance,
+    // Settings, and Docs, so those descriptors join the direct three and the
+    // Contest, Task, User, and Team routes in registry order.
     const enabledIds = [
       'home',
       'contests.list',
@@ -151,23 +158,26 @@ describe('target route registry', () => {
       'evaluation.lanes',
       ...ADMINISTRATION_ROUTE_IDS,
       ...INFRASTRUCTURE_ROUTE_IDS,
+      ...SYSTEM_ROUTE_IDS,
     ];
     const enabledIdSet = new Set<string>(enabledIds);
     expect(ROUTE_REGISTRY.filter((route) => route.enabled).map((route) => route.id)).toEqual(enabledIds);
     expect(ROUTE_REGISTRY.filter((route) => !enabledIdSet.has(route.id)).every((route) => !route.enabled)).toBe(true);
     // Why: page surfaces are group-scoped, so the sidebar equality is scoped to
-    // the module IDs this registry owns — a People, Evaluation, or System entry
-    // owned by another slice would otherwise make the complete visible list look
+    // the module IDs this registry owns — a People or Evaluation entry owned by
+    // another slice would otherwise make the complete visible list look
     // incomplete.
     const sidebarIds = visibleRoutes(new Set(['all:all']), 'sidebar').map((route) => route.id);
     expect(sidebarIds.slice(0, directIds.length)).toEqual(directIds);
-    const administrationIds = new Set<RouteId>([
+    const moduleIds = new Set<RouteId>([
       ...ADMINISTRATION_ROUTE_IDS,
       ...INFRASTRUCTURE_ROUTE_IDS,
+      ...SYSTEM_ROUTE_IDS,
     ]);
-    expect(sidebarIds.filter((id) => administrationIds.has(id))).toEqual([
+    expect(sidebarIds.filter((id) => moduleIds.has(id))).toEqual([
       ...ADMINISTRATION_ROUTE_IDS,
       ...INFRASTRUCTURE_ROUTE_IDS,
+      ...SYSTEM_ROUTE_IDS,
     ]);
   });
 

@@ -104,6 +104,7 @@ describe('module tab and route permission parity', () => {
     expect(routePermits('infrastructure.containers', new Set(['container:control']))).toBe(false);
     expect(routePermits('infrastructure.ranking', new Set(['ranking:snapshot']))).toBe(false);
     expect(routePermits('system.appearance', new Set(['appearance:update']))).toBe(false);
+    expect(routePermits('system.settings', new Set(['env:update']))).toBe(false);
     expect(routePermits('system.settings', new Set(['settings:update']))).toBe(false);
     expect(routePermits('system.maintenance', new Set(['maintenance:enable']))).toBe(false);
   });

@@ -19,6 +19,7 @@ import { ContainerRow } from '@/components/containers/ContainerRow';
 import { useContainersController } from '@/components/containers/useContainersController';
 import { useDictionary } from '@/hooks/useDictionary';
 import { interpolate } from '@/lib/interpolate';
+import { buildRoute } from '@/lib/navigation/routes';
 import { cn } from '@/lib/utils';
 import type { ModulePageCopy } from '@/components/navigation/ModulePageCopy';
 
@@ -35,6 +36,7 @@ export function ContainersClient({ copy }: ContainersClientProps): React.JSX.Ele
   const controller = useContainersController();
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
+  const docsPath = buildRoute(locale, 'system.docs');
 
   const breadcrumbs = [
     { label: copy.group },
@@ -65,7 +67,7 @@ export function ContainersClient({ copy }: ContainersClientProps): React.JSX.Ele
       <div className="space-y-8">
         <div className="flex justify-end">
           <Link
-            href={`/${locale}/docs#services`}
+            href={`${docsPath}#services`}
             className="flex h-11 w-11 items-center justify-center p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground"
             title={dict.docs.viewDocumentation}
           >

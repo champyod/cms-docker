@@ -70,11 +70,22 @@ describe('the rebuild command stays inside what the Makefile offers', () => {
     expect(await readMakefile()).toContain('DEPLOYMENT_TYPE_OVERRIDE');
   });
   it('does not load configuration for backup-only operators', async (): Promise<void> => {
-    const source = await fs.readFile(
-      path.join(repoRoot, 'admin-panel/src/app/[locale]/(authenticated)/maintenance/MaintenanceClient.tsx'),
-      'utf-8',
-    );
-    expect(source).toContain("hasEffectivePermission(effective, 'maintenance:update')");
-    expect(source).toContain('if (canConfigure)');
+    const [controller, actions, page] = await Promise.all([
+      fs.readFile(
+        path.join(repoRoot, 'admin-panel/src/components/system/useMaintenanceController.ts'),
+        'utf-8',
+      ),
+      fs.readFile(
+        path.join(repoRoot, 'admin-panel/src/components/system/maintenance-actions.ts'),
+        'utf-8',
+      ),
+      fs.readFile(
+        path.join(repoRoot, 'admin-panel/src/app/[locale]/(authenticated)/system/maintenance/page.tsx'),
+        'utf-8',
+      ),
+    ]);
+    expect(page).toContain("authorizeRoutePage('system.maintenance')");
+    expect(controller).toContain("hasEffectivePermission(effective, 'maintenance:update')");
+    expect(actions).toContain('if (canConfigure)');
   });
 });

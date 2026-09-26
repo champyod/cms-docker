@@ -1,23 +1,29 @@
-import { checkPermission, getPermissions } from '@/lib/permissions';
-import { notFound } from 'next/navigation';
-import MaintenanceClient from './MaintenanceClient';
+import { notFound, redirect } from 'next/navigation';
 
-export default async function MaintenancePage({
+import { getRoutePermissions } from '@/lib/navigation/page-authorization';
+import { resolveLegacyRedirect } from '@/lib/navigation/redirects';
+import { AuthorizationError } from '@/lib/server/authorization';
+
+const LEGACY_PATH = '/maintenance';
+
+/**
+ * Why this route still exists: the Maintenance screen keeps its old address so
+ * existing bookmarks, chord history, and links land on the canonical module
+ * route. Only a reader whose permissions fail closed is concealed; a 401 and any
+ * unexpected storage failure keep propagating.
+ */
+export default async function MaintenanceRedirectPage({
   params,
 }: {
   params: Promise<{ locale: string }>;
-}) {
-  await params;
-  // Why OR: backup operators (backup:create, no maintenance:update) must reach
-  // the backup controls; full maintainers keep access via maintenance:update.
-  const canConfigure = await checkPermission('maintenance:update', false);
-  const canBackUp = await checkPermission('backup:create', false);
-
-  // Why: return 404 for forbidden access so existence is indistinguishable from missing page
-  if (!canConfigure && !canBackUp) {
-    notFound();
+}): Promise<never> {
+  try {
+    const [{ locale }, effective] = await Promise.all([params, getRoutePermissions()]);
+    const target = resolveLegacyRedirect(locale, LEGACY_PATH, effective);
+    if (target === null) notFound();
+    redirect(target);
+  } catch (error: unknown) {
+    if (error instanceof AuthorizationError && error.status === 403) notFound();
+    throw error;
   }
-
-  const permissions = await getPermissions();
-  return <MaintenanceClient permissionKeys={Array.from(permissions)} />;
 }

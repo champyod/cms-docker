@@ -6,11 +6,12 @@ import NextImage from 'next/image';
 
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
-import { PageContent, PageHeader } from '@/components/core/Layout';
+import { PageSurface } from '@/components/core/PageSurface';
 import { Tabs } from '@/components/core/Tabs';
 import { toast } from 'sonner';
 import { readConfigToml, updateConfigToml } from '@/app/actions/appearance';
 import { useDisplayDensity } from '@/hooks/useDisplayDensity';
+import type { ModulePageCopy } from '@/components/navigation/ModulePageCopy';
 import type { DensityPreference, TextSizePreference } from '@/lib/display-density';
 
 type TabKey = 'branding' | 'services' | 'display';
@@ -183,7 +184,7 @@ function ServicesTab({ values }: { values: Record<string, string> }) {
   );
 }
 
-export function AppearanceClient({ locale }: { locale: string }) {
+export function AppearanceClient({ locale, copy }: { locale: 'en' | 'th'; copy: ModulePageCopy }): React.JSX.Element {
   void locale;
   const [active, setActive] = useState<TabKey>('branding');
   const [values, setValues] = useState<Record<string, string>>({});
@@ -236,8 +237,11 @@ export function AppearanceClient({ locale }: { locale: string }) {
   }, [branding]);
 
   return (
-    <PageContent>
-      <PageHeader title="Appearance" description="Branding and system service customization from config.toml (read-only preview, save edits where enabled)." />
+    <PageSurface
+      breadcrumbs={[{ label: copy.group }, { label: copy.title }]}
+      title={copy.title}
+      description={copy.description}
+    >
       <AppearanceTabs active={active} onChange={setActive} />
       {active === 'branding' ? (
         <BrandingTab branding={branding} onFieldChange={handleFieldChange} onSave={handleSave} saving={saving} logoPreview={logoPreview} />
@@ -246,6 +250,6 @@ export function AppearanceClient({ locale }: { locale: string }) {
       ) : (
         <DisplayTab />
       )}
-    </PageContent>
+    </PageSurface>
   );
 }
