@@ -3,11 +3,12 @@
 import { useCallback, useMemo } from 'react';
 import { Pencil, Trash2, Users } from 'lucide-react';
 
-import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
 import { ResponsiveTable } from '@/components/core/ResponsiveTable';
+import { RowActions, rowActionGroupLabel } from '@/components/core/RowActions';
 import { Skeleton } from '@/components/core/Skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
+import { useDictionary } from '@/hooks/useDictionary';
 import { ROW_SELECTED_CLASSES } from '@/hooks/shortcut-rows';
 import { CHECKBOX_CLASS, buildUserColumns, getUserRowProps } from './userColumns';
 import type { UserRow, UserTableProps } from './userTableTypes';
@@ -25,6 +26,7 @@ export function UserTable({
   onEdit,
   onDelete,
 }: UserTableProps) {
+  const dict = useDictionary();
   const allSelected = users.length > 0 && users.every((user) => selectedIds.has(user.id));
 
   const rows = useMemo<UserRow[]>(
@@ -47,30 +49,17 @@ export function UserTable({
       if (!canManageUsers) return null;
       const { user } = row;
       return (
-        <span onClick={(event) => event.stopPropagation()}>
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={Pencil}
-            iconOnly
-            tooltip={`Edit user ${user.username}`}
-            data-shortcut-primary
-            className="min-h-11 min-w-11"
-            onClick={() => onEdit(user)}
-          />
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={Trash2}
-            iconOnly
-            tooltip={`Delete user ${user.username}`}
-            className="min-h-11 min-w-11"
-            onClick={() => onDelete(user.id)}
-          />
-        </span>
+        <RowActions
+          ariaLabel={rowActionGroupLabel(dict, 'users')}
+          primaryActionKey="edit"
+          actions={[
+            { key: 'edit', label: `Edit user ${user.username}`, icon: Pencil, onClick: () => onEdit(user), className: 'min-h-11 min-w-11' },
+            { key: 'delete', label: `Delete user ${user.username}`, icon: Trash2, onClick: () => onDelete(user.id), className: 'min-h-11 min-w-11' },
+          ]}
+        />
       );
     },
-    [canManageUsers, onEdit, onDelete],
+    [canManageUsers, dict, onEdit, onDelete],
   );
 
   if (loading && users.length === 0) {

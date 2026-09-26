@@ -26,6 +26,16 @@ export interface RowAction {
 export interface RowActionsProps {
   readonly actions: readonly RowAction[];
   readonly ariaLabel: string;
+  /**
+   * The `RowAction.key` the j/k shortcut activates for this row.
+   *
+   * Why a key and not a flag on the action: `hooks/shortcut-rows` resolves the
+   * marker with `querySelector`, so two flagged actions would leave the first
+   * silently winning. Naming the key keeps "exactly one primary" true by
+   * construction, and a key matching nothing is a contract error rather than a
+   * shortcut that quietly stops reaching the row.
+   */
+  readonly primaryActionKey?: string;
   readonly className?: string;
 }
 
@@ -59,7 +69,10 @@ export function rowActionGroupLabel(dictionary: Dictionary, listType: RowActionG
  * Why propagation stops here: the surrounding row is itself clickable, so an
  * action click would open the record on top of running the action.
  */
-export function RowActions({ actions, ariaLabel, className }: RowActionsProps): React.JSX.Element {
+export function RowActions({ actions, ariaLabel, primaryActionKey, className }: RowActionsProps): React.JSX.Element {
+  if (primaryActionKey !== undefined && !actions.some((action) => action.key === primaryActionKey)) {
+    throw new Error(`RowActions: primaryActionKey "${primaryActionKey}" matches no action`);
+  }
   const visible = actions.filter((action) => action.isVisible !== false);
   return (
     <div
@@ -78,6 +91,7 @@ export function RowActions({ actions, ariaLabel, className }: RowActionsProps): 
           tooltip={action.label}
           aria-label={action.ariaLabel ?? action.label}
           className={action.className}
+          data-shortcut-primary={action.key === primaryActionKey ? true : undefined}
           disabled={action.disabled}
           loading={action.loading}
           onClick={action.onClick}

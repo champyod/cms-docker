@@ -1,9 +1,11 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { Pencil, Trash2 } from 'lucide-react';
 
 import en from '@/dictionaries/en.json';
 import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
+import { RowActions } from '@/components/core/RowActions';
 import { AdminRowActions } from '@/components/admins/AdminRowActions';
 import type { AdminCapabilities } from '@/components/admins/adminCapabilities';
 import { ContainerRow } from '@/components/containers/ContainerRow';
@@ -207,9 +209,27 @@ describe('task row actions', () => {
     expect(onRowClick).not.toHaveBeenCalled();
   });
 
-  it('hides delete on the desktop row for a reader without task:delete', () => {
+  // Why both layouts are asserted: the card used to gate Delete on update alone, so a reader
+  // with task:update and no task:delete saw a Delete button the server action always refused.
+  it('offers delete in both layouts only for a reader holding task:delete', () => {
     render(withDictionary(taskList(['task:update'])));
-    expect(screen.getAllByRole('button', { name: 'Delete task' })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Delete task' })).toBeNull();
     expect(screen.getAllByRole('button', { name: 'Edit task' })).toHaveLength(2);
+    cleanup();
+    render(withDictionary(taskList(['task:update', 'task:delete'])));
+    expect(screen.getAllByRole('button', { name: 'Delete task' })).toHaveLength(2);
+  });
+});
+
+describe('the primary marker key', () => {
+  it('stays valid while a gate hides the action it names', () => {
+    // Why the hidden edit: the key is checked against every action, not the visible ones, so a
+    // permission gate on the primary action must not turn into a throw on the next render.
+    render(withDictionary(<RowActions ariaLabel="User actions" primaryActionKey="edit" actions={[
+      { key: 'edit', label: 'Edit', icon: Pencil, onClick: () => undefined, isVisible: false },
+      { key: 'delete', label: 'Delete', icon: Trash2, onClick: () => undefined },
+    ]} />));
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Delete' }).hasAttribute('data-shortcut-primary')).toBe(false);
   });
 });

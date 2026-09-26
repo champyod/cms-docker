@@ -202,6 +202,26 @@ describe('RowAction per-action contracts', () => {
   });
 });
 
+describe('RowActions primary marker contracts', () => {
+  it('marks the named action and no other', () => {
+    render(<RowActions ariaLabel="User actions" primaryActionKey="delete" actions={EDIT_DELETE} />);
+    expect(screen.getByRole('button', { name: 'Delete' }).getAttribute('data-shortcut-primary')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Edit' }).hasAttribute('data-shortcut-primary')).toBe(false);
+  });
+
+  it('marks nothing when no key is given', () => {
+    render(<RowActions ariaLabel="Task actions" actions={EDIT_DELETE} />);
+    for (const action of EDIT_DELETE) expect(screen.getByRole('button', { name: action.label }).hasAttribute('data-shortcut-primary')).toBe(false);
+  });
+
+  // Why the throw: a key matching nothing disables the j/k shortcut silently, so a typo has to
+  // surface at the call site instead of degrading the keyboard path.
+  it('fails loudly when the key names no action rather than marking nothing', () => {
+    expect(() => render(<RowActions ariaLabel="User actions" primaryActionKey="archive" actions={EDIT_DELETE} />))
+      .toThrow(/primaryActionKey "archive" matches no action/);
+  });
+});
+
 describe('StatusCard dictionary contract', () => {
   it('reads every verdict from the dictionary in both locales', () => {
     const statuses: readonly StatusCardStatus[] = ['healthy', 'degraded', 'offline', 'unknown'];

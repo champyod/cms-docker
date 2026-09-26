@@ -120,12 +120,12 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
               <MobileCardRow label="Title" value={task.title} />
               <MobileCardRow label="Contest" value={task.contests ? task.contests.name : 'Unassigned'} />
               <MobileCardRow label="Submissions" value={task._count?.submissions ?? 0} />
-              {/* Why both flags are set: the card gates the whole pair on update, so delete is never hidden here. */}
+              {/* Why the edit flag is constant: the cluster itself is gated on update, so only delete needs its own gate. */}
               {canManageTasks && (
                 <RowActions
                   ariaLabel={rowActionGroupLabel(dict, 'tasks')}
                   className="justify-end gap-2 pt-2"
-                  actions={buildTaskRowActions(task, { edit: true, delete: true }, handleEdit, handleDelete)}
+                  actions={buildTaskRowActions(task, { edit: true, delete: canDeleteTasks }, handleEdit, handleDelete)}
                 />
               )}
             </MobileCard>
