@@ -395,6 +395,33 @@ describe('People reader relations and gates', () => {
   });
 });
 
+// Why official and language are pinned beside score: all three sit on one submission
+// row, but only score rides the submission_results relation, so moving either
+// submissions column onto submissionresult:read would leak nothing and still pass
+// a score-only assertion.
+const SCORE_READER = [...HISTORY_READER, 'submissionresult:read'];
+
+async function serveHistoryFor(keys: readonly string[]): Promise<Awaited<ReturnType<typeof getUserHistory>>> {
+  grant(keys);
+  mockHistoryUser(LAST_LOGIN);
+  mockQueryRaw.mockResolvedValue([] as never);
+  return getUserHistory(9);
+}
+
+describe('User history score gating', () => {
+  it('withholds the score from a submission:read-only caller and keeps the submission fields', async () => {
+    const history = await serveHistoryFor(HISTORY_READER);
+
+    expect(history?.submissions[0]).toMatchObject({ id: 19, language: 'cpp', official: true, score: null });
+  });
+
+  it('carries the score for a caller that also holds submissionresult:read', async () => {
+    const history = await serveHistoryFor(SCORE_READER);
+
+    expect(history?.submissions[0]).toMatchObject({ id: 19, language: 'cpp', official: true, score: 80 });
+  });
+});
+
 // Why: a non-null memory column is the shape that made a BigInt reachable, and the
 // non-null values are exactly the ones the existing list fixture never sets.
 const SUBMISSION_ROW = {
