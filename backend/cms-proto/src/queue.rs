@@ -6,11 +6,11 @@
 //! instead of rebuilding. [`IndexedQueue`] is the same two structures and
 //! [`crate::QueueKey`] supplies the tuple, so both sides pop the same entry next.
 //!
-//! The invariant the type rests on: `positions` is written in exactly one place,
-//! `swap`, so the map mirrors the heap after every exchange by construction
-//! rather than by a rule each caller has to remember. Each of push, pop, remove
-//! and `set_priority` then repairs the heap along the one path the moved entry
-//! could have disturbed.
+//! The invariant the type rests on: every exchange of two positions is written
+//! in exactly one place, `swap`, so the map mirrors the heap after any exchange
+//! by construction rather than by a rule each caller has to remember. The only
+//! other write is the tail insert `push` makes when it appends; push, pop,
+//! remove and `set_priority` each repair whatever path a move could disturb.
 
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -59,8 +59,8 @@ pub struct QueueEntry<T> {
 pub struct IndexedQueue<T> {
     /// The min-heap; the next to dispatch is at index 0.
     heap: Vec<QueueEntry<T>>,
-    /// Reverse lookup from item to its position, written only by `swap`: a stale
-    /// position is what makes a queue hand out the wrong item.
+    /// Reverse lookup from item to its position, kept in step by `swap` on every
+    /// exchange: a stale position is what makes a queue hand out the wrong item.
     positions: HashMap<T, usize>,
     /// Enqueue sequence number, never reused, so a returning item orders behind later arrivals.
     next_index: u64,
