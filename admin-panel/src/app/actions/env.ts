@@ -57,8 +57,22 @@ export async function readEnvFile(filename: string) {
       }
     });
 
+    await recordAudit({
+      verb: 'env:view',
+      entity: 'env',
+      // Why keys only: this read hands back every value in the file, secrets included, so the
+      // audit row records which keys were exposed and never what they hold.
+      afterValues: { filename, requestedKeys: Object.keys(config) },
+      result: 'success',
+    });
     return { success: true, content, config };
   } catch (error) {
+    await recordAudit({
+      verb: 'env:view',
+      entity: 'env',
+      afterValues: { filename, error: error instanceof Error ? error.name : 'UnknownError' },
+      result: 'failure',
+    });
     return { success: false, error: (error as Error).message };
   }
 }
@@ -113,8 +127,23 @@ export async function readConfigTomlValues(
   }
   try {
     const content = await fs.readFile(path.join(getRepoRoot(), CONFIG_TOML_FILE), 'utf-8');
-    return { success: true, values: extractConfigTomlValues(content, keys) };
+    const values = extractConfigTomlValues(content, keys);
+    await recordAudit({
+      verb: 'config:view',
+      entity: 'config',
+      // Keys only, as on env:update: the read sections hold credentials (POSTGRES_PASSWORD,
+      // RANKING_PASSWORD), so the row names the sections asked for and never their values.
+      afterValues: { file: CONFIG_TOML_FILE, requestedKeys: keys.map(({ section, key }) => `${section}.${key}`) },
+      result: 'success',
+    });
+    return { success: true, values };
   } catch (error) {
+    await recordAudit({
+      verb: 'config:view',
+      entity: 'config',
+      afterValues: { file: CONFIG_TOML_FILE, error: error instanceof Error ? error.name : 'UnknownError' },
+      result: 'failure',
+    });
     return { success: false, error: (error as Error).message };
   }
 }
@@ -168,8 +197,23 @@ export async function readActiveContestId(): Promise<{ success: true; contestId:
     // config.toml is the source of truth; reading the generated env file here made the
     // display lag the value the panel just wrote and drift from a config sync.
     const content = await fs.readFile(path.join(getRepoRoot(), CONFIG_TOML_FILE), 'utf-8');
-    return { success: true, contestId: readContestId(content) };
+    const contestId = readContestId(content);
+    await recordAudit({
+      verb: 'config:view',
+      entity: 'config',
+      // The id, matching what writeActiveContestId records, is what a page load that lands here
+      // looked up: it names the active contest without exposing the rest of the file.
+      afterValues: { file: CONFIG_TOML_FILE, [CONTEST_ID_KEY]: contestId },
+      result: 'success',
+    });
+    return { success: true, contestId };
   } catch (error) {
+    await recordAudit({
+      verb: 'config:view',
+      entity: 'config',
+      afterValues: { file: CONFIG_TOML_FILE, error: error instanceof Error ? error.name : 'UnknownError' },
+      result: 'failure',
+    });
     return { success: false, error: (error as Error).message };
   }
 }
