@@ -143,7 +143,60 @@
   },
   "resources": {
     "title": "Resource Control",
-    "subtitle": "Monitor and manage main server resources and distributed worker activity."
+    "subtitle": "Monitor and manage main server resources and distributed worker activity.",
+    "loading": "Loading system metrics...",
+    "cpuUsage": "CPU Usage",
+    "memoryUsage": "RAM Usage",
+    "hostSource": "(Host)",
+    "containerSource": "(Container)",
+    "workerNodes": "Worker Nodes",
+    "systemMetrics": "System Metrics",
+    "uptime": "Uptime",
+    "loadAvg": "Load Avg",
+    "networkTotal": "Network Total"
+  },
+  "containers": {
+    "upAll": "Up All",
+    "selected": "{count} selected",
+    "clearSelection": "Clear selection",
+    "restartSelection": "Restart selected containers",
+    "stopSelection": "Stop selected containers",
+    "logsSelection": "View logs for selection",
+    "discordBadge": "Discord not configured",
+    "discordWarning": "Discord not configured — notifications will be skipped",
+    "stats": {
+      "total": "Total",
+      "running": "Running",
+      "stopped": "Stopped",
+      "uptime": "Uptime"
+    },
+    "activeContainers": "Active Containers",
+    "emptyTitle": "No Docker containers found on this host.",
+    "restart": "Restart",
+    "remove": "Remove",
+    "logs": "Logs",
+    "bulk": {
+      "selectedDescription": "{count} containers selected",
+      "cancel": "Cancel",
+      "restartTitle": "Confirm Restart",
+      "restartDescription": "This will restart the selected containers and their dependents.",
+      "restartPreviewLabel": "This will restart:",
+      "restartDependents": "Includes dependent services via restart policies",
+      "restartConfirm": "Confirm Restart",
+      "stopTitle": "Confirm Stop",
+      "stopDescription": "This will stop the selected containers. You can start them again from the control center.",
+      "stopConfirm": "Confirm Stop",
+      "logsTitle": "View Logs",
+      "logsDescription": "Open logs for the first selected container. Use individual rows for more containers.",
+      "logsConfirm": "View Logs"
+    }
+  },
+  "deployments": {
+    "refresh": "Refresh"
+  },
+  "ranking": {
+    "refreshSnapshot": "Refresh Snapshot",
+    "disconnect": "Disconnect"
   },
   "settings": {
     "title": "System Settings",
@@ -384,6 +437,39 @@
       "envWriteFailed": "{configToml} was updated, but writing {envFile} failed: {error}",
       "noWebhookUrl": "No webhook URL to test — enter one and save it, or set DISCORD_WEBHOOK_URL in config.toml [infra].",
       "deliveryFailed": "Delivery failed"
+    },
+    "containers": {
+      "errorTitle": "Error",
+      "restartFailedFallback": "Failed to restart container",
+      "stopFailedFallback": "Failed to stop container",
+      "restartTriggered": "Restart triggered for {count} containers",
+      "stopTriggered": "Stop triggered for {count} containers",
+      "controlSucceeded": "Container {action} completed successfully",
+      "composeSucceeded": "Compose {action} completed",
+      "autoRestartEnabled": "Auto-restart enabled",
+      "autoRestartDisabled": "Auto-restart disabled",
+      "restartCountReset": "Restart count reset",
+      "discordEnabled": "Discord notifications enabled",
+      "discordDisabled": "Discord notifications disabled",
+      "discordNotConfiguredTitle": "Discord not configured",
+      "discordNotConfiguredDescription": "Webhook is empty — notifications will be skipped until configured in settings."
+    },
+    "ranking": {
+      "logoUpdatedTitle": "Logo updated",
+      "logoUpdatedDescription": "Ranking logo hot reloaded",
+      "uploadFailedTitle": "Upload failed",
+      "uploadFailedFallback": "Failed to upload logo",
+      "snapshotFailed": "Failed to fetch ranking snapshot",
+      "sessionFailed": "Failed to load ranking session",
+      "connectFailed": "Failed to connect ranking",
+      "disconnectFailed": "Failed to disconnect ranking"
+    },
+    "deploySettings": {
+      "saveFailedTitle": "Save Failed",
+      "saveFailedFallback": "Could not update config.toml",
+      "savedTitle": "Settings Saved",
+      "savedDescription": "Contest settings updated.",
+      "unexpectedErrorTitle": "Unexpected Error"
     }
   },
   "live": {
@@ -398,6 +484,7 @@
       "description": "The data could not be loaded. Retry the request."
     },
     "loading": {
+      "deployments": "Loading contest deployment...",
       "people": "Loading people...",
       "evaluation": "Loading evaluation...",
       "userProfile": "Loading user profile...",

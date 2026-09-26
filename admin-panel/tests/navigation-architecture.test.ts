@@ -250,11 +250,15 @@ describe('foundation cutover state', () => {
     }
   });
 
-  it('enables only the Administration module descriptors in Task 1', () => {
+  it('enables Administration and Infrastructure module descriptors in Task 2', () => {
     expectModuleState([
       'administration.admins',
       'administration.groups',
       'administration.audit',
+      'infrastructure.deployments',
+      'infrastructure.containers',
+      'infrastructure.resources',
+      'infrastructure.ranking',
     ]);
   });
 

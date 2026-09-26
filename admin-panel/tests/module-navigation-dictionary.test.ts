@@ -46,6 +46,22 @@ describe('module navigation dictionary parity', () => {
     }
   });
 
+  it('resolves the module page copy for every enabled module page in both locales', () => {
+    for (const key of [
+      'navigation.infrastructure.deployments.label',
+      'navigation.infrastructure.deployments.description',
+      'navigation.infrastructure.containers.label',
+      'navigation.infrastructure.containers.description',
+      'navigation.infrastructure.resources.label',
+      'navigation.infrastructure.resources.description',
+      'navigation.infrastructure.ranking.label',
+      'navigation.infrastructure.ranking.description',
+    ]) {
+      expectLabel(en, key);
+      expectLabel(th, key);
+    }
+  });
+
   it('resolves the module state-surface labels in both locales', () => {
     for (const key of [
       'navigation.states.loading',
@@ -60,6 +76,7 @@ describe('module navigation dictionary parity', () => {
 
   it.each([
     'src/app/[locale]/(authenticated)/administration/layout.tsx',
+    'src/app/[locale]/(authenticated)/infrastructure/layout.tsx',
   ])('%s resolves registry label keys through the dictionary', (relativePath) => {
     const source = readSource(relativePath);
     expect(source).toContain('getDictionary(locale)');
@@ -70,6 +87,9 @@ describe('module navigation dictionary parity', () => {
     'src/app/[locale]/(authenticated)/administration/loading.tsx',
     'src/app/[locale]/(authenticated)/administration/error.tsx',
     'src/app/[locale]/(authenticated)/administration/not-found.tsx',
+    'src/app/[locale]/(authenticated)/infrastructure/loading.tsx',
+    'src/app/[locale]/(authenticated)/infrastructure/error.tsx',
+    'src/app/[locale]/(authenticated)/infrastructure/not-found.tsx',
   ])('%s reaches the dictionary without the server-only loader', (relativePath) => {
     const source = readSource(relativePath);
     expect(source).toContain('useDictionary()');

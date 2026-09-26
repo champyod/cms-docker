@@ -1,21 +1,30 @@
-import { checkPermission, getPermissions } from '@/lib/permissions';
-import { notFound } from 'next/navigation';
-import { RankingClient } from '@/components/ranking/RankingClient';
+import { notFound, redirect } from 'next/navigation';
 
-export default async function RankingPage({
+import { getRoutePermissions } from '@/lib/navigation/page-authorization';
+import { resolveLegacyRedirect } from '@/lib/navigation/redirects';
+import { AuthorizationError } from '@/lib/server/authorization';
+
+const LEGACY_PATH = '/ranking';
+
+/**
+ * Why this route still exists: the Secure Ranking screen keeps its old address so
+ * existing bookmarks, chord history, and links land on the canonical module
+ * route. Only a reader whose permissions fail closed is concealed; a 401 and any
+ * unexpected storage failure keep propagating.
+ */
+export default async function RankingRedirectPage({
   params,
 }: {
   params: Promise<{ locale: string }>;
-}) {
-  await params;
-  const hasPermission =
-    (await checkPermission('ranking:list', false)) &&
-    (await checkPermission('ranking:read', false));
-
-  // Why: return 404 for forbidden access so existence is indistinguishable from missing page
-  if (!hasPermission) {
-    notFound();
+}): Promise<never> {
+  try {
+    const { locale } = await params;
+    const effective = await getRoutePermissions();
+    const target = resolveLegacyRedirect(locale, LEGACY_PATH, effective);
+    if (target === null) notFound();
+    redirect(target);
+  } catch (error: unknown) {
+    if (error instanceof AuthorizationError && error.status === 403) notFound();
+    throw error;
   }
-
-  return <RankingClient permissionKeys={[...(await getPermissions())]} />;
 }

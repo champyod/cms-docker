@@ -3,16 +3,28 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Button } from '@/components/core/Button';
-import { PageContent, PageHeader, Stack } from '@/components/core/Layout';
+import { PageSurface } from '@/components/core/PageSurface';
+import { Stack } from '@/components/core/Layout';
 import { toast } from 'sonner';
 
 import { BrandingCard } from './BrandingCard';
 import { RankingConnectionCard } from './RankingConnectionCard';
 import { RankingScoreboard } from './RankingScoreboard';
 import { useRankingRows, type RankingSnapshot } from './useRankingRows';
+import { useDictionary } from '@/hooks/useDictionary';
 import { hasEffectivePermission } from '@/lib/permission-engine';
+import type { ModulePageCopy } from '@/components/navigation/ModulePageCopy';
+import type { Locale } from '@/lib/locales';
 
-export function RankingClient({ permissionKeys }: { permissionKeys: readonly string[] }) {
+export interface RankingClientProps {
+  readonly locale: Locale;
+  readonly permissionKeys: readonly string[];
+  readonly copy: ModulePageCopy;
+}
+
+export function RankingClient({ permissionKeys, copy }: RankingClientProps): React.JSX.Element {
+  const dict = useDictionary();
+  const toastCopy = dict.toasts.ranking;
   // Why memoized: the key list is stable for the session, so rebuilding the Set on
   // every render only repeats work the two gates below then probe.
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
@@ -57,25 +69,25 @@ export function RankingClient({ permissionKeys }: { permissionKeys: readonly str
 
   const fetchSnapshot = () =>
     runWithLoading(setLoadingSnapshot, async () => {
-      const data = await requestRankingApi('/snapshot', undefined, 'Failed to fetch ranking snapshot');
+      const data = await requestRankingApi('/snapshot', undefined, toastCopy.snapshotFailed);
       setSnapshot(data.snapshot as RankingSnapshot);
     });
 
   const loadSession = useCallback(() =>
     runWithLoading(setLoadingSession, async () => {
-      const data = await requestRankingApi('/auth', undefined, 'Failed to load ranking session');
+      const data = await requestRankingApi('/auth', undefined, toastCopy.sessionFailed);
       if (data.connected) {
         setConnected(true);
         setBaseUrl((data.baseUrl as string) || '');
         setUsername((data.username as string) || '');
       }
     }),
-    [runWithLoading, requestRankingApi],
+    [runWithLoading, requestRankingApi, toastCopy],
   );
 
   const connect = () =>
     runWithLoading(setLoadingSession, async () => {
-      await requestRankingApi('/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ baseUrl, username, password }) }, 'Failed to connect ranking');
+      await requestRankingApi('/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ baseUrl, username, password }) }, toastCopy.connectFailed);
       setConnected(true);
       setPassword('');
       await fetchSnapshot();
@@ -83,7 +95,7 @@ export function RankingClient({ permissionKeys }: { permissionKeys: readonly str
 
   const disconnect = () =>
     runWithLoading(setLoadingSession, async () => {
-      await requestRankingApi('/auth', { method: 'DELETE' }, 'Failed to disconnect ranking');
+      await requestRankingApi('/auth', { method: 'DELETE' }, toastCopy.disconnectFailed);
       setConnected(false);
       setSnapshot(null);
       setPassword('');
@@ -117,19 +129,18 @@ export function RankingClient({ permissionKeys }: { permissionKeys: readonly str
         formData.append('logo', file);
         const res = await fetch('/api/ranking/logo', { method: 'POST', body: formData });
         const data = (await res.json()) as { success: boolean; error?: string };
-        if (!res.ok || !data.success) throw new Error(data.error ?? 'Failed to upload logo');
-        const nextUrl = buildLogoUrl();
-        setLogoUrl(nextUrl);
-        toast.success('Logo updated', { description: 'Ranking logo hot reloaded' });
+        if (!res.ok || !data.success) throw new Error(data.error ?? toastCopy.uploadFailedFallback);
+        setLogoUrl(buildLogoUrl());
+        toast.success(toastCopy.logoUpdatedTitle, { description: toastCopy.logoUpdatedDescription });
       } catch (error) {
         const message = (error as Error).message;
         setBrandingError(message);
-        toast.error('Upload failed', { description: message });
+        toast.error(toastCopy.uploadFailedTitle, { description: message });
       } finally {
         setUploading(false);
       }
     },
-    [buildLogoUrl],
+    [buildLogoUrl, toastCopy],
   );
 
   useEffect(() => {
@@ -140,29 +151,34 @@ export function RankingClient({ permissionKeys }: { permissionKeys: readonly str
     void fetchLogo();
   }, [fetchLogo]);
 
+  const breadcrumbs = [
+    { label: copy.group },
+    { label: copy.title },
+  ] as const;
+
   return (
-    <PageContent>
-      <PageHeader
-        title="Secure Ranking"
-        description="Server-side proxy for ranking data with protected credential session."
-        actions={
-          <Stack direction="row" gap={2}>
-            {canSnapshot && (
-              <Button variant="secondary" onClick={fetchSnapshot} loading={loadingSnapshot} disabled={!connected}>
-                Refresh Snapshot
-              </Button>
-            )}
-            {canManage && (
-              <Button variant="negative" onClick={disconnect} loading={loadingSession} disabled={!connected}>
-                Disconnect
-              </Button>
-            )}
-          </Stack>
-        }
-      />
+    <PageSurface
+      breadcrumbs={breadcrumbs}
+      title={copy.title}
+      description={copy.description}
+      actions={
+        <Stack direction="row" gap={2}>
+          {canSnapshot && (
+            <Button variant="secondary" onClick={fetchSnapshot} loading={loadingSnapshot} disabled={!connected}>
+              {dict.ranking.refreshSnapshot}
+            </Button>
+          )}
+          {canManage && (
+            <Button variant="negative" onClick={disconnect} loading={loadingSession} disabled={!connected}>
+              {dict.ranking.disconnect}
+            </Button>
+          )}
+        </Stack>
+      }
+    >
       <BrandingCard previewUrl={logoUrl} loading={uploading} onUpload={handleLogoUpload} error={brandingError} readOnly={!canManage} />
       <RankingConnectionCard baseUrl={baseUrl} username={username} password={password} connected={connected} loadingSession={loadingSession} errorMessage={errorMessage} onBaseUrl={setBaseUrl} onUsername={setUsername} onPassword={setPassword} onConnect={connect} canManage={canManage} />
       <RankingScoreboard rows={rows} loadingSnapshot={loadingSnapshot} />
-    </PageContent>
+    </PageSurface>
   );
 }

@@ -143,7 +143,60 @@
   },
   "resources": {
     "title": "การควบคุมทรัพยากร",
-    "subtitle": "ตรวจสอบและจัดการทรัพยากรเซิร์ฟเวอร์หลักและกิจกรรม worker แบบกระจาย"
+    "subtitle": "ตรวจสอบและจัดการทรัพยากรเซิร์ฟเวอร์หลักและกิจกรรม worker แบบกระจาย",
+    "loading": "กำลังโหลดข้อมูลระบบ...",
+    "cpuUsage": "การใช้งาน CPU",
+    "memoryUsage": "การใช้งานหน่วยความจำ",
+    "hostSource": "(โฮสต์)",
+    "containerSource": "(คอนเทนเนอร์)",
+    "workerNodes": "โหนดเวิร์กเกอร์",
+    "systemMetrics": "ตัวชี้วัดระบบ",
+    "uptime": "เวลาทำงาน",
+    "loadAvg": "ค่าเฉลี่ยโหลด",
+    "networkTotal": "ยอดรวมเครือข่าย"
+  },
+  "containers": {
+    "upAll": "เริ่มทั้งหมด",
+    "selected": "เลือกแล้ว {count}",
+    "clearSelection": "ล้างการเลือก",
+    "restartSelection": "รีสตาร์ตคอนเทนเนอร์ที่เลือก",
+    "stopSelection": "หยุดคอนเทนเนอร์ที่เลือก",
+    "logsSelection": "ดูบันทึกของรายการที่เลือก",
+    "discordBadge": "ยังไม่ได้ตั้งค่า Discord",
+    "discordWarning": "ยังไม่ได้ตั้งค่า Discord — ระบบจะข้ามการแจ้งเตือน",
+    "stats": {
+      "total": "ทั้งหมด",
+      "running": "กำลังทำงาน",
+      "stopped": "หยุดแล้ว",
+      "uptime": "เวลาทำงาน"
+    },
+    "activeContainers": "คอนเทนเนอร์ที่ใช้งานอยู่",
+    "emptyTitle": "ไม่พบคอนเทนเนอร์ Docker บนโฮสต์นี้",
+    "restart": "รีสตาร์ต",
+    "remove": "หยุด",
+    "logs": "บันทึก",
+    "bulk": {
+      "selectedDescription": "เลือกแล้ว {count} คอนเทนเนอร์",
+      "cancel": "ยกเลิก",
+      "restartTitle": "ยืนยันการรีสตาร์ต",
+      "restartDescription": "การดำเนินการนี้จะรีสตาร์ตคอนเทนเนอร์ที่เลือกและบริการที่พึ่งพาอยู่",
+      "restartPreviewLabel": "รายการที่จะถูกรีสตาร์ต:",
+      "restartDependents": "รวมบริการที่พึ่งพาตามนโยบายการรีสตาร์ต",
+      "restartConfirm": "ยืนยันการรีสตาร์ต",
+      "stopTitle": "ยืนยันการหยุด",
+      "stopDescription": "การดำเนินการนี้จะหยุดคอนเทนเนอร์ที่เลือก และคุณสามารถเริ่มอีกครั้งได้จากศูนย์ควบคุม",
+      "stopConfirm": "ยืนยันการหยุด",
+      "logsTitle": "ดูบันทึก",
+      "logsDescription": "เปิดบันทึกของคอนเทนเนอร์ที่เลือกรายการแรก หากต้องการดูหลายรายการให้เปิดจากแต่ละแถว",
+      "logsConfirm": "ดูบันทึก"
+    }
+  },
+  "deployments": {
+    "refresh": "รีเฟรช"
+  },
+  "ranking": {
+    "refreshSnapshot": "รีเฟรชสแนปช็อต",
+    "disconnect": "ตัดการเชื่อมต่อ"
   },
   "settings": {
     "title": "การตั้งค่าระบบ",
@@ -384,6 +437,39 @@
       "envWriteFailed": "อัปเดต {configToml} แล้ว แต่เขียน {envFile} ไม่สำเร็จ: {error}",
       "noWebhookUrl": "ไม่มี URL ของเว็บฮุกให้ทดสอบ — กรอกและบันทึกก่อน หรือตั้งค่า DISCORD_WEBHOOK_URL ใน config.toml [infra]",
       "deliveryFailed": "การส่งล้มเหลว"
+    },
+    "containers": {
+      "errorTitle": "ข้อผิดพลาด",
+      "restartFailedFallback": "ไม่สามารถรีสตาร์ตคอนเทนเนอร์ได้",
+      "stopFailedFallback": "ไม่สามารถหยุดคอนเทนเนอร์ได้",
+      "restartTriggered": "สั่งรีสตาร์ต {count} คอนเทนเนอร์แล้ว",
+      "stopTriggered": "สั่งหยุด {count} คอนเทนเนอร์แล้ว",
+      "controlSucceeded": "คำสั่ง {action} ของคอนเทนเนอร์เสร็จสมบูรณ์",
+      "composeSucceeded": "คำสั่ง compose {action} เสร็จสมบูรณ์",
+      "autoRestartEnabled": "เปิดการรีสตาร์ตอัตโนมัติแล้ว",
+      "autoRestartDisabled": "ปิดการรีสตาร์ตอัตโนมัติแล้ว",
+      "restartCountReset": "รีเซ็ตจำนวนการรีสตาร์ตแล้ว",
+      "discordEnabled": "เปิดการแจ้งเตือนผ่าน Discord แล้ว",
+      "discordDisabled": "ปิดการแจ้งเตือนผ่าน Discord แล้ว",
+      "discordNotConfiguredTitle": "ยังไม่ได้ตั้งค่า Discord",
+      "discordNotConfiguredDescription": "เว็บฮุกยังว่าง — ระบบจะข้ามการแจ้งเตือนจนกว่าจะตั้งค่าในหน้าการตั้งค่า"
+    },
+    "ranking": {
+      "logoUpdatedTitle": "อัปเดตโลโก้แล้ว",
+      "logoUpdatedDescription": "โลโก้อันดับถูกโหลดใหม่ทันที",
+      "uploadFailedTitle": "อัปโหลดไม่สำเร็จ",
+      "uploadFailedFallback": "ไม่สามารถอัปโหลดโลโก้ได้",
+      "snapshotFailed": "ไม่สามารถดึงสแนปช็อตอันดับได้",
+      "sessionFailed": "ไม่สามารถโหลดเซสชันอันดับได้",
+      "connectFailed": "เชื่อมต่ออันดับไม่สำเร็จ",
+      "disconnectFailed": "ตัดการเชื่อมต่ออันดับไม่สำเร็จ"
+    },
+    "deploySettings": {
+      "saveFailedTitle": "บันทึกไม่สำเร็จ",
+      "saveFailedFallback": "ไม่สามารถอัปเดต config.toml ได้",
+      "savedTitle": "บันทึกการตั้งค่าแล้ว",
+      "savedDescription": "อัปเดตการตั้งค่าการแข่งขันแล้ว",
+      "unexpectedErrorTitle": "เกิดข้อผิดพลาดที่ไม่คาดคิด"
     }
   },
   "live": {
@@ -398,6 +484,7 @@
       "description": "ไม่สามารถโหลดข้อมูลได้ กรุณาลองอีกครั้ง"
     },
     "loading": {
+      "deployments": "กำลังโหลดข้อมูลการดีพลอย...",
       "people": "กำลังโหลดข้อมูลบุคคล...",
       "evaluation": "กำลังโหลดข้อมูลการประเมิน...",
       "userProfile": "กำลังโหลดโปรไฟล์ผู้ใช้...",

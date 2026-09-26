@@ -1,32 +1,30 @@
-import { ResourceView } from '@/components/resources/ResourceView';
-import { checkPermission } from '@/lib/permissions';
-import { getDictionary } from '@/i18n';
-import { notFound } from 'next/navigation';
-import { Text } from '@/components/core/Typography';
-import { Stack } from '@/components/core/Layout';
+import { notFound, redirect } from 'next/navigation';
 
-export default async function ResourcesPage({
+import { getRoutePermissions } from '@/lib/navigation/page-authorization';
+import { resolveLegacyRedirect } from '@/lib/navigation/redirects';
+import { AuthorizationError } from '@/lib/server/authorization';
+
+const LEGACY_PATH = '/resources';
+
+/**
+ * Why this route still exists: the Resource Control screen keeps its old address
+ * so existing bookmarks, chord history, and links land on the canonical module
+ * route. Only a reader whose permissions fail closed is concealed; a 401 and any
+ * unexpected storage failure keep propagating.
+ */
+export default async function ResourcesRedirectPage({
   params,
 }: {
   params: Promise<{ locale: string }>;
-}) {
-  const { locale } = await params;
-  const dict = await getDictionary(locale);
-  const hasPermission = await checkPermission('resource:read', false);
-
-  // Why: return 404 for forbidden access so existence is indistinguishable from missing page
-  if (!hasPermission) {
-    notFound();
+}): Promise<never> {
+  try {
+    const { locale } = await params;
+    const effective = await getRoutePermissions();
+    const target = resolveLegacyRedirect(locale, LEGACY_PATH, effective);
+    if (target === null) notFound();
+    redirect(target);
+  } catch (error: unknown) {
+    if (error instanceof AuthorizationError && error.status === 403) notFound();
+    throw error;
   }
-
-  return (
-    <Stack gap={8}>
-      <Stack gap={2}>
-        <Text variant="h1">{dict.resources.title}</Text>
-        <Text variant="muted">{dict.resources.subtitle}</Text>
-      </Stack>
-
-      <ResourceView />
-    </Stack>
-  );
 }

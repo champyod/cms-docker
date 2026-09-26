@@ -71,6 +71,13 @@ const DIRECT_LABEL_CASES = [
   { labelKey: 'navigation.tasks.list.label', en: 'Tasks', th: 'งาน' },
 ] as const;
 
+const INFRASTRUCTURE_ROUTE_IDS = [
+  'infrastructure.deployments',
+  'infrastructure.containers',
+  'infrastructure.resources',
+  'infrastructure.ranking',
+] as const satisfies readonly RouteId[];
+
 function tabIdsVisibleTo(effective: ReadonlySet<string>): string[] {
   return ROUTE_REGISTRY
     .filter((route) => route.kind === 'nested-tab')
@@ -143,18 +150,25 @@ describe('target route registry', () => {
       'evaluation.submission-tabs.evaluation',
       'evaluation.lanes',
       ...ADMINISTRATION_ROUTE_IDS,
+      ...INFRASTRUCTURE_ROUTE_IDS,
     ];
     const enabledIdSet = new Set<string>(enabledIds);
     expect(ROUTE_REGISTRY.filter((route) => route.enabled).map((route) => route.id)).toEqual(enabledIds);
     expect(ROUTE_REGISTRY.filter((route) => !enabledIdSet.has(route.id)).every((route) => !route.enabled)).toBe(true);
     // Why: page surfaces are group-scoped, so the sidebar equality is scoped to
-    // the Administration module IDs this slice owns — a People, Evaluation, or
-    // Infrastructure entry owned by another slice would otherwise make the
-    // complete visible list look incomplete.
+    // the module IDs this registry owns — a People, Evaluation, or System entry
+    // owned by another slice would otherwise make the complete visible list look
+    // incomplete.
     const sidebarIds = visibleRoutes(new Set(['all:all']), 'sidebar').map((route) => route.id);
     expect(sidebarIds.slice(0, directIds.length)).toEqual(directIds);
-    const administrationIds = new Set<RouteId>(ADMINISTRATION_ROUTE_IDS);
-    expect(sidebarIds.filter((id) => administrationIds.has(id))).toEqual([...ADMINISTRATION_ROUTE_IDS]);
+    const administrationIds = new Set<RouteId>([
+      ...ADMINISTRATION_ROUTE_IDS,
+      ...INFRASTRUCTURE_ROUTE_IDS,
+    ]);
+    expect(sidebarIds.filter((id) => administrationIds.has(id))).toEqual([
+      ...ADMINISTRATION_ROUTE_IDS,
+      ...INFRASTRUCTURE_ROUTE_IDS,
+    ]);
   });
 
   it('uses stable unique IDs and unique canonical patterns', () => {

@@ -53,10 +53,10 @@ export const EXPECTED_ROUTE_MANIFEST: readonly RouteFixture[] = [
   { id: 'administration.groups', path: '/administration/groups', kind: 'page', tabIds: [], legacyPaths: ['/groups'], enabled: true },
   { id: 'administration.audit', path: '/administration/audit', kind: 'page', tabIds: [], legacyPaths: ['/audit'], enabled: true },
 
-  { id: 'infrastructure.deployments', path: '/infrastructure/deployments', kind: 'page', tabIds: [], legacyPaths: ['/deployments'], enabled: false },
-  { id: 'infrastructure.containers', path: '/infrastructure/containers', kind: 'page', tabIds: [], legacyPaths: ['/containers'], enabled: false },
-  { id: 'infrastructure.resources', path: '/infrastructure/resources', kind: 'page', tabIds: [], legacyPaths: ['/resources'], enabled: false },
-  { id: 'infrastructure.ranking', path: '/infrastructure/ranking', kind: 'page', tabIds: [], legacyPaths: ['/ranking'], enabled: false },
+  { id: 'infrastructure.deployments', path: '/infrastructure/deployments', kind: 'page', tabIds: [], legacyPaths: ['/deployments'], enabled: true },
+  { id: 'infrastructure.containers', path: '/infrastructure/containers', kind: 'page', tabIds: [], legacyPaths: ['/containers'], enabled: true },
+  { id: 'infrastructure.resources', path: '/infrastructure/resources', kind: 'page', tabIds: [], legacyPaths: ['/resources'], enabled: true },
+  { id: 'infrastructure.ranking', path: '/infrastructure/ranking', kind: 'page', tabIds: [], legacyPaths: ['/ranking'], enabled: true },
 
   { id: 'system.appearance', path: '/system/appearance', kind: 'page', tabIds: [], legacyPaths: ['/appearance'], enabled: false },
   { id: 'system.maintenance', path: '/system/maintenance', kind: 'page', tabIds: [], legacyPaths: ['/maintenance'], enabled: false },
