@@ -156,8 +156,12 @@ delivered_scripts() {
   fi
 }
 
+# WHY: a lib path named in a comment or a log line creates no obligation, so the
+# scan drops comment lines and wants source/. in command position to count.
 lib_refs() {
-  grep -oE '__lib/[A-Za-z0-9_.-]+\.sh' "$1" 2>/dev/null | sort -u
+  grep -vE '^[[:space:]]*#' "$1" 2>/dev/null \
+    | grep -E '(^[[:space:]]*|[;&|(]+[[:space:]]*)(source|\.)[[:space:]]+.*__lib/[A-Za-z0-9_.-]+\.sh' \
+    | grep -oE '__lib/[A-Za-z0-9_.-]+\.sh' | sort -u
 }
 
 # Only a delivered script that actually sources the lib creates an obligation,
