@@ -12,7 +12,6 @@ export default async function InfrastructureRankingPage({
   const effective = await authorizeRoutePage('infrastructure.ranking');
   return (
     <RankingClient
-      locale={locale}
       permissionKeys={[...effective]}
       copy={{
         group: dict['navigation']['groups']['infrastructure'],

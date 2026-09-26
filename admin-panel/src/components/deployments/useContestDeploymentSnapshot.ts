@@ -9,6 +9,7 @@ import { settleDeployOperations } from '@/app/actions/services';
 import { getContainerContestId } from '@/app/actions/docker';
 import { buildConfigTomlUpdates } from '@/lib/config-toml';
 import { useDictionary } from '@/hooks/useDictionary';
+import type { DeployPhase } from '@/hooks/useDeployContest';
 import { CONTEST_SETTINGS_KEYS } from '@/components/deployments/deploymentConfig';
 import type { ContestOption } from '@/components/deployments/ActiveContestCard';
 import type { Dispatch, SetStateAction } from 'react';
@@ -32,10 +33,15 @@ export interface ContestDeploymentSnapshot {
   readonly saveSettings: () => Promise<void>;
 }
 
-export function useContestDeploymentSnapshot(
-  setSaving: Dispatch<SetStateAction<boolean>>,
-  deployPhase: string,
-): ContestDeploymentSnapshot {
+export interface ContestDeploymentSnapshotOptions {
+  readonly setSaving: Dispatch<SetStateAction<boolean>>;
+  readonly deployPhase: DeployPhase;
+}
+
+export function useContestDeploymentSnapshot({
+  setSaving,
+  deployPhase,
+}: ContestDeploymentSnapshotOptions): ContestDeploymentSnapshot {
   const toastCopy = useDictionary().toasts.deploySettings;
   const [loading, setLoading] = useState(true);
   const [availableContests, setAvailableContests] = useState<ContestOption[]>([]);

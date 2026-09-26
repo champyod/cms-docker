@@ -74,13 +74,24 @@ describe('module navigation dictionary parity', () => {
     }
   });
 
+  it('resolves registry label keys through the dictionary in one shared module', () => {
+    const source = readSource('src/lib/navigation/module-nav.ts');
+    expect(source).toContain('descriptor.labelKey');
+    expect(source).toContain('labelForDescriptor(dict, descriptor)');
+  });
+
   it.each([
     'src/app/[locale]/(authenticated)/administration/layout.tsx',
     'src/app/[locale]/(authenticated)/infrastructure/layout.tsx',
-  ])('%s resolves registry label keys through the dictionary', (relativePath) => {
+  ])('%s wires its group to the shared module rail', (relativePath) => {
     const source = readSource(relativePath);
     expect(source).toContain('getDictionary(locale)');
-    expect(source).toContain('descriptor.labelKey');
+    expect(source).toContain('permittedNavItems(GROUP_ID, locale, dict, effective)');
+    expect(source).toContain('concealedPermissions()');
+    // The resolver lives in the shared module; a shell that grew its own copy is the duplication
+    // this wiring exists to prevent.
+    expect(source).not.toContain('descriptor.labelKey');
+    expect(source).not.toContain('function labelForDescriptor');
   });
 
   it.each([

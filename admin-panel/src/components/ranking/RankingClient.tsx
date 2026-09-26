@@ -14,10 +14,8 @@ import { useRankingRows, type RankingSnapshot } from './useRankingRows';
 import { useDictionary } from '@/hooks/useDictionary';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 import type { ModulePageCopy } from '@/components/navigation/ModulePageCopy';
-import type { Locale } from '@/lib/locales';
 
 export interface RankingClientProps {
-  readonly locale: Locale;
   readonly permissionKeys: readonly string[];
   readonly copy: ModulePageCopy;
 }

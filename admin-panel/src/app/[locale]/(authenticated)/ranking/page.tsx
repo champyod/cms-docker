@@ -18,8 +18,7 @@ export default async function RankingRedirectPage({
   params: Promise<{ locale: string }>;
 }): Promise<never> {
   try {
-    const { locale } = await params;
-    const effective = await getRoutePermissions();
+    const [{ locale }, effective] = await Promise.all([params, getRoutePermissions()]);
     const target = resolveLegacyRedirect(locale, LEGACY_PATH, effective);
     if (target === null) notFound();
     redirect(target);

@@ -12,7 +12,6 @@ export default async function InfrastructureDeploymentsPage({
   await authorizeRoutePage('infrastructure.deployments');
   return (
     <DeploymentsClient
-      locale={locale}
       copy={{
         group: dict['navigation']['groups']['infrastructure'],
         title: dict['navigation']['infrastructure']['deployments']['label'],

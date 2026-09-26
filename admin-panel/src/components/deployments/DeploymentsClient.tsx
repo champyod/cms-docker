@@ -16,10 +16,8 @@ import { useDeployWorkers } from '@/components/deployments/useDeployWorkers';
 import { useContestDeploymentSnapshot } from '@/components/deployments/useContestDeploymentSnapshot';
 import { useDictionary } from '@/hooks/useDictionary';
 import type { ModulePageCopy } from '@/components/navigation/ModulePageCopy';
-import type { Locale } from '@/lib/locales';
 
 export interface DeploymentsClientProps {
-  readonly locale: Locale;
   readonly copy: ModulePageCopy;
 }
 
@@ -28,7 +26,10 @@ export function DeploymentsClient({ copy }: DeploymentsClientProps): React.JSX.E
   const { state: deployState, deploy: handleDeploy, cancel: cancelDeploy, reset: resetDeploy } = useDeployContest();
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [workersSaving, setWorkersSaving] = useState(false);
-  const snapshot = useContestDeploymentSnapshot(setSettingsSaving, deployState.phase);
+  const snapshot = useContestDeploymentSnapshot({
+    setSaving: setSettingsSaving,
+    deployPhase: deployState.phase,
+  });
   const workers = useDeployWorkers(setWorkersSaving);
   const { applyDeployedContestId, loadData } = snapshot;
 
