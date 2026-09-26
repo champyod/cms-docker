@@ -54,6 +54,7 @@ pub const PRIORITY_EXTRA_LOW: i32 = 4;
 pub struct QueueKey {
     /// Discrete priority level; a smaller value is dispatched earlier.
     pub priority: i32,
+    // WHY: `timestamp_micros`, not the brief's `timestamp`; Python orders datetimes, not seconds.
     /// Microseconds since the Unix epoch, taken when the operation was first
     /// requested, so an operation that is re-enqueued keeps its place behind
     /// the ones that were waiting longer.
