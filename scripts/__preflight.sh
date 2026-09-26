@@ -494,10 +494,11 @@ check_monitor_backup_access() {
 
   local backup_root="${BACKUP_DIR:-${REPO_ROOT}/backups}"
   local container_uid="${DOCKER_UID:-1000}"
-  # WHY 1000 and not ${DOCKER_GID:-999}: DOCKER_GID is granted on docker.sock
-  # alone and never reaches file access; the monitor user carries DOCKER_UID and
-  # its primary group, which is the same number.
-  local container_gid=1000
+  # WHY ${container_uid} and not ${DOCKER_GID:-999}: docker/monitor/Dockerfile
+  # creates the monitor group with addgroup -g ${DOCKER_UID}, so the container gid
+  # is the same number as its uid; DOCKER_GID is granted on docker.sock alone and
+  # never reaches file access.
+  local container_gid="${container_uid}"
 
   # Inspect only — a box that has never written a backup has no root to judge.
   if [[ ! -d "$backup_root" ]]; then
