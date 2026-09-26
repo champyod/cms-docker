@@ -20,9 +20,22 @@ const RESTART_POLICY_RE = /^(?:no|always|unless-stopped|on-failure:(?:[0-9]|1[0-
 // that render it keep importing it from where they always did.
 export type { ContainerRestartConfig };
 
+/**
+ * Why the read is audited: restart policy is what decides whether a container comes back on its
+ * own, so who looked at it is part of the answer to "who changed the restart behaviour". The row
+ * carries container ids only — the config holds no credentials, and a view log that echoed values
+ * would train the log to be treated as a values store.
+ */
 export async function getContainerConfig(): Promise<ContainerRestartConfig> {
   await ensurePermission('container:read');
-  return readContainerRestartConfig();
+  const config = await readContainerRestartConfig();
+  await recordAudit({
+    verb: 'container:view',
+    entity: 'container_config',
+    afterValues: { containerIds: Object.keys(config) },
+    result: 'success',
+  });
+  return config;
 }
 
 export async function updateContainerConfig(containerId: string, config: {
