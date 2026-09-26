@@ -1,8 +1,8 @@
 'use client';
 
-import { Card } from '@/components/core/Card';
+import { SectionCard } from '@/components/core/SectionCard';
 import { ToggleSwitch } from '../contest-modal/shared/ToggleSwitch';
-import { Settings, ChevronDown, ChevronUp } from 'lucide-react';
+import { Settings } from 'lucide-react';
 
 const LABEL_CLASSES = 'mb-1 block text-xs font-bold uppercase tracking-widest text-muted-foreground';
 const FIELD_CLASSES = 'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]';
@@ -38,37 +38,36 @@ export function ContestSettingsSection({ formData, expanded, disabled = false, c
   // locks every input so no false save affordance reaches the reader.
   const readOnly = disabled || !canEdit;
   return (
-    <Card className="overflow-hidden">
-      <button onClick={onToggle} className="flex w-full items-center justify-between p-4 transition-colors hover:bg-muted/50">
-        <div className="flex items-center gap-3"><Settings className="h-5 w-5 text-primary" /><span className="font-bold text-foreground">Contest Settings</span></div>
-        {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-      </button>
-      {expanded && (
-        <div className="grid grid-cols-1 gap-4 p-4 pt-0 md:grid-cols-2">
-          <div className="space-y-4">
-            <div>
-              <label className={LABEL_CLASSES}>Name</label>
-              <input type="text" value={formData.name} disabled={readOnly} onChange={(e) => onChange({ name: e.target.value })} className={FIELD_CLASSES} />
-            </div>
-            <div>
-              <label className={LABEL_CLASSES}>Description</label>
-              <textarea value={formData.description} disabled={readOnly} onChange={(e) => onChange({ description: e.target.value })} rows={2} className={FIELD_CLASSES} />
-            </div>
-            <div>
-              <label className={LABEL_CLASSES}>Timezone</label>
-              <input type="text" value={formData.timezone} disabled={readOnly} onChange={(e) => onChange({ timezone: e.target.value })} placeholder="Asia/Bangkok" className={FIELD_CLASSES} />
-            </div>
+    <SectionCard
+      title="Contest Settings"
+      icon={<Settings className="h-5 w-5 text-primary" />}
+      expanded={expanded}
+      onToggle={onToggle}
+    >
+      <div className="grid grid-cols-1 gap-4 p-4 pt-0 md:grid-cols-2">
+        <div className="space-y-4">
+          <div>
+            <label className={LABEL_CLASSES}>Name</label>
+            <input type="text" value={formData.name} disabled={readOnly} onChange={(e) => onChange({ name: e.target.value })} className={FIELD_CLASSES} />
           </div>
-          <div className="space-y-3">
-            <ToggleRow label="Allow Questions" checked={formData.allow_questions} disabled={readOnly} onChange={(v) => onChange({ allow_questions: v })} />
-            <ToggleRow label="Allow User Tests" checked={formData.allow_user_tests} disabled={readOnly} onChange={(v) => onChange({ allow_user_tests: v })} />
-            <ToggleRow label="Allow Submissions Download" checked={formData.submissions_download_allowed} disabled={readOnly} onChange={(v) => onChange({ submissions_download_allowed: v })} />
-            <ToggleRow label="Allow Password Auth" checked={formData.allow_password_authentication} disabled={readOnly} onChange={(v) => onChange({ allow_password_authentication: v })} />
-            <ToggleRow label="Allow Registration" checked={formData.allow_registration} disabled={readOnly} onChange={(v) => onChange({ allow_registration: v })} />
-            <ToggleRow label="Analysis Mode" checked={formData.analysis_enabled} disabled={readOnly} onChange={(v) => onChange({ analysis_enabled: v })} />
+          <div>
+            <label className={LABEL_CLASSES}>Description</label>
+            <textarea value={formData.description} disabled={readOnly} onChange={(e) => onChange({ description: e.target.value })} rows={2} className={FIELD_CLASSES} />
+          </div>
+          <div>
+            <label className={LABEL_CLASSES}>Timezone</label>
+            <input type="text" value={formData.timezone} disabled={readOnly} onChange={(e) => onChange({ timezone: e.target.value })} placeholder="Asia/Bangkok" className={FIELD_CLASSES} />
           </div>
         </div>
-      )}
-    </Card>
+        <div className="space-y-3">
+          <ToggleRow label="Allow Questions" checked={formData.allow_questions} disabled={readOnly} onChange={(v) => onChange({ allow_questions: v })} />
+          <ToggleRow label="Allow User Tests" checked={formData.allow_user_tests} disabled={readOnly} onChange={(v) => onChange({ allow_user_tests: v })} />
+          <ToggleRow label="Allow Submissions Download" checked={formData.submissions_download_allowed} disabled={readOnly} onChange={(v) => onChange({ submissions_download_allowed: v })} />
+          <ToggleRow label="Allow Password Auth" checked={formData.allow_password_authentication} disabled={readOnly} onChange={(v) => onChange({ allow_password_authentication: v })} />
+          <ToggleRow label="Allow Registration" checked={formData.allow_registration} disabled={readOnly} onChange={(v) => onChange({ allow_registration: v })} />
+          <ToggleRow label="Analysis Mode" checked={formData.analysis_enabled} disabled={readOnly} onChange={(v) => onChange({ analysis_enabled: v })} />
+        </div>
+      </div>
+    </SectionCard>
   );
 }

@@ -1,17 +1,51 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import en from '@/dictionaries/en.json';
+import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
 
 import { ContestTasksSection } from '@/components/contests/contest-detail/ContestTasksSection';
 import { ContestParticipantsSection } from '@/components/contests/contest-detail/ContestParticipantsSection';
 import { ContestModalShell } from '@/components/contests/contest-modal/ContestModalShell';
+import { ContestSettingsSection } from '@/components/contests/contest-detail/ContestSettingsSection';
+import { TeamDetailView } from '@/components/teams/TeamDetailView';
 import { MismatchBanner } from '@/components/deployments/MismatchBanner';
 import { UnsavedRestartBanner } from '@/components/settings/UnsavedRestartBanner';
 import { EnvSectionCard } from '@/components/settings/EnvSectionCard';
 import type { EnvConfigSection } from '@/components/settings/envConfigSections';
 
 afterEach(() => cleanup());
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
+  usePathname: () => '/en/people/teams',
+}));
+vi.mock('@/app/actions/teams', () => ({ deleteTeam: vi.fn(), updateTeam: vi.fn() }));
+
+function withDictionary(node: React.ReactNode): React.JSX.Element {
+  return <DictionaryProvider dict={en}>{node}</DictionaryProvider>;
+}
+
+const SETTINGS_FORM = {
+  name: 'Autumn',
+  description: 'Regional round',
+  timezone: 'Asia/Bangkok',
+  allow_questions: true,
+  allow_user_tests: true,
+  submissions_download_allowed: false,
+  allow_password_authentication: false,
+  allow_registration: true,
+  analysis_enabled: false,
+};
+
+const TEAM_DETAIL = {
+  id: 4,
+  code: 'THA-01',
+  name: 'Thailand Team 1',
+  members: [{ user: { id: 17, username: 'ada', first_name: 'Ada', last_name: 'Lovelace' }, contests: [{ id: 3, name: 'Autumn' }] }],
+  contests: [{ id: 3, name: 'Autumn', description: 'Regional round', start: '', stop: '' }],
+};
 
 // Why these assertions and not snapshots: each one pins that a consumer reached
 // a shared primitive instead of re-declaring the same markup, so re-inlining the
@@ -53,6 +87,40 @@ describe('detail sections render through SectionCard', () => {
     expect(html).toContain('aria-expanded="true"');
     expect(html).toContain('Add Participant');
     expect(html).toContain('No participants yet');
+  });
+
+  it('marks the settings section collapsed and reveals the form only when expanded', () => {
+    const onToggle = vi.fn();
+    const settings = { formData: SETTINGS_FORM, onToggle, onChange: vi.fn() };
+    const collapsed = renderToStaticMarkup(<ContestSettingsSection {...settings} expanded={false} />);
+    expect(collapsed).toContain('aria-expanded="false"');
+    expect(collapsed).toContain('Contest Settings');
+    expect(collapsed).not.toContain('Asia/Bangkok');
+
+    render(<ContestSettingsSection {...settings} expanded />);
+    const toggle = screen.getByRole('button', { name: /Contest Settings/ });
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByPlaceholderText('Asia/Bangkok')).not.toBeNull();
+  });
+
+  it('keeps every team section owner-collapsible and reports its count', () => {
+    render(withDictionary(<TeamDetailView team={TEAM_DETAIL} />));
+    const sections = [
+      { name: /Team Information/, body: 'Team Code' },
+      { name: /Team Members/, body: 'ada', count: '(1)' },
+      { name: /Contests/, body: 'Autumn', count: '(1)' },
+    ];
+    for (const section of sections) {
+      const toggle = screen.getByRole('button', { name: section.name });
+      expect(toggle.getAttribute('aria-expanded')).toBe('true');
+      if ('count' in section) expect(toggle.textContent).toContain(section.count);
+      expect(document.getElementById(toggle.getAttribute('aria-controls') ?? '')?.textContent).toContain(section.body);
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: /Team Members/ }));
+    const collapsed = screen.getByRole('button', { name: /Team Members/ });
+    expect(collapsed.getAttribute('aria-expanded')).toBe('false');
+    expect(document.getElementById(collapsed.getAttribute('aria-controls') ?? '')).toBeNull();
   });
 });
 
