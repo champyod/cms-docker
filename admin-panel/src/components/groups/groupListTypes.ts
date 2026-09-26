@@ -16,6 +16,7 @@ export interface GroupsDict {
   noGroupsDescription: string;
   deleteTooltip: string;
   editTooltip: string;
+  loadFailed: string;
 }
 
 export interface GroupListProps {

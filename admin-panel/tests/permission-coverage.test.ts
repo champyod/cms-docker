@@ -6,7 +6,7 @@ import { DEFAULT_GROUPS } from '@/lib/permission-groups';
 import { FIELD_PERMISSION_MAP } from '@/lib/field-permissions';
 import { hasEffectivePermission, resolveEffectivePermissions } from '@/lib/permission-engine';
 import { NAV_REGISTRY, visibleEntries } from '@/lib/nav-registry';
-import { PERMISSION_TAB_LIST_KEY, permittedTabs } from '@/lib/permission-tabs';
+import { ROUTE_REGISTRY, visibleRoutes } from '@/lib/navigation/registry';
 import { ACTIONS_DIR, API_DIR, FOLLOW_FILES, SRC_DIR } from '../scripts/coverage/model';
 import { parseFile, listFilesRecursive } from '../scripts/coverage/scan';
 import { resolveDemanded, tableUpdateKeys, isAllowlisted } from '../scripts/coverage/resolve';
@@ -222,7 +222,7 @@ describe('permission coverage', () => {
     expect(hasEffectivePermission(new Set(), 'task:read')).toBe(false);
   });
 
-  it('gates every nav entry and tab on a registry key', () => {
+  it('gates every nav entry on a registry key', () => {
     const registryKeys = new Set(PERMISSION_REGISTRY.map((d) => d.key));
     const offenders: string[] = [];
     for (const entry of NAV_REGISTRY) {
@@ -234,8 +234,10 @@ describe('permission coverage', () => {
         if (!registryKeys.has(key)) offenders.push(`${entry.path} -> ${key}`);
       }
     }
-    for (const [tab, key] of Object.entries(PERMISSION_TAB_LIST_KEY)) {
-      if (!registryKeys.has(key)) offenders.push(`tab:${tab} -> ${key}`);
+    for (const route of ROUTE_REGISTRY) {
+      for (const key of [...(route.permission.all ?? []), ...(route.permission.any ?? [])]) {
+        if (!registryKeys.has(key)) offenders.push(`${route.id} -> ${key}`);
+      }
     }
     expect(offenders).toEqual([]);
   });
@@ -247,7 +249,10 @@ describe('permission coverage', () => {
       expect(entry.permissions).toBeUndefined();
       expect(entry.requiredPermissions).toBeUndefined();
     }
-    expect(permittedTabs(empty)).toEqual([]);
+    for (const route of visibleRoutes(empty, 'sidebar')) {
+      expect(route.permission.all ?? []).toEqual([]);
+      expect(route.permission.any ?? []).toEqual([]);
+    }
   });
 
   it('uses only registry keys in frontend permission checks', () => {

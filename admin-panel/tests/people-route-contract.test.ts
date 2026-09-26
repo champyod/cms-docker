@@ -31,9 +31,10 @@ describe('People route contracts', () => {
     expect(buildRoute('en', 'people.team-tabs.members', { id: 4 })).toBe('/en/people/teams/4/members');
   });
 
-  it('preserves locale and conceals an unauthorized legacy target', () => {
+  it('preserves locale and falls back inside the People group', () => {
     expect(resolveLegacyRedirect('th', '/users', new Set(['user:list']))).toBe('/th/people/users');
-    expect(resolveLegacyRedirect('en', '/users', new Set(['team:list']))).toBeNull();
+    expect(resolveLegacyRedirect('en', '/users', new Set(['team:list']))).toBe('/en/people/teams');
+    expect(resolveLegacyRedirect('en', '/users', new Set(['task:list']))).toBeNull();
   });
 });
 
@@ -65,6 +66,7 @@ describe('People Team route contracts', () => {
 
   it('resolves the old /teams path through the frozen redirect helper', () => {
     expect(resolveLegacyRedirect('th', '/teams', new Set(['team:list']))).toBe('/th/people/teams');
-    expect(resolveLegacyRedirect('en', '/teams', new Set(['user:list']))).toBeNull();
+    expect(resolveLegacyRedirect('en', '/teams', new Set(['user:list']))).toBe('/en/people/users');
+    expect(resolveLegacyRedirect('en', '/teams', new Set(['task:list']))).toBeNull();
   });
 });

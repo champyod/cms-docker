@@ -61,8 +61,9 @@ describe('Evaluation route contracts', () => {
     expect(resolveLegacyRedirect('en', '/submissions/lanes', new Set(['evaluation:list']))).toBe('/en/evaluation/lanes');
   });
 
-  it('conceals an unauthorized legacy Evaluation target', () => {
-    expect(resolveLegacyRedirect('en', '/submissions', new Set(['evaluation:list']))).toBeNull();
-    expect(resolveLegacyRedirect('th', '/submissions/lanes', new Set(['submission:list']))).toBeNull();
+  it('falls back inside the Evaluation group and conceals an unreadable group', () => {
+    expect(resolveLegacyRedirect('en', '/submissions', new Set(['evaluation:list']))).toBe('/en/evaluation/lanes');
+    expect(resolveLegacyRedirect('th', '/submissions/lanes', new Set(['submission:list']))).toBe('/th/evaluation/submissions');
+    expect(resolveLegacyRedirect('th', '/submissions', new Set(['team:list']))).toBeNull();
   });
 });

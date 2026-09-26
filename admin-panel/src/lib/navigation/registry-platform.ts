@@ -1,12 +1,13 @@
-import { pageRoute, searchRoute } from '@/lib/navigation/registry-descriptors';
+import { enabledPageRoute, pageRoute, searchRoute } from '@/lib/navigation/registry-descriptors';
 import type { RouteDescriptor } from '@/lib/navigation/types';
 
 // Why: the platform slice groups the administration, infrastructure, and system
-// modules; none of them has a canonical physical route yet, so all stay disabled.
+// modules; only the Administration descriptors have a proven physical route, so
+// infrastructure and system stay disabled until their own slice lands.
 export const PLATFORM_ROUTES: readonly RouteDescriptor[] = [
-  pageRoute('administration.admins', '/administration/admins', { all: ['admin:list', 'admin:read'] }, ['/admins']),
-  pageRoute('administration.groups', '/administration/groups', { all: ['group:list', 'group:read'] }, ['/groups']),
-  pageRoute('administration.audit', '/administration/audit', { all: ['audit:list', 'audit:read'] }, ['/audit']),
+  enabledPageRoute('administration.admins', '/administration/admins', { all: ['admin:list', 'admin:read'] }, ['/admins']),
+  enabledPageRoute('administration.groups', '/administration/groups', { all: ['group:list', 'group:read'] }, ['/groups']),
+  enabledPageRoute('administration.audit', '/administration/audit', { all: ['audit:list', 'audit:read'] }, ['/audit']),
 
   pageRoute('infrastructure.deployments', '/infrastructure/deployments', { all: ['deployment:list', 'deployment:read', 'env:read', 'env:list', 'contest:list', 'container:read', 'settings:read', 'settings:list', 'task:read'] }, ['/deployments']),
   pageRoute('infrastructure.containers', '/infrastructure/containers', { all: ['container:list', 'container:read'] }, ['/containers']),

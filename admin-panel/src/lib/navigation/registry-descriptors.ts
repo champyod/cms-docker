@@ -69,6 +69,19 @@ export function directPageRoute(
   return { ...pageRoute(id, path, permission, legacyPaths, surfaces), enabled: true };
 }
 
+// Why: a group page is enabled in the same commit that creates its physical
+// route, so a descriptor that outlives a removed page cannot advertise a
+// surface that answers 404.
+export function enabledPageRoute(
+  id: RouteId,
+  path: string,
+  permission: PermissionRequirement,
+  legacyPaths: readonly string[],
+  surfaces: readonly NavigationSurface[] = GROUP_PAGE_SURFACES,
+): RouteDescriptor {
+  return { ...pageRoute(id, path, permission, legacyPaths, surfaces), enabled: true };
+}
+
 export function recordRoute(
   id: RouteId,
   path: string,

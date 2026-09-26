@@ -169,7 +169,8 @@
     "noGroups": "No groups found",
     "noGroupsDescription": "Create a group to get started.",
     "deleteTooltip": "Delete group",
-    "editTooltip": "Edit group"
+    "editTooltip": "Edit group",
+    "loadFailed": "Groups could not be loaded."
   },
   "permissions": {
     "title": "Permissions",
@@ -216,6 +217,7 @@
     "pageInfo": "{total} entries total",
     "expandedDetails": "Details",
     "detailLoadFailed": "Could not load details",
+    "loadFailed": "Audit log could not be loaded.",
     "beforeValues": "Before",
     "afterValues": "After",
     "ip": "IP Address",
@@ -427,7 +429,7 @@
     }
   },
   "navigation": {
-    "groups": { "direct": "Direct", "people": "People", "evaluation": "Evaluation" },
+    "groups": { "direct": "Direct", "people": "People", "evaluation": "Evaluation", "administration": "Administration", "infrastructure": "Infrastructure", "system": "System" },
     "home": { "label": "Dashboard" },
     "contests": {
       "list": { "label": "Contests" },
@@ -442,6 +444,21 @@
     },
     "tasks": { "list": { "label": "Tasks" }, "record": { "label": "Task" }, "tabs": { "overview": { "label": "Overview" }, "datasets": { "label": "Datasets" }, "files": { "label": "Files" }, "settings": { "label": "Settings" } } },
     "people": { "users": { "label": "Users" }, "user-record": { "label": "User" }, "user-tabs": { "profile": { "label": "Profile" }, "teams": { "label": "Teams" }, "history": { "label": "History" } }, "teams": { "label": "Teams" }, "team-record": { "label": "Team" }, "team-tabs": { "overview": { "label": "Overview" }, "members": { "label": "Members" }, "contests": { "label": "Contests" } } },
-    "evaluation": { "submissions": { "label": "Submissions" }, "submission-record": { "label": "Submission" }, "submission-tabs": { "summary": { "label": "Summary" }, "results": { "label": "Results" }, "logs": { "label": "Logs" }, "evaluation": { "label": "Evaluation" } }, "lanes": { "label": "Evaluation Lanes" } }
+    "evaluation": { "submissions": { "label": "Submissions" }, "submission-record": { "label": "Submission" }, "submission-tabs": { "summary": { "label": "Summary" }, "results": { "label": "Results" }, "logs": { "label": "Logs" }, "evaluation": { "label": "Evaluation" } }, "lanes": { "label": "Evaluation Lanes" } },
+    "administration": { "admins": { "label": "Admins" }, "groups": { "label": "Groups" }, "audit": { "label": "Audit" } },
+    "infrastructure": {
+      "deployments": { "label": "Deployments", "description": "Select, activate, and manage the currently deployed contest stack." },
+      "containers": { "label": "Containers", "description": "Manage and monitor Docker services in real time." },
+      "resources": { "label": "Resources", "description": "Monitor server resources, workers, services, and network traffic." },
+      "ranking": { "label": "Ranking", "description": "Manage the protected ranking session, snapshot, and scoreboard." }
+    },
+    "system": {
+      "appearance": { "label": "Appearance", "description": "Configure branding, service previews, and display density." },
+      "maintenance": { "label": "Maintenance", "description": "Configure automated backups and system notifications." },
+      "settings": { "label": "Settings", "description": "Configure environment files and service restarts." },
+      "docs": { "label": "Docs", "description": "Read CMS administration and contest-system documentation." },
+      "search": { "label": "Search" }
+    },
+    "states": { "loading": "Loading", "error": "could not be loaded", "notFound": "Not found", "retry": "Try again" }
   }
 }

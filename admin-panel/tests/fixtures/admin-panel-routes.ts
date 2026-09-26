@@ -49,9 +49,9 @@ export const EXPECTED_ROUTE_MANIFEST: readonly RouteFixture[] = [
   { id: 'evaluation.submission-tabs.evaluation', path: '/evaluation/submissions/[id]/evaluation', kind: 'nested-tab', parentId: 'evaluation.submission-record', tabIds: [], legacyPaths: [], enabled: true },
   { id: 'evaluation.lanes', path: '/evaluation/lanes', kind: 'page', tabIds: [], legacyPaths: ['/submissions/lanes'], enabled: true },
 
-  { id: 'administration.admins', path: '/administration/admins', kind: 'page', tabIds: [], legacyPaths: ['/admins'], enabled: false },
-  { id: 'administration.groups', path: '/administration/groups', kind: 'page', tabIds: [], legacyPaths: ['/groups'], enabled: false },
-  { id: 'administration.audit', path: '/administration/audit', kind: 'page', tabIds: [], legacyPaths: ['/audit'], enabled: false },
+  { id: 'administration.admins', path: '/administration/admins', kind: 'page', tabIds: [], legacyPaths: ['/admins'], enabled: true },
+  { id: 'administration.groups', path: '/administration/groups', kind: 'page', tabIds: [], legacyPaths: ['/groups'], enabled: true },
+  { id: 'administration.audit', path: '/administration/audit', kind: 'page', tabIds: [], legacyPaths: ['/audit'], enabled: true },
 
   { id: 'infrastructure.deployments', path: '/infrastructure/deployments', kind: 'page', tabIds: [], legacyPaths: ['/deployments'], enabled: false },
   { id: 'infrastructure.containers', path: '/infrastructure/containers', kind: 'page', tabIds: [], legacyPaths: ['/containers'], enabled: false },

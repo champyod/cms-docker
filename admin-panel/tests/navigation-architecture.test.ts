@@ -5,6 +5,7 @@ import en from '@/dictionaries/en.json';
 import th from '@/dictionaries/th.json';
 
 import { NAVIGATION_GROUPS, ROUTE_REGISTRY } from '@/lib/navigation/registry';
+import type { RouteId } from '@/lib/navigation/types';
 import { EXPECTED_NAVIGATION_GROUPS, EXPECTED_ROUTE_MANIFEST, EXPECTED_ROUTE_PERMISSIONS } from './fixtures/admin-panel-routes';
 
 const ROOT = join(__dirname, '..');
@@ -48,6 +49,42 @@ const DIRECT_LABEL_CASES = [
   { labelKey: 'navigation.contests.list.label', en: 'Contests', th: 'การแข่งขัน' },
   { labelKey: 'navigation.tasks.list.label', en: 'Tasks', th: 'งาน' },
 ] as const;
+
+const FOUNDATION_DIRECT_ROUTE_IDS = [
+  'home',
+  'contests.list',
+  'tasks.list',
+] as const satisfies readonly RouteId[];
+
+const PHASE_OWNED_ROUTE_PREFIXES = [
+  'contests.',
+  'tasks.',
+  'people.',
+  'evaluation.',
+] as const;
+
+const MODULE_ROUTE_IDS = [
+  'administration.admins',
+  'administration.groups',
+  'administration.audit',
+  'infrastructure.deployments',
+  'infrastructure.containers',
+  'infrastructure.resources',
+  'infrastructure.ranking',
+  'system.appearance',
+  'system.maintenance',
+  'system.settings',
+  'system.docs',
+] as const satisfies readonly RouteId[];
+
+function expectModuleState(expectedEnabledIds: readonly RouteId[]): void {
+  const expected = new Set<RouteId>(expectedEnabledIds);
+  for (const routeId of MODULE_ROUTE_IDS) {
+    const descriptor = ROUTE_REGISTRY.find((route) => route.id === routeId);
+    if (!descriptor) throw new Error(`Missing module descriptor: ${routeId}`);
+    expect(descriptor.enabled).toBe(expected.has(routeId));
+  }
+}
 
 function resolveGeneratedLabel(dictionary: unknown, labelKey: string): string {
   let current: unknown = dictionary;
@@ -193,43 +230,32 @@ describe('foundation cutover state', () => {
       expect(pageSource).toContain('getDictionary(locale)');
       expect(pageSource).toContain(directRoute.pageLabelKey);
     }
-    // Why: the Submission record landing and its four tabs have physical routes now.
-    const enabledIds = [
-      'home',
-      'contests.list',
-      'contests.record',
-      'contests.tabs.overview',
-      'contests.tabs.tasks',
-      'contests.tabs.participants',
-      'contests.tabs.communications',
-      'contests.tabs.settings',
-      'tasks.list',
-      'tasks.record',
-      'tasks.tabs.overview',
-      'tasks.tabs.datasets',
-      'tasks.tabs.files',
-      'tasks.tabs.settings',
-      'people.users',
-      'people.user-record',
-      'people.user-tabs.profile',
-      'people.user-tabs.teams',
-      'people.user-tabs.history',
-      'people.teams',
-      'people.team-record',
-      'people.team-tabs.overview',
-      'people.team-tabs.members',
-      'people.team-tabs.contests',
-      'evaluation.submissions',
-      'evaluation.submission-record',
-      'evaluation.submission-tabs.summary',
-      'evaluation.submission-tabs.results',
-      'evaluation.submission-tabs.logs',
-      'evaluation.submission-tabs.evaluation',
-      'evaluation.lanes',
-    ];
-    const enabledIdSet = new Set<string>(enabledIds);
-    expect(ROUTE_REGISTRY.filter((route) => route.enabled).map((route) => route.id)).toEqual(enabledIds);
-    expect(ROUTE_REGISTRY.filter((route) => !enabledIdSet.has(route.id)).every((route) => !route.enabled)).toBe(true);
+  });
+
+  it('preserves foundation-direct and phase-owned enabled descriptors', () => {
+    const enabledIds = new Set(
+      ROUTE_REGISTRY.filter((route) => route.enabled).map((route) => route.id),
+    );
+    for (const routeId of FOUNDATION_DIRECT_ROUTE_IDS) {
+      expect(enabledIds.has(routeId)).toBe(true);
+    }
+    const phaseOwnedIds = ROUTE_REGISTRY
+      .filter((route) => PHASE_OWNED_ROUTE_PREFIXES.some(
+        (prefix) => route.id.startsWith(prefix),
+      ))
+      .map((route) => route.id);
+    expect(phaseOwnedIds.length).toBeGreaterThan(0);
+    for (const routeId of phaseOwnedIds) {
+      expect(enabledIds.has(routeId)).toBe(true);
+    }
+  });
+
+  it('enables only the Administration module descriptors in Task 1', () => {
+    expectModuleState([
+      'administration.admins',
+      'administration.groups',
+      'administration.audit',
+    ]);
   });
 
   it('keeps Sidebar, palette, and mobile on the old registry', () => {

@@ -6,7 +6,6 @@ import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
 import { ResponsiveTable } from '@/components/core/ResponsiveTable';
-import { Text } from '@/components/core/Typography';
 import type { GroupWithPermissions } from '@/app/actions/adminPermissions';
 import { buildColumns } from './groupColumns';
 import { useGroupList } from './useGroupList';
@@ -78,8 +77,7 @@ export function GroupList({
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <Text variant="h2">{dict.title}</Text>
+      <div className="flex justify-end items-center">
         {canCreate && (
           <Button variant="positive" icon={Plus} onClick={handleOpenCreate}>
             {dict.createGroup}

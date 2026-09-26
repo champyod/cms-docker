@@ -1,14 +1,30 @@
-import { redirect } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
+
+import { getRoutePermissions } from '@/lib/navigation/page-authorization';
+import { resolveLegacyRedirect } from '@/lib/navigation/redirects';
+import { AuthorizationError } from '@/lib/server/authorization';
+
+const LEGACY_PATH = '/admins';
 
 /**
- * Why this route still exists: admin accounts and permission groups share the tabbed /permissions page,
- * and the old addresses stay reachable so existing bookmarks, chord history and links keep working.
+ * Why this route still exists: the Admins section used to share the tabbed
+ * /permissions page, so the old address stays reachable for existing bookmarks,
+ * chord history, and links. Only a reader whose permissions fail closed is
+ * concealed; a 401 and any unexpected storage failure keep propagating.
  */
 export default async function AdminsRedirectPage({
   params,
 }: {
   params: Promise<{ locale: string }>;
 }): Promise<never> {
-  const { locale } = await params;
-  return redirect(`/${locale}/permissions?tab=admins`);
+  try {
+    const { locale } = await params;
+    const effective = await getRoutePermissions();
+    const target = resolveLegacyRedirect(locale, LEGACY_PATH, effective);
+    if (target === null) notFound();
+    redirect(target);
+  } catch (error: unknown) {
+    if (error instanceof AuthorizationError && error.status === 403) notFound();
+    throw error;
+  }
 }

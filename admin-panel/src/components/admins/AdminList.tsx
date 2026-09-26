@@ -8,7 +8,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
 import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
-import { Text } from '@/components/core/Typography';
 import { Plus, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { updateAdmin, deleteAdmin } from '@/app/actions/admins';
 import { listAdminsAccessSummary, type AdminAccessSummary } from '@/app/actions/adminPermissions';
@@ -23,7 +22,7 @@ interface AdminListProps {
   initialAdmins: AdminWithLogin[];
   callerPermissions: string[];
   capabilities: AdminCapabilities;
-  headerLabels: { title: string; addAdmin: string };
+  headerLabels: { addAdmin: string };
   actionLabels: { edit: string; delete: string };
 }
 
@@ -228,8 +227,7 @@ export function AdminList({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-3">
-        <Text variant="h2">{headerLabels.title}</Text>
+      <div className="flex items-center justify-end gap-3">
         {capabilities.canCreate && (
           <Button variant="positive" icon={Plus} onClick={startCreate}>
             {headerLabels.addAdmin}

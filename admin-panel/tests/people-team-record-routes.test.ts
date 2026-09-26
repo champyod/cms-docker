@@ -94,11 +94,18 @@ describe('legacy /teams redirect', () => {
     expect(notFound).toHaveBeenCalled();
   });
 
-  it('renders the concealed view when no permitted target resolves', async () => {
-    vi.mocked(requirePermission).mockResolvedValue(new Set(['user:list']));
+  it('renders the concealed view when the caller can read no People route', async () => {
+    vi.mocked(requirePermission).mockResolvedValue(new Set(['task:list']));
     await expect(
       LegacyTeamsPage({ params: Promise.resolve({ locale: 'en' }) }),
     ).rejects.toThrow('NEXT_NOT_FOUND');
+  });
+
+  it('falls back inside the People group for a denied legacy target', async () => {
+    vi.mocked(requirePermission).mockResolvedValue(new Set(['user:list']));
+    await expect(
+      LegacyTeamsPage({ params: Promise.resolve({ locale: 'en' }) }),
+    ).rejects.toThrow('NEXT_REDIRECT:/en/people/users');
   });
 
   it('redirects a permitted caller to the locale-preserving canonical page', async () => {

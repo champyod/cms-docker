@@ -13,7 +13,7 @@ import { buildRoute } from '@/lib/navigation/routes';
 import { resolveLegacyRedirect } from '@/lib/navigation/redirects';
 import en from '@/dictionaries/en.json';
 import th from '@/dictionaries/th.json';
-import type { RouteDescriptor } from '@/lib/navigation/types';
+import type { RouteDescriptor, RouteId } from '@/lib/navigation/types';
 
 function routeWith(
   permission: RouteDescriptor['permission'],
@@ -106,8 +106,9 @@ describe('target route registry', () => {
     expect(ROUTE_REGISTRY).toHaveLength(43);
     const directIds = DIRECT_ROUTE_CASES.map(({ routeId }) => routeId);
     // Why: the Evaluation shell proves the Submission list, the lane module, and
-    // the Submission record landing with its four tabs, so those descriptors join
-    // the direct three and the Contest, Task, User, and Team routes in registry
+    // the Submission record landing with its four tabs, and the Administration
+    // group proves Admins, Groups, and Audit, so those descriptors join the
+    // direct three and the Contest, Task, User, and Team routes in registry
     // order.
     const enabledIds = [
       'home',
@@ -141,20 +142,19 @@ describe('target route registry', () => {
       'evaluation.submission-tabs.logs',
       'evaluation.submission-tabs.evaluation',
       'evaluation.lanes',
+      ...ADMINISTRATION_ROUTE_IDS,
     ];
     const enabledIdSet = new Set<string>(enabledIds);
     expect(ROUTE_REGISTRY.filter((route) => route.enabled).map((route) => route.id)).toEqual(enabledIds);
     expect(ROUTE_REGISTRY.filter((route) => !enabledIdSet.has(route.id)).every((route) => !route.enabled)).toBe(true);
-    // Why: page surfaces are group-scoped, so the enabled users, teams,
-    // submissions, and lanes pages are the only People and Evaluation entries
-    // the sidebar surface can resolve for a full reader.
-    expect(visibleRoutes(new Set(['all:all']), 'sidebar').map((route) => route.id)).toEqual([
-      ...directIds,
-      'people.users',
-      'people.teams',
-      'evaluation.submissions',
-      'evaluation.lanes',
-    ]);
+    // Why: page surfaces are group-scoped, so the sidebar equality is scoped to
+    // the Administration module IDs this slice owns — a People, Evaluation, or
+    // Infrastructure entry owned by another slice would otherwise make the
+    // complete visible list look incomplete.
+    const sidebarIds = visibleRoutes(new Set(['all:all']), 'sidebar').map((route) => route.id);
+    expect(sidebarIds.slice(0, directIds.length)).toEqual(directIds);
+    const administrationIds = new Set<RouteId>(ADMINISTRATION_ROUTE_IDS);
+    expect(sidebarIds.filter((id) => administrationIds.has(id))).toEqual([...ADMINISTRATION_ROUTE_IDS]);
   });
 
   it('uses stable unique IDs and unique canonical patterns', () => {
