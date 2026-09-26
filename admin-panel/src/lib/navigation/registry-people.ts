@@ -1,9 +1,9 @@
 import { pageRoute, recordRoute, tabRoute } from '@/lib/navigation/registry-descriptors';
 import type { RouteDescriptor } from '@/lib/navigation/types';
 
-// Why: Task 3 proved the physical Team routes, so the teams page, the record
-// landing and its three tabs join the User descriptors in the enabled set — the
-// Evaluation descriptors stay disabled until Task 4 proves their routes.
+// Why: a descriptor is enabled only where its physical route already exists,
+// so the People set here is the users page, the teams page, both record
+// landings, and their tabs. Every other slice keeps its own enablement.
 export const PEOPLE_ROUTES: readonly RouteDescriptor[] = [
   { ...pageRoute('people.users', '/people/users', { all: ['user:list'] }, ['/users']), enabled: true },
   { ...recordRoute(

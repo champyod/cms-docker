@@ -66,6 +66,15 @@ describe('people and evaluation bilingual navigation parity', () => {
     }
   });
 
+  it('pins the Evaluation group labels so a shorter label cannot drift back', () => {
+    // Why value level: a non-empty check alone let "Lanes" pass for the lane
+    // module that the sidebar already called "Evaluation Lanes".
+    expect(resolveLabel(en, 'navigation.evaluation.lanes.label')).toBe('Evaluation Lanes');
+    expect(resolveLabel(th, 'navigation.evaluation.lanes.label')).toBe('แถวประเมิน');
+    expect(resolveLabel(en, 'navigation.groups.evaluation')).toBe('Evaluation');
+    expect(resolveLabel(th, 'navigation.groups.evaluation')).toBe('การประเมิน');
+  });
+
   it('keeps English and Thai People and Evaluation detail-label keys in parity', () => {
     const cases = [
       ['navigation.people.user-tabs', ['profile', 'teams', 'history']],

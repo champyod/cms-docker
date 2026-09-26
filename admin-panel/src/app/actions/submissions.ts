@@ -1,15 +1,11 @@
 'use server'
 
-import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { ensurePermission, getPermissions } from '@/lib/permissions';
-import { hasEffectivePermission } from '@/lib/permission-engine';
 import { stripDisallowedFields, getFieldAccess, type FieldAccess } from '@/lib/field-permissions';
-import { submissionsListInclude } from '@/lib/prisma-selects';
 import { revalidatePath } from 'next/cache';
 import { recordAudit } from '@/lib/audit';
 
-const SUBMISSIONS_PER_PAGE = 20;
 const EVALUATION_RPC_ENDPOINT = 'http://cms-admin-web-server:25000/rpc/EvaluationService/0/invalidate_submission';
 
 interface ActionResult {
@@ -18,68 +14,6 @@ interface ActionResult {
 }
 
 type RecalcType = 'score' | 'evaluation' | 'full';
-
-export async function getSubmissions({
-    page = 1,
-  contestId,
-  taskId,
-    userId,
-}: {
-    page?: number;
-  contestId?: number;
-  taskId?: number;
-    userId?: number;
-}) {
-  await ensurePermission('submission:list');
-  const perms = await getPermissions();
-
-  const skip = (page - 1) * SUBMISSIONS_PER_PAGE;
-  const where = buildSubmissionsWhere({ contestId, taskId, userId });
-
-  const [submissions, total] = await Promise.all([
-    prisma.submissions.findMany({
-      where,
-      skip,
-      take: SUBMISSIONS_PER_PAGE,
-      orderBy: { timestamp: 'desc' },
-      include: submissionsListInclude,
-    }),
-    prisma.submissions.count({ where }),
-  ]);
-
-  // Why empty arrays instead of row removal: relation data the caller may not
-  // read is withheld while the row shape stays intact for the list type.
-  const canSeeResults = hasEffectivePermission(perms, 'submissionresult:read');
-  const canSeeFiles = hasEffectivePermission(perms, 'file:read');
-  return {
-      submissions: submissions.map((row) => ({
-        ...row,
-        submission_results: canSeeResults ? row.submission_results : [],
-        files: canSeeFiles ? row.files : [],
-      })),
-    totalPages: Math.ceil(total / SUBMISSIONS_PER_PAGE),
-    total,
-  };
-}
-
-function buildSubmissionsWhere(filters: { contestId?: number; taskId?: number; userId?: number }): Prisma.submissionsWhereInput {
-  const participations: Record<string, unknown> = {};
-  if (filters.contestId) {
-    participations.contest_id = filters.contestId;
-  }
-  if (filters.userId) {
-    participations.user_id = filters.userId;
-  }
-
-  const where: Prisma.submissionsWhereInput = {};
-  if (filters.taskId) {
-    where.task_id = filters.taskId;
-  }
-  if (Object.keys(participations).length > 0) {
-    where.participations = participations as Prisma.submissionsWhereInput['participations'];
-  }
-  return where;
-}
 
 export async function updateSubmissionComment(submissionId: number, comment: string): Promise<ActionResult> {
     await ensurePermission('submission:update');

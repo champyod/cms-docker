@@ -18,6 +18,9 @@ import { cn } from '@/lib/utils';
 export interface ResponsiveColumn<Row> {
   key: string;
   header: React.ReactNode;
+  // Why optional: alignment and width are per-list presentation, so a column
+  // carries its own head class instead of the core guessing an alignment.
+  headerClassName?: string;
   render: (row: Row) => React.ReactNode;
   mobileLabel?: string;
   hideOnMobile?: boolean;
@@ -91,7 +94,7 @@ function renderDesktopHeader<Row>(
     <TableHeader>
       <TableRow>
         {columns.map((column) => (
-          <TableHead key={column.key}>{column.header}</TableHead>
+          <TableHead key={column.key} className={column.headerClassName}>{column.header}</TableHead>
         ))}
         {hasActions ? <TableHead className="text-right">{actionsHeader ?? 'Actions'}</TableHead> : null}
       </TableRow>

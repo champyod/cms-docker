@@ -84,6 +84,36 @@ function componentGateKeys(): Map<string, string[]> {
   return found;
 }
 
+// Why page gates count: app/[locale] pages are server components, so a
+// permission check there is server-side enforcement, not a UX hint. The
+// matcher lists the same helpers as the shared coverage scanner, because a
+// page that gates with the typed reader is enforcing, not hinting.
+const PAGE_GATE_RE = /\b(?:ensurePermission|checkPermission|requirePermission)\s*\(\s*['"`]([^'"`]+)['"`]/g;
+
+function pageGateKeys(): Set<string> {
+  const keys = new Set<string>();
+  const walk = (dir: string): void => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const abs = path.join(dir, entry.name);
+      if (entry.isDirectory()) { walk(abs); continue; }
+      if (!abs.endsWith('.tsx')) continue;
+      const source = fs.readFileSync(abs, 'utf8');
+      let match: RegExpExecArray | null;
+      while ((match = PAGE_GATE_RE.exec(source)) !== null) keys.add(match[1]);
+    }
+  };
+  walk(path.join(SRC_DIR, 'app'));
+  return keys;
+}
+
+function enforcedKeys(): Set<string> {
+  const { demandedByEntry } = collectEntries();
+  const enforced = fieldMapKeys();
+  for (const keys of demandedByEntry.values()) for (const key of keys) enforced.add(key);
+  for (const key of pageGateKeys()) enforced.add(key);
+  return enforced;
+}
+
 describe('permission coverage', () => {
   it('gates every server action and API entry (or allowlists it with a reason)', () => {
     const { entries, demandedByEntry } = collectEntries();
@@ -107,24 +137,7 @@ describe('permission coverage', () => {
   });
 
   it('enforces every registry key or documents it as system-owned', () => {
-    const { demandedByEntry } = collectEntries();
-    const demanded = new Set<string>();
-    for (const keys of demandedByEntry.values()) for (const key of keys) demanded.add(key);
-    // Why page gates count: app/[locale] pages are server components, so a
-    // checkPermission there is server-side enforcement, not a UX hint.
-    const pageGateRe = /\b(?:ensurePermission|checkPermission)\s*\(\s*['"`]([^'"`]+)['"`]/g;
-    const pagesDir = path.join(SRC_DIR, 'app');
-    const walkPages = (dir: string): void => {
-      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        const abs = path.join(dir, entry.name);
-        if (entry.isDirectory()) { walkPages(abs); continue; }
-        if (!abs.endsWith('.tsx')) continue;
-        const source = fs.readFileSync(abs, 'utf8');
-        let match: RegExpExecArray | null;
-        while ((match = pageGateRe.exec(source)) !== null) demanded.add(match[1]);
-      }
-    };
-    walkPages(pagesDir);
+    const demanded = enforcedKeys();
     const mapped = fieldMapKeys();
     const reserved = new Set(RESERVED_PERMISSIONS.map((r) => r.key));
     const ignored = PERMISSION_REGISTRY.map((d) => d.key).filter(
@@ -148,9 +161,7 @@ describe('permission coverage', () => {
   });
 
   it('documents every granted-but-unenforced key as system-owned', () => {
-    const { demandedByEntry } = collectEntries();
-    const enforced = new Set<string>(fieldMapKeys());
-    for (const keys of demandedByEntry.values()) for (const key of keys) enforced.add(key);
+    const enforced = enforcedKeys();
     const reserved = new Set(RESERVED_PERMISSIONS.map((r) => r.key));
     const offenders: string[] = [];
     for (const group of DEFAULT_GROUPS) {

@@ -101,6 +101,12 @@ describe('submission list canonical navigation', () => {
     expect(anchors).toHaveLength(2);
     expect(anchors[0].getAttribute('href')).toBe('/en/evaluation/submissions/19');
     expect(container.querySelector('.space-y-3.md\\:hidden a')?.getAttribute('href')).toBe(RECORD_HREF);
+    // Why: an anchor wrapping a real button announces as two controls and eats
+    // modified clicks, so the row action must be the anchor itself.
+    for (const anchor of anchors) {
+      expect(anchor.tagName).toBe('A');
+      expect(anchor.querySelector('button')).toBeNull();
+    }
   });
 
   it('keeps the row action from double-navigating through the row handler', () => {

@@ -1,239 +1,51 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
-import { FileSpreadsheet, HelpCircle, Plus } from 'lucide-react';
-import { useActionFeedback } from '@/hooks/useActionFeedback';
-import Link from 'next/link';
-
-import { Button } from '@/components/core/Button';
-import { apiClient, type ApiResponse } from '@/lib/apiClient';
-import { buildRoute } from '@/lib/navigation/routes';
-import { hasEffectivePermission } from '@/lib/permission-engine';
-
-import { UserBulkCreateCsv } from './UserBulkCreateCsv';
-import { UserBulkEditDialog } from './UserBulkEditDialog';
-import { UserModal } from './UserModal';
-import { UserTable } from './UserTable';
-import { TableToolbar } from '@/components/core/TableToolbar';
-import { TablePaginationControls } from '@/components/core/TablePaginationControls';
-import { useConfirm } from '@/hooks/useConfirm';
 import { useAppRouter } from '@/hooks/useAppRouter';
-import { useTable } from '@/hooks/useTable';
-import { useTableAutoRefresh } from '@/hooks/useTableAutoRefresh';
-import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
+import { buildRoute } from '@/lib/navigation/routes';
 import type { UsersPageRow } from '@/lib/prisma-selects';
+
+import { UserListDialogs } from './UserListDialogs';
+import { UserListHeader } from './UserListHeader';
+import { UserListPagination } from './UserListPagination';
+import { UserListTable } from './UserListTable';
+import { UserSearchToolbar } from './UserSearchToolbar';
 import type { UserListProps } from './userTableTypes';
+import { useUserCapabilities, useUserDelete, useUserDialogs } from './useUserListActions';
+import { useUserListRows } from './useUserListRows';
+import { useUserSelection } from './useUserSelection';
 
-function mergeIntoCache(prev: Record<number, UsersPageRow>, users: UsersPageRow[]): Record<number, UsersPageRow> {
-  const next = { ...prev };
-  users.forEach((user) => { next[user.id] = user; });
-  return next;
-}
-
-export function UserList({ initialUsers, totalPages, currentPage, perPage, initialSearch, contests, canReadContests, navigation, permissionKeys, locale }: UserListProps) {
-  const [usersList, setUsersList] = useState(initialUsers);
-  const [userCache, setUserCache] = useState<Record<number, UsersPageRow>>(() => mergeIntoCache({}, initialUsers));
-  const [totalPagesState, setTotalPagesState] = useState(totalPages);
-  const [loadingList, setLoadingList] = useState(false);
-  const [searchDraft, setSearchDraft] = useState(initialSearch);
-  const [pageInput, setPageInput] = useState(String(currentPage));
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
-  const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<UsersPageRow | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const table = useTable({ initialPage: currentPage, initialPerPage: perPage, initialSearch });
+export function UserList({ initialUsers, totalPages, currentPage, perPage, initialSearch, contests, canReadContests, navigation, permissionKeys, locale }: UserListProps): React.JSX.Element {
+  const rows = useUserListRows({ initialUsers, totalPages, currentPage, perPage, initialSearch });
+  const selection = useUserSelection(rows.users, rows.userCache);
+  const capabilities = useUserCapabilities(permissionKeys);
+  const dialogs = useUserDialogs();
   const router = useAppRouter();
-  const confirm = useConfirm();
-  const { destructiveConfirm } = useConfirmationCopy();
-
-  const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
-  const canCreateUsers = hasEffectivePermission(effective, 'user:create');
-  const canManageUsers = hasEffectivePermission(effective, 'user:update');
-  const canDeleteUsers = hasEffectivePermission(effective, 'user:delete');
-
-  const fetchUsers = useCallback(async (next: { page?: number; perPage?: number; search?: string } = {}) => {
-    const targetPage = Math.max(next.page ?? table.page, 1);
-    const targetPerPage = next.perPage ?? table.perPage;
-    const targetSearch = next.search ?? table.search;
-
-    setLoadingList(true);
-    try {
-      const query = new URLSearchParams({
-        page: String(targetPage),
-        perPage: String(targetPerPage),
-        search: targetSearch,
-      });
-
-      const result = (await apiClient.get(`/api/users?${query.toString()}`)) as ApiResponse & { users?: UsersPageRow[]; totalPages?: number; currentPage?: number; perPage?: number; search?: string };
-      if (!result.success) return;
-
-      setUsersList(result.users || []);
-      setUserCache((prev) => mergeIntoCache(prev, result.users || []));
-      setTotalPagesState(result.totalPages || 1);
-      table.setPage(result.currentPage || targetPage);
-      table.setPerPage(result.perPage || targetPerPage);
-      table.setSearch(result.search ?? targetSearch);
-      setPageInput(String(result.currentPage || targetPage));
-      // Selection survives refreshes so bulk actions and local previews stay visible until explicitly cleared.
-    } finally {
-      setLoadingList(false);
-    }
-  }, [table]);
-
-  const selectedUsers = useMemo(() => {
-    return Array.from(selectedIds).map((id) => userCache[id]).filter(Boolean);
-  }, [selectedIds, userCache]);
-
-  useTableAutoRefresh({
-    enabled: true,
-    intervalMs: 60000,
-    onRefresh: () => fetchUsers(),
-  });
-
-  const handleEdit = (user: UsersPageRow) => {
-    if (!canManageUsers) return;
-    setSelectedUser(user);
-    setIsModalOpen(true);
-  };
-
-  const runAction = useActionFeedback();
-
-  const handleDelete = async (id: number) => {
-    if (!canDeleteUsers) return;
-    if (!(await confirm(destructiveConfirm('user')))) return;
-    const result = await runAction(
-      { pending: 'Deleting user...', success: 'User deleted', failure: 'Failed to delete user' },
-      () => apiClient.delete(`/api/users/${id}`)
-    );
-    if (result?.success) await fetchUsers();
-  };
-
-  const handleCreate = () => {
-    if (!canCreateUsers) return;
-    setSelectedUser(null);
-    setIsModalOpen(true);
-  };
-
-  const toggleAll = (checked: boolean) => {
-    setSelectedIds((previous) => {
-      const next = new Set(previous);
-      usersList.forEach((user) => {
-        if (checked) next.add(user.id);
-        else next.delete(user.id);
-      });
-      return next;
-    });
-  };
-
-  const toggleOne = (userId: number, checked: boolean) => {
-    setSelectedIds((previous) => {
-      const next = new Set(previous);
-      if (checked) next.add(userId);
-      else next.delete(userId);
-      return next;
-    });
-  };
+  const refresh = () => { void rows.fetchUsers(); };
+  const removeUser = useUserDelete(capabilities.canDelete, refresh);
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <Link
-          href={`/${locale}/docs#users`}
-          className="inline-flex size-11 shrink-0 items-center justify-center hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground"
-          title="View Documentation"
-        >
-          <HelpCircle className="w-4 h-4" />
-        </Link>
-        {canCreateUsers && (
-          <>
-            <Button variant="positiveOutline" icon={FileSpreadsheet} onClick={() => setIsBulkModalOpen(true)}>
-              Bulk Add Users
-            </Button>
-            <Button variant="positive" icon={Plus} onClick={handleCreate}>
-              Create User
-            </Button>
-          </>
-        )}
-      </div>
-
-      <TableToolbar
-        searchText={searchDraft}
-        onSearchTextChange={setSearchDraft}
-        onSearchSubmit={() => fetchUsers({ page: 1, search: searchDraft })}
-        searchPlaceholder="Search users..."
-        rightContent={
-          canManageUsers ? (
-            <Button variant="secondary" onClick={() => setIsBulkEditOpen(true)} disabled={selectedIds.size === 0}>
-              Edit Selected ({selectedIds.size})
-            </Button>
-          ) : null
-        }
+      <UserListHeader locale={locale} canCreate={capabilities.canCreate} onCreate={dialogs.openCreate} onBulkCreate={dialogs.openBulkCreate} />
+      <UserSearchToolbar rows={rows} canManage={capabilities.canManage} selectedCount={selection.selectedIds.size} onBulkEdit={dialogs.openBulkEdit} />
+      <UserListTable
+        rows={rows}
+        selection={selection}
+        capabilities={capabilities}
+        onOpen={(user: UsersPageRow) => router.push(buildRoute(locale, 'people.user-record', { id: user.id }))}
+        onEdit={dialogs.openEdit}
+        onDelete={(userId) => { void removeUser(userId); }}
       />
-
-      <UserTable
-        users={usersList}
-        loading={loadingList}
-        selectedIds={selectedIds}
-        canManageUsers={canManageUsers}
-        pageNumber={table.page}
-        perPage={table.perPage}
-        onToggleAll={toggleAll}
-        onToggleOne={toggleOne}
-        onOpen={(user) => router.push(buildRoute(locale, 'people.user-record', { id: user.id }))}
-        onEdit={handleEdit}
-        onDelete={handleDelete}
-      />
-
-      <TablePaginationControls
-        currentPage={table.page}
-        totalPages={totalPagesState}
-        pageInput={pageInput}
-        onPageInputChange={setPageInput}
-        onPageGo={() => {
-          const parsed = Number(pageInput);
-          if (!Number.isFinite(parsed)) return;
-          fetchUsers({ page: Math.min(Math.max(parsed, 1), totalPagesState) });
-        }}
-        perPage={table.perPage}
-        onPerPageChange={(value) => fetchUsers({ page: 1, perPage: value })}
-        onPrev={() => fetchUsers({ page: table.page - 1 })}
-        onNext={() => fetchUsers({ page: table.page + 1 })}
-      />
-
-      <UserModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        user={selectedUser}
+      <UserListPagination rows={rows} />
+      <UserListDialogs
+        dialogs={dialogs}
+        capabilities={capabilities}
+        selectedUsers={selection.selectedUsers}
         contests={contests}
         canReadContests={canReadContests}
-        navigation={navigation}
-        onSuccess={() => { void fetchUsers(); }}
         permissionKeys={permissionKeys}
+        navigation={navigation}
+        onSaved={refresh}
       />
-
-      {canCreateUsers && (
-        <UserBulkCreateCsv
-          isOpen={isBulkModalOpen}
-          onClose={() => setIsBulkModalOpen(false)}
-          contests={contests}
-          canReadContests={canReadContests}
-          navigation={navigation}
-          onSuccess={() => { void fetchUsers(); }}
-        />
-      )}
-
-      {canManageUsers && (
-        <UserBulkEditDialog
-          isOpen={isBulkEditOpen}
-          onClose={() => setIsBulkEditOpen(false)}
-          selectedUsers={selectedUsers}
-          contests={contests}
-          canReadContests={canReadContests}
-          navigation={navigation}
-          onSuccess={() => { void fetchUsers(); }}
-        />
-      )}
     </div>
   );
 }

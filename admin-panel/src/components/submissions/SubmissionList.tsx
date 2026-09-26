@@ -1,20 +1,20 @@
 'use client';
 
-import { Clock, Eye, FileCode, HelpCircle, User as UserIcon } from 'lucide-react';
+import { Eye, FileCode, HelpCircle } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useAppRouter } from '@/hooks/useAppRouter';
 
-import { Badge } from '@/components/core/Badge';
-import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
-import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
+import { RecordList } from '@/components/list/RecordList';
+import { RecordListPager } from '@/components/list/RecordListPager';
+import { RowActionLink } from '@/components/list/RowActionLink';
+import { useAppRouter } from '@/hooks/useAppRouter';
 import { useSyncedState } from '@/hooks/useSyncedState';
-
 import type { Dictionary } from '@/lib/dictionary';
 import { buildRoute } from '@/lib/navigation/routes';
 import type { SubmissionListItem } from '@/types';
+
+import { buildSubmissionColumns } from './submissionColumns';
 
 export interface SubmissionListProps {
   readonly initialSubmissions: readonly SubmissionListItem[];
@@ -23,14 +23,28 @@ export interface SubmissionListProps {
   readonly navigation: Dictionary['navigation'];
 }
 
-function formatDate(date: Date): string {
-  return new Date(date).toLocaleString(undefined, {
-    month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit', second: '2-digit'
-  });
+function recordHref(locale: string, submission: SubmissionListItem): string {
+  return buildRoute(locale, 'evaluation.submission-record', { id: submission.id });
 }
 
-export function SubmissionList({ initialSubmissions, totalPages, currentPage, navigation }: SubmissionListProps) {
+function SubmissionListHeader({ locale, currentPage, totalPages }: {
+  locale: string;
+  currentPage: number;
+  totalPages: number;
+}): React.JSX.Element {
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <Link href={`/${locale}/docs#submissions`} className="flex h-11 w-11 items-center justify-center p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-primary" title="View Documentation">
+        <HelpCircle className="w-4 h-4" />
+      </Link>
+      <div className="text-sm text-muted-foreground">
+        Page {currentPage} of {totalPages}
+      </div>
+    </div>
+  );
+}
+
+export function SubmissionList({ initialSubmissions, totalPages, currentPage, navigation }: SubmissionListProps): React.JSX.Element {
   const [submissions] = useSyncedState(initialSubmissions);
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
@@ -38,13 +52,6 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage, na
   // Why the generated record label: the row action opens the submission record,
   // so its accessible name comes from the same bilingual key the record uses.
   const recordLabel = navigation.evaluation['submission-record'].label;
-
-  const recordHref = (submission: SubmissionListItem): string =>
-    buildRoute(locale, 'evaluation.submission-record', { id: submission.id });
-
-  const openRecord = (submission: SubmissionListItem): void => {
-    router.push(recordHref(submission));
-  };
 
   const handlePageChange = (newPage: number): void => {
     const url = new URL(window.location.href);
@@ -54,192 +61,20 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage, na
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <Link href={`/${locale}/docs#submissions`} className="flex h-11 w-11 items-center justify-center p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-primary" title="View Documentation">
-          <HelpCircle className="w-4 h-4" />
-        </Link>
-        <div className="text-sm text-muted-foreground">
-          Page {currentPage} of {totalPages}
-        </div>
-      </div>
-
-      <Table
-        mobileCards={submissions.map((submission) => {
-          const result = submission.submission_results[0];
-          const score = result?.score;
-          const compilationFailed = result?.compilation_outcome === 'fail';
-          const compiling = result?.compilation_outcome === null;
-          const evaluating = !compilationFailed && result?.evaluation_outcome === null;
-          return (
-            <MobileCard key={submission.id}>
-              <MobileCardRow label="ID" value={`#${submission.id}`} />
-              <MobileCardRow label="Time" value={formatDate(submission.timestamp)} />
-              <MobileCardRow label="User" value={submission.participations.users.username} />
-              <MobileCardRow label="Task" value={submission.tasks.name} />
-              <MobileCardRow label="Language" value={submission.language ?? '—'} />
-              <MobileCardRow
-                label="Status"
-                value={
-                  compilationFailed ? (
-                    <Badge variant="destructive">Compilation Failed</Badge>
-                  ) : compiling ? (
-                    <Badge variant="info" className="animate-pulse">Compiling</Badge>
-                  ) : evaluating ? (
-                    <Badge variant="indigo" className="animate-pulse">Evaluating</Badge>
-                  ) : score !== null && score !== undefined ? (
-                    <Badge variant={score > 0 ? 'success' : 'destructive'} className="font-mono">
-                      {score.toFixed(0)} / 100
-                    </Badge>
-                  ) : (
-                    <Badge variant="neutral">Pending</Badge>
-                  )
-                }
-              />
-              <MobileCardRow
-                label="Score"
-                value={score !== null && score !== undefined ? score.toFixed(0) : '—'}
-              />
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <a
-                  href={recordHref(submission)}
-                  aria-label={`${recordLabel} ${submission.id}`}
-                  title={recordLabel}
-                  className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-primary"
-                >
-                  <Eye className="h-4 w-4" />
-                </a>
-              </div>
-            </MobileCard>
-          );
-        })}
-      >
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-24">ID</TableHead>
-            <TableHead>Time</TableHead>
-            <TableHead>User</TableHead>
-            <TableHead>Task</TableHead>
-            <TableHead>Language</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="text-right">Score</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {submissions.map((submission) => {
-            const result = submission.submission_results[0];
-            const score = result?.score;
-            const compilationFailed = result?.compilation_outcome === 'fail';
-            const compiling = result?.compilation_outcome === null;
-            const evaluating = !compilationFailed && result?.evaluation_outcome === null;
-
-            return (
-              <TableRow
-                key={submission.id}
-                data-shortcut-row={submission.id}
-                className="cursor-pointer"
-                tabIndex={0}
-                onClick={() => openRecord(submission)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && event.target === event.currentTarget) openRecord(submission);
-                }}
-              >
-                  <TableCell className="font-mono text-muted-foreground text-xs">#{submission.id}</TableCell>
-                  <TableCell>
-                      <div className="flex items-center gap-2 text-sm">
-                          <Clock className="w-3 h-3 text-muted-foreground" />
-                          {formatDate(submission.timestamp)}
-                      </div>
-                  </TableCell>
-                  <TableCell>
-                      <div className="flex items-center gap-2 font-medium">
-                          <UserIcon className="w-3 h-3 text-muted-foreground" />
-                          {submission.participations.users.username}
-                      </div>
-                      <div className="text-xs text-muted-foreground ml-5">{submission.participations.contests.name}</div>
-                  </TableCell>
-                  <TableCell>
-                       <div className="flex items-center gap-2">
-                          <FileCode className="w-3 h-3 text-muted-foreground" />
-                          {submission.tasks.name}
-                      </div>
-                  </TableCell>
-                  <TableCell className="font-mono text-sm">
-                      {submission.language ?? '—'}
-                  </TableCell>
-                  <TableCell>
-                    {compilationFailed ? (
-                      <Badge variant="destructive">Compilation Failed</Badge>
-                    ) : compiling ? (
-                      <Badge variant="info" className="animate-pulse">Compiling</Badge>
-                    ) : evaluating ? (
-                      <Badge variant="indigo" className="animate-pulse">Evaluating</Badge>
-                    ) : score !== null && score !== undefined ? (
-                      <Badge variant={score > 0 ? 'success' : 'destructive'} className="font-mono">
-                        {score.toFixed(0)} / 100
-                      </Badge>
-                    ) : (
-                      <Badge variant="neutral">Pending</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm">
-                      {score !== null && score !== undefined ? (
-                          <span className={score > 0 ? 'text-success' : 'text-destructive'}>{score.toFixed(0)}</span>
-                      ) : (
-                          <span className="text-muted-foreground">—</span>
-                      )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end" onClick={(event) => event.stopPropagation()}>
-                      <a href={recordHref(submission)} aria-label={`${recordLabel} ${submission.id}`}>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          icon={Eye}
-                          iconOnly
-                          tooltip={recordLabel}
-                          data-shortcut-primary
-                        />
-                      </a>
-                    </div>
-                  </TableCell>
-              </TableRow>
-            );
-          })}
-          {submissions.length === 0 && (
-              <TableRow>
-                  <TableCell colSpan={8} className="p-0">
-                      <EmptyState
-                          icon={FileCode}
-                          title="No submissions found"
-                          description="Submissions will appear here once contestants start submitting."
-                      />
-                  </TableCell>
-              </TableRow>
-          )}
-        </TableBody>
-      </Table>
-      <div className="flex justify-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={currentPage <= 1}
-            onClick={() => handlePageChange(currentPage - 1)}
-          >
-              Previous
-          </Button>
-          <div className="flex items-center px-4 text-sm text-muted-foreground">
-              Page {currentPage}
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={currentPage >= totalPages}
-            onClick={() => handlePageChange(currentPage + 1)}
-          >
-              Next
-          </Button>
-      </div>
+      <SubmissionListHeader locale={locale} currentPage={currentPage} totalPages={totalPages} />
+      <RecordList
+        rows={submissions}
+        columns={buildSubmissionColumns()}
+        getRowKey={(submission) => submission.id}
+        getRecordHref={(submission) => recordHref(locale, submission)}
+        renderRowActions={(submission) => (
+          <RowActionLink href={recordHref(locale, submission)} label={`${recordLabel} ${submission.id}`} icon={<Eye />} isPrimary />
+        )}
+        emptyState={
+          <EmptyState icon={FileCode} title="No submissions found" description="Submissions will appear here once contestants start submitting." />
+        }
+      />
+      <RecordListPager currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
     </div>
   );
 }

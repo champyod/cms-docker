@@ -66,6 +66,20 @@ describe('team list canonical navigation', () => {
     expect(viewLink.getAttribute('href')).toBe('/en/people/teams/4');
   });
 
+  it('renders the desktop view action as one anchor with no nested control', () => {
+    const { container } = renderList(['team:list']);
+
+    const recordHref = buildRoute('en', 'people.team-record', { id: TEAM_ROW.id });
+    const desktopAction = container.querySelector(`tbody tr a[href="${recordHref}"]`);
+    if (!desktopAction) throw new Error('Missing desktop view action');
+
+    // Why: an anchor wrapping a real button announces as two controls, so the
+    // row action must be the anchor itself with the shortcut marker on it.
+    expect(desktopAction.querySelector('button')).toBeNull();
+    expect(desktopAction.getAttribute('data-shortcut-primary')).toBe('true');
+    expect(desktopAction.getAttribute('aria-label')).toBe('View team members');
+  });
+
   it('keeps the edit action from activating the row and opens the team dialog', () => {
     mockPush.mockClear();
     const { container } = renderList(['team:list', 'team:update']);
