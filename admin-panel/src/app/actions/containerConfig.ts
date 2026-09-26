@@ -21,14 +21,23 @@ const RESTART_POLICY_RE = /^(?:no|always|unless-stopped|on-failure:(?:[0-9]|1[0-
 export type { ContainerRestartConfig };
 
 /**
+ * The stored restart config, unaudited. The update, reset, sync and initialise paths all need it
+ * as an input to the write they are about to record, and a view row per write would report reads
+ * nobody made — a restart policy is not disclosed by a panel that is already changing it.
+ */
+async function readContainerConfigCore(): Promise<ContainerRestartConfig> {
+  await ensurePermission('container:read');
+  return readContainerRestartConfig();
+}
+
+/**
  * Why the read is audited: restart policy is what decides whether a container comes back on its
  * own, so who looked at it is part of the answer to "who changed the restart behaviour". The row
  * carries container ids only — the config holds no credentials, and a view log that echoed values
  * would train the log to be treated as a values store.
  */
 export async function getContainerConfig(): Promise<ContainerRestartConfig> {
-  await ensurePermission('container:read');
-  const config = await readContainerRestartConfig();
+  const config = await readContainerConfigCore();
   await recordAudit({
     verb: 'container:view',
     entity: 'container_config',
@@ -46,7 +55,7 @@ export async function updateContainerConfig(containerId: string, config: {
 }) {
   await ensurePermission('container:update');
   try {
-    const currentConfig = await getContainerConfig();
+    const currentConfig = await readContainerConfigCore();
 
     const beforeEntry = currentConfig[containerId] ? { ...currentConfig[containerId] } : null;
 
@@ -82,7 +91,7 @@ export async function updateContainerConfig(containerId: string, config: {
 export async function resetRestartCount(containerId: string) {
   await ensurePermission('container:update');
   try {
-    const currentConfig = await getContainerConfig();
+    const currentConfig = await readContainerConfigCore();
 
     const hadEntry = Boolean(currentConfig[containerId]);
     const beforeRestarts = currentConfig[containerId]?.currentRestarts ?? null;
@@ -142,7 +151,7 @@ export async function syncContainerConfigWithDocker(containerId: string) {
     const { stdout } = await execPromise(`docker inspect ${containerId} --format='{{.HostConfig.RestartPolicy.Name}}:{{.HostConfig.RestartPolicy.MaximumRetryCount}}'`);
     const [policyName, maxRetries] = stdout.trim().split(':');
 
-    const config = await getContainerConfig();
+    const config = await readContainerConfigCore();
     const currentConfig = config[containerId] || {};
 
     const dockerAutoRestart = policyName === 'on-failure' || policyName === 'always' || policyName === 'unless-stopped';
@@ -164,7 +173,7 @@ export async function syncContainerConfigWithDocker(containerId: string) {
 
 export async function initializeContainerConfig(containerId: string) {
   await ensurePermission('container:update');
-  const config = await getContainerConfig();
+  const config = await readContainerConfigCore();
 
   if (!config[containerId]) {
     await syncContainerConfigWithDocker(containerId);
