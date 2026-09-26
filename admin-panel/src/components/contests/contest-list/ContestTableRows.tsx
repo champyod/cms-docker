@@ -1,12 +1,13 @@
 'use client';
 
 import { Badge } from '@/components/core/Badge';
-import { Button } from '@/components/core/Button';
+import { RowActions, rowActionGroupLabel } from '@/components/core/RowActions';
 import type { ResponsiveColumn, ResponsiveRowProps } from '@/components/core/ResponsiveTable';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
+import { useDictionary } from '@/hooks/useDictionary';
 import { Calendar, CheckCircle2, Clock, ExternalLink, Pencil, Power, Trash2 } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
 
@@ -120,6 +121,7 @@ export function ContestRowActions({ contest, canDeploy, canManage, canUpdate, on
   const confirm = useConfirm();
   const { destructiveConfirm } = useConfirmationCopy();
   const runAction = useActionFeedback();
+  const dict = useDictionary();
 
   const handleDelete = async (): Promise<void> => {
     if (!canManage) return;
@@ -131,16 +133,13 @@ export function ContestRowActions({ contest, canDeploy, canManage, canUpdate, on
     if (result?.success) router.refresh();
   };
   return (
-    <>
-      {canUpdate && (
-        <Button variant="ghost" size="sm" icon={Pencil} tooltip="Edit" aria-label={`Edit ${contest.name}`} onClick={() => onEdit(contest.id)} className="min-h-11 min-w-11" />
-      )}
-      {canDeploy && contest.is_active !== true && (
-        <Button variant="ghost" size="sm" icon={Power} iconOnly tooltip="Set Active" onClick={() => onSetActive(contest.id)} className="min-h-11 min-w-11" />
-      )}
-      {canManage && (
-        <Button variant="ghost" size="sm" icon={Trash2} tooltip="Delete" onClick={() => { void handleDelete(); }} className="min-h-11 min-w-11" />
-      )}
-    </>
+    <RowActions
+      ariaLabel={rowActionGroupLabel(dict, 'contests')}
+      actions={[
+        { key: 'edit', label: 'Edit', ariaLabel: `Edit ${contest.name}`, icon: Pencil, onClick: () => onEdit(contest.id), isVisible: canUpdate, className: 'min-h-11 min-w-11' },
+        { key: 'activate', label: 'Set Active', icon: Power, onClick: () => onSetActive(contest.id), isVisible: canDeploy && contest.is_active !== true, className: 'min-h-11 min-w-11' },
+        { key: 'delete', label: 'Delete', icon: Trash2, onClick: () => { void handleDelete(); }, isVisible: canManage, className: 'min-h-11 min-w-11' },
+      ]}
+    />
   );
 }

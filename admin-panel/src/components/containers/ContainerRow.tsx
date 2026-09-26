@@ -1,5 +1,6 @@
 'use client';
-import { Button } from '@/components/core/Button';
+import { RowActions, rowActionGroupLabel } from '@/components/core/RowActions';
+import { useDictionary } from '@/hooks/useDictionary';
 import { cn } from '@/lib/utils';
 import { ContainerInfo } from '@/app/actions/docker';
 import { Play, Square, RotateCcw, ScrollText, Settings, Bell, BellOff, Check } from 'lucide-react';
@@ -58,28 +59,30 @@ function ContainerActions({
   onViewLogs,
   onOpenSettings,
   onControl,
-  stopPropagation,
 }: {
   container: ContainerInfo;
   actionLoading: string | null;
   onViewLogs: (ref: ContainerRef) => void;
   onOpenSettings: (ref: ContainerRef) => void;
   onControl: (id: string, action: 'start' | 'stop' | 'restart') => void;
-  stopPropagation: (event: React.MouseEvent) => void;
 }): React.JSX.Element {
+  const dict = useDictionary();
+  const busy = actionLoading === container.id;
   return (
     <div className="flex flex-wrap items-center gap-2 sm:gap-4 sm:justify-end">
       <div className={cn('px-2 py-0.5 rounded text-xs font-bold border', getStatusColor(container.state))}>{container.state.toUpperCase()}</div>
-      <div className="flex flex-wrap items-center gap-2" onClick={stopPropagation}>
-        <Button size="sm" variant="ghost" icon={ScrollText} tooltip="View Logs" className="shrink-0" onClick={() => onViewLogs({ id: container.id, name: container.name })} />
-        <Button size="sm" variant="ghost" icon={Settings} tooltip="Container Settings" className="shrink-0" onClick={() => onOpenSettings({ id: container.id, name: container.name })} />
-        {container.state !== 'running' ? (
-          <Button size="sm" variant="positiveOutline" icon={Play} tooltip="Start Container" className="shrink-0" onClick={() => onControl(container.id, 'start')} disabled={actionLoading === container.id} />
-        ) : (
-          <Button size="sm" variant="negative" icon={Square} tooltip="Stop Container" className="shrink-0" onClick={() => onControl(container.id, 'stop')} disabled={actionLoading === container.id} />
-        )}
-        <Button size="sm" variant="positiveOutline" icon={RotateCcw} tooltip="Restart Container" className="shrink-0" onClick={() => onControl(container.id, 'restart')} disabled={actionLoading === container.id} />
-      </div>
+      <RowActions
+        ariaLabel={rowActionGroupLabel(dict, 'containers')}
+        className="flex-wrap gap-2"
+        actions={[
+          { key: 'logs', label: 'View Logs', icon: ScrollText, onClick: () => onViewLogs({ id: container.id, name: container.name }), className: 'shrink-0' },
+          { key: 'settings', label: 'Container Settings', icon: Settings, onClick: () => onOpenSettings({ id: container.id, name: container.name }), className: 'shrink-0' },
+          container.state === 'running'
+            ? { key: 'stop', label: 'Stop Container', icon: Square, variant: 'negative', onClick: () => onControl(container.id, 'stop'), disabled: busy, className: 'shrink-0' }
+            : { key: 'start', label: 'Start Container', icon: Play, variant: 'positiveOutline', onClick: () => onControl(container.id, 'start'), disabled: busy, className: 'shrink-0' },
+          { key: 'restart', label: 'Restart Container', icon: RotateCcw, variant: 'positiveOutline', onClick: () => onControl(container.id, 'restart'), disabled: busy, className: 'shrink-0' },
+        ]}
+      />
     </div>
   );
 }
@@ -90,12 +93,11 @@ function ContainerMainRow(props: {
   onViewLogs: (ref: ContainerRef) => void;
   onOpenSettings: (ref: ContainerRef) => void;
   onControl: (id: string, action: 'start' | 'stop' | 'restart') => void;
-  stopPropagation: (event: React.MouseEvent) => void;
 }): React.JSX.Element {
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-2">
       <ContainerIdentity container={props.container} />
-      <ContainerActions container={props.container} actionLoading={props.actionLoading} onViewLogs={props.onViewLogs} onOpenSettings={props.onOpenSettings} onControl={props.onControl} stopPropagation={props.stopPropagation} />
+      <ContainerActions container={props.container} actionLoading={props.actionLoading} onViewLogs={props.onViewLogs} onOpenSettings={props.onOpenSettings} onControl={props.onControl} />
     </div>
   );
 }
@@ -188,7 +190,7 @@ export function ContainerRow({ container, config, restartCount, actionLoading, o
     <div data-shortcut-row role={onToggleSelection ? 'button' : undefined} tabIndex={onToggleSelection ? 0 : undefined} onClick={onToggleSelection ? handleRowClick : undefined} onKeyDown={onToggleSelection ? handleKeyDown : undefined} aria-selected={onToggleSelection ? isSelected : undefined} className={cn('p-4 hover:bg-muted/30 transition-colors group cursor-pointer flex items-center gap-3', isSelected && 'bg-primary/5 border-l-2 border-l-primary')}>
       {onToggleSelection && <SelectionCheckbox name={container.name} isSelected={isSelected} onToggle={() => onToggleSelection(container.id)} />}
       <div className="flex-1 min-w-0">
-        <ContainerMainRow container={container} actionLoading={actionLoading} onViewLogs={onViewLogs} onOpenSettings={onOpenSettings} onControl={onControl} stopPropagation={stopPropagation} />
+        <ContainerMainRow container={container} actionLoading={actionLoading} onViewLogs={onViewLogs} onOpenSettings={onOpenSettings} onControl={onControl} />
         <ContainerMetaRow container={container} config={config} restartCount={restartCount} onToggleAutoRestart={onToggleAutoRestart} onResetRestartCount={onResetRestartCount} onToggleDiscordNotifications={onToggleDiscordNotifications} stopPropagation={stopPropagation} />
       </div>
     </div>

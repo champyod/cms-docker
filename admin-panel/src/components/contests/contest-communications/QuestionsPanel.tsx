@@ -2,6 +2,8 @@
 
 import { Eye, EyeOff, Reply } from 'lucide-react';
 import { Button } from '@/components/core/Button';
+import { RowActions, rowActionGroupLabel, type RowAction } from '@/components/core/RowActions';
+import { useDictionary } from '@/hooks/useDictionary';
 
 export interface QuestionRow {
   id: number;
@@ -39,7 +41,26 @@ function formatTime(date: Date | string): string {
   return QUESTION_TIME_FORMAT.format(new Date(date));
 }
 
+interface QuestionGates {
+  readonly canReply: boolean;
+  readonly canIgnore: boolean;
+}
+
+function buildQuestionActions(
+  question: QuestionRow,
+  gates: QuestionGates,
+  replyingTo: number | null,
+  onReplyingTo: (id: number | null) => void,
+  onIgnore: (id: number, ignored: boolean) => void,
+): RowAction[] {
+  return [
+    { key: 'reply', label: 'Reply', ariaLabel: `Reply to ${question.subject}`, icon: Reply, onClick: () => onReplyingTo(replyingTo === question.id ? null : question.id), isVisible: gates.canReply && !question.reply_timestamp, className: 'shrink-0 rounded-lg text-primary hover:bg-primary/20' },
+    { key: 'ignore', label: question.ignored ? 'Unignore' : 'Ignore', ariaLabel: question.ignored ? 'Unignore question' : 'Ignore question', icon: question.ignored ? Eye : EyeOff, onClick: () => onIgnore(question.id, question.ignored), isVisible: gates.canIgnore, className: 'shrink-0 rounded-lg' },
+  ];
+}
+
 export function QuestionsPanel({ questions, replyingTo, replySubject, replyText, canReply = true, canIgnore = true, onReplyingTo, onReplySubject, onReplyText, onReply, onIgnore }: Props): React.JSX.Element {
+  const dict = useDictionary();
   if (questions.length === 0) return <p className="text-sm text-muted-foreground">No questions from contestants.</p>;
   return (
     <div className="space-y-3">
@@ -61,14 +82,11 @@ export function QuestionsPanel({ questions, replyingTo, replySubject, replyText,
                 </div>
               )}
             </div>
-            <div className="flex shrink-0 items-center gap-1">
-              {canReply && !q.reply_timestamp && (
-                <Button variant="ghost" iconOnly icon={Reply} tooltip="Reply" aria-label={`Reply to ${q.subject}`} onClick={() => onReplyingTo(replyingTo === q.id ? null : q.id)} className="shrink-0 rounded-lg text-primary hover:bg-primary/20" />
-              )}
-              {canIgnore && (
-                <Button variant="ghost" iconOnly icon={q.ignored ? Eye : EyeOff} tooltip={q.ignored ? 'Unignore' : 'Ignore'} aria-label={q.ignored ? 'Unignore question' : 'Ignore question'} onClick={() => onIgnore(q.id, q.ignored)} className="shrink-0 rounded-lg" />
-              )}
-            </div>
+            <RowActions
+              ariaLabel={rowActionGroupLabel(dict, 'questions')}
+              className="shrink-0"
+              actions={buildQuestionActions(q, { canReply, canIgnore }, replyingTo, onReplyingTo, onIgnore)}
+            />
           </div>
           {replyingTo === q.id && (
             <div className="mt-3 space-y-2 rounded-lg bg-muted/30 p-3">

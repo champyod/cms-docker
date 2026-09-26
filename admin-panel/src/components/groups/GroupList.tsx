@@ -6,6 +6,8 @@ import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
 import { ResponsiveTable } from '@/components/core/ResponsiveTable';
+import { RowActions, rowActionGroupLabel } from '@/components/core/RowActions';
+import { useDictionary } from '@/hooks/useDictionary';
 import type { GroupWithPermissions } from '@/app/actions/adminPermissions';
 import { buildColumns } from './groupColumns';
 import { useGroupList } from './useGroupList';
@@ -19,6 +21,9 @@ export function GroupList({
   dict,
 }: GroupListProps): React.JSX.Element {
   const list = useGroupList(permissionKeys);
+  // Why the hook, not the prop: the group label lives outside the groups copy
+  // block, and only the full dictionary carries it.
+  const actionGroupLabel = rowActionGroupLabel(useDictionary(), 'groups');
   const {
     canCreate,
     canUpdate,
@@ -34,32 +39,15 @@ export function GroupList({
 
   const renderRowActions = useCallback(
     (group: GroupWithPermissions) => (
-      <>
-        {canUpdate && (
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={Pencil}
-            iconOnly
-            tooltip={dict.editTooltip}
-            className="min-h-11 min-w-11"
-            onClick={() => handleOpenEdit(group)}
-          />
-        )}
-        {canDelete && (
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={Trash2}
-            iconOnly
-            tooltip={dict.deleteTooltip}
-            className="min-h-11 min-w-11"
-            onClick={() => handleOpenDelete(group)}
-          />
-        )}
-      </>
+      <RowActions
+        ariaLabel={actionGroupLabel}
+        actions={[
+          { key: 'edit', label: dict.editTooltip, icon: Pencil, onClick: () => handleOpenEdit(group), isVisible: canUpdate, className: 'min-h-11 min-w-11' },
+          { key: 'delete', label: dict.deleteTooltip, icon: Trash2, onClick: () => handleOpenDelete(group), isVisible: canDelete, className: 'min-h-11 min-w-11' },
+        ]}
+      />
     ),
-    [canUpdate, canDelete, dict, handleOpenEdit, handleOpenDelete],
+    [actionGroupLabel, canUpdate, canDelete, dict, handleOpenEdit, handleOpenDelete],
   );
 
   const getRowProps = useCallback((group: GroupWithPermissions) => (

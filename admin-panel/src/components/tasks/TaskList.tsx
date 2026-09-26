@@ -7,6 +7,7 @@ import { usePathname } from 'next/navigation';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
+import { RowActions, rowActionGroupLabel, type RowAction } from '@/components/core/RowActions';
 import { Pencil, Trash2, Plus, FileText, Database, ExternalLink, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ROW_SELECTED_CLASSES } from '@/hooks/shortcut-rows';
@@ -18,6 +19,7 @@ import { hasEffectivePermission } from '@/lib/permission-engine';
 import { buildRoute } from '@/lib/navigation/routes';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
+import { useDictionary } from '@/hooks/useDictionary';
 import type { TaskDiagnostic } from '@/lib/task-diagnostics';
 
 interface TaskRow {
@@ -37,6 +39,23 @@ interface TaskListProps {
   permissionKeys: readonly string[];
 }
 
+interface TaskActionGates {
+  readonly edit: boolean;
+  readonly delete: boolean;
+}
+
+function buildTaskRowActions(
+  task: TaskRow,
+  gates: TaskActionGates,
+  onEdit: (task: TaskRow) => void,
+  onDelete: (id: number) => void,
+): RowAction[] {
+  return [
+    { key: 'edit', label: 'Edit task', icon: Pencil, onClick: () => onEdit(task), isVisible: gates.edit, className: 'text-muted-foreground hover:text-primary' },
+    { key: 'delete', label: 'Delete task', icon: Trash2, onClick: () => { void onDelete(task.id); }, isVisible: gates.delete, className: 'text-muted-foreground hover:text-destructive' },
+  ];
+}
+
 export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React.JSX.Element {
   const router = useAppRouter();
   const pathname = usePathname();
@@ -46,6 +65,7 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
   const confirm = useConfirm();
   const { destructiveConfirm } = useConfirmationCopy();
+  const dict = useDictionary();
 
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
   const canCreateTasks = hasEffectivePermission(effective, 'task:create');
@@ -100,11 +120,13 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
               <MobileCardRow label="Title" value={task.title} />
               <MobileCardRow label="Contest" value={task.contests ? task.contests.name : 'Unassigned'} />
               <MobileCardRow label="Submissions" value={task._count?.submissions ?? 0} />
+              {/* Why both flags are set: the card gates the whole pair on update, so delete is never hidden here. */}
               {canManageTasks && (
-                <div className="flex items-center justify-end gap-2 pt-2">
-                  <Button variant="ghost" size="sm" icon={Pencil} iconOnly tooltip="Edit task" onClick={() => handleEdit(task)} className="text-muted-foreground hover:text-primary" />
-                  <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete task" onClick={() => { void handleDelete(task.id); }} className="text-muted-foreground hover:text-destructive" />
-                </div>
+                <RowActions
+                  ariaLabel={rowActionGroupLabel(dict, 'tasks')}
+                  className="justify-end gap-2 pt-2"
+                  actions={buildTaskRowActions(task, { edit: true, delete: true }, handleEdit, handleDelete)}
+                />
               )}
             </MobileCard>
           ))}
@@ -182,14 +204,11 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{task._count?.submissions ?? 0}</TableCell>
                   <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2" onClick={(event) => event.stopPropagation()}>
-                      {canManageTasks && (
-                        <Button variant="ghost" size="sm" icon={Pencil} iconOnly tooltip="Edit task" onClick={() => handleEdit(task)} className="text-muted-foreground hover:text-primary" />
-                      )}
-                      {canDeleteTasks && (
-                        <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete task" onClick={() => { void handleDelete(task.id); }} className="text-muted-foreground hover:text-destructive" />
-                      )}
-                    </div>
+                    <RowActions
+                      ariaLabel={rowActionGroupLabel(dict, 'tasks')}
+                      className="justify-end gap-2"
+                      actions={buildTaskRowActions(task, { edit: canManageTasks, delete: canDeleteTasks }, handleEdit, handleDelete)}
+                    />
                   </TableCell>
                 </TableRow>
               );

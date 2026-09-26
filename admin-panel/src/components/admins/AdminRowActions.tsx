@@ -2,7 +2,8 @@
 
 import { Pencil, Trash2 } from 'lucide-react';
 
-import { Button } from '@/components/core/Button';
+import { RowActions, rowActionGroupLabel } from '@/components/core/RowActions';
+import { useDictionary } from '@/hooks/useDictionary';
 import { cn } from '@/lib/utils';
 import type { AdminCapabilities } from './adminCapabilities';
 
@@ -29,36 +30,19 @@ export function AdminRowActions({
   onDelete,
   className,
 }: AdminRowActionsProps): React.JSX.Element | null {
+  const dict = useDictionary();
   // Why: resetting a credential is reachable from the same form as the other fields, so it also opens the row.
   const canEdit = capabilities.canUpdate || capabilities.canSetPassword;
   if (!canEdit && !capabilities.canDelete) return null;
 
   return (
-    <div className={cn('flex items-center justify-end gap-2', className)}>
-      {canEdit && (
-        <Button
-          variant="ghost"
-          size="sm"
-          iconOnly
-          tooltip={editLabel}
-          onClick={onEdit}
-          className="text-muted-foreground hover:text-primary"
-        >
-          <Pencil className="w-4 h-4" />
-        </Button>
-      )}
-      {capabilities.canDelete && (
-        <Button
-          variant="ghost"
-          size="sm"
-          iconOnly
-          tooltip={deleteLabel}
-          onClick={onDelete}
-          className="text-muted-foreground hover:text-destructive"
-        >
-          <Trash2 className="w-4 h-4" />
-        </Button>
-      )}
-    </div>
+    <RowActions
+      ariaLabel={rowActionGroupLabel(dict, 'admins')}
+      className={cn('justify-end gap-2', className)}
+      actions={[
+        { key: 'edit', label: editLabel, icon: Pencil, onClick: onEdit, isVisible: canEdit, className: 'text-muted-foreground hover:text-primary' },
+        { key: 'delete', label: deleteLabel, icon: Trash2, onClick: onDelete, isVisible: capabilities.canDelete, className: 'text-muted-foreground hover:text-destructive' },
+      ]}
+    />
   );
 }
