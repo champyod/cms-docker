@@ -11,6 +11,7 @@ import { logToDiscord } from '@/lib/discord-notifier';
 import { recordAudit } from '@/lib/audit';
 import { readDeploymentModeSetting } from '@/lib/deployment-mode-file';
 import type { DeploymentModeSetting } from '@/lib/deployment-mode';
+import { CONFIG_TOML_FILE } from '@/lib/config-toml';
 import {
   analyzeContainerDependencies as analyzeContainerDependenciesLib,
   buildComposeFileFlags,
@@ -37,7 +38,17 @@ const execPromise = util.promisify(exec);
  */
 export async function getDeploymentMode(): Promise<DeploymentModeSetting> {
     await ensurePermission('service:read');
-    return readDeploymentModeSetting();
+    const setting = await readDeploymentModeSetting();
+    // Why entity config rather than deployment: what this reads is config.toml's
+    // [admin] DEPLOYMENT_TYPE, the same key updateConfigTomlValues writes, so the view row lands
+    // on the entity the edit that would change it also uses. Keys and the resolved flag only.
+    await recordAudit({
+      verb: 'config:view',
+      entity: 'config',
+      afterValues: { file: CONFIG_TOML_FILE, requestedKeys: ['admin.DEPLOYMENT_TYPE'], resolved: setting.resolved },
+      result: 'success',
+    });
+    return setting;
 }
 
 // Why: client components must not import the fs-backed planner directly —
@@ -158,7 +169,17 @@ export async function deployContest(contestId: number): Promise<DeployContestRes
 
 export async function getDeployStatus(operationId: string): Promise<DeployStatusResult> {
   await ensurePermission('deployment:read');
-  return fetchDeployStatus(operationId);
+  const result = await fetchDeployStatus(operationId);
+  // Why the status but not the rest: the returned log and error carry compose output verbatim,
+  // so the row names the operation, its state and its contest and stops there.
+  await recordAudit({
+    verb: 'deployment:view',
+    entity: 'deployment',
+    entityId: operationId,
+    afterValues: { operationId, status: result.status, contestId: result.contestId ?? null },
+    result: 'success',
+  });
+  return result;
 }
 
 /**
@@ -180,7 +201,17 @@ export async function settleDeployOperations(): Promise<void> {
 
 export async function getActiveDeployOperation(): Promise<ActiveDeployOperation | null> {
   await ensurePermission('deployment:read');
-  return getActiveDeployOperationLib();
+  const active = await getActiveDeployOperationLib();
+  // A null result is a real answer (nothing in flight) and is recorded as one, so a page that
+  // keeps asking for a live deploy leaves the same trail whichever way it came back.
+  await recordAudit({
+    verb: 'deployment:view',
+    entity: 'deployment',
+    entityId: active?.operationId,
+    afterValues: { operationId: active?.operationId ?? null, contestId: active?.contestId ?? null },
+    result: 'success',
+  });
+  return active;
 }
 
 export async function triggerManualBackup() {
@@ -243,30 +274,51 @@ export async function getServiceStatus() {
     await ensurePermission('service:list');
     try {
         const { stdout } = await execPromise('docker ps -a --format "{{json .}}"');
-        if (!stdout.trim()) return { status: 'down' as const, running: 0, total: 0 };
-
-        const lines = stdout.trim().split('\n');
-        let running = 0;
-        let total = 0;
-
-        for (const line of lines) {
-            const parsed = JSON.parse(line);
-            const name = parsed.Names || '';
-            if (name.startsWith('cms-') || name.includes('cms')) {
-                total++;
-                if (parsed.State === 'running') running++;
-            }
-        }
-
-        const status = total === 0 ? 'down' as const
-            : running === total ? 'ok' as const
-            : running === 0 ? 'down' as const
-            : 'degraded' as const;
-
-        return { status, running, total };
-    } catch {
+        const summary = summariseCmsContainers(stdout);
+        // Why counts and not names: the row answers "who looked at the stack's health", and the
+        // container list it would otherwise carry is what the caller is about to see anyway.
+        await recordAudit({
+            verb: 'service:view',
+            entity: 'service',
+            afterValues: { status: summary.status, running: summary.running, total: summary.total },
+            result: 'success',
+        });
+        return summary;
+    } catch (error) {
+        await recordAudit({
+            verb: 'service:view',
+            entity: 'service',
+            afterValues: { error: error instanceof Error ? error.name : 'UnknownError' },
+            result: 'failure',
+        });
         return { status: 'down' as const, running: 0, total: 0 };
     }
+}
+
+type ServiceStatusSummary = { status: 'ok' | 'degraded' | 'down'; running: number; total: number };
+
+function summariseCmsContainers(stdout: string): ServiceStatusSummary {
+    if (!stdout.trim()) return { status: 'down', running: 0, total: 0 };
+
+    const lines = stdout.trim().split('\n');
+    let running = 0;
+    let total = 0;
+
+    for (const line of lines) {
+        const parsed = JSON.parse(line);
+        const name = parsed.Names || '';
+        if (name.startsWith('cms-') || name.includes('cms')) {
+            total++;
+            if (parsed.State === 'running') running++;
+        }
+    }
+
+    const status = total === 0 ? 'down'
+        : running === total ? 'ok'
+        : running === 0 ? 'down'
+        : 'degraded';
+
+    return { status, running, total };
 }
 
 export async function updateServer() {
