@@ -236,8 +236,65 @@ check_lib_delivery() {
   done < <(delivered_scripts)
 }
 
+# ---------------------------------------------------------------------------
+# BusyBox compatibility of the delivered set
+#
+# The monitor image is Alpine, so every script a delivery hands it runs against
+# BusyBox applets, where a GNU-only flag does not degrade the check — it aborts
+# the line, and `set -e` takes the rest of the cycle with it. A delivery hands
+# over a file or a directory of them, so the scan reads the shell files it
+# actually puts in front of BusyBox. A source that is the build context itself
+# (`.`, or `./` which the sed below reduces to an empty field), a `..` climb out
+# of the repository, or a host path names no script set this checker governs.
+# ---------------------------------------------------------------------------
+delivered_shell_files() {
+  local src
+  while IFS= read -r src; do
+    case "$src" in
+      ''|.|..|../*|/*) continue ;;
+    esac
+    if [ -d "${REPO_ROOT}/${src}" ]; then
+      find "${REPO_ROOT}/${src}" -type f -name '*.sh'
+    elif [ -f "${REPO_ROOT}/${src}" ]; then
+      printf '%s\n' "${REPO_ROOT}/${src}"
+    fi
+  done < <(delivered_scripts | cut -f4 | sed 's|^\./||' | sort -u)
+}
+
+# One rule per line as <command>@<invocation pattern>@<portable spelling>, so a
+# new flag is a new line and every finding names the file:line to change. @ is
+# the delimiter because it is the one character no field can contain: the
+# patterns are regexes, so ; | and space all occur inside them.
+busybox_rules() {
+  cat <<'BUSYBOX_RULES'
+df@(^|[^[:alnum:]_.-])df[[:space:]]([^|;&]*[[:space:]])?-{1,2}(B|output)@df -Pk <path> and read field 4 with awk
+grep@(^|[^[:alnum:]_.-])grep[[:space:]]([^|;&]*[[:space:]])?-{1,2}(P|perl-regexp)@grep -E
+date@(^|[^[:alnum:]_.-])date[[:space:]]([^|;&]*[[:space:]])?-{1,2}(d|date)@date +%s and compare the epochs
+stat@(^|[^[:alnum:]_.-])stat[[:space:]]([^|;&]*[[:space:]])?--[a-zA-Z]@stat -c
+du@(^|[^[:alnum:]_.-])du[[:space:]]([^|;&]*[[:space:]])?--[a-zA-Z]@du -sk
+BUSYBOX_RULES
+}
+
+# A comment names a flag without running it, so only real invocations are
+# reported — the same reasoning lib_refs uses to drop comment lines.
+check_busybox_compat() {
+  local file rel cmd pattern alternative line lineno
+  while IFS= read -r file; do
+    rel="${file#"${REPO_ROOT}/"}"
+    while IFS='@' read -r cmd pattern alternative; do
+      while IFS= read -r line; do
+        lineno="${line%%:*}"
+        printf '%s:%s: GNU-only %s in a delivered script — use %s\n' \
+          "$rel" "$lineno" "$cmd" "$alternative" >> "$tmp_violations"
+        violations=$((violations + 1))
+      done < <(grep -nE "$pattern" "$file" 2>/dev/null | grep -vE '^[0-9]+:[[:space:]]*#' || true)
+    done < <(busybox_rules)
+  done < <(delivered_shell_files)
+}
+
 check_lib_delivery
 check_delivered_lib_files
+check_busybox_compat
 
 if [ -s "$tmp_findings" ]; then
   printf '[INFO] lib-contract findings (%d informational — not enforced):\n' "$findings" >&2
