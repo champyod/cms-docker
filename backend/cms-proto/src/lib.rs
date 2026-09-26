@@ -23,6 +23,7 @@
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
+mod codec;
 mod guards;
 mod jobs;
 
@@ -30,6 +31,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fmt;
 
+pub use codec::{encode, Frame, FrameError, FrameRefusal, Framer};
 pub use guards::{
     check_rpc_secret, ensure_within_size_limit, EnvelopeError, MAX_MESSAGE_SIZE,
     MESSAGE_TERMINATOR_LEN,
