@@ -19,6 +19,7 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 readonly DISK_FLOOR_GB=3
 readonly DISK_WARN_GB=5
+readonly KIB_PER_GB=1048576
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -47,7 +48,12 @@ log_die() {
 # ---------------------------------------------------------------------------
 # require_disk_free_gb <path> [floor_gb] [warn_gb]
 # ---------------------------------------------------------------------------
-# Verify available disk space at <path> using `df -BG`.
+# Verify available disk space at <path>.
+# WHY `df -Pk`: the monitor image is Alpine, so df is BusyBox and rejects both
+# `--output` and `-B`, while `df -Pk` is the one spelling BusyBox and GNU
+# coreutils agree on. Field 4 of the POSIX report is the available 1K blocks,
+# and dividing by KIB_PER_GB turns those blocks into whole GB — the unit the
+# thresholds and the log lines speak.
 # Defaults honour DISK_FLOOR_GB / DISK_WARN_GB constants.
 # Behaviour:
 #   avail < floor  → log_die with exit code 2 (hard failure)
@@ -57,23 +63,20 @@ require_disk_free_gb() {
   local target_path="${1:?require_disk_free_gb: <path> required}"
   local floor_gb="${2:-$DISK_FLOOR_GB}"
   local warn_gb="${3:-$DISK_WARN_GB}"
+  local avail_kb
   local avail_gb
-  local avail_raw
 
-  if ! avail_raw=$(df -BG --output=avail "$target_path" 2>/dev/null | tail -n 1); then
+  # An empty field means df failed or the report carried no data line; to a
+  # caller both are the same fault, so they share one message.
+  if ! avail_kb=$(df -Pk "$target_path" 2>/dev/null | awk 'NR==2 {print $4}') || [ -z "$avail_kb" ]; then
     log_die "unable to determine disk space for: $target_path" 2
   fi
 
-  # df -BG outputs like "  123G" — strip whitespace and trailing G.
-  avail_raw=$(printf '%s' "$avail_raw" | tr -d '[:space:]')
-  avail_gb="${avail_raw%G}"
-  # Handle potential decimal (e.g. GNU coreutils never emits decimals for -BG
-  # but be defensive): truncate.
-  avail_gb="${avail_gb%%.*}"
-
-  if ! [[ "$avail_gb" =~ ^[0-9]+$ ]]; then
-    log_die "unable to parse disk space value: $avail_raw" 2
+  if ! [[ "$avail_kb" =~ ^[0-9]+$ ]]; then
+    log_die "unable to parse disk space value: $avail_kb" 2
   fi
+
+  avail_gb=$(( avail_kb / KIB_PER_GB ))
 
   if (( avail_gb < floor_gb )); then
     log_die "disk space ${avail_gb}G < floor ${floor_gb}G at ${target_path}" 2
