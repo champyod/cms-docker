@@ -49,8 +49,15 @@ export async function cleanupExpiredCreds(): Promise<void> {
   }
 }
 
+/** Why prefix: Excel and LibreOffice execute a cell that opens with one of these
+ * characters as a formula, so a stored value must arrive at the sheet as text. */
+const FORMULA_PREFIX = /^[=+\-@\t\r]/;
+
 export function csvEscape(value: string): string {
   const str = String(value ?? '');
+  if (FORMULA_PREFIX.test(str)) {
+    return `"'${str.replace(/"/g, '""')}"`;
+  }
   if (str.includes('"') || str.includes(',') || str.includes('\n') || str.includes('\r')) {
     return `"${str.replace(/"/g, '""')}"`;
   }

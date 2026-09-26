@@ -110,8 +110,14 @@ export function openServerDownload(downloadUrl: string): void {
   document.body.removeChild(anchor);
 }
 
+/** Why prefix: Excel and LibreOffice execute a cell that opens with one of these
+ * characters as a formula, so a stored value must arrive at the sheet as text. */
+const FORMULA_PREFIX = /^[=+\-@\t\r]/;
+
 function csvEscapeValue(value: unknown): string {
-  return `"${String(value ?? '').replace(/"/g, '""')}"`;
+  const str = String(value ?? '');
+  const quoted = str.replace(/"/g, '""');
+  return `"${FORMULA_PREFIX.test(str) ? `'${quoted}` : quoted}"`;
 }
 
 export function buildEditExportCsv(rows: SelectedUser[]): string {

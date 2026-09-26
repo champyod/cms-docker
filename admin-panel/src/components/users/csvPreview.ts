@@ -75,18 +75,52 @@ function processChar(char: string, next: string | undefined, state: CsvScannerSt
   return false;
 }
 
+export interface CsvFieldMismatch {
+  /** 1-based position in the file, header included — matches the row numbers the panel shows. */
+  rowIndex: number;
+  expected: number;
+  actual: number;
+}
+
+/** Why strip at the tokenizer entry: Excel prepends a BOM to every CSV it saves, and
+ * the marker must never reach the scanner — where it could open or close a quoted
+ * field — rather than relying on the per-cell trim to absorb it later. */
+function stripBom(text: string): string {
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
 export function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
+  const source = stripBom(text);
   const state: CsvScannerState = { current: '', row: [], inQuotes: false };
 
-  for (let i = 0; i < text.length; i += 1) {
-    if (processChar(text[i], text[i + 1], state, rows)) i += 1;
+  for (let i = 0; i < source.length; i += 1) {
+    if (processChar(source[i], source[i + 1], state, rows)) i += 1;
   }
 
   appendCell(state);
   if (state.row.some((cell) => cell !== '')) rows.push(state.row);
 
   return rows;
+}
+
+/** Why compare against the header: a row with the wrong cell count silently shifts
+ * every value after the break, so the operator has to be told which row is short or
+ * long and by how much. */
+export function detectFieldMismatches(rows: readonly string[][]): CsvFieldMismatch[] {
+  const expected = rows[0]?.length ?? 0;
+  const mismatches: CsvFieldMismatch[] = [];
+  for (let index = 1; index < rows.length; index += 1) {
+    const actual = rows[index].length;
+    if (actual !== expected) {
+      mismatches.push({ rowIndex: index + 1, expected, actual });
+    }
+  }
+  return mismatches;
+}
+
+function formatMismatch(mismatch: CsvFieldMismatch): string {
+  return `Row ${mismatch.rowIndex}: expected ${mismatch.expected} fields, got ${mismatch.actual}`;
 }
 
 /** Client-side preview tokens are intentionally Math.random — they never authenticate anything. */
@@ -237,10 +271,19 @@ export function buildPreviewRows(
   const rawHeaders = matrix[0].map((header) => header.trim());
   const mappedHeaders = rawHeaders.map((header) => HEADER_ALIASES[header.toLowerCase()] || null);
   const usedUsernames = new Set<string>();
+  const mismatches = detectFieldMismatches(matrix);
+  const mismatchByMatrixIndex = new Map(mismatches.map((mismatch) => [mismatch.rowIndex - 1, mismatch]));
 
-  const rows = matrix.slice(1).map((cells, rowIndex) =>
-    mapMatrixRow(cells, mappedHeaders, rowIndex + 2, mode, usedUsernames)
-  );
+  const rows = matrix.slice(1).map((cells, rowIndex) => {
+    const preview = mapMatrixRow(cells, mappedHeaders, rowIndex + 2, mode, usedUsernames);
+    const mismatch = mismatchByMatrixIndex.get(rowIndex + 1);
+    return mismatch === undefined ? preview : { ...preview, issues: [...preview.issues, formatMismatch(mismatch)] };
+  });
 
-  return { warnings: collectHeaderWarnings(rawHeaders, mappedHeaders), rows };
+  const warnings = collectHeaderWarnings(rawHeaders, mappedHeaders);
+  if (mismatches.length > 0) {
+    warnings.push(`${mismatches.length} row(s) have a different field count than the header`);
+  }
+
+  return { warnings, rows };
 }
