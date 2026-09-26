@@ -82,6 +82,26 @@ function parseWorkersFromEnvCore(content: string): Array<{ host: string; port: n
     .map(({ host, port }) => ({ host, port }));
 }
 
+/**
+ * The worker endpoints, taken from cms.toml's Worker block when it declares any and from the
+ * generated env file otherwise. Kept separate from the audit call so the read reports one result
+ * per request rather than one per candidate source.
+ */
+async function readWorkerEndpoints(configPath: string | null): Promise<WorkerEntry[]> {
+  if (configPath) {
+    const content = await fs.readFile(configPath, 'utf-8');
+    const workerBlock = extractWorkerBlock(content);
+    if (workerBlock) {
+      const workers = parseWorkersFromBlock(workerBlock);
+      if (workers.length > 0) return workers;
+    }
+  }
+
+  const envCorePath = path.join(getRepoRoot(), '.env');
+  const envCoreContent = await fs.readFile(envCorePath, 'utf-8');
+  return parseWorkersFromEnvCore(envCoreContent);
+}
+
 export async function getWorkers() {
   await ensurePermission('settings:read');
   await ensurePermission('settings:list');
@@ -89,22 +109,27 @@ export async function getWorkers() {
   const configPath = await getCmsConfigPath();
 
   try {
-    if (configPath) {
-      const content = await fs.readFile(configPath, 'utf-8');
-      const workerBlock = extractWorkerBlock(content);
-      if (workerBlock) {
-        const workers = parseWorkersFromBlock(workerBlock);
-        if (workers.length > 0) return workers;
-      }
-    }
-
-    const envCorePath = path.join(getRepoRoot(), '.env');
-    const envCoreContent = await fs.readFile(envCorePath, 'utf-8');
-    return parseWorkersFromEnvCore(envCoreContent);
+    const workers = await readWorkerEndpoints(configPath);
+    // Why count and not the endpoints: these are the deployment's internal hosts and ports, and
+    // an audit table is the wrong place to keep them. The row answers who asked and how much
+    // the request revealed, which is what a later disclosure has to be weighed against.
+    await recordAudit({
+      verb: 'worker_config:view',
+      entity: 'worker_config',
+      afterValues: { count: workers.length },
+      result: 'success',
+    });
+    return workers;
   } catch (error) {
     console.error('Failed to parse workers from cms.toml', error);
+    await recordAudit({
+      verb: 'worker_config:view',
+      entity: 'worker_config',
+      afterValues: { error: error instanceof Error ? error.name : 'UnknownError' },
+      result: 'failure',
+    });
+    return [];
   }
-  return [];
 }
 
 type WorkerEntry = { host: string; port: number };
