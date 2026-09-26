@@ -191,6 +191,63 @@ env_unquote() {
 }
 
 # ---------------------------------------------------------------------------
+# ensure_backup_dir_perms
+# ---------------------------------------------------------------------------
+# WHY: the monitor container runs as ${DOCKER_UID:-1000} and writes archives under
+# ${BACKUP_DIR:-<repo>/backups}, but a backup root belongs to whoever created it —
+# the operator uid on a fresh install, a foreign uid on a restored box. The
+# container then cannot create an archive, while the host shell that owns the
+# directory still sees the path as writable, so ownership and mode are read from
+# the filesystem and repaired here rather than only reported.
+# A missing root is created, an already-correct root returns silently so a repeat
+# call costs and prints nothing, the repair runs directly as root or behind one
+# `sudo -v` and one privileged run (one prompt, never a loop, never an assumed
+# passwordless sudo), and an unprivileged failure prints the exact commands to
+# run by hand and returns 1 without exiting — the caller decides if that is fatal.
+# WHY 0300: the monitor must enter the directory (owner execute) and create an
+# archive inside it (owner write); the mask reads the owner column whatever setuid
+# or sticky digits stat -c %a prints in front of it.
+ensure_backup_dir_perms() {
+  local repo_root root uid stat_line owner_uid mode
+
+  repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+  root="${BACKUP_DIR:-${repo_root}/backups}"
+  uid="${DOCKER_UID:-1000}"
+
+  if [[ ! -d "$root" ]]; then
+    mkdir -p "$root" || { log_warn "cannot create backup root: ${root}"; return 1; }
+  fi
+
+  stat_line="$(stat -c '%u %a' "$root" 2>/dev/null || true)"
+  if [[ -z "$stat_line" ]]; then
+    log_warn "cannot read ownership of backup root: ${root}"
+    return 1
+  fi
+  read -r owner_uid mode <<<"$stat_line"
+  if [[ "$owner_uid" == "$uid" ]] && (( (8#$mode & 0300) == 0300 )); then
+    return 0
+  fi
+
+  if [[ "$(id -u)" -eq 0 ]]; then
+    chown -R "$uid" "$root" && find "$root" -type d -exec chmod u+rwx {} +
+  elif sudo -v 2>/dev/null; then
+    sudo chown -R "$uid" "$root" && sudo find "$root" -type d -exec chmod u+rwx {} +
+  fi
+
+  stat_line="$(stat -c '%u %a' "$root" 2>/dev/null || true)"
+  read -r owner_uid mode <<<"${stat_line:-0 0}"
+  if [[ "$owner_uid" == "$uid" ]] && (( (8#$mode & 0300) == 0300 )); then
+    log_info "backup root repaired for uid ${uid}: ${root}"
+    return 0
+  fi
+
+  log_warn "monitor (uid ${uid}) cannot write ${root} — run these as a user with sudo:
+    sudo chown -R ${uid} ${root}
+    sudo find ${root} -type d -exec chmod u+rwx {} +"
+  return 1
+}
+
+# ---------------------------------------------------------------------------
 # ensure_docker_resource_network <name>
 # ---------------------------------------------------------------------------
 # Idempotently ensure a Docker network exists. Creates it if missing and logs
