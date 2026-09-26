@@ -71,18 +71,30 @@ fn equal_priority_and_timestamp_are_dispatched_in_enqueue_order() {
 }
 
 #[test]
-fn dispatch_order_is_the_ascending_order_of_the_key_tuple() {
+fn dispatch_order_follows_the_tuple_priority_then_timestamp_then_index() {
+    // The expected order is written out by hand rather than sorted with the
+    // derived `Ord`: sorting would compare the key with itself, so a key whose
+    // fields were declared in the wrong order would pass here. The two
+    // extra-high entries are the load: the older one carries the lower index,
+    // so timestamp and index disagree about which of them goes first, and
+    // swapping those two fields (or promoting either of them ahead of
+    // `priority`) produces a different order.
     let queued = [
-        key(PRIORITY_LOW, 500, 1),
-        key(PRIORITY_EXTRA_HIGH, 900, 2),
-        key(PRIORITY_MEDIUM, 100, 3),
-        key(PRIORITY_MEDIUM, 100, 4),
+        key(PRIORITY_EXTRA_HIGH, 900, 0),
+        key(PRIORITY_EXTRA_HIGH, 100, 1),
+        key(PRIORITY_MEDIUM, 100, 2),
+        key(PRIORITY_LOW, 0, 3),
     ];
 
-    let mut expected = queued.to_vec();
-    expected.sort();
-
-    assert_eq!(dispatch_order(&queued), expected);
+    assert_eq!(
+        dispatch_order(&queued),
+        vec![
+            key(PRIORITY_EXTRA_HIGH, 100, 1),
+            key(PRIORITY_EXTRA_HIGH, 900, 0),
+            key(PRIORITY_MEDIUM, 100, 2),
+            key(PRIORITY_LOW, 0, 3),
+        ]
+    );
 }
 
 #[test]

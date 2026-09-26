@@ -13,3 +13,4 @@ sqlx = { version = "0.9.0", default-features = false, features = [
     "runtime-tokio",
     "tls-rustls-ring-webpki",
 ] }
+subtle = { version = "2.6", default-features = false }

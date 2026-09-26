@@ -10,8 +10,15 @@
 //!
 //! Decoding is deliberately the only strict step: the types reproduce the
 //! wire shape, and every judgement call about whether a well-formed envelope
-//! may be acted on lives in [`guards`], where it can be read against the
-//! Python rule it mirrors.
+//! may be acted on is written down in one place per subject — [`Request::validate`],
+//! [`Request::authenticate`] and [`Response::validate`] for the envelope
+//! itself, [`guards`] for the frame that carries it. Each states the Python
+//! rule it mirrors.
+//!
+//! A connection's frame codec owns one read buffer for the whole connection
+//! and decodes successive frames out of it, so a message costs a copy into
+//! existing capacity rather than a fresh allocation per frame. The message
+//! limit in [`guards`] is what keeps that buffer from growing without bound.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
@@ -125,8 +132,13 @@ pub struct Response {
     #[serde(rename = "__data")]
     pub data: Value,
 
-    /// Always serialized: the Python side indexes this key and relies on
-    /// it being present (null on success) rather than absent.
+    /// Failure detail, or null when the call succeeded.
+    ///
+    /// Required on decode, null included: `process_incoming_response`
+    /// disconnects a reply whose keys do not cover `__error` and then reads
+    /// that key unconditionally, so a reply that omits it is a broken
+    /// response rather than a successful one. Always serialized for the same
+    /// reason — a client must never be the side that finds a key missing.
     #[serde(rename = "__error", deserialize_with = "Option::<Value>::deserialize")]
     pub error: Option<Value>,
 }

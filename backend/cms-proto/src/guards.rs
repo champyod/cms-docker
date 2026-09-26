@@ -7,6 +7,8 @@
 
 use std::fmt;
 
+use subtle::ConstantTimeEq;
+
 /// Largest message accepted on the wire, terminator included.
 ///
 /// Mirrors `RemoteServiceBase.MAX_MESSAGE_SIZE`; the Python side drops a
@@ -61,6 +63,20 @@ impl std::error::Error for EnvelopeError {}
 /// Fails closed exactly like `_check_rpc_secret`: an unconfigured secret never
 /// authenticates anybody, so a service that forgot to configure one rejects all
 /// calls instead of silently accepting them.
+///
+/// A non-ASCII secret is the one place this deliberately parts company with
+/// `_check_rpc_secret`, which hands both sides to `hmac.compare_digest` and so
+/// raises `TypeError` on a non-ASCII `str`. That call sits outside every
+/// handler in `process_incoming_request`, so the greenlet serving the request
+/// dies without writing a reply, the caller's pending result is never
+/// resolved, and the caller waits. Comparing the UTF-8 bytes here turns the
+/// same envelope into an ordinary mismatch answered with
+/// [`EnvelopeError::AuthenticationFailed`], so the comparison stays byte-wise
+/// and a non-ASCII secret is never diverted into a path that skips the reply.
+///
+/// The contents are compared in constant time, so a mismatch costs what a
+/// match costs. The length is not hidden: the sender chose it, and a length
+/// difference settles the comparison on its own.
 #[must_use]
 pub fn check_rpc_secret(presented: Option<&str>, configured: Option<&str>) -> bool {
     let (Some(presented), Some(configured)) = (presented, configured) else {
@@ -69,7 +85,7 @@ pub fn check_rpc_secret(presented: Option<&str>, configured: Option<&str>) -> bo
     if presented.is_empty() || configured.is_empty() {
         return false;
     }
-    constant_time_eq(presented.as_bytes(), configured.as_bytes())
+    bool::from(presented.as_bytes().ct_eq(configured.as_bytes()))
 }
 
 /// Rejects a payload that would not fit in a single message.
@@ -83,18 +99,4 @@ pub fn ensure_within_size_limit(payload_len: usize) -> Result<(), EnvelopeError>
         return Err(EnvelopeError::MessageTooLarge { size, limit });
     }
     Ok(())
-}
-
-/// Compares two byte strings without leaking where they first differ.
-///
-/// The loop always runs over the full input and the length verdict is folded
-/// in afterwards, so a mismatch costs the same time as a match. The length of
-/// each input is public information (the sender chose one of them), which is why
-/// only the contents are hidden.
-fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
-    let mut content_diff = 0_u8;
-    for (left_byte, right_byte) in left.iter().zip(right) {
-        content_diff |= left_byte ^ right_byte;
-    }
-    content_diff == 0 && left.len() == right.len()
 }

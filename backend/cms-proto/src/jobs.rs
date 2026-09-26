@@ -10,7 +10,13 @@
 //! The three types are deliberately separate. [`QueueKey`] is the in-memory
 //! ordering key, while [`QueueEntryDto`] and [`JobGroup`] are the payloads a
 //! service reads from or writes to the wire; a queue status reply cannot
-//! reproduce the key, because it carries no enqueue index.
+//! reproduce the key, for the reasons given on [`QueueEntryDto`].
+//!
+//! The queue that orders these keys is an indexed heap: it compares entries by
+//! key and locates one by its enqueue index, which is what lets a removal or a
+//! priority change repair the heap in place instead of rebuilding it. Only the
+//! key and the payloads belong to the protocol; the heap, the index behind it,
+//! and the container of queued items are the queue's own business.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -48,8 +54,8 @@ pub const PRIORITY_EXTRA_LOW: i32 = 4;
 /// [`std::cmp::Reverse`] of this key.
 ///
 /// This is the in-memory key and not a wire type: the queue status reply
-/// ([`QueueEntryDto`]) has no enqueue index to break ties, and its timestamp is
-/// a float, which has no place in a total order.
+/// ([`QueueEntryDto`]) carries no enqueue index and an approximate timestamp,
+/// and those two are enough to stop it standing in for this key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct QueueKey {
     /// Discrete priority level; a smaller value is dispatched earlier.
@@ -70,9 +76,15 @@ pub struct QueueKey {
 /// Mirrors `priorityqueue.QueueEntryDict`, the value `get_status` fills in and
 /// the `queue_status` RPC returns: the queued item, its priority, and the time
 /// the operation was first requested as the float seconds
-/// `cmscommon.datetime.make_timestamp` computes. There is no index on the
-/// wire, so an entry cannot stand in for a [`QueueKey`] when the order of two
-/// otherwise equal operations has to be decided.
+/// `cmscommon.datetime.make_timestamp` computes.
+///
+/// Three separate things stop an entry from standing in for a [`QueueKey`]. It
+/// carries no enqueue index, so two entries that tie on the other two fields
+/// have no defined order. Its timestamp re-encodes the `datetime` the queue
+/// compares as binary floating-point seconds, so the instant is approximated
+/// rather than exact. And `NaN` is a value JSON accepts for that field while
+/// having no position in a total order at all, so a decoded entry is not always
+/// comparable with anything, itself included.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct QueueEntryDto {
     /// The queued operation, in the shape the owning service's queue item
