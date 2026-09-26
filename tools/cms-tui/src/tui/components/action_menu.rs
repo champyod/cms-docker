@@ -1,5 +1,5 @@
-use crossterm::event::KeyCode;
 use ratatui::{
+    crossterm::event::KeyCode,
     layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
@@ -164,7 +164,7 @@ impl ActionMenu {
 #[cfg(test)]
 mod tests {
     use super::{ActionMenu, MenuItem};
-    use crossterm::event::KeyCode;
+    use ratatui::crossterm::event::KeyCode;
 
     fn sample_menu() -> ActionMenu {
         ActionMenu::new(vec![

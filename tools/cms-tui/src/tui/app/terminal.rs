@@ -1,9 +1,12 @@
-use crossterm::{
-    event::EnableMouseCapture,
-    execute,
-    terminal::{enable_raw_mode, EnterAlternateScreen, SetTitle},
+use ratatui::{
+    backend::CrosstermBackend,
+    crossterm::{
+        event::EnableMouseCapture,
+        execute,
+        terminal::{enable_raw_mode, EnterAlternateScreen, SetTitle},
+    },
+    Terminal,
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
 use std::error::Error;
 use std::io;
 

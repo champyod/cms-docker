@@ -17,7 +17,7 @@ pub fn render(f: &mut Frame, app: &App) {
             Constraint::Min(0),
             Constraint::Length(4),
         ])
-        .split(f.size());
+        .split(f.area());
 
     draw_header(f, chunks[0]);
     draw_breadcrumbs(f, chunks[1], app);

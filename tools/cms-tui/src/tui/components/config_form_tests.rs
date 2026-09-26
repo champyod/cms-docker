@@ -1,5 +1,5 @@
 use super::{ConfigForm, TextField};
-use crossterm::event::KeyCode;
+use ratatui::crossterm::event::KeyCode;
 
 fn form_two() -> ConfigForm {
     ConfigForm::new(vec![

@@ -1,5 +1,5 @@
-use crossterm::event::KeyCode;
 use ratatui::{
+    crossterm::event::KeyCode,
     layout::Rect,
     style::{Color, Style},
     widgets::{Block, Borders, Paragraph},
@@ -131,7 +131,7 @@ impl Default for LogViewer {
 #[cfg(test)]
 mod tests {
     use super::{LogViewer, EMPTY_PLACEHOLDER, PAGE_SIZE, PAUSED_MARKER};
-    use crossterm::event::KeyCode;
+    use ratatui::crossterm::event::KeyCode;
     #[test]
     fn new_starts_empty_and_following() {
         let v: LogViewer = LogViewer::new();

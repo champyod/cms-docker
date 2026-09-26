@@ -5,11 +5,15 @@ pub mod pages;
 
 use app::App;
 use components::template;
-use crossterm::{
-    event::{self, Event, KeyCode},
-    execute,
+use ratatui::{
+    backend::Backend,
+    crossterm::{
+        event::{self, Event, KeyCode},
+        execute,
+        terminal::{disable_raw_mode, LeaveAlternateScreen},
+    },
+    Terminal,
 };
-use ratatui::Terminal;
 use std::error::Error;
 use std::io;
 
@@ -25,8 +29,8 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     let res = run_app(&mut terminal, &mut app);
 
     let mut stdout = io::stdout();
-    crossterm::terminal::disable_raw_mode()?;
-    execute!(stdout, crossterm::terminal::LeaveAlternateScreen)?;
+    disable_raw_mode()?;
+    execute!(stdout, LeaveAlternateScreen)?;
     terminal.show_cursor()?;
 
     if let Err(err) = res {
@@ -36,10 +40,11 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn run_app<B: ratatui::backend::Backend>(
-    terminal: &mut Terminal<B>,
-    app: &mut App,
-) -> io::Result<()> {
+fn run_app<B>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(), Box<dyn Error>>
+where
+    B: Backend,
+    B::Error: 'static,
+{
     while !app.is_quitting() {
         terminal.draw(|f| {
             template::render(f, app);
