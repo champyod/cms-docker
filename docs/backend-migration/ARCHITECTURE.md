@@ -57,11 +57,11 @@ Every invariant the task requires to be preserved, and its fate in this architec
 
 | Invariant | Current source | Fate |
 |---|---|---|
-| `audit_log` append-only | `admin-panel/prisma/sql/20260820130000_rls.sql:218-223` | Preserved. No migration changes RLS; the API writes through the same policies; no UPDATE or DELETE path is added. |
-| `submissions` DELETE allowed, governed by permission + reason + audit | `admin-panel/prisma/sql/20260820130000_rls.sql:227-236` | Preserved. The API enforces the reason and writes the audit entry before the delete commits. |
-| `cms_backup` keeps BYPASSRLS and membership | `admin-panel/prisma/sql/20260820120000_db_roles.sql:15-52` | Preserved. No role SQL is touched. |
-| Application role stays demoted | `admin-panel/prisma/sql/20260820140000_owner_hardening.sql` | Preserved. The new backend connects with the same role and never requests elevation. |
-| RLS binds the application connection | `admin-panel/prisma/sql/20260820130000_rls.sql` | Preserved and reinforced: all new data access goes through `cms-db` on the application connection; no superuser or BYPASSRLS connection is introduced for request handling. |
+| `audit_log` append-only | `admin-panel/prisma/migrations/20260912000400_rls_policies/migration.sql:153-158` | Preserved. No migration changes RLS; the API writes through the same policies; no UPDATE or DELETE path is added. |
+| `submissions` DELETE allowed, governed by permission + reason + audit | `admin-panel/prisma/migrations/20260912000400_rls_policies/migration.sql:163-171` | Preserved. The API enforces the reason and writes the audit entry before the delete commits. |
+| `cms_backup` keeps BYPASSRLS and membership | `admin-panel/prisma/sql/20260820120000_db_roles.sql:15-52` (intentionally exempt: role SQL lives only here, not as a migration) | Preserved. No role SQL is touched. |
+| Application role stays demoted | `admin-panel/prisma/migrations/20260912000500_owner_hardening/migration.sql:17` | Preserved. The new backend connects with the same role and never requests elevation. |
+| RLS binds the application connection | `admin-panel/prisma/migrations/20260912000400_rls_policies/migration.sql` | Preserved and reinforced: all new data access goes through `cms-db` on the application connection; no superuser or BYPASSRLS connection is introduced for request handling. |
 | RPC message cap | `src/cms/io/rpc.py:117` | Preserved, same value. |
 | RPC fail-closed authentication | `src/cms/io/rpc.py:62-74` | Preserved; the replacement keeps the same check and adds a per-caller identity as an unselected option (see `OPEN-QUESTIONS.md`). |
 | Prisma is the table authority | `admin-panel/prisma/schema.prisma` | Preserved. The replacement treats the schema as read-only and adds no migration. |
@@ -88,22 +88,87 @@ recommendation.
 | Admin panel | Next.js, direct Prisma and Docker socket | TypeScript frontend plus one `api/` module calling the Rust API | Removes backend logic and database credentials from the panel | Panel loses direct container control; only if the API exposes it safely | None |
 | Operational CLI | Rust `cms-tui` over the bash launcher | Unchanged, or extended to call the new API | Already Rust | None | None |
 
-## 6. Proposed dependencies and cost tiers
+## 6. Proposed dependencies, versions, and cost tiers
 
 Every entry is free and open-source. No paid dependency is proposed anywhere.
+Every cost tier is therefore "Free"; the column that actually decides an entry
+is disposition.
 
-| Dependency | Purpose | License | Cost tier |
-|---|---|---|---|
-| tokio | Async runtime | MIT | Free |
-| axum | HTTP API framework | MIT | Free |
-| serde / serde_json | Serialization | MIT or Apache-2.0 | Free |
-| sqlx | Database access with bound parameters | MIT or Apache-2.0 | Free |
-| hmac / subtle | Constant-time secret comparison | MIT or Apache-2.0 | Free |
-| clap | CLI parsing, already in use | MIT or Apache-2.0 | Free |
-| tracing | Structured logging | MIT | Free |
-| utoipa | Generated API documentation | Apache-2.0 | Free |
-| rustls | TLS for outbound calls | Apache-2.0 or ISC | Free |
-| isolate | Sandbox backend, already in use | GPL-2.0 | Free |
+Versions were read on 2026-09-26. Two provenance markers are used:
+
+- `lock` — the version `backend/Cargo.lock` resolves today.
+- `index` — read from the crates.io index, and the newest release there on that
+  date. Publish dates are given so a later reader can tell how current a row was.
+
+A `lock` row is a statement about this tree. An `index` row is a statement about
+the registry. Neither is a performance claim; see 6.7.
+
+### 6.1 Runtime and HTTP
+
+| Dependency | Version | Source | License | Disposition | Trade-off |
+|---|---|---|---|---|---|
+| tokio | 1.53.1 | lock | MIT | keep | Required because the services are network servers and `sqlx` is configured `runtime-tokio`. The cost is a large dependency surface that buys the synchronous operator CLI nothing. |
+| axum | 0.8.9 | index, published 2026-04-14 | MIT | keep | Middleware is `tower::Service`, so timeouts, tracing, and auth layers compose instead of being hand-written, and `axum-core` is the stable surface for the shared types. The cost is that axum targets tokio and hyper specifically and states that runtime independence is not a goal; its default `tokio` feature pulls the runtime into every consumer. |
+| actix-web | 4.15.0 | index, published 2026-08-21 | MIT or Apache-2.0 | reject | Carries its own router and middleware type, so middleware cannot be shared with the tower stack the rest of the workspace would use, and it raises the MSRV to 1.88 against axum's 1.80. Rejecting it means giving up the throughput argument usually made for actix; no measurement here supports or refutes that argument. |
+| hyper | 1.11.1 | index, published 2026-08-28 | MIT | reject as a direct dependency, keep transitively | Writing routing, extractors, and body handling directly on hyper re-implements what axum provides. axum 0.8.9 requires `hyper ^1.1.0`, so 1.11.1 is what lands in the tree regardless. |
+
+### 6.2 Database
+
+| Dependency | Version | Source | License | Disposition | Trade-off |
+|---|---|---|---|---|---|
+| sqlx | 0.9.0 | lock, and the requirement in `backend/Cargo.toml` | MIT or Apache-2.0 | keep | The only option that can offer compile-time checked queries via optional macros against a real database; the current manifest disables `macros`, so that cost is not currently incurred. RLS also stays binding, because all access goes through the application connection. The cost when macros are enabled is that compile-time checking ties a build to a reachable database or a checked-in query cache, and `tls-rustls-ring-webpki` is a narrower TLS story than a native-tls build. |
+| tokio-postgres | 0.7.18 | index, published 2026-06-12 | MIT or Apache-2.0 | reject | A plain async driver with no compile-time verification, so a renamed column or a changed type surfaces at runtime. Its `runtime` feature does enable tokio net and time, so it is a workable peer. Rejecting it means hand-written row decoding is maintained for every query the checked layer would otherwise cover. |
+| diesel | 2.3.13 | index, published 2026-09-04 | MIT or Apache-2.0 | reject | The `postgres` feature pulls `pq-sys`, a libpq C binding, which would add a C dependency and change the build and packaging story. Its published 2.3.13 feature set also exposes no async feature, so using it inside tokio handlers means a blocking pool. Rejecting it means the query layer stays thinner but gains no query-level type checking. |
+| sea-orm | 2.0.3 | index, published 2026-09-13 | MIT or Apache-2.0 | reject | An ORM built on sqlx, so adopting it means adopting sqlx anyway plus a second abstraction, at the highest MSRV in this section (1.94.0). Its `schema-sync` feature pulls in schema tooling meant to generate DDL; leaving that feature off is required, because Prisma remains the table authority and no migration may be introduced. Rejecting it means query shapes are written by hand with no entity-level codegen. |
+
+### 6.3 Serialization, errors, config, and CLI
+
+| Dependency | Version | Source | License | Disposition | Trade-off |
+|---|---|---|---|---|---|
+| serde | 1.0.229 | lock | MIT or Apache-2.0 | keep | Derive support for the wire types and the config schema. |
+| serde_json | 1.0.151 | lock | MIT or Apache-2.0 | keep | `arbitrary_precision` is already enabled in `backend/Cargo.toml`, so a JSON number crossing the RPC boundary keeps its literal form instead of being reformatted through a float. The cost is that arbitrary-precision parsing is slower than the default path; no figure for that is claimed. |
+| thiserror | 2.0.21 | lock, and the index newest on 2026-09-26 | MIT or Apache-2.0 | keep | Derive-only, so the library error enums are concise while the top-level binary entry point still needs a second error type for context. `anyhow` is not in the current manifest and is not proposed here. |
+| toml | 1.1.6 | index, published 2026-09-10 | MIT or Apache-2.0 | keep | `cms-proto` owns the config schema. The index version string carries the suffix `+spec-1.1.0`, so the requirement is `1.1.6`; `toml` is absent from backend lock, no lock metadata claimed. No API-compatibility claim is made: the existing parser is small and must be re-verified against 1.1.6 before the version is adopted. |
+| clap | 4.6.7 | index, published 2026-09-14 | MIT or Apache-2.0 | keep | `cms-cli` parses the operator CLI and then delegates to the existing launcher and Makefile, so its flags must match what operators already type. The `derive` feature is what the operator tool already uses. |
+
+### 6.4 Observability, secret handling, TLS, and documentation
+
+| Dependency | Version | Source | License | Disposition | Trade-off |
+|---|---|---|---|---|---|
+| tracing | 0.1.44 | lock | MIT | keep | Structured logs throughout. axum's `tracing` feature emits rejections from its built-in extractors with no extra wiring. |
+| hmac / subtle | 0.13.0 / 2.6.1 | lock | MIT or Apache-2.0 | keep | The fail-closed secret check on every RPC frame, with `subtle` supplying the constant-time comparison. This is the security-critical pair and gets no substitution. |
+| rustls | 0.23.45 | lock | Apache-2.0 or ISC | keep | Matches the `tls-rustls-ring-webpki` feature already chosen for sqlx, so the tree carries one TLS stack rather than two. The cost is that the provider is `ring`; a policy requiring FIPS-validated providers would force the `aws-lc-rs` feature and a rebuild. |
+| utoipa | 6.0.0 | index, published 2026-09-22 | MIT or Apache-2.0 | keep | Generates OpenAPI at compile time, satisfying the documentation requirement with no paid generator. It exposes an `axum_extras` feature, which is the integration point if the API is axum. The cost is that 6.0.0 is a recent major, so its derive macros must be reviewed against the API definitions. |
+| bollard | 0.21.1 | index, published 2026-08-16 | Apache-2.0 | keep, scoped to container control | Section 5 records that the admin panel loses direct container control. The resource service and the panel's `api/` module are what give it back, and this is the async Docker client that fits a tokio service. The default feature set is `http` and `pipe`; a TLS-protected daemon endpoint needs `ssl` enabled explicitly. The crate is versioned independently of the Docker API it wraps, so an API change is a maintenance obligation rather than a one-time port. |
+
+### 6.5 Sandbox
+
+| Dependency | Version | Source | License | Disposition | Trade-off |
+|---|---|---|---|---|---|
+| isolate | not versioned as a crate | the sandbox backend already in use | GPL-2.0 | keep, unchanged | No version applies, so none is proposed. It remains the one entry here that is not MIT or Apache-2.0, and its copyleft obligation is unchanged by this re-baseline, as is the obligation to re-verify isolation equivalence before trusting the worker port. |
+
+### 6.6 Disposition summary
+
+Keep: tokio, axum, hyper (transitively), sqlx, serde, serde_json, thiserror,
+toml, clap, tracing, hmac, subtle, rustls, utoipa, bollard, isolate.
+
+Reject: actix-web, tokio-postgres, diesel, sea-orm, and hyper as a direct
+dependency.
+
+Nothing in this section is rejected for being slow or fast. Each rejection rests
+on a structural property — a C dependency, a second abstraction over a crate
+already chosen, a middleware stack that cannot be shared, no compile-time query
+checking — that is visible in the crate's own feature and version metadata.
+
+### 6.7 Benchmarks
+
+No benchmark was run for this re-baseline. No throughput, latency, memory, or
+binary-size figure is claimed for any version in this section, and none can be
+inferred from the version numbers. Any performance claim would need a
+measurement against the Python services it would replace, on this system's own
+data volume, and that measurement does not exist. Section 7 already disclaims
+performance improvement; this subsection records that choosing between the
+versions above adds no measurement either.
 
 ## 7. What this architecture does not claim
 
