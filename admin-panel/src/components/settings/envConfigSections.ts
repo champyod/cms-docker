@@ -62,10 +62,6 @@ export const CONFIG_SECTIONS: EnvConfigSection[] = [
   }
 ];
 
-export function deepCopyEnvData(data: EnvFilesData): EnvFilesData {
-  return JSON.parse(JSON.stringify(data));
-}
-
 export function updateFileValue(
   prev: EnvFilesData,
   filename: string,

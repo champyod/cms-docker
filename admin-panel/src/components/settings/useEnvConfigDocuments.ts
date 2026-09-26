@@ -4,7 +4,6 @@ import { useCallback, useState } from 'react';
 import { readConfigTomlValues } from '@/app/actions/configTomlActions';
 import { CONFIG_TOML_FILE } from '@/lib/config-toml';
 import {
-  deepCopyEnvData,
   configTomlKeys,
   updateFileValue,
   type EnvFilesData,
@@ -42,7 +41,10 @@ export function useEnvConfigDocuments(): EnvConfigDocuments {
       }
       const next: EnvFilesData = { [CONFIG_TOML_FILE]: result.values };
       setData(next);
-      setOriginalData(deepCopyEnvData(next));
+      // Why shared, not cloned: every writer (updateFileValue, the save updater)
+      // replaces objects instead of mutating them, so this snapshot can never be
+      // changed behind the baseline that computeChangedKeys compares against.
+      setOriginalData(() => next);
     } catch {
       setError('Failed to load configuration');
     } finally {
