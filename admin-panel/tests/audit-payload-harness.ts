@@ -106,7 +106,6 @@ export async function loadAuditedActions(options?: { userRow?: unknown; adminRow
   }));
   vi.doMock('@/lib/deploy-operations', () => ({
     getActiveDeployOperation: vi.fn(async () => ({ operationId: 'op-1', contestId: 7, startedAt: 'now', percent: 10 })),
-    fetchDeployStatus: vi.fn(async () => ({ success: true, status: 'running', contestId: 7, log: LOG_SECRET })),
     runDeployContest: vi.fn(),
     reconcileDeployOperations: vi.fn(async () => {}),
   }));

@@ -60,6 +60,36 @@ describe('audited read rows carry names, ids, counts and flags only', () => {
     expect(entries[0].afterValues).toEqual({ containerId: 'abc123', tail: 50 });
   });
 
+  it('records nothing for a polled log read and one row for an explicit refresh', async () => {
+    // The invariant this pins: an open log viewer polls every five seconds, so a session that
+    // watches for a minute must leave the log exactly as empty as it found it, and the operator's
+    // own refresh is the one that counts. Without the split this test wrote twelve rows.
+    const { entries } = await loadAuditedActions();
+    const { fetchContainerLogs, getContainerLogs } = await import('@/app/actions/docker');
+
+    for (let tick = 0; tick < 12; tick += 1) {
+      await fetchContainerLogs('abc123', 100);
+    }
+    expect(entries).toEqual([]);
+
+    await getContainerLogs('abc123', 100);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].verb).toBe('container:view');
+    expectNoLeak(entries);
+  });
+
+  it('records nothing for a polled deploy-discovery read', async () => {
+    // Same invariant for reattachability discovery, which asks every 30s per open tab.
+    const { entries } = await loadAuditedActions();
+    const { fetchActiveDeployOperation } = await import('@/app/actions/deployActions');
+
+    for (let tick = 0; tick < 12; tick += 1) {
+      await fetchActiveDeployOperation();
+    }
+
+    expect(entries).toEqual([]);
+  });
+
   it('records the deploy operation read as ids only', async () => {
     const { entries } = await loadAuditedActions();
     const { getActiveDeployOperation } = await import('@/app/actions/deployActions');
