@@ -455,18 +455,20 @@ check_worker_cgroup() {
 # Prints which rule grants the container write access to the backup root and
 # returns 0, or returns 1 when no rule applies. <mode> is read on its last three
 # octal digits so a setuid or sticky digit cannot shift the group/other columns.
+# Creating a directory inside the root also needs the search bit, so a class
+# counts only when its octal digit carries write and execute together — 3 or 7.
 backup_root_write_rule() {
   local owner_uid="$1" group_gid="$2" mode="$3" container_uid="$4" container_gid="$5"
   local perms="${mode: -3}"
-  if [[ "$owner_uid" == "$container_uid" ]]; then
+  if [[ "$owner_uid" == "$container_uid" && "${perms:0:1}" =~ [37] ]]; then
     printf 'owner uid %s\n' "$owner_uid"
     return 0
   fi
-  if [[ "$group_gid" == "$container_gid" && "${perms:1:1}" =~ [2367] ]]; then
+  if [[ "$group_gid" == "$container_gid" && "${perms:1:1}" =~ [37] ]]; then
     printf 'group %s write (mode %s)\n' "$group_gid" "$mode"
     return 0
   fi
-  if [[ "${perms:2:1}" =~ [2367] ]]; then
+  if [[ "${perms:2:1}" =~ [37] ]]; then
     printf 'other-write (mode %s)\n' "$mode"
     return 0
   fi
