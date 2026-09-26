@@ -15,8 +15,8 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=__lib/common.sh
 source "${SCRIPT_DIR}/__lib/common.sh" 2>/dev/null || true
-declare -F log_info >/dev/null || log_info() { echo "[INFO] $*"; }
-declare -F log_warn >/dev/null || log_warn() { echo "[WARN] $*" >&2; }
+command -v log_info >/dev/null 2>&1 || log_info() { echo "[INFO] $*"; }
+command -v log_warn >/dev/null 2>&1 || log_warn() { echo "[WARN] $*" >&2; }
 
 MODE="${CONTEST_NGINX_REFRESH:-restart}"
 while [[ $# -gt 0 ]]; do
