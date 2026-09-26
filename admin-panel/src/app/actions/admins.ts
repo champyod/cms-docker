@@ -240,6 +240,17 @@ export async function revealAdminPassword(id: number): Promise<
     const row = await prisma.admins.findUnique({ where: { id }, select: { authentication: true } });
     if (!row) return { success: false, error: 'Admin not found' };
     const parsed = parseStoredPassword(row.authentication);
+    // Why kind only: the row records that this admin's secret was disclosed, never the secret.
+    // An admin credential is the one that re-grants every permission below it, so leaving this
+    // read unlogged made it the single sensitive read on the panel with no trail.
+    await recordAudit({
+      verb: 'password:reveal',
+      entity: 'admin',
+      entityId: String(id),
+      beforeValues: { adminId: id },
+      afterValues: { kind: parsed.kind },
+      result: 'success',
+    });
     if (parsed.kind === 'bcrypt') return { success: true, kind: 'bcrypt' };
     return { success: true, kind: 'plaintext', value: parsed.value };
   } catch {
