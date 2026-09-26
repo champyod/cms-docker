@@ -32,9 +32,11 @@ const EVALUATION_JOB: &str = r#"{
   "input": null, "output": "4\n", "time_limit": 2.0, "memory_limit": 262144, "outcome": "correct",
   "user_output": "", "plus": {}, "only_execution": false, "get_output": false}"#;
 
-/// A memory limit above 2^53 and a whole number of mebibytes, so it is a limit
-/// the dataset accepts and a float could not hold: one bit past the mantissa.
-const EXACT_MEMORY_LIMIT: i64 = 9_007_200_303_259_568;
+/// 8_796_093_022_207 MiB: a whole number of mebibytes the dataset admits, and
+/// the largest an i64 limit carries. It needs 63 bits, so it arrives whole only
+/// if the field is as wide as the `int` the constructor declares over its
+/// BigInteger column.
+const EXACT_MEMORY_LIMIT: i64 = 9_223_372_036_853_727_232;
 
 fn job(kind: JobKind) -> Value {
     let literal = match kind {
@@ -357,7 +359,7 @@ fn a_memory_limit_is_the_integer_the_python_side_declares() {
     assert_eq!(
         exact.expect("an integer must decode").memory_limit,
         Some(EXACT_MEMORY_LIMIT),
-        "a float field would round this last bit away"
+        "the declared int must arrive whole, as the BigInteger column holds it"
     );
     assert!(
         matches!(refused, Err(JobError::WrongValue { key, .. }) if key == "memory_limit"),
