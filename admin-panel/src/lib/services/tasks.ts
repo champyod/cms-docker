@@ -16,6 +16,14 @@ export interface TaskData {
   max_user_test_number?: number | null; min_submission_interval?: number | null; min_user_test_interval?: number | null;
 }
 const TASKS_PER_PAGE = 20;
+const REQUIRED_INTERVAL_KEYS = new Set(['token_min_interval', 'token_gen_interval']);
+const OPTIONAL_INTERVAL_KEYS = new Set(['min_submission_interval', 'min_user_test_interval']);
+const INTERVAL_KEYS = new Set([...REQUIRED_INTERVAL_KEYS, ...OPTIONAL_INTERVAL_KEYS]);
+const ARRAY_KEYS = new Set(['submission_format', 'primary_statements', 'allowed_languages']);
+const API_INTERVAL_KEYS = new Set([...INTERVAL_KEYS, ...ARRAY_KEYS]);
+const NULLABLE_TASK_KEYS = new Set(['contest_id', 'token_max_number', 'token_gen_max', 'max_submission_number', 'max_user_test_number', ...OPTIONAL_INTERVAL_KEYS]);
+const NULLABLE_API_KEYS = new Set([...NULLABLE_TASK_KEYS, 'score_precision']);
+const ZERO_DEFAULT_KEYS = new Set(['score_precision', 'token_gen_initial', 'token_gen_number']);
 type MutationResult = { success: boolean; error?: string };
 type TasksListResult = { tasks: Array<Prisma.tasksGetPayload<{ include: { contests: { select: { id: true; name: true } }; statements: { select: { id: true } }; datasets_datasets_task_idTotasks: { select: { id: true; description: true; _count: { select: { testcases: true } } } }; _count: { select: { submissions: true } } } }> & { diagnostics: ReturnType<typeof buildDiagnosticsForLoadedTask> }>; totalPages: number; total: number; };
 export async function listTasks(params: { page?: number; search?: string } = {}): Promise<TasksListResult> {
@@ -75,10 +83,8 @@ export async function createTaskViaApi(data: Record<string, unknown>): Promise<M
 }
 function splitTaskData(data: Partial<TaskData>): { standardFields: Record<string, unknown>; intervalFields: Record<string, unknown> } {
   const sanitized: Record<string, unknown> = {}; for (const k in data) sanitized[k] = sanitize((data as Record<string, unknown>)[k] as never);
-  const req = ['token_min_interval', 'token_gen_interval']; const opt = ['min_submission_interval', 'min_user_test_interval'];
-  const nullable = ['contest_id', 'token_max_number', 'token_gen_max', 'max_submission_number', 'max_user_test_number', ...opt];
   const std: Record<string, unknown> = {}; const iv: Record<string, unknown> = {};
-  for (const k in sanitized) { if ([...req, ...opt].includes(k)) { if (req.includes(k) && sanitized[k] === null) continue; iv[k] = sanitized[k]; } else if (sanitized[k] !== null || nullable.includes(k)) std[k] = sanitized[k]; }
+  for (const k in sanitized) { if (INTERVAL_KEYS.has(k)) { if (REQUIRED_INTERVAL_KEYS.has(k) && sanitized[k] === null) continue; iv[k] = sanitized[k]; } else if (sanitized[k] !== null || NULLABLE_TASK_KEYS.has(k)) std[k] = sanitized[k]; }
   return { standardFields: std, intervalFields: iv };
 }
 async function applyTaskIntervals(id: number, iv: Record<string, unknown>): Promise<void> {
@@ -107,10 +113,8 @@ async function normalizeSubmissionFormat(data: Record<string, unknown>, taskId: 
   if (n) data.submission_format = (data.submission_format as string[]).map((f) => f.replace(/%s/g, n as string));
 }
 function splitFieldsForApi(s: Record<string, unknown>): { standardFields: Record<string, unknown>; intervalFields: Record<string, unknown> } {
-  const req = ['token_min_interval', 'token_gen_interval']; const opt = ['min_submission_interval', 'min_user_test_interval']; const arr = ['submission_format', 'primary_statements', 'allowed_languages'];
-  const nullable = ['contest_id', 'token_max_number', 'token_gen_max', 'max_submission_number', 'max_user_test_number', 'score_precision', ...opt];
   const std: Record<string, unknown> = {}; const iv: Record<string, unknown> = {};
-  for (const k in s) { if ([...req, ...opt, ...arr].includes(k)) { if (req.includes(k) && s[k] === null) continue; iv[k] = s[k]; } else if (s[k] !== null || nullable.includes(k)) { if (s[k] === null && ['score_precision', 'token_gen_initial', 'token_gen_number'].includes(k)) std[k] = 0; else std[k] = s[k]; } }
+  for (const k in s) { if (API_INTERVAL_KEYS.has(k)) { if (REQUIRED_INTERVAL_KEYS.has(k) && s[k] === null) continue; iv[k] = s[k]; } else if (s[k] !== null || NULLABLE_API_KEYS.has(k)) { if (s[k] === null && ZERO_DEFAULT_KEYS.has(k)) std[k] = 0; else std[k] = s[k]; } }
   return { standardFields: std, intervalFields: iv };
 }
 async function applyTaskUpdatesForApi(id: number, std: Record<string, unknown>, iv: Record<string, unknown>): Promise<void> {

@@ -28,12 +28,19 @@ interface PendingDrop {
 
 const FIELD_CLASSES = 'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring';
 
+// Why module scope: every card formats its own timestamp, so a per-card formatter
+// would be rebuilt for each row on every render.
+const LANE_TIME_FORMAT = new Intl.DateTimeFormat();
+
 export function LaneBoard({ board, permissionKeys }: LaneBoardProps) {
   const router = useRouter();
   const sensor = useSensor(PointerSensor, { activationConstraint: { distance: 4 } });
+  // Why memoized: the key list is stable for the session, so the gate below rebuilds
+  // the same Set on every render without reading different data.
+  const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
   // Why lane_move, not lane_assign: every card already has a lane, so any
   // placement change is a move — matching how SubmissionList gates its modal.
-  const canMove = hasEffectivePermission(new Set(permissionKeys), 'evaluation:lane_move');
+  const canMove = hasEffectivePermission(effective, 'evaluation:lane_move');
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [pending, setPending] = useState<PendingDrop | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -149,7 +156,7 @@ function LaneCard({ item, laneNames, canMove, expanded, pending, onToggle, onDon
           <Badge variant={item.waitingCount > 0 ? 'warning' : 'neutral'}>Waiting {item.waitingCount}</Badge>
         </div>
         <p className="text-sm font-medium">{item.username}</p>
-        <p className="text-xs text-muted-foreground">{item.taskName} · {new Date(item.timestamp).toLocaleString()}</p>
+        <p className="text-xs text-muted-foreground">{item.taskName} · {LANE_TIME_FORMAT.format(new Date(item.timestamp))}</p>
         {item.reason && <p className="text-xs text-muted-foreground italic truncate" title={item.reason}>Last: {item.reason}</p>}
       </div>
       {canMove && (

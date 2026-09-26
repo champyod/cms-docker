@@ -36,6 +36,16 @@ function toIntervalSeconds(value: unknown): number | null {
 
 type ParticipationIntervalRow = { id: number; delay_time_seconds: number | null; extra_time_seconds: number | null };
 
+// Why a single Set: spreading the returned sets into an array literal builds a
+// throwaway array per gate before the Set is constructed.
+// Why still sequential: each gate throws on its own key, so the first missing
+// permission is the one the caller must be told about.
+function combinePermissions(...granted: readonly ReadonlySet<string>[]): Set<string> {
+  const permissions = new Set<string>();
+  for (const set of granted) for (const key of set) permissions.add(key);
+  return permissions;
+}
+
 // Why: Postgres interval columns are not selectable through the generated Prisma client,
 // so participation delay/extra seconds arrive via typed raw SQL (same pattern as queryParticipationDetails).
 async function fetchParticipationIntervals(userId: number): Promise<readonly ParticipationIntervalRow[]> {
@@ -68,7 +78,7 @@ export async function getUserProfile(userId: number): Promise<UserProfile | null
 }
 
 export async function getUserTeams(userId: number): Promise<readonly UserTeamMembership[]> {
-  const permissions = new Set<string>([...await requirePermission('user:read'), ...await requirePermission('participation:list'), ...await requirePermission('team:read')]);
+  const permissions = combinePermissions(await requirePermission('user:read'), await requirePermission('participation:list'), await requirePermission('team:read'));
   // Why: one access table per entity, built before the map, so N rows resolve N rows of
   // fields instead of N full permission tables.
   const access = {
@@ -98,7 +108,7 @@ function toHistorySubmission(submission: HistorySubmissionRow, contestId: number
 }
 
 export async function getUserHistory(userId: number): Promise<UserHistory | null> {
-  const permissions = new Set<string>([...await requirePermission('user:read'), ...await requirePermission('participation:list'), ...await requirePermission('submission:read')]);
+  const permissions = combinePermissions(await requirePermission('user:read'), await requirePermission('participation:list'), await requirePermission('submission:read'));
   const row = await prisma.users.findUnique({ where: { id: userId }, select: { last_login_at: true, participations: { orderBy: { contests: { start: 'desc' } }, select: { id: true, contest_id: true, team_id: true, starting_time: true, contests: { select: { id: true, name: true, start: true, stop: true } }, teams: { select: { id: true, code: true, name: true } }, submissions: { orderBy: { timestamp: 'desc' }, select: { id: true, timestamp: true, language: true, official: true, task_id: true, tasks: { select: { id: true, name: true } }, submission_results: { select: { score: true } } } } } } } });
   if (!row) return null;
   const access: HistoryAccess & { users: Record<string, FieldAccess>; participations: Record<string, FieldAccess>; contests: Record<string, FieldAccess>; teams: Record<string, FieldAccess> } = {
@@ -115,15 +125,19 @@ export async function getUserHistory(userId: number): Promise<UserHistory | null
   const intervalById = new Map(intervals.map((item) => [item.id, item]));
   const participations: UserHistoryParticipation[] = [];
   const contests: Array<{ id: number | null; name: string | null; start: string | null; stop: string | null }> = [];
+  const seenContestIds = new Set<number>();
   const teams: Array<{ id: number | null; code: string | null; name: string | null }> = [];
+  const seenTeamIds = new Set<number>();
   const submissions: UserHistorySubmission[] = [];
   for (const entry of row.participations) {
     const participation = filterReadableFieldsWith(access.participations, { id: entry.id, contest_id: entry.contest_id, team_id: entry.team_id, starting_time: entry.starting_time });
     const contest = entry.contests ? filterReadableFieldsWith(access.contests, { id: entry.contests.id, name: entry.contests.name }) : {};
     const team = entry.teams ? filterReadableFieldsWith(access.teams, { id: entry.teams.id, code: entry.teams.code, name: entry.teams.name }) : {};
     participations.push({ id: participation.id ?? entry.id, contestId: participation.contest_id ?? entry.contest_id, contestName: contest.name ?? entry.contests?.name ?? null, contestStart: toIso(entry.contests?.start), contestStop: toIso(entry.contests?.stop), teamId: participation.team_id ?? entry.team_id, teamCode: team.code ?? entry.teams?.code ?? null, startingTime: toIso(entry.starting_time), delayTimeSeconds: toIntervalSeconds(intervalById.get(entry.id)?.delay_time_seconds ?? null), extraTimeSeconds: toIntervalSeconds(intervalById.get(entry.id)?.extra_time_seconds ?? null) });
-    if (entry.contests && !contests.some((item) => item.id === entry.contests?.id)) contests.push({ id: contest.id ?? entry.contests.id, name: contest.name ?? entry.contests.name, start: toIso(entry.contests.start), stop: toIso(entry.contests.stop) });
-    if (entry.teams && !teams.some((item) => item.id === entry.teams?.id)) teams.push({ id: team.id ?? entry.teams.id, code: team.code ?? entry.teams.code, name: team.name ?? entry.teams.name });
+    // Why an id Set: rescanning the accumulated lists makes the walk quadratic in
+    // participations, and the first row for a contest or team is the one kept.
+    if (entry.contests && !seenContestIds.has(entry.contests.id)) { seenContestIds.add(entry.contests.id); contests.push({ id: contest.id ?? entry.contests.id, name: contest.name ?? entry.contests.name, start: toIso(entry.contests.start), stop: toIso(entry.contests.stop) }); }
+    if (entry.teams && !seenTeamIds.has(entry.teams.id)) { seenTeamIds.add(entry.teams.id); teams.push({ id: team.id ?? entry.teams.id, code: team.code ?? entry.teams.code, name: team.name ?? entry.teams.name }); }
     for (const submission of entry.submissions) submissions.push(toHistorySubmission(submission, entry.contest_id, entry.contests?.name ?? null, access));
   }
   submissions.sort((first, second) => (first.timestamp < second.timestamp ? 1 : -1));
@@ -144,7 +158,7 @@ export async function getTeamSummary(teamId: number): Promise<TeamSummary | null
 }
 
 export async function getTeamMembers(teamId: number): Promise<readonly TeamMember[]> {
-  const permissions = new Set<string>([...await requirePermission('team:read'), ...await requirePermission('participation:list'), ...await requirePermission('user:read')]);
+  const permissions = combinePermissions(await requirePermission('team:read'), await requirePermission('participation:list'), await requirePermission('user:read'));
   const access = {
     users: getFieldAccess('users', permissions),
     contests: getFieldAccess('contests', permissions),
@@ -152,14 +166,21 @@ export async function getTeamMembers(teamId: number): Promise<readonly TeamMembe
   const row = await prisma.teams.findUnique({ where: { id: teamId }, select: { id: true, participations: { select: { user_id: true, users: { select: { id: true, username: true, first_name: true, last_name: true } }, contests: { select: { id: true, name: true } } } } } });
   if (!row) return [];
   const members = new Map<number, TeamMember & { contests: Array<{ id: number; name: string }> }>();
+  // Why a per-member id Set: rescanning a member's own contests makes the walk
+  // quadratic in that member's participations.
+  const seenContestsByUser = new Map<number, Set<number>>();
   for (const entry of row.participations) {
     const user = entry.users ? filterReadableFieldsWith(access.users, { id: entry.users.id, username: entry.users.username, first_name: entry.users.first_name, last_name: entry.users.last_name }) : {};
     const contest = filterReadableFieldsWith(access.contests, { id: entry.contests.id, name: entry.contests.name });
     const key = entry.user_id;
+    const seenContests = seenContestsByUser.get(key) ?? new Set<number>();
+    seenContestsByUser.set(key, seenContests);
+    if (seenContests.has(entry.contests.id)) continue;
+    seenContests.add(entry.contests.id);
     const existing = members.get(key);
     const contestRef = { id: contest.id ?? entry.contests.id, name: contest.name ?? entry.contests.name };
     if (existing) {
-      if (!existing.contests.some((item) => item.id === contestRef.id)) existing.contests.push(contestRef);
+      existing.contests.push(contestRef);
     } else {
       members.set(key, { userId: user.id ?? entry.users?.id ?? null, username: user.username ?? entry.users?.username ?? null, firstName: user.first_name ?? entry.users?.first_name ?? null, lastName: user.last_name ?? entry.users?.last_name ?? null, contests: [contestRef] });
     }
@@ -168,7 +189,7 @@ export async function getTeamMembers(teamId: number): Promise<readonly TeamMembe
 }
 
 export async function getTeamContests(teamId: number): Promise<readonly TeamContest[]> {
-  const permissions = new Set<string>([...await requirePermission('team:read'), ...await requirePermission('participation:list'), ...await requirePermission('contest:read')]);
+  const permissions = combinePermissions(await requirePermission('team:read'), await requirePermission('participation:list'), await requirePermission('contest:read'));
   const contestsAccess = getFieldAccess('contests', permissions);
   const row = await prisma.teams.findUnique({ where: { id: teamId }, select: { id: true, participations: { select: { contests: { select: { id: true, name: true, description: true, start: true, stop: true } } } } } });
   if (!row) return [];

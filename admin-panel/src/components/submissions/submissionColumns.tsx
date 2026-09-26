@@ -6,11 +6,11 @@ import type { SubmissionListItem } from '@/types';
 
 type SubmissionResult = SubmissionListItem['submission_results'][number];
 
+// Why module scope: built per call otherwise, and every row cell asks for the same shape.
+const SUBMISSION_TIME_FORMAT = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
 export function formatSubmissionDate(date: Date): string {
-  return new Date(date).toLocaleString(undefined, {
-    month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit', second: '2-digit'
-  });
+  return SUBMISSION_TIME_FORMAT.format(new Date(date));
 }
 
 // Why the first result only: a submission is scored per dataset, and the list

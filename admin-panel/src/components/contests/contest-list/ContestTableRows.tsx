@@ -21,8 +21,14 @@ export interface ContestRowData {
 
 type StatusVariant = 'warning' | 'neutral' | 'success';
 
+// Why module scope: two timeline cells per contest ask for the same shape, so a
+// per-cell formatter would be rebuilt for every row of both layouts.
+const CONTEST_DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
+  month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit',
+});
+
 function formatContestDate(date: Date): string {
-  return new Date(date).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return CONTEST_DATE_FORMAT.format(new Date(date));
 }
 
 function getContestStatus(start: Date, stop: Date): { label: string; variant: StatusVariant } {

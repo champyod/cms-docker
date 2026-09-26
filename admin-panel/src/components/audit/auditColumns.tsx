@@ -9,8 +9,12 @@ export interface AuditColumnHelpers {
   resultBadgeVariant: (result: string) => 'success' | 'destructive' | 'neutral';
 }
 
+// Why module scope: the formatter is built per call, so one per audit row on every
+// render of both the desktop table and the mobile cards.
+const AUDIT_TIME_FORMAT = new Intl.DateTimeFormat();
+
 export function formatTimestamp(iso: string): string {
-  return new Date(iso).toLocaleString();
+  return AUDIT_TIME_FORMAT.format(new Date(iso));
 }
 
 export function truncate(text: string | null, max: number): string {

@@ -1,6 +1,6 @@
 'use client';
 
-import type { Dispatch, SetStateAction } from 'react';
+import { useMemo, type Dispatch, type SetStateAction } from 'react';
 import { ShieldCheck } from 'lucide-react';
 
 import { Button } from '@/components/core/Button';
@@ -42,6 +42,12 @@ export function GroupFormDialog({
   onToggleModule,
   onSave,
 }: GroupFormDialogProps): React.JSX.Element {
+  // Why a Set: every checkbox and both module aggregates probe the selection, so a
+  // linear scan per probe is quadratic in the permission count.
+  const selectedKeys = useMemo(
+    () => new Set(formData.permissionKeys),
+    [formData.permissionKeys],
+  );
   return (
     <Dialog
       open={open}
@@ -91,12 +97,8 @@ export function GroupFormDialog({
             {[...groupedPermissions.entries()]
               .sort(([a], [b]) => a.localeCompare(b))
               .map(([module, defs]) => {
-                const allSelected = defs.every((d) =>
-                  formData.permissionKeys.includes(d.key),
-                );
-                const someSelected = defs.some((d) =>
-                  formData.permissionKeys.includes(d.key),
-                );
+                const allSelected = defs.every((d) => selectedKeys.has(d.key));
+                const someSelected = defs.some((d) => selectedKeys.has(d.key));
                 return (
                   <div key={module} className="space-y-1.5">
                     <label className="flex items-center gap-2 text-xs font-semibold text-foreground uppercase tracking-wider">
@@ -126,9 +128,7 @@ export function GroupFormDialog({
                         >
                           <input
                             type="checkbox"
-                            checked={formData.permissionKeys.includes(
-                              def.key,
-                            )}
+                            checked={selectedKeys.has(def.key)}
                             onChange={(e) =>
                               onTogglePermission(
                                 def.key,
