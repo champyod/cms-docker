@@ -252,8 +252,8 @@ describe('permission coverage', () => {
     // Why the ID set and not the per-route shape: visibleRoutes already filters on
     // isRoutePermitted, and a requirement-free route is permitted for anyone, so
     // asserting an empty requirement per visible route holds by construction. The
-    // exact visible ID set is the form that can actually fail when a gated route
-    // is enabled without a gate reaching the sidebar surface.
+    // exact visible ID set is the form that can actually fail when a route is
+    // enabled whose gate does not reach the sidebar surface.
     expect(visibleRoutes(empty, 'sidebar').map((route) => route.id)).toEqual(['home']);
   });
 
