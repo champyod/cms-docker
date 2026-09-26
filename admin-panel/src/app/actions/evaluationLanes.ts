@@ -8,6 +8,13 @@ import { recordAudit } from '@/lib/audit';
 
 const MAX_LANE_NAME_LENGTH = 64;
 const MAX_REASON_LENGTH = 500;
+/** Why capped: lane state lives only in audit rows, so an uncapped scan grows with
+ * lifetime history. The board is a working view of the current queue, and the
+ * newest rows are the only ones that can still be current. */
+const LANE_AUDIT_SCAN_LIMIT = 2000;
+/** Why capped per lane: one busy lane must not crowd the others out of the
+ * response, and assignments arrive newest-first so the head is the live work. */
+const MAX_ITEMS_PER_LANE = 200;
 
 interface ActionResult {
   success: boolean;
@@ -212,6 +219,9 @@ export async function getLaneBoard(): Promise<LaneBoard> {
   }
   const submissions = await prisma.submissions.findMany({
     where: { id: { in: assignments.map((assignment) => assignment.submissionId) } },
+    // Why take at the assignment count: ids are unique, so this can never
+    // truncate — it pins the query cost to the already-capped assignment list.
+    take: assignments.length,
     select: {
       id: true,
       timestamp: true,
@@ -232,6 +242,7 @@ async function readLatestLaneAssignments(): Promise<LaneAssignment[]> {
   const rows = await prisma.audit_log.findMany({
     where: { entity: 'submission', verb: { in: [...LANE_VERBS] } },
     orderBy: { id: 'desc' },
+    take: LANE_AUDIT_SCAN_LIMIT,
     select: { entity_id: true, actor_id: true, after_values: true },
   });
   const seen = new Set<number>();
@@ -388,7 +399,7 @@ function groupByLane(
     const laneItems = groups.get(assignment.lane);
     if (laneItems === undefined) {
       groups.set(assignment.lane, [item]);
-    } else {
+    } else if (laneItems.length < MAX_ITEMS_PER_LANE) {
       laneItems.push(item);
     }
   }
