@@ -13,8 +13,15 @@ RUN apk add --no-cache bash curl docker-cli procps postgresql-client bc jq
 # We copy the script from the context (repo root)
 COPY scripts/__monitor.sh /usr/local/bin/monitor.sh
 COPY scripts/__backup.sh /usr/local/bin/cms-backup.sh
+# WHY: cms-backup.sh sources ${SCRIPT_DIR}/__lib/common.sh and SCRIPT_DIR is
+# /usr/local/bin here, so the lib has to land beside the scripts or the source
+# fails and every backup cycle aborts.
+COPY scripts/__lib /usr/local/bin/__lib
 
-RUN chmod +x /usr/local/bin/monitor.sh /usr/local/bin/cms-backup.sh
+# a+rX grants the uid 1000 runtime read access, and X only to directories, so
+# the lib is traversable without depending on the build context's file modes.
+RUN chmod +x /usr/local/bin/monitor.sh /usr/local/bin/cms-backup.sh \
+    && chmod -R a+rX /usr/local/bin/__lib
 
 # Non-root runtime (uid/gid 1000). Read-only mounts stay readable (/host:ro is
 # world-readable), but the Docker socket is owned by the host "docker" group,

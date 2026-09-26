@@ -684,6 +684,10 @@ services:
       # (the image copy stays as the fallback).
       - ./scripts/__backup.sh:/usr/local/bin/cms-backup.sh:ro
       - ./scripts/__monitor.sh:/usr/local/bin/monitor.sh:ro
+      # WHY the lib is mounted too: cms-backup.sh sources ${SCRIPT_DIR}/__lib/common.sh and
+      # SCRIPT_DIR is /usr/local/bin in the container, so the lib has to sit beside the
+      # scripts — without this mount the source fails and every backup cycle aborts.
+      - ./scripts/__lib:/usr/local/bin/__lib:ro
       - ./config:/repo-root/config:ro # Mount config to read container restart settings
     networks:
       - cms-network
