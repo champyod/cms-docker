@@ -17,6 +17,7 @@
 #![forbid(unsafe_code)]
 
 mod guards;
+mod jobs;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -25,6 +26,9 @@ use std::fmt;
 pub use guards::{
     check_rpc_secret, ensure_within_size_limit, EnvelopeError, MAX_MESSAGE_SIZE,
     MESSAGE_TERMINATOR_LEN,
+};
+pub use jobs::{
+    QueueKey, PRIORITY_EXTRA_HIGH, PRIORITY_EXTRA_LOW, PRIORITY_HIGH, PRIORITY_LOW, PRIORITY_MEDIUM,
 };
 
 /// Shown in place of the secret wherever a `Request` is formatted.
