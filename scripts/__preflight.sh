@@ -444,6 +444,77 @@ check_worker_cgroup() {
 }
 
 # ===========================================================================
+# 8) Monitor backup write access — backup-root ownership vs the container uid
+# ===========================================================================
+# The monitor container is not root, so it writes under the uid it was built
+# for. A backup root owned by a different uid then fails every cycle while the
+# host shell — which owns that directory — reports the same path as writable.
+# Ownership and mode are therefore read from the filesystem, never from `test
+# -w`, which answers for the operator instead of for the container.
+#
+# Prints which rule grants the container write access to the backup root and
+# returns 0, or returns 1 when no rule applies. <mode> is read on its last three
+# octal digits so a setuid or sticky digit cannot shift the group/other columns.
+backup_root_write_rule() {
+  local owner_uid="$1" group_gid="$2" mode="$3" container_uid="$4" container_gid="$5"
+  local perms="${mode: -3}"
+  if [[ "$owner_uid" == "$container_uid" ]]; then
+    printf 'owner uid %s\n' "$owner_uid"
+    return 0
+  fi
+  if [[ "$group_gid" == "$container_gid" && "${perms:1:1}" =~ [2367] ]]; then
+    printf 'group %s write (mode %s)\n' "$group_gid" "$mode"
+    return 0
+  fi
+  if [[ "${perms:2:1}" =~ [2367] ]]; then
+    printf 'other-write (mode %s)\n' "$mode"
+    return 0
+  fi
+  return 1
+}
+
+check_monitor_backup_access() {
+  if ! stack_includes "monitor"; then
+    record_result "monitor backup access" "PASS" "skipped (--stack ${STACK})"
+    return 0
+  fi
+
+  local backup_root="${BACKUP_DIR:-${REPO_ROOT}/backups}"
+  local container_uid="${DOCKER_UID:-1000}"
+  # WHY 1000 and not ${DOCKER_GID:-999}: DOCKER_GID is granted on docker.sock
+  # alone and never reaches file access; the monitor user carries DOCKER_UID and
+  # its primary group, which is the same number.
+  local container_gid=1000
+
+  # Inspect only — a box that has never written a backup has no root to judge.
+  if [[ ! -d "$backup_root" ]]; then
+    record_result "monitor backup access" "PASS" "no backup root yet (${backup_root})"
+    return 0
+  fi
+
+  local stat_line
+  if ! stat_line=$(stat -c '%u %g %a' "$backup_root" 2>/dev/null) || [[ -z "$stat_line" ]]; then
+    printf '[FAIL] cannot read ownership of %s\n' "$backup_root" >&2
+    record_result "monitor backup access" "FAIL" "stat failed on ${backup_root}"
+    return 0
+  fi
+
+  local owner_uid group_gid mode rule=""
+  read -r owner_uid group_gid mode <<<"$stat_line"
+  if ! rule=$(backup_root_write_rule "$owner_uid" "$group_gid" "$mode" "$container_uid" "$container_gid"); then
+    printf '[FAIL] monitor cannot write %s: uid %s mode %s, container runs as uid %s gid %s\n' \
+      "$backup_root" "$owner_uid" "$mode" "$container_uid" "$container_gid" >&2
+    printf '       Fix: sudo chown -R %s %s   or: export DOCKER_UID=%s\n' \
+      "$container_uid" "$backup_root" "$owner_uid" >&2
+    record_result "monitor backup access" "FAIL" \
+      "uid ${owner_uid} mode ${mode}; container uid ${container_uid} cannot write"
+    return 0
+  fi
+
+  record_result "monitor backup access" "PASS" "$rule"
+}
+
+# ===========================================================================
 # Main — run checks in order
 # ===========================================================================
 printf '=== CMS Preflight Checks (stack: %s) ===\n' "$STACK"
@@ -485,6 +556,7 @@ check_cms_toml
 check_secret_perms
 check_ports
 check_worker_cgroup
+check_monitor_backup_access
 check_config_stale
 
 # ===========================================================================
