@@ -20,12 +20,24 @@ export type RankRow = {
   solved: number;
 };
 
+type Accumulator = { totalScore: number; solved: number };
+
+function accumulateScores(scores: Record<string, number> | undefined, taskKeys: readonly string[]): Accumulator {
+  const total: Accumulator = { totalScore: 0, solved: 0 };
+  if (!scores) return total;
+  for (const taskId of taskKeys) {
+    const value = Number(scores[taskId] || 0);
+    total.totalScore += value;
+    if (value > 0) total.solved += 1;
+  }
+  return total;
+}
+
 function buildRows(snapshot: RankingSnapshot): RankRow[] {
   const taskKeys = Object.keys(snapshot.tasks);
   const computedRows = Object.entries(snapshot.users).map(([userId, user]) => {
-    const userScores = snapshot.scores[userId] || {};
-    const totalScore = taskKeys.reduce((sum, taskId) => sum + Number(userScores[taskId] || 0), 0);
-    const solved = taskKeys.filter((taskId) => Number(userScores[taskId] || 0) > 0).length;
+    // Why one pass: summing and counting separately walks the task list twice per user.
+    const { totalScore, solved } = accumulateScores(snapshot.scores[userId], taskKeys);
     const teamName = user.team ? snapshot.teams[user.team]?.name || user.team : '-';
     return { rank: 0, userId, firstName: user.f_name, lastName: user.l_name, team: teamName, totalScore, solved };
   });
@@ -40,7 +52,9 @@ function buildRows(snapshot: RankingSnapshot): RankRow[] {
   return computedRows;
 }
 
-function assignRanks(rows: RankRow[]): RankRow[] {
+// Why one pass: the rank only depends on the previous row's score, so building a
+// second array to stamp ranks allocates a copy of every row for nothing.
+function assignRanks(rows: readonly RankRow[]): RankRow[] {
   let currentRank = 1;
   let previousScore: number | null = null;
   return rows.map((row, index) => {

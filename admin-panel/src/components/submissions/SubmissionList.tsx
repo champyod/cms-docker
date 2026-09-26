@@ -4,7 +4,7 @@ import { Clock, Eye, FileCode, HelpCircle, User as UserIcon } from 'lucide-react
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAppRouter } from '@/hooks/useAppRouter';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { Badge } from '@/components/core/Badge';
 import { Button } from '@/components/core/Button';
@@ -26,6 +26,10 @@ interface SubmissionListProps {
   permissionKeys: readonly string[];
 }
 
+// Why module scope: built per call otherwise, and every row cell asks for the same shape.
+const SUBMISSION_TIME_FORMAT = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+const formatDate = (date: Date): string => SUBMISSION_TIME_FORMAT.format(new Date(date));
+
 export function SubmissionList({ initialSubmissions, totalPages, currentPage, permissionKeys }: SubmissionListProps) {
   const [submissions] = useSyncedState(initialSubmissions);
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<number | null>(null);
@@ -36,16 +40,12 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage, pe
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
   const router = useAppRouter();
+  // Why one Set: four gates read the same keys, so building it per gate repeats the
+  // work on every render even though the key list only changes with the session.
+  const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
 
   const handleView = (submission: SubmissionListItem) => {
     setSelectedSubmissionId(submission.id);
-  };
-
-  const formatDate = (date: Date) => {
-     return new Date(date).toLocaleString(undefined, {
-        month: 'short', day: 'numeric',
-        hour: '2-digit', minute: '2-digit', second: '2-digit'
-     });
   };
 
   const handlePageChange = (newPage: number) => {
@@ -246,10 +246,10 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage, pe
             isOpen={!!selectedSubmission}
             onClose={() => setSelectedSubmissionId(null)}
             submission={selectedSubmission}
-            canRecompute={hasEffectivePermission(new Set(permissionKeys), 'submission:recompute')}
-            canDownload={hasEffectivePermission(new Set(permissionKeys), 'submission:download')}
-            canAssignLane={hasEffectivePermission(new Set(permissionKeys), 'evaluation:lane_assign')}
-            canMoveLane={hasEffectivePermission(new Set(permissionKeys), 'evaluation:lane_move')}
+            canRecompute={hasEffectivePermission(effective, 'submission:recompute')}
+            canDownload={hasEffectivePermission(effective, 'submission:download')}
+            canAssignLane={hasEffectivePermission(effective, 'evaluation:lane_assign')}
+            canMoveLane={hasEffectivePermission(effective, 'evaluation:lane_move')}
         />
       )}
     </div>

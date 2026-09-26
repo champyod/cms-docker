@@ -29,8 +29,12 @@ interface Props {
 
 const FIELD_CLASSES = 'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50';
 
+// Why module scope: every question row formats its own timestamp, so a per-row
+// formatter would be rebuilt for each card on every render.
+const QUESTION_TIME_FORMAT = new Intl.DateTimeFormat();
+
 function formatTime(date: Date | string): string {
-  return new Date(date).toLocaleString();
+  return QUESTION_TIME_FORMAT.format(new Date(date));
 }
 
 export function QuestionsPanel({ questions, replyingTo, replySubject, replyText, onReplyingTo, onReplySubject, onReplyText, onReply, onIgnore }: Props) {

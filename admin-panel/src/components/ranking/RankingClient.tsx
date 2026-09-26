@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Button } from '@/components/core/Button';
 import { PageContent, PageHeader, Stack } from '@/components/core/Layout';
@@ -13,7 +13,9 @@ import { useRankingRows, type RankingSnapshot } from './useRankingRows';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 
 export function RankingClient({ permissionKeys }: { permissionKeys: readonly string[] }) {
-  const effective = new Set(permissionKeys);
+  // Why memoized: the key list is stable for the session, so rebuilding the Set on
+  // every render only repeats work the two gates below then probe.
+  const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
   // Why these keys: the snapshot route enforces ranking:snapshot while the
   // auth/logo routes enforce ranking:update, so each control mirrors its route.
   const canSnapshot = hasEffectivePermission(effective, 'ranking:snapshot');

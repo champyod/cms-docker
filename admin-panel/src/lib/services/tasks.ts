@@ -19,6 +19,15 @@ export interface TaskData {
   max_user_test_number?: number | null; min_submission_interval?: number | null; min_user_test_interval?: number | null;
 }
 const TASKS_PER_PAGE = 20;
+const STATEMENT_AUDIT_LIMIT = 100;
+const REQUIRED_INTERVAL_KEYS = new Set(['token_min_interval', 'token_gen_interval']);
+const OPTIONAL_INTERVAL_KEYS = new Set(['min_submission_interval', 'min_user_test_interval']);
+const INTERVAL_KEYS = new Set([...REQUIRED_INTERVAL_KEYS, ...OPTIONAL_INTERVAL_KEYS]);
+const ARRAY_KEYS = new Set(['submission_format', 'primary_statements', 'allowed_languages']);
+const API_INTERVAL_KEYS = new Set([...INTERVAL_KEYS, ...ARRAY_KEYS]);
+const NULLABLE_TASK_KEYS = new Set(['contest_id', 'token_max_number', 'token_gen_max', 'max_submission_number', 'max_user_test_number', ...OPTIONAL_INTERVAL_KEYS]);
+const NULLABLE_API_KEYS = new Set([...NULLABLE_TASK_KEYS, 'score_precision']);
+const ZERO_DEFAULT_KEYS = new Set(['score_precision', 'token_gen_initial', 'token_gen_number']);
 type MutationResult = { success: boolean; error?: string };
 type TasksListResult = { tasks: Array<Prisma.tasksGetPayload<{ include: { contests: { select: { id: true; name: true } }; statements: { select: { id: true } }; datasets_datasets_task_idTotasks: { select: { id: true; description: true; _count: { select: { testcases: true } } } }; _count: { select: { submissions: true } } } }> & { diagnostics: ReturnType<typeof buildDiagnosticsForLoadedTask> }>; totalPages: number; total: number; };
 // Why: permission failure as thrown error lets adapters map to throw vs 401/403 JSON without duplicating checks.
@@ -66,34 +75,54 @@ export async function getTask(id: number): Promise<TaskWithStatements | null> {
 }
 
 
-async function enrichStatements(taskId: number, statements: Array<{ id: number; language: string; digest: string }>): Promise<EnrichedStatement[]> {
-  if (statements.length === 0) return [];
-  const sizeMap = new Map<string, number>();
-  for (const s of statements) {
-    try {
-      const rows = await prisma.$queryRaw<Array<{ size: number }>>`SELECT octet_length(lo_get(loid))::int AS size FROM fsobjects WHERE digest = ${s.digest}`;
-      if (rows.length > 0) sizeMap.set(s.digest, Number(rows[0].size));
-    } catch {}
+type StatementInput = { id: number; language: string; digest: string };
+type FsobjectSizeRow = { digest: string; size: number };
+type StatementAuditRow = { after_values: unknown; timestamp: Date };
+
+// Why one query: sizes are per statement, so a query per statement is N+1 round trips
+// for a detail page. fsobjects.digest is the primary key, so any digest matches at most one row.
+async function fetchStatementSizes(digests: readonly string[]): Promise<Map<string, number>> {
+  const rows = await prisma.$queryRaw<FsobjectSizeRow[]>`SELECT digest, octet_length(lo_get(loid))::int AS size FROM fsobjects WHERE digest = ANY(${[...digests]}::varchar[])`;
+  return new Map(rows.map((row) => [row.digest, Number(row.size)]));
+}
+
+// Why first-wins: audits are newest-first, so the first row per language is the latest upload.
+function indexLatestStatementUploads(audits: readonly StatementAuditRow[], taskId: number): Map<string, string> {
+  const uploads = new Map<string, string>();
+  const wantedId = String(taskId);
+  for (const audit of audits) {
+    const after = audit.after_values as Record<string, unknown> | null;
+    if (!after) continue;
+    const ownerId = String((after.taskId as unknown) ?? (after.task_id as unknown) ?? '');
+    if (ownerId !== wantedId) continue;
+    const language = String((after.language as unknown) ?? '');
+    if (!uploads.has(language)) uploads.set(language, audit.timestamp.toISOString());
   }
-  const dateMap = new Map<string, string>();
+  return uploads;
+}
+
+async function enrichStatements(taskId: number, statements: StatementInput[]): Promise<EnrichedStatement[]> {
+  if (statements.length === 0) return [];
+  let sizes = new Map<string, number>();
   try {
-    const audits = await prisma.audit_log.findMany({ where: { verb: 'statement:create', entity: 'statement' }, orderBy: { timestamp: 'desc' }, take: 100 });
-    for (const s of statements) {
-      const hit = audits.find((a) => {
-        const av = a.after_values as Record<string, unknown> | null;
-        if (!av) return false;
-        const t = String((av.taskId as unknown) ?? (av.task_id as unknown) ?? '');
-        const l = String((av.language as unknown) ?? '');
-        return t === String(taskId) && l === s.language;
-      });
-      if (hit) dateMap.set(s.language, hit.timestamp.toISOString());
-    }
-  } catch {}
+    sizes = await fetchStatementSizes(statements.map((statement) => statement.digest));
+  } catch (error) {
+    // Why degrade, not throw: an unreadable large object must not fail the whole task detail page.
+    console.error('Failed to read statement sizes', error);
+  }
+  let uploads = new Map<string, string>();
+  try {
+    const audits = await prisma.audit_log.findMany({ where: { verb: 'statement:create', entity: 'statement' }, orderBy: { timestamp: 'desc' }, take: STATEMENT_AUDIT_LIMIT });
+    uploads = indexLatestStatementUploads(audits, taskId);
+  } catch (error) {
+    // Why degrade, not throw: an upload date is display metadata, so the panel renders without it.
+    console.error('Failed to read statement upload times', error);
+  }
   return statements.map((s) => ({
     ...s,
     filename: `${s.language}.pdf`,
-    size: sizeMap.get(s.digest) ?? null,
-    uploadedAt: dateMap.get(s.language) ?? null,
+    size: sizes.get(s.digest) ?? null,
+    uploadedAt: uploads.get(s.language) ?? null,
   }));
 }
 
@@ -144,10 +173,8 @@ export async function createTaskViaApi(data: Record<string, unknown>): Promise<M
 }
 function splitTaskData(data: Partial<TaskData>): { standardFields: Record<string, unknown>; intervalFields: Record<string, unknown> } {
   const sanitized: Record<string, unknown> = {}; for (const k in data) sanitized[k] = sanitize((data as Record<string, unknown>)[k] as never);
-  const req = ['token_min_interval', 'token_gen_interval']; const opt = ['min_submission_interval', 'min_user_test_interval'];
-  const nullable = ['contest_id', 'token_max_number', 'token_gen_max', 'max_submission_number', 'max_user_test_number', ...opt];
   const std: Record<string, unknown> = {}; const iv: Record<string, unknown> = {};
-  for (const k in sanitized) { if ([...req, ...opt].includes(k)) { if (req.includes(k) && sanitized[k] === null) continue; iv[k] = sanitized[k]; } else if (sanitized[k] !== null || nullable.includes(k)) std[k] = sanitized[k]; }
+  for (const k in sanitized) { if (INTERVAL_KEYS.has(k)) { if (REQUIRED_INTERVAL_KEYS.has(k) && sanitized[k] === null) continue; iv[k] = sanitized[k]; } else if (sanitized[k] !== null || NULLABLE_TASK_KEYS.has(k)) std[k] = sanitized[k]; }
   return { standardFields: std, intervalFields: iv };
 }
 async function applyTaskIntervals(id: number, iv: Record<string, unknown>): Promise<void> {
@@ -176,10 +203,8 @@ async function normalizeSubmissionFormat(data: Record<string, unknown>, taskId: 
   if (n) data.submission_format = (data.submission_format as string[]).map((f) => f.replace(/%s/g, n as string));
 }
 function splitFieldsForApi(s: Record<string, unknown>): { standardFields: Record<string, unknown>; intervalFields: Record<string, unknown> } {
-  const req = ['token_min_interval', 'token_gen_interval']; const opt = ['min_submission_interval', 'min_user_test_interval']; const arr = ['submission_format', 'primary_statements', 'allowed_languages'];
-  const nullable = ['contest_id', 'token_max_number', 'token_gen_max', 'max_submission_number', 'max_user_test_number', 'score_precision', ...opt];
   const std: Record<string, unknown> = {}; const iv: Record<string, unknown> = {};
-  for (const k in s) { if ([...req, ...opt, ...arr].includes(k)) { if (req.includes(k) && s[k] === null) continue; iv[k] = s[k]; } else if (s[k] !== null || nullable.includes(k)) { if (s[k] === null && ['score_precision', 'token_gen_initial', 'token_gen_number'].includes(k)) std[k] = 0; else std[k] = s[k]; } }
+  for (const k in s) { if (API_INTERVAL_KEYS.has(k)) { if (REQUIRED_INTERVAL_KEYS.has(k) && s[k] === null) continue; iv[k] = s[k]; } else if (s[k] !== null || NULLABLE_API_KEYS.has(k)) { if (s[k] === null && ZERO_DEFAULT_KEYS.has(k)) std[k] = 0; else std[k] = s[k]; } }
   return { standardFields: std, intervalFields: iv };
 }
 async function applyTaskUpdatesForApi(id: number, std: Record<string, unknown>, iv: Record<string, unknown>): Promise<void> {
