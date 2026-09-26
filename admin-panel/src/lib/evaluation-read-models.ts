@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { getFieldAccess } from '@/lib/field-permissions';
 import { requirePermission } from '@/lib/server/authorization';
 import type {
   SubmissionEvaluationModel,
@@ -110,10 +111,12 @@ export async function getSubmissionResults(submissionId: number): Promise<Submis
       select: SUBMISSION_FILE_SELECT,
     }),
   ]);
+  const resultsAccess = getFieldAccess('submission_results', permissions);
+  const filesAccess = getFieldAccess('files', permissions);
   return {
     submissionId,
-    results: results.map((entry) => toSubmissionResultRow(entry, permissions)),
-    files: files.map((entry) => toSubmissionFileRow(entry, permissions)),
+    results: results.map((entry) => toSubmissionResultRow(entry, resultsAccess)),
+    files: files.map((entry) => toSubmissionFileRow(entry, filesAccess)),
   };
 }
 
@@ -136,7 +139,7 @@ export async function getSubmissionLogs(submissionId: number): Promise<Submissio
     compilation_stdout: null,
     compilation_stderr: null,
   };
-  return { submissionId, ...toSubmissionLogRow(entry ?? empty, permissions) };
+  return { submissionId, ...toSubmissionLogRow(entry ?? empty, getFieldAccess('submission_results', permissions)) };
 }
 
 export async function getSubmissionEvaluation(submissionId: number): Promise<SubmissionEvaluationModel | null> {
@@ -151,11 +154,12 @@ export async function getSubmissionEvaluation(submissionId: number): Promise<Sub
     orderBy: { testcase_id: 'asc' },
     select: SUBMISSION_EVALUATION_SELECT,
   });
+  const evaluationsAccess = getFieldAccess('evaluations', permissions);
   return {
     submissionId,
     evaluations: rows.map((entry) => toSubmissionEvaluationRow(
       { ...entry, codename: entry.testcases?.codename ?? null } satisfies SubmissionEvaluationRow,
-      permissions,
+      evaluationsAccess,
     )),
   };
 }

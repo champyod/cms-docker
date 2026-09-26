@@ -1,4 +1,4 @@
-import { filterReadableFields } from '@/lib/field-permissions';
+import { filterReadableFields, filterReadableFieldsWith, type FieldAccess } from '@/lib/field-permissions';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 import type {
   SubmissionEvaluationModel,
@@ -35,7 +35,7 @@ export function toOutcome(value: unknown): string | null {
   return String(value);
 }
 
-// Why a stripped field becomes null: filterReadableFields drops a field the caller
+// Why a stripped field becomes null: the readable-field filter drops a field the caller
 // may not read, so falling back to the raw column would put back exactly what the
 // field permission removed. Identity columns are the exception because each one is
 // bound to a key its reader already required, which the projection cannot drop.
@@ -118,13 +118,14 @@ export interface SubmissionEvaluationRow {
  *
  * Exported so the field filter is provable without a database: a caller without
  * `submissionresult:read` gets null for every governed column instead of the
- * stored value.
+ * stored value. Takes a pre-resolved access table so a batch pays for one table,
+ * not one per row.
  */
 export function toSubmissionResultRow(
   row: SubmissionResultRow,
-  permissions: ReadonlySet<string>,
+  access: Record<string, FieldAccess>,
 ): SubmissionResultsModel['results'][number] {
-  const visible = filterReadableFields('submission_results', {
+  const visible = filterReadableFieldsWith(access, {
     compilation_outcome: row.compilation_outcome,
     evaluation_outcome: row.evaluation_outcome,
     compilation_time: row.compilation_time,
@@ -132,7 +133,7 @@ export function toSubmissionResultRow(
     score: row.score,
     public_score: row.public_score,
     scored_at: row.scored_at,
-  }, permissions);
+  });
   return {
     datasetId: row.dataset_id,
     compilationOutcome: toOutcome(visible.compilation_outcome ?? null),
@@ -147,14 +148,14 @@ export function toSubmissionResultRow(
 
 export function toSubmissionLogRow(
   row: SubmissionLogRow,
-  permissions: ReadonlySet<string>,
+  access: Record<string, FieldAccess>,
 ): Omit<SubmissionLogsModel, 'submissionId'> {
-  const visible = filterReadableFields('submission_results', {
+  const visible = filterReadableFieldsWith(access, {
     compilation_outcome: row.compilation_outcome,
     compilation_text: row.compilation_text,
     compilation_stdout: row.compilation_stdout,
     compilation_stderr: row.compilation_stderr,
-  }, permissions);
+  });
   return {
     compilationOutcome: toOutcome(visible.compilation_outcome ?? null),
     compilationText: visible.compilation_text ?? [],
@@ -165,22 +166,22 @@ export function toSubmissionLogRow(
 
 export function toSubmissionFileRow(
   row: SubmissionFileRow,
-  permissions: ReadonlySet<string>,
+  access: Record<string, FieldAccess>,
 ): SubmissionResultsModel['files'][number] {
-  const visible = filterReadableFields('files', { filename: row.filename, digest: row.digest }, permissions);
+  const visible = filterReadableFieldsWith(access, { filename: row.filename, digest: row.digest });
   return { id: row.id, filename: visible.filename ?? '', digest: visible.digest ?? '' };
 }
 
 export function toSubmissionEvaluationRow(
   row: SubmissionEvaluationRow,
-  permissions: ReadonlySet<string>,
+  access: Record<string, FieldAccess>,
 ): SubmissionEvaluationModel['evaluations'][number] {
-  const visible = filterReadableFields('evaluations', {
+  const visible = filterReadableFieldsWith(access, {
     outcome: row.outcome,
     text: row.text,
     execution_time: row.execution_time,
     execution_memory: row.execution_memory,
-  }, permissions);
+  });
   return {
     id: row.id,
     datasetId: row.dataset_id,

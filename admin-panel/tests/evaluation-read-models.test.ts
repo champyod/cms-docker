@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach, vi } from 'vitest';
 import {
   toSubmissionResultRow,
 } from '@/lib/evaluation-read-model-projections';
+import { getFieldAccess } from '@/lib/field-permissions';
 import {
   getSubmissionEvaluation,
   getSubmissionLogs,
@@ -132,10 +133,13 @@ const RESULT_ROW = {
 } as const;
 
 const RESULT_READER = new Set(['submission:read', 'submissionresult:read', 'file:read']);
+const PARTIAL_READER = new Set(['submission:read', 'file:read']);
+const RESULT_ACCESS = getFieldAccess('submission_results', RESULT_READER);
+const PARTIAL_ACCESS = getFieldAccess('submission_results', PARTIAL_READER);
 
 describe('Evaluation result field filtering', () => {
   it('reads every projected field for a caller holding submissionresult:read', () => {
-    const row = toSubmissionResultRow(RESULT_ROW, RESULT_READER);
+    const row = toSubmissionResultRow(RESULT_ROW, RESULT_ACCESS);
 
     expect(row).toMatchObject({
       datasetId: 1,
@@ -153,13 +157,13 @@ describe('Evaluation result field filtering', () => {
     'scoredAt',
     'compilationMemoryBytes',
   ] as const)('nulls %s when the projection strips its column', (modelField) => {
-    const row = toSubmissionResultRow(RESULT_ROW, new Set(['submission:read', 'file:read']));
+    const row = toSubmissionResultRow(RESULT_ROW, PARTIAL_ACCESS);
 
     expect(row[modelField]).toBeNull();
   });
 
   it('keeps only the identity column a partial reader may not read out of the payload', () => {
-    const row = toSubmissionResultRow(RESULT_ROW, new Set(['submission:read', 'file:read']));
+    const row = toSubmissionResultRow(RESULT_ROW, PARTIAL_ACCESS);
 
     expect(row.datasetId).toBe(1);
     expect(row.compilationOutcome).toBeNull();
@@ -169,17 +173,17 @@ describe('Evaluation result field filtering', () => {
   });
 
   it('serializes the BigInt memory column as a byte count', () => {
-    expect(toSubmissionResultRow(RESULT_ROW, RESULT_READER).compilationMemoryBytes).toBe(3145728);
+    expect(toSubmissionResultRow(RESULT_ROW, RESULT_ACCESS).compilationMemoryBytes).toBe(3145728);
   });
 
   it('reports a null memory column as null', () => {
-    const row = toSubmissionResultRow({ ...RESULT_ROW, compilation_memory: null }, RESULT_READER);
+    const row = toSubmissionResultRow({ ...RESULT_ROW, compilation_memory: null }, RESULT_ACCESS);
 
     expect(row.compilationMemoryBytes).toBeNull();
   });
 
   it('refuses to round a memory column past the safe integer range', () => {
-    const row = toSubmissionResultRow({ ...RESULT_ROW, compilation_memory: BigInt(2) ** BigInt(70) }, RESULT_READER);
+    const row = toSubmissionResultRow({ ...RESULT_ROW, compilation_memory: BigInt(2) ** BigInt(70) }, RESULT_ACCESS);
 
     expect(row.compilationMemoryBytes).toBeNull();
   });

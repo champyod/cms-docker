@@ -74,44 +74,6 @@ export const FIELD_PERMISSION_MAP: Record<string, Record<string, FieldPermission
     leader_id: { read: 'team:read', update: 'team:update' },
     participations: { read: 'participation:list' },
   },
-  contests: {
-    id: { read: 'contest:read' },
-    name: { read: 'contest:read', update: 'contest:update' },
-    description: { read: 'contest:read', update: 'contest:update' },
-    allowed_localizations: { read: 'contest:read', update: 'contest:update' },
-    languages: { read: 'contest:read', update: 'contest:update' },
-    submissions_download_allowed: { read: 'contest:read', update: 'contest:update' },
-    allow_questions: { read: 'contest:read', update: 'contest:update' },
-    allow_user_tests: { read: 'contest:read', update: 'contest:update' },
-    allow_unofficial_submission_before_analysis_mode: { read: 'contest:read', update: 'contest:update' },
-    block_hidden_participations: { read: 'contest:read', update: 'contest:update' },
-    allow_password_authentication: { read: 'contest:read', update: 'contest:update' },
-    allow_registration: { read: 'contest:read', update: 'contest:update' },
-    ip_restriction: { read: 'contest:read', update: 'contest:update' },
-    ip_autologin: { read: 'contest:read', update: 'contest:update' },
-    token_mode: { read: 'contest:read', update: 'contest:update' },
-    token_max_number: { read: 'contest:read', update: 'contest:update' },
-    token_min_interval: { read: 'contest:read', update: 'contest:update' },
-    token_gen_initial: { read: 'contest:read', update: 'contest:update' },
-    token_gen_number: { read: 'contest:read', update: 'contest:update' },
-    token_gen_interval: { read: 'contest:read', update: 'contest:update' },
-    token_gen_max: { read: 'contest:read', update: 'contest:update' },
-    max_submission_number: { read: 'contest:read', update: 'contest:update' },
-    max_user_test_number: { read: 'contest:read', update: 'contest:update' },
-    min_submission_interval: { read: 'contest:read', update: 'contest:update' },
-    min_submission_interval_grace_period: { read: 'contest:read', update: 'contest:update' },
-    min_user_test_interval: { read: 'contest:read', update: 'contest:update' },
-    queue_fairness_penalty_seconds: { read: 'contest:read', update: 'contest:update' },
-    is_active: { read: 'contest:read', update: 'contest:switch' },
-    score_precision: { read: 'contest:read', update: 'contest:update' },
-    start: { read: 'contest:read', update: 'contest:update' },
-    stop: { read: 'contest:read', update: 'contest:update' },
-    timezone: { read: 'contest:read', update: 'contest:update' },
-    per_user_time: { read: 'contest:read', update: 'contest:update' },
-    analysis_enabled: { read: 'contest:read', update: 'contest:update' },
-    analysis_start: { read: 'contest:read', update: 'contest:update' },
-    analysis_stop: { read: 'contest:read', update: 'contest:update' },
-  },
   tasks: {
     id: { read: 'task:read' },
     num: { read: 'task:read' },
@@ -221,21 +183,33 @@ export function getFieldAccess(
   return result;
 }
 
+function pickAllowedFields<T extends Record<string, unknown>>(
+  data: T,
+  access: Record<string, FieldAccess>,
+  gate: 'canRead' | 'canUpdate',
+): Partial<T> {
+  const result: Record<string, unknown> = {};
+  for (const key of Object.keys(data)) {
+    if (access[key]?.[gate]) result[key] = data[key];
+  }
+  return result as Partial<T>;
+}
+
 /** Returns only the keys of data that the caller has read permission for. */
 export function filterReadableFields<T extends Record<string, unknown>>(
   entity: string,
   data: T,
   effectivePermissions: ReadonlySet<string>,
 ): Partial<T> {
-  const map = FIELD_PERMISSION_MAP[entity];
-  if (!map) return {};
+  return filterReadableFieldsWith(getFieldAccess(entity, effectivePermissions), data);
+}
 
-  const access = getFieldAccess(entity, effectivePermissions);
-  const result: Record<string, unknown> = {};
-  for (const key of Object.keys(data)) {
-    if (access[key]?.canRead) result[key] = data[key];
-  }
-  return result as Partial<T>;
+/** Returns the readable keys of data from an access table the caller already built for the batch. */
+export function filterReadableFieldsWith<T extends Record<string, unknown>>(
+  access: Record<string, FieldAccess>,
+  data: T,
+): Partial<T> {
+  return pickAllowedFields(data, access, 'canRead');
 }
 
 /** Returns only the keys of data that the caller has update permission for. */
@@ -244,15 +218,5 @@ export function stripDisallowedFields<T extends Record<string, unknown>>(
   data: T,
   effectivePermissions: ReadonlySet<string>,
 ): Partial<T> {
-  const map = FIELD_PERMISSION_MAP[entity];
-  if (!map) return {};
-
-  const access = getFieldAccess(entity, effectivePermissions);
-  const result: Record<string, unknown> = {};
-  for (const key of Object.keys(data)) {
-    if (access[key]?.canUpdate) {
-      result[key] = data[key];
-    }
-  }
-  return result as Partial<T>;
+  return pickAllowedFields(data, getFieldAccess(entity, effectivePermissions), 'canUpdate');
 }
