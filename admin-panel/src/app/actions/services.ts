@@ -1,6 +1,5 @@
 'use server';
 
-import fs from 'fs/promises';
 import path from 'path';
 import { exec } from 'child_process';
 import util from 'util';
@@ -18,17 +17,6 @@ import {
   buildRestartCommand,
   getRestartPolicies,
 } from '@/lib/restart-planner';
-import {
-  runDeployContest,
-  fetchDeployStatus,
-  getActiveDeployOperation as getActiveDeployOperationLib,
-  reconcileDeployOperations as reconcileDeployOperationsLib,
-} from '@/lib/deploy-operations';
-import type {
-  ActiveDeployOperation,
-  DeployContestResult,
-  DeployStatusResult,
-} from '@/lib/deploy-operations';
 
 const execPromise = util.promisify(exec);
 
@@ -136,147 +124,6 @@ export async function restartServices(type: 'all' | 'core' | 'admin' | 'worker' 
     console.error('Restart error:', error);
     return { success: false, error: (error as Error).message };
   }
-}
-
-export async function deployContest(contestId: number): Promise<DeployContestResult> {
-  await ensurePermission('deployment:deploy');
-
-  // Why the deploy resolves the same three things a restart does: the contest stack is the same
-  // project the make targets run, so it is brought up from the same file list, with the same
-  // deployment mode deciding pull + --no-build versus --build, and with the host repository path
-  // compose needs when this panel runs inside its container (see lib/compose-location.ts). Refusing
-  // an undeterminable location for the same reason as a restart: a wrong project directory mounts and
-  // builds the wrong files instead of failing.
-  const location = await resolveHostComposeLocation();
-  if (!location.ok) return { success: false, error: location.error };
-
-  const result = await runDeployContest(contestId, {
-    files: await buildComposeFileFlags(),
-    mode: (await readDeploymentModeSetting()).mode,
-    location: location.location,
-  });
-  if (result.success) {
-    await recordAudit({
-      verb: 'deployment:deploy',
-      entity: 'deployment',
-      entityId: String(contestId),
-      afterValues: { contestId },
-      result: 'success',
-    });
-  }
-  return result;
-}
-
-export async function getDeployStatus(operationId: string): Promise<DeployStatusResult> {
-  await ensurePermission('deployment:read');
-  const result = await fetchDeployStatus(operationId);
-  // Why the status but not the rest: the returned log and error carry compose output verbatim,
-  // so the row names the operation, its state and its contest and stops there.
-  await recordAudit({
-    verb: 'deployment:view',
-    entity: 'deployment',
-    entityId: operationId,
-    afterValues: { operationId, status: result.status, contestId: result.contestId ?? null },
-    result: 'success',
-  });
-  return result;
-}
-
-/**
- * Applies the outcome of any deploy whose effects are still owed, so a visit to the deploy page reaches
- * the state that deploy actually left — the contest activated, or the configuration rolled back —
- * without a client having watched the operation to its end. Reuses the same settle the deploy's own
- * start runs (`reconcileDeployOperations`), which is what keeps it from double-applying an outcome: the
- * operation's record holds the claim and whether its effects landed.
- *
- * Why the deploy page's own permission rather than a mutation key: this is the deploy the operator
- * already ran reaching its end, not a new action, so whoever may look at the deploy page may let it
- * finish. Why a server action and not the page's render: settling activates a contest, and that
- * activation revalidates cached pages — which Next.js refuses from inside a render.
- */
-export async function settleDeployOperations(): Promise<void> {
-  await ensurePermission('deployment:list');
-  await reconcileDeployOperationsLib();
-}
-
-/**
- * The active deploy operation, unaudited. Reattachability discovery calls this every
- * DEPLOY_DISCOVERY_INTERVAL_MS per mounted tab to notice a deploy another tab started, so a row
- * per call would be thousands a day from a panel doing nothing but sitting open — and the lookup
- * reconciles server side, which is why it cannot be skipped and must not be mistaken for a read.
- */
-export async function fetchActiveDeployOperation(): Promise<ActiveDeployOperation | null> {
-  await ensurePermission('deployment:read');
-  return getActiveDeployOperationLib();
-}
-
-export async function getActiveDeployOperation(): Promise<ActiveDeployOperation | null> {
-  const active = await fetchActiveDeployOperation();
-  // A null result is a real answer (nothing in flight) and is recorded as one, so a panel that
-  // looks leaves the same trail whichever way the lookup came back.
-  await recordAudit({
-    verb: 'deployment:view',
-    entity: 'deployment',
-    entityId: active?.operationId,
-    afterValues: { operationId: active?.operationId ?? null, contestId: active?.contestId ?? null },
-    result: 'success',
-  });
-  return active;
-}
-
-export async function triggerManualBackup() {
-    // Strict own key: no fallback to maintenance:enable. Re-seed
-    // (prisma-sync) grants backup:create to Storage Admin and Superadmin.
-    await ensurePermission('backup:create');
-    try {
-        const rootDir = getRepoRoot();
-        await logToDiscord('Manual Backup', 'Admin triggered a manual submissions backup.', 3447003);
-        const cmd = 'docker exec -d cms-monitor bash /usr/local/bin/cms-backup.sh';
-        await execPromise(cmd, { cwd: rootDir });
-        await recordAudit({
-          verb: 'backup:create',
-          entity: 'service',
-          afterValues: { action: 'backup' },
-          result: 'success',
-        });
-        return { success: true, message: 'Backup process started in background.' };
-    } catch (error) {
-        return { success: false, error: (error as Error).message };
-    }
-}
-
-export interface BackupArchive {
-  name: string;
-  sizeBytes: number;
-  modifiedIso: string;
-}
-
-const MAX_ARCHIVES = 200;
-
-// Strict own key. Names come from the filesystem and are display-only;
-// no archive is ever executed or interpolated into a shell command here.
-export async function listBackups(): Promise<{ success: boolean; archives?: BackupArchive[]; error?: string }> {
-    await ensurePermission('backup:list');
-    const dir = process.env.BACKUP_DIR ?? path.join(getRepoRoot(), 'backups');
-    let entries;
-    try {
-      entries = await fs.readdir(dir, { withFileTypes: true });
-    } catch {
-      return { success: true, archives: [] };
-    }
-    const archives: BackupArchive[] = [];
-    for (const entry of entries) {
-      if (!entry.isFile()) continue;
-      if (!/^[A-Za-z0-9._-]+\.(tar\.gz|tgz|sql|sql\.gz|dump|gpg)$/.test(entry.name)) continue;
-      try {
-        const stat = await fs.stat(path.join(dir, entry.name));
-        archives.push({ name: entry.name, sizeBytes: stat.size, modifiedIso: stat.mtime.toISOString() });
-      } catch {
-        continue;
-      }
-    }
-    archives.sort((a, b) => (a.modifiedIso < b.modifiedIso ? 1 : -1));
-    return { success: true, archives: archives.slice(0, MAX_ARCHIVES) };
 }
 
 export async function getServiceStatus() {

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { toast } from 'sonner';
-import { deployContest, fetchActiveDeployOperation } from '@/app/actions/services';
+import { deployContest, fetchActiveDeployOperation } from '@/app/actions/deployActions';
 import { DeployContestContext, type DeployState } from '@/hooks/useDeployContest';
 import { useDeployStream } from '@/hooks/useDeployStream';
 import { useDictionary } from '@/hooks/useDictionary';

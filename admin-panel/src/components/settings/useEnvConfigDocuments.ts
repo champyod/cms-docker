@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { readConfigTomlValues } from '@/app/actions/env';
+import { readConfigTomlValues } from '@/app/actions/configTomlActions';
 import { CONFIG_TOML_FILE } from '@/lib/config-toml';
 import {
   deepCopyEnvData,
