@@ -2,7 +2,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { ensurePermission, getPermissions } from '@/lib/permissions';
-import { filterReadableFields } from '@/lib/field-permissions';
+import { filterReadableFieldsWith, getFieldAccess } from '@/lib/field-permissions';
 import { buildUserSearchWhere, usersPageSelect, type UsersPageRow } from '@/lib/prisma-selects';
 import { parseStoredPassword } from '@/lib/password-format';
 import { recordAudit } from '@/lib/audit';
@@ -40,8 +40,10 @@ export async function getUsers({ page = 1, search = '', perPage = USERS_PER_PAGE
 
   // Why: strip fields the caller cannot read (e.g., PII for viewers without user:read)
   const perms = await getPermissions();
+  // Why: one access table for the page, built before the map, not one table per user.
+  const usersAccess = getFieldAccess('users', perms);
   const filtered = users.map((user) =>
-    filterReadableFields('users', user as unknown as Record<string, unknown>, perms) as unknown as UsersPageRow,
+    filterReadableFieldsWith(usersAccess, user as unknown as Record<string, unknown>) as unknown as UsersPageRow,
   );
 
   return {
