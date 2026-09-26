@@ -46,6 +46,10 @@ export function LaneBoard({ board, permissionKeys }: LaneBoardProps) {
   const [createOpen, setCreateOpen] = useState(false);
 
   const laneNames = useMemo(() => board.lanes.map((entry) => entry.lane), [board]);
+  // Why no windowing: the server caps this board before it reaches here, and the
+  // sibling lists are paginated rather than virtualized. Row virtualisation would
+  // also unmount the drag handles dnd-kit measures against, so a drop that looks
+  // available would no longer be droppable.
   const allItems = useMemo(() => board.lanes.flatMap((entry) => entry.items), [board]);
 
   const handleDragEnd = (event: DragEndEvent): void => {
