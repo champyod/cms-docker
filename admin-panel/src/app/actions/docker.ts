@@ -49,9 +49,25 @@ export async function getContainerLogs(id: string, tail: number = 100) {
   }
   try {
     const { stdout, stderr } = await execPromise(`docker logs --tail ${coercedTail} ${id}`);
+    await recordAudit({
+      verb: 'container:view',
+      entity: 'container',
+      entityId: String(id),
+      // Why no log text: a container's own output carries whatever it was given, credentials
+      // included, so the row says which container was read and never what it printed.
+      afterValues: { containerId: id, tail: coercedTail },
+      result: 'success',
+    });
     return { success: true, logs: stdout || stderr };
   } catch (error) {
     console.error(`Failed to get logs for container ${id}:`, error);
+    await recordAudit({
+      verb: 'container:view',
+      entity: 'container',
+      entityId: String(id),
+      afterValues: { containerId: id, tail: coercedTail, error: error instanceof Error ? error.name : 'UnknownError' },
+      result: 'failure',
+    });
     return { success: false, error: (error as Error).message };
   }
 }
@@ -63,8 +79,25 @@ export async function getContainerContestId(): Promise<{ success: true; contestI
   try {
     const { stdout } = await execPromise(`docker inspect ${CONTEST_WEB_SERVER_CONTAINER} --format '{{range .Config.Env}}{{println .}}{{end}}'`);
     const match = stdout.match(/^CONTEST_ID=(\d+)$/m);
-    return { success: true, contestId: match ? parseInt(match[1], 10) : null };
+    const contestId = match ? parseInt(match[1], 10) : null;
+    // Why audited with the id only: this inspect pulls the container's whole environment block,
+    // credentials among it. The row records the contest it answered with, not what else it saw.
+    await recordAudit({
+      verb: 'container:view',
+      entity: 'container',
+      entityId: CONTEST_WEB_SERVER_CONTAINER,
+      afterValues: { containerId: CONTEST_WEB_SERVER_CONTAINER, contestId },
+      result: 'success',
+    });
+    return { success: true, contestId };
   } catch (error) {
+    await recordAudit({
+      verb: 'container:view',
+      entity: 'container',
+      entityId: CONTEST_WEB_SERVER_CONTAINER,
+      afterValues: { containerId: CONTEST_WEB_SERVER_CONTAINER, error: error instanceof Error ? error.name : 'UnknownError' },
+      result: 'failure',
+    });
     return { success: false, error: (error as Error).message };
   }
 }
