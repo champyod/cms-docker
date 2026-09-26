@@ -18,19 +18,23 @@ COPY scripts/__backup.sh /usr/local/bin/cms-backup.sh
 # fails and every backup cycle aborts.
 COPY scripts/__lib /usr/local/bin/__lib
 
-# a+rX grants the uid 1000 runtime read access, and X only to directories, so
+# a+rX grants the runtime user read access, and X only to directories, so
 # the lib is traversable without depending on the build context's file modes.
 RUN chmod +x /usr/local/bin/monitor.sh /usr/local/bin/cms-backup.sh \
     && chmod -R a+rX /usr/local/bin/__lib
 
-# Non-root runtime (uid/gid 1000). Read-only mounts stay readable (/host:ro is
-# world-readable), but the Docker socket is owned by the host "docker" group,
-# so the compose file (owned elsewhere) must grant that GID to this container:
+# Non-root runtime. Read-only mounts stay readable (/host:ro is world-readable),
+# but backups are written through the bind mount at /app/backups, so the uid has
+# to equal the owner of the host backup tree or every write is denied. The Docker
+# socket is owned by the host "docker" group, so the compose file (owned
+# elsewhere) must grant that GID to this container:
 #   group_add:
 #     - "999"  # host docker GID: stat -c %g /var/run/docker.sock
-# Backup targets under ${REPO_ROOT}/backups must also be writable by uid 1000.
-RUN addgroup -g 1000 monitor \
-    && adduser -D -u 1000 -G monitor monitor
+# DOCKER_UID is a build arg so a box whose backups belong to another uid needs no
+# source change; the default keeps hosts that already own uid 1000 unchanged.
+ARG DOCKER_UID=1000
+RUN addgroup -g ${DOCKER_UID} monitor \
+    && adduser -D -u ${DOCKER_UID} -G monitor monitor
 
 WORKDIR /app
 

@@ -125,6 +125,7 @@ BACKUP_MAX_COUNT = 50           # num
 BACKUP_MAX_AGE_DAYS = 10        # num
 BACKUP_MAX_SIZE_GB = 5          # num
 DOCKER_GID = 999                # num; find with: stat -c %g /var/run/docker.sock
+DOCKER_UID = 1000               # num; find with: stat -c %u backups (monitor image build arg; backup write access)
 OFFSITE_TAILNET_NODE = ""       # str; Tailscale IP of remote backup node
 OFFSITE_ENCRYPT_KEY = ""        # secret; openssl rand -hex 32
 OFFSITE_BACKUP_PATH = "/var/local/backups/cms"

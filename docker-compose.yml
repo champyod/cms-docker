@@ -645,6 +645,11 @@ services:
     build:
       context: .
       dockerfile: docker/monitor/Dockerfile
+      # WHY: the monitor writes backups through the ./backups bind mount, so the
+      # image's runtime uid must match that directory's owner on this host
+      # (stat -c %u backups). The default keeps hosts owning uid 1000 unchanged.
+      args:
+        DOCKER_UID: ${DOCKER_UID:-1000}
     image: ghcr.io/champyod/cms-docker-monitor:${IMG_TAG:-major-admin-panel}
     container_name: cms-monitor
     restart: on-failure:5
