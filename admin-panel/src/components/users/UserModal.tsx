@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo } from 'react';
 
 import { revealUserPassword } from '@/app/actions/users';
 import { Button } from '@/components/core/Button';
-import { Dialog, DialogFooter } from '@/components/core/Dialog';
+import { Dialog } from '@/components/core/Dialog';
+import { ModalFooter } from '@/components/core/ModalFooter';
 import { PasswordFieldWithKind } from '@/components/core/PasswordFieldWithKind';
 import { SavedSecretReveal } from '@/components/core/SavedSecretReveal';
 import { RestrictedField } from '@/components/core/RestrictedField';
@@ -120,6 +121,12 @@ export function UserModal({ isOpen, onClose, user, contests = [], canReadContest
 
   const inputClassName = 'w-full px-3 py-2 bg-background/60 border border-border rounded-lg text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30 transition-colors';
 
+  // Why the guard: a submit already in flight cannot be recalled, so cancelling
+  // through it would close the dialog over an unresolved save.
+  const cancel = (): void => {
+    if (!loading) onClose();
+  };
+
   return (
     <Dialog
       open={isOpen}
@@ -135,7 +142,7 @@ export function UserModal({ isOpen, onClose, user, contests = [], canReadContest
           {error}
         </div>
       )}
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form id="user-form" onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <RestrictedField
             canRead={fieldAccess.first_name.canRead}
@@ -319,23 +326,16 @@ export function UserModal({ isOpen, onClose, user, contests = [], canReadContest
             </div>
           </>
         )}
-        <DialogFooter className="pt-6">
-          <Button
-            variant="negativeOutline"
-            onClick={onClose}
-            disabled={loading}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            variant="positive"
-            loading={loading}
-            disabled={loading}
-          >
-            {user ? 'Save Changes' : 'Create User'}
-          </Button>
-        </DialogFooter>
+        <ModalFooter
+          formId="user-form"
+          className="pt-6"
+          cancelLabel="Cancel"
+          cancelVariant="negativeOutline"
+          confirmLabel={user ? 'Save Changes' : 'Create User'}
+          onCancel={cancel}
+          confirmLoading={loading}
+          confirmDisabled={loading}
+        />
       </form>
     </Dialog>
   );

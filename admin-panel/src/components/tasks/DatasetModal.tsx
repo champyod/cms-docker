@@ -5,7 +5,7 @@ import { Database, Save, Terminal } from 'lucide-react';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { Dialog } from '@/components/core/Dialog';
 import { ResponsiveModalShell } from '@/components/core/ResponsiveModalShell';
-import { Button } from '@/components/core/Button';
+import { ModalFooter } from '@/components/core/ModalFooter';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/apiClient';
 import { DatasetGeneralForm } from './DatasetGeneralForm';
@@ -167,6 +167,18 @@ export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess, perm
 
   if (!isOpen) return null;
 
+  // Why the guard: a submit already in flight cannot be recalled, so cancelling
+  // through it would close the dialog over an unresolved save.
+  const cancel = (): void => {
+    if (!loading) onClose();
+  };
+
+  // Why requestSubmit rather than a form id on the footer: the form only exists on
+  // the general tab, so the association is resolved at click time.
+  const submitFromFooter = (): void => {
+    (document.getElementById('dataset-form') as HTMLFormElement | null)?.requestSubmit();
+  };
+
   return (
     <Dialog
       open
@@ -176,23 +188,15 @@ export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess, perm
       title={dataset ? `Edit Dataset: ${dataset.description}` : 'Create New Dataset'}
       description="Configure dataset parameters and managers"
       footer={
-        <>
-          <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>
-            Close
-          </Button>
-          {activeTab === 'general' && (
-            <Button
-              type="button"
-              variant="positive"
-              icon={Save}
-              loading={loading}
-              disabled={loading}
-              onClick={() => (document.getElementById('dataset-form') as HTMLFormElement)?.requestSubmit()}
-            >
-              {dataset ? 'Save Changes' : 'Create Dataset'}
-            </Button>
-          )}
-        </>
+        <ModalFooter
+          cancelLabel="Close"
+          confirmLabel={activeTab === 'general' ? (dataset ? 'Save Changes' : 'Create Dataset') : undefined}
+          onCancel={cancel}
+          onConfirm={submitFromFooter}
+          confirmIcon={Save}
+          confirmLoading={loading}
+          confirmDisabled={loading}
+        />
       }
       className="flex max-h-[70vh] w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-3xl"
     >

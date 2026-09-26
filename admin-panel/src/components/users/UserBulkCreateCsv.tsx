@@ -4,7 +4,8 @@ import { useMemo, useState } from 'react';
 import { FileSpreadsheet } from 'lucide-react';
 
 import { Button } from '@/components/core/Button';
-import { Dialog, DialogFooter } from '@/components/core/Dialog';
+import { Dialog } from '@/components/core/Dialog';
+import { ModalFooter } from '@/components/core/ModalFooter';
 import { PasswordKindSelector } from '@/components/core/PasswordFieldWithKind';
 import { apiClient } from '@/lib/apiClient';
 import type { Dictionary } from '@/lib/dictionary';
@@ -151,6 +152,12 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests, canRea
     });
   };
 
+  // Why the guard: a submit already in flight cannot be recalled, so cancelling
+  // through it would close the dialog over an unresolved create.
+  const cancel = (): void => {
+    if (!submitting) onClose();
+  };
+
   return (
     <Dialog
       open={isOpen}
@@ -211,22 +218,17 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests, canRea
           <SubmitResultBanner result={submitResult} onDownloadCredentials={handleExportCreatedCredentials} />
         )}
       </div>
-      <DialogFooter className="mt-4 pt-4 border-t border-border">
-        <Button variant="negativeOutline" onClick={onClose} disabled={submitting}>
-          Cancel
-        </Button>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Generation mode: {generationMode}</span>
-          <Button
-            variant="positive"
-            loading={submitting}
-            onClick={handleSubmitBulk}
-            disabled={submitting || previewRows.length === 0}
-          >
-            Create Users from Preview
-          </Button>
-        </div>
-      </DialogFooter>
+      <ModalFooter
+        className="mt-4 pt-4 border-t border-border"
+        cancelLabel="Cancel"
+        cancelVariant="negativeOutline"
+        confirmLabel="Create Users from Preview"
+        onCancel={cancel}
+        onConfirm={handleSubmitBulk}
+        confirmLoading={submitting}
+        confirmDisabled={submitting || previewRows.length === 0}
+        leadingAction={<span className="text-xs text-muted-foreground">Generation mode: {generationMode}</span>}
+      />
     </Dialog>
   );
 }

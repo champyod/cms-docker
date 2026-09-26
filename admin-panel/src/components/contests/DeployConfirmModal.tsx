@@ -2,12 +2,11 @@
 
 import {
   DialogContent,
-  DialogFooter,
   DialogHeader,
   DialogRoot,
   DialogTitle,
 } from '@/components/core/Dialog';
-import { Button } from '@/components/core/Button';
+import { ModalFooter } from '@/components/core/ModalFooter';
 import { CheckCircle2, Loader2, Rocket } from 'lucide-react';
 import type { DeployPhase } from '@/hooks/useDeployContest';
 
@@ -43,10 +42,13 @@ export function DeployConfirmModal({ isOpen, phase, targetLabel, extraNote = DEF
                 This will mark <strong className="text-foreground">{targetLabel}</strong> as the active contest,
                 set CONTEST_ID in config.toml [contest], and restart the contest stack. {extraNote}
               </p>
-              <DialogFooter>
-                <Button variant="ghost" onClick={onClose}>Cancel</Button>
-                <Button variant="positive" icon={Rocket} onClick={onConfirm}>Deploy</Button>
-              </DialogFooter>
+              <ModalFooter
+                cancelLabel="Cancel"
+                confirmLabel="Deploy"
+                onCancel={onClose}
+                onConfirm={onConfirm}
+                confirmIcon={Rocket}
+              />
             </>
           )}
           {busy && (

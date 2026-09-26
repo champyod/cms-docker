@@ -2,7 +2,8 @@
 
 import { Download, Wand2 } from 'lucide-react';
 import { Button } from '@/components/core/Button';
-import { Dialog, DialogFooter } from '@/components/core/Dialog';
+import { Dialog } from '@/components/core/Dialog';
+import { ModalFooter } from '@/components/core/ModalFooter';
 import { PasswordKindSelector } from '@/components/core/PasswordFieldWithKind';
 import type { Dictionary } from '@/lib/dictionary';
 import { BulkEditPreviewTable, ContestSection, ProfileSection, TeamSection } from './bulkEditSections';
@@ -39,6 +40,12 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, c
 
   const handleExportSelectedRows = (): void => {
     exportSelectedRows(`users-selected-${Date.now()}.csv`, buildEditExportCsv);
+  };
+
+  // Why the guard: an apply already in flight cannot be recalled, so cancelling
+  // through it would close the dialog over an unresolved write.
+  const cancel = (): void => {
+    if (!loading) onClose();
   };
 
   return (
@@ -123,14 +130,17 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, c
           </Button>
         </div>
       </div>
-      <DialogFooter className="mt-4 pt-4 border-t border-border">
-        <Button variant="negativeOutline" onClick={onClose} disabled={loading}>
-          Cancel
-        </Button>
-        <Button variant="positiveOutline" loading={loading} onClick={() => applyCredentials(true)} disabled={loading}>
-          Done
-        </Button>
-      </DialogFooter>
+      <ModalFooter
+        className="mt-4 pt-4 border-t border-border"
+        cancelLabel="Cancel"
+        cancelVariant="negativeOutline"
+        confirmLabel="Done"
+        confirmVariant="positiveOutline"
+        onCancel={cancel}
+        onConfirm={(): void => void applyCredentials(true)}
+        confirmLoading={loading}
+        confirmDisabled={loading}
+      />
     </Dialog>
   );
 }

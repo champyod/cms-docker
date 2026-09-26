@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Copy, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { Dialog } from './Dialog';
+import { ModalFooter } from './ModalFooter';
 import { Button } from './Button';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -160,22 +161,16 @@ export function PasswordFieldWithGenerator({
         onOpenChange={setIsGeneratorOpen}
         title="Generate Password"
         footer={
-          <>
-            <Button type="button" variant="ghost" onClick={generatePassword} disabled={!charset.length}>
-              Generate
-            </Button>
-            <Button
-              type="button"
-              variant="positive"
-              disabled={!generated}
-              onClick={() => {
-                if (generated) onChange(generated);
-                setIsGeneratorOpen(false);
-              }}
-            >
-              Use Password
-            </Button>
-          </>
+          <ModalFooter
+            cancelLabel="Generate"
+            confirmLabel="Use Password"
+            onCancel={generatePassword}
+            onConfirm={(): void => {
+              if (generated) onChange(generated);
+              setIsGeneratorOpen(false);
+            }}
+            confirmDisabled={!generated}
+          />
         }
         className="max-h-96 overflow-y-auto sm:max-w-xl"
       >

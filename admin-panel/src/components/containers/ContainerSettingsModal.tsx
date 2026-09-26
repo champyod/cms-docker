@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Dialog } from '@/components/core/Dialog';
+import { ModalFooter } from '@/components/core/ModalFooter';
 import { Button } from '@/components/core/Button';
 import { cn } from '@/lib/utils';
 import { Power, RotateCcw, Bell, AlertTriangle } from 'lucide-react';
@@ -79,18 +80,20 @@ export function ContainerSettingsModal({
       description={containerName}
       className="max-w-lg"
       footer={
-        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end w-full">
-          <Button variant="secondary" onClick={handleReset}>
-            <RotateCcw className="w-4 h-4 mr-2" />
-            Reset Restart Count
-          </Button>
-          <div className="flex gap-3">
-            <Button variant="ghost" onClick={onClose}>Cancel</Button>
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? 'Saving...' : 'Save Settings'}
+        <ModalFooter
+          className="flex-col gap-2 sm:flex-row"
+          cancelLabel="Cancel"
+          confirmLabel={saving ? 'Saving...' : 'Save Settings'}
+          onCancel={onClose}
+          onConfirm={handleSave}
+          confirmDisabled={saving}
+          leadingAction={
+            <Button variant="secondary" onClick={handleReset}>
+              <RotateCcw className="w-4 h-4 mr-2" />
+              Reset Restart Count
             </Button>
-          </div>
-        </div>
+          }
+        />
       }
     >
       <div className="space-y-6">

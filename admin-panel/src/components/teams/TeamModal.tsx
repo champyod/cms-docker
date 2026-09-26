@@ -3,8 +3,8 @@
 import { useState, useMemo } from 'react';
 import { apiClient } from '@/lib/apiClient';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
-import { Button } from '@/components/core/Button';
-import { Dialog, DialogFooter } from '@/components/core/Dialog';
+import { ModalFooter } from '@/components/core/ModalFooter';
+import { Dialog } from '@/components/core/Dialog';
 import { RestrictedField } from '@/components/core/RestrictedField';
 import type { Dictionary } from '@/lib/dictionary';
 import { getFieldAccess, stripDisallowedFields } from '@/lib/field-permissions';
@@ -81,6 +81,12 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData, permissionK
 
   const inputClassName = 'w-full px-3 py-2 bg-background/60 border border-border rounded-lg text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30 transition-colors';
 
+  // Why the guard: a submit already in flight cannot be recalled, so cancelling
+  // through it would close the dialog over an unresolved save.
+  const cancel = (): void => {
+    if (!loading) onClose();
+  };
+
   return (
     <Dialog
       open={isOpen}
@@ -91,7 +97,7 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData, permissionK
       description={navigation.people.teams.label}
       className="sm:max-w-md"
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form id="team-form" onSubmit={handleSubmit} className="space-y-4">
         {error && (
           <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive text-sm">
             {error}
@@ -128,14 +134,16 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData, permissionK
           />
         </RestrictedField>
 
-        <DialogFooter className="pt-4">
-          <Button type="button" variant="negativeOutline" onClick={onClose} disabled={loading}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="positive" loading={loading} disabled={loading}>
-            {initialData ? 'Update Team' : 'Create Team'}
-          </Button>
-        </DialogFooter>
+        <ModalFooter
+          formId="team-form"
+          className="pt-4"
+          cancelLabel="Cancel"
+          cancelVariant="negativeOutline"
+          confirmLabel={initialData ? 'Update Team' : 'Create Team'}
+          onCancel={cancel}
+          confirmLoading={loading}
+          confirmDisabled={loading}
+        />
       </form>
     </Dialog>
   );

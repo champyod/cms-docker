@@ -2,8 +2,8 @@
 
 import { AlertTriangle, RefreshCw, RotateCcw, type LucideIcon } from 'lucide-react';
 
-import { Button } from '@/components/core/Button';
 import { Dialog } from '@/components/core/Dialog';
+import { ModalFooter } from '@/components/core/ModalFooter';
 import { useDictionary } from '@/hooks/useDictionary';
 import type { ConfirmationKind } from '@/lib/confirmation-copy';
 import type { PendingConfirmation } from '@/lib/confirmation-store';
@@ -42,14 +42,13 @@ export function ConfirmDialog({ confirmation, onResolve }: ConfirmDialogProps): 
       title={confirmation.title}
       description={confirmation.description}
       footer={
-        <div className="flex w-full justify-end gap-3">
-          <Button variant="ghost" onClick={(): void => onResolve(false)}>
-            {confirmations.cancel}
-          </Button>
-          <Button variant={confirmation.kind === 'destructive' ? 'negative' : 'positive'} onClick={(): void => onResolve(true)}>
-            {confirmation.confirmLabel}
-          </Button>
-        </div>
+        <ModalFooter
+          cancelLabel={confirmations.cancel}
+          confirmLabel={confirmation.confirmLabel}
+          onCancel={(): void => onResolve(false)}
+          onConfirm={(): void => onResolve(true)}
+          confirmVariant={confirmation.kind === 'destructive' ? 'negative' : 'positive'}
+        />
       }
     >
       <div className="flex items-center gap-2">

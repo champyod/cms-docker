@@ -6,7 +6,7 @@ import { Upload, Archive, File as FileIcon } from 'lucide-react';
 import { batchUploadTestcases } from '@/app/actions/testcases';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { Dialog } from '@/components/core/Dialog';
-import { Button } from '@/components/core/Button';
+import { ModalFooter } from '@/components/core/ModalFooter';
 import type { FileEncoding } from '@/lib/file-encoding';
 import { validatePattern } from '@/utils/filenameParser';
 import { pairToUploadData } from './testcase-helpers';
@@ -168,6 +168,15 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
 
   const readyCount = pairs.filter((p) => p.status === 'ready').length;
 
+  // Why the guard: a submit already in flight cannot be recalled, so cancelling
+  // through it would close the dialog over an unresolved upload.
+  const cancel = (): void => {
+    if (!loading && !processing) {
+      setPreviewPairId(null);
+      onClose();
+    }
+  };
+
   return (
     <>
       <Dialog
@@ -177,21 +186,15 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
         }}
         title="Upload Testcases"
         footer={
-          <>
-            <Button type="button" variant="ghost" onClick={() => { setPreviewPairId(null); onClose(); }} disabled={loading || processing}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="positive"
-              icon={Upload}
-              loading={loading}
-              disabled={loading || processing || step === 1 || readyCount === 0}
-              onClick={handleUpload}
-            >
-              Upload {readyCount} Pairs
-            </Button>
-          </>
+          <ModalFooter
+            cancelLabel="Cancel"
+            confirmLabel={`Upload ${readyCount} Pairs`}
+            onCancel={cancel}
+            onConfirm={handleUpload}
+            confirmIcon={Upload}
+            confirmLoading={loading}
+            confirmDisabled={loading || processing || step === 1 || readyCount === 0}
+          />
         }
         className="flex max-h-[70vh] w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-3xl"
       >

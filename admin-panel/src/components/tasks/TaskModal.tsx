@@ -7,7 +7,7 @@ import { apiClient } from '@/lib/apiClient';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { Dialog } from '@/components/core/Dialog';
 import { ResponsiveModalShell } from '@/components/core/ResponsiveModalShell';
-import { Button } from '@/components/core/Button';
+import { ModalFooter } from '@/components/core/ModalFooter';
 import { cn } from '@/lib/utils';
 import { parseIntervalToSeconds } from '@/lib/task-intervals';
 import { getFieldAccess, type FieldAccess } from '@/lib/field-permissions';
@@ -172,6 +172,12 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
 
   if (!isOpen) return null;
 
+  // Why the guard: a submit already in flight cannot be recalled, so cancelling
+  // through it would close the dialog over an unresolved save.
+  const cancel = (): void => {
+    if (!loading) onClose();
+  };
+
   return (
     <FieldAccessContext.Provider value={fieldAccess}>
       <Dialog
@@ -181,14 +187,14 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
         }}
         title={task ? 'Edit Task' : 'Create New Task'}
         footer={
-          <>
-            <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>
-              Cancel
-            </Button>
-            <Button type="submit" form="task-form" variant="positive" loading={loading} disabled={loading} className="min-w-32">
-              {task ? 'Save Changes' : 'Create Task'}
-            </Button>
-          </>
+          <ModalFooter
+            formId="task-form"
+            cancelLabel="Cancel"
+            confirmLabel={task ? 'Save Changes' : 'Create Task'}
+            onCancel={cancel}
+            confirmLoading={loading}
+            confirmDisabled={loading}
+          />
         }
         className="flex max-h-[70vh] w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-4xl"
       >

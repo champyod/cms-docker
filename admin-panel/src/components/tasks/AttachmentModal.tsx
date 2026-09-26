@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Upload } from 'lucide-react';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { Dialog } from '@/components/core/Dialog';
-import { Button } from '@/components/core/Button';
+import { ModalFooter } from '@/components/core/ModalFooter';
 import { apiClient } from '@/lib/apiClient';
 import { readFileAsBase64 } from '@/lib/file-helpers';
 
@@ -69,6 +69,12 @@ export function AttachmentModal({ isOpen, onClose, taskId, onSuccess }: Attachme
     }
   };
 
+  // Why the guard: a submit already in flight cannot be recalled, so cancelling
+  // through it would close the dialog over an unresolved upload.
+  const cancel = (): void => {
+    if (!loading) onClose();
+  };
+
   return (
     <Dialog
       open
@@ -77,14 +83,15 @@ export function AttachmentModal({ isOpen, onClose, taskId, onSuccess }: Attachme
       }}
       title="Add Attachment"
       footer={
-        <>
-          <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>
-            Cancel
-          </Button>
-          <Button type="submit" form="attachment-form" variant="positive" icon={Upload} loading={loading} disabled={loading || !file}>
-            Upload Attachment
-          </Button>
-        </>
+        <ModalFooter
+          formId="attachment-form"
+          cancelLabel="Cancel"
+          confirmLabel="Upload Attachment"
+          onCancel={cancel}
+          confirmIcon={Upload}
+          confirmLoading={loading}
+          confirmDisabled={loading || !file}
+        />
       }
       className="sm:max-w-md"
     >

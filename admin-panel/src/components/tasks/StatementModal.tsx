@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Upload } from 'lucide-react';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { Dialog } from '@/components/core/Dialog';
-import { Button } from '@/components/core/Button';
+import { ModalFooter } from '@/components/core/ModalFooter';
 import { LanguagePicker } from '@/components/core/LanguagePicker';
 import { normalizeLanguageCode } from '@/lib/constants/languages';
 import { apiClient } from '@/lib/apiClient';
@@ -69,6 +69,12 @@ export function StatementModal({ isOpen, onClose, taskId, existingLanguages, onS
     }
   }
 
+  // Why the guard: a submit already in flight cannot be recalled, so cancelling
+  // through it would close the dialog over an unresolved upload.
+  function cancel(): void {
+    if (!loading) onClose();
+  }
+
   return (
     <Dialog
       open
@@ -77,14 +83,15 @@ export function StatementModal({ isOpen, onClose, taskId, existingLanguages, onS
       }}
       title="Add Statement"
       footer={
-        <>
-          <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>
-            Cancel
-          </Button>
-          <Button type="submit" form="statement-form" variant="positive" icon={Upload} loading={loading} disabled={loading || !file}>
-            Upload Statement
-          </Button>
-        </>
+        <ModalFooter
+          formId="statement-form"
+          cancelLabel="Cancel"
+          confirmLabel="Upload Statement"
+          onCancel={cancel}
+          confirmIcon={Upload}
+          confirmLoading={loading}
+          confirmDisabled={loading || !file}
+        />
       }
       className="sm:max-w-md"
     >

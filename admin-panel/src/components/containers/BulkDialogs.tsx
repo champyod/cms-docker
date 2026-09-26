@@ -1,7 +1,7 @@
 'use client';
 
-import { Button } from '@/components/core/Button';
 import { Dialog } from '@/components/core/Dialog';
+import { ModalFooter } from '@/components/core/ModalFooter';
 import { RotateCcw, Trash2, ScrollText } from 'lucide-react';
 
 import { useDictionary } from '@/hooks/useDictionary';
@@ -27,10 +27,6 @@ interface BulkDialogsProps {
   readonly onConfirmRestart: () => void;
   readonly onConfirmRemove: () => void;
   readonly onConfirmLogs: () => void;
-}
-
-function Footer({ children }: { readonly children: React.ReactNode }): React.JSX.Element {
-  return <div className="flex justify-end gap-3 w-full">{children}</div>;
 }
 
 function DiscordWarning({ isDiscordConfigured }: {
@@ -81,13 +77,14 @@ export function BulkDialogs({
         title={copy.restartTitle}
         description={selectedDescription}
         footer={
-          <Footer>
-            <Button variant="ghost" onClick={() => setShowRestart(false)}>{copy.cancel}</Button>
-            <Button variant="positive" onClick={onConfirmRestart} loading={bulkLoading}>
-              <RotateCcw className="w-4 h-4 mr-2" />
-              {copy.restartConfirm}
-            </Button>
-          </Footer>
+          <ModalFooter
+            cancelLabel={copy.cancel}
+            confirmLabel={copy.restartConfirm}
+            onCancel={(): void => setShowRestart(false)}
+            onConfirm={onConfirmRestart}
+            confirmIcon={RotateCcw}
+            confirmLoading={bulkLoading}
+          />
         }
       >
         <div className="space-y-3">
@@ -111,13 +108,15 @@ export function BulkDialogs({
         title={copy.stopTitle}
         description={selectedDescription}
         footer={
-          <Footer>
-            <Button variant="ghost" onClick={() => setShowRemove(false)}>{copy.cancel}</Button>
-            <Button variant="negative" onClick={onConfirmRemove} loading={bulkLoading}>
-              <Trash2 className="w-4 h-4 mr-2" />
-              {copy.stopConfirm}
-            </Button>
-          </Footer>
+          <ModalFooter
+            cancelLabel={copy.cancel}
+            confirmLabel={copy.stopConfirm}
+            onCancel={(): void => setShowRemove(false)}
+            onConfirm={onConfirmRemove}
+            confirmIcon={Trash2}
+            confirmVariant="negative"
+            confirmLoading={bulkLoading}
+          />
         }
       >
         <div className="space-y-3">
@@ -133,13 +132,14 @@ export function BulkDialogs({
         title={copy.logsTitle}
         description={selectedDescription}
         footer={
-          <Footer>
-            <Button variant="ghost" onClick={() => setShowLogs(false)}>{copy.cancel}</Button>
-            <Button variant="secondary" onClick={onConfirmLogs}>
-              <ScrollText className="w-4 h-4 mr-2" />
-              {copy.logsConfirm}
-            </Button>
-          </Footer>
+          <ModalFooter
+            cancelLabel={copy.cancel}
+            confirmLabel={copy.logsConfirm}
+            onCancel={(): void => setShowLogs(false)}
+            onConfirm={onConfirmLogs}
+            confirmIcon={ScrollText}
+            confirmVariant="secondary"
+          />
         }
       >
         <div className="space-y-3">
