@@ -174,16 +174,7 @@
   },
   "permissions": {
     "title": "Permissions",
-    "subtitle": "Manage administrator accounts and the groups that grant their access.",
-    "adminsRestricted": {
-      "title": "Administrators are not available",
-      "description": "You can open this section, but your account is not permitted to read admin records."
-    },
-    "tabs": {
-      "label": "Permission sections",
-      "admins": "Admins",
-      "groups": "Groups"
-    }
+    "subtitle": "Manage administrator accounts and the groups that grant their access."
   },
   "audit": {
     "title": "Audit Log",

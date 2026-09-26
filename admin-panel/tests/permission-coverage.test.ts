@@ -249,10 +249,12 @@ describe('permission coverage', () => {
       expect(entry.permissions).toBeUndefined();
       expect(entry.requiredPermissions).toBeUndefined();
     }
-    for (const route of visibleRoutes(empty, 'sidebar')) {
-      expect(route.permission.all ?? []).toEqual([]);
-      expect(route.permission.any ?? []).toEqual([]);
-    }
+    // Why the ID set and not the per-route shape: visibleRoutes already filters on
+    // isRoutePermitted, and a requirement-free route is permitted for anyone, so
+    // asserting an empty requirement per visible route holds by construction. The
+    // exact visible ID set is the form that can actually fail when a gated route
+    // is enabled without a gate reaching the sidebar surface.
+    expect(visibleRoutes(empty, 'sidebar').map((route) => route.id)).toEqual(['home']);
   });
 
   it('uses only registry keys in frontend permission checks', () => {

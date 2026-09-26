@@ -1,12 +1,40 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ADMINISTRATION_ROUTE_IDS, ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import { resolveLegacyRedirect } from '@/lib/navigation/redirects';
 import { buildRoute } from '@/lib/navigation/routes';
 import type { RouteDescriptor, RouteId } from '@/lib/navigation/types';
+
+const mocks = vi.hoisted(() => ({ docsEnabled: false }));
+
+// Why patch the registry: system.docs is the only requirement-free module route
+// and it is still disabled, so the fallback rule can only be exercised against it
+// by enabling it here. The factory re-runs after vi.resetModules(), which is what
+// lets resolveLegacyRedirect rebuild its id-to-descriptor map with Docs enabled.
+vi.mock('@/lib/navigation/registry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/navigation/registry')>();
+  return {
+    ...actual,
+    ROUTE_REGISTRY: mocks.docsEnabled
+      ? actual.ROUTE_REGISTRY.map((descriptor) =>
+          descriptor.id === 'system.docs' ? { ...descriptor, enabled: true } : descriptor,
+        )
+      : actual.ROUTE_REGISTRY,
+  };
+});
+
+async function resolveWithDocsEnabled(
+  legacyPath: string,
+  effective: ReadonlySet<string>,
+): Promise<string | null> {
+  mocks.docsEnabled = true;
+  vi.resetModules();
+  const fresh = await import('@/lib/navigation/redirects');
+  return fresh.resolveLegacyRedirect('th', legacyPath, effective);
+}
 
 function route(routeId: RouteId): RouteDescriptor {
   const descriptor = ROUTE_REGISTRY.find((item) => item.id === routeId);
@@ -93,6 +121,38 @@ describe('Administration legacy redirects', () => {
   it('conceals a group whose members are all disabled or denied', () => {
     expect(resolveLegacyRedirect('th', '/deployments', new Set(['task:list']))).toBeNull();
     expect(resolveLegacyRedirect('th', '/appearance', new Set(['task:list']))).toBeNull();
+  });
+});
+
+describe('requirement-free route is never a fallback target', () => {
+  const DOCS_ID = 'system.docs';
+
+  it('declares no permission requirement on the open System route', () => {
+    const docs = route(DOCS_ID);
+    expect(docs.permission.all ?? []).toEqual([]);
+    expect(docs.permission.any ?? []).toEqual([]);
+  });
+
+  it('keeps a denied System legacy path concealed while Docs is disabled', () => {
+    expect(resolveLegacyRedirect('th', '/appearance', new Set(['task:list']))).toBeNull();
+    expect(resolveLegacyRedirect('th', '/maintenance', new Set(['task:list']))).toBeNull();
+  });
+
+  it('never redirects a denied System legacy path to Docs once Docs is enabled', async () => {
+    for (const legacyPath of ['/appearance', '/maintenance', '/settings']) {
+      expect(await resolveWithDocsEnabled(legacyPath, new Set(['task:list']))).toBeNull();
+    }
+  });
+
+  it('still resolves the open Docs route as a direct legacy target', async () => {
+    expect(await resolveWithDocsEnabled('/docs', new Set(['task:list'])))
+      .toBe('/th/system/docs');
+  });
+
+  it('prefers a readable gated System route over the open Docs route', async () => {
+    expect(
+      await resolveWithDocsEnabled('/appearance', new Set(['appearance:read', 'appearance:list'])),
+    ).toBe('/th/system/appearance');
   });
 });
 
