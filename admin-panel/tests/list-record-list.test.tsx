@@ -6,6 +6,7 @@ import { Pencil } from 'lucide-react';
 import { EmptyState } from '@/components/core/EmptyState';
 import { RecordList } from '@/components/list/RecordList';
 import { RowActionLink } from '@/components/list/RowActionLink';
+import { handleShortcutEvent, IDLE_CHORD, type ShortcutHandlerDeps } from '@/hooks/useShortcuts';
 
 // Why: globals are disabled in vitest.config.ts, so @testing-library/react's
 // automatic afterEach cleanup does not run; without it, later row queries
@@ -117,11 +118,55 @@ describe('RecordList', () => {
     expect(mockPush.mock.calls[1][0]).toBe(RECORD_HREF);
   });
 
-  it('marks the desktop row and the mobile card for j/k navigation', () => {
+  it('marks only the desktop row for j/k navigation', () => {
     const container = renderList();
 
+    expect(container.querySelectorAll('[data-shortcut-row]')).toHaveLength(1);
     expect(container.querySelector('tbody tr')?.getAttribute('data-shortcut-row')).toBe('4');
-    expect(container.querySelector('.space-y-3.md\\:hidden > div')?.getAttribute('data-shortcut-row')).toBe('4');
+    // Why changed: the mobile card used to carry the marker too, which doubled
+    // every list in the traversal order. One record, one traversable row.
+    expect(
+      container.querySelector('.space-y-3.md\\:hidden > div')?.hasAttribute('data-shortcut-row'),
+    ).toBe(false);
+  });
+
+  it('gives each record exactly one traversable row and walks first to last in N-1 steps', () => {
+    const rows: Row[] = [
+      { id: 1, name: 'Thailand Team 1' },
+      { id: 2, name: 'Thailand Team 2' },
+      { id: 3, name: 'Thailand Team 3' },
+    ];
+    renderList(rows);
+
+    const traversable = Array.from(document.querySelectorAll('[data-shortcut-row]'));
+    expect(traversable).toHaveLength(rows.length);
+    expect(traversable.map((row) => row.getAttribute('data-shortcut-row'))).toEqual(['1', '2', '3']);
+
+    const selectedRowIndex = { current: -1 };
+    const deps: ShortcutHandlerDeps = {
+      navigate: vi.fn(),
+      getLocale: () => 'en',
+      isOverlayOpen: () => false,
+      toggleOverlay: vi.fn(),
+      chordState: { current: IDLE_CHORD },
+      selectedRowIndex,
+    };
+    const pressJ = (): void => {
+      handleShortcutEvent(
+        { key: 'j', defaultPrevented: false, target: { tagName: 'BODY' }, preventDefault: vi.fn() },
+        deps,
+      );
+    };
+
+    pressJ();
+    expect(selectedRowIndex.current).toBe(0);
+    expect(traversable[0].classList.contains('ring-2')).toBe(true);
+
+    for (let step = 1; step < rows.length; step += 1) pressJ();
+
+    expect(selectedRowIndex.current).toBe(rows.length - 1);
+    expect(traversable[rows.length - 1].classList.contains('ring-2')).toBe(true);
+    expect(traversable[0].classList.contains('ring-2')).toBe(false);
   });
 
   it('renders the row action in both layouts from one definition', () => {

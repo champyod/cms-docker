@@ -10,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/core/Table';
+import { SHORTCUT_ROW_ATTRIBUTE } from '@/hooks/useShortcuts';
 import { cn } from '@/lib/utils';
 
 // Why: one column definition drives both layouts, so callers stop
@@ -29,8 +30,9 @@ export interface ResponsiveColumn<Row> {
   cellClassName?: string;
 }
 
-// Why: extra attributes (e.g. data-shortcut-row for j/k nav) must land
-// on both layouts, so keyboard selection cannot die on migration.
+// Why: interaction props (onClick, onKeyDown, tabIndex, className) must reach
+// both layouts so a migrated list stays clickable and focusable on every
+// viewport. `data-shortcut-row` is the one exception — see mobileCardRowProps.
 export type ResponsiveRowProps = React.HTMLAttributes<HTMLElement> & {
   [dataAttribute: `data-${string}`]: string | number | undefined;
 };
@@ -57,12 +59,29 @@ function visibleOnMobile<Row>(columns: ResponsiveColumn<Row>[]): ResponsiveColum
   return columns.filter((column) => !column.hideOnMobile);
 }
 
+// Why the marker is stripped here: the mobile cards render into the `md:hidden`
+// container that Table always mounts, so a second `[data-shortcut-row]` would
+// make j/k walk 2N elements for N records and let Enter activate an action the
+// user cannot see. The desktop row is the record's traversable element; the
+// card keeps its class name and click/keyboard handlers for pointer and touch.
+function mobileCardRowProps<Row>(
+  getRowProps: ResponsiveTableProps<Row>['getRowProps'],
+  row: Row,
+  index: number,
+): ResponsiveRowProps | undefined {
+  const extraProps = getRowProps?.(row, index);
+  if (!extraProps) return undefined;
+  const interactionProps: ResponsiveRowProps = { ...extraProps };
+  delete interactionProps[SHORTCUT_ROW_ATTRIBUTE];
+  return interactionProps;
+}
+
 function renderMobileCards<Row>(props: ResponsiveTableProps<Row>): React.ReactNode {
   const { columns, rows, getRowKey, getRowClassName, getRowProps, renderRowActions } = props;
   const visible = visibleOnMobile(columns);
   return rows.map((row, index) => {
     const actions = renderRowActions?.(row, index);
-    const extraProps = getRowProps?.(row, index);
+    const extraProps = mobileCardRowProps(getRowProps, row, index);
     // Why: core-level null skip — a null/undefined column value means
     // "no data" (e.g. non-seeded group badge), so mobile omits the row
     // instead of rendering an empty label/value pair; desktop keeps the

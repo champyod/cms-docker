@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from 'vitest';
-import { render } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render } from '@testing-library/react';
 import { ResponsiveTable, type ResponsiveColumn } from '@/components/core/ResponsiveTable';
 
 interface Person {
@@ -57,14 +57,25 @@ describe('ResponsiveTable', () => {
     expect(getByText('No people yet')).toBeTruthy();
   });
 
-  it('spreads getRowProps onto desktop rows and mobile cards', () => {
+  it('spreads getRowProps onto desktop rows only, keeping the mobile card clickable', () => {
+    const onClick = vi.fn();
     const { container } = render(
-      <ResponsiveTable {...baseProps()} getRowProps={(row) => ({ 'data-shortcut-row': row.id })} />
+      <ResponsiveTable
+        {...baseProps()}
+        getRowProps={(row) => ({ 'data-shortcut-row': row.id, className: 'cursor-pointer', onClick })}
+      />
     );
     const desktopRow = container.querySelector('tbody tr');
     expect(desktopRow?.getAttribute('data-shortcut-row')).toBe('1');
     const mobileCard = container.querySelector('.space-y-3.md\\:hidden > div');
-    expect(mobileCard?.getAttribute('data-shortcut-row')).toBe('1');
+    // Why: the mobile card sits in a `md:hidden` container that stays in the
+    // DOM, so a second marker makes j/k walk 2N elements and lets Enter fire an
+    // action nobody can see. The marker belongs to the desktop row alone.
+    expect(mobileCard?.hasAttribute('data-shortcut-row')).toBe(false);
+    expect(mobileCard?.className).toContain('cursor-pointer');
+    if (!mobileCard) throw new Error('Missing mobile card');
+    fireEvent.click(mobileCard);
+    expect(onClick).toHaveBeenCalledTimes(1);
   });
 
   it('omits null column values from mobile cards but keeps the desktop cell', () => {
