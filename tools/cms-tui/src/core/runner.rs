@@ -1,19 +1,52 @@
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Command, ExitStatus, Stdio};
+
+/// Reported when a child was killed by a signal, which leaves it without an
+/// exit code of its own. Any non-zero value keeps the step marked as failed.
+const SIGNALLED_EXIT_CODE: i32 = -1;
+
+/// Why a script name is refused before it is joined onto `scripts/`.
+const SCRIPT_NAME_RULE: &str = "a name may not be empty, contain '/' or '..', or start with '-'";
 
 /// Error type for subprocess execution failures.
 #[derive(Debug, thiserror::Error)]
 pub enum RunError {
-    #[error("not found: {0}")]
-    NotFound(String),
-    #[error("failed to spawn {program}: {source}")]
+    #[error(
+        "CMS repository root not found: no directory above the executable or the current \
+         directory holds both `cms` and `Makefile`. Run this from inside a CMS checkout."
+    )]
+    RepoRootMissing,
+    #[error(
+        "`scripts/{script}` is missing from the CMS repository root. Check the command name, \
+         then run `./cms doctor` to verify the checkout."
+    )]
+    ScriptMissing { script: String },
+    #[error("`{program}` could not be started: {source}. Check that make and bash are on PATH.")]
     Spawn {
         program: String,
         #[source]
         source: std::io::Error,
     },
-    #[error("command exited with code {0}")]
-    NonZero(i32),
+    #[error("`{command}` exited with code {code}")]
+    NonZero { command: String, code: i32 },
+    #[error("invalid script name `{name}`: {rule}")]
+    InvalidScriptName { name: String, rule: &'static str },
+}
+
+/// Rejects script names that could resolve outside `scripts/` or be read as a
+/// `bash` option.
+///
+/// The rule sits here rather than at the callers because this module owns the
+/// `scripts/<name>` join, so every path into the runner is covered by it.
+pub fn validate_script_name(script: &str) -> Result<(), RunError> {
+    if script.is_empty() || script.contains("..") || script.contains('/') || script.starts_with('-')
+    {
+        return Err(RunError::InvalidScriptName {
+            name: script.to_string(),
+            rule: SCRIPT_NAME_RULE,
+        });
+    }
+    Ok(())
 }
 
 /// Executes `make`/`sh` commands with the repo root as the working directory.
@@ -36,18 +69,21 @@ impl Runner {
     ///
     /// # Errors
     ///
-    /// Returns `Err` if the repo root markers are not found.
+    /// Returns [`RunError::RepoRootMissing`] if the repo root markers are not
+    /// found.
     pub fn new() -> Result<Self, RunError> {
-        let root = Self::detect_repo_root()
-            .ok_or_else(|| RunError::NotFound("CMS repo root (cms + Makefile)".into()))?;
+        let root = Self::detect_repo_root().ok_or(RunError::RepoRootMissing)?;
         Ok(Self { cwd: root })
     }
 
-    /// Runs `make <target>` in the repo root.
+    /// Runs `make <target>` in the repo root and reports its exit code.
+    ///
+    /// The code is returned rather than raised as an error so a caller that
+    /// drives several targets in sequence can report each one.
     ///
     /// # Errors
     ///
-    /// Returns `Err` if `make` fails to spawn.
+    /// Returns [`RunError::Spawn`] if `make` fails to start.
     pub fn run_make(&self, target: &str, envs: &[(&str, &str)]) -> Result<i32, RunError> {
         let mut cmd = Command::new("make");
         cmd.current_dir(&self.cwd).arg(target);
@@ -58,10 +94,29 @@ impl Runner {
             program: "make".into(),
             source,
         })?;
-        Ok(status.code().unwrap_or(-1))
+        Ok(exit_code(status))
     }
 
-    /// Runs `scripts/<script>` via `bash` in the repo root.
+    /// Runs `make <target>` and turns a non-zero exit into a typed error that
+    /// names the target, so the report says which step failed.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RunError::NonZero`] if `make` reports a failing exit code, or
+    /// [`RunError::Spawn`] if it fails to start.
+    pub fn run_make_checked(&self, target: &str, envs: &[(&str, &str)]) -> Result<(), RunError> {
+        let code = self.run_make(target, envs)?;
+        if code != 0 {
+            return Err(RunError::NonZero {
+                command: format!("make {target}"),
+                code,
+            });
+        }
+        Ok(())
+    }
+
+    /// Runs `scripts/<script>` via `bash` in the repo root and reports its exit
+    /// code.
     ///
     /// All `scripts/__*.sh` are bash (shebang, arrays, `local`); spawning a
     /// POSIX `sh` instead aborts fatally on a failed `source` and would break
@@ -69,9 +124,18 @@ impl Runner {
     ///
     /// # Errors
     ///
-    /// Returns `Err` if the script fails to spawn.
+    /// Returns [`RunError::InvalidScriptName`] for a name that could escape
+    /// `scripts/`, [`RunError::ScriptMissing`] when the file is absent — which
+    /// `bash` would otherwise report as an exit 127 that reads like a bug in
+    /// the script — and [`RunError::Spawn`] if `bash` fails to start.
     pub fn run_sh(&self, script: &str, args: &[&str]) -> Result<i32, RunError> {
+        validate_script_name(script)?;
         let script_path = self.cwd.join("scripts").join(script);
+        if !script_path.is_file() {
+            return Err(RunError::ScriptMissing {
+                script: script.to_string(),
+            });
+        }
         let mut cmd = Command::new("bash");
         cmd.current_dir(&self.cwd)
             .arg(&script_path)
@@ -83,7 +147,7 @@ impl Runner {
             program: script_path.display().to_string(),
             source,
         })?;
-        Ok(status.code().unwrap_or(-1))
+        Ok(exit_code(status))
     }
 
     #[must_use]
@@ -122,52 +186,15 @@ impl Runner {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn resolves_repo_root_containing_cms_and_makefile() {
-        let runner = Runner::new().expect("repo root should resolve");
-        assert!(
-            runner.repo_root().join("cms").exists(),
-            "cms script present"
-        );
-        assert!(
-            runner.repo_root().join("Makefile").exists(),
-            "Makefile present"
-        );
-    }
-
-    #[test]
-    fn run_make_bad_target_returns_nonzero() {
-        let runner = Runner::new().expect("repo root should resolve");
-        let code = runner
-            .run_make("__cms_tui_definitely_missing_target__", &[])
-            .expect("make should spawn");
-        assert_ne!(code, 0, "missing make target must fail");
-    }
-
-    #[test]
-    fn run_sh_executes_script_in_repo_root() {
-        let runner = Runner::new().expect("repo root should resolve");
-        let code = runner
-            .run_sh("__preflight.sh", &[])
-            .expect("script should spawn");
-        assert!(
-            code == 0 || code == 2,
-            "preflight ran and returned a real exit code, got {code}"
-        );
-    }
-
-    #[test]
-    fn find_repo_root_rejects_dir_without_markers() {
-        let tmp = std::env::temp_dir().join("cms_runner_no_markers");
-        std::fs::create_dir_all(&tmp).expect("create temp dir");
-        // `tmp` is inside /tmp, walk up — eventually /tmp has no Makefile+cms
-        // and we should surface a clear error via Runner::new.
-        let result = Runner::new();
-        drop(tmp);
-        let _ = result; // dev tree resolves via cwd; this only checks no panic
-    }
+/// Maps a finished child onto the exit code the caller reports.
+///
+/// A child killed by a signal reports no code of its own; any non-zero value
+/// keeps the step marked as failed instead of silently looking successful.
+#[must_use]
+pub fn exit_code(status: ExitStatus) -> i32 {
+    status.code().unwrap_or(SIGNALLED_EXIT_CODE)
 }
+
+#[cfg(test)]
+#[path = "runner_tests.rs"]
+mod tests;
