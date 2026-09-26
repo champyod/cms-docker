@@ -169,12 +169,10 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
   const readyCount = pairs.filter((p) => p.status === 'ready').length;
 
   // Why the guard: a submit already in flight cannot be recalled, so cancelling
-  // through it would close the dialog over an unresolved upload.
+  // through it would close the dialog over an unresolved upload. The same pair
+  // of flags reaches the footer's cancelDisabled, so both states agree.
   const cancel = (): void => {
-    if (!loading && !processing) {
-      setPreviewPairId(null);
-      onClose();
-    }
+    if (!loading && !processing) { setPreviewPairId(null); onClose(); }
   };
 
   return (
@@ -194,6 +192,7 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
             confirmIcon={Upload}
             confirmLoading={loading}
             confirmDisabled={loading || processing || step === 1 || readyCount === 0}
+            cancelDisabled={loading || processing}
           />
         }
         className="flex max-h-[70vh] w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-3xl"

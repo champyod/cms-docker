@@ -93,12 +93,33 @@ describe('RowActions', () => {
 });
 
 describe('ModalFooter', () => {
-  it('locks confirm while pending and keeps cancel reachable', () => {
+  it('locks confirm and cancel together while pending', () => {
     const onCancel = vi.fn();
     render(<ModalFooter cancelLabel="Cancel" confirmLabel="Save" onCancel={onCancel} onConfirm={() => undefined} confirmLoading />);
     expect(isDisabled(screen.getByRole('button', { name: 'Save' }))).toBe(true);
+    expect(isDisabled(screen.getByRole('button', { name: 'Cancel' }))).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('leaves cancel reachable when the dialog overrides the pending lock', () => {
+    const onCancel = vi.fn();
+    render(<ModalFooter cancelLabel="Cancel" confirmLabel="Save" onCancel={onCancel} onConfirm={() => undefined} confirmLoading cancelDisabled={false} />);
+    expect(isDisabled(screen.getByRole('button', { name: 'Save' }))).toBe(true);
+    expect(isDisabled(screen.getByRole('button', { name: 'Cancel' }))).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('answers cancel while idle and lets an explicit lock win over the default', () => {
+    const onCancel = vi.fn();
+    const { rerender } = render(<ModalFooter cancelLabel="Cancel" confirmLabel="Save" onCancel={onCancel} onConfirm={() => undefined} />);
+    expect(isDisabled(screen.getByRole('button', { name: 'Cancel' }))).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+
+    rerender(<ModalFooter cancelLabel="Cancel" confirmLabel="Save" onCancel={onCancel} onConfirm={() => undefined} confirmLoading cancelDisabled={false} />);
+    expect(isDisabled(screen.getByRole('button', { name: 'Cancel' }))).toBe(false);
   });
 
   it('submits through the owning form when given a form id', () => {

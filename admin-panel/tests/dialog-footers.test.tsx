@@ -116,6 +116,9 @@ describe('form-driven dialogs submit through the shared footer', () => {
     const pending = buttonNamed(confirm);
     fireEvent.submit(pending.form as HTMLFormElement);
     await vi.waitFor(() => expect(isLocked(pending)).toBe(true));
+    // Why the appearance too: the guard is what refuses the close, so only the
+    // disabled button is what tells the reader the dialog is mid-save.
+    expect(isLocked(buttonNamed('Cancel'))).toBe(true);
     fireEvent.click(buttonNamed('Cancel'));
     expect(onClose).not.toHaveBeenCalled();
   });
@@ -123,6 +126,7 @@ describe('form-driven dialogs submit through the shared footer', () => {
   it.each(FORM_FOOTER_CASES)('$label: cancel still answers while idle', ({ open }) => {
     const onClose = vi.fn();
     render(open(onClose));
+    expect(isLocked(buttonNamed('Cancel'))).toBe(false);
     fireEvent.click(buttonNamed('Cancel'));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -246,6 +250,7 @@ describe('the people dialogs keep their destructive-outline cancel', () => {
     const pending = buttonNamed('Create Team');
     fireEvent.submit(pending.form as HTMLFormElement);
     await vi.waitFor(() => expect(isLocked(pending)).toBe(true));
+    expect(isLocked(buttonNamed('Cancel'))).toBe(true);
     fireEvent.click(buttonNamed('Cancel'));
     expect(onClose).not.toHaveBeenCalled();
   });
@@ -340,6 +345,14 @@ describe('the testcase upload footer blocks until a pair is ready', () => {
     const confirm = buttonNamed('Upload 0 Pairs');
     expect(isLocked(confirm)).toBe(true);
     expect(confirm.querySelector('svg')).not.toBeNull();
+  });
+
+  it('keeps cancel live before the CSV parse starts, so the override never over-locks it', () => {
+    const onClose = vi.fn();
+    render(<TestcaseUploadModal isOpen onClose={onClose} datasetId={3} onSuccess={() => undefined} />);
+    expect(isLocked(buttonNamed('Cancel'))).toBe(false);
+    fireEvent.click(buttonNamed('Cancel'));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
 

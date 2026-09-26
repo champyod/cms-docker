@@ -84,6 +84,7 @@ export function BulkDialogs({
             onConfirm={onConfirmRestart}
             confirmIcon={RotateCcw}
             confirmLoading={bulkLoading}
+            cancelDisabled={false}
           />
         }
       >
@@ -116,6 +117,7 @@ export function BulkDialogs({
             confirmIcon={Trash2}
             confirmVariant="negative"
             confirmLoading={bulkLoading}
+            cancelDisabled={false}
           />
         }
       >

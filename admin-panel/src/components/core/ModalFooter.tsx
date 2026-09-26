@@ -15,6 +15,12 @@ export interface ModalFooterProps {
   readonly onConfirm?: () => void;
   readonly confirmLoading?: boolean;
   readonly confirmDisabled?: boolean;
+  /**
+   * Overrides the cancel lock, which otherwise follows `confirmLoading`. Pass
+   * `false` for a dialog that must stay cancellable during a save, or the
+   * dialog's own condition where its busy window is wider than the confirm's.
+   */
+  readonly cancelDisabled?: boolean;
   readonly layout?: 'end' | 'split';
   readonly confirmVariant?: ButtonVariantInput;
   readonly cancelVariant?: ButtonVariantInput;
@@ -36,10 +42,13 @@ const LAYOUT_CLASSES = {
  * `<form>` must submit through it so the browser runs native validation and the
  * consumer keeps one submit handler instead of two.
  *
- * Why cancel is invoked unconditionally: pending-cancel is the caller's policy,
- * not the primitive's. A footer whose dialog must refuse cancellation while a
- * save is in flight guards its own `onCancel`, and no prop here may let a
- * pending footer cancel anyway.
+ * Why cancel locks onto the confirm's pending state: greying cancel while a
+ * save runs is the state every one of these dialogs showed before the footers
+ * were shared, and a disabled button is the only way to express it once. The
+ * default follows `confirmLoading` so a dialog says nothing; a dialog whose busy
+ * window is wider, or whose cancel must stay live, states the difference with
+ * `cancelDisabled`. Whether the handler then refuses to run stays the caller's
+ * own guard, so no prop here can cancel a pending footer.
  */
 export function ModalFooter({
   formId,
@@ -49,6 +58,7 @@ export function ModalFooter({
   onConfirm,
   confirmLoading,
   confirmDisabled,
+  cancelDisabled,
   layout = 'end',
   confirmVariant = 'positive',
   cancelVariant = 'ghost',
@@ -60,7 +70,7 @@ export function ModalFooter({
   return (
     <div data-footer-layout={layout} className={cn(LAYOUT_CLASSES[layout], className)}>
       {leadingAction}
-      <Button type="button" variant={cancelVariant} onClick={onCancel}>
+      <Button type="button" variant={cancelVariant} onClick={onCancel} disabled={cancelDisabled ?? confirmLoading}>
         {cancelLabel}
       </Button>
       {confirmLabel !== undefined && (

@@ -18,6 +18,10 @@ function textOf(element: Element | null): string {
   return element?.textContent ?? '';
 }
 
+function isDisabled(element: Element): boolean {
+  return element instanceof HTMLButtonElement && element.disabled;
+}
+
 function withDictionary(dictionary: Dictionary, node: React.ReactNode): React.JSX.Element {
   return <DictionaryProvider dict={dictionary}>{node}</DictionaryProvider>;
 }
@@ -84,9 +88,9 @@ describe('ModalFooter variant and slot contracts', () => {
     expect(onConfirm).not.toHaveBeenCalled();
   });
 
-  it('leaves pending cancellation with the caller once a leading control exists', () => {
+  it('locks pending cancellation with the confirm unless the dialog opts out', () => {
     const onCancel = vi.fn();
-    render(
+    const { rerender } = render(
       <ModalFooter
         leadingAction={<button type="button">Reset</button>}
         cancelLabel="Cancel"
@@ -96,7 +100,25 @@ describe('ModalFooter variant and slot contracts', () => {
         confirmLoading
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    const cancel = screen.getByRole('button', { name: 'Cancel' });
+    expect(isDisabled(cancel)).toBe(true);
+    fireEvent.click(cancel);
+    expect(onCancel).not.toHaveBeenCalled();
+
+    rerender(
+      <ModalFooter
+        leadingAction={<button type="button">Reset</button>}
+        cancelLabel="Cancel"
+        confirmLabel="Save"
+        onCancel={onCancel}
+        onConfirm={() => undefined}
+        confirmLoading
+        cancelDisabled={false}
+      />,
+    );
+    const reachable = screen.getByRole('button', { name: 'Cancel' });
+    expect(isDisabled(reachable)).toBe(false);
+    fireEvent.click(reachable);
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 });
