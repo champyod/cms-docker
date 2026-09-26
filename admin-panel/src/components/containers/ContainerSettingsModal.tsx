@@ -5,7 +5,7 @@ import { Dialog } from '@/components/core/Dialog';
 import { Button } from '@/components/core/Button';
 import { cn } from '@/lib/utils';
 import { Power, RotateCcw, Bell, AlertTriangle } from 'lucide-react';
-import { updateContainerConfig, resetRestartCount } from '@/app/actions/containerConfig';
+import { updateContainerConfig, resetRestartCount, getContainerConfig } from '@/app/actions/containerConfig';
 import { getDiscordWebhookStatus } from '@/lib/discord-notifier';
 import { toast } from 'sonner';
 
@@ -38,6 +38,28 @@ export function ContainerSettingsModal({
   useEffect(() => {
     getDiscordWebhookStatus().then((status) => setIsDiscordConfigured(status.configured)).catch(() => setIsDiscordConfigured(false));
   }, []);
+
+  // Why the server read on open: the stream snapshot this modal also receives can be a poll old,
+  // and an operator about to change a restart policy edits the values the server holds. Opening the
+  // settings is a human read of that config, so it is the one that belongs on the audit trail —
+  // the stream that carries the same values on every tick is not.
+  useEffect(() => {
+    let active = true;
+    getContainerConfig()
+      .then((fresh) => {
+        if (!active) return;
+        const entry = fresh[containerId];
+        // No entry means the container has never been configured; the snapshot's defaults stand.
+        if (!entry) return;
+        setAutoRestart(entry.autoRestart);
+        setMaxRestarts(entry.maxRestarts);
+        setDiscordNotifications(entry.discordNotifications ?? true);
+      })
+      .catch(() => {
+        // The snapshot already rendered the values, so a read that could not run leaves them as they are.
+      });
+    return (): void => { active = false; };
+  }, [containerId]);
 
   const handleSave = async () => {
     setSaving(true);
