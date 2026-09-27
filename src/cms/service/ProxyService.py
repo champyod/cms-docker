@@ -363,6 +363,14 @@ class ProxyService(TriggeredService[ProxyOperation, ProxyExecutor]):
             tasks = dict()
 
             for task in contest.tasks:
+                # A task with no active dataset has no score type, and so
+                # no max score or extra headers, to announce.
+                if task.active_dataset is None:
+                    logger.warning("Skipping task %s of contest %s: it has "
+                                   "no active dataset.", task.name,
+                                   contest.name)
+                    continue
+
                 score_type = task.active_dataset.score_type_object
                 tasks[encode_id(task.name)] = {
                     "short_name": task.name,
