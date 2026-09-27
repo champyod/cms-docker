@@ -386,8 +386,8 @@ services:
     ports:
       - "${NGINX_BIND_IP:-0.0.0.0}:${NGINX_HTTP_PORT:-80}:80"
       - "${NGINX_BIND_IP:-0.0.0.0}:${NGINX_HTTPS_PORT:-443}:443"
-      - "127.0.0.1:${FUNNEL_PANEL_LISTEN:-8892}:8892"
-      - "127.0.0.1:${FUNNEL_RANKING_LISTEN:-8893}:8893"
+      - "${FUNNEL_BIND_IP:-127.0.0.1}:${FUNNEL_PANEL_LISTEN:-8892}:8892"
+      - "${FUNNEL_BIND_IP:-127.0.0.1}:${FUNNEL_RANKING_LISTEN:-8893}:8893"
     command: ["/usr/local/bin/render.sh"]
 
 

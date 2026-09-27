@@ -64,6 +64,7 @@ CMS_RANKING_LOG_DIR = "/var/local/log/cms/ranking"
 CMS_RANKING_LIB_DIR = "/var/local/lib/cms/ranking"
 DOMAIN_NAME = ""                # str; primary FQDN (e.g. grader.example.org); empty=cms.local
 DOMAIN_CERT_METHOD = "letsencrypt" # enum:letsencrypt,provided,selfsigned
+DOMAIN_NGINX_BIND_IP = "0.0.0.0" # str; address the domain nginx publishes 80/443 on; the wildcard is the public entry, set it to the box address to narrow it
 HSTS_MAX_AGE = 300              # num; seconds; 31536000=1yr prod; 300=staging
 SOCKET_PROXY = 0                # enum:0,1
 MONITOR_ENHANCED = 0            # enum:0,1
@@ -135,6 +136,7 @@ PROMETHEUS_PORT = 9090          # port
 PROMETHEUS_BIND_IP = "127.0.0.1"
 GRAFANA_PORT = 3001             # port
 GRAFANA_BIND_IP = "127.0.0.1"
+FUNNEL_BIND_IP = "127.0.0.1"     # str; address the funnel panel/ranking gateways publish on; loopback keeps them reachable only through the proxy, set it to the tailnet IP to reach them directly
 GRAFANA_ADMIN_USER = "admin"    # str
 GRAFANA_PASSWORD = ""           # secret; default 'admin' is insecure
 GRAFANA_ROOT_URL = "http://localhost:3001/"
