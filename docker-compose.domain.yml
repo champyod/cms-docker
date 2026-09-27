@@ -35,9 +35,11 @@ services:
       - cms-network
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # WHY: an empty bind default omits the host field, so the engine publishes on
+    # its own dual-stack wildcard; naming 0.0.0.0 here would pin IPv4 only.
     ports:
-      - "${DOMAIN_NGINX_BIND_IP:-0.0.0.0}:${DOMAIN_NGINX_HTTP_PORT:-80}:80"
-      - "${DOMAIN_NGINX_BIND_IP:-0.0.0.0}:${DOMAIN_NGINX_HTTPS_PORT:-443}:443"
+      - "${DOMAIN_NGINX_BIND_IP:-}:${DOMAIN_NGINX_HTTP_PORT:-80}:80"
+      - "${DOMAIN_NGINX_BIND_IP:-}:${DOMAIN_NGINX_HTTPS_PORT:-443}:443"
 
   certbot:
     image: certbot/certbot

@@ -729,7 +729,7 @@ VAR_SPECS=(
   "Infra & Monitoring|[infra]|BACKUP_MAX_AGE_DAYS|num||10"
   "Infra & Monitoring|[infra]|BACKUP_MAX_SIZE_GB|num||5"
   "Admin Panel|[admin]|DOMAIN_NAME|str||cms.local"
-  "Admin Panel|[admin]|DOMAIN_NGINX_BIND_IP|str||0.0.0.0"
+  "Admin Panel|[admin]|DOMAIN_NGINX_BIND_IP|str||"
   "Admin Panel|[admin]|DOMAIN_CERT_METHOD|str||letsencrypt"
   "Admin Panel|[admin]|HSTS_MAX_AGE|num||300"
   "Infra & Monitoring|[infra]|OFFSITE_TAILNET_NODE|str||"

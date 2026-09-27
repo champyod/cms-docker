@@ -64,7 +64,7 @@ CMS_RANKING_LOG_DIR = "/var/local/log/cms/ranking"
 CMS_RANKING_LIB_DIR = "/var/local/lib/cms/ranking"
 DOMAIN_NAME = ""                # str; primary FQDN (e.g. grader.example.org); empty=cms.local
 DOMAIN_CERT_METHOD = "letsencrypt" # enum:letsencrypt,provided,selfsigned
-DOMAIN_NGINX_BIND_IP = "0.0.0.0" # str; address the domain nginx publishes 80/443 on; the wildcard is the public entry, set it to the box address to narrow it
+DOMAIN_NGINX_BIND_IP = "" # str; address the domain nginx publishes 80/443 on; empty=engine wildcard on every interface (IPv4 and IPv6) — the public entry, set it to the box address to narrow it
 HSTS_MAX_AGE = 300              # num; seconds; 31536000=1yr prod; 300=staging
 SOCKET_PROXY = 0                # enum:0,1
 MONITOR_ENHANCED = 0            # enum:0,1
