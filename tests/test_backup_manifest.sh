@@ -148,6 +148,72 @@ check_eq "the drill reader reads the newest entry" \
      "$(entry_field "$QUIET_MANIFEST" 2 '.pg_version')")" \
   "$(drill_reader "$QUIET_MANIFEST")"
 
+# ---------------------------------------------------------------------------
+# 4. A retired set is marked in the manifest, and its entry is kept
+# ---------------------------------------------------------------------------
+# Rotation deletes the files, but the entry describing them outlives them: a reader cannot
+# tell a set the operator still holds from one whose files are gone, and an entry with no
+# file behind it reads as a failed run rather than a retired one. The mark is that
+# distinction, and it is additive — the record of what was taken, and when it stopped
+# existing, is the history a rotation must not throw away. Two retired sets are the
+# minimum that shows a loop marking more than one entry and still sparing the newest.
+printf '\n== rotation marks each entry it retired, and keeps the entry ==\n'
+new_run_root pruned-mark
+PRUNED_MANIFEST="${RUN_ROOT}/backups/manifest.json"
+
+# Two complete sets, each with an entry already on file, so the run rotates entries that
+# predate it rather than marking the one it is about to write itself.
+for old_ts in 20200101-000000 20200102-000000; do
+  printf 'superseded dump\n' > "${RUN_ROOT}/backups/db/cmsdb-${old_ts}.dump"
+  printf '%s  cmsdb-%s.dump\n' \
+    "0000000000000000000000000000000000000000000000000000000000000000" "$old_ts" \
+    > "${RUN_ROOT}/backups/db/cmsdb-${old_ts}.dump.sha256"
+  printf 'superseded archive\n' > "${RUN_ROOT}/backups/volumes/cms-data-${old_ts}.tar.gz"
+  printf '%s  cms-data-%s.tar.gz\n' \
+    "0000000000000000000000000000000000000000000000000000000000000000" "$old_ts" \
+    > "${RUN_ROOT}/backups/volumes/cms-data-${old_ts}.tar.gz.sha256"
+done
+jq -n --arg first 20200101-000000 --arg second 20200102-000000 '
+  def complete($ts):
+    {ts: $ts,
+     db_dump: ("db/cmsdb-" + $ts + ".dump"),
+     db_sha256: "0000000000000000000000000000000000000000000000000000000000000000",
+     vol_tar: ("volumes/cms-data-" + $ts + ".tar.gz"),
+     vol_sha256: "0000000000000000000000000000000000000000000000000000000000000000",
+     pg_version: "15.4",
+     sizes: {db_bytes: 18, vol_bytes: 21, total_bytes: 39}};
+  [complete($first), complete($second)]
+' > "$PRUNED_MANIFEST"
+
+# Only the count rule is left on, so the two retired sets go by the loop and the run keeps
+# its own: age and size pruning are off rather than unrepresentative, which would each
+# retire a set for a reason the mark never names.
+run_backup BACKUP_MAX_COUNT=1 BACKUP_MAX_AGE_DAYS=0 BACKUP_MAX_SIZE_GB=0
+expect_exit "a run that rotates its superseded sets is still a complete run" "0"
+
+check_eq "rotation removed the oldest dump" "0" \
+  "$(count_matching "${RUN_ROOT}/backups/db" 'cmsdb-20200101-000000.dump')"
+check_eq "rotation removed the oldest archive" "0" \
+  "$(count_matching "${RUN_ROOT}/backups/volumes" 'cms-data-20200101-000000.tar.gz')"
+check_eq "the set the run kept is the only one left on disk" "1" \
+  "$(count_matching "${RUN_ROOT}/backups/db" 'cmsdb-2*.dump')"
+
+check_eq "the entry whose files were removed is marked as retired" "true" \
+  "$(entry_field "$PRUNED_MANIFEST" 0 '.pruned')"
+check_eq "the second retired entry is marked as well" "true" \
+  "$(entry_field "$PRUNED_MANIFEST" 1 '.pruned')"
+# WHY the count is 3 and not 1: a mark that shortened the manifest would destroy the very
+# history it exists to record, and a reader counting entries is the only way to see that.
+check_eq "marking retired an entry kept every entry the file held" "3" \
+  "$(entry_count "$PRUNED_MANIFEST")"
+check_eq "a mark carries the moment the files stopped existing" "string" \
+  "$(entry_field "$PRUNED_MANIFEST" 0 '.pruned_at | type')"
+check_eq "the moment is named in UTC" "true" \
+  "$(entry_field "$PRUNED_MANIFEST" 0 \
+     '.pruned_at | tostring | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")')"
+check_eq "the newest entry, whose files are still on disk, is unmarked" "false" \
+  "$(entry_field "$PRUNED_MANIFEST" 2 'has("pruned")')"
+
 printf '\n== summary ==\n'
 printf 'PASS: %d  FAIL: %d\n' "$PASS" "$FAIL"
 [[ "$FAIL" -eq 0 ]] || exit 1
