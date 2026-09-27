@@ -168,6 +168,10 @@ dependencies = [
 [[package]]
 name = "cms-worker"
 version = "0.1.0"
+dependencies = [
+ "cms-proto",
+ "serde_json",
+]
 
 [[package]]
 name = "core-foundation-sys"

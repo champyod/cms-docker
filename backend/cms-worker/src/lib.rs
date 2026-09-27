@@ -28,6 +28,8 @@
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
+pub mod job;
+
 mod measure;
 mod stats;
 
