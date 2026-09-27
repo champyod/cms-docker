@@ -6,6 +6,7 @@ import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { Dialog } from '@/components/core/Dialog';
 import { ModalFooter } from '@/components/core/ModalFooter';
 import { LanguagePicker } from '@/components/core/LanguagePicker';
+import { InlineAlert } from '@/components/core/InlineAlert';
 import { normalizeLanguageCode } from '@/lib/constants/languages';
 import { apiClient } from '@/lib/apiClient';
 import { readFileAsBase64 } from '@/lib/file-helpers';
@@ -95,7 +96,7 @@ export function StatementModal({ isOpen, onClose, taskId, existingLanguages, onS
       }
       className="sm:max-w-md"
     >
-      {error ? <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
+      {error ? <InlineAlert tone="destructive" density="compact" className="mb-4 text-sm">{error}</InlineAlert> : null}
       <form id="statement-form" onSubmit={handleSubmit} className="space-y-4">
         <LanguagePicker value={language} onChange={setLanguage} extraOptions={existingLanguages} placeholder="en" label="Language" id="statement-language" />
         <div>

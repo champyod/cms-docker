@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react';
 import { Dialog } from '@/components/core/Dialog';
 import { ModalFooter } from '@/components/core/ModalFooter';
 import { Button } from '@/components/core/Button';
+import { InlineAlert } from '@/components/core/InlineAlert';
 import { cn } from '@/lib/utils';
-import { Power, RotateCcw, Bell, AlertTriangle } from 'lucide-react';
+import { Power, RotateCcw, Bell } from 'lucide-react';
 import { updateContainerConfig, resetRestartCount } from '@/app/actions/containerConfig';
 import { getDiscordWebhookStatus } from '@/lib/discord-notifier';
 import { toast } from 'sonner';
@@ -133,12 +134,9 @@ export function ContainerSettingsModal({
           </div>
 
           {!autoRestart && (
-            <div className="bg-warning/10 border border-warning/20 rounded-lg p-3">
-              <p className="text-xs text-warning flex items-start gap-1.5">
-                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                Container will NOT restart automatically on failure. You must start it manually via the UI.
-              </p>
-            </div>
+            <InlineAlert tone="warning" density="compact">
+              Container will NOT restart automatically on failure. You must start it manually via the UI.
+            </InlineAlert>
           )}
         </div>
         <div className="space-y-3">
@@ -200,20 +198,14 @@ export function ContainerSettingsModal({
           </div>
 
           {!discordNotifications && (
-            <div className="bg-warning/10 border border-warning/20 rounded-lg p-3">
-              <p className="text-xs text-warning flex items-start gap-1.5">
-                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                Discord notifications disabled. Container events will not be sent to webhook.
-              </p>
-            </div>
+            <InlineAlert tone="warning" density="compact">
+              Discord notifications disabled. Container events will not be sent to webhook.
+            </InlineAlert>
           )}
           {isDiscordConfigured === false && discordNotifications && (
-            <div className="bg-warning/10 border border-warning/20 rounded-lg p-3">
-              <p className="text-xs text-warning flex items-start gap-1.5">
-                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                Discord webhook is not configured. Notifications will be skipped until DISCORD_WEBHOOK_URL is set.
-              </p>
-            </div>
+            <InlineAlert tone="warning" density="compact">
+              Discord webhook is not configured. Notifications will be skipped until DISCORD_WEBHOOK_URL is set.
+            </InlineAlert>
           )}
         </div>
         <div className="bg-muted/40 border border-border rounded-lg p-4 space-y-2">
@@ -237,12 +229,9 @@ export function ContainerSettingsModal({
             </span>
           </div>
           {config.currentRestarts >= config.maxRestarts && (
-            <div className="bg-destructive/10 border border-destructive/20 rounded p-2 mt-2">
-              <p className="text-xs text-destructive flex items-start gap-1.5">
-                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                Restart limit reached! Container will not auto-restart until count is reset.
-              </p>
-            </div>
+            <InlineAlert tone="destructive" density="compact" className="rounded p-2 mt-2">
+              Restart limit reached! Container will not auto-restart until count is reset.
+            </InlineAlert>
           )}
         </div>
       </div>

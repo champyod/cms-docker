@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { addTeamToContest } from '@/app/actions/participations';
 import { Dialog } from '@/components/core/Dialog';
 import { Button } from '@/components/core/Button';
+import { InlineAlert } from '@/components/core/InlineAlert';
 
 interface AvailableTeam {
   id: number;
@@ -57,7 +58,7 @@ export function TeamBulkAddModal({ isOpen, onClose, contestId, teams: availableT
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }} title="Add Team to Contest" className="sm:max-w-md">
-      {error && <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+      {error && <InlineAlert tone="destructive" density="compact" className="mb-4 text-sm">{error}</InlineAlert>}
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-muted-foreground">Select Team</label>

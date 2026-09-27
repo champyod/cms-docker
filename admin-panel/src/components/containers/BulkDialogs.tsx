@@ -2,6 +2,7 @@
 
 import { Dialog } from '@/components/core/Dialog';
 import { ModalFooter } from '@/components/core/ModalFooter';
+import { InlineAlert } from '@/components/core/InlineAlert';
 import { RotateCcw, Trash2, ScrollText } from 'lucide-react';
 
 import { useDictionary } from '@/hooks/useDictionary';
@@ -35,9 +36,9 @@ function DiscordWarning({ isDiscordConfigured }: {
   const { discordWarning } = useDictionary().containers;
   if (isDiscordConfigured !== false) return null;
   return (
-    <div className="bg-warning/10 border border-warning/20 rounded-lg p-2 text-xs text-warning">
+    <InlineAlert tone="warning" density="compact" className="p-2">
       {discordWarning}
-    </div>
+    </InlineAlert>
   );
 }
 

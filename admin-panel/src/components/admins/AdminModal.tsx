@@ -14,6 +14,7 @@ import {
 } from '@/app/actions/adminPermissions';
 import { Dialog } from '@/components/core/Dialog';
 import { Button } from '@/components/core/Button';
+import { InlineAlert } from '@/components/core/InlineAlert';
 import { Input } from '@/components/core/Input';
 import { Card } from '@/components/core/Card';
 import { PasswordFieldWithKind } from '@/components/core/PasswordFieldWithKind';
@@ -313,11 +314,7 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData, callerPerm
       title={initialData ? 'Edit Administrator' : 'Add Administrator'}
       className="max-w-md max-h-[85vh] overflow-y-auto"
     >
-      {error && (
-        <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive text-sm">
-          {error}
-        </div>
-      )}
+      {error && <InlineAlert tone="destructive" density="compact" className="text-sm">{error}</InlineAlert>}
       <form onSubmit={handleSubmit} className="space-y-4">
         <RestrictedField
           canRead={initialData ? fieldAccess.name.canRead : canCreate}

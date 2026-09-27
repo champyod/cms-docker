@@ -2,7 +2,7 @@
 
 import { AlertTriangle, FileSpreadsheet, Table2, Upload, Wand2 } from 'lucide-react';
 import { Button } from '@/components/core/Button';
-import { cn } from '@/lib/utils';
+import { InlineAlert } from '@/components/core/InlineAlert';
 import { EXPECTED_FIELDS } from './csvTemplate';
 import type { GenerationMode } from './csvPreview';
 
@@ -28,13 +28,13 @@ export function HeaderWarnings({ warnings }: HeaderWarningsProps) {
   if (warnings.length === 0) return null;
 
   return (
-    <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-warning text-xs space-y-1">
+    <InlineAlert tone="warning" density="compact" className="space-y-1 border-warning/30">
       {warnings.map((warning) => (
         <div key={warning} className="flex items-center gap-2">
           <AlertTriangle className="w-3 h-3" /> {warning}
         </div>
       ))}
-    </div>
+    </InlineAlert>
   );
 }
 
@@ -44,21 +44,21 @@ interface SubmitResultBannerProps {
 }
 
 export function SubmitResultBanner({ result, onDownloadCredentials }: SubmitResultBannerProps) {
+  const downloadAction = result.success && result.downloadUrl ? (
+    <Button variant="secondary" size="sm" icon={FileSpreadsheet} onClick={onDownloadCredentials}>
+      Download Credentials CSV
+    </Button>
+  ) : undefined;
   return (
-    <div className={cn(
-      'rounded-lg border p-3 text-xs',
-      result.success ? 'border-success/30 bg-success/10 text-success' : 'border-destructive/30 bg-destructive/10 text-destructive'
-    )}>
+    <InlineAlert
+      tone={result.success ? 'success' : 'destructive'}
+      density="compact"
+      className={result.success ? 'border-success/30' : 'border-destructive/30'}
+      actions={downloadAction}
+    >
       {result.success ? (
         <div className="space-y-1">
           <div>Created: {result.createdCount} | Failed: {result.failedCount}</div>
-          {result.downloadUrl && (
-            <div className="pt-2">
-              <Button variant="secondary" size="sm" icon={FileSpreadsheet} onClick={onDownloadCredentials}>
-                Download Credentials CSV
-              </Button>
-            </div>
-          )}
           {Array.isArray(result.failed) && result.failed.length > 0 && (
             <div className="max-h-32 overflow-auto">
               {result.failed.map((failure) => (
@@ -70,7 +70,7 @@ export function SubmitResultBanner({ result, onDownloadCredentials }: SubmitResu
       ) : (
         <div>{result.error || 'Bulk create failed'}</div>
       )}
-    </div>
+    </InlineAlert>
   );
 }
 

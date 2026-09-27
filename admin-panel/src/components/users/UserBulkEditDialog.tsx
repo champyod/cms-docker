@@ -4,6 +4,7 @@ import { Download, Wand2 } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { Dialog } from '@/components/core/Dialog';
 import { ModalFooter } from '@/components/core/ModalFooter';
+import { InlineAlert } from '@/components/core/InlineAlert';
 import { PasswordKindSelector } from '@/components/core/PasswordFieldWithKind';
 import type { Dictionary } from '@/lib/dictionary';
 import { BulkEditPreviewTable, ContestSection, ProfileSection, TeamSection } from './bulkEditSections';
@@ -112,8 +113,8 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, c
           onRunEmailClear={runEmailClear}
         />
 
-        {statusMessage && <div className="rounded-lg border border-success/30 bg-success/10 p-3 text-xs text-success">{statusMessage}</div>}
-        {errorMessage && <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">{errorMessage}</div>}
+        {statusMessage && <InlineAlert tone="success" density="compact" className="border-success/30">{statusMessage}</InlineAlert>}
+        {errorMessage && <InlineAlert tone="destructive" density="compact" className="border-destructive/30">{errorMessage}</InlineAlert>}
 
         <BulkEditPreviewTable
           rows={rows}

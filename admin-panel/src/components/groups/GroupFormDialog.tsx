@@ -7,6 +7,7 @@ import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
 import { Dialog } from '@/components/core/Dialog';
 import { Input } from '@/components/core/Input';
+import { InlineAlert } from '@/components/core/InlineAlert';
 import type { PermissionDefinition } from '@/lib/permission-registry';
 import type { GroupWithPermissions } from '@/app/actions/adminPermissions';
 import type { GroupsDict, GroupFormData } from './groupListTypes';
@@ -57,11 +58,7 @@ export function GroupFormDialog({
       title={selectedGroup ? dict.editGroup : dict.createGroup}
       className="max-w-2xl max-h-[85vh] overflow-y-auto"
     >
-      {error && (
-        <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive text-sm">
-          {error}
-        </div>
-      )}
+      {error && <InlineAlert tone="destructive" density="compact" className="text-sm">{error}</InlineAlert>}
       <div className="space-y-4">
         <Input
           label={dict.name}

@@ -4,6 +4,7 @@ import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
 import { Input } from '@/components/core/Input';
 import { Stack } from '@/components/core/Layout';
+import { InlineAlert } from '@/components/core/InlineAlert';
 
 interface Props {
   baseUrl: string;
@@ -51,7 +52,7 @@ export function RankingConnectionCard({
             Status: <span className={connected ? 'text-emerald-400' : 'text-amber-400'}>{connected ? 'Connected' : 'Disconnected'}</span>
           </span>
         </Stack>
-        {errorMessage && <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">{errorMessage}</div>}
+        {errorMessage && <InlineAlert tone="destructive" className="rounded-xl border-destructive/20 text-destructive">{errorMessage}</InlineAlert>}
       </Stack>
     </Card>
   );

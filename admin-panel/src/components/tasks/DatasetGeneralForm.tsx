@@ -1,8 +1,8 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { AlertCircle } from 'lucide-react';
 import { DatasetScoreParamsEditor } from './DatasetScoreParamsEditor';
+import { InlineAlert } from '@/components/core/InlineAlert';
 import { convertScoreParams } from './dataset-score-params';
 
 interface DatasetFormData {
@@ -76,12 +76,7 @@ export function DatasetGeneralForm({
   };
   return (
     <form id="dataset-form" onSubmit={onSubmit} className="space-y-6">
-      {error && (
-        <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg flex items-center gap-3 text-destructive">
-          <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          <p className="text-sm">{error}</p>
-        </div>
-      )}
+      {error && <InlineAlert tone="destructive" className="border-destructive/20 text-destructive">{error}</InlineAlert>}
 
       <div className="space-y-4">
         <div>

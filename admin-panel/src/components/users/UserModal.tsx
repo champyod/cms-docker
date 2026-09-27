@@ -9,6 +9,7 @@ import { ModalFooter } from '@/components/core/ModalFooter';
 import { PasswordFieldWithKind } from '@/components/core/PasswordFieldWithKind';
 import { SavedSecretReveal } from '@/components/core/SavedSecretReveal';
 import { RestrictedField } from '@/components/core/RestrictedField';
+import { InlineAlert } from '@/components/core/InlineAlert';
 import { toast } from 'sonner';
 import { apiClient } from '@/lib/apiClient';
 import { getFieldAccess, stripDisallowedFields } from '@/lib/field-permissions';
@@ -137,11 +138,7 @@ export function UserModal({ isOpen, onClose, user, contests = [], canReadContest
       description={navigation.people.users.label}
       className="sm:max-w-md"
     >
-      {error && (
-        <div className="mb-4 p-3 border border-destructive/30 bg-destructive/10 rounded-lg text-destructive text-sm">
-          {error}
-        </div>
-      )}
+      {error && <InlineAlert tone="destructive" density="compact" className="mb-4 border-destructive/30 text-sm">{error}</InlineAlert>}
       <form id="user-form" onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <RestrictedField

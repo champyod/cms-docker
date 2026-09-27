@@ -5,6 +5,7 @@ import { Upload } from 'lucide-react';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { Dialog } from '@/components/core/Dialog';
 import { ModalFooter } from '@/components/core/ModalFooter';
+import { InlineAlert } from '@/components/core/InlineAlert';
 import { apiClient } from '@/lib/apiClient';
 import { readFileAsBase64 } from '@/lib/file-helpers';
 
@@ -95,7 +96,7 @@ export function AttachmentModal({ isOpen, onClose, taskId, onSuccess }: Attachme
       }
       className="sm:max-w-md"
     >
-      {error && <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+      {error && <InlineAlert tone="destructive" density="compact" className="mb-4 text-sm">{error}</InlineAlert>}
       <form id="attachment-form" onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="mb-2 block text-xs font-bold uppercase text-muted-foreground">File</label>

@@ -5,6 +5,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import { Button } from '@/components/core/Button';
 import { Dialog } from '@/components/core/Dialog';
 import { Input } from '@/components/core/Input';
+import { InlineAlert } from '@/components/core/InlineAlert';
 import type { GroupsDict } from './groupListTypes';
 
 interface GroupDeleteDialogProps {
@@ -38,11 +39,7 @@ export function GroupDeleteDialog({
       description={dict.deleteConfirm}
       className="max-w-md"
     >
-      {error && (
-        <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive text-sm">
-          {error}
-        </div>
-      )}
+      {error && <InlineAlert tone="destructive" density="compact" className="text-sm">{error}</InlineAlert>}
       <div className="space-y-4">
         <Input
           label="Reason"

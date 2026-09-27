@@ -8,6 +8,7 @@ import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { Dialog } from '@/components/core/Dialog';
 import { ResponsiveModalShell } from '@/components/core/ResponsiveModalShell';
 import { ModalFooter } from '@/components/core/ModalFooter';
+import { InlineAlert } from '@/components/core/InlineAlert';
 import { cn } from '@/lib/utils';
 import { parseIntervalToSeconds } from '@/lib/task-intervals';
 import { getFieldAccess, type FieldAccess } from '@/lib/field-permissions';
@@ -221,7 +222,7 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
         >
           <div className="p-8">
             <form id="task-form" onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
-              {error && <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+              {error && <InlineAlert tone="destructive" className="rounded-xl border-destructive/20 text-destructive">{error}</InlineAlert>}
               {activeTab === 'general' && <GeneralTab formData={formData} onChange={setFormData} />}
               {activeTab === 'grading' && <GradingTab formData={formData} onChange={setFormData} />}
               {activeTab === 'limits' && <LimitsTab formData={formData} onChange={setFormData} />}

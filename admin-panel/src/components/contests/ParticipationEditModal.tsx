@@ -5,6 +5,7 @@ import { useParticipationEditState } from './participation-edit/useParticipation
 import { revealParticipationPassword } from '@/app/actions/participations';
 import { SettingsTab, MessageTab } from './participation-edit/ParticipationEditTabs';
 import { Dialog } from '@/components/core/Dialog';
+import { InlineAlert } from '@/components/core/InlineAlert';
 import { cn } from '@/lib/utils';
 
 interface ParticipationEditModalProps {
@@ -32,7 +33,7 @@ export function ParticipationEditModal({ isOpen, onClose, participation, adminId
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) s.handleClose(); }} title={`Edit: ${participation.users.username}`}>
       <EditTabs activeTab={s.activeTab} onSelect={s.setActiveTab} />
-      {s.error && <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{s.error}</div>}
+      {s.error && <InlineAlert tone="destructive" density="compact" className="mb-4 text-sm">{s.error}</InlineAlert>}
       {s.activeTab === 'settings' ? (
         // Why always revealable here: this subtree carries no permission context, so the
         // server action remains the gate (403 + audit on denial), exactly as before.

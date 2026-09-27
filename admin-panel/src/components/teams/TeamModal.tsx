@@ -6,6 +6,7 @@ import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { ModalFooter } from '@/components/core/ModalFooter';
 import { Dialog } from '@/components/core/Dialog';
 import { RestrictedField } from '@/components/core/RestrictedField';
+import { InlineAlert } from '@/components/core/InlineAlert';
 import type { Dictionary } from '@/lib/dictionary';
 import { getFieldAccess, stripDisallowedFields } from '@/lib/field-permissions';
 
@@ -98,11 +99,7 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData, permissionK
       className="sm:max-w-md"
     >
       <form id="team-form" onSubmit={handleSubmit} className="space-y-4">
-        {error && (
-          <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive text-sm">
-            {error}
-          </div>
-        )}
+        {error && <InlineAlert tone="destructive" density="compact" className="border-destructive/30 text-sm">{error}</InlineAlert>}
 
         <RestrictedField
           canRead={fieldAccess.code.canRead}
