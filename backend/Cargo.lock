@@ -140,6 +140,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cms-db"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "sqlx",
+ "subtle",
+]
+
+[[package]]
 name = "cms-proto"
 version = "0.1.0"
 dependencies = [
