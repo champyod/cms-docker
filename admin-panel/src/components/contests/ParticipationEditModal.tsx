@@ -33,7 +33,7 @@ export function ParticipationEditModal({ isOpen, onClose, participation, adminId
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) s.handleClose(); }} title={`Edit: ${participation.users.username}`}>
       <EditTabs activeTab={s.activeTab} onSelect={s.setActiveTab} />
-      {s.error && <InlineAlert tone="destructive" density="compact" className="mb-4 text-sm">{s.error}</InlineAlert>}
+      {s.error && <InlineAlert tone="destructive" density="regular" className="mb-4">{s.error}</InlineAlert>}
       {s.activeTab === 'settings' ? (
         // Why always revealable here: this subtree carries no permission context, so the
         // server action remains the gate (403 + audit on denial), exactly as before.

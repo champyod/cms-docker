@@ -99,7 +99,7 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData, permissionK
       className="sm:max-w-md"
     >
       <form id="team-form" onSubmit={handleSubmit} className="space-y-4">
-        {error && <InlineAlert tone="destructive" density="compact" className="border-destructive/30 text-sm">{error}</InlineAlert>}
+        {error && <InlineAlert tone="destructive" density="regular" className="border-destructive/30">{error}</InlineAlert>}
 
         <RestrictedField
           canRead={fieldAccess.code.canRead}

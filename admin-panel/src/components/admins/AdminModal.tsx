@@ -314,7 +314,7 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData, callerPerm
       title={initialData ? 'Edit Administrator' : 'Add Administrator'}
       className="max-w-md max-h-[85vh] overflow-y-auto"
     >
-      {error && <InlineAlert tone="destructive" density="compact" className="text-sm">{error}</InlineAlert>}
+      {error && <InlineAlert tone="destructive" density="regular">{error}</InlineAlert>}
       <form onSubmit={handleSubmit} className="space-y-4">
         <RestrictedField
           canRead={initialData ? fieldAccess.name.canRead : canCreate}

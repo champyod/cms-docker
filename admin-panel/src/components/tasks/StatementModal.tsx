@@ -96,7 +96,7 @@ export function StatementModal({ isOpen, onClose, taskId, existingLanguages, onS
       }
       className="sm:max-w-md"
     >
-      {error ? <InlineAlert tone="destructive" density="compact" className="mb-4 text-sm">{error}</InlineAlert> : null}
+      {error ? <InlineAlert tone="destructive" density="regular" className="mb-4">{error}</InlineAlert> : null}
       <form id="statement-form" onSubmit={handleSubmit} className="space-y-4">
         <LanguagePicker value={language} onChange={setLanguage} extraOptions={existingLanguages} placeholder="en" label="Language" id="statement-language" />
         <div>

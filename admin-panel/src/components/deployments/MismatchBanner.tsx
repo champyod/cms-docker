@@ -19,7 +19,7 @@ function listDisagreeingSources(activeContestId: number | null, dbActiveContestI
 export function MismatchBanner({ activeContestId, activeContestName, dbActiveContestId, containerContestId }: MismatchBannerProps) {
     const disagreeing = listDisagreeingSources(activeContestId, dbActiveContestId, containerContestId);
     return (
-        <InlineAlert tone="warning" title="Configuration Mismatch" className="mb-6">
+        <InlineAlert tone="warning" title="Configuration Mismatch" announce="polite" className="mb-6">
             <Text variant="small">
                 The config.toml <strong className="text-foreground">[contest] CONTEST_ID</strong> setting points to contest <strong className="text-foreground">#{activeContestId}</strong>
                 {activeContestName ? ` (${activeContestName})` : ''}

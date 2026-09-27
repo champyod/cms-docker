@@ -39,7 +39,7 @@ export function GroupDeleteDialog({
       description={dict.deleteConfirm}
       className="max-w-md"
     >
-      {error && <InlineAlert tone="destructive" density="compact" className="text-sm">{error}</InlineAlert>}
+      {error && <InlineAlert tone="destructive" density="regular">{error}</InlineAlert>}
       <div className="space-y-4">
         <Input
           label="Reason"

@@ -36,7 +36,7 @@ function DiscordWarning({ isDiscordConfigured }: {
   const { discordWarning } = useDictionary().containers;
   if (isDiscordConfigured !== false) return null;
   return (
-    <InlineAlert tone="warning" density="compact" className="p-2">
+    <InlineAlert tone="warning" density="compact" announce="polite" className="p-2">
       {discordWarning}
     </InlineAlert>
   );

@@ -68,12 +68,30 @@ vi.mock('@/components/users/bulkEditActions', async (importOriginal) => ({
 
 type Tone = 'info' | 'success' | 'warning' | 'destructive';
 
+/**
+ * The typography a strip is authored at, held as whole class tokens so a
+ * per-site `className` override cannot quietly take ownership of it again.
+ */
+interface StripScale {
+  readonly present: readonly string[];
+  readonly absent: readonly string[];
+}
+
+const PAGE_SCALE: StripScale = { present: ['p-4', 'text-sm'], absent: ['p-3', 'text-xs'] };
+const REGULAR_SCALE: StripScale = { present: ['p-3', 'text-sm'], absent: ['p-4', 'text-xs'] };
+
 /** Pins the three things a strip is: it announces itself, it wears one tone, it says its message. */
-function expectStrip(tone: Tone, message: string): HTMLElement {
-  const alert = screen.getByRole('alert');
-  expect(alert.className).toContain(`border-${tone}/`);
-  expect(alert.textContent).toContain(message);
-  return alert;
+function expectStrip(tone: Tone, message: string, role: 'alert' | 'status' = 'alert'): HTMLElement {
+  const strip = screen.getByRole(role);
+  expect(strip.className).toContain(`border-${tone}/`);
+  expect(strip.textContent).toContain(message);
+  return strip;
+}
+
+function expectScale(strip: HTMLElement, scale: StripScale): void {
+  const tokens = strip.className.split(' ');
+  for (const token of scale.present) expect(tokens).toContain(token);
+  for (const token of scale.absent) expect(tokens).not.toContain(token);
 }
 
 function submitForm(): void {
@@ -107,42 +125,42 @@ function openBulkDialogs(isDiscordConfigured: boolean | null): void {
 
 // Why one table: every strip here is the same contract — a message the reader did not just
 // cause, rendered through InlineAlert — so only the seam that raises it differs per case.
-function stripping(label: string, message: string, node: React.ReactNode, trigger?: () => void): { label: string; message: string; raise: () => void } {
-  return { label, message, raise: (): void => { render(node); trigger?.(); } };
+function stripping(label: string, message: string, node: React.ReactNode, scale: StripScale, trigger?: () => void): { label: string; message: string; scale: StripScale; raise: () => void } {
+  return { label, message, scale, raise: (): void => { render(node); trigger?.(); } };
 }
 
 const FAILURE_CASES = [
   stripping('participation create', 'Failed to load participation data',
-    <ParticipationModal isOpen onClose={NOOP} participationId={4} username="ada" teams={[]} onSuccess={NOOP} />),
+    <ParticipationModal isOpen onClose={NOOP} participationId={4} username="ada" teams={[]} onSuccess={NOOP} />, REGULAR_SCALE),
   stripping('group create', 'Group name is required',
-    <GroupFormDialog open setOpen={NOOP} selectedGroup={null} dict={en.groups} formData={{ name: '', description: '', permissionKeys: [], reason: '' }} setFormData={NOOP} groupedPermissions={new Map()} effectivePreview={new Set<string>()} error="Group name is required" loading={false} onTogglePermission={NOOP} onToggleModule={NOOP} onSave={NOOP} />),
+    <GroupFormDialog open setOpen={NOOP} selectedGroup={null} dict={en.groups} formData={{ name: '', description: '', permissionKeys: [], reason: '' }} setFormData={NOOP} groupedPermissions={new Map()} effectivePreview={new Set<string>()} error="Group name is required" loading={false} onTogglePermission={NOOP} onToggleModule={NOOP} onSave={NOOP} />, REGULAR_SCALE),
   stripping('group delete', 'Group is still referenced',
-    <GroupDeleteDialog open setOpen={NOOP} dict={en.groups} error="Group is still referenced" deleteReason="" setDeleteReason={NOOP} loading={false} onDelete={NOOP} />),
+    <GroupDeleteDialog open setOpen={NOOP} dict={en.groups} error="Group is still referenced" deleteReason="" setDeleteReason={NOOP} loading={false} onDelete={NOOP} />, REGULAR_SCALE),
   stripping('dataset form', 'Dataset description is required',
-    <DatasetGeneralForm formData={DATASET_FORM} onChange={NOOP} onSubmit={NOOP} error="Dataset description is required" scoreParamsError="" taskParamsError="" onScoreParamsChange={NOOP} onScoreParamsError={NOOP} onTaskParamsTextChange={NOOP} />),
+    <DatasetGeneralForm formData={DATASET_FORM} onChange={NOOP} onSubmit={NOOP} error="Dataset description is required" scoreParamsError="" taskParamsError="" onScoreParamsChange={NOOP} onScoreParamsError={NOOP} onTaskParamsTextChange={NOOP} />, PAGE_SCALE),
   stripping('ranking connect', 'Ranking server unreachable',
-    <RankingConnectionCard baseUrl="" username="" password="" connected={false} loadingSession={false} errorMessage="Ranking server unreachable" onBaseUrl={NOOP} onUsername={NOOP} onPassword={NOOP} onConnect={NOOP} canManage={false} />),
+    <RankingConnectionCard baseUrl="" username="" password="" connected={false} loadingSession={false} errorMessage="Ranking server unreachable" onBaseUrl={NOOP} onUsername={NOOP} onPassword={NOOP} onConnect={NOOP} canManage={false} />, PAGE_SCALE),
   stripping('admin create', 'Name and Username are required',
-    <AdminModal isOpen onClose={NOOP} onSuccess={NOOP} initialData={null} callerPermissions={['admin:create']} canRevealPassword={false} />, submitForm),
+    <AdminModal isOpen onClose={NOOP} onSuccess={NOOP} initialData={null} callerPermissions={['admin:create']} canRevealPassword={false} />, REGULAR_SCALE, submitForm),
   stripping('user create', 'Save failed',
-    <UserModal isOpen onClose={NOOP} onSuccess={NOOP} canReadContests={false} permissionKeys={['user:read', 'user:update']} navigation={en.navigation} />, submitForm),
+    <UserModal isOpen onClose={NOOP} onSuccess={NOOP} canReadContests={false} permissionKeys={['user:read', 'user:update']} navigation={en.navigation} />, REGULAR_SCALE, submitForm),
   stripping('team create', 'All fields are required',
-    <TeamModal isOpen onClose={NOOP} onSuccess={NOOP} permissionKeys={['team:read', 'team:update']} navigation={en.navigation} />, submitForm),
+    <TeamModal isOpen onClose={NOOP} onSuccess={NOOP} permissionKeys={['team:read', 'team:update']} navigation={en.navigation} />, REGULAR_SCALE, submitForm),
   stripping('task create', 'Save failed',
-    <TaskModal isOpen onClose={NOOP} onSuccess={NOOP} />, submitForm),
+    <TaskModal isOpen onClose={NOOP} onSuccess={NOOP} />, PAGE_SCALE, submitForm),
   stripping('attachment upload', 'Please select a file',
-    <AttachmentModal isOpen onClose={NOOP} taskId={4} onSuccess={NOOP} />, submitForm),
+    <AttachmentModal isOpen onClose={NOOP} taskId={4} onSuccess={NOOP} />, REGULAR_SCALE, submitForm),
   stripping('statement upload', 'Please select a file',
-    <StatementModal isOpen onClose={NOOP} taskId={4} existingLanguages={['en']} onSuccess={NOOP} />, submitForm),
+    <StatementModal isOpen onClose={NOOP} taskId={4} existingLanguages={['en']} onSuccess={NOOP} />, REGULAR_SCALE, submitForm),
   {
-    label: 'participation edit', message: 'Participation rejected',
+    label: 'participation edit', message: 'Participation rejected', scale: REGULAR_SCALE,
     raise: (): void => {
       render(<ParticipationEditModal isOpen onClose={NOOP} adminId={2} participation={{ id: 4, hidden: false, unrestricted: false, password: null, users: { username: 'ada', first_name: 'A', last_name: 'B' } }} />);
       fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
     },
   },
   {
-    label: 'team bulk add', message: 'Team already in contest',
+    label: 'team bulk add', message: 'Team already in contest', scale: REGULAR_SCALE,
     raise: (): void => {
       render(<TeamBulkAddModal isOpen onClose={NOOP} contestId={1} teams={[{ id: 3, name: 'Thailand', code: 'THA' }]} onSuccess={NOOP} />);
       fireEvent.change(screen.getByRole('combobox'), { target: { value: '3' } });
@@ -157,9 +175,10 @@ const NOTE_CASES: ReadonlyArray<{ label: string; tone: Tone; message: string; op
 ];
 
 describe('every save-failure strip announces itself in the destructive tone', () => {
-  it.each(FAILURE_CASES)('$label names the failure it was given', async ({ message, raise }) => {
+  it.each(FAILURE_CASES)('$label names its failure at the scale the primitive owns', async ({ message, scale, raise }) => {
     raise();
-    await vi.waitFor(() => expectStrip('destructive', message));
+    const strip = await vi.waitFor(() => expectStrip('destructive', message));
+    expectScale(strip, scale);
   });
 });
 
@@ -176,9 +195,11 @@ describe('the container and bulk notes keep the compact warning scale', () => {
     expect(expectStrip('destructive', 'Restart limit reached!').className).toContain('p-2');
   });
 
-  it('keeps the bulk discord notice at the same tighter box', () => {
+  it('keeps the bulk discord notice polite, since the webhook state was not the reader doing', () => {
     openBulkDialogs(false);
-    expect(expectStrip('warning', en.containers.discordWarning).className).toContain('p-2');
+    const strip = expectStrip('warning', en.containers.discordWarning, 'status');
+    expect(strip.className).toContain('p-2');
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('announces an unconfigured discord webhook on the enabled tab', async () => {

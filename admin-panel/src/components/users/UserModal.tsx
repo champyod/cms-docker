@@ -138,7 +138,7 @@ export function UserModal({ isOpen, onClose, user, contests = [], canReadContest
       description={navigation.people.users.label}
       className="sm:max-w-md"
     >
-      {error && <InlineAlert tone="destructive" density="compact" className="mb-4 border-destructive/30 text-sm">{error}</InlineAlert>}
+      {error && <InlineAlert tone="destructive" density="regular" className="mb-4 border-destructive/30">{error}</InlineAlert>}
       <form id="user-form" onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <RestrictedField

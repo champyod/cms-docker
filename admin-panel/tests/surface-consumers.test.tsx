@@ -160,11 +160,12 @@ describe('row action clusters render through RowActions', () => {
 });
 
 describe('warning strips render through InlineAlert', () => {
-  it('announces the configuration mismatch with its source detail', () => {
+  it('keeps the configuration mismatch polite, since the page found it on arrival', () => {
     const html = renderToStaticMarkup(
       <MismatchBanner activeContestId={12} activeContestName="Autumn" dbActiveContestId={10} containerContestId={10} />,
     );
-    expect(html).toContain('role="alert"');
+    expect(html).toContain('role="status"');
+    expect(html).not.toContain('role="alert"');
     expect(html).toContain('Configuration Mismatch');
   });
 

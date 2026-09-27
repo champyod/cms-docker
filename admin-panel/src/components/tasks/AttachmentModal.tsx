@@ -96,7 +96,7 @@ export function AttachmentModal({ isOpen, onClose, taskId, onSuccess }: Attachme
       }
       className="sm:max-w-md"
     >
-      {error && <InlineAlert tone="destructive" density="compact" className="mb-4 text-sm">{error}</InlineAlert>}
+      {error && <InlineAlert tone="destructive" density="regular" className="mb-4">{error}</InlineAlert>}
       <form id="attachment-form" onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="mb-2 block text-xs font-bold uppercase text-muted-foreground">File</label>

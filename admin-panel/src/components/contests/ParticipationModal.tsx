@@ -27,7 +27,7 @@ export function ParticipationModal({ isOpen, onClose, participationId, username,
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }} title="Participation Settings" description={username}>
-      {error && <InlineAlert tone="destructive" density="compact" className="mb-4 text-sm">{error}</InlineAlert>}
+      {error && <InlineAlert tone="destructive" density="regular" className="mb-4">{error}</InlineAlert>}
       {loading ? (
         <div className="p-8 text-center text-muted-foreground">Loading...</div>
       ) : (
