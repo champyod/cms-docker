@@ -6,9 +6,9 @@
 # Data model (backward compatible):
 #   config.toml [worker] : WORKER_<shard> = "host:port"  <- registry (source);
 #                          scripts/__config_sync.sh renders it into .env
-#   .env                 : WORKER_<shard>=host:port      <- legacy fallback,
-#                                                     read only when config.toml
-#                                                     has no such row
+#   .env                 : WORKER_<shard>=host:port      <- rendered copy of the
+#                                                     rows above, never a row
+#                                                     source of its own
 #   config.toml [worker] : all existing vars untouched    <- per-host worker defaults
 #                 WORKER_SHARD<n>_LOCAL = 0       <- OPTIONAL: registry-only,
 #                                                 skip local deployment
@@ -163,12 +163,13 @@ is_local_host() {
   return 1
 }
 
-# Merged WORKER_<n> rows as "shard<TAB>host:port", config.toml first.
-# WHY config.toml wins: scripts/__config_sync.sh regenerates .env FROM
-# config.toml, so config.toml is the source and .env is its render. A row
-# living only in .env is never seen by compose (which reads config.toml) and
-# a stale .env value silently overrides the real one — that inversion is what
-# made an orphan row deploy as an unresolvable fleet. Both shapes warn once.
+# WORKER_<n> rows as "shard<TAB>host:port", read from config.toml [worker] only.
+# WHY config.toml alone: scripts/__config_sync.sh rebuilds .env from config.toml
+# on every run, so config.toml is the source and .env is only its render. A row
+# no config.toml entry backs is therefore an orphan: compose never sees it, so it
+# can never be deployed, and a shard listed only in .env resolves to nothing.
+# Both disagreement shapes still warn once, so an orphan is never dropped
+# quietly either.
 registry_rows() {
   local -A toml_v=() env_v=()
   local -a keys=() drift=()
@@ -192,10 +193,11 @@ registry_rows() {
   fi
   if [ "${#env_v[@]}" -gt 0 ]; then
     for k in "${!env_v[@]}"; do
-      keys+=("$k")
       if [ -z "${toml_v[$k]+set}" ]; then
-        drift+=("shard $k exists only in .env (${env_v[$k]}) and no config.toml row resolves it")
-      elif [ "${toml_v[$k]}" != "${env_v[$k]}" ]; then
+        drift+=("shard $k exists only in .env (${env_v[$k]}) and no config.toml row backs it - not in the fleet")
+        continue
+      fi
+      if [ "${toml_v[$k]}" != "${env_v[$k]}" ]; then
         drift+=("shard $k: .env=${env_v[$k]} vs config.toml=${toml_v[$k]}")
       fi
     done
@@ -210,7 +212,7 @@ registry_rows() {
 
   printf '%s\n' ${keys[@]+"${keys[@]}"} | sort -n -u | while IFS= read -r k; do
     [ -n "$k" ] || continue
-    printf '%s\t%s\n' "$k" "${toml_v[$k]:-${env_v[$k]:-}}"
+    printf '%s\t%s\n' "$k" "${toml_v[$k]}"
   done
 }
 
