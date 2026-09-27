@@ -10,6 +10,7 @@ import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import { useDictionary } from '@/hooks/useDictionary';
 import { Calendar, CheckCircle2, Clock, ExternalLink, Pencil, Power, Trash2 } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
+import { ACTION_PERMISSIONS, hasEffectivePermission } from '@/lib/permission-engine';
 
 export interface ContestRowData {
   id: number;
@@ -107,24 +108,23 @@ export function getContestRowProps(contest: ContestRowData): ResponsiveRowProps 
 
 interface ContestRowActionsProps {
   contest: ContestRowData;
-  canDeploy: boolean;
-  canManage: boolean;
-  canUpdate: boolean;
+  permissionKeys: readonly string[];
   onSetActive: (id: number) => void;
   onEdit: (id: number) => void;
 }
 
 // Why: shared by desktop rows and mobile cards, with 44px targets kept
 // in this fragment so both layouts stay touch-sized.
-export function ContestRowActions({ contest, canDeploy, canManage, canUpdate, onSetActive, onEdit }: ContestRowActionsProps): React.JSX.Element {
+export function ContestRowActions({ contest, permissionKeys, onSetActive, onEdit }: ContestRowActionsProps): React.JSX.Element {
   const router = useAppRouter();
   const confirm = useConfirm();
   const { destructiveConfirm } = useConfirmationCopy();
   const runAction = useActionFeedback();
   const dict = useDictionary();
+  const effective = new Set(permissionKeys);
 
   const handleDelete = async (): Promise<void> => {
-    if (!canManage) return;
+    if (!hasEffectivePermission(effective, ACTION_PERMISSIONS.deleteContest)) return;
     if (!(await confirm(destructiveConfirm('contest')))) return;
     const result = await runAction(
       { pending: 'Deleting contest...', success: 'Contest deleted', failure: 'Failed to delete contest' },
@@ -135,10 +135,11 @@ export function ContestRowActions({ contest, canDeploy, canManage, canUpdate, on
   return (
     <RowActions
       ariaLabel={rowActionGroupLabel(dict, 'contests')}
+      permissionKeys={permissionKeys}
       actions={[
-        { key: 'edit', label: 'Edit', ariaLabel: `Edit ${contest.name}`, icon: Pencil, onClick: () => onEdit(contest.id), isVisible: canUpdate, className: 'min-h-11 min-w-11' },
-        { key: 'activate', label: 'Set Active', icon: Power, onClick: () => onSetActive(contest.id), isVisible: canDeploy && contest.is_active !== true, className: 'min-h-11 min-w-11' },
-        { key: 'delete', label: 'Delete', icon: Trash2, onClick: () => { void handleDelete(); }, isVisible: canManage, className: 'min-h-11 min-w-11' },
+        { key: 'edit', label: 'Edit', ariaLabel: `Edit ${contest.name}`, icon: Pencil, onClick: () => onEdit(contest.id), permission: ACTION_PERMISSIONS.updateContest, className: 'min-h-11 min-w-11' },
+        { key: 'activate', label: 'Set Active', icon: Power, onClick: () => onSetActive(contest.id), permission: ACTION_PERMISSIONS.deployContest, showWhen: contest.is_active !== true, className: 'min-h-11 min-w-11' },
+        { key: 'delete', label: 'Delete', icon: Trash2, onClick: () => { void handleDelete(); }, permission: ACTION_PERMISSIONS.deleteContest, className: 'min-h-11 min-w-11' },
       ]}
     />
   );

@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { ensurePermission, getPermissions } from '@/lib/permissions';
+import { ACTION_PERMISSIONS } from '@/lib/permission-engine';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { recordAudit } from '@/lib/audit';
 
@@ -19,7 +20,7 @@ export async function createAnnouncement(contestId: number, adminId: number, dat
   subject: string;
   text: string;
 }) {
-  await ensurePermission('announcement:create');
+  await ensurePermission(ACTION_PERMISSIONS.createAnnouncement);
   await ensurePermission('announcement:publish');
   const permissions = await getPermissions();
   const allowed = stripDisallowedFields('announcements', {
@@ -88,7 +89,7 @@ export async function updateAnnouncement(announcementId: number, data: {
 }
 
 export async function deleteAnnouncement(announcementId: number) {
-  await ensurePermission('announcement:delete');
+  await ensurePermission(ACTION_PERMISSIONS.deleteAnnouncement);
   let beforeValues: unknown = undefined;
   try {
     beforeValues = await prisma.announcements.findUnique({ where: { id: announcementId } });

@@ -8,6 +8,7 @@ import {
   getTargetEffectivePermissions,
   hasEffectivePermission,
   isEffectiveSuperset,
+  ACTION_PERMISSIONS,
 } from '@/lib/permission-engine';
 import { ensurePermission, getPermissions, invalidateAccessCache } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
@@ -79,7 +80,7 @@ export async function getAdmins(): Promise<AdminWithLogin[]> {
 }
 
 export async function createAdmin(data: CreateAdminInput): Promise<ActionResult> {
-  await ensurePermission('admin:create');
+  await ensurePermission(ACTION_PERMISSIONS.createAdmin);
   // WHY: creation is gated by `admin:create`; stripDisallowedFields models the UPDATE contract (per-field `update` keys) and must not be applied to create payloads
   try {
     const created = await prisma.admins.create({
@@ -155,8 +156,8 @@ export async function updateAdmin(adminId: number, data: UpdateAdminInput): Prom
   const effectivePermissions = await getPermissions();
   const allowed = stripDisallowedFields('admins', data as Record<string, unknown>, effectivePermissions);
 
-  const mayUpdateAdmin = hasEffectivePermission(effectivePermissions, 'admin:update');
-  const mayUpdatePassword = hasEffectivePermission(effectivePermissions, 'admin:password:update');
+  const mayUpdateAdmin = hasEffectivePermission(effectivePermissions, ACTION_PERMISSIONS.updateAdmin);
+  const mayUpdatePassword = hasEffectivePermission(effectivePermissions, ACTION_PERMISSIONS.setAdminPassword);
   if (!mayUpdateAdmin && !mayUpdatePassword) {
     return { success: false, error: 'Not authorized' };
   }
@@ -193,7 +194,7 @@ export async function updateAdmin(adminId: number, data: UpdateAdminInput): Prom
 }
 
 export async function deleteAdmin(adminId: number): Promise<ActionResult> {
-  await ensurePermission('admin:delete');
+  await ensurePermission(ACTION_PERMISSIONS.deleteAdmin);
 
   const session = await getSession();
   if (!session) {

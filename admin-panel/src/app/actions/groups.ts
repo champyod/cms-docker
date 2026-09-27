@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { recordAudit, assertReasonForDestructive } from '@/lib/audit';
 import { ensurePermission, getPermissions, invalidateAccessCache } from '@/lib/permissions';
-import { hasEffectivePermission } from '@/lib/permission-engine';
+import { hasEffectivePermission, ACTION_PERMISSIONS } from '@/lib/permission-engine';
 
 type ActionResult<T> = { success: true; data: T } | { success: false; error: string };
 
@@ -52,7 +52,7 @@ export async function createGroup(
   reason: string,
 ): Promise<ActionResult<{ id: number }>> {
   try {
-    await ensurePermission('group:create');
+    await ensurePermission(ACTION_PERMISSIONS.createGroup);
     await assertCanGrant(permissionKeys);
     const trimmedName = name.trim();
     if (!trimmedName) return { success: false, error: 'A group name is required' };
@@ -94,7 +94,7 @@ export async function updateGroup(
   reason: string,
 ): Promise<ActionResult<{ id: number }>> {
   try {
-    await ensurePermission('group:update');
+    await ensurePermission(ACTION_PERMISSIONS.updateGroup);
     await assertCanGrant(permissionKeys);
     const trimmedName = name.trim();
     if (!trimmedName) return { success: false, error: 'A group name is required' };
@@ -159,7 +159,7 @@ export async function updateGroup(
 
 export async function deleteGroup(id: number, reason: string): Promise<ActionResult<{ id: number }>> {
   try {
-    await ensurePermission('group:delete');
+    await ensurePermission(ACTION_PERMISSIONS.deleteGroup);
     const destructive = assertReasonForDestructive('group:delete', reason);
     if (!destructive.ok) return { success: false, error: destructive.error };
 

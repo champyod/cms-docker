@@ -80,9 +80,9 @@ describe('RowActions', () => {
     expect(edit.className).toContain('w-11');
   });
 
-  it('omits actions the caller marks invisible and disables a pending one', () => {
-    render(<RowActions ariaLabel="Dataset actions" actions={[
-      { key: 'hidden', label: 'Never', icon: Pencil, onClick: () => undefined, isVisible: false },
+  it('omits actions the caller marks hidden and disables a pending one', () => {
+    render(<RowActions ariaLabel="Dataset actions" permissionKeys={[]} actions={[
+      { key: 'hidden', label: 'Never', icon: Pencil, onClick: () => undefined, permission: 'task:update' },
       { key: 'busy', label: 'Save', icon: Pencil, onClick: () => undefined, loading: true },
       { key: 'off', label: 'Remove', icon: Trash2, onClick: () => undefined, disabled: true },
     ]} />);

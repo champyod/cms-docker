@@ -2,6 +2,10 @@ import { getSession } from '@/lib/auth';
 import { getFreshPermissions, type PermissionKey } from '@/lib/permissions';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 
+// Why re-exported here: a service states which action it is, and reaches the key that action
+// demands without importing anything but this module — the service layer's only gate.
+export { ACTION_PERMISSIONS } from '@/lib/permission-engine';
+
 // Why: services and routes need a thrown 401/403 contract that adapters can
 // map to their transport (throw vs JSON) — a typed Error subclass carries the
 // status and missing key without ad-hoc `{ status }` casts at each call site.

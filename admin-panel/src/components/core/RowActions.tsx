@@ -1,10 +1,13 @@
 'use client';
 
+import { useMemo } from 'react';
 import type { LucideIcon } from 'lucide-react';
 
 import { Button, type ButtonVariantInput } from '@/components/core/Button';
 import { cn } from '@/lib/utils';
+import { hasEffectivePermission } from '@/lib/permission-engine';
 import type { Dictionary } from '@/lib/dictionary';
+import type { PermissionKey } from '@/lib/permissions';
 
 export interface RowAction {
   readonly key: string;
@@ -14,7 +17,21 @@ export interface RowAction {
   readonly variant?: ButtonVariantInput;
   readonly disabled?: boolean;
   readonly loading?: boolean;
-  readonly isVisible?: boolean;
+  /**
+   * The key — or keys — the action's own server gate demands, resolved here against
+   * `permissionKeys`; a list means the action admits any one of them.
+   *
+   * Why keys and not a pre-computed flag: a boolean cannot say which permission it stands in
+   * for, so a button gated on one action's flag can offer a different action. Naming the keys
+   * makes the button and the gate the same value, and `ACTION_PERMISSIONS` is where those values
+   * are read from by the server action too.
+   */
+  readonly permission?: PermissionKey | readonly PermissionKey[];
+  /**
+   * A display condition that is not a permission — an already-active record, a pending
+   * change, a collapsed panel. Named apart from `permission` so the two cannot be conflated.
+   */
+  readonly showWhen?: boolean;
   /**
    * Names the action for a reader who cannot see the tooltip, so a cluster over
    * many records can read "Edit Contest 4" instead of repeating "Edit".
@@ -26,6 +43,8 @@ export interface RowAction {
 export interface RowActionsProps {
   readonly actions: readonly RowAction[];
   readonly ariaLabel: string;
+  /** The caller's effective permission keys, against which every action's `permission` resolves. */
+  readonly permissionKeys?: readonly string[];
   /**
    * The `RowAction.key` the j/k shortcut activates for this row.
    *
@@ -63,17 +82,32 @@ export function rowActionGroupLabel(dictionary: Dictionary, listType: RowActionG
   return dictionary.rowActions[listType];
 }
 
+function grantsAction(effective: ReadonlySet<string>, permission: PermissionKey | readonly PermissionKey[]): boolean {
+  const keys: readonly PermissionKey[] = typeof permission === 'string' ? [permission] : permission;
+  return keys.some((key) => hasEffectivePermission(effective, key));
+}
+
+function isActionVisible(action: RowAction, effective: ReadonlySet<string>): boolean {
+  if (action.showWhen === false) return false;
+  if (action.permission === undefined) return true;
+  return grantsAction(effective, action.permission);
+}
+
 /**
  * Icon action cluster for one record row.
  *
  * Why propagation stops here: the surrounding row is itself clickable, so an
  * action click would open the record on top of running the action.
  */
-export function RowActions({ actions, ariaLabel, primaryActionKey, className }: RowActionsProps): React.JSX.Element {
+export function RowActions({ actions, ariaLabel, permissionKeys, primaryActionKey, className }: RowActionsProps): React.JSX.Element | null {
+  const effective = useMemo(() => new Set(permissionKeys ?? []), [permissionKeys]);
   if (primaryActionKey !== undefined && !actions.some((action) => action.key === primaryActionKey)) {
     throw new Error(`RowActions: primaryActionKey "${primaryActionKey}" matches no action`);
   }
-  const visible = actions.filter((action) => action.isVisible !== false);
+  const visible = actions.filter((action) => isActionVisible(action, effective));
+  // Why: a cluster whose every action is gated out is announced as an empty labelled
+  // group, which reads to a screen reader as controls that failed to load.
+  if (visible.length === 0) return null;
   return (
     <div
       role="group"

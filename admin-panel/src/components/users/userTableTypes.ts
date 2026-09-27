@@ -18,7 +18,7 @@ export interface UserTableProps {
   users: UsersPageRow[];
   loading: boolean;
   selectedIds: Set<number>;
-  canManageUsers: boolean;
+  permissionKeys: readonly string[];
   pageNumber: number;
   perPage: number;
   onToggleAll: (checked: boolean) => void;

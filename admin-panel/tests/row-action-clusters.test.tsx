@@ -7,7 +7,6 @@ import en from '@/dictionaries/en.json';
 import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
 import { RowActions } from '@/components/core/RowActions';
 import { AdminRowActions } from '@/components/admins/AdminRowActions';
-import type { AdminCapabilities } from '@/components/admins/adminCapabilities';
 import { ContainerRow } from '@/components/containers/ContainerRow';
 import { ContestRowActions, type ContestRowData } from '@/components/contests/contest-list/ContestTableRows';
 import { QuestionsPanel, type QuestionRow } from '@/components/contests/contest-communications/QuestionsPanel';
@@ -29,7 +28,6 @@ vi.mock('sonner', () => ({ toast: { loading: vi.fn(), success: vi.fn(), error: v
 // would bind to the accumulated document.body.
 afterEach(() => cleanup());
 
-const ADMIN_CAPABILITIES: AdminCapabilities = { canCreate: true, canUpdate: true, canDelete: true, canSetPassword: false, canRevealPassword: false };
 const CONTAINER_CONFIG = { autoRestart: true, maxRestarts: 3, currentRestarts: 0, discordNotifications: true };
 const CONTAINER = { id: 'abc123', name: 'api', image: 'cms/api', status: 'Up 2 days', created: '', isCmsContainer: true };
 const CONTEST: ContestRowData = { id: 4, name: 'Autumn', is_active: true, start: new Date('2026-01-01'), stop: new Date('2026-12-01') };
@@ -62,12 +60,12 @@ function renderInsideRow(node: React.ReactNode, onRowClick: () => void): void {
   render(withDictionary(<div onClick={onRowClick}>{node}</div>));
 }
 
-function adminActions(capabilities: AdminCapabilities): React.JSX.Element {
-  return <AdminRowActions capabilities={capabilities} editLabel="Edit admin" deleteLabel="Delete admin" onEdit={noop} onDelete={noop} />;
+function adminActions(permissionKeys: readonly string[]): React.JSX.Element {
+  return <AdminRowActions permissionKeys={permissionKeys} editLabel="Edit admin" deleteLabel="Delete admin" onEdit={noop} onDelete={noop} />;
 }
 
-function contestActions(canUpdate: boolean, canDeploy: boolean, canManage: boolean): React.JSX.Element {
-  return <ContestRowActions contest={CONTEST} canDeploy={canDeploy} canManage={canManage} canUpdate={canUpdate} onSetActive={noop} onEdit={noop} />;
+function contestActions(permissionKeys: readonly string[]): React.JSX.Element {
+  return <ContestRowActions contest={CONTEST} permissionKeys={permissionKeys} onSetActive={noop} onEdit={noop} />;
 }
 
 function containerRow(state: string, onToggleSelection: () => void, actionLoading: string | null = null): React.JSX.Element {
@@ -75,7 +73,7 @@ function containerRow(state: string, onToggleSelection: () => void, actionLoadin
 }
 
 function questionPanel(overrides: Partial<QuestionsPanelProps>): React.JSX.Element {
-  return <QuestionsPanel questions={[QUESTION]} replyingTo={null} replySubject="" replyText="" onReplyingTo={noop} onReplySubject={noop} onReplyText={noop} onReply={noop} onIgnore={noop} {...overrides} />;
+  return <QuestionsPanel questions={[QUESTION]} replyingTo={null} replySubject="" replyText="" permissionKeys={['question:answer', 'question:ignore']} onReplyingTo={noop} onReplySubject={noop} onReplyText={noop} onReply={noop} onIgnore={noop} {...overrides} />;
 }
 
 function groupList(permissionKeys: readonly string[]): React.JSX.Element {
@@ -89,7 +87,7 @@ function taskList(permissionKeys: readonly string[]): React.JSX.Element {
 describe('admin row actions', () => {
   it('keeps 44px targets, per-button tints, and the click inside the cluster', () => {
     const onRowClick = vi.fn();
-    renderInsideRow(adminActions(ADMIN_CAPABILITIES), onRowClick);
+    renderInsideRow(adminActions(['admin:update', 'admin:delete']), onRowClick);
     const edit = screen.getByRole('button', { name: 'Edit admin' });
     const remove = screen.getByRole('button', { name: 'Delete admin' });
     expect(screen.getByRole('group', { name: en.rowActions.admins })).not.toBeNull();
@@ -102,17 +100,23 @@ describe('admin row actions', () => {
     expect(onRowClick).not.toHaveBeenCalled();
   });
 
-  it('hides the action a withheld capability owns instead of disabling it', () => {
-    render(withDictionary(adminActions({ ...ADMIN_CAPABILITIES, canDelete: false })));
-    expect(screen.queryByRole('button', { name: 'Delete admin' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Edit admin' })).not.toBeNull();
+  // Why rewritten: it used to assert one `canEdit` boolean for two permissions. The two entry
+  // permissions are now named separately, so a reader holding only one of them still gets Edit.
+  it('offers edit on either entry permission, and delete only on admin:delete', () => {
+    const cases = [[['admin:password:update'], true, false], [['admin:update'], true, false], [['admin:delete'], false, true]] as const;
+    for (const [keys, edit, remove] of cases) {
+      render(withDictionary(adminActions([...keys])));
+      expect(screen.queryByRole('button', { name: 'Edit admin' }) !== null).toBe(edit);
+      expect(screen.queryByRole('button', { name: 'Delete admin' }) !== null).toBe(remove);
+      cleanup();
+    }
   });
 });
 
 describe('contest row actions', () => {
   it('names the record on the action, keeps 44px targets, and stops the click', () => {
     const onRowClick = vi.fn();
-    renderInsideRow(contestActions(true, true, true), onRowClick);
+    renderInsideRow(contestActions(['contest:update', 'deployment:deploy', 'contest:delete']), onRowClick);
     const edit = screen.getByRole('button', { name: 'Edit Autumn' });
     expect(screen.getByRole('group', { name: en.rowActions.contests })).not.toBeNull();
     expectTouchTarget(edit);
@@ -122,7 +126,7 @@ describe('contest row actions', () => {
   });
 
   it('withholds edit and set-active for a reader without the key or on an active contest', () => {
-    render(withDictionary(contestActions(false, true, true)));
+    render(withDictionary(contestActions(['deployment:deploy', 'contest:delete'])));
     expect(screen.queryByRole('button', { name: 'Edit Autumn' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Set Active' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeNull();
@@ -167,7 +171,7 @@ describe('question row actions', () => {
     expect(screen.queryByRole('button', { name: 'Reply to Scoring' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Ignore question' })).not.toBeNull();
     cleanup();
-    render(withDictionary(questionPanel({ canIgnore: false })));
+    render(withDictionary(questionPanel({ permissionKeys: ['question:answer'] })));
     expect(screen.queryByRole('button', { name: 'Ignore question' })).toBeNull();
   });
 });
@@ -219,14 +223,25 @@ describe('task row actions', () => {
     render(withDictionary(taskList(['task:update', 'task:delete'])));
     expect(screen.getAllByRole('button', { name: 'Delete task' })).toHaveLength(2);
   });
+
+  // Why: the cluster is no longer wrapped in a task:update guard, so a delete-only reader
+  // reaches Delete on both layouts and a reader with neither key sees no group at all.
+  it('gives a delete-only reader delete alone, and a reader with neither key no cluster', () => {
+    render(withDictionary(taskList(['task:delete'])));
+    expect(screen.getAllByRole('button', { name: 'Delete task' })).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: 'Edit task' })).toBeNull();
+    cleanup();
+    render(withDictionary(taskList(['task:list'])));
+    expect(screen.queryByRole('group', { name: en.rowActions.tasks })).toBeNull();
+  });
 });
 
 describe('the primary marker key', () => {
   it('stays valid while a gate hides the action it names', () => {
     // Why the hidden edit: the key is checked against every action, not the visible ones, so a
     // permission gate on the primary action must not turn into a throw on the next render.
-    render(withDictionary(<RowActions ariaLabel="User actions" primaryActionKey="edit" actions={[
-      { key: 'edit', label: 'Edit', icon: Pencil, onClick: () => undefined, isVisible: false },
+    render(withDictionary(<RowActions ariaLabel="User actions" primaryActionKey="edit" permissionKeys={[]} actions={[
+      { key: 'edit', label: 'Edit', icon: Pencil, onClick: () => undefined, permission: 'task:update' },
       { key: 'delete', label: 'Delete', icon: Trash2, onClick: () => undefined },
     ]} />));
     expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();

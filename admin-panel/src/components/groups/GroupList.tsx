@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/core/EmptyState';
 import { ResponsiveTable } from '@/components/core/ResponsiveTable';
 import { RowActions, rowActionGroupLabel } from '@/components/core/RowActions';
 import { useDictionary } from '@/hooks/useDictionary';
+import { ACTION_PERMISSIONS, hasEffectivePermission } from '@/lib/permission-engine';
 import type { GroupWithPermissions } from '@/app/actions/adminPermissions';
 import { buildColumns } from './groupColumns';
 import { useGroupList } from './useGroupList';
@@ -25,9 +26,6 @@ export function GroupList({
   // block, and only the full dictionary carries it.
   const actionGroupLabel = rowActionGroupLabel(useDictionary(), 'groups');
   const {
-    canCreate,
-    canUpdate,
-    canDelete,
     handleOpenCreate,
     handleOpenEdit,
     handleOpenDelete,
@@ -41,17 +39,18 @@ export function GroupList({
     (group: GroupWithPermissions) => (
       <RowActions
         ariaLabel={actionGroupLabel}
+        permissionKeys={permissionKeys}
         actions={[
-          { key: 'edit', label: dict.editTooltip, icon: Pencil, onClick: () => handleOpenEdit(group), isVisible: canUpdate, className: 'min-h-11 min-w-11' },
-          { key: 'delete', label: dict.deleteTooltip, icon: Trash2, onClick: () => handleOpenDelete(group), isVisible: canDelete, className: 'min-h-11 min-w-11' },
+          { key: 'edit', label: dict.editTooltip, icon: Pencil, onClick: () => handleOpenEdit(group), permission: ACTION_PERMISSIONS.updateGroup, className: 'min-h-11 min-w-11' },
+          { key: 'delete', label: dict.deleteTooltip, icon: Trash2, onClick: () => handleOpenDelete(group), permission: ACTION_PERMISSIONS.deleteGroup, className: 'min-h-11 min-w-11' },
         ]}
       />
     ),
-    [actionGroupLabel, canUpdate, canDelete, dict, handleOpenEdit, handleOpenDelete],
+    [actionGroupLabel, permissionKeys, dict, handleOpenEdit, handleOpenDelete],
   );
 
   const getRowProps = useCallback((group: GroupWithPermissions) => (
-    canUpdate
+    hasEffectivePermission(new Set(permissionKeys), ACTION_PERMISSIONS.updateGroup)
       ? {
         onClick: () => handleOpenEdit(group),
         onKeyDown: (event: React.KeyboardEvent) => {
@@ -61,12 +60,12 @@ export function GroupList({
         className: 'cursor-pointer',
       }
       : undefined
-  ), [canUpdate, handleOpenEdit]);
+  ), [permissionKeys, handleOpenEdit]);
 
   return (
     <div className="space-y-6">
       <div className="flex justify-end items-center">
-        {canCreate && (
+        {hasEffectivePermission(new Set(permissionKeys), ACTION_PERMISSIONS.createGroup) && (
           <Button variant="positive" icon={Plus} onClick={handleOpenCreate}>
             {dict.createGroup}
           </Button>

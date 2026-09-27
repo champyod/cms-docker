@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import type { Prisma } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { ensurePermission, getPermissions } from '@/lib/permissions';
+import { ACTION_PERMISSIONS } from '@/lib/permission-engine';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { recordAudit } from '@/lib/audit';
 
@@ -25,7 +26,7 @@ export async function replyToQuestion(questionId: number, adminId: number, data:
   reply_subject: string;
   reply_text: string;
 }) {
-  await ensurePermission('question:answer');
+  await ensurePermission(ACTION_PERMISSIONS.replyToQuestion);
   const permissions = await getPermissions();
   const allowed = stripDisallowedFields('questions', {
     reply_subject: data.reply_subject,
@@ -62,7 +63,7 @@ export async function replyToQuestion(questionId: number, adminId: number, data:
 }
 
 export async function ignoreQuestion(questionId: number) {
-  await ensurePermission('question:ignore');
+  await ensurePermission(ACTION_PERMISSIONS.ignoreQuestion);
   const permissions = await getPermissions();
   const allowed = stripDisallowedFields('questions', { ignored: true }, permissions);
   if (allowed.ignored === undefined) {
@@ -90,7 +91,7 @@ export async function ignoreQuestion(questionId: number) {
 }
 
 export async function unignoreQuestion(questionId: number) {
-  await ensurePermission('question:ignore');
+  await ensurePermission(ACTION_PERMISSIONS.unignoreQuestion);
   const permissions = await getPermissions();
   const allowed = stripDisallowedFields('questions', { ignored: false }, permissions);
   if (allowed.ignored === undefined) {

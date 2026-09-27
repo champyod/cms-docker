@@ -13,7 +13,7 @@ import { ContestListHeader } from './contest-list/ContestListHeader';
 import { ContestRowActions, buildContestColumns, getContestRowClassName, getContestRowProps, type ContestRowData } from './contest-list/ContestTableRows';
 import { useContestListActions } from './contest-list/useContestListActions';
 import type { ExistingContest } from './contest-modal/types';
-import { hasEffectivePermission } from '@/lib/permission-engine';
+import { hasEffectivePermission, ACTION_PERMISSIONS } from '@/lib/permission-engine';
 import { buildRoute } from '@/lib/navigation/routes';
 import { apiClient } from '@/lib/apiClient';
 
@@ -33,10 +33,10 @@ interface ContestPermissions {
 function resolveContestPermissions(permissionKeys: readonly string[]): ContestPermissions {
   const effective = new Set(permissionKeys);
   return {
-    canCreate: hasEffectivePermission(effective, 'contest:create'),
-    canDelete: hasEffectivePermission(effective, 'contest:delete'),
-    canDeploy: hasEffectivePermission(effective, 'deployment:deploy'),
-    canUpdate: hasEffectivePermission(effective, 'contest:update'),
+    canCreate: hasEffectivePermission(effective, ACTION_PERMISSIONS.createContest),
+    canDelete: hasEffectivePermission(effective, ACTION_PERMISSIONS.deleteContest),
+    canDeploy: hasEffectivePermission(effective, ACTION_PERMISSIONS.deployContest),
+    canUpdate: hasEffectivePermission(effective, ACTION_PERMISSIONS.updateContest),
   };
 }
 
@@ -74,8 +74,8 @@ export function ContestList({ initialContests, totalPages, permissionKeys }: Con
   const columns = useMemo(() => buildContestColumns(handleOpenContest), [handleOpenContest]);
 
   const renderRowActions = useCallback((contest: ContestRowData) => (
-    <ContestRowActions contest={contest} canDeploy={permissions.canDeploy} canManage={permissions.canDelete} canUpdate={permissions.canUpdate} onSetActive={actions.requestDeploy} onEdit={(id) => { void handleEdit(id); }} />
-  ), [permissions.canDeploy, permissions.canDelete, permissions.canUpdate, actions.requestDeploy, handleEdit]);
+    <ContestRowActions contest={contest} permissionKeys={permissionKeys} onSetActive={actions.requestDeploy} onEdit={(id) => { void handleEdit(id); }} />
+  ), [permissionKeys, actions.requestDeploy, handleEdit]);
 
   return (
     <div className="space-y-6">

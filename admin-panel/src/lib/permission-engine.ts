@@ -1,5 +1,50 @@
 import { PERMISSION_REGISTRY } from './permission-registry';
 
+// Why: registry keys are always `${module}:${verb}`; this template literal rejects the legacy
+// coarse names (all/tasks/users/contests/messaging) at compile time so stale call sites surface.
+export type PermissionKey = `${string}:${string}`;
+
+/**
+ * The permission each named action demands, read by the action that enforces it and by the
+ * button that offers it, so the two gates cannot drift apart.
+ *
+ * Why the map sits here rather than in `permissions.ts`: every action button is a client
+ * component, and importing `permissions.ts` from one would pull Prisma into the browser bundle.
+ * `permissions.ts` re-exports it, so server code reads the same value from either path.
+ *
+ * Why it is hand-maintained: a component has to be able to name the action it offers, and a value
+ * derived from source cannot be named that way. `tests/action-permission-drift.test.ts` fails when
+ * an entry and the gate its action actually demands disagree.
+ */
+export const ACTION_PERMISSIONS = {
+  addParticipant: 'participation:create',
+  createAdmin: 'admin:create',
+  createAnnouncement: 'announcement:create',
+  createContest: 'contest:create',
+  createGroup: 'group:create',
+  createTask: 'task:create',
+  deleteAdmin: 'admin:delete',
+  deleteAnnouncement: 'announcement:delete',
+  deleteContest: 'contest:delete',
+  deleteGroup: 'group:delete',
+  deleteTask: 'task:delete',
+  deleteUser: 'user:delete',
+  deployContest: 'deployment:deploy',
+  ignoreQuestion: 'question:ignore',
+  removeParticipant: 'participation:delete',
+  replyToQuestion: 'question:answer',
+  setAdminPassword: 'admin:password:update',
+  setTestUser: 'participation:update',
+  unignoreQuestion: 'question:ignore',
+  updateAdmin: 'admin:update',
+  updateContest: 'contest:update',
+  updateGroup: 'group:update',
+  updateTask: 'task:update',
+  updateUser: 'user:update',
+} as const satisfies Record<string, PermissionKey>;
+
+export type ActionName = keyof typeof ACTION_PERMISSIONS;
+
 export type OverrideEffect = 'allow' | 'deny';
 
 export interface PermissionOverride {

@@ -5,7 +5,7 @@ import { EmptyState } from '@/components/core/EmptyState';
 import { RowActions } from '@/components/core/RowActions';
 import { SectionCard } from '@/components/core/SectionCard';
 import { Users, Plus, Trash2, Settings, FlaskConical } from 'lucide-react';
-import { hasEffectivePermission } from '@/lib/permission-engine';
+import { ACTION_PERMISSIONS, hasEffectivePermission } from '@/lib/permission-engine';
 import { cn } from '@/lib/utils';
 
 interface ParticipationUser { username: string; first_name: string; last_name: string; }
@@ -22,19 +22,6 @@ interface Props {
   onMarkAsTest: (id: number) => void;
   onOpenSettings: (id: number, username: string) => void;
   onRemove: (id: number) => void;
-}
-
-interface ParticipationGates { canInvite: boolean; canMarkTest: boolean; canRemove: boolean; }
-
-// Why: invite, test-marking, and removal are separate server actions — each
-// control renders only when its own action permission is present.
-function useParticipationGates(permissionKeys: readonly string[]): ParticipationGates {
-  const effective = new Set(permissionKeys);
-  return {
-    canInvite: hasEffectivePermission(effective, 'participation:create'),
-    canMarkTest: hasEffectivePermission(effective, 'participation:update'),
-    canRemove: hasEffectivePermission(effective, 'participation:delete'),
-  };
 }
 
 const CHIP_CLASSES = 'rounded-full px-2 py-0.5 text-xs';
@@ -65,23 +52,23 @@ function ParticipationIdentity({ participation }: { participation: Participation
   );
 }
 
-function ParticipantActions({ participation, gates, onMarkAsTest, onOpenSettings, onRemove }: Pick<Props, 'onMarkAsTest' | 'onOpenSettings' | 'onRemove'> & { participation: Participation; gates: ParticipationGates }): React.JSX.Element | null {
-  if (!gates.canMarkTest && !gates.canRemove) return null;
+function ParticipantActions({ participation, permissionKeys, onMarkAsTest, onOpenSettings, onRemove }: Pick<Props, 'onMarkAsTest' | 'onOpenSettings' | 'onRemove' | 'permissionKeys'> & { participation: Participation }): React.JSX.Element {
   const username = participation.users?.username || 'Unknown participant';
   return (
     <RowActions
       ariaLabel="Participants"
+      permissionKeys={permissionKeys}
       actions={[
-        { key: 'test', label: 'Mark as Test User', icon: FlaskConical, onClick: () => onMarkAsTest(participation.id), isVisible: gates.canMarkTest },
+        { key: 'test', label: 'Mark as Test User', icon: FlaskConical, onClick: () => onMarkAsTest(participation.id), permission: ACTION_PERMISSIONS.setTestUser },
         { key: 'settings', label: 'Settings', icon: Settings, onClick: () => onOpenSettings(participation.id, username) },
-        { key: 'remove', label: `Remove ${username}`, icon: Trash2, onClick: () => onRemove(participation.id), isVisible: gates.canRemove },
+        { key: 'remove', label: `Remove ${username}`, icon: Trash2, onClick: () => onRemove(participation.id), permission: ACTION_PERMISSIONS.removeParticipant },
       ]}
     />
   );
 }
 
 export function ContestParticipantsSection({ participations, expanded, permissionKeys, onToggle, onAddParticipant, onAddTeam, onMarkAsTest, onOpenSettings, onRemove }: Props): React.JSX.Element {
-  const gates = useParticipationGates(permissionKeys);
+  const effective = new Set(permissionKeys);
   return (
     <SectionCard
       title="Participants"
@@ -90,7 +77,7 @@ export function ContestParticipantsSection({ participations, expanded, permissio
       expanded={expanded}
       onToggle={onToggle}
     >
-      {gates.canInvite && (
+      {hasEffectivePermission(effective, ACTION_PERMISSIONS.addParticipant) && (
         <div className="flex justify-end gap-2 border-b border-border bg-muted/20 p-4">
           <Button variant="secondary" size="sm" icon={Users} onClick={onAddTeam}>Add Team</Button>
           <Button variant="positiveOutline" size="sm" icon={Plus} onClick={onAddParticipant}>Add Participant</Button>
@@ -102,7 +89,7 @@ export function ContestParticipantsSection({ participations, expanded, permissio
             <ParticipationIdentity participation={participation} />
             <div className="flex flex-wrap items-center gap-2">
               <ParticipationChips participation={participation} />
-              <ParticipantActions participation={participation} gates={gates} onMarkAsTest={onMarkAsTest} onOpenSettings={onOpenSettings} onRemove={onRemove} />
+              <ParticipantActions participation={participation} permissionKeys={permissionKeys} onMarkAsTest={onMarkAsTest} onOpenSettings={onOpenSettings} onRemove={onRemove} />
             </div>
           </div>
         ))}

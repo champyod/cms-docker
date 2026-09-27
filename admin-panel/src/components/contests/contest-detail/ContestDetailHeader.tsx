@@ -1,9 +1,11 @@
 'use client';
 
+import { useMemo } from 'react';
 import { Rocket, Power, Pencil } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { SaveButton } from '@/components/core/SaveButton';
 import { Badge } from '@/components/core/Badge';
+import { ACTION_PERMISSIONS, hasEffectivePermission } from '@/lib/permission-engine';
 
 interface Props {
   name: string;
@@ -11,13 +13,14 @@ interface Props {
   isActive: boolean;
   saving: boolean;
   justSaved: boolean;
-  canEdit: boolean;
+  permissionKeys: readonly string[];
   onSetActive: () => void;
   onSave: () => void;
   onEdit: () => void;
 }
 
-export function ContestDetailHeader({ name, description, isActive, saving, justSaved, canEdit, onSetActive, onSave, onEdit }: Props) {
+export function ContestDetailHeader({ name, description, isActive, saving, justSaved, permissionKeys, onSetActive, onSave, onEdit }: Props) {
+  const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
@@ -33,12 +36,12 @@ export function ContestDetailHeader({ name, description, isActive, saving, justS
         <p className="mt-1 text-muted-foreground">{description}</p>
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        {canEdit && (
+        {hasEffectivePermission(effective, ACTION_PERMISSIONS.updateContest) && (
           <Button variant="secondary" icon={Pencil} onClick={onEdit} disabled={saving}>
             Edit Contest
           </Button>
         )}
-        {!isActive && (
+        {!isActive && hasEffectivePermission(effective, ACTION_PERMISSIONS.deployContest) && (
           <Button variant="positiveOutline" icon={Power} iconOnly tooltip="Set as Active Contest" onClick={onSetActive} disabled={saving} />
         )}
         <SaveButton saving={saving} justSaved={justSaved} idleLabel="Save Changes" disabled={saving} onClick={onSave} />

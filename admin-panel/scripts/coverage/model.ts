@@ -20,6 +20,8 @@ export const FOLLOW_FILES = [
 
 export const KEY_CALL_RE =
   /\b(?:ensurePermission|checkPermission|verifyApiPermission|requirePermission)\s*\(\s*['"`]([^'"`]+)['"`]\s*\)/g;
+export const MAP_KEY_RE = /\bACTION_PERMISSIONS\.(\w+)/g;
+export const PERMISSIONS_FILE = path.join(SRC_DIR, "lib", "permission-engine.ts");
 export const HAS_EFFECTIVE_RE =
   /\bhasEffectivePermission\s*\(\s*\w+\s*,\s*['"`]([^'"`]+)['"`]\s*\)/g;
 export const SESSION_ONLY_RE = /\bverifyApiAuth\s*\(\s*\)/;

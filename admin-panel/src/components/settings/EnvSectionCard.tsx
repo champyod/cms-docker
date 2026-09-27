@@ -36,7 +36,7 @@ function SectionActions({
       ariaLabel={section.title}
       actions={[
         { key: 'save', label: 'Save Only', icon: Save, onClick: () => { void onPersist(section.filename, false); }, disabled: saving },
-        { key: 'restart', label: 'Save & Restart', icon: RefreshCw, onClick: () => { void onPersist(section.filename, true); }, disabled: saving, loading: saving, isVisible: hasPendingRestarts && hasPendingChange(section, data, originalData) },
+        { key: 'restart', label: 'Save & Restart', icon: RefreshCw, onClick: () => { void onPersist(section.filename, true); }, disabled: saving, loading: saving, showWhen: hasPendingRestarts && hasPendingChange(section, data, originalData) },
       ]}
     />
   );

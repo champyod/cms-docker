@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { requirePermission } from '@/lib/server/authorization';
+import { requirePermission, ACTION_PERMISSIONS } from '@/lib/server/authorization';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { validateContestData, CONTEST_NAME_MESSAGE, CONTEST_NAME_REGEX } from '@/lib/contest-validation';
 import { recordAudit } from '@/lib/audit';
@@ -26,7 +26,7 @@ export async function listContests(params: ContestListParams = {}): Promise<Cont
 }
 
 export async function createContest(data: ContestData): Promise<MutationResult> {
-  const perms = await requirePermission('contest:create');
+  const perms = await requirePermission(ACTION_PERMISSIONS.createContest);
   const allowed = stripDisallowedFields('contests', data as unknown as Record<string, unknown>, perms) as unknown as ContestData;
   const rawName = (data as unknown as Record<string, unknown>).name;
   if (typeof rawName !== 'string' || !CONTEST_NAME_REGEX.test(rawName)) {
@@ -56,7 +56,7 @@ export async function createContest(data: ContestData): Promise<MutationResult> 
 }
 
 export async function updateContest(id: number, data: Partial<ContestData>): Promise<MutationResult> {
-  const perms = await requirePermission('contest:update');
+  const perms = await requirePermission(ACTION_PERMISSIONS.updateContest);
   const allowed = stripDisallowedFields('contests', data as unknown as Record<string, unknown>, perms) as unknown as Partial<ContestData>;
   const validation = validateContestData(allowed as ContestData);
   if (!validation.valid) {
@@ -78,7 +78,7 @@ export async function updateContest(id: number, data: Partial<ContestData>): Pro
 }
 
 export async function deleteContest(id: number): Promise<MutationResult> {
-  await requirePermission('contest:delete');
+  await requirePermission(ACTION_PERMISSIONS.deleteContest);
   const beforeRow = await prisma.contests.findUnique({ where: { id } });
   try {
     await prisma.contests.delete({ where: { id } });
@@ -96,7 +96,7 @@ export async function deleteContest(id: number): Promise<MutationResult> {
 }
 
 export async function addParticipant(contestId: number, userId: number): Promise<MutationResult> {
-  await requirePermission('participation:create');
+  await requirePermission(ACTION_PERMISSIONS.addParticipant);
   try {
     await prisma.$executeRaw`
       INSERT INTO participations (contest_id, user_id, hidden, unrestricted, delay_time, extra_time)
@@ -115,7 +115,7 @@ export async function addParticipant(contestId: number, userId: number): Promise
 }
 
 export async function removeParticipant(participationId: number): Promise<MutationResult> {
-  await requirePermission('participation:delete');
+  await requirePermission(ACTION_PERMISSIONS.removeParticipant);
   const beforeRow = await prisma.participations.findUnique({ where: { id: participationId } });
   try {
     await prisma.participations.delete({ where: { id: participationId } });

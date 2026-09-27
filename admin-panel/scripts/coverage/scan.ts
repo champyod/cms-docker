@@ -4,6 +4,7 @@ import {
   BARE_CALL_RE,
   EXPORT_FN_RE,
   JS_KEYWORDS,
+  MAP_KEY_RE,
   MEMBER_CALL_RE,
   NAMED_IMPORT_RE,
   SESSION_ONLY_RE,
@@ -157,17 +158,42 @@ export function bodyFromMatch(source: string, parenIdx: number): string | null {
   return null;
 }
 
-export function collectKeys(body: string): string[] {
+export function collectKeys(body: string, actionPermissions: Map<string, string>): string[] {
   const keys = new Set<string>();
   for (const re of [KEY_CALL_RE, HAS_EFFECTIVE_RE]) {
     re.lastIndex = 0;
     let match: RegExpExecArray | null;
     while ((match = re.exec(body)) !== null) keys.add(match[1]);
   }
+  // Why: a mapped action reads its key through ACTION_PERMISSIONS, so without
+  // resolving the reference the gate would vanish and the action read as ungated.
+  MAP_KEY_RE.lastIndex = 0;
+  let mapped: RegExpExecArray | null;
+  while ((mapped = MAP_KEY_RE.exec(body)) !== null) {
+    const key = actionPermissions.get(mapped[1]);
+    if (key !== undefined) keys.add(key);
+  }
   return [...keys];
 }
 
-export function parseFile(abs: string): FileInfo {
+// Why a dedicated reader: the map is a hand-maintained literal, so its entries
+// have to be recovered for the scanner and for the drift test to compare an
+// entry against the gate its action actually demands.
+export function parseActionPermissions(abs: string): Map<string, string> {
+  const source = fs.readFileSync(abs, "utf8");
+  const assignIdx = source.search(/ACTION_PERMISSIONS\s*[:=]/);
+  if (assignIdx < 0) return new Map();
+  const openIdx = source.indexOf("{", assignIdx);
+  if (openIdx < 0) return new Map();
+  const body = sliceBody(source, openIdx);
+  const entries = new Map<string, string>();
+  const entryRe = /([A-Za-z_]\w*)\s*:\s*'([^']+)'/g;
+  let match: RegExpExecArray | null;
+  while ((match = entryRe.exec(body)) !== null) entries.set(match[1], match[2]);
+  return entries;
+}
+
+export function parseFile(abs: string, actionPermissions: Map<string, string>): FileInfo {
   const source = fs.readFileSync(abs, "utf8");
   const starAliases = new Map<string, string>();
   const namedImports = new Map<string, string>();
@@ -188,7 +214,7 @@ export function parseFile(abs: string): FileInfo {
       if (orig !== "" && local !== "") namedImports.set(local, `${target}#${orig}`);
     }
   }
-  return parseFunctions(source, abs, starAliases, namedImports);
+  return parseFunctions(source, abs, starAliases, namedImports, actionPermissions);
 }
 
 function parseFunctions(
@@ -196,6 +222,7 @@ function parseFunctions(
   abs: string,
   starAliases: Map<string, string>,
   namedImports: Map<string, string>,
+  actionPermissions: Map<string, string>,
 ): FileInfo {
   const fns: FileInfo["fns"] = new Map();
   EXPORT_FN_RE.lastIndex = 0;
@@ -221,7 +248,7 @@ function parseFunctions(
     }
     fns.set(name, {
       body,
-      keys: collectKeys(body),
+      keys: collectKeys(body, actionPermissions),
       sessionOnly: SESSION_ONLY_RE.test(body),
       callees: [...callees],
     });

@@ -56,11 +56,11 @@ function buildDatasetActions(
 ): readonly RowAction[] {
   return [
     { key: 'settings', label: 'Dataset Settings', icon: Settings2, onClick: () => handlers.onEdit(dataset) },
-    { key: 'live', label: 'Make Live', icon: CheckCircle, onClick: () => handlers.onActivate(dataset.id), isVisible: !isActive },
+    { key: 'live', label: 'Make Live', icon: CheckCircle, onClick: () => handlers.onActivate(dataset.id), showWhen: !isActive },
     { key: 'clone', label: 'Clone', icon: Copy, onClick: () => handlers.onClone(dataset.id, dataset.description) },
     { key: 'rename', label: 'Rename', icon: Edit, onClick: () => handlers.onRename(dataset.id, dataset.description) },
     { key: 'autojudge', label: 'Toggle Autojudge', icon: dataset.autojudge ? ToggleRight : ToggleLeft, onClick: () => handlers.onToggleAutojudge(dataset.id) },
-    { key: 'delete', label: 'Delete', icon: Trash2, onClick: () => handlers.onDelete(dataset.id), isVisible: !isActive },
+    { key: 'delete', label: 'Delete', icon: Trash2, onClick: () => handlers.onDelete(dataset.id), showWhen: !isActive },
   ];
 }
 

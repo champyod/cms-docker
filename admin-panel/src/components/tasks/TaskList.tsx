@@ -15,7 +15,7 @@ import { EmptyState } from '@/components/core/EmptyState';
 import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
 import { TaskModal } from './TaskModal';
 import { apiClient } from '@/lib/apiClient';
-import { hasEffectivePermission } from '@/lib/permission-engine';
+import { hasEffectivePermission, ACTION_PERMISSIONS } from '@/lib/permission-engine';
 import { buildRoute } from '@/lib/navigation/routes';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
@@ -39,20 +39,14 @@ interface TaskListProps {
   permissionKeys: readonly string[];
 }
 
-interface TaskActionGates {
-  readonly edit: boolean;
-  readonly delete: boolean;
-}
-
 function buildTaskRowActions(
   task: TaskRow,
-  gates: TaskActionGates,
   onEdit: (task: TaskRow) => void,
   onDelete: (id: number) => void,
 ): RowAction[] {
   return [
-    { key: 'edit', label: 'Edit task', icon: Pencil, onClick: () => onEdit(task), isVisible: gates.edit, className: 'text-muted-foreground hover:text-primary' },
-    { key: 'delete', label: 'Delete task', icon: Trash2, onClick: () => { void onDelete(task.id); }, isVisible: gates.delete, className: 'text-muted-foreground hover:text-destructive' },
+    { key: 'edit', label: 'Edit task', icon: Pencil, onClick: () => onEdit(task), permission: ACTION_PERMISSIONS.updateTask, className: 'text-muted-foreground hover:text-primary' },
+    { key: 'delete', label: 'Delete task', icon: Trash2, onClick: () => { void onDelete(task.id); }, permission: ACTION_PERMISSIONS.deleteTask, className: 'text-muted-foreground hover:text-destructive' },
   ];
 }
 
@@ -68,12 +62,12 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
   const dict = useDictionary();
 
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
-  const canCreateTasks = hasEffectivePermission(effective, 'task:create');
-  const canManageTasks = hasEffectivePermission(effective, 'task:update');
-  const canDeleteTasks = hasEffectivePermission(effective, 'task:delete');
+  const canCreateTasks = hasEffectivePermission(effective, ACTION_PERMISSIONS.createTask);
+  const canUpdateTasks = hasEffectivePermission(effective, ACTION_PERMISSIONS.updateTask);
+  const canDeleteTasks = hasEffectivePermission(effective, ACTION_PERMISSIONS.deleteTask);
 
   const handleEdit = (task: TaskRow): void => {
-    if (!canManageTasks) return;
+    if (!canUpdateTasks) return;
     setSelectedTask(task);
     setIsModalOpen(true);
   };
@@ -120,14 +114,12 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
               <MobileCardRow label="Title" value={task.title} />
               <MobileCardRow label="Contest" value={task.contests ? task.contests.name : 'Unassigned'} />
               <MobileCardRow label="Submissions" value={task._count?.submissions ?? 0} />
-              {/* Why the edit flag is constant: the cluster itself is gated on update, so only delete needs its own gate. */}
-              {canManageTasks && (
-                <RowActions
-                  ariaLabel={rowActionGroupLabel(dict, 'tasks')}
-                  className="justify-end gap-2 pt-2"
-                  actions={buildTaskRowActions(task, { edit: true, delete: canDeleteTasks }, handleEdit, handleDelete)}
-                />
-              )}
+              <RowActions
+                ariaLabel={rowActionGroupLabel(dict, 'tasks')}
+                className="justify-end gap-2 pt-2"
+                permissionKeys={permissionKeys}
+                actions={buildTaskRowActions(task, handleEdit, handleDelete)}
+              />
             </MobileCard>
           ))}
         >
@@ -207,7 +199,8 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
                     <RowActions
                       ariaLabel={rowActionGroupLabel(dict, 'tasks')}
                       className="justify-end gap-2"
-                      actions={buildTaskRowActions(task, { edit: canManageTasks, delete: canDeleteTasks }, handleEdit, handleDelete)}
+                      permissionKeys={permissionKeys}
+                      actions={buildTaskRowActions(task, handleEdit, handleDelete)}
                     />
                   </TableCell>
                 </TableRow>

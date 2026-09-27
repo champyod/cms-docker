@@ -13,6 +13,8 @@ import { updateAdmin, deleteAdmin } from '@/app/actions/admins';
 import { listAdminsAccessSummary, type AdminAccessSummary } from '@/app/actions/adminPermissions';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
+import { ACTION_PERMISSIONS, hasEffectivePermission } from '@/lib/permission-engine';
+import { cn } from '@/lib/utils';
 import { AdminModal } from './AdminModal';
 import { AdminRowActions } from './AdminRowActions';
 import type { AdminCapabilities } from './adminCapabilities';
@@ -40,6 +42,11 @@ export function AdminList({
   const router = useRouter();
   const confirm = useConfirm();
   const { destructiveConfirm } = useConfirmationCopy();
+  const canUpdate = hasEffectivePermission(new Set(callerPermissions), ACTION_PERMISSIONS.updateAdmin);
+  // Why the pair: the Actions column and the row's own click both admit `updateAdmin`'s either
+  // entry permission, so a caller holding only `admin:password:update` still reaches the form.
+  const canEditRow = canUpdate || hasEffectivePermission(new Set(callerPermissions), ACTION_PERMISSIONS.setAdminPassword);
+  const canDelete = hasEffectivePermission(new Set(callerPermissions), ACTION_PERMISSIONS.deleteAdmin);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,17 +105,14 @@ export function AdminList({
     setIsModalOpen(true);
   };
 
-  // Why: the Edit/Delete pair is control surface, so a caller holding none of those keys gets no Actions column.
-  const showRowActions = capabilities.canUpdate || capabilities.canSetPassword || capabilities.canDelete;
+  // Why the pair: the Edit/Delete controls are the Actions column, and `updateAdmin` admits
+  // either entry permission, so a password-only caller still gets the column.
+  const showRowActions = canEditRow || canDelete;
   const columnCount = showRowActions ? 7 : 6;
 
   const renderStatusToggle = (admin: AdminWithLogin) => {
-    const badge = admin.enabled ? (
-      <span className="px-2 py-0.5 text-xs bg-emerald-500/20 text-emerald-400 rounded-full">Enabled</span>
-    ) : (
-      <span className="px-2 py-0.5 text-xs bg-red-500/20 text-red-400 rounded-full">Disabled</span>
-    );
-    if (!capabilities.canUpdate) return badge;
+    const badge = <span className={cn('px-2 py-0.5 text-xs rounded-full', admin.enabled ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400')}>{admin.enabled ? 'Enabled' : 'Disabled'}</span>;
+    if (!canUpdate) return badge;
     return (
       <Button variant="ghost" size="sm" onClick={() => handleToggleEnabled(admin)} className="h-auto p-1">
         {badge}
@@ -130,7 +134,7 @@ export function AdminList({
               <MobileCardRow label="Groups" value={permLabel} />
               <MobileCardRow label="Status" value={admin.enabled ? 'Enabled' : 'Disabled'} />
               <AdminRowActions
-                capabilities={capabilities}
+                permissionKeys={callerPermissions}
                 editLabel={actionLabels.edit}
                 deleteLabel={actionLabels.delete}
                 onEdit={() => startEdit(admin)}
@@ -162,12 +166,8 @@ export function AdminList({
               <TableRow
                 key={admin.id}
                 data-shortcut-row={admin.id}
-                onClick={() => {
-                  if (capabilities.canUpdate || capabilities.canSetPassword) startEdit(admin);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && event.target === event.currentTarget && (capabilities.canUpdate || capabilities.canSetPassword)) startEdit(admin);
-                }}
+                onClick={() => { if (canEditRow) startEdit(admin); }}
+                onKeyDown={(event) => { if (event.key === 'Enter' && event.target === event.currentTarget && canEditRow) startEdit(admin); }}
                 tabIndex={0}
                 className="border-b border-border hover:bg-muted/50 transition-colors cursor-pointer"
               >
@@ -202,7 +202,7 @@ export function AdminList({
                 {showRowActions && (
                   <TableCell className="text-right" onClick={(event) => event.stopPropagation()}>
                     <AdminRowActions
-                      capabilities={capabilities}
+                      permissionKeys={callerPermissions}
                       editLabel={actionLabels.edit}
                       deleteLabel={actionLabels.delete}
                       onEdit={() => startEdit(admin)}
@@ -228,7 +228,7 @@ export function AdminList({
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-end gap-3">
-        {capabilities.canCreate && (
+        {hasEffectivePermission(new Set(callerPermissions), ACTION_PERMISSIONS.createAdmin) && (
           <Button variant="positive" icon={Plus} onClick={startCreate}>
             {headerLabels.addAdmin}
           </Button>

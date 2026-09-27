@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { ensurePermission, getPermissions } from '@/lib/permissions';
+import { ACTION_PERMISSIONS } from '@/lib/permission-engine';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { safeUserSelect } from '@/lib/prisma-selects';
 import { recordAudit } from '@/lib/audit';
@@ -74,7 +75,7 @@ export async function updateParticipation(
 }
 
 export async function setTestUser(participationId: number): Promise<ActionResult> {
-  await ensurePermission('participation:update');
+  await ensurePermission(ACTION_PERMISSIONS.setTestUser);
 
   try {
     const permissions = await getPermissions();

@@ -5,11 +5,13 @@ import {
   resolveEffectivePermissions,
   hasEffectivePermission,
   type PermissionOverride,
+  type PermissionKey,
 } from '@/lib/permission-engine';
 
-// Why: registry keys are always `${module}:${verb}`; this template literal rejects the legacy
-// coarse names (all/tasks/users/contests/messaging) at compile time so stale call sites surface.
-export type PermissionKey = `${string}:${string}`;
+// Why re-exported: the action/permission map is the one place a server gate and the button that
+// offers it read a key from, and both sides must import one value.
+export { ACTION_PERMISSIONS } from '@/lib/permission-engine';
+export type { PermissionKey, ActionName } from '@/lib/permission-engine';
 
 // Why: cache fresh permissions for 60 seconds to avoid a database round trip on every render while still reflecting revocation quickly
 const accessCache = new Map<string, { value: ReadonlySet<string>; expires: number }>();

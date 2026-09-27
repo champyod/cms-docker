@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Pencil, Power, Rocket } from 'lucide-react';
-import { hasEffectivePermission } from '@/lib/permission-engine';
+import { hasEffectivePermission, ACTION_PERMISSIONS } from '@/lib/permission-engine';
 import { getContestEditData } from '@/app/actions/contests';
 import { useDeployContest, type DeployPhase } from '@/hooks/useDeployContest';
 import { Badge } from '@/components/core/Badge';
@@ -91,8 +91,8 @@ function useRecordHeaderState(contestId: number, permissionKeys: readonly string
   const deploy = useRecordDeploy(contestId);
 
   return {
-    canEdit: hasEffectivePermission(effective, 'contest:update'),
-    canDeploy: hasEffectivePermission(effective, 'deployment:deploy'),
+    canEdit: hasEffectivePermission(effective, ACTION_PERMISSIONS.updateContest),
+    canDeploy: hasEffectivePermission(effective, ACTION_PERMISSIONS.deployContest),
     ...edit,
     ...deploy,
   };

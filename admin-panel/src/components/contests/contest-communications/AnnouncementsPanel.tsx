@@ -1,7 +1,9 @@
 'use client';
 
+import { useMemo } from 'react';
 import { Plus, Send, Trash2 } from 'lucide-react';
 import { Button } from '@/components/core/Button';
+import { ACTION_PERMISSIONS, hasEffectivePermission } from '@/lib/permission-engine';
 
 export interface AnnouncementRow {
   id: number;
@@ -16,8 +18,7 @@ interface Props {
   showForm: boolean;
   subject: string;
   text: string;
-  canPublish?: boolean;
-  canDelete?: boolean;
+  permissionKeys: readonly string[];
   onShowForm: (v: boolean) => void;
   onSubject: (v: string) => void;
   onText: (v: string) => void;
@@ -35,7 +36,10 @@ function formatTime(date: Date | string): string {
   return ANNOUNCEMENT_TIME_FORMAT.format(new Date(date));
 }
 
-export function AnnouncementsPanel({ announcements, showForm, subject, text, canPublish = true, canDelete = true, onShowForm, onSubject, onText, onCreate, onDelete }: Props): React.JSX.Element {
+export function AnnouncementsPanel({ announcements, showForm, subject, text, permissionKeys, onShowForm, onSubject, onText, onCreate, onDelete }: Props): React.JSX.Element {
+  const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
+  const canPublish = hasEffectivePermission(effective, ACTION_PERMISSIONS.createAnnouncement);
+  const canDelete = hasEffectivePermission(effective, ACTION_PERMISSIONS.deleteAnnouncement);
   return (
     <div className="space-y-4">
       {canPublish && <Button variant="positiveOutline" size="sm" icon={Plus} onClick={() => onShowForm(true)}>New Announcement</Button>}

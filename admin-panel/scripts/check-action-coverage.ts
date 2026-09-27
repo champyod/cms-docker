@@ -24,6 +24,7 @@ import {
   ALLOWLIST,
   API_DIR,
   FOLLOW_FILES,
+  PERMISSIONS_FILE,
   ROUTE_METHODS,
   SRC_DIR,
   toRel,
@@ -31,7 +32,7 @@ import {
   type FileInfo,
   type Finding,
 } from "./coverage/model";
-import { parseFile } from "./coverage/scan";
+import { parseActionPermissions, parseFile } from "./coverage/scan";
 import { isAllowlisted, listFilesRecursive, resolveDemanded, tableUpdateKeys } from "./coverage/resolve";
 
 function collectEntries(
@@ -99,6 +100,10 @@ function findViolations(entries: EntryPoint[]): Finding[] {
   return findings;
 }
 
+function readActionPermissions(): Map<string, string> {
+  return fs.existsSync(PERMISSIONS_FILE) ? parseActionPermissions(PERMISSIONS_FILE) : new Map();
+}
+
 function run(): { entries: EntryPoint[]; findings: Finding[] } {
   const actionFiles = listFilesRecursive(ACTIONS_DIR, ".ts").filter(
     (abs) => !abs.endsWith(".test.ts"),
@@ -108,7 +113,7 @@ function run(): { entries: EntryPoint[]; findings: Finding[] } {
   const watched = new Set<string>([...actionFiles, ...FOLLOW_FILES, ...routeFiles]);
   if (fs.existsSync(redirectFile)) watched.add(redirectFile);
   const files = new Map<string, FileInfo>();
-  for (const abs of watched) files.set(abs, parseFile(abs));
+  for (const abs of watched) files.set(abs, parseFile(abs, readActionPermissions()));
   const fieldPerms = files.get(path.join(SRC_DIR, "lib", "field-permissions.ts"));
   const tables = fieldPerms === undefined ? new Map<string, string[]>() : tableUpdateKeys(fieldPerms.source);
 

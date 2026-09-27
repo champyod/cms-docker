@@ -59,16 +59,18 @@ function WorkerEditFields({ editData, setEditData, onSave }: WorkerEditFieldsPro
 }
 
 interface WorkerRowActionsProps {
-  canRetry: boolean;
+  showRetry: boolean;
   onRetry: () => void;
   onStartEdit: () => void;
   onRemove: () => void;
 }
 
-function WorkerRowActions({ canRetry, onRetry, onStartEdit, onRemove }: WorkerRowActionsProps): ReactElement {
+// Why the name: retry is offered while the worker is disconnected, which is a
+// connection state, not a permission — nothing here is permission-gated.
+function WorkerRowActions({ showRetry, onRetry, onStartEdit, onRemove }: WorkerRowActionsProps): ReactElement {
   return (
     <div className="flex items-center gap-1">
-      {canRetry && (
+      {showRetry && (
         <Button variant="ghost" size="sm" onClick={onRetry} className="text-info hover:text-info/80 opacity-100">
           <RefreshCw className="w-4 h-4" />
         </Button>
@@ -110,7 +112,7 @@ export function WorkerNodeRow({ index, worker, status, editing, editor, onRetry,
           <>
             <WorkerDisplayInfo worker={worker} status={status} />
             <WorkerRowActions
-              canRetry={status?.status === 'disconnected'}
+              showRetry={status?.status === 'disconnected'}
               onRetry={onRetry}
               onStartEdit={() => editor.startEdit(index)}
               onRemove={onRemove}

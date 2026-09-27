@@ -94,7 +94,7 @@ describe('user list row navigation', () => {
           users={[USER_ROW]}
           loading={false}
           selectedIds={new Set()}
-          canManageUsers={false}
+          permissionKeys={[]}
           pageNumber={1}
           perPage={20}
           onToggleAll={vi.fn()}
@@ -123,7 +123,7 @@ describe('user list row navigation', () => {
           users={[USER_ROW]}
           loading={false}
           selectedIds={new Set()}
-          canManageUsers={false}
+          permissionKeys={[]}
           pageNumber={1}
           perPage={20}
           onToggleAll={vi.fn()}
@@ -173,14 +173,14 @@ describe('user list row navigation', () => {
 });
 
 describe('user list row action cluster', () => {
-  function renderUserTable(onEdit: (user: UsersPageRow) => void, onDelete: (id: number) => void): void {
+  function renderUserTable(onEdit: (user: UsersPageRow) => void, onDelete: (id: number) => void, permissionKeys: readonly string[] = ['user:update', 'user:delete']): void {
     render(
       <DictionaryProvider dict={en}>
         <UserTable
           users={[USER_ROW]}
           loading={false}
           selectedIds={new Set()}
-          canManageUsers
+          permissionKeys={permissionKeys}
           pageNumber={1}
           perPage={20}
           onToggleAll={vi.fn()}
@@ -207,6 +207,18 @@ describe('user list row action cluster', () => {
       expectTouchTarget(remove);
       expect(remove.hasAttribute('data-shortcut-primary')).toBe(false);
     }
+  });
+
+  // Why: the cluster used to sit behind one user:update flag, so a delete-only reader saw
+  // no controls at all. Each action now carries the permission its own server route demands.
+  it('gates edit and delete on their own keys rather than one shared flag', () => {
+    renderUserTable(vi.fn(), vi.fn(), ['user:delete']);
+    expect(screen.queryByRole('button', { name: 'Edit user ada' })).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Delete user ada' })).toHaveLength(2);
+    cleanup();
+    renderUserTable(vi.fn(), vi.fn(), ['user:update']);
+    expect(screen.getAllByRole('button', { name: 'Edit user ada' })).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: 'Delete user ada' })).toBeNull();
   });
 
   // Why the marker and the press are both asserted: the marker is what

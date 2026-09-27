@@ -9,6 +9,7 @@ import { RowActions, rowActionGroupLabel } from '@/components/core/RowActions';
 import { Skeleton } from '@/components/core/Skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { useDictionary } from '@/hooks/useDictionary';
+import { ACTION_PERMISSIONS } from '@/lib/permission-engine';
 import { ROW_SELECTED_CLASSES } from '@/hooks/shortcut-rows';
 import { CHECKBOX_CLASS, buildUserColumns, getUserRowProps } from './userColumns';
 import type { UserRow, UserTableProps } from './userTableTypes';
@@ -17,7 +18,7 @@ export function UserTable({
   users,
   loading,
   selectedIds,
-  canManageUsers,
+  permissionKeys,
   pageNumber,
   perPage,
   onToggleAll,
@@ -46,20 +47,20 @@ export function UserTable({
   // in this fragment so both layouts stay touch-sized.
   const renderRowActions = useCallback(
     (row: UserRow) => {
-      if (!canManageUsers) return null;
       const { user } = row;
       return (
         <RowActions
           ariaLabel={rowActionGroupLabel(dict, 'users')}
           primaryActionKey="edit"
+          permissionKeys={permissionKeys}
           actions={[
-            { key: 'edit', label: `Edit user ${user.username}`, icon: Pencil, onClick: () => onEdit(user), className: 'min-h-11 min-w-11' },
-            { key: 'delete', label: `Delete user ${user.username}`, icon: Trash2, onClick: () => onDelete(user.id), className: 'min-h-11 min-w-11' },
+            { key: 'edit', label: `Edit user ${user.username}`, icon: Pencil, onClick: () => onEdit(user), permission: ACTION_PERMISSIONS.updateUser, className: 'min-h-11 min-w-11' },
+            { key: 'delete', label: `Delete user ${user.username}`, icon: Trash2, onClick: () => onDelete(user.id), permission: ACTION_PERMISSIONS.deleteUser, className: 'min-h-11 min-w-11' },
           ]}
         />
       );
     },
-    [canManageUsers, dict, onEdit, onDelete],
+    [permissionKeys, dict, onEdit, onDelete],
   );
 
   if (loading && users.length === 0) {

@@ -30,7 +30,7 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
       <UserListTable
         rows={rows}
         selection={selection}
-        capabilities={capabilities}
+        permissionKeys={permissionKeys}
         onOpen={(user: UsersPageRow) => router.push(buildRoute(locale, 'people.user-record', { id: user.id }))}
         onEdit={dialogs.openEdit}
         onDelete={(userId) => { void removeUser(userId); }}

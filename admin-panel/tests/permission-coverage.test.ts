@@ -7,8 +7,8 @@ import { FIELD_PERMISSION_MAP } from '@/lib/field-permissions';
 import { hasEffectivePermission, resolveEffectivePermissions } from '@/lib/permission-engine';
 import { ROUTE_REGISTRY, visibleRoutes } from '@/lib/navigation/registry';
 import type { PermissionRequirement } from '@/lib/navigation/types';
-import { ACTIONS_DIR, API_DIR, FOLLOW_FILES, SRC_DIR, type FileInfo } from '../scripts/coverage/model';
-import { parseFile, listFilesRecursive } from '../scripts/coverage/scan';
+import { ACTIONS_DIR, API_DIR, FOLLOW_FILES, PERMISSIONS_FILE, SRC_DIR, type FileInfo } from '../scripts/coverage/model';
+import { parseActionPermissions, parseFile, listFilesRecursive } from '../scripts/coverage/scan';
 import { resolveDemanded, tableUpdateKeys, isAllowlisted } from '../scripts/coverage/resolve';
 
 // Why this tester: every action permission must be alive (enforced), every
@@ -81,7 +81,7 @@ function fieldPermissionSources(): string {
 const collectEntries = once((): EntryScan => {
   const entryPaths = new Set(entryFiles());
   const parsed = new Map<string, FileInfo>();
-  for (const abs of [...entryPaths, ...FOLLOW_FILES]) parsed.set(abs, parseFile(abs));
+  for (const abs of [...entryPaths, ...FOLLOW_FILES]) parsed.set(abs, parseFile(abs, parseActionPermissions(PERMISSIONS_FILE)));
   const tables = tableUpdateKeys(fieldPermissionSources());
   const entries: Entry[] = [];
   const demandedByEntry = new Map<string, string[]>();

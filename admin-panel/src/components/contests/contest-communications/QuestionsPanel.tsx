@@ -4,6 +4,7 @@ import { Eye, EyeOff, Reply } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { RowActions, rowActionGroupLabel, type RowAction } from '@/components/core/RowActions';
 import { useDictionary } from '@/hooks/useDictionary';
+import { ACTION_PERMISSIONS } from '@/lib/permission-engine';
 
 export interface QuestionRow {
   id: number;
@@ -22,8 +23,7 @@ interface Props {
   replyingTo: number | null;
   replySubject: string;
   replyText: string;
-  canReply?: boolean;
-  canIgnore?: boolean;
+  permissionKeys: readonly string[];
   onReplyingTo: (id: number | null) => void;
   onReplySubject: (v: string) => void;
   onReplyText: (v: string) => void;
@@ -42,8 +42,7 @@ function formatTime(date: Date | string): string {
 }
 
 interface QuestionGates {
-  readonly canReply: boolean;
-  readonly canIgnore: boolean;
+  readonly showReply: boolean;
 }
 
 function buildQuestionActions(
@@ -53,13 +52,14 @@ function buildQuestionActions(
   onReplyingTo: (id: number | null) => void,
   onIgnore: (id: number, ignored: boolean) => void,
 ): RowAction[] {
+  const ignorePermission = question.ignored ? ACTION_PERMISSIONS.unignoreQuestion : ACTION_PERMISSIONS.ignoreQuestion;
   return [
-    { key: 'reply', label: 'Reply', ariaLabel: `Reply to ${question.subject}`, icon: Reply, onClick: () => onReplyingTo(replyingTo === question.id ? null : question.id), isVisible: gates.canReply && !question.reply_timestamp, className: 'shrink-0 rounded-lg text-primary hover:bg-primary/20' },
-    { key: 'ignore', label: question.ignored ? 'Unignore' : 'Ignore', ariaLabel: question.ignored ? 'Unignore question' : 'Ignore question', icon: question.ignored ? Eye : EyeOff, onClick: () => onIgnore(question.id, question.ignored), isVisible: gates.canIgnore, className: 'shrink-0 rounded-lg' },
+    { key: 'reply', label: 'Reply', ariaLabel: `Reply to ${question.subject}`, icon: Reply, onClick: () => onReplyingTo(replyingTo === question.id ? null : question.id), permission: ACTION_PERMISSIONS.replyToQuestion, showWhen: gates.showReply, className: 'shrink-0 rounded-lg text-primary hover:bg-primary/20' },
+    { key: 'ignore', label: question.ignored ? 'Unignore' : 'Ignore', ariaLabel: question.ignored ? 'Unignore question' : 'Ignore question', icon: question.ignored ? Eye : EyeOff, onClick: () => onIgnore(question.id, question.ignored), permission: ignorePermission, className: 'shrink-0 rounded-lg' },
   ];
 }
 
-export function QuestionsPanel({ questions, replyingTo, replySubject, replyText, canReply = true, canIgnore = true, onReplyingTo, onReplySubject, onReplyText, onReply, onIgnore }: Props): React.JSX.Element {
+export function QuestionsPanel({ questions, replyingTo, replySubject, replyText, permissionKeys, onReplyingTo, onReplySubject, onReplyText, onReply, onIgnore }: Props): React.JSX.Element {
   const dict = useDictionary();
   if (questions.length === 0) return <p className="text-sm text-muted-foreground">No questions from contestants.</p>;
   return (
@@ -85,7 +85,8 @@ export function QuestionsPanel({ questions, replyingTo, replySubject, replyText,
             <RowActions
               ariaLabel={rowActionGroupLabel(dict, 'questions')}
               className="shrink-0"
-              actions={buildQuestionActions(q, { canReply, canIgnore }, replyingTo, onReplyingTo, onIgnore)}
+              permissionKeys={permissionKeys}
+              actions={buildQuestionActions(q, { showReply: q.reply_timestamp === null }, replyingTo, onReplyingTo, onIgnore)}
             />
           </div>
           {replyingTo === q.id && (

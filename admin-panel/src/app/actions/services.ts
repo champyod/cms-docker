@@ -5,6 +5,7 @@ import path from 'path';
 import { exec } from 'child_process';
 import util from 'util';
 import { ensurePermission } from '@/lib/permissions';
+import { ACTION_PERMISSIONS } from '@/lib/permission-engine';
 import { getRepoRoot } from '@/lib/repo-root';
 import { resolveHostComposeLocation } from '@/lib/compose-location';
 import { logToDiscord } from '@/lib/discord-notifier';
@@ -128,7 +129,7 @@ export async function restartServices(type: 'all' | 'core' | 'admin' | 'worker' 
 }
 
 export async function deployContest(contestId: number): Promise<DeployContestResult> {
-  await ensurePermission('deployment:deploy');
+  await ensurePermission(ACTION_PERMISSIONS.deployContest);
 
   // Why the deploy resolves the same three things a restart does: the contest stack is the same
   // project the make targets run, so it is brought up from the same file list, with the same

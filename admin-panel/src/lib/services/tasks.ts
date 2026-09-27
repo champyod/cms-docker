@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { requirePermission } from '@/lib/server/authorization';
+import { requirePermission, ACTION_PERMISSIONS } from '@/lib/server/authorization';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { recordAudit } from '@/lib/audit';
 import { sanitize } from '@/lib/api-utils';
@@ -50,7 +50,7 @@ export async function getDiagnosticsForApi(taskId: number): Promise<Awaited<Retu
 }
 function toIntervalString(v: number | null, unit: string, fb: string): string | null { if (v === null || v === undefined) return fb; return `${v} ${unit}`; }
 export async function createTask(data: TaskData): Promise<MutationResult> {
-  const perms = await requirePermission('task:create');
+  const perms = await requirePermission(ACTION_PERMISSIONS.createTask);
   const allowed = stripDisallowedFields('tasks', data as unknown as Record<string, unknown>, perms) as unknown as TaskData;
   const s = allowed as unknown as TaskData;
   try {
@@ -73,7 +73,7 @@ async function insertTaskForApi(data: Record<string, unknown>): Promise<void> {
   await prisma.$executeRaw`INSERT INTO tasks (name, title, contest_id, num, submission_format, primary_statements, allowed_languages, token_mode, token_max_number, token_min_interval, token_gen_initial, token_gen_number, token_gen_interval, token_gen_max, max_submission_number, max_user_test_number, min_submission_interval, min_user_test_interval, feedback_level, score_precision, score_mode) VALUES (${data.name as string}, ${data.title as string}, ${sanitize(data.contest_id as never)}, null, ${cleanArray(data.submission_format).map((f: string) => f.replace(/%s/g, data.name as string))}::varchar[], ${cleanArray(data.primary_statements)}::varchar[], ${cleanArray(data.allowed_languages)}::varchar[], ${(data.token_mode as string) ?? 'disabled'}::token_mode, ${nullablePositive(data.token_max_number)}, ${tokenMin}::interval, ${(data.token_gen_initial as number) ?? 0}, ${(data.token_gen_number as number) ?? 0}, ${tokenGen}::interval, ${nullablePositive(data.token_gen_max)}, ${nullablePositive(data.max_submission_number)}, ${nullablePositive(data.max_user_test_number)}, ${minSub}::interval, ${minUser}::interval, ${(data.feedback_level as string) ?? 'restricted'}::feedback_level, ${(data.score_precision as number) ?? 0}, ${(data.score_mode as string) ?? 'max'}::score_mode)`;
 }
 export async function createTaskViaApi(data: Record<string, unknown>): Promise<MutationResult> {
-  await requirePermission('task:create');
+  await requirePermission(ACTION_PERMISSIONS.createTask);
   const name = typeof data.name === 'string' ? data.name.trim() : ''; const title = typeof data.title === 'string' ? data.title.trim() : '';
   if (!name) { const e = new Error('Task name is required') as Error & { status: number }; e.status = 400; throw e; }
   if (!/^[A-Za-z0-9_-]+$/.test(name)) { const e = new Error('Task name must contain only letters, numbers, hyphens and underscores') as Error & { status: number }; e.status = 400; throw e; }
@@ -94,7 +94,7 @@ async function applyTaskIntervals(id: number, iv: Record<string, unknown>): Prom
   if (clauses.length === 0) return; p.push(id); await prisma.$executeRawUnsafe(`UPDATE tasks SET ${clauses.join(', ')} WHERE id = $${p.length}`, ...p);
 }
 export async function updateTask(id: number, data: Partial<TaskData>): Promise<MutationResult> {
-  const perms = await requirePermission('task:update');
+  const perms = await requirePermission(ACTION_PERMISSIONS.updateTask);
   const allowed = stripDisallowedFields('tasks', data as unknown as Record<string, unknown>, perms) as unknown as Partial<TaskData>;
   const s = allowed as unknown as Partial<TaskData>;
   try {
@@ -128,17 +128,17 @@ async function applyTaskUpdatesForApi(id: number, std: Record<string, unknown>, 
   if (clauses.length > 0) { q.push(id); await prisma.$executeRawUnsafe(`UPDATE tasks SET ${clauses.join(', ')} WHERE id = $${q.length}`, ...q); }
 }
 export async function updateTaskViaApi(id: number, raw: Record<string, unknown>): Promise<MutationResult> {
-  await requirePermission('task:update'); if (Number.isNaN(id)) { const e = new Error('Invalid ID') as Error & { status: number }; e.status = 400; throw e; }
+  await requirePermission(ACTION_PERMISSIONS.updateTask); if (Number.isNaN(id)) { const e = new Error('Invalid ID') as Error & { status: number }; e.status = 400; throw e; }
   const s = sanitizeTaskDataForApi(raw); await normalizeSubmissionFormat(s, id);
   const { standardFields, intervalFields } = splitFieldsForApi(s);
   try { await applyTaskUpdatesForApi(id, standardFields, intervalFields); await recordAudit({ verb: 'task:update', entity: 'task', entityId: String(id), afterValues: { changedKeys: [...Object.keys(standardFields), ...Object.keys(intervalFields)] }, result: 'success' }); return { success: true }; } catch (e) { const code = (e as { code?: string }).code; if (code === 'P2002') { const er = new Error('Task name already exists') as Error & { status: number }; er.status = 400; throw er; } throw e; }
 }
 export async function deleteTask(id: number): Promise<MutationResult> {
-  await requirePermission('task:delete'); const before = await prisma.tasks.findUnique({ where: { id } });
+  await requirePermission(ACTION_PERMISSIONS.deleteTask); const before = await prisma.tasks.findUnique({ where: { id } });
   try { await prisma.tasks.delete({ where: { id } }); await recordAudit({ verb: 'task:delete', entity: 'task', entityId: String(id), beforeValues: before ?? undefined, result: 'success' }); return { success: true }; } catch (e) { return { success: false, error: (e as Error).message }; }
 }
 export async function deleteTaskViaApi(id: number): Promise<MutationResult> {
-  await requirePermission('task:delete'); if (Number.isNaN(id)) { const e = new Error('Invalid ID') as Error & { status: number }; e.status = 400; throw e; }
+  await requirePermission(ACTION_PERMISSIONS.deleteTask); if (Number.isNaN(id)) { const e = new Error('Invalid ID') as Error & { status: number }; e.status = 400; throw e; }
   const before = await prisma.tasks.findUnique({ where: { id }, select: { name: true, title: true } });
   try { await prisma.tasks.delete({ where: { id } }); await recordAudit({ verb: 'task:delete', entity: 'task', entityId: String(id), beforeValues: before ? { name: before.name, title: before.title } : undefined, result: 'success' }); return { success: true }; } catch (e) { throw e; }
 }
