@@ -15,7 +15,7 @@ use std::thread;
 
 use cms_proto::Shard;
 use cms_worker::edge::{JobError, JobResult};
-use cms_worker::service::{Job, Service, ServiceError, ServiceState};
+use cms_worker::service::{GroupOutcome, Job, Service, ServiceError, ServiceState};
 use serde_json::{Map, Value};
 
 /// The shard the worker under test stamps on the jobs it runs.
@@ -124,6 +124,16 @@ fn a_job_the_tombstone_stopped_is_one_result_and_the_group_continues() {
     );
 }
 
+/// What the request that follows a released worker is charged, which is how the
+/// charge of the request that failed before it is read back.
+fn next_request_is_charged(service: &Service) -> GroupOutcome {
+    let next_clock = Clock::of(&[20.0, 21.0]);
+    let mut next = vec![job("after")];
+    service
+        .execute_group(&mut next, || next_clock.read(), |_, _| Ok(()))
+        .expect("the worker is free, so the next request is taken")
+}
+
 #[test]
 fn a_task_type_this_worker_does_not_have_fails_the_group_before_it_runs() {
     let service = worker();
@@ -156,11 +166,7 @@ fn a_task_type_this_worker_does_not_have_fails_the_group_before_it_runs() {
         "the worker is released on the failing path too"
     );
 
-    let next_clock = Clock::of(&[20.0, 21.0]);
-    let mut next = vec![job("after")];
-    let next = service
-        .execute_group(&mut next, || next_clock.read(), |_, _| Ok(()))
-        .expect("the worker is free, so the next request is taken");
+    let next = next_request_is_charged(&service);
     assert_eq!(
         next.report.free_seconds, 14.0,
         "the request that failed its job was closed at 6.0 as well"
@@ -188,13 +194,21 @@ fn a_worker_taken_by_one_request_is_free_for_the_next() {
     );
 }
 
-#[test]
-fn a_request_that_finds_the_worker_busy_is_declined_and_still_charged() {
-    let service = Arc::new(worker());
+/// One request parked inside its only job while it holds the worker, and the
+/// signal that lets it finish.
+struct HeldRequest {
+    finish: mpsc::Sender<()>,
+    running: thread::JoinHandle<Result<GroupOutcome, ServiceError>>,
+}
+
+/// Starts a request that takes the worker and parks inside its one job until
+/// [`HeldRequest::finish`] is sent, so a request arriving then finds a worker
+/// already taken rather than a free one.
+fn request_holding_the_worker(service: &Arc<Service>) -> HeldRequest {
     let (running, is_running) = mpsc::channel();
-    let (release, may_finish) = mpsc::channel();
-    let holding = Arc::clone(&service);
-    let request = thread::spawn(move || {
+    let (finish, may_finish) = mpsc::channel();
+    let holding = Arc::clone(service);
+    let parked = thread::spawn(move || {
         let mut jobs = vec![job("only")];
         let clock = Clock::of(&[10.0, 12.0]);
         let mut work = |_task_type: &str, _body: &mut Map<String, Value>| {
@@ -207,12 +221,16 @@ fn a_request_that_finds_the_worker_busy_is_declined_and_still_charged() {
     is_running
         .recv()
         .expect("the first request took the worker and is running");
-    assert_eq!(service.state(), ServiceState::Busy);
+    HeldRequest {
+        finish,
+        running: parked,
+    }
+}
 
-    let clock = Clock::of(&[25.0, 26.0]);
-    let declined = service
-        .execute_group(&mut [], || clock.read(), |_, _| Ok(()))
-        .expect_err("a request that finds the worker busy is declined");
+/// Asserts the refusal a request gets from a worker another request already
+/// holds: it names that worker, and it charges the declined request for the idle
+/// it waited in.
+fn assert_declined(declined: ServiceError) {
     assert!(
         declined.to_string().contains("shard 3"),
         "the refusal names the worker that declined it: {declined}"
@@ -228,9 +246,22 @@ fn a_request_that_finds_the_worker_busy_is_declined_and_still_charged() {
         }
         refusal => panic!("a busy worker declines rather than refuses a job: {refusal}"),
     }
+}
 
-    release.send(()).expect("the first request may finish");
-    let outcome = request.join().expect("the first request finished");
+#[test]
+fn a_request_that_finds_the_worker_busy_is_declined_and_still_charged() {
+    let service = Arc::new(worker());
+    let held = request_holding_the_worker(&service);
+    assert_eq!(service.state(), ServiceState::Busy);
+
+    let clock = Clock::of(&[25.0, 26.0]);
+    let declined = service
+        .execute_group(&mut [], || clock.read(), |_, _| Ok(()))
+        .expect_err("a request that finds the worker busy is declined");
+    assert_declined(declined);
+
+    held.finish.send(()).expect("the first request may finish");
+    let outcome = held.running.join().expect("the first request finished");
     let ran = outcome.expect("the first request ran its job");
     assert_eq!(ran.results, [JobResult::COMPLETED]);
     assert_eq!(service.state(), ServiceState::Free);
