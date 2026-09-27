@@ -115,7 +115,8 @@ pub struct Runtime {
     pub compilation: CompilationLimits,
     /// The largest file a run may create, in bytes, or `None` for a file as large
     /// as the machine allows. It bounds the box rather than a testcase, so it is
-    /// the same size for every run this worker makes.
+    /// the same size for every evaluation run this worker makes, and a
+    /// compilation is not held to it.
     pub file_size: Option<u64>,
 }
 
