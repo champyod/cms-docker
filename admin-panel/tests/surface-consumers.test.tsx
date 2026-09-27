@@ -84,6 +84,44 @@ describe('detail sections render through SectionCard', () => {
 });
 
 describe('row action clusters render through RowActions', () => {
+  // Why a reader, not the markup: every gate here is a per-action permission, so the
+  // contract is which control a given key set reaches.
+  function participantRow(permissionKeys: readonly string[]): void {
+    render(
+      <ContestParticipantsSection
+        participations={[{ id: 4, user_id: 2, unrestricted: false, hidden: false, users: { username: 'ada', first_name: 'Ada', last_name: 'L' } }]}
+        expanded
+        permissionKeys={permissionKeys}
+        onToggle={() => undefined}
+        onAddParticipant={() => undefined}
+        onAddTeam={() => undefined}
+        onMarkAsTest={() => undefined}
+        onOpenSettings={() => undefined}
+        onRemove={() => undefined}
+      />,
+    );
+  }
+
+  it('gates the participation editor on the permission its save action demands', () => {
+    participantRow(['participation:update']);
+    expect(screen.queryByRole('button', { name: 'Settings' })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Mark as Test User' })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Remove ada' })).toBeNull();
+  });
+
+  // Why each key alone: a reader holding only one of the two must reach exactly that
+  // control, and Settings must follow its own action rather than a sibling's gate.
+  it('gives a delete-only reader remove alone, and a reader with neither key no cluster', () => {
+    participantRow(['participation:delete']);
+    expect(screen.queryByRole('button', { name: 'Remove ada' })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Settings' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Mark as Test User' })).toBeNull();
+    cleanup();
+    participantRow(['participation:read']);
+    expect(screen.queryByRole('group', { name: 'Participants' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Settings' })).toBeNull();
+  });
+
   it('wraps the environment save pair in a labelled group and hides the restart until a field changes', () => {
     const section: EnvConfigSection = {
       title: 'Database Configuration',

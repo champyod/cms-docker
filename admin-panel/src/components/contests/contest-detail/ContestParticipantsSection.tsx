@@ -60,7 +60,7 @@ function ParticipantActions({ participation, permissionKeys, onMarkAsTest, onOpe
       permissionKeys={permissionKeys}
       actions={[
         { key: 'test', label: 'Mark as Test User', icon: FlaskConical, onClick: () => onMarkAsTest(participation.id), permission: ACTION_PERMISSIONS.setTestUser },
-        { key: 'settings', label: 'Settings', icon: Settings, onClick: () => onOpenSettings(participation.id, username) },
+        { key: 'settings', label: 'Settings', icon: Settings, onClick: () => onOpenSettings(participation.id, username), permission: ACTION_PERMISSIONS.updateParticipation },
         { key: 'remove', label: `Remove ${username}`, icon: Trash2, onClick: () => onRemove(participation.id), permission: ACTION_PERMISSIONS.removeParticipant },
       ]}
     />

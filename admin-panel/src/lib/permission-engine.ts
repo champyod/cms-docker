@@ -39,6 +39,7 @@ export const ACTION_PERMISSIONS = {
   updateAdmin: 'admin:update',
   updateContest: 'contest:update',
   updateGroup: 'group:update',
+  updateParticipation: 'participation:update',
   updateTask: 'task:update',
   updateUser: 'user:update',
 } as const satisfies Record<string, PermissionKey>;

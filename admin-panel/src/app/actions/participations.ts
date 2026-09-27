@@ -40,7 +40,7 @@ export async function updateParticipation(
   participationId: number,
   data: UpdateParticipationInput
 ): Promise<ActionResult> {
-  await ensurePermission('participation:update');
+  await ensurePermission(ACTION_PERMISSIONS.updateParticipation);
 
   try {
     const permissions = await getPermissions();
