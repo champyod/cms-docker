@@ -581,6 +581,13 @@ class ProxyService(TriggeredService[ProxyOperation, ProxyExecutor]):
                              self.contest_id)
                 return
 
+            # Without an active dataset there is nothing to rescore: the
+            # stored scores belong to a dataset that is no longer active.
+            if dataset is None:
+                logger.warning("Skipping dataset update for task %d: it has "
+                               "no active dataset.", task.id)
+                return
+
             logger.info("Dataset update for task %d (dataset now is %d).",
                         task.id, dataset.id)
 
