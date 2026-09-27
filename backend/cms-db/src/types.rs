@@ -3,9 +3,22 @@
 //!
 //! Each mapping is a newtype rather than a bare alias, so a value that reached a
 //! query has already passed the rule its column enforces and a caller cannot
-//! build one that has not. The driver's own `Text` wrapper is what makes a
-//! newtype in a text column usable as a bind and row type, so none is declared
-//! by hand here.
+//! build one that has not.
+//!
+//! Only [`Interval`] is a bind and a row type today, because an `interval` is
+//! the one column here that is not text: `interval::wire` declares the driver's
+//! `Type`, `Encode` and `Decode` for it by hand. [`FileDigest`], [`CacheHandle`],
+//! [`PasswordForm`] and [`PermissionInputs`] apply their column's rule and hand
+//! the caller the value as a string, so they are validation only — the query step
+//! that reads and writes those columns is what binds and decodes them, and until
+//! it exists no driver trait is declared for any of them.
+//!
+//! # Errors
+//!
+//! Every fallible mapping reports the error type re-exported beside it here:
+//! [`IntervalError`], [`DigestError`], [`CacheError`] and [`AuthError`]. A
+//! [`PermissionInputs`] set is read from rows rather than parsed, so resolving it
+//! cannot fail.
 
 pub use crate::auth::{AuthError, BcryptPassword, BcryptVerifier, PasswordForm, PlaintextPassword};
 pub use crate::digest::{

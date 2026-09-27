@@ -1,13 +1,27 @@
-//! The wire form of an `interval`.
+//! The `interval` integration with the driver, and the only one in the crate.
 //!
 //! Postgres keeps an interval in three integral fields and sends all three over
 //! the binary protocol as sixteen big-endian bytes: eight for the time, four for
 //! the day, four for the month. The month is carried rather than folded into the
 //! day because a month is not a fixed number of days, which is exactly why
-//! [`Interval`] refuses to hold one.
+//! [`Interval`] refuses to hold one. The text protocol carries the same value in
+//! the verbose form instead, which [`text`](super::text) reads.
 //!
-//! The text protocol carries the same value in the verbose form instead, which
-//! [`text`](super::text) reads.
+//! All three traits a column type needs are declared here, and for [`Interval`]
+//! alone: [`Type`] so a query knows the column, [`Encode`] so a value binds, and
+//! [`Decode`] so a row comes back. Nothing else in the crate claims a driver
+//! trait, because an `interval` is the one column here that is not text — the
+//! other families validate what their column holds and hand the caller the
+//! string, and the query step that reads those columns is what binds them.
+//!
+//! # Errors
+//!
+//! Both directions return the driver's error type. Decoding a binary value that
+//! is not the sixteen bytes an `interval` occupies gives
+//! [`IntervalError::BinaryLength`], and one carrying a month gives
+//! [`IntervalError::CalendarField`], both before any value is built. Encoding
+//! gives [`IntervalError::OutOfRange`] when the whole-day part is larger than
+//! the `int32` the column's day field holds.
 
 use sqlx::decode::Decode;
 use sqlx::encode::{Encode, IsNull};

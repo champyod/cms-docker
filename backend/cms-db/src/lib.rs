@@ -1,8 +1,8 @@
 //! Column-level type mapping for the contest database.
 //!
 //! The four mappings in [`types`] turn the shapes the rest of CMS already
-//! exchanges into Rust values the driver can bind and decode, so that a row the
-//! database would have refused never reaches a query:
+//! exchanges into Rust values that carry the rule their column enforces, so that
+//! a row the database would have refused never reaches a query:
 //!
 //! | Rust type | Postgres column | Reference it reproduces |
 //! |---|---|---|
@@ -14,9 +14,18 @@
 //!
 //! Each mapping carries the reference's own acceptance rule rather than a
 //! looser one, so a value the database would have refused is refused here too
-//! instead of reaching a query. Nothing here opens a connection: the mappings
-//! are the values a query binds and the rows it decodes, and their tests run
-//! against captured column shapes with no server.
+//! instead of reaching a query.
+//!
+//! [`Interval`] is the only mapping the driver carries, and the only one that
+//! declares `Type`, `Encode` and `Decode`: an `interval` is the one column here
+//! that is not text, so the driver's own text wrapper does not apply to it. The
+//! other four apply their rule and hand the caller the value as a string, which
+//! makes them validation only until the query step that reads and writes their
+//! columns binds them.
+//!
+//! Nothing here opens a connection. The `interval` tests check the driver's own
+//! encoder and decoder against the sixteen bytes and the text a column really
+//! holds, and the rest check the values their columns hold.
 //!
 //! # Errors
 //!
