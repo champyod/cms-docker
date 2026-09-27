@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
+import { Button } from './Button';
 import { PasswordFieldWithGenerator } from './PasswordFieldWithGenerator';
 import { cn } from '@/lib/utils';
 import type { PasswordKind } from '@/lib/password-format';
@@ -65,6 +66,62 @@ export function PasswordKindSelector({
   );
 }
 
+interface SavedPasswordFieldProps {
+  reveal: RevealProps;
+}
+
+/** Why the request is latched in a ref: the secret arrives once per mount, and a
+ * ref keeps a Hide/Reveal pair from re-arming the fetch on every reopen. */
+function useSavedPasswordReveal(reveal: RevealProps) {
+  const [isRevealed, setIsRevealed] = useState(false);
+  const hasRequestedRef = useRef(false);
+  const isLoading = reveal.loading === true;
+
+  const toggleReveal = (): void => {
+    if (isRevealed && !isLoading) {
+      setIsRevealed(false);
+      return;
+    }
+    if (!hasRequestedRef.current) {
+      hasRequestedRef.current = true;
+      reveal.onReveal();
+    }
+    setIsRevealed(true);
+  };
+
+  return { isLoading, isOpen: isRevealed && !isLoading, toggleReveal };
+}
+
+function SavedPasswordField({ reveal }: SavedPasswordFieldProps) {
+  const { isLoading, isOpen, toggleReveal } = useSavedPasswordReveal(reveal);
+
+  return (
+    <div className="relative">
+      <input
+        type={isOpen ? 'text' : 'password'}
+        readOnly
+        autoComplete="off"
+        value={reveal.value ?? ''}
+        aria-label="Current password"
+        placeholder="••••••••"
+        className="w-full rounded-lg border border-border bg-black/50 px-3 py-2 pr-14 font-mono text-sm text-emerald-300 focus:outline-none"
+      />
+      <div className="absolute right-2 top-1/2 -translate-y-1/2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          icon={isOpen ? EyeOff : Eye}
+          iconOnly
+          tooltip={isOpen ? 'Hide' : 'Reveal'}
+          loading={isLoading}
+          onClick={toggleReveal}
+        />
+      </div>
+    </div>
+  );
+}
+
 export function PasswordFieldWithKind({
   label,
   value,
@@ -75,17 +132,6 @@ export function PasswordFieldWithKind({
   reveal,
   placeholder,
 }: PasswordFieldWithKindProps) {
-  const [isRevealedVisible, setIsRevealedVisible] = useState(false);
-
-  const handleRevealClick = (): void => {
-    if (isRevealedVisible) {
-      setIsRevealedVisible(false);
-      return;
-    }
-    reveal?.onReveal();
-    setIsRevealedVisible(true);
-  };
-
   return (
     <div className="space-y-2">
       <PasswordFieldWithGenerator
@@ -98,32 +144,13 @@ export function PasswordFieldWithKind({
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-xs uppercase tracking-wider text-neutral-500">Storage</span>
         <PasswordKindSelector kind={kind} onKind={onKind} />
-        {reveal?.state === 'plaintext' && (
-          <button
-            type="button"
-            onClick={handleRevealClick}
-            disabled={reveal.loading}
-            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-card hover:bg-card text-neutral-200 border border-border rounded-lg transition-colors disabled:opacity-50"
-          >
-            {isRevealedVisible ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-            {reveal.loading ? 'Revealing…' : isRevealedVisible ? 'Hide' : 'Reveal'}
-          </button>
-        )}
       </div>
       {reveal?.state === 'bcrypt' && (
         <p className="text-xs text-amber-400/80">
           Stored as bcrypt — irreversible. Typing replaces it.
         </p>
       )}
-      {reveal?.state === 'plaintext' && isRevealedVisible && !reveal.loading && (
-        <input
-          type="text"
-          readOnly
-          value={reveal.value ?? ''}
-          aria-label="Current password"
-          className="w-full px-3 py-2 bg-black/50 border border-border rounded-lg font-mono text-sm text-emerald-300 focus:outline-none"
-        />
-      )}
+      {reveal?.state === 'plaintext' && <SavedPasswordField reveal={reveal} />}
     </div>
   );
 }
