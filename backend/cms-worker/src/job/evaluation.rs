@@ -76,11 +76,13 @@ impl EvaluationJob {
     /// it leaves out. `EvaluationJob.__init__` defaults `only_execution` and
     /// `get_output` to `False`, `from_submission` names neither, and
     /// `export_to_dict` writes both whatever they hold (`Job.py:549-550`,
-    /// `Job.py:599-600`, `Job.py:635-650`). Nothing downstream separates that
-    /// from an absent value: the pinned evaluation set lists both keys
-    /// (`keys.rs:110-111`) and reads each as an `Option<bool>`
-    /// (`isolation.rs:241-242`), and a task type tests the truth of one
-    /// (`Batch.py:353`), so the wire form is decided here.
+    /// `Job.py:599-600`, `Job.py:635-650`). Nothing here tells `false` from an
+    /// absent value — a task type tests the truth of one (`Batch.py:353`) and
+    /// the pinned set reads each as an `Option<bool>` (`isolation.rs:241-242`)
+    /// — while the export of a submission evaluation this repository already
+    /// holds says `false` and decodes to `Some(false)` (`jobs_fixtures.rs:29`,
+    /// `jobs_isolation.rs:76`). That is what a serialize step writing what this
+    /// constructor holds will produce.
     ///
     /// # Errors
     ///
