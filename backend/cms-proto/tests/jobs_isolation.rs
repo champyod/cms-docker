@@ -1,50 +1,23 @@
-//! The key sets a job must carry, and what isolating one batch does with a job
-//! that does not.
+//! What isolating a finished batch does with each job that does not carry the
+//! keys, the values or the shard of its own kind.
 //!
-//! The two literals are what the Python side writes: `Job.export_to_dict` and
-//! the keys each subclass adds on top. The pin tests compare them against the
-//! constants, so a constant edited without the Python side being edited fails
-//! here rather than in production.
+//! The key sets those jobs are checked against are pinned against the Python
+//! exports in `jobs_pins`, which reads the same literals from `jobs_fixtures`.
+
+mod jobs_fixtures;
 
 use cms_proto::{
-    key_set_for, DigestMap, EvaluationOutcome, FinishedCall, IsolatedBatch, JobError, JobKind,
-    KindExtras, OperationKind, Quarantine, Requeue, Shard, COMPILATION_KEYS, DIGEST_MAP_KEYS,
-    EVALUATION_EXECUTION_KEYS, EVALUATION_KEYS, OPERATION_KEYS,
+    DigestMap, EvaluationOutcome, FinishedCall, IsolatedBatch, JobError, JobKind, KindExtras,
+    OperationKind, Requeue, Shard,
 };
+use jobs_fixtures::{job, quarantined, reported};
 use serde_json::{json, Value};
-
-const COMPILATION_JOB: &str = r#"{
-  "operation": {"type": "compile", "object_id": 42, "dataset_id": 7,
-    "testcase_codename": null, "archive_sandbox": false},
-  "task_type": "batch", "task_type_parameters": {"compilation": "grader"}, "language": "C++17",
-  "multithreaded_sandbox": false, "archive_sandbox": false, "shard": 3, "keep_sandbox": false,
-  "sandboxes": [], "sandbox_digests": {}, "info": "Compilation", "success": true, "text": "ok",
-  "admin_text": "", "files": {"foo.cpp": "1a2b3c4d5e6f7890"}, "managers": {}, "executables": {},
-  "type": "compilation", "compilation_success": true, "plus": {}}"#;
-
-const EVALUATION_JOB: &str = r#"{
-  "operation": {"type": "evaluate", "object_id": 42, "dataset_id": 7,
-    "testcase_codename": "001", "archive_sandbox": false},
-  "task_type": "batch", "task_type_parameters": {"evaluation": "grader"}, "language": "C++17",
-  "multithreaded_sandbox": false, "archive_sandbox": false, "shard": 3, "keep_sandbox": false,
-  "sandboxes": [], "sandbox_digests": {}, "info": "Evaluation", "success": true, "text": "ok",
-  "admin_text": "", "files": {}, "managers": {}, "executables": {}, "type": "evaluation",
-  "input": null, "output": "4\n", "time_limit": 2.0, "memory_limit": 262144, "outcome": "correct",
-  "user_output": "", "plus": {}, "only_execution": false, "get_output": false}"#;
 
 /// 8_796_093_022_207 MiB: a whole number of mebibytes the dataset admits, and
 /// the largest an i64 limit carries. It needs 63 bits, so it arrives whole only
 /// if the field is as wide as the `int` the constructor declares over its
 /// BigInteger column.
 const EXACT_MEMORY_LIMIT: i64 = 9_223_372_036_853_727_232;
-
-fn job(kind: JobKind) -> Value {
-    let literal = match kind {
-        JobKind::Compilation => COMPILATION_JOB,
-        JobKind::Evaluation => EVALUATION_JOB,
-    };
-    serde_json::from_str(literal).expect("the python literal must be valid JSON")
-}
 
 /// A compilation job with `key` set to `value`.
 fn with(key: &str, value: Value) -> Value {
@@ -61,45 +34,6 @@ fn without(key: &str) -> Value {
     let mut job = job(JobKind::Compilation);
     job.as_object_mut().expect("an object").remove(key);
     job
-}
-
-fn keys_of(value: &Value) -> Vec<&str> {
-    let object = value.as_object().expect("a job must be a JSON object");
-    let mut keys: Vec<&str> = object.keys().map(String::as_str).collect();
-    keys.sort_unstable();
-    keys
-}
-
-fn sorted<'a>(keys: &[&'a str]) -> Vec<&'a str> {
-    let mut keys = keys.to_vec();
-    keys.sort_unstable();
-    keys
-}
-
-fn shared_keys() -> Vec<&'static str> {
-    COMPILATION_KEYS
-        .iter()
-        .filter(|k| EVALUATION_KEYS.contains(k))
-        .copied()
-        .collect()
-}
-
-/// The outcome of a call reporting these jobs from this shard, this error.
-fn reported(jobs: Vec<Value>, shard: i64, error: Option<&str>) -> Result<IsolatedBatch, JobError> {
-    let call = FinishedCall {
-        data: json!({ "jobs": jobs }),
-        shard: Shard::new(shard),
-        error: error.map(str::to_owned),
-    };
-    call.isolate()
-}
-
-/// The one job of these that was refused, with its reason and its requeue.
-fn quarantined(jobs: Vec<Value>) -> Quarantine {
-    let batch = reported(jobs, 3, None).expect("must isolate");
-    let mut refused = batch.quarantined();
-    assert_eq!(refused.len(), 1, "exactly one job must be refused");
-    refused.remove(0).clone()
 }
 
 /// The reason the one compilation job of these is refused for.
@@ -123,83 +57,6 @@ fn evaluated(key: &str, value: Value) -> Result<EvaluationOutcome, JobError> {
         panic!("an evaluation job carries the evaluation fields");
     };
     Ok(outcome.clone())
-}
-
-#[test]
-fn the_key_sets_are_exactly_the_ones_the_python_exports_write() {
-    for (kind, pinned) in [
-        (JobKind::Compilation, &COMPILATION_KEYS[..]),
-        (JobKind::Evaluation, &EVALUATION_KEYS[..]),
-    ] {
-        assert_eq!(keys_of(&job(kind)), sorted(pinned));
-        assert_eq!(key_set_for(kind), pinned);
-        assert_eq!(
-            sorted(pinned).len(),
-            pinned.len(),
-            "a repeated key is a pin that lies"
-        );
-    }
-    let operation = job(JobKind::Evaluation)["operation"].clone();
-    assert_eq!(keys_of(&operation), sorted(&OPERATION_KEYS));
-    let sizes = [
-        COMPILATION_KEYS.len(),
-        EVALUATION_KEYS.len(),
-        OPERATION_KEYS.len(),
-    ];
-    assert_eq!(sizes, [20, 27, 5]);
-}
-
-#[test]
-fn the_two_job_sets_differ_only_in_what_each_subclass_adds() {
-    let shared = shared_keys();
-    let only: Vec<&str> = COMPILATION_KEYS
-        .iter()
-        .filter(|k| !shared.contains(k))
-        .copied()
-        .collect();
-    let sizes = [shared.len(), only.len(), EVALUATION_EXECUTION_KEYS.len()];
-    let mut nullable = job(JobKind::Evaluation);
-    nullable["outcome"] = Value::Null;
-
-    assert_eq!(
-        (sizes, only.as_slice()),
-        ([19, 1, 8], ["compilation_success"].as_slice())
-    );
-    assert_eq!(shared.len() + only.len(), COMPILATION_KEYS.len());
-    assert_eq!(
-        shared.len() + EVALUATION_EXECUTION_KEYS.len(),
-        EVALUATION_KEYS.len()
-    );
-    assert!(DIGEST_MAP_KEYS.iter().all(|key| shared.contains(key)));
-    assert!(EVALUATION_EXECUTION_KEYS
-        .iter()
-        .all(|k| !COMPILATION_KEYS.contains(k)));
-    assert_eq!(
-        reported(vec![nullable], 3, None)
-            .expect("null must decode")
-            .committed()
-            .len(),
-        1
-    );
-}
-
-#[test]
-fn the_two_levels_of_nesting_carry_the_group_beside_the_shard() {
-    let mut wrapper = json!({
-        "data": { "jobs": [job(JobKind::Compilation), job(JobKind::Evaluation)] },
-        "shard": 3, "error": null,
-    });
-    let call: FinishedCall = serde_json::from_value(wrapper.clone()).expect("must decode");
-    let batch = call.isolate().expect("two good jobs must isolate");
-
-    assert_eq!(call.shard, Shard::new(3));
-    assert_eq!(batch.committed().len(), 2);
-    assert!(batch.quarantined().is_empty());
-    wrapper["prize"] = json!(1);
-    assert!(
-        serde_json::from_value::<FinishedCall>(wrapper).is_err(),
-        "not a python key"
-    );
 }
 
 #[test]
@@ -302,34 +159,6 @@ fn every_refusal_names_the_key_or_the_value_it_found() {
         wrong_digest,
         JobError::WrongValue { key: "files", .. }
     ));
-}
-
-#[test]
-fn a_nested_operation_and_a_foreign_shard_are_refused_where_they_sit() {
-    let mut six_keyed = job(JobKind::Evaluation);
-    let operation = six_keyed["operation"]
-        .as_object_mut()
-        .expect("an operation");
-    operation.insert("multiplicity".to_owned(), json!(3));
-    let six = quarantined(vec![six_keyed]);
-    let foreign = reported(vec![job(JobKind::Compilation)], 4, None).expect("must isolate");
-
-    assert_eq!(
-        six.reason,
-        JobError::UnknownKey {
-            key: "multiplicity".to_owned()
-        }
-    );
-    assert_eq!(
-        six.operation, None,
-        "an unread operation cannot be re-enqueued"
-    );
-    let mut refused = foreign.quarantined();
-    let both = JobError::ShardMismatch {
-        job: Shard::new(3),
-        call: Shard::new(4),
-    };
-    assert_eq!(refused.remove(0).reason, both);
 }
 
 #[test]
