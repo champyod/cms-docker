@@ -179,6 +179,7 @@ list_backup_timestamps() {
 delete_backup_set() {
   local ts="$1"
   local f
+  local removed=0
   for f in "${BACKUP_DB_DIR}/cmsdb-${ts}.dump" "${BACKUP_DB_DIR}/cmsdb-${ts}.dump.sha256" "${BACKUP_VOL_DIR}/cms-data-${ts}.tar.gz" "${BACKUP_VOL_DIR}/cms-data-${ts}.tar.gz.sha256"; do
     if [[ -f "$f" ]]; then
       # WHY the status is read instead of left to errexit: the caller tests the rotation in a
@@ -190,8 +191,15 @@ delete_backup_set() {
         return 1
       fi
       log_info "Rotation: removed $f"
+      removed=1
     fi
   done
+  # WHY the mark lives here and not in the caller: all three rotation rules delete through this
+  # function, so a rule added later is marked without being touched, and a set whose files were
+  # already gone is not re-stamped on every later rotation.
+  if (( removed == 1 )); then
+    manifest_mark_pruned "$MANIFEST_FILE" "$ts"
+  fi
 }
 
 apply_rotation() {
@@ -403,6 +411,65 @@ manifest_append() {
     return 1
   fi
   rm -f -- "$prev" "$entry_file"
+}
+
+# manifest_mark_pruned <manifest> <ts>
+# WHY this exists at all: rotation removes the dump and the archive but the entry that records
+# them survives verbatim, so a reader cannot tell a set the operator still holds from one whose
+# files were deleted — and an entry with no file behind it reads as a failed run, not a retired
+# one. The entry is kept rather than removed: the record of what was taken, and when it stopped
+# existing, is the history.
+manifest_mark_pruned() {
+  local manifest="$1"
+  local ts="$2"
+
+  # WHY a warning instead of a return code: rotation exists to reclaim disk, and a stale record
+  # is not a lost backup — the files it names are already gone, so there is nothing to restore
+  # that the mark would have saved. Rotation continues and the run keeps its dump.
+  if ! command -v jq >/dev/null 2>&1; then
+    log_warn "jq not found — manifest entry ${ts} stays unmarked as pruned"
+    return 0
+  fi
+  if [[ ! -f "$manifest" ]]; then
+    return 0
+  fi
+
+  local dir now staged
+  dir="$(dirname -- "$manifest")"
+  now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  # WHY the temporary file is not the destination's sibling via $TMPDIR: the replace is a rename,
+  # and a rename across filesystems is a copy that a concurrent reader can observe half-written.
+  if ! staged="$(mktemp "${dir}/.manifest.pruned.XXXXXX" 2>/dev/null)"; then
+    log_warn "could not stage the pruned manifest next to $manifest — entry ${ts} stays unmarked"
+    return 0
+  fi
+
+  # WHY pruned_at keeps its first value: the fact being recorded is when the files stopped
+  # existing, and a set restored and pruned again does not make the first moment untrue.
+  if ! jq --arg ts "$ts" --arg now "$now" '
+        def mark:
+          if .ts == $ts
+          then . + {pruned: true, pruned_at: (.pruned_at // $now)}
+          else . end;
+        if type == "array" then map(mark)
+        elif type == "object" then mark
+        else error("manifest root is neither an array nor an object")
+        end' "$manifest" > "$staged" 2>/dev/null; then
+    # WHY the manifest is left untouched instead of rewritten: an unreadable or unexpectedly
+    # shaped root is a fault of its own, and replacing it here would destroy the very history
+    # this function exists to keep.
+    rm -f -- "$staged"
+    log_warn "could not mark ${ts} pruned in ${manifest} — manifest left unchanged"
+    return 0
+  fi
+
+  if ! mv -- "$staged" "$manifest"; then
+    rm -f -- "$staged"
+    log_warn "could not replace the manifest at $manifest — entry ${ts} stays unmarked"
+    return 0
+  fi
+  log_info "Rotation: manifest entry ${ts} marked pruned"
 }
 
 # ---------------------------------------------------------------------------
