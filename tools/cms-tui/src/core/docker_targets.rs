@@ -23,6 +23,91 @@ pub enum DockerError {
     MissingStack,
 }
 
+/// A stack lifecycle command. One row per variant in [`STACK_TARGETS`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(usize)]
+enum Operation {
+    Deploy = 0,
+    Stop = 1,
+    Clean = 2,
+    Pull = 3,
+}
+
+/// The `make` targets one command runs: the text wrapped around a stack name,
+/// plus the all-stacks form where that text does not determine it.
+#[derive(Clone, Copy)]
+struct StackTargets {
+    prefix: &'static str,
+    suffix: &'static str,
+    all: AllTargets,
+}
+
+/// How a command spells the all-stacks form.
+#[derive(Clone, Copy)]
+enum AllTargets {
+    /// One target per stack, in `DEPLOY_ALL_ORDER`.
+    InDeployOrder,
+    /// One target per stack, in `ALL_STACKS`.
+    PerStack,
+    /// One target that already covers every stack.
+    One(&'static str),
+}
+
+const STACK_TARGETS: [StackTargets; 4] = [
+    StackTargets {
+        prefix: "",
+        suffix: "",
+        all: AllTargets::InDeployOrder,
+    },
+    StackTargets {
+        prefix: "",
+        suffix: "-stop",
+        all: AllTargets::PerStack,
+    },
+    StackTargets {
+        prefix: "",
+        suffix: "-clean",
+        all: AllTargets::PerStack,
+    },
+    // WHY: `pull` rebuilds every image from one target, so the all-stacks form
+    // is a single target instead of one per stack.
+    StackTargets {
+        prefix: "pull-",
+        suffix: "",
+        all: AllTargets::One("pull"),
+    },
+];
+
+// WHY: a command without a table row would resolve as some other command's
+// targets, so the row count is pinned to the last operation here.
+const _: () = assert!(Operation::Pull.row_count() == STACK_TARGETS.len());
+
+impl Operation {
+    const fn row(self) -> StackTargets {
+        STACK_TARGETS[self as usize]
+    }
+
+    /// Row count implied by the operation list, used to tie it to the table.
+    const fn row_count(self) -> usize {
+        self as usize + 1
+    }
+
+    /// `prefix + stack + suffix`, the shape every single-stack target takes.
+    fn spell(self, stack: &str) -> String {
+        let StackTargets { prefix, suffix, .. } = self.row();
+        format!("{prefix}{stack}{suffix}")
+    }
+
+    /// The targets a command runs when every stack is requested at once.
+    fn every_stack(self) -> Vec<String> {
+        match self.row().all {
+            AllTargets::InDeployOrder => DEPLOY_ALL_ORDER.iter().map(|s| self.spell(s)).collect(),
+            AllTargets::PerStack => ALL_STACKS.iter().map(|s| self.spell(s)).collect(),
+            AllTargets::One(target) => vec![target.to_string()],
+        }
+    }
+}
+
 /// Resolves deploy make targets for `stack`.
 ///
 /// # Errors
@@ -32,10 +117,7 @@ pub fn deploy_targets(stack: &str) -> Result<Vec<String>, DockerError> {
     if stack.is_empty() {
         return Err(DockerError::MissingStack);
     }
-    if stack == ALL_STACKS_ARG {
-        return Ok(DEPLOY_ALL_ORDER.iter().map(ToString::to_string).collect());
-    }
-    single_stack(stack)
+    resolve(Operation::Deploy, stack)
 }
 
 /// Resolves stop make targets for `stack`.
@@ -44,7 +126,7 @@ pub fn deploy_targets(stack: &str) -> Result<Vec<String>, DockerError> {
 ///
 /// Returns `Err` if `stack` is unknown.
 pub fn stop_targets(stack: &str) -> Result<Vec<String>, DockerError> {
-    suffixed_targets(stack, "-stop")
+    resolve(Operation::Stop, stack)
 }
 
 /// Builds the ordered sequence of `make` targets for a clean request.
@@ -53,7 +135,7 @@ pub fn stop_targets(stack: &str) -> Result<Vec<String>, DockerError> {
 ///
 /// Returns `Err` if `stack` is unknown.
 pub fn clean_targets(stack: &str) -> Result<Vec<String>, DockerError> {
-    suffixed_targets(stack, "-clean")
+    resolve(Operation::Clean, stack)
 }
 
 /// Resolves pull make targets for `stack`.
@@ -62,112 +144,106 @@ pub fn clean_targets(stack: &str) -> Result<Vec<String>, DockerError> {
 ///
 /// Returns `Err` if `stack` is empty or unknown.
 pub fn pull_targets(stack: &str) -> Result<Vec<String>, DockerError> {
-    if ALL_STACKS.contains(&stack) {
-        return Ok(vec![format!("pull-{stack}")]);
-    }
-    // WHY: `pull` rebuilds every image from one target, so the all-stacks form
-    // is a single target instead of one per stack.
-    if stack.is_empty() || stack == ALL_STACKS_ARG {
-        return Ok(vec!["pull".to_string()]);
-    }
-    Err(DockerError::UnknownStack(stack.to_string()))
+    resolve(Operation::Pull, stack)
 }
 
-/// Resolves `make <stack><suffix>` for one stack, or for every stack at once.
+/// Resolves one stack, or every stack at once, through the command's table row.
 ///
 /// An empty stack resolves like `all` because every caller declares `all` as the
 /// default, and clap passes the default rather than an empty value.
-fn suffixed_targets(stack: &str, suffix: &str) -> Result<Vec<String>, DockerError> {
+fn resolve(operation: Operation, stack: &str) -> Result<Vec<String>, DockerError> {
     if ALL_STACKS.contains(&stack) {
-        return Ok(vec![format!("{stack}{suffix}")]);
+        return Ok(vec![operation.spell(stack)]);
     }
     if stack.is_empty() || stack == ALL_STACKS_ARG {
-        return Ok(suffixed_all(suffix));
+        return Ok(operation.every_stack());
     }
     Err(DockerError::UnknownStack(stack.to_string()))
-}
-
-fn single_stack(stack: &str) -> Result<Vec<String>, DockerError> {
-    if ALL_STACKS.contains(&stack) {
-        return Ok(vec![stack.to_string()]);
-    }
-    Err(DockerError::UnknownStack(stack.to_string()))
-}
-
-fn suffixed_all(suffix: &str) -> Vec<String> {
-    ALL_STACKS
-        .iter()
-        .map(|name| format!("{name}{suffix}"))
-        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    type Resolve = fn(&str) -> Result<Vec<String>, DockerError>;
+
     #[test]
-    fn deploy_single_stack_maps_to_stack_target() {
-        assert_eq!(deploy_targets("core").unwrap(), vec!["core"]);
-        assert_eq!(deploy_targets("admin").unwrap(), vec!["admin"]);
+    fn every_command_spells_one_stack() {
+        let cases: [(Resolve, &str, &str); 5] = [
+            (deploy_targets, "core", "core"),
+            (deploy_targets, "admin", "admin"),
+            (stop_targets, "core", "core-stop"),
+            (clean_targets, "worker", "worker-clean"),
+            (pull_targets, "infra", "pull-infra"),
+        ];
+        for (resolve, stack, target) in cases {
+            assert_eq!(
+                resolve(stack).unwrap(),
+                vec![target.to_string()],
+                "target for {stack}"
+            );
+        }
     }
 
     #[test]
-    fn deploy_all_uses_deploy_order() {
-        let targets = deploy_targets("all").unwrap();
-        assert_eq!(targets, vec!["core", "infra", "admin", "contest", "worker"]);
+    fn every_command_expands_all_stacks() {
+        let cases: [(Resolve, &[&str]); 4] = [
+            (
+                deploy_targets,
+                &["core", "infra", "admin", "contest", "worker"],
+            ),
+            (
+                stop_targets,
+                &[
+                    "core-stop",
+                    "admin-stop",
+                    "contest-stop",
+                    "worker-stop",
+                    "infra-stop",
+                ],
+            ),
+            (
+                clean_targets,
+                &[
+                    "core-clean",
+                    "admin-clean",
+                    "contest-clean",
+                    "worker-clean",
+                    "infra-clean",
+                ],
+            ),
+            (pull_targets, &["pull"]),
+        ];
+        for (resolve, targets) in cases {
+            let expected: Vec<String> = targets.iter().map(ToString::to_string).collect();
+            assert_eq!(resolve("all").unwrap(), expected);
+        }
     }
 
     #[test]
-    fn deploy_unknown_stack_errors() {
-        assert_eq!(
-            deploy_targets("bogus"),
-            Err(DockerError::UnknownStack("bogus".into()))
-        );
+    fn an_empty_stack_means_every_stack_except_for_deploy() {
+        for resolve in [stop_targets, clean_targets, pull_targets] {
+            assert_eq!(resolve("").unwrap(), resolve("all").unwrap());
+        }
         assert_eq!(deploy_targets(""), Err(DockerError::MissingStack));
     }
 
     #[test]
-    fn stop_maps_per_stack_and_all() {
-        assert_eq!(stop_targets("core").unwrap(), vec!["core-stop"]);
-        let all = stop_targets("all").unwrap();
-        assert_eq!(all.len(), ALL_STACKS.len());
-        assert!(all.contains(&"admin-stop".to_string()));
-    }
-
-    #[test]
-    fn clean_single_maps_to_clean_target() {
-        assert_eq!(clean_targets("worker").unwrap(), vec!["worker-clean"]);
-    }
-
-    #[test]
-    fn clean_all_maps_to_per_stack_cleans() {
-        let targets: Vec<String> = clean_targets("all").unwrap();
-        assert_eq!(targets.len(), ALL_STACKS.len());
-        assert_eq!(targets, suffixed_all("-clean"));
-        assert!(
-            !targets.iter().any(|target| target == "clean"),
-            "`clean all` must never resolve to the bare `clean` target, which removes the generated .env"
-        );
-    }
-
-    #[test]
-    fn pull_maps_per_stack_and_all() {
-        assert_eq!(pull_targets("infra").unwrap(), vec!["pull-infra"]);
-        assert_eq!(pull_targets("").unwrap(), vec!["pull"]);
-        assert_eq!(pull_targets("all").unwrap(), vec!["pull"]);
-    }
-
-    #[test]
-    fn an_unknown_stack_is_refused_by_every_operation() {
-        for resolve in [
-            stop_targets as fn(&str) -> Result<Vec<String>, DockerError>,
-            clean_targets,
-            pull_targets,
-        ] {
+    fn an_unknown_stack_is_refused_by_every_command() {
+        for resolve in [deploy_targets, stop_targets, clean_targets, pull_targets] {
             assert_eq!(
                 resolve("bogus"),
                 Err(DockerError::UnknownStack("bogus".into()))
             );
         }
+    }
+
+    #[test]
+    fn clean_all_never_resolves_to_the_bare_clean_target() {
+        let targets = clean_targets("all").unwrap();
+        assert!(
+            !targets.iter().any(|target| target == "clean"),
+            "`clean all` must never resolve to the bare `clean` target, which removes the generated .env"
+        );
     }
 }
