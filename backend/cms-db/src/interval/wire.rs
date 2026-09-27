@@ -85,3 +85,44 @@ fn field<const WIDTH: usize>(bytes: &[u8], offset: usize) -> [u8; WIDTH] {
     raw.copy_from_slice(&bytes[offset..offset + WIDTH]);
     raw
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::interval::MICROS_PER_HOUR;
+
+    /// One hour, one day and one month in the order the driver sends them.
+    const HOUR_DAY_MONTH: [u8; BYTES_PER_PG_INTERVAL] = [
+        0x00, 0x00, 0x00, 0x00, 0xd6, 0x93, 0xa4, 0x00, // 3_600_000_000 microseconds
+        0x00, 0x00, 0x00, 0x01, // one day
+        0x00, 0x00, 0x00, 0x01, // one month
+    ];
+
+    #[test]
+    fn the_sixteen_bytes_read_back_as_time_then_day_then_month() {
+        let read = read_pg_interval(&HOUR_DAY_MONTH).expect("sixteen bytes is the whole layout");
+
+        assert_eq!(
+            read,
+            PgInterval {
+                months: 1,
+                days: 1,
+                microseconds: MICROS_PER_HOUR,
+            }
+        );
+    }
+
+    #[test]
+    fn a_field_of_any_length_but_sixteen_bytes_is_refused() {
+        let bytes = [0; BYTES_PER_PG_INTERVAL + 1];
+
+        for found in [0, BYTES_PER_PG_INTERVAL - 1, BYTES_PER_PG_INTERVAL + 1] {
+            assert_eq!(
+                read_pg_interval(&bytes[..found]),
+                Err(IntervalError::BinaryLength { found }),
+                "{found} bytes"
+            );
+        }
+    }
+}
