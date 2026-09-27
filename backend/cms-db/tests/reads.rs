@@ -1,8 +1,7 @@
 //! The four judging reads, mapped against fixture rows rather than a database.
 //!
-//! Every fixture below is a value the named column actually holds: forty
-//! characters of lowercase hex for a `DIGEST`, a time without a zone for a
-//! `timestamp`, absent values for the nullable columns. No connection is opened.
+//! Every fixture is a value the named column actually holds: forty lowercase hex for
+//! a `DIGEST`, a time without a zone, absent nullable values. No connection is opened.
 
 use chrono::{DateTime, NaiveDateTime};
 use cms_db::{
@@ -41,15 +40,12 @@ const RESULT_KEY: ResultKey = ResultKey {
     dataset_id: DATASET_ID,
 };
 
-/// Every query the module holds, under the name it is checked by.
+/// Every query the module holds, and the record fields it projects, in row order.
 const QUERIES: [(&str, &str); 4] = [
-    ("SUBMISSION_BY_ID", SUBMISSION_BY_ID),
-    (
-        "RESULT_BY_SUBMISSION_AND_DATASET",
-        RESULT_BY_SUBMISSION_AND_DATASET,
-    ),
-    ("DATASET_BY_ID", DATASET_BY_ID),
-    ("TESTCASES_BY_DATASET", TESTCASES_BY_DATASET),
+    (SUBMISSION_BY_ID, "id task_id participation_id timestamp language official"),
+    (RESULT_BY_SUBMISSION_AND_DATASET, "submission_id dataset_id is_compiled is_compilation_succeeded compilation_tries is_evaluated evaluation_tries"),
+    (DATASET_BY_ID, "id task_id task_type time_limit memory_limit is_active"),
+    (TESTCASES_BY_DATASET, "id dataset_id codename is_public input output"),
 ];
 
 /// The time a `submissions.timestamp` column holds, without a zone.
@@ -86,6 +82,21 @@ fn bound_placeholders(sql: &str) -> Vec<String> {
         })
         .map(str::to_string)
         .collect()
+}
+
+/// The name every projection answers under, in row order: its alias, or the column
+/// behind it, since only a select list holds a comma before the FROM and WHERE clauses.
+fn projected_names(sql: &str) -> Vec<&str> {
+    let mut segments: Vec<&str> = sql.split(',').map(str::trim).collect();
+    let last = segments.pop().expect("a query selects");
+    segments.push(last.lines().next().unwrap_or_default());
+    let mut names = Vec::new();
+    for part in segments {
+        let mut words = part.split_ascii_whitespace();
+        let token = words.next_back().unwrap_or(part);
+        names.push(token.rsplit_once('.').map_or(token, |(_, column)| column));
+    }
+    names
 }
 
 #[test]
@@ -202,14 +213,17 @@ fn a_testcase_row_names_the_column_whose_digest_the_domain_refuses() {
 }
 
 #[test]
-fn every_query_asks_only_for_what_it_names_and_binds_in_order() {
-    for (name, sql) in QUERIES {
+fn every_query_asks_only_for_what_it_names_binds_in_order_and_maps() {
+    for (sql, fields) in QUERIES {
         let bound = bound_placeholders(sql);
         let ordered: Vec<String> = (1..=bound.len()).map(|at| format!("${at}")).collect();
+        let projected = projected_names(sql);
+        let declared: Vec<&str> = fields.split_ascii_whitespace().collect();
 
-        assert!(!sql.contains('*'), "{name} asks for a column");
-        assert!(sql.starts_with("SELECT "), "{name} is not a select");
-        assert_eq!(bound, ordered, "{name} binds out of order");
+        assert!(!sql.contains('*'), "{sql} asks for a column");
+        assert!(sql.starts_with("SELECT "), "{sql} is not a select");
+        assert_eq!(bound, ordered, "{sql} binds out of order");
+        assert_eq!(projected, declared, "{sql} does not project its record");
     }
 }
 

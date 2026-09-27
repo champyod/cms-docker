@@ -196,7 +196,7 @@ pub const fn dataset_from_row(
 /// The columns every `testcases` row of one dataset is read with, bound to that
 /// dataset's id as `$1`.
 pub const TESTCASES_BY_DATASET: &str = "\
-    SELECT c.id, c.dataset_id, c.codename, c.public, c.input, c.output
+    SELECT c.id, c.dataset_id, c.codename, c.public AS is_public, c.input, c.output
     FROM testcases AS c
     WHERE c.dataset_id = $1";
 
