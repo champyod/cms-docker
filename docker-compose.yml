@@ -645,6 +645,11 @@ services:
     build:
       context: .
       dockerfile: docker/monitor/Dockerfile
+      # WHY: the monitor writes backups through the ./backups bind mount, so the
+      # image's runtime uid must match that directory's owner on this host
+      # (stat -c %u backups). The default keeps hosts owning uid 1000 unchanged.
+      args:
+        DOCKER_UID: ${DOCKER_UID:-1000}
     image: ghcr.io/champyod/cms-docker-monitor:${IMG_TAG:-major-admin-panel}
     container_name: cms-monitor
     restart: on-failure:5
@@ -661,8 +666,14 @@ services:
       - REPO_ROOT=/repo-root
       - MONITOR_INTERVAL=5
       - DISK_PATH=/host
-      # WHY: monitor performs no database operations (__monitor.sh has no psql/pg_dump) — no DATABASE_URL needed; backups use cms_backup via __backup.sh.
-      # DATABASE_URL removed — monitor needs no DB access
+      # WHY: the backup path does need database credentials — __monitor.sh itself runs
+      # no psql/pg_dump, so there is no DATABASE_URL, but the bind-mounted __backup.sh
+      # dumps as cms_backup (BYPASSRLS, the only role that survives FORCE RLS) with
+      # PGPASSWORD and then retries as the owner, reading both passwords from the
+      # environment. Empty defaults keep the service bootable when they are unset;
+      # __backup.sh warns each cycle when a dump credential is missing.
+      - POSTGRES_BACKUP_PASSWORD=${POSTGRES_BACKUP_PASSWORD:-}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-}
       - BACKUP_INTERVAL_MINS=${BACKUP_INTERVAL_MINS:-1440}
       - BACKUP_MAX_COUNT=${BACKUP_MAX_COUNT:-50}
       - BACKUP_MAX_AGE_DAYS=${BACKUP_MAX_AGE_DAYS:-10}
@@ -684,6 +695,10 @@ services:
       # (the image copy stays as the fallback).
       - ./scripts/__backup.sh:/usr/local/bin/cms-backup.sh:ro
       - ./scripts/__monitor.sh:/usr/local/bin/monitor.sh:ro
+      # WHY the lib is mounted too: cms-backup.sh sources ${SCRIPT_DIR}/__lib/common.sh and
+      # SCRIPT_DIR is /usr/local/bin in the container, so the lib has to sit beside the
+      # scripts — without this mount the source fails and every backup cycle aborts.
+      - ./scripts/__lib:/usr/local/bin/__lib:ro
       - ./config:/repo-root/config:ro # Mount config to read container restart settings
     networks:
       - cms-network

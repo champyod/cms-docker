@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { getPermissions } from '@/lib/permissions';
-import { filterReadableFields } from '@/lib/field-permissions';
+import { filterReadableFieldsWith, getFieldAccess } from '@/lib/field-permissions';
 import { buildUserSearchWhere, safeUserSelect, usersPageSelect, type UsersPageRow } from '@/lib/prisma-selects';
 import { formatStoredPassword, isPasswordKind, DEFAULT_PASSWORD_KIND } from '@/lib/password-format';
 import { NextRequest } from 'next/server';
@@ -37,8 +37,9 @@ export async function GET(req: NextRequest) {
     ]);
 
     const permissions = await getPermissions();
+    const usersFieldAccess = getFieldAccess('users', permissions);
     const visibleUsers = users.map((user) =>
-      filterReadableFields('users', user as unknown as Record<string, unknown>, permissions) as unknown as UsersPageRow,
+      filterReadableFieldsWith(usersFieldAccess, user as unknown as Record<string, unknown>) as unknown as UsersPageRow,
     );
 
     return apiSuccess({

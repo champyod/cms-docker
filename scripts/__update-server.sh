@@ -89,6 +89,13 @@ log "Detected deployment type: ${DEPLOY_TYPE}"
 # ---------------------------------------------------------------------------
 # (c) Preflight checks — abort cleanly before touching running services
 # ---------------------------------------------------------------------------
+# WHY: preflight hard-fails when the monitor's uid cannot write the backup root,
+# so the ownership is repaired here first — at most one sudo prompt — and an
+# update self-heals instead of only being blocked.
+if ! ensure_backup_dir_perms; then
+    warn "Backup root not usable by the monitor; preflight below will block this update."
+fi
+
 PREFLIGHT_SCRIPT="scripts/__preflight.sh"
 if [ ! -x "$PREFLIGHT_SCRIPT" ]; then
     log_die "scripts/__preflight.sh not found or not executable; refusing to update."

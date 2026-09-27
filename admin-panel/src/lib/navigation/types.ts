@@ -44,7 +44,8 @@ export type RouteId =
   | 'system.maintenance'
   | 'system.settings'
   | 'system.docs'
-  | 'system.search';
+  | 'system.search'
+  | 'auth.signout';
 
 export type RouteKind = 'page' | 'record-landing' | 'nested-tab' | 'search';
 export type NavigationSurface =

@@ -55,6 +55,13 @@ POSTGRES_BACKUP_PASSWORD_VAL="${POSTGRES_BACKUP_PASSWORD:-}"
 CONTAINER_DB="cms-database"
 VOLUME_DATA="cms-data"
 
+# Exit contract — a caller must be able to separate "the database is safe" from
+# "nothing was archived" without reading the log:
+#   0 = full backup (DB and volume)
+#   1 = no usable backup (the DB step failed, so no dump was kept)
+#   3 = partial backup (the dump was kept and recorded; the volume archive failed)
+readonly EXIT_PARTIAL_BACKUP=3
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -65,6 +72,20 @@ json_escape() {
   else
     printf '"%s"' "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\n/\\n/g; s/\r/\\r/g; s/\t/\\t/g')"
   fi
+}
+
+# WHY one flag rather than a test per path: the contract is that a run which announced a
+# degradation must not afterwards announce a success, and a check enumerating the degrading
+# paths would be silently wrong the moment one is added without it. The exit code is
+# deliberately untouched — the status contract above says what was backed up, and that did
+# not change; only the alert contradicted it.
+is_degraded=0
+
+send_degraded() {
+  # WHY the flag is raised beside the send and not at the call sites: a path that sends its
+  # own amber and forgets the flag is a run whose headline contradicts its own warning.
+  is_degraded=1
+  send_discord "$1" 16776960 "true"
 }
 
 send_discord() {
@@ -124,6 +145,23 @@ get_pg_version() {
 }
 
 # ---------------------------------------------------------------------------
+# stream_volume_tar <image> — gzipped tar of VOLUME_DATA on stdout
+# ---------------------------------------------------------------------------
+# WHY stdout instead of `-v BACKUP_VOL_DIR:/backup`: the docker CLI only sends the
+# mount request to the host daemon, which resolves a bind-mount source on the
+# HOST, so the archive lands in the host's tree and never in this container's
+# filesystem — the file then does not exist here and every later step that reads
+# it is skipped. VOLUME_DATA is a named volume, which the daemon resolves on its
+# own side, so the mount is identical from host or container and only the output
+# channel has to move. The caller redirects this function's stdout to the archive
+# and reads its exit status, so no pipeline is involved: a failing docker cannot
+# be masked by a succeeding writer, with or without pipefail.
+stream_volume_tar() {
+  local image="$1"
+  docker run --rm -v "${VOLUME_DATA}:/volume:ro" "$image" tar czf - -C /volume .
+}
+
+# ---------------------------------------------------------------------------
 # Rotation — operates on timestamp sets across BOTH dirs, always keeps ≥1 set
 # ---------------------------------------------------------------------------
 list_backup_timestamps() {
@@ -141,7 +179,14 @@ delete_backup_set() {
   local f
   for f in "${BACKUP_DB_DIR}/cmsdb-${ts}.dump" "${BACKUP_DB_DIR}/cmsdb-${ts}.dump.sha256" "${BACKUP_VOL_DIR}/cms-data-${ts}.tar.gz" "${BACKUP_VOL_DIR}/cms-data-${ts}.tar.gz.sha256"; do
     if [[ -f "$f" ]]; then
-      rm -f "$f"
+      # WHY the status is read instead of left to errexit: the caller tests the rotation in a
+      # condition, and errexit is ignored inside a function called that way — so an unchecked
+      # removal neither stops the loop nor reaches the caller, and the loop then retries the
+      # same set forever. A removal that fails is reported and ends the rotation instead.
+      if ! rm -f "$f"; then
+        log_warn "Rotation: could not remove $f"
+        return 1
+      fi
       log_info "Rotation: removed $f"
     fi
   done
@@ -163,7 +208,7 @@ apply_rotation() {
       # Always keep ≥1 newest — break if only 1 left
       if (( ${#timestamps[@]} <= 1 )); then break; fi
       local oldest="${timestamps[0]}"
-      delete_backup_set "$oldest"
+      delete_backup_set "$oldest" || return 1
       deleted_any=1
       mapfile -t timestamps < <(list_backup_timestamps)
       if (( ${#timestamps[@]} == 0 )); then break; fi
@@ -193,7 +238,7 @@ apply_rotation() {
         # Ensure we keep newest ≥1
         local newest="${timestamps[-1]}"
         if [[ "$ts" == "$newest" ]]; then continue; fi
-        delete_backup_set "$ts"
+        delete_backup_set "$ts" || return 1
         deleted_any=1
       fi
     done
@@ -221,7 +266,7 @@ apply_rotation() {
           set_bytes=$(( set_bytes + sz ))
         fi
       done
-      delete_backup_set "$oldest"
+      delete_backup_set "$oldest" || return 1
       deleted_any=1
       total_bytes=$(( total_bytes - set_bytes ))
       mapfile -t timestamps < <(list_backup_timestamps)
@@ -235,13 +280,142 @@ apply_rotation() {
 }
 
 # ---------------------------------------------------------------------------
+# Manifest
+#
+# jq, not python3: the monitor image ships jq (docker/monitor/Dockerfile) and
+# the host has it, while it ships no python3 — a python3-first chain left the
+# manifest unwritten on every in-container run. jq is also what __create_contests.sh
+# and __monitor.sh already read JSON with, so one tool covers the whole script set.
+# ---------------------------------------------------------------------------
+manifest_entry_json() {
+  local ts="$1" db_sha="$2" vol_tar="$3" vol_sha="$4" vol_status="$5"
+  local pg_ver="$6" db_bytes="$7" vol_bytes="$8" total_bytes="$9"
+  # WHY an empty vol_tar/vol_sha256 becomes null rather than "": a reader has to be
+  # able to tell "no volume archive was produced" from "an archive exists at this
+  # path", and a size stays a number so size arithmetic never special-cases the run.
+  # WHY volume_status is added only when set: a complete run keeps the entry shape it
+  # has always had, so every reader that exists today is unaffected by a partial run.
+  jq -n \
+    --arg ts "$ts" \
+    --arg db_sha256 "$db_sha" \
+    --arg vol_tar "$vol_tar" \
+    --arg vol_sha256 "$vol_sha" \
+    --arg vol_status "$vol_status" \
+    --arg pg_version "$pg_ver" \
+    --argjson db_bytes "$db_bytes" \
+    --argjson vol_bytes "$vol_bytes" \
+    --argjson total_bytes "$total_bytes" \
+    '{
+       ts: $ts,
+       db_dump: ("db/cmsdb-" + $ts + ".dump"),
+       db_sha256: $db_sha256,
+       vol_tar: (if $vol_tar == "" then null else $vol_tar end),
+       vol_sha256: (if $vol_sha256 == "" then null else $vol_sha256 end),
+       pg_version: $pg_version,
+       sizes: {db_bytes: $db_bytes, vol_bytes: $vol_bytes, total_bytes: $total_bytes}
+     }
+     + (if $vol_status == "" then {} else {volume_status: $vol_status} end)'
+}
+
+manifest_merge() {
+  local prev_file="$1" entry_file="$2" out_file="$3"
+  # WHY the shape tests: an existing array is extended, a bare object is wrapped
+  # rather than dropped, and an empty array stays empty — so no reader meets a hole.
+  jq -n --slurpfile previous "$prev_file" --slurpfile entry "$entry_file" \
+    '($previous | length) as $count
+     | (if $count == 0 then []
+        else ($previous[0] | if type == "array" then . else [.] end)
+        end)
+     + $entry' > "$out_file"
+}
+
+# WHY approximate without jq: the entry shape cannot be assembled from the shell
+# alone, so the file is only seeded and the run stays unrecorded.
+manifest_seed() {
+  local manifest="$1"
+  if [[ -f "$manifest" ]]; then
+    return 0
+  fi
+  local seeded
+  seeded="$(mktemp "$(dirname -- "$manifest")/.manifest.XXXXXX")"
+  printf '[]\n' > "$seeded"
+  mv -- "$seeded" "$manifest"
+}
+
+# manifest_append <manifest> <ts> <db_sha256> <vol_tar> <vol_sha256>
+#               <vol_status> <pg_version> <db_bytes> <vol_bytes> <total_bytes>
+manifest_append() {
+  local manifest="$1"
+  # WHY the ts is read before the shift: every alert below names the run it belongs to, and
+  # this argument is the only place that timestamp survives the shift.
+  local ts="$2"
+  local dir prev entry_file merged
+  dir="$(dirname -- "$manifest")"
+  mkdir -p "$dir"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    # WHY a failed seed is fatal and not approximate: a manifest that cannot be created is a
+    # run nobody can read back, which is the one outcome an empty file must not stand in for.
+    if ! manifest_seed "$manifest"; then
+      log_warn "could not seed the manifest at $manifest"
+      send_discord "❌ **Backup Failed** — manifest not seeded at \`${manifest}\` — ts \`${ts}\`" 16711680 "true"
+      return 1
+    fi
+    log_warn "jq not found — manifest update is approximate"
+    send_degraded "⚠️ **Backup Degraded** — jq not found: manifest left empty, this run is unrecorded — ts \`${ts}\`"
+    return 0
+  fi
+
+  prev="$(mktemp "${dir}/.manifest.prev.XXXXXX")"
+  entry_file="$(mktemp "${dir}/.manifest.entry.XXXXXX")"
+  merged="$(mktemp "${dir}/.manifest.merged.XXXXXX")"
+  shift
+  if ! manifest_entry_json "$@" > "$entry_file"; then
+    rm -f -- "$prev" "$entry_file" "$merged"
+    log_warn "jq could not build the manifest entry"
+    send_discord "❌ **Backup Failed** — manifest not updated: jq could not build the entry — ts \`${ts}\`" 16711680 "true"
+    return 1
+  fi
+
+  # WHY a manifest that does not parse is dropped instead of fatal: an unreadable
+  # history must not cost this backup its own entry.
+  if ! jq . "$manifest" > "$prev" 2>/dev/null; then
+    printf '[]\n' > "$prev"
+  fi
+
+  if ! manifest_merge "$prev" "$entry_file" "$merged"; then
+    rm -f -- "$prev" "$entry_file" "$merged"
+    log_warn "jq could not assemble the manifest"
+    send_discord "❌ **Backup Failed** — manifest not updated: jq could not assemble the entries — ts \`${ts}\`" 16711680 "true"
+    return 1
+  fi
+
+  # atomic write: the merged file is renamed over the manifest in the same directory
+  if ! mv -- "$merged" "$manifest"; then
+    rm -f -- "$prev" "$entry_file" "$merged"
+    log_warn "could not replace the manifest at $manifest"
+    send_discord "❌ **Backup Failed** — manifest not updated: replace failed at \`${manifest}\` — ts \`${ts}\`" 16711680 "true"
+    return 1
+  fi
+  rm -f -- "$prev" "$entry_file"
+}
+
+# ---------------------------------------------------------------------------
 # Main backup
 # ---------------------------------------------------------------------------
 run_backup() {
   log_info "CMS backup starting — backup root: $BACKUP_ROOT"
 
-  # Disk guard — abort if <3GB free on backup filesystem
-  require_disk_free_gb "$BACKUP_ROOT" 3 5
+  # Disk guard — abort when the backup filesystem has less free than the floor
+  # WHY a subshell: require_disk_free_gb dies with its own exit code, and a die in a plain
+  # call ends the process before anything can be announced. The subshell keeps that code and
+  # that log line, and the caller decides what the operator is told.
+  local disk_guard_status=0
+  ( require_disk_free_gb "$BACKUP_ROOT" "$DISK_FLOOR_GB" "$DISK_WARN_GB" ) || disk_guard_status=$?
+  if (( disk_guard_status != 0 )); then
+    send_discord "❌ **Backup Failed** — disk guard aborted at \`${BACKUP_ROOT}\`: free space unreadable or under the ${DISK_FLOOR_GB} GB floor" 16711680 "true"
+    exit "$disk_guard_status"
+  fi
 
   mkdir -p -m 700 "$BACKUP_DB_DIR" "$BACKUP_VOL_DIR"
   chmod 700 "$BACKUP_DB_DIR" "$BACKUP_VOL_DIR" 2>/dev/null || true
@@ -252,7 +426,9 @@ run_backup() {
   fi
 
   if ! command -v docker >/dev/null 2>&1; then
-    log_die "docker not found in PATH"
+    local msg="docker not found in PATH"
+    send_discord "❌ **Backup Failed** — $msg" 16711680 "true"
+    log_die "$msg"
   fi
 
   if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$CONTAINER_DB"; then
@@ -273,10 +449,11 @@ run_backup() {
   # Ensure container tmp is cleaned on failure
   local cleanup_done=0
   cleanup_container_tmp() {
-    if (( cleanup_done == 0 )); then
-      docker exec "$CONTAINER_DB" rm -f "$db_tmp" 2>/dev/null || true
+    if (( ${cleanup_done:-0} == 0 )); then
+      docker exec "$CONTAINER_DB" rm -f "${db_tmp:-}" 2>/dev/null || true
     fi
   }
+  # WHY ${cleanup_done:-0} / ${db_tmp:-}: the EXIT trap can fire after run_backup returned and its locals are out of scope, so a bare reference would die on set -u and mask the real error.
   trap cleanup_container_tmp EXIT
 
   # 1) Full logical backup — credentials via docker exec -e PGPASSWORD (never on host argv)
@@ -331,34 +508,56 @@ run_backup() {
   local db_bytes
   db_bytes="$(file_size_bytes "$db_file")"
 
-  # 2) Volume backup via helper container (ro mount)
+  # 2) Volume backup — archive streamed from the helper container (ro mount).
+  # WHY no early return here: the dump is already on disk, so a lost volume leaves a
+  # usable database backup. Returning at this point would report the run as a total
+  # failure and record nothing, which is indistinguishable from a failed dump. The
+  # reason is captured instead, and the manifest, the rotation and the notification
+  # all run before the run is reported as partial.
   log_info "Archiving volume $VOLUME_DATA ..."
   local vol_image="alpine:3.19"
   # Pull quietly if needed (ignore failure — try busybox fallback)
   docker pull "$vol_image" >/dev/null 2>&1 || true
-  if ! docker run --rm -v "${VOLUME_DATA}:/volume:ro" -v "${BACKUP_VOL_DIR}:/backup" "$vol_image" sh -c "tar czf \"/backup/cms-data-${ts}.tar.gz\" -C /volume . 2>/tmp/tar.log || (cat /tmp/tar.log; exit 1)"; then
+  local vol_fail_reason=""
+  if ! stream_volume_tar "$vol_image" > "$vol_file"; then
     # Fallback to busybox
-    if ! docker run --rm -v "${VOLUME_DATA}:/volume:ro" -v "${BACKUP_VOL_DIR}:/backup" busybox sh -c "tar czf \"/backup/cms-data-${ts}.tar.gz\" -C /volume ."; then
-      log_warn "Volume backup failed"
-      send_discord "❌ **Backup Failed** — volume tar failed" 16711680 "true"
-      # Keep DB dump but warn — not fatal for DB part; still mark as failed
-      return 1
+    if ! stream_volume_tar busybox > "$vol_file"; then
+      rm -f "$vol_file"
+      vol_fail_reason="volume tar failed"
     fi
   fi
 
-  if [[ ! -f "$vol_file" ]]; then
-    log_warn "Volume tar not created: $vol_file"
-    send_discord "❌ **Backup Failed** — volume tar missing" 16711680 "true"
-    return 1
+  if [[ -z "$vol_fail_reason" && ! -f "$vol_file" ]]; then
+    vol_fail_reason="volume tar missing"
   fi
 
-  chmod 600 "$vol_file" 2>/dev/null || true
-  sha256sum "$vol_file" | awk '{print $1"  " $2}' > "$vol_sha_file"
-  chmod 600 "$vol_sha_file" 2>/dev/null || true
-  local vol_sha
-  vol_sha="$(awk '{print $1}' "$vol_sha_file")"
-  local vol_bytes
-  vol_bytes="$(file_size_bytes "$vol_file")"
+  # WHY -s and not just -f: a stream that died before the first tar block leaves a
+  # file that exists and is 0 bytes, which -f accepts and the manifest then records
+  # as a complete archive. An empty volume still tars to a non-zero gzip header.
+  if [[ -z "$vol_fail_reason" && ! -s "$vol_file" ]]; then
+    rm -f "$vol_file"
+    vol_fail_reason="volume tar empty"
+  fi
+
+  # WHY the path is empty and the byte count zero when the archive is missing: a
+  # reader has to be able to tell "no volume archive was produced" from "an archive
+  # exists at this path", and a size stays a number so size arithmetic on an entry
+  # never has to special-case this run.
+  local vol_sha=""
+  local vol_bytes=0
+  local vol_status=""
+  local vol_tar_rel="volumes/cms-data-${ts}.tar.gz"
+  if [[ -n "$vol_fail_reason" ]]; then
+    log_warn "Volume archive not produced: $vol_fail_reason"
+    vol_status="failed"
+    vol_tar_rel=""
+  else
+    chmod 600 "$vol_file" 2>/dev/null || true
+    sha256sum "$vol_file" | awk '{print $1"  " $2}' > "$vol_sha_file"
+    chmod 600 "$vol_sha_file" 2>/dev/null || true
+    vol_sha="$(awk '{print $1}' "$vol_sha_file")"
+    vol_bytes="$(file_size_bytes "$vol_file")"
+  fi
 
   local pg_ver
   pg_ver="$(get_pg_version)"
@@ -366,54 +565,33 @@ run_backup() {
 
   # 3) manifest.json append
   log_info "Updating manifest $MANIFEST_FILE ..."
-  if command -v python3 >/dev/null 2>&1; then
-    python3 - "$MANIFEST_FILE" "$ts" "db/cmsdb-${ts}.dump" "$db_sha" "volumes/cms-data-${ts}.tar.gz" "$vol_sha" "$pg_ver" "$db_bytes" "$vol_bytes" "$total_bytes" <<'PY'
-import json, os, sys, tempfile
-manifest_path, ts, db_dump, db_sha, vol_tar, vol_sha, pg_ver, db_b, vol_b, tot_b = sys.argv[1:11]
-db_b=int(db_b); vol_b=int(vol_b); tot_b=int(tot_b)
-entry={"ts":ts,"db_dump":db_dump,"db_sha256":db_sha,"vol_tar":vol_tar,"vol_sha256":vol_sha,"pg_version":pg_ver,"sizes":{"db_bytes":db_b,"vol_bytes":vol_b,"total_bytes":tot_b}}
-if os.path.exists(manifest_path):
-    try:
-        with open(manifest_path) as f:
-            data=json.load(f)
-            if not isinstance(data, list):
-                data=[data]
-    except Exception:
-        data=[]
-else:
-    data=[]
-data.append(entry)
-os.makedirs(os.path.dirname(manifest_path) or ".", exist_ok=True)
-# atomic write: tmp then replace
-fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(manifest_path) or ".")
-try:
-    with os.fdopen(fd, "w") as f:
-        json.dump(data,f,indent=2)
-        f.write("\n")
-    os.replace(tmp_path, manifest_path)
-except Exception:
-    try: os.unlink(tmp_path)
-    except: pass
-    raise
-PY
-  else
-    # Fallback: minimal append without python — atomic via mktemp+mv
-    if [[ ! -f "$MANIFEST_FILE" ]]; then
-      tmp_manifest="$(mktemp "$(dirname -- "$MANIFEST_FILE")/.manifest.XXXXXX")"
-      echo "[]" > "$tmp_manifest"
-      mv -- "$tmp_manifest" "$MANIFEST_FILE"
-      chmod 600 "$MANIFEST_FILE" 2>/dev/null || true
-    fi
-    log_warn "python3 not found — manifest update is approximate"
-  fi
+  manifest_append "$MANIFEST_FILE" "$ts" "$db_sha" "$vol_tar_rel" "$vol_sha" \
+    "$vol_status" "$pg_ver" "$db_bytes" "$vol_bytes" "$total_bytes"
   chmod 600 "$MANIFEST_FILE" 2>/dev/null || true
 
   # 4) Rotation
-  apply_rotation || log_warn "Rotation encountered an error (non-fatal)"
+  if ! apply_rotation; then
+    log_warn "Rotation encountered an error (non-fatal)"
+    send_degraded "⚠️ **Backup Degraded** — rotation aborted: superseded sets may accumulate in \`${BACKUP_ROOT}\` — ts \`${ts}\`"
+  fi
 
   local db_mb vol_mb
   db_mb="$(awk "BEGIN{printf \"%.2f\", $db_bytes/1048576}")"
   vol_mb="$(awk "BEGIN{printf \"%.2f\", $vol_bytes/1048576}")"
+  if [[ -n "$vol_status" ]]; then
+    log_warn "Backup partial: db=${db_mb}MB vol=FAILED (${vol_fail_reason}) ts=${ts}"
+    send_discord "⚠️ **Backup Partial** — ts \`${ts}\` — DB ${db_mb}MB OK / Vol FAILED (${vol_fail_reason}) — \`${pg_ver}\`" 16776960 "true"
+    return "$EXIT_PARTIAL_BACKUP"
+  fi
+  # WHY the success alert is withheld once a run has degraded: the amber alert already went
+  # out, and a green headline after it is the last thing a reader sees, so the run announces
+  # both outcomes and the reader is left to guess which one the operator meant. The amber
+  # alert stands as this run's verdict. The status is unchanged, so a caller that reads the
+  # exit code sees exactly what it saw before.
+  if (( is_degraded == 1 )); then
+    log_warn "Backup degraded: db=${db_mb}MB vol=${vol_mb}MB ts=${ts}"
+    return 0
+  fi
   log_info "Backup complete: db=${db_mb}MB vol=${vol_mb}MB ts=${ts}"
   send_discord "✅ **Backup Successful** — ts \`${ts}\` — DB ${db_mb}MB / Vol ${vol_mb}MB — \`${pg_ver}\`" 65280 "false"
 }
@@ -423,7 +601,13 @@ PY
 # ---------------------------------------------------------------------------
 run_cleanup_only() {
   log_info "Running cleanup only"
-  apply_rotation
+  # WHY fatal and not a warning: prune mode exists to reclaim disk, so a rotation that stops
+  # is the whole job failing rather than a degraded run with something still usable left.
+  if ! apply_rotation; then
+    log_warn "Rotation encountered an error (cleanup aborted)"
+    send_discord "❌ **Cleanup Failed** — rotation aborted: superseded sets may accumulate in \`${BACKUP_ROOT}\`" 16711680 "true"
+    return 1
+  fi
 }
 
 # ---------------------------------------------------------------------------

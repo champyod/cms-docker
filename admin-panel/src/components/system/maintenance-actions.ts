@@ -3,8 +3,9 @@
 import { toast } from 'sonner';
 
 import { getDiscordNotificationSettings, saveDiscordNotificationSettings, sendTestDiscordAlert } from '@/app/actions/notifications';
-import { readConfigTomlValues, updateConfigTomlValues } from '@/app/actions/env';
-import { listBackups, restartServices, triggerManualBackup } from '@/app/actions/services';
+import { readConfigTomlValues, updateConfigTomlValues } from '@/app/actions/configTomlActions';
+import { restartServices } from '@/app/actions/services';
+import { listBackups, triggerManualBackup } from '@/app/actions/backupActions';
 import type { Confirm } from '@/hooks/useConfirm';
 import { buildConfigTomlUpdates, type ConfigTomlKey } from '@/lib/config-toml';
 import type { ConfirmationCopy } from '@/lib/confirmation-copy';

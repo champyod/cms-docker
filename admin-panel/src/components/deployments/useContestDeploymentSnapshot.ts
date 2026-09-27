@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-import { readActiveContestId, readConfigTomlValues, updateConfigTomlValues } from '@/app/actions/env';
+import { readActiveContestId, readConfigTomlValues, updateConfigTomlValues } from '@/app/actions/configTomlActions';
 import { getAvailableContests } from '@/app/actions/contests';
-import { settleDeployOperations } from '@/app/actions/services';
+import { settleDeployOperations, getActiveDeployOperation } from '@/app/actions/deployActions';
 import { getContainerContestId } from '@/app/actions/docker';
 import { buildConfigTomlUpdates } from '@/lib/config-toml';
 import { useDictionary } from '@/hooks/useDictionary';
@@ -81,6 +81,11 @@ export function useContestDeploymentSnapshot({
       readConfigTomlValues(CONTEST_SETTINGS_KEYS),
       getAvailableContests(),
       getContainerContestId(),
+      // Why the audited read: this screen exists to answer "what is deployed right now", and
+      // asking whether a deploy is in flight is part of that answer, so the ask is recorded.
+      // The 30s discovery poll stays on the unaudited core — this runs on a visit, on the
+      // refresh button, and once per terminal deploy phase, never on a timer.
+      getActiveDeployOperation(),
     ]);
 
     // Read the freshly parsed id, not the state binding — setState in this same tick leaves the

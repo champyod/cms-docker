@@ -506,6 +506,60 @@ check_once() {
 PREV_STATE="OK"
 LAST_BACKUP_TIME=0
 
+# WHY: the backup script sources __lib/common.sh, so a container that never received
+# the lib aborts every backup cycle at that source. Warn loudly but keep looping —
+# alerting, disk checks and log pruning are all still useful without backups.
+CMS_BACKUP_SCRIPT="/usr/local/bin/cms-backup.sh"
+CMS_BACKUP_LIB="${CMS_BACKUP_SCRIPT%/*}/__lib/common.sh"
+if ! grep -q '__lib/' "$CMS_BACKUP_SCRIPT" 2>/dev/null || [ ! -r "$CMS_BACKUP_LIB" ]; then
+    echo "[WARN] ===========================================================" >&2
+    if ! grep -q '__lib/' "$CMS_BACKUP_SCRIPT" 2>/dev/null; then
+        echo "[WARN] $CMS_BACKUP_SCRIPT is missing or unreadable, so no backup" >&2
+        echo "[WARN] will run in this container." >&2
+    else
+        echo "[WARN] $CMS_BACKUP_LIB is missing or unreadable, so every backup" >&2
+        echo "[WARN] cycle will abort at its source line." >&2
+    fi
+    echo "[WARN] Mount or copy scripts/__lib next to the backup script, then" >&2
+    echo "[WARN] recreate the monitor container so it picks the lib up." >&2
+    echo "[WARN] Monitoring continues without backups." >&2
+    echo "[WARN] ===========================================================" >&2
+fi
+
+# WHY: __backup.sh writes its archives under ${BACKUP_DIR:-${REPO_ROOT}/backups} and the
+# compose monitor service pins that env to the bind-mounted volume, so the probe has to
+# aim at the same path — a probe anywhere else calls a broken box healthy. The default
+# only covers a run that reaches this script without the env.
+BACKUP_ROOT="${BACKUP_DIR:-/app/backups}"
+
+# WHY: when the runtime uid does not own the backup tree, every backup write is denied
+# while the monitor itself looks healthy, and the only symptom is a permission line from
+# a detached backup process one whole interval later. One write attempt at startup names
+# the box immediately; it warns and returns, because alerting, disk checks and log
+# pruning are all still worth running without backups.
+probe_backup_dir_writable() {
+    local backup_root="$1" probe runtime_uid
+    runtime_uid=$(id -u)
+    probe="${backup_root}/.cms-write-probe.$$"
+    # WHY the braces: 2>/dev/null must be applied before the failing redirect, or bash
+    # prints its own "Permission denied" line with the probe filename and pid.
+    if { : > "$probe"; } 2>/dev/null; then
+        rm -f "$probe"
+        return 0
+    fi
+
+    echo "[WARN] ===========================================================" >&2
+    echo "[WARN] $backup_root is not writable by uid $runtime_uid, so every" >&2
+    echo "[WARN] backup cycle in this container will fail." >&2
+    echo "[WARN] Fix on the host: chown -R $runtime_uid <backup dir>, or set" >&2
+    echo "[WARN] DOCKER_UID in config.toml [infra] to that directory's owner" >&2
+    echo "[WARN] (stat -c %u <backup dir>), then recreate the monitor container." >&2
+    echo "[WARN] Monitoring continues without backups." >&2
+    echo "[WARN] ===========================================================" >&2
+}
+
+probe_backup_dir_writable "$BACKUP_ROOT"
+
 # WHY: say up front whether this run can deliver anything — starting a monitor with no
 # webhook otherwise looks healthy while every alert is dropped.
 if [ -z "$WEBHOOK_URL" ]; then

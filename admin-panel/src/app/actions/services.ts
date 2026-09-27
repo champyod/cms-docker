@@ -1,34 +1,22 @@
 'use server';
 
-import fs from 'fs/promises';
 import path from 'path';
 import { exec } from 'child_process';
 import util from 'util';
 import { ensurePermission } from '@/lib/permissions';
-import { ACTION_PERMISSIONS } from '@/lib/permission-engine';
 import { getRepoRoot } from '@/lib/repo-root';
 import { resolveHostComposeLocation } from '@/lib/compose-location';
 import { logToDiscord } from '@/lib/discord-notifier';
 import { recordAudit } from '@/lib/audit';
 import { readDeploymentModeSetting } from '@/lib/deployment-mode-file';
 import type { DeploymentModeSetting } from '@/lib/deployment-mode';
+import { CONFIG_TOML_FILE } from '@/lib/config-toml';
 import {
   analyzeContainerDependencies as analyzeContainerDependenciesLib,
   buildComposeFileFlags,
   buildRestartCommand,
   getRestartPolicies,
 } from '@/lib/restart-planner';
-import {
-  runDeployContest,
-  fetchDeployStatus,
-  getActiveDeployOperation as getActiveDeployOperationLib,
-  reconcileDeployOperations as reconcileDeployOperationsLib,
-} from '@/lib/deploy-operations';
-import type {
-  ActiveDeployOperation,
-  DeployContestResult,
-  DeployStatusResult,
-} from '@/lib/deploy-operations';
 
 const execPromise = util.promisify(exec);
 
@@ -38,7 +26,17 @@ const execPromise = util.promisify(exec);
  */
 export async function getDeploymentMode(): Promise<DeploymentModeSetting> {
     await ensurePermission('service:read');
-    return readDeploymentModeSetting();
+    const setting = await readDeploymentModeSetting();
+    // Why entity config rather than deployment: what this reads is config.toml's
+    // [admin] DEPLOYMENT_TYPE, the same key updateConfigTomlValues writes, so the view row lands
+    // on the entity the edit that would change it also uses. Keys and the resolved flag only.
+    await recordAudit({
+      verb: 'config:view',
+      entity: 'config',
+      afterValues: { file: CONFIG_TOML_FILE, requestedKeys: ['admin.DEPLOYMENT_TYPE'], resolved: setting.resolved },
+      result: 'success',
+    });
+    return setting;
 }
 
 // Why: client components must not import the fs-backed planner directly —
@@ -128,146 +126,56 @@ export async function restartServices(type: 'all' | 'core' | 'admin' | 'worker' 
   }
 }
 
-export async function deployContest(contestId: number): Promise<DeployContestResult> {
-  await ensurePermission(ACTION_PERMISSIONS.deployContest);
-
-  // Why the deploy resolves the same three things a restart does: the contest stack is the same
-  // project the make targets run, so it is brought up from the same file list, with the same
-  // deployment mode deciding pull + --no-build versus --build, and with the host repository path
-  // compose needs when this panel runs inside its container (see lib/compose-location.ts). Refusing
-  // an undeterminable location for the same reason as a restart: a wrong project directory mounts and
-  // builds the wrong files instead of failing.
-  const location = await resolveHostComposeLocation();
-  if (!location.ok) return { success: false, error: location.error };
-
-  const result = await runDeployContest(contestId, {
-    files: await buildComposeFileFlags(),
-    mode: (await readDeploymentModeSetting()).mode,
-    location: location.location,
-  });
-  if (result.success) {
-    await recordAudit({
-      verb: 'deployment:deploy',
-      entity: 'deployment',
-      entityId: String(contestId),
-      afterValues: { contestId },
-      result: 'success',
-    });
-  }
-  return result;
-}
-
-export async function getDeployStatus(operationId: string): Promise<DeployStatusResult> {
-  await ensurePermission('deployment:read');
-  return fetchDeployStatus(operationId);
-}
-
-/**
- * Applies the outcome of any deploy whose effects are still owed, so a visit to the deploy page reaches
- * the state that deploy actually left — the contest activated, or the configuration rolled back —
- * without a client having watched the operation to its end. Reuses the same settle the deploy's own
- * start runs (`reconcileDeployOperations`), which is what keeps it from double-applying an outcome: the
- * operation's record holds the claim and whether its effects landed.
- *
- * Why the deploy page's own permission rather than a mutation key: this is the deploy the operator
- * already ran reaching its end, not a new action, so whoever may look at the deploy page may let it
- * finish. Why a server action and not the page's render: settling activates a contest, and that
- * activation revalidates cached pages — which Next.js refuses from inside a render.
- */
-export async function settleDeployOperations(): Promise<void> {
-  await ensurePermission('deployment:list');
-  await reconcileDeployOperationsLib();
-}
-
-export async function getActiveDeployOperation(): Promise<ActiveDeployOperation | null> {
-  await ensurePermission('deployment:read');
-  return getActiveDeployOperationLib();
-}
-
-export async function triggerManualBackup() {
-    // Strict own key: no fallback to maintenance:enable. Re-seed
-    // (prisma-sync) grants backup:create to Storage Admin and Superadmin.
-    await ensurePermission('backup:create');
-    try {
-        const rootDir = getRepoRoot();
-        await logToDiscord('Manual Backup', 'Admin triggered a manual submissions backup.', 3447003);
-        const cmd = 'docker exec -d cms-monitor bash /usr/local/bin/cms-backup.sh';
-        await execPromise(cmd, { cwd: rootDir });
-        await recordAudit({
-          verb: 'backup:create',
-          entity: 'service',
-          afterValues: { action: 'backup' },
-          result: 'success',
-        });
-        return { success: true, message: 'Backup process started in background.' };
-    } catch (error) {
-        return { success: false, error: (error as Error).message };
-    }
-}
-
-export interface BackupArchive {
-  name: string;
-  sizeBytes: number;
-  modifiedIso: string;
-}
-
-const MAX_ARCHIVES = 200;
-
-// Strict own key. Names come from the filesystem and are display-only;
-// no archive is ever executed or interpolated into a shell command here.
-export async function listBackups(): Promise<{ success: boolean; archives?: BackupArchive[]; error?: string }> {
-    await ensurePermission('backup:list');
-    const dir = process.env.BACKUP_DIR ?? path.join(getRepoRoot(), 'backups');
-    let entries;
-    try {
-      entries = await fs.readdir(dir, { withFileTypes: true });
-    } catch {
-      return { success: true, archives: [] };
-    }
-    const archives: BackupArchive[] = [];
-    for (const entry of entries) {
-      if (!entry.isFile()) continue;
-      if (!/^[A-Za-z0-9._-]+\.(tar\.gz|tgz|sql|sql\.gz|dump|gpg)$/.test(entry.name)) continue;
-      try {
-        const stat = await fs.stat(path.join(dir, entry.name));
-        archives.push({ name: entry.name, sizeBytes: stat.size, modifiedIso: stat.mtime.toISOString() });
-      } catch {
-        continue;
-      }
-    }
-    archives.sort((a, b) => (a.modifiedIso < b.modifiedIso ? 1 : -1));
-    return { success: true, archives: archives.slice(0, MAX_ARCHIVES) };
-}
-
 export async function getServiceStatus() {
     await ensurePermission('service:read');
     await ensurePermission('service:list');
     try {
         const { stdout } = await execPromise('docker ps -a --format "{{json .}}"');
-        if (!stdout.trim()) return { status: 'down' as const, running: 0, total: 0 };
-
-        const lines = stdout.trim().split('\n');
-        let running = 0;
-        let total = 0;
-
-        for (const line of lines) {
-            const parsed = JSON.parse(line);
-            const name = parsed.Names || '';
-            if (name.startsWith('cms-') || name.includes('cms')) {
-                total++;
-                if (parsed.State === 'running') running++;
-            }
-        }
-
-        const status = total === 0 ? 'down' as const
-            : running === total ? 'ok' as const
-            : running === 0 ? 'down' as const
-            : 'degraded' as const;
-
-        return { status, running, total };
-    } catch {
+        const summary = summariseCmsContainers(stdout);
+        // Why counts and not names: the row answers "who looked at the stack's health", and the
+        // container list it would otherwise carry is what the caller is about to see anyway.
+        await recordAudit({
+            verb: 'service:view',
+            entity: 'service',
+            afterValues: { status: summary.status, running: summary.running, total: summary.total },
+            result: 'success',
+        });
+        return summary;
+    } catch (error) {
+        await recordAudit({
+            verb: 'service:view',
+            entity: 'service',
+            afterValues: { error: error instanceof Error ? error.name : 'UnknownError' },
+            result: 'failure',
+        });
         return { status: 'down' as const, running: 0, total: 0 };
     }
+}
+
+type ServiceStatusSummary = { status: 'ok' | 'degraded' | 'down'; running: number; total: number };
+
+function summariseCmsContainers(stdout: string): ServiceStatusSummary {
+    if (!stdout.trim()) return { status: 'down', running: 0, total: 0 };
+
+    const lines = stdout.trim().split('\n');
+    let running = 0;
+    let total = 0;
+
+    for (const line of lines) {
+        const parsed = JSON.parse(line);
+        const name = parsed.Names || '';
+        if (name.startsWith('cms-') || name.includes('cms')) {
+            total++;
+            if (parsed.State === 'running') running++;
+        }
+    }
+
+    const status = total === 0 ? 'down'
+        : running === total ? 'ok'
+        : running === 0 ? 'down'
+        : 'degraded';
+
+    return { status, running, total };
 }
 
 export async function updateServer() {

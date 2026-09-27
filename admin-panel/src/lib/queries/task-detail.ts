@@ -46,52 +46,60 @@ export type TaskFilesData = { taskId: number; attachments: readonly TaskAttachme
 export type TaskSettingsData = { task: TaskSettingsRecord; permissionKeys: readonly string[] };
 
 type RawStatement = { id: number; language: string; digest: string };
+type FsobjectSizeRow = { digest: string; size: number };
+type StatementAuditRow = { timestamp: Date; after_values: unknown };
 
-// Why: statement blobs live outside Prisma models — a missing fsobject row
-// degrades to an unknown size instead of failing the whole overview read.
-async function fetchStatementSize(digest: string): Promise<number | null> {
+// Why the limit: the audit trail is append-only and unbounded, so an upload date
+// is only read from the most recent window of statement creations.
+const STATEMENT_AUDIT_LIMIT = 100;
+
+// Why one query: statement blobs live outside Prisma models and their sizes are
+// per statement, so a query per statement is N+1 round trips for a detail page.
+// fsobjects.digest is the primary key, so any digest matches at most one row.
+async function fetchStatementSizes(statements: readonly RawStatement[]): Promise<Map<string, number>> {
+  const digests = [...new Set(statements.map((statement) => statement.digest))];
+  if (digests.length === 0) return new Map();
   try {
-    const rows = await prisma.$queryRaw<Array<{ size: number }>>`SELECT octet_length(lo_get(loid))::int AS size FROM fsobjects WHERE digest = ${digest}`;
-    return rows.length > 0 ? Number(rows[0].size) : null;
+    const rows = await prisma.$queryRaw<FsobjectSizeRow[]>`SELECT digest, octet_length(lo_get(loid))::int AS size FROM fsobjects WHERE digest = ANY(${digests}::varchar[])`;
+    return new Map(rows.map((row) => [row.digest, Number(row.size)]));
   } catch {
-    return null;
+    // Why degrade, not throw: a missing or unreadable large object leaves the size
+    // unknown instead of failing the whole overview read.
+    return new Map();
   }
 }
 
-async function fetchStatementSizes(statements: readonly RawStatement[]): Promise<Map<string, number>> {
-  const sizes = new Map<string, number>();
-  for (const statement of statements) {
-    const size = await fetchStatementSize(statement.digest);
-    if (size !== null) sizes.set(statement.digest, size);
+// Why first-wins: audits are read newest-first, so the first row per language is
+// that language's latest upload.
+function indexLatestStatementUploads(audits: readonly StatementAuditRow[], taskId: number): Map<string, string> {
+  const uploads = new Map<string, string>();
+  const wantedId = String(taskId);
+  for (const audit of audits) {
+    const after = audit.after_values as Record<string, unknown> | null;
+    if (!after) continue;
+    if (String(after.taskId ?? after.task_id ?? '') !== wantedId) continue;
+    const language = String(after.language ?? '');
+    if (!uploads.has(language)) uploads.set(language, audit.timestamp.toISOString());
   }
-  return sizes;
+  return uploads;
 }
 
 // Why: upload dates come from audit history, which is best-effort context —
 // an audit lookup failure degrades to unknown dates, never a failed read.
-async function fetchStatementUploadDates(taskId: number, statements: readonly RawStatement[]): Promise<Map<string, string>> {
-  const dates = new Map<string, string>();
-  let audits: Array<{ timestamp: Date; after_values: unknown }>;
+async function fetchStatementUploadDates(taskId: number): Promise<Map<string, string>> {
   try {
-    audits = await prisma.audit_log.findMany({ where: { verb: 'statement:create', entity: 'statement' }, orderBy: { timestamp: 'desc' }, take: 100 });
+    const audits = await prisma.audit_log.findMany({ where: { verb: 'statement:create', entity: 'statement' }, orderBy: { timestamp: 'desc' }, take: STATEMENT_AUDIT_LIMIT });
+    return indexLatestStatementUploads(audits, taskId);
   } catch {
-    return dates;
+    return new Map();
   }
-  for (const statement of statements) {
-    const hit = audits.find((entry) => {
-      const after = entry.after_values as Record<string, unknown> | null;
-      return !!after && String(after.taskId ?? after.task_id ?? '') === String(taskId) && String(after.language ?? '') === statement.language;
-    });
-    if (hit) dates.set(statement.language, hit.timestamp.toISOString());
-  }
-  return dates;
 }
 
-// Why: enrichment lives here so the overview read keeps digest/file
+// Why enrichment lives here so the overview read keeps digest/file
 // metadata without depending on the task mutation service.
 async function enrichStatements(taskId: number, statements: readonly RawStatement[]): Promise<TaskStatementSummary[]> {
   if (statements.length === 0) return [];
-  const [sizes, dates] = await Promise.all([fetchStatementSizes(statements), fetchStatementUploadDates(taskId, statements)]);
+  const [sizes, dates] = await Promise.all([fetchStatementSizes(statements), fetchStatementUploadDates(taskId)]);
   return statements.map((statement) => ({
     id: statement.id, language: statement.language, digest: statement.digest, filename: `${statement.language}.pdf`,
     size: sizes.get(statement.digest) ?? null, uploadedAt: dates.get(statement.language) ?? null,

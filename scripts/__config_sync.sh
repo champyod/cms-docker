@@ -859,9 +859,12 @@ main() {
      log_info "Would run: bash scripts/__inject_config.sh"
    fi
  
-  # Ensure backups/.gitkeep exists (monitor mount needs host dir)
+  # Ensure backups/.gitkeep exists (monitor mount needs host dir) and that the
+  # monitor's uid can write it — a directory created here belongs to the
+  # operator, and the monitor container is not the operator.
   if [[ "$DRY_RUN" -eq 0 ]]; then
     mkdir -p backups && touch backups/.gitkeep
+    ensure_backup_dir_perms || log_warn "monitor may not be able to write backups"
   fi
 
   if [[ "$DRY_RUN" -eq 0 ]]; then

@@ -53,6 +53,7 @@ vi.mock('@/app/actions/adminPermissions', () => ({
 vi.mock('@/app/actions/users', () => ({ revealUserPassword: vi.fn(() => Promise.resolve({ success: true, data: null })) }));
 vi.mock('@/app/actions/teams', () => ({ getTeams: vi.fn(() => Promise.resolve({ success: true, data: [] })) }));
 vi.mock('@/app/actions/containerConfig', () => ({
+  getContainerConfig: vi.fn(() => Promise.resolve({})),
   updateContainerConfig: vi.fn(() => Promise.resolve({ success: true })),
   resetRestartCount: vi.fn(() => Promise.resolve({ success: true })),
 }));

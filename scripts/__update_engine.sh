@@ -721,6 +721,7 @@ VAR_SPECS=(
   "Infra & Monitoring|[infra]|MONITOR_DISK_THRESHOLD|num||80"
   "Infra & Monitoring|[infra]|MONITOR_INTERVAL|num||10"
   "Infra & Monitoring|[infra]|DOCKER_GID|num||docker_gid"
+  "Infra & Monitoring|[infra]|DOCKER_UID|num||1000"
   "Infra & Monitoring|[infra]|DISK_PATH|str||/host"
   "Infra & Monitoring|[infra]|BACKUP_INTERVAL_MINS|num||1440"
   "Infra & Monitoring|[infra]|BACKUP_MAX_COUNT|num||50"

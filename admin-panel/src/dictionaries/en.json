@@ -553,6 +553,9 @@
       "docs": { "label": "Docs", "description": "Read CMS administration and contest-system documentation." },
       "search": { "label": "Search" }
     },
+    "auth": {
+      "signout": { "label": "Sign out" }
+    },
     "states": { "loading": "Loading", "error": "could not be loaded", "notFound": "Not found", "retry": "Try again" }
   }
 }

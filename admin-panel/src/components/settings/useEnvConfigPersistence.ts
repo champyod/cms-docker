@@ -1,6 +1,6 @@
 'use client';
 
-import { updateConfigTomlValues } from '@/app/actions/env';
+import { updateConfigTomlValues } from '@/app/actions/configTomlActions';
 import { restartServices } from '@/app/actions/services';
 import { useDictionary } from '@/hooks/useDictionary';
 import type { Dictionary } from '@/lib/dictionary';

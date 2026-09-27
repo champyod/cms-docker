@@ -63,6 +63,7 @@ export const EXPECTED_ROUTE_MANIFEST: readonly RouteFixture[] = [
   { id: 'system.settings', path: '/system/settings', kind: 'page', tabIds: [], legacyPaths: ['/settings'], enabled: true },
   { id: 'system.docs', path: '/system/docs', kind: 'page', tabIds: [], legacyPaths: ['/docs'], enabled: true },
   { id: 'system.search', path: '/search', kind: 'search', tabIds: [], legacyPaths: [], enabled: true },
+  { id: 'auth.signout', path: '/auth/signout', kind: 'page', tabIds: [], legacyPaths: [], enabled: false },
 ];
 
 export const EXPECTED_ROUTE_PERMISSIONS = {
@@ -109,6 +110,7 @@ export const EXPECTED_ROUTE_PERMISSIONS = {
   'system.settings': { all: ['env:read', 'env:list', 'monitor:read', 'monitor:list'] },
   'system.docs': {},
   'system.search': { all: ['all:all'] },
+  'auth.signout': {},
 } as const satisfies Readonly<Record<RouteId, PermissionRequirement>>;
 
 export const EXPECTED_NAVIGATION_GROUPS: readonly NavigationGroupDescriptor[] = [

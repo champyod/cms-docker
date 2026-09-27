@@ -13,7 +13,6 @@ import {
   DialogTitle,
 } from '@/components/core/Dialog';
 import { toast } from 'sonner';
-import { logout } from '@/app/actions/auth';
 import { activateContest, getAvailableContests } from '@/app/actions/contests';
 import { buildEntitySearchers } from './entity-searchers';
 import { useEntitySearch } from './useEntitySearch';
@@ -92,7 +91,17 @@ export function CommandPalette({ open, onOpenChange, permissionKeys }: CommandPa
     } catch { toast.error('Failed to switch contest'); }
   };
 
-  const runSignOut = (): void => { close(); logout().catch(() => { toast.error('Sign out failed'); }); };
+  // Why: the route handler owns both the cookie clear and the locale-correct redirect, so the
+  // palette hands off to it instead of posting a Server Action from the page it is leaving.
+  // The destination is built from the frozen registry so the sign-out URL has one owner.
+  const runSignOut = (): void => {
+    close();
+    try {
+      router.push(buildRoute(locale, 'auth.signout'));
+    } catch {
+      toast.error('Sign out failed');
+    }
+  };
 
   return (
     <DialogRoot open={open} onOpenChange={handleOpenChange}>

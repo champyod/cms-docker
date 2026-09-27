@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# tests/fixtures/docker — the docker a backup suite puts on the PATH.
+#
+# WHY a stub rather than a daemon: the contract under test is which channel the archive
+# bytes travel and which exit status the helper returns, and this answers both while
+# writing down the exact argv it was handed. The recorded command line is the evidence that
+# a host bind mount is gone, which no assertion on the resulting file can establish.
+#
+# It never reaches a network and never reads a credential. The archive it writes on stdout
+# and the version it reports come from the run's environment.
+#
+# STUB_VOLUME selects what the helper container does on stdout:
+#   ok           alpine succeeds, busybox is never reached
+#   alpine-fails alpine fails, busybox succeeds (the fallback path)
+#   all-fail     every helper fails
+#   empty        every helper exits 0 having written nothing
+# STUB_DUMP selects whether pg_dump succeeds.
+set -u
+
+container="${CMS_DB_CONTAINER:-cms-database}"
+printf '%s\n' "$*" >> "${STUB_LOG}"
+
+case "${1:-}" in
+  ps)
+    printf '%s\n' "$container"
+    exit 0
+    ;;
+  pull)
+    exit 0
+    ;;
+  cp)
+    printf 'PGDUMP-STUB-PAYLOAD\n' > "${!#}"
+    exit 0
+    ;;
+  run)
+    shift
+    image=""
+    previous=""
+    for arg in "$@"; do
+      if [[ "$arg" == "tar" ]]; then image="$previous"; break; fi
+      previous="$arg"
+    done
+    case "${STUB_VOLUME:-ok}" in
+      ok)
+        if [[ "$image" == alpine:* ]]; then cat "${STUB_ARCHIVE}"; exit 0; fi
+        ;;
+      alpine-fails)
+        if [[ "$image" == alpine:* ]]; then
+          printf 'stub: helper image %s unavailable\n' "$image" >&2
+          exit 1
+        fi
+        if [[ "$image" == busybox ]]; then cat "${STUB_ARCHIVE}"; exit 0; fi
+        ;;
+      all-fail)
+        printf 'stub: helper image %s unavailable\n' "$image" >&2
+        exit 1
+        ;;
+      empty)
+        exit 0
+        ;;
+    esac
+    exit 1
+    ;;
+  exec)
+    shift
+    command_name=""
+    seen_container=0
+    for arg in "$@"; do
+      if (( seen_container )); then command_name="$arg"; break; fi
+      [[ "$arg" == "$container" ]] && seen_container=1
+    done
+    case "$command_name" in
+      pg_dump)
+        if [[ "${STUB_DUMP:-ok}" == "ok" ]]; then exit 0; fi
+        printf 'pg_dump: stubbed failure\n' >&2
+        exit 1
+        ;;
+      psql)
+        printf '%s\n' "${STUB_PG_VERSION}"
+        exit 0
+        ;;
+      postgres)
+        printf 'postgres (PostgreSQL) %s\n' "${STUB_PG_VERSION}"
+        exit 0
+        ;;
+      *)
+        exit 0
+        ;;
+    esac
+    ;;
+esac
+exit 0

@@ -1,4 +1,4 @@
-import type { BackupArchive } from '@/app/actions/services';
+import type { BackupArchive } from '@/app/actions/backupActions';
 import type { Dictionary } from '@/lib/dictionary';
 import type { Locale } from '@/lib/locales';
 
