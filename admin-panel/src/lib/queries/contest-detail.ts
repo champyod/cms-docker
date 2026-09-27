@@ -206,9 +206,19 @@ const contestEditSelect = {
 // typed raw query carries them while the explicit select stays relation-free.
 type IntervalColumns = { token_min_interval: unknown; token_gen_interval: unknown; min_submission_interval: unknown; min_user_test_interval: unknown };
 
+const NO_INTERVALS: IntervalColumns = { token_min_interval: null, token_gen_interval: null, min_submission_interval: null, min_user_test_interval: null };
+
 async function fetchContestIntervals(contestId: number): Promise<IntervalColumns> {
-  const rows = await prisma.$queryRaw<IntervalColumns[]>`SELECT token_min_interval, token_gen_interval, min_submission_interval, min_user_test_interval FROM contests WHERE id = ${contestId}`;
-  return rows[0] ?? { token_min_interval: null, token_gen_interval: null, min_submission_interval: null, min_user_test_interval: null };
+  try {
+    const rows = await prisma.$queryRaw<IntervalColumns[]>`SELECT token_min_interval, token_gen_interval, min_submission_interval, min_user_test_interval FROM contests WHERE id = ${contestId}`;
+    return rows[0] ?? NO_INTERVALS;
+  } catch {
+    // Why degrade, not throw: the interval columns live on a CMS-created table that
+    // no admin-panel migration owns, so a schema drift or a connection fault there
+    // must leave four cosmetic inputs unset rather than fail the whole edit read —
+    // the same reasoning the Task settings read applies to the identical query.
+    return NO_INTERVALS;
+  }
 }
 
 type ContestEditRow = Prisma.contestsGetPayload<{ select: typeof contestEditSelect }> & IntervalColumns;

@@ -1,17 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { findUnique, findMany, requirePermission } = vi.hoisted(() => ({
+const { findUnique, findMany, requirePermission, queryRaw } = vi.hoisted(() => ({
   findUnique: vi.fn(),
   findMany: vi.fn(),
   requirePermission: vi.fn(),
+  queryRaw: vi.fn(),
 }));
 
-vi.mock('@/lib/prisma', () => ({ prisma: { contests: { findUnique }, participations: { findMany }, tasks: { findMany }, users: { findMany }, teams: { findMany } } }));
+vi.mock('@/lib/prisma', () => ({ prisma: { contests: { findUnique }, participations: { findMany }, tasks: { findMany }, users: { findMany }, teams: { findMany }, $queryRaw: queryRaw } }));
 vi.mock('@/lib/server/authorization', () => ({ requirePermission }));
 vi.mock('@/lib/field-permissions', () => ({ filterReadableFields: (_entity: string, row: Record<string, unknown>) => row }));
 
 import {
   getContestDetailSummary,
+  getContestEditData,
   getContestParticipants,
 } from '@/lib/queries/contest-detail';
 
@@ -65,5 +67,69 @@ describe('contest detail read models', () => {
       permission: 'user:read',
     });
     expect(findMany).not.toHaveBeenCalled();
+  });
+});
+
+const CONTEST_EDIT_ROW = {
+  id: 7,
+  name: 'Contest Seven',
+  description: 'Description',
+  start: new Date('2026-09-25T00:00:00.000Z'),
+  stop: null,
+  analysis_start: null,
+  analysis_stop: null,
+  timezone: 'UTC',
+  allowed_localizations: [],
+  languages: [],
+  token_mode: 'disabled',
+  token_max_number: null,
+  token_gen_initial: 2,
+  token_gen_number: 2,
+  token_gen_max: null,
+  max_submission_number: null,
+  max_user_test_number: null,
+  score_precision: 0,
+  analysis_enabled: false,
+};
+
+describe('contest edit read model', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requirePermission.mockResolvedValue(new Set(['contest:read', 'contest:update']));
+    findUnique.mockResolvedValue(CONTEST_EDIT_ROW);
+  });
+
+  it('carries real interval values when the interval read succeeds', async () => {
+    queryRaw.mockResolvedValue([{ token_min_interval: '00:01:00', token_gen_interval: '00:30:00', min_submission_interval: null, min_user_test_interval: null }]);
+
+    const data = await getContestEditData(7);
+
+    expect(data?.contest).toMatchObject({ id: 7, token_min_interval: '00:01:00', token_gen_interval: '00:30:00' });
+  });
+
+  it('degrades a failed interval read to null intervals instead of failing the read', async () => {
+    // Why this case: the interval columns live outside the Prisma model, so their
+    // read is raw SQL over a CMS-created table. Any failure there must not take
+    // down the four cosmetic fields the rest of the edit form still needs.
+    queryRaw.mockRejectedValue(new Error('column "token_min_interval" does not exist'));
+
+    const data = await getContestEditData(7);
+
+    expect(data?.contest).toMatchObject({
+      id: 7,
+      name: 'Contest Seven',
+      timezone: 'UTC',
+      token_min_interval: null,
+      token_gen_interval: null,
+      min_submission_interval: null,
+      min_user_test_interval: null,
+    });
+  });
+
+  it('still reports a missing contest as null when the interval read fails', async () => {
+    findUnique.mockResolvedValue(null);
+    queryRaw.mockRejectedValue(new Error('connection reset'));
+
+    expect(await getContestEditData(404)).toBeNull();
   });
 });

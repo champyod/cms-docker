@@ -65,7 +65,6 @@ function renderTask(permissionKeys: readonly string[]): void {
     <TaskRecordHeader
       taskId={9}
       name="task-nine"
-      title="Task Nine"
       contest={{ id: 3, name: 'Thailand Cup' }}
       permissionKeys={permissionKeys}
     />,
@@ -92,9 +91,9 @@ function renderTeam(permissionKeys: readonly string[]): void {
   );
 }
 
-/** Why the three: the visible label and the icon are one affordance, a label swap without the icon swap is exactly the drift this guards, and the modal must stay closed until the click lands. The accessible name is asserted separately because only the new headers must keep it equal to the visible label (WCAG 2.5.3). */
-function expectEditAffordance(label: string, testId: string, accessibleName = label): void {
-  const button = screen.getByRole('button', { name: accessibleName });
+/** Why the three: the accessible name must be the visible label (WCAG 2.5.3 Label in Name), the label and the icon are one affordance so a label swap without the icon swap is caught, and the modal must stay closed until the click lands. */
+function expectEditAffordance(label: string, testId: string): void {
+  const button = screen.getByRole('button', { name: label });
   expect(button.textContent).toBe(label);
   expect(button.querySelector('.lucide-pencil')).not.toBeNull();
   expect(screen.queryByTestId(testId)).toBeNull();
@@ -109,9 +108,7 @@ describe('Task record edit affordance', () => {
   it('offers Edit Task with the Pencil icon to a reader holding task:update', () => {
     mockGetTaskSettings.mockResolvedValue(TASK_SETTINGS);
     renderTask(['task:read', 'task:update']);
-    // Why the third argument: the Task button keeps its pre-existing aria-label,
-    // so its accessible name names the record while its visible label is the action.
-    expectEditAffordance('Edit Task', 'task-modal', 'Edit Task Nine');
+    expectEditAffordance('Edit Task', 'task-modal');
   });
 
   it('withholds the Edit Task button from a reader without task:update', () => {

@@ -14,7 +14,6 @@ import { TaskModal } from './TaskModal';
 export type TaskRecordHeaderProps = {
   taskId: number;
   name: string;
-  title: string;
   contest: { id: number; name: string } | null;
   permissionKeys: readonly string[];
 };
@@ -30,7 +29,7 @@ function useHeaderLocale(): string {
 // Why: the layout already renders the record title and description, so the
 // header owns only the contest link and the gated edit action — the edit record
 // loads on demand, keeping the header summary-only.
-export function TaskRecordHeader({ taskId, title, contest, permissionKeys }: TaskRecordHeaderProps): React.JSX.Element {
+export function TaskRecordHeader({ taskId, contest, permissionKeys }: TaskRecordHeaderProps): React.JSX.Element {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsRecord, setSettingsRecord] = useState<TaskSettingsRecord | null>(null);
   const refresh = useRecordTabRefresh();
@@ -58,7 +57,7 @@ export function TaskRecordHeader({ taskId, title, contest, permissionKeys }: Tas
         </a>
       )}
       {canEdit && (
-        <Button variant="secondary" icon={Pencil} onClick={() => { void openSettings(); }} aria-label={`Edit ${title}`}>
+        <Button variant="secondary" icon={Pencil} onClick={() => { void openSettings(); }}>
           Edit Task
         </Button>
       )}

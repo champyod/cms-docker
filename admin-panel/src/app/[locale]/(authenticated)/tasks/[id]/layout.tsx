@@ -80,7 +80,7 @@ export default async function TaskDetailLayout({
     breadcrumbs,
     title: summary.title,
     description: summary.name,
-    actions: <TaskRecordHeader taskId={summary.id} name={summary.name} title={summary.title} contest={summary.contest} permissionKeys={summary.permissionKeys} />,
+    actions: <TaskRecordHeader taskId={summary.id} name={summary.name} contest={summary.contest} permissionKeys={summary.permissionKeys} />,
     tabs: buildTaskTabs(locale, summary.id, effective, dictionary),
     children,
     className: 'space-y-6',
