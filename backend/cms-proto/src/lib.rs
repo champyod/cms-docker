@@ -41,8 +41,8 @@ pub use guards::{
 };
 pub use jobs::{
     key_set_for, DecodedJob, DigestMap, EvaluationOutcome, FinishedCall, IsolatedBatch, JobError,
-    JobGroup, JobKind, JobOutcome, KindExtras, Operation, OperationKind, Quarantine, QueueEntryDto,
-    QueueKey, Requeue, Shard, COMPILATION_KEYS, COMPILATION_TYPE, DIGEST_MAP_KEYS,
+    JobGroup, JobKey, JobKind, JobOutcome, KindExtras, Operation, OperationKind, Quarantine,
+    QueueEntryDto, QueueKey, Requeue, Shard, COMPILATION_KEYS, COMPILATION_TYPE, DIGEST_MAP_KEYS,
     EVALUATION_EXECUTION_KEYS, EVALUATION_KEYS, EVALUATION_TYPE, OPERATION_KEYS, OPERATION_TYPES,
     PRIORITY_EXTRA_HIGH, PRIORITY_EXTRA_LOW, PRIORITY_HIGH, PRIORITY_LOW, PRIORITY_MEDIUM,
 };

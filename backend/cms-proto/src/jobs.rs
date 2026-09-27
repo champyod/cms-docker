@@ -37,7 +37,7 @@ use serde_json::Value;
 pub use isolation::{FinishedCall, IsolatedBatch, JobOutcome};
 pub use job::{DecodedJob, EvaluationOutcome, KindExtras};
 pub use keys::{
-    key_set_for, DigestMap, JobKind, COMPILATION_KEYS, COMPILATION_TYPE, DIGEST_MAP_KEYS,
+    key_set_for, DigestMap, JobKey, JobKind, COMPILATION_KEYS, COMPILATION_TYPE, DIGEST_MAP_KEYS,
     EVALUATION_EXECUTION_KEYS, EVALUATION_KEYS, EVALUATION_TYPE, OPERATION_KEYS, OPERATION_TYPES,
 };
 pub use operation::{Operation, OperationKind, Shard};

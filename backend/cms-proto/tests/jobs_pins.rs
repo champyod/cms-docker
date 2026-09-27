@@ -9,7 +9,7 @@
 mod jobs_fixtures;
 
 use cms_proto::{
-    key_set_for, FinishedCall, JobError, JobKind, Shard, COMPILATION_KEYS, DIGEST_MAP_KEYS,
+    key_set_for, FinishedCall, JobError, JobKey, JobKind, Shard, COMPILATION_KEYS, DIGEST_MAP_KEYS,
     EVALUATION_EXECUTION_KEYS, EVALUATION_KEYS, OPERATION_KEYS,
 };
 use jobs_fixtures::{job, quarantined, reported};
@@ -58,6 +58,59 @@ fn the_key_sets_are_exactly_the_ones_the_python_exports_write() {
         OPERATION_KEYS.len(),
     ];
     assert_eq!(sizes, [20, 27, 5]);
+}
+
+#[test]
+fn a_claimed_key_is_one_the_python_side_writes() {
+    let claimed = [
+        JobKey::OPERATION,
+        JobKey::TYPE,
+        JobKey::OBJECT_ID,
+        JobKey::DATASET_ID,
+        JobKey::TESTCASE_CODENAME,
+        JobKey::ARCHIVE_SANDBOX,
+        JobKey::SHARD,
+        JobKey::SANDBOXES,
+        JobKey::SUCCESS,
+        JobKey::FILES,
+        JobKey::MANAGERS,
+        JobKey::EXECUTABLES,
+        JobKey::PLUS,
+        JobKey::COMPILATION_SUCCESS,
+        JobKey::INPUT,
+        JobKey::OUTPUT,
+        JobKey::TIME_LIMIT,
+        JobKey::MEMORY_LIMIT,
+        JobKey::OUTCOME,
+        JobKey::USER_OUTPUT,
+        JobKey::ONLY_EXECUTION,
+        JobKey::GET_OUTPUT,
+    ];
+    for key in claimed {
+        let name = key.as_str();
+        assert!(
+            COMPILATION_KEYS.contains(&name)
+                || EVALUATION_KEYS.contains(&name)
+                || OPERATION_KEYS.contains(&name),
+            "{name} is claimed but no pinned set writes it"
+        );
+        assert_eq!(
+            JobKey::new(name),
+            Ok(key),
+            "{name} must read back as itself"
+        );
+    }
+    let unclaimed = JobError::UnknownKey { key: String::new() };
+    assert_eq!(JobKey::new(""), Err(unclaimed.clone()));
+    for name in ["shoard", "language"] {
+        assert_eq!(
+            JobKey::new(name),
+            Err(JobError::UnknownKey {
+                key: name.to_owned()
+            }),
+            "{name} is a key nothing here reads"
+        );
+    }
 }
 
 #[test]
