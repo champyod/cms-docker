@@ -10,15 +10,21 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/core/EmptyState';
+import type { DismissReason } from '@/hooks/useUnsavedChangesGuard';
 
 interface DialogProps {
   open: boolean;
-  onOpenChange: (open: boolean) => void;
+  onOpenChange: (open: boolean, reason: DismissReason) => void;
   title?: string;
   description?: string;
   footer?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
+  /**
+   * Refuses every dismissal while a submit is in flight. The dialog is controlled,
+   * so ignoring the close request is what keeps the action's result on screen.
+   */
+  pending?: boolean;
 }
 
 export function Dialog({
@@ -29,11 +35,13 @@ export function Dialog({
   footer,
   children,
   className,
+  pending = false,
 }: DialogProps) {
   const invokeRef = useRef<HTMLElement | null>(null);
+  const reasonRef = useRef<DismissReason>('close');
   const isContentEmpty = children === null || children === undefined;
 
-  // Why this capture: every dialog in the panel is opened from a controlled
+  // Why the capture: every dialog in the panel is opened from a controlled
   // `open` flag, so Radix has no trigger to return focus to and a close would
   // otherwise drop focus on the document body mid-record.
   const rememberInvoker = useCallback((): void => {
@@ -52,9 +60,28 @@ export function Dialog({
     if (invoker?.isConnected === true) invoker.focus();
   }, []);
 
+  // Why the reason: Radix reports a dismissal as a bare `false`, so a form that
+  // has to ask before losing its edits cannot tell Escape from the overlay, and
+  // a caller that forwards the reason needs one value per dismissal path.
+  const handleOpenChange = useCallback((next: boolean): void => {
+    if (next) {
+      reasonRef.current = 'close';
+      onOpenChange(true, 'close');
+      return;
+    }
+    if (pending) return;
+    onOpenChange(false, reasonRef.current);
+  }, [onOpenChange, pending]);
+
   return (
-    <UIDialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={className} onOpenAutoFocus={rememberInvoker} onCloseAutoFocus={restoreInvoker}>
+    <UIDialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent
+        className={className}
+        onOpenAutoFocus={rememberInvoker}
+        onCloseAutoFocus={restoreInvoker}
+        onEscapeKeyDown={(): void => { reasonRef.current = 'escape'; }}
+        onInteractOutside={(): void => { reasonRef.current = 'backdrop'; }}
+      >
         {(title || description) && (
           <DialogHeader>
             {title && <DialogTitle>{title}</DialogTitle>}

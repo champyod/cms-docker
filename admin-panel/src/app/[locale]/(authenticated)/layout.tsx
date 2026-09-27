@@ -49,7 +49,7 @@ export default async function AuthenticatedLayout({
   return (
     <DictionaryProvider dict={dict}>
       <ConfirmProvider>
-        <PageBackground className="flex h-screen overflow-hidden">
+        <PageBackground className="flex h-screen overflow-hidden" data-authenticated-shell="true">
           <Sidebar
             className="z-20 hidden md:flex"
             locale={locale}

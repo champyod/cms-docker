@@ -69,6 +69,9 @@ function visibleOnMobile<Row>(columns: ResponsiveColumn<Row>[]): ResponsiveColum
 // make j/k walk 2N elements for N records and let Enter activate an action the
 // user cannot see. The desktop row is the record's traversable element; the
 // card keeps its class name and click/keyboard handlers for pointer and touch.
+// Why `data-row-id` is not stripped as well: nothing addresses a record by it
+// twice, and React's key never reaches the DOM, so the desktop row is the only
+// place a session restore can read a row's identity back out.
 function mobileCardRowProps<Row>(
   getRowProps: ResponsiveTableProps<Row>['getRowProps'],
   row: Row,
@@ -134,7 +137,7 @@ function renderDesktopRows<Row>(props: ResponsiveTableProps<Row>): React.ReactNo
       {rows.map((row, index) => {
         const extraProps = getRowProps?.(row, index);
         return (
-        <TableRow key={getRowKey(row, index)} {...extraProps} className={cn(getRowClassName?.(row, index), extraProps?.className)}>
+        <TableRow key={getRowKey(row, index)} {...extraProps} data-row-id={String(getRowKey(row, index))} className={cn(getRowClassName?.(row, index), extraProps?.className)}>
           {columns.map((column) => (
             <TableCell key={column.key} className={column.cellClassName}>{column.render(row)}</TableCell>
           ))}

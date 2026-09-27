@@ -3,7 +3,7 @@
 import React from 'react';
 
 import { Loader2, type LucideIcon } from 'lucide-react';
-import { motion, type HTMLMotionProps } from 'motion/react';
+import { motion, useReducedMotion, type HTMLMotionProps } from 'motion/react';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/core/Tooltip';
 import { EmptyState } from '@/components/core/EmptyState';
@@ -108,6 +108,9 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ) => {
     const resolvedVariant = resolveVariant(variant);
     const { hasChildren, isIconOnly } = getIconOnlyState(children, icon, iconOnly);
+    // Why the hook rather than a stylesheet: the hover and tap transforms are
+    // motion values, so a `prefers-reduced-motion` rule cannot reach them.
+    const shouldReduceMotion = useReducedMotion() === true;
     if (process.env.NODE_ENV !== 'production' && isIconOnly && !tooltip) {
       console.warn('Button: iconOnly requires a `tooltip` prop for accessibility.');
     }
@@ -122,8 +125,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={disabled || loading}
         aria-label={ariaLabel}
         aria-busy={loading || undefined}
-        whileHover={{ scale: 1.02, filter: 'brightness(1.05)' }}
-        whileTap={{ scale: 0.97 }}
+        whileHover={shouldReduceMotion ? undefined : { scale: 1.02, filter: 'brightness(1.05)' }}
+        whileTap={shouldReduceMotion ? undefined : { scale: 0.97 }}
         transition={{ type: 'spring', stiffness: 400, damping: 25 }}
         className={cn(buttonVariants({ variant: BUTTON_VARIANT_TO_ADAPTER[resolvedVariant], size }), isIconOnly && ICON_ONLY_SIZE[size], className)}
         {...props}

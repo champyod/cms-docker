@@ -365,7 +365,15 @@
       "title": "Change the official flag?",
       "description": "Only the official flag changes; the submission itself is untouched and the flag can be changed back.",
       "confirmLabel": "Change official flag"
+    },
+    "discardUnsavedChanges": {
+      "title": "Discard unsaved changes?",
+      "description": "The edits on this form have not been saved yet and will be lost.",
+      "confirmLabel": "Discard changes"
     }
+  },
+  "sidePanel": {
+    "close": "Close"
   },
   "toasts": {
     "deploy": {

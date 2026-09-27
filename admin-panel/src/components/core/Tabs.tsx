@@ -16,7 +16,10 @@ interface TabsProps {
   onSelect?: (id: string) => void;
 }
 
-const TAB_BASE = 'flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors';
+// Why the minimum height and the scroll container together: a record with more
+// tabs than fit a phone either wraps into a ragged second line or clips the last
+// tab, and a clipped tab is a tab the reader cannot reach or aim at.
+const TAB_BASE = 'flex min-h-11 items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors';
 const TAB_ACTIVE = 'border-primary text-primary';
 const TAB_INACTIVE = 'border-transparent text-muted-foreground hover:text-foreground';
 
@@ -32,10 +35,10 @@ export function Tabs({ items, activeId, ariaLabel, className, onSelect }: TabsPr
   if (items.length === 0) return null;
 
   return (
-    <nav aria-label={ariaLabel} className={cn('flex border-b border-border', className)}>
+    <nav aria-label={ariaLabel} className={cn('flex overflow-x-auto border-b border-border scrollbar-thin', className)}>
       {items.map((item) => {
         const isActive = item.id === activeId;
-        const tabClassName = cn(TAB_BASE, isActive ? TAB_ACTIVE : TAB_INACTIVE);
+        const tabClassName = cn(TAB_BASE, 'shrink-0', isActive ? TAB_ACTIVE : TAB_INACTIVE);
         if (item.href) {
           return (
             <Link

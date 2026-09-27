@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useMemo } from 'react';
+import { Fragment, useEffect, useMemo, useRef } from 'react';
 import { X } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { useDictionary } from '@/hooks/useDictionary';
@@ -64,6 +64,23 @@ function OverlayBody({ locale, permissionKeys, onClose }: Omit<FullScreenNavOver
 }
 
 export function FullScreenNavOverlay({ locale, permissionKeys, open, onClose }: FullScreenNavOverlayProps): React.JSX.Element | null {
+  // Why the capture: the overlay is opened by a button the reader pressed, and
+  // closing it from a link leaves focus on the body, so the next Tab starts the
+  // reader from the top of the page instead of back at the control they used.
+  const invokeRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    if (invokeRef.current === null && document.activeElement instanceof HTMLElement) {
+      invokeRef.current = document.activeElement;
+    }
+    return (): void => {
+      const invoker = invokeRef.current;
+      invokeRef.current = null;
+      if (invoker?.isConnected === true) invoker.focus();
+    };
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const previous = document.body.style.overflow;

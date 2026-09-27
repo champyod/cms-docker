@@ -7,6 +7,8 @@ import { FormField } from '@/components/core/FormField';
 import { InlineAlert } from '@/components/core/InlineAlert';
 import { Input } from '@/components/core/Input';
 import { ModalFooter } from '@/components/core/ModalFooter';
+import { useConfirm } from '@/hooks/useConfirm';
+import { useUnsavedChangesGuard, type DismissReason } from '@/hooks/useUnsavedChangesGuard';
 
 export interface NameDialogProps {
   readonly open: boolean;
@@ -45,6 +47,12 @@ export function NameDialog({
   const [error, setError] = useState<string | undefined>(undefined);
   const [pending, setPending] = useState(false);
   const [wasOpen, setWasOpen] = useState(open);
+  const confirm = useConfirm();
+
+  // Why trimmed on both sides: the field is dirty when it holds something the
+  // server would not store as a change, and "  copy" against "copy" is not one.
+  const isDirty = value.trim() !== initialValue.trim();
+  const { requestClose, markClean } = useUnsavedChangesGuard(isDirty, confirm, () => onOpenChange(false));
 
   // Why state is adjusted during render rather than in an effect: seeding on
   // the closed-to-open edge must land before the input paints, and an effect
@@ -58,14 +66,18 @@ export function NameDialog({
     }
   }
 
-  // Why a pending submit blocks dismissal: the action already left the browser,
-  // and closing here would hide its result and leave a half-named record.
+  // Why the pending block lives in the core Dialog: the cancel control and the
+  // dismiss gestures reach the same guarded `onOpenChange` there, so this
+  // component only has to state that it is busy.
   const handleOpenChange = useCallback(
-    (next: boolean): void => {
-      if (pending) return;
-      onOpenChange(next);
+    (next: boolean, reason: DismissReason): void => {
+      if (next) {
+        onOpenChange(true);
+        return;
+      }
+      requestClose(reason);
     },
-    [pending, onOpenChange],
+    [onOpenChange, requestClose],
   );
 
   const handleSubmit = useCallback((): void => {
@@ -80,13 +92,18 @@ export function NameDialog({
     setPending(true);
     void onSubmit(trimmed).then((result) => {
       if (result.success) {
+        // Why before the close: the write landed, so the next dismissal has
+        // nothing left to lose and must not ask again. The pending latch clears
+        // with it, or the dialog would refuse a dismissal it has finished.
+        markClean();
+        setPending(false);
         onOpenChange(false);
         return;
       }
       setPending(false);
       setError(result.error);
     });
-  }, [onSubmit, onOpenChange, pending, validate, value]);
+  }, [onSubmit, onOpenChange, markClean, pending, validate, value]);
 
   if (!open) return null;
 
@@ -94,13 +111,14 @@ export function NameDialog({
     <Dialog
       open={open}
       onOpenChange={handleOpenChange}
+      pending={pending}
       title={title}
       description={description}
       footer={
         <ModalFooter
           cancelLabel={cancelLabel}
           confirmLabel={submitLabel}
-          onCancel={(): void => handleOpenChange(false)}
+          onCancel={(): void => handleOpenChange(false, 'close')}
           onConfirm={handleSubmit}
           confirmLoading={pending}
         />

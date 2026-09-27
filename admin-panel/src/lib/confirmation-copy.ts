@@ -54,6 +54,7 @@ export interface ConfirmationCopy {
   rebuildStackConfirm: (stack: RebuildStackKey) => ConfirmationRequest;
   manualBackupConfirm: () => ConfirmationRequest;
   toggleOfficialConfirm: () => ConfirmationRequest;
+  discardUnsavedChangesConfirm: () => ConfirmationRequest;
 }
 
 function request(
@@ -105,5 +106,12 @@ export function buildConfirmationCopy(copy: ConfirmationDictionary): Confirmatio
 
     /** The official flag is a reversible write on an untouched submission, so the flag alone is what changes. */
     toggleOfficialConfirm: () => request('recoverable', copy.toggleOfficial),
+
+    /**
+     * Closing a surface that still holds edits. The work is gone for good once the
+     * surface closes, but the record itself is untouched, so it is recoverable in
+     * the sense the caption uses: the reader can type the changes again.
+     */
+    discardUnsavedChangesConfirm: () => request('recoverable', copy.discardUnsavedChanges),
   };
 }

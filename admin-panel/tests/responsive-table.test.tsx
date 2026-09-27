@@ -109,4 +109,17 @@ describe('ResponsiveTable', () => {
     // (no auto-cleanup), so a global role query would match stale tables.
     expect(container.querySelectorAll('table tbody td')).toHaveLength(2);
   });
+
+  it('exposes the row key as the record identity on the desktop row only', () => {
+    // Why pinned: session restore and the j/k chord both address a record by its
+    // row key, and React's key never reaches the DOM. The mobile card stays out of
+    // it for the same reason it stays out of the shortcut marker — the `md:hidden`
+    // container stays mounted, so a second identity element is a second record.
+    const { container } = render(
+      <ResponsiveTable {...baseProps()} rows={[{ id: 7, name: 'Grace', email: 'grace@example.com' }]} />
+    );
+    const desktopRow = container.querySelector('tbody tr');
+    expect(desktopRow?.getAttribute('data-row-id')).toBe('7');
+    expect(container.querySelector('.space-y-3.md\\:hidden > div')?.hasAttribute('data-row-id')).toBe(false);
+  });
 });

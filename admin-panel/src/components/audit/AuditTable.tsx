@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback, useMemo, useTransition } from 'react';
 import { useAppRouter } from '@/hooks/useAppRouter';
-import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
+import { SidePanel } from '@/components/core/SidePanel';
 import {
   ResponsiveTable,
   type ResponsiveRowProps,
@@ -242,28 +242,34 @@ export function AuditTable({
         emptyState={<EmptyState icon={Filter} title={dict.noEntries} />}
       />
 
-      {expandedEntry !== undefined && (loadingDetail || expandedDetail !== null || detailError !== null) && (
-        <Card className="p-4 space-y-4">
-          {loadingDetail && (
-            <div className="text-sm text-muted-foreground animate-pulse">Loading details…</div>
-          )}
-          {detailError !== null && (
-            <div className="text-sm text-destructive">
-              {dict.detailLoadFailed}: {detailError}
-            </div>
-          )}
-          {expandedDetail && (
-            <AuditDetailContent
-              detail={expandedDetail}
-              dict={dict}
-              copiedField={copiedField}
-              onCopy={(text, field) => {
-                void handleCopy(text, field);
-              }}
-            />
-          )}
-        </Card>
-      )}
+      {/* Why a side panel and not a block under the table: an entry's detail is
+          read against the rows above it, and a block below pushed the row the
+          reader clicked off the screen on every open. */}
+      <SidePanel
+        open={expandedEntry !== undefined && (loadingDetail || expandedDetail !== null || detailError !== null)}
+        onOpenChange={(open) => {
+          if (open || expandedRowId === null) return;
+          handleRowClick(expandedRowId);
+        }}
+        title={expandedEntry === undefined ? dict.expandedDetails : `${expandedEntry.verb} · ${expandedEntry.entity_name ?? expandedEntry.entity}`}
+      >
+        {loadingDetail && <div className="text-sm text-muted-foreground animate-pulse">Loading details…</div>}
+        {detailError !== null && (
+          <div className="text-sm text-destructive">
+            {dict.detailLoadFailed}: {detailError}
+          </div>
+        )}
+        {expandedDetail && (
+          <AuditDetailContent
+            detail={expandedDetail}
+            dict={dict}
+            copiedField={copiedField}
+            onCopy={(text, field) => {
+              void handleCopy(text, field);
+            }}
+          />
+        )}
+      </SidePanel>
 
       {totalPages > 1 && (
         <TablePaginationControls

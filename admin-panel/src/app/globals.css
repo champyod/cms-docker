@@ -112,3 +112,18 @@
     font-size: 18px;
   }
 }
+
+/* Reduced motion: a reader who asked the system to stop moving gets the same
+   layouts with the movement removed. The 0.01ms floor is deliberate — `none`
+   would also cancel the delay an animation needs before its end state applies,
+   so a dismissed dialog would reappear for one frame. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -19,8 +19,11 @@ interface MobileBottomBarProps {
   onToggle: () => void;
 }
 
+// Why the minimum height on the slot itself: the bar row is 64px tall, so a slot
+// sized only by the flex row would be 44px wide but its tap area would stop at
+// the icon, and the label under a phone-sized target misses more than it hits.
 const SLOT_CLASSES =
-  'flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[0.625rem] font-medium transition-colors';
+  'flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[0.625rem] font-medium transition-colors';
 
 // Why a link and not a second disclosure: the People slot is the group entered
 // through its first permitted route, and More is the control that opens the full

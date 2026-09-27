@@ -1,10 +1,13 @@
 'use client';
 
 import { useCallback, useState } from 'react';
+import { usePathname } from 'next/navigation';
 
+import { useAppRouter } from '@/hooks/useAppRouter';
 import { useTable } from '@/hooks/useTable';
 import { useTableAutoRefresh } from '@/hooks/useTableAutoRefresh';
 import { apiClient, type ApiResponse } from '@/lib/apiClient';
+import { writeListQuery, type ListQueryState } from '@/lib/list-state';
 import type { UsersPageRow } from '@/lib/prisma-selects';
 
 const AUTO_REFRESH_INTERVAL_MS = 60000;
@@ -88,8 +91,18 @@ export function useUserListRows({ initialUsers, totalPages, currentPage, perPage
   const [searchDraft, setSearchDraft] = useState(initialSearch);
   const [pageInput, setPageInput] = useState(String(currentPage));
   const table = useTable({ initialPage: currentPage, initialPerPage: perPage, initialSearch });
+  const router = useAppRouter();
+  const pathname = usePathname() ?? '';
+
+  // Why the URL is written here and not in the page: a page change arrives
+  // through this fetch, and the canonical base path belongs to the route the
+  // registry built, so only the query values are recomposed from state.
+  const syncQueryToUrl = useCallback((state: ListQueryState): void => {
+    router.replace(writeListQuery(pathname, state));
+  }, [pathname, router]);
 
   const fetchUsers = useCallback(async (query: UserListQuery = {}) => {
+    const isNavigation = Object.keys(query).length > 0;
     const request = resolveRequest(query, table);
     setLoading(true);
     try {
@@ -100,14 +113,21 @@ export function useUserListRows({ initialUsers, totalPages, currentPage, perPage
       setUsers(page.users ?? []);
       setUserCache((previous) => mergeIntoCache(previous, page.users ?? []));
       setTotalPagesState(page.totalPages ?? 1);
-      table.setPage(page.currentPage ?? request.page);
-      table.setPerPage(page.perPage ?? request.perPage);
-      table.setSearch(page.search ?? request.search);
-      setPageInput(String(page.currentPage ?? request.page));
+      const nextPage = page.currentPage ?? request.page;
+      const nextPerPage = page.perPage ?? request.perPage;
+      const nextSearch = page.search ?? request.search;
+      table.setPage(nextPage);
+      table.setPerPage(nextPerPage);
+      table.setSearch(nextSearch);
+      setPageInput(String(nextPage));
+      // Why only on navigation: the auto-refresh re-reads the page the reader is
+      // already on, and pushing that same query would put an entry in history
+      // every minute for a list nobody navigated.
+      if (isNavigation) syncQueryToUrl({ page: nextPage, perPage: nextPerPage, search: nextSearch });
     } finally {
       setLoading(false);
     }
-  }, [table]);
+  }, [syncQueryToUrl, table]);
 
   useTableAutoRefresh({ enabled: true, intervalMs: AUTO_REFRESH_INTERVAL_MS, onRefresh: () => fetchUsers() });
 

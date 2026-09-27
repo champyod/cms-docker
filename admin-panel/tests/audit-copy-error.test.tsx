@@ -134,7 +134,10 @@ describe('AuditTable copy feedback', () => {
         'Copy failed. Select the text to copy it manually.',
       );
     });
-    expect(view.container.querySelector('.lucide-check')).toBeNull();
+    // Why baseElement, not container: the detail now renders in a side panel that
+    // portals to the document body, and the assertion is about the copied state,
+    // not about which subtree the copy control is mounted in.
+    expect(view.baseElement.querySelector('.lucide-check')).toBeNull();
   });
 
   it('shows the copied feedback when the clipboard write succeeds', async () => {
@@ -144,7 +147,7 @@ describe('AuditTable copy feedback', () => {
     fireEvent.click(view.getByRole('button', { name: 'Copy before' }));
 
     await waitFor(() => {
-      expect(view.container.querySelector('.lucide-check')).not.toBeNull();
+      expect(view.baseElement.querySelector('.lucide-check')).not.toBeNull();
     });
     expect(vi.mocked(toast.error)).not.toHaveBeenCalled();
   });
