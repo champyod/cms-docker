@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["cms-audit", "cms-db", "cms-proto"]
+members = ["cms-audit", "cms-db", "cms-proto", "cms-svc"]
 
 [workspace.dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }

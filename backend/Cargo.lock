@@ -158,6 +158,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "cms-svc"
+version = "0.1.0"
+dependencies = [
+ "cms-proto",
+ "serde_json",
+]
+
+[[package]]
 name = "core-foundation-sys"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"

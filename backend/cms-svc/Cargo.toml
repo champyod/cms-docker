@@ -1,0 +1,11 @@
+[package]
+name = "cms-svc"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cms-proto = { path = "../cms-proto" }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+cms-proto = { path = "../cms-proto" }
