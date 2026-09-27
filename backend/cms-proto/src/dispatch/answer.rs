@@ -38,7 +38,7 @@ pub enum DropReason {
 }
 
 /// What the gate decided about one decoded message.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Decision {
     /// Write nothing at all: the message is dropped and the connection ends.
     Dropped(DropReason),

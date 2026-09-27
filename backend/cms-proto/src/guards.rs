@@ -5,8 +5,6 @@
 //! it with a message the Python client can read. The two sides therefore stay
 //! interchangeable without either one growing a new failure mode.
 
-use std::fmt;
-
 use subtle::ConstantTimeEq;
 
 /// Largest message accepted on the wire, terminator included.
@@ -23,13 +21,16 @@ pub const MAX_MESSAGE_SIZE: usize = 1024 * 1024;
 pub const MESSAGE_TERMINATOR_LEN: usize = 2;
 
 /// Why an envelope was refused, phrased for the handler that has to report it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum EnvelopeError {
     /// `__id` was present but empty, so a response could not be correlated.
+    #[error("envelope rejected: `__id` must not be empty")]
     EmptyId,
     /// `__method` was present but empty, so there is nothing to dispatch to.
+    #[error("envelope rejected: `__method` must not be empty")]
     EmptyMethod,
     /// The framed message would exceed [`MAX_MESSAGE_SIZE`].
+    #[error("message of {size} bytes exceeds the {limit} byte limit")]
     MessageTooLarge {
         /// Size of the payload plus its terminator.
         size: usize,
@@ -37,26 +38,12 @@ pub enum EnvelopeError {
         limit: usize,
     },
     /// The presented secret is absent, empty, or does not match the configured
-    /// one. Deliberately says nothing about which of those it was.
+    /// one. Deliberately says nothing about which of those it was, and the
+    /// message is byte-identical to the string `process_incoming_request` puts
+    /// on the wire, so a Python caller recognises the refusal.
+    #[error("RPC authentication failed.")]
     AuthenticationFailed,
 }
-
-impl fmt::Display for EnvelopeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::EmptyId => write!(f, "envelope rejected: `__id` must not be empty"),
-            Self::EmptyMethod => write!(f, "envelope rejected: `__method` must not be empty"),
-            Self::MessageTooLarge { size, limit } => {
-                write!(f, "message of {size} bytes exceeds the {limit} byte limit")
-            }
-            // WHY: byte-identical to the string `process_incoming_request`
-            // puts on the wire, so a Python caller recognises the refusal.
-            Self::AuthenticationFailed => write!(f, "RPC authentication failed."),
-        }
-    }
-}
-
-impl std::error::Error for EnvelopeError {}
 
 /// Reports whether a presented secret authenticates against the configured one.
 ///
@@ -92,7 +79,12 @@ pub fn check_rpc_secret(presented: Option<&str>, configured: Option<&str>) -> bo
 ///
 /// `payload_len` is the serialized envelope; the terminator the transport adds
 /// counts against the limit, matching the `_write` guard in `rpc.py`.
-pub fn ensure_within_size_limit(payload_len: usize) -> Result<(), EnvelopeError> {
+///
+/// # Errors
+///
+/// [`EnvelopeError::MessageTooLarge`] naming the size including the terminator
+/// and the limit it passed, when the two do not fit in one message.
+pub const fn ensure_within_size_limit(payload_len: usize) -> Result<(), EnvelopeError> {
     let limit = MAX_MESSAGE_SIZE;
     let size = payload_len.saturating_add(MESSAGE_TERMINATOR_LEN);
     if size > limit {

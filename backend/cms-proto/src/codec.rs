@@ -11,6 +11,8 @@
 //! allocation per message. The limit in [`crate::guards`] is what keeps that
 //! buffer from growing without bound.
 
+use bytes::{Buf, BytesMut};
+use memchr::memchr;
 use serde::Serialize;
 use serde_json::Value;
 
@@ -48,21 +50,25 @@ pub struct Frame {
 /// A frame reported here is dropped without a response, exactly as
 /// `process_data` and `_read` drop one: what the codec could not read has no
 /// envelope to answer with.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum FrameError {
     /// The framed message would exceed the limit. Carries the guard's own
     /// error so the refusal reads the same wherever it is reported.
+    #[error("{0}")]
     TooLarge(EnvelopeError),
 
     /// The payload is not JSON: on the way in it did not decode, on the way
     /// out it does not encode. A JSON document is UTF-8, so bytes that are not
     /// UTF-8 are not JSON either.
+    #[error("payload is not JSON")]
     NotJson,
 
     /// The frame decoded to something other than an object.
+    #[error("frame decoded to something other than an object")]
     NotAnObject,
 
     /// The frame ended on a bare line feed; the transport frames with CRLF.
+    #[error("frame ended on a bare line feed")]
     Unterminated,
 }
 
@@ -85,8 +91,10 @@ pub enum FrameRefusal {
 /// finished once it reports an error.
 #[derive(Debug, Default)]
 pub struct Framer {
-    /// Bytes read but not yet decoded. Everything before `start` is consumed.
-    buffer: Vec<u8>,
+    /// Bytes read but not yet decoded. The prefix already handed out is given
+    /// back rather than shifted down, so a frame costs one copy into capacity
+    /// that already exists and no move of what follows it.
+    buffer: BytesMut,
 
     /// Offset of the first undecoded byte.
     start: usize,
@@ -163,21 +171,12 @@ impl Framer {
         })
     }
 
-    /// Drops the decoded prefix once it outweighs the rest.
-    ///
-    /// Compacting on every frame would copy the remainder once per frame; doing
-    /// it only past the halfway point keeps the buffer from holding a frame's
-    /// worth of dead bytes for the life of the connection.
+    /// Drops the decoded prefix and restarts both offsets at the new front.
     fn consume_through(&mut self, end: usize) {
-        self.start += end;
         // WHY: the region just consumed ended on a line feed and held none
-        // before it, so resuming the scan at the new `start` can neither miss
-        // a terminator nor look at a byte twice.
-        self.scan = self.start;
-        if self.start < self.pending_len() {
-            return;
-        }
-        self.buffer.drain(..self.start);
+        // before it, so resuming the scan at the new front of the buffer can
+        // neither miss a terminator nor look at a byte twice.
+        self.buffer.advance(self.start + end);
         self.start = 0;
         self.scan = 0;
     }
@@ -188,10 +187,8 @@ impl Framer {
     /// `scan` on the line feed it found so a caller that reads the same frame
     /// twice is answered the same way both times.
     fn line_feed_offset(&mut self) -> Option<usize> {
-        let line_feed = self.buffer[self.scan..]
-            .iter()
-            .position(|byte| *byte == LINE_FEED)
-            .map(|offset| self.scan + offset);
+        let line_feed =
+            memchr(LINE_FEED, &self.buffer[self.scan..]).map(|offset| self.scan + offset);
         self.scan = line_feed.unwrap_or(self.buffer.len());
         line_feed.map(|found| found - self.start)
     }
@@ -202,7 +199,7 @@ impl Framer {
     }
 
     /// How many of those bytes there are.
-    const fn pending_len(&self) -> usize {
+    fn pending_len(&self) -> usize {
         self.buffer.len() - self.start
     }
 }

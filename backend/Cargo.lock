@@ -153,9 +153,13 @@ dependencies = [
 name = "cms-proto"
 version = "0.1.0"
 dependencies = [
+ "bytes",
+ "memchr",
+ "priority-queue",
  "serde",
  "serde_json",
  "subtle",
+ "thiserror",
 ]
 
 [[package]]
@@ -827,6 +831,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d83eb9bc6d8e5cf568e7a1101d60ee05e81ed50ea106026f3d18deeb046d7661"
 dependencies = [
  "zerovec",
+]
+
+[[package]]
+name = "priority-queue"
+version = "2.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93980406f12d9f8140ed5abe7155acb10bb1e69ea55c88960b9c2f117445ef96"
+dependencies = [
+ "equivalent",
+ "indexmap",
+ "serde",
 ]
 
 [[package]]

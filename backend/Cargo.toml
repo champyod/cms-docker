@@ -3,7 +3,10 @@ resolver = "2"
 members = ["cms-audit", "cms-db", "cms-proto", "cms-svc", "cms-worker"]
 
 [workspace.dependencies]
+bytes = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+memchr = "2"
+priority-queue = "2.7"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["arbitrary_precision"] }
 sha1 = "0.11"

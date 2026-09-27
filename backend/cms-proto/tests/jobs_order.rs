@@ -12,7 +12,7 @@ use cms_proto::{
     QueueKey, PRIORITY_EXTRA_HIGH, PRIORITY_EXTRA_LOW, PRIORITY_HIGH, PRIORITY_LOW, PRIORITY_MEDIUM,
 };
 
-fn key(priority: i32, timestamp_micros: i64, index: u64) -> QueueKey {
+const fn key(priority: i32, timestamp_micros: i64, index: u64) -> QueueKey {
     QueueKey {
         priority,
         timestamp_micros,

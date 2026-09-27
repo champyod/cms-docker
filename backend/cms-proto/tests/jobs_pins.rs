@@ -101,7 +101,7 @@ fn a_claimed_key_is_one_the_python_side_writes() {
         );
     }
     let unclaimed = JobError::UnknownKey { key: String::new() };
-    assert_eq!(JobKey::new(""), Err(unclaimed.clone()));
+    assert_eq!(JobKey::new(""), Err(unclaimed));
     for name in ["shoard", "language"] {
         assert_eq!(
             JobKey::new(name),
@@ -139,7 +139,7 @@ fn the_two_job_sets_differ_only_in_what_each_subclass_adds() {
         .iter()
         .all(|k| !COMPILATION_KEYS.contains(k)));
     assert_eq!(
-        reported(vec![nullable], 3, None)
+        reported(&[nullable], 3, None)
             .expect("null must decode")
             .committed()
             .len(),
@@ -173,8 +173,8 @@ fn a_nested_operation_and_a_foreign_shard_are_refused_where_they_sit() {
         .as_object_mut()
         .expect("an operation");
     operation.insert("multiplicity".to_owned(), json!(3));
-    let six = quarantined(vec![six_keyed]);
-    let foreign = reported(vec![job(JobKind::Compilation)], 4, None).expect("must isolate");
+    let six = quarantined(&[six_keyed]);
+    let foreign = reported(&[job(JobKind::Compilation)], 4, None).expect("must isolate");
 
     assert_eq!(
         six.reason,

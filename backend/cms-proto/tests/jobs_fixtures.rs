@@ -29,6 +29,12 @@ const EVALUATION_JOB: &str = r#"{
   "user_output": "", "plus": {}, "only_execution": false, "get_output": false}"#;
 
 /// The job of this kind as the Python side writes it.
+///
+/// # Panics
+///
+/// On a literal this file owns that stopped being valid JSON, which would mean
+/// the fixture and the Python export no longer agree.
+#[must_use]
 pub fn job(kind: JobKind) -> Value {
     let literal = match kind {
         JobKind::Compilation => COMPILATION_JOB,
@@ -38,8 +44,13 @@ pub fn job(kind: JobKind) -> Value {
 }
 
 /// The outcome of a call reporting these jobs from this shard, this error.
+///
+/// # Errors
+///
+/// Whatever `FinishedCall::isolate` reports for a batch carrying these jobs, so
+/// a test can name the refusal it expects.
 pub fn reported(
-    jobs: Vec<Value>,
+    jobs: &[Value],
     shard: i64,
     error: Option<&str>,
 ) -> Result<IsolatedBatch, JobError> {
@@ -52,7 +63,13 @@ pub fn reported(
 }
 
 /// The one job of these that was refused, with its reason and its requeue.
-pub fn quarantined(jobs: Vec<Value>) -> Quarantine {
+///
+/// # Panics
+///
+/// On a batch that quarantined anything other than exactly one job, which would
+/// mean the fixture stopped isolating the one refusal it is written for.
+#[must_use]
+pub fn quarantined(jobs: &[Value]) -> Quarantine {
     let batch = reported(jobs, 3, None).expect("must isolate");
     let mut refused = batch.quarantined();
     assert_eq!(refused.len(), 1, "exactly one job must be refused");

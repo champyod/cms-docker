@@ -98,7 +98,7 @@ fn response_round_trip_preserves_integer_larger_than_u64_max() -> Result<(), ser
 }
 
 #[test]
-fn python_shaped_response_with_non_null_error_deserializes() -> Result<(), serde_json::Error> {
+fn python_shaped_response_with_non_null_error_deserializes() {
     let python_json = r#"{
         "__id": "6f9619ff8b86",
         "__data": null,
@@ -109,7 +109,6 @@ fn python_shaped_response_with_non_null_error_deserializes() -> Result<(), serde
     assert_eq!(decoded.id, "6f9619ff8b86");
     assert_eq!(decoded.data, Value::Null);
     assert_eq!(decoded.error, Some(json!("RPC authentication failed.")));
-    Ok(())
 }
 
 #[test]
@@ -129,7 +128,7 @@ fn response_missing_required_keys_is_rejected() -> Result<(), serde_json::Error>
 }
 
 #[test]
-fn request_missing_required_keys_is_rejected() -> Result<(), serde_json::Error> {
+fn request_missing_required_keys_is_rejected() {
     let missing_data: Result<Request, _> =
         serde_json::from_str(r#"{"__id": "abc", "__method": "echo"}"#);
     assert!(missing_data.is_err());
@@ -137,7 +136,6 @@ fn request_missing_required_keys_is_rejected() -> Result<(), serde_json::Error> 
     let missing_method: Result<Request, _> =
         serde_json::from_str(r#"{"__id": "abc", "__data": null}"#);
     assert!(missing_method.unwrap_err().to_string().contains("__method"));
-    Ok(())
 }
 
 #[test]

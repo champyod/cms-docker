@@ -52,7 +52,7 @@ pub use queue::{now_micros, IndexedQueue, QueueEntry, QueueError};
 const SECRET_REDACTED: &str = "<redacted>";
 
 /// Outgoing call: method name plus arguments, tagged with a unique id.
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Request {
     /// Correlation id, echoed back by the responder.
     #[serde(rename = "__id")]
@@ -104,7 +104,7 @@ impl Request {
     ///
     /// Returns [`EnvelopeError::EmptyId`] or [`EnvelopeError::EmptyMethod`]
     /// when the corresponding field is empty.
-    pub fn validate(&self) -> Result<(), EnvelopeError> {
+    pub const fn validate(&self) -> Result<(), EnvelopeError> {
         if self.id.is_empty() {
             return Err(EnvelopeError::EmptyId);
         }
@@ -131,7 +131,7 @@ impl Request {
 }
 
 /// Reply to a call: the echoed id, the result, and a null when no error.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Response {
     /// Correlation id copied verbatim from the request.
     #[serde(rename = "__id")]
@@ -158,7 +158,7 @@ impl Response {
     /// # Errors
     ///
     /// Returns [`EnvelopeError::EmptyId`] when the echoed id is empty.
-    pub fn validate(&self) -> Result<(), EnvelopeError> {
+    pub const fn validate(&self) -> Result<(), EnvelopeError> {
         if self.id.is_empty() {
             return Err(EnvelopeError::EmptyId);
         }

@@ -47,6 +47,11 @@ pub const SERVICE: [Method; 5] = [
 /// Answers with the arguments it was called with, the way a keyword-argument
 /// call does: a `__data` that is not an object cannot be splatted, so it is
 /// refused by the handler rather than by the gate.
+///
+/// # Errors
+///
+/// The refusal string when `data` is not an object, which is the one case the
+/// gate lets through for a handler to answer.
 pub fn echo(data: &Value) -> Result<Value, String> {
     data.as_object()
         .map(|_| data.clone())
@@ -55,11 +60,17 @@ pub fn echo(data: &Value) -> Result<Value, String> {
 
 /// Answers with a failure of its own wording, since a handler in another
 /// language has no Python class name and traceback to format.
+///
+/// # Errors
+///
+/// Always: this handler exists to produce a failure the way a Python handler's
+/// exception does.
 pub fn refuse(_data: &Value) -> Result<Value, String> {
     Err("no log for this shard".to_owned())
 }
 
 /// The gate settings a test dispatches under.
+#[must_use]
 pub const fn gate(secret: Option<&'static str>, is_backdoor_enabled: bool) -> GateConfig<'static> {
     GateConfig {
         secret,
@@ -68,6 +79,7 @@ pub const fn gate(secret: Option<&'static str>, is_backdoor_enabled: bool) -> Ga
 }
 
 /// A well-formed message naming `method`, with one argument and the secret.
+#[must_use]
 pub fn message(method: &str) -> Value {
     json!({
         "__id": REQUEST,
@@ -79,6 +91,7 @@ pub fn message(method: &str) -> Value {
 
 /// The decision for a message that was refused, carrying the refusal and no
 /// result beside it: the null `__data` is what proves no handler ran.
+#[must_use]
 pub fn refused(reason: &str) -> Decision {
     Decision::Answered(Response {
         id: REQUEST.to_owned(),

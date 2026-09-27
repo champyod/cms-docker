@@ -9,6 +9,15 @@
 use cms_proto::{JobGroup, QueueEntryDto, PRIORITY_EXTRA_HIGH, PRIORITY_MEDIUM};
 use serde_json::Value;
 
+/// The bits of a timestamp, so a wire value is pinned exactly.
+///
+/// The Python side sends halves and quarters of a second, which are the only
+/// values it sends, and comparing the bits says no bit of them was lost where an
+/// `==` on floats could not.
+const fn bits_of(seconds: f64) -> u64 {
+    seconds.to_bits()
+}
+
 /// A `JobGroup.export_to_dict` output holding one compilation job and one
 /// evaluation job, the two shapes a worker can report.
 const PYTHON_JOB_GROUP: &str = r#"{
@@ -144,7 +153,7 @@ fn an_empty_batch_is_a_group_with_no_jobs() {
 
 #[test]
 fn a_group_without_the_jobs_key_is_rejected() {
-    assert!(serde_json::from_str::<JobGroup>(r#"{}"#).is_err());
+    assert!(serde_json::from_str::<JobGroup>("{}").is_err());
 }
 
 #[test]
@@ -156,9 +165,9 @@ fn queue_status_decodes_the_python_get_status_shape() {
     assert_eq!(entries[0].priority, PRIORITY_MEDIUM);
     assert_eq!(entries[0].item["type"], "evaluate");
     assert_eq!(entries[0].item["multiplicity"], 3);
-    assert_eq!(entries[0].timestamp, 1_700_000_000.5);
+    assert_eq!(entries[0].timestamp.to_bits(), bits_of(1_700_000_000.5));
     assert_eq!(entries[1].priority, PRIORITY_EXTRA_HIGH);
-    assert_eq!(entries[1].timestamp, 1_700_000_123.75);
+    assert_eq!(entries[1].timestamp.to_bits(), bits_of(1_700_000_123.75));
 }
 
 #[test]

@@ -13,10 +13,10 @@ use cms_proto::{
 use jobs_fixtures::{job, quarantined, reported};
 use serde_json::{json, Value};
 
-/// 8_796_093_022_207 MiB: a whole number of mebibytes the dataset admits, and
-/// the largest an i64 limit carries. It needs 63 bits, so it arrives whole only
+/// `8_796_093_022_207` MiB: a whole number of mebibytes the dataset admits, and
+/// the largest an `i64` limit carries. It needs 63 bits, so it arrives whole only
 /// if the field is as wide as the `int` the constructor declares over its
-/// BigInteger column.
+/// `BigInteger` column.
 const EXACT_MEMORY_LIMIT: i64 = 9_223_372_036_853_727_232;
 
 /// A compilation job with `key` set to `value`.
@@ -38,7 +38,7 @@ fn without(key: &str) -> Value {
 
 /// The reason the one compilation job of these is refused for.
 fn refused(job: Value) -> JobError {
-    quarantined(vec![job]).reason
+    quarantined(&[job]).reason
 }
 
 /// The evaluation outcome of the one job of these carrying `key` set to
@@ -48,7 +48,7 @@ fn evaluated(key: &str, value: Value) -> Result<EvaluationOutcome, JobError> {
     job.as_object_mut()
         .expect("an object")
         .insert(key.to_owned(), value);
-    let batch = reported(vec![job], 3, None).expect("one job never fails the batch");
+    let batch = reported(&[job], 3, None).expect("one job never fails the batch");
     if let Some(quarantine) = batch.quarantined().first() {
         return Err(quarantine.reason.clone());
     }
@@ -62,7 +62,7 @@ fn evaluated(key: &str, value: Value) -> Result<EvaluationOutcome, JobError> {
 #[test]
 fn a_decoded_job_carries_what_the_receiving_service_files() {
     let jobs = vec![job(JobKind::Evaluation), job(JobKind::Compilation)];
-    let batch = reported(jobs, 3, None).expect("two good jobs must decode");
+    let batch = reported(&jobs, 3, None).expect("two good jobs must decode");
     let evaluation = batch.committed().remove(0).clone();
     let compilation = batch.committed().remove(1).clone();
     let Some(KindExtras::Evaluation(outcome)) = Some(&evaluation.extras) else {
@@ -106,8 +106,8 @@ fn one_malformed_job_leaves_the_jobs_beside_it_committable() {
         duplicate.clone(),
         duplicate,
     ];
-    let batch = reported(jobs, 3, None).expect("a malformed job must not fail the batch");
-    let empty = reported(Vec::new(), 3, None).expect("an empty batch must isolate");
+    let batch = reported(&jobs, 3, None).expect("a malformed job must not fail the batch");
+    let empty = reported(&[], 3, None).expect("an empty batch must isolate");
     let counts = (batch.committed().len(), batch.quarantined().len());
     let all = batch.quarantined();
     let repeated = all
@@ -126,7 +126,7 @@ fn one_malformed_job_leaves_the_jobs_beside_it_committable() {
 
 #[test]
 fn every_refusal_names_the_key_or_the_value_it_found() {
-    let lost = quarantined(vec![without("info")]);
+    let lost = quarantined(&[without("info")]);
     let extra = refused(with("retries", json!(3)));
     let unknown = refused(with("type", json!("user_test")));
     let wrong_shard = refused(with("shard", json!("three")));
@@ -163,7 +163,7 @@ fn every_refusal_names_the_key_or_the_value_it_found() {
 
 #[test]
 fn the_two_whole_batch_failures_are_not_a_single_job() {
-    let died = reported(vec![job(JobKind::Compilation)], 3, Some("died"));
+    let died = reported(&[job(JobKind::Compilation)], 3, Some("died"));
     let not_a_group = json!({ "data": { "results": [] }, "shard": 3, "error": null });
     let not_a_group: Result<IsolatedBatch, JobError> =
         serde_json::from_value::<FinishedCall>(not_a_group)
@@ -203,7 +203,7 @@ fn a_null_sandbox_list_is_the_empty_list_the_python_side_normalizes_to() {
     let mut two = job(JobKind::Evaluation);
     two["sandboxes"] = json!(["/sandbox/0", "/sandbox/1"]);
 
-    let batch = reported(vec![none, two], 3, None).expect("null must not fail a job");
+    let batch = reported(&[none, two], 3, None).expect("null must not fail a job");
     let lists: Vec<Vec<String>> = batch
         .committed()
         .iter()

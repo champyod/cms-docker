@@ -13,19 +13,22 @@ use super::operation::{Operation, Shard};
 ///
 /// Every variant names the thing to look at, so a quarantined job can be traced
 /// to a key or a value rather than to a decode failure with no context.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum JobError {
     /// The value is not a JSON object, so it has no keys to check at all.
+    #[error("value is not a JSON object")]
     NotAnObject,
 
     /// The `type` key names neither job shape, so there is no key set to check
     /// the rest of the job against.
+    #[error("`type` names no job shape, found {found:?}")]
     UnknownJobType {
         /// The value the worker sent.
         found: String,
     },
 
     /// The `type` key of an operation names none of the four operations.
+    #[error("operation `type` names no operation, found {found:?}")]
     UnknownOperationType {
         /// The value the worker sent.
         found: String,
@@ -33,12 +36,14 @@ pub enum JobError {
 
     /// The job or its operation carries a key the Python side would not have
     /// written, so this Rust build is not the one that produced it.
+    #[error("key {key:?} is not in the set for this kind")]
     UnknownKey {
         /// The key that is not in the set for this kind.
         key: String,
     },
 
     /// The job or its operation omits a key the set requires.
+    #[error("key {key:?} is required but absent")]
     MissingKey {
         /// The key that is absent.
         key: &'static str,
@@ -46,6 +51,7 @@ pub enum JobError {
 
     /// A key is present but its value is not of the declared type, which
     /// `detail` is the deserializer's own account of.
+    #[error("key {key:?} is of the wrong type: {detail}")]
     WrongValue {
         /// The key whose value was refused.
         key: &'static str,
@@ -56,6 +62,7 @@ pub enum JobError {
     /// The job names a different shard than the call released. The worker stamps
     /// its own shard on every job it runs, so a mismatch means the batch belongs
     /// to another worker and filing it would write results under the wrong one.
+    #[error("job runs on shard {job:?} but the call released shard {call:?}")]
     ShardMismatch {
         /// The shard the job names.
         job: Shard,
@@ -66,11 +73,13 @@ pub enum JobError {
     /// The batch already carried this operation earlier, and that earlier job is
     /// the one being written. One operation is dispatched to one worker once, so
     /// a repeat is refused rather than filed twice.
+    #[error("the batch already carried this operation")]
     DuplicateOperation,
 
     /// The worker reported a failure instead of results, so the batch never held
     /// anything to read. This is the whole batch lost by design, not by a job
     /// that failed to decode.
+    #[error("worker reported a failure instead of results: {detail}")]
     WorkerFailed {
         /// The message the worker sent.
         detail: String,
@@ -78,6 +87,7 @@ pub enum JobError {
 
     /// The batch itself is not a `{"jobs": [...]}` object. The only way to lose a
     /// whole batch now, because no job was ever identified.
+    #[error("the batch is not a jobs object: {detail}")]
     MalformedBatch {
         /// What the deserializer expected and what it found.
         detail: String,

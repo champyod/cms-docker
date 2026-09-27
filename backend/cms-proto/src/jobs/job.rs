@@ -71,7 +71,7 @@ pub struct EvaluationOutcome {
     /// User time limit in seconds, null when the job defined none.
     pub time_limit: Option<f64>,
     /// Memory limit in bytes, null when the job defined none. An integer,
-    /// because `EvaluationJob.__init__` declares one over its BigInteger
+    /// because `EvaluationJob.__init__` declares one over its `BigInteger`
     /// column, and a limit is stored as a whole number of mebibytes.
     pub memory_limit: Option<i64>,
     /// The outcome the score is computed from, null when the output was not

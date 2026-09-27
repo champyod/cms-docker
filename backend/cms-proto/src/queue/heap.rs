@@ -1,9 +1,11 @@
-//! The array and the two sifts that keep it ordered.
+//! The ordered container, and the operations every queue shares.
 //!
-//! Everything here is about *position*: what sits where, and which way an entry
-//! moves when a position changes. Naming an item and moving it is [`super::index`].
+//! Everything here is about *position*: which entry is at the top, and where a
+//! new one belongs. Naming an item and moving it is [`super::index`].
 
-use std::hash::Hash;
+use std::borrow::Borrow;
+use std::cmp::Reverse;
+use std::hash::{Hash, Hasher};
 
 use crate::jobs::{QueueKey, PRIORITY_MEDIUM};
 
@@ -19,7 +21,41 @@ pub struct QueueEntry<T> {
     pub key: QueueKey,
 }
 
-impl<T: Clone + Eq + Hash> IndexedQueue<T> {
+/// What the container stores: the public entry, under the name the container
+/// indexes it by.
+///
+/// A slot is identified by its item alone, because that is the name `remove` and
+/// `set_priority` look up; the key rides in the container's own priority beside
+/// it.
+#[derive(Debug)]
+pub struct Slot<T> {
+    /// The entry `top` and `pop` hand back.
+    pub entry: QueueEntry<T>,
+}
+
+impl<T: Hash> Hash for Slot<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.entry.item.hash(state);
+    }
+}
+
+impl<T: Eq> PartialEq for Slot<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.entry.item == other.entry.item
+    }
+}
+
+impl<T: Eq> Eq for Slot<T> {}
+
+/// Lends the item out under its own name, so a lookup hands the container the
+/// caller's own reference instead of an owned copy of the item to compare.
+impl<T> Borrow<T> for Slot<T> {
+    fn borrow(&self) -> &T {
+        &self.entry.item
+    }
+}
+
+impl<T: Eq + Hash> IndexedQueue<T> {
     /// Creates a queue holding nothing.
     #[must_use]
     pub fn new() -> Self {
@@ -28,13 +64,13 @@ impl<T: Clone + Eq + Hash> IndexedQueue<T> {
 
     /// How many items are queued.
     #[must_use]
-    pub const fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.heap.len()
     }
 
     /// Reports whether nothing is queued, without blocking.
     #[must_use]
-    pub const fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.heap.is_empty()
     }
 
@@ -50,7 +86,7 @@ impl<T: Clone + Eq + Hash> IndexedQueue<T> {
         priority: Option<i32>,
         timestamp_micros: Option<i64>,
     ) -> Result<(), QueueError> {
-        if self.positions.contains_key(&item) {
+        if self.heap.contains(&item) {
             return Err(QueueError::DuplicateItem);
         }
         let index = self.next_index;
@@ -60,11 +96,12 @@ impl<T: Clone + Eq + Hash> IndexedQueue<T> {
             timestamp_micros: timestamp_micros.unwrap_or_else(now_micros),
             index,
         };
-        self.positions.insert(item.clone(), self.heap.len());
-        self.heap.push(QueueEntry { item, key });
-        // WHY: a fresh entry sits last with no children, so `repair` would add a
-        // descent that provably stops where this lift did.
-        self.lift(self.heap.len() - 1);
+        self.heap.push(
+            Slot {
+                entry: QueueEntry { item, key },
+            },
+            Reverse(key),
+        );
         Ok(())
     }
 
@@ -75,7 +112,8 @@ impl<T: Clone + Eq + Hash> IndexedQueue<T> {
     /// [`QueueError::Empty`] when nothing is queued. A peek touches no position,
     /// so it is safe to repeat and costs the same however full the queue is.
     pub fn top(&self) -> Result<&QueueEntry<T>, QueueError> {
-        self.heap.first().ok_or(QueueError::Empty)
+        let (slot, _) = self.heap.peek().ok_or(QueueError::Empty)?;
+        Ok(&slot.entry)
     }
 
     /// Removes the entry that would be dispatched next and returns it.
@@ -84,60 +122,7 @@ impl<T: Clone + Eq + Hash> IndexedQueue<T> {
     ///
     /// [`QueueError::Empty`] when nothing is queued, leaving the queue as it was.
     pub fn pop(&mut self) -> Result<QueueEntry<T>, QueueError> {
-        if self.is_empty() {
-            return Err(QueueError::Empty);
-        }
-        let last = self.heap.len() - 1;
-        self.swap(0, last);
-        let entry = self.heap.pop().ok_or(QueueError::Empty)?;
-        self.forget(&entry.item);
-        if !self.heap.is_empty() {
-            self.sink(0);
-        }
-        Ok(entry)
-    }
-
-    /// Exchanges two positions and restates both in the reverse lookup.
-    pub(super) fn swap(&mut self, first: usize, second: usize) {
-        self.heap.swap(first, second);
-        self.restate(first, second);
-    }
-
-    /// Raises the entry at `position` for as long as its parent outranks it.
-    fn lift(&mut self, mut position: usize) {
-        while position > 0 {
-            let parent = (position - 1) / 2;
-            if self.heap[position].key >= self.heap[parent].key {
-                return;
-            }
-            self.swap(parent, position);
-            position = parent;
-        }
-    }
-
-    /// Lowers the entry at `position` for as long as a child outranks it.
-    fn sink(&mut self, mut position: usize) {
-        loop {
-            let last = self.heap.len() - 1;
-            let left = 2 * position + 1;
-            if left > last {
-                return;
-            }
-            let right = left + 1;
-            let is_right_smaller = right <= last && self.heap[right].key < self.heap[left].key;
-            let child = if is_right_smaller { right } else { left };
-            if self.heap[child].key >= self.heap[position].key {
-                return;
-            }
-            self.swap(child, position);
-            position = child;
-        }
-    }
-
-    /// Lifts then lowers, the repair a removal or a priority change needs. Neither
-    /// reports where the entry landed: the map is already level with the heap.
-    pub(super) fn repair(&mut self, position: usize) {
-        self.lift(position);
-        self.sink(position);
+        let (slot, _) = self.heap.pop().ok_or(QueueError::Empty)?;
+        Ok(slot.entry)
     }
 }
