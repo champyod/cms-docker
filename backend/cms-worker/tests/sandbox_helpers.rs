@@ -84,6 +84,31 @@ pub fn isolation_stub(dir: &Path, code: &str, log: &str) -> PathBuf {
     )
 }
 
+/// A stub standing in for the isolation program that also writes down the words it
+/// was launched with, one per line, into `record`.
+///
+/// This is the only way the words a run is actually started with can be read back
+/// on this side, and it is what a change to how those words are built is compared
+/// against.
+pub fn isolation_stub_recording(dir: &Path, code: &str, log: &str, record: &Path) -> PathBuf {
+    let record = record.display();
+    stub(
+        dir,
+        "isolate",
+        &format!(
+            "#!/bin/sh\n\
+             meta=\n\
+             : > '{record}'\n\
+             for arg in \"$@\"; do\n\
+             \x20 printf '%s\\n' \"$arg\" >> '{record}'\n\
+             \x20 case \"$arg\" in --meta=*) meta=\"${{arg#--meta=}}\" ;; esac\n\
+             done\n\
+             printf '{log}' > \"$meta\"\n\
+             exit {code}\n"
+        ),
+    )
+}
+
 /// A sandbox whose runs are launched under the stub at `executable`.
 pub fn sandbox(executable: &Path, dir: &Path) -> Sandbox {
     Sandbox::new(executable, dir, "box").expect("the run's own directory must be creatable")

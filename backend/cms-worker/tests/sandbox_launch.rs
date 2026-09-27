@@ -13,7 +13,10 @@ use cms_worker::ExitStatus;
 #[path = "sandbox_helpers.rs"]
 mod helpers;
 
-use helpers::{isolation_stub, sandbox, stub, workspace, KIB, RETURNED_LOG, UNREADABLE_LOG};
+use helpers::{
+    isolation_stub, isolation_stub_recording, sandbox, stub, workspace, KIB, RETURNED_LOG,
+    UNREADABLE_LOG,
+};
 
 #[test]
 fn only_the_four_commands_run_beside_the_isolation_program() {
@@ -169,6 +172,40 @@ fn a_log_holding_a_number_it_cannot_be_read_as_is_refused() {
         Err(SpawnError::Measure(_)) => {}
         other => panic!("a number that cannot be read must be refused: {other:?}"),
     }
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_run_is_started_with_exactly_the_words_the_options_render() {
+    let dir = workspace("argv");
+    let record = dir.join("argv.txt");
+    let executable = isolation_stub_recording(&dir, "1", RETURNED_LOG, &record);
+    let mut box_of = sandbox(&executable, &dir);
+    let command = ["/bin/sh", "-c", "echo a b"];
+    box_of.run(&command).expect("the run must finish");
+
+    let launched: Vec<String> = fs::read_to_string(&record)
+        .expect("the stub must have written down its arguments")
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    let rendered = box_of
+        .options()
+        .invocation(&box_of.outer().join("run.log.0"), &command);
+    assert_eq!(
+        launched, rendered,
+        "a run must be started with the arguments it was rendered from, and no other"
+    );
+    assert_eq!(
+        box_of.executable(),
+        executable,
+        "the program those arguments are handed to is the one the box was built with"
+    );
+    assert_eq!(
+        &launched[launched.len() - 5..],
+        ["--run", "--", "/bin/sh", "-c", "echo a b"],
+        "the flags end where the run's own words begin, one word per argument"
+    );
     let _ = fs::remove_dir_all(&dir);
 }
 

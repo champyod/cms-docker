@@ -59,8 +59,6 @@ use crate::stats::ExecutionStats;
 
 /// The program a run is launched under, whatever an operator configured.
 pub const EXECUTABLE_NAME: &str = "isolate";
-/// The flag that ends the isolation program's own options and starts the run's.
-const OPTION_END: &str = "--";
 /// The path a run sees its own directory at, and the only place it may write.
 pub const HOME_DESTINATION: &str = "/tmp";
 /// A private directory the run's own user and group may share, on shared memory.
@@ -219,13 +217,9 @@ impl Sandbox {
         if Self::is_secure_command(command) {
             return Ok(command.iter().map(|word| (*word).to_owned()).collect());
         }
+        let meta = self.layout.meta_file(self.executions);
         let mut launch = vec![self.layout.executable.display().to_string()];
-        launch.extend(
-            self.options
-                .arguments(&self.layout.meta_file(self.executions)),
-        );
-        launch.push(OPTION_END.to_owned());
-        launch.extend(command.iter().map(|word| (*word).to_owned()));
+        launch.extend(self.options.invocation(&meta, command));
         Ok(launch)
     }
 
