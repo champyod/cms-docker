@@ -389,7 +389,10 @@ class WorkerPool:
                     self.release_worker(shard)
                     self._worker[shard].quit(
                         reason="No response in %s - %s."
-                               % (active_for, REACHABILITY_HINT))
+                               % (active_for, REACHABILITY_HINT),
+                        # WHY: an unresponsive worker hung a job, so it
+                        # must die nonzero to be restarted by on-failure.
+                        fatal=True)
 
         return lost_operations
 

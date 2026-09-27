@@ -79,6 +79,7 @@ def repeater(func: Callable[[], Any], period: float):
 class Service:
 
     def __init__(self, shard: int = 0):
+        self._is_fatal_exit = False
         signal.signal(signal.SIGINT, lambda unused_x, unused_y: self.exit())
         signal.signal(signal.SIGTERM, lambda unused_x, unused_y: self.exit())
 
@@ -238,11 +239,17 @@ class Service:
         else:
             gevent.spawn_later(seconds, repeater, func, seconds)
 
-    def exit(self):
+    def exit(self, fatal: bool = False):
         """Terminate the service at the next step.
+
+        fatal: if True, run() reports failure, so the process exits
+            with a nonzero status and the supervisor restarts it.
 
         """
         logger.warning("%s received request to shut down.", self._my_coord)
+        # WHY: a fatal quit must stay fatal when a signal lands before
+        # the main loop returns, so the flag is never cleared.
+        self._is_fatal_exit = self._is_fatal_exit or fatal
         self.rpc_server.stop()
 
     def get_backdoor_path(self) -> str:
@@ -309,7 +316,8 @@ class Service:
     def run(self) -> bool:
         """Starts the main loop of the service.
 
-        return: True if successful.
+        return: True if successful, False if the service was asked to
+            quit fatally.
 
         """
         try:
@@ -350,7 +358,7 @@ class Service:
             self._stop_backdoor_impl()
 
         self._disconnect_all()
-        return True
+        return not self._is_fatal_exit
 
     def _disconnect_all(self):
         """Disconnect all remote services.
@@ -371,11 +379,13 @@ class Service:
         return string
 
     @rpc_method
-    def quit(self, reason: str = ""):
+    def quit(self, reason: str = "", fatal: bool = False):
         """Shut down the service
 
         reason: why, oh why, you want me down?
+        fatal: if True, run() reports failure, so the process exits
+            with a nonzero status and the supervisor restarts it.
 
         """
         logger.warning("Trying to exit as asked by another service (%s).", reason)
-        self.exit()
+        self.exit(fatal=fatal)
