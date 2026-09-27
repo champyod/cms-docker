@@ -36,19 +36,21 @@
 #![forbid(unsafe_code)]
 
 mod batch;
+mod communication;
 mod compile;
 mod evaluate;
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
 
 pub use batch::{Batch, TaskError};
+pub use communication::{Communication, Verdict};
 pub use compile::Compilation;
 pub use evaluate::{Evaluation, OutputFile};
 
-use crate::sandbox::{Options, Sandbox};
+use crate::sandbox::{Launch, Options, Sandbox};
 use crate::stage::{Cache, CacheHandle, FileDigest, Stage, StageError};
 use crate::stats::ExecutionStats;
 
@@ -86,7 +88,15 @@ pub trait Toolchain {
 
     /// The commands that run `executable`, judged by `main` where a language
     /// names its main class or module separately from the executable holding it.
-    fn evaluation_commands(&self, executable: &str, main: &str) -> Vec<Vec<String>>;
+    /// `args` are the arguments the program itself is run with, which a task type
+    /// whose run is told where to find another one by name needs, and empty for
+    /// a run told nothing.
+    fn evaluation_commands(
+        &self,
+        executable: &str,
+        main: &str,
+        args: &[String],
+    ) -> Vec<Vec<String>>;
 }
 
 /// The three numbers a compilation is held to.
@@ -121,6 +131,12 @@ pub struct Runtime {
 }
 
 impl Runtime {
+    /// The directory a task type makes its own files in, which is where a box's
+    /// files are and so where anything that belongs to a run beside a box goes.
+    pub(super) fn temp_dir(&self) -> &Path {
+        &self.temp_dir
+    }
+
     /// A runtime whose boxes are made under `temp_dir`, whose runs are launched
     /// under the isolation program at `program`, and whose evaluation runs may
     /// create a file of `file_size` bytes.
@@ -164,6 +180,15 @@ impl Run {
 
     fn files(&self) -> &Stage {
         &self.files
+    }
+
+    /// Starts one command under `options` and hands the run back, still running,
+    /// for a task type that must start every one of its runs before it waits for
+    /// any of them, which is the only order in which two runs that have to talk to
+    /// each other can both make progress.
+    fn started(&mut self, words: &[&str], options: &Options) -> Result<Launch, TaskError> {
+        self.sandbox.set_options(options.clone());
+        self.sandbox.start(words).map_err(TaskError::Spawn)
     }
 
     /// Launches one command under `options` and answers with what it was charged.

@@ -96,7 +96,7 @@ impl Batch {
     ) -> Result<Evaluation, TaskError> {
         let executable = only_executable(job)?;
         let main = self.main_of(&executable.0);
-        let commands = toolchain.evaluation_commands(&executable.0, &main);
+        let commands = toolchain.evaluation_commands(&executable.0, &main, &[]);
         let mut run = runtime.open(EVALUATE_BOX, store)?;
         stage_run(&run, self, job, &executable)?;
         let mut last: Option<ExecutionStats> = None;
@@ -203,8 +203,9 @@ fn decide(stats: Option<ExecutionStats>) -> Evaluation {
 
 /// The one sentence a report shows for a run that did not do what it was asked
 /// to, and nothing for a run that ended cleanly: a run that answered is judged on
-/// its answer rather than on this.
-fn what_went_wrong(stats: &ExecutionStats) -> Vec<String> {
+/// its answer rather than on this. The Communication task type reads the same
+/// sentence for the process it is blaming, so this is the one table of them.
+pub(super) fn what_went_wrong(stats: &ExecutionStats) -> Vec<String> {
     let message = match stats.exit_status {
         ExitStatus::Timeout => Some(TIMED_OUT),
         ExitStatus::TimeoutWall => Some(WALL_TIMED_OUT),

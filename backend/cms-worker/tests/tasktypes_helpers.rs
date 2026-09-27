@@ -61,8 +61,15 @@ impl Toolchain for StubToolchain {
         vec![vec![format!("compile {executable}"), sources.join(" ")]]
     }
 
-    fn evaluation_commands(&self, executable: &str, main: &str) -> Vec<Vec<String>> {
-        vec![vec![format!("run {executable}"), main.to_owned()]]
+    fn evaluation_commands(
+        &self,
+        executable: &str,
+        main: &str,
+        args: &[String],
+    ) -> Vec<Vec<String>> {
+        let mut command = vec![format!("run {executable}"), main.to_owned()];
+        command.extend(args.iter().cloned());
+        vec![command]
     }
 }
 
