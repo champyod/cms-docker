@@ -1,13 +1,16 @@
 #!/bin/bash
 # Worker fleet TUI — manage the WORKER_<shard>=<host>:<port> registry in
-# .env and deploy each local entry as its own compose project
+# config.toml [worker] and deploy each local entry as its own compose project
 # (cms-worker-<shard>, host port <port>).
 #
 # Data model (backward compatible):
-#   .env        : WORKER_<shard>=host:port      <- registry, rendered into
-#                                                  config/cms.toml by make env
-#   .env        : all existing vars untouched    <- per-host worker defaults
-#                 WORKER_SHARD<n>_LOCAL=0        <- OPTIONAL: registry-only,
+#   config.toml [worker] : WORKER_<shard> = "host:port"  <- registry (source);
+#                          scripts/__config_sync.sh renders it into .env
+#   .env                 : WORKER_<shard>=host:port      <- legacy fallback,
+#                                                     read only when config.toml
+#                                                     has no such row
+#   config.toml [worker] : all existing vars untouched    <- per-host worker defaults
+#                 WORKER_SHARD<n>_LOCAL = 0       <- OPTIONAL: registry-only,
 #                                                 skip local deployment
 #                 WORKER_SHARD<n>_MEMORY/_CPU    <- OPTIONAL per-shard overrides
 #
@@ -31,10 +34,12 @@ cd "$REPO_ROOT"
 
 CORE_ENV=".env"
 WORKER_ENV=".env"
+TOML_FILE="config.toml"
 
 WORKERS=()      # rows: "shard|host|port|local(1/0)|memory|cpus"
 CUR=0
 SELECTED=()
+FLEET_DRIFT_WARNED=0   # drift is reported once per process, not on every render
 
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/__lib/common.sh"
@@ -49,9 +54,83 @@ env_val() { # file key -> value (exact key match, first hit)
   awk -F= -v k="$2" '$1==k {v=$0; sub(/^[^=]*=/,"",v); gsub(/^[ \t]+|[ \t\r]+$/,"",v); print v; exit}' "$1" 2>/dev/null || true
 }
 
-global_memory() { env_val "$WORKER_ENV" WORKER_MEMORY_LIMIT || true; }
-global_cpus()   { env_val "$WORKER_ENV" WORKER_CPU_LIMIT   || true; }
+global_memory() { worker_default WORKER_MEMORY_LIMIT || true; }
+global_cpus()   { worker_default WORKER_CPU_LIMIT   || true; }
 core_host_ip()  { env_val "$CORE_ENV"   CORE_SERVICES_HOST || true; }
+
+# ---------------------------------------------------------------------------
+# Registry readers — config.toml is the source, .env is the rendered copy
+# ---------------------------------------------------------------------------
+# One reader for both registry sources. config.toml carries a section header and
+# a quoted or commented value; the .env render is flat and bare, so the section
+# argument is what distinguishes them ("worker" vs "" for sectionless). Emits
+# "key<TAB>raw-value"; row_value decodes the raw side.
+registry_keys() { # file key-regex section ("" = sectionless file)
+  local file="$1" keyre="$2" section="$3"
+  [ -f "$file" ] || return 0
+  awk -v k="$keyre" -v sec="$section" '
+    function emit(line,   e, key, val) {
+      e = index(line, "=")
+      key = substr(line, 1, e - 1)
+      val = substr(line, e + 1)
+      gsub(/^[ \t]+|[ \t\r]+$/, "", key)
+      printf "%s\t%s\n", key, val
+    }
+    sec != "" && /^[ \t]*\[/ { inside = ($0 ~ ("^[ \t]*\\[" sec "\\][ \t]*$")); next }
+    (sec == "" || inside) && $0 ~ ("^[ \t]*" k "[ \t]*=") { emit($0) }
+  ' "$file" 2>/dev/null || true
+}
+
+trim() { # strip leading and trailing whitespace
+  local s="$1"
+  s="${s#"${s%%[![:space:]]*}"}"
+  printf '%s' "${s%"${s##*[![:space:]]}"}"
+}
+
+# Raw right-hand side -> the bare value. Strips any inline comment and one layer
+# of quotes. Values here are host:port, shard numbers, memory and cpu limits, so
+# a "#" is always a comment and never part of the value.
+# WHY the comment is cut before the quotes are stripped: a trailing
+# `WORKER_4 = "h:p" # note` ends in the comment, not the closing quote, so
+# quote-first would leave the quotes attached and the row would fail its port
+# check as malformed.
+row_value() {
+  local v; v="$(trim "$1")"
+  v="$(trim "${v%%#*}")"
+  case "$v" in
+    \"*\") v="${v#\"}"; v="${v%\"}" ;;
+    \'*\') v="${v#\'}"; v="${v%\'}" ;;
+  esac
+  trim "$v"
+}
+
+# WORKER_SHARD<n>_<suffix>: config.toml [worker] first, then the .env render,
+# so an override committed to config.toml is not masked by a stale .env.
+shard_val() { # shard suffix -> value ("" when unset)
+  local key="WORKER_SHARD$1_$2" v
+  {
+    registry_keys "$TOML_FILE" "$key" worker
+    registry_keys "$CORE_ENV"   "$key" ""
+  } | while IFS=$'\t' read -r _ raw; do
+    v="$(row_value "$raw")"
+    if [ -n "$v" ]; then printf '%s' "$v"; break; fi
+  done
+  return 0
+}
+
+# Worker-wide default (memory/cpu) from config.toml [worker], else the .env
+# render. Same precedence as shard_val: the source file wins over its render.
+worker_default() { # key -> value ("" when unset)
+  local v
+  {
+    registry_keys "$TOML_FILE" "$1" worker
+    registry_keys "$CORE_ENV"   "$1" ""
+  } | while IFS=$'\t' read -r _ raw; do
+    v="$(row_value "$raw")"
+    if [ -n "$v" ]; then printf '%s' "$v"; break; fi
+  done
+  return 0
+}
 
 toml_val() { # key -> value from config.toml (first hit, quotes stripped)
   sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*[\"']\\{0,1\\}\\([^\"'#]*\\)[\"']\\{0,1\\}.*/\\1/p" config.toml 2>/dev/null | head -n 1
@@ -68,7 +147,7 @@ main_reachable_ip() {
 }
 
 # ---------------------------------------------------------------------------
-# Registry persistence (.env WORKER_N block + optional flags in worker env)
+# Registry persistence (config.toml [worker] source + .env render)
 # ---------------------------------------------------------------------------
 # Shared-registry rule: both boxes hold identical rows; each box binds the
 # rows addressed at itself and advertises the rest. An explicit LOCAL flag
@@ -84,22 +163,67 @@ is_local_host() {
   return 1
 }
 
+# Merged WORKER_<n> rows as "shard<TAB>host:port", config.toml first.
+# WHY config.toml wins: scripts/__config_sync.sh regenerates .env FROM
+# config.toml, so config.toml is the source and .env is its render. A row
+# living only in .env is never seen by compose (which reads config.toml) and
+# a stale .env value silently overrides the real one — that inversion is what
+# made an orphan row deploy as an unresolvable fleet. Both shapes warn once.
+registry_rows() {
+  local -A toml_v=() env_v=()
+  local -a keys=() drift=()
+  local k raw line
+  while IFS=$'\t' read -r k raw; do
+    [ -n "$k" ] || continue
+    toml_v["${k#WORKER_}"]="$(row_value "$raw")"
+  done < <(registry_keys "$TOML_FILE" 'WORKER_[0-9]+' worker)
+  while IFS=$'\t' read -r k raw; do
+    [ -n "$k" ] || continue
+    env_v["${k#WORKER_}"]="$(row_value "$raw")"
+  done < <(registry_keys "$CORE_ENV" 'WORKER_[0-9]+' "")
+
+  # WHY the length guard: ${!arr[@]} has no empty-safe "+" form, so an unset
+  # assoc array under `set -u` needs the count checked before the key loop.
+  if [ "${#toml_v[@]}" -gt 0 ]; then
+    for k in "${!toml_v[@]}"; do
+      keys+=("$k")
+      [ -z "${env_v[$k]+set}" ] && drift+=("shard $k is in config.toml but not in the .env render — run ./cms config sync")
+    done
+  fi
+  if [ "${#env_v[@]}" -gt 0 ]; then
+    for k in "${!env_v[@]}"; do
+      keys+=("$k")
+      if [ -z "${toml_v[$k]+set}" ]; then
+        drift+=("shard $k exists only in .env (${env_v[$k]}) and no config.toml row resolves it")
+      elif [ "${toml_v[$k]}" != "${env_v[$k]}" ]; then
+        drift+=("shard $k: .env=${env_v[$k]} vs config.toml=${toml_v[$k]}")
+      fi
+    done
+  fi
+
+  if [ "${#drift[@]}" -gt 0 ] && [ "$FLEET_DRIFT_WARNED" -eq 0 ]; then
+    FLEET_DRIFT_WARNED=1
+    log_warn "registry drift: .env and config.toml disagree - config.toml wins"
+    printf '%s\n' "${drift[@]}" | sort | while IFS= read -r line; do log_warn "  $line"; done
+    log_warn "reconcile with: ./cms config sync"
+  fi
+
+  printf '%s\n' ${keys[@]+"${keys[@]}"} | sort -n -u | while IFS= read -r k; do
+    [ -n "$k" ] || continue
+    printf '%s\t%s\n' "$k" "${toml_v[$k]:-${env_v[$k]:-}}"
+  done
+}
+
 fleet_load() {
   WORKERS=()
-  local tmp line key idx hp host port mem cpu loc explicit
-  tmp="$(mktemp)"
-  awk -F= '/^WORKER_[0-9]+=/ {print}' "$CORE_ENV" 2>/dev/null \
-    | sort -t_ -k3,3n > "$tmp" || true
-  while IFS= read -r line || [ -n "$line" ]; do
-    [ -z "$line" ] && continue
-    key="${line%%=*}"; hp="${line#*=}"
-    idx="${key#WORKER_}"
+  local idx hp host port mem cpu loc explicit
+  while IFS=$'\t' read -r idx hp || [ -n "${idx:-}" ]; do
+    [ -n "${idx:-}" ] || continue
     host="${hp%%:*}"; port="${hp##*:}"
-    if ! [[ "$idx" =~ ^[0-9]+$ ]]; then log_warn "skipping malformed: $line"; continue; fi
-    if ! [[ "$port" =~ ^[0-9]+$ ]]; then log_warn "skipping bad port: $line"; continue; fi
-    mem="$(env_val "$WORKER_ENV" "WORKER_SHARD${idx}_MEMORY")"; mem="${mem:-$(global_memory)}"; mem="${mem:-512M}"
-    cpu="$(env_val "$WORKER_ENV" "WORKER_SHARD${idx}_CPU")";     cpu="${cpu:-$(global_cpus)}";     cpu="${cpu:-0.5}"
-    explicit="$(env_val "$WORKER_ENV" "WORKER_SHARD${idx}_LOCAL")"
+    if ! [[ "$port" =~ ^[0-9]+$ ]]; then log_warn "skipping bad port: WORKER_$idx=$hp"; continue; fi
+    mem="$(shard_val "$idx" MEMORY)"; mem="${mem:-$(global_memory)}"; mem="${mem:-512M}"
+    cpu="$(shard_val "$idx" CPU)";     cpu="${cpu:-$(global_cpus)}";     cpu="${cpu:-0.5}"
+    explicit="$(shard_val "$idx" LOCAL)"
     if [ -n "$explicit" ]; then
       loc="$explicit"
     elif is_local_host "$host"; then
@@ -108,12 +232,11 @@ fleet_load() {
       loc=0
     fi
     WORKERS+=("$idx|$host|$port|$loc|$mem|$cpu")
-  done < "$tmp"
-  rm -f "$tmp"
+  done < <(registry_rows)
 }
 
-fleet_save() {  # updates config.toml [worker] with fleet rows, re-runs sync
-  local toml="config.toml"
+fleet_save() {  # writes config.toml [worker], then re-renders .env from it
+  local toml="$TOML_FILE"
   [ -f "$toml" ] || log_die "config.toml missing — run ./cms first"
   local row s h p l m c
   local gm gc; gm="$(global_memory)"; gc="$(global_cpus)"
@@ -186,6 +309,20 @@ PYEOF
   # WHY not 2>/dev/null: that discards the sync's own [WARN]/[ERROR] lines and
   # preflight failures, so a failure arrives with no stated cause.
   bash scripts/__config_sync.sh --no-secrets || log_warn "config sync after fleet_save failed"
+
+  # Both files must now carry the fleet. The sync is the only writer of .env, so
+  # a row missing from it after a successful sync means the two files will drift
+  # on the next load — assert instead of assuming, since a silent divergence here
+  # is what produced an unresolvable fleet.
+  FLEET_DRIFT_WARNED=0
+  local missing="" k raw
+  while IFS=$'\t' read -r k raw || [ -n "${k:-}" ]; do
+    [ -n "${k:-}" ] || continue
+    [ -n "$(env_val "$CORE_ENV" "$k")" ] || missing+=" $k"
+  done < <(registry_keys "$toml" 'WORKER_[0-9]+' worker)
+  if [ -n "$missing" ]; then
+    log_warn "fleet saved to config.toml but .env render is missing:$missing — run: ./cms config sync"
+  fi
 }
 
 require_env_files() {
@@ -598,6 +735,18 @@ attach_print_block() {
   echo "  # 4) Cgroups, then start and verify"
   echo "  sudo ./scripts/__worker_cgroup_setup.sh /sys/fs/cgroup/cms-isolate"
   echo "  ./cms config sync && ./cms worker deploy all && ./cms worker list"
+  # The deploy gate passes on a box whose shards resolve as remote (all skipped,
+  # exit 0), so a green list/deploy is not proof this box runs them. The scope
+  # column is the only per-shard statement of which box owns a row, so assert it.
+  local alt=""
+  for i in "${!shards[@]}"; do
+    [ -n "$alt" ] && alt+="|"
+    alt+="${shards[$i]}"
+  done
+  echo "  # 5) Confirm this box owns the shards (scope must read local, not remote)"
+  echo "  ./cms worker list | awk '\$1 ~ /^(${alt})\$/ && \$4 != \"local\" { print \"NOT LOCAL: \" \$0; bad = 1 } END { exit (bad ? 1 : 0) }' \\"
+  echo "    && echo 'all shards local — this box is running them' \\"
+  echo "    || echo 'NOT local: this box did not claim them — set WORKER_SHARD<n>_LOCAL = 1 under [worker] in config.toml'"
 }
 
 render() {
