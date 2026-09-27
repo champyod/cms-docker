@@ -165,7 +165,14 @@ delete_backup_set() {
   local f
   for f in "${BACKUP_DB_DIR}/cmsdb-${ts}.dump" "${BACKUP_DB_DIR}/cmsdb-${ts}.dump.sha256" "${BACKUP_VOL_DIR}/cms-data-${ts}.tar.gz" "${BACKUP_VOL_DIR}/cms-data-${ts}.tar.gz.sha256"; do
     if [[ -f "$f" ]]; then
-      rm -f "$f"
+      # WHY the status is read instead of left to errexit: the caller tests the rotation in a
+      # condition, and errexit is ignored inside a function called that way — so an unchecked
+      # removal neither stops the loop nor reaches the caller, and the loop then retries the
+      # same set forever. A removal that fails is reported and ends the rotation instead.
+      if ! rm -f "$f"; then
+        log_warn "Rotation: could not remove $f"
+        return 1
+      fi
       log_info "Rotation: removed $f"
     fi
   done
@@ -187,7 +194,7 @@ apply_rotation() {
       # Always keep ≥1 newest — break if only 1 left
       if (( ${#timestamps[@]} <= 1 )); then break; fi
       local oldest="${timestamps[0]}"
-      delete_backup_set "$oldest"
+      delete_backup_set "$oldest" || return 1
       deleted_any=1
       mapfile -t timestamps < <(list_backup_timestamps)
       if (( ${#timestamps[@]} == 0 )); then break; fi
@@ -217,7 +224,7 @@ apply_rotation() {
         # Ensure we keep newest ≥1
         local newest="${timestamps[-1]}"
         if [[ "$ts" == "$newest" ]]; then continue; fi
-        delete_backup_set "$ts"
+        delete_backup_set "$ts" || return 1
         deleted_any=1
       fi
     done
@@ -245,7 +252,7 @@ apply_rotation() {
           set_bytes=$(( set_bytes + sz ))
         fi
       done
-      delete_backup_set "$oldest"
+      delete_backup_set "$oldest" || return 1
       deleted_any=1
       total_bytes=$(( total_bytes - set_bytes ))
       mapfile -t timestamps < <(list_backup_timestamps)
@@ -325,13 +332,23 @@ manifest_seed() {
 #               <vol_status> <pg_version> <db_bytes> <vol_bytes> <total_bytes>
 manifest_append() {
   local manifest="$1"
+  # WHY the ts is read before the shift: every alert below names the run it belongs to, and
+  # this argument is the only place that timestamp survives the shift.
+  local ts="$2"
   local dir prev entry_file merged
   dir="$(dirname -- "$manifest")"
   mkdir -p "$dir"
 
   if ! command -v jq >/dev/null 2>&1; then
+    # WHY a failed seed is fatal and not approximate: a manifest that cannot be created is a
+    # run nobody can read back, which is the one outcome an empty file must not stand in for.
+    if ! manifest_seed "$manifest"; then
+      log_warn "could not seed the manifest at $manifest"
+      send_discord "❌ **Backup Failed** — manifest not seeded at \`${manifest}\` — ts \`${ts}\`" 16711680 "true"
+      return 1
+    fi
     log_warn "jq not found — manifest update is approximate"
-    manifest_seed "$manifest"
+    send_discord "⚠️ **Backup Degraded** — jq not found: manifest left empty, this run is unrecorded — ts \`${ts}\`" 16776960 "true"
     return 0
   fi
 
@@ -342,6 +359,7 @@ manifest_append() {
   if ! manifest_entry_json "$@" > "$entry_file"; then
     rm -f -- "$prev" "$entry_file" "$merged"
     log_warn "jq could not build the manifest entry"
+    send_discord "❌ **Backup Failed** — manifest not updated: jq could not build the entry — ts \`${ts}\`" 16711680 "true"
     return 1
   fi
 
@@ -354,6 +372,7 @@ manifest_append() {
   if ! manifest_merge "$prev" "$entry_file" "$merged"; then
     rm -f -- "$prev" "$entry_file" "$merged"
     log_warn "jq could not assemble the manifest"
+    send_discord "❌ **Backup Failed** — manifest not updated: jq could not assemble the entries — ts \`${ts}\`" 16711680 "true"
     return 1
   fi
 
@@ -361,6 +380,7 @@ manifest_append() {
   if ! mv -- "$merged" "$manifest"; then
     rm -f -- "$prev" "$entry_file" "$merged"
     log_warn "could not replace the manifest at $manifest"
+    send_discord "❌ **Backup Failed** — manifest not updated: replace failed at \`${manifest}\` — ts \`${ts}\`" 16711680 "true"
     return 1
   fi
   rm -f -- "$prev" "$entry_file"
@@ -372,8 +392,16 @@ manifest_append() {
 run_backup() {
   log_info "CMS backup starting — backup root: $BACKUP_ROOT"
 
-  # Disk guard — abort if <3GB free on backup filesystem
-  require_disk_free_gb "$BACKUP_ROOT" 3 5
+  # Disk guard — abort when the backup filesystem has less free than the floor
+  # WHY a subshell: require_disk_free_gb dies with its own exit code, and a die in a plain
+  # call ends the process before anything can be announced. The subshell keeps that code and
+  # that log line, and the caller decides what the operator is told.
+  local disk_guard_status=0
+  ( require_disk_free_gb "$BACKUP_ROOT" "$DISK_FLOOR_GB" "$DISK_WARN_GB" ) || disk_guard_status=$?
+  if (( disk_guard_status != 0 )); then
+    send_discord "❌ **Backup Failed** — disk guard aborted at \`${BACKUP_ROOT}\`: free space unreadable or under the ${DISK_FLOOR_GB} GB floor" 16711680 "true"
+    exit "$disk_guard_status"
+  fi
 
   mkdir -p -m 700 "$BACKUP_DB_DIR" "$BACKUP_VOL_DIR"
   chmod 700 "$BACKUP_DB_DIR" "$BACKUP_VOL_DIR" 2>/dev/null || true
@@ -384,7 +412,9 @@ run_backup() {
   fi
 
   if ! command -v docker >/dev/null 2>&1; then
-    log_die "docker not found in PATH"
+    local msg="docker not found in PATH"
+    send_discord "❌ **Backup Failed** — $msg" 16711680 "true"
+    log_die "$msg"
   fi
 
   if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$CONTAINER_DB"; then
@@ -526,7 +556,10 @@ run_backup() {
   chmod 600 "$MANIFEST_FILE" 2>/dev/null || true
 
   # 4) Rotation
-  apply_rotation || log_warn "Rotation encountered an error (non-fatal)"
+  if ! apply_rotation; then
+    log_warn "Rotation encountered an error (non-fatal)"
+    send_discord "⚠️ **Backup Degraded** — rotation aborted: superseded sets may accumulate in \`${BACKUP_ROOT}\` — ts \`${ts}\`" 16776960 "true"
+  fi
 
   local db_mb vol_mb
   db_mb="$(awk "BEGIN{printf \"%.2f\", $db_bytes/1048576}")"
@@ -545,7 +578,13 @@ run_backup() {
 # ---------------------------------------------------------------------------
 run_cleanup_only() {
   log_info "Running cleanup only"
-  apply_rotation
+  # WHY fatal and not a warning: prune mode exists to reclaim disk, so a rotation that stops
+  # is the whole job failing rather than a degraded run with something still usable left.
+  if ! apply_rotation; then
+    log_warn "Rotation encountered an error (cleanup aborted)"
+    send_discord "❌ **Cleanup Failed** — rotation aborted: superseded sets may accumulate in \`${BACKUP_ROOT}\`" 16711680 "true"
+    return 1
+  fi
 }
 
 # ---------------------------------------------------------------------------
