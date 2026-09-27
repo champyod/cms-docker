@@ -7,10 +7,10 @@ import { getContestEditData } from '@/app/actions/contests';
 import { useDeployContest, type DeployPhase } from '@/hooks/useDeployContest';
 import { Badge } from '@/components/core/Badge';
 import { Button } from '@/components/core/Button';
+import { useRecordTabRefresh } from '@/hooks/useRecordTabRefresh';
 import { ContestModal } from '../ContestModal';
 import type { ExistingContest } from '../contest-modal/types';
 import { DeployConfirmModal } from '../DeployConfirmModal';
-import { useTabRefresh } from './useContestSettingsState';
 
 export type ContestRecordHeaderProps = {
   contestId: number;
@@ -50,7 +50,7 @@ function useRecordDeploy(contestId: number): {
 } {
   const [showDeployModal, setShowDeployModal] = useState(false);
   const { state: deployState, deploy, reset } = useDeployContest();
-  const refresh = useTabRefresh();
+  const refresh = useRecordTabRefresh();
 
   useEffect(() => {
     if (deployState.phase === 'completed') refresh();
@@ -100,7 +100,7 @@ function useRecordHeaderState(contestId: number, permissionKeys: readonly string
 
 export function ContestRecordHeader({ contestId, name, isActive, permissionKeys }: ContestRecordHeaderProps): React.JSX.Element {
   const header = useRecordHeaderState(contestId, permissionKeys);
-  const refresh = useTabRefresh();
+  const refresh = useRecordTabRefresh();
 
   return (
     <div className="flex flex-wrap items-center gap-3">

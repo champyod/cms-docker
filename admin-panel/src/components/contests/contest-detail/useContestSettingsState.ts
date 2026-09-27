@@ -1,38 +1,20 @@
 'use client';
 
-import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useContext, useMemo, useState } from 'react';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { useJustSavedFlag } from '@/hooks/useJustSavedFlag';
 import { DictionaryContext } from '@/hooks/useDictionary';
+import { useRecordTabRefresh } from '@/hooks/useRecordTabRefresh';
 import { updateContestSettings } from '@/app/actions/contests';
 import { buildConfirmationCopy, type ConfirmationCopy } from '@/lib/confirmation-copy';
 import type { ContestData } from '@/lib/contests-repo';
 import type { ContestOverviewData, ContestSettingsFields } from '@/lib/queries/contest-detail';
 import en from '@/dictionaries/en.json';
 
-// Why: useRouter throws without an AppRouter provider, which unit tests do
-// not mount — so the router is captured once by a registrar the Contest
-// layout mounts, while this hook stays a stable null-safe reader.
-let tabRefreshImpl: (() => void) | null = null;
-
+// Why the alias: the contest tab actions keep their own name while reading the
+// one shared refresh handle every record layout registers.
 export function useTabRefresh(): () => void {
-  return useCallback((): void => {
-    tabRefreshImpl?.();
-  }, []);
-}
-
-// Why: server-rendered under the real AppRouter, effects register the refresh
-// on hydration — test renders never mount the layout, so they never throw.
-export function TabRefreshRegistrar(): null {
-  const router = useRouter();
-  useEffect(() => {
-    tabRefreshImpl = (): void => router.refresh();
-    return (): void => {
-      tabRefreshImpl = null;
-    };
-  }, [router]);
-  return null;
+  return useRecordTabRefresh();
 }
 
 // Why: useConfirmationCopy throws without a DictionaryProvider, which unit

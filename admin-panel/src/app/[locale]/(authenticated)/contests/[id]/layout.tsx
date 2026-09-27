@@ -15,7 +15,7 @@ import { DetailSurface, type DetailSurfaceProps } from '@/components/core/Detail
 import { getContestDetailSummary } from '@/lib/queries/contest-detail';
 import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access';
 import { ContestRecordHeader } from '@/components/contests/contest-detail/ContestRecordHeader';
-import { TabRefreshRegistrar } from '@/components/contests/contest-detail/useContestSettingsState';
+import { RecordTabRefreshRegistrar } from '@/hooks/useRecordTabRefresh';
 
 function getContestTabLabel(dictionary: Dictionary, routeId: RouteId): string {
   switch (routeId) {
@@ -88,7 +88,7 @@ export default async function ContestDetailLayout({
   // calling useRouter where unit tests render provider-less.
   return (
     <>
-      <TabRefreshRegistrar />
+      <RecordTabRefreshRegistrar />
       <DetailSurface {...props} />
     </>
   );

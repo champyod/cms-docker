@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { DetailSurface, type DetailSurfaceProps } from '@/components/core/DetailSurface';
-import { TaskTabRefreshRegistrar } from '@/components/tasks/task-detail/useTaskTabRefresh';
+import { RecordTabRefreshRegistrar } from '@/hooks/useRecordTabRefresh';
 import { UserDetailFrame } from '@/components/users/UserDetailFrame';
 import { UserRecordHeader } from '@/components/users/UserRecordHeader';
 import type { Dictionary } from '@/lib/dictionary';
@@ -97,7 +97,7 @@ export default async function UserRecordLayout({
     breadcrumbs: userRecordBreadcrumbs(locale, id, dictionary),
     title: summary.username,
     description: <UserDetailFrame summary={summary} />,
-    actions: <UserRecordHeader userId={summary.id} username={summary.username} permissionKeys={[...effective]} navigation={dictionary.navigation} />,
+    actions: <UserRecordHeader userId={summary.id} permissionKeys={[...effective]} navigation={dictionary.navigation} />,
     tabs: buildUserTabs(locale, id, effective, dictionary),
     children,
     className: 'space-y-6',
@@ -106,7 +106,7 @@ export default async function UserRecordLayout({
   // calling useRouter where unit tests render provider-less.
   return (
     <>
-      <TaskTabRefreshRegistrar />
+      <RecordTabRefreshRegistrar />
       <DetailSurface {...props} />
     </>
   );

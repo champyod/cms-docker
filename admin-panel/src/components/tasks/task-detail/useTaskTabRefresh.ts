@@ -1,33 +1,15 @@
 'use client';
 
-import { useCallback, useContext, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useContext, useMemo } from 'react';
 import { DictionaryContext } from '@/hooks/useDictionary';
+import { useRecordTabRefresh } from '@/hooks/useRecordTabRefresh';
 import { buildConfirmationCopy, type ConfirmationCopy } from '@/lib/confirmation-copy';
 import en from '@/dictionaries/en.json';
 
-// Why: useRouter throws without an AppRouter provider, which unit tests do
-// not mount — so the router is captured once by a registrar the Task layout
-// mounts, while tab hooks stay stable null-safe readers.
-let taskTabRefreshImpl: (() => void) | null = null;
-
+// Why the alias: the task tab actions keep their own name while reading the one
+// shared refresh handle every record layout registers.
 export function useTaskTabRefresh(): () => void {
-  return useCallback((): void => {
-    taskTabRefreshImpl?.();
-  }, []);
-}
-
-// Why: server-rendered under the real AppRouter, effects register the refresh
-// on hydration — test renders never mount the layout, so they never throw.
-export function TaskTabRefreshRegistrar(): null {
-  const router = useRouter();
-  useEffect(() => {
-    taskTabRefreshImpl = (): void => router.refresh();
-    return (): void => {
-      taskTabRefreshImpl = null;
-    };
-  }, [router]);
-  return null;
+  return useRecordTabRefresh();
 }
 
 // Why: useConfirmationCopy throws without a DictionaryProvider, which unit

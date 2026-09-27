@@ -76,7 +76,6 @@ function renderUser(permissionKeys: readonly string[]): void {
   render(
     <UserRecordHeader
       userId={17}
-      username="ada"
       permissionKeys={permissionKeys}
       navigation={en.navigation}
     />,
@@ -87,21 +86,18 @@ function renderTeam(permissionKeys: readonly string[]): void {
   render(
     <TeamRecordHeader
       teamId={4}
-      name="Alpha"
       permissionKeys={permissionKeys}
       navigation={en.navigation}
     />,
   );
 }
 
-/** Why the pair: the visible label and the icon are one affordance, and a label swap without the icon swap is exactly the drift this guards. */
-function expectEditAffordance(label: string, testId: string): HTMLButtonElement {
-  const button = screen.getByText(label).closest('button');
-  if (!button) throw new Error(`${label} is not a button`);
+/** Why the three: the visible label and the icon are one affordance, a label swap without the icon swap is exactly the drift this guards, and the modal must stay closed until the click lands. The accessible name is asserted separately because only the new headers must keep it equal to the visible label (WCAG 2.5.3). */
+function expectEditAffordance(label: string, testId: string, accessibleName = label): void {
+  const button = screen.getByRole('button', { name: accessibleName });
   expect(button.textContent).toBe(label);
   expect(button.querySelector('.lucide-pencil')).not.toBeNull();
   expect(screen.queryByTestId(testId)).toBeNull();
-  return button;
 }
 
 async function expectModalOpens(testId: string, recordId: number): Promise<void> {
@@ -113,7 +109,9 @@ describe('Task record edit affordance', () => {
   it('offers Edit Task with the Pencil icon to a reader holding task:update', () => {
     mockGetTaskSettings.mockResolvedValue(TASK_SETTINGS);
     renderTask(['task:read', 'task:update']);
-    expectEditAffordance('Edit Task', 'task-modal');
+    // Why the third argument: the Task button keeps its pre-existing aria-label,
+    // so its accessible name names the record while its visible label is the action.
+    expectEditAffordance('Edit Task', 'task-modal', 'Edit Task Nine');
   });
 
   it('withholds the Edit Task button from a reader without task:update', () => {
@@ -151,7 +149,7 @@ describe('User record edit affordance', () => {
     renderUser(['user:read', 'user:update']);
 
     expect(mockGetUserEditData).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByText('Edit User'));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit User' }));
 
     await expectModalOpens('user-modal', 17);
     expect(mockGetUserEditData).toHaveBeenCalledWith(17);
@@ -175,7 +173,7 @@ describe('Team record edit affordance', () => {
     renderTeam(['team:read', 'team:update']);
 
     expect(mockGetTeamEditData).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByText('Edit Team'));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Team' }));
 
     await expectModalOpens('team-modal', 4);
     expect(mockGetTeamEditData).toHaveBeenCalledWith(4);

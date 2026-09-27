@@ -15,7 +15,7 @@ import { DetailSurface, type DetailSurfaceProps } from '@/components/core/Detail
 import { getTaskDetailSummary } from '@/lib/queries/task-detail';
 import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access';
 import { TaskRecordHeader } from '@/components/tasks/TaskRecordHeader';
-import { TaskTabRefreshRegistrar } from '@/components/tasks/task-detail/useTaskTabRefresh';
+import { RecordTabRefreshRegistrar } from '@/hooks/useRecordTabRefresh';
 
 function getTaskTabLabel(dictionary: Dictionary, routeId: RouteId): string {
   switch (routeId) {
@@ -89,7 +89,7 @@ export default async function TaskDetailLayout({
   // calling useRouter where unit tests render provider-less.
   return (
     <>
-      <TaskTabRefreshRegistrar />
+      <RecordTabRefreshRegistrar />
       <DetailSurface {...props} />
     </>
   );

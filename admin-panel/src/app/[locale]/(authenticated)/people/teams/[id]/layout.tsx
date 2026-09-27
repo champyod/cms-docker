@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { DetailSurface, type DetailSurfaceProps } from '@/components/core/DetailSurface';
-import { TaskTabRefreshRegistrar } from '@/components/tasks/task-detail/useTaskTabRefresh';
+import { RecordTabRefreshRegistrar } from '@/hooks/useRecordTabRefresh';
 import { TeamRecordHeader } from '@/components/teams/TeamRecordHeader';
 import { getDictionary } from '@/i18n';
 import type { Dictionary } from '@/lib/dictionary';
@@ -97,7 +97,7 @@ export default async function TeamRecordLayout({
   const props = {
     breadcrumbs: teamRecordBreadcrumbs(locale, id, dictionary),
     title: summary.name,
-    actions: <TeamRecordHeader teamId={summary.id} name={summary.name ?? ''} permissionKeys={[...effective]} navigation={dictionary.navigation} />,
+    actions: <TeamRecordHeader teamId={summary.id} permissionKeys={[...effective]} navigation={dictionary.navigation} />,
     tabs: buildTeamTabs(locale, id, effective, dictionary),
     children,
     className: 'space-y-6',
@@ -106,7 +106,7 @@ export default async function TeamRecordLayout({
   // calling useRouter where unit tests render provider-less.
   return (
     <>
-      <TaskTabRefreshRegistrar />
+      <RecordTabRefreshRegistrar />
       <DetailSurface {...props} />
     </>
   );

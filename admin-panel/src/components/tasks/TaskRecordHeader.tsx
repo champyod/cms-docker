@@ -5,11 +5,11 @@ import { ExternalLink, Pencil } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { getTaskSettings } from '@/app/actions/tasks';
 import { Button } from '@/components/core/Button';
+import { useRecordTabRefresh } from '@/hooks/useRecordTabRefresh';
 import { buildRoute } from '@/lib/navigation/routes';
 import { ACTION_PERMISSIONS, hasEffectivePermission } from '@/lib/permission-engine';
 import type { TaskSettingsRecord } from '@/lib/queries/task-detail';
 import { TaskModal } from './TaskModal';
-import { useTaskTabRefresh } from './task-detail/useTaskTabRefresh';
 
 export type TaskRecordHeaderProps = {
   taskId: number;
@@ -33,7 +33,7 @@ function useHeaderLocale(): string {
 export function TaskRecordHeader({ taskId, title, contest, permissionKeys }: TaskRecordHeaderProps): React.JSX.Element {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsRecord, setSettingsRecord] = useState<TaskSettingsRecord | null>(null);
-  const refresh = useTaskTabRefresh();
+  const refresh = useRecordTabRefresh();
   const locale = useHeaderLocale();
   const canEdit = hasEffectivePermission(new Set(permissionKeys), ACTION_PERMISSIONS.updateTask);
 

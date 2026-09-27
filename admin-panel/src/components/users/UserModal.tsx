@@ -17,14 +17,14 @@ import { cn } from '@/lib/utils';
 import type { Dictionary } from '@/lib/dictionary';
 import { isKnownLanguageCode, normalizeLanguageCode } from '@/lib/constants/languages';
 import type { PasswordKind } from '@/lib/password-format';
-import type { UsersPageRow } from '@/lib/prisma-selects';
+import type { SafeUser } from '@/lib/prisma-selects';
 
 import { EMPTY_USER_FORM, formFromUser, type UserFormState } from './userFormState';
 
 interface UserModalProps {
   isOpen: boolean;
   onClose: () => void;
-  user?: UsersPageRow | null;
+  user?: SafeUser | null;
   contests?: Array<{ id: number; name: string }>;
   canReadContests: boolean;
   navigation: Dictionary['navigation'];
