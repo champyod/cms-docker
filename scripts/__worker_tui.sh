@@ -219,12 +219,17 @@ worker_status() {
 # ---------------------------------------------------------------------------
 # Deployment — one compose project per local shard
 # ---------------------------------------------------------------------------
+# deploy_worker exit codes: 0 deployed, 1 compose failure, DEPLOY_SKIP_REMOTE a
+# registry-only row. WHY a third code: a skip is not a success, and a caller that
+# cannot tell the two apart reads an all-remote run as a completed deploy.
+readonly DEPLOY_SKIP_REMOTE=3
+
 deploy_worker() {
   local row="$1" s h p l m c proj
   IFS='|' read -r s h p l m c <<<"$row"
   if [ "$l" != "1" ]; then
     log_info "shard $s is registry-only (REMOTE) — skipping local deploy"
-    return 0
+    return "$DEPLOY_SKIP_REMOTE"
   fi
   proj="cw$s"
   log_info "Deploying worker shard $s (port $p, mem $m, cpus $c, project $proj) ..."
@@ -294,6 +299,24 @@ wait_core_healthy() {
   done
 }
 
+# Verdict for a finished pass: deployed / skipped / failed shard counts.
+# A registry-only row is a shard this host was never asked to run, so skipping it
+# leaves the selection uncovered — reported as failure, named specifically when
+# nothing ran at all, because that is the mis-registered-fleet signature.
+deploy_verdict() { # deployed skipped failed
+  if [ "$2" -gt 0 ] && [ "$1" -eq 0 ] && [ "$3" -eq 0 ]; then
+    log_warn "no shards matched this host - check WORKER_n host vs hostname -I and WORKER_SHARDn_LOCAL; worker list scope column shows local vs remote"
+    return 1
+  fi
+  if [ "$2" -gt 0 ]; then
+    log_warn "deploy incomplete: $2 of $(( $1 + $2 + $3 )) shard(s) skipped as registry-only (remote)"
+  fi
+  if [ "$2" -gt 0 ] || [ "$3" -gt 0 ]; then
+    return 1
+  fi
+  return 0
+}
+
 cmd_deploy() {
   require_env_files
   seed_if_empty
@@ -305,7 +328,8 @@ cmd_deploy() {
     fi
     return 1
   fi
-  local target="${1:-all}" rc=0 row s hit w_list
+  local target="${1:-all}" row s hit w_list drc
+  local deployed=0 skipped=0 failed=0 rc=0
   local -a want=()
   if [ "$target" != "all" ]; then
     w_list="$(expand_spec "$target")" || { log_warn "bad shard spec: $target"; return 1; }
@@ -318,8 +342,15 @@ cmd_deploy() {
       for w in "${want[@]}"; do [ "$s" = "$w" ] && hit=1; done
       [ "$hit" = 1 ] || continue
     fi
-    deploy_worker "$row" || rc=1
+    drc=0
+    deploy_worker "$row" || drc=$?
+    case "$drc" in
+      0) deployed=$((deployed + 1)) ;;
+      "$DEPLOY_SKIP_REMOTE") skipped=$((skipped + 1)) ;;
+      *) failed=$((failed + 1)) ;;
+    esac
   done
+  deploy_verdict "$deployed" "$skipped" "$failed" || rc=1
   return "$rc"
 }
 
