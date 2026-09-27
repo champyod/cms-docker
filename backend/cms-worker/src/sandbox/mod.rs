@@ -6,6 +6,10 @@
 //! answers with the run's figures, why it ended and what it printed. Nothing here
 //! grades, schedules or stores — the isolation program owns every one of those.
 //!
+//! A run that has to be alive beside another one is asked for differently:
+//! [`Sandbox::start`] answers with the run itself rather than with what it left
+//! behind, as a [`Launch`] waited for once every run has been started.
+//!
 //! The launch is faithful in four ways, each of which is a way a run could
 //! otherwise be measured wrongly, and each is one module's whole subject.
 //!
@@ -38,6 +42,7 @@
 
 mod error;
 mod exits;
+mod launch;
 mod options;
 mod spawn;
 mod stream;
@@ -48,6 +53,7 @@ use std::process::Output;
 
 pub use error::SpawnError;
 pub use exits::Outcome;
+pub use launch::Launch;
 pub use options::{MappedDirectory, Options};
 pub use spawn::SECURE_COMMANDS;
 pub use stream::{ReadError, Stream};
@@ -174,9 +180,7 @@ impl Sandbox {
     /// [`SpawnError::NoMetaFile`] when the run left no log behind or it could not
     /// be read, and [`SpawnError::Measure`] for a number it cannot be read as.
     fn read_log(&self, number: u32) -> Result<ExecutionLog, SpawnError> {
-        let path = self.layout.meta_file(number);
-        let text = fs::read_to_string(&path).map_err(|_| SpawnError::NoMetaFile { path })?;
-        ExecutionLog::parse(&text).map_err(SpawnError::Measure)
+        read_log(&self.layout.meta_file(number))
     }
 
     /// Whether a command is one of the four run beside the isolation program.
@@ -237,4 +241,16 @@ impl Sandbox {
             executions: 0,
         }
     }
+}
+
+/// What one run wrote at `path`, which is where a run's own measurements are
+/// waiting, and which a run started but not waited for is already named to write to.
+/// # Errors
+/// [`SpawnError::NoMetaFile`] when the run left no log behind or it could not be
+/// read, and [`SpawnError::Measure`] for a number it cannot be read as.
+pub(super) fn read_log(path: &Path) -> Result<ExecutionLog, SpawnError> {
+    let text = fs::read_to_string(path).map_err(|_| SpawnError::NoMetaFile {
+        path: path.to_path_buf(),
+    })?;
+    ExecutionLog::parse(&text).map_err(SpawnError::Measure)
 }

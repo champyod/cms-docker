@@ -46,3 +46,27 @@ fn a_pipe_and_its_which_are_named_so_a_failure_says_which_one_failed() {
     assert!(failure.to_string().contains("standard error"));
     assert!(Outcome::of_bypassed(exit_status_of(0)).is_ok());
 }
+
+#[test]
+fn a_run_started_and_waited_for_later_answers_the_figures_a_waiting_run_does() {
+    let dir = workspace("started");
+    let executable = isolation_stub(&dir, "1", RETURNED_LOG);
+    let mut box_of = sandbox(&executable, &dir);
+    let started = box_of
+        .start(&["/bin/true"])
+        .expect("the run must start")
+        .wait()
+        .expect("the run must finish");
+    let waiting = sandbox(&executable, &dir)
+        .run(&["/bin/true"])
+        .expect("the run must finish");
+    assert_eq!(
+        started, waiting,
+        "starting a run and waiting for it later is the same run"
+    );
+    assert_eq!(
+        box_of.executions(),
+        1,
+        "a started run is logged under its own number"
+    );
+}

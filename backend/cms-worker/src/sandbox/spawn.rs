@@ -41,7 +41,7 @@ const OUTER_DIRECTORY_PREFIX: &str = "cms-sandbox-";
 /// The prefix of the file one run's measurements are written to.
 const META_PREFIX: &str = "run.log";
 /// The permissions a run's own directory is given while a run is inside it.
-const MODE_RUNNING: u32 = 0o770;
+pub(super) const MODE_RUNNING: u32 = 0o770;
 /// The permissions it is given while a command is setting the box up beside it.
 ///
 /// It is kept to its owner alone, because such a command runs with no isolation
@@ -119,7 +119,7 @@ impl Sandbox {
     /// # Errors
     /// [`SpawnError::Exit`] for a code outside the closed set, and for a process
     /// that was stopped before it returned one.
-    fn accept(status: ExitStatus, bypassed: bool, name: &str) -> Result<(), SpawnError> {
+    pub(super) fn accept(status: ExitStatus, bypassed: bool, name: &str) -> Result<(), SpawnError> {
         let read = if bypassed {
             Outcome::of_bypassed(status)
         } else {
@@ -155,7 +155,7 @@ impl Sandbox {
         launched
     }
 
-    fn home_mode(&self) -> Result<u32, SpawnError> {
+    pub(super) fn home_mode(&self) -> Result<u32, SpawnError> {
         let home = self.home();
         fs::metadata(home)
             .map(|metadata| metadata.permissions().mode() & MODE_PERMISSIONS)
@@ -165,15 +165,18 @@ impl Sandbox {
             })
     }
 
-    fn set_home_mode(&self, mode: u32) -> Result<(), SpawnError> {
-        let home = self.home();
-        fs::set_permissions(home, fs::Permissions::from_mode(mode)).map_err(|source| {
-            SpawnError::Io {
-                path: home.to_path_buf(),
-                source,
-            }
-        })
+    pub(super) fn set_home_mode(&self, mode: u32) -> Result<(), SpawnError> {
+        set_mode(self.home(), mode)
     }
+}
+
+/// The permissions a path is given, which is the same question asked of a run's
+/// own directory whether the run is over or not.
+pub(super) fn set_mode(path: &Path, mode: u32) -> Result<(), SpawnError> {
+    fs::set_permissions(path, fs::Permissions::from_mode(mode)).map_err(|source| SpawnError::Io {
+        path: path.to_path_buf(),
+        source,
+    })
 }
 
 /// The permissions a run's own directory is given for a launch.

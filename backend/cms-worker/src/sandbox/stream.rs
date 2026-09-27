@@ -102,12 +102,7 @@ impl std::error::Error for ReadError {
 /// one reader before the other exists would leave the second pipe unread for
 /// exactly as long as the first was full.
 pub(super) fn drain(child: &mut Child) -> Result<Drained, ReadError> {
-    let out = child.stdout.take().map(|pipe| reader(pipe, Stream::Output));
-    let err = child.stderr.take().map(|pipe| reader(pipe, Stream::Error));
-    Ok(Drained {
-        stdout: take_pipe(out)?,
-        stderr: take_pipe(err)?,
-    })
+    Readers::of(child).finish()
 }
 
 /// Both pipes of a run, read to their end.
@@ -151,5 +146,38 @@ fn pipe_lost() -> ReadError {
     ReadError::Pipe {
         stream: Stream::Output,
         source: io::Error::other("the thread reading the run's output is gone"),
+    }
+}
+
+/// The two readers of a run that has been started, held for as long as the run
+/// lasts rather than only for as long as a launch.
+///
+/// This is what a caller that starts a run and does not wait for it holds: the
+/// readers are started at the launch either way, so a run that prints more than a
+/// pipe holds is emptied for the whole of its life and not only from the moment
+/// somebody waits for it.
+pub(super) struct Readers {
+    out: Option<Reader>,
+    err: Option<Reader>,
+}
+
+impl Readers {
+    /// The two readers of `child`, one per pipe, started before either is waited
+    /// for, which is the whole of the drain.
+    pub(super) fn of(child: &mut Child) -> Self {
+        Self {
+            out: child.stdout.take().map(|pipe| reader(pipe, Stream::Output)),
+            err: child.stderr.take().map(|pipe| reader(pipe, Stream::Error)),
+        }
+    }
+
+    /// Waits for both readers and hands back everything they read. A reader whose
+    /// read failed is left to the pipe it was reading, so the other is still read
+    /// to its end rather than abandoned half full.
+    pub(super) fn finish(self) -> Result<Drained, ReadError> {
+        Ok(Drained {
+            stdout: take_pipe(self.out)?,
+            stderr: take_pipe(self.err)?,
+        })
     }
 }
