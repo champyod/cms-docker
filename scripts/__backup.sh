@@ -57,9 +57,11 @@ VOLUME_DATA="cms-data"
 
 # Exit contract — a caller must be able to separate "the database is safe" from
 # "nothing was archived" without reading the log:
-#   0 = full backup (DB and volume)
+#   0 = the DB dump and the volume archive are both on disk and readable. A run whose rotation
+#       was skipped still reports 0: the run was recorded, so what it costs is retention.
 #   1 = no usable backup (the DB step failed, so no dump was kept)
-#   3 = partial backup (the dump was kept and recorded; the volume archive failed)
+#   3 = partial backup — the dump was kept, but the run is not whole: the volume archive
+#       failed, or the manifest does not record this run.
 readonly EXIT_PARTIAL_BACKUP=3
 
 # ---------------------------------------------------------------------------
@@ -363,7 +365,10 @@ manifest_append() {
     fi
     log_warn "jq not found — manifest update is approximate"
     send_degraded "⚠️ **Backup Degraded** — jq not found: manifest left empty, this run is unrecorded — ts \`${ts}\`"
-    return 0
+    # WHY partial and not success: exit 0 is the contract's "full backup", and a run nobody can read
+    # back is not one. The dump and the volume archive exist, but nothing records them, so a caller
+    # that saw 0 would retire a backup it cannot verify.
+    return "$EXIT_PARTIAL_BACKUP"
   fi
 
   prev="$(mktemp "${dir}/.manifest.prev.XXXXXX")"
@@ -549,11 +554,21 @@ run_backup() {
 
   # 3) manifest.json append
   log_info "Updating manifest $MANIFEST_FILE ..."
+  # WHY the status is captured instead of left to errexit: a manifest that cannot be written
+  # costs this run its record, not its dump and its archive, and errexit would end the run on
+  # the spot — before the rotation, before the summary, and before the run says one word about
+  # itself. Judged with the rest of the run's verdict below, it still reaches an exit code.
+  local manifest_status=0
   manifest_append "$MANIFEST_FILE" "$ts" "$db_sha" "$vol_tar_rel" "$vol_sha" \
-    "$vol_status" "$pg_ver" "$db_bytes" "$vol_bytes" "$total_bytes"
+    "$vol_status" "$pg_ver" "$db_bytes" "$vol_bytes" "$total_bytes" || manifest_status=$?
   chmod 600 "$MANIFEST_FILE" 2>/dev/null || true
 
   # 4) Rotation
+  # WHY degraded and not fatal: the dump and the volume archive are already written and recorded by
+  # the time rotation runs, so a rotation that aborts costs retention rather than this run's backup.
+  # The flag is what makes the difference visible — it routes the run to the degraded verdict below
+  # instead of the success alert — and the status stays 0 because the contract's 0 covers the DB and
+  # the volume, both of which are present and readable.
   if ! apply_rotation; then
     log_warn "Rotation encountered an error (non-fatal)"
     send_degraded "⚠️ **Backup Degraded** — rotation aborted: superseded sets may accumulate in \`${BACKUP_ROOT}\` — ts \`${ts}\`"
@@ -565,6 +580,16 @@ run_backup() {
   if [[ -n "$vol_status" ]]; then
     log_warn "Backup partial: db=${db_mb}MB vol=FAILED (${vol_fail_reason}) ts=${ts}"
     send_discord "⚠️ **Backup Partial** — ts \`${ts}\` — DB ${db_mb}MB OK / Vol FAILED (${vol_fail_reason}) — \`${pg_ver}\`" 16776960 "true"
+    return "$EXIT_PARTIAL_BACKUP"
+  fi
+  # WHY the manifest status is judged here and not left to the alert the function already sent:
+  # a run nobody can read back is one a caller cannot verify, and a caller that read 0 would
+  # retire a backup it has no way to check. No second alert is sent — the function named the
+  # condition — so this only keeps the run from reaching the success alert. Every manifest
+  # failure scores 3 and never 1: 1 is reserved for a run that kept no dump, and the dump is
+  # on disk by the time this is reached.
+  if (( manifest_status != 0 )); then
+    log_warn "Backup degraded: db=${db_mb}MB vol=${vol_mb}MB manifest unrecorded ts=${ts}"
     return "$EXIT_PARTIAL_BACKUP"
   fi
   # WHY the success alert is withheld once a run has degraded: the amber alert already went
