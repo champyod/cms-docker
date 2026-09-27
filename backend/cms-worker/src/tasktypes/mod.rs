@@ -104,29 +104,37 @@ pub struct CompilationLimits {
     pub processes: Option<u32>,
 }
 
-/// Where a box is made and what a compilation is held to: the two settings every
-/// run of this worker carries before a task type changes anything.
+/// Where a box is made, what a compilation is held to and how large a file a run
+/// may create: the settings every run of this worker carries before a task type
+/// changes anything.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Runtime {
     program: PathBuf,
     temp_dir: PathBuf,
     /// The three numbers a compilation is held to.
     pub compilation: CompilationLimits,
+    /// The largest file a run may create, in bytes, or `None` for a file as large
+    /// as the machine allows. It bounds the box rather than a testcase, so it is
+    /// the same size for every run this worker makes.
+    pub file_size: Option<u64>,
 }
 
 impl Runtime {
-    /// A runtime whose boxes are made under `temp_dir` and whose runs are
-    /// launched under the isolation program at `program`.
+    /// A runtime whose boxes are made under `temp_dir`, whose runs are launched
+    /// under the isolation program at `program`, and whose runs may create a file
+    /// of `file_size` bytes.
     #[must_use]
     pub fn new(
         program: impl Into<PathBuf>,
         temp_dir: impl Into<PathBuf>,
         compilation: CompilationLimits,
+        file_size: Option<u64>,
     ) -> Self {
         Self {
             program: program.into(),
             temp_dir: temp_dir.into(),
             compilation,
+            file_size,
         }
     }
 

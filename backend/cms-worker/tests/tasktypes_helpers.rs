@@ -207,7 +207,7 @@ pub fn runtime_of(dir: &Path, code: &str, log: &str, leaves: &str) -> Runtime {
         memory: Some(64 * 1024 * 1024),
         processes: Some(4),
     };
-    Runtime::new(program, dir, limits)
+    Runtime::new(program, dir, limits, Some(2048 * 1024))
 }
 
 /// The names of the files a box was handed, in one order however it wrote them.

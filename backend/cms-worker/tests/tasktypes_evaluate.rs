@@ -72,6 +72,7 @@ fn an_evaluation_runs_the_executable_under_the_datasets_limits_and_hands_on_its_
             "--stdout=/tmp/output.txt",
             "--time=5",
             "--wall-time=11",
+            "--fsize=2048",
             "--cg-mem=1024",
             "--processes=1000",
         ],

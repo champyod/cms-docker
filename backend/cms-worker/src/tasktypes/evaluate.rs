@@ -5,7 +5,7 @@
 //! holds, and the name it is judged by comes from the parameters. Then the two
 //! streams, which the two filenames decide: an empty one is a redirect to the
 //! default file and a named one is a file the run opens itself. Then the limits,
-//! which are the dataset's rather than the compilation's.
+//! the dataset's two and the box's own bound on how large a file may be.
 //!
 //! What the run did with them is read in the same order: a box that did not work
 //! is undecided, a run that was stopped or killed was charged nothing and is told
@@ -101,7 +101,8 @@ impl Batch {
         stage_run(&run, self, job, &executable)?;
         let mut last: Option<ExecutionStats> = None;
         for command in &commands {
-            let options = run_options(&mut run, self, job)?;
+            let mut options = run_options(&mut run, self, job)?;
+            options.file_size = runtime.file_size;
             last = Some(run.launch(command, &options)?);
         }
         let mut evaluation = decide(last);
