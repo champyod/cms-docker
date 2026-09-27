@@ -30,19 +30,17 @@
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
+mod flags;
+
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+pub use flags::MappedDirectory;
+
 use super::{HOME_DESTINATION, SHARED_MEMORY_DESTINATION};
 
-/// Bytes in the kibibytes the isolation program takes every size in.
-const BYTES_PER_KIBIBYTE: u64 = 1024;
 /// The flag that opens every run's argument list.
 const FLAG_CG: &str = "--cg";
-/// The flag that runs a box with the whole environment rather than an empty one.
-const FLAG_FULL_ENV: &str = "--full-env";
-/// The flag naming one variable of the environment, and what it is set to.
-const FLAG_ENV: &str = "--env";
 /// The flag that ends the box's own options and starts the run's own.
 const OPTION_END: &str = "--";
 /// The flag that makes every later flag apply to a run.
@@ -55,66 +53,6 @@ const RULE_READ_WRITE: &str = "rw";
 const RULE_TEMPORARY: &str = "tmp";
 /// The name of the variable every run is told its home is.
 const HOME_VARIABLE: &str = "HOME";
-
-/// A directory the box is told to make visible inside itself.
-///
-/// The source is the directory on this side and the destination is where the run
-/// sees it, and a mapping with no source is bound to itself. The options are the
-/// isolation program's own rule options — `rw`, `noexec`, `tmp` — and are written
-/// after the source, which is the order it reads them in.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MappedDirectory {
-    /// The directory on this side, or `None` to bind the destination to itself.
-    pub source: Option<PathBuf>,
-    /// Where the run sees the directory.
-    pub destination: String,
-    /// The isolation program's rule options, or `None` for its own default.
-    pub options: Option<String>,
-}
-
-impl MappedDirectory {
-    /// A directory made visible where it already is.
-    #[must_use]
-    pub fn new(path: impl Into<String>) -> Self {
-        Self {
-            source: None,
-            destination: path.into(),
-            options: None,
-        }
-    }
-
-    /// A directory on this side made visible under another name.
-    #[must_use]
-    pub fn at(source: impl Into<PathBuf>, destination: impl Into<String>) -> Self {
-        Self {
-            source: Some(source.into()),
-            destination: destination.into(),
-            options: None,
-        }
-    }
-
-    /// The same mapping, with the isolation program's rule options set.
-    #[must_use]
-    pub fn with_options(mut self, options: impl Into<String>) -> Self {
-        self.options = Some(options.into());
-        self
-    }
-
-    /// The mapping as one `--dir` argument: destination, then source, then rules.
-    #[must_use]
-    pub fn argument(&self) -> String {
-        let mut argument = self.destination.clone();
-        if let Some(source) = &self.source {
-            argument.push('=');
-            argument.push_str(&source.display().to_string());
-        }
-        if let Some(options) = &self.options {
-            argument.push(':');
-            argument.push_str(options);
-        }
-        argument
-    }
-}
 
 /// What every run of a box is launched with.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -231,101 +169,4 @@ impl Options {
         flags.extend(command.iter().map(|word| (*word).to_owned()));
         flags
     }
-
-    fn directory_flags(&self) -> Vec<String> {
-        self.directories
-            .iter()
-            .map(|directory| format!("--dir={}", directory.argument()))
-            .collect()
-    }
-
-    fn environment_flags(&self) -> Vec<String> {
-        let mut flags = Vec::new();
-        if self.full_environment {
-            flags.push(FLAG_FULL_ENV.to_owned());
-        }
-        flags.extend(
-            self.inherited_variables
-                .iter()
-                .map(|name| format!("{FLAG_ENV}={name}")),
-        );
-        flags.extend(
-            self.assigned_variables
-                .iter()
-                .map(|(name, value)| format!("{FLAG_ENV}={name}={value}")),
-        );
-        flags
-    }
-
-    fn size_flags(&self) -> Vec<String> {
-        let mut flags = Vec::new();
-        if let Some(size) = self.file_size {
-            flags.push(format!("--fsize={}", kibibytes(size)));
-        }
-        if let Some(size) = self.stack_size {
-            flags.push(format!("--stack={}", kibibytes(size)));
-        }
-        if let Some(size) = self.address_space {
-            flags.push(format!("--cg-mem={}", kibibytes(size)));
-        }
-        flags
-    }
-
-    fn stream_flags(&self) -> Vec<String> {
-        let mut flags = Vec::new();
-        if let Some(file) = &self.stdin_file {
-            flags.push(self.inner_path_flag("--stdin", file));
-        }
-        if let Some(file) = &self.stdout_file {
-            flags.push(self.inner_path_flag("--stdout", file));
-        }
-        if let Some(file) = &self.stderr_file {
-            flags.push(self.inner_path_flag("--stderr", file));
-        }
-        flags
-    }
-
-    /// The isolation program permits one process unless told otherwise, so a run
-    /// given no number of its own is told it may have as many as it likes.
-    fn processes_flag(&self) -> String {
-        self.max_processes.map_or_else(
-            || "--processes".to_owned(),
-            |allowed| format!("--processes={allowed}"),
-        )
-    }
-
-    fn timeout_flags(&self) -> Vec<String> {
-        let mut flags = Vec::new();
-        if let Some(limit) = self.cpu_time {
-            flags.push(format!("--time={}", seconds(limit)));
-        }
-        if let Some(limit) = self.wall_clock_timeout {
-            flags.push(format!("--wall-time={}", seconds(limit)));
-        }
-        if let Some(limit) = self.extra_time {
-            flags.push(format!("--extra-time={}", seconds(limit)));
-        }
-        flags
-    }
-
-    /// A file a run reads or writes, named the way the run itself sees it: an
-    /// absolute path is already the run's own, and a relative one is inside the
-    /// directory the run was given.
-    fn inner_path_flag(&self, flag: &str, file: &Path) -> String {
-        let path = file.display().to_string();
-        if path.starts_with('/') {
-            return format!("{flag}={path}");
-        }
-        format!("{flag}={home}/{path}", home = self.working_directory)
-    }
-}
-
-/// A size in bytes as the kibibytes the isolation program takes it in.
-const fn kibibytes(size: u64) -> u64 {
-    size / BYTES_PER_KIBIBYTE
-}
-
-/// A limit as the seconds the isolation program takes it in, fractions kept.
-const fn seconds(limit: Duration) -> f64 {
-    limit.as_secs_f64()
 }
