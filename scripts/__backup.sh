@@ -445,20 +445,36 @@ run_backup() {
 
   local ts
   ts="$(date +%Y%m%d-%H%M%S)"
-  local db_tmp="/tmp/cmsdb-${ts}.dump"
+  # WHY mktemp and not $ts in the name: a name built from the run's own timestamp tells every other
+  # account on the box which file is the live dump, so it can be read and pre-empted for as long as
+  # the run lasts. The template ends in XXXXXX because the runtime image is Alpine and its BusyBox
+  # mktemp rejects a suffix after the X's, so the name cannot carry a .dump ending. -u is safe
+  # because the file is created inside the container and never here: only pg_dump and the cleanup
+  # below ever reach this path. /tmp and not $TMPDIR, because the database container does not share
+  # the TMPDIR of whatever runs the script.
+  local db_tmp
+  db_tmp="$(mktemp -u /tmp/cmsdb.XXXXXX)"
+  # WHY private: this file carries pg_dump's stderr, which names the backup role and can name the
+  # server, and it lands in a directory every local account can write to.
+  local pgdump_log
+  pgdump_log="$(mktemp "${TMPDIR:-/tmp}/cms-backup-pgdump.XXXXXX")"
+  chmod 600 "$pgdump_log" 2>/dev/null || true
   local db_file="${BACKUP_DB_DIR}/cmsdb-${ts}.dump"
   local db_sha_file="${db_file}.sha256"
   local vol_file="${BACKUP_VOL_DIR}/cms-data-${ts}.tar.gz"
   local vol_sha_file="${vol_file}.sha256"
 
-  # Ensure container tmp is cleaned on failure
+  # WHY both files are removed here: the dump's container path is only needed until it has been
+  # copied out and the stderr log only until its text has reached the failure alert, so neither has
+  # a reason to outlive the run.
   local cleanup_done=0
   cleanup_container_tmp() {
     if (( ${cleanup_done:-0} == 0 )); then
       docker exec "$CONTAINER_DB" rm -f "${db_tmp:-}" 2>/dev/null || true
     fi
+    rm -f -- "${pgdump_log:-}" 2>/dev/null || true
   }
-  # WHY ${cleanup_done:-0} / ${db_tmp:-}: the EXIT trap can fire after run_backup returned and its locals are out of scope, so a bare reference would die on set -u and mask the real error.
+  # WHY ${cleanup_done:-0} / ${db_tmp:-} / ${pgdump_log:-}: the EXIT trap can fire after run_backup returned and its locals are out of scope, so a bare reference would die on set -u and mask the real error.
   trap cleanup_container_tmp EXIT
 
   # 1) Full logical backup — credentials via docker exec -e PGPASSWORD (never on host argv)
@@ -470,14 +486,23 @@ run_backup() {
     send_discord "❌ **Backup Failed** — POSTGRES_BACKUP_PASSWORD is not configured; run './cms config sync' to generate it" 16711680 "true"
     return 1
   fi
+  # WHY the destination is created before the dump is written: pg_dump creates its own output file,
+  # which on the container umask is readable by every account in that container for the whole
+  # write, whereas writing into a file that already exists keeps the mode pg_dump leaves alone. A
+  # container without sh keeps the previous behaviour instead of failing the run.
+  if ! docker exec "$CONTAINER_DB" sh -c 'umask 077 && : > "$1"' sh "$db_tmp"; then
+    log_warn "could not pre-create $db_tmp with mode 600 in $CONTAINER_DB — pg_dump will create it with the container default mode"
+  fi
   log_info "Running pg_dump (Fc) inside $CONTAINER_DB as $pg_dump_user ..."
-  if ! docker exec -e PGPASSWORD="$pg_dump_pass" "$CONTAINER_DB" pg_dump -U "$pg_dump_user" -d "$POSTGRES_DB_VAL" -Fc -f "$db_tmp" 2>/tmp/cms-backup-pgdump.log; then
+  if ! docker exec -e PGPASSWORD="$pg_dump_pass" "$CONTAINER_DB" pg_dump -U "$pg_dump_user" -d "$POSTGRES_DB_VAL" -Fc -f "$db_tmp" 2>"$pgdump_log"; then
     local err
-    err="$(cat /tmp/cms-backup-pgdump.log 2>/dev/null || echo 'pg_dump failed')"
+    err="$(cat "$pgdump_log" 2>/dev/null || echo 'pg_dump failed')"
+    rm -f -- "$pgdump_log"
     log_warn "pg_dump as $pg_dump_user failed: $err — backups REQUIRE cms_backup (BYPASSRLS); owner $POSTGRES_USER_VAL is blocked by FORCE RLS; run './cms config sync' to verify POSTGRES_BACKUP_PASSWORD"
     send_discord "❌ **Backup Failed** — pg_dump as $pg_dump_user error: $err" 16711680 "true"
     return 1
   fi
+  rm -f -- "$pgdump_log"
 
   log_info "Copying dump from container to host ..."
   if ! docker cp "${CONTAINER_DB}:${db_tmp}" "$db_file"; then
