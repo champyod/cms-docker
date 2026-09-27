@@ -43,6 +43,7 @@ mod interval;
 mod permission;
 mod reads;
 mod types;
+mod writes;
 
 pub use reads::{
     dataset_from_row, result_from_row, submission_from_row, testcase_from_row, DatasetRecord,
@@ -54,4 +55,9 @@ pub use types::{
     Effect, EffectivePermissions, FileDigest, Interval, IntervalError, PasswordForm,
     PermissionInputs, PlaintextPassword, RemoveAction, DIGEST_HEX_LEN, MICROS_PER_DAY,
     MICROS_PER_HOUR, MICROS_PER_MINUTE, MICROS_PER_SECOND, TOMBSTONE, WILDCARD_PERMISSION,
+};
+pub use writes::{
+    group_by_object, AuditRow, CompilationOutcome, EvaluationOutcome, EvaluationRow, ExecutableRow,
+    ObjectWrite, OperationType, ResultRow, RowState, ScoreRow, WriteError, INSERT_EVALUATIONS,
+    INSERT_EXECUTABLES, UPSERT_RESULT, UPSERT_SCORE,
 };
