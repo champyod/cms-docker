@@ -5,11 +5,12 @@
 //! The records, the stub language and the stub isolation program every test here
 //! is decided by live beside this file, so a test is a claim about the task type
 //! and nothing else: which files a compilation is handed, which flags its run is
-//! held to, what a compilation that produced nothing is worth, and what the
-//! reference refuses before anything is launched.
+//! held to, what it printed, and what the reference refuses before it is launched.
 
 #[path = "tasktypes_helpers.rs"]
 mod helpers;
+
+use std::path::Path;
 
 use cms_proto::DigestMap;
 use cms_worker::tasktypes::{Batch, TaskError};
@@ -21,6 +22,12 @@ use helpers::{
     runtime_of, staged, store_of, submission, workspace, StubToolchain, CLEAN_LOG, EXECUTABLE,
     FAILED_LOG, GRADER, HEADER, NOTHING, SOURCE_DIGEST,
 };
+
+/// The names a compilation command's two streams are redirected to.
+const STDOUT_STREAM: &str = "compilation_stdout_0.txt";
+const STDERR_STREAM: &str = "compilation_stderr_0.txt";
+/// The package directory a Haskell compilation is given only where it is there.
+const TOOLCHAIN_PACKAGES: &str = "/var/lib/ghc";
 
 /// The parameters of a task that is compiled together with a grader the dataset
 /// holds, which redirects both of its streams.
@@ -37,6 +44,20 @@ fn held_to(flags: &str, expected: &[&str]) {
     for flag in expected {
         assert!(flags.contains(flag), "{flag} must be among {flags}");
     }
+}
+
+/// What a warned compilation is expected to have left behind: the executable, and
+/// what the compiler printed on each of the two streams it was redirected to.
+fn warned(program: &str) -> String {
+    let streams = [
+        (STDOUT_STREAM, "the notice"),
+        (STDERR_STREAM, "the warning"),
+    ];
+    let printed: Vec<String> = streams
+        .iter()
+        .map(|(name, text)| format!("printf '{text}' > \"$home/{name}\""))
+        .collect();
+    format!("{}\n{}\n{NOTHING}", produced(program), printed.join("\n"))
 }
 
 #[test]
@@ -139,9 +160,61 @@ fn a_compilation_that_produced_nothing_is_a_failure_and_leaves_no_executable() {
     assert_eq!(compiled.compilation_success, Some(false));
     assert_eq!(compiled.text, vec!["Compilation failed"]);
     assert!(compiled.executables.is_empty());
+    let silent = &compiled.diagnostics;
+    assert!(silent.is_empty(), "a command that printed nothing is filed");
     assert_eq!(
         compiled.stats.as_ref().map(|s| s.exit_status),
         Some(ExitStatus::NonzeroReturn)
+    );
+}
+
+#[test]
+fn a_compilation_that_was_only_warned_about_keeps_what_the_compiler_printed() {
+    let dir = workspace("compile-warned");
+    let store = store_of(&dir);
+    let runtime = runtime_of(&dir, "0", CLEAN_LOG, &warned(EXECUTABLE));
+    let compiled = alone()
+        .compile(
+            &compile_job(managers()),
+            &StubToolchain,
+            &runtime,
+            Box::new(store.clone()),
+        )
+        .expect("the compilation must run");
+
+    assert!(compiled.success, "a warning is not a failure");
+    assert_eq!(compiled.compilation_success, Some(true));
+    let streams: Vec<&str> = compiled.diagnostics.keys().map(String::as_str).collect();
+    assert_eq!(streams, vec![STDERR_STREAM, STDOUT_STREAM], "both streams");
+    for (name, printed) in [
+        (STDOUT_STREAM, "the notice"),
+        (STDERR_STREAM, "the warning"),
+    ] {
+        let digest = compiled.diagnostics.get(name).expect("a filed stream");
+        assert_eq!(content_of(&store, digest), printed.as_bytes());
+    }
+}
+
+#[test]
+fn a_compilation_sees_the_system_configuration_and_the_packages_where_there_are_any() {
+    let dir = workspace("compile-directories");
+    let runtime = runtime_of(&dir, "0", CLEAN_LOG, &produced(EXECUTABLE));
+    let compiled = with_grader()
+        .compile(
+            &compile_job(managers()),
+            &StubToolchain,
+            &runtime,
+            Box::new(store_of(&dir)),
+        )
+        .expect("the compilation must run");
+
+    let flags = flags_of(&compiled.sandboxes[0]);
+    held_to(&flags, &["--dir=/etc"]);
+    let packages = format!("--dir={TOOLCHAIN_PACKAGES}");
+    assert_eq!(
+        flags.contains(&packages),
+        Path::new(TOOLCHAIN_PACKAGES).exists(),
+        "the package database is mapped only where the machine holds one"
     );
 }
 
