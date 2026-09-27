@@ -3,9 +3,10 @@
 //! The first thing a worker has to answer is what a run it ran actually did —
 //! how long it was charged for, how long it took, how much memory it wanted,
 //! why it stopped and what it printed — and every later decision is made from
-//! that answer. The [`measure`] module is that answer and the only thing here
-//! yet: an execution log read into a map, the seven statuses its codes can
-//! mean, and the statistics several runs fold into.
+//! that answer. [`ExecutionLog`] and [`ExitStatus`] are the log a run wrote and
+//! the seven statuses its codes can mean, and [`ExecutionStats`] is that answer
+//! as one value plus the figures several runs fold into. They are the only
+//! things here yet.
 //!
 //! A run may log several codes at once, so the status is decided by a fixed
 //! precedence — `XX` over `TO` over `SG` over `RE`, with the `OK` a log never
@@ -20,13 +21,15 @@
 //!
 //! # Errors
 //!
-//! [`measure::MeasureError`], and only that: a line that names no key, and a
-//! value that is not the number its key promises. A run that measured nothing
-//! is `None`, which is an answer rather than a failure.
+//! [`MeasureError`], and only that: a line that names no key, and a value that
+//! is not the number its key promises. A run that measured nothing is `None`,
+//! which is an answer rather than a failure.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
 mod measure;
+mod stats;
 
-pub use measure::{ExecutionLog, ExecutionStats, ExitStatus, MeasureError};
+pub use measure::{ExecutionLog, ExitStatus, MeasureError};
+pub use stats::ExecutionStats;
