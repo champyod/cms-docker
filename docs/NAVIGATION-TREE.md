@@ -16,7 +16,7 @@ HOME / Dashboard / Overview ─────────────────�
 │   ├─ Contests list ─────────────────────────────────────── [cms~][panel][py]
 │   │     [cms]  action-only: Stacks▸Deploy Contest (menus.rs:56);
 │   │            System▸Create Contest (menus.rs:260); CLI `contest create`
-│   │     [panel] /contests (sidebar-nav.ts:44) ▸ /contests/[id]
+│   │     [panel] /contests (ROUTE_REGISTRY `contests.list`) ▸ /contests/[id]
 │   │     [py]   /contests (handlers/__init__.py:124) ▸ /contest/<id>
 │   ├─ Tasks ─────────────────────────────────────────────── [✗][panel][py]
 │   ├─ Submissions ───────────────────────────────────────── [✗][panel][py]
@@ -28,7 +28,7 @@ HOME / Dashboard / Overview ─────────────────�
 ├─ Identity & authority
 │   ├─ Admins / Superadmin ───────────────────────────────── [cms][panel][py]
 │   │     [cms]  Bootstrap▸Create Superadmin (menus.rs:270); CLI `admin-create`
-│   │     [panel] /admins (sidebar-nav.ts:53)
+│   │     [panel] /administration/admins (ROUTE_REGISTRY `administration.admins`)
 │   │     [py]   /admins — greeting link ONLY (base.html:71)
 │   ├─ Groups ────────────────────────────────────────────── [✗][panel][✗ py]
 │   ├─ Permissions ───────────────────────────────────────── [✗][✗][py assign-only]
@@ -70,20 +70,33 @@ Dashboard ─┬─ Stacks      (menus.rs:140)  ← Deploy/Stop/Clean/Pull × 5 
 Siblings: all 10 reachable from any page by number key (tui/mod.rs:64-101) ✅
 Back: Esc → pop_route → parent (tui/mod.rs:58, app/state.rs:98) ✅   Home: key `1` ✅
 
-[panel] Next.js — three INDEPENDENT hand-written nav lists + the route dirs (4 sources)
-Sidebar (17, sidebar-nav.ts:29-62) │ Palette ⌘K (14, palette-data.ts:37-52) │ `g`-chord (10, useShortcuts.ts:17-28)
-  Dashboard                          Dashboard                                (Dashboard path:'' key d)
-  Documentation                      Documentation                            —
-  Contest: Contests/Tasks/           Contests/Tasks/                          Contests/Tasks/Users/
-    Submissions/Users/Teams            Submissions/Users/Teams                  Teams/Submissions
-  Infrastructure: Active Contest     Active Contest                           Deployments ← label differs
-    /Admins/Groups/Audit/Resources/    /Admins/Resources/Containers/            Resources/Containers/
-    Containers/Ranking/Appearance/     Ranking/Maintenance/Settings             Settings
-    Maintenance/Settings
-  Missing from palette: Groups, Audit, Appearance
-  Missing from `g`-chord: Docs, Admins, Groups, Audit, Ranking, Appearance, Maintenance, Search
-Siblings ✅ (flat sidebar) · Back: NO in-app back control anywhere (0 hits) ✗
-Home: sidebar Dashboard always visible ✅
+[panel] Next.js — ONE assembled route manifest; every surface is a filtered view of it
+  Source of truth: src/lib/navigation/registry.ts (ROUTE_REGISTRY) + 4 domain slices
+    43 descriptors, all enabled: 18 pages · 5 record landings · 19 nested tabs · 1 search
+  Single permission predicate: isRoutePermitted(descriptor, effective)   (permissions.ts)
+  Single path builder:     buildRoute(locale, routeId, params)          (routes.ts)
+  Single legacy resolver:  resolveLegacyRedirect(locale, path, effective) (redirects.ts)
+  Declared surfaces: sidebar · mobile-primary · mobile-more · palette · search ·
+                     shortcuts · tabs · breadcrumbs
+  Sidebar / mobile More / palette / shortcuts / tabs all call visibleRoutes(effective, surface)
+  Groups: direct · people · evaluation · administration · infrastructure · system
+  mobile-primary (approved order): Home · Contests · Tasks · People
+  Search: palette + search page + shortcuts ONLY — never sidebar, never the mobile bar
+  Canonical module paths:
+    /contests · /tasks · /people/users · /people/teams · /evaluation/submissions ·
+    /evaluation/lanes · /administration/{admins,groups,audit} ·
+    /infrastructure/{deployments,containers,resources,ranking} ·
+    /system/{appearance,maintenance,settings,docs} · /search
+  Legacy paths kept reachable and redirected, never deleted:
+    /users · /teams · /submissions · /submissions/lanes · /admins · /groups · /audit ·
+    /deployments · /containers · /resources · /ranking · /appearance · /maintenance ·
+    /settings · /docs · /permissions (+ ?tab=admins|groups)
+  Denied legacy target: concealed with notFound(); a permitted sibling in the SAME group is
+  the deterministic fallback (Administration stays Admins → Groups → Audit).
+  Labels: descriptor labelKey → navigation.<routeId>.label, resolved per locale from
+    dictionaries/en.json and dictionaries/th.json. No surface authors a label itself.
+Siblings ✅ (groups + module rail) · Back: record landings declare parentId and the
+  `breadcrumbs` surface ✅ · Home: `home` descriptor, always visible ✅
 
 [py] Python admin — nav hand-written in base.html; two DIFFERENT menus by context
   contest none → Overview /, Resource usage, Contests(+/add), Tasks(+/add),
@@ -100,10 +113,10 @@ Home: sidebar Dashboard always visible ✅
 
 | # | Surface | Violation | Evidence | Proposed general mechanism |
 |---|---|---|---|---|
-| 1 | panel | **No in-app Back at all**; `/contests/[id]`,`/tasks/[id]`,`/teams/[id]` have no parent link | 0 hits for `router.back\|history.back\|ArrowLeft\|onBack` | registry `parent` field; one `<BackLink>` renders it |
-| 2 | panel | `/search` unreachable — in none of the 3 nav lists | `(authenticated)/search/page.tsx` | registry `exposeIn:['sidebar','palette','chord']` |
-| 3 | panel | Palette ⊂ sidebar: Groups/Audit/Appearance sidebar-only | sidebar-nav.ts:54,55,59 vs palette-data.ts:37-52 | one list + per-surface filter |
-| 4 | panel | 3rd divergent list; same route labelled "Active Contest" vs "Deployments" | sidebar-nav.ts:52 vs useShortcuts.ts:26 | single registry; label authored once |
+| 1 | ~~panel~~ | **RESOLVED** — no in-app Back | record landings declare `parentId`; the `breadcrumbs` surface is in every page/record/tab descriptor | `ROUTE_REGISTRY` owns the parent edge |
+| 2 | ~~panel~~ | **RESOLVED** — `/search` was unreachable | `system.search` declares `palette`, `search`, `shortcuts`; palette-data + shortcut-chord + the search page all resolve it | one manifest, per-surface filter |
+| 3 | ~~panel~~ | **RESOLVED** — palette ⊂ sidebar | `visibleRoutes(effective, surface)` is the only gate; Groups/Audit/Appearance are palette-eligible like every other page | one list + per-surface filter |
+| 4 | ~~panel~~ | **RESOLVED** — third divergent list, "Active Contest" vs "Deployments" | one `labelKey` per descriptor, resolved from `en.json`/`th.json`; the duplicate `useShortcuts` list is gone | single registry; label authored once |
 | 5 | cms | **Worker promoted to top-level while peers admin/contest are buried** in the Stacks menu | route.rs:8 + tui/mod.rs:77 vs menus.rs:52-86 | catalog `group` field drives route set + menu nesting |
 | 6 | cms | `cmd_usage()` (cms:29-78) and `usage()` (cms:135-151) have NO reachable call site — advertised command list is dead, drifting text | cms:127-129 execs run_tui for any arg | render `--help` from the Rust catalog |
 | 7 | cms | `./cms expose` advertised (cms:60) but **linked-but-broken** | Expose→`__domain.sh`, ARGS_NONE (table_fleet.rs:91-98); no verb → usage + exit 1 (__domain.sh:827) | registry entry must carry its verb/args or be absent |
@@ -125,7 +138,7 @@ Home: sidebar Dashboard always visible ✅
 
 | Repetition | Count | Evidence | Proposed mechanism |
 |---|---|---|---|
-| Panel nav for ONE route set | **4 sources** (sidebar 17 · palette 14 · chord 10 · route dirs 18) | sidebar-nav.ts:29-62 · palette-data.ts:37-52 · useShortcuts.ts:17-28 · `app/**/page.tsx` | one `nav-registry.ts` (path,label,icon,group,permission,exposeIn); surfaces render filtered views |
+| Panel nav for ONE route set | **1 source** (`ROUTE_REGISTRY`, 43 descriptors) + 8 per-surface filters | `src/lib/navigation/registry*.ts` · `visibleRoutes(effective, surface)` | **DONE** — every surface is a filtered view; labels come from `labelKey` → dictionaries |
 | TUI page wiring per page | **5 places/page** (route enum · render fn · pages/mod.rs match · key arm · drawer/refresh arm) | route.rs:4-15 · pages/mod.rs:16-28 · tui/mod.rs:64-101 · state.rs:52-63,111-139 | `PAGES: &[PageDef{route,key,label,render}]` iterated for keys+mounts |
 | TUI menu labels duplicate catalog `about` | 8 menus, ~60 literals | menus.rs:147-272 vs catalog/table.rs:9-190 | render menus from `catalog()` grouped by `CommandSpec.group` |
 | Compose service definitions | 9 services × 4 files | docker-compose.yml ↔ .core/.admin/.contest/.worker.yml | `extends`/`include` |
@@ -134,11 +147,15 @@ Home: sidebar Dashboard always visible ✅
 ## 4. Missing / unreachable inventory
 
 **Implemented but unreachable**
-- panel `/search` — page exists, zero nav references.
-- panel `Groups`, `Audit`, `Appearance` — sidebar-only, missing from palette **and** `g`-chord.
-- panel `Documentation` — missing from `g`-chord.
-- panel `Admins/Groups/Audit/Ranking/Appearance/Maintenance` — missing from `g`-chord.
+- ~~panel `/search` — page exists, zero nav references.~~ **RESOLVED**: `system.search` is
+  enabled and declares `palette` + `search` + `shortcuts`; it is deliberately absent from
+  `sidebar`, `mobile-primary`, and `mobile-more`.
+- ~~panel `Groups`, `Audit`, `Appearance` — sidebar-only, missing from palette and `g`-chord.~~
+  **RESOLVED**: all three are ordinary group pages on every declared surface.
+- ~~panel `Documentation` and the Admin/Group/Audit/Ranking/Appearance/Maintenance chord gaps.~~
+  **RESOLVED**: `shortcut-chord.ts` builds its key map from `visibleRoutes(·, 'shortcuts')`.
 - panel `users` has **no** detail route while contests/tasks/teams do (`unverified` whether modal-only).
+  — **RESOLVED for this epic**: `/people/users/[id]` exists with profile / teams / history tabs.
 - py `/admins` — reachable only via the greeting name (base.html:71).
 - `./cms expose` — reachable but **broken**: binds to `__domain.sh` with no verb → usage + exit 1.
 - `./cms` `cmd_usage()` / `usage()` — dead text (cms:29,135).

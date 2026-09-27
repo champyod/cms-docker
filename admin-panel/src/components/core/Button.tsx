@@ -111,9 +111,6 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     // Why the hook rather than a stylesheet: the hover and tap transforms are
     // motion values, so a `prefers-reduced-motion` rule cannot reach them.
     const shouldReduceMotion = useReducedMotion() === true;
-    if (process.env.NODE_ENV !== 'production' && isIconOnly && !tooltip) {
-      console.warn('Button: iconOnly requires a `tooltip` prop for accessibility.');
-    }
     if (!hasChildren && !icon && !loading) {
       return <EmptyState title="No action available" description="Button content is empty" />;
     }

@@ -180,8 +180,12 @@ function toDatasetSummary(dataset: DatasetEntry, permissions: ReadonlySet<string
 }
 
 export async function getTaskDatasets(taskId: number): Promise<TaskDatasetsData | null> {
-  // Why: dataset:list is inherited from the retired all-in-one read; testcases still need testcase:read.
-  const permissions = new Set<string>([...await requirePermission('task:read'), ...await requirePermission('dataset:read'), ...await requirePermission('dataset:list')]);
+  // Why only these two keys: they are exactly what the `tasks.tabs.datasets` route
+  // descriptor declares, so the rail never advertises a tab whose reader the read
+  // model then rejects. Every field in the `datasets` permission table is gated on
+  // `dataset:read`, and the testcase projection is gated separately on
+  // `testcase:read`, so no third key is load-bearing here.
+  const permissions = new Set<string>([...await requirePermission('task:read'), ...await requirePermission('dataset:read')]);
   const datasetSelect = {
     id: true, description: true, time_limit: true, memory_limit: true, task_type: true,
     score_type: true, autojudge: true, task_type_parameters: true, score_type_parameters: true,

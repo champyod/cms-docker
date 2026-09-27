@@ -113,19 +113,41 @@ describe('icon support', () => {
 });
 
 describe('iconOnly mode', () => {
-  it('warns in development when tooltip is missing', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    vi.stubEnv('NODE_ENV', 'test');
-    renderToStaticMarkup(<Button icon={Trash2} />);
-    expect(warn).toHaveBeenCalledOnce();
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('tooltip'));
+  // Why the rendered button and not a console channel: the hazard being guarded is
+  // a glyph-only control that a screen reader announces as nothing, so the misuse
+  // is observable in the markup the caller actually receives.
+  function openingButtonTag(html: string): string {
+    const match = html.match(/<button\b[^>]*>/);
+    if (!match) throw new Error('No button rendered');
+    return match[0];
+  }
+
+  it('renders a glyph-only button with no accessible name and no tooltip when neither is given', () => {
+    // Why the rendered name and not a console channel: the hazard this guards is
+    // a glyph-only control that a screen reader announces as nothing, so the
+    // guard is observable in the markup a caller actually receives.
+    const html = renderToStaticMarkup(<Button icon={Trash2} />);
+    const tag = openingButtonTag(html);
+    expect(tag).not.toContain('aria-label=');
+    expect(tag).not.toContain('aria-labelledby=');
+    expect(tag).not.toContain('title=');
+    expect(tag).not.toContain('data-slot="tooltip-trigger"');
+    expect(html).not.toContain('aria-hidden="true"></button>');
+    expect(html).toContain('aria-hidden="true"');
   });
 
-  it('does not warn when tooltip is provided and sets aria-label', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('supplies the accessible name and tooltip trigger from the tooltip prop', () => {
     const html = renderToStaticMarkup(<Button icon={Trash2} tooltip="Delete item" />);
-    expect(warn).not.toHaveBeenCalled();
-    expect(html).toContain('aria-label="Delete item"');
+    const tag = openingButtonTag(html);
+    expect(tag).toContain('aria-label="Delete item"');
+    expect(tag).toContain('data-slot="tooltip-trigger"');
+    expect(html).toContain('Delete item');
+  });
+
+  it('falls back to string children for the accessible name when no tooltip is given', () => {
+    const html = renderToStaticMarkup(<Button iconOnly>Delete</Button>);
+    expect(openingButtonTag(html)).toContain('aria-label="Delete"');
+    expect(html).toContain('>Delete<');
   });
 
   it('renders square sizing for inferred icon-only buttons', () => {
@@ -136,10 +158,9 @@ describe('iconOnly mode', () => {
   });
 
   it('honors an explicit iconOnly flag even with children', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const html = renderToStaticMarkup(<Button iconOnly icon={Trash2} tooltip="Add" />);
-    expect(warn).not.toHaveBeenCalled();
     expect(html).toContain('w-11');
     expect(html).not.toContain('>Add<');
+    expect(openingButtonTag(html)).toContain('aria-label="Add"');
   });
 });

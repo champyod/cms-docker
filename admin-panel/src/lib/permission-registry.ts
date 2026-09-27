@@ -173,6 +173,7 @@ const RESERVED_KEYS: readonly { key: string; reason: string }[] = [
   { key: 'deployment:create', reason: 'Deploy operations are spawned by deploy, not created as rows.' },
   { key: 'deployment:update', reason: 'Deploy operations are immutable once spawned.' },
   { key: 'deployment:delete', reason: 'Deploy operations are settled, never deleted via UI.' },
+  { key: 'dataset:list', reason: 'Datasets are read through the Task Datasets tab under task:read plus dataset:read; every datasets field is gated on dataset:read, so no list path checks this key.' },
   { key: 'env:create', reason: 'Fixed env file set updated in place; no create path exists.' },
   { key: 'env:delete', reason: 'Fixed env file set updated in place; no delete path exists.' },
   { key: 'fsobject:list', reason: 'Storage layer read via statement/attachment flows; no list path exists.' },
