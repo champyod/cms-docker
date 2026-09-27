@@ -96,13 +96,10 @@ pub struct Framer {
     /// that already exists and no move of what follows it.
     buffer: BytesMut,
 
-    /// Offset of the first undecoded byte.
-    start: usize,
-
     /// Offset into `buffer` where the search for a terminator resumes.
     ///
-    /// Everything from `start` up to `scan` is already known to hold no line
-    /// feed, so `start <= scan <= buffer.len()` holds at every observable
+    /// Everything from the front of `buffer` up to `scan` is already known to
+    /// hold no line feed, so `scan <= buffer.len()` holds at every observable
     /// point and a frame that arrives one chunk at a time is scanned once in
     /// total rather than once per chunk. [`Self::consume_through`] is the only
     /// thing that moves it.
@@ -171,36 +168,35 @@ impl Framer {
         })
     }
 
-    /// Drops the decoded prefix and restarts both offsets at the new front.
+    /// Drops the decoded prefix and restarts the scan at the new front.
     fn consume_through(&mut self, end: usize) {
         // WHY: the region just consumed ended on a line feed and held none
         // before it, so resuming the scan at the new front of the buffer can
         // neither miss a terminator nor look at a byte twice.
-        self.buffer.advance(self.start + end);
-        self.start = 0;
+        self.buffer.advance(end);
         self.scan = 0;
     }
 
-    /// Offset of the first undecoded line feed, relative to `start`.
+    /// Offset of the first undecoded line feed in `buffer`.
     ///
-    /// Resumes at `scan` rather than at the first undecoded byte, and leaves
+    /// Resumes at `scan` rather than at the front of the buffer, and leaves
     /// `scan` on the line feed it found so a caller that reads the same frame
     /// twice is answered the same way both times.
     fn line_feed_offset(&mut self) -> Option<usize> {
         let line_feed =
             memchr(LINE_FEED, &self.buffer[self.scan..]).map(|offset| self.scan + offset);
         self.scan = line_feed.unwrap_or(self.buffer.len());
-        line_feed.map(|found| found - self.start)
+        line_feed
     }
 
     /// Bytes read but not yet decoded.
     fn pending(&self) -> &[u8] {
-        &self.buffer[self.start..]
+        &self.buffer[..]
     }
 
     /// How many of those bytes there are.
     fn pending_len(&self) -> usize {
-        self.buffer.len() - self.start
+        self.buffer.len()
     }
 }
 

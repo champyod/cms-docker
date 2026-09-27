@@ -29,7 +29,8 @@ pub use heap::{QueueEntry, Slot};
 
 /// The current instant in the microseconds [`QueueKey`](crate::QueueKey)
 /// compares: the one place a wall clock becomes a queue timestamp, mirroring
-/// `make_timestamp(make_datetime())`.
+/// `make_timestamp(make_datetime())`. A clock reading before the epoch reports
+/// [`i64::MIN`], which sorts such an operation ahead of every one waiting.
 #[must_use]
 pub fn now_micros() -> i64 {
     let Ok(elapsed) = SystemTime::now().duration_since(UNIX_EPOCH) else {
