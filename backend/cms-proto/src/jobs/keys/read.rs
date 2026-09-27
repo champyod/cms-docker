@@ -1,11 +1,15 @@
 //! Taking one field out of an object, once its keys have been checked.
 //!
-//! Every reader here names the key it wants, which is why
-//! [`JobKey`](super::JobKey) exists: a name is only ever written down once.
+//! [`check_key_set`] compares an object against the names a key set writes, and
+//! the two readers below name the key they want with a
+//! [`JobKey`](super::JobKey). That is what keeps a name written down once: a
+//! plain literal beside a reader would compile against a job shape that never
+//! writes it, and would be a second copy of a name the constant already holds.
 
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 
+use super::name::JobKey;
 use crate::jobs::refusal::JobError;
 
 /// Refuses a JSON object whose keys are not exactly `key_set`.
@@ -43,13 +47,11 @@ pub fn check_key_set(
 /// Returns [`JobError::MissingKey`] when the object has no such key, and
 /// [`JobError::WrongValue`] naming the key when the value under it is not of
 /// the type the job declares.
-pub fn field<T: DeserializeOwned>(
-    object: &Map<String, Value>,
-    key: &'static str,
-) -> Result<T, JobError> {
-    let value = object.get(key).ok_or(JobError::MissingKey { key })?;
+pub fn field<T: DeserializeOwned>(object: &Map<String, Value>, key: JobKey) -> Result<T, JobError> {
+    let name = key.as_str();
+    let value = object.get(name).ok_or(JobError::MissingKey { key: name })?;
     T::deserialize(value).map_err(|source| JobError::WrongValue {
-        key,
+        key: name,
         detail: source.to_string(),
     })
 }
@@ -60,13 +62,14 @@ pub fn field<T: DeserializeOwned>(
 ///
 /// Returns [`JobError::MissingKey`] when the object has no such key, and
 /// [`JobError::WrongValue`] naming the key when its value is not a string.
-pub fn read_name(object: &Map<String, Value>, key: &'static str) -> Result<String, JobError> {
-    match object.get(key) {
-        Some(Value::String(name)) => Ok(name.clone()),
+pub fn read_name(object: &Map<String, Value>, key: JobKey) -> Result<String, JobError> {
+    let name = key.as_str();
+    match object.get(name) {
+        Some(Value::String(found)) => Ok(found.clone()),
         Some(_) => Err(JobError::WrongValue {
-            key,
+            key: name,
             detail: "expected a JSON string".to_owned(),
         }),
-        None => Err(JobError::MissingKey { key }),
+        None => Err(JobError::MissingKey { key: name }),
     }
 }

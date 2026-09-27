@@ -1,11 +1,11 @@
 //! The name of a key this crate claims, in a type that cannot hold a name it
 //! does not.
 //!
-//! A key name is written down as a plain literal in every reader that wants one,
-//! and a literal compiles whether or not the job shape that set it has. The
-//! constant list below is what this crate actually reads, so a name that reached
-//! a reader by any other route is refused here instead of being read as a field
-//! that was never there.
+//! A reader taking a plain literal would compile whether or not the job shape
+//! that wrote it has the key, and the name would sit written down a second time
+//! beside the constant that already carries it. So every reader takes a
+//! [`JobKey`] instead, and a name reaches one only as a constant or through
+//! [`JobKey::new`], which refuses a name none of the constants below carries.
 
 use crate::jobs::refusal::JobError;
 

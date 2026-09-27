@@ -21,7 +21,7 @@ use serde::Deserialize;
 use serde_json::{Map, Value};
 
 use super::job::{DecodedJob, EvaluationOutcome, KindExtras};
-use super::keys::{check_key_set, field, key_set_for, JobKind};
+use super::keys::{check_key_set, field, key_set_for, JobKey, JobKind};
 use super::operation::{Operation, Shard};
 use super::refusal::{JobError, Quarantine, Requeue};
 use super::JobGroup;
@@ -171,20 +171,20 @@ impl FinishedCall {
                 call: self.shard,
             });
         }
-        let sandboxes = match object.get("sandboxes") {
+        let sandboxes = match object.get(JobKey::SANDBOXES.as_str()) {
             Some(Value::Null) => Vec::new(),
-            _ => field(object, "sandboxes")?,
+            _ => field(object, JobKey::SANDBOXES)?,
         };
         Ok(DecodedJob {
             kind,
             operation: operation.cloned(),
-            success: field(object, "success")?,
+            success: field(object, JobKey::SUCCESS)?,
             shard,
             sandboxes,
-            files: field(object, "files")?,
-            managers: field(object, "managers")?,
-            executables: field(object, "executables")?,
-            plus: field(object, "plus")?,
+            files: field(object, JobKey::FILES)?,
+            managers: field(object, JobKey::MANAGERS)?,
+            executables: field(object, JobKey::EXECUTABLES)?,
+            plus: field(object, JobKey::PLUS)?,
             extras: read_extras(object, kind)?,
         })
     }
@@ -212,8 +212,10 @@ fn claim(operation: Option<&Operation>, dispatched: &mut HashSet<Operation>) -> 
 /// [`Operation::read`] when the operation does not carry its own five keys.
 fn read_operation(job: &Value) -> Result<Option<Operation>, JobError> {
     let object = job.as_object().ok_or(JobError::NotAnObject)?;
-    match object.get("operation") {
-        None => Err(JobError::MissingKey { key: "operation" }),
+    match object.get(JobKey::OPERATION.as_str()) {
+        None => Err(JobError::MissingKey {
+            key: JobKey::OPERATION.as_str(),
+        }),
         Some(Value::Null) => Ok(None),
         Some(operation) => Operation::read(operation).map(Some),
     }
@@ -229,17 +231,17 @@ fn read_operation(job: &Value) -> Result<Option<Operation>, JobError> {
 fn read_extras(object: &Map<String, Value>, kind: JobKind) -> Result<KindExtras, JobError> {
     Ok(match kind {
         JobKind::Compilation => KindExtras::Compilation {
-            compilation_success: field(object, "compilation_success")?,
+            compilation_success: field(object, JobKey::COMPILATION_SUCCESS)?,
         },
         JobKind::Evaluation => KindExtras::Evaluation(EvaluationOutcome {
-            input: field(object, "input")?,
-            output: field(object, "output")?,
-            time_limit: field(object, "time_limit")?,
-            memory_limit: field(object, "memory_limit")?,
-            outcome: field(object, "outcome")?,
-            user_output: field(object, "user_output")?,
-            only_execution: field(object, "only_execution")?,
-            get_output: field(object, "get_output")?,
+            input: field(object, JobKey::INPUT)?,
+            output: field(object, JobKey::OUTPUT)?,
+            time_limit: field(object, JobKey::TIME_LIMIT)?,
+            memory_limit: field(object, JobKey::MEMORY_LIMIT)?,
+            outcome: field(object, JobKey::OUTCOME)?,
+            user_output: field(object, JobKey::USER_OUTPUT)?,
+            only_execution: field(object, JobKey::ONLY_EXECUTION)?,
+            get_output: field(object, JobKey::GET_OUTPUT)?,
         }),
     })
 }

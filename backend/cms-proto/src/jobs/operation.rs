@@ -13,7 +13,7 @@
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
-use super::keys::{check_key_set, field, read_name, OPERATION_KEYS};
+use super::keys::{check_key_set, field, read_name, JobKey, OPERATION_KEYS};
 use super::refusal::JobError;
 
 /// The index of the worker that ran a job, in a type of its own.
@@ -43,7 +43,7 @@ impl Shard {
     /// [`JobError::WrongValue`] naming the key when the value is not an
     /// integer.
     pub fn read(object: &Map<String, Value>) -> Result<Self, JobError> {
-        field(object, "shard").map(Self)
+        field(object, JobKey::SHARD).map(Self)
     }
 }
 
@@ -102,10 +102,10 @@ impl Operation {
         check_key_set(object, &OPERATION_KEYS)?;
         Ok(Self {
             kind: OperationKind::read(object)?,
-            object_id: field(object, "object_id")?,
-            dataset_id: field(object, "dataset_id")?,
-            testcase_codename: field(object, "testcase_codename")?,
-            archive_sandbox: field(object, "archive_sandbox")?,
+            object_id: field(object, JobKey::OBJECT_ID)?,
+            dataset_id: field(object, JobKey::DATASET_ID)?,
+            testcase_codename: field(object, JobKey::TESTCASE_CODENAME)?,
+            archive_sandbox: field(object, JobKey::ARCHIVE_SANDBOX)?,
         })
     }
 }
@@ -119,7 +119,7 @@ impl OperationKind {
     /// of the four values [`crate::OPERATION_TYPES`] pins, and
     /// [`JobError::WrongValue`] naming the key when it is not a string at all.
     pub fn read(object: &Map<String, Value>) -> Result<Self, JobError> {
-        let found = read_name(object, "type")?;
+        let found = read_name(object, JobKey::TYPE)?;
         match found.as_str() {
             "compile" => Ok(Self::Compilation),
             "evaluate" => Ok(Self::Evaluation),

@@ -3,6 +3,7 @@
 
 use serde_json::{Map, Value};
 
+use super::name::JobKey;
 use super::read::read_name;
 use super::sets::{COMPILATION_KEYS, COMPILATION_TYPE, EVALUATION_KEYS, EVALUATION_TYPE};
 use crate::jobs::refusal::JobError;
@@ -35,7 +36,7 @@ impl JobKind {
     /// [`COMPILATION_TYPE`] nor [`EVALUATION_TYPE`], and
     /// [`JobError::WrongValue`] naming the key when it is not a string at all.
     pub fn read(object: &Map<String, Value>) -> Result<Self, JobError> {
-        let found = read_name(object, "type")?;
+        let found = read_name(object, JobKey::TYPE)?;
         match found.as_str() {
             COMPILATION_TYPE => Ok(Self::Compilation),
             EVALUATION_TYPE => Ok(Self::Evaluation),

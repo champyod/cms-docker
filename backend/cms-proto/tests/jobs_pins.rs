@@ -28,6 +28,14 @@ fn sorted<'a>(keys: &[&'a str]) -> Vec<&'a str> {
     keys
 }
 
+/// The key a refusal names, whichever way it was refused.
+fn refusing_key(reason: &JobError) -> Option<&'static str> {
+    match reason {
+        JobError::MissingKey { key } | JobError::WrongValue { key, .. } => Some(key),
+        _ => None,
+    }
+}
+
 fn shared_keys() -> Vec<&'static str> {
     COMPILATION_KEYS
         .iter()
@@ -111,6 +119,25 @@ fn a_claimed_key_is_one_the_python_side_writes() {
             "{name} is a key nothing here reads"
         );
     }
+}
+
+#[test]
+fn a_reader_refuses_under_the_name_its_key_constant_carries() {
+    let mut mistyped = job(JobKind::Evaluation);
+    mistyped[JobKey::SUCCESS.as_str()] = json!(1);
+    let mut untyped = job(JobKind::Compilation);
+    untyped[JobKey::TYPE.as_str()] = json!(3);
+
+    assert_eq!(
+        refusing_key(&quarantined(&[mistyped]).reason),
+        Some(JobKey::SUCCESS.as_str()),
+        "a mistyped field is refused under the key the reader asked for"
+    );
+    assert_eq!(
+        refusing_key(&quarantined(&[untyped]).reason),
+        Some(JobKey::TYPE.as_str()),
+        "an untyped discriminator is refused under the key the reader asked for"
+    );
 }
 
 #[test]
