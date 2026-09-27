@@ -6,7 +6,7 @@
 
 use std::collections::BTreeMap;
 
-use cms_proto::{DigestMap, Operation, OperationKind};
+use cms_proto::{DigestMap, Operation, OperationKind, EVALUATION_KEYS};
 use cms_worker::job::{
     BuildError, CompilationJob, Dataset, EvaluationJob, Language, Submission, Testcase,
 };
@@ -140,9 +140,20 @@ fn a_submission_evaluation_runs_on_the_testcase_the_operation_names() {
     assert_eq!(job.executables, digests(&[("sol", "e")]));
     assert_eq!(job.time_limit, Some(5.0));
     assert_eq!(job.memory_limit, Some(1024));
-    assert_eq!(job.only_execution, None);
-    assert_eq!(job.get_output, None);
     assert_eq!(job.info, "evaluate submission 7 on testcase 1.in");
+}
+
+#[test]
+fn both_output_flags_are_false_rather_than_absent_on_a_submission_evaluation() {
+    let job = evaluate_submission();
+    assert_eq!(job.only_execution, Some(false));
+    assert_eq!(job.get_output, Some(false));
+    for key in ["only_execution", "get_output"] {
+        assert!(
+            EVALUATION_KEYS.contains(&key),
+            "{key} is written for every evaluation, so a flag cannot be left out"
+        );
+    }
 }
 
 #[test]

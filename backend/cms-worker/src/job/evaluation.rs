@@ -8,7 +8,7 @@ use serde_json::Value;
 
 use cms_proto::{DigestMap, Operation, OperationKind};
 
-use super::{check_scope, BuildError, Dataset, Submission};
+use super::{check_scope, BuildError, Dataset, Submission, Testcase};
 
 /// A job to evaluate one object on one testcase, as `EvaluationJob` holds it.
 ///
@@ -51,11 +51,13 @@ pub struct EvaluationJob {
     pub time_limit: Option<f64>,
     /// `datasets.memory_limit` in bytes, absent when the dataset sets none.
     pub memory_limit: Option<i64>,
-    /// Whether the run is only executed, absent unless the constructor said so:
-    /// a user test is run to see what it prints, a submission to be scored.
+    /// Whether the run is only executed rather than compared against the
+    /// testcase's output: `false` for a submission, which is scored, `true` for
+    /// a user test, which is run to see what it prints. Every evaluation writes
+    /// the key, so a job states the flag rather than leaving it out.
     pub only_execution: Option<bool>,
-    /// Whether the output of the run is to be fetched, absent unless the
-    /// constructor said so, for the same reason.
+    /// Whether the output of the run is to be fetched: `true` for a user test,
+    /// `false` for a submission, for the same reason.
     pub get_output: Option<bool>,
     /// A sentence naming what is being evaluated and against what.
     pub info: String,
@@ -68,10 +70,17 @@ impl EvaluationJob {
     /// The managers are the dataset's, verbatim, as they are for a submission
     /// compilation. The executables are the ones the submission's result for
     /// this dataset already holds, and the testcase the operation names is
-    /// looked up in the dataset for its input and its output. Neither output
-    /// flag is set: a submission is scored against the testcase's output, so
-    /// neither asking to execute it alone nor asking for what it printed is
-    /// this job's business.
+    /// looked up in the dataset for its input and its output.
+    ///
+    /// Both output flags are `false`, a value this path states rather than one
+    /// it leaves out. `EvaluationJob.__init__` defaults `only_execution` and
+    /// `get_output` to `False`, `from_submission` names neither, and
+    /// `export_to_dict` writes both whatever they hold (`Job.py:549-550`,
+    /// `Job.py:599-600`, `Job.py:635-650`). Nothing downstream separates that
+    /// from an absent value: the pinned evaluation set lists both keys
+    /// (`keys.rs:110-111`) and reads each as an `Option<bool>`
+    /// (`isolation.rs:241-242`), and a task type tests the truth of one
+    /// (`Batch.py:353`), so the wire form is decided here.
     ///
     /// # Errors
     ///
@@ -92,16 +101,7 @@ impl EvaluationJob {
                 found: operation.kind,
             });
         }
-        let Some(codename) = operation.testcase_codename.as_deref() else {
-            return Err(BuildError::UnknownTestcase { codename: None });
-        };
-        let testcase =
-            dataset
-                .testcases
-                .get(codename)
-                .ok_or_else(|| BuildError::UnknownTestcase {
-                    codename: Some(codename.to_owned()),
-                })?;
+        let testcase = require_testcase(operation, dataset)?;
         Ok(Self {
             operation: operation.clone(),
             task_type: dataset.task_type.clone(),
@@ -116,12 +116,38 @@ impl EvaluationJob {
             output: Some(testcase.output.clone()),
             time_limit: dataset.time_limit,
             memory_limit: dataset.memory_limit,
-            only_execution: None,
-            get_output: None,
-            info: format!(
-                "evaluate submission {} on testcase {}",
-                submission.id, testcase.codename
-            ),
+            only_execution: Some(false),
+            get_output: Some(false),
+            info: submission_info(submission, testcase),
         })
     }
+}
+
+/// The testcase a submission evaluation is run on: the one the operation names,
+/// taken out of the dataset.
+///
+/// An operation that names none and a codename the dataset holds no testcase
+/// for are one refusal, the codename filled in or left out.
+fn require_testcase<'a>(
+    operation: &Operation,
+    dataset: &'a Dataset,
+) -> Result<&'a Testcase, BuildError> {
+    let Some(codename) = operation.testcase_codename.as_deref() else {
+        return Err(BuildError::UnknownTestcase { codename: None });
+    };
+    dataset
+        .testcases
+        .get(codename)
+        .ok_or_else(|| BuildError::UnknownTestcase {
+            codename: Some(codename.to_owned()),
+        })
+}
+
+/// The sentence a submission evaluation carries, naming the submission and the
+/// testcase it is run on.
+fn submission_info(submission: &Submission, testcase: &Testcase) -> String {
+    format!(
+        "evaluate submission {} on testcase {}",
+        submission.id, testcase.codename
+    )
 }
