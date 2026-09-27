@@ -259,6 +259,114 @@ apply_rotation() {
 }
 
 # ---------------------------------------------------------------------------
+# Manifest
+#
+# jq, not python3: the monitor image ships jq (docker/monitor/Dockerfile) and
+# the host has it, while it ships no python3 — a python3-first chain left the
+# manifest unwritten on every in-container run. jq is also what __create_contests.sh
+# and __monitor.sh already read JSON with, so one tool covers the whole script set.
+# ---------------------------------------------------------------------------
+manifest_entry_json() {
+  local ts="$1" db_sha="$2" vol_tar="$3" vol_sha="$4" vol_status="$5"
+  local pg_ver="$6" db_bytes="$7" vol_bytes="$8" total_bytes="$9"
+  # WHY an empty vol_tar/vol_sha256 becomes null rather than "": a reader has to be
+  # able to tell "no volume archive was produced" from "an archive exists at this
+  # path", and a size stays a number so size arithmetic never special-cases the run.
+  # WHY volume_status is added only when set: a complete run keeps the entry shape it
+  # has always had, so every reader that exists today is unaffected by a partial run.
+  jq -n \
+    --arg ts "$ts" \
+    --arg db_sha256 "$db_sha" \
+    --arg vol_tar "$vol_tar" \
+    --arg vol_sha256 "$vol_sha" \
+    --arg vol_status "$vol_status" \
+    --arg pg_version "$pg_ver" \
+    --argjson db_bytes "$db_bytes" \
+    --argjson vol_bytes "$vol_bytes" \
+    --argjson total_bytes "$total_bytes" \
+    '{
+       ts: $ts,
+       db_dump: ("db/cmsdb-" + $ts + ".dump"),
+       db_sha256: $db_sha256,
+       vol_tar: (if $vol_tar == "" then null else $vol_tar end),
+       vol_sha256: (if $vol_sha256 == "" then null else $vol_sha256 end),
+       pg_version: $pg_version,
+       sizes: {db_bytes: $db_bytes, vol_bytes: $vol_bytes, total_bytes: $total_bytes}
+     }
+     + (if $vol_status == "" then {} else {volume_status: $vol_status} end)'
+}
+
+manifest_merge() {
+  local prev_file="$1" entry_file="$2" out_file="$3"
+  # WHY the shape tests: an existing array is extended, a bare object is wrapped
+  # rather than dropped, and an empty array stays empty — so no reader meets a hole.
+  jq -n --slurpfile previous "$prev_file" --slurpfile entry "$entry_file" \
+    '($previous | length) as $count
+     | (if $count == 0 then []
+        else ($previous[0] | if type == "array" then . else [.] end)
+        end)
+     + $entry' > "$out_file"
+}
+
+# WHY approximate without jq: the entry shape cannot be assembled from the shell
+# alone, so the file is only seeded and the run stays unrecorded.
+manifest_seed() {
+  local manifest="$1"
+  if [[ -f "$manifest" ]]; then
+    return 0
+  fi
+  local seeded
+  seeded="$(mktemp "$(dirname -- "$manifest")/.manifest.XXXXXX")"
+  printf '[]\n' > "$seeded"
+  mv -- "$seeded" "$manifest"
+}
+
+# manifest_append <manifest> <ts> <db_sha256> <vol_tar> <vol_sha256>
+#               <vol_status> <pg_version> <db_bytes> <vol_bytes> <total_bytes>
+manifest_append() {
+  local manifest="$1"
+  local dir prev entry_file merged
+  dir="$(dirname -- "$manifest")"
+  mkdir -p "$dir"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    log_warn "jq not found — manifest update is approximate"
+    manifest_seed "$manifest"
+    return 0
+  fi
+
+  prev="$(mktemp "${dir}/.manifest.prev.XXXXXX")"
+  entry_file="$(mktemp "${dir}/.manifest.entry.XXXXXX")"
+  merged="$(mktemp "${dir}/.manifest.merged.XXXXXX")"
+  shift
+  if ! manifest_entry_json "$@" > "$entry_file"; then
+    rm -f -- "$prev" "$entry_file" "$merged"
+    log_warn "jq could not build the manifest entry"
+    return 1
+  fi
+
+  # WHY a manifest that does not parse is dropped instead of fatal: an unreadable
+  # history must not cost this backup its own entry.
+  if ! jq . "$manifest" > "$prev" 2>/dev/null; then
+    printf '[]\n' > "$prev"
+  fi
+
+  if ! manifest_merge "$prev" "$entry_file" "$merged"; then
+    rm -f -- "$prev" "$entry_file" "$merged"
+    log_warn "jq could not assemble the manifest"
+    return 1
+  fi
+
+  # atomic write: the merged file is renamed over the manifest in the same directory
+  if ! mv -- "$merged" "$manifest"; then
+    rm -f -- "$prev" "$entry_file" "$merged"
+    log_warn "could not replace the manifest at $manifest"
+    return 1
+  fi
+  rm -f -- "$prev" "$entry_file"
+}
+
+# ---------------------------------------------------------------------------
 # Main backup
 # ---------------------------------------------------------------------------
 run_backup() {
@@ -413,50 +521,8 @@ run_backup() {
 
   # 3) manifest.json append
   log_info "Updating manifest $MANIFEST_FILE ..."
-  if command -v python3 >/dev/null 2>&1; then
-    python3 - "$MANIFEST_FILE" "$ts" "db/cmsdb-${ts}.dump" "$db_sha" "$vol_tar_rel" "$vol_sha" "$pg_ver" "$db_bytes" "$vol_bytes" "$total_bytes" "$vol_status" <<'PY'
-import json, os, sys, tempfile
-manifest_path, ts, db_dump, db_sha, vol_tar, vol_sha, pg_ver, db_b, vol_b, tot_b, vol_status = sys.argv[1:12]
-db_b=int(db_b); vol_b=int(vol_b); tot_b=int(tot_b)
-entry={"ts":ts,"db_dump":db_dump,"db_sha256":db_sha,"vol_tar":vol_tar or None,"vol_sha256":vol_sha or None,"pg_version":pg_ver,"sizes":{"db_bytes":db_b,"vol_bytes":vol_b,"total_bytes":tot_b}}
-# WHY only when the volume step failed: a complete run keeps the entry shape it has
-# always had, so every reader that exists today is unaffected by the partial run.
-if vol_status:
-    entry["volume_status"]=vol_status
-if os.path.exists(manifest_path):
-    try:
-        with open(manifest_path) as f:
-            data=json.load(f)
-            if not isinstance(data, list):
-                data=[data]
-    except Exception:
-        data=[]
-else:
-    data=[]
-data.append(entry)
-os.makedirs(os.path.dirname(manifest_path) or ".", exist_ok=True)
-# atomic write: tmp then replace
-fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(manifest_path) or ".")
-try:
-    with os.fdopen(fd, "w") as f:
-        json.dump(data,f,indent=2)
-        f.write("\n")
-    os.replace(tmp_path, manifest_path)
-except Exception:
-    try: os.unlink(tmp_path)
-    except: pass
-    raise
-PY
-  else
-    # Fallback: minimal append without python — atomic via mktemp+mv
-    if [[ ! -f "$MANIFEST_FILE" ]]; then
-      tmp_manifest="$(mktemp "$(dirname -- "$MANIFEST_FILE")/.manifest.XXXXXX")"
-      echo "[]" > "$tmp_manifest"
-      mv -- "$tmp_manifest" "$MANIFEST_FILE"
-      chmod 600 "$MANIFEST_FILE" 2>/dev/null || true
-    fi
-    log_warn "python3 not found — manifest update is approximate"
-  fi
+  manifest_append "$MANIFEST_FILE" "$ts" "$db_sha" "$vol_tar_rel" "$vol_sha" \
+    "$vol_status" "$pg_ver" "$db_bytes" "$vol_bytes" "$total_bytes"
   chmod 600 "$MANIFEST_FILE" 2>/dev/null || true
 
   # 4) Rotation
