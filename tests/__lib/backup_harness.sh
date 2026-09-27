@@ -35,24 +35,24 @@ set -u
 # Scratch tree
 # ---------------------------------------------------------------------------
 # The script aborts below DISK_FLOOR_GB free on the backup filesystem, so the scratch has
-# to sit on one that clears it. A nearly full /tmp is a normal state on a developer box,
-# and the repository's own filesystem is the second candidate.
+# to sit on one that clears it. A nearly full /tmp is a normal state on a developer box, but
+# the checkout's own filesystem is never offered as a substitute: a run killed part-way
+# would leave a scratch tree inside the working tree. A caller who needs a different
+# filesystem points TMPDIR at it, and a caller who has neither space is told so.
 scratch_parent() {
+  local candidate="${TMPDIR:-/tmp}"
   local required_kib=$(( DISK_FLOOR_GB * KIB_PER_GB ))
-  local candidate available
-  for candidate in "${TMPDIR:-/tmp}" "${TESTS_LIB_DIR}"; do
-    [[ -d "$candidate" && -w "$candidate" ]] || continue
-    available="$(df -Pk "$candidate" 2>/dev/null | awk 'NR==2 {print $4}')"
-    if [[ "$available" =~ ^[0-9]+$ ]] && (( available >= required_kib )); then
-      printf '%s' "$candidate"
-      return 0
-    fi
-  done
-  return 1
+  local available
+  [[ -d "$candidate" && -w "$candidate" ]] || return 1
+  available="$(df -Pk "$candidate" 2>/dev/null | awk 'NR==2 {print $4}')"
+  [[ "$available" =~ ^[0-9]+$ ]] && (( available >= required_kib )) || return 1
+  printf '%s' "$candidate"
 }
 
 if ! SCRATCH_PARENT="$(scratch_parent)"; then
-  printf '[FAIL] no writable directory has %d GB free for the scratch tree\n' \
+  printf '[FAIL] the backup suites need %d GB free outside the checkout for the scratch tree\n' \
+    "$DISK_FLOOR_GB" >&2
+  printf '       set TMPDIR to a writable directory on a filesystem with at least %d GB free\n' \
     "$DISK_FLOOR_GB" >&2
   exit 1
 fi
