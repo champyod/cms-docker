@@ -11,6 +11,7 @@ import { PageSurface } from '@/components/core/PageSurface';
 import { Tabs } from '@/components/core/Tabs';
 import { toast } from 'sonner';
 import { readConfigToml, updateConfigToml } from '@/app/actions/appearance';
+import type { BreadcrumbItem } from '@/lib/navigation/types';
 import type { ModulePageCopy } from '@/components/navigation/ModulePageCopy';
 
 type TabKey = 'branding' | 'services' | 'display';
@@ -139,7 +140,7 @@ function ServicesTab({ values }: { values: Record<string, string> }) {
   );
 }
 
-export function AppearanceClient({ locale, copy }: { locale: 'en' | 'th'; copy: ModulePageCopy }): React.JSX.Element {
+export function AppearanceClient({ locale, breadcrumbs, copy }: { locale: 'en' | 'th'; breadcrumbs: readonly BreadcrumbItem[]; copy: ModulePageCopy }): React.JSX.Element {
   void locale;
   const [active, setActive] = useState<TabKey>('branding');
   const [values, setValues] = useState<Record<string, string>>({});
@@ -193,7 +194,7 @@ export function AppearanceClient({ locale, copy }: { locale: 'en' | 'th'; copy: 
 
   return (
     <PageSurface
-      breadcrumbs={[{ label: copy.group }, { label: copy.title }]}
+      breadcrumbs={breadcrumbs}
       title={copy.title}
       description={copy.description}
     >

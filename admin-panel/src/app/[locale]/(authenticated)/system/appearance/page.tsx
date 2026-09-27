@@ -1,5 +1,6 @@
 import { AppearanceClient } from '@/components/appearance/AppearanceClient';
 import { getDictionary } from '@/i18n';
+import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
 export default async function SystemAppearancePage({ params }: {
@@ -11,6 +12,7 @@ export default async function SystemAppearancePage({ params }: {
   return (
     <AppearanceClient
       locale={locale}
+      breadcrumbs={listBreadcrumbs(locale, 'system', 'system.appearance', dict)}
       copy={{
         group: dict['navigation']['groups']['system'],
         title: dict['navigation']['system']['appearance']['label'],

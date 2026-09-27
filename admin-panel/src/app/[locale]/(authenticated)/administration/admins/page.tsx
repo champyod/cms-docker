@@ -3,7 +3,7 @@ import { AdminList } from '@/components/admins/AdminList';
 import type { AdminCapabilities } from '@/components/admins/adminCapabilities';
 import { PageSurface } from '@/components/core/PageSurface';
 import { getDictionary } from '@/i18n';
-import type { Dictionary } from '@/lib/dictionary';
+import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 
@@ -19,13 +19,6 @@ function adminCapabilities(effective: ReadonlySet<string>): AdminCapabilities {
   };
 }
 
-function adminBreadcrumbs(dict: Dictionary): { label: string }[] {
-  return [
-    { label: dict['navigation']['groups']['administration'] },
-    { label: dict['navigation']['administration']['admins']['label'] },
-  ];
-}
-
 export default async function AdminsPage({
   params,
 }: {
@@ -37,7 +30,7 @@ export default async function AdminsPage({
   const admins = await getAdmins();
   return (
     <PageSurface
-      breadcrumbs={adminBreadcrumbs(dict)}
+      breadcrumbs={listBreadcrumbs(locale, 'administration', 'administration.admins', dict)}
       title={dict['navigation']['administration']['admins']['label']}
       description={dict.permissions.subtitle}
     >

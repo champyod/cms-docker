@@ -3,6 +3,7 @@ import { Book } from 'lucide-react';
 import { PageSurface } from '@/components/core/PageSurface';
 import { DocsContent } from '@/components/docs/DocsContent';
 import { getDictionary } from '@/i18n';
+import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 
 export default async function SystemDocsPage({ params }: {
   params: Promise<{ locale: 'en' | 'th' }>;
@@ -11,10 +12,7 @@ export default async function SystemDocsPage({ params }: {
   const dict = await getDictionary(locale);
   return (
     <PageSurface
-      breadcrumbs={[
-        { label: dict['navigation']['groups']['system'] },
-        { label: dict['navigation']['system']['docs']['label'] },
-      ]}
+      breadcrumbs={listBreadcrumbs(locale, 'system', 'system.docs', dict)}
       title={dict['navigation']['system']['docs']['label']}
       description={dict.docs.subtitle}
       actions={(

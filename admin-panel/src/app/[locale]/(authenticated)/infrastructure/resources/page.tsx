@@ -1,5 +1,6 @@
 import { ResourceView } from '@/components/resources/ResourceView';
 import { getDictionary } from '@/i18n';
+import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
 export default async function InfrastructureResourcesPage({
@@ -12,6 +13,7 @@ export default async function InfrastructureResourcesPage({
   await authorizeRoutePage('infrastructure.resources');
   return (
     <ResourceView
+      breadcrumbs={listBreadcrumbs(locale, 'infrastructure', 'infrastructure.resources', dict)}
       copy={{
         group: dict['navigation']['groups']['infrastructure'],
         title: dict['navigation']['infrastructure']['resources']['label'],

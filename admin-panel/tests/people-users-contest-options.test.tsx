@@ -10,7 +10,11 @@ vi.mock('@/components/users/UserList', () => ({ UserList: vi.fn(() => null) }));
 vi.mock('@/i18n', () => ({
   getDictionary: vi.fn(async () => ({
     users: { title: 'Users', subtitle: 'Manage users' },
-    navigation: { people: { users: { label: 'Users' } } },
+    navigation: {
+      home: { label: 'Dashboard' },
+      groups: { people: 'People' },
+      people: { users: { label: 'Users' } },
+    },
   })),
 }));
 vi.mock('@/lib/prisma', () => ({ prisma: { contests: { findMany: vi.fn() } } }));

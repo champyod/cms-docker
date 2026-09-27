@@ -4,8 +4,8 @@ import { getUsers } from '@/app/actions/users';
 import { UserList } from '@/components/users/UserList';
 import { getDictionary } from '@/i18n';
 import type { Dictionary } from '@/lib/dictionary';
+import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
-import { buildRoute } from '@/lib/navigation/routes';
 import type { RouteDescriptor } from '@/lib/navigation/types';
 import { prisma } from '@/lib/prisma';
 import { AuthorizationError } from '@/lib/server/authorization';
@@ -73,7 +73,7 @@ export default async function PeopleUsersPage({ params, searchParams }: {
   const { result, search, contests, canReadContests } = await loadUsersListPage(searchParams);
   return (
     <PageSurface
-      breadcrumbs={[{ label: usersLabel, href: buildRoute(locale, 'people.users') }]}
+      breadcrumbs={listBreadcrumbs(locale, 'people', 'people.users', dict)}
       title={usersLabel}
       description={dict.users.subtitle}
     >

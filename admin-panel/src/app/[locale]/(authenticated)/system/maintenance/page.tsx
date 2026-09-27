@@ -1,5 +1,6 @@
 import { MaintenanceClient } from '@/components/system/MaintenanceClient';
 import { getDictionary } from '@/i18n';
+import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
 export default async function SystemMaintenancePage({ params }: {
@@ -12,6 +13,7 @@ export default async function SystemMaintenancePage({ params }: {
     <MaintenanceClient
       locale={locale}
       permissionKeys={[...effective]}
+      breadcrumbs={listBreadcrumbs(locale, 'system', 'system.maintenance', dict)}
       copy={{
         group: dict['navigation']['groups']['system'],
         title: dict['navigation']['system']['maintenance']['label'],

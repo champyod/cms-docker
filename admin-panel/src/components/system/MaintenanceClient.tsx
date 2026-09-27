@@ -4,6 +4,7 @@ import { Save } from 'lucide-react';
 
 import { Button } from '@/components/core/Button';
 import { PageSurface } from '@/components/core/PageSurface';
+import type { BreadcrumbItem } from '@/lib/navigation/types';
 import type { ModulePageCopy } from '@/components/navigation/ModulePageCopy';
 import { MaintenanceBackupsCard } from '@/components/system/MaintenanceBackupsCard';
 import { MaintenanceNotificationsCard } from '@/components/system/MaintenanceNotificationsCard';
@@ -13,12 +14,14 @@ import type { Locale } from '@/lib/locales';
 export interface MaintenanceClientProps {
   readonly locale: Locale;
   readonly permissionKeys: readonly string[];
+  readonly breadcrumbs: readonly BreadcrumbItem[];
   readonly copy: ModulePageCopy;
 }
 
 export function MaintenanceClient({
   locale,
   permissionKeys,
+  breadcrumbs,
   copy,
 }: MaintenanceClientProps): React.JSX.Element {
   const controller = useMaintenanceController(locale, permissionKeys);
@@ -26,7 +29,7 @@ export function MaintenanceClient({
   if (loading) {
     return (
       <PageSurface
-        breadcrumbs={[{ label: copy.group }, { label: copy.title }]}
+        breadcrumbs={breadcrumbs}
         title={copy.title}
         status={{ kind: 'loading', title: copy.title }}
       >
@@ -37,7 +40,7 @@ export function MaintenanceClient({
 
   return (
     <PageSurface
-      breadcrumbs={[{ label: copy.group }, { label: copy.title }]}
+      breadcrumbs={breadcrumbs}
       title={copy.title}
       description={copy.description}
       actions={canConfigure ? (

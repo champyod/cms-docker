@@ -6,9 +6,10 @@ import { UserRecordHeader } from '@/components/users/UserRecordHeader';
 import type { Dictionary } from '@/lib/dictionary';
 import { getDictionary } from '@/i18n';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
+import { recordBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import { buildRoute } from '@/lib/navigation/routes';
-import type { BreadcrumbItem, RouteDescriptor, RouteId, RouteTab } from '@/lib/navigation/types';
+import type { RouteDescriptor, RouteId, RouteTab } from '@/lib/navigation/types';
 import { getUserSummary } from '@/lib/people-read-models';
 import type { UserSummary } from '@/lib/people-read-model-types';
 import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access';
@@ -56,17 +57,6 @@ export function buildUserTabs(
   });
 }
 
-function userRecordBreadcrumbs(
-  locale: string,
-  userId: number,
-  dictionary: Dictionary,
-): readonly BreadcrumbItem[] {
-  return [
-    { label: labelForDescriptor(dictionary, findRoute('people.users')), href: buildRoute(locale, 'people.users') },
-    { label: labelForDescriptor(dictionary, findRoute('people.user-record')), href: buildRoute(locale, 'people.user-record', { id: userId }) },
-  ];
-}
-
 async function loadUserRecord(userId: number): Promise<{
   readonly effective: ReadonlySet<string>;
   readonly summary: UserSummary;
@@ -94,7 +84,7 @@ export default async function UserRecordLayout({
   if (id === null) notFound();
   const { effective, summary } = await loadUserRecord(id);
   const props = {
-    breadcrumbs: userRecordBreadcrumbs(locale, id, dictionary),
+    breadcrumbs: recordBreadcrumbs(locale, 'people', 'people.user-record', 'people.users', dictionary),
     title: summary.username,
     description: <UserDetailFrame summary={summary} />,
     actions: <UserRecordHeader userId={summary.id} permissionKeys={[...effective]} navigation={dictionary.navigation} />,

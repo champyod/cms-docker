@@ -20,6 +20,7 @@ import { useContainersController } from '@/components/containers/useContainersCo
 import { useDictionary } from '@/hooks/useDictionary';
 import { interpolate } from '@/lib/interpolate';
 import { buildRoute } from '@/lib/navigation/routes';
+import type { BreadcrumbItem } from '@/lib/navigation/types';
 import { cn } from '@/lib/utils';
 import type { ModulePageCopy } from '@/components/navigation/ModulePageCopy';
 
@@ -27,10 +28,11 @@ const DEFAULT_RESTART_CONFIG = { autoRestart: false, maxRestarts: 5, currentRest
 const DEFAULT_ROW_CONFIG = { ...DEFAULT_RESTART_CONFIG, discordNotifications: true };
 
 export interface ContainersClientProps {
+  readonly breadcrumbs: readonly BreadcrumbItem[];
   readonly copy: ModulePageCopy;
 }
 
-export function ContainersClient({ copy }: ContainersClientProps): React.JSX.Element {
+export function ContainersClient({ breadcrumbs, copy }: ContainersClientProps): React.JSX.Element {
   const dict = useDictionary();
   const pageCopy = dict.containers;
   const controller = useContainersController();
@@ -38,10 +40,6 @@ export function ContainersClient({ copy }: ContainersClientProps): React.JSX.Ele
   const locale = pathname.split('/')[1] || 'en';
   const docsPath = buildRoute(locale, 'system.docs');
 
-  const breadcrumbs = [
-    { label: copy.group },
-    { label: copy.title },
-  ] as const;
   const selectedCount = controller.selectedIds.size;
   const selectedNames = controller.containers
     .filter((container) => controller.selectedIds.has(container.id))

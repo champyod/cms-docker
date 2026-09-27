@@ -1,15 +1,11 @@
 import { notFound } from 'next/navigation';
 import { getDictionary } from '@/i18n';
 import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
+import { recordBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import { buildRoute } from '@/lib/navigation/routes';
-import type {
-  BreadcrumbItem,
-  RouteDescriptor,
-  RouteId,
-  RouteTab,
-} from '@/lib/navigation/types';
+import type { RouteDescriptor, RouteId, RouteTab } from '@/lib/navigation/types';
 import type { Dictionary } from '@/lib/dictionary';
 import { DetailSurface, type DetailSurfaceProps } from '@/components/core/DetailSurface';
 import { getTaskDetailSummary } from '@/lib/queries/task-detail';
@@ -70,14 +66,10 @@ export default async function TaskDetailLayout({
   }
 
   const summary = await readRecordOrNotFound(() => getTaskDetailSummary(taskId));
-  const breadcrumbs: readonly BreadcrumbItem[] = [
-    { label: dictionary.navigation.tasks.record.label, href: buildRoute(locale, 'tasks.record', { id: summary.id }) },
-    { label: summary.title },
-  ];
   // Why: the summary carries `id` while the header contract takes
   // `taskId`, so the record fields map explicitly instead of spreading.
   const props = {
-    breadcrumbs,
+    breadcrumbs: recordBreadcrumbs(locale, 'direct', 'tasks.record', 'tasks.list', dictionary),
     title: summary.title,
     description: summary.name,
     actions: <TaskRecordHeader taskId={summary.id} name={summary.name} contest={summary.contest} permissionKeys={summary.permissionKeys} />,

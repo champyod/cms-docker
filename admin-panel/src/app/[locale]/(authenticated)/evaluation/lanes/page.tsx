@@ -4,8 +4,8 @@ import { PageSurface } from '@/components/core/PageSurface';
 import { LaneBoard } from '@/components/submissions/LaneBoard';
 import { getDictionary } from '@/i18n';
 import type { Dictionary } from '@/lib/dictionary';
+import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
-import { buildRoute } from '@/lib/navigation/routes';
 import type { RouteDescriptor, RouteId } from '@/lib/navigation/types';
 import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
 
@@ -51,7 +51,7 @@ export default async function EvaluationLanesPage({
   const { board, permissionKeys } = await loadLanesPage();
   return (
     <PageSurface
-      breadcrumbs={[{ label: lanesLabel, href: buildRoute(locale, 'evaluation.lanes') }]}
+      breadcrumbs={listBreadcrumbs(locale, 'evaluation', 'evaluation.lanes', dict)}
       title={lanesLabel}
       description={dict.submissions.lanesDescription}
     >

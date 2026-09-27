@@ -2,7 +2,7 @@ import { getAuditLog } from '@/app/actions/audit';
 import { AuditTable } from '@/components/audit/AuditTable';
 import { PageSurface } from '@/components/core/PageSurface';
 import { getDictionary } from '@/i18n';
-import type { Dictionary } from '@/lib/dictionary';
+import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
 interface AuditSearchParams {
@@ -14,13 +14,6 @@ interface AuditSearchParams {
   search?: string;
   fromDate?: string;
   toDate?: string;
-}
-
-function auditBreadcrumbs(dict: Dictionary): { label: string }[] {
-  return [
-    { label: dict['navigation']['groups']['administration'] },
-    { label: dict['navigation']['administration']['audit']['label'] },
-  ];
 }
 
 export default async function AuditPage({
@@ -47,7 +40,7 @@ export default async function AuditPage({
   });
   return (
     <PageSurface
-      breadcrumbs={auditBreadcrumbs(dict)}
+      breadcrumbs={listBreadcrumbs(locale, 'administration', 'administration.audit', dict)}
       title={dict['navigation']['administration']['audit']['label']}
       description={dict.audit.subtitle}
       status={result.success ? { kind: 'idle' } : {

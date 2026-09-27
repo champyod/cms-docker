@@ -1,15 +1,11 @@
 import { notFound } from 'next/navigation';
 import { getDictionary } from '@/i18n';
 import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
+import { recordBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import { buildRoute } from '@/lib/navigation/routes';
-import type {
-  BreadcrumbItem,
-  RouteDescriptor,
-  RouteId,
-  RouteTab,
-} from '@/lib/navigation/types';
+import type { RouteDescriptor, RouteId, RouteTab } from '@/lib/navigation/types';
 import type { Dictionary } from '@/lib/dictionary';
 import { DetailSurface, type DetailSurfaceProps } from '@/components/core/DetailSurface';
 import { getContestDetailSummary } from '@/lib/queries/contest-detail';
@@ -71,12 +67,8 @@ export default async function ContestDetailLayout({
   }
 
   const summary = await readRecordOrNotFound(() => getContestDetailSummary(contestId));
-  const breadcrumbs: readonly BreadcrumbItem[] = [
-    { label: dictionary.navigation.contests.record.label, href: buildRoute(locale, 'contests.record', { id: summary.id }) },
-    { label: summary.name },
-  ];
   const props = {
-    breadcrumbs,
+    breadcrumbs: recordBreadcrumbs(locale, 'direct', 'contests.record', 'contests.list', dictionary),
     title: summary.name,
     description: summary.description,
     actions: <ContestRecordHeader contestId={summary.id} name={summary.name} description={summary.description} isActive={summary.is_active} permissionKeys={summary.permissionKeys} />,

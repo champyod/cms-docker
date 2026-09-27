@@ -3,10 +3,12 @@ import { DetailSurface } from '@/components/core/DetailSurface';
 import { getDictionary } from '@/i18n';
 import type { Dictionary } from '@/lib/dictionary';
 import { getSubmissionSummary } from '@/lib/evaluation-read-models';
+import type { SubmissionSummary } from '@/lib/evaluation-read-model-types';
+import { recordBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
-import { NAVIGATION_GROUPS, ROUTE_REGISTRY } from '@/lib/navigation/registry';
+import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import { buildRoute } from '@/lib/navigation/routes';
-import type { BreadcrumbItem, RouteDescriptor, RouteId, RouteTab } from '@/lib/navigation/types';
+import type { RouteDescriptor, RouteId, RouteTab } from '@/lib/navigation/types';
 import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access';
 import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
 
@@ -31,6 +33,18 @@ function findRoute(routeId: RouteId): RouteDescriptor {
   return route;
 }
 
+// Why the task leads: a submission has no name of its own, and the task it was
+// sent for is what a reader recognises; the submitter is the next identifier down.
+// A row whose task and submitter the caller may not read falls back to the id,
+// which is the one value this page can always show.
+export function submissionHeading(summary: SubmissionSummary): string {
+  return summary.task?.name ?? `#${summary.id}`;
+}
+
+export function submissionDescription(summary: SubmissionSummary): string | null {
+  return summary.user?.username ?? summary.language ?? null;
+}
+
 // Why: a tab the reader may not open is omitted entirely rather than rendered
 // disabled, so the record rail never advertises a route that would 404.
 export function buildSubmissionTabs(
@@ -52,26 +66,13 @@ export function buildSubmissionTabs(
   });
 }
 
-// Why two crumbs: the group label owns the list URL and the record label owns
-// the record URL, which is the shape the User and Team record layouts emit. A
-// third crumb would have to repeat one of those two URLs.
-function submissionRecordBreadcrumbs(
-  locale: string,
-  submissionId: number,
-  dictionary: Dictionary,
-): readonly BreadcrumbItem[] {
-  const evaluationGroup = NAVIGATION_GROUPS.find((group) => group.id === 'evaluation');
-  if (!evaluationGroup) notFound();
-  return [
-    { label: labelForKey(dictionary, evaluationGroup.labelKey), href: buildRoute(locale, 'evaluation.submissions') },
-    { label: labelForDescriptor(dictionary, findRoute('evaluation.submission-record')), href: buildRoute(locale, 'evaluation.submission-record', { id: submissionId }) },
-  ];
-}
-
 // Why: the summary read is what proves the record exists and that the caller may
 // open it, so a missing row and a 403 both render as the concealed not-found
 // view while a 401 or an unexpected failure keeps propagating.
-async function loadSubmissionRecord(submissionId: number): Promise<ReadonlySet<string>> {
+async function loadSubmissionRecord(submissionId: number): Promise<{
+  readonly effective: ReadonlySet<string>;
+  readonly summary: SubmissionSummary;
+}> {
   let effective: ReadonlySet<string>;
   try {
     effective = await requirePermission('submission:read');
@@ -79,8 +80,7 @@ async function loadSubmissionRecord(submissionId: number): Promise<ReadonlySet<s
     if (error instanceof AuthorizationError && error.status === 403) notFound();
     throw error;
   }
-  await readRecordOrNotFound(() => getSubmissionSummary(submissionId));
-  return effective;
+  return { effective, summary: await readRecordOrNotFound(() => getSubmissionSummary(submissionId)) };
 }
 
 export default async function SubmissionRecordLayout({
@@ -94,11 +94,12 @@ export default async function SubmissionRecordLayout({
   const dictionary = await getDictionary(locale);
   const id = parseRecordId(rawId);
   if (id === null) notFound();
-  const effective = await loadSubmissionRecord(id);
+  const { effective, summary } = await loadSubmissionRecord(id);
   return (
     <DetailSurface
-      breadcrumbs={submissionRecordBreadcrumbs(locale, id, dictionary)}
-      title={`Submission #${id}`}
+      breadcrumbs={recordBreadcrumbs(locale, 'evaluation', 'evaluation.submission-record', 'evaluation.submissions', dictionary)}
+      title={submissionHeading(summary)}
+      description={submissionDescription(summary)}
       tabs={buildSubmissionTabs(locale, id, effective, dictionary)}
     >
       {children}

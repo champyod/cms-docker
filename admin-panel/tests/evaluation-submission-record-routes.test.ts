@@ -4,8 +4,9 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import en from '@/dictionaries/en.json';
-import SubmissionRecordLayout, { buildSubmissionTabs } from '@/app/[locale]/(authenticated)/evaluation/submissions/[id]/layout';
+import SubmissionRecordLayout, { buildSubmissionTabs, submissionDescription, submissionHeading } from '@/app/[locale]/(authenticated)/evaluation/submissions/[id]/layout';
 import SubmissionLandingPage from '@/app/[locale]/(authenticated)/evaluation/submissions/[id]/page';
+import type { SubmissionSummary } from '@/lib/evaluation-read-model-types';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import { buildRoute } from '@/lib/navigation/routes';
 import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
@@ -189,16 +190,80 @@ function breadcrumbHrefs(html: string): string[] {
 }
 
 describe('Submission record breadcrumbs', () => {
-  it('renders two crumbs like the User and Team record layouts', () => {
-    expect(breadcrumbHrefs(recordHtml)).toEqual([
-      '/en/evaluation/submissions',
-      '/en/evaluation/submissions/19',
-    ]);
+  it('closes the trail on the submissions list the record lives under', () => {
+    // Why Home is the only link: the group and the list page are the record's
+    // context, and a link on either would point away from the page the reader is
+    // already inside.
+    expect(breadcrumbHrefs(recordHtml)).toEqual(['/en']);
   });
 
   it('never points two crumbs at one URL', () => {
     const hrefs = breadcrumbHrefs(recordHtml);
     expect(new Set(hrefs).size).toBe(hrefs.length);
+  });
+
+  it('never points a crumb at the submission record itself', () => {
+    expect(breadcrumbHrefs(recordHtml)).not.toContain('/en/evaluation/submissions/19');
+  });
+
+  it('names the group and the list page without repeating the record heading', () => {
+    const nav = recordHtml.slice(recordHtml.indexOf('<nav'), recordHtml.indexOf('</nav>'));
+
+    expect(nav).toContain('Evaluation');
+    expect(nav).toContain('Submissions');
+  });
+
+  it('heads the record with its id rather than a generic entity label', () => {
+    const header = recordHtml.slice(recordHtml.indexOf('data-testid="surface-header"'));
+
+    expect(header).toContain('#19');
+    expect(header).not.toContain('Submission #');
+  });
+});
+
+describe('Submission record header identity', () => {
+  const BASE: SubmissionSummary = {
+    id: 19,
+    timestamp: '2026-02-03T04:05:06.000Z',
+    language: 'cpp',
+    comment: '',
+    official: false,
+    user: { id: 5, username: 'ada' },
+    contest: { id: 2, name: 'ICPC 2026' },
+    task: { id: 8, name: 'aplusb', title: 'A Plus B' },
+    capabilities: {
+      canUpdate: true,
+      canRecompute: true,
+      canDownload: true,
+      canMoveLane: true,
+    },
+  };
+
+  it('heads the record with the task it was sent for and names the submitter below', () => {
+    expect(submissionHeading(BASE)).toBe('aplusb');
+    expect(submissionDescription(BASE)).toBe('ada');
+  });
+
+  it('falls back to the id and the language when the task is hidden from this reader', () => {
+    const taskless = { ...BASE, task: null };
+
+    expect(submissionHeading(taskless)).toBe('#19');
+    expect(submissionDescription(taskless)).toBe('ada');
+  });
+
+  it('never repeats the heading as its own description', () => {
+    const cases: SubmissionSummary[] = [
+      BASE,
+      { ...BASE, task: null },
+      { ...BASE, task: null, user: null },
+      { ...BASE, task: null, user: null, language: null },
+    ];
+
+    for (const summary of cases) {
+      const heading = submissionHeading(summary);
+      expect(heading.trim(), JSON.stringify(summary)).not.toBe('');
+      expect(submissionDescription(summary), heading).not.toBe(heading);
+    }
   });
 });
 

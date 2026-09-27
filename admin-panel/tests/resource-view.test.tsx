@@ -25,7 +25,7 @@ function render(node: React.ReactNode, dict: typeof en): string {
 
 describe('ResourceView', () => {
   it('surfaces the module shell copy and the surface density while loading', () => {
-    const html = render(<ResourceView copy={copy} />, en);
+    const html = render(<ResourceView breadcrumbs={[{ label: 'fixture-group' }]} copy={copy} />, en);
     expect(html).toContain('data-surface="page"');
     expect(html).toContain('fixture-group');
     expect(html).toContain('fixture-resources');
@@ -33,7 +33,7 @@ describe('ResourceView', () => {
     expect(html).toContain('density:space-y-4');
   });
   it('blocks its children on the loading status and releases them once it clears', () => {
-    const loading = render(<ResourceView copy={copy} />, en);
+    const loading = render(<ResourceView breadcrumbs={[]} copy={copy} />, en);
     expect(loading).toContain(en.resources.loading);
     expect(loading).not.toContain(CHILD_MARKER);
 

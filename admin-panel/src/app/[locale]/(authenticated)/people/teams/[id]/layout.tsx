@@ -5,9 +5,10 @@ import { TeamRecordHeader } from '@/components/teams/TeamRecordHeader';
 import { getDictionary } from '@/i18n';
 import type { Dictionary } from '@/lib/dictionary';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
-import { NAVIGATION_GROUPS, ROUTE_REGISTRY } from '@/lib/navigation/registry';
+import { recordBreadcrumbs } from '@/lib/navigation/breadcrumbs';
+import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import { buildRoute } from '@/lib/navigation/routes';
-import type { BreadcrumbItem, RouteDescriptor, RouteId, RouteTab } from '@/lib/navigation/types';
+import type { RouteDescriptor, RouteId, RouteTab } from '@/lib/navigation/types';
 import { getTeamSummary } from '@/lib/people-read-models';
 import type { TeamSummary } from '@/lib/people-read-model-types';
 import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access';
@@ -34,6 +35,18 @@ function findRoute(routeId: RouteId): RouteDescriptor {
   return route;
 }
 
+// Why the fallbacks: a team row may carry no name, and an empty heading is the one
+// thing a record page cannot show — the name is the heading, and the next
+// identifier down becomes the description so the two never repeat one word.
+export function teamHeading(summary: TeamSummary): string {
+  return summary.name ?? summary.code ?? `#${summary.id}`;
+}
+
+export function teamDescription(summary: TeamSummary): string | null {
+  const heading = teamHeading(summary);
+  return [summary.code, summary.organization].find((value) => value !== null && value !== heading) ?? null;
+}
+
 // Why: a tab the reader may not open is omitted entirely rather than rendered
 // disabled, so the record rail never advertises a route that would 404.
 export function buildTeamTabs(
@@ -53,19 +66,6 @@ export function buildTeamTabs(
       href: buildRoute(locale, route.id, { id: teamId }),
     } satisfies RouteTab];
   });
-}
-
-function teamRecordBreadcrumbs(
-  locale: string,
-  teamId: number,
-  dictionary: Dictionary,
-): readonly BreadcrumbItem[] {
-  const peopleGroup = NAVIGATION_GROUPS.find((group) => group.id === 'people');
-  if (!peopleGroup) notFound();
-  return [
-    { label: labelForKey(dictionary, peopleGroup.labelKey), href: buildRoute(locale, 'people.teams') },
-    { label: labelForDescriptor(dictionary, findRoute('people.team-record')), href: buildRoute(locale, 'people.team-record', { id: teamId }) },
-  ];
 }
 
 async function loadTeamRecord(teamId: number): Promise<{
@@ -95,8 +95,9 @@ export default async function TeamRecordLayout({
   if (id === null) notFound();
   const { effective, summary } = await loadTeamRecord(id);
   const props = {
-    breadcrumbs: teamRecordBreadcrumbs(locale, id, dictionary),
-    title: summary.name,
+    breadcrumbs: recordBreadcrumbs(locale, 'people', 'people.team-record', 'people.teams', dictionary),
+    title: teamHeading(summary),
+    description: teamDescription(summary),
     actions: <TeamRecordHeader teamId={summary.id} permissionKeys={[...effective]} navigation={dictionary.navigation} />,
     tabs: buildTeamTabs(locale, id, effective, dictionary),
     children,

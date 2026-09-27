@@ -15,13 +15,15 @@ import { WorkersPanel } from '@/components/deployments/WorkersPanel';
 import { useDeployWorkers } from '@/components/deployments/useDeployWorkers';
 import { useContestDeploymentSnapshot } from '@/components/deployments/useContestDeploymentSnapshot';
 import { useDictionary } from '@/hooks/useDictionary';
+import type { BreadcrumbItem } from '@/lib/navigation/types';
 import type { ModulePageCopy } from '@/components/navigation/ModulePageCopy';
 
 export interface DeploymentsClientProps {
+  readonly breadcrumbs: readonly BreadcrumbItem[];
   readonly copy: ModulePageCopy;
 }
 
-export function DeploymentsClient({ copy }: DeploymentsClientProps): React.JSX.Element {
+export function DeploymentsClient({ breadcrumbs, copy }: DeploymentsClientProps): React.JSX.Element {
   const dict = useDictionary();
   const { state: deployState, deploy: handleDeploy, cancel: cancelDeploy, reset: resetDeploy } = useDeployContest();
   const [settingsSaving, setSettingsSaving] = useState(false);
@@ -63,10 +65,6 @@ export function DeploymentsClient({ copy }: DeploymentsClientProps): React.JSX.E
     handleDeploy(snapshot.selectedContestId);
   };
 
-  const breadcrumbs = [
-    { label: copy.group },
-    { label: copy.title },
-  ] as const;
   if (snapshot.loading) {
     return (
       <PageSurface

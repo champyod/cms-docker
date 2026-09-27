@@ -3,8 +3,8 @@ import { PageSurface } from '@/components/core/PageSurface';
 import { TeamList } from '@/components/teams/TeamList';
 import { getDictionary } from '@/i18n';
 import type { Dictionary } from '@/lib/dictionary';
+import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
-import { buildRoute } from '@/lib/navigation/routes';
 import type { RouteDescriptor } from '@/lib/navigation/types';
 import { getTeams } from '@/lib/people-read-models';
 import type { TeamsPageResult } from '@/lib/people-read-model-types';
@@ -48,7 +48,7 @@ export default async function PeopleTeamsPage({ params }: {
   const { teams, effectivePermissions } = await loadTeamsListPage();
   return (
     <PageSurface
-      breadcrumbs={[{ label: teamsLabel, href: buildRoute(locale, 'people.teams') }]}
+      breadcrumbs={listBreadcrumbs(locale, 'people', 'people.teams', dict)}
       title={teamsLabel}
       description={dict.teams.subtitle}
     >

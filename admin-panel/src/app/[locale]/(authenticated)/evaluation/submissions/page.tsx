@@ -3,8 +3,8 @@ import { PageSurface } from '@/components/core/PageSurface';
 import { SubmissionList } from '@/components/submissions/SubmissionList';
 import { getDictionary } from '@/i18n';
 import type { Dictionary } from '@/lib/dictionary';
+import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
-import { buildRoute } from '@/lib/navigation/routes';
 import type { RouteDescriptor, RouteId } from '@/lib/navigation/types';
 import { getSubmissions } from '@/lib/people-read-models';
 import type { SubmissionsPageResult } from '@/lib/people-read-model-types';
@@ -56,7 +56,7 @@ export default async function EvaluationSubmissionsPage({
   const result = await loadSubmissionsListPage(currentPage);
   return (
     <PageSurface
-      breadcrumbs={[{ label: submissionsLabel, href: buildRoute(locale, 'evaluation.submissions') }]}
+      breadcrumbs={listBreadcrumbs(locale, 'evaluation', 'evaluation.submissions', dict)}
       title={submissionsLabel}
       description={dict.submissions.subtitle}
     >

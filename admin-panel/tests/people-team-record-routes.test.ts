@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import en from '@/dictionaries/en.json';
 import { notFound } from 'next/navigation';
-import { buildTeamTabs } from '@/app/[locale]/(authenticated)/people/teams/[id]/layout';
+import { buildTeamTabs, teamDescription, teamHeading } from '@/app/[locale]/(authenticated)/people/teams/[id]/layout';
 import LegacyTeamsPage from '@/app/[locale]/(authenticated)/teams/page';
 import LegacyTeamDetailPage from '@/app/[locale]/(authenticated)/teams/[id]/page';
+import type { TeamSummary } from '@/lib/people-read-model-types';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
 
@@ -82,6 +83,52 @@ describe('Team record tab rail', () => {
       'people.team-tabs.members',
       'people.team-tabs.contests',
     ]);
+  });
+});
+
+describe('Team record header identity', () => {
+  const BASE: TeamSummary = {
+    id: 4,
+    code: 'THA-01',
+    name: 'Thailand Team 1',
+    organization: 'MWIT',
+    leaderId: 9,
+    leader: null,
+    participationCount: 2,
+  };
+
+  it('heads the record with its name and describes it with the next identifier', () => {
+    expect(teamHeading(BASE)).toBe('Thailand Team 1');
+    expect(teamDescription(BASE)).toBe('THA-01');
+  });
+
+  it('falls back to the code when the row carries no name', () => {
+    const unnamed = { ...BASE, name: null };
+
+    expect(teamHeading(unnamed)).toBe('THA-01');
+    expect(teamDescription(unnamed)).toBe('MWIT');
+  });
+
+  it('falls back to the id when the row carries neither a name nor a code', () => {
+    const bare = { ...BASE, name: null, code: null };
+
+    expect(teamHeading(bare)).toBe('#4');
+    expect(teamDescription(bare)).toBe('MWIT');
+  });
+
+  it('never repeats the heading as its own description', () => {
+    const cases: TeamSummary[] = [
+      BASE,
+      { ...BASE, name: null },
+      { ...BASE, name: null, code: null },
+      { ...BASE, name: null, code: null, organization: null },
+    ];
+
+    for (const summary of cases) {
+      const heading = teamHeading(summary);
+      expect(heading.trim(), JSON.stringify(summary)).not.toBe('');
+      expect(teamDescription(summary), heading).not.toBe(heading);
+    }
   });
 });
 

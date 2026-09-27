@@ -13,14 +13,16 @@ import { RankingScoreboard } from './RankingScoreboard';
 import { useRankingRows, type RankingSnapshot } from './useRankingRows';
 import { useDictionary } from '@/hooks/useDictionary';
 import { hasEffectivePermission } from '@/lib/permission-engine';
+import type { BreadcrumbItem } from '@/lib/navigation/types';
 import type { ModulePageCopy } from '@/components/navigation/ModulePageCopy';
 
 export interface RankingClientProps {
   readonly permissionKeys: readonly string[];
+  readonly breadcrumbs: readonly BreadcrumbItem[];
   readonly copy: ModulePageCopy;
 }
 
-export function RankingClient({ permissionKeys, copy }: RankingClientProps): React.JSX.Element {
+export function RankingClient({ permissionKeys, breadcrumbs, copy }: RankingClientProps): React.JSX.Element {
   const dict = useDictionary();
   const toastCopy = dict.toasts.ranking;
   // Why memoized: the key list is stable for the session, so rebuilding the Set on
@@ -148,11 +150,6 @@ export function RankingClient({ permissionKeys, copy }: RankingClientProps): Rea
   useEffect(() => {
     void fetchLogo();
   }, [fetchLogo]);
-
-  const breadcrumbs = [
-    { label: copy.group },
-    { label: copy.title },
-  ] as const;
 
   return (
     <PageSurface

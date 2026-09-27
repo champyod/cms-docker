@@ -13,13 +13,15 @@ import { useLiveStream } from '@/hooks/useLiveStream';
 import { useDictionary } from '@/hooks/useDictionary';
 import { TRAFFIC_LOG_LIMIT_DEFAULT } from '@/lib/constants/live-stream';
 import type { ResourceFrame, ServerStats, TrafficLog, WorkerStat, CoreServiceStatus } from '@/lib/live-frames';
+import type { BreadcrumbItem } from '@/lib/navigation/types';
 import type { ModulePageCopy } from '@/components/navigation/ModulePageCopy';
 
 export interface ResourceViewProps {
+  readonly breadcrumbs: readonly BreadcrumbItem[];
   readonly copy: ModulePageCopy;
 }
 
-export function ResourceView({ copy }: ResourceViewProps): React.JSX.Element {
+export function ResourceView({ breadcrumbs, copy }: ResourceViewProps): React.JSX.Element {
   const dict = useDictionary();
   const [serverStats, setServerStats] = useState<ServerStats | null>(null);
   const [workers, setWorkers] = useState<WorkerStat[]>([]);
@@ -44,10 +46,6 @@ export function ResourceView({ copy }: ResourceViewProps): React.JSX.Element {
     onFrame,
   });
 
-  const breadcrumbs = [
-    { label: copy.group },
-    { label: copy.title },
-  ] as const;
   const source = serverStats?.source === 'host' ? dict.resources.hostSource : dict.resources.containerSource;
 
   return (
