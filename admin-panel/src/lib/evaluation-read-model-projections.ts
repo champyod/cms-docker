@@ -69,10 +69,18 @@ export function readTask(
   return { id: visible.id, name: visible.name, title: visible.title };
 }
 
+// Why all four: the action gates on all four — fewer renders buttons that can only explode.
+const RECOMPUTE_GATE_KEYS = [
+  'submission:recompute',
+  'submission:rejudge',
+  'evaluation:delete',
+  'submissionresult:delete',
+] as const;
+
 export function readSubmissionCapabilities(permissions: ReadonlySet<string>): SubmissionSummary['capabilities'] {
   return {
     canUpdate: hasEffectivePermission(permissions, 'submission:update'),
-    canRecompute: hasEffectivePermission(permissions, 'submission:recompute'),
+    canRecompute: RECOMPUTE_GATE_KEYS.every((key) => hasEffectivePermission(permissions, key)),
     canDownload: hasEffectivePermission(permissions, 'submission:download'),
     canMoveLane: hasEffectivePermission(permissions, 'evaluation:lane_move'),
   };

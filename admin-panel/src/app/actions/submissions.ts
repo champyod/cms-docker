@@ -78,14 +78,13 @@ export async function toggleSubmissionOfficial(submissionId: number): Promise<Ac
 }
 
 export async function recalculateSubmission(submissionId: number, type: RecalcType = 'score'): Promise<ActionResult & { message?: string }> {
-  await ensurePermission('submission:recompute');
-  // Why three gates: requeueing regenerates the outcome rows it clears, so the
-  // caller needs the rejudge right plus delete rights on both cleared tables.
-  await ensurePermission('submission:rejudge');
-  await ensurePermission('evaluation:delete');
-  await ensurePermission('submissionresult:delete');
-
   try {
+    await ensurePermission('submission:recompute');
+    // Why gates inside try: requeueing needs rejudge plus delete rights on both cleared tables, and a denial must return a failure, never a digest.
+    await ensurePermission('submission:rejudge');
+    await ensurePermission('evaluation:delete');
+    await ensurePermission('submissionresult:delete');
+
     const context = await getRecalcContext(submissionId);
     if (!context) {
       return { success: false, error: 'Submission not found' };
