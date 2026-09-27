@@ -146,6 +146,7 @@ dependencies = [
  "chrono",
  "sqlx",
  "subtle",
+ "thiserror",
 ]
 
 [[package]]

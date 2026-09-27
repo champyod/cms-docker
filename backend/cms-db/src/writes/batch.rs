@@ -14,8 +14,6 @@ use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::fmt;
 
-use crate::reads::ResultKey;
-
 use super::shapes::{EvaluationRow, ExecutableRow, ResultRow, ScoreRow};
 
 /// Which half of a judging commit one group belongs to.
@@ -67,18 +65,22 @@ pub struct AuditRow {
 pub enum WriteError {
     /// The batch carried no audit row, so nothing would record the change.
     MissingAudit {
-        /// The object the batch would have written.
-        key: ResultKey,
+        /// The submission whose object the batch would have written.
+        submission_id: i32,
+        /// The dataset that object was measured against.
+        dataset_id: i32,
     },
 }
 
 impl fmt::Display for WriteError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingAudit { key } => write!(
+            Self::MissingAudit {
+                submission_id,
+                dataset_id,
+            } => write!(
                 f,
-                "no audit row for submission {} on dataset {}",
-                key.submission_id, key.dataset_id
+                "no audit row for submission {submission_id} on dataset {dataset_id}"
             ),
         }
     }
@@ -92,8 +94,11 @@ impl std::error::Error for WriteError {}
 pub struct ObjectWrite {
     /// Which half of the commit the rows belong to.
     pub operation: OperationType,
-    /// The object and the dataset: the key every row in the batch carries.
-    pub key: ResultKey,
+    /// The submission the object belongs to, which every row in the batch carries.
+    pub submission_id: i32,
+    /// The dataset the object was measured against, which every row in the batch
+    /// carries.
+    pub dataset_id: i32,
     /// The result row the object's progress is written to.
     pub result: ResultRow,
     /// The executable set one successful compilation produced.
@@ -116,7 +121,10 @@ impl ObjectWrite {
     /// record of who made it and what it changed.
     pub fn seal(self) -> Result<Self, WriteError> {
         if self.audit.is_empty() {
-            return Err(WriteError::MissingAudit { key: self.key });
+            return Err(WriteError::MissingAudit {
+                submission_id: self.submission_id,
+                dataset_id: self.dataset_id,
+            });
         }
         Ok(self)
     }
@@ -153,13 +161,12 @@ pub fn group_by_object(writes: &[ObjectWrite]) -> Result<Vec<ObjectWrite>, Write
     let mut groups: BTreeMap<(OperationType, i32, i32), ObjectWrite> = BTreeMap::new();
     for write in writes {
         if write.audit.is_empty() {
-            return Err(WriteError::MissingAudit { key: write.key });
+            return Err(WriteError::MissingAudit {
+                submission_id: write.submission_id,
+                dataset_id: write.dataset_id,
+            });
         }
-        let key = (
-            write.operation,
-            write.key.submission_id,
-            write.key.dataset_id,
-        );
+        let key = (write.operation, write.submission_id, write.dataset_id);
         match groups.entry(key) {
             Entry::Occupied(mut found) => found.get_mut().merge(write),
             Entry::Vacant(slot) => {

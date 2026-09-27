@@ -6,8 +6,8 @@
 use chrono::{DateTime, NaiveDateTime};
 use cms_db::{
     dataset_from_row, result_from_row, submission_from_row, testcase_from_row, DatasetRecord,
-    DigestError, ReadError, ResultKey, ResultRecord, SubmissionRecord, TestcaseRecord,
-    DATASET_BY_ID, RESULT_BY_SUBMISSION_AND_DATASET, SUBMISSION_BY_ID, TESTCASES_BY_DATASET,
+    DigestError, ReadError, ResultRecord, SubmissionRecord, TestcaseRecord, DATASET_BY_ID,
+    RESULT_BY_SUBMISSION_AND_DATASET, SUBMISSION_BY_ID, TESTCASES_BY_DATASET,
 };
 
 /// Forty lowercase hex characters, which is what `testcases.input` holds.
@@ -33,12 +33,6 @@ const SUBMISSION_ID: i32 = 41;
 const TASK_ID: i32 = 7;
 const PARTICIPATION_ID: i32 = 12;
 const DATASET_ID: i32 = 9;
-
-/// The composite key one `submission_results` row is read by.
-const RESULT_KEY: ResultKey = ResultKey {
-    submission_id: SUBMISSION_ID,
-    dataset_id: DATASET_ID,
-};
 
 /// Every query the module holds, and the record fields it projects, in row order.
 const QUERIES: [(&str, &str); 4] = [
@@ -124,8 +118,8 @@ fn a_submission_with_no_language_and_no_score_place_carries_both() {
 }
 
 #[test]
-fn a_result_row_maps_its_key_its_flags_and_its_tries_onto_its_record() {
-    let record = result_from_row(RESULT_KEY, true, true, 1, false, 0);
+fn a_result_row_maps_its_ids_its_flags_and_its_tries_onto_its_record() {
+    let record = result_from_row(SUBMISSION_ID, DATASET_ID, true, true, 1, false, 0);
 
     assert_eq!(
         record,
@@ -143,7 +137,7 @@ fn a_result_row_maps_its_key_its_flags_and_its_tries_onto_its_record() {
 
 #[test]
 fn a_result_that_has_never_compiled_carries_no_tries() {
-    let record = result_from_row(RESULT_KEY, false, false, 0, false, 0);
+    let record = result_from_row(SUBMISSION_ID, DATASET_ID, false, false, 0, false, 0);
 
     assert!(!record.is_compiled && !record.is_compilation_succeeded);
     assert!(!record.is_evaluated);
@@ -235,7 +229,7 @@ fn the_result_query_binds_its_key_in_order_and_projects_every_flag() {
     assert!(query.contains(key_order), "the key binds out of order");
     for projection in [
         "r.compilation_outcome IS NOT NULL AS is_compiled",
-        "r.compilation_outcome = 'ok' AS is_compilation_succeeded",
+        "r.compilation_outcome = 'ok' IS TRUE AS is_compilation_succeeded",
         "r.evaluation_outcome IS NOT NULL AS is_evaluated",
     ] {
         assert!(query.contains(projection), "a declared flag is missing");

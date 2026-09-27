@@ -7,3 +7,4 @@ edition = "2021"
 chrono = { workspace = true }
 sqlx = { workspace = true }
 subtle = { workspace = true }
+thiserror = { workspace = true }

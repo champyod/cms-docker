@@ -7,7 +7,7 @@
 
 use cms_db::{
     group_by_object, AuditRow, CompilationOutcome, EvaluationRow, ExecutableRow, ObjectWrite,
-    OperationType, ResultKey, ResultRow, RowState, ScoreRow, WriteError,
+    OperationType, ResultRow, RowState, ScoreRow, WriteError,
 };
 
 /// Synthetic ids, standing for nothing outside this file.
@@ -24,16 +24,12 @@ const DIGEST: &str = "0123456789abcdef0123456789abcdef01234567";
 const SCORE_DETAILS: &str = "{\"percent\": 100.0}";
 /// The grader output a `text` array holds.
 const GRADER_TEXT: &str = "Output is correct";
-/// The row key every fixture of one object shares.
-const KEY: ResultKey = ResultKey {
-    submission_id: SUBMISSION_ID,
-    dataset_id: DATASET_ID,
-};
 
 /// The result row of an object whose compilation succeeded once.
 fn result_row() -> ResultRow {
     ResultRow {
-        key: KEY,
+        submission_id: SUBMISSION_ID,
+        dataset_id: DATASET_ID,
         compilation_outcome: Some(CompilationOutcome::Ok),
         compilation_text: vec![GRADER_TEXT.to_string()],
         compilation_tries: 1,
@@ -53,7 +49,8 @@ fn result_row() -> ResultRow {
 /// One testcase run.
 fn evaluation_row(testcase_id: i32) -> EvaluationRow {
     EvaluationRow {
-        key: KEY,
+        submission_id: SUBMISSION_ID,
+        dataset_id: DATASET_ID,
         testcase_id,
         outcome: Some("1.0".to_string()),
         text: vec![GRADER_TEXT.to_string()],
@@ -70,7 +67,8 @@ fn evaluation_row(testcase_id: i32) -> EvaluationRow {
 /// One compiled file, carrying a digest the domain already accepted.
 fn executable_row() -> ExecutableRow {
     ExecutableRow {
-        key: KEY,
+        submission_id: SUBMISSION_ID,
+        dataset_id: DATASET_ID,
         filename: "user".to_string(),
         digest: DIGEST
             .parse()
@@ -81,7 +79,8 @@ fn executable_row() -> ExecutableRow {
 /// The score fields of one result.
 fn score_row() -> ScoreRow {
     ScoreRow {
-        key: KEY,
+        submission_id: SUBMISSION_ID,
+        dataset_id: DATASET_ID,
         score: Some(100.0),
         score_details: Some(SCORE_DETAILS.to_string()),
         scored_at: Some(
@@ -108,12 +107,13 @@ fn audit_row(entity: &str, after: RowState) -> AuditRow {
     }
 }
 
-/// One finished operation on [`KEY`], holding its audit row or none at all.
+/// One finished operation on one object, holding its audit row or none at all.
 fn write(operation: OperationType, testcase_id: Option<i32>, audited: bool) -> ObjectWrite {
     let is_compilation = operation == OperationType::Compilation;
     let mut batch = ObjectWrite {
         operation,
-        key: KEY,
+        submission_id: SUBMISSION_ID,
+        dataset_id: DATASET_ID,
         result: result_row(),
         executables: if is_compilation {
             vec![executable_row()]
@@ -146,7 +146,10 @@ fn the_operations_on_one_object_and_type_collapse_into_one_batch_of_their_rows()
     assert_eq!(batches.len(), 1);
     assert_eq!(batch.evaluations.len(), 2);
     assert_eq!(batch.audit.len(), 2);
-    assert!(batch.evaluations.iter().all(|row| row.key == batch.key));
+    assert!(batch
+        .evaluations
+        .iter()
+        .all(|row| row.submission_id == batch.submission_id && row.dataset_id == batch.dataset_id));
     assert!(batch
         .audit
         .iter()
@@ -156,7 +159,7 @@ fn the_operations_on_one_object_and_type_collapse_into_one_batch_of_their_rows()
 #[test]
 fn one_batch_is_returned_per_object_and_type_in_key_order() {
     let mut other_object = write(OperationType::Evaluation, Some(TESTCASE_ID), true);
-    other_object.key.submission_id = OTHER_SUBMISSION_ID;
+    other_object.submission_id = OTHER_SUBMISSION_ID;
     let operations = [
         write(OperationType::Evaluation, Some(TESTCASE_ID), true),
         other_object,
@@ -166,7 +169,7 @@ fn one_batch_is_returned_per_object_and_type_in_key_order() {
     let batches = group_by_object(&operations).expect("every operation carries an audit row");
     let keys: Vec<(OperationType, i32)> = batches
         .iter()
-        .map(|b| (b.operation, b.key.submission_id))
+        .map(|b| (b.operation, b.submission_id))
         .collect();
 
     assert_eq!(
@@ -196,12 +199,16 @@ fn a_batch_keeps_the_state_the_last_of_its_operations_left() {
 #[test]
 fn a_batch_with_no_audit_row_neither_groups_nor_seals() {
     let unaudited = write(OperationType::Evaluation, Some(TESTCASE_ID), false);
+    let unaudited_error = WriteError::MissingAudit {
+        submission_id: SUBMISSION_ID,
+        dataset_id: DATASET_ID,
+    };
 
     assert_eq!(
         group_by_object(std::slice::from_ref(&unaudited)),
-        Err(WriteError::MissingAudit { key: KEY })
+        Err(unaudited_error)
     );
-    assert_eq!(unaudited.seal(), Err(WriteError::MissingAudit { key: KEY }));
+    assert_eq!(unaudited.seal(), Err(unaudited_error));
     assert!(write(OperationType::Evaluation, Some(TESTCASE_ID), true)
         .seal()
         .is_ok());

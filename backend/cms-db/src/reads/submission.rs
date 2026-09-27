@@ -1,6 +1,7 @@
 //! One `submissions` row: the columns that read it, and the record they map onto.
 
 use chrono::NaiveDateTime;
+use sqlx::FromRow;
 
 /// The columns one `submissions` row is read with, bound to its own id as `$1`.
 pub const SUBMISSION_BY_ID: &str = "\
@@ -9,7 +10,10 @@ pub const SUBMISSION_BY_ID: &str = "\
     WHERE s.id = $1";
 
 /// A submission as judging holds it: which task, which contestant, and when.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// The fields are the columns [`SUBMISSION_BY_ID`] projects, so a row of that
+/// query binds straight onto this record.
+#[derive(Debug, Clone, PartialEq, Eq, FromRow)]
 pub struct SubmissionRecord {
     /// The handle every result is filed under, so one submission is tracked
     /// across every dataset it was judged on and every rejudge it survives.

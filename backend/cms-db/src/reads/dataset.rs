@@ -1,5 +1,7 @@
 //! One `datasets` row: the columns that read it, and the record they map onto.
 
+use sqlx::FromRow;
+
 /// The columns one `datasets` row is read with, bound to its own id as `$1`.
 ///
 /// `tasks.active_dataset_id` is nullable and `=` against it is `NULL` rather than
@@ -13,7 +15,10 @@ pub const DATASET_BY_ID: &str = "\
     WHERE d.id = $1";
 
 /// One dataset: the task it judges for, the limits it imposes, whether it is live.
-#[derive(Debug, Clone, PartialEq)]
+///
+/// The fields are the columns [`DATASET_BY_ID`] projects, so a row of that query
+/// binds straight onto this record.
+#[derive(Debug, Clone, PartialEq, FromRow)]
 pub struct DatasetRecord {
     /// What the task's `active_dataset_id` is compared against, which is why the
     /// query joins `tasks` rather than reading the flag off this table.
