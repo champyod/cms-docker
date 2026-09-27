@@ -1,4 +1,4 @@
-//! The arguments a run is launched with, and the directory mapping each becomes.
+//! The arguments a run is launched with, and the order they are read in.
 //!
 //! [`Options`] says what a run is allowed to do; this says what that looks like on
 //! a command line. Nothing here decides anything — it renders the options a caller
@@ -7,15 +7,15 @@
 //!
 //! The rendering is separate from the options for one reason: an option is a value
 //! a caller can hold and change, while an argument is a string that only exists for
-//! the length of one launch. Keeping them apart means the flag names, the kibibyte
-//! conversions and the unit the isolation program takes are all in one place, and
-//! adding an option is adding a value rather than touching every flag writer.
+//! the length of one launch. Keeping them apart means the flag names and the unit
+//! every limit is written in are all in one place, and adding an option is adding a
+//! value rather than touching every flag writer.
 //!
-//! Two conversions happen here rather than at the call site, because the isolation
-//! program and the log disagree with the caller about units. Every size is given
-//! in bytes and written in kibibytes, and every limit is given as a duration and
-//! written in seconds with its fraction kept, because that is what the two sides
-//! take them in.
+//! Every list here is an argument list rather than a line of shell, and is handed to
+//! a [`Command`] as it is: a program is started with the words it is given, not with
+//! a string something else has to take apart again, so no word is quoted on the way
+//! to a launch. A line meant for a person to read is the one exception, and it is
+//! quoted word by word precisely so it says what the launch said.
 //!
 //! # Errors
 //!
@@ -27,62 +27,28 @@
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
-use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::borrow::Cow;
+use std::path::Path;
 
-use super::Options;
+use shell_escape::unix::escape;
 
-/// Bytes in the kibibytes the isolation program takes every size in.
-const BYTES_PER_KIBIBYTE: u64 = 1024;
+use super::units::{kibibytes, seconds};
+use super::{MappedDirectory, Options};
+
+/// The flag that opens every run's argument list.
+const FLAG_CG: &str = "--cg";
+/// The flag that ends the isolation program's own options and starts the run's.
+const OPTION_END: &str = "--";
+/// The flag that makes every later flag apply to a run.
+const FLAG_RUN: &str = "--run";
+/// The flag that makes a run print what it is doing, once per repetition.
+const FLAG_VERBOSE: &str = "--verbose";
 /// The flag that runs a box with the whole environment rather than an empty one.
 const FLAG_FULL_ENV: &str = "--full-env";
 /// The flag naming one variable of the environment, and what it is set to.
 const FLAG_ENV: &str = "--env";
 
-/// A directory the box is told to make visible inside itself.
-///
-/// The source is the directory on this side and the destination is where the run
-/// sees it, and a mapping with no source is bound to itself. The options are the
-/// isolation program's own rule options — `rw`, `noexec`, `tmp` — and are written
-/// after the source, which is the order it reads them in.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MappedDirectory {
-    /// The directory on this side, or `None` to bind the destination to itself.
-    pub source: Option<PathBuf>,
-    /// Where the run sees the directory.
-    pub destination: String,
-    /// The isolation program's rule options, or `None` for its own default.
-    pub options: Option<String>,
-}
-
 impl MappedDirectory {
-    /// A directory made visible where it already is.
-    #[must_use]
-    pub fn new(path: impl Into<String>) -> Self {
-        Self {
-            source: None,
-            destination: path.into(),
-            options: None,
-        }
-    }
-
-    /// A directory on this side made visible under another name.
-    #[must_use]
-    pub fn at(source: impl Into<PathBuf>, destination: impl Into<String>) -> Self {
-        Self {
-            source: Some(source.into()),
-            destination: destination.into(),
-            options: None,
-        }
-    }
-
-    /// The same mapping, with the isolation program's rule options set.
-    #[must_use]
-    pub fn with_options(mut self, options: impl Into<String>) -> Self {
-        self.options = Some(options.into());
-        self
-    }
-
     /// The mapping as one `--dir` argument: destination, then source, then rules.
     #[must_use]
     pub fn argument(&self) -> String {
@@ -100,6 +66,54 @@ impl MappedDirectory {
 }
 
 impl Options {
+    /// The flags this run of the box is launched with, in the reference's order.
+    ///
+    /// `meta` is the file this run's measurements are written to, so the last two
+    /// flags name where to read them and make everything above them about a run.
+    #[must_use]
+    pub fn arguments(&self, meta: &Path) -> Vec<String> {
+        let mut flags = vec![
+            FLAG_CG.to_owned(),
+            format!("--chdir={}", self.working_directory),
+        ];
+        flags.extend(self.directory_flags());
+        flags.extend(self.environment_flags());
+        flags.extend(self.size_flags());
+        flags.extend(self.stream_flags());
+        flags.push(self.processes_flag());
+        flags.extend(self.timeout_flags());
+        flags.extend(vec![FLAG_VERBOSE.to_owned(); self.verbosity as usize]);
+        flags.push(format!("--meta={}", meta.display()));
+        flags.push(FLAG_RUN.to_owned());
+        flags
+    }
+
+    /// The whole command line a run is launched with, its own words included.
+    #[must_use]
+    pub fn invocation(&self, meta: &Path, command: &[&str]) -> Vec<String> {
+        let mut flags = self.arguments(meta);
+        flags.push(OPTION_END.to_owned());
+        flags.extend(command.iter().map(|word| (*word).to_owned()));
+        flags
+    }
+
+    /// The same command line as one line a person can read and paste into a shell.
+    ///
+    /// This is the only place a word is escaped, and it is escaped because a line
+    /// someone copies is taken apart again by a shell rather than by a program: a
+    /// word holding a space or a quote has to survive being read back, or the line
+    /// says something other than what the launch said. A launch is handed
+    /// [`Self::invocation`] itself and is never escaped.
+    #[must_use]
+    pub fn display(&self, meta: &Path, command: &[&str]) -> String {
+        let words = self.invocation(meta, command);
+        words
+            .iter()
+            .map(|word| escape(Cow::Borrowed(word.as_str())))
+            .collect::<Vec<Cow<'_, str>>>()
+            .join(" ")
+    }
+
     /// The `--dir` flags for every directory the box is told to make visible.
     pub(super) fn directory_flags(&self) -> Vec<String> {
         self.directories
@@ -193,14 +207,4 @@ impl Options {
         }
         format!("{flag}={home}/{path}", home = self.working_directory)
     }
-}
-
-/// A size in bytes as the kibibytes the isolation program takes it in.
-const fn kibibytes(size: u64) -> u64 {
-    size / BYTES_PER_KIBIBYTE
-}
-
-/// A limit as the seconds the isolation program takes it in, fractions kept.
-const fn seconds(limit: Duration) -> f64 {
-    limit.as_secs_f64()
 }

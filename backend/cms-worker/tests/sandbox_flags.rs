@@ -115,3 +115,25 @@ fn a_mapping_is_written_destination_then_source_then_rules() {
         "/etc/mono=/etc/mono:noexec"
     );
 }
+
+#[test]
+fn a_displayed_line_quotes_only_the_words_a_shell_would_take_apart() {
+    let options = Options::for_sandbox(Path::new("/outer/home"));
+    let line = options.display(
+        Path::new("/outer/run.log.0"),
+        &["/bin/sh", "-c", "echo a b"],
+    );
+    assert!(line.ends_with("-- /bin/sh -c 'echo a b'"), "{line}");
+
+    let quoted = options.display(
+        Path::new("/outer/run.log.0"),
+        &["/bin/sh", "-c", "echo 'a' && echo b"],
+    );
+    assert!(
+        quoted.ends_with(r"-- /bin/sh -c 'echo '\''a'\'' && echo b'"),
+        "{quoted}"
+    );
+
+    let spoken = options.display(Path::new("/outer/run.log.0"), &["/bin/echo"]);
+    assert!(spoken.ends_with("-- /bin/echo"), "{spoken}");
+}

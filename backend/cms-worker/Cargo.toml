@@ -8,3 +8,5 @@ cms-db = { path = "../cms-db" }
 cms-proto = { path = "../cms-proto" }
 serde_json = { workspace = true }
 sha1 = { workspace = true }
+shell-escape = { workspace = true }
+thiserror = { workspace = true }

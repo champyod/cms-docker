@@ -26,7 +26,6 @@
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
-use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
@@ -37,13 +36,16 @@ use crate::measure::MeasureError;
 ///
 /// Every variant names the path or the program to look at, so a refusal names the
 /// run rather than reporting that something did not work.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum SpawnError {
     /// A command was handed with nothing in it to run.
+    #[error("the command to run is empty")]
     EmptyCommand,
     /// The command's own name is the empty string, which names no program.
+    #[error("the command to run has no program in it")]
     NamelessCommand,
     /// The isolation program, or a command run in its place, would not start.
+    #[error("cannot start {}: {source}", program.display())]
     Unlaunchable {
         /// The program that would not start.
         program: PathBuf,
@@ -51,6 +53,7 @@ pub enum SpawnError {
         source: io::Error,
     },
     /// A run finished and left no log behind, so nothing measured it.
+    #[error("the run wrote no log at {}", path.display())]
     NoMetaFile {
         /// Where the log was to have been written.
         path: PathBuf,
@@ -58,6 +61,7 @@ pub enum SpawnError {
     /// The launch returned a code nothing here reads: either the isolation program
     /// failed in a way it does not document, or a command run beside it did not do
     /// what it was asked to. The box is not set up either way.
+    #[error("{program} returned an exit status ({code}) unknown")]
     Exit {
         /// The program that returned the code.
         program: String,
@@ -65,6 +69,7 @@ pub enum SpawnError {
         code: i32,
     },
     /// A launch had to touch the run's own directory and could not.
+    #[error("{source} at {}", path.display())]
     Io {
         /// The path the launch was working on.
         path: PathBuf,
@@ -72,40 +77,9 @@ pub enum SpawnError {
         source: io::Error,
     },
     /// A pipe carrying what a run printed could not be read to its end.
+    #[error(transparent)]
     Pipe(ReadError),
     /// A log held a value that is not the number its key promises.
+    #[error(transparent)]
     Measure(MeasureError),
-}
-
-impl fmt::Display for SpawnError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::EmptyCommand => write!(f, "the command to run is empty"),
-            Self::NamelessCommand => write!(f, "the command to run has no program in it"),
-            Self::Unlaunchable { program, source } => {
-                write!(f, "cannot start {}: {source}", program.display())
-            }
-            Self::NoMetaFile { path } => write!(f, "the run wrote no log at {}", path.display()),
-            Self::Exit { program, code } => {
-                write!(f, "{program} returned an exit status ({code}) unknown")
-            }
-            Self::Io { path, source } => write!(f, "{source} at {}", path.display()),
-            Self::Pipe(error) => write!(f, "{error}"),
-            Self::Measure(error) => write!(f, "{error}"),
-        }
-    }
-}
-
-impl std::error::Error for SpawnError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Unlaunchable { source, .. } | Self::Io { source, .. } => Some(source),
-            Self::Pipe(error) => Some(error),
-            Self::Measure(error) => Some(error),
-            Self::EmptyCommand
-            | Self::NamelessCommand
-            | Self::NoMetaFile { .. }
-            | Self::Exit { .. } => None,
-        }
-    }
 }
