@@ -292,9 +292,97 @@ check_busybox_compat() {
   done < <(delivered_shell_files)
 }
 
+# ---------------------------------------------------------------------------
+# Bind address of a published container port
+#
+# A published port reaches the host through a bind address, so a host field that
+# is only a port expression lands the container on every interface and leaves the
+# operator no dial to narrow it with. Services that already name an address keep
+# it; the rest are reported, because a bare publication is a decision about who
+# may reach a container and it should be a written one.
+# ---------------------------------------------------------------------------
+parse_compose_published_ports() {
+  # WHY: a long-form item spans several lines, so the item is buffered until the
+  # next item or block ends and then collapsed to one field — a record has to
+  # stay a single line for the read loop below. An item keeps its own file and
+  # line, because the buffer for the last item of one file is flushed after awk
+  # has already moved on to the next.
+  awk '
+    function flush_item(   text) {
+      if (!has_item) return
+      text = item_text
+      gsub(/[[:space:]]+/, " ", text)
+      sub(/^ /, "", text)
+      sub(/ +$/, "", text)
+      print item_file "\t" item_line "\t" text
+      has_item = 0
+      item_text = ""
+    }
+    function start_item() {
+      flush_item()
+      has_item = 1
+      item_file = FILENAME
+      item_line = FNR
+      item_text = substr($0, index($0, "-") + 2)
+      sub(/[[:space:]]+#.*$/, "", item_text)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", item_text)
+    }
+    FNR == 1 { flush_item(); item_file = ""; item_line = 0; in_services = 0; in_ports = 0 }
+    /^[^[:space:]#]/ { flush_item(); in_services = ($0 ~ /^services:/); in_ports = 0; next }
+    /^[[:space:]]*#/ { next }
+    !in_services { next }
+    /^  [A-Za-z0-9_.-]+:/ { flush_item(); in_ports = 0; next }
+    /^    ports:/ { flush_item(); in_ports = 1; next }
+    in_ports && /^    [^[:space:]]/ { flush_item(); in_ports = 0; next }
+    in_ports && /^[[:space:]]*-[[:space:]]/ { start_item(); next }
+    in_ports && has_item && item_text !~ /^["0-9$]/ { item_text = item_text " " $0 }
+    END { flush_item() }
+  ' "$@"
+}
+
+# WHY: the long form states the host address as its own key, so naming host_ip
+# is the whole contract; the short form has no such key and states the address in
+# front of the ports. That leading field cannot be read by splitting on a colon,
+# because ${VAR:-0.0.0.0} carries colons of its own — the closing brace is the
+# only delimiter an expansion cannot itself contain. An address is a dotted
+# literal, localhost, or an expansion defaulting to one; a port number is none.
+published_port_binds_an_address() {
+  local entry="$1" bind_default
+  case "$entry" in
+    *host_ip:*) return 0 ;;
+  esac
+  entry="${entry%\"}"
+  entry="${entry#\"}"
+  if [[ "$entry" =~ ^\$\{[A-Za-z_][A-Za-z0-9_]*:-([^}]*)\}(:|$) ]]; then
+    bind_default="${BASH_REMATCH[1]}"
+  elif [[ "$entry" =~ ^(localhost|[0-9]+(\.[0-9]+)+)(:|$) ]]; then
+    return 0
+  else
+    return 1
+  fi
+  case "$bind_default" in
+    *.*) return 0 ;;
+  esac
+  return 1
+}
+
+check_published_port_bind() {
+  local file rel lineno entry
+  local remedy="\${SERVICE_BIND_ADDR:-127.0.0.1}:<host>:<container>"
+  [ "${#COMPOSE_FILES[@]}" -gt 0 ] || return 0
+  while IFS=$'\t' read -r file lineno entry; do
+    published_port_binds_an_address "$entry" && continue
+    rel="${file#"${REPO_ROOT}/"}"
+    printf '%s:%s: finding — published port "%s" names no bind address — add one: "%s"\n' \
+      "$rel" "$lineno" "$entry" "$remedy" >> "$tmp_findings"
+    findings=$((findings + 1))
+  done < <(parse_compose_published_ports "${COMPOSE_FILES[@]}")
+}
+
 check_lib_delivery
 check_delivered_lib_files
 check_busybox_compat
+check_published_port_bind
 
 if [ -s "$tmp_findings" ]; then
   printf '[INFO] lib-contract findings (%d informational — not enforced):\n' "$findings" >&2

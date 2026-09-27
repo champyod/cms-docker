@@ -563,7 +563,7 @@ services:
       # - ${MTLS_WORKER_CERT:-config/mtls/worker.pem}:/etc/cms/mtls/worker.pem:ro
       # - ${MTLS_WORKER_KEY:-config/mtls/worker-key.pem}:/etc/cms/mtls/worker-key.pem:ro
     ports:
-      - "${WORKER_PORT:-26000}:${WORKER_PORT:-26000}"
+      - "${WORKER_BIND_ADDR:-0.0.0.0}:${WORKER_PORT:-26000}:${WORKER_PORT:-26000}"
     networks:
       - cms-network
     privileged: true

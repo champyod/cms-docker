@@ -102,6 +102,7 @@ CORE_SERVICES_HOST = "cms-log-service" # str; remote workers: main server IP
 WORKER_SHARD = 0                # num; MUST be unique per instance
 WORKER_NAME = "worker-0"        # str
 WORKER_PORT = 26000             # port
+WORKER_BIND_ADDR = "0.0.0.0"    # str; RPC bind address; a remote worker sets this to its own Tailscale IP so 26000 is not published on every interface
 WORKER_REPLICAS = 1             # num
 WORKER_CPU_LIMIT = "2"          # str
 WORKER_MEMORY_LIMIT = "2G"      # str

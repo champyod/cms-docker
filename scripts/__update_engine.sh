@@ -705,6 +705,7 @@ VAR_SPECS=(
   "Worker|[worker]|WORKER_SHARD|num||0"
   "Worker|[worker]|WORKER_NAME|str||worker-0"
   "Worker|[worker]|WORKER_PORT|port||26000"
+  "Worker|[worker]|WORKER_BIND_ADDR|str||0.0.0.0"
   "Worker|[worker]|WORKER_REPLICAS|num||1"
   "Worker|[worker]|WORKER_CPU_LIMIT|str||2"
   "Worker|[worker]|WORKER_MEMORY_LIMIT|str||2G"
