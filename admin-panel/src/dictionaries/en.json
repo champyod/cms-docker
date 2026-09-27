@@ -503,12 +503,6 @@
       "userRecord": "This user could not be loaded",
       "teamRecord": "This team could not be loaded",
       "submissionRecord": "This submission could not be loaded"
-    },
-    "status": {
-      "healthy": "Healthy",
-      "degraded": "Degraded",
-      "offline": "Offline",
-      "unknown": "Unknown"
     }
   },
   "rowActions": {

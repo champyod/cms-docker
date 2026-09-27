@@ -2,17 +2,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Pencil, Trash2 } from 'lucide-react';
-import en from '@/dictionaries/en.json';
-import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
-import type { Dictionary } from '@/lib/dictionary';
 import { FormField, SelectField, TextareaField } from '@/components/core/FormField';
 import { InlineAlert } from '@/components/core/InlineAlert';
 import { RowActions, type RowAction } from '@/components/core/RowActions';
 import { ModalFooter } from '@/components/core/ModalFooter';
 import { SectionCard } from '@/components/core/SectionCard';
 import { NameDialog } from '@/components/core/NameDialog';
-import { MetricCard } from '@/components/core/MetricCard';
-import { StatusCard } from '@/components/core/StatusCard';
 
 afterEach(() => cleanup());
 
@@ -22,10 +17,6 @@ function isDisabled(element: Element): boolean {
 
 function textOf(element: Element | null): string {
   return element?.textContent ?? '';
-}
-
-function withDictionary(dictionary: Dictionary, node: React.ReactNode): React.JSX.Element {
-  return <DictionaryProvider dict={dictionary}>{node}</DictionaryProvider>;
 }
 
 const EDIT_DELETE: readonly RowAction[] = [
@@ -172,34 +163,6 @@ describe('InlineAlert', () => {
     render(<InlineAlert tone="destructive" title="Delete failed" actions={<button type="button" onClick={onRetry}>Retry</button>}>The record was not removed.</InlineAlert>);
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(onRetry).toHaveBeenCalledTimes(1);
-  });
-
-});
-
-describe('MetricCard', () => {
-  it('renders a label with its value, unit, description, and footer', () => {
-    render(<MetricCard label="Running" value={3} unit="workers" description="Across all hosts" icon={<span>i</span>} tone="success" footer={<span>updated</span>} />);
-    expect(screen.getByText('Running')).not.toBeNull();
-    expect(screen.getByText('3')).not.toBeNull();
-    expect(screen.getByText('workers')).not.toBeNull();
-    expect(screen.getByText('Across all hosts')).not.toBeNull();
-    expect(screen.getByText('updated')).not.toBeNull();
-  });
-});
-
-describe('StatusCard', () => {
-  it('renders a status badge beside its description', () => {
-    render(withDictionary(en, <StatusCard title="Workers" status="healthy" description="All online" />));
-    expect(screen.getByText('Workers')).not.toBeNull();
-    expect(screen.getByText('All online')).not.toBeNull();
-    expect(screen.getByText('Healthy')).not.toBeNull();
-  });
-
-  it('keeps the status contract out of the metric card', () => {
-    const { container } = render(withDictionary(en, <StatusCard title="Disk" status="offline" description="Unreachable" actions={<button type="button">Retry</button>}><p>detail</p></StatusCard>));
-    expect(container.querySelector('[data-card-kind="status"]')).not.toBeNull();
-    expect(container.querySelector('[data-card-kind="metric"]')).toBeNull();
-    expect(screen.getByText('detail')).not.toBeNull();
   });
 
 });

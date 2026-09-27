@@ -5,12 +5,10 @@ import { Pencil, Trash2, Upload } from 'lucide-react';
 
 import en from '@/dictionaries/en.json';
 import th from '@/dictionaries/th.json';
-import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
 import { InlineAlert } from '@/components/core/InlineAlert';
+import { LiveIndicator } from '@/components/core/LiveIndicator';
 import { ModalFooter } from '@/components/core/ModalFooter';
 import { RowActions, ROW_ACTION_GROUP_TYPES, rowActionGroupLabel, type RowAction } from '@/components/core/RowActions';
-import { StatusCard, type StatusCardStatus } from '@/components/core/StatusCard';
-import type { Dictionary } from '@/lib/dictionary';
 
 afterEach(() => cleanup());
 
@@ -20,10 +18,6 @@ function textOf(element: Element | null): string {
 
 function isDisabled(element: Element): boolean {
   return element instanceof HTMLButtonElement && element.disabled;
-}
-
-function withDictionary(dictionary: Dictionary, node: React.ReactNode): React.JSX.Element {
-  return <DictionaryProvider dict={dictionary}>{node}</DictionaryProvider>;
 }
 
 const EDIT_DELETE: readonly RowAction[] = [
@@ -222,29 +216,11 @@ describe('RowActions primary marker contracts', () => {
   });
 });
 
-describe('StatusCard dictionary contract', () => {
-  it('reads every verdict from the dictionary in both locales', () => {
-    const statuses: readonly StatusCardStatus[] = ['healthy', 'degraded', 'offline', 'unknown'];
-    for (const [locale, dictionary] of [['en', en], ['th', th]] as const) {
-      for (const status of statuses) {
-        const { unmount } = render(withDictionary(dictionary, <StatusCard title="Workers" status={status} description="Probe" />));
-        expect(textOf(screen.getByText(dictionary.states.status[status])), `${locale} ${status}`).not.toBe('');
-        unmount();
-      }
-    }
-  });
-
-  it('keeps the English verdict out of the Thai card and the reverse', () => {
-    const { unmount } = render(withDictionary(th, <StatusCard title="Workers" status="offline" description="Probe" />));
-    expect(screen.queryByText('Offline')).toBeNull();
-    expect(screen.getByText(th.states.status.offline)).not.toBeNull();
-    unmount();
-    render(withDictionary(en, <StatusCard title="Workers" status="offline" description="Probe" />));
-    expect(screen.queryByText(th.states.status.offline)).toBeNull();
-    expect(screen.getByText('Offline')).not.toBeNull();
-  });
-
+describe('dictionary provider contract', () => {
+  // Why this rides on a core consumer: the throw belongs to the hook, and a consumer is the only
+  // way to call a hook under test, so the contract is pinned on whichever core component still
+  // reads the dictionary rather than on a fixture that could drift from real usage.
   it('fails closed without a dictionary instead of falling back to English', () => {
-    expect(() => render(<StatusCard title="Workers" status="healthy" description="All online" />)).toThrow(/DictionaryProvider/);
+    expect(() => render(<LiveIndicator status="live" />)).toThrow(/DictionaryProvider/);
   });
 });
