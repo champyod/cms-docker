@@ -48,16 +48,26 @@
 //! tombstone into a result, and the request is charged to the clock and the
 //! worker released whichever way it left.
 //!
+//! What a task is made of is the half inside all of that. [`tasktypes`] is the
+//! order a job's files are handed over, its runs are launched and its files are
+//! taken back in, which is the one thing a task type decides and the only thing
+//! that differs between one task type and the next. A language a job names and
+//! the box its runs are made in are the caller's, so [`tasktypes::Toolchain`] and
+//! [`tasktypes::Runtime`] are values rather than lookups and a task type can be
+//! exercised without a machine.
+//!
 //! # Errors
 //!
 //! [`MeasureError`], [`StageError`], [`CacheError`], [`edge::JobError`],
-//! [`service::ServiceError`] and [`sandbox::SpawnError`], and nothing else: a
-//! line that names no key, a value that is not the number its key promises, a path
-//! already staged, a path with no file, a digest no store holds, a task type this
-//! worker does not have, the tombstone, a request declined because the worker was
-//! busy, a run that could not be launched, a pipe that could not be
-//! read, and a code the isolation program does not document. A run that measured
-//! nothing is `None`, which is an answer rather than a failure.
+//! [`service::ServiceError`], [`sandbox::SpawnError`] and
+//! [`tasktypes::TaskError`], and nothing else: a line that names no key, a value
+//! that is not the number its key promises, a path already staged, a path with no
+//! file, a digest no store holds, a task type this worker does not have, the
+//! tombstone, a request declined because the worker was busy, a run that could not
+//! be launched, a pipe that could not be read, a code the isolation program does
+//! not document, and a task type's own three parameters, managers, file counts,
+//! executable counts and limits. A run that measured nothing is `None`, which is
+//! an answer rather than a failure.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
@@ -67,6 +77,7 @@ pub mod job;
 pub mod sandbox;
 pub mod service;
 pub mod stage;
+pub mod tasktypes;
 
 mod measure;
 mod stats;
