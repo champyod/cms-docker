@@ -21,7 +21,7 @@ import { PasswordFieldWithKind } from '@/components/core/PasswordFieldWithKind';
 import { SavedSecretReveal } from '@/components/core/SavedSecretReveal';
 import { toast } from 'sonner';
 import type { PasswordKind } from '@/lib/password-format';
-import { hasEffectivePermission, resolveEffectivePermissions, type OverrideEffect } from '@/lib/permission-engine';
+import { ACTION_PERMISSIONS, hasEffectivePermission, resolveEffectivePermissions, type OverrideEffect } from '@/lib/permission-engine';
 import { PERMISSION_REGISTRY } from '@/lib/permission-registry';
 import type { AdminWithLogin } from '@/lib/prisma-selects';
 import { getFieldAccess, stripDisallowedFields } from '@/lib/field-permissions';
@@ -167,7 +167,7 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData, callerPerm
   // Why: creating an admin is gated by admin:create on the server, so a create form is editable
   // whenever the caller holds that key; the per-field update keys only govern editing an existing row.
   const canCreate = useMemo(
-    () => hasEffectivePermission(callerPermissionSet, 'admin:create'),
+    () => hasEffectivePermission(callerPermissionSet, ACTION_PERMISSIONS.createAdmin),
     [callerPermissionSet],
   );
 

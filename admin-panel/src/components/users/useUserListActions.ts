@@ -6,7 +6,7 @@ import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import { apiClient } from '@/lib/apiClient';
-import { hasEffectivePermission } from '@/lib/permission-engine';
+import { ACTION_PERMISSIONS, hasEffectivePermission } from '@/lib/permission-engine';
 import type { UsersPageRow } from '@/lib/prisma-selects';
 
 export interface UserCapabilities {
@@ -33,8 +33,8 @@ export function useUserCapabilities(permissionKeys: readonly string[]): UserCapa
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
   return {
     canCreate: hasEffectivePermission(effective, 'user:create'),
-    canManage: hasEffectivePermission(effective, 'user:update'),
-    canDelete: hasEffectivePermission(effective, 'user:delete'),
+    canManage: hasEffectivePermission(effective, ACTION_PERMISSIONS.updateUser),
+    canDelete: hasEffectivePermission(effective, ACTION_PERMISSIONS.deleteUser),
   };
 }
 

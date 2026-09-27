@@ -23,11 +23,13 @@ export const ACTION_PERMISSIONS = {
   createContest: 'contest:create',
   createGroup: 'group:create',
   createTask: 'task:create',
+  createTeam: 'team:create',
   deleteAdmin: 'admin:delete',
   deleteAnnouncement: 'announcement:delete',
   deleteContest: 'contest:delete',
   deleteGroup: 'group:delete',
   deleteTask: 'task:delete',
+  deleteTeam: 'team:delete',
   deleteUser: 'user:delete',
   deployContest: 'deployment:deploy',
   ignoreQuestion: 'question:ignore',
@@ -41,6 +43,7 @@ export const ACTION_PERMISSIONS = {
   updateGroup: 'group:update',
   updateParticipation: 'participation:update',
   updateTask: 'task:update',
+  updateTeam: 'team:update',
   updateUser: 'user:update',
 } as const satisfies Record<string, PermissionKey>;
 

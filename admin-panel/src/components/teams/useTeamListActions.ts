@@ -6,7 +6,7 @@ import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import { deleteTeam } from '@/app/actions/teams';
-import { hasEffectivePermission } from '@/lib/permission-engine';
+import { ACTION_PERMISSIONS, hasEffectivePermission } from '@/lib/permission-engine';
 import type { TeamSummary } from '@/lib/people-read-model-types';
 
 export interface TeamCapabilities {
@@ -26,9 +26,9 @@ export interface TeamDialogs {
 export function useTeamCapabilities(permissionKeys: readonly string[]): TeamCapabilities {
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
   return {
-    canCreate: hasEffectivePermission(effective, 'team:create'),
-    canManage: hasEffectivePermission(effective, 'team:update'),
-    canDelete: hasEffectivePermission(effective, 'team:delete'),
+    canCreate: hasEffectivePermission(effective, ACTION_PERMISSIONS.createTeam),
+    canManage: hasEffectivePermission(effective, ACTION_PERMISSIONS.updateTeam),
+    canDelete: hasEffectivePermission(effective, ACTION_PERMISSIONS.deleteTeam),
   };
 }
 

@@ -16,6 +16,7 @@ export type TeamListCopy = Pick<Dictionary['teams'], 'addTeam' | 'tableEmptyTitl
 export interface TeamListTableProps {
   readonly teams: readonly TeamSummary[];
   readonly recordHref: (team: TeamSummary) => string;
+  readonly permissionKeys: readonly string[];
   readonly capabilities: TeamCapabilities;
   readonly onEdit: (team: TeamSummary) => void;
   readonly onDelete: (teamId: number) => void;
@@ -26,6 +27,7 @@ export interface TeamListTableProps {
 export function TeamListTable({
   teams,
   recordHref,
+  permissionKeys,
   capabilities,
   onEdit,
   onDelete,
@@ -42,8 +44,7 @@ export function TeamListTable({
         <TeamRowActions
           team={team}
           recordHref={recordHref(team)}
-          canManage={capabilities.canManage}
-          canDelete={capabilities.canDelete}
+          permissionKeys={permissionKeys}
           onEdit={onEdit}
           onDelete={onDelete}
         />

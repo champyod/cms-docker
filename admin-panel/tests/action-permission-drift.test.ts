@@ -31,6 +31,7 @@ const MAP_ENTRY_RE = /([A-Za-z_]\w*)\s*:\s*'([^']+)'/g;
 const MAP_REFERENCE_RE = /\bACTION_PERMISSIONS\.(\w+)/g;
 const GATE_REFERENCE_RE = /\b(?:ensurePermission|checkPermission|verifyApiPermission|requirePermission|hasEffectivePermission)\(\s*[^)]*ACTION_PERMISSIONS\.(\w+)/g;
 const LITERAL_GATE_RE = /\bpermission:\s*'[^']+'/g;
+const HOOK_LITERAL_GATE_RE = /\bhasEffectivePermission\s*\(\s*\w+\s*,\s*'([^']+)'/g;
 const REGISTRY_KEYS = new Set(PERMISSION_REGISTRY.map((entry) => entry.key));
 
 interface Drift {
@@ -55,7 +56,8 @@ function parseEntries(entries: Map<string, string>): Map<string, FileInfo> {
 }
 
 function componentSources(): Array<{ rel: string; source: string }> {
-  return listFilesRecursive(path.join(SRC_DIR, 'components'), '.tsx').map((abs) => ({
+  const dir = path.join(SRC_DIR, 'components');
+  return [...listFilesRecursive(dir, '.tsx'), ...listFilesRecursive(dir, '.ts')].map((abs) => ({
     rel: path.relative(SRC_DIR, abs),
     source: fs.readFileSync(abs, 'utf8'),
   }));
@@ -88,6 +90,31 @@ function collectGateDrift(entries: Map<string, string>, source: string, rel: str
     drift.push({ action: match[0], detail: `${rel} gates a button on a bare key instead of the map` });
   }
   return drift;
+}
+
+/**
+ * Why the map decides here and the syntax does not: a `.tsx` action descriptor's `permission`
+ * field is always an action, but the identical `hasEffectivePermission(effective, 'key')` call in
+ * a `.ts` hook also expresses a read or a page-visibility filter that no action owns. Keying the
+ * rule to the map's own values keeps it precise — a visibility key the map never claimed is left
+ * alone, while a key some entry already claims is a bypass and must read through that entry.
+ */
+function collectHookGateDrift(entries: Map<string, string>, source: string, rel: string): Drift[] {
+  const claimed = new Set(entries.values());
+  const drift: Drift[] = [];
+  for (const match of source.matchAll(HOOK_LITERAL_GATE_RE)) {
+    if (claimed.has(match[1])) {
+      drift.push({ action: match[1], detail: `${rel} gates a hook on a bare key instead of the map` });
+    }
+  }
+  return drift;
+}
+
+function collectComponentDrift(entries: Map<string, string>, files: Array<{ rel: string; source: string }>): Drift[] {
+  return files.flatMap((file) => [
+    ...collectGateDrift(entries, file.source, file.rel),
+    ...collectHookGateDrift(entries, file.source, file.rel),
+  ]);
 }
 
 describe('the action/permission map', () => {
@@ -134,9 +161,19 @@ describe('the action/permission map', () => {
     expect(collectGateDrift(entries, "{ key: 'delete', permission: 'task:update' }", 'components/tasks/TaskList.tsx')).toHaveLength(1);
   });
 
-  it('leaves no action button in the tree gated on a bare key or an undefined entry', () => {
+  it('fails when a hook gate is a bare key rather than a map entry, and spares an unclaimed read key', () => {
     const entries = readEntries(MAP_SOURCE);
-    const drift = componentSources().flatMap((file) => collectGateDrift(entries, file.source, file.rel));
-    expect(drift).toEqual([]);
+    // Why these two: a hook calls hasEffectivePermission for reads and for page visibility as well
+    // as for actions, so the proof needs both halves — the claimed key must be caught, and the
+    // unclaimed read key must survive, or widening the scan would only trade a blind spot for noise.
+    expect(collectHookGateDrift(entries, "hasEffectivePermission(effective, 'group:delete')", 'components/groups/useGroupList.ts'))
+      .toHaveLength(1);
+    expect(collectHookGateDrift(entries, "hasEffectivePermission(effective, 'contest:list')", 'components/palette/palette-data.ts'))
+      .toEqual([]);
+  });
+
+  it('leaves no action button or hook gate in the tree gated on a bare key or an undefined entry', () => {
+    const entries = readEntries(MAP_SOURCE);
+    expect(collectComponentDrift(entries, componentSources())).toEqual([]);
   });
 });

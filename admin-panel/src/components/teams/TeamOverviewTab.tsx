@@ -16,7 +16,7 @@ import { useJustSavedFlag } from '@/hooks/useJustSavedFlag';
 import type { Dictionary } from '@/lib/dictionary';
 import { getFieldAccess, type FieldAccess } from '@/lib/field-permissions';
 import { buildRoute } from '@/lib/navigation/routes';
-import { hasEffectivePermission } from '@/lib/permission-engine';
+import { ACTION_PERMISSIONS, hasEffectivePermission } from '@/lib/permission-engine';
 import type { TeamSummary } from '@/lib/people-read-model-types';
 
 export interface TeamOverviewTabProps {
@@ -112,8 +112,8 @@ export function TeamOverviewTab({ team, permissionKeys, navigation, copy, locale
   const router = useAppRouter();
   const effective = new Set(permissionKeys);
   const fieldAccess = getFieldAccess('teams', effective);
-  const canUpdateTeam = hasEffectivePermission(effective, 'team:update');
-  const canDeleteTeam = hasEffectivePermission(effective, 'team:delete');
+  const canUpdateTeam = hasEffectivePermission(effective, ACTION_PERMISSIONS.updateTeam);
+  const canDeleteTeam = hasEffectivePermission(effective, ACTION_PERMISSIONS.deleteTeam);
   const { formData, saving, justSaved, changeField, save } = useTeamOverviewForm(team, canUpdateTeam, router.refresh);
   const removeTeam = useTeamDeletion(team, locale, router.push);
   const fields = copy.overview;

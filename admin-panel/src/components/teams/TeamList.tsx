@@ -35,6 +35,7 @@ export function TeamList({ initialTeams, permissionKeys, navigation, copy, docsL
       <TeamListTable
         teams={teams}
         recordHref={(team) => recordHref(locale, team)}
+        permissionKeys={permissionKeys}
         capabilities={capabilities}
         onEdit={startEdit}
         onDelete={(teamId) => { void removeTeam(teamId); }}

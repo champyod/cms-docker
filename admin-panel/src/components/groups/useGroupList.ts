@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 
 import { toast } from 'sonner';
 import {
+  ACTION_PERMISSIONS,
   hasEffectivePermission,
   resolveEffectivePermissions,
 } from '@/lib/permission-engine';
@@ -20,9 +21,9 @@ export function useGroupList(permissionKeys: readonly string[]) {
     [permissionKeys],
   );
 
-  const canCreate = hasEffectivePermission(effective, 'group:create');
-  const canUpdate = hasEffectivePermission(effective, 'group:update');
-  const canDelete = hasEffectivePermission(effective, 'group:delete');
+  const canCreate = hasEffectivePermission(effective, ACTION_PERMISSIONS.createGroup);
+  const canUpdate = hasEffectivePermission(effective, ACTION_PERMISSIONS.updateGroup);
+  const canDelete = hasEffectivePermission(effective, ACTION_PERMISSIONS.deleteGroup);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);

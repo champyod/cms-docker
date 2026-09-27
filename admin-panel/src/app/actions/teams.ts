@@ -3,8 +3,8 @@
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { ensurePermission, getPermissions } from '@/lib/permissions';
+import { ACTION_PERMISSIONS } from '@/lib/permission-engine';
 import { stripDisallowedFields } from '@/lib/field-permissions';
-import { safeUserSelect } from '@/lib/prisma-selects';
 import { recordAudit } from '@/lib/audit';
 
 export async function getTeams() {
@@ -24,7 +24,7 @@ export async function getTeams() {
 }
 
 export async function createTeam(data: { code: string; name: string }) {
-  await ensurePermission('team:create');
+  await ensurePermission(ACTION_PERMISSIONS.createTeam);
   const perms = await getPermissions();
   const allowed = stripDisallowedFields('teams', data as Record<string, unknown>, perms);
 
@@ -51,7 +51,7 @@ export async function createTeam(data: { code: string; name: string }) {
 }
 
 export async function updateTeam(teamId: number, data: { code?: string; name?: string }) {
-  await ensurePermission('team:update');
+  await ensurePermission(ACTION_PERMISSIONS.updateTeam);
   const perms = await getPermissions();
   const allowed = stripDisallowedFields('teams', data as Record<string, unknown>, perms);
 
@@ -76,7 +76,7 @@ export async function updateTeam(teamId: number, data: { code?: string; name?: s
 }
 
 export async function deleteTeam(teamId: number) {
-  await ensurePermission('team:delete');
+  await ensurePermission(ACTION_PERMISSIONS.deleteTeam);
 
   let beforeValues: unknown = undefined;
   try {
@@ -100,55 +100,5 @@ export async function deleteTeam(teamId: number) {
     const e = error as Error;
     return { success: false, error: e.message };
   }
-}
-
-export async function getTeamWithDetails(teamId: number) {
-  await ensurePermission('team:read');
-
-  const team = await prisma.teams.findUnique({
-    where: { id: teamId },
-    include: {
-      participations: {
-        include: {
-          users: { select: safeUserSelect },
-          contests: {
-            select: { id: true, name: true, description: true, start: true, stop: true }
-          }
-        }
-      }
-    }
-  });
-
-  if (!team) return null;
-
-  const membersMap = new Map<number, { user: typeof team.participations[0]['users']; contests: { id: number; name: string }[] }>();
-
-  team.participations.forEach((p: (typeof team.participations)[number]) => {
-    if (!membersMap.has(p.user_id)) {
-      membersMap.set(p.user_id, { user: p.users, contests: [] });
-    }
-    membersMap.get(p.user_id)!.contests.push({ id: p.contests.id, name: p.contests.name });
-  });
-
-  const contestsMap = new Map<number, { id: number; name: string; description: string; start: Date; stop: Date }>();
-  team.participations.forEach((p: (typeof team.participations)[number]) => {
-    if (!contestsMap.has(p.contest_id)) {
-      contestsMap.set(p.contest_id, {
-        id: p.contests.id,
-        name: p.contests.name,
-        description: p.contests.description,
-        start: p.contests.start,
-        stop: p.contests.stop,
-      });
-    }
-  });
-
-  return {
-    id: team.id,
-    code: team.code,
-    name: team.name,
-    members: Array.from(membersMap.values()),
-    contests: Array.from(contestsMap.values()),
-  };
 }
 
