@@ -124,6 +124,23 @@ get_pg_version() {
 }
 
 # ---------------------------------------------------------------------------
+# stream_volume_tar <image> — gzipped tar of VOLUME_DATA on stdout
+# ---------------------------------------------------------------------------
+# WHY stdout instead of `-v BACKUP_VOL_DIR:/backup`: the docker CLI only sends the
+# mount request to the host daemon, which resolves a bind-mount source on the
+# HOST, so the archive lands in the host's tree and never in this container's
+# filesystem — the file then does not exist here and every later step that reads
+# it is skipped. VOLUME_DATA is a named volume, which the daemon resolves on its
+# own side, so the mount is identical from host or container and only the output
+# channel has to move. The caller redirects this function's stdout to the archive
+# and reads its exit status, so no pipeline is involved: a failing docker cannot
+# be masked by a succeeding writer, with or without pipefail.
+stream_volume_tar() {
+  local image="$1"
+  docker run --rm -v "${VOLUME_DATA}:/volume:ro" "$image" tar czf - -C /volume .
+}
+
+# ---------------------------------------------------------------------------
 # Rotation — operates on timestamp sets across BOTH dirs, always keeps ≥1 set
 # ---------------------------------------------------------------------------
 list_backup_timestamps() {
@@ -332,14 +349,15 @@ run_backup() {
   local db_bytes
   db_bytes="$(file_size_bytes "$db_file")"
 
-  # 2) Volume backup via helper container (ro mount)
+  # 2) Volume backup — archive streamed from the helper container (ro mount)
   log_info "Archiving volume $VOLUME_DATA ..."
   local vol_image="alpine:3.19"
   # Pull quietly if needed (ignore failure — try busybox fallback)
   docker pull "$vol_image" >/dev/null 2>&1 || true
-  if ! docker run --rm -v "${VOLUME_DATA}:/volume:ro" -v "${BACKUP_VOL_DIR}:/backup" "$vol_image" sh -c "tar czf \"/backup/cms-data-${ts}.tar.gz\" -C /volume . 2>/tmp/tar.log || (cat /tmp/tar.log; exit 1)"; then
+  if ! stream_volume_tar "$vol_image" > "$vol_file"; then
     # Fallback to busybox
-    if ! docker run --rm -v "${VOLUME_DATA}:/volume:ro" -v "${BACKUP_VOL_DIR}:/backup" busybox sh -c "tar czf \"/backup/cms-data-${ts}.tar.gz\" -C /volume ."; then
+    if ! stream_volume_tar busybox > "$vol_file"; then
+      rm -f "$vol_file"
       log_warn "Volume backup failed"
       send_discord "❌ **Backup Failed** — volume tar failed" 16711680 "true"
       # Keep DB dump but warn — not fatal for DB part; still mark as failed
@@ -350,6 +368,16 @@ run_backup() {
   if [[ ! -f "$vol_file" ]]; then
     log_warn "Volume tar not created: $vol_file"
     send_discord "❌ **Backup Failed** — volume tar missing" 16711680 "true"
+    return 1
+  fi
+
+  # WHY -s and not just -f: a stream that died before the first tar block leaves a
+  # file that exists and is 0 bytes, which -f accepts and the manifest then records
+  # as a complete archive. An empty volume still tars to a non-zero gzip header.
+  if [[ ! -s "$vol_file" ]]; then
+    rm -f "$vol_file"
+    log_warn "Volume tar stream empty: $vol_file"
+    send_discord "❌ **Backup Failed** — volume tar empty" 16711680 "true"
     return 1
   fi
 
