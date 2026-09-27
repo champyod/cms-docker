@@ -104,9 +104,9 @@ pub struct CompilationLimits {
     pub processes: Option<u32>,
 }
 
-/// Where a box is made, what a compilation is held to and how large a file a run
-/// may create: the settings every run of this worker carries before a task type
-/// changes anything.
+/// Where a box is made, what a compilation is held to and how large a file an
+/// evaluation may create: the settings every run of this worker carries before a
+/// task type changes anything.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Runtime {
     program: PathBuf,
@@ -122,8 +122,8 @@ pub struct Runtime {
 
 impl Runtime {
     /// A runtime whose boxes are made under `temp_dir`, whose runs are launched
-    /// under the isolation program at `program`, and whose runs may create a file
-    /// of `file_size` bytes.
+    /// under the isolation program at `program`, and whose evaluation runs may
+    /// create a file of `file_size` bytes.
     #[must_use]
     pub fn new(
         program: impl Into<PathBuf>,
