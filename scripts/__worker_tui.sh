@@ -704,7 +704,27 @@ attach_write_rows() {
   for i in "${!shards[@]}"; do
     printf '  WORKER_%s=%s:%s\n' "${shards[$i]}" "$host" "${ports[$i]}"
   done
+  attach_selfmatch_verdict "$host" "${shards[@]}"
   refresh_hint
+}
+
+# Does this box claim the shards an attach just wrote? Every row is registry-only,
+# so a shard addressed at this box runs nowhere, and the only statement of that was
+# deploy_verdict refusing the deploy much later. is_local_host is the same matcher
+# the scope column applies, so the answer here is the answer ./cms worker list
+# gives. Informational only — deploy_verdict stays the enforcing gate.
+attach_selfmatch_verdict() { # host shard...
+  local host="$1"; shift
+  local s
+  if is_local_host "$host"; then
+    log_info "Self-match: $host is this box, so the rows above are addressed here —"
+    for s in "$@"; do
+      printf '  %-30s' "shard $s:"
+      printf 'PASS (host is this box; scope=remote since attach wrote LOCAL=0 — set WORKER_SHARD%s_LOCAL = 1 to run it here)\n' "$s"
+    done
+    return 0
+  fi
+  log_info "This box claims none of the $# attached shard(s) at $host: every row is registry-only (scope=remote) on another host, so nothing deploys here. Informational, not a failure."
 }
 
 # Print the worker-side setup block (paste on the worker box).
