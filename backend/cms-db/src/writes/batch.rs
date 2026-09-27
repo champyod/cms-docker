@@ -15,6 +15,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use super::shapes::{EvaluationRow, ExecutableRow, ResultRow, ScoreRow};
+use crate::reads::{DatasetId, SubmissionId};
 
 /// Which half of a judging commit one group belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -66,9 +67,9 @@ pub enum WriteError {
     /// The batch carried no audit row, so nothing would record the change.
     MissingAudit {
         /// The submission whose object the batch would have written.
-        submission_id: i32,
+        submission_id: SubmissionId,
         /// The dataset that object was measured against.
-        dataset_id: i32,
+        dataset_id: DatasetId,
     },
 }
 
@@ -95,10 +96,10 @@ pub struct ObjectWrite {
     /// Which half of the commit the rows belong to.
     pub operation: OperationType,
     /// The submission the object belongs to, which every row in the batch carries.
-    pub submission_id: i32,
+    pub submission_id: SubmissionId,
     /// The dataset the object was measured against, which every row in the batch
     /// carries.
-    pub dataset_id: i32,
+    pub dataset_id: DatasetId,
     /// The result row the object's progress is written to.
     pub result: ResultRow,
     /// The executable set one successful compilation produced.
@@ -158,7 +159,8 @@ impl ObjectWrite {
 /// audit row, so no batch reaches the statements without the record of who made
 /// the change and what it changed.
 pub fn group_by_object(writes: &[ObjectWrite]) -> Result<Vec<ObjectWrite>, WriteError> {
-    let mut groups: BTreeMap<(OperationType, i32, i32), ObjectWrite> = BTreeMap::new();
+    let mut groups: BTreeMap<(OperationType, SubmissionId, DatasetId), ObjectWrite> =
+        BTreeMap::new();
     for write in writes {
         if write.audit.is_empty() {
             return Err(WriteError::MissingAudit {

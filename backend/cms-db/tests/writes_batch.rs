@@ -6,14 +6,14 @@
 //! opened, and no check reads a clock or draws a random.
 
 use cms_db::{
-    group_by_object, AuditRow, CompilationOutcome, EvaluationRow, ExecutableRow, ObjectWrite,
-    OperationType, ResultRow, RowState, ScoreRow, WriteError,
+    group_by_object, AuditRow, CompilationOutcome, DatasetId, EvaluationRow, ExecutableRow,
+    ObjectWrite, OperationType, ResultRow, RowState, ScoreRow, SubmissionId, WriteError,
 };
 
 /// Synthetic ids, standing for nothing outside this file.
-const SUBMISSION_ID: i32 = 41;
-const OTHER_SUBMISSION_ID: i32 = 42;
-const DATASET_ID: i32 = 9;
+const SUBMISSION_ID: SubmissionId = SubmissionId(41);
+const OTHER_SUBMISSION_ID: SubmissionId = SubmissionId(42);
+const DATASET_ID: DatasetId = DatasetId(9);
 const TESTCASE_ID: i32 = 3;
 const OTHER_TESTCASE_ID: i32 = 4;
 /// The admin a fixture change is attributed to.
@@ -167,7 +167,7 @@ fn one_batch_is_returned_per_object_and_type_in_key_order() {
     ];
 
     let batches = group_by_object(&operations).expect("every operation carries an audit row");
-    let keys: Vec<(OperationType, i32)> = batches
+    let keys: Vec<(OperationType, SubmissionId)> = batches
         .iter()
         .map(|b| (b.operation, b.submission_id))
         .collect();

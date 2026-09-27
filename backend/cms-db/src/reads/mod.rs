@@ -11,9 +11,11 @@
 //! The four files below hold one entity each, so that a record is read together
 //! with the query behind it:
 //!
-//! - `submission`: the `submissions` row, and the id its query binds.
+//! - `submission`: the `submissions` row, the id its query binds, and the
+//!   [`SubmissionId`] that id is read as.
 //! - `result`: the `submission_results` row, and the pair of ids it is read by.
-//! - `dataset`: the `datasets` row, and the task join that spells its active flag.
+//! - `dataset`: the `datasets` row, the task join that spells its active flag,
+//!   and the [`DatasetId`] that id is read as.
 //! - `testcase`: the `testcases` row of one dataset, and the `DIGEST` columns it
 //!   carries.
 //!
@@ -24,6 +26,10 @@
 //! would refuse. The other three mappings are total, because every column they
 //! read is already the type their record declares — the outcome and active flags
 //! are computed by the projection rather than parsed out of text.
+//!
+//! The two ids are distinct types because both are `integer` columns and both
+//! halves of every result key, so nothing that files a result can take one where
+//! the other belongs.
 
 use crate::digest::DigestError;
 
@@ -32,9 +38,9 @@ mod result;
 mod submission;
 mod testcase;
 
-pub use dataset::{dataset_from_row, DatasetRecord, DATASET_BY_ID};
+pub use dataset::{dataset_from_row, DatasetId, DatasetRecord, DATASET_BY_ID};
 pub use result::{result_from_row, ResultRecord, RESULT_BY_SUBMISSION_AND_DATASET};
-pub use submission::{submission_from_row, SubmissionRecord, SUBMISSION_BY_ID};
+pub use submission::{submission_from_row, SubmissionId, SubmissionRecord, SUBMISSION_BY_ID};
 pub use testcase::{testcase_from_row, TestcaseRecord, TESTCASES_BY_DATASET};
 
 /// Why a row could not be mapped onto the record beside it.

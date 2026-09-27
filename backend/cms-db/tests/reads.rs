@@ -5,9 +5,10 @@
 
 use chrono::{DateTime, NaiveDateTime};
 use cms_db::{
-    dataset_from_row, result_from_row, submission_from_row, testcase_from_row, DatasetRecord,
-    DigestError, ReadError, ResultRecord, SubmissionRecord, TestcaseRecord, DATASET_BY_ID,
-    RESULT_BY_SUBMISSION_AND_DATASET, SUBMISSION_BY_ID, TESTCASES_BY_DATASET,
+    dataset_from_row, result_from_row, submission_from_row, testcase_from_row, DatasetId,
+    DatasetRecord, DigestError, ReadError, ResultRecord, SubmissionId, SubmissionRecord,
+    TestcaseRecord, DATASET_BY_ID, RESULT_BY_SUBMISSION_AND_DATASET, SUBMISSION_BY_ID,
+    TESTCASES_BY_DATASET,
 };
 
 /// Forty lowercase hex characters, which is what `testcases.input` holds.
@@ -29,10 +30,10 @@ const BATCH: &str = "Batch";
 const SUBMITTED_EPOCH_SECONDS: i64 = 1_700_000_000;
 
 /// Ids that stand for nothing: every one of them is a fixture.
-const SUBMISSION_ID: i32 = 41;
+const SUBMISSION_ID: SubmissionId = SubmissionId(41);
 const TASK_ID: i32 = 7;
 const PARTICIPATION_ID: i32 = 12;
-const DATASET_ID: i32 = 9;
+const DATASET_ID: DatasetId = DatasetId(9);
 
 /// Every query the module holds, and the record fields it projects, in row order.
 const QUERIES: [(&str, &str); 4] = [
@@ -63,7 +64,7 @@ fn submission_row(language: Option<&str>, official: bool) -> SubmissionRecord {
 
 /// One testcase of [`DATASET_ID`], carrying the two digests it was given.
 fn testcase_row(input: &str, output: &str) -> Result<TestcaseRecord, ReadError> {
-    testcase_from_row(3, DATASET_ID, CODENAME.to_string(), true, input, output)
+    testcase_from_row(3, DATASET_ID.0, CODENAME.to_string(), true, input, output)
 }
 
 /// The placeholders a query carries, in the order it writes them.
@@ -181,7 +182,7 @@ fn a_testcase_row_maps_onto_its_record_with_both_digests_typed() {
         record,
         TestcaseRecord {
             id: 3,
-            dataset_id: DATASET_ID,
+            dataset_id: DATASET_ID.0,
             codename: CODENAME.to_string(),
             is_public: true,
             input: INPUT_DIGEST.parse().expect("fixture digest"),

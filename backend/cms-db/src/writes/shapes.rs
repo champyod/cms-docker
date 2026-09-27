@@ -15,6 +15,7 @@
 use chrono::NaiveDateTime;
 
 use crate::digest::FileDigest;
+use crate::reads::{DatasetId, SubmissionId};
 
 /// The two values the `compilation_outcome` enum accepts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,9 +60,9 @@ impl EvaluationOutcome {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ResultRow {
     /// `submission_results.submission_id`, the row's own key bound as `$1`.
-    pub submission_id: i32,
+    pub submission_id: SubmissionId,
     /// `submission_results.dataset_id`, the row's own key bound as `$2`.
-    pub dataset_id: i32,
+    pub dataset_id: DatasetId,
     /// `submission_results.compilation_outcome`, absent until compilation ends.
     pub compilation_outcome: Option<CompilationOutcome>,
     /// `submission_results.compilation_text`, the localized compiler output.
@@ -96,9 +97,9 @@ pub struct ResultRow {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExecutableRow {
     /// The owning result's `submission_id`, bound as `$1`.
-    pub submission_id: i32,
+    pub submission_id: SubmissionId,
     /// The owning result's `dataset_id`, bound as `$2`.
-    pub dataset_id: i32,
+    pub dataset_id: DatasetId,
     /// `executables.filename`, unique within the owning result.
     pub filename: String,
     /// `executables.digest`, the identity of the stored file.
@@ -111,9 +112,9 @@ pub struct ExecutableRow {
 #[derive(Debug, Clone, PartialEq)]
 pub struct EvaluationRow {
     /// The owning result's `submission_id`, bound as `$1`.
-    pub submission_id: i32,
+    pub submission_id: SubmissionId,
     /// The owning result's `dataset_id`, bound as `$2`.
-    pub dataset_id: i32,
+    pub dataset_id: DatasetId,
     /// `evaluations.testcase_id`, the testcase the run was performed on.
     pub testcase_id: i32,
     /// `evaluations.outcome`, the grader's own outcome string.
@@ -143,9 +144,9 @@ pub struct EvaluationRow {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ScoreRow {
     /// `submission_results.submission_id`, the row's own key bound as `$1`.
-    pub submission_id: i32,
+    pub submission_id: SubmissionId,
     /// `submission_results.dataset_id`, the row's own key bound as `$2`.
-    pub dataset_id: i32,
+    pub dataset_id: DatasetId,
     /// `submission_results.score`, what the dataset's score type computed.
     pub score: Option<f64>,
     /// `submission_results.score_details`, the `jsonb` document behind it.

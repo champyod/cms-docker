@@ -46,9 +46,9 @@ mod types;
 mod writes;
 
 pub use reads::{
-    dataset_from_row, result_from_row, submission_from_row, testcase_from_row, DatasetRecord,
-    ReadError, ResultRecord, SubmissionRecord, TestcaseRecord, DATASET_BY_ID,
-    RESULT_BY_SUBMISSION_AND_DATASET, SUBMISSION_BY_ID, TESTCASES_BY_DATASET,
+    dataset_from_row, result_from_row, submission_from_row, testcase_from_row, DatasetId,
+    DatasetRecord, ReadError, ResultRecord, SubmissionId, SubmissionRecord, TestcaseRecord,
+    DATASET_BY_ID, RESULT_BY_SUBMISSION_AND_DATASET, SUBMISSION_BY_ID, TESTCASES_BY_DATASET,
 };
 pub use types::{
     resolve, AuthError, BcryptPassword, BcryptVerifier, CacheError, CacheHandle, DigestError,
