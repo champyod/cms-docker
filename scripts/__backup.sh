@@ -55,6 +55,13 @@ POSTGRES_BACKUP_PASSWORD_VAL="${POSTGRES_BACKUP_PASSWORD:-}"
 CONTAINER_DB="cms-database"
 VOLUME_DATA="cms-data"
 
+# Exit contract — a caller must be able to separate "the database is safe" from
+# "nothing was archived" without reading the log:
+#   0 = full backup (DB and volume)
+#   1 = no usable backup (the DB step failed, so no dump was kept)
+#   3 = partial backup (the dump was kept and recorded; the volume archive failed)
+readonly EXIT_PARTIAL_BACKUP=3
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -349,45 +356,56 @@ run_backup() {
   local db_bytes
   db_bytes="$(file_size_bytes "$db_file")"
 
-  # 2) Volume backup — archive streamed from the helper container (ro mount)
+  # 2) Volume backup — archive streamed from the helper container (ro mount).
+  # WHY no early return here: the dump is already on disk, so a lost volume leaves a
+  # usable database backup. Returning at this point would report the run as a total
+  # failure and record nothing, which is indistinguishable from a failed dump. The
+  # reason is captured instead, and the manifest, the rotation and the notification
+  # all run before the run is reported as partial.
   log_info "Archiving volume $VOLUME_DATA ..."
   local vol_image="alpine:3.19"
   # Pull quietly if needed (ignore failure — try busybox fallback)
   docker pull "$vol_image" >/dev/null 2>&1 || true
+  local vol_fail_reason=""
   if ! stream_volume_tar "$vol_image" > "$vol_file"; then
     # Fallback to busybox
     if ! stream_volume_tar busybox > "$vol_file"; then
       rm -f "$vol_file"
-      log_warn "Volume backup failed"
-      send_discord "❌ **Backup Failed** — volume tar failed" 16711680 "true"
-      # Keep DB dump but warn — not fatal for DB part; still mark as failed
-      return 1
+      vol_fail_reason="volume tar failed"
     fi
   fi
 
-  if [[ ! -f "$vol_file" ]]; then
-    log_warn "Volume tar not created: $vol_file"
-    send_discord "❌ **Backup Failed** — volume tar missing" 16711680 "true"
-    return 1
+  if [[ -z "$vol_fail_reason" && ! -f "$vol_file" ]]; then
+    vol_fail_reason="volume tar missing"
   fi
 
   # WHY -s and not just -f: a stream that died before the first tar block leaves a
   # file that exists and is 0 bytes, which -f accepts and the manifest then records
   # as a complete archive. An empty volume still tars to a non-zero gzip header.
-  if [[ ! -s "$vol_file" ]]; then
+  if [[ -z "$vol_fail_reason" && ! -s "$vol_file" ]]; then
     rm -f "$vol_file"
-    log_warn "Volume tar stream empty: $vol_file"
-    send_discord "❌ **Backup Failed** — volume tar empty" 16711680 "true"
-    return 1
+    vol_fail_reason="volume tar empty"
   fi
 
-  chmod 600 "$vol_file" 2>/dev/null || true
-  sha256sum "$vol_file" | awk '{print $1"  " $2}' > "$vol_sha_file"
-  chmod 600 "$vol_sha_file" 2>/dev/null || true
-  local vol_sha
-  vol_sha="$(awk '{print $1}' "$vol_sha_file")"
-  local vol_bytes
-  vol_bytes="$(file_size_bytes "$vol_file")"
+  # WHY the path is empty and the byte count zero when the archive is missing: a
+  # reader has to be able to tell "no volume archive was produced" from "an archive
+  # exists at this path", and a size stays a number so size arithmetic on an entry
+  # never has to special-case this run.
+  local vol_sha=""
+  local vol_bytes=0
+  local vol_status=""
+  local vol_tar_rel="volumes/cms-data-${ts}.tar.gz"
+  if [[ -n "$vol_fail_reason" ]]; then
+    log_warn "Volume archive not produced: $vol_fail_reason"
+    vol_status="failed"
+    vol_tar_rel=""
+  else
+    chmod 600 "$vol_file" 2>/dev/null || true
+    sha256sum "$vol_file" | awk '{print $1"  " $2}' > "$vol_sha_file"
+    chmod 600 "$vol_sha_file" 2>/dev/null || true
+    vol_sha="$(awk '{print $1}' "$vol_sha_file")"
+    vol_bytes="$(file_size_bytes "$vol_file")"
+  fi
 
   local pg_ver
   pg_ver="$(get_pg_version)"
@@ -396,11 +414,15 @@ run_backup() {
   # 3) manifest.json append
   log_info "Updating manifest $MANIFEST_FILE ..."
   if command -v python3 >/dev/null 2>&1; then
-    python3 - "$MANIFEST_FILE" "$ts" "db/cmsdb-${ts}.dump" "$db_sha" "volumes/cms-data-${ts}.tar.gz" "$vol_sha" "$pg_ver" "$db_bytes" "$vol_bytes" "$total_bytes" <<'PY'
+    python3 - "$MANIFEST_FILE" "$ts" "db/cmsdb-${ts}.dump" "$db_sha" "$vol_tar_rel" "$vol_sha" "$pg_ver" "$db_bytes" "$vol_bytes" "$total_bytes" "$vol_status" <<'PY'
 import json, os, sys, tempfile
-manifest_path, ts, db_dump, db_sha, vol_tar, vol_sha, pg_ver, db_b, vol_b, tot_b = sys.argv[1:11]
+manifest_path, ts, db_dump, db_sha, vol_tar, vol_sha, pg_ver, db_b, vol_b, tot_b, vol_status = sys.argv[1:12]
 db_b=int(db_b); vol_b=int(vol_b); tot_b=int(tot_b)
-entry={"ts":ts,"db_dump":db_dump,"db_sha256":db_sha,"vol_tar":vol_tar,"vol_sha256":vol_sha,"pg_version":pg_ver,"sizes":{"db_bytes":db_b,"vol_bytes":vol_b,"total_bytes":tot_b}}
+entry={"ts":ts,"db_dump":db_dump,"db_sha256":db_sha,"vol_tar":vol_tar or None,"vol_sha256":vol_sha or None,"pg_version":pg_ver,"sizes":{"db_bytes":db_b,"vol_bytes":vol_b,"total_bytes":tot_b}}
+# WHY only when the volume step failed: a complete run keeps the entry shape it has
+# always had, so every reader that exists today is unaffected by the partial run.
+if vol_status:
+    entry["volume_status"]=vol_status
 if os.path.exists(manifest_path):
     try:
         with open(manifest_path) as f:
@@ -443,6 +465,11 @@ PY
   local db_mb vol_mb
   db_mb="$(awk "BEGIN{printf \"%.2f\", $db_bytes/1048576}")"
   vol_mb="$(awk "BEGIN{printf \"%.2f\", $vol_bytes/1048576}")"
+  if [[ -n "$vol_status" ]]; then
+    log_warn "Backup partial: db=${db_mb}MB vol=FAILED (${vol_fail_reason}) ts=${ts}"
+    send_discord "⚠️ **Backup Partial** — ts \`${ts}\` — DB ${db_mb}MB OK / Vol FAILED (${vol_fail_reason}) — \`${pg_ver}\`" 16776960 "true"
+    return "$EXIT_PARTIAL_BACKUP"
+  fi
   log_info "Backup complete: db=${db_mb}MB vol=${vol_mb}MB ts=${ts}"
   send_discord "✅ **Backup Successful** — ts \`${ts}\` — DB ${db_mb}MB / Vol ${vol_mb}MB — \`${pg_ver}\`" 65280 "false"
 }
