@@ -32,6 +32,18 @@ const TRIP_AFTER: u32 = 2;
 /// Shortest gap between two notices past the opening burst.
 const NOTICE: Duration = Duration::from_millis(1_000);
 
+/// How far a wait may sit from the exact multiple, in the ladder's own units.
+///
+/// The doubling is computed in binary floating point, so a wait lands a few
+/// nanoseconds off a multiple of the base rather than exactly on it, and the
+/// ceiling is still hit exactly because an overshoot is clamped.
+const ROUNDING: Duration = Duration::from_micros(1);
+
+/// Whether a wait is the wanted one to within [`ROUNDING`].
+fn is_wait(got: Duration, want: Duration) -> bool {
+    got.abs_diff(want) <= ROUNDING
+}
+
 /// What the peer does with each dial, in order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Attempt {
@@ -201,7 +213,9 @@ fn every_refusal_waits_twice_as_long_as_the_one_before() {
         waits.push(peer.next_dial_in(now));
     }
 
-    assert_eq!(waits, vec![BASE, BASE * 2, CAP, CAP, CAP]);
+    for (got, want) in waits.iter().copied().zip([BASE, BASE * 2, CAP, CAP, CAP]) {
+        assert!(is_wait(got, want), "waited {got:?}, wanted {want:?}");
+    }
 }
 
 #[test]
@@ -209,11 +223,47 @@ fn jitter_only_ever_adds_within_the_ceiling() {
     let jittered = policy();
 
     assert_eq!(jittered.interval(1, 0.0), BASE);
-    assert_eq!(jittered.interval(1, 0.5), Duration::from_millis(150));
-    assert_eq!(jittered.interval(2, 1.0), Duration::from_millis(300));
+    assert!(is_wait(
+        jittered.interval(1, 0.5),
+        Duration::from_millis(150)
+    ));
+    assert!(is_wait(
+        jittered.interval(2, 1.0),
+        Duration::from_millis(300)
+    ));
     assert_eq!(jittered.interval(3, 0.5), CAP);
     assert_eq!(jittered.interval(3, 0.75), CAP);
     assert_eq!(jittered.interval(u32::MAX, 1.0), CAP);
+}
+
+#[test]
+fn a_sampled_jitter_is_a_unit_fraction() {
+    let jittered = policy();
+
+    let drawn = BackoffPolicy::sample_jitter();
+
+    assert!(
+        (0.0..=1.0).contains(&drawn),
+        "a draw is a unit fraction, got {drawn}"
+    );
+    let jittered = jittered.interval(1, drawn);
+    assert!(
+        (BASE..=CAP).contains(&jittered),
+        "a jittered interval stays under the ceiling, got {jittered:?}"
+    );
+}
+
+#[test]
+fn a_jitter_outside_the_unit_interval_is_refused() {
+    let jittered = policy();
+
+    assert_eq!(jittered.interval(1, 1.5), BASE, "above the unit interval");
+    assert_eq!(jittered.interval(1, -0.5), BASE, "below the unit interval");
+    assert_eq!(
+        jittered.interval(1, f64::NAN),
+        BASE,
+        "not a fraction at all"
+    );
 }
 
 #[test]

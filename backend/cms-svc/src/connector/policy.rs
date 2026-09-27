@@ -3,12 +3,16 @@
 //! The interval a failed dial earns, the ceiling it stops at, the cap the
 //! breaker probes under and the gap between two notices are one policy's worth
 //! of numbers, so they are declared together with the arithmetic that reads
-//! them. That arithmetic is written out rather than taken from a crate because
-//! the exact shape of it is the behaviour: doubling from a half-second base,
-//! folded jitter under the same ceiling, and a `NaN` refused rather than
-//! rounded, all of which the Python loop a peer is dialled against does by hand.
+//! them. That arithmetic is a doubling from a half-second base, folded jitter
+//! under the same ceiling, and a `NaN` refused rather than rounded, all of
+//! which the Python loop a peer is dialled against does by hand — so the ladder
+//! is read from `backon`, which doubles under the ceiling on its own, and the
+//! jitter is drawn from the unit interval by `rand`.
 
 use std::time::Duration;
+
+use backon::{BackoffBuilder, ExponentialBuilder};
+use rand::random_range;
 
 use super::state::DialError;
 use super::Connector;
@@ -30,6 +34,15 @@ const DEFAULT_NOTICE_EVERY: Duration = Duration::from_secs(60);
 
 /// Notices emitted before throttling starts, `_log_retry`'s `failures <= 3`.
 const NOTICE_BURST: u32 = 3;
+
+/// The multiplier one failure multiplies the interval by.
+const EXPONENT_FACTOR: f32 = 2.0;
+
+/// Doublings past which the interval already sits at its ceiling.
+///
+/// Wide enough that the ladder is never read past the point the ceiling stops
+/// it, so the number of failures cannot ask for more steps than are read.
+const EXPONENT_LIMIT: usize = 32;
 
 /// One reconnect notice, emitted at most once per interval.
 ///
@@ -105,18 +118,43 @@ impl BackoffPolicy {
     ///
     /// Doubling stops at `max` and the jitter is folded in under that same
     /// ceiling, so an interval is bounded and never zero: two peers that lost
-    /// the same upstream do not retry in lockstep.
+    /// the same upstream do not retry in lockstep. The doubling is computed in
+    /// binary floating point, so a wait sits a few nanoseconds off a multiple of
+    /// the base; the ceiling is hit exactly, since an overshoot is clamped.
     #[must_use]
     pub fn interval(&self, failures: u32, jitter: f64) -> Duration {
-        let factor = 1u32
-            .checked_shl(failures.saturating_sub(1))
-            .unwrap_or(u32::MAX);
-        let ceiling = self.base.saturating_mul(factor).min(self.max);
+        let ceiling = self.ceiling(failures);
         let span = self
             .base
             .min(self.max.saturating_sub(ceiling))
             .as_secs_f64();
         ceiling + Duration::from_secs_f64(span * fraction(jitter))
+    }
+
+    /// A jitter drawn from the unit interval, for one interval.
+    ///
+    /// A host that has no opinion passes this to [`Self::interval`], which is
+    /// what keeps two peers off the same schedule; a value it made up is
+    /// validated there instead, because an out-of-unit jitter is a different
+    /// request rather than a smaller one.
+    #[must_use]
+    pub fn sample_jitter() -> f64 {
+        random_range(0.0..=1.0)
+    }
+
+    /// The doubling read at the n-th failure, stopped at `max`.
+    fn ceiling(&self, failures: u32) -> Duration {
+        let step = usize::try_from(failures.saturating_sub(1))
+            .unwrap_or(EXPONENT_LIMIT)
+            .min(EXPONENT_LIMIT);
+        ExponentialBuilder::default()
+            .with_factor(EXPONENT_FACTOR)
+            .with_min_delay(self.base)
+            .with_max_delay(self.max)
+            .with_max_times(EXPONENT_LIMIT + 1)
+            .build()
+            .nth(step)
+            .unwrap_or(self.max)
     }
 }
 

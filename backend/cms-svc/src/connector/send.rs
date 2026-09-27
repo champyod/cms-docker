@@ -50,7 +50,7 @@ pub enum NoRoute {
 }
 
 /// What the connection owes the peer about one message.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Send {
     /// Write this whole answer: a refusal or a result, keyed with the id the
     /// caller is waiting on.
