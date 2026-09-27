@@ -1,9 +1,10 @@
-//! The arguments a run is launched with, and the order they are read in.
+//! The arguments a run is launched with, and the groups they are written in.
 //!
 //! [`Options`] says what a run is allowed to do; this says what that looks like on
 //! a command line. Nothing here decides anything — it renders the options a caller
-//! already set into the words the isolation program reads, in the reference's
-//! order, and the isolation program is the only thing that enforces any of it.
+//! already set into the words the isolation program reads, grouped here by what
+//! each group limits, and the isolation program is the only thing that enforces
+//! any of it.
 //!
 //! The rendering is separate from the options for one reason: an option is a value
 //! a caller can hold and change, while an argument is a string that only exists for
@@ -66,7 +67,12 @@ impl MappedDirectory {
 }
 
 impl Options {
-    /// The flags this run of the box is launched with, in the reference's order.
+    /// The flags this run of the box is launched with.
+    ///
+    /// The groups below are ordered by what each group limits — where the run
+    /// works, what it can see, what it inherits, then what it may consume — and
+    /// the groups themselves are in no fixed order relative to each other, since
+    /// the isolation program reads each flag by name.
     ///
     /// `meta` is the file this run's measurements are written to, so the last two
     /// flags name where to read them and make everything above them about a run.

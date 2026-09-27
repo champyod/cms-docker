@@ -150,7 +150,7 @@ pub fn clean_targets(stack: &str) -> Result<Vec<String>, DockerError> {
 ///
 /// # Errors
 ///
-/// Returns `Err` if `stack` is empty or unknown.
+/// Returns `Err` if `stack` is unknown.
 pub fn pull_targets(stack: &str) -> Result<Vec<String>, DockerError> {
     resolve(Operation::Pull, stack)
 }
