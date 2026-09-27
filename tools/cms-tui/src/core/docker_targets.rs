@@ -5,6 +5,8 @@
 //! these functions, which is what keeps `./cms deploy all` and the TUI's Deploy
 //! All row in the same order.
 
+use itertools::Itertools;
+
 /// The five make-target stacks that mirror `./cms deploy`/`stop`/`pull`.
 pub const ALL_STACKS: [&str; 5] = ["core", "admin", "contest", "worker", "infra"];
 
@@ -14,12 +16,18 @@ pub const DEPLOY_ALL_ORDER: [&str; 5] = ["core", "infra", "admin", "contest", "w
 /// Value that asks for every stack at once.
 const ALL_STACKS_ARG: &str = "all";
 
+/// The stack vocabulary as an error message spells it, read from [`ALL_STACKS`]
+/// and [`ALL_STACKS_ARG`] so a stack is named in exactly one place.
+fn stack_choices() -> String {
+    format!("{}, or {ALL_STACKS_ARG}", ALL_STACKS.iter().join(", "))
+}
+
 /// Represents a stack lifecycle failure that is not a process error.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum DockerError {
-    #[error("unknown stack `{0}`: expected one of core, admin, contest, worker, infra, or all")]
+    #[error("unknown stack `{0}`: expected one of {choices}", choices = stack_choices())]
     UnknownStack(String),
-    #[error("no stack given: pass one of core, admin, contest, worker, infra, or all")]
+    #[error("no stack given: pass one of {choices}", choices = stack_choices())]
     MissingStack,
 }
 
@@ -236,6 +244,18 @@ mod tests {
                 Err(DockerError::UnknownStack("bogus".into()))
             );
         }
+    }
+
+    #[test]
+    fn a_refusal_lists_every_stack_in_the_declared_order() {
+        assert_eq!(
+            DockerError::UnknownStack("bogus".into()).to_string(),
+            "unknown stack `bogus`: expected one of core, admin, contest, worker, infra, or all"
+        );
+        assert_eq!(
+            DockerError::MissingStack.to_string(),
+            "no stack given: pass one of core, admin, contest, worker, infra, or all"
+        );
     }
 
     #[test]
