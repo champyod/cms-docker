@@ -60,8 +60,12 @@ VOLUME_DATA="cms-data"
 #   0 = the DB dump and the volume archive are both on disk and readable. A run whose rotation
 #       was skipped still reports 0: the run was recorded, so what it costs is retention.
 #   1 = no usable backup (the DB step failed, so no dump was kept)
+#   2 = the disk guard stopped the run — free space at the backup root was unreadable or under the
+#       floor, so nothing was written and there is no dump from this run to judge
 #   3 = partial backup — the dump was kept, but the run is not whole: the volume archive
 #       failed, or the manifest does not record this run.
+# --cleanup-only writes no backup and runs no disk guard, so it only ever returns 0 (the rotation
+# reclaimed disk) or 1 (the rotation itself failed) and never 2 or 3.
 readonly EXIT_PARTIAL_BACKUP=3
 
 # ---------------------------------------------------------------------------
@@ -671,7 +675,14 @@ run_backup() {
   vol_mb="$(awk "BEGIN{printf \"%.2f\", $vol_bytes/1048576}")"
   if [[ -n "$vol_status" ]]; then
     log_warn "Backup partial: db=${db_mb}MB vol=FAILED (${vol_fail_reason}) ts=${ts}"
-    send_discord "⚠️ **Backup Partial** — ts \`${ts}\` — DB ${db_mb}MB OK / Vol FAILED (${vol_fail_reason}) — \`${pg_ver}\`" 16776960 "true"
+    # WHY guarded and not sent: rotation has already announced its own amber when it aborted, so
+    # an unconditional send here gives one run two verdicts and leaves the reader choosing between
+    # them. The flag is the run's own record that it already spoke, and the volume failure stays
+    # in the log line above and in the status returned below. send_degraded, not send_discord, so
+    # the alert and the flag cannot drift apart — the same reason the rotation path uses it.
+    if (( is_degraded == 0 )); then
+      send_degraded "⚠️ **Backup Partial** — ts \`${ts}\` — DB ${db_mb}MB OK / Vol FAILED (${vol_fail_reason}) — \`${pg_ver}\`"
+    fi
     return "$EXIT_PARTIAL_BACKUP"
   fi
   # WHY the manifest status is judged here and not left to the alert the function already sent:
