@@ -4,7 +4,7 @@ import React, { useActionState, useCallback, useEffect, useRef, useState } from 
 import { Card } from '@/components/core/Card';
 import { Input } from '@/components/core/Input';
 import { Button } from '@/components/core/Button';
-import { Lock, User, AlertCircle, ShieldCheck } from 'lucide-react';
+import { Lock, User, AlertCircle, ShieldCheck, Eye, EyeOff } from 'lucide-react';
 import { getCaptchaState, login } from '@/app/actions/auth';
 import { AuthBackground } from '@/components/core/PageBackground';
 import { Stack } from '@/components/core/Layout';
@@ -115,6 +115,7 @@ export default function LoginPage() {
   const [state, loginAction, pending] = useActionState(login, null);
   const [captchaToken, setCaptchaToken] = useState('');
   const [captchaUi, setCaptchaUi] = useState<CaptchaUiState | null>(null);
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const usernameRef = useRef<HTMLInputElement>(null);
 
   const fetchCaptchaState = useCallback(async (username?: string) => {
@@ -223,14 +224,30 @@ export default function LoginPage() {
               required
               onBlur={handleUsernameBlur}
             />
-            <Input
-              name="password"
-              label="Password"
-              type="password"
-              placeholder="••••••••"
-              icon={<Lock className="w-4 h-4" />}
-              required
-            />
+            <div className="relative">
+              <Input
+                name="password"
+                label="Password"
+                type={isPasswordVisible ? 'text' : 'password'}
+                placeholder="••••••••"
+                icon={<Lock className="w-4 h-4" />}
+                className="pr-28"
+                required
+              />
+              {/* Why anchored to the bottom row: Input stacks its label above the
+                  field, so the last 44px of this wrapper is the field itself and a
+                  44px icon button centres on it without depending on label height. */}
+              <div className="absolute right-2 bottom-0 flex h-11 items-center">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={isPasswordVisible ? EyeOff : Eye}
+                  iconOnly
+                  tooltip={isPasswordVisible ? 'Hide' : 'Reveal'}
+                  onClick={() => setIsPasswordVisible((previous) => !previous)}
+                />
+              </div>
+            </div>
 
             {showCaptcha && (
               <>
