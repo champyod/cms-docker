@@ -6,10 +6,10 @@
 # told two different stories. A run whose rotation stopped sent an amber "Backup Degraded"
 # and then, a line later, a green "Backup Successful" — so the headline an operator reads
 # contradicted the warning above it, and the amber was the thing that got scrolled past. A
-# run with no jq on the PATH did the same. The exit code stayed 0 for both, deliberately: the
-# status contract says what was backed up, the dump was kept, and a caller that reads the
-# status saw exactly what it saw before. Only the message was wrong, and the message is what
-# this suite holds still.
+# run with no jq on the PATH did the same. The exit code says so too: a run that kept its dump
+# but could not record it, or could not finish its rotation, is 3 rather than 0, because a
+# caller that read 0 would retire a backup it has no way to check. Only a complete run is 0.
+# Both the message and the status are what this suite holds still.
 #
 # The suite runs the real script against a staged copy with a stubbed docker, jq, mv and rm,
 # and records every POST the run would have made. No daemon, no network, no credentials. Each
@@ -169,7 +169,7 @@ printf '\n== a degraded run reports amber and no green ==\n'
 
 new_run_root degraded-no-jq
 run_backup_on "$NO_JQ_PATH"
-expect_exit "a run whose manifest went unrecorded keeps its exit 0" "0"
+expect_exit "a run whose manifest went unrecorded is exit 3" "3"
 expect_verdict "a run with no jq" "$ALERT_AMBER" 1 "ping"
 expect_says "a run with no jq" "$ALERT_AMBER" '**Backup Degraded**'
 expect_says "a run with no jq" "$ALERT_AMBER" 'jq not found'
@@ -202,7 +202,7 @@ run_backup STUB_DUMP=fail
 expect_exit "a run with no usable dump is exit 1" "1"
 expect_verdict "a failed dump" "$ALERT_RED" 1 "ping"
 expect_says "a failed dump" "$ALERT_RED" '**Backup Failed**'
-expect_says "a failed dump" "$ALERT_RED" 'pg_dump error'
+expect_says "a failed dump" "$ALERT_RED" 'pg_dump as cms_backup'
 
 printf '\n== the database container is not there ==\n'
 new_run_root failed-container
@@ -238,7 +238,7 @@ expect_says "a run with no docker" "$ALERT_RED" 'docker not found in PATH'
 printf '\n== the manifest entry could not be built ==\n'
 new_run_root failed-manifest-entry
 run_backup STUB_FAULT_JQ=--argjson
-expect_exit "a manifest that could not be written ends the run at 1" "1"
+expect_exit "a manifest that could not be written ends the run at 3" "3"
 expect_verdict "a manifest entry jq could not build" "$ALERT_RED" 1 "ping"
 expect_says "a manifest entry jq could not build" "$ALERT_RED" 'jq could not build the entry'
 expect_names_run "a manifest entry jq could not build" "$ALERT_RED"
@@ -246,7 +246,7 @@ expect_names_run "a manifest entry jq could not build" "$ALERT_RED"
 printf '\n== the manifest entries could not be assembled ==\n'
 new_run_root failed-manifest-merge
 run_backup STUB_FAULT_JQ=--slurpfile
-expect_exit "a manifest that could not be assembled ends the run at 1" "1"
+expect_exit "a manifest that could not be assembled ends the run at 3" "3"
 expect_verdict "a manifest jq could not assemble" "$ALERT_RED" 1 "ping"
 expect_says "a manifest jq could not assemble" "$ALERT_RED" 'jq could not assemble the entries'
 expect_names_run "a manifest jq could not assemble" "$ALERT_RED"
@@ -254,7 +254,7 @@ expect_names_run "a manifest jq could not assemble" "$ALERT_RED"
 printf '\n== the manifest could not be replaced ==\n'
 new_run_root failed-manifest-replace
 run_backup STUB_FAULT_MV=.manifest.merged.
-expect_exit "a manifest that could not be replaced ends the run at 1" "1"
+expect_exit "a manifest that could not be replaced ends the run at 3" "3"
 expect_verdict "a manifest rename that failed" "$ALERT_RED" 1 "ping"
 expect_says "a manifest rename that failed" "$ALERT_RED" 'replace failed'
 expect_names_run "a manifest rename that failed" "$ALERT_RED"
@@ -263,7 +263,7 @@ printf '\n== the manifest could not be created at all ==\n'
 # Only reachable without jq, because that is the one branch that seeds the file itself.
 new_run_root failed-manifest-seed
 run_backup_on "$NO_JQ_PATH" STUB_FAULT_MV=.manifest.
-expect_exit "a manifest that could not be created ends the run at 1" "1"
+expect_exit "a manifest that could not be created ends the run at 3" "3"
 expect_verdict "a manifest that could not be seeded" "$ALERT_RED" 1 "ping"
 expect_says "a manifest that could not be seeded" "$ALERT_RED" 'manifest not seeded'
 expect_names_run "a manifest that could not be seeded" "$ALERT_RED"

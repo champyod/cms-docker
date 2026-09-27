@@ -74,7 +74,7 @@ check_eq "no dump is kept" "0" \
 check_eq "the archive step is never reached" "0" \
   "$(count_lines "$STREAM_LOG")"
 check_eq "the run names the dump failure" "yes" \
-  "$(grep_yes "$RUN_LOG" 'pg_dump failed')"
+  "$(grep_yes "$RUN_LOG" 'pg_dump as cms_backup failed')"
 
 # ---------------------------------------------------------------------------
 # 3. The manifest is written with python3 absent
