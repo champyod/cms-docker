@@ -41,13 +41,21 @@
 //! than inside it: the tombstone a job is reported for instead of being failed on,
 //! and the seconds a worker spent working against the seconds it stood idle.
 //!
+//! What a request does with a worker is the half outside even that. [`service`]
+//! is the loop one request goes through: the worker is taken without waiting and a
+//! request that finds it busy is declined rather than queued, each job is stamped
+//! with the shard that ran it and dispatched through the disposal that turns a
+//! tombstone into a result, and the request is charged to the clock and the
+//! worker released whichever way it left.
+//!
 //! # Errors
 //!
-//! [`MeasureError`], [`StageError`], [`CacheError`], [`edge::JobError`] and
-//! [`sandbox::SpawnError`], and nothing else: a line that names no key, a value
-//! that is not the number its key promises, a path already staged, a path with no
-//! file, a digest no store holds, a task type this worker does not have, the
-//! tombstone, a run that could not be launched, a pipe that could not be
+//! [`MeasureError`], [`StageError`], [`CacheError`], [`edge::JobError`],
+//! [`service::ServiceError`] and [`sandbox::SpawnError`], and nothing else: a
+//! line that names no key, a value that is not the number its key promises, a path
+//! already staged, a path with no file, a digest no store holds, a task type this
+//! worker does not have, the tombstone, a request declined because the worker was
+//! busy, a run that could not be launched, a pipe that could not be
 //! read, and a code the isolation program does not document. A run that measured
 //! nothing is `None`, which is an answer rather than a failure.
 
@@ -57,6 +65,7 @@
 pub mod edge;
 pub mod job;
 pub mod sandbox;
+pub mod service;
 pub mod stage;
 
 mod measure;
