@@ -42,6 +42,11 @@ pub const MODE_EXECUTABLE: u32 = 0o755;
 pub const DEFAULT_READ_LIMIT: usize = 1024;
 
 /// The files one run stages, and the store a result of that run goes to.
+///
+/// A relative path handed to this type is trusted configuration — a manager
+/// name or a run name, never anything a contestant supplied — so refusing an
+/// absolute path or a segment that climbs out of the run's own directory is the
+/// first caller's work, not this type's.
 pub struct Stage {
     root: PathBuf,
     cache: Box<dyn Cache>,
