@@ -256,9 +256,36 @@ seed_if_empty() {
   log_info "Seeded registry entry WORKER_0=0.0.0.0:$p into $CORE_ENV"
 }
 
-# Workers dial log-service at boot; refuse to start into a down core.
+# Core ports a worker box must reach on the main server. The attach block asks
+# the operator to confirm all six open, so the deploy gate holds the same line.
+readonly CORE_PROBE_PORTS="25000 28000 28500 29000 22000 28600"
+readonly CORE_PROBE_TIMEOUT=3
+
+# The core runs on another box when CORE_SERVICES_HOST names a non-local host.
+core_is_remote() {
+  local h
+  h="$(core_host_ip)"
+  [ -n "$h" ] || return 1
+  if is_local_host "$h"; then return 1; fi
+  return 0
+}
+
+core_port_open() { # host port
+  timeout "$CORE_PROBE_TIMEOUT" bash -c "</dev/tcp/$1/$2" 2>/dev/null
+}
+
+# Workers dial log-service at boot; refuse to start into a down core. A remote
+# core has no local container to inspect, so probe its ports — a worker-only box
+# otherwise waits out the whole timeout for a container that cannot exist.
 wait_core_healthy() {
-  local timeout="${1:-120}" elapsed=0 state
+  local timeout="${1:-120}" elapsed=0 state host port
+  if core_is_remote; then
+    host="$(core_host_ip)"
+    for port in $CORE_PROBE_PORTS; do
+      core_port_open "$host" "$port" && return 0
+    done
+    return 1
+  fi
   while :; do
     state=$(docker inspect -f '{{.State.Health.Status}}' cms-log-service 2>/dev/null || echo missing)
     [ "$state" = healthy ] && return 0
@@ -271,7 +298,11 @@ cmd_deploy() {
   require_env_files
   seed_if_empty
   if ! wait_core_healthy 120; then
-    log_warn "cms-log-service is not healthy — start core first: make core (workers would only crash-loop on connect)"
+    if core_is_remote; then
+      log_warn "remote core $(core_host_ip) unreachable - check network/firewall, not make core"
+    else
+      log_warn "cms-log-service is not healthy — start core first: make core (workers would only crash-loop on connect)"
+    fi
     return 1
   fi
   local target="${1:-all}" rc=0 row s hit w_list
