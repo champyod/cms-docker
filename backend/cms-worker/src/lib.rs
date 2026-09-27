@@ -19,16 +19,27 @@
 //! concurrent runs are all decided by text rather than waited for, and no
 //! process, file or clock is involved in producing one.
 //!
+//! The files a run is handed and leaves behind are the other half of that
+//! answer. [`stage::Stage`] creates a run's files under the modes it will use
+//! them with, refuses a path the run already has, reads a file back whole or
+//! only as far as a limit reaches, and stores a result under the digest the
+//! storage addresses it by. [`stage::Cache`] is that storage as one trait with a
+//! directory, a database and a discarding backend behind it, and the tombstone
+//! is refused once, by the digest mapping all three share.
+//!
 //! # Errors
 //!
-//! [`MeasureError`], and only that: a line that names no key, and a value that
-//! is not the number its key promises. A run that measured nothing is `None`,
+//! [`MeasureError`], [`StageError`] and [`CacheError`], and nothing else: a line
+//! that names no key, a value that is not the number its key promises, a path
+//! already staged, a path with no file, a digest no store holds, and the
+//! tombstone, which no store will read. A run that measured nothing is `None`,
 //! which is an answer rather than a failure.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
 pub mod job;
+pub mod stage;
 
 mod measure;
 mod stats;
