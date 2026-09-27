@@ -303,6 +303,9 @@ SECRETS
 # Apply subcommand
 # ---------------------------------------------------------------------------
 cmd_apply() {
+  local secrets_file="${GENERATE_OUT:-.env.new}"
+  _ensure_secrets_file "$secrets_file"
+
   log_info "Applying secret rotation"
   echo ""
 
@@ -313,11 +316,6 @@ cmd_apply() {
       log_info "Aborted"
       return 0
     fi
-  fi
-
-  local secrets_file="${GENERATE_OUT:-.env.new}"
-  if [[ ! -f "$secrets_file" ]]; then
-    log_die "secrets file not found: $secrets_file — run --generate first" 1
   fi
 
   # Source generated secrets
@@ -388,6 +386,26 @@ cmd_apply() {
   _check_remote_worker_ref
 
   log_info "Secret rotation applied — verify services are healthy with: ./cms status"
+}
+
+# WHY: a missing secrets file makes the apply prompt unanswerable — the operator
+# confirms an overwrite of values that do not exist yet — so the file is checked
+# first and generated in place when a terminal is there to ask on.
+_ensure_secrets_file() {
+  local secrets_file="$1"
+  [[ -f "$secrets_file" ]] && return 0
+
+  local answer
+  if [[ -t 0 ]]; then
+    read -r -p "No generated secrets found. Generate now? [y/N] " answer || answer=""
+    if [[ "$answer" =~ ^[Yy] ]]; then
+      cmd_generate || true
+      [[ -f "$secrets_file" ]] && return 0
+      log_warn "generation produced no $secrets_file"
+    fi
+  fi
+
+  log_die "secrets file not found: $secrets_file — run --generate first" 1
 }
 
 _update_config_toml() {
