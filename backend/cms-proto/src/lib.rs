@@ -12,8 +12,8 @@
 //! wire shape, and every judgement call about whether a well-formed envelope
 //! may be acted on is written down in one place per subject — [`Request::validate`],
 //! [`Request::authenticate`] and [`Response::validate`] for the envelope
-//! itself, [`guards`] for the frame that carries it. Each states the Python
-//! rule it mirrors.
+//! itself, [`guards`] for the frame that carries it, and [`dispatch`] for the
+//! order the checks run in. Each states the Python rule it mirrors.
 //!
 //! A connection's frame codec owns one read buffer for the whole connection
 //! and decodes successive frames out of it, so a message costs a copy into
@@ -24,6 +24,7 @@
 #![forbid(unsafe_code)]
 
 mod codec;
+mod dispatch;
 mod guards;
 mod jobs;
 mod queue;
@@ -33,6 +34,7 @@ use serde_json::Value;
 use std::fmt;
 
 pub use codec::{encode, Frame, FrameError, FrameRefusal, Framer};
+pub use dispatch::{dispatch, Decision, DropReason, GateConfig, Method};
 pub use guards::{
     check_rpc_secret, ensure_within_size_limit, EnvelopeError, MAX_MESSAGE_SIZE,
     MESSAGE_TERMINATOR_LEN,
