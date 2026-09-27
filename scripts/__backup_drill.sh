@@ -81,7 +81,21 @@ if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$CONTAINER_DB"; the
   log_warn "cms-database container not running — backup will likely fail, but proceeding anyway"
 fi
 
-bash "${SCRIPT_DIR}/__backup.sh" "" 2>&1 || log_warn "Backup script exited with non-zero (may be expected if db issues)"
+# WHY the status is captured rather than flattened into one warning: exit 3 is the
+# contract's "the dump was kept but the volume archive is missing (or the manifest does
+# not record this run)". A drill that then restores only the dump has verified the
+# database half of the backup and knows nothing about the volume half, so it must not
+# go on to report a pass.
+BACKUP_PARTIAL=0
+BACKUP_STATUS=0
+bash "${SCRIPT_DIR}/__backup.sh" "" 2>&1 || BACKUP_STATUS=$?
+
+if [ "$BACKUP_STATUS" -eq 3 ]; then
+  log_warn "Backup reported PARTIAL (exit 3): no volume archive was produced, or the manifest does not record this run."
+  BACKUP_PARTIAL=1
+elif [ "$BACKUP_STATUS" -ne 0 ]; then
+  log_warn "Backup script exited with status ${BACKUP_STATUS} (may be expected if db issues)"
+fi
 
 # ---------------------------------------------------------------------------
 # Find the dump file and manifest that were just created
@@ -174,6 +188,11 @@ log_info "Expected from manifest: db_bytes=$EXPECTED_DB_BYTES vol_bytes=$EXPECTE
 # Assertions: counts >0 and match manifest numbers
 # ---------------------------------------------------------------------------
 PASS=1
+
+if [ "$BACKUP_PARTIAL" -eq 1 ]; then
+  log_warn "FAIL: backup was partial (exit 3) — this drill only verified the database dump; the volume archive was not archived"
+  PASS=0
+fi
 
 if [[ "$ACTUAL_SUB_COUNT" -le 0 ]]; then
   log_warn "FAIL: Submissions count is $ACTUAL_SUB_COUNT, expected > 0"

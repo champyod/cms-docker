@@ -109,7 +109,20 @@ log "Running preflight checks..."
 BACKUP_SCRIPT="scripts/__backup.sh"
 if [ -x "$BACKUP_SCRIPT" ]; then
     log "Running safety backup..."
-    "$BACKUP_SCRIPT" || log_die "Backup failed; aborting update."
+    # WHY the status is read instead of collapsed into one "backup failed" line: the backup
+    # contract separates "no usable backup" (1) from "the dump was kept but the run is not
+    # whole" (3), and the two need different advice from the operator. Exit 3 leaves a
+    # database-only rollback point — a restore from it brings back rows but none of the
+    # uploaded files and submissions blobs that live in the volume — which is exactly the
+    # fact an operator must see before an update touches the services.
+    BACKUP_STATUS=0
+    "$BACKUP_SCRIPT" || BACKUP_STATUS=$?
+    if [ "$BACKUP_STATUS" -eq 3 ]; then
+        log_die "Backup partial (exit 3): the database dump was kept but the volume archive is missing. Aborting update — a rollback from this backup would not restore uploaded files or submissions."
+    fi
+    if [ "$BACKUP_STATUS" -ne 0 ]; then
+        log_die "Backup failed (exit ${BACKUP_STATUS}); no usable dump was kept. Aborting update."
+    fi
 else
     warn "__backup.sh missing or not executable — SKIPPING SAFETY BACKUP."
     warn "Continuing WITHOUT a fresh backup. Consider Ctrl+C now."
