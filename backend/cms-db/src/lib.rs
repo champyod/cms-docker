@@ -1,8 +1,9 @@
 //! Column-level type mapping for the contest database.
 //!
-//! The four mappings in [`types`] turn the shapes the rest of CMS already
-//! exchanges into Rust values that carry the rule their column enforces, so that
-//! a row the database would have refused never reaches a query:
+//! The four mapping families behind the `types` module turn the shapes the rest
+//! of CMS already exchanges into Rust values that carry the rule their column
+//! enforces, so that a row the database would have refused never reaches a
+//! query:
 //!
 //! | Rust type | Postgres column | Reference it reproduces |
 //! |---|---|---|
