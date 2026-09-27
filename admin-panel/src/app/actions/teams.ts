@@ -5,7 +5,14 @@ import { revalidatePath } from 'next/cache';
 import { ensurePermission, getPermissions } from '@/lib/permissions';
 import { ACTION_PERMISSIONS } from '@/lib/permission-engine';
 import { stripDisallowedFields } from '@/lib/field-permissions';
+import * as peopleReadModels from '@/lib/people-read-models';
 import { recordAudit } from '@/lib/audit';
+
+// Why: on-demand record read — the Team record header fetches its edit payload
+// through this wrapper instead of widening the layout's summary read.
+export async function getTeamEditData(teamId: number): Promise<Awaited<ReturnType<typeof peopleReadModels.getTeamEditData>>> {
+  return peopleReadModels.getTeamEditData(teamId);
+}
 
 export async function getTeams() {
   await ensurePermission('team:list');

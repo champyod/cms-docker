@@ -2,7 +2,7 @@ import type { Prisma } from '@prisma/client';
 import { filterReadableFieldsWith, getFieldAccess } from '@/lib/field-permissions';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 import { prisma } from '@/lib/prisma';
-import { buildUserSearchWhere, submissionsListInclude, usersPageSelect, type UsersPageRow } from '@/lib/prisma-selects';
+import { buildUserSearchWhere, safeUserSelect, submissionsListInclude, usersPageSelect, type SafeUser, type UsersPageRow } from '@/lib/prisma-selects';
 import { requirePermission } from '@/lib/server/authorization';
 import {
   collectHistory, toContestIdentity, toIso, toTeamIdentity, toTeamSummary, toUserIdentity, teamSummaryAccess,
@@ -64,6 +64,14 @@ export async function getUserProfile(userId: number): Promise<UserProfile | null
   };
 }
 
+export async function getUserEditData(userId: number): Promise<SafeUser | null> {
+  // Why no field projection: every column safeUserSelect names is gated on
+  // user:read, the key this reader already required, so an access table could not
+  // strip one, and the credential column is absent from the select by design.
+  await requirePermission('user:read');
+  return prisma.users.findUnique({ where: { id: userId }, select: safeUserSelect });
+}
+
 export async function getUserTeams(userId: number): Promise<readonly UserTeamMembership[]> {
   const permissions = combinePermissions(await requirePermission('user:read'), await requirePermission('participation:list'), await requirePermission('team:read'));
   // Why: one access table per entity, built before the map, so N rows resolve N rows of
@@ -107,6 +115,19 @@ export async function getTeamSummary(teamId: number): Promise<TeamSummary | null
   const row = await prisma.teams.findUnique({ where: { id: teamId }, select: { id: true, code: true, name: true, organization: true, leader_id: true, leader: { select: { id: true, username: true, first_name: true, last_name: true } }, _count: { select: { participations: true } } } });
   if (!row) return null;
   return toTeamSummary(row, teamSummaryAccess(permissions));
+}
+
+export type TeamEditData = Pick<TeamSummary, 'id' | 'code' | 'name'>;
+
+export async function getTeamEditData(teamId: number): Promise<TeamEditData | null> {
+  const permissions = await requirePermission('team:read');
+  const row = await prisma.teams.findUnique({ where: { id: teamId }, select: { id: true, code: true, name: true } });
+  if (!row) return null;
+  // Why the projection: TeamModal renders code and name as inputs, so a caller
+  // who may not read one gets null rather than the stored value. Why id is not
+  // projected: it is the record key this reader was asked for, also team:read.
+  const visible = filterReadableFieldsWith(getFieldAccess('teams', permissions), row);
+  return { id: row.id, code: visible.code ?? null, name: visible.name ?? null };
 }
 
 export async function getTeamMembers(teamId: number): Promise<readonly TeamMember[]> {

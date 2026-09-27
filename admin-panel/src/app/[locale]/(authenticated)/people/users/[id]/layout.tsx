@@ -1,6 +1,8 @@
 import { notFound } from 'next/navigation';
-import { DetailSurface } from '@/components/core/DetailSurface';
+import { DetailSurface, type DetailSurfaceProps } from '@/components/core/DetailSurface';
+import { TaskTabRefreshRegistrar } from '@/components/tasks/task-detail/useTaskTabRefresh';
 import { UserDetailFrame } from '@/components/users/UserDetailFrame';
+import { UserRecordHeader } from '@/components/users/UserRecordHeader';
 import type { Dictionary } from '@/lib/dictionary';
 import { getDictionary } from '@/i18n';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
@@ -91,14 +93,21 @@ export default async function UserRecordLayout({
   const id = parseRecordId(rawId);
   if (id === null) notFound();
   const { effective, summary } = await loadUserRecord(id);
+  const props = {
+    breadcrumbs: userRecordBreadcrumbs(locale, id, dictionary),
+    title: summary.username,
+    description: <UserDetailFrame summary={summary} />,
+    actions: <UserRecordHeader userId={summary.id} username={summary.username} permissionKeys={[...effective]} navigation={dictionary.navigation} />,
+    tabs: buildUserTabs(locale, id, effective, dictionary),
+    children,
+    className: 'space-y-6',
+  } satisfies DetailSurfaceProps;
+  // Why: the edit header refreshes through a registered router instead of
+  // calling useRouter where unit tests render provider-less.
   return (
-    <DetailSurface
-      breadcrumbs={userRecordBreadcrumbs(locale, id, dictionary)}
-      title={summary.username}
-      description={<UserDetailFrame summary={summary} />}
-      tabs={buildUserTabs(locale, id, effective, dictionary)}
-    >
-      {children}
-    </DetailSurface>
+    <>
+      <TaskTabRefreshRegistrar />
+      <DetailSurface {...props} />
+    </>
   );
 }

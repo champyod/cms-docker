@@ -13,6 +13,7 @@ export const FOLLOW_FILES = [
   path.join(SRC_DIR, "lib", "services", "tasks.ts"),
   path.join(SRC_DIR, "lib", "queries", "contest-detail.ts"),
   path.join(SRC_DIR, "lib", "queries", "task-detail.ts"),
+  path.join(SRC_DIR, "lib", "people-read-models.ts"),
   path.join(SRC_DIR, "lib", "deploy-store.ts"),
   path.join(SRC_DIR, "lib", "deploy-operations.ts"),
   path.join(SRC_DIR, "lib", "field-permissions.ts"),

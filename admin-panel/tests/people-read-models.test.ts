@@ -1,13 +1,13 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import {
-  getSubmissions, getTeamContests, getTeamMembers, getTeamSummary, getTeams, getUserHistory,
-  getUserProfile, getUserSummary, getUserTeams,
+  getSubmissions, getTeamContests, getTeamEditData, getTeamMembers, getTeamSummary, getTeams,
+  getUserEditData, getUserHistory, getUserProfile, getUserSummary, getUserTeams,
 } from '@/lib/people-read-models';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import { requirePermission } from '@/lib/server/authorization';
 import { prisma } from '@/lib/prisma';
-import { submissionsListInclude } from '@/lib/prisma-selects';
+import { submissionsListInclude, safeUserSelect } from '@/lib/prisma-selects';
 
 vi.mock('@/lib/server/authorization', () => ({ requirePermission: vi.fn() }));
 vi.mock('@/lib/prisma', () => ({
@@ -497,5 +497,61 @@ describe('Submissions list payload', () => {
       'compilation_outcome',
       'evaluation_outcome',
     ]);
+  });
+});
+
+describe('Record edit payloads', () => {
+  it('requires user:read and selects only the fields the user edit form reads', async () => {
+    grant(['user:read']);
+    // Why the narrow row: Prisma's select is what bounds the payload, so the mock
+    // has to answer with that shape for the returned object to prove the bound.
+    const { id, username, first_name, last_name, email, timezone, preferred_languages } = USER_ROW;
+    mockUserFindUnique.mockResolvedValue({ id, username, first_name, last_name, email, timezone, preferred_languages } as never);
+
+    const result = await getUserEditData(9);
+
+    expect(mockRequirePermission).toHaveBeenCalledWith('user:read');
+    expect(mockUserFindUnique.mock.calls[0][0]).toMatchObject({ where: { id: 9 }, select: safeUserSelect });
+    expect(result).toEqual({
+      id: 9,
+      username: 'ada',
+      first_name: 'Ada',
+      last_name: 'Lovelace',
+      email: 'ada@example.org',
+      timezone: 'UTC',
+      preferred_languages: ['cpp'],
+    });
+  });
+
+  it('never selects a credential column for the user edit payload', () => {
+    expect(Object.keys(safeUserSelect)).not.toContain('password');
+  });
+
+  it('requires team:read and returns the code and name the team edit form reads', async () => {
+    grant(['team:read']);
+    mockTeamFindUnique.mockResolvedValue({ id: 4, code: 'A-1', name: 'Alpha' } as never);
+
+    const result = await getTeamEditData(4);
+
+    expect(mockRequirePermission).toHaveBeenCalledWith('team:read');
+    expect(Object.keys(mockTeamFindUnique.mock.calls[0][0].select ?? {}).sort()).toEqual(['code', 'id', 'name']);
+    expect(result).toEqual({ id: 4, code: 'A-1', name: 'Alpha' });
+  });
+
+  it('nulls a team field the caller cannot read instead of returning the stored value', async () => {
+    // Why a key the reader did not require: the mock resolves requirePermission to
+    // whatever is granted, so granting only team:list is the one way to observe a
+    // field the access table strips.
+    grant(['team:list']);
+    mockTeamFindUnique.mockResolvedValue({ id: 4, code: 'A-1', name: 'Alpha' } as never);
+
+    expect(await getTeamEditData(4)).toEqual({ id: 4, code: null, name: null });
+  });
+
+  it('reports a missing record as null rather than an empty payload', async () => {
+    grant(['team:read']);
+    mockTeamFindUnique.mockResolvedValue(null as never);
+
+    expect(await getTeamEditData(404)).toBeNull();
   });
 });

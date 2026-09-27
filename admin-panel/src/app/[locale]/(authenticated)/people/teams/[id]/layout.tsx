@@ -1,5 +1,7 @@
 import { notFound } from 'next/navigation';
-import { DetailSurface } from '@/components/core/DetailSurface';
+import { DetailSurface, type DetailSurfaceProps } from '@/components/core/DetailSurface';
+import { TaskTabRefreshRegistrar } from '@/components/tasks/task-detail/useTaskTabRefresh';
+import { TeamRecordHeader } from '@/components/teams/TeamRecordHeader';
 import { getDictionary } from '@/i18n';
 import type { Dictionary } from '@/lib/dictionary';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
@@ -92,13 +94,20 @@ export default async function TeamRecordLayout({
   const id = parseRecordId(rawId);
   if (id === null) notFound();
   const { effective, summary } = await loadTeamRecord(id);
+  const props = {
+    breadcrumbs: teamRecordBreadcrumbs(locale, id, dictionary),
+    title: summary.name,
+    actions: <TeamRecordHeader teamId={summary.id} name={summary.name ?? ''} permissionKeys={[...effective]} navigation={dictionary.navigation} />,
+    tabs: buildTeamTabs(locale, id, effective, dictionary),
+    children,
+    className: 'space-y-6',
+  } satisfies DetailSurfaceProps;
+  // Why: the edit header refreshes through a registered router instead of
+  // calling useRouter where unit tests render provider-less.
   return (
-    <DetailSurface
-      breadcrumbs={teamRecordBreadcrumbs(locale, id, dictionary)}
-      title={summary.name}
-      tabs={buildTeamTabs(locale, id, effective, dictionary)}
-    >
-      {children}
-    </DetailSurface>
+    <>
+      <TaskTabRefreshRegistrar />
+      <DetailSurface {...props} />
+    </>
   );
 }

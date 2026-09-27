@@ -4,11 +4,18 @@ import { prisma } from '@/lib/prisma';
 import { ensurePermission, getPermissions } from '@/lib/permissions';
 import { filterReadableFieldsWith, getFieldAccess } from '@/lib/field-permissions';
 import { buildUserSearchWhere, usersPageSelect, type UsersPageRow } from '@/lib/prisma-selects';
+import * as peopleReadModels from '@/lib/people-read-models';
 import { parseStoredPassword } from '@/lib/password-format';
 import { recordAudit } from '@/lib/audit';
 
 const USERS_PER_PAGE = 20;
 const MAX_USERS_PER_PAGE = 100;
+
+// Why: on-demand record read — the User record header fetches its edit payload
+// through this wrapper instead of widening the layout's summary read.
+export async function getUserEditData(userId: number): Promise<Awaited<ReturnType<typeof peopleReadModels.getUserEditData>>> {
+  return peopleReadModels.getUserEditData(userId);
+}
 
 interface UsersPageResult {
   users: UsersPageRow[];

@@ -1,12 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { ExternalLink, Settings } from 'lucide-react';
+import { ExternalLink, Pencil } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { getTaskSettings } from '@/app/actions/tasks';
 import { Button } from '@/components/core/Button';
 import { buildRoute } from '@/lib/navigation/routes';
-import { hasEffectivePermission } from '@/lib/permission-engine';
+import { ACTION_PERMISSIONS, hasEffectivePermission } from '@/lib/permission-engine';
 import type { TaskSettingsRecord } from '@/lib/queries/task-detail';
 import { TaskModal } from './TaskModal';
 import { useTaskTabRefresh } from './task-detail/useTaskTabRefresh';
@@ -28,14 +28,14 @@ function useHeaderLocale(): string {
 }
 
 // Why: the layout already renders the record title and description, so the
-// header owns only the contest link and the gated settings action — the
-// settings record loads on demand, keeping the header summary-only.
+// header owns only the contest link and the gated edit action — the edit record
+// loads on demand, keeping the header summary-only.
 export function TaskRecordHeader({ taskId, title, contest, permissionKeys }: TaskRecordHeaderProps): React.JSX.Element {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsRecord, setSettingsRecord] = useState<TaskSettingsRecord | null>(null);
   const refresh = useTaskTabRefresh();
   const locale = useHeaderLocale();
-  const canEdit = hasEffectivePermission(new Set(permissionKeys), 'task:update');
+  const canEdit = hasEffectivePermission(new Set(permissionKeys), ACTION_PERMISSIONS.updateTask);
 
   const openSettings = async (): Promise<void> => {
     const settings = await getTaskSettings(taskId);
@@ -58,8 +58,8 @@ export function TaskRecordHeader({ taskId, title, contest, permissionKeys }: Tas
         </a>
       )}
       {canEdit && (
-        <Button variant="secondary" icon={Settings} onClick={() => { void openSettings(); }} aria-label={`Edit ${title}`}>
-          Task Settings
+        <Button variant="secondary" icon={Pencil} onClick={() => { void openSettings(); }} aria-label={`Edit ${title}`}>
+          Edit Task
         </Button>
       )}
       {isSettingsOpen && settingsRecord && (
