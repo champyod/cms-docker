@@ -14,7 +14,6 @@ export default async function SystemAppearancePage({ params }: {
       locale={locale}
       breadcrumbs={listBreadcrumbs(locale, 'system', 'system.appearance', dict)}
       copy={{
-        group: dict['navigation']['groups']['system'],
         title: dict['navigation']['system']['appearance']['label'],
         description: dict['navigation']['system']['appearance']['description'],
       }}

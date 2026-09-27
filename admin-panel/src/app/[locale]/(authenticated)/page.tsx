@@ -1,5 +1,6 @@
 import { checkPermission } from '@/lib/permissions';
 import { getDictionary } from '@/i18n';
+import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { notFound } from 'next/navigation';
 import { Card } from '@/components/core/Card';
 import {
@@ -12,8 +13,9 @@ import {
 } from 'lucide-react';
 import { prisma } from '@/lib/prisma';
 import { getServiceStatus } from '@/app/actions/services';
+import { PageSurface } from '@/components/core/PageSurface';
 import { StatusBadge, StatusType } from '@/components/core/StatusBadge';
-import { PageContent, PageHeader, Grid, Stack } from '@/components/core/Layout';
+import { Grid, Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
 import { EmptyState } from '@/components/core/EmptyState';
 
@@ -106,12 +108,11 @@ export default async function DashboardPage({
   ]);
 
   return (
-    <PageContent>
-      <PageHeader 
-        title={dict.dashboard.welcome}
-        description={dict.dashboard.description}
-      />
-
+    <PageSurface
+      breadcrumbs={listBreadcrumbs(locale, 'direct', 'home', dict)}
+      title={dict.dashboard.welcome}
+      description={dict.dashboard.description}
+    >
       <Grid cols={4}>
         <Card className="p-6 flex flex-col gap-4 relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
@@ -206,6 +207,6 @@ export default async function DashboardPage({
           )}
         </Card>
       </Stack>
-    </PageContent>
+    </PageSurface>
   );
 }

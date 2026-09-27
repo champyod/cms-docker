@@ -15,7 +15,6 @@ export default async function InfrastructureContainersPage({
     <ContainersClient
       breadcrumbs={listBreadcrumbs(locale, 'infrastructure', 'infrastructure.containers', dict)}
       copy={{
-        group: dict['navigation']['groups']['infrastructure'],
         title: dict['navigation']['infrastructure']['containers']['label'],
         description: dict['navigation']['infrastructure']['containers']['description'],
       }}

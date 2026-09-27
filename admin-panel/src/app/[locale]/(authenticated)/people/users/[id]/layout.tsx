@@ -5,6 +5,7 @@ import { UserDetailFrame } from '@/components/users/UserDetailFrame';
 import { UserRecordHeader } from '@/components/users/UserRecordHeader';
 import type { Dictionary } from '@/lib/dictionary';
 import { getDictionary } from '@/i18n';
+import { interpolate } from '@/lib/interpolate';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { recordBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
@@ -86,7 +87,14 @@ export default async function UserRecordLayout({
   const props = {
     breadcrumbs: recordBreadcrumbs(locale, 'people', 'people.user-record', 'people.users', dictionary),
     title: summary.username,
-    description: <UserDetailFrame summary={summary} />,
+    description: (
+      <UserDetailFrame
+        summary={summary}
+        participationsLabel={interpolate(dictionary.users.participations, {
+          count: summary.participationCount,
+        })}
+      />
+    ),
     actions: <UserRecordHeader userId={summary.id} permissionKeys={[...effective]} navigation={dictionary.navigation} />,
     tabs: buildUserTabs(locale, id, effective, dictionary),
     children,

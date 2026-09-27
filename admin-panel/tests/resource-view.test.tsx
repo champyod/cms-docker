@@ -8,7 +8,6 @@ import th from '@/dictionaries/th.json';
 import type { ModulePageCopy } from '@/components/navigation/ModulePageCopy';
 
 const copy: ModulePageCopy = {
-  group: 'fixture-group',
   title: 'fixture-resources',
   description: 'fixture-description',
 };
@@ -39,7 +38,7 @@ describe('ResourceView', () => {
 
     const ready = render(
       <PageSurface
-        breadcrumbs={[{ label: copy.group }, { label: copy.title }]}
+        breadcrumbs={[{ label: 'fixture-group' }, { label: copy.title }]}
         title={copy.title}
         description={copy.description}
         className="density:space-y-4"

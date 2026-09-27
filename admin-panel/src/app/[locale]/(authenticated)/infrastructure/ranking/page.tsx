@@ -16,7 +16,6 @@ export default async function InfrastructureRankingPage({
       permissionKeys={[...effective]}
       breadcrumbs={listBreadcrumbs(locale, 'infrastructure', 'infrastructure.ranking', dict)}
       copy={{
-        group: dict['navigation']['groups']['infrastructure'],
         title: dict['navigation']['infrastructure']['ranking']['label'],
         description: dict['navigation']['infrastructure']['ranking']['description'],
       }}

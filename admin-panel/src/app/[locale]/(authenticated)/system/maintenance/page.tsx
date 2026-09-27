@@ -15,7 +15,6 @@ export default async function SystemMaintenancePage({ params }: {
       permissionKeys={[...effective]}
       breadcrumbs={listBreadcrumbs(locale, 'system', 'system.maintenance', dict)}
       copy={{
-        group: dict['navigation']['groups']['system'],
         title: dict['navigation']['system']['maintenance']['label'],
         description: dict['navigation']['system']['maintenance']['description'],
       }}

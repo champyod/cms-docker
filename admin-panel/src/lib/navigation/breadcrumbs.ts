@@ -70,7 +70,14 @@ function assertRecordParent(currentRouteId: RouteId, parentRouteId: RouteId): vo
   }
 }
 
-function homeCrumb(locale: string, dictionary: Dictionary): BreadcrumbItem {
+function homeCrumb(
+  locale: string,
+  currentRouteId: RouteId | null,
+  dictionary: Dictionary,
+): BreadcrumbItem | null {
+  // Why the omission: on the dashboard the Home route is the page the reader is on,
+  // so its own name would be the single crumb sitting directly above its heading.
+  if (currentRouteId === HOME_ROUTE_ID) return null;
   return { label: routeLabel(dictionary, HOME_ROUTE_ID), href: buildRoute(locale, HOME_ROUTE_ID) };
 }
 
@@ -78,6 +85,9 @@ function homeCrumb(locale: string, dictionary: Dictionary): BreadcrumbItem {
 // nothing to the reader, directly above a heading that already names the page.
 function groupCrumb(groupId: BreadcrumbGroupId, dictionary: Dictionary): BreadcrumbItem | null {
   if (groupId === UNLABELLED_GROUP_ID) return null;
+  // Why plain text and not a link: a navigation group is a section of the shell
+  // with no page of its own, so there is no URL to point it at. The asymmetry with
+  // the list crumb beside it is deliberate — that one is a real page.
   return { label: labelFor(dictionary, groupFor(groupId).labelKey) };
 }
 
@@ -91,7 +101,7 @@ function crumbs(items: readonly (BreadcrumbItem | null)[]): readonly BreadcrumbI
  * Why the current page's own name cannot appear: the only labels this function
  * can reach are the Home route, the group, and nothing else, so there is no path
  * by which the page's own name becomes a crumb above its own heading. Only the
- * first crumb is linked — the group owns no page, and a link on the last crumb
+ * Home crumb is linked — the group owns no page, and a link on the last crumb
  * would point at the surface it sits in. `currentRouteId` is null for a group
  * boundary (loading, error, or not-found), where the group is the current page
  * rather than the context above it, so the boundary shows the Home crumb alone.
@@ -102,18 +112,19 @@ export function listBreadcrumbs(
   currentRouteId: RouteId | null,
   dictionary: Dictionary,
 ): readonly BreadcrumbItem[] {
-  if (currentRouteId === null) return [homeCrumb(locale, dictionary)];
+  if (currentRouteId === null) return crumbs([homeCrumb(locale, currentRouteId, dictionary)]);
   assertGroupOwns(groupId, currentRouteId);
-  return crumbs([homeCrumb(locale, dictionary), groupCrumb(groupId, dictionary)]);
+  return crumbs([homeCrumb(locale, currentRouteId, dictionary), groupCrumb(groupId, dictionary)]);
 }
 
 /**
  * The trail above a record page: `Home / <Group> / <List page>`.
  *
- * Why the list page closes the trail and carries no href: it is the record's
- * parent context, while the record's own name is the heading. The record's own
- * route is never read here, which is what keeps a crumb from pointing at the page
- * it sits on — the self-reference this builder replaces.
+ * Why the list page closes the trail and is the one crumb that leads back out: it
+ * is the record's parent context and a real page, so linking it is the reader's
+ * only way up from a record without using the sidebar. The record's own route is
+ * never read here, which is what keeps a crumb from pointing at the page it sits
+ * on — the self-reference this builder replaces.
  */
 export function recordBreadcrumbs(
   locale: string,
@@ -125,9 +136,9 @@ export function recordBreadcrumbs(
   assertRecordParent(currentRouteId, parentRouteId);
   assertGroupOwns(groupId, parentRouteId);
   return crumbs([
-    homeCrumb(locale, dictionary),
+    homeCrumb(locale, currentRouteId, dictionary),
     groupCrumb(groupId, dictionary),
-    { label: routeLabel(dictionary, parentRouteId) },
+    { label: routeLabel(dictionary, parentRouteId), href: buildRoute(locale, parentRouteId) },
   ]);
 }
 

@@ -4,18 +4,12 @@ import { describe, expect, it } from 'vitest';
 
 import en from '@/dictionaries/en.json';
 import th from '@/dictionaries/th.json';
-import {
-  listBreadcrumbs,
-  recordBreadcrumbs,
-} from '@/lib/navigation/breadcrumbs';
+import { listBreadcrumbs, recordBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { buildRoute } from '@/lib/navigation/routes';
 import type { Dictionary } from '@/lib/dictionary';
 import type { BreadcrumbItem } from '@/lib/navigation/types';
 
-const LOCALES: readonly (readonly [string, Dictionary])[] = [
-  ['en', en],
-  ['th', th],
-];
+const LOCALES: readonly (readonly [string, Dictionary])[] = [['en', en], ['th', th]];
 
 const LIST_ROUTE_ID = 'infrastructure.containers' as const;
 const RECORD_ROUTE_ID = 'people.user-record' as const;
@@ -72,6 +66,42 @@ function pageTypeOffenders(): string[] {
   );
 }
 
+const SURFACE_ELEMENT = /<(PageSurface|DetailSurface)[\s/>]/;
+const ROUTE_ENTRY_FILE = /(page|layout|error|loading|not-found)\.tsx$/;
+const HAND_ROLLED_HEADING = /variant="h1"|<h1|PageHeader|PageContent/;
+
+/**
+ * Every page that shows a surface must take its trail from the shared builder.
+ *
+ * Why the positive form: a page could pass the rule by rendering no surface at
+ * all, and three pages once did — the Dashboard, Contests, and Tasks, each
+ * hand-rolling its own heading above a bare `Stack`. Requiring the builder call
+ * wherever a surface is rendered is what makes "no exception carve-out" true.
+ */
+function surfaceWithoutBuilderOffenders(): string[] {
+  return sourceFilesUnder(join('src', 'app')).filter((file) => {
+    const source = readFileSync(file, 'utf8');
+    if (!SURFACE_ELEMENT.test(source)) return false;
+    return [...BUILDER_CALLS].every((call) => !source.includes(`${call}(`));
+  });
+}
+
+/**
+ * A route entry that writes its own heading must still show a surface.
+ *
+ * Why this catches what the rule above cannot: dropping a page back to
+ * `Text variant="h1"` also removes its `PageSurface`, so the surface rule simply
+ * stops applying to it. The heading is the thing that must not be hand-built, so
+ * the check belongs on the heading.
+ */
+function handRolledHeadingOffenders(): string[] {
+  return sourceFilesUnder(join('src', 'app')).filter((file) => {
+    if (!ROUTE_ENTRY_FILE.test(file)) return false;
+    const source = readFileSync(file, 'utf8');
+    return HAND_ROLLED_HEADING.test(source) && !SURFACE_ELEMENT.test(source);
+  });
+}
+
 describe('list breadcrumb trail', () => {
   it.each(LOCALES)('builds Home / <Group> for a module page in %s', (locale, dictionary) => {
     expect(listBreadcrumbs(locale, 'infrastructure', LIST_ROUTE_ID, dictionary)).toEqual([
@@ -113,6 +143,16 @@ describe('list breadcrumb trail', () => {
     expect(crumbs).toEqual([{ label: dictionary.navigation.home.label, href: `/${locale}` }]);
   });
 
+  it.each(LOCALES)('leaves the dashboard with no crumb, because its own name is the only one it could show in %s', (locale, dictionary) => {
+    // Why empty and not a Dashboard crumb: the dashboard is the root, so the one
+    // route above it is itself — a trail that named it would put "Dashboard" over
+    // the "Dashboard" heading, which is the defect the rule exists to remove.
+    const crumbs = listBreadcrumbs(locale, 'direct', 'home', dictionary);
+
+    expect(crumbs).toEqual([]);
+    expect(labelsOf(crumbs)).not.toContain(dictionary.navigation.home.label);
+  });
+
   it('fails the render on a page that claims a group it does not belong to', () => {
     expect(() => listBreadcrumbs('en', 'system', 'people.users', en)).toThrow(
       'Route is not in group system: people.users',
@@ -127,7 +167,7 @@ describe('record breadcrumb trail', () => {
     ).toEqual([
       { label: dictionary.navigation.home.label, href: `/${locale}` },
       { label: dictionary.navigation.groups.people },
-      { label: dictionary.navigation.people.users.label },
+      { label: dictionary.navigation.people.users.label, href: buildRoute(locale, RECORD_PARENT_ROUTE_ID) },
     ]);
   });
 
@@ -155,7 +195,7 @@ describe('record breadcrumb trail', () => {
     );
   });
 
-  it.each(LOCALES)('closes the record trail on the list page without an href in %s', (locale, dictionary) => {
+  it.each(LOCALES)('links the closing list crumb to the list the record lives under in %s', (locale, dictionary) => {
     const crumbs = recordBreadcrumbs(
       locale,
       'evaluation',
@@ -166,15 +206,18 @@ describe('record breadcrumb trail', () => {
 
     expect(crumbs[crumbs.length - 1]).toEqual({
       label: dictionary.navigation.evaluation.submissions.label,
+      href: buildRoute(locale, 'evaluation.submissions'),
     });
   });
 
-  it('links only the first crumb of a record trail', () => {
+  it('links Home and the list page but never the group or the record', () => {
     const crumbs = recordBreadcrumbs('en', 'people', 'people.team-record', 'people.teams', en);
 
     expect(crumbs.filter((crumb) => crumb.href !== undefined)).toEqual([
       { label: en.navigation.home.label, href: '/en' },
+      { label: en.navigation.people.teams.label, href: '/en/people/teams' },
     ]);
+    expect(crumbs.map((crumb) => crumb.href)).not.toContain('/en/people/teams/4');
   });
 
   it('fails the render on a record whose parent list is not its own', () => {
@@ -191,5 +234,13 @@ describe('breadcrumb construction sites', () => {
 
   it('keeps the BreadcrumbItem type out of every page', () => {
     expect(pageTypeOffenders()).toEqual([]);
+  });
+
+  it('gives every page that shows a surface a trail from the shared builder', () => {
+    expect(surfaceWithoutBuilderOffenders()).toEqual([]);
+  });
+
+  it('has no route entry that hand-rolls its heading instead of showing a surface', () => {
+    expect(handRolledHeadingOffenders()).toEqual([]);
   });
 });

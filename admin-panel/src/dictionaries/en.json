@@ -48,6 +48,7 @@
   "users": {
     "title": "User Management",
     "subtitle": "Manage system users and participants.",
+    "participations": "{count} participations",
     "allUsers": "All Users",
     "bulkAddUsers": "Bulk Add Users",
     "createUser": "Create User",

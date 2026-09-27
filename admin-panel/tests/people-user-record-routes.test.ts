@@ -1,8 +1,14 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import en from '@/dictionaries/en.json';
+import th from '@/dictionaries/th.json';
 import { notFound } from 'next/navigation';
 import { buildUserTabs } from '@/app/[locale]/(authenticated)/people/users/[id]/layout';
 import LegacyUsersPage from '@/app/[locale]/(authenticated)/users/page';
+import { UserDetailFrame } from '@/components/users/UserDetailFrame';
+import { interpolate } from '@/lib/interpolate';
+import type { UserSummary } from '@/lib/people-read-model-types';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
 
@@ -77,6 +83,54 @@ describe('User record tab rail', () => {
       'people.user-tabs.teams',
       'people.user-tabs.history',
     ]);
+  });
+});
+
+describe('User record description copy', () => {
+  const SUMMARY: UserSummary = {
+    id: 17,
+    username: 'ada',
+    firstName: 'Ada',
+    lastName: 'Lovelace',
+    status: 'active',
+    organization: 'MWIT',
+    country: 'TH',
+    participationCount: 4,
+    teamCodes: ['THA-01'],
+  };
+
+  it.each([
+    ['en', en],
+    ['th', th],
+  ])('renders the participation count from the %s dictionary', (_locale, dict) => {
+    const label = interpolate(dict.users.participations, { count: SUMMARY.participationCount });
+    const markup = renderToStaticMarkup(
+      createElement(UserDetailFrame, { summary: SUMMARY, participationsLabel: label }),
+    );
+
+    expect(markup).toContain(label);
+  });
+
+  it('resolves a distinct, non-blank participation template in both locales', () => {
+    for (const dict of [en, th]) {
+      expect(dict.users.participations.trim()).not.toBe('');
+      expect(dict.users.participations).toContain('{count}');
+    }
+    expect(en.users.participations).not.toBe(th.users.participations);
+  });
+
+  it('carries no English of its own when the caller hands it Thai copy', () => {
+    const markup = renderToStaticMarkup(
+      createElement(UserDetailFrame, {
+        summary: SUMMARY,
+        participationsLabel: interpolate(th.users.participations, {
+          count: SUMMARY.participationCount,
+        }),
+      }),
+    );
+
+    expect(markup).toContain('4 การเข้าร่วมการแข่งขัน');
+    expect(markup).not.toContain('participations');
   });
 });
 

@@ -5,7 +5,6 @@ import { TableToolbar } from '@/components/core/TableToolbar';
 import { EnvSectionCard } from '@/components/settings/EnvSectionCard';
 
 const APPEARANCE_COPY = {
-  group: 'System',
   title: 'Appearance',
   description: 'Branding and display preferences.',
 } as const;

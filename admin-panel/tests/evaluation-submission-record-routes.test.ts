@@ -191,10 +191,10 @@ function breadcrumbHrefs(html: string): string[] {
 
 describe('Submission record breadcrumbs', () => {
   it('closes the trail on the submissions list the record lives under', () => {
-    // Why Home is the only link: the group and the list page are the record's
-    // context, and a link on either would point away from the page the reader is
-    // already inside.
-    expect(breadcrumbHrefs(recordHtml)).toEqual(['/en']);
+    // Why Home and the list are the two links: the group is a section with no page
+    // of its own, while the submissions list is the record's real parent and the
+    // reader's way back up out of the record.
+    expect(breadcrumbHrefs(recordHtml)).toEqual(['/en', '/en/evaluation/submissions']);
   });
 
   it('never points two crumbs at one URL', () => {

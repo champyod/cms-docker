@@ -1,10 +1,10 @@
 import { getContests } from '@/app/actions/contests';
 import { ContestList } from '@/components/contests/ContestList';
-import { checkPermission, getPermissions } from '@/lib/permissions';
+import { PageSurface } from '@/components/core/PageSurface';
 import { getDictionary } from '@/i18n';
+import { checkPermission, getPermissions } from '@/lib/permissions';
+import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { notFound } from 'next/navigation';
-import { Stack } from '@/components/core/Layout';
-import { Text } from '@/components/core/Typography';
 
 export default async function ContestsPage({
   params,
@@ -12,7 +12,7 @@ export default async function ContestsPage({
 }: {
     params: Promise<{ locale: string }>;
     searchParams: Promise<{ page?: string; search?: string }>;
-}) {
+}): Promise<React.JSX.Element> {
   const { locale } = await params;
   const dict = await getDictionary(locale);
   const hasPermission = await checkPermission('contest:list', false);
@@ -30,13 +30,12 @@ export default async function ContestsPage({
   const { contests, totalPages } = await getContests({ page, search });
 
   return (
-    <Stack gap={8}>
-      <Stack gap={2}>
-        <Text variant="h1">{dict.contests.title}</Text>
-        <Text variant="muted">{dict.contests.subtitle}</Text>
-      </Stack>
-
+    <PageSurface
+      breadcrumbs={listBreadcrumbs(locale, 'direct', 'contests.list', dict)}
+      title={dict.contests.title}
+      description={dict.contests.subtitle}
+    >
       <ContestList initialContests={contests} totalPages={totalPages} permissionKeys={Array.from(permissions)} />
-    </Stack>
+    </PageSurface>
   );
 }

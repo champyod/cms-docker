@@ -1,10 +1,10 @@
 import { getTasks } from '@/app/actions/tasks';
+import { PageSurface } from '@/components/core/PageSurface';
 import { TaskList } from '@/components/tasks/TaskList';
-import { checkPermission, getPermissions } from '@/lib/permissions';
 import { getDictionary } from '@/i18n';
+import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
+import { checkPermission, getPermissions } from '@/lib/permissions';
 import { notFound } from 'next/navigation';
-import { Stack } from '@/components/core/Layout';
-import { Text } from '@/components/core/Typography';
 
 export default async function TasksPage({
   params: paramsPromise,
@@ -12,7 +12,7 @@ export default async function TasksPage({
 }: {
   params: Promise<{ locale: string }>;
   searchParams: Promise<{ page?: string; search?: string }>;
-}) {
+}): Promise<React.JSX.Element> {
   const { locale } = await paramsPromise;
   const dict = await getDictionary(locale);
   const hasPermission = await checkPermission('task:list', false);
@@ -30,13 +30,12 @@ export default async function TasksPage({
   const { tasks, totalPages } = await getTasks({ page, search });
 
   return (
-    <Stack gap={8}>
-      <Stack gap={2}>
-        <Text variant="h1">{dict.tasks.title}</Text>
-        <Text variant="muted">{dict.tasks.subtitle}</Text>
-      </Stack>
-
+    <PageSurface
+      breadcrumbs={listBreadcrumbs(locale, 'direct', 'tasks.list', dict)}
+      title={dict.tasks.title}
+      description={dict.tasks.subtitle}
+    >
       <TaskList initialTasks={tasks} totalPages={totalPages} permissionKeys={Array.from(permissions)} />
-    </Stack>
+    </PageSurface>
   );
 }

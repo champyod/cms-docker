@@ -15,7 +15,6 @@ export default async function InfrastructureResourcesPage({
     <ResourceView
       breadcrumbs={listBreadcrumbs(locale, 'infrastructure', 'infrastructure.resources', dict)}
       copy={{
-        group: dict['navigation']['groups']['infrastructure'],
         title: dict['navigation']['infrastructure']['resources']['label'],
         description: dict['navigation']['infrastructure']['resources']['description'],
       }}
