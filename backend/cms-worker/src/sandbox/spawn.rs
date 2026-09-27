@@ -1,19 +1,15 @@
 //! Starting a run, keeping both its pipes empty while it lasts, and reading it back.
 //!
-//! A run that prints more than a pipe holds would block on the write and never
-//! finish, so both pipes are emptied for as long as the run is alive rather than
-//! after it ends. Each pipe is read by a thread of its own to its very end, and
-//! the launch waits for both threads before it answers, so what the run printed is
-//! here rather than stuck in a pipe. Reading the two pipes in turn instead would
-//! deadlock on whichever of them filled first, and reading neither would deadlock
-//! on the first of them: the run cannot finish while this side is not reading, so
-//! this side reads while the run is running.
+//! This is the module that touches the machine: it makes the run's own directory
+//! writable for the length of a launch, starts the program, and reads back the log
+//! the run left. The pipes themselves are [`super::stream`]'s subject, and the
+//! limits a run is held to are [`super::Options`]'s.
 //!
-//! Nothing here waits on a clock of its own. The limits a run is held to are the
-//! ones it was launched with, which the isolation program enforces and which its
-//! log reports; a wall-clock stop is told apart from a CPU one by the message the
-//! log wrote. A launch is over when the run is over, and a run the isolation
-//! program could not stop is the isolation program's to answer for.
+//! Nothing here waits on a clock of its own. The limits are the ones a run was
+//! launched with, which the isolation program enforces and which its log reports;
+//! a wall-clock stop is told apart from a CPU one by the message the log wrote. A
+//! launch is over when the run is over, and a run the isolation program could not
+//! stop is the isolation program's to answer for.
 //!
 //! A command that is one of the four run beside the isolation program takes the
 //! other path entirely: it is started in the run's own directory, which is made
@@ -26,18 +22,24 @@
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
-use std::fmt;
 use std::fs;
-use std::io::{self, Read};
+use std::io;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, ExitStatus, Output, Stdio};
-use std::thread::JoinHandle;
+use std::process::{Command, ExitStatus, Output, Stdio};
 
-use super::{ExecutionLog, ExecutionStats, Outcome, Sandbox, SpawnError};
+use super::stream::drain;
+use super::{Outcome, Sandbox, SpawnError};
 
-/// How much of a pipe is taken at a time, which is the size of a pipe's buffer.
-const PIPE_CHUNK: usize = 8 * 1024;
+/// The commands run beside the isolation program rather than inside it.
+///
+/// They create files the run has to see, and they read nothing a contestant wrote,
+/// which is what makes running them unsandboxed safe.
+pub const SECURE_COMMANDS: [&str; 4] = ["/bin/cp", "/bin/mv", "/usr/bin/zip", "/usr/bin/unzip"];
+/// The name a box's directory is given before its own unique suffix.
+const OUTER_DIRECTORY_PREFIX: &str = "cms-sandbox-";
+/// The prefix of the file one run's measurements are written to.
+const META_PREFIX: &str = "run.log";
 /// The permissions a run's own directory is given while a run is inside it.
 const MODE_RUNNING: u32 = 0o770;
 /// The permissions it is given while a command is setting the box up beside it.
@@ -51,60 +53,36 @@ const MODE_PERMISSIONS: u32 = 0o7777;
 /// measured nothing, written as though it had measured zero of everything.
 const EMPTY_LOG: &str = "time:0.000\ntime-wall:0.000\nmax-rss:0\ncg-mem:0\n";
 
-/// Which of a run's two pipes is meant, for saying which one could not be read.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Stream {
-    /// What the run wrote to its standard output.
-    Output,
-    /// What the run wrote to its standard error.
-    Error,
+/// The outer directory, the run's own directory inside it, and the program.
+///
+/// Both paths are made once, when a sandbox is built, and every path a launch
+/// works on is reached through here rather than named by a launch of its own.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct Layout {
+    /// The box's own directory, which a run's log is written into.
+    pub outer: PathBuf,
+    /// The directory a run writes in, which is the one it is bound to.
+    pub home: PathBuf,
+    /// The program the run is launched under.
+    pub executable: PathBuf,
 }
 
-impl fmt::Display for Stream {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Output => write!(f, "standard output"),
-            Self::Error => write!(f, "standard error"),
-        }
+impl Layout {
+    /// A layout under a caller-named directory, holding a run's own directory.
+    pub(super) fn create(temp_dir: &Path, name: &str, executable: &Path) -> io::Result<Self> {
+        let outer = temp_dir.join(format!("{OUTER_DIRECTORY_PREFIX}{name}"));
+        let home = outer.join("home");
+        fs::create_dir_all(&home)?;
+        Ok(Self {
+            outer,
+            home,
+            executable: executable.to_path_buf(),
+        })
     }
-}
 
-/// Why what a run printed could not be read.
-#[derive(Debug)]
-pub enum ReadError {
-    /// A pipe the run was writing to could not be read to its end.
-    Pipe {
-        /// Whether it was the run's output or its error that failed.
-        stream: Stream,
-        /// What reading it was refused with.
-        source: io::Error,
-    },
-    /// The run finished without returning a code, so nothing was decided.
-    NoExitCode,
-    /// The isolation program returned a code nothing here has a reading for.
-    UnknownCode(i32),
-}
-
-impl fmt::Display for ReadError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Pipe { stream, source } => {
-                write!(f, "cannot read the run's {stream}: {source}")
-            }
-            Self::NoExitCode => write!(f, "the run was stopped before it returned a code"),
-            Self::UnknownCode(code) => {
-                write!(f, "the sandbox returned an exit status ({code}) unknown")
-            }
-        }
-    }
-}
-
-impl std::error::Error for ReadError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Pipe { source, .. } => Some(source),
-            Self::NoExitCode | Self::UnknownCode(_) => None,
-        }
+    /// The file the run numbered `number` has its measurements written to.
+    pub(super) fn meta_file(&self, number: u32) -> PathBuf {
+        self.outer.join(format!("{META_PREFIX}.{number}"))
     }
 }
 
@@ -151,31 +129,6 @@ impl Sandbox {
             program: name.to_owned(),
             code: unknown.code,
         })
-    }
-
-    /// The answer a launch is turned into, once its log has been read.
-    /// # Errors
-    /// [`SpawnError::Measure`] for a number the log cannot read, and nothing else.
-    pub(super) fn finish(
-        output: &Output,
-        log: &ExecutionLog,
-    ) -> Result<ExecutionStats, SpawnError> {
-        Self::outcome(
-            log,
-            Some(String::from_utf8_lossy(&output.stdout).into_owned()),
-            Some(String::from_utf8_lossy(&output.stderr).into_owned()),
-        )
-    }
-
-    /// Reads the log of the run numbered `number`, which is where a run's own
-    /// measurements are waiting.
-    /// # Errors
-    /// [`SpawnError::NoMetaFile`] when the run left no log behind or it could not
-    /// be read, and [`SpawnError::Measure`] for a number it cannot be read as.
-    pub(super) fn read_log(&self, number: u32) -> Result<ExecutionLog, SpawnError> {
-        let path = self.layout.meta_file(number);
-        let text = fs::read_to_string(&path).map_err(|_| SpawnError::NoMetaFile { path })?;
-        ExecutionLog::parse(&text).map_err(SpawnError::Measure)
     }
 
     /// Leaves the log a command run beside the isolation program is answered from:
@@ -278,62 +231,5 @@ fn unlaunchable(name: &str, source: io::Error) -> SpawnError {
     SpawnError::Unlaunchable {
         program: PathBuf::from(name),
         source,
-    }
-}
-
-/// Empties both of a running child's pipes, each by a thread of its own.
-///
-/// Both readers are started before either is waited for, which is the whole of
-/// the drain: a run blocked on a pipe nobody is reading cannot finish, and
-/// waiting for one reader before the other exists would leave the second pipe
-/// unread for exactly as long as the first was full.
-fn drain(child: &mut Child) -> Result<Drained, ReadError> {
-    let out = child.stdout.take().map(|pipe| reader(pipe, Stream::Output));
-    let err = child.stderr.take().map(|pipe| reader(pipe, Stream::Error));
-    Ok(Drained {
-        stdout: take_pipe(out)?,
-        stderr: take_pipe(err)?,
-    })
-}
-
-/// Both pipes of a run, read to their end.
-struct Drained {
-    stdout: Vec<u8>,
-    stderr: Vec<u8>,
-}
-
-/// A thread reading one pipe to its end, which is the whole of the drain.
-type Reader = JoinHandle<Result<Vec<u8>, ReadError>>;
-
-/// Empties one pipe from a thread of its own, for as long as the run lasts.
-fn reader(mut pipe: impl Read + Send + 'static, stream: Stream) -> Reader {
-    std::thread::spawn(move || {
-        let mut read = Vec::new();
-        let mut chunk = [0_u8; PIPE_CHUNK];
-        loop {
-            let filled = pipe
-                .read(&mut chunk)
-                .map_err(|source| ReadError::Pipe { stream, source })?;
-            if filled == 0 {
-                return Ok(read);
-            }
-            read.extend_from_slice(&chunk[..filled]);
-        }
-    })
-}
-
-/// Waits for a reader and hands back everything it read.
-fn take_pipe(pipe: Option<Reader>) -> Result<Vec<u8>, ReadError> {
-    let Some(pipe) = pipe else {
-        return Ok(Vec::new());
-    };
-    pipe.join().unwrap_or_else(|_| Err(pipe_lost()))
-}
-
-/// A reader whose thread is gone: the output is lost rather than half read.
-fn pipe_lost() -> ReadError {
-    ReadError::Pipe {
-        stream: Stream::Output,
-        source: io::Error::other("the thread reading the run's output is gone"),
     }
 }

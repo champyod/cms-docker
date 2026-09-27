@@ -7,26 +7,18 @@
 //! grades, schedules or stores — the isolation program owns every one of those.
 //!
 //! The launch is faithful in four ways, each of which is a way a run could
-//! otherwise be measured wrongly.
+//! otherwise be measured wrongly, and each is one module's whole subject.
 //!
-//! Both pipes are drained while the run is alive. A run that prints more than a
-//! pipe buffer holds would otherwise block on the write and never finish, so each
-//! pipe is emptied by a thread of its own for as long as the run lasts and is
-//! read to its end before the launch returns. Reading them in turn instead would
-//! deadlock on whichever pipe filled first.
+//! Both pipes are drained while the run is alive, by [`stream`], or a run that
+//! prints more than a pipe holds would block on the write and never finish.
 //!
-//! Every limit is the isolation program's to enforce, so a CPU time, a wall clock
-//! and the extra time a stop costs it are options rather than clocks this side
-//! keeps. [`Options`] is where they are said, and a wall-clock stop is told apart
-//! from a CPU one by the message the run's log wrote, not by guessing.
+//! Every limit is the isolation program's to enforce, so the CPU time, the wall
+//! clock and what a stop costs are [`Options`] rather than clocks this side keeps.
 //!
-//! Four commands run without the isolation program at all — copying into the box,
-//! moving inside it, packing it and unpacking it — because they create files the
-//! box has to be able to see and they read nothing a contestant wrote.
+//! Four commands run without the isolation program at all, because they create
+//! files the box has to see and read nothing a contestant wrote;
 //! [`Sandbox::is_secure_command`] is the whole of that rule. Their output is not
-//! forwarded: a run that sets a box up is not a run a contestant is shown, and its
-//! error output is not theirs to read. Each leaves an empty log behind instead,
-//! which is what a command that measured nothing looks like.
+//! forwarded, and each leaves an empty log behind instead.
 //!
 //! A code the run returned is not a verdict. [`Outcome`] is: `0` and `1` both mean
 //! the isolation program itself worked, and only the run's log says what happened
@@ -44,19 +36,25 @@
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
+mod error;
 mod exits;
 mod options;
 mod spawn;
+mod stream;
 
-use std::fmt;
-use std::io;
-use std::path::{Path, PathBuf};
+use std::fs;
+use std::path::Path;
+use std::process::Output;
 
+pub use error::SpawnError;
 pub use exits::Outcome;
 pub use options::{MappedDirectory, Options};
-pub use spawn::{ReadError, Stream};
+pub use spawn::SECURE_COMMANDS;
+pub use stream::{ReadError, Stream};
 
-use crate::measure::{ExecutionLog, MeasureError};
+use spawn::Layout;
+
+use crate::measure::ExecutionLog;
 use crate::stats::ExecutionStats;
 
 /// The program a run is launched under, whatever an operator configured.
@@ -67,120 +65,6 @@ const OPTION_END: &str = "--";
 pub const HOME_DESTINATION: &str = "/tmp";
 /// A private directory the run's own user and group may share, on shared memory.
 const SHARED_MEMORY_DESTINATION: &str = "/dev/shm";
-/// The name a box's directory is given before its own unique suffix.
-const OUTER_DIRECTORY_PREFIX: &str = "cms-sandbox-";
-/// The prefix of the file one run's measurements are written to.
-const META_PREFIX: &str = "run.log";
-/// The commands run beside the isolation program rather than inside it.
-///
-/// They create files the run has to see, and they read nothing a contestant wrote,
-/// which is what makes running them unsandboxed safe.
-pub const SECURE_COMMANDS: [&str; 4] = ["/bin/cp", "/bin/mv", "/usr/bin/zip", "/usr/bin/unzip"];
-
-/// The outer directory, the run's own directory inside it, and the program.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Layout {
-    outer: PathBuf,
-    home: PathBuf,
-    executable: PathBuf,
-}
-
-impl Layout {
-    /// A layout under a caller-named directory, holding a run's own directory.
-    fn create(temp_dir: &Path, name: &str, executable: &Path) -> io::Result<Self> {
-        let outer = temp_dir.join(format!("{OUTER_DIRECTORY_PREFIX}{name}"));
-        let home = outer.join("home");
-        std::fs::create_dir_all(&home)?;
-        Ok(Self {
-            outer,
-            home,
-            executable: executable.to_path_buf(),
-        })
-    }
-
-    /// The file the run numbered `number` has its measurements written to.
-    fn meta_file(&self, number: u32) -> PathBuf {
-        self.outer.join(format!("{META_PREFIX}.{number}"))
-    }
-}
-
-/// Why a run was never launched, or was launched and could not be read back.
-///
-/// Every variant names the path or the program to look at, so a refusal names the
-/// run rather than reporting that something did not work.
-#[derive(Debug)]
-pub enum SpawnError {
-    /// A command was handed with nothing in it to run.
-    EmptyCommand,
-    /// The command's own name is the empty string, which names no program.
-    NamelessCommand,
-    /// The isolation program, or a command run in its place, would not start.
-    Unlaunchable {
-        /// The program that would not start.
-        program: PathBuf,
-        /// What starting it was refused with.
-        source: io::Error,
-    },
-    /// A run finished and left no log behind, so nothing measured it.
-    NoMetaFile {
-        /// Where the log was to have been written.
-        path: PathBuf,
-    },
-    /// The launch returned a code nothing here reads: either the isolation program
-    /// failed in a way it does not document, or a command run beside it did not do
-    /// what it was asked to. The box is not set up either way.
-    Exit {
-        /// The program that returned the code.
-        program: String,
-        /// The code it returned.
-        code: i32,
-    },
-    /// A launch had to touch the run's own directory and could not.
-    Io {
-        /// The path the launch was working on.
-        path: PathBuf,
-        /// What the file system refused it with.
-        source: io::Error,
-    },
-    /// A pipe carrying what a run printed could not be read to its end.
-    Pipe(ReadError),
-    /// A log held a value that is not the number its key promises.
-    Measure(MeasureError),
-}
-
-impl fmt::Display for SpawnError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::EmptyCommand => write!(f, "the command to run is empty"),
-            Self::NamelessCommand => write!(f, "the command to run has no program in it"),
-            Self::Unlaunchable { program, source } => {
-                write!(f, "cannot start {}: {source}", program.display())
-            }
-            Self::NoMetaFile { path } => write!(f, "the run wrote no log at {}", path.display()),
-            Self::Exit { program, code } => {
-                write!(f, "{program} returned an exit status ({code}) unknown")
-            }
-            Self::Io { path, source } => write!(f, "{source} at {}", path.display()),
-            Self::Pipe(error) => write!(f, "{error}"),
-            Self::Measure(error) => write!(f, "{error}"),
-        }
-    }
-}
-
-impl std::error::Error for SpawnError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Unlaunchable { source, .. } | Self::Io { source, .. } => Some(source),
-            Self::Pipe(error) => Some(error),
-            Self::Measure(error) => Some(error),
-            Self::EmptyCommand
-            | Self::NamelessCommand
-            | Self::NoMetaFile { .. }
-            | Self::Exit { .. } => None,
-        }
-    }
-}
-
 /// The program a run is launched under, and the run's own directory beside it.
 ///
 /// A sandbox is created over a directory and never initialised, torn down or told
@@ -270,6 +154,31 @@ impl Sandbox {
         let output = self.launch(&program, number, bypassed)?;
         let log = self.read_log(number)?;
         Self::finish(&output, &log)
+    }
+
+    /// The answer a launch is turned into, once its log has been read.
+    /// # Errors
+    /// [`SpawnError::Measure`] for a number the log cannot read, and nothing else.
+    pub(super) fn finish(
+        output: &Output,
+        log: &ExecutionLog,
+    ) -> Result<ExecutionStats, SpawnError> {
+        Self::outcome(
+            log,
+            Some(String::from_utf8_lossy(&output.stdout).into_owned()),
+            Some(String::from_utf8_lossy(&output.stderr).into_owned()),
+        )
+    }
+
+    /// Reads the log of the run numbered `number`, which is where a run's own
+    /// measurements are waiting.
+    /// # Errors
+    /// [`SpawnError::NoMetaFile`] when the run left no log behind or it could not
+    /// be read, and [`SpawnError::Measure`] for a number it cannot be read as.
+    fn read_log(&self, number: u32) -> Result<ExecutionLog, SpawnError> {
+        let path = self.layout.meta_file(number);
+        let text = fs::read_to_string(&path).map_err(|_| SpawnError::NoMetaFile { path })?;
+        ExecutionLog::parse(&text).map_err(SpawnError::Measure)
     }
 
     /// Whether a command is one of the four run beside the isolation program.
