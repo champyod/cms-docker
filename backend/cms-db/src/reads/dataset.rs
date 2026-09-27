@@ -15,7 +15,8 @@ pub const DATASET_BY_ID: &str = "\
 /// One dataset: the task it judges for, the limits it imposes, whether it is live.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DatasetRecord {
-    /// `datasets.id`.
+    /// What the task's `active_dataset_id` is compared against, which is why the
+    /// query joins `tasks` rather than reading the flag off this table.
     pub id: i32,
     /// `datasets.task_id`, the task owning the dataset.
     pub task_id: i32,

@@ -15,7 +15,8 @@ pub const TESTCASES_BY_DATASET: &str = "\
 /// One testcase: the codename an evaluation names it by, and the two digests.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TestcaseRecord {
-    /// `testcases.id`.
+    /// The one testcase of the set an evaluation measured, and what
+    /// `invalidate_evaluation` matches on to drop that one and leave the rest.
     pub id: i32,
     /// `testcases.dataset_id`, the dataset the testcase belongs to.
     pub dataset_id: i32,

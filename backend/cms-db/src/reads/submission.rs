@@ -11,7 +11,8 @@ pub const SUBMISSION_BY_ID: &str = "\
 /// A submission as judging holds it: which task, which contestant, and when.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubmissionRecord {
-    /// `submissions.id`.
+    /// The handle every result is filed under, so one submission is tracked
+    /// across every dataset it was judged on and every rejudge it survives.
     pub id: i32,
     /// `submissions.task_id`, the task the submission is on.
     pub task_id: i32,

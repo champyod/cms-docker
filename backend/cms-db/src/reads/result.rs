@@ -5,9 +5,11 @@
 /// binds it: `submission_id` as `$1`, `dataset_id` as `$2`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ResultKey {
-    /// `submission_results.submission_id`.
+    /// The submission whose result is being read, and the half a rejudge files
+    /// the row it writes under.
     pub submission_id: i32,
-    /// `submission_results.dataset_id`.
+    /// The dataset it was measured against: a submission carries one result per
+    /// dataset, so neither half of the pair addresses a row on its own.
     pub dataset_id: i32,
 }
 
@@ -25,7 +27,8 @@ pub const RESULT_BY_SUBMISSION_AND_DATASET: &str = "\
 /// One result: how far compilation and evaluation have got, and what they cost.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ResultRecord {
-    /// `submission_results.submission_id`.
+    /// Which submission the row reports on, carried over from the key the query
+    /// read it by.
     pub submission_id: i32,
     /// `submission_results.dataset_id`, the dataset the result belongs to.
     pub dataset_id: i32,
