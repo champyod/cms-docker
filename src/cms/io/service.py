@@ -377,5 +377,5 @@ class Service:
         reason: why, oh why, you want me down?
 
         """
-        logger.info("Trying to exit as asked by another service (%s).", reason)
+        logger.warning("Trying to exit as asked by another service (%s).", reason)
         self.exit()

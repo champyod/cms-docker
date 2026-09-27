@@ -45,6 +45,11 @@ if typing.TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# WHY: a shard that goes silent is almost always an unreachable
+# endpoint (firewall, wrong host, wrong port) rather than a broken
+# shard, so the operator is told what to look at.
+REACHABILITY_HINT = "evaluation service cannot reach shard - check network/firewall"
+
 
 class WorkerPool:
     """This class keeps the state of the workers attached to ES, and
@@ -383,7 +388,8 @@ class WorkerPool:
                     self._ignore[shard] = True
                     self.release_worker(shard)
                     self._worker[shard].quit(
-                        reason="No response in %s." % active_for)
+                        reason="No response in %s - %s."
+                               % (active_for, REACHABILITY_HINT))
 
         return lost_operations
 
