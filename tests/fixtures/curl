@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# tests/fixtures/curl — the curl a backup suite puts on the PATH.
+#
+# WHY a recorder rather than a silent no-op: a backup run's alert is the verdict left behind
+# for the case where nobody reads its status, so the contract is the payload — its colour,
+# whether it pings the role, and the words it uses. A stub that discarded the body could prove
+# a POST was attempted and nothing about what was said. The body is written verbatim, one JSON
+# object per line, so a suite counts alerts and reads their fields rather than matching prose
+# against a log line the script wrote about itself.
+#
+# It never reaches a network. The URL the run holds is a suite-invented stub, and the body
+# goes to a file this script appends to.
+#
+# STUB_WEBHOOK_LOG names the file the bodies are appended to. Unset, the call is accepted and
+# recorded nowhere, which keeps a run that has no suite behind it from failing on a missing
+# file rather than on a broken alert.
+set -u
+
+if [[ -n "${STUB_WEBHOOK_LOG:-}" ]]; then
+  body=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -d|--data|--data-raw|--data-binary)
+        body="${2:-}"
+        break
+        ;;
+    esac
+    shift
+  done
+  printf '%s\n' "$body" >> "${STUB_WEBHOOK_LOG}"
+fi
+exit 0

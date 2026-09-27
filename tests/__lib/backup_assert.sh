@@ -43,6 +43,17 @@ not_grep_yes() { # file pattern — the absence is the contract
   if grep -q -- "$2" "$1" 2>/dev/null; then printf 'no'; else printf 'yes'; fi
 }
 
+# has_yes <value> <substring> — the substring test for a value a reader returned rather than
+# for a file, so a suite can ask about one field of one alert without writing it out first.
+has_yes() {
+  if [[ "$1" == *"$2"* ]]; then printf 'yes'; else printf 'no'; fi
+}
+
+# not_has_yes <value> <substring> — the absence is the contract, for a value a reader returned.
+not_has_yes() {
+  if [[ "$1" == *"$2"* ]]; then printf 'no'; else printf 'yes'; fi
+}
+
 # ---------------------------------------------------------------------------
 # Readers
 # ---------------------------------------------------------------------------
@@ -66,6 +77,33 @@ entry_count() { jq 'length' "$1"; }
 
 entry_field() { # <manifest> <index> <jq filter over the entry>
   jq -r ".[${2}] | ${3}" "$1"
+}
+
+# ---------------------------------------------------------------------------
+# Alert readers — the payloads a run POSTed, one JSON object per line
+# ---------------------------------------------------------------------------
+# Each reader counts before it answers. Two alerts of one severity is a run giving the same
+# verdict twice, and a reader that returned the first of them would hide that behind a
+# passing assertion, so a suite states the count and the field separately.
+alerts_with_colour() { # <webhook log> <colour>
+  jq -s --argjson colour "$2" \
+    '[.[] | select(.embeds[0].color == $colour)] | length' "$1" 2>/dev/null ||
+    printf 'unreadable'
+}
+
+alert_description_of() { # <webhook log> <colour> — what that colour's alert says
+  jq -sr --argjson colour "$2" \
+    '[.[] | select(.embeds[0].color == $colour) | .embeds[0].description] | join("\n")' \
+    "$1" 2>/dev/null || printf 'unreadable'
+}
+
+# The ping that alert carries, or nothing at all. A degraded or failed run is announced to
+# the role, a routine one is not, so an alert nobody is pulled into is a claim the operator
+# never sees.
+alert_mention_of() { # <webhook log> <colour>
+  jq -sr --argjson colour "$2" \
+    '[.[] | select(.embeds[0].color == $colour) | .content // ""] | join("")' \
+    "$1" 2>/dev/null || printf 'unreadable'
 }
 
 # archive_image <streaming log> — the image of the last helper invocation, read the way the

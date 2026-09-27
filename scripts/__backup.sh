@@ -74,6 +74,20 @@ json_escape() {
   fi
 }
 
+# WHY one flag rather than a test per path: the contract is that a run which announced a
+# degradation must not afterwards announce a success, and a check enumerating the degrading
+# paths would be silently wrong the moment one is added without it. The exit code is
+# deliberately untouched — the status contract above says what was backed up, and that did
+# not change; only the alert contradicted it.
+is_degraded=0
+
+send_degraded() {
+  # WHY the flag is raised beside the send and not at the call sites: a path that sends its
+  # own amber and forgets the flag is a run whose headline contradicts its own warning.
+  is_degraded=1
+  send_discord "$1" 16776960 "true"
+}
+
 send_discord() {
   local message="$1"
   local color="${2:-3447003}"
@@ -348,7 +362,7 @@ manifest_append() {
       return 1
     fi
     log_warn "jq not found — manifest update is approximate"
-    send_discord "⚠️ **Backup Degraded** — jq not found: manifest left empty, this run is unrecorded — ts \`${ts}\`" 16776960 "true"
+    send_degraded "⚠️ **Backup Degraded** — jq not found: manifest left empty, this run is unrecorded — ts \`${ts}\`"
     return 0
   fi
 
@@ -558,7 +572,7 @@ run_backup() {
   # 4) Rotation
   if ! apply_rotation; then
     log_warn "Rotation encountered an error (non-fatal)"
-    send_discord "⚠️ **Backup Degraded** — rotation aborted: superseded sets may accumulate in \`${BACKUP_ROOT}\` — ts \`${ts}\`" 16776960 "true"
+    send_degraded "⚠️ **Backup Degraded** — rotation aborted: superseded sets may accumulate in \`${BACKUP_ROOT}\` — ts \`${ts}\`"
   fi
 
   local db_mb vol_mb
@@ -568,6 +582,15 @@ run_backup() {
     log_warn "Backup partial: db=${db_mb}MB vol=FAILED (${vol_fail_reason}) ts=${ts}"
     send_discord "⚠️ **Backup Partial** — ts \`${ts}\` — DB ${db_mb}MB OK / Vol FAILED (${vol_fail_reason}) — \`${pg_ver}\`" 16776960 "true"
     return "$EXIT_PARTIAL_BACKUP"
+  fi
+  # WHY the success alert is withheld once a run has degraded: the amber alert already went
+  # out, and a green headline after it is the last thing a reader sees, so the run announces
+  # both outcomes and the reader is left to guess which one the operator meant. The amber
+  # alert stands as this run's verdict. The status is unchanged, so a caller that reads the
+  # exit code sees exactly what it saw before.
+  if (( is_degraded == 1 )); then
+    log_warn "Backup degraded: db=${db_mb}MB vol=${vol_mb}MB ts=${ts}"
+    return 0
   fi
   log_info "Backup complete: db=${db_mb}MB vol=${vol_mb}MB ts=${ts}"
   send_discord "✅ **Backup Successful** — ts \`${ts}\` — DB ${db_mb}MB / Vol ${vol_mb}MB — \`${pg_ver}\`" 65280 "false"
