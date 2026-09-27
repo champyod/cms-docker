@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
-import { HelpCircle, Database, CheckCircle, Copy, Edit, ToggleLeft, ToggleRight, TestTube, Plus, Trash2, Upload, Paperclip, Settings2 } from 'lucide-react';
+import { HelpCircle, Database, CheckCircle, Copy, Edit, ToggleLeft, ToggleRight, TestTube, Plus, Trash2, Upload, Paperclip, Settings2, Globe, Lock } from 'lucide-react';
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
 import { RowActions, type RowAction } from '@/components/core/RowActions';
@@ -148,7 +148,16 @@ export function DatasetsSection({
                         <div key={tc.id} className="px-2 py-1 bg-muted/40 rounded text-xs text-muted-foreground flex items-center justify-between group">
                           <span className="truncate">{tc.codename}</span>
                           <div className="flex shrink-0 items-center gap-1">
-                            <button onClick={() => onTogglePublic(tc.id)} title={tc.public ? 'Public' : 'Private'} aria-label={tc.public ? 'Make testcase private' : 'Make testcase public'} className={cn('flex size-11 items-center justify-center rounded-md text-xs font-bold transition-colors', tc.public ? 'text-success' : 'text-muted-foreground')}>{tc.public ? 'P' : 'H'}</button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              iconOnly
+                              icon={tc.public ? Globe : Lock}
+                              tooltip={tc.public ? 'Public' : 'Private'}
+                              aria-label={tc.public ? 'Make testcase private' : 'Make testcase public'}
+                              onClick={() => onTogglePublic(tc.id)}
+                              className={cn('rounded-md', tc.public ? 'text-success' : 'text-muted-foreground')}
+                            />
                             <button onClick={() => onDeleteTestcase(tc.id)} title="Delete testcase" aria-label="Delete testcase" className="flex size-11 items-center justify-center rounded-md text-destructive transition-colors hover:bg-destructive/10">×</button>
                           </div>
                         </div>
