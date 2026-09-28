@@ -88,10 +88,8 @@ pub fn exact_diff(output: &[u8], correct: &[u8]) -> Result<(), Difference> {
     if common == output.len() && common == correct.len() {
         return Ok(());
     }
-    let number = 1 + output[..common]
-        .iter()
-        .filter(|byte| **byte == NEWLINE)
-        .count();
+    let newlines = output[..common].iter().filter(|byte| **byte == NEWLINE);
+    let number = 1 + newlines.count();
     Err(Difference::Line {
         number,
         expected: line_at(correct, number),
@@ -111,26 +109,46 @@ fn common_prefix(output: &[u8], correct: &[u8]) -> usize {
 }
 
 /// Compares two answers line for line, forgiving whitespace and nothing else.
+///
+/// A difference is reported in the form its two lines were compared in, so what a
+/// report shows is the answer as the diff read it and not as the submission wrote it.
 pub fn white_diff(output: &[u8], correct: &[u8]) -> Result<(), Difference> {
     let mut found = output.split_inclusive(|byte| *byte == NEWLINE);
     let mut expected = correct.split_inclusive(|byte| *byte == NEWLINE);
     let mut number = 0;
     loop {
         number += 1;
-        match (found.next(), expected.next()) {
-            (None, None) => return Ok(()),
-            (Some(answer), None) if !blank(answer) => return Err(Difference::TooLong),
-            (None, Some(answer)) if !blank(answer) => return Err(Difference::TooShort),
-            (Some(found), Some(expected)) if canonicalize(found) != canonicalize(expected) => {
-                return Err(Difference::Line {
-                    number,
-                    expected: report(expected),
-                    found: report(found),
-                })
-            }
-            _ => {}
+        let answer = found.next();
+        let wanted = expected.next();
+        if answer.is_none() && wanted.is_none() {
+            return Ok(());
+        }
+        if let Some(difference) = line_diff(answer, wanted, number) {
+            return Err(difference);
         }
     }
+}
+
+/// What one line of each answer is worth, which is nothing at all where the two
+/// answers still agree, and otherwise the first difference they hold, where a line the
+/// other answer has run out of is the form it would have had with nothing written on it.
+fn line_diff(answer: Option<&[u8]>, expected: Option<&[u8]>, number: usize) -> Option<Difference> {
+    let found = answer.map_or_else(Vec::new, canonicalize);
+    let wanted = expected.map_or_else(Vec::new, canonicalize);
+    if found == wanted {
+        return None;
+    }
+    if expected.is_none() {
+        return Some(Difference::TooLong);
+    }
+    if answer.is_none() {
+        return Some(Difference::TooShort);
+    }
+    Some(Difference::Line {
+        number,
+        expected: report(&wanted),
+        found: report(&found),
+    })
 }
 
 /// A line in the one form a diff compares: no whitespace at either end, and one space
@@ -148,31 +166,22 @@ fn canonicalize(line: &[u8]) -> Vec<u8> {
         }
         if gap {
             folded.push(b' ');
+            gap = false;
         }
-        gap = false;
         folded.push(byte);
     }
     folded
 }
 
-/// Whether a line is nothing but whitespace, and so is not an answer at all.
-fn blank(line: &[u8]) -> bool {
-    line.iter().all(|byte| WHITES.contains(byte))
-}
-
-/// A line as a report shows it: cut at the line's own end, cut again to the length a
-/// report is given, and with any byte that is not text written as its escape.
+/// Bytes as a report shows them: cut to the length a report is given, and with any
+/// byte that is not text written as the escape that reads back as that byte, so
+/// nothing is lost and nothing that is not text is shown as though it were.
 ///
-/// A line too long to show whole is marked as cut rather than passed over silently,
-/// so a report says that it is not showing all of it rather than implying that it is.
-fn report(line: &[u8]) -> String {
-    let whole = match line.iter().position(|byte| *byte == NEWLINE) {
-        Some(end) => &line[..end],
-        None => line,
-    };
-    let cut = &whole[..whole.len().min(LINE_REPORT_LIMIT)];
-    let shown = escaped(cut);
-    if whole.len() > LINE_REPORT_LIMIT {
+/// Bytes too many to show whole are marked as cut rather than passed over silently,
+/// so a report says that it is not showing all of them rather than implying that it is.
+fn report(bytes: &[u8]) -> String {
+    let shown = escaped(&bytes[..bytes.len().min(LINE_REPORT_LIMIT)]);
+    if bytes.len() > LINE_REPORT_LIMIT {
         shown + "..."
     } else {
         shown
@@ -189,32 +198,25 @@ fn line_at(answer: &[u8], number: usize) -> String {
         };
         rest = &rest[end + 1..];
     }
-    report(rest)
+    let end = rest.iter().position(|byte| *byte == NEWLINE);
+    report(&rest[..end.unwrap_or(rest.len())])
 }
 
-/// Bytes as a report shows them: the text among them as it is, and a byte that is not
-/// text as the escape that reads back as that byte, so nothing is lost and nothing
-/// that is not text is shown as though it were.
+/// Bytes as a report shows them, which is [`report`]'s other half: the text among
+/// them as it is, and every byte that is not text as its escape.
 fn escaped(bytes: &[u8]) -> String {
     let mut shown = String::with_capacity(bytes.len());
     let mut rest = bytes;
-    while !rest.is_empty() {
-        match std::str::from_utf8(rest) {
-            Ok(text) => {
-                shown.push_str(text);
-                break;
-            }
-            Err(broken) => {
-                let (text, unreadable) = rest.split_at(broken.valid_up_to());
-                let bad = broken.error_len().unwrap_or(unreadable.len());
-                shown.push_str(std::str::from_utf8(text).unwrap_or_default());
-                for byte in &unreadable[..bad] {
-                    write!(shown, "\\x{byte:02x}").expect("writing into a String cannot fail");
-                }
-                rest = &unreadable[bad..];
-            }
+    while let Err(broken) = std::str::from_utf8(rest) {
+        let (text, unreadable) = rest.split_at(broken.valid_up_to());
+        let bad = broken.error_len().unwrap_or(unreadable.len());
+        shown.push_str(std::str::from_utf8(text).unwrap_or_default());
+        for byte in &unreadable[..bad] {
+            write!(shown, "\\x{byte:02x}").expect("writing into a String cannot fail");
         }
+        rest = &unreadable[bad..];
     }
+    shown.push_str(std::str::from_utf8(rest).unwrap_or_default());
     shown
 }
 

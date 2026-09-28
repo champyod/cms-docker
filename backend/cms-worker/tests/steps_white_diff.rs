@@ -39,6 +39,43 @@ fn a_line_that_says_something_else_is_named_by_its_number() {
 }
 
 #[test]
+fn a_difference_is_reported_in_the_form_its_two_lines_were_compared_in() {
+    let wrong = white_diff(b"  1   2  \n", b"1 2\t3\n").expect_err("the second word differs");
+    assert_eq!(
+        wrong,
+        Difference::Line {
+            number: 1,
+            expected: "1 2 3".to_owned(),
+            found: "1 2".to_owned(),
+        },
+        "a report shows the form the diff compared, not the bytes that were written"
+    );
+    assert_eq!(wrong.to_string(), "Expected `1 2 3`, found `1 2` on line 1");
+}
+
+#[test]
+fn a_line_is_cut_by_the_length_of_the_form_compared_and_not_of_the_bytes_written() {
+    let gap = "  ".repeat(REPORT_LIMIT);
+    let found = format!("a{gap}b\n");
+    let expected = format!("a{gap}c\n");
+    let wrong = white_diff(found.as_bytes(), expected.as_bytes())
+        .expect_err("the first line's last word differs");
+    let said = wrong.to_string();
+    let Difference::Line {
+        expected, found, ..
+    } = wrong
+    else {
+        panic!("two lines that differ are reported as the line they differ on");
+    };
+    assert_eq!((expected.as_str(), found.as_str()), ("a c", "a b"));
+    assert!(
+        !said.contains("..."),
+        "a line folded short enough is shown whole, and the gap it was written with \
+         does not make it long"
+    );
+}
+
+#[test]
 fn a_line_too_long_for_a_report_is_shown_cut_and_says_so() {
     let long = "a".repeat(REPORT_LIMIT + 50);
     let cut = exact_diff(
