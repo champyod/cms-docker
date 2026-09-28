@@ -476,7 +476,8 @@ listen_docker_events() {
     # documents, and the reverse case bites here. The only caller backgrounds the function, so
     # this trap dies with that subshell when the docker events stream ends, leaving the main
     # loop's own exit path untouched — and the markers never outlive the run that wrote them.
-    trap 'rm -f -- "$NOTIF_CACHE"' EXIT
+    # INT TERM beside EXIT so a signal shutdown cleans the file too, not just a normal stream end.
+    trap 'rm -f -- "$NOTIF_CACHE"' EXIT INT TERM
 
     docker events --filter 'event=start' --filter 'event=stop' --filter 'event=die' --filter 'event=restart' --format '{{.Status}} container {{.Actor.Attributes.name}}' | {
     while true; do
