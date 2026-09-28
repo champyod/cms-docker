@@ -26,6 +26,7 @@
 #![forbid(unsafe_code)]
 
 mod checker;
+mod escape;
 mod white_diff;
 
 pub use checker::{

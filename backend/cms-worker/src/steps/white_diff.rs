@@ -26,8 +26,8 @@
 #![forbid(unsafe_code)]
 
 use std::fmt;
-use std::fmt::Write as _;
 
+use super::escape::report;
 use super::StockMessage;
 
 /// What an answer is worth when it is right, and what it is worth when it is not.
@@ -39,9 +39,6 @@ const NEWLINE: u8 = b'\n';
 /// The whites a diff forgives: the ASCII members of Unicode's White_Space property,
 /// which is the set the reference takes, and not one more.
 const WHITES: [u8; 6] = [b' ', b'\t', b'\n', 0x0b, 0x0c, b'\r'];
-/// How much of a line a report is shown of it, so that a submission which printed a
-/// megabyte cannot put a megabyte into an administrator's log.
-const LINE_REPORT_LIMIT: usize = 100;
 
 /// Why two answers are not the same, which is the first thing that is not.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -173,25 +170,6 @@ fn canonicalize(line: &[u8]) -> Vec<u8> {
     folded
 }
 
-/// Bytes as a report shows them: cut to the length a report is given, and with any
-/// byte that is not text written as the escape that reads back as that byte, so
-/// nothing is lost and nothing that is not text is shown as though it were.
-///
-/// The bytes are one line's worth and hold no newline, which is a cut the caller
-/// makes: a line was ended before it was asked to be shown, and a newline left
-/// among them would end the line the report is written on.
-///
-/// Bytes too many to show whole are marked as cut rather than passed over silently,
-/// so a report says that it is not showing all of them rather than implying that it is.
-fn report(bytes: &[u8]) -> String {
-    let shown = escaped(&bytes[..bytes.len().min(LINE_REPORT_LIMIT)]);
-    if bytes.len() > LINE_REPORT_LIMIT {
-        shown + "..."
-    } else {
-        shown
-    }
-}
-
 /// The `number`th line of an answer, as a report shows it, and empty where the answer
 /// has no line of that number.
 fn line_at(answer: &[u8], number: usize) -> String {
@@ -204,24 +182,6 @@ fn line_at(answer: &[u8], number: usize) -> String {
     }
     let end = rest.iter().position(|byte| *byte == NEWLINE);
     report(&rest[..end.unwrap_or(rest.len())])
-}
-
-/// Bytes as a report shows them, which is [`report`]'s other half: the text among
-/// them as it is, and every byte that is not text as its escape.
-fn escaped(bytes: &[u8]) -> String {
-    let mut shown = String::with_capacity(bytes.len());
-    let mut rest = bytes;
-    while let Err(broken) = std::str::from_utf8(rest) {
-        let (text, unreadable) = rest.split_at(broken.valid_up_to());
-        let bad = broken.error_len().unwrap_or(unreadable.len());
-        shown.push_str(std::str::from_utf8(text).unwrap_or_default());
-        for byte in &unreadable[..bad] {
-            write!(shown, "\\x{byte:02x}").expect("writing into a String cannot fail");
-        }
-        rest = &unreadable[bad..];
-    }
-    shown.push_str(std::str::from_utf8(rest).unwrap_or_default());
-    shown
 }
 
 /// What a comparison is worth: the score it awards and the sentences a report shows
