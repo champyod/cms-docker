@@ -464,8 +464,19 @@ flush_event_batch() {
 listen_docker_events() {
     echo "Starting Docker event listener..."
     # One-shot markers for terminal states; every other event is digested.
-    NOTIF_CACHE="/tmp/monitor_notif_cache"
-    touch "$NOTIF_CACHE"
+    # WHY a private temp file: these lines name containers, and a fixed name in the shared
+    # temp directory left them world-readable and never cleaned up, so one run's markers
+    # outlived it and suppressed the next run's alerts.
+    if ! NOTIF_CACHE="$(mktemp "${TMPDIR:-/tmp}/cms-monitor-notif.XXXXXX")"; then
+        echo "[WARN] could not create the docker event notification cache — listener stopped." >&2
+        return 1
+    fi
+    chmod 600 "$NOTIF_CACHE" 2>/dev/null || true
+    # WHY an EXIT trap and not a RETURN one: this is the same scoping trap post_discord_payload
+    # documents, and the reverse case bites here. The only caller backgrounds the function, so
+    # this trap dies with that subshell when the docker events stream ends, leaving the main
+    # loop's own exit path untouched — and the markers never outlive the run that wrote them.
+    trap 'rm -f -- "$NOTIF_CACHE"' EXIT
 
     docker events --filter 'event=start' --filter 'event=stop' --filter 'event=die' --filter 'event=restart' --format '{{.Status}} container {{.Actor.Attributes.name}}' | {
     while true; do
