@@ -438,19 +438,19 @@ wait_core_healthy() {
   done
 }
 
-# Verdict for a finished pass: deployed / skipped / failed shard counts.
-# A registry-only row is a shard this host was never asked to run, so skipping it
-# leaves the selection uncovered — reported as failure, named specifically when
-# nothing ran at all, because that is the mis-registered-fleet signature.
+# Verdict for a finished pass: deployed / skipped / failed shard counts. A
+# registry-only row is a shard this host was never asked to run, so skipping it is
+# by design and a pass that deployed something and failed nothing has done its job
+# — only a pass that deployed nothing (mis-registered fleet) or failed fails.
 deploy_verdict() { # deployed skipped failed
-  if [ "$2" -gt 0 ] && [ "$1" -eq 0 ] && [ "$3" -eq 0 ]; then
+  if [ "$1" -eq 0 ] && [ "$3" -eq 0 ]; then
     log_warn "no shards matched this host - check WORKER_n host vs hostname -I and WORKER_SHARDn_LOCAL; worker list scope column shows local vs remote"
     return 1
   fi
   if [ "$2" -gt 0 ]; then
-    log_warn "deploy incomplete: $2 of $(( $1 + $2 + $3 )) shard(s) skipped as registry-only (remote)"
+    log_warn "deploy incomplete: $2 of $(( $1 + $2 + $3 )) shard(s) skipped as registry-only (remote); worker list scope column shows local vs remote"
   fi
-  if [ "$2" -gt 0 ] || [ "$3" -gt 0 ]; then
+  if [ "$1" -eq 0 ] || [ "$3" -gt 0 ]; then
     return 1
   fi
   return 0
