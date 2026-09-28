@@ -50,6 +50,7 @@ mod compile;
 mod evaluate;
 mod kinds_answer;
 mod output_only;
+mod two_steps;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -62,6 +63,7 @@ pub use communication::{Communication, Verdict};
 pub use compile::Compilation;
 pub use evaluate::{Evaluation, OutputFile};
 pub use output_only::{Answer as OutputOnlyAnswer, OutputOnly};
+pub use two_steps::TwoSteps;
 
 use crate::sandbox::{Launch, Options, Sandbox};
 use crate::stage::{Cache, CacheHandle, FileDigest, Stage, StageError};
