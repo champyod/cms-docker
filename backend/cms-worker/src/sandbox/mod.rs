@@ -24,6 +24,10 @@
 //! [`Sandbox::is_secure_command`] is the whole of that rule. Their output is not
 //! forwarded, and each leaves an empty log behind instead.
 //!
+//! What a run leaves behind is kept as one archive under one digest, which is
+//! [`archive`]'s whole subject: the run's own directory is walked once, packed
+//! into a gzip stream and filed, and one that cannot be packed is a named refusal.
+//!
 //! A code the run returned is not a verdict. [`Outcome`] is: `0` and `1` both mean
 //! the isolation program itself worked, and only the run's log says what happened
 //! inside it, so the codes it reports are read through [`ExecutionLog`] into the
@@ -40,6 +44,7 @@
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
+mod archive;
 mod error;
 mod exits;
 mod launch;
@@ -51,6 +56,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Output;
 
+pub use archive::ArchiveError;
 pub use error::SpawnError;
 pub use exits::Outcome;
 pub use launch::Launch;
