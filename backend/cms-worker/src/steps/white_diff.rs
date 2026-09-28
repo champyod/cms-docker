@@ -177,6 +177,10 @@ fn canonicalize(line: &[u8]) -> Vec<u8> {
 /// byte that is not text written as the escape that reads back as that byte, so
 /// nothing is lost and nothing that is not text is shown as though it were.
 ///
+/// The bytes are one line's worth and hold no newline, which is a cut the caller
+/// makes: a line was ended before it was asked to be shown, and a newline left
+/// among them would end the line the report is written on.
+///
 /// Bytes too many to show whole are marked as cut rather than passed over silently,
 /// so a report says that it is not showing all of them rather than implying that it is.
 fn report(bytes: &[u8]) -> String {
