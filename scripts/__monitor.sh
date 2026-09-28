@@ -161,6 +161,21 @@ EOF
     esac
 }
 
+# WHY: alert bodies carry host metrics, and a fixed path in the shared temp directory leaves
+# them readable by any local user and clobberable by a second concurrent run. A per-body
+# mktemp file is private from creation, so the caller owns deleting it once the send is done.
+# Echoes that path, or fails with 1 when the body cannot be staged.
+stage_discord_body() {
+    local label="$1"
+    local body_file
+    if ! body_file="$(mktemp "${TMPDIR:-/tmp}/cms-monitor-body.XXXXXX")"; then
+        echo "[WARN] could not stage the Discord request — dropped $label." >&2
+        return 1
+    fi
+    chmod 600 "$body_file" 2>/dev/null || true
+    echo "$body_file"
+}
+
 send_discord_alert() {
     local status="$1"
     local message="$2"
@@ -173,7 +188,9 @@ send_discord_alert() {
         return 0
     fi
 
-    cat <<EOF > /tmp/discord_payload.json
+    local payload_file
+    payload_file="$(stage_discord_body "alert ($status)")" || return 0
+    cat <<EOF > "$payload_file"
 {
   "content": "$mention",
   "embeds": [
@@ -194,7 +211,8 @@ send_discord_alert() {
 }
 EOF
 
-    post_discord_payload /tmp/discord_payload.json "alert ($status)"
+    post_discord_payload "$payload_file" "alert ($status)"
+    rm -f -- "$payload_file"
 }
 
 send_discord_notification() {
@@ -208,7 +226,9 @@ send_discord_notification() {
         return 0
     fi
 
-    cat <<EOF > /tmp/discord_notif.json
+    local body_file
+    body_file="$(stage_discord_body "notification ($title)")" || return 0
+    cat <<EOF > "$body_file"
 {
   "embeds": [
     {
@@ -222,7 +242,8 @@ send_discord_notification() {
 }
 EOF
 
-    post_discord_payload /tmp/discord_notif.json "notification ($title)"
+    post_discord_payload "$body_file" "notification ($title)"
+    rm -f -- "$body_file"
 }
 
 # WHY: when the config file cannot be located the defaults below silently disarm every
@@ -424,12 +445,15 @@ flush_event_batch() {
     fi
 
     if command -v jq >/dev/null 2>&1; then
+        local digest_file
+        digest_file="$(stage_discord_body "docker event digest")" || return 0
         jq -n --rawfile lines "$batch_file" --argjson color "$worst_color" '
             ($lines | split("\n") | map(select(length > 0)) | .[0:25]
              | map(split("|") | {name: .[2], value: .[3], inline: false})) as $fields
             | {embeds: [{title: "Docker Events", color: $color, fields: $fields}]}' \
-            > /tmp/discord_digest.json
-        post_discord_payload /tmp/discord_digest.json "docker event digest"
+            > "$digest_file"
+        post_discord_payload "$digest_file" "docker event digest"
+        rm -f -- "$digest_file"
     else
         local joined
         joined=$(cut -d'|' -f3- "$batch_file" | paste -sd' / ' -)
