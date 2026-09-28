@@ -56,17 +56,24 @@
 //! [`tasktypes::Runtime`] are values rather than lookups and a task type can be
 //! exercised without a machine.
 //!
+//! What a submission is then worth is the half a task type's answer hands on.
+//! [`steps`] is the checker a dataset supplies, held to the limits that bound a
+//! manager rather than a submission and read as the standard output it is required to
+//! write, and the comparison of an answer with the one a dataset says is right: byte
+//! for byte, or forgiving whitespace and nothing else. Both are pure, so a verdict is
+//! decided by the bytes a run wrote rather than by a box of their own.
+//!
 //! # Errors
 //!
 //! [`MeasureError`], [`StageError`], [`CacheError`], [`edge::JobError`],
-//! [`service::ServiceError`], [`sandbox::SpawnError`] and
+//! [`service::ServiceError`], [`sandbox::SpawnError`], [`steps::CheckerError`] and
 //! [`tasktypes::TaskError`], and nothing else: a line that names no key, a value
 //! that is not the number its key promises, a path already staged, a path with no
 //! file, a digest no store holds, a task type this worker does not have, the
 //! tombstone, a request declined because the worker was busy, a run that could not
 //! be launched, a pipe that could not be read, a code the isolation program does
-//! not document, and a task type's own three parameters, managers, file counts,
-//! executable counts and limits. A run that measured nothing is `None`, which is
+//! not document, a checker that answered with something unreadable, and a task type's
+//! own three parameters, managers, file counts, executable counts and limits. A run that measured nothing is `None`, which is
 //! an answer rather than a failure.
 
 #![deny(missing_docs)]
@@ -77,6 +84,7 @@ pub mod job;
 pub mod sandbox;
 pub mod service;
 pub mod stage;
+pub mod steps;
 pub mod tasktypes;
 
 mod measure;
