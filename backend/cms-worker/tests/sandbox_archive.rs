@@ -9,6 +9,10 @@
 //! The store is a directory beside the sandbox, and the packed archive is read
 //! back through the store rather than off the disk, so what each test claims is
 //! what a run's archive is actually filed as.
+//!
+//! The stage is the run's own directory, which is the layout a run is handed, so
+//! the packed copy lands inside the very directory the walk read and is gone from
+//! it again before any later walk of that directory could pack it once more.
 
 use std::fs;
 use std::io::Read as _;
@@ -84,6 +88,10 @@ fn the_archive_holds_the_run_directory_under_its_own_name() {
     );
     assert!(listed.contains(&at(OUTPUT_NAME)), "output: {listed:?}");
     assert!(listed.contains(&at(NESTED_NAME)), "nested file: {listed:?}");
+    assert!(
+        !listed.contains(&at(ARCHIVE_NAME)),
+        "the archive never holds itself: {listed:?}"
+    );
 }
 
 #[test]
@@ -118,13 +126,14 @@ fn nothing_is_left_behind_where_the_next_archive_would_pack_it_again() {
 
     let digest = sandbox.archive(&stage).expect("the directory is there");
 
-    assert!(
-        !stage.path(ARCHIVE_NAME).exists(),
-        "the stage keeps no copy"
+    assert_eq!(
+        stage.path(ARCHIVE_NAME),
+        sandbox.home().join(ARCHIVE_NAME),
+        "the stage is the run's own directory, so a copy kept there is packed again"
     );
     assert!(
         !sandbox.home().join(ARCHIVE_NAME).exists(),
-        "the box keeps no copy"
+        "the directory the archive was packed out of keeps no copy"
     );
     assert_eq!(digest.as_str().len(), 40, "a digest is forty characters");
 }
@@ -174,6 +183,9 @@ fn a_file_where_the_packed_copy_goes_is_refused_rather_than_overwritten() {
 }
 
 /// A sandbox holding what a run would have left, and the store to file it in.
+///
+/// The stage is the run's own directory, which is the layout a run is handed,
+/// so the packed copy is written into the directory the walk read.
 fn box_with_output(test: &str) -> (Sandbox, Stage, PathBuf) {
     let dir = helpers::workspace(test);
     let executable = stub(&dir, "isolate", "#!/bin/sh\nexit 0\n");
@@ -184,7 +196,7 @@ fn box_with_output(test: &str) -> (Sandbox, Stage, PathBuf) {
     fs::write(home.join(NESTED_NAME), NESTED_CONTENT).expect("nested unwritable");
     let cache = dir.join("cache");
     let store = FsCache::at(&cache).expect("store uncreatable");
-    let stage = Stage::at(dir.join("stage"), Box::new(store)).expect("stage uncreatable");
+    let stage = Stage::at(home, Box::new(store)).expect("stage uncreatable");
     (sandbox, stage, cache)
 }
 

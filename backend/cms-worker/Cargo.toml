@@ -12,7 +12,3 @@ sha1 = { workspace = true }
 shell-escape = { workspace = true }
 tar = { workspace = true }
 thiserror = { workspace = true }
-
-[dev-dependencies]
-flate2 = { workspace = true }
-tar = { workspace = true }
