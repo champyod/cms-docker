@@ -80,6 +80,7 @@ impl Options {
     pub fn arguments(&self, meta: &Path) -> Vec<String> {
         let mut flags = vec![
             FLAG_CG.to_owned(),
+            format!("--box-id={}", self.box_id),
             format!("--chdir={}", self.working_directory),
         ];
         flags.extend(self.directory_flags());

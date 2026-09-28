@@ -23,6 +23,7 @@ fn the_flags_are_written_in_the_reference_order_with_the_log_named_last() {
         flags,
         vec![
             "--cg",
+            "--box-id=0",
             "--chdir=/tmp",
             "--dir=/tmp=/outer/home:rw",
             "--dir=/dev/shm=/dev/shm:tmp",
@@ -34,6 +35,20 @@ fn the_flags_are_written_in_the_reference_order_with_the_log_named_last() {
     );
     let last_two = &flags[flags.len() - 2..];
     assert_eq!(last_two, ["--meta=/outer/run.log.0", "--run"]);
+}
+
+#[test]
+fn a_run_is_told_the_box_it_is_charged_to() {
+    let options = Options {
+        box_id: 42,
+        ..Options::default()
+    };
+    let flags = options.arguments(Path::new("/outer/run.log.0"));
+    assert_eq!(flags[1], "--box-id=42");
+    assert_eq!(
+        flags.iter().filter(|flag| *flag == "--box-id=42").count(),
+        1
+    );
 }
 
 #[test]

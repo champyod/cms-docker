@@ -79,6 +79,10 @@ impl MappedDirectory {
 /// What every run of a box is launched with.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Options {
+    /// The box a run's memory and time are charged to, which is what keeps two runs
+    /// launched side by side from being charged to one box, and zero is the first of
+    /// the ids kept for a launch that was given no box of its own.
+    pub box_id: u32,
     /// The directory a run writes in, which is the one it is bound to.
     pub working_directory: String,
     /// The directories the box is told to make visible.
@@ -118,10 +122,12 @@ impl Default for Options {
     /// The options a run is launched with when the caller said nothing about
     /// directories: it writes in its own directory, is told where its home is, and
     /// has no time and no memory of its own to be stopped for. A run launched this
-    /// way is bounded only by the machine, so a caller that means to bound it says
-    /// so.
+    /// way is bounded only by the machine and shares its box with every other run
+    /// launched the same way, so a caller that means to bound it or to give it a box
+    /// of its own says so.
     fn default() -> Self {
         Self {
+            box_id: 0,
             working_directory: HOME_DESTINATION.to_owned(),
             directories: Vec::new(),
             full_environment: false,
