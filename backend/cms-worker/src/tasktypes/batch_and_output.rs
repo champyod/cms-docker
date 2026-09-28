@@ -27,11 +27,10 @@ use std::path::PathBuf;
 
 use serde_json::Value;
 
-use cms_proto::DigestMap;
-
-use super::batch::{TaskError, SOURCE_PLACEHOLDER};
-use super::output_only::{carried, no_compilation, NOT_CARRIED, NO_CREDIT};
-use super::{Batch, Compilation, Evaluation, OutputFile, Runtime, Toolchain};
+use super::batch::TaskError;
+use super::kinds_answer::{carries_source, listed};
+use super::output_only::{carried, no_compilation};
+use super::{Batch, Compilation, OutputFile, Runtime, Toolchain};
 use crate::job::{CompilationJob, EvaluationJob};
 use crate::stage::{Cache, FileDigest};
 use crate::stats::ExecutionStats;
@@ -187,74 +186,4 @@ impl BatchAndOutput {
         }
         Ok(Answer::not_carried())
     }
-}
-
-impl Answer {
-    /// What a testcase the submission carried an answer for is worth: the digest the
-    /// answer is kept under, and the word a checker is told which kind it holds.
-    fn carried(answer: FileDigest, kind: &'static str) -> Self {
-        Self {
-            success: true,
-            outcome: None,
-            text: Vec::new(),
-            stats: None,
-            sandboxes: Vec::new(),
-            origin: Some(Origin::Carried(answer)),
-            extra_args: vec![kind.to_owned()],
-        }
-    }
-
-    /// What a testcase nothing answered is worth: a score of zero and the sentence
-    /// that says so, and no answer for a checker to be handed.
-    fn not_carried() -> Self {
-        Self {
-            success: true,
-            outcome: Some(NO_CREDIT),
-            text: vec![NOT_CARRIED.to_owned()],
-            stats: None,
-            sandboxes: Vec::new(),
-            origin: None,
-            extra_args: Vec::new(),
-        }
-    }
-
-    /// What a run is worth as the answer it left: what the box reported, what the run
-    /// was charged, and the file a comparison or a checker reads. A run that wrote no
-    /// answer hands nothing on, so it is given no word either.
-    fn from_run(mut run: Evaluation, kind: &'static str) -> Self {
-        let origin = run.output_file.take().map(Origin::Written);
-        let extra_args = if origin.is_some() {
-            vec![kind.to_owned()]
-        } else {
-            Vec::new()
-        };
-        Self {
-            success: run.success,
-            outcome: run.outcome,
-            text: run.text,
-            stats: run.stats,
-            sandboxes: run.sandboxes,
-            origin,
-            extra_args,
-        }
-    }
-}
-
-/// The testcases a parameter listed as output-only: a comma-separated list of
-/// codenames, where one naming none is the empty set and not the empty name.
-fn listed(entry: &Value) -> Result<BTreeSet<String>, TaskError> {
-    let text = entry.as_str().ok_or(TaskError::Parameters)?;
-    Ok(text
-        .split(',')
-        .filter(|codename| !codename.is_empty())
-        .map(str::to_owned)
-        .collect())
-}
-
-/// Whether a submission carries anything to compile, which is what decides whether a
-/// compilation is attempted: an answer file is not a source.
-fn carries_source(files: &DigestMap) -> bool {
-    files
-        .keys()
-        .any(|codename| codename.ends_with(SOURCE_PLACEHOLDER))
 }

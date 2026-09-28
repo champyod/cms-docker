@@ -48,6 +48,7 @@ mod batch_and_output;
 mod communication;
 mod compile;
 mod evaluate;
+mod kinds_answer;
 mod output_only;
 
 use std::fs;
