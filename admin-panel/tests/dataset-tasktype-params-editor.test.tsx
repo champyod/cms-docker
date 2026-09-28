@@ -52,6 +52,7 @@ function control(label: string): HTMLInputElement | HTMLSelectElement {
 
 const FIELDS_BY_TYPE = [
   { taskType: 'Batch', labels: ['Compilation', 'Input file', 'Output file', 'Output evaluation'] },
+  { taskType: 'BatchAndOutput', labels: ['Compilation', 'Input file', 'Output file', 'Output evaluation', 'Output only testcases'] },
   { taskType: 'OutputOnly', labels: ['Output evaluation'] },
   { taskType: 'TwoSteps', labels: ['Output evaluation'] },
   { taskType: 'Communication', labels: ['Number of processes', 'Compilation', 'User I/O'] },
@@ -61,6 +62,7 @@ const VALID_EDITS = [
   { taskType: 'Batch', label: 'Compilation', value: 'grader', params: ['grader', ['', ''], 'diff'] },
   { taskType: 'Batch', label: 'Input file', value: 'in.txt', params: ['alone', ['in.txt', ''], 'diff'] },
   { taskType: 'Batch', label: 'Output evaluation', value: 'comparator', params: ['alone', ['', ''], 'comparator'] },
+  { taskType: 'BatchAndOutput', label: 'Output only testcases', value: '1,3', params: ['alone', ['', ''], 'diff', '1,3'] },
   { taskType: 'OutputOnly', label: 'Output evaluation', value: 'comparator', params: ['comparator'] },
   { taskType: 'TwoSteps', label: 'Output evaluation', value: 'diff', params: ['diff'] },
   { taskType: 'Communication', label: 'Number of processes', value: '3', params: [3, 'alone', 'std_io'] },
@@ -105,6 +107,19 @@ describe('both views describe the same list', () => {
     expect(control('Output evaluation').value).toBe('comparator');
     openJson();
     expect(codeBox().value).toBe(STORED_TEXT);
+  });
+
+  it('reads a stored BatchAndOutput list into its four parameters', () => {
+    const stored: unknown[] = ['grader', ['in.txt', 'out.txt'], 'comparator', '1,3'];
+    renderEditor('BatchAndOutput', stored);
+    openVisual();
+    expect(control('Compilation').value).toBe('grader');
+    expect(control('Input file').value).toBe('in.txt');
+    expect(control('Output file').value).toBe('out.txt');
+    expect(control('Output evaluation').value).toBe('comparator');
+    expect(control('Output only testcases').value).toBe('1,3');
+    openJson();
+    expect(codeBox().value).toBe(JSON.stringify(stored, null, 2));
   });
 
   it('shows the defaults of the task type in both views when nothing is stored', () => {

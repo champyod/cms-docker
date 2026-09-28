@@ -55,6 +55,16 @@ describe('taskTypeParamsToFields', () => {
     });
   });
 
+  it('reads the fourth BatchAndOutput parameter as a testcase list', () => {
+    expect(taskTypeParamsToFields(['grader', ['in.txt', 'out.txt'], 'comparator', '1,3'], 'BatchAndOutput')).toEqual({
+      compilation: 'grader',
+      inputfile: 'in.txt',
+      outputfile: 'out.txt',
+      output_eval: 'comparator',
+      output_only_testcases: '1,3',
+    });
+  });
+
   it('has no fields for an unknown task type', () => {
     expect(taskTypeParamsToFields(['diff'], 'Interactive')).toEqual({});
   });
@@ -76,6 +86,12 @@ describe('fieldsToTaskTypeParams', () => {
     for (const taskType of ['OutputOnly', 'TwoSteps']) {
       expect(fieldsToTaskTypeParams({ output_eval: 'comparator' }, taskType)).toEqual(['comparator']);
     }
+  });
+
+  it('round-trips a BatchAndOutput list with its testcase list intact', () => {
+    const params = ['grader', ['in.txt', 'out.txt'], 'comparator', '1,3'];
+    const fields = taskTypeParamsToFields(params, 'BatchAndOutput');
+    expect(fieldsToTaskTypeParams(fields, 'BatchAndOutput')).toEqual(params);
   });
 
   it('rebuilds Communication with the process count as an integer', () => {
@@ -101,6 +117,7 @@ describe('defaultTaskTypeParams', () => {
     expect(defaultTaskTypeParams('OutputOnly')).toEqual(['diff']);
     expect(defaultTaskTypeParams('TwoSteps')).toEqual(['diff']);
     expect(defaultTaskTypeParams('Communication')).toEqual([1, 'alone', 'std_io']);
+    expect(defaultTaskTypeParams('BatchAndOutput')).toEqual(['alone', ['', ''], 'diff', '']);
     expect(defaultTaskTypeParams('Interactive')).toBeNull();
   });
 
@@ -111,6 +128,13 @@ describe('defaultTaskTypeParams', () => {
       outputfile: '',
       output_eval: 'diff',
     });
+    expect(defaultTaskTypeFields('BatchAndOutput')).toEqual({
+      compilation: 'alone',
+      inputfile: '',
+      outputfile: '',
+      output_eval: 'diff',
+      output_only_testcases: '',
+    });
   });
 });
 
@@ -120,6 +144,17 @@ describe('lintTaskTypeFields', () => {
     expect(lintTaskTypeFields({ output_eval: 'diff' }, 'OutputOnly')).toBe('');
     expect(lintTaskTypeFields({ output_eval: 'diff' }, 'TwoSteps')).toBe('');
     expect(lintTaskTypeFields({ num_processes: '1', compilation: 'alone', user_io: 'std_io' }, 'Communication')).toBe('');
+    expect(lintTaskTypeFields({ compilation: 'alone', inputfile: '', outputfile: '', output_eval: 'diff', output_only_testcases: '1,3' }, 'BatchAndOutput')).toBe('');
+  });
+
+  it('reports the missing BatchAndOutput testcase list', () => {
+    expect(lintTaskTypeFields({ compilation: 'alone', inputfile: '', outputfile: '', output_eval: 'diff' }, 'BatchAndOutput'))
+      .toContain('missing output_only_testcases');
+  });
+
+  it('rejects a BatchAndOutput compilation the task type does not declare', () => {
+    expect(lintTaskTypeFields({ compilation: 'stub', inputfile: '', outputfile: '', output_eval: 'diff', output_only_testcases: '' }, 'BatchAndOutput'))
+      .toBe('Compilation must be one of: alone, grader.');
   });
 
   it('reports the wrong parameter count', () => {

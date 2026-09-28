@@ -139,6 +139,33 @@ describe('create dataset task type parameters', () => {
   });
 });
 
+describe('a BatchAndOutput list a dataset already carries', () => {
+  const STORED: unknown[] = ['grader', ['in.txt', 'out.txt'], 'comparator', '1,3'];
+  it('stores the four parameters the worker reads', async () => {
+    const response = await postDataset({ taskId: 1, description: 'Base', task_type: 'BatchAndOutput', task_type_parameters: STORED });
+    expect(response.status).toBe(200);
+    expect(mocks.datasetCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ task_type_parameters: STORED }) }));
+  });
+
+  it('rejects a list the worker would not read back', async () => {
+    const short = await postDataset({ taskId: 1, description: 'Base', task_type: 'BatchAndOutput', task_type_parameters: ['alone', ['', ''], 'diff'] });
+    expect(short.status).toBe(400);
+    expect((await short.json()).error).toBe('Task type "BatchAndOutput" expects 4 parameters, received 3. Expected shape: ["alone",["",""],"diff",""].');
+    const notAString = await postDataset({ taskId: 1, description: 'Base', task_type: 'BatchAndOutput', task_type_parameters: ['alone', ['', ''], 'diff', 7] });
+    expect(notAString.status).toBe(400);
+    expect((await notAString.json()).error).toBe('Output only testcases must be a string.');
+    const badChoice = await postDataset({ taskId: 1, description: 'Base', task_type: 'BatchAndOutput', task_type_parameters: ['stub', ['', ''], 'diff', ''] });
+    expect(badChoice.status).toBe(400);
+    expect((await badChoice.json()).error).toBe('Compilation must be one of: alone, grader.');
+  });
+
+  it('replaces the list of a dataset that already carries the type', async () => {
+    const response = await putDataset({ action: 'update', task_type: 'BatchAndOutput', task_type_parameters: STORED });
+    expect(response.status).toBe(200);
+    expect(mocks.datasetUpdate).toHaveBeenCalledWith({ where: { id: 7 }, data: { task_type: 'BatchAndOutput', task_type_parameters: STORED } });
+  });
+});
+
 describe('update dataset task type parameters', () => {
   it('stores a valid list and passes the type unchanged', async () => {
     const response = await putDataset({ action: 'update', task_type: 'Batch', task_type_parameters: ['grader', ['in.txt', 'out.txt'], 'comparator'] });
@@ -197,9 +224,9 @@ describe('update dataset task type parameters', () => {
   });
 
   it('rejects an unknown task type that the worker would not resolve', async () => {
-    const response = await putDataset({ action: 'update', task_type: 'BatchAndOutput' });
+    const response = await putDataset({ action: 'update', task_type: 'Interactive' });
     expect(response.status).toBe(400);
-    expect((await response.json()).error).toBe('Unknown task type "BatchAndOutput".');
+    expect((await response.json()).error).toBe('Unknown task type "Interactive".');
   });
 });
 
@@ -210,9 +237,14 @@ describe('validateTaskTypeParams', () => {
     }
   });
 
+  it('accepts the four parameters of a list stored for a task type outside the panel', () => {
+    const params: unknown[] = ['grader', ['in.txt', 'out.txt'], 'comparator', '1,3'];
+    expect(validateTaskTypeParams('BatchAndOutput', params)).toEqual({ isValid: true, params });
+  });
+
   it('fails closed on a task type it cannot describe', () => {
-    expect(validateTaskTypeParams('BatchAndOutput', ['alone', ['', ''], 'diff', '']))
-      .toEqual({ isValid: false, message: 'Unknown task type "BatchAndOutput".' });
+    expect(validateTaskTypeParams('Interactive', ['diff']))
+      .toEqual({ isValid: false, message: 'Unknown task type "Interactive".' });
     expect(validateTaskTypeParams('', undefined)).toEqual({ isValid: false, message: 'Unknown task type "".' });
   });
 });

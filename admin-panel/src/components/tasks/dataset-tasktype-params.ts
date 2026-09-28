@@ -14,6 +14,7 @@ export interface TaskTypeFieldDef {
 
 export const TASK_TYPE_PARAM_HELPERS: Record<string, string> = {
   Batch: 'Compilation, I/O file names (leave both blank to use stdin/stdout) and output evaluation.',
+  BatchAndOutput: 'Batch parameters, plus the testcases that must be provided as output only, comma-separated.',
   OutputOnly: 'Output evaluation: white diff or a comparator.',
   TwoSteps: 'Output evaluation: white diff or a comparator.',
   Communication: 'Number of user processes, compilation, and how user processes talk to the manager.',
@@ -30,12 +31,18 @@ function outputEvaluationField(path: readonly number[]): TaskTypeFieldDef {
   };
 }
 
+const BATCH_FIELDS: readonly TaskTypeFieldDef[] = [
+  { key: 'compilation', label: 'Compilation', kind: 'choice', path: [0], defaultValue: 'alone', options: ['alone', 'grader'] },
+  { key: 'inputfile', label: 'Input file', kind: 'text', path: [1, 0], defaultValue: '', options: [] },
+  { key: 'outputfile', label: 'Output file', kind: 'text', path: [1, 1], defaultValue: '', options: [] },
+  outputEvaluationField([2]),
+];
+
 export const TASK_TYPE_FIELD_DEFS: Record<string, readonly TaskTypeFieldDef[]> = {
-  Batch: [
-    { key: 'compilation', label: 'Compilation', kind: 'choice', path: [0], defaultValue: 'alone', options: ['alone', 'grader'] },
-    { key: 'inputfile', label: 'Input file', kind: 'text', path: [1, 0], defaultValue: '', options: [] },
-    { key: 'outputfile', label: 'Output file', kind: 'text', path: [1, 1], defaultValue: '', options: [] },
-    outputEvaluationField([2]),
+  Batch: BATCH_FIELDS,
+  BatchAndOutput: [
+    ...BATCH_FIELDS,
+    { key: 'output_only_testcases', label: 'Output only testcases', kind: 'text', path: [3], defaultValue: '', options: [] },
   ],
   OutputOnly: [outputEvaluationField([0])],
   TwoSteps: [outputEvaluationField([0])],
