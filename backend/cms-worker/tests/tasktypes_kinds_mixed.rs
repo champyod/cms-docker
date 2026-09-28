@@ -23,6 +23,11 @@ use support::toolchain::{
 };
 use support::{compilation, evaluation, mixed, ANSWER, ANSWER_DIGEST, TESTCASE, UNADMITTED};
 
+/// The directory the box a run is launched in is made under: the box the task
+/// types name `evaluate`, under the prefix the sandbox gives every box. The
+/// sandbox keeps both names to itself, so the whole name is written out here.
+const EVALUATE_BOX: &str = "cms-sandbox-evaluate";
+
 #[test]
 fn the_fourth_parameter_names_the_testcases_a_dataset_lists_as_output_only() {
     let task = mixed("1.in,2.in");
@@ -203,10 +208,12 @@ fn the_refusals_are_asked_before_anything_runs() {
     let refused = |job: &EvaluationJob, label: &str| {
         let dir = workspace(label);
         let runtime = runtime_of(&dir, "0", CLEAN_LOG, &answered());
-        mixed("2.in").evaluate(job, &StubToolchain, &runtime, Box::new(store_of(&dir)))
+        let decision =
+            mixed("2.in").evaluate(job, &StubToolchain, &runtime, Box::new(store_of(&dir)));
+        (dir, decision)
     };
 
-    let unadmitted = refused(
+    let (_, unadmitted) = refused(
         &evaluation(TESTCASE, &[(ANSWER, UNADMITTED)], &[]),
         "refuse-digest",
     );
@@ -215,7 +222,7 @@ fn the_refusals_are_asked_before_anything_runs() {
         "a digest the domain does not admit is not an answer"
     );
 
-    let two = refused(
+    let (dir, two) = refused(
         &evaluation(
             TESTCASE,
             &[],
@@ -232,5 +239,9 @@ fn the_refusals_are_asked_before_anything_runs() {
             })
         ),
         "a result of two executables names no one of them to run"
+    );
+    assert!(
+        !dir.join(EVALUATE_BOX).exists(),
+        "the count is asked before a box is opened, so a refused result launches nothing"
     );
 }

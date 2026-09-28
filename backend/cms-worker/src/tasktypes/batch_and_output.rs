@@ -146,11 +146,21 @@ impl BatchAndOutput {
     /// Judges one testcase in the order the reference decides an answer in: the
     /// answer the submission carried, then a testcase nothing may run, then a run.
     ///
+    /// A result holding a number of executables other than one is refused rather
+    /// than run, and that is a deliberate departure from the reference, which
+    /// reaches the execution step for this task type without asking the count and
+    /// so runs whichever executable its result happens to list first. Nothing in a
+    /// result says which of several was meant, so that run would be scored as an
+    /// answer to a testcase the submission never described; refusing instead names
+    /// how many were found against how many were wanted, which is a report someone
+    /// can act on. The count is asked before a box is opened, so a result already
+    /// wrong is refused with nothing launched and nothing left behind.
+    ///
     /// # Errors
     ///
     /// [`TaskError`], and only that: a digest a job carries for a carried answer the
-    /// `DIGEST` domain does not admit, and what a [`Batch`](super::Batch) evaluation
-    /// refuses.
+    /// `DIGEST` domain does not admit, a result holding a number of executables
+    /// other than one, and what a [`Batch`](super::Batch) evaluation refuses.
     pub fn evaluate(
         &self,
         job: &EvaluationJob,
