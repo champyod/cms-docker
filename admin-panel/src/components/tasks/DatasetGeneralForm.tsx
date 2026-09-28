@@ -17,7 +17,7 @@ interface DatasetFormData {
   task_type_parameters_text: string;
 }
 
-const TASK_TYPES = ['Batch', 'OutputOnly', 'Communication', 'TwoSteps'];
+const TASK_TYPES = ['Batch', 'BatchAndOutput', 'OutputOnly', 'Communication', 'TwoSteps'];
 const SCORE_TYPES = ['Sum', 'GroupMin', 'GroupMul', 'GroupThreshold'];
 
 interface DatasetGeneralFormProps {
