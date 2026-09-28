@@ -91,22 +91,18 @@ fn operation(kind: OperationKind) -> Operation {
 }
 
 pub fn dataset(managers: DigestMap) -> Dataset {
-    let mut testcases = BTreeMap::new();
-    testcases.insert(
-        TESTCASE.to_owned(),
-        Testcase {
-            codename: TESTCASE.to_owned(),
-            input: INPUT_DIGEST.to_owned(),
-            output: SOURCE_DIGEST.to_owned(),
-        },
-    );
+    let testcase = Testcase {
+        codename: TESTCASE.to_owned(),
+        input: INPUT_DIGEST.to_owned(),
+        output: SOURCE_DIGEST.to_owned(),
+    };
     Dataset {
         id: DATASET,
         task_type: "batch".to_owned(),
         task_type_parameters: serde_json::json!(["alone", ["", ""], "diff"]),
         managers,
         auto_managers: None,
-        testcases,
+        testcases: BTreeMap::from([(TESTCASE.to_owned(), testcase)]),
         time_limit: Some(5.0),
         memory_limit: Some(1024 * 1024),
     }
@@ -135,8 +131,7 @@ pub fn compile_job(managers: DigestMap) -> CompilationJob {
     compilation_of(&submission(DigestMap::new()), &dataset(managers))
 }
 
-/// A compilation of one submission against one dataset, which is the record a
-/// compilation's refusals are made from.
+/// A compilation of one submission against one dataset, the record its refusals are made from.
 pub fn compilation_of(submission: &Submission, dataset: &Dataset) -> CompilationJob {
     CompilationJob::from_submission(&operation(OperationKind::Compilation), submission, dataset)
         .expect("a compilation operation builds a job")
@@ -189,8 +184,7 @@ fn isolation_stub(dir: &Path, code: &str, log: &str, leaves: &str) -> PathBuf {
              \x20\x20--meta=*) meta=\"${{arg#--meta=}}\" ;;\n\
              \x20\x20--dir=/tmp=*) home=\"${{arg#--dir=/tmp=}}\"; home=\"${{home%%:*}}\" ;;\n\
              \x20\x20--stdout=*) out=\"${{arg#--stdout=}}\" ;;\n\
-             \x20 esac\n\
-             done\n\
+             \x20 esac; done\n\
              printf '%s\\n' \"$@\" > \"$home/flags.txt\"\n\
              {leaves}\n\
              printf '{log}' > \"$meta\"\n\

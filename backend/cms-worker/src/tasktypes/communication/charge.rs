@@ -62,7 +62,7 @@ pub(super) fn time_of(job: &EvaluationJob) -> Result<Option<Duration>, TaskError
 /// process from sending the manager into a stop by waiting on it, and the manager
 /// from stopping before every process it is waiting for has been given its own.
 pub(super) fn manager_clock(processes: usize, time: Option<Duration>) -> Option<Duration> {
-    time.map(|limit| limit * processes as u32 + GRACE)
+    time.map(|limit| (limit + GRACE) * processes as u32)
 }
 
 /// The memory a process is held to, which is the dataset's own, and the reference's.

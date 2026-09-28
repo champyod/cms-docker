@@ -32,8 +32,8 @@ const NO_CREDIT: f64 = 0.0;
 const ERROR_FILENAME: &str = "stderr.txt";
 const LIMIT_TIME: &str = "time limit";
 const LIMIT_MEMORY: &str = "memory limit";
-/// The processes a run may have alive at once, and the ceiling a multithreaded
-/// one is given so that a fork bomb is bounded rather than enabled.
+/// The processes a run may have alive at once: one, and the ceiling a
+/// multithreaded one is given so a fork bomb is bounded rather than enabled.
 const SINGLE_PROCESS: u32 = 1;
 const MULTIPROCESS_LIMIT: u32 = 1000;
 /// The sentences a report shows for a run that did not answer. The first of the
@@ -214,9 +214,7 @@ pub(super) fn what_went_wrong(stats: &ExecutionStats) -> Vec<String> {
         ExitStatus::NonzeroReturn => Some(NONZERO_RETURN),
         ExitStatus::Ok | ExitStatus::SandboxError => None,
     };
-    message
-        .map(|said| vec![said.to_owned()])
-        .unwrap_or_default()
+    message.map_or_else(Vec::new, |said| vec![said.to_owned()])
 }
 
 impl Evaluation {

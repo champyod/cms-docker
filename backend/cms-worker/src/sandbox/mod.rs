@@ -135,8 +135,7 @@ impl Sandbox {
         &self.options
     }
 
-    /// The options of this sandbox's runs, which a caller may change before the
-    /// next one is launched.
+    /// The options of this sandbox's runs, which a caller may change before the next.
     pub fn set_options(&mut self, options: Options) {
         self.options = options;
     }
@@ -156,7 +155,7 @@ impl Sandbox {
         let number = self.next_execution();
         let bypassed = Self::is_secure_command(command);
         let output = self.launch(&program, number, bypassed)?;
-        let log = self.read_log(number)?;
+        let log = read_log(&self.layout.meta_file(number))?;
         Self::finish(&output, &log)
     }
 
@@ -174,19 +173,8 @@ impl Sandbox {
         )
     }
 
-    /// Reads the log of the run numbered `number`, which is where a run's own
-    /// measurements are waiting.
-    /// # Errors
-    /// [`SpawnError::NoMetaFile`] when the run left no log behind or it could not
-    /// be read, and [`SpawnError::Measure`] for a number it cannot be read as.
-    fn read_log(&self, number: u32) -> Result<ExecutionLog, SpawnError> {
-        read_log(&self.layout.meta_file(number))
-    }
-
-    /// Whether a command is one of the four run beside the isolation program.
-    ///
-    /// The whole of the rule: the name is the program, and it is the program that
-    /// is compared, not how the command was written.
+    /// Whether a command is one of the four run beside the isolation program: the
+    /// name is the program, and it is the program that is compared.
     #[must_use]
     pub fn is_secure_command(command: &[&str]) -> bool {
         let Some(program) = command.first() else {
@@ -246,8 +234,7 @@ impl Sandbox {
 /// What one run wrote at `path`, which is where a run's own measurements are
 /// waiting, and which a run started but not waited for is already named to write to.
 /// # Errors
-/// [`SpawnError::NoMetaFile`] when the run left no log behind or it could not be
-/// read, and [`SpawnError::Measure`] for a number it cannot be read as.
+/// [`SpawnError::NoMetaFile`] or [`SpawnError::Measure`], as [`Sandbox::run`] says.
 pub(super) fn read_log(path: &Path) -> Result<ExecutionLog, SpawnError> {
     let text = fs::read_to_string(path).map_err(|_| SpawnError::NoMetaFile {
         path: path.to_path_buf(),
