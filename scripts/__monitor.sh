@@ -132,12 +132,29 @@ warn_webhook_unconfigured() {
 }
 
 # Post a prepared payload and report a non-2xx response instead of discarding it.
+# WHY the webhook is staged in a curl config file instead of passed on the command line:
+# the token in that URL is a credential, and a process command line is readable by every
+# account on the box for as long as the request lives. The body is already read from disk,
+# so the alert text — which names containers, hosts and a role — stays out of argv too.
+# WHY no RETURN trap removes the config file: a RETURN trap is not scoped to the function
+# that set it, so it fires at some later function's return instead. Every step below is
+# captured into a status rather than returned early, making this the only exit.
 post_discord_payload() {
     local payload_file="$1"
     local context="$2"
     local http_code
+    local conf_file
+    if ! conf_file="$(mktemp "${TMPDIR:-/tmp}/cms-monitor-request.XXXXXX")"; then
+        echo "[WARN] could not stage the Discord request — dropped $context." >&2
+        return 0
+    fi
+    chmod 600 "$conf_file" 2>/dev/null || true
+    cat > "$conf_file" <<EOF
+url = "${WEBHOOK_URL}"
+EOF
     # curl reports an unreachable endpoint as 000, which the case below also catches.
-    http_code=$(curl -s -o /dev/null -w '%{http_code}' -H "Content-Type: application/json" -X POST -d "@${payload_file}" "$WEBHOOK_URL" || true)
+    http_code=$(curl -s -o /dev/null -w '%{http_code}' -H "Content-Type: application/json" -X POST -d "@${payload_file}" -K "$conf_file" || true)
+    rm -f -- "$conf_file"
     case "$http_code" in
         2??) ;;
         *) echo "[WARN] Discord webhook delivery failed (HTTP ${http_code:-000}) — dropped $context." >&2 ;;

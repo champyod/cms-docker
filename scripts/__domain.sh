@@ -57,24 +57,70 @@ fi
 # ---------------------------------------------------------------------------
 # Discord alert stub
 # ---------------------------------------------------------------------------
+# discord_payload_json <color> <ts> — the alert body on stdout, with the message on stdin.
+# WHY the message arrives on stdin: it names hosts, domains, ports and certificate paths,
+# and a process command line is readable by every account on the box for as long as the
+# builder lives — the same exposure the webhook token gets, one process earlier.
+discord_payload_json() {
+  python3 -c '
+import json,sys
+msg,clr,ts=sys.stdin.read().rstrip("\n"),int(sys.argv[1]),sys.argv[2]
+body={"embeds":[{"title":"CMS Domain System","description":msg,"color":clr,"timestamp":ts}]}
+print(json.dumps(body))
+' "$1" "$2"
+}
+
+# discord_post <payload_file> <conf_file> <url> — deliver a prepared alert.
+# WHY the webhook lands in a curl config file instead of on the command line: the token in
+# that URL is a credential, and a process command line is readable by every account on the
+# box for as long as the request lives. The body is read from disk for the same reason, so
+# no part of an alert is ever in argv.
+discord_post() {
+  local payload_file="$1" conf_file="$2" url="$3"
+  cat > "$conf_file" <<EOF
+url = "${url}"
+EOF
+  curl -s -H "Content-Type: application/json" -X POST -d "@${payload_file}" -K "$conf_file" >/dev/null 2>&1
+}
+
 discord_alert() {
   local message="${1:-}"
   local color="${2:-3447003}"
   local webhook="${DISCORD_WEBHOOK_URL:-}"
-  [[ -z "$webhook" ]] && { log_info "discord_alert: no DISCORD_WEBHOOK_URL set — skipping"; return 0; }
-  local ts
-  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  if command -v python3 >/dev/null 2>&1; then
-    python3 -c '
-import json,sys
-msg,clr,ts=sys.argv[1],int(sys.argv[2]),sys.argv[3]
-body={"embeds":[{"title":"CMS Domain System","description":msg,"color":clr,"timestamp":ts}]}
-print(json.dumps(body))
-' "$message" "$color" "$ts" | curl -s -H "Content-Type: application/json" -X POST -d @- "$webhook" >/dev/null 2>&1 \
-      || log_warn "Discord webhook POST failed"
-  else
-    log_warn "python3 not found — cannot send Discord alert"
+  if [[ -z "$webhook" ]]; then
+    log_info "discord_alert: no DISCORD_WEBHOOK_URL set — skipping"
+    return 0
   fi
+  if ! command -v python3 >/dev/null 2>&1; then
+    log_warn "python3 not found — cannot send Discord alert"
+    return 0
+  fi
+
+  local payload_file conf_file
+  payload_file="$(mktemp "${TMPDIR:-/tmp}/cms-domain-payload.XXXXXX")" || {
+    log_warn "could not stage the Discord payload"
+    return 0
+  }
+  conf_file="$(mktemp "${TMPDIR:-/tmp}/cms-domain-request.XXXXXX")" || {
+    rm -f -- "$payload_file"
+    log_warn "could not stage the Discord request"
+    return 0
+  }
+  chmod 600 "$payload_file" "$conf_file" 2>/dev/null || true
+
+  # WHY the removal is one statement at the end and not a RETURN trap: a RETURN trap is not
+  # scoped to the function that set it, so it fires at some later function's return, with
+  # this one's locals already gone. Each step below is captured into a status rather than
+  # returned early, so this is the only exit and the payload is never left behind.
+  local build_status=0
+  discord_payload_json "$color" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    > "$payload_file" <<< "$message" || build_status=$?
+  if (( build_status != 0 )); then
+    log_warn "Discord payload could not be built"
+  else
+    discord_post "$payload_file" "$conf_file" "$webhook" || log_warn "Discord webhook POST failed"
+  fi
+  rm -f -- "$payload_file" "$conf_file"
 }
 
 # ---------------------------------------------------------------------------
