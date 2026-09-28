@@ -5,6 +5,70 @@ import { revalidatePath } from 'next/cache';
 import { recordAudit } from '@/lib/audit';
 import { getFieldAccess } from '@/lib/field-permissions';
 import { getPermissions } from '@/lib/permissions';
+import { isEmptyTaskTypeParams, validateTaskTypeParams, DEFAULT_TASK_TYPE } from '@/lib/tasktype-params';
+
+type FieldGate = (field: string) => boolean;
+
+type FieldUpdate =
+  | { isValid: true; updateData: Record<string, unknown> }
+  | { isValid: false; response: Response };
+
+function deniedField(field: string): FieldUpdate {
+  return { isValid: false, response: apiError({ message: 'Permission denied for ' + field + ' field', status: 403 }) };
+}
+
+/** Fields stored as they arrive, each behind its own field permission. */
+function buildDirectFields(data: Record<string, unknown>, canUpdate: FieldGate): FieldUpdate {
+  const updateData: Record<string, unknown> = {};
+  if (data.time_limit !== undefined) {
+    if (!canUpdate('time_limit')) return deniedField('time_limit');
+    updateData.time_limit = data.time_limit as number | null;
+  }
+  if (data.memory_limit !== undefined) {
+    if (!canUpdate('memory_limit')) return deniedField('memory_limit');
+    updateData.memory_limit = data.memory_limit ? BigInt((data.memory_limit as number) * 1024 * 1024) : null;
+  }
+  if (data.task_type) {
+    if (!canUpdate('task_type')) return deniedField('task_type');
+    updateData.task_type = data.task_type as string;
+  }
+  if (data.score_type) {
+    if (!canUpdate('score_type')) return deniedField('score_type');
+    updateData.score_type = data.score_type as string;
+  }
+  if (data.score_type_parameters !== undefined) {
+    if (!canUpdate('score_type_parameters')) return deniedField('score_type_parameters');
+    if (typeof data.score_type_parameters !== 'number' && !Array.isArray(data.score_type_parameters)) {
+      return { isValid: false, response: apiError({ message: 'Score parameters must be a number or an array', status: 400 }) };
+    }
+    updateData.score_type_parameters = data.score_type_parameters;
+  }
+  return { isValid: true, updateData };
+}
+
+/** A task type change is checked against the list the dataset already stores,
+ *  because the worker pairs the two when it builds the task type. */
+async function buildTaskTypeParamsUpdate(data: Record<string, unknown>, id: number, canUpdate: FieldGate): Promise<FieldUpdate> {
+  const hasParams = data.task_type_parameters !== undefined;
+  const hasType = typeof data.task_type === 'string' && data.task_type !== '';
+  if (!hasParams && !hasType) return { isValid: true, updateData: {} };
+
+  const stored = await prisma.datasets.findUnique({
+    where: { id },
+    select: { task_type: true, task_type_parameters: true },
+  });
+  const storedParams = stored?.task_type_parameters;
+  const result = validateTaskTypeParams(
+    hasType ? (data.task_type as string) : (stored?.task_type ?? DEFAULT_TASK_TYPE),
+    hasParams ? data.task_type_parameters : storedParams,
+  );
+  if (!result.isValid) {
+    return { isValid: false, response: apiError({ message: result.message, status: 400 }) };
+  }
+  if (!hasParams && !isEmptyTaskTypeParams(storedParams)) return { isValid: true, updateData: {} };
+  if (!canUpdate('task_type_parameters')) return deniedField('task_type_parameters');
+  return { isValid: true, updateData: { task_type_parameters: result.params } };
+}
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<Response> {
   const { authorized, response } = await verifyApiPermission('dataset:update');
@@ -17,10 +81,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const data = (await req.json()) as Record<string, unknown>;
     const access = getFieldAccess('datasets', await getPermissions());
     const canUpdate = (field: string): boolean => access[field]?.canUpdate === true;
-    const fieldDenied = (field: string): Response | null => {
-      if (canUpdate(field)) return null;
-      return apiError({ message: 'Permission denied for ' + field + ' field', status: 403 });
-    };
 
     if (data.action === 'rename') {
       if (!canUpdate('description') || typeof data.description !== 'string') {
@@ -43,46 +103,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
        if (!d) return apiError({ message: 'Dataset not found', status: 404 });
        await prisma.datasets.update({ where: { id }, data: { autojudge: !d.autojudge } });
     } else {
-       const updateData: Record<string, unknown> = {};
-        if (data.time_limit !== undefined) {
-          const denied = fieldDenied('time_limit');
-          if (denied) return denied;
-          updateData.time_limit = data.time_limit as number | null;
-        }
-        if (data.memory_limit !== undefined) {
-          const denied = fieldDenied('memory_limit');
-          if (denied) return denied;
-          updateData.memory_limit = data.memory_limit ? BigInt((data.memory_limit as number) * 1024 * 1024) : null;
-        }
-        if (data.task_type) {
-          const denied = fieldDenied('task_type');
-          if (denied) return denied;
-          updateData.task_type = data.task_type as string;
-        }
-        if (data.score_type) {
-          const denied = fieldDenied('score_type');
-          if (denied) return denied;
-          updateData.score_type = data.score_type as string;
-        }
-        if (data.score_type_parameters !== undefined) {
-          const denied = fieldDenied('score_type_parameters');
-          if (denied) return denied;
-         const scoreParams = data.score_type_parameters as unknown;
-         if (typeof scoreParams !== 'number' && !Array.isArray(scoreParams)) {
-           return apiError({ message: 'Score parameters must be a number or an array', status: 400 });
-         }
-         updateData.score_type_parameters = scoreParams;
-       }
-        if (data.task_type_parameters !== undefined) {
-          const denied = fieldDenied('task_type_parameters');
-          if (denied) return denied;
-         const taskParams = data.task_type_parameters as unknown;
-         if (!Array.isArray(taskParams)) {
-           return apiError({ message: 'Task type parameters must be an array', status: 400 });
-         }
-         updateData.task_type_parameters = taskParams;
-       }
-       await prisma.datasets.update({ where: { id }, data: updateData });
+       const directFields = buildDirectFields(data, canUpdate);
+       if (!directFields.isValid) return directFields.response;
+       const taskTypeParams = await buildTaskTypeParamsUpdate(data, id, canUpdate);
+       if (!taskTypeParams.isValid) return taskTypeParams.response;
+       await prisma.datasets.update({ where: { id }, data: { ...directFields.updateData, ...taskTypeParams.updateData } });
     }
 
     await recordAudit({

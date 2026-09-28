@@ -4,6 +4,20 @@ import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { recordAudit } from '@/lib/audit';
+import { validateTaskTypeParams, DEFAULT_TASK_TYPE } from '@/lib/tasktype-params';
+
+type ResolvedTaskType =
+  | { isValid: true; taskType: string; params: unknown[] }
+  | { isValid: false; response: Response };
+
+function resolveTaskType(data: { task_type?: string; task_type_parameters?: unknown }): ResolvedTaskType {
+  const taskType = data.task_type || DEFAULT_TASK_TYPE;
+  const result = validateTaskTypeParams(taskType, data.task_type_parameters);
+  if (!result.isValid) {
+    return { isValid: false, response: apiError({ message: result.message, status: 400 }) };
+  }
+  return { isValid: true, taskType, params: result.params };
+}
 
 export async function POST(req: NextRequest): Promise<Response> {
   const { authorized, response } = await verifyApiPermission('dataset:create');
@@ -25,6 +39,8 @@ export async function POST(req: NextRequest): Promise<Response> {
       const memoryLimit = Number(datasetData.memory_limit);
       if (!Number.isFinite(memoryLimit) || memoryLimit <= 0 || memoryLimit > 4096) return apiError({ message: 'Memory limit must be between 1 and 4096 megabytes', status: 400 });
     }
+    const taskType = resolveTaskType(datasetData);
+    if (!taskType.isValid) return taskType.response;
 
     const dataset = await prisma.datasets.create({
       data: {
@@ -32,8 +48,8 @@ export async function POST(req: NextRequest): Promise<Response> {
         description: descriptionTrimmed,
         time_limit: datasetData.time_limit || null,
         memory_limit: datasetData.memory_limit ? BigInt(datasetData.memory_limit * 1024 * 1024) : null,
-        task_type: datasetData.task_type || 'Batch',
-        task_type_parameters: (datasetData.task_type_parameters ?? []) as Prisma.InputJsonValue,
+        task_type: taskType.taskType,
+        task_type_parameters: taskType.params as Prisma.InputJsonValue,
         score_type: datasetData.score_type || 'Sum',
         score_type_parameters: (datasetData.score_type_parameters ?? []) as Prisma.InputJsonValue,
         autojudge: false,
