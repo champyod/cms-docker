@@ -16,6 +16,14 @@
 //! executable; `Batch::evaluate` stages the executable and the input, runs it
 //! under the dataset's limits, and maps what came back to an outcome.
 //!
+//! [`OutputOnly`] is the one for a submission that is a list of answers rather than
+//! a program: nothing is compiled, and a testcase is judged on the file the
+//! submission carried for it. [`BatchAndOutput`] is the one for a task whose
+//! testcases are answered either way, and it decides which of the two it is in the
+//! order the reference does: a carried answer wins over a run, a testcase the
+//! dataset listed as output-only is never run, and everything else is a [`Batch`]
+//! testcase whose two phases are reused unchanged.
+//!
 //! Three things are the caller's, because none of them is a task type's business.
 //! The language a job names is a [`Toolchain`], and the lookup that produced it
 //! lives with the languages the worker was configured with. Where a box is made
@@ -26,8 +34,8 @@
 //!
 //! # Errors
 //!
-//! [`TaskError`], and only that: parameters that are not the three a Batch task
-//! has, a dataset holding no grader manager a grader compilation needs, a
+//! [`TaskError`], and only that: parameters that are not the entries a task type has,
+//! a dataset holding no grader manager a grader compilation needs, a
 //! submission carrying too few files, a result carrying the wrong number of
 //! executables, a limit a dataset set that is not a positive number, a file the
 //! store would not hand over, and a run the box could not carry or read back.
@@ -36,9 +44,11 @@
 #![forbid(unsafe_code)]
 
 mod batch;
+mod batch_and_output;
 mod communication;
 mod compile;
 mod evaluate;
+mod output_only;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -46,9 +56,11 @@ use std::str::FromStr;
 use std::time::Duration;
 
 pub use batch::{Batch, TaskError};
+pub use batch_and_output::{Answer as BatchAndOutputAnswer, BatchAndOutput, Origin};
 pub use communication::{Communication, Verdict};
 pub use compile::Compilation;
 pub use evaluate::{Evaluation, OutputFile};
+pub use output_only::{Answer as OutputOnlyAnswer, OutputOnly};
 
 use crate::sandbox::{Launch, Options, Sandbox};
 use crate::stage::{Cache, CacheHandle, FileDigest, Stage, StageError};
