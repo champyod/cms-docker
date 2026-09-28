@@ -757,8 +757,8 @@ attach_print_block() {
   echo "  # 4) Cgroups, then start and verify"
   echo "  sudo ./scripts/__worker_cgroup_setup.sh /sys/fs/cgroup/cms-isolate"
   echo "  ./cms config sync && ./cms worker deploy all && ./cms worker list"
-  # The deploy gate passes on a box whose shards resolve as remote (all skipped,
-  # exit 0), so a green list/deploy is not proof this box runs them. The scope
+  # The deploy gate fails a box whose shards all resolve as remote (zero match),
+  # and warns-but-passes a healthy split, so a green deploy is not proof this box runs them. The scope
   # column is the only per-shard statement of which box owns a row, so assert it.
   local alt=""
   for i in "${!shards[@]}"; do
