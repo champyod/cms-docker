@@ -53,8 +53,7 @@ pub(super) fn time_of(job: &EvaluationJob) -> Result<Option<Duration>, TaskError
     Ok(Some(Duration::from_secs_f64(seconds)))
 }
 
-/// The clock the manager is held to: the dataset's own limit and one second more
-/// for each process on top of it.
+/// The clock the manager is held to: the process count times the dataset's limit with one second added.
 ///
 /// This is the reference's own number with the operator's own floor left out,
 /// because this worker holds no configuration: a manager is given
