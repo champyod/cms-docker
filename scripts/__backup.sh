@@ -493,9 +493,12 @@ run_backup() {
     exit "$disk_guard_status"
   fi
 
-  mkdir -p -m 700 "$BACKUP_DB_DIR" "$BACKUP_VOL_DIR"
-  chmod 700 "$BACKUP_DB_DIR" "$BACKUP_VOL_DIR" 2>/dev/null || true
-  chmod 700 "$BACKUP_ROOT" 2>/dev/null || true
+  # WHY g+rwx,g+s and not a mode clamp: it converges on the same dual-writer state
+  # ensure_backup_dir_perms establishes, because a forced 700 strips the group off the shared tree
+  # and locks the host operator out of its own backups. Ownership is that repair's alone.
+  mkdir -p "$BACKUP_DB_DIR" "$BACKUP_VOL_DIR"
+  chmod g+rwx,g+s "$BACKUP_DB_DIR" "$BACKUP_VOL_DIR" 2>/dev/null || true
+  chmod g+rwx,g+s "$BACKUP_ROOT" 2>/dev/null || true
 
   if [[ -z "$POSTGRES_PASSWORD_VAL" ]]; then
     log_warn "POSTGRES_PASSWORD is empty — pg_dump may fail if auth required"
