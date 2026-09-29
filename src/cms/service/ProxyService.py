@@ -371,7 +371,19 @@ class ProxyService(TriggeredService[ProxyOperation, ProxyExecutor]):
                                    contest.name)
                     continue
 
-                score_type = task.active_dataset.score_type_object
+                # Building the score type can raise, if the type is unknown
+                # or its parameters are malformed: such a task has no max
+                # score or extra headers to announce, so skip it instead of
+                # failing the whole initialization.
+                try:
+                    score_type = task.active_dataset.score_type_object
+                except Exception as error:
+                    logger.warning("Skipping task %s of contest %s: its score "
+                                   "type could not be built: %s: %s.",
+                                   task.name, contest.name,
+                                   type(error).__name__, error)
+                    continue
+
                 tasks[encode_id(task.name)] = {
                     "short_name": task.name,
                     "name": task.title,
