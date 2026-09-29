@@ -30,6 +30,7 @@
 
 mod cache;
 mod files;
+mod precache;
 
 use std::fmt;
 use std::path::PathBuf;
@@ -37,6 +38,7 @@ use std::path::PathBuf;
 pub use cache::{Cache, DatabaseCache, FsCache, LargeObjects, NullCache, PrecacheLock};
 pub use cms_db::{CacheError, CacheHandle, DigestError, FileDigest};
 pub use files::{Stage, DEFAULT_READ_LIMIT, MODE_EXECUTABLE, MODE_PLAIN};
+pub use precache::{precache, DigestEntry, DigestWalk, PrecacheReport, PRECACHE_BATCH};
 
 /// Why a file could not be staged, read or stored.
 ///
