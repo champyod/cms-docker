@@ -485,6 +485,43 @@ model monitor_targets {
   @@map("monitor_targets")
 }
 
+/// One archived run of a backup schedule, or of a backup an admin triggered by
+/// hand. `scheduleId` stays NULL for manual runs and is deliberately not a
+/// relation: run history outlives the schedule it came from, so deleting a
+/// schedule must not delete the audit trail.
+model backup_runs {
+  id         String    @id @default(cuid())
+  scheduleId String?
+  kind       String
+  tables     String[]  @db.VarChar
+  status     String
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  message    String?
+  manifestTs String?
+
+  @@index([startedAt], map: "ix_backup_runs_started_at")
+  @@map("backup_runs")
+}
+
+/// A recurring selective backup. `nextRunAt` is what the backup poller compares
+/// against the clock, so it is indexed together with `enabled`: every poll asks
+/// for exactly `enabled = true AND nextRunAt <= now`.
+model backup_schedules {
+  id           String    @id @default(cuid())
+  name         String    @unique
+  tables       String[]  @db.VarChar
+  intervalMins Int
+  enabled      Boolean   @default(true)
+  lastRunAt    DateTime?
+  nextRunAt    DateTime
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([enabled, nextRunAt], map: "ix_backup_schedules_enabled_next_run_at")
+  @@map("backup_schedules")
+}
+
 model users {
   id                  Int              @id @default(autoincrement())
   first_name          String           @db.VarChar

@@ -8,9 +8,15 @@ const SCHEMA_SOURCE = readFileSync(fileURLToPath(new URL('../prisma/schema.prism
 /**
  * schema.prisma models the catalog leaves out on purpose: `admins` is never
  * archived because Epic 3 remaps admin_id to a live admins row instead, and
- * `monitor_targets` holds monitor service configuration, not competition data.
+ * `monitor_targets`, `backup_schedules` and `backup_runs` are backup and
+ * monitor configuration describing what to dump, not competition data to dump.
  */
-const MODELS_OUTSIDE_CATALOG: ReadonlySet<string> = new Set(['admins', 'monitor_targets']);
+const MODELS_OUTSIDE_CATALOG: ReadonlySet<string> = new Set([
+  'admins',
+  'monitor_targets',
+  'backup_schedules',
+  'backup_runs',
+]);
 
 /** The tasks/datasets cycle no dump order can satisfy; see the catalog header. */
 const UNSATISFIABLE_EDGES: ReadonlyArray<readonly [string, string]> = [['tasks', 'datasets']];
