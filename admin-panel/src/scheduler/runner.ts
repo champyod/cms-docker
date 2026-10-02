@@ -10,7 +10,6 @@
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { pathToFileURL } from 'node:url';
 
 import { computeNextRun } from '@/lib/backup-schedules';
 import { logToDiscord } from '@/lib/discord-notifier';
@@ -163,8 +162,3 @@ export function startScheduler(): void {
     console.error('Scheduler tick failed:', error);
   });
 }
-
-/** Importing the module must not start the loop; only running it as the entry point may. */
-const isEntryPoint = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
-
-if (isEntryPoint) startScheduler();

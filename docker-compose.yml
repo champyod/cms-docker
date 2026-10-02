@@ -716,6 +716,36 @@ services:
     networks:
       - cms-network
 
+  # Backup Schedule Poller - fires due backup_schedules rows on its own socket
+  scheduler:
+    build:
+      context: .
+      dockerfile: docker/scheduler/Dockerfile
+    image: ghcr.io/champyod/cms-docker-scheduler:${IMG_TAG:-major-admin-panel}
+    container_name: cms-scheduler
+    restart: on-failure:5
+    profiles:
+      - monitor
+    depends_on:
+      database:
+        condition: service_healthy
+    group_add:
+      - "${DOCKER_GID:-999}"
+    environment:
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - DISCORD_ROLE_ID=${DISCORD_ROLE_ID}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
+      - BACKUP_INTERVAL_MINS=${BACKUP_INTERVAL_MINS:-1440}
+      - BACKUP_MAX_COUNT=${BACKUP_MAX_COUNT:-50}
+      - BACKUP_MAX_AGE_DAYS=${BACKUP_MAX_AGE_DAYS:-10}
+      - BACKUP_MAX_SIZE_GB=${BACKUP_MAX_SIZE_GB:-5}
+    volumes:
+      # Read-write, unlike cms-monitor: docker exec creates an exec instance in
+      # the target container, which the socket refuses when mounted read-only.
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - cms-network
+
 # ============================================================
 # NETWORKS
 # ============================================================

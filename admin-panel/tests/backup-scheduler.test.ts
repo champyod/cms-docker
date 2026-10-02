@@ -28,7 +28,20 @@ const REFERENCE = new Date('2026-03-01T12:00:00.000Z');
 const MINUTE_MS = 60_000;
 
 const RUNNER_SOURCE = readFileSync(fileURLToPath(new URL('../src/scheduler/runner.ts', import.meta.url)), 'utf8');
+const MAIN_SOURCE = readFileSync(fileURLToPath(new URL('../src/scheduler/main.ts', import.meta.url)), 'utf8');
+const BOOTSTRAP_SOURCE = readFileSync(fileURLToPath(new URL('../src/scheduler/bootstrap.mjs', import.meta.url)), 'utf8');
 const BACKUPS_ACTION_SOURCE = readFileSync(fileURLToPath(new URL('../src/app/actions/backups.ts', import.meta.url)), 'utf8');
+const SCHEDULER_DOCKERFILE = readFileSync(fileURLToPath(new URL('../../docker/scheduler/Dockerfile', import.meta.url)), 'utf8');
+const COMPOSE_SOURCE = readFileSync(fileURLToPath(new URL('../../docker-compose.yml', import.meta.url)), 'utf8');
+const WORKFLOW_SOURCE = readFileSync(fileURLToPath(new URL('../../.github/workflows/build-and-push.yml', import.meta.url)), 'utf8');
+
+function composeService(name: string): string {
+  const start = COMPOSE_SOURCE.indexOf(`\n  ${name}:\n`);
+  if (start === -1) throw new Error(`docker-compose.yml has no ${name} service`);
+  const block = COMPOSE_SOURCE.slice(start + 1);
+  const end = block.indexOf('\n# ===');
+  return end === -1 ? block : block.slice(0, end);
+}
 
 function schedule(overrides: Partial<DueScheduleRow> = {}): DueScheduleRow {
   return { id: 'sch_1', name: 'nightly', tables: ['contests', 'users'], intervalMins: 60, enabled: true, nextRunAt: REFERENCE, ...overrides };
@@ -298,5 +311,124 @@ describe('argv parity with the manual backup path', () => {
     expect(BACKUPS_ACTION_SOURCE).toContain("args.push('--large-objects')");
     expect(MONITOR_CONTAINER).toBe('cms-monitor');
     expect(MONITOR_BACKUP_SCRIPT).toBe('/usr/local/bin/cms-backup.sh');
+  });
+});
+
+describe('scheduler image', () => {
+  it('builds in a stage that installs dependencies and generates the Prisma client', () => {
+    expect(SCHEDULER_DOCKERFILE).toContain('RUN pnpm install --no-frozen-lockfile');
+    expect(SCHEDULER_DOCKERFILE).toContain('RUN pnpm prisma generate --schema=./prisma/schema.prisma');
+  });
+
+  it('compiles the poller with the project TypeScript, not a bundler or a type stripper', () => {
+    expect(SCHEDULER_DOCKERFILE).toContain('RUN pnpm exec tsc -p src/scheduler/tsconfig.build.json');
+  });
+
+  it('ships the compiled output, the Prisma client and the Docker CLI', () => {
+    expect(SCHEDULER_DOCKERFILE).toContain('COPY --from=build /app/dist ./dist');
+    expect(SCHEDULER_DOCKERFILE).toContain('COPY --from=build /app/node_modules ./node_modules');
+    expect(SCHEDULER_DOCKERFILE).toContain('curl -fsSL https://get.docker.com | sh');
+  });
+
+  it('never bakes in the socket, only mounts it at run time', () => {
+    expect(SCHEDULER_DOCKERFILE).not.toContain('docker.sock');
+  });
+
+  it('runs unprivileged, like cms-monitor', () => {
+    expect(SCHEDULER_DOCKERFILE).toContain('USER node');
+  });
+
+  it('starts the compiled entry through the alias bootstrap', () => {
+    expect(SCHEDULER_DOCKERFILE).toContain('CMD ["node", "bootstrap.mjs"]');
+  });
+});
+
+describe('scheduler process entry', () => {
+  it('is the only module that starts the polling loop', () => {
+    expect(MAIN_SOURCE).toContain("import { startScheduler } from '@/scheduler/runner'");
+    expect(MAIN_SOURCE).toContain('startScheduler();');
+    expect(RUNNER_SOURCE).not.toContain('startScheduler();');
+  });
+
+  it('resolves the emitted path alias before the first load', () => {
+    expect(BOOTSTRAP_SOURCE).toContain("request.startsWith('@/')");
+    expect(BOOTSTRAP_SOURCE).toContain("loadCompiled(path.join(DIST_ROOT, 'scheduler', 'main.js'))");
+  });
+
+  it('reaches the compiled CommonJS tree through createRequire, not a bare require', () => {
+    expect(BOOTSTRAP_SOURCE).toContain('createRequire(import.meta.url)');
+    expect(BOOTSTRAP_SOURCE).not.toMatch(/(^|[^.\w])require\(/);
+  });
+});
+
+describe('scheduler compose service', () => {
+  const service = composeService('scheduler');
+
+  it('is named cms-scheduler and restarts like its siblings', () => {
+    expect(service).toContain('container_name: cms-scheduler');
+    expect(service).toContain('restart: on-failure:5');
+  });
+
+  it('joins the monitor profile, so make infra and make all start it', () => {
+    expect(service).toContain('profiles:\n      - monitor');
+  });
+
+  it('mounts the Docker socket read-write, because docker exec writes to it', () => {
+    expect(service).toContain('- /var/run/docker.sock:/var/run/docker.sock\n');
+    expect(service).not.toContain('/var/run/docker.sock:ro');
+  });
+
+  it('takes the docker group GID, because the socket is not world-writable', () => {
+    expect(service).toContain('group_add:\n      - "${DOCKER_GID:-999}"');
+  });
+
+  it('waits for a healthy database instead of failing its first tick', () => {
+    expect(service).toContain('depends_on:\n      database:\n        condition: service_healthy');
+  });
+
+  it('takes its database and Discord config from the host env, never from the file', () => {
+    expect(service).toContain('DATABASE_URL=postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}');
+    expect(service).toContain('DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}');
+    expect(service).toContain('DISCORD_ROLE_ID=${DISCORD_ROLE_ID}');
+  });
+
+  it('carries the same backup rotation config the monitor container runs with', () => {
+    expect(service).toContain('BACKUP_MAX_COUNT=${BACKUP_MAX_COUNT:-50}');
+    expect(service).toContain('BACKUP_MAX_AGE_DAYS=${BACKUP_MAX_AGE_DAYS:-10}');
+    expect(service).toContain('BACKUP_MAX_SIZE_GB=${BACKUP_MAX_SIZE_GB:-5}');
+    expect(service).toContain('BACKUP_INTERVAL_MINS=${BACKUP_INTERVAL_MINS:-1440}');
+  });
+
+  it('publishes under the sibling image naming scheme', () => {
+    expect(service).toContain('image: ghcr.io/champyod/cms-docker-scheduler:${IMG_TAG:-major-admin-panel}');
+  });
+
+  it('builds from docker/scheduler/Dockerfile without touching the admin or monitor image', () => {
+    expect(service).toContain('dockerfile: docker/scheduler/Dockerfile');
+    expect(service).not.toContain('admin-panel/Dockerfile');
+    expect(service).not.toContain('docker/monitor/Dockerfile');
+  });
+});
+
+describe('scheduler publish workflow', () => {
+  it('rebuilds on the paths the scheduler image is built from', () => {
+    expect(WORKFLOW_SOURCE).toContain('scheduler: ${{ steps.filter.outputs.scheduler }}');
+    expect(WORKFLOW_SOURCE).toContain("- 'admin-panel/src/scheduler/**'");
+    expect(WORKFLOW_SOURCE).toContain("- 'docker/scheduler/**'");
+  });
+
+  it('publishes a scheduler image with the same registry, tags and cache scope pattern', () => {
+    expect(WORKFLOW_SOURCE).toContain('needs.changes.outputs.scheduler == \'true\'');
+    expect(WORKFLOW_SOURCE).toContain('images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-scheduler');
+    expect(WORKFLOW_SOURCE).toContain('file: ./docker/scheduler/Dockerfile');
+    expect(WORKFLOW_SOURCE).toContain('cache-from: type=gha,scope=scheduler');
+    expect(WORKFLOW_SOURCE).toContain("type=raw,value=latest,enable=${{ github.ref_name == 'main' || github.ref_name == 'major/admin-panel' }}");
+  });
+
+  it('pushes only outside pull requests, like every sibling image', () => {
+    const job = WORKFLOW_SOURCE.slice(WORKFLOW_SOURCE.indexOf('build-and-push-scheduler:'));
+    expect(job).toContain("push: ${{ github.event_name != 'pull_request' }}");
+    expect(job).toContain("if: github.event_name != 'pull_request'");
+    expect(job).toContain('packages: write');
   });
 });
