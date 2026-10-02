@@ -9,15 +9,19 @@ import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
 import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
+import {
+    archiveFingerprint,
+    describeError,
+    formatBytes,
+    formatDate,
+    sortNewestFirst,
+} from '@/components/maintenance/archive-browser-helpers';
 // Type-only: the runtime module pulls in node:fs and must stay out of the client bundle.
 import type { BackupArchive } from '@/lib/backup-archives';
 
 export interface ArchiveBrowserSectionProps {
     readonly refreshToken: number;
 }
-
-const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
-const BYTE_STEP = 1024;
 
 /** Bounded backoff: a selective dump is started detached, so the archive appears later. */
 const POLL_BACKOFF_MS: readonly number[] = [2_000, 4_000, 8_000];
@@ -28,35 +32,6 @@ const BACKUP_WATCH_MESSAGE: Readonly<Record<Exclude<BackupWatchState, 'idle'>, s
     waiting: 'Backup is running in the background. Checking for the new archive...',
     timedOut: 'Backup is still running in the background. It can take several minutes — use Refresh to check again.',
 };
-
-function describeError(error: unknown, fallback: string): string {
-    return error instanceof Error && error.message.length > 0 ? error.message : fallback;
-}
-
-/** Mirrors sortNewestFirst in backup-archives, which stays server-side because it imports node:fs. */
-function sortNewestFirst(archives: readonly BackupArchive[]): BackupArchive[] {
-    return [...archives].sort(
-        (left, right) => right.modifiedAt.localeCompare(left.modifiedAt) || right.name.localeCompare(left.name),
-    );
-}
-
-function formatBytes(bytes: number): string {
-    if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
-    const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(BYTE_STEP)), BYTE_UNITS.length - 1);
-    const value = bytes / BYTE_STEP ** exponent;
-    return `${exponent === 0 ? value : value.toFixed(1)} ${BYTE_UNITS[exponent]}`;
-}
-
-function formatDate(iso: string): string {
-    const parsed = new Date(iso);
-    return Number.isNaN(parsed.getTime()) ? 'Unknown date' : parsed.toLocaleString();
-}
-
-/** A growing dump keeps changing size and mtime, so either one proves the run reached the archive dir. */
-function archiveFingerprint(archives: readonly BackupArchive[]): string {
-    const newest = archives[0];
-    return newest === undefined ? 'none' : `${newest.name}:${newest.modifiedAt}:${newest.sizeBytes}`;
-}
 
 export function ArchiveBrowserSection({ refreshToken }: ArchiveBrowserSectionProps) {
     const [archives, setArchives] = useState<readonly BackupArchive[]>([]);
