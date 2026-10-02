@@ -7,12 +7,10 @@ import NextImage from 'next/image';
 import { DisplayTab } from '@/components/appearance/DisplayTab';
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
-import { PageSurface } from '@/components/core/PageSurface';
 import { Tabs } from '@/components/core/Tabs';
 import { toast } from 'sonner';
 import { readConfigToml, updateConfigToml } from '@/app/actions/appearance';
-import type { BreadcrumbItem } from '@/lib/navigation/types';
-import type { ModulePageCopy } from '@/components/navigation/ModulePageCopy';
+import { usePublishModuleTabActions } from '@/components/navigation/ModuleTabActionSlot';
 
 type TabKey = 'branding' | 'services' | 'display';
 
@@ -49,14 +47,10 @@ function AppearanceTabs({ active, onChange }: { active: TabKey; onChange: (key: 
 function BrandingTab({
   branding,
   onFieldChange,
-  onSave,
-  saving,
   logoPreview,
 }: {
   branding: BrandingFields;
   onFieldChange: (key: keyof BrandingFields, value: string) => void;
-  onSave: () => void;
-  saving: boolean;
   logoPreview: string;
 }) {
   return (
@@ -77,12 +71,7 @@ function BrandingTab({
       </Card>
 
       <Card className="space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <h2 className="text-sm font-semibold text-foreground">Branding Fields (read-only preview — save edits to config.toml)</h2>
-          <Button size="sm" icon={Save} loading={saving} onClick={onSave}>
-            Save to config.toml
-          </Button>
-        </div>
+        <h2 className="text-sm font-semibold text-foreground">Branding Fields (read-only preview — save edits to config.toml)</h2>
         <div className="grid gap-4">
           <label className="space-y-1">
             <span className="text-xs font-medium text-muted-foreground">RANKING_LOGO_PATH</span>
@@ -140,8 +129,7 @@ function ServicesTab({ values }: { values: Record<string, string> }) {
   );
 }
 
-export function AppearanceClient({ locale, breadcrumbs, copy }: { locale: 'en' | 'th'; breadcrumbs: readonly BreadcrumbItem[]; copy: ModulePageCopy }): React.JSX.Element {
-  void locale;
+export function AppearanceClient(): React.JSX.Element {
   const [active, setActive] = useState<TabKey>('branding');
   const [values, setValues] = useState<Record<string, string>>({});
   const [branding, setBranding] = useState<BrandingFields>({ rankingLogoPath: '', rankingUsername: '', rankingPassword: '' });
@@ -192,20 +180,28 @@ export function AppearanceClient({ locale, breadcrumbs, copy }: { locale: 'en' |
     }
   }, [branding]);
 
+  // Why published only over Branding: the fields this Save writes belong to the Branding
+  // panel, so the same control shown over Services or Display would offer to save edits the
+  // reader cannot see on screen.
+  usePublishModuleTabActions(
+    'system.appearance',
+    active === 'branding' ? (
+      <Button size="sm" icon={Save} loading={saving} onClick={() => void handleSave()}>
+        Save to config.toml
+      </Button>
+    ) : null,
+  );
+
   return (
-    <PageSurface
-      breadcrumbs={breadcrumbs}
-      title={copy.title}
-      description={copy.description}
-    >
+    <div className="space-y-6">
       <AppearanceTabs active={active} onChange={setActive} />
       {active === 'branding' ? (
-        <BrandingTab branding={branding} onFieldChange={handleFieldChange} onSave={handleSave} saving={saving} logoPreview={logoPreview} />
+        <BrandingTab branding={branding} onFieldChange={handleFieldChange} logoPreview={logoPreview} />
       ) : active === 'services' ? (
         <ServicesTab values={values} />
       ) : (
         <DisplayTab />
       )}
-    </PageSurface>
+    </div>
   );
 }

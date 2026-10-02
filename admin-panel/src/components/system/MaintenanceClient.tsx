@@ -3,57 +3,48 @@
 import { Save } from 'lucide-react';
 
 import { Button } from '@/components/core/Button';
-import { PageSurface } from '@/components/core/PageSurface';
-import type { BreadcrumbItem } from '@/lib/navigation/types';
-import type { ModulePageCopy } from '@/components/navigation/ModulePageCopy';
+import { SurfaceState } from '@/components/core/SurfaceState';
 import { MaintenanceBackupsCard } from '@/components/system/MaintenanceBackupsCard';
 import { MaintenanceNotificationsCard } from '@/components/system/MaintenanceNotificationsCard';
+import { usePublishModuleTabActions } from '@/components/navigation/ModuleTabActionSlot';
 import { useMaintenanceController } from '@/components/system/useMaintenanceController';
+import { useDictionary } from '@/hooks/useDictionary';
 import type { Locale } from '@/lib/locales';
 
 export interface MaintenanceClientProps {
   readonly locale: Locale;
   readonly permissionKeys: readonly string[];
-  readonly breadcrumbs: readonly BreadcrumbItem[];
-  readonly copy: ModulePageCopy;
 }
 
 export function MaintenanceClient({
   locale,
   permissionKeys,
-  breadcrumbs,
-  copy,
 }: MaintenanceClientProps): React.JSX.Element {
+  const dict = useDictionary();
   const controller = useMaintenanceController(locale, permissionKeys);
   const { loading, saving, canConfigure, handleSave } = controller;
+
+  // Why published from here and withdrawn while loading: the pending state the Save labels
+  // itself with belongs to this controller, and the loading surface below replaces the panel
+  // body before those settings have been read at all.
+  usePublishModuleTabActions(
+    'system.maintenance',
+    canConfigure && !loading ? (
+      <Button variant="positive" onClick={() => void handleSave()} loading={saving}>
+        <Save className="h-4 w-4" />
+        {saving ? 'Saving...' : 'Save Settings'}
+      </Button>
+    ) : null,
+  );
+
   if (loading) {
-    return (
-      <PageSurface
-        breadcrumbs={breadcrumbs}
-        title={copy.title}
-        status={{ kind: 'loading', title: copy.title }}
-      >
-        {null}
-      </PageSurface>
-    );
+    return <SurfaceState status={{ kind: 'loading', title: dict['navigation']['system']['maintenance']['label'] }} />;
   }
 
   return (
-    <PageSurface
-      breadcrumbs={breadcrumbs}
-      title={copy.title}
-      description={copy.description}
-      actions={canConfigure ? (
-        <Button variant="positive" onClick={() => void handleSave()} loading={saving}>
-          <Save className="h-4 w-4" />
-          {saving ? 'Saving...' : 'Save Settings'}
-        </Button>
-      ) : null}
-    >
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-        <MaintenanceBackupsCard controller={controller} />
-        <MaintenanceNotificationsCard controller={controller} />
-      </div>
-    </PageSurface>
+    <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+      <MaintenanceBackupsCard controller={controller} />
+      <MaintenanceNotificationsCard controller={controller} />
+    </div>
   );
 }
