@@ -6,7 +6,6 @@ import { motion } from 'motion/react';
 
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
-import { PageSurface } from '@/components/core/PageSurface';
 import { EmptyState } from '@/components/core/EmptyState';
 import { SkeletonTable } from '@/components/core/Skeleton';
 import { LiveIndicator } from '@/components/core/LiveIndicator';
@@ -17,22 +16,16 @@ import { StatsCard } from '@/components/containers/StatsCard';
 import { ContainerStackControls } from '@/components/containers/ContainerStackControls';
 import { ContainerRow } from '@/components/containers/ContainerRow';
 import { useContainersController } from '@/components/containers/useContainersController';
+import { usePublishModuleTabActions } from '@/components/navigation/ModuleTabActionSlot';
 import { useDictionary } from '@/hooks/useDictionary';
 import { interpolate } from '@/lib/interpolate';
 import { buildRoute } from '@/lib/navigation/routes';
-import type { BreadcrumbItem } from '@/lib/navigation/types';
 import { cn } from '@/lib/utils';
-import type { ModulePageCopy } from '@/components/navigation/ModulePageCopy';
 
 const DEFAULT_RESTART_CONFIG = { autoRestart: false, maxRestarts: 5, currentRestarts: 0 } as const;
 const DEFAULT_ROW_CONFIG = { ...DEFAULT_RESTART_CONFIG, discordNotifications: true };
 
-export interface ContainersClientProps {
-  readonly breadcrumbs: readonly BreadcrumbItem[];
-  readonly copy: ModulePageCopy;
-}
-
-export function ContainersClient({ breadcrumbs, copy }: ContainersClientProps): React.JSX.Element {
+export function ContainersClient(): React.JSX.Element {
   const dict = useDictionary();
   const pageCopy = dict.containers;
   const controller = useContainersController();
@@ -45,34 +38,31 @@ export function ContainersClient({ breadcrumbs, copy }: ContainersClientProps): 
     .filter((container) => controller.selectedIds.has(container.id))
     .map((container) => container.name);
 
-  return (
-    <PageSurface
-      breadcrumbs={breadcrumbs}
-      title={copy.title}
-      description={copy.description}
-      actions={
-        <div className="flex items-center gap-3">
-          <LiveIndicator status={controller.status} />
-          <Button onClick={() => void controller.handleCompose('up')} disabled={controller.actionLoading === 'compose'}>
-            <Layers className="w-4 h-4 mr-2" /> {pageCopy.upAll}
-          </Button>
-          <Button variant="secondary" onClick={controller.refresh} disabled={controller.loading}>
-            <RefreshCw className={cn('w-4 h-4', controller.loading && 'animate-spin')} />
-          </Button>
-        </div>
-      }
-    >
-      <div className="space-y-8">
-        <div className="flex justify-end">
-          <Link
-            href={`${docsPath}#services`}
-            className="flex h-11 w-11 items-center justify-center p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground"
-            title={dict.docs.viewDocumentation}
-          >
-            <HelpCircle className="w-5 h-5" />
-          </Link>
-        </div>
+  // Why one controller serves both places: these controls read the compose action, the stream
+  // status, and the refresh the controller just ran, so they are published from the panel that
+  // owns it rather than rebuilt from a second instance in the header.
+  usePublishModuleTabActions(
+    'infrastructure.containers',
+    <div className="flex items-center gap-3">
+      <LiveIndicator status={controller.status} />
+      <Button onClick={() => void controller.handleCompose('up')} disabled={controller.actionLoading === 'compose'}>
+        <Layers className="w-4 h-4 mr-2" /> {pageCopy.upAll}
+      </Button>
+      <Button variant="secondary" onClick={controller.refresh} disabled={controller.loading}>
+        <RefreshCw className={cn('w-4 h-4', controller.loading && 'animate-spin')} />
+      </Button>
+      <Link
+        href={`${docsPath}#services`}
+        className="flex h-11 w-11 items-center justify-center p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground"
+        title={dict.docs.viewDocumentation}
+      >
+        <HelpCircle className="w-5 h-5" />
+      </Link>
+    </div>,
+  );
 
+  return (
+    <div className="space-y-8">
         {controller.selectedContainer && (
           <LogViewerModal
             containerId={controller.selectedContainer.id}
@@ -195,6 +185,5 @@ export function ContainersClient({ breadcrumbs, copy }: ContainersClientProps): 
           onConfirmLogs={controller.handleConfirmBulkLogs}
         />
       </div>
-    </PageSurface>
   );
 }

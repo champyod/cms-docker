@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Button } from '@/components/core/Button';
-import { PageSurface } from '@/components/core/PageSurface';
 import { Stack } from '@/components/core/Layout';
 import { toast } from 'sonner';
 
@@ -11,18 +10,15 @@ import { BrandingCard } from './BrandingCard';
 import { RankingConnectionCard } from './RankingConnectionCard';
 import { RankingScoreboard } from './RankingScoreboard';
 import { useRankingRows, type RankingSnapshot } from './useRankingRows';
+import { usePublishModuleTabActions } from '@/components/navigation/ModuleTabActionSlot';
 import { useDictionary } from '@/hooks/useDictionary';
 import { hasEffectivePermission } from '@/lib/permission-engine';
-import type { BreadcrumbItem } from '@/lib/navigation/types';
-import type { ModulePageCopy } from '@/components/navigation/ModulePageCopy';
 
 export interface RankingClientProps {
   readonly permissionKeys: readonly string[];
-  readonly breadcrumbs: readonly BreadcrumbItem[];
-  readonly copy: ModulePageCopy;
 }
 
-export function RankingClient({ permissionKeys, breadcrumbs, copy }: RankingClientProps): React.JSX.Element {
+export function RankingClient({ permissionKeys }: RankingClientProps): React.JSX.Element {
   const dict = useDictionary();
   const toastCopy = dict.toasts.ranking;
   // Why memoized: the key list is stable for the session, so rebuilding the Set on
@@ -151,29 +147,29 @@ export function RankingClient({ permissionKeys, breadcrumbs, copy }: RankingClie
     void fetchLogo();
   }, [fetchLogo]);
 
+  // Why these two buttons travel together: the snapshot read and the session that authorizes it
+  // are this panel's state, so the header cannot offer either without this component.
+  usePublishModuleTabActions(
+    'infrastructure.ranking',
+    <Stack direction="row" gap={2}>
+      {canSnapshot && (
+        <Button variant="secondary" onClick={fetchSnapshot} loading={loadingSnapshot} disabled={!connected}>
+          {dict.ranking.refreshSnapshot}
+        </Button>
+      )}
+      {canManage && (
+        <Button variant="negative" onClick={disconnect} loading={loadingSession} disabled={!connected}>
+          {dict.ranking.disconnect}
+        </Button>
+      )}
+    </Stack>,
+  );
+
   return (
-    <PageSurface
-      breadcrumbs={breadcrumbs}
-      title={copy.title}
-      description={copy.description}
-      actions={
-        <Stack direction="row" gap={2}>
-          {canSnapshot && (
-            <Button variant="secondary" onClick={fetchSnapshot} loading={loadingSnapshot} disabled={!connected}>
-              {dict.ranking.refreshSnapshot}
-            </Button>
-          )}
-          {canManage && (
-            <Button variant="negative" onClick={disconnect} loading={loadingSession} disabled={!connected}>
-              {dict.ranking.disconnect}
-            </Button>
-          )}
-        </Stack>
-      }
-    >
+    <div>
       <BrandingCard previewUrl={logoUrl} loading={uploading} onUpload={handleLogoUpload} error={brandingError} readOnly={!canManage} />
       <RankingConnectionCard baseUrl={baseUrl} username={username} password={password} connected={connected} loadingSession={loadingSession} errorMessage={errorMessage} onBaseUrl={setBaseUrl} onUsername={setUsername} onPassword={setPassword} onConnect={connect} canManage={canManage} />
       <RankingScoreboard rows={rows} loadingSnapshot={loadingSnapshot} />
-    </PageSurface>
+    </div>
   );
 }

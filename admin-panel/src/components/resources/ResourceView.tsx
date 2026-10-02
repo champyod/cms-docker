@@ -7,21 +7,15 @@ import { NetworkTrafficLogs } from '@/components/resources/NetworkTrafficLogs';
 import { GaugeCard } from '@/components/resources/GaugeCard';
 import { Activity, Cpu, Database, Network } from 'lucide-react';
 import { Card } from '@/components/core/Card';
-import { PageSurface } from '@/components/core/PageSurface';
 import { LiveIndicator } from '@/components/core/LiveIndicator';
+import { SurfaceState } from '@/components/core/SurfaceState';
+import { usePublishModuleTabActions } from '@/components/navigation/ModuleTabActionSlot';
 import { useLiveStream } from '@/hooks/useLiveStream';
 import { useDictionary } from '@/hooks/useDictionary';
 import { TRAFFIC_LOG_LIMIT_DEFAULT } from '@/lib/constants/live-stream';
 import type { ResourceFrame, ServerStats, TrafficLog, WorkerStat, CoreServiceStatus } from '@/lib/live-frames';
-import type { BreadcrumbItem } from '@/lib/navigation/types';
-import type { ModulePageCopy } from '@/components/navigation/ModulePageCopy';
 
-export interface ResourceViewProps {
-  readonly breadcrumbs: readonly BreadcrumbItem[];
-  readonly copy: ModulePageCopy;
-}
-
-export function ResourceView({ breadcrumbs, copy }: ResourceViewProps): React.JSX.Element {
+export function ResourceView(): React.JSX.Element {
   const dict = useDictionary();
   const [serverStats, setServerStats] = useState<ServerStats | null>(null);
   const [workers, setWorkers] = useState<WorkerStat[]>([]);
@@ -47,17 +41,21 @@ export function ResourceView({ breadcrumbs, copy }: ResourceViewProps): React.JS
   });
 
   const source = serverStats?.source === 'host' ? dict.resources.hostSource : dict.resources.containerSource;
+  const awaitingFirstFrame = loading && !serverStats;
+
+  // Why the indicator is published from here and withdrawn while loading: the stream status
+  // is this hook's own, and the loading surface below replaces the panel body entirely.
+  usePublishModuleTabActions(
+    'infrastructure.resources',
+    awaitingFirstFrame ? null : <LiveIndicator status={status} />,
+  );
+
+  if (awaitingFirstFrame) {
+    return <SurfaceState status={{ kind: 'loading', title: dict.resources.loading }} />;
+  }
 
   return (
-    <PageSurface
-      breadcrumbs={breadcrumbs}
-      title={copy.title}
-      description={copy.description}
-      actions={<LiveIndicator status={status} />}
-      status={loading && !serverStats ? { kind: 'loading', title: dict.resources.loading } : undefined}
-      className="density:space-y-4"
-    >
-      <div className="space-y-4">
+    <div className="space-y-4 density:space-y-4">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <CoreServicesStatus services={services} loading={loading} />
 
@@ -96,8 +94,7 @@ export function ResourceView({ breadcrumbs, copy }: ResourceViewProps): React.JS
           </div>
           <NetworkTrafficLogs logs={traffic} limit={trafficLimit} onLimitChange={setTrafficLimit} loading={loading} />
         </div>
-      </div>
-    </PageSurface>
+    </div>
   );
 }
 

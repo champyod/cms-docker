@@ -4,9 +4,9 @@ import { useState, useEffect } from 'react';
 import { RefreshCw } from 'lucide-react';
 
 import { useDeployContest } from '@/hooks/useDeployContest';
-import { PageSurface } from '@/components/core/PageSurface';
 import { Stack } from '@/components/core/Layout';
 import { Button } from '@/components/core/Button';
+import { SurfaceState } from '@/components/core/SurfaceState';
 import { MismatchBanner } from '@/components/deployments/MismatchBanner';
 import { DeployStatusPanel } from '@/components/deployments/DeployStatusPanel';
 import { ActiveContestCard } from '@/components/deployments/ActiveContestCard';
@@ -14,16 +14,10 @@ import { ContestSettingsForm } from '@/components/deployments/ContestSettingsFor
 import { WorkersPanel } from '@/components/deployments/WorkersPanel';
 import { useDeployWorkers } from '@/components/deployments/useDeployWorkers';
 import { useContestDeploymentSnapshot } from '@/components/deployments/useContestDeploymentSnapshot';
+import { usePublishModuleTabActions } from '@/components/navigation/ModuleTabActionSlot';
 import { useDictionary } from '@/hooks/useDictionary';
-import type { BreadcrumbItem } from '@/lib/navigation/types';
-import type { ModulePageCopy } from '@/components/navigation/ModulePageCopy';
 
-export interface DeploymentsClientProps {
-  readonly breadcrumbs: readonly BreadcrumbItem[];
-  readonly copy: ModulePageCopy;
-}
-
-export function DeploymentsClient({ breadcrumbs, copy }: DeploymentsClientProps): React.JSX.Element {
+export function DeploymentsClient(): React.JSX.Element {
   const dict = useDictionary();
   const { state: deployState, deploy: handleDeploy, cancel: cancelDeploy, reset: resetDeploy } = useDeployContest();
   const [settingsSaving, setSettingsSaving] = useState(false);
@@ -65,84 +59,75 @@ export function DeploymentsClient({ breadcrumbs, copy }: DeploymentsClientProps)
     handleDeploy(snapshot.selectedContestId);
   };
 
-  if (snapshot.loading) {
-    return (
-      <PageSurface
-        breadcrumbs={breadcrumbs}
-        title={copy.title}
-        description={copy.description}
-        status={{ kind: 'loading', title: dict.states.loading.deployments }}
+  // Why the refresh is withdrawn while loading: the panel body is the loading surface during
+  // that read, and loadData is the read it would restart underneath itself.
+  usePublishModuleTabActions(
+    'infrastructure.deployments',
+    snapshot.loading ? null : (
+      <Button
+        variant="secondary"
+        size="sm"
+        icon={RefreshCw}
+        onClick={() => void loadData()}
       >
-        {null}
-      </PageSurface>
-    );
+        {dict.deployments.refresh}
+      </Button>
+    ),
+  );
+
+  if (snapshot.loading) {
+    return <SurfaceState status={{ kind: 'loading', title: dict.states.loading.deployments }} />;
   }
 
   return (
-    <PageSurface
-      breadcrumbs={breadcrumbs}
-      title={copy.title}
-      description={copy.description}
-      actions={
-        <Button
-          variant="secondary"
-          size="sm"
-          icon={RefreshCw}
-          onClick={() => void loadData()}
-        >
-          {dict.deployments.refresh}
-        </Button>
-      }
-    >
-      <Stack gap={8} className="pb-20">
-        {deployState.phase !== 'idle' && (
-          <DeployStatusPanel state={deployState} onCancel={cancelDeploy} onReset={resetDeploy} />
-        )}
+    <Stack gap={8} className="pb-20">
+      {deployState.phase !== 'idle' && (
+        <DeployStatusPanel state={deployState} onCancel={cancelDeploy} onReset={resetDeploy} />
+      )}
 
-        {snapshot.hasMismatch && (
-          <MismatchBanner
+      {snapshot.hasMismatch && (
+        <MismatchBanner
+          activeContestId={snapshot.activeContestId}
+          activeContestName={snapshot.activeContestName}
+          dbActiveContestId={snapshot.dbActiveContestId}
+          containerContestId={snapshot.containerContestId}
+        />
+      )}
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+        <Stack gap={6} className="xl:col-span-2">
+          <ActiveContestCard
             activeContestId={snapshot.activeContestId}
             activeContestName={snapshot.activeContestName}
-            dbActiveContestId={snapshot.dbActiveContestId}
-            containerContestId={snapshot.containerContestId}
+            availableContests={snapshot.availableContests}
+            selectedContestId={snapshot.selectedContestId}
+            deployPhase={deployState.phase}
+            hasChangedContest={snapshot.hasChangedContest}
+            onSelectContest={snapshot.setSelectedContestId}
+            onActivate={handleActivateAndRestart}
+            onCancel={cancelDeploy}
           />
-        )}
-
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-          <Stack gap={6} className="xl:col-span-2">
-            <ActiveContestCard
-              activeContestId={snapshot.activeContestId}
-              activeContestName={snapshot.activeContestName}
-              availableContests={snapshot.availableContests}
-              selectedContestId={snapshot.selectedContestId}
-              deployPhase={deployState.phase}
-              hasChangedContest={snapshot.hasChangedContest}
-              onSelectContest={snapshot.setSelectedContestId}
-              onActivate={handleActivateAndRestart}
-              onCancel={cancelDeploy}
-            />
-            <ContestSettingsForm
-              globalSettings={snapshot.globalSettings}
-              saving={saving}
-              isDirty={snapshot.isDirty}
-              onGlobalChange={(key, value) => snapshot.setGlobalSettings((previous) => ({ ...previous, [key]: value }))}
-              onSaveSettings={() => void snapshot.saveSettings()}
-            />
-          </Stack>
-          <WorkersPanel
-            workers={workers.workers}
-            status={workers.liveWorkers}
-            forbidden={workers.workersForbidden}
-            canManage={workers.canManageWorkers}
+          <ContestSettingsForm
+            globalSettings={snapshot.globalSettings}
             saving={saving}
-            workersDirty={workers.workersDirty}
-            onSaveWorkers={workers.handleSaveWorkers}
-            onAddWorker={workers.addGlobalWorker}
-            onRemoveWorker={workers.removeGlobalWorker}
-            onUpdateWorker={workers.updateGlobalWorker}
+            isDirty={snapshot.isDirty}
+            onGlobalChange={(key, value) => snapshot.setGlobalSettings((previous) => ({ ...previous, [key]: value }))}
+            onSaveSettings={() => void snapshot.saveSettings()}
           />
-        </div>
-      </Stack>
-    </PageSurface>
+        </Stack>
+        <WorkersPanel
+          workers={workers.workers}
+          status={workers.liveWorkers}
+          forbidden={workers.workersForbidden}
+          canManage={workers.canManageWorkers}
+          saving={saving}
+          workersDirty={workers.workersDirty}
+          onSaveWorkers={workers.handleSaveWorkers}
+          onAddWorker={workers.addGlobalWorker}
+          onRemoveWorker={workers.removeGlobalWorker}
+          onUpdateWorker={workers.updateGlobalWorker}
+        />
+      </div>
+    </Stack>
   );
 }
