@@ -18,8 +18,6 @@ import type { LiveDatabaseEnv } from './restore-apply-measure';
 import { applyLargeObjects, applyOneTable, dropStaging, loadStaging } from './restore-apply-steps';
 import { describeFailure, runDocker, settle } from './restore-preview-run';
 
-export { APPLY_STATEMENT_TIMEOUT_MS, MAX_RELAY_CHUNK_BYTES } from './restore-apply-steps';
-
 const execFileAsync = promisify(execFile);
 
 const MANIFEST_FILE = 'manifest.json';
@@ -32,8 +30,8 @@ const PROMOTE_CONSOLE_COLOR = 16711680;
  * manifest before any live row is written, and a timeout aborts rather than
  * proceeding on an assumption about the run.
  */
-export const PRE_PROMOTE_BACKUP_TIMEOUT_MS = 900_000;
-export const PRE_PROMOTE_BACKUP_POLL_MS = 10_000;
+const PRE_PROMOTE_BACKUP_TIMEOUT_MS = 900_000;
+const PRE_PROMOTE_BACKUP_POLL_MS = 10_000;
 
 /**
  * Read-only phase. The live database is only measured, the scratch container is
