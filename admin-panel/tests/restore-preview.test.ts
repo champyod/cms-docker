@@ -5,35 +5,37 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { BACKUP_TABLE_NAMES } from '@/lib/backup-table-catalog';
 import {
-  MAX_PK_SAMPLE_ROWS,
   MAX_SAMPLE_ROWS,
   NEW_ESTIMATE_METHOD,
-  ORPHAN_SWEEP_COMMAND,
-  PREVIEW_ID_PATTERN,
-  PREVIEW_ROOT_DIR_NAME,
-  SCRATCH_IMAGE,
   UPDATED_ESTIMATE_METHOD,
-  UPLOAD_MAX_BYTES_DEFAULT,
-  UPLOAD_SIZE_LIMIT_ENV,
   buildTableDiff,
-  checkUploadFileName,
   clampSampleRowCount,
-  getPreviewRoot,
-  getUploadMaxBytes,
-  isPreviewId,
   parseRestoreList,
   pkSampleExpression,
-  previewContainerName,
-  previewDumpPath,
-  previewQuarantineDir,
   qualifiedTable,
   quoteIdentifier,
-  scratchDatabaseEnv,
   shapeSampleRows,
   summarizeToc,
   tocTableNames,
 } from '@/lib/restore-preview';
 import type { PkOverlapSample } from '@/lib/restore-preview';
+import {
+  MAX_PK_SAMPLE_ROWS,
+  ORPHAN_SWEEP_COMMAND,
+  PREVIEW_ID_PATTERN,
+  PREVIEW_ROOT_DIR_NAME,
+  SCRATCH_IMAGE,
+  UPLOAD_MAX_BYTES_DEFAULT,
+  UPLOAD_SIZE_LIMIT_ENV,
+  checkUploadFileName,
+  getPreviewRoot,
+  getUploadMaxBytes,
+  isPreviewId,
+  previewContainerName,
+  previewDumpPath,
+  previewQuarantineDir,
+  scratchDatabaseEnv,
+} from '@/lib/restore-preview-store';
 
 const PREVIEW_ID = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
 
