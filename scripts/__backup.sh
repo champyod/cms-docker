@@ -2,8 +2,9 @@
 set -euo pipefail
 
 ###############################################################################
-# CMS Full Backup Script
-# - Full logical pg_dump via docker exec (PGPASSWORD in env, not argv)
+# CMS Backup Script
+# - Logical pg_dump via docker exec (PGPASSWORD in env, not argv)
+# - Full database, or a --tables selection turned into one -t per table
 # - Volume tar via helper container (cms-data:ro mount)
 # - manifest.json, rotation across BOTH dirs, disk guard, Discord webhook
 ###############################################################################
@@ -310,9 +311,15 @@ run_backup() {
   }
   trap cleanup_container_tmp EXIT
 
-  # 1) Full logical backup — credentials via docker exec -e PGPASSWORD (never on host argv)
-  log_info "Running pg_dump (Fc) inside $CONTAINER_DB ..."
-  if ! docker exec -e PGPASSWORD="$POSTGRES_PASSWORD_VAL" "$CONTAINER_DB" pg_dump -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -Fc -f "$db_tmp" 2>/tmp/cms-backup-pgdump.log; then
+  # 1) Logical backup — credentials via docker exec -e PGPASSWORD (never on host argv)
+  #    PG_SELECTION_ARGS is empty for a full dump and holds one -t per selected table
+  #    plus -b when the selected tables carry large objects.
+  if [[ "$BACKUP_KIND" == "selective" ]]; then
+    log_info "Running selective pg_dump (Fc) for ${#SELECTED_TABLES[@]} table(s): ${SELECTED_TABLES[*]}"
+  else
+    log_info "Running pg_dump (Fc) inside $CONTAINER_DB ..."
+  fi
+  if ! docker exec -e PGPASSWORD="$POSTGRES_PASSWORD_VAL" "$CONTAINER_DB" pg_dump -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -Fc "${PG_SELECTION_ARGS[@]}" -f "$db_tmp" 2>/tmp/cms-backup-pgdump.log; then
     local err
     err="$(cat /tmp/cms-backup-pgdump.log 2>/dev/null || echo 'pg_dump failed')"
     log_warn "pg_dump failed: $err"
@@ -375,11 +382,11 @@ run_backup() {
   # 3) manifest.json append
   log_info "Updating manifest $MANIFEST_FILE ..."
   if command -v python3 >/dev/null 2>&1; then
-    python3 - "$MANIFEST_FILE" "$ts" "db/cmsdb-${ts}.dump" "$db_sha" "volumes/cms-data-${ts}.tar.gz" "$vol_sha" "$pg_ver" "$db_bytes" "$vol_bytes" "$total_bytes" <<'PY'
+    python3 - "$MANIFEST_FILE" "$ts" "db/cmsdb-${ts}.dump" "$db_sha" "volumes/cms-data-${ts}.tar.gz" "$vol_sha" "$pg_ver" "$db_bytes" "$vol_bytes" "$total_bytes" "$BACKUP_KIND" "$SELECTED_TABLES_CSV" <<'PY'
 import json, os, sys, tempfile
-manifest_path, ts, db_dump, db_sha, vol_tar, vol_sha, pg_ver, db_b, vol_b, tot_b = sys.argv[1:11]
+manifest_path, ts, db_dump, db_sha, vol_tar, vol_sha, pg_ver, db_b, vol_b, tot_b, kind, tables_csv = sys.argv[1:13]
 db_b=int(db_b); vol_b=int(vol_b); tot_b=int(tot_b)
-entry={"ts":ts,"db_dump":db_dump,"db_sha256":db_sha,"vol_tar":vol_tar,"vol_sha256":vol_sha,"pg_version":pg_ver,"sizes":{"db_bytes":db_b,"vol_bytes":vol_b,"total_bytes":tot_b}}
+entry={"ts":ts,"db_dump":db_dump,"db_sha256":db_sha,"vol_tar":vol_tar,"vol_sha256":vol_sha,"pg_version":pg_ver,"sizes":{"db_bytes":db_b,"vol_bytes":vol_b,"total_bytes":tot_b},"kind":kind,"tables":[t for t in tables_csv.split(",") if t]}
 if os.path.exists(manifest_path):
     try:
         with open(manifest_path) as f:
@@ -436,15 +443,102 @@ run_cleanup_only() {
 }
 
 # ---------------------------------------------------------------------------
-# Entry
+# Entry — flags are parsed before any work so a bad table name never reaches
+# pg_dump, and an unrecognised flag still runs the backup as it always has.
 # ---------------------------------------------------------------------------
-case "${1:-}" in
-  --cleanup-only) run_cleanup_only ;;
-  --help|-h)
-    echo "Usage: $0 [--cleanup-only]"
-    echo "Env: BACKUP_DIR, BACKUP_MAX_COUNT, BACKUP_MAX_AGE_DAYS, BACKUP_MAX_SIZE_GB"
-    echo "     DISCORD_WEBHOOK_URL (env only), POSTGRES_* from .env.core"
-    ;;
-  "") run_backup ;;
-  *) log_warn "Unknown arg: $1 — running backup anyway"; run_backup ;;
+BACKUP_MODE="full"
+SELECTED_TABLES=()   # validated table names in the order pg_dump must dump them
+PG_SELECTION_ARGS=()  # one -t per selected table, plus -b for large objects
+BACKUP_KIND="full"
+SELECTED_TABLES_CSV=""
+
+usage() {
+  echo "Usage: $0 [--cleanup-only] [--tables <t1,t2,...>] [--large-objects]"
+  echo "Env: BACKUP_DIR, BACKUP_MAX_COUNT, BACKUP_MAX_AGE_DAYS, BACKUP_MAX_SIZE_GB"
+  echo "     DISCORD_WEBHOOK_URL (env only), POSTGRES_* from .env.core"
+  echo "Without --tables the whole database is dumped, exactly as before."
+  echo "--large-objects adds pg_dump -b and is only meaningful together with --tables."
+  echo "--tables accepts ^[a-z_]+$ names; the admin panel allowlists them first."
+}
+
+parse_args() {
+  local tables_csv=""
+  local tables_flag_given=0
+  local include_large_objects=0
+  local name
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --tables)
+        if [[ $# -lt 2 ]]; then
+          log_die "--tables requires a comma-separated table list"
+        fi
+        tables_csv="$2"
+        tables_flag_given=1
+        shift 2
+        ;;
+      --tables=*)
+        tables_csv="${1#--tables=}"
+        tables_flag_given=1
+        shift
+        ;;
+      --large-objects|-b)
+        include_large_objects=1
+        shift
+        ;;
+      --cleanup-only)
+        BACKUP_MODE="cleanup"
+        shift
+        ;;
+      --help|-h)
+        BACKUP_MODE="help"
+        shift
+        ;;
+      "") shift ;;
+      *)
+        log_warn "Unknown arg: $1 — running backup anyway"
+        shift
+        ;;
+    esac
+  done
+
+  if [[ "$BACKUP_MODE" != "full" || "$tables_flag_given" -eq 0 ]]; then
+    return 0
+  fi
+
+  local IFS=','
+  local -a requested=()
+  read -r -a requested <<< "$tables_csv"
+  for name in "${requested[@]}"; do
+    name="${name#"${name%%[![:space:]]*}"}"
+    name="${name%"${name##*[![:space:]]}"}"
+    [[ -n "$name" ]] || continue
+    if [[ ! "$name" =~ ^[a-z_]+$ ]]; then
+      log_die "Refusing table name: '$name' — expected ^[a-z_]+\$"
+    fi
+    if [[ " ${SELECTED_TABLES[*]:-} " != *" $name "* ]]; then
+      SELECTED_TABLES+=("$name")
+    fi
+  done
+
+  if [[ ${#SELECTED_TABLES[@]} -eq 0 ]]; then
+    log_die "Refusing an empty --tables selection: pg_dump with no -t would dump the entire database"
+  fi
+
+  BACKUP_KIND="selective"
+  SELECTED_TABLES_CSV="$(IFS=','; printf '%s' "${SELECTED_TABLES[*]}")"
+  for name in "${SELECTED_TABLES[@]}"; do
+    PG_SELECTION_ARGS+=(-t "$name")
+  done
+  if [[ "$include_large_objects" -eq 1 ]]; then
+    PG_SELECTION_ARGS+=(-b)
+  fi
+}
+
+parse_args "$@"
+
+case "$BACKUP_MODE" in
+  cleanup) run_cleanup_only ;;
+  help) usage ;;
+  *) run_backup ;;
 esac
