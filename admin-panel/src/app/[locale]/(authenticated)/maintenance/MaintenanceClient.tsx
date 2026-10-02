@@ -14,6 +14,7 @@ import { BackupSelectionSection } from '@/components/maintenance/BackupSelection
 import { ArchiveBrowserSection } from '@/components/maintenance/ArchiveBrowserSection';
 import { ScheduleSection } from '@/components/maintenance/ScheduleSection';
 import { ScheduleRunsSection } from '@/components/maintenance/ScheduleRunsSection';
+import { RestoreSection } from '@/components/maintenance/RestoreSection';
 
 export default function MaintenanceClient() {
   const [data, setData] = useState<Record<string, string>>({});
@@ -147,6 +148,7 @@ export default function MaintenanceClient() {
             <ArchiveBrowserSection refreshToken={archiveRefreshToken} />
             <ScheduleSection />
             <ScheduleRunsSection />
+            <RestoreSection />
         </Stack>
 
         {/* Discord Section */}
