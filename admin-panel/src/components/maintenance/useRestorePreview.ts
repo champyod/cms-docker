@@ -1,14 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { deletePreview, getPreviewTables, getSampleRows, startPreview } from '@/app/actions/restore';
-import { promotePreview, validatePromote } from '@/app/actions/restore-apply';
+import { getPromoteStatus, promotePreview, validatePromote } from '@/app/actions/restore-apply';
 import { describeError } from '@/components/maintenance/archive-browser-helpers';
 import type { SampleView } from '@/components/maintenance/RestorePreviewTable';
 // Type-only: the runtime modules reach node:os through restore-preview-store and must stay out of the client bundle.
 import type { TableDiffRow } from '@/lib/restore-preview';
 import type { ApplyStrategies, PromoteReport, TableStrategy, ValidateReport } from '@/lib/restore-apply';
+import type { PromoteProgressView } from '@/lib/restore-apply-progress';
 
 const UPLOAD_URL = '/api/backups/upload';
 const UPLOAD_FIELD = 'file';
@@ -17,6 +18,13 @@ export const DUMP_SUFFIX = '.dump';
 const SAMPLE_ROW_LIMIT = 10;
 /** scripts/__backup.sh names dumps cmsdb-YYYYmmdd-HHMMSS.dump, so the archive timestamp is in the file name. */
 const ARCHIVE_TIMESTAMP_PATTERN = /^cmsdb-(\d{8}-\d{6})\.dump$/;
+const PROMOTE_PROGRESS_POLL_MS = 2_000;
+/**
+ * How long the watcher follows a promote before it stops and says so. The run
+ * itself is unaffected: a merge of this size legitimately runs for longer than
+ * any page should hold a request open watching it.
+ */
+export const PROMOTE_PROGRESS_WINDOW_MS = 30 * 60_000;
 
 export type PreviewPhase = 'idle' | 'uploading' | 'restoring' | 'measuring' | 'validating' | 'promoting' | 'deleting';
 
@@ -97,6 +105,48 @@ function confirmationPhrase(archiveName: string): string {
 
 function defaultStrategies(rows: readonly TableDiffRow[]): ApplyStrategies {
     return Object.fromEntries(rows.map((row) => [row.table, 'merge'] as const));
+}
+
+/** A figure belongs to the report id that published it, so it can never be read against another run. */
+interface PromoteWatch {
+    readonly runId: string | null;
+    readonly progress: PromoteProgressView;
+}
+
+/**
+ * Reads the applier's per-table figure while a promote runs. It stops when the
+ * promote promise settles, because the settled report carries the full detail,
+ * and after a bounded window so a long run is never polled forever. `recheck`
+ * gives a run that outlasted the window another one, which the operator asks
+ * for explicitly because the run itself was never at risk.
+ */
+export function usePromoteProgress(active: boolean, previewId: string | null, reportId: string | null): { readonly progress: PromoteProgressView; readonly recheck: () => void } {
+    const [watch, setWatch] = useState<PromoteWatch>({ runId: null, progress: { state: 'waiting' } });
+    const [windowIndex, startWindow] = useState(0);
+    useEffect(() => {
+        if (!active || previewId === null || reportId === null) return;
+        const deadline = Date.now() + PROMOTE_PROGRESS_WINDOW_MS;
+        const timer = setInterval(() => {
+            if (Date.now() > deadline) {
+                clearInterval(timer);
+                setWatch({ runId: reportId, progress: { state: 'timeout' } });
+                return;
+            }
+            getPromoteStatus(previewId, reportId).then(
+                // A failed read keeps the last figure rather than blanking a promote that is still running.
+                (status) => setWatch({ runId: reportId, progress: status }),
+                (error: unknown) => console.error(`Could not read promote progress for ${reportId}:`, error),
+            );
+        }, PROMOTE_PROGRESS_POLL_MS);
+        return () => clearInterval(timer);
+    }, [active, previewId, reportId, windowIndex]);
+    return {
+        progress: active && watch.runId === reportId ? watch.progress : { state: 'waiting' },
+        recheck: () => {
+            setWatch({ runId: reportId, progress: { state: 'waiting' } });
+            startWindow((index) => index + 1);
+        },
+    };
 }
 
 export function useRestorePreview() {
@@ -228,9 +278,10 @@ export function useRestorePreview() {
     };
 
     const tableWarnings = (run.validate?.tableReports ?? []).flatMap((table) => table.warnings.map((warning) => `${table.table}: ${warning}`));
+    const { progress: promoteProgress, recheck: recheckPromoteProgress } = usePromoteProgress(phase === 'promoting', previewId, run.validate?.reportId ?? null);
 
     return {
-        phase, isBusy, feedback, selectedFile, uploadFraction, archive, run,
+        phase, isBusy, feedback, selectedFile, uploadFraction, archive, run, promoteProgress, recheckPromoteProgress,
         warnings: [...run.warnings, ...(run.validate?.warnings ?? []), ...(run.promote?.warnings ?? []), ...tableWarnings],
         problems: [...run.failures, ...(run.validate?.errors ?? []), ...(run.promote?.errors ?? [])],
         requiredPhrase, canPromote: !isBusy && run.validate?.ok === true && isConfirmed,

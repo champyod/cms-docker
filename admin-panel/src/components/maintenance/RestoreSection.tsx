@@ -35,7 +35,7 @@ function NoticeList({ tone, items }: { readonly tone: 'error' | 'warning'; reado
 
 export function RestoreSection() {
     const {
-        phase, isBusy, feedback, selectedFile, uploadFraction, archive, run, warnings, problems,
+        phase, isBusy, feedback, selectedFile, uploadFraction, archive, run, promoteProgress, recheckPromoteProgress, warnings, problems,
         requiredPhrase, canPromote, setConfirm, handleFileChange, handleBuildPreview, handleValidate,
         handlePromote, handleStrategyChange, handleViewSample, handleDeletePreview,
     } = useRestorePreview();
@@ -110,6 +110,8 @@ export function RestoreSection() {
                             isPromoting={phase === 'promoting'}
                             validate={run.validate}
                             promote={run.promote}
+                            progress={promoteProgress}
+                            onRecheck={recheckPromoteProgress}
                             archiveName={archive?.fileName ?? ''}
                             confirmText={run.confirm}
                             requiredPhrase={requiredPhrase}

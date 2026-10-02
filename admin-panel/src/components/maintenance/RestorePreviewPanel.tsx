@@ -1,14 +1,16 @@
 'use client';
 
-import { ShieldCheck } from 'lucide-react';
+import { RefreshCw, ShieldCheck } from 'lucide-react';
 
 import { Badge } from '@/components/core/Badge';
 import { Button } from '@/components/core/Button';
 import { Input } from '@/components/core/Input';
 import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
+import { PROMOTE_PROGRESS_WINDOW_MS } from '@/components/maintenance/useRestorePreview';
 // Type-only: the runtime module reaches node:os through restore-preview-store and must stay out of the client bundle.
 import type { PromoteReport, TableApplyStatus, ValidateReport } from '@/lib/restore-apply';
+import type { PromotePhase, PromoteProgressView } from '@/lib/restore-apply-progress';
 
 const NO_BACKUP_ENTRY = 'none recorded';
 const STATUS_VARIANT: Readonly<Record<TableApplyStatus, 'success' | 'destructive' | 'neutral' | 'warning'>> = {
@@ -17,6 +19,59 @@ const STATUS_VARIANT: Readonly<Record<TableApplyStatus, 'success' | 'destructive
     pending: 'warning',
     skipped: 'neutral',
 };
+const PHASE_TEXT: Readonly<Record<PromotePhase, string>> = {
+    backup: 'Taking the pre-promote backup before any live row is written.',
+    staging: 'Loading archive rows into the staging schema. Nothing live has changed yet.',
+    applying: 'Committing one transaction per table, in foreign-key order.',
+    cleanup: 'Every table is committed. Dropping the staging schema and reporting.',
+};
+
+/**
+ * The figure the applier publishes while a promote runs: one row per table, with
+ * the tables already committed, the one in flight and those not reached yet.
+ */
+export function PromoteProgressList({ progress, onRecheck }: { readonly progress: PromoteProgressView; readonly onRecheck: () => void }) {
+    if (progress.state === 'timeout') {
+        return (
+            <Stack gap={2} className="rounded-lg border border-border p-3">
+                <Text variant="small" className="text-warning">
+                    Stopped updating after {Math.round(PROMOTE_PROGRESS_WINDOW_MS / 60_000)} minutes. The promote was not touched and is still running on the server.
+                </Text>
+                <div>
+                    <Button size="sm" variant="secondary" icon={RefreshCw} onClick={onRecheck}>Refresh</Button>
+                </div>
+            </Stack>
+        );
+    }
+    if (progress.state !== 'running') return null;
+    const pending = progress.totalTables - progress.doneTables.length - (progress.currentTable === null ? 0 : 1);
+    return (
+        <Stack gap={2} className="rounded-lg border border-border p-3">
+            <Text variant="small" color="text-muted-foreground">
+                {`${PHASE_TEXT[progress.phase]} ${progress.doneTables.length} of ${progress.totalTables} table(s) committed.`}
+            </Text>
+            <ul className="divide-y divide-border rounded-lg border border-border">
+                {progress.doneTables.map((table) => (
+                    <li key={table} className="flex items-center gap-2 px-3 py-1.5">
+                        <span className="text-sm text-white">{table}</span>
+                        <Badge variant="success">committed</Badge>
+                    </li>
+                ))}
+                {progress.currentTable !== null && (
+                    <li className="flex items-center gap-2 px-3 py-1.5">
+                        <span className="text-sm text-white">{progress.currentTable}</span>
+                        <Badge variant="indigo">in progress</Badge>
+                    </li>
+                )}
+                {pending > 0 && (
+                    <li className="px-3 py-1.5">
+                        <Text variant="small" color="text-muted-foreground">{`${pending} table(s) not reached yet. They are untouched unless a table below them fails.`}</Text>
+                    </li>
+                )}
+            </ul>
+        </Stack>
+    );
+}
 
 /** What one promote committed, per table, plus what stayed pending when a table rolled back. */
 export function PromoteRecords({ report }: { readonly report: PromoteReport }) {
@@ -65,6 +120,8 @@ export function RestorePromoteGate({
     isPromoting,
     validate,
     promote,
+    progress,
+    onRecheck,
     archiveName,
     confirmText,
     requiredPhrase,
@@ -78,6 +135,8 @@ export function RestorePromoteGate({
     readonly isPromoting: boolean;
     readonly validate: ValidateReport | null;
     readonly promote: PromoteReport | null;
+    readonly progress: PromoteProgressView;
+    readonly onRecheck: () => void;
     readonly archiveName: string;
     readonly confirmText: string;
     readonly requiredPhrase: string;
@@ -118,6 +177,7 @@ export function RestorePromoteGate({
                     />
                 </Stack>
             )}
+            <PromoteProgressList progress={progress} onRecheck={onRecheck} />
             {promote !== null && <PromoteRecords report={promote} />}
         </Stack>
     );

@@ -7,6 +7,7 @@
 
 import { LARGE_OBJECT_TABLE, adminColumnFor, archiveDigestBytesForSql, archiveDigestDescriptionSql, archiveDigestListSql, catalogPrimaryKeys, countRowsSql, createStagingSchemaSql, createStagingTableSql, deleteDigestBatchSql, dropStagingSchemaSql, fsobjectInsertSql, insertSelectSql, liveDigestQuerySql, mergeInsertSql, overwriteDeleteSql, qualifiedTable, relayTable, sequenceNameQuerySql, sequenceResetSql, setLocalTimeoutSql, stagingLoadSql, stagingNewRowCountSql } from '@/lib/restore-apply';
 import type { ApplyFacts, ApplyStrategies, LargeObjectCopy, RelayBatch, RelayPage, TableApplyRecord, TableStrategy } from '@/lib/restore-apply';
+import type { PromoteProgressWriter } from '@/lib/restore-apply-progress';
 import { DOCKER_TIMEOUT_MS, countFrom, lines, liveCount, liveDigestSet, runLiveSql } from './restore-apply-measure';
 import type { LiveDatabaseEnv } from './restore-apply-measure';
 import { describeFailure, scratchQuery, settle } from './restore-preview-run';
@@ -64,6 +65,9 @@ async function writeStagingBatch(env: LiveDatabaseEnv, staging: string, table: s
  * `fsobjects` is not staged: its digest list and its bytes are both read from
  * the scratch container, and a content-addressed table can carry one row per
  * stored file, so staging it would page rows nothing reads back.
+ *
+ * Each table is announced as it is staged and never counted as done: rows in a
+ * staging table have committed to nothing live yet.
  */
 export async function loadStaging(
   container: string,
@@ -71,10 +75,12 @@ export async function loadStaging(
   staging: string,
   order: readonly string[],
   facts: ApplyFacts,
+  progress: PromoteProgressWriter,
 ): Promise<void> {
   await runLiveSql(env, dropStagingSchemaSql(staging), DOCKER_TIMEOUT_MS);
   await runLiveSql(env, createStagingSchemaSql(staging), DOCKER_TIMEOUT_MS);
   for (const table of order.filter((name) => name !== LARGE_OBJECT_TABLE)) {
+    await progress.starting(table);
     await runLiveSql(env, createStagingTableSql(staging, table), DOCKER_TIMEOUT_MS);
     const columns = (facts.liveColumns.get(table) ?? []).filter((column) => (facts.archiveColumns.get(table) ?? []).includes(column));
     await loadStagingTable(container, env, staging, table, columns);

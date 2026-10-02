@@ -9,8 +9,10 @@ import { getBackupRoot } from '@/lib/backup-archives';
 import { logToDiscord } from '@/lib/discord-notifier';
 import { ensurePermission } from '@/lib/permissions';
 import { isPreviewId, previewContainerName } from '@/lib/restore-preview-store';
-import { LARGE_OBJECT_TABLE, applyOrder, buildReportId, checkConfirmToken, normalizeStrategies, planApply, stagingSchemaName } from '@/lib/restore-apply';
+import { LARGE_OBJECT_TABLE, applyOrder, buildReportId, checkConfirmToken, normalizeStrategies, parseReportId, planApply, stagingSchemaName } from '@/lib/restore-apply';
 import type { ApplyFacts, ApplyStrategies, PromoteReport, TableApplyRecord, ValidateReport } from '@/lib/restore-apply';
+import { WAITING_PROGRESS, readPromoteStatus, startPromoteProgress, sweepStaleProgress } from '@/lib/restore-apply-progress';
+import type { PromoteProgressWriter, PromoteStatus } from '@/lib/restore-apply-progress';
 import { DOCKER_MAX_OUTPUT_BYTES, DOCKER_TIMEOUT_MS, measureFacts, preparePromote } from './restore-apply-measure';
 import type { LiveDatabaseEnv } from './restore-apply-measure';
 import { applyLargeObjects, applyOneTable, dropStaging, loadStaging } from './restore-apply-steps';
@@ -27,27 +29,25 @@ const PROMOTE_CONSOLE_COLOR = 16711680;
 
 /**
  * The gate that makes a promote recoverable: one full backup must land in the
- * manifest before any live row is written. Bounded on purpose, and a timeout
- * aborts rather than proceeding on an assumption about the run.
+ * manifest before any live row is written, and a timeout aborts rather than
+ * proceeding on an assumption about the run.
  */
 export const PRE_PROMOTE_BACKUP_TIMEOUT_MS = 900_000;
 export const PRE_PROMOTE_BACKUP_POLL_MS = 10_000;
 
-function emptyReport(previewId: string, staging: string, reportId: string, generatedAtMs: number, errors: readonly string[]): ValidateReport {
-  return { ok: false, reportId, generatedAt: new Date(generatedAtMs).toISOString(), previewId, stagingSchema: staging, tableReports: [], errors, warnings: [] };
-}
-
 /**
  * Read-only phase. The live database is only measured, the scratch container is
  * only read, and the result is the report whose `reportId` the operator must
- * confirm with before `promotePreview` will write anything.
+ * confirm with before `promotePreview` will write anything. The figures of runs
+ * that ended days ago are swept here, so a validation is also a cleanup.
  */
 export async function validatePromote(previewId: string, strategies: ApplyStrategies): Promise<ValidateReport> {
   await ensurePermission('all');
+  await sweepStaleProgress();
   const generatedAtMs = Date.now();
   const staging = isPreviewId(previewId) ? stagingSchemaName(previewId) : 'restore_staging_00000000';
   const reportId = buildReportId(staging, generatedAtMs);
-  const fail = (errors: readonly string[]): ValidateReport => emptyReport(previewId, staging, reportId, generatedAtMs, errors);
+  const fail = (errors: readonly string[]): ValidateReport => ({ ok: false, reportId, generatedAt: new Date(generatedAtMs).toISOString(), previewId, stagingSchema: staging, tableReports: [], errors, warnings: [] });
   if (!isPreviewId(previewId)) return fail(['Unknown preview id.']);
   const { ok, resolved, unknown } = normalizeStrategies(strategies ?? {});
   if (!ok) return fail([`Not a catalog table or not a valid strategy: ${unknown.join(', ')}`]);
@@ -55,22 +55,11 @@ export async function validatePromote(previewId: string, strategies: ApplyStrate
   if (order.length === 0) return fail(['Every table is skipped, so there is nothing to promote.']);
   const container = previewContainerName(previewId);
   const alive = await settle(runDocker(['exec', container, 'true']));
-  if (!alive.ok) {
-    return fail([`Scratch container ${container} is gone, so the archive rows it holds cannot be read. Start the preview again.`]);
-  }
+  if (!alive.ok) return fail([`Scratch container ${container} is gone, so the archive rows it holds cannot be read. Start the preview again.`]);
   try {
     const facts = await measureFacts(container, resolved, order);
     const plan = planApply(resolved, facts);
-    return {
-      ok: plan.errors.length === 0,
-      reportId,
-      generatedAt: new Date(generatedAtMs).toISOString(),
-      previewId,
-      stagingSchema: staging,
-      tableReports: plan.tableReports,
-      errors: plan.errors,
-      warnings: plan.warnings,
-    };
+    return { ok: plan.errors.length === 0, reportId, generatedAt: new Date(generatedAtMs).toISOString(), previewId, stagingSchema: staging, tableReports: plan.tableReports, errors: plan.errors, warnings: plan.warnings };
   } catch (error) {
     return fail([`Validation could not measure the live database: ${describeFailure(error)}`]);
   }
@@ -80,10 +69,7 @@ export async function validatePromote(previewId: string, strategies: ApplyStrate
 // Pre-promote backup gate
 // ---------------------------------------------------------------------------
 
-interface ManifestEntry {
-  readonly ts?: unknown;
-  readonly kind?: unknown;
-}
+interface ManifestEntry { readonly ts?: unknown; readonly kind?: unknown }
 
 async function readManifestEntries(): Promise<readonly string[]> {
   const text = await readFile(path.join(getBackupRoot(), MANIFEST_FILE), 'utf8');
@@ -92,14 +78,10 @@ async function readManifestEntries(): Promise<readonly string[]> {
   return list.map((entry) => (typeof entry.ts === 'string' ? `${entry.kind ?? 'full'}:${entry.ts}` : '')).filter((entry) => entry.length > 0);
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 /**
- * Waits for a manifest entry that was not there when the wait began, so the
- * entry observed afterwards belongs to the run this promote started. A timeout
- * aborts: the promote never assumes a backup it cannot see.
+ * Waits for a manifest entry that was not there when the wait began, so the entry
+ * observed afterwards belongs to the run this promote started. A timeout aborts:
+ * the promote never assumes a backup it cannot see.
  */
 async function awaitFreshBackupEntry(known: ReadonlySet<string>): Promise<string> {
   const deadline = Date.now() + PRE_PROMOTE_BACKUP_TIMEOUT_MS;
@@ -109,11 +91,9 @@ async function awaitFreshBackupEntry(known: ReadonlySet<string>): Promise<string
       const fresh = entries.value.find((entry) => !known.has(entry));
       if (fresh !== undefined) return fresh;
     }
-    await delay(PRE_PROMOTE_BACKUP_POLL_MS);
+    await new Promise<void>((resolve) => setTimeout(resolve, PRE_PROMOTE_BACKUP_POLL_MS));
   }
-  throw new Error(
-    `No new backup appeared in ${MANIFEST_FILE} within ${Math.round(PRE_PROMOTE_BACKUP_TIMEOUT_MS / 1000)}s. Nothing was written; check ${MONITOR_CONTAINER} and try again.`,
-  );
+  throw new Error(`No new backup appeared in ${MANIFEST_FILE} within ${Math.round(PRE_PROMOTE_BACKUP_TIMEOUT_MS / 1000)}s. Nothing was written; check ${MONITOR_CONTAINER} and try again.`);
 }
 
 async function runPrePromoteBackup(): Promise<string> {
@@ -161,7 +141,9 @@ function preconditionError(
  *
  * A table that fails is rolled back and every later table is left pending;
  * tables already committed stay committed. Re-running with the applied tables
- * set to `skip` resumes exactly the pending ones.
+ * set to `skip` resumes exactly the pending ones. The per-table figure published
+ * while this runs is a convenience and is cleared on every way out of here; the
+ * returned report remains the record.
  */
 export async function promotePreview(previewId: string, strategies: ApplyStrategies, confirmToken: string): Promise<PromoteReport> {
   await ensurePermission('all');
@@ -179,20 +161,29 @@ export async function promotePreview(previewId: string, strategies: ApplyStrateg
   if (!setup.ok) return abortRun(previewId, reportId, staging, [`Promote refused before writing: ${describeFailure(setup.error)}`]);
   if (setup.value.planErrors.length > 0) return abortRun(previewId, reportId, staging, setup.value.planErrors, setup.value.warnings);
 
+  const progress = await startPromoteProgress(reportId, order.length);
   const gate = await settle(runPrePromoteBackup());
-  if (!gate.ok) return abortRun(previewId, reportId, staging, [`Pre-promote backup gate: ${describeFailure(gate.error)}`]);
+  if (!gate.ok) {
+    await progress.finish();
+    return abortRun(previewId, reportId, staging, [`Pre-promote backup gate: ${describeFailure(gate.error)}`]);
+  }
   const { env, facts, warnings } = setup.value;
-  const loaded = await settle(loadStaging(container, env, staging, order, facts));
+  await progress.phase('staging');
+  const loaded = await settle(loadStaging(container, env, staging, order, facts, progress));
   if (!loaded.ok) {
     const cleanupError = await dropStaging(staging, env);
+    await progress.finish();
     return {
       ...abortRun(previewId, reportId, staging, [`Staging load failed; no live row was written: ${describeFailure(loaded.error)}`]),
       backupEntry: gate.value,
       warnings: cleanupError === null ? [] : [cleanupError],
     };
   }
-  const applied = await applyTables(container, env, staging, order, resolved, facts);
+  await progress.phase('applying');
+  const applied = await applyTables(container, env, staging, order, resolved, facts, progress);
+  await progress.phase('cleanup');
   const cleanupError = await dropStaging(staging, env);
+  await progress.finish();
   return finish(previewId, reportId, staging, gate.value, applied.records, order, applied.errors, cleanupError === null ? warnings : [...warnings, cleanupError]);
 }
 
@@ -204,21 +195,24 @@ async function applyTables(
   order: readonly string[],
   strategies: ApplyStrategies,
   facts: ApplyFacts,
+  progress: PromoteProgressWriter,
 ): Promise<{ readonly records: readonly TableApplyRecord[]; readonly errors: readonly string[] }> {
   const records: TableApplyRecord[] = [];
   const errors: string[] = [];
   for (const table of order) {
-    try {
-      records.push(
-        table === LARGE_OBJECT_TABLE
-          ? await applyLargeObjects(container, env, strategies[table])
-          : await applyOneTable(env, staging, table, strategies[table], strategies, facts),
-      );
-    } catch (error) {
-      records.push({ table, strategy: strategies[table], status: 'failed', liveBefore: 0, liveAfter: 0, merged: 0, note: describeFailure(error) });
-      errors.push(`"${table}" failed and every later table was left pending: ${describeFailure(error)}`);
+    await progress.starting(table);
+    const applied = await settle(
+      table === LARGE_OBJECT_TABLE
+        ? applyLargeObjects(container, env, strategies[table])
+        : applyOneTable(env, staging, table, strategies[table], strategies, facts),
+    );
+    if (!applied.ok) {
+      records.push({ table, strategy: strategies[table], status: 'failed', liveBefore: 0, liveAfter: 0, merged: 0, note: applied.error });
+      errors.push(`"${table}" failed and every later table was left pending: ${applied.error}`);
       break;
     }
+    records.push(applied.value);
+    await progress.tableDone(table);
   }
   return { records, errors };
 }
@@ -240,10 +234,17 @@ async function finish(
 ): Promise<PromoteReport> {
   const appliedTables = records.filter((record) => record.status === 'applied').map((record) => record.table);
   const pendingTables = order.filter((table) => !appliedTables.includes(table));
-  await logToDiscord(
-    errors.length === 0 ? 'Restore Merge Applied' : 'Restore Merge Stopped',
-    `Preview \`${previewId}\`: ${appliedTables.length}/${records.length || order.length} table(s) applied${errors.length > 0 ? `, stopped on \`${errors[0]}\`` : ''}. Backup: ${backupEntry ?? 'none'}. Re-run with the applied tables skipped to resume.`,
-    PROMOTE_CONSOLE_COLOR,
-  );
+  await logToDiscord(errors.length === 0 ? 'Restore Merge Applied' : 'Restore Merge Stopped', `Preview \`${previewId}\`: ${appliedTables.length}/${records.length || order.length} table(s) applied${errors.length > 0 ? `, stopped on \`${errors[0]}\`` : ''}. Backup: ${backupEntry ?? 'none'}. Re-run with the applied tables skipped to resume.`, PROMOTE_CONSOLE_COLOR);
   return { ok: errors.length === 0 && pendingTables.length === 0, previewId, reportId, stagingSchema: staging, backupEntry, tableRecords: records, appliedTables, pendingTables, errors, warnings };
+}
+
+/**
+ * The read-only companion to a promote that is still running. A report id the
+ * server did not issue for this preview is refused rather than answered, so one
+ * preview's figure can never be shown against another's run.
+ */
+export async function getPromoteStatus(previewId: string, reportId: string): Promise<PromoteStatus> {
+  await ensurePermission('all');
+  if (!isPreviewId(previewId) || parseReportId(stagingSchemaName(previewId), reportId) === null) return WAITING_PROGRESS;
+  return readPromoteStatus(reportId);
 }
