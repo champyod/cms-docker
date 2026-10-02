@@ -1,15 +1,21 @@
 import { notFound } from 'next/navigation';
 
-import type { ModuleRouteNavItem } from '@/components/navigation/ModuleRouteNav';
 import type { Dictionary } from '@/lib/dictionary';
 import { getRoutePermissions } from '@/lib/navigation/page-authorization';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { NAVIGATION_GROUPS, ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import { buildRoute } from '@/lib/navigation/routes';
-import type { NavigationGroupDescriptor, RouteDescriptor } from '@/lib/navigation/types';
+import type { NavigationGroupDescriptor, RouteDescriptor, RouteId } from '@/lib/navigation/types';
 import { AuthorizationError } from '@/lib/server/authorization';
 
 type ModuleGroupId = NavigationGroupDescriptor['id'];
+
+/** One permitted rail entry: the registry id, its dictionary label, and its localized href. */
+export interface ModuleRailItem {
+  readonly id: RouteId;
+  readonly label: string;
+  readonly href: string;
+}
 
 /**
  * The one label resolver behind every module rail.
@@ -37,7 +43,7 @@ export function permittedNavItems(
   locale: string,
   dict: Dictionary,
   effective: ReadonlySet<string>,
-): ModuleRouteNavItem[] {
+): ModuleRailItem[] {
   const group = NAVIGATION_GROUPS.find((item) => item.id === groupId);
   return (group?.routeIds ?? []).flatMap((id) => {
     const descriptor = ROUTE_REGISTRY.find((route) => route.id === id);

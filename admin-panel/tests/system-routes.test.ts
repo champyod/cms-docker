@@ -98,16 +98,14 @@ describe('System physical pages authorize and delegate', () => {
       expect(source).toContain(`authorizeRoutePage('${routeId}')`);
     }
     for (const clientTag of clientTags) expect(source).toContain(clientTag);
+    // Why the absences: the trail and header copy a page used to build belong to the module
+    // layout now, so a page that still resolved them would duplicate the shell's own row.
+    expect(source).not.toContain('listBreadcrumbs');
+    expect(source).not.toContain('<PageSurface');
   });
 
-  it.each([
-    'src/app/[locale]/(authenticated)/system/appearance/page.tsx',
-    'src/app/[locale]/(authenticated)/system/maintenance/page.tsx',
-    'src/app/[locale]/(authenticated)/system/settings/page.tsx',
-    'src/app/[locale]/(authenticated)/system/docs/page.tsx',
-    'src/app/[locale]/(authenticated)/system/layout.tsx',
-  ])('%s resolves localized labels with getDictionary(locale)', (relativePath) => {
-    expect(readSource(relativePath)).toContain('getDictionary(locale)');
+  it('src/app/[locale]/(authenticated)/system/layout.tsx resolves localized labels with getDictionary(locale)', () => {
+    expect(readSource('src/app/[locale]/(authenticated)/system/layout.tsx')).toContain('getDictionary(locale)');
   });
 
   it('keeps Branding, Services, Display local and URL-stable', () => {

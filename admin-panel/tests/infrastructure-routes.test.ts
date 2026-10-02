@@ -90,7 +90,9 @@ describe('Infrastructure ownership and wiring', () => {
   ])('%s authorizes and delegates to %s', (relativePath, routeId, clientTag) => {
     const source = readSource(relativePath);
     expect(source).toContain(`authorizeRoutePage('${routeId}')`);
-    expect(source).toContain('getDictionary(locale)');
+    // Why the absence: the trail and header copy a page used to build belong to the module
+    // layout now, so a page that still resolved them would duplicate the shell's own row.
+    expect(source).not.toContain('listBreadcrumbs');
     expect(source).toContain(clientTag);
     expect(source).not.toContain('<PageSurface');
     expect(source).not.toContain('InfrastructureClient');

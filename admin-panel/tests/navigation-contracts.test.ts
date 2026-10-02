@@ -71,6 +71,15 @@ const DIRECT_LABEL_CASES = [
   { labelKey: 'navigation.tasks.list.label', en: 'Tasks', th: 'งาน' },
 ] as const;
 
+// Why one id and not the group: a module contributes a single sidebar entry, the
+// landing page its tab strip opens on, while its remaining routes stay reachable
+// as tabs and from the palette, the search page, and the shortcut chords.
+const ADMINISTRATION_LANDING_ROUTE_ID: RouteId = 'administration.admins';
+
+const INFRASTRUCTURE_LANDING_ROUTE_ID: RouteId = 'infrastructure.deployments';
+
+const SYSTEM_LANDING_ROUTE_ID: RouteId = 'system.appearance';
+
 const INFRASTRUCTURE_ROUTE_IDS = [
   'infrastructure.deployments',
   'infrastructure.containers',
@@ -176,9 +185,9 @@ describe('target route registry', () => {
       ...SYSTEM_ROUTE_IDS,
     ]);
     expect(sidebarIds.filter((id) => moduleIds.has(id))).toEqual([
-      ...ADMINISTRATION_ROUTE_IDS,
-      ...INFRASTRUCTURE_ROUTE_IDS,
-      ...SYSTEM_ROUTE_IDS,
+      ADMINISTRATION_LANDING_ROUTE_ID,
+      INFRASTRUCTURE_LANDING_ROUTE_ID,
+      SYSTEM_LANDING_ROUTE_ID,
     ]);
   });
 

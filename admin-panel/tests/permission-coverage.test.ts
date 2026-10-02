@@ -354,9 +354,10 @@ describe('permission coverage', () => {
     // isRoutePermitted, and a requirement-free route is permitted for anyone, so
     // asserting an empty requirement per visible route holds by construction. The
     // exact visible ID set is the form that can actually fail when a route is
-    // enabled whose gate does not reach the sidebar surface. Home and Docs are the
-    // two authenticated-public targets, so a keyless caller sees exactly those.
-    expect(visibleRoutes(empty, 'sidebar').map((route) => route.id)).toEqual(['home', 'system.docs']);
+    // enabled whose gate does not reach the sidebar surface. Home is the one
+    // authenticated-public target left on the sidebar, so a keyless caller sees
+    // exactly that: Docs reaches the same reader as a System tab, not as a rail entry.
+    expect(visibleRoutes(empty, 'sidebar').map((route) => route.id)).toEqual(['home']);
   });
 
   it('uses only registry keys in frontend permission checks', () => {

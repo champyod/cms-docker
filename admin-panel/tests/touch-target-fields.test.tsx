@@ -4,11 +4,6 @@ import { AppearanceClient } from '@/components/appearance/AppearanceClient';
 import { TableToolbar } from '@/components/core/TableToolbar';
 import { EnvSectionCard } from '@/components/settings/EnvSectionCard';
 
-const APPEARANCE_COPY = {
-  title: 'Appearance',
-  description: 'Branding and display preferences.',
-} as const;
-
 function getInputTouchHeightCount(markup: string): number {
   const inputTags = markup.match(/<input[^>]*>/g) ?? [];
   return inputTags.filter((inputTag) => {
@@ -32,9 +27,7 @@ describe('raw form field touch targets', () => {
   });
 
   it('gives all appearance branding inputs a 44px touch target', () => {
-    const markup = renderToStaticMarkup(
-      <AppearanceClient locale="en" breadcrumbs={[]} copy={APPEARANCE_COPY} />,
-    );
+    const markup = renderToStaticMarkup(<AppearanceClient />);
 
     expect(getInputTouchHeightCount(markup)).toBe(3);
   });
