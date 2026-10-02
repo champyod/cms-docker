@@ -1,8 +1,7 @@
 import { getAuditLog } from '@/app/actions/audit';
 import { AuditTable } from '@/components/audit/AuditTable';
-import { PageSurface } from '@/components/core/PageSurface';
+import { SurfaceState } from '@/components/core/SurfaceState';
 import { getDictionary } from '@/i18n';
-import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
 interface AuditSearchParams {
@@ -38,36 +37,34 @@ export default async function AuditPage({
     fromDate: query.fromDate,
     toDate: query.toDate,
   });
+  if (!result.success) {
+    return (
+      <SurfaceState
+        status={{
+          kind: 'error',
+          title: dict.audit.loadFailed,
+          description: result.error,
+        }}
+      />
+    );
+  }
   return (
-    <PageSurface
-      breadcrumbs={listBreadcrumbs(locale, 'administration', 'administration.audit', dict)}
-      title={dict['navigation']['administration']['audit']['label']}
-      description={dict.audit.subtitle}
-      status={result.success ? { kind: 'idle' } : {
-        kind: 'error',
-        title: dict.audit.loadFailed,
-        description: result.error,
+    <AuditTable
+      entries={result.data.entries}
+      total={result.data.total}
+      totalPages={result.data.totalPages}
+      currentPage={page}
+      filters={{
+        entity: query.entity,
+        verb: query.verb,
+        actorId: query.actorId,
+        result: query.result,
+        search: query.search,
+        fromDate: query.fromDate,
+        toDate: query.toDate,
       }}
-    >
-      {result.success ? (
-        <AuditTable
-          entries={result.data.entries}
-          total={result.data.total}
-          totalPages={result.data.totalPages}
-          currentPage={page}
-          filters={{
-            entity: query.entity,
-            verb: query.verb,
-            actorId: query.actorId,
-            result: query.result,
-            search: query.search,
-            fromDate: query.fromDate,
-            toDate: query.toDate,
-          }}
-          dict={dict.audit}
-          permissionKeys={[...effective]}
-        />
-      ) : null}
-    </PageSurface>
+      dict={dict.audit}
+      permissionKeys={[...effective]}
+    />
   );
 }

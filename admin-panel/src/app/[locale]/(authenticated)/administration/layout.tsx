@@ -1,8 +1,17 @@
-import { ModuleRouteNav } from '@/components/navigation/ModuleRouteNav';
+import {
+  ModuleTabShell,
+  type ModuleTabActions,
+  type ModuleTabDescriptions,
+} from '@/components/navigation/ModuleTabShell';
 import { getDictionary } from '@/i18n';
-import { concealedPermissions, permittedNavItems } from '@/lib/navigation/module-nav';
+import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
+import { concealedPermissions } from '@/lib/navigation/module-nav';
+import { buildModuleTabs } from '@/lib/navigation/module-tabs';
 
 const GROUP_ID = 'administration';
+const ADMINS_TAB_ID = 'administration.admins';
+const GROUPS_TAB_ID = 'administration.groups';
+const AUDIT_TAB_ID = 'administration.audit';
 
 export default async function AdministrationLayout({
   children,
@@ -16,13 +25,27 @@ export default async function AdministrationLayout({
     getDictionary(locale),
     concealedPermissions(),
   ]);
+  const tabs = buildModuleTabs(GROUP_ID, locale, dict, effective);
+  // Why one line per tab: the title spans every administration page, so only the dictionary
+  // knows which of them the URL opened and what that page is for.
+  const descriptions: ModuleTabDescriptions = {
+    [ADMINS_TAB_ID]: dict.permissions.subtitle,
+    [GROUPS_TAB_ID]: dict['navigation']['administration']['groups']['description'],
+    [AUDIT_TAB_ID]: dict.audit.subtitle,
+  };
+  // Why the map stays empty: both administration panels own the state their create control
+  // acts on — the one admin modal, the one group form — so each publishes that control into the
+  // title slot instead of the layout rebuilding a second copy above it.
+  const actionsMap: ModuleTabActions = {};
   return (
-    <>
-      <ModuleRouteNav
-        items={permittedNavItems(GROUP_ID, locale, dict, effective)}
-        ariaLabel={dict['navigation']['groups'][GROUP_ID]}
-      />
+    <ModuleTabShell
+      breadcrumbs={listBreadcrumbs(locale, GROUP_ID, ADMINS_TAB_ID, dict)}
+      title={dict['navigation']['groups'][GROUP_ID]}
+      tabs={tabs}
+      descriptions={descriptions}
+      actionsMap={actionsMap}
+    >
       {children}
-    </>
+    </ModuleTabShell>
   );
 }

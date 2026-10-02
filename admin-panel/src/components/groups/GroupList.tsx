@@ -1,13 +1,14 @@
 'use client';
 
 import { useMemo, useCallback } from 'react';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
 import { ResponsiveTable } from '@/components/core/ResponsiveTable';
 import { RowActions, rowActionGroupLabel } from '@/components/core/RowActions';
 import { useDictionary } from '@/hooks/useDictionary';
+import { usePublishModuleTabActions } from '@/components/navigation/ModuleTabActionSlot';
 import { ACTION_PERMISSIONS, hasEffectivePermission } from '@/lib/permission-engine';
 import type { GroupWithPermissions } from '@/app/actions/adminPermissions';
 import { buildColumns } from './groupColumns';
@@ -26,7 +27,6 @@ export function GroupList({
   // block, and only the full dictionary carries it.
   const actionGroupLabel = rowActionGroupLabel(useDictionary(), 'groups');
   const {
-    handleOpenCreate,
     handleOpenEdit,
     handleOpenDelete,
   } = list;
@@ -62,16 +62,19 @@ export function GroupList({
       : undefined
   ), [permissionKeys, handleOpenEdit]);
 
+  // Why published from here: the create button opens the one group form this hook owns, and a
+  // copy of it above would be a second form driven by a second group list.
+  usePublishModuleTabActions(
+    'administration.groups',
+    list.canCreate ? (
+      <Button variant="positive" icon={Plus} onClick={list.handleOpenCreate}>
+        {dict.createGroup}
+      </Button>
+    ) : null,
+  );
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-end items-center">
-        {hasEffectivePermission(new Set(permissionKeys), ACTION_PERMISSIONS.createGroup) && (
-          <Button variant="positive" icon={Plus} onClick={handleOpenCreate}>
-            {dict.createGroup}
-          </Button>
-        )}
-      </div>
-
       <ResponsiveTable
         columns={columns}
         rows={groups}

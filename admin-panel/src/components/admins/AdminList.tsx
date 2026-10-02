@@ -8,11 +8,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
 import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
-import { Plus, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, Plus } from 'lucide-react';
 import { updateAdmin, deleteAdmin } from '@/app/actions/admins';
 import { listAdminsAccessSummary, type AdminAccessSummary } from '@/app/actions/adminPermissions';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
+import { useDictionary } from '@/hooks/useDictionary';
+import { usePublishModuleTabActions } from '@/components/navigation/ModuleTabActionSlot';
 import { ACTION_PERMISSIONS, hasEffectivePermission } from '@/lib/permission-engine';
 import { cn } from '@/lib/utils';
 import { AdminModal } from './AdminModal';
@@ -24,7 +26,6 @@ interface AdminListProps {
   initialAdmins: AdminWithLogin[];
   callerPermissions: string[];
   capabilities: AdminCapabilities;
-  headerLabels: { addAdmin: string };
   actionLabels: { edit: string; delete: string };
 }
 
@@ -32,13 +33,13 @@ export function AdminList({
   initialAdmins,
   callerPermissions,
   capabilities,
-  headerLabels,
   actionLabels,
 }: AdminListProps) {
   const [adminsList] = useSyncedState(initialAdmins);
   const [accessSummary, setAccessSummary] = useState<Record<number, AdminAccessSummary>>({});
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAdmin, setEditingAdmin] = useState<AdminWithLogin | null>(null);
+  const dict = useDictionary();
   const router = useRouter();
   const confirm = useConfirm();
   const { destructiveConfirm } = useConfirmationCopy();
@@ -100,11 +101,6 @@ export function AdminList({
     setEditingAdmin(null);
   };
 
-  const startCreate = () => {
-    setEditingAdmin(null);
-    setIsModalOpen(true);
-  };
-
   // Why the pair: the Edit/Delete controls are the Actions column, and `updateAdmin` admits
   // either entry permission, so a password-only caller still gets the column.
   const showRowActions = canEditRow || canDelete;
@@ -119,6 +115,17 @@ export function AdminList({
       </Button>
     );
   };
+
+  // Why published from here: the create button opens this panel's one AdminModal, so a copy of
+  // it in the header would be a second modal holding its own open state over the same list.
+  usePublishModuleTabActions(
+    'administration.admins',
+    capabilities.canCreate ? (
+      <Button variant="positive" icon={Plus} onClick={() => { setEditingAdmin(null); setIsModalOpen(true); }}>
+        {dict.admins.addAdmin}
+      </Button>
+    ) : null,
+  );
 
   const table = (
     <div className="border border-border rounded-xl overflow-hidden bg-card/50">
@@ -227,14 +234,6 @@ export function AdminList({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-end gap-3">
-        {hasEffectivePermission(new Set(callerPermissions), ACTION_PERMISSIONS.createAdmin) && (
-          <Button variant="positive" icon={Plus} onClick={startCreate}>
-            {headerLabels.addAdmin}
-          </Button>
-        )}
-      </div>
-
       {table}
 
       <AdminModal

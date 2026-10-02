@@ -1,9 +1,7 @@
 import { getAdmins } from '@/app/actions/admins';
 import { AdminList } from '@/components/admins/AdminList';
 import type { AdminCapabilities } from '@/components/admins/adminCapabilities';
-import { PageSurface } from '@/components/core/PageSurface';
 import { getDictionary } from '@/i18n';
-import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 
@@ -29,21 +27,14 @@ export default async function AdminsPage({
   const effective = await authorizeRoutePage('administration.admins');
   const admins = await getAdmins();
   return (
-    <PageSurface
-      breadcrumbs={listBreadcrumbs(locale, 'administration', 'administration.admins', dict)}
-      title={dict['navigation']['administration']['admins']['label']}
-      description={dict.permissions.subtitle}
-    >
-      <AdminList
-        initialAdmins={admins}
-        callerPermissions={[...effective]}
-        capabilities={adminCapabilities(effective)}
-        headerLabels={{ addAdmin: dict.admins.addAdmin }}
-        actionLabels={{
-          edit: dict.admins.actions.edit,
-          delete: dict.admins.actions.delete,
-        }}
-      />
-    </PageSurface>
+    <AdminList
+      initialAdmins={admins}
+      callerPermissions={[...effective]}
+      capabilities={adminCapabilities(effective)}
+      actionLabels={{
+        edit: dict.admins.actions.edit,
+        delete: dict.admins.actions.delete,
+      }}
+    />
   );
 }

@@ -1,8 +1,7 @@
 import { listGroupsWithPermissions } from '@/app/actions/adminPermissions';
-import { PageSurface } from '@/components/core/PageSurface';
+import { SurfaceState } from '@/components/core/SurfaceState';
 import { GroupList } from '@/components/groups/GroupList';
 import { getDictionary } from '@/i18n';
-import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
 export default async function GroupsPage({
@@ -14,25 +13,22 @@ export default async function GroupsPage({
   const dict = await getDictionary(locale);
   const effective = await authorizeRoutePage('administration.groups');
   const result = await listGroupsWithPermissions();
-  const groupLabel = dict['navigation']['administration']['groups']['label'];
+  if (!result.success) {
+    return (
+      <SurfaceState
+        status={{
+          kind: 'error',
+          title: dict.groups.loadFailed,
+          description: result.error,
+        }}
+      />
+    );
+  }
   return (
-    <PageSurface
-      breadcrumbs={listBreadcrumbs(locale, 'administration', 'administration.groups', dict)}
-      title={groupLabel}
-      description={dict['navigation']['administration']['groups']['description']}
-      status={result.success ? { kind: 'idle' } : {
-        kind: 'error',
-        title: dict.groups.loadFailed,
-        description: result.error,
-      }}
-    >
-      {result.success ? (
-        <GroupList
-          groups={result.data}
-          permissionKeys={[...effective]}
-          dict={dict.groups}
-        />
-      ) : null}
-    </PageSurface>
+    <GroupList
+      groups={result.data}
+      permissionKeys={[...effective]}
+      dict={dict.groups}
+    />
   );
 }
