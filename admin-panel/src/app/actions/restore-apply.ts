@@ -4,61 +4,25 @@ import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { Prisma } from '@prisma/client';
 
 import { getBackupRoot } from '@/lib/backup-archives';
-import { BACKUP_TABLE_NAMES } from '@/lib/backup-table-catalog';
 import { logToDiscord } from '@/lib/discord-notifier';
 import { ensurePermission } from '@/lib/permissions';
-import { prisma } from '@/lib/prisma';
-import { isPreviewId, previewContainerName, scratchDatabaseEnv } from '@/lib/restore-preview-store';
-import {
-  LARGE_OBJECT_TABLE,
-  adminColumnFor,
-  applyOrder,
-  archiveDigestBytesForSql,
-  archiveDigestBytesSql,
-  archiveDigestDescriptionSql,
-  archiveDigestIntegritySql,
-  archiveDigestListSql,
-  buildReportId,
-  catalogPrimaryKeys,
-  checkConfirmToken,
-  countRowsSql,
-  createStagingSchemaSql,
-  createStagingTableSql,
-  databaseSizeQuerySql,
-  deleteDigestBatchSql,
-  dropStagingSchemaSql,
-  fsobjectInsertSql,
-  insertSelectSql,
-  liveColumnsQuerySql,
-  liveDigestListQuerySql,
-  liveDigestQuerySql,
-  liveFkParentQuerySql,
-  livePrimaryKeyQuerySql,
-  mergeInsertSql,
-  normalizeStrategies,
-  overwriteDeleteSql,
-  planApply,
-  qualifiedTable,
-  scratchExportSql,
-  sequenceNameQuerySql,
-  sequenceResetSql,
-  setLocalTimeoutSql,
-  stagingLoadSql,
-  stagingNewRowCountSql,
-  stagingSchemaName,
-} from '@/lib/restore-apply';
-import type { ApplyFacts, ApplyStrategies, LargeObjectCopy, PromoteReport, TableApplyRecord, TableStrategy, ValidateReport } from '@/lib/restore-apply';
-import { describeFailure, readToc, runDocker, scratchQuery, settle } from './restore-preview-run';
+import { isPreviewId, previewContainerName } from '@/lib/restore-preview-store';
+import { LARGE_OBJECT_TABLE, applyOrder, buildReportId, checkConfirmToken, normalizeStrategies, planApply, stagingSchemaName } from '@/lib/restore-apply';
+import type { ApplyFacts, ApplyStrategies, PromoteReport, TableApplyRecord, ValidateReport } from '@/lib/restore-apply';
+import { DOCKER_MAX_OUTPUT_BYTES, DOCKER_TIMEOUT_MS, measureFacts, preparePromote } from './restore-apply-measure';
+import type { LiveDatabaseEnv } from './restore-apply-measure';
+import { applyLargeObjects, applyOneTable, dropStaging, loadStaging } from './restore-apply-steps';
+import { describeFailure, runDocker, settle } from './restore-preview-run';
+
+export { APPLY_STATEMENT_TIMEOUT_MS, MAX_TABLE_EXPORT_BYTES } from './restore-apply-steps';
 
 const execFileAsync = promisify(execFile);
 
+const MANIFEST_FILE = 'manifest.json';
 const MONITOR_CONTAINER = 'cms-monitor';
 const MONITOR_BACKUP_SCRIPT = '/usr/local/bin/cms-backup.sh';
-const MANIFEST_FILE = 'manifest.json';
-const LIVE_CONTAINER = 'cms-database';
 const PROMOTE_CONSOLE_COLOR = 16711680;
 
 /**
@@ -68,155 +32,6 @@ const PROMOTE_CONSOLE_COLOR = 16711680;
  */
 export const PRE_PROMOTE_BACKUP_TIMEOUT_MS = 900_000;
 export const PRE_PROMOTE_BACKUP_POLL_MS = 10_000;
-/** Per-transaction budget for one table's merge. */
-export const APPLY_STATEMENT_TIMEOUT_MS = 600_000;
-/**
- * Bounded so an oversized table fails loudly instead of exhausting the panel.
- * This matches the shared docker runner's stdout cap, so the ceiling is the same
- * one `scratchQuery` already enforces and the failure is reported here as an
- * actionable message instead of arriving as an opaque exec error.
- */
-export const MAX_TABLE_EXPORT_BYTES = 8 * 1024 * 1024;
-const DOCKER_TIMEOUT_MS = 60_000;
-const DOCKER_MAX_OUTPUT_BYTES = 128 * 1024 * 1024;
-const LARGE_OBJECT_BATCH_SIZE = 200;
-
-interface LiveDatabaseEnv {
-  readonly POSTGRES_USER: string;
-  readonly POSTGRES_PASSWORD: string;
-  readonly POSTGRES_DB: string;
-}
-
-function liveDatabaseEnv(): LiveDatabaseEnv {
-  const scratch = scratchDatabaseEnv();
-  const password = process.env.POSTGRES_PASSWORD?.trim();
-  if (password === undefined || password.length === 0) {
-    throw new Error('POSTGRES_PASSWORD is not set, so the promote cannot write to the live database.');
-  }
-  return { POSTGRES_USER: scratch.POSTGRES_USER, POSTGRES_PASSWORD: password, POSTGRES_DB: scratch.POSTGRES_DB };
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function lines(stdout: string): string[] {
-  return stdout.split('\n').map((line) => line.trim()).filter((line) => line.length > 0);
-}
-
-async function countFrom(value: string): Promise<number> {
-  const parsed = Number(value.trim());
-  if (!Number.isFinite(parsed)) throw new Error(`Expected a numeric value, got: ${value}`);
-  return parsed;
-}
-
-/** A `table`+`value` row set grouped by table, as the measurement queries return it. */
-function groupByTable(rows: readonly { table: string; value: string }[]): Map<string, string[]> {
-  const grouped = new Map<string, string[]>();
-  for (const row of rows) {
-    const existing = grouped.get(row.table) ?? [];
-    existing.push(row.value);
-    grouped.set(row.table, existing);
-  }
-  return grouped;
-}
-
-async function liveGrouped(build: (tables: readonly string[]) => string, tables: readonly string[]): Promise<Map<string, string[]>> {
-  const rows = await prisma.$queryRaw<{ table: string; value: string }[]>(Prisma.sql`${Prisma.raw(build(tables))}`);
-  return groupByTable(rows);
-}
-
-async function liveScalar(sql: string): Promise<number> {
-  const rows = await prisma.$queryRaw<{ value: string }[]>(Prisma.sql`${Prisma.raw(sql)}`);
-  return countFrom(rows[0]?.value ?? '0');
-}
-
-async function liveRowCounts(): Promise<Map<string, number>> {
-  const counts = new Map<string, number>();
-  for (const table of BACKUP_TABLE_NAMES) {
-    const rows = await prisma.$queryRaw<{ value: string }[]>(Prisma.sql`${Prisma.raw(countRowsSql('public', table))}`);
-    counts.set(table, await countFrom(rows[0]?.value ?? '0'));
-  }
-  return counts;
-}
-
-async function scratchRowCounts(container: string, order: readonly string[]): Promise<Map<string, number>> {
-  const counts = new Map<string, number>();
-  for (const table of order) {
-    counts.set(table, await countFrom(await scratchQuery(container, countRowsSql('public', table))));
-  }
-  return counts;
-}
-
-async function scratchColumns(container: string, order: readonly string[]): Promise<Map<string, string[]>> {
-  const columns = new Map<string, string[]>();
-  for (const table of order) {
-    columns.set(table, lines(await scratchQuery(container, scratchColumnsQuery(table))));
-  }
-  return columns;
-}
-
-function scratchColumnsQuery(table: string): string {
-  return `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '${table}' ORDER BY ordinal_position`;
-}
-
-async function liveDigestSet(): Promise<Set<string>> {
-  const rows = await prisma.$queryRaw<{ value: string }[]>(Prisma.sql`${Prisma.raw(liveDigestListQuerySql())}`);
-  return new Set(rows.map((row) => row.value));
-}
-
-/**
- * Byte volume for the digests live has never seen, measured in the scratch
- * container because that is where those bytes actually are.
- */
-async function scratchDigestBytes(container: string, digests: readonly string[]): Promise<number> {
-  let total = 0;
-  for (const digest of digests) {
-    const encoded = (await scratchQuery(container, archiveDigestBytesForSql(digest))).trim();
-    total += (Buffer.byteLength(encoded, 'base64'));
-  }
-  return total;
-}
-
-async function measureDigests(container: string, strategies: ApplyStrategies): Promise<Pick<ApplyFacts, 'archiveDigestCount' | 'archiveDigestBytes' | 'liveDigestCount' | 'missingDigestCount' | 'missingDigestBytes'>> {
-  const empty = { archiveDigestCount: 0, archiveDigestBytes: 0, liveDigestCount: 0, missingDigestCount: 0, missingDigestBytes: 0 };
-  if (strategies[LARGE_OBJECT_TABLE] === 'skip') return empty;
-  const archiveDigests = lines(await scratchQuery(container, archiveDigestListSql()));
-  const liveDigests = await liveDigestSet();
-  const missing = archiveDigests.filter((digest) => !liveDigests.has(digest));
-  const [archiveBytes, liveDigestCount, copyBytes] = await Promise.all([
-    countFrom(await scratchQuery(container, archiveDigestBytesSql())),
-    liveScalar(liveDigestQuerySql()),
-    missing.length === 0 ? Promise.resolve(0) : scratchDigestBytes(container, missing),
-  ]);
-  return { archiveDigestCount: archiveDigests.length, archiveDigestBytes: archiveBytes, liveDigestCount, missingDigestCount: missing.length, missingDigestBytes: copyBytes };
-}
-
-async function measureFacts(container: string, strategies: ApplyStrategies, order: readonly string[]): Promise<ApplyFacts> {
-  const toc = await readToc(container);
-  const [liveColumns, livePkColumns, liveFkParents, liveRows, archiveRows, archiveColumns, databaseSizeBytes, digests] = await Promise.all([
-    liveGrouped(liveColumnsQuerySql, BACKUP_TABLE_NAMES),
-    liveGrouped(livePrimaryKeyQuerySql, BACKUP_TABLE_NAMES),
-    liveGrouped(liveFkParentQuerySql, BACKUP_TABLE_NAMES),
-    liveRowCounts(),
-    scratchRowCounts(container, order),
-    scratchColumns(container, order),
-    liveScalar(databaseSizeQuerySql()),
-    measureDigests(container, strategies),
-  ]);
-  return { scratchAlive: true, archiveTables: new Set(toc.catalogTables), archiveRows, archiveColumns, liveRows, liveColumns, livePkColumns, liveFkParents, ...digests, databaseSizeBytes };
-}
-
-/** Archive blobs must be self-consistent in the scratch container before any byte is copied. */
-async function assertArchiveBlobsIntact(container: string, strategies: ApplyStrategies): Promise<void> {
-  if (strategies[LARGE_OBJECT_TABLE] === 'skip') return;
-  const dangling = await countFrom(await scratchQuery(container, archiveDigestIntegritySql()));
-  if (dangling > 0) {
-    throw new Error(
-      `The archive's ${LARGE_OBJECT_TABLE} has ${dangling} row(s) whose large object is missing from the scratch container, so their bytes cannot be copied. Promote without ${LARGE_OBJECT_TABLE} or re-upload the archive.`,
-    );
-  }
-}
 
 function emptyReport(previewId: string, staging: string, reportId: string, generatedAtMs: number, errors: readonly string[]): ValidateReport {
   return { ok: false, reportId, generatedAt: new Date(generatedAtMs).toISOString(), previewId, stagingSchema: staging, tableReports: [], errors, warnings: [] };
@@ -277,6 +92,10 @@ async function readManifestEntries(): Promise<readonly string[]> {
   return list.map((entry) => (typeof entry.ts === 'string' ? `${entry.kind ?? 'full'}:${entry.ts}` : '')).filter((entry) => entry.length > 0);
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Waits for a manifest entry that was not there when the wait began, so the
  * entry observed afterwards belongs to the run this promote started. A timeout
@@ -308,219 +127,6 @@ async function runPrePromoteBackup(): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
-// Staging load
-// ---------------------------------------------------------------------------
-
-async function runLiveSql(env: LiveDatabaseEnv, sql: string, timeoutMs: number): Promise<string> {
-  const { stdout } = await execFileAsync(
-    'docker',
-    ['exec', '-e', `PGPASSWORD=${env.POSTGRES_PASSWORD}`, LIVE_CONTAINER, 'psql', '-v', 'ON_ERROR_STOP=1', '-U', env.POSTGRES_USER, '-d', env.POSTGRES_DB, '-t', '-A', '-c', sql],
-    { timeout: timeoutMs, maxBuffer: DOCKER_MAX_OUTPUT_BYTES },
-  );
-  return stdout;
-}
-
-/**
- * Loads one table's archive rows into its staging table as a single JSON
- * document. The rows leave the scratch container and re-enter the live
- * database through this process, because `pg_restore -L` cannot redirect a
- * restore into another schema.
- */
-async function loadStagingTable(container: string, env: LiveDatabaseEnv, staging: string, table: string, columns: readonly string[]): Promise<void> {
-  const pkColumns = catalogPrimaryKeys(table);
-  const exported = await settle(scratchQuery(container, scratchExportSql(table, columns, pkColumns), DOCKER_TIMEOUT_MS));
-  if (!exported.ok) {
-    throw new Error(
-      `"${table}" could not be read out of the scratch container: ${describeFailure(exported.error)}. The applier serialises one table at a time and cannot exceed ${MAX_TABLE_EXPORT_BYTES} bytes of output, so a table this large must be promoted on its own.`,
-    );
-  }
-  const payload = exported.value.trim();
-  if (Buffer.byteLength(payload) > MAX_TABLE_EXPORT_BYTES) {
-    throw new Error(`"${table}" serialises to more than the ${MAX_TABLE_EXPORT_BYTES} byte per-table ceiling.`);
-  }
-  await runLiveSql(env, stagingLoadSql(staging, table, columns).replace('$1::json', `'${payload.replace(/'/g, "''")}'::json`), APPLY_STATEMENT_TIMEOUT_MS);
-}
-
-/**
- * Drops any staging schema left by an earlier attempt before rebuilding it, so
- * a retried promote starts from a clean staging area rather than failing on a
- * name that is already taken.
- *
- * `fsobjects` is not staged: its digest list and its bytes are both read from
- * the scratch container, and a content-addressed table can carry one row per
- * stored file, so staging it would spend the export ceiling on rows nothing
- * reads back.
- */
-async function loadStaging(
-  container: string,
-  env: LiveDatabaseEnv,
-  staging: string,
-  order: readonly string[],
-  facts: ApplyFacts,
-): Promise<void> {
-  await runLiveSql(env, dropStagingSchemaSql(staging), DOCKER_TIMEOUT_MS);
-  await runLiveSql(env, createStagingSchemaSql(staging), DOCKER_TIMEOUT_MS);
-  for (const table of order.filter((name) => name !== LARGE_OBJECT_TABLE)) {
-    await runLiveSql(env, createStagingTableSql(staging, table), DOCKER_TIMEOUT_MS);
-    const columns = (facts.liveColumns.get(table) ?? []).filter((column) => (facts.archiveColumns.get(table) ?? []).includes(column));
-    await loadStagingTable(container, env, staging, table, columns);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Per-table transactions
-// ---------------------------------------------------------------------------
-
-/**
- * One table, one transaction. The statement timeout is local to it, so a
- * stalled merge rolls that table back and leaves every earlier commit in place.
- * The row count afterwards must equal what the strategy promised, or the
- * transaction is rolled back rather than reported as applied.
- */
-async function applyOneTable(
-  env: LiveDatabaseEnv,
-  staging: string,
-  table: string,
-  strategy: TableStrategy,
-  strategies: ApplyStrategies,
-  facts: ApplyFacts,
-): Promise<TableApplyRecord> {
-  const pkColumns = catalogPrimaryKeys(table);
-  const adminColumn = adminColumnFor(table, strategies);
-  const stagingRows = await liveCount(env, countRowsSql(staging, table));
-  const newRows = await liveCount(env, stagingNewRowCountSql(staging, table, pkColumns));
-  const liveBefore = await liveCount(env, countRowsSql('public', table));
-  const expectedAfter = strategy === 'overwrite' ? liveBefore - (stagingRows - newRows) + stagingRows : liveBefore + newRows;
-  await runLiveSql(env, `${await tableTransactionBody(env, staging, table, strategy, strategies, facts, pkColumns, adminColumn, expectedAfter)}\n`, APPLY_STATEMENT_TIMEOUT_MS + DOCKER_TIMEOUT_MS);
-  const liveAfter = await liveCount(env, countRowsSql('public', table));
-  if (liveAfter !== expectedAfter) {
-    throw new Error(`"${table}" ended with ${liveAfter} live row(s) where ${expectedAfter} were expected.`);
-  }
-  return {
-    table,
-    strategy,
-    status: 'applied',
-    liveBefore,
-    liveAfter,
-    merged: stagingRows,
-    ...tableNote(table, strategy, stagingRows, adminColumn, pkColumns),
-  };
-}
-
-/**
- * The sequence reset is resolved before the transaction opens and runs inside
- * it, so a key that cannot be advanced rolls the table back rather than leaving
- * it committed with a sequence that would hand out a colliding id.
- */
-async function sequenceResetStatements(env: LiveDatabaseEnv, table: string, pkColumns: readonly string[]): Promise<readonly string[]> {
-  if (pkColumns.length !== 1) return [];
-  const sequenceName = (await runLiveSql(env, sequenceNameQuerySql(table, pkColumns[0]), DOCKER_TIMEOUT_MS)).trim();
-  const sql = sequenceResetSql(table, pkColumns[0], sequenceName.length > 0 ? sequenceName : null);
-  return sql === null ? [] : [`${sql};`];
-}
-
-/**
- * The whole transaction for one table. The trailing assertion raises a division
- * by zero when the row count is not the one the strategy promised, which rolls
- * the table back instead of reporting it as applied.
- */
-async function tableTransactionBody(
-  env: LiveDatabaseEnv,
-  staging: string,
-  table: string,
-  strategy: TableStrategy,
-  strategies: ApplyStrategies,
-  facts: ApplyFacts,
-  pkColumns: readonly string[],
-  adminColumn: string | null,
-  expectedAfter: number,
-): Promise<string> {
-  const columns = facts.liveColumns.get(table) ?? [];
-  const statements =
-    strategy === 'overwrite'
-      ? [overwriteDeleteSql(staging, table, pkColumns), insertSelectSql(table, staging, columns, adminColumn)]
-      : [mergeInsertSql(table, staging, columns, pkColumns, adminColumn)];
-  return [
-    'BEGIN',
-    `${setLocalTimeoutSql(APPLY_STATEMENT_TIMEOUT_MS)};`,
-    ...statements,
-    ...(await sequenceResetStatements(env, table, pkColumns)),
-    `SELECT CASE WHEN (SELECT count(*) FROM ${qualifiedTable('public', table)}) = ${expectedAfter} THEN 1 ELSE 1 / 0 END`,
-    'COMMIT',
-  ].join('\n');
-}
-
-async function liveCount(env: LiveDatabaseEnv, sql: string): Promise<number> {
-  return countFrom(await runLiveSql(env, sql, DOCKER_TIMEOUT_MS));
-}
-
-function tableNote(table: string, strategy: TableStrategy, stagingRows: number, adminColumn: string | null, pkColumns: readonly string[]): { readonly note?: string } {
-  const notes: string[] = [];
-  if (adminColumn !== null) notes.push(`${adminColumn} set to NULL on ${stagingRows} restored row(s)`);
-  if (strategy === 'overwrite') notes.push(`replaced ${stagingRows} live row(s) the archive carries`);
-  if (pkColumns.length !== 1) notes.push('composite key, so no sequence was advanced');
-  return notes.length === 0 ? {} : { note: notes.join('; ') };
-}
-
-
-
-/**
- * Large objects are content-addressed, so a merge copies bytes only for digests
- * live has never seen and leaves the rest of the table alone. Each copied blob
- * is written with `lo_from_bytea`, which mints a live oid; the archive's own oid
- * is never reused because it names a large object in the scratch database.
- */
-async function applyLargeObjects(
-  container: string,
-  env: LiveDatabaseEnv,
-  strategy: TableStrategy,
-): Promise<TableApplyRecord> {
-  const liveBefore = await countFrom(await runLiveSql(env, liveDigestQuerySql(), DOCKER_TIMEOUT_MS));
-  const digests = lines(await scratchQuery(container, archiveDigestListSql()));
-  const liveDigests = await liveDigestSet();
-  const wanted = strategy === 'overwrite' ? digests : digests.filter((digest) => !liveDigests.has(digest));
-  let copied = 0;
-  for (const batch of batches(wanted)) {
-    if (strategy === 'overwrite') {
-      await runLiveSql(env, `BEGIN;\n${deleteDigestBatchSql(batch)};\nCOMMIT;\n`, APPLY_STATEMENT_TIMEOUT_MS);
-    }
-    copied += await copyBlobBatch(container, env, batch);
-  }
-  const liveAfter = await countFrom(await runLiveSql(env, liveDigestQuerySql(), DOCKER_TIMEOUT_MS));
-  return {
-    table: LARGE_OBJECT_TABLE,
-    strategy,
-    status: 'applied',
-    liveBefore,
-    liveAfter,
-    merged: copied,
-    note: strategy === 'overwrite'
-      ? `replaced ${digests.length} live digest(s) and copied ${copied} blob(s)`
-      : `reused ${digests.length - copied} live large object(s) and copied ${copied} blob(s)`,
-  };
-}
-
-/** Blob bytes transit this process, so the digest list is copied in bounded batches. */
-function* batches(items: readonly string[]): Generator<string[]> {
-  for (let start = 0; start < items.length; start += LARGE_OBJECT_BATCH_SIZE) {
-    yield items.slice(start, start + LARGE_OBJECT_BATCH_SIZE);
-  }
-}
-
-async function copyBlobBatch(container: string, env: LiveDatabaseEnv, digests: readonly string[]): Promise<number> {
-  const rows: LargeObjectCopy[] = [];
-  for (const digest of digests) {
-    const [encoded, description] = await Promise.all([
-      scratchQuery(container, archiveDigestBytesForSql(digest)),
-      scratchQuery(container, archiveDigestDescriptionSql(digest)),
-    ]);
-    rows.push({ digest, encoded: encoded.trim(), description: description.trim() });
-  }
-  await runLiveSql(env, `BEGIN;\n${fsobjectInsertSql(rows)};\nCOMMIT;\n`, APPLY_STATEMENT_TIMEOUT_MS);
-  return rows.length;
-}
-
-// ---------------------------------------------------------------------------
 // Promote
 // ---------------------------------------------------------------------------
 
@@ -542,12 +148,6 @@ function preconditionError(
   if (!strategiesValid) return `Not a catalog table or not a valid strategy: ${unknown.join(', ')}`;
   if (order.length === 0) return 'Every table is skipped, so there is nothing to promote.';
   return checkConfirmToken(staging, confirmToken, nowMs);
-}
-
-interface PromoteSetup {
-  readonly env: LiveDatabaseEnv;
-  readonly facts: ApplyFacts;
-  readonly warnings: readonly string[];
 }
 
 /**
@@ -596,18 +196,6 @@ export async function promotePreview(previewId: string, strategies: ApplyStrateg
   return finish(previewId, reportId, staging, gate.value, applied.records, order, applied.errors, cleanupError === null ? warnings : [...warnings, cleanupError]);
 }
 
-/**
- * Re-measures and re-plans immediately before writing, so a promote never acts
- * on a report whose rules passed minutes ago against a database that has since
- * moved.
- */
-async function preparePromote(container: string, strategies: ApplyStrategies, order: readonly string[]): Promise<PromoteSetup & { readonly planErrors: readonly string[] }> {
-  const facts = await measureFacts(container, strategies, order);
-  const plan = planApply(strategies, facts);
-  await assertArchiveBlobsIntact(container, strategies);
-  return { env: liveDatabaseEnv(), facts, warnings: plan.warnings, planErrors: plan.errors };
-}
-
 /** One committed transaction per table, stopping at the first failure. */
 async function applyTables(
   container: string,
@@ -633,16 +221,6 @@ async function applyTables(
     }
   }
   return { records, errors };
-}
-
-/**
- * The staging schema is dropped whatever happened. A failure here is reported
- * alongside the run rather than swallowed: leftover staging rows are harmless
- * but they are disk the operator should know is still there.
- */
-async function dropStaging(staging: string, env: LiveDatabaseEnv): Promise<string | null> {
-  const dropped = await settle(runLiveSql(env, dropStagingSchemaSql(staging), DOCKER_TIMEOUT_MS));
-  return dropped.ok ? null : `Staging schema ${staging} could not be dropped: ${describeFailure(dropped.error)}`;
 }
 
 /**
