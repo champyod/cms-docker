@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Archive, Download, RefreshCw, Trash2 } from 'lucide-react';
 
 import { deleteArchive, listArchives } from '@/app/actions/backups';
@@ -18,6 +18,16 @@ export interface ArchiveBrowserSectionProps {
 
 const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
 const BYTE_STEP = 1024;
+
+/** Bounded backoff: a selective dump is started detached, so the archive appears later. */
+const POLL_BACKOFF_MS: readonly number[] = [2_000, 4_000, 8_000];
+
+type BackupWatchState = 'idle' | 'waiting' | 'timedOut';
+
+const BACKUP_WATCH_MESSAGE: Readonly<Record<Exclude<BackupWatchState, 'idle'>, string>> = {
+    waiting: 'Backup is running in the background. Checking for the new archive...',
+    timedOut: 'Backup is still running in the background. It can take several minutes — use Refresh to check again.',
+};
 
 function describeError(error: unknown, fallback: string): string {
     return error instanceof Error && error.message.length > 0 ? error.message : fallback;
@@ -42,12 +52,24 @@ function formatDate(iso: string): string {
     return Number.isNaN(parsed.getTime()) ? 'Unknown date' : parsed.toLocaleString();
 }
 
+/** A growing dump keeps changing size and mtime, so either one proves the run reached the archive dir. */
+function archiveFingerprint(archives: readonly BackupArchive[]): string {
+    const newest = archives[0];
+    return newest === undefined ? 'none' : `${newest.name}:${newest.modifiedAt}:${newest.sizeBytes}`;
+}
+
 export function ArchiveBrowserSection({ refreshToken }: ArchiveBrowserSectionProps) {
     const [archives, setArchives] = useState<readonly BackupArchive[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
     const [deletingName, setDeletingName] = useState<string | null>(null);
+    const [backupWatch, setBackupWatch] = useState<BackupWatchState>('idle');
+    const knownArchivesRef = useRef<readonly BackupArchive[]>([]);
+    const isMountedRef = useRef(true);
+    const isFirstLoadRef = useRef(true);
+    const pollGenerationRef = useRef(0);
+    const cancelPollDelayRef = useRef<(() => void) | null>(null);
 
     const loadArchives = useCallback(async () => {
         setIsLoading(true);
@@ -55,7 +77,9 @@ export function ArchiveBrowserSection({ refreshToken }: ArchiveBrowserSectionPro
         try {
             const result = await listArchives();
             if (result.success) {
-                setArchives(sortNewestFirst(result.archives ?? []));
+                const sorted = sortNewestFirst(result.archives ?? []);
+                knownArchivesRef.current = sorted;
+                setArchives(sorted);
             } else {
                 setArchives([]);
                 setLoadError(result.error ?? 'Could not read the backup archive list.');
@@ -68,9 +92,65 @@ export function ArchiveBrowserSection({ refreshToken }: ArchiveBrowserSectionPro
         }
     }, []);
 
+    const waitForPollDelay = useCallback(
+        (ms: number): Promise<void> =>
+            new Promise((resolve) => {
+                const timer = setTimeout(resolve, ms);
+                cancelPollDelayRef.current = () => {
+                    clearTimeout(timer);
+                    resolve();
+                };
+            }),
+        [],
+    );
+
+    const stopPolling = useCallback(() => {
+        pollGenerationRef.current += 1;
+        cancelPollDelayRef.current?.();
+        cancelPollDelayRef.current = null;
+    }, []);
+
+    const pollForNewArchive = useCallback(
+        async (baseline: string) => {
+            const generation = pollGenerationRef.current + 1;
+            pollGenerationRef.current = generation;
+            setBackupWatch('waiting');
+            try {
+                for (const delayMs of POLL_BACKOFF_MS) {
+                    await waitForPollDelay(delayMs);
+                    if (pollGenerationRef.current !== generation) return;
+                    const result = await listArchives().catch(() => null);
+                    if (result === null || !result.success) continue;
+                    const sorted = sortNewestFirst(result.archives ?? []);
+                    if (archiveFingerprint(sorted) === baseline) continue;
+                    knownArchivesRef.current = sorted;
+                    setArchives(sorted);
+                    setBackupWatch('idle');
+                    return;
+                }
+                setBackupWatch('timedOut');
+            } finally {
+                cancelPollDelayRef.current = null;
+            }
+        },
+        [waitForPollDelay],
+    );
+
+    useEffect(() => () => {
+        isMountedRef.current = false;
+    }, []);
+
     useEffect(() => {
-        void loadArchives();
-    }, [loadArchives, refreshToken]);
+        const baseline = archiveFingerprint(knownArchivesRef.current);
+        const isFirstLoad = isFirstLoadRef.current;
+        isFirstLoadRef.current = false;
+        void (async () => {
+            await loadArchives();
+            if (isFirstLoad || !isMountedRef.current) return;
+            await pollForNewArchive(baseline);
+        })();
+        return stopPolling;
+    }, [loadArchives, pollForNewArchive, refreshToken, stopPolling]);
 
     const handleDelete = async (name: string) => {
         if (!confirm(`Delete backup archive ${name}? This cannot be undone.`)) return;
@@ -111,6 +191,12 @@ export function ArchiveBrowserSection({ refreshToken }: ArchiveBrowserSectionPro
                         Refresh
                     </Button>
                 </Stack>
+
+                {backupWatch !== 'idle' && (
+                    <Text variant="small" role="status" aria-live="polite" className="text-amber-400">
+                        {BACKUP_WATCH_MESSAGE[backupWatch]}
+                    </Text>
+                )}
 
                 {loadError !== null ? (
                     <Text variant="small" role="alert" className="text-destructive">

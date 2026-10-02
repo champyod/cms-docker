@@ -12,7 +12,7 @@ import { BACKUP_TABLES, validateTableSelection } from '@/lib/backup-table-catalo
 import type { BackupTable } from '@/lib/backup-table-catalog';
 
 export interface BackupRunStatus {
-    readonly tone: 'success' | 'error';
+    readonly tone: 'started' | 'error';
     readonly message: string;
 }
 
@@ -88,7 +88,7 @@ export function BackupSelectionSection({ onBackupComplete }: BackupSelectionSect
         try {
             const result = await triggerSelectiveBackup(orderedSelection);
             if (result.success) {
-                setStatus({ tone: 'success', message: result.message ?? `Backed up ${orderedSelection.length} table(s).` });
+                setStatus({ tone: 'started', message: result.message ?? `Selective backup of ${orderedSelection.length} table(s) started in the background.` });
                 onBackupComplete();
             } else {
                 setStatus({ tone: 'error', message: result.error ?? 'Selective backup failed.' });
@@ -171,7 +171,7 @@ export function BackupSelectionSection({ onBackupComplete }: BackupSelectionSect
                         variant="small"
                         role="status"
                         aria-live="polite"
-                        className={status.tone === 'success' ? 'text-emerald-400' : 'text-destructive'}
+                        className={status.tone === 'started' ? 'text-amber-400' : 'text-destructive'}
                     >
                         {status.message}
                     </Text>

@@ -8,7 +8,8 @@ FROM alpine:3.22
 # postgresql-client: for CSV exports.
 # bc: for calculations in backup script.
 # jq: for JSON parsing of container config.
-RUN apk add --no-cache bash curl docker-cli procps postgresql-client bc jq
+# python3: manifest.json entries, where kind and the table list are written.
+RUN apk add --no-cache bash curl docker-cli procps postgresql-client bc jq python3
 
 # We copy the script from the context (repo root)
 COPY scripts/__monitor.sh /usr/local/bin/monitor.sh

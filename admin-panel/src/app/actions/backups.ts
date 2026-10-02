@@ -1,46 +1,41 @@
 'use server';
 
 import { execFile } from 'node:child_process';
-import { readFile, unlink } from 'node:fs/promises';
-import path from 'node:path';
+import { unlink } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { revalidatePath } from 'next/cache';
 
 import { BACKUP_TABLES, validateTableSelection } from '@/lib/backup-table-catalog';
 import type { TableSelectionResult } from '@/lib/backup-table-catalog';
-import { getBackupRoot, listArchives as readArchiveFiles, resolveArchivePath } from '@/lib/backup-archives';
+import { listArchives as readArchiveFiles, resolveArchivePath } from '@/lib/backup-archives';
 import type { BackupArchive } from '@/lib/backup-archives';
 import { logToDiscord } from '@/lib/discord-notifier';
 import { ensurePermission } from '@/lib/permissions';
-import { getRepoRoot } from '@/lib/repo-root';
 
 const execFileAsync = promisify(execFile);
 
-const BACKUP_SCRIPT_PATH = 'scripts/__backup.sh';
-const BACKUP_TIMEOUT_MS = 600_000;
+const MONITOR_CONTAINER = 'cms-monitor';
+const MONITOR_BACKUP_SCRIPT = '/usr/local/bin/cms-backup.sh';
+const BACKUP_START_TIMEOUT_MS = 30_000;
 const BACKUP_MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
 const BACKUP_CONSOLE_COLOR = 16711680;
 const MAINTENANCE_PAGE = '/[locale]/maintenance';
-const MANIFEST_FILE = 'manifest.json';
 
 const LARGE_OBJECT_TABLES: ReadonlySet<string> = new Set(
   BACKUP_TABLES.filter((table) => table.needsLargeObjects === true).map((table) => table.name),
 );
 
-export interface BackupManifestSummary {
-  readonly ts: string;
-  readonly kind: string;
-  readonly tables: readonly string[];
-  readonly pgVersion: string;
-  readonly totalBytes: number;
-}
-
+/**
+ * The dump is handed to cms-monitor detached, so this resolves the moment the
+ * container accepts the run rather than when the archive exists. No manifest
+ * entry is reported: any entry readable at that moment belongs to an older run.
+ */
 export interface SelectiveBackupResult {
   readonly success: boolean;
+  readonly started: boolean;
   readonly message?: string;
   readonly error?: string;
   readonly warnings: readonly string[];
-  readonly entry?: BackupManifestSummary;
 }
 
 export interface ArchiveListResult {
@@ -76,70 +71,34 @@ function describeFailure(error: unknown): string {
   return stderr.length > 0 ? `${error.message}: ${stderr}` : error.message;
 }
 
-function asString(value: unknown, fallback: string): string {
-  return typeof value === 'string' ? value : fallback;
-}
-
-function asStringList(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((entry): entry is string => typeof entry === 'string');
-}
-
-function summarizeManifestEntry(entry: Record<string, unknown>): BackupManifestSummary {
-  const sizes = typeof entry.sizes === 'object' && entry.sizes !== null ? (entry.sizes as Record<string, unknown>) : {};
-  return {
-    ts: asString(entry.ts, ''),
-    kind: asString(entry.kind, 'full'),
-    tables: asStringList(entry.tables),
-    pgVersion: asString(entry.pg_version, 'unknown'),
-    totalBytes: typeof sizes.total_bytes === 'number' ? sizes.total_bytes : 0,
-  };
-}
-
-async function readLatestManifestEntry(): Promise<BackupManifestSummary | null> {
-  const raw = await readFile(path.join(getBackupRoot(), MANIFEST_FILE), 'utf8').catch(() => null);
-  if (raw === null) return null;
-  try {
-    const entries: unknown = JSON.parse(raw);
-    const latest: unknown = Array.isArray(entries) ? entries.at(-1) : undefined;
-    if (typeof latest !== 'object' || latest === null) return null;
-    return summarizeManifestEntry(latest as Record<string, unknown>);
-  } catch (error) {
-    console.error('Selective backup manifest is unreadable:', error);
-    return null;
-  }
-}
-
-async function runBackupScript(tables: readonly string[], includeLargeObjects: boolean): Promise<void> {
-  const rootDir = getRepoRoot();
-  const args = [path.join(rootDir, BACKUP_SCRIPT_PATH), '--tables', tables.join(',')];
+async function startBackupInMonitor(tables: readonly string[], includeLargeObjects: boolean): Promise<void> {
+  const args = ['exec', '-d', MONITOR_CONTAINER, 'bash', MONITOR_BACKUP_SCRIPT, '--tables', tables.join(',')];
   if (includeLargeObjects) args.push('--large-objects');
-  await execFileAsync('bash', args, { cwd: rootDir, timeout: BACKUP_TIMEOUT_MS, maxBuffer: BACKUP_MAX_OUTPUT_BYTES });
+  await execFileAsync('docker', args, { timeout: BACKUP_START_TIMEOUT_MS, maxBuffer: BACKUP_MAX_OUTPUT_BYTES });
 }
 
 export async function triggerSelectiveBackup(tables: string[]): Promise<SelectiveBackupResult> {
   await ensurePermission('all');
   if (!Array.isArray(tables) || !tables.every((table) => typeof table === 'string')) {
-    return { success: false, error: 'Table selection must be a list of names.', warnings: [] };
+    return { success: false, started: false, error: 'Table selection must be a list of names.', warnings: [] };
   }
   const validation = validateTableSelection(tables);
   if (!validation.valid) {
-    return { success: false, error: describeInvalidSelection(validation), warnings: [] };
+    return { success: false, started: false, error: describeInvalidSelection(validation), warnings: [] };
   }
   const selection = orderSelection(tables);
   try {
     await logToDiscord('Selective Backup', `Admin triggered a selective backup of ${selection.length} table(s): ${selection.join(', ')}`);
-    await runBackupScript(selection, selectionNeedsLargeObjects(selection));
+    await startBackupInMonitor(selection, selectionNeedsLargeObjects(selection));
   } catch (error) {
-    return { success: false, error: describeFailure(error), warnings: validation.warnings };
+    return { success: false, started: false, error: describeFailure(error), warnings: validation.warnings };
   }
   revalidatePath(MAINTENANCE_PAGE, 'page');
-  const entry = await readLatestManifestEntry();
   return {
     success: true,
-    message: `Selective backup of ${selection.length} table(s) completed.`,
+    started: true,
+    message: `Selective backup of ${selection.length} table(s) started in the background on ${MONITOR_CONTAINER}. Follow the Discord channel for the result, or wait for the new dump to appear in the archive list.`,
     warnings: validation.warnings,
-    entry: entry ?? undefined,
   };
 }
 
