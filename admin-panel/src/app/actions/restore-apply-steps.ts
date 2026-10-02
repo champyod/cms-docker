@@ -5,8 +5,8 @@
  * they run in and the report the run produces.
  */
 
-import { LARGE_OBJECT_TABLE, adminColumnFor, archiveDigestBytesForSql, archiveDigestDescriptionSql, archiveDigestListSql, catalogPrimaryKeys, countRowsSql, createStagingSchemaSql, createStagingTableSql, deleteDigestBatchSql, dropStagingSchemaSql, fsobjectInsertSql, insertSelectSql, liveDigestQuerySql, mergeInsertSql, overwriteDeleteSql, qualifiedTable, scratchExportSql, sequenceNameQuerySql, sequenceResetSql, setLocalTimeoutSql, stagingLoadSql, stagingNewRowCountSql } from '@/lib/restore-apply';
-import type { ApplyFacts, ApplyStrategies, LargeObjectCopy, TableApplyRecord, TableStrategy } from '@/lib/restore-apply';
+import { LARGE_OBJECT_TABLE, adminColumnFor, archiveDigestBytesForSql, archiveDigestDescriptionSql, archiveDigestListSql, catalogPrimaryKeys, countRowsSql, createStagingSchemaSql, createStagingTableSql, deleteDigestBatchSql, dropStagingSchemaSql, fsobjectInsertSql, insertSelectSql, liveDigestQuerySql, mergeInsertSql, overwriteDeleteSql, qualifiedTable, relayTable, sequenceNameQuerySql, sequenceResetSql, setLocalTimeoutSql, stagingLoadSql, stagingNewRowCountSql } from '@/lib/restore-apply';
+import type { ApplyFacts, ApplyStrategies, LargeObjectCopy, RelayBatch, RelayPage, TableApplyRecord, TableStrategy } from '@/lib/restore-apply';
 import { DOCKER_TIMEOUT_MS, countFrom, lines, liveCount, liveDigestSet, runLiveSql } from './restore-apply-measure';
 import type { LiveDatabaseEnv } from './restore-apply-measure';
 import { describeFailure, scratchQuery, settle } from './restore-preview-run';
@@ -14,10 +14,10 @@ import { describeFailure, scratchQuery, settle } from './restore-preview-run';
 /** Per-transaction budget for one table's merge. */
 export const APPLY_STATEMENT_TIMEOUT_MS = 600_000;
 /**
- * Bounded so an oversized table fails loudly instead of exhausting the panel.
- * This matches the shared docker runner's stdout cap, so the ceiling is the same
- * one `scratchQuery` already enforces and the failure is reported here as an
- * actionable message instead of arriving as an opaque exec error.
+ * Bounded per chunk rather than per table, so an oversized table is paged
+ * instead of refused. This matches the shared docker runner's stdout cap, which
+ * the relay stays inside by paging; a chunk that would exceed it is reported
+ * here as an actionable message instead of arriving as an opaque exec error.
  */
 export const MAX_TABLE_EXPORT_BYTES = 8 * 1024 * 1024;
 const LARGE_OBJECT_BATCH_SIZE = 200;
@@ -27,24 +27,33 @@ const LARGE_OBJECT_BATCH_SIZE = 200;
 // ---------------------------------------------------------------------------
 
 /**
- * Loads one table's archive rows into its staging table as a single JSON
- * document. The rows leave the scratch container and re-enter the live
- * database through this process, because `pg_restore -L` cannot redirect a
- * restore into another schema.
+ * Loads one table's archive rows into its staging table. The rows leave the
+ * scratch container and re-enter the live database through this process, because
+ * `pg_restore -L` cannot redirect a restore into another schema; keyset paging
+ * is what bounds that transport, so any table size streams through memory that
+ * never grows with it.
  */
 async function loadStagingTable(container: string, env: LiveDatabaseEnv, staging: string, table: string, columns: readonly string[]): Promise<void> {
-  const pkColumns = catalogPrimaryKeys(table);
-  const exported = await settle(scratchQuery(container, scratchExportSql(table, columns, pkColumns), DOCKER_TIMEOUT_MS));
-  if (!exported.ok) {
-    throw new Error(
-      `"${table}" could not be read out of the scratch container: ${describeFailure(exported.error)}. The applier serialises one table at a time and cannot exceed ${MAX_TABLE_EXPORT_BYTES} bytes of output, so a table this large must be promoted on its own.`,
-    );
+  await relayTable(
+    (page) => readStagingPage(container, page),
+    (batch) => writeStagingBatch(env, staging, table, columns, batch),
+    { table, columns, pkColumns: catalogPrimaryKeys(table) },
+  );
+}
+
+async function readStagingPage(container: string, page: RelayPage): Promise<string> {
+  try {
+    return await scratchQuery(container, page.sql, page.timeoutMs);
+  } catch (error) {
+    throw new Error(`"${page.table}" could not be read out of the scratch container: ${describeFailure(error)}`);
   }
-  const payload = exported.value.trim();
-  if (Buffer.byteLength(payload) > MAX_TABLE_EXPORT_BYTES) {
-    throw new Error(`"${table}" serialises to more than the ${MAX_TABLE_EXPORT_BYTES} byte per-table ceiling.`);
+}
+
+async function writeStagingBatch(env: LiveDatabaseEnv, staging: string, table: string, columns: readonly string[], batch: RelayBatch): Promise<void> {
+  if (Buffer.byteLength(batch.payload) > MAX_TABLE_EXPORT_BYTES) {
+    throw new Error(`"${table}" serialises a chunk of ${batch.rows} row(s) to more than the ${MAX_TABLE_EXPORT_BYTES} byte ceiling one chunk may carry.`);
   }
-  await runLiveSql(env, stagingLoadSql(staging, table, columns).replace('$1::json', `'${payload.replace(/'/g, "''")}'::json`), APPLY_STATEMENT_TIMEOUT_MS);
+  await runLiveSql(env, stagingLoadSql(staging, table, columns).replace('$1::json', `'${batch.payload.replace(/'/g, "''")}'::json`), APPLY_STATEMENT_TIMEOUT_MS);
 }
 
 /**
@@ -54,8 +63,7 @@ async function loadStagingTable(container: string, env: LiveDatabaseEnv, staging
  *
  * `fsobjects` is not staged: its digest list and its bytes are both read from
  * the scratch container, and a content-addressed table can carry one row per
- * stored file, so staging it would spend the export ceiling on rows nothing
- * reads back.
+ * stored file, so staging it would page rows nothing reads back.
  */
 export async function loadStaging(
   container: string,

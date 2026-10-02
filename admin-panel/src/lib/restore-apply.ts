@@ -66,6 +66,10 @@ export {
   stagingSchemaTableCountSql,
 } from '@/lib/restore-apply-sql-queries';
 
+// The chunked row transport the staging load pages through.
+export { RELAY_CHUNK_SIZE, RELAY_CHUNK_TIMEOUT_MS, relayPageSql, relayTable } from '@/lib/restore-apply-relay';
+export type { RelayBatch, RelayOptions, RelayPage, RelayProgress, RelayRow, RelayRows, RelaySink, RelaySource } from '@/lib/restore-apply-relay';
+
 // The rules that must hold before any live row is written.
 export {
   LARGE_TABLE_ROW_WARN,
