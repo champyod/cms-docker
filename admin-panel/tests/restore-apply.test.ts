@@ -196,12 +196,13 @@ describe('planApply', () => {
     expect(blobWarning).toContain('20 digest(s) (about 10 MB)');
   });
 
-  it('warns that a table big enough to exceed the export ceiling stops the run', () => {
+  it('warns that a table above the row threshold costs a longer promote, not a refused run', () => {
     const archiveRows = new Map(BACKUP_TABLE_NAMES.map((table) => [table, table === 'submissions' ? LARGE_TABLE_ROW_WARN : 10]));
     const plan = planApply(mergeAll(), liveFacts({ archiveRows }));
     const submissions = plan.tableReports.find((row) => row.table === 'submissions');
-    expect(submissions?.warnings.join(' ')).toContain('serialises as one document per table');
-    expect(plan.tableReports.find((row) => row.table === 'users')?.warnings.join(' ')).not.toContain('serialises');
+    expect(submissions?.warnings.join(' ')).toContain('relays them in chunks');
+    expect(submissions?.warnings.join(' ')).toContain('per chunk, not per table');
+    expect(plan.tableReports.find((row) => row.table === 'users')?.warnings.join(' ')).not.toContain('relays them in chunks');
     expect(plan.errors).toEqual([]);
   });
 

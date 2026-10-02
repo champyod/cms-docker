@@ -19,7 +19,6 @@ import {
   liveDigestQuerySql,
   mergeInsertSql,
   overwriteDeleteSql,
-  scratchExportSql,
   sequenceNameQuerySql,
   sequenceResetSql,
   setLocalTimeoutSql,
@@ -105,13 +104,6 @@ describe('staging load statements', () => {
       'CREATE TABLE "restore_staging_a1b2c3d4"."contests" (LIKE "public"."contests")',
     );
     expect(createStagingTableSql(STAGING, 'contests')).not.toContain('INCLUDING');
-  });
-
-  it('exports archive rows as one JSON document ordered by the primary key', () => {
-    expect(scratchExportSql('users', ['id', 'name'], ['id'])).toBe(
-      'SELECT coalesce(json_agg(row_to_json(s))::text, \'[]\') FROM ' +
-        '(SELECT "id", "name" FROM "public"."users" ORDER BY "id") AS s',
-    );
   });
 
   it('rebuilds the rows with postgres, naming every column on both sides', () => {

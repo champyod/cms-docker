@@ -99,7 +99,7 @@ export interface ApplyPlan {
 }
 
 const SPACE_WARN_RATIO = 0.1;
-/** Row count at which the per-table JSON export is worth warning about before promote. */
+/** Row count at which a table is worth warning about before promote; the relay pages any table size, so nothing stops. */
 export const LARGE_TABLE_ROW_WARN = 50_000;
 
 function countOf(counts: ReadonlyMap<string, number>, table: string): number {
@@ -190,7 +190,7 @@ function tableWarnings(facts: ApplyFacts, table: string, strategies: ApplyStrate
   }
   if (archiveRows >= LARGE_TABLE_ROW_WARN) {
     warnings.push(
-      `"${table}" carries ${archiveRows} row(s), which the applier serialises as one document per table; a table this size can exceed the export ceiling and will stop the run before any row is written.`,
+      `"${table}" carries ${archiveRows} row(s); the applier relays them in chunks, so this costs a longer promote rather than a refused run. The ceiling it reports is per chunk, not per table.`,
     );
   }
   const extra = columnsOf(facts.archiveColumns, table).filter((column) => !columnsOf(facts.liveColumns, table).includes(column));

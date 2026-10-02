@@ -19,7 +19,7 @@ export const APPLY_STATEMENT_TIMEOUT_MS = 600_000;
  * the relay stays inside by paging; a chunk that would exceed it is reported
  * here as an actionable message instead of arriving as an opaque exec error.
  */
-export const MAX_TABLE_EXPORT_BYTES = 8 * 1024 * 1024;
+export const MAX_RELAY_CHUNK_BYTES = 8 * 1024 * 1024;
 const LARGE_OBJECT_BATCH_SIZE = 200;
 
 // ---------------------------------------------------------------------------
@@ -50,8 +50,8 @@ async function readStagingPage(container: string, page: RelayPage): Promise<stri
 }
 
 async function writeStagingBatch(env: LiveDatabaseEnv, staging: string, table: string, columns: readonly string[], batch: RelayBatch): Promise<void> {
-  if (Buffer.byteLength(batch.payload) > MAX_TABLE_EXPORT_BYTES) {
-    throw new Error(`"${table}" serialises a chunk of ${batch.rows} row(s) to more than the ${MAX_TABLE_EXPORT_BYTES} byte ceiling one chunk may carry.`);
+  if (Buffer.byteLength(batch.payload) > MAX_RELAY_CHUNK_BYTES) {
+    throw new Error(`"${table}" serialises a chunk of ${batch.rows} row(s) to more than the ${MAX_RELAY_CHUNK_BYTES} byte ceiling one chunk may carry.`);
   }
   await runLiveSql(env, stagingLoadSql(staging, table, columns).replace('$1::json', `'${batch.payload.replace(/'/g, "''")}'::json`), APPLY_STATEMENT_TIMEOUT_MS);
 }

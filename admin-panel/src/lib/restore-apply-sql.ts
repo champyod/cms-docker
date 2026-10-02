@@ -126,18 +126,6 @@ export function createStagingTableSql(stagingSchema: string, table: string): str
 // Row data transport
 // ---------------------------------------------------------------------------
 
-/**
- * The archive's rows leave the scratch container as one JSON document per
- * table. `psql -t -A` prints a bare `SELECT` value with no command tag, which
- * `COPY ... TO STDOUT` cannot promise, so the rows are serialized here and
- * rebuilt by postgres on the live side.
- */
-export function scratchExportSql(table: string, columns: readonly string[], pkColumns: readonly string[]): string {
-  const selected = columns.map(quoteIdentifier).join(', ');
-  const order = (pkColumns.length > 0 ? pkColumns : columns).map(quoteIdentifier).join(', ');
-  return `SELECT coalesce(json_agg(row_to_json(s))::text, '[]') FROM (SELECT ${selected} FROM ${qualifiedTable('public', table)} ORDER BY ${order}) AS s`;
-}
-
 export function stagingLoadSql(stagingSchema: string, table: string, columns: readonly string[]): string {
   const record = `json_populate_recordset(NULL::${qualifiedTable(stagingSchema, table)}, $1::json) AS r`;
   const selected = columns.map((column) => `r.${quoteIdentifier(column)}`).join(', ');

@@ -16,7 +16,7 @@ import type { LiveDatabaseEnv } from './restore-apply-measure';
 import { applyLargeObjects, applyOneTable, dropStaging, loadStaging } from './restore-apply-steps';
 import { describeFailure, runDocker, settle } from './restore-preview-run';
 
-export { APPLY_STATEMENT_TIMEOUT_MS, MAX_TABLE_EXPORT_BYTES } from './restore-apply-steps';
+export { APPLY_STATEMENT_TIMEOUT_MS, MAX_RELAY_CHUNK_BYTES } from './restore-apply-steps';
 
 const execFileAsync = promisify(execFile);
 

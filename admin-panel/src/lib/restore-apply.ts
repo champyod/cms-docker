@@ -39,7 +39,6 @@ export {
   mergeInsertSql,
   overwriteDeleteSql,
   scratchColumnsSql,
-  scratchExportSql,
   sequenceNameQuerySql,
   sequenceResetSql,
   setLocalTimeoutSql,
