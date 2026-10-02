@@ -10,12 +10,15 @@ import { Text } from '@/components/core/Typography';
 import { Button } from '@/components/core/Button';
 import { Input } from '@/components/core/Input';
 import { Loading } from '@/components/core/Loading';
+import { BackupSelectionSection } from '@/components/maintenance/BackupSelectionSection';
+import { ArchiveBrowserSection } from '@/components/maintenance/ArchiveBrowserSection';
 
 export default function MaintenanceClient() {
   const [data, setData] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
+  const [archiveRefreshToken, setArchiveRefreshToken] = useState(0);
 
   const loadData = async () => {
     setLoading(true);
@@ -137,6 +140,9 @@ export default function MaintenanceClient() {
                     </Stack>
                 </Stack>
             </Card>
+
+            <BackupSelectionSection onBackupComplete={() => setArchiveRefreshToken((token) => token + 1)} />
+            <ArchiveBrowserSection refreshToken={archiveRefreshToken} />
         </Stack>
 
         {/* Discord Section */}
