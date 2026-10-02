@@ -50,8 +50,12 @@ export const LARGE_OBJECT_TABLE = 'fsobjects';
 export const LARGE_OBJECT_DIGEST_COLUMN = 'digest';
 export const LARGE_OBJECT_OID_COLUMN = 'loid';
 export const LARGE_OBJECT_DESCRIPTION_COLUMN = 'description';
-/** `pg_largeobject` stores one 8192-byte chunk per row, so chunk count times this is the byte length. */
-export const LARGE_OBJECT_CHUNK_BYTES = 8192;
+/**
+ * `pg_largeobject` stores one chunk per row, sized `LOBLKSIZE`, which postgres
+ * defines as a quarter of `BLCKSZ` and leaves at 8192 bytes by default: 2048
+ * bytes per chunk, so a chunk count times this is the byte length.
+ */
+export const LARGE_OBJECT_CHUNK_BYTES = 2048;
 /**
  * Archive digests already stored live are reused by their live oid; only digests
  * live has never seen need their bytes copied out of the scratch container.
@@ -126,8 +130,14 @@ export function createStagingTableSql(stagingSchema: string, table: string): str
 // Row data transport
 // ---------------------------------------------------------------------------
 
-export function stagingLoadSql(stagingSchema: string, table: string, columns: readonly string[]): string {
-  const record = `json_populate_recordset(NULL::${qualifiedTable(stagingSchema, table)}, $1::json) AS r`;
+/**
+ * Loads one page of rows into its staging table. The page is a quoted literal
+ * rather than a bound parameter: `psql -c` speaks the simple query protocol, so
+ * there is no bind parameter to bind it to, and one that stays in the statement
+ * text would reach the server unbound.
+ */
+export function stagingLoadSql(stagingSchema: string, table: string, columns: readonly string[], payload: string): string {
+  const record = `json_populate_recordset(NULL::${qualifiedTable(stagingSchema, table)}, '${sqlLiteral(payload)}'::json) AS r`;
   const selected = columns.map((column) => `r.${quoteIdentifier(column)}`).join(', ');
   return `INSERT INTO ${qualifiedTable(stagingSchema, table)} (${columns.map(quoteIdentifier).join(', ')}) SELECT ${selected} FROM ${record}`;
 }
@@ -205,6 +215,9 @@ export function deleteDigestBatchSql(digests: readonly string[]): string {
   return `DELETE FROM ${qualifiedTable('public', LARGE_OBJECT_TABLE)} WHERE ${quoteIdentifier(LARGE_OBJECT_DIGEST_COLUMN)} IN (${list})`;
 }
 
+/** A sequence the catalog reported is always a schema-qualified identifier. */
+const SEQUENCE_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_$]*\.[A-Za-z_][A-Za-z0-9_$]*$/;
+
 /**
  * Advance the sequence behind a single-column serial or identity primary key.
  *
@@ -214,12 +227,17 @@ export function deleteDigestBatchSql(digests: readonly string[]): string {
  * key such as `fsobjects.digest`. A null name means there is nothing to
  * advance and no statement is built. The next value is one past the highest
  * live id and left uncalled, which is idempotent and safe on an empty table.
+ *
+ * The resolved name is embedded as a validated quoted literal rather than looked
+ * up with `$1`/`$2`: this statement runs through `psql -c`, whose simple query
+ * protocol binds nothing, so a parameter here would fail on every serial key.
  */
 export function sequenceResetSql(table: string, pkColumn: string, sequenceName: string | null): string | null {
   if (sequenceName === null) return null;
+  if (!SEQUENCE_NAME_PATTERN.test(sequenceName)) throw new Error(`Refusing to build a sequence reset from a sequence name that is not a qualified identifier: ${sequenceName}`);
   const column = quoteIdentifier(pkColumn);
   const next = `greatest(coalesce((SELECT max(${column}) FROM ${qualifiedTable('public', table)}), 0) + 1, 1)`;
-  return `SELECT pg_catalog.setval(pg_catalog.pg_get_serial_sequence($1, $2), ${next}, false)::text`;
+  return `SELECT pg_catalog.setval('${sqlLiteral(sequenceName)}'::regclass, ${next}, false)::text`;
 }
 
 /** The live database decides which primary keys own a sequence; this reports one. */

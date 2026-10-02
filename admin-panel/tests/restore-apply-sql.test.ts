@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   ADMIN_ID_COLUMN,
+  LARGE_OBJECT_CHUNK_BYTES,
   LARGE_OBJECT_TABLE,
   STAGING_SCHEMA_PREFIX,
   archiveDigestBytesForSql,
@@ -107,12 +108,18 @@ describe('staging load statements', () => {
   });
 
   it('rebuilds the rows with postgres, naming every column on both sides', () => {
-    const sql = stagingLoadSql(STAGING, 'users', ['id', 'name']);
+    const sql = stagingLoadSql(STAGING, 'users', ['id', 'name'], '[{"id":1,"name":"Ada"}]');
     expect(sql).toBe(
       'INSERT INTO "restore_staging_a1b2c3d4"."users" ("id", "name") ' +
-        'SELECT r."id", r."name" FROM json_populate_recordset(NULL::"restore_staging_a1b2c3d4"."users", $1::json) AS r',
+        'SELECT r."id", r."name" FROM json_populate_recordset(NULL::"restore_staging_a1b2c3d4"."users", \'[{"id":1,"name":"Ada"}]\'::json) AS r',
     );
     expect(sql).not.toContain('SELECT *');
+  });
+
+  it('leaves the staging load nothing to bind, because psql -c binds no parameter', () => {
+    const sql = stagingLoadSql(STAGING, 'users', ['id', 'name'], '[{"id":1,"name":"it\'s Ada"}]');
+    expect(sql).not.toMatch(/\$\d/);
+    expect(sql).toContain('\'[{"id":1,"name":"it\'\'s Ada"}]\'::json');
   });
 
   it('bounds a statement timeout and counts rows for the before-and-after audit', () => {
@@ -125,9 +132,20 @@ describe('staging load statements', () => {
 describe('sequenceResetSql', () => {
   it('advances a sequence the live database reported for the key', () => {
     expect(sequenceResetSql('users', 'id', 'public.users_id_seq')).toBe(
-      'SELECT pg_catalog.setval(pg_catalog.pg_get_serial_sequence($1, $2), ' +
+      "SELECT pg_catalog.setval('public.users_id_seq'::regclass, " +
         'greatest(coalesce((SELECT max("id") FROM "public"."users"), 0) + 1, 1), false)::text',
     );
+  });
+
+  it('carries the resolved name as a literal, leaving psql -c nothing to bind', () => {
+    expect(sequenceResetSql('users', 'id', 'public.users_id_seq')).not.toMatch(/\$\d/);
+    expect(sequenceResetSql('users', 'id', 'public.users_id_seq')).not.toContain('pg_get_serial_sequence(');
+  });
+
+  it('refuses a sequence name that is not a qualified identifier', () => {
+    expect(() => sequenceResetSql('users', 'id', 'users_id_seq')).toThrow(/qualified identifier/);
+    expect(() => sequenceResetSql('users', 'id', "public.users_id_seq'; DROP TABLE \"users\"; --")).toThrow(/qualified identifier/);
+    expect(() => sequenceResetSql('users', 'id', 'public.users id_seq')).toThrow(/qualified identifier/);
   });
 
   it('builds nothing when the database reports no sequence for the key', () => {
@@ -182,7 +200,8 @@ describe('large objects', () => {
 
   it('measures archive blob bytes in the scratch container, not the live one', () => {
     expect(archiveDigestIntegritySql()).toContain('FROM pg_largeobject AS l');
-    expect(archiveDigestBytesSql()).toContain('* 8192');
+    expect(LARGE_OBJECT_CHUNK_BYTES).toBe(2048);
+    expect(archiveDigestBytesSql()).toContain('* 2048');
     expect(archiveDigestBytesForSql('abc')).toContain('lo_get');
     expect(liveDigestQuerySql()).not.toContain('lo_get');
   });

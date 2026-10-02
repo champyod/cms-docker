@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { RELAY_CHUNK_SIZE, relayPageSql, relayTable } from '@/lib/restore-apply';
 import type { RelayBatch, RelayOptions, RelayPage, RelayProgress, RelayRow, RelayRows, RelaySink, RelaySource } from '@/lib/restore-apply';
+import { ARGV_PAYLOAD_MAX_BYTES } from '@/lib/restore-apply-runner';
 
 /** A page of `count` rows carrying a serial id from `from`, as the scratch container returns them. */
 function serialPage(from: number, count: number): RelayRow[] {
@@ -196,5 +197,53 @@ describe('relayTable', () => {
   it('refuses a chunk whose last row carries no scalar key', async () => {
     const result = relayTable(() => Promise.resolve('[{"name":"x"}]'), () => Promise.resolve(), { table: 'users', columns: ['id', 'name'], pkColumns: ['id'], chunkSize: 1 });
     await expect(result).rejects.toThrow('"users" carries a row whose "id" is missing');
+  });
+
+  it('re-reads a wide page with fewer rows until the chunk fits the byte ceiling', async () => {
+    const rows = serialPage(1, 5);
+    const { source, requests } = pagingSource(rows, ['id']);
+    const batches: RelayBatch[] = [];
+    const result = await relayTable(source, (batch) => { batches.push(batch); return Promise.resolve(); }, {
+      table: 'users',
+      columns: ['id', 'name'],
+      pkColumns: ['id'],
+      chunkSize: 5,
+      maxPayloadBytes: 60,
+    });
+    expect(result).toEqual({ rowsMoved: 5, chunksDone: 3 });
+    expect(requests.map((page) => page.chunkSize)).toEqual([5, 2, 2, 2]);
+    expect(requests.map((page) => page.after)).toEqual([null, null, ['2'], ['4']]);
+    expect(batches.map((batch) => batch.rows)).toEqual([2, 2, 1]);
+    expect(batches.every((batch) => batch.payloadBytes <= 60)).toBe(true);
+    expect(batches.flatMap((batch) => JSON.parse(batch.payload))).toEqual(rows);
+  });
+
+  it('keeps every chunk inside the ceiling one staging statement may carry', async () => {
+    const wide = 'x'.repeat(30_000);
+    const rows: RelayRow[] = Array.from({ length: 8 }, (_unused, index) => ({ id: index + 1, name: wide }));
+    const { source } = pagingSource(rows, ['id']);
+    const batches: RelayBatch[] = [];
+    const result = await relayTable(source, (batch) => { batches.push(batch); return Promise.resolve(); }, { table: 'users', columns: ['id', 'name'], pkColumns: ['id'] });
+    expect(result).toEqual({ rowsMoved: 8, chunksDone: 3 });
+    expect(batches.map((batch) => batch.rows)).toEqual([3, 3, 2]);
+    expect(batches.every((batch) => batch.payloadBytes <= ARGV_PAYLOAD_MAX_BYTES)).toBe(true);
+  });
+
+  it('stops on a single row past the ceiling, because no page can be smaller', async () => {
+    const result = relayTable(() => Promise.resolve(JSON.stringify(serialPage(1, 1))), () => Promise.resolve(), {
+      table: 'users',
+      columns: ['id', 'name'],
+      pkColumns: ['id'],
+      chunkSize: 5,
+      maxPayloadBytes: 10,
+    });
+    await expect(result).rejects.toThrow('"users" carries a row of 26 byte(s), past the 10 bytes one staging statement may carry');
+  });
+
+  it('refuses a budget that is not a positive whole number', async () => {
+    const options: RelayOptions = { table: 'users', columns: ['id'], pkColumns: ['id'] };
+    await expect(relayTable(() => Promise.resolve('[]'), () => Promise.resolve(), { ...options, chunkSize: 1.5 })).rejects.toThrow(/positive whole number/);
+    await expect(relayTable(() => Promise.resolve('[]'), () => Promise.resolve(), { ...options, maxPayloadBytes: 0 })).rejects.toThrow(/byte payload budget/);
+    await expect(relayTable(() => Promise.resolve('[]'), () => Promise.resolve(), { ...options, chunkTimeoutMs: 0 })).rejects.toThrow(/chunk budget/);
   });
 });
