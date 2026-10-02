@@ -506,9 +506,8 @@ parse_args() {
     return 0
   fi
 
-  local IFS=','
   local -a requested=()
-  read -r -a requested <<< "$tables_csv"
+  IFS=',' read -r -a requested <<< "$tables_csv"
   for name in "${requested[@]}"; do
     name="${name#"${name%%[![:space:]]*}"}"
     name="${name%"${name##*[![:space:]]}"}"
