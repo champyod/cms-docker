@@ -9,20 +9,36 @@ import {
   RUN_KIND,
   RUN_STATUS_FAILED,
   RUN_STATUS_LAUNCHED,
+  RUN_STATUS_SETTLED,
   RUN_STATUS_STARTED,
   UNFINISHED_RUN_STATUSES,
   buildBackupArgv,
   buildDueScheduleFilter,
   buildStartedRun,
+  buildStaleRunFilter,
   buildUnfinishedRunFilter,
+  computeCadence,
   describeExecFailure,
   failedRunNote,
+  fireDueSchedules,
+  fireSchedule,
   launchedRunNote,
+  reconcileStaleRuns,
+  reconciledRunNote,
   selectDueSchedules,
   selectionNeedsLargeObjects,
+  settledRunNote,
   startedRunNote,
 } from '@/scheduler/tick';
-import type { DueScheduleRow } from '@/scheduler/tick';
+import type {
+  DueScheduleRow,
+  RunOutcome,
+  ScheduleCadence,
+  ScheduleLauncher,
+  SchedulerDeps,
+  SchedulerStore,
+  StartedRunRecord,
+} from '@/scheduler/tick';
 
 const REFERENCE = new Date('2026-03-01T12:00:00.000Z');
 const MINUTE_MS = 60_000;
@@ -47,6 +63,122 @@ function schedule(overrides: Partial<DueScheduleRow> = {}): DueScheduleRow {
   return { id: 'sch_1', name: 'nightly', tables: ['contests', 'users'], intervalMins: 60, enabled: true, nextRunAt: REFERENCE, ...overrides };
 }
 
+function at(minutesFromReference: number): Date {
+  return new Date(REFERENCE.getTime() + minutesFromReference * MINUTE_MS);
+}
+
+type MutableRow = { -readonly [Key in keyof DueScheduleRow]: DueScheduleRow[Key] };
+
+/** A stored row the fake store can advance, the way Prisma would on the real one. */
+function mutableSchedule(overrides: Partial<DueScheduleRow> = {}): MutableRow {
+  const base = schedule(overrides);
+  return { id: base.id, name: base.name, tables: base.tables, intervalMins: base.intervalMins, enabled: base.enabled, nextRunAt: base.nextRunAt };
+}
+
+interface Alert {
+  readonly title: string;
+  readonly body: string;
+}
+
+interface FakeOptions {
+  readonly unfinishedRunId?: string;
+  readonly staleRunIds?: readonly string[];
+  readonly launchError?: Error;
+  readonly stopped?: boolean;
+}
+
+interface FakeStore extends SchedulerStore {
+  rows: MutableRow[];
+  readonly created: StartedRunRecord[];
+  readonly cadences: ReadonlyArray<{ scheduleId: string; cadence: ScheduleCadence }>;
+  readonly outcomes: ReadonlyArray<{ runId: string; outcome: RunOutcome }>;
+  readonly settled: Map<string, string>;
+}
+
+function fakeStore(options: FakeOptions, calls: string[]): FakeStore {
+  const rows: MutableRow[] = [];
+  const created: StartedRunRecord[] = [];
+  const cadences: Array<{ scheduleId: string; cadence: ScheduleCadence }> = [];
+  const outcomes: Array<{ runId: string; outcome: RunOutcome }> = [];
+  const settled = new Map<string, string>();
+  const unfinishedRunId = options.unfinishedRunId ?? null;
+  let runCount = 0;
+  return {
+    rows,
+    created,
+    cadences,
+    outcomes,
+    settled,
+    findDueSchedules: async () => {
+      calls.push('findDueSchedules');
+      return rows;
+    },
+    findStaleRunIds: async () => {
+      calls.push('findStaleRunIds');
+      return options.staleRunIds ?? [];
+    },
+    findUnfinishedRunId: async (scheduleId) => {
+      calls.push(`findUnfinishedRunId:${scheduleId}`);
+      return unfinishedRunId;
+    },
+    createStartedRun: async (record) => {
+      calls.push(`createStartedRun:${record.scheduleId}`);
+      created.push(record);
+      runCount += 1;
+      return `run_${runCount}`;
+    },
+    advanceSchedule: async (row, cadence) => {
+      calls.push(`advanceSchedule:${row.id}`);
+      cadences.push({ scheduleId: row.id, cadence });
+      const stored = rows.find((entry) => entry.id === row.id);
+      if (stored !== undefined) stored.nextRunAt = cadence.nextRunAt;
+    },
+    updateRun: async (runId, outcome) => {
+      calls.push(`updateRun:${outcome.status}`);
+      outcomes.push({ runId, outcome });
+    },
+    settleRun: async (runId, message) => {
+      calls.push(`settleRun:${runId}`);
+      settled.set(runId, message);
+    },
+  };
+}
+
+interface FakeLauncher extends ScheduleLauncher {
+  readonly launched: string[][];
+  readonly alerts: Alert[];
+}
+
+function fakeLauncher(options: FakeOptions, calls: string[]): FakeLauncher {
+  const launched: string[][] = [];
+  const alerts: Alert[] = [];
+  return {
+    launched,
+    alerts,
+    launch: async (args) => {
+      calls.push('launch');
+      launched.push([...args]);
+      if (options.launchError !== undefined) throw options.launchError;
+    },
+    alert: async (title, body) => {
+      calls.push(`alert:${title}`);
+      alerts.push({ title, body });
+    },
+  };
+}
+
+function fakeDeps(options: FakeOptions = {}): {
+  readonly calls: string[];
+  readonly store: FakeStore;
+  readonly launcher: FakeLauncher;
+  readonly deps: SchedulerDeps;
+} {
+  const calls: string[] = [];
+  const store = fakeStore(options, calls);
+  const launcher = fakeLauncher(options, calls);
+  return { calls, store, launcher, deps: { store, launcher, shouldStop: () => options.stopped === true } };
+}
+
 describe('buildDueScheduleFilter', () => {
   it('asks for exactly the indexed predicate: enabled and due', () => {
     expect(buildDueScheduleFilter(REFERENCE)).toEqual({ enabled: true, nextRunAt: { lte: REFERENCE } });
@@ -67,6 +199,30 @@ describe('buildUnfinishedRunFilter', () => {
     const { status } = buildUnfinishedRunFilter('sch_1');
     expect(status.in).not.toContain(RUN_STATUS_FAILED);
     expect(status.in).not.toContain(RUN_STATUS_LAUNCHED);
+  });
+
+  it('never treats a settled row as unfinished, so settling releases its schedule', () => {
+    const { status } = buildUnfinishedRunFilter('sch_1');
+    expect(status.in).not.toContain(RUN_STATUS_SETTLED);
+  });
+});
+
+describe('buildStaleRunFilter', () => {
+  it('asks for started rows older than a day, which no live launch can own', () => {
+    expect(buildStaleRunFilter(REFERENCE)).toEqual({ status: RUN_STATUS_STARTED, startedAt: { lte: new Date('2026-02-28T12:00:00.000Z') } });
+  });
+
+  it('never selects a row this scheduler already resolved or an operator settled', () => {
+    expect(buildStaleRunFilter(REFERENCE).status).not.toBe(RUN_STATUS_LAUNCHED);
+    expect(buildStaleRunFilter(REFERENCE).status).not.toBe(RUN_STATUS_FAILED);
+    expect(buildStaleRunFilter(REFERENCE).status).not.toBe(RUN_STATUS_SETTLED);
+  });
+});
+
+describe('computeCadence', () => {
+  it('moves the due time one interval past the tick instant, not past the last due time', () => {
+    expect(computeCadence(schedule({ intervalMins: 60 }), REFERENCE)).toEqual({ lastRunAt: REFERENCE, nextRunAt: computeNextRun(REFERENCE, 60) });
+    expect(computeCadence(schedule({ intervalMins: 15 }), REFERENCE).nextRunAt).toEqual(at(15));
   });
 });
 
@@ -222,8 +378,16 @@ describe('run notes', () => {
     expect(startedRunNote()).toContain('never observed');
   });
 
-  it('writes that note on the started row, so a launch lost mid-flight is self-describing', () => {
-    expect(RUNNER_SOURCE).toContain('message: startedRunNote()');
+  it('says the row was settled by hand without claiming the backup succeeded', () => {
+    const note = settledRunNote();
+    expect(note).toContain('Settled by an operator');
+    expect(note).not.toContain('succeeded');
+    expect(note).toContain('backups/manifest.json');
+  });
+
+  it('keeps the operator note when one is given, and drops a blank one', () => {
+    expect(settledRunNote('  verified against manifest.json  ')).toContain('verified against manifest.json');
+    expect(settledRunNote('   ')).toBe(settledRunNote());
   });
 
   it('carries the reason a launch failed', () => {
@@ -246,6 +410,149 @@ describe('describeExecFailure', () => {
   });
 });
 
+describe('fireSchedule on a launch', () => {
+  it('checks the overlap guard before it claims a run or touches the cadence', async () => {
+    const { calls, store, launcher, deps } = fakeDeps({ unfinishedRunId: 'run_stuck' });
+    await fireSchedule(schedule(), REFERENCE, deps);
+    expect(calls).toEqual(['findUnfinishedRunId:sch_1']);
+    expect(store.created).toEqual([]);
+    expect(store.cadences).toEqual([]);
+    expect(launcher.launched).toEqual([]);
+    expect(store.outcomes).toEqual([]);
+  });
+
+  it('claims the run and advances the cadence before it execs docker', async () => {
+    const { calls, deps } = fakeDeps();
+    await fireSchedule(schedule(), REFERENCE, deps);
+    expect(calls).toEqual([
+      'findUnfinishedRunId:sch_1',
+      'createStartedRun:sch_1',
+      'advanceSchedule:sch_1',
+      'launch',
+      'updateRun:launched',
+      'alert:Scheduled Backup Launched',
+    ]);
+  });
+
+  it('writes the never-observed note on the started row, so a launch lost mid-flight is self-describing', async () => {
+    const { store, deps } = fakeDeps();
+    await fireSchedule(schedule(), REFERENCE, deps);
+    expect(store.created).toEqual([{ scheduleId: 'sch_1', tables: ['contests', 'users'], startedAt: REFERENCE, message: startedRunNote() }]);
+  });
+
+  it('advances the cadence from the tick instant, on the schedule own interval', async () => {
+    const { store, deps } = fakeDeps();
+    await fireSchedule(schedule({ intervalMins: 30 }), REFERENCE, deps);
+    expect(store.cadences).toEqual([{ scheduleId: 'sch_1', cadence: { lastRunAt: REFERENCE, nextRunAt: at(30) } }]);
+  });
+
+  it('settles the launched run without claiming a result it cannot see', async () => {
+    const { store, deps } = fakeDeps();
+    await fireSchedule(schedule(), REFERENCE, deps);
+    expect(store.outcomes).toEqual([
+      { runId: 'run_1', outcome: { status: RUN_STATUS_LAUNCHED, message: launchedRunNote('nightly', 2), finishedAt: null } },
+    ]);
+  });
+
+  it('fails the run at the tick instant and alerts Discord when the exec itself fails', async () => {
+    const launchError = Object.assign(new Error('Command failed: docker exec'), { stderr: 'Error: No such container: cms-monitor\n' });
+    const { store, launcher, deps } = fakeDeps({ launchError });
+    await fireSchedule(schedule(), REFERENCE, deps);
+    expect(store.outcomes).toEqual([
+      { runId: 'run_1', outcome: { status: RUN_STATUS_FAILED, message: failedRunNote('Command failed: docker exec: Error: No such container: cms-monitor'), finishedAt: REFERENCE } },
+    ]);
+    expect(launcher.alerts).toEqual([
+      { title: 'Scheduled Backup Failed', body: 'Schedule **nightly** could not start its dump: Command failed: docker exec: Error: No such container: cms-monitor' },
+    ]);
+  });
+});
+
+describe('fireSchedule on a selection that left the catalog', () => {
+  const LEFT_THE_CATALOG = schedule({ tables: ['contests', 'admins'] });
+
+  it('advances the cadence on the schedule interval instead of leaving it due-past', async () => {
+    const { calls, store, deps } = fakeDeps();
+    await fireSchedule(LEFT_THE_CATALOG, REFERENCE, deps);
+    expect(store.cadences).toEqual([{ scheduleId: 'sch_1', cadence: { lastRunAt: REFERENCE, nextRunAt: at(60) } }]);
+    expect(calls).toEqual(['advanceSchedule:sch_1', 'alert:Scheduled Backup Rejected']);
+  });
+
+  it('claims no run and execs nothing, because there is no argv to hand over', async () => {
+    const { store, launcher, deps } = fakeDeps();
+    await fireSchedule(LEFT_THE_CATALOG, REFERENCE, deps);
+    expect(store.created).toEqual([]);
+    expect(store.outcomes).toEqual([]);
+    expect(launcher.launched).toEqual([]);
+  });
+
+  it('alerts once per rejection and names the table that left the catalog', async () => {
+    const { launcher, deps } = fakeDeps();
+    await fireSchedule(LEFT_THE_CATALOG, REFERENCE, deps);
+    expect(launcher.alerts).toEqual([
+      { title: 'Scheduled Backup Rejected', body: 'Schedule **nightly** was skipped: Not in the backup table catalog: admins It will be retried on its own interval until its table selection is fixed.' },
+    ]);
+  });
+
+  it('retries on cadence, not on every tick, and launches once the selection is fixed', async () => {
+    const row = mutableSchedule({ tables: ['contests', 'admins'] });
+    const { store, launcher, deps } = fakeDeps();
+    store.rows.push(row);
+    await fireDueSchedules(store.rows, REFERENCE, deps);
+    await fireDueSchedules(store.rows, at(30), deps);
+    expect(launcher.alerts.map((alert) => alert.title)).toEqual(['Scheduled Backup Rejected']);
+    expect(row.nextRunAt).toEqual(at(60));
+    row.tables = ['contests'];
+    await fireDueSchedules(store.rows, at(60), deps);
+    expect(launcher.launched).toEqual([['exec', '-d', MONITOR_CONTAINER, 'bash', MONITOR_BACKUP_SCRIPT, '--tables', 'contests']]);
+    expect(launcher.alerts.map((alert) => alert.title)).toEqual(['Scheduled Backup Rejected', 'Scheduled Backup Launched']);
+  });
+});
+
+describe('fireDueSchedules', () => {
+  it('reads the candidates once and fires only the rows that are still due', async () => {
+    const { calls, store, launcher, deps } = fakeDeps();
+    store.rows.push(schedule({ id: 'sch_due', nextRunAt: at(-1) }), schedule({ id: 'sch_later', nextRunAt: at(10) }));
+    await fireDueSchedules(store.rows, REFERENCE, deps);
+    expect(calls.filter((call) => call.startsWith('advanceSchedule'))).toEqual(['advanceSchedule:sch_due']);
+    expect(launcher.launched).toHaveLength(1);
+  });
+
+  it('fires nothing once shutdown has started', async () => {
+    const { calls, store, deps } = fakeDeps({ stopped: true });
+    store.rows.push(schedule({ nextRunAt: at(-1) }));
+    await fireDueSchedules(store.rows, REFERENCE, deps);
+    expect(calls).toEqual([]);
+  });
+});
+
+describe('reconcileStaleRuns', () => {
+  it('settles a started row a dead scheduler left, which is what releases its schedule', async () => {
+    const { calls, store, deps } = fakeDeps({ staleRunIds: ['run_stale'] });
+    expect(await reconcileStaleRuns(REFERENCE, deps)).toBe(1);
+    expect(store.settled.get('run_stale')).toBe(reconciledRunNote());
+    expect(calls).toEqual(['findStaleRunIds', 'settleRun:run_stale', 'alert:Backup Runs Reconciled']);
+  });
+
+  it('says in the note that boot settled the row, so history stays readable', async () => {
+    expect(reconciledRunNote()).toContain('reconciled on boot');
+  });
+
+  it('alerts once with the count, because a settled row claims nothing about the dump', async () => {
+    const { launcher, deps } = fakeDeps({ staleRunIds: ['run_a', 'run_b'] });
+    expect(await reconcileStaleRuns(REFERENCE, deps)).toBe(2);
+    expect(launcher.alerts).toEqual([
+      { title: 'Backup Runs Reconciled', body: '2 run(s) were left unfinished by an earlier scheduler process and have been settled on boot; their real results are in Discord and backups/manifest.json.' },
+    ]);
+  });
+
+  it('writes nothing and stays silent when no run is stale', async () => {
+    const { store, launcher, deps } = fakeDeps();
+    expect(await reconcileStaleRuns(REFERENCE, deps)).toBe(0);
+    expect(store.settled.size).toBe(0);
+    expect(launcher.alerts).toEqual([]);
+  });
+});
+
 describe('poller wiring', () => {
   it('polls once a minute', () => {
     expect(RUNNER_SOURCE).toContain('const TICK_INTERVAL_MS = 60_000;');
@@ -261,30 +568,8 @@ describe('poller wiring', () => {
     expect(RUNNER_SOURCE).toContain('prisma.backup_schedules.findMany({ where: buildDueScheduleFilter(now) })');
   });
 
-  it('advances the cadence from the tick instant, on the same interval', () => {
-    expect(computeNextRun(REFERENCE, 60).toISOString()).toBe('2026-03-01T13:00:00.000Z');
-    expect(RUNNER_SOURCE).toContain('nextRunAt: computeNextRun(now, schedule.intervalMins)');
-  });
-
-  it('checks the overlap guard before it claims a run for a schedule', () => {
-    expect(RUNNER_SOURCE).toContain('if (await hasUnfinishedRun(schedule.id)) return;');
-  });
-
   it('refuses to overlap a tick with itself', () => {
     expect(RUNNER_SOURCE).toContain('if (isTicking) return;');
-  });
-
-  it('settles a launched run without claiming a result it cannot see', () => {
-    expect(RUNNER_SOURCE).toContain(`status: RUN_STATUS_LAUNCHED, message: launchedRunNote(schedule.name, tableCount)`);
-  });
-
-  it('fails the run and alerts Discord when the exec itself fails', () => {
-    expect(RUNNER_SOURCE).toContain('status: RUN_STATUS_FAILED');
-    expect(RUNNER_SOURCE).toContain('logToDiscord(\'Scheduled Backup Failed\'');
-  });
-
-  it('starts a run even when a table left the catalog after the schedule was saved', () => {
-    expect(RUNNER_SOURCE).toContain('const argv = buildBackupArgv(schedule.tables);');
   });
 
   it('shuts down gracefully on SIGTERM and SIGINT', () => {

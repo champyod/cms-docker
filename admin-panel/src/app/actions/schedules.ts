@@ -1,15 +1,20 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
+
 import { logToDiscord } from '@/lib/discord-notifier';
 import { ensurePermission } from '@/lib/permissions';
 import { computeNextRun, validateScheduleInput } from '@/lib/backup-schedules';
 import type { ScheduleInput } from '@/lib/backup-schedules';
 import { prisma } from '@/lib/prisma';
+import { RUN_STATUS_SETTLED, UNFINISHED_RUN_STATUSES, settledRunNote } from '@/scheduler/tick';
 
 const DEFAULT_RUN_LIMIT = 50;
 const MAX_RUN_LIMIT = 200;
 /** Same red as the backup-channel embeds in actions/backups.ts. */
 const BACKUP_LOG_COLOR = 16_711_680;
+/** Same page the backup actions revalidate after a run. */
+const MAINTENANCE_PAGE = '/[locale]/maintenance';
 
 export interface BackupSchedule {
   readonly id: string;
@@ -203,6 +208,36 @@ export async function listRuns(limit: number = DEFAULT_RUN_LIMIT): Promise<RunLi
       take: clampRunLimit(limit),
     });
     return { success: true, runs };
+  } catch (error) {
+    return { success: false, error: describeFailure(error) };
+  }
+}
+
+/**
+ * Releases a run the scheduler claimed and never resolved. The row is `started`
+ * only because the poller died between writing it and learning the outcome, so
+ * settling says the row is closed, never that the backup succeeded: the real
+ * result is in Discord and backups/manifest.json.
+ */
+export async function settleRun(runId: string, note?: string): Promise<ScheduleMutationResult> {
+  await ensurePermission('all');
+  try {
+    const existing = await prisma.backup_runs.findUnique({ where: { id: runId }, select: { id: true, status: true } });
+    if (existing === null) return { success: false, error: `Run not found: ${runId}` };
+    if (!UNFINISHED_RUN_STATUSES.includes(existing.status)) {
+      return { success: false, error: `Run is already ${existing.status}; only an unfinished run can be settled.` };
+    }
+    const saved = await prisma.backup_runs.update({
+      where: { id: runId },
+      data: { status: RUN_STATUS_SETTLED, finishedAt: new Date(), message: settledRunNote(note) },
+    });
+    await logToDiscord(
+      'Backup Run Settled',
+      `Admin settled backup run ${saved.id} (${saved.kind}, ${saved.tables.length} table(s), was ${existing.status}). Its schedule can fire again; the real result is in backups/manifest.json.`,
+      BACKUP_LOG_COLOR,
+    );
+    revalidatePath(MAINTENANCE_PAGE, 'page');
+    return { success: true, message: `Settled run ${saved.id}.` };
   } catch (error) {
     return { success: false, error: describeFailure(error) };
   }

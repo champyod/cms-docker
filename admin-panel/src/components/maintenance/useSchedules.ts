@@ -6,6 +6,7 @@ import {
     createSchedule,
     deleteSchedule,
     listSchedules,
+    settleRun,
     toggleSchedule,
     updateSchedule,
 } from '@/app/actions/schedules';
@@ -17,6 +18,8 @@ import { MAX_INTERVAL_MINS, MIN_INTERVAL_MINS, validateScheduleInput } from '@/l
 const DEFAULT_INTERVAL_MINS = 1440;
 const LIST_ERROR = 'Could not read the backup schedules.';
 const SAVE_ERROR = 'Could not save the schedule.';
+const SETTLE_ERROR = 'Could not settle the backup run.';
+const SETTLE_CONFIRM = 'Settle this backup run? It closes the row and lets its schedule fire again. Check Discord and backups/manifest.json for the real result first.';
 
 export interface Notice {
     readonly tone: 'info' | 'error';
@@ -132,6 +135,40 @@ export function useScheduleMutations(reload: () => Promise<void>, report: Report
     );
 
     return { busyRow, toggle, remove };
+}
+
+/**
+ * Settling a run is a per-row action, so its notice is keyed by run id and the
+ * reload happens only after the row was actually settled.
+ */
+export function useSettleRun(reload: () => Promise<void>) {
+    const [busyRunId, setBusyRunId] = useState<string | null>(null);
+    const [feedback, setFeedback] = useState<ReadonlyMap<string, Notice>>(new Map());
+
+    const settle = useCallback(
+        async (runId: string) => {
+            if (!confirm(SETTLE_CONFIRM)) return;
+            setBusyRunId(runId);
+            const reportForRun = (notice: Notice): void =>
+                setFeedback((current) => new Map(current).set(runId, notice));
+            try {
+                const result = await settleRun(runId);
+                if (!result.success) {
+                    reportForRun({ tone: 'error', message: result.error ?? SETTLE_ERROR });
+                    return;
+                }
+                reportForRun({ tone: 'info', message: result.message ?? `Settled run ${runId}.` });
+                await reload();
+            } catch (error) {
+                reportForRun({ tone: 'error', message: describeError(error, SETTLE_ERROR) });
+            } finally {
+                setBusyRunId(null);
+            }
+        },
+        [reload],
+    );
+
+    return { busyRunId, feedback, settle };
 }
 
 export function useScheduleForm(reload: () => Promise<void>, report: Report) {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { History, RefreshCw } from 'lucide-react';
+import { CheckCircle2, History, RefreshCw } from 'lucide-react';
 
 import { listRuns, listSchedules } from '@/app/actions/schedules';
 // Type-only: the runtime module reaches Prisma and must stay out of the client bundle.
@@ -12,8 +12,10 @@ import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
 import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
-import { RUN_STATUS_FAILED } from '@/scheduler/tick';
+import { RUN_STATUS_FAILED, RUN_STATUS_SETTLED, RUN_STATUS_STARTED } from '@/scheduler/tick';
 import { summarizeTables } from '@/components/maintenance/ScheduleSection';
+import { useSettleRun } from '@/components/maintenance/useSchedules';
+import type { Notice } from '@/components/maintenance/useSchedules';
 
 /** The action clamps any larger value to its own maximum, so this only bounds the row count. */
 const RUN_HISTORY_LIMIT = 50;
@@ -28,7 +30,14 @@ const STATUS_VARIANT: Readonly<Record<string, BadgeVariant>> = {
     started: 'warning',
     launched: 'success',
     failed: 'destructive',
+    settled: 'neutral',
 };
+
+const MESSAGE_STATUSES: ReadonlySet<string> = new Set([RUN_STATUS_FAILED, RUN_STATUS_SETTLED]);
+
+function isUnfinished(run: BackupRun): boolean {
+    return run.status === RUN_STATUS_STARTED;
+}
 
 function describeError(error: unknown, fallback: string): string {
     return error instanceof Error && error.message.length > 0 ? error.message : fallback;
@@ -91,9 +100,12 @@ function useRunHistory() {
 interface RunRowProps {
     readonly run: BackupRun;
     readonly scheduleNames: ReadonlyMap<string, string>;
+    readonly isSettling: boolean;
+    readonly onSettle: (runId: string) => void;
+    readonly feedback: Notice | undefined;
 }
 
-function RunRow({ run, scheduleNames }: RunRowProps) {
+function RunRow({ run, scheduleNames, isSettling, onSettle, feedback }: RunRowProps) {
     return (
         <li className="px-3 py-3">
             <Stack gap={2}>
@@ -104,14 +116,34 @@ function RunRow({ run, scheduleNames }: RunRowProps) {
                     </div>
                     <Badge variant="indigo">{run.kind}</Badge>
                     <Badge variant={statusVariant(run.status)}>{run.status}</Badge>
+                    {isUnfinished(run) && (
+                        <Button
+                            size="sm"
+                            variant="secondary"
+                            icon={CheckCircle2}
+                            loading={isSettling}
+                            onClick={() => onSettle(run.id)}
+                        >
+                            Settle
+                        </Button>
+                    )}
                 </Stack>
                 <Text variant="small" color="text-muted-foreground">
                     Started {formatWhen(run.startedAt, 'unknown')} &middot; finished{' '}
                     {formatWhen(run.finishedAt, 'not finished')}
                 </Text>
-                {run.status === RUN_STATUS_FAILED && run.message !== null && (
-                    <Text variant="small" className="text-destructive">
+                {run.message !== null && MESSAGE_STATUSES.has(run.status) && (
+                    <Text variant="small" className={run.status === RUN_STATUS_FAILED ? 'text-destructive' : 'text-muted-foreground'}>
                         {run.message}
+                    </Text>
+                )}
+                {feedback !== undefined && (
+                    <Text
+                        variant="small"
+                        role="status"
+                        className={feedback.tone === 'error' ? 'text-destructive' : 'text-muted-foreground'}
+                    >
+                        {feedback.message}
                     </Text>
                 )}
             </Stack>
@@ -121,6 +153,7 @@ function RunRow({ run, scheduleNames }: RunRowProps) {
 
 export function ScheduleRunsSection() {
     const { runs, scheduleNames, isLoading, loadError, reload } = useRunHistory();
+    const { busyRunId, feedback, settle } = useSettleRun(reload);
 
     return (
         <Card className="p-6">
@@ -140,7 +173,8 @@ export function ScheduleRunsSection() {
                 <Text variant="small" color="text-muted-foreground">
                     Newest first, last {RUN_HISTORY_LIMIT} runs. A launch reports its outcome on Discord and in the
                     archive browser, so a run stays <span className="font-mono">launched</span> after its dump
-                    finishes.
+                    finishes. A run stuck in <span className="font-mono">started</span> blocks its schedule; settle it
+                    once you have checked the real result.
                 </Text>
 
                 {loadError !== null ? (
@@ -160,7 +194,14 @@ export function ScheduleRunsSection() {
                 ) : (
                     <ul className="divide-y divide-border rounded-lg border border-border">
                         {runs.map((run) => (
-                            <RunRow key={run.id} run={run} scheduleNames={scheduleNames} />
+                            <RunRow
+                                key={run.id}
+                                run={run}
+                                scheduleNames={scheduleNames}
+                                isSettling={busyRunId === run.id}
+                                onSettle={(runId) => void settle(runId)}
+                                feedback={feedback.get(run.id)}
+                            />
                         ))}
                     </ul>
                 )}
