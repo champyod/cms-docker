@@ -1,13 +1,11 @@
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * A promote reaches docker, the live database and the manifest before it can be
- * observed at all, so every one of those is replaced here. What is left is the
- * part the findings are about: which exits publish a report, and which manifest
- * entry is allowed to open the pre-promote gate.
+ * A promote reaches docker, the live database, the manifest and the progress
+ * directory before it can be observed at all, so every one of those is replaced
+ * here and nothing a test drives depends on real I/O or real time. What is left
+ * is the part the findings are about: which exits publish a report, and which
+ * manifest entry is allowed to open the pre-promote gate.
  */
 const harness = vi.hoisted(() => ({
     discord: [] as { title: string; message: string }[],
@@ -15,13 +13,16 @@ const harness = vi.hoisted(() => ({
     dockerAlive: true,
     planErrors: [] as string[],
     stagingLoadFails: false,
-    progressRoot: '',
 }));
 
-vi.mock('node:os', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('node:os')>();
-    harness.progressRoot = actual.tmpdir();
-    return { ...actual, tmpdir: () => harness.progressRoot };
+vi.mock('@/lib/restore-apply-progress', () => {
+    const silent = { phase: async () => {}, starting: async () => {}, tableDone: async () => {}, finish: async () => {} };
+    return {
+        WAITING_PROGRESS: { state: 'waiting' },
+        readPromoteStatus: async () => ({ state: 'waiting' }),
+        startPromoteProgress: async () => silent,
+        sweepStaleProgress: async () => 0,
+    };
 });
 
 vi.mock('node:fs/promises', async (importOriginal) => {
@@ -134,13 +135,7 @@ function promote(strategies: ApplyStrategies = mergeAll(), token: string = confi
     return promotePreview(PREVIEW_ID, strategies, token);
 }
 
-let realTmp: string;
-let progressRoot: string;
-
-beforeEach(async () => {
-    realTmp = tmpdir();
-    progressRoot = await mkdtemp(path.join(realTmp, 'restore-promote-'));
-    harness.progressRoot = progressRoot;
+beforeEach(() => {
     harness.discord = [];
     harness.manifestBodies = [];
     harness.dockerAlive = true;
@@ -150,9 +145,8 @@ beforeEach(async () => {
     vi.mocked(applyOneTable).mockImplementation(async (_env, _staging, table, strategy) => ({ table, strategy, status: 'applied', liveBefore: 4, liveAfter: 9, merged: 5 }));
 });
 
-afterEach(async () => {
-    harness.progressRoot = realTmp;
-    await rm(progressRoot, { recursive: true, force: true });
+afterEach(() => {
+    vi.useRealTimers();
 });
 
 describe('pre-promote backup gate', () => {
@@ -170,12 +164,9 @@ describe('pre-promote backup gate', () => {
             manifestWith({ ts: '2026-10-03T00:00:00Z', kind: 'full' }),
             manifestWith({ ts: '2026-10-03T00:00:00Z', kind: 'full' }, { ts: '2026-10-03T01:00:00Z', kind: 'selective' }),
         ];
-        const selectiveOnly = promote();
-        let settled = false;
-        const observed = selectiveOnly.then((report) => { settled = true; return report; });
-        for (let poll = 0; poll < 200 && !settled; poll += 1) await vi.advanceTimersByTimeAsync(10_000);
-        const report = await observed;
-        vi.useRealTimers();
+        const waiting = promote();
+        for (let poll = 0; poll < 100; poll += 1) await vi.advanceTimersByTimeAsync(10_000);
+        const report = await waiting;
         expect(report.ok).toBe(false);
         expect(report.backupEntry).toBeUndefined();
         expect(report.errors[0]).toMatch(/No new full backup appeared/);
