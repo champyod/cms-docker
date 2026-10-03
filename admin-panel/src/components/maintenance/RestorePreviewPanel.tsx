@@ -9,22 +9,33 @@ import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
 import { PROMOTE_PROGRESS_WINDOW_MS } from '@/components/maintenance/useRestorePreview';
 // Type-only: the runtime module reaches node:os through restore-preview-store and must stay out of the client bundle.
-import type { PromoteReport, TableApplyStatus, ValidateReport } from '@/lib/restore-apply';
+import type { PromoteReport, TableApplyRecord, TableApplyStatus, ValidateReport } from '@/lib/restore-apply';
 import type { PromotePhase, PromoteProgressView } from '@/lib/restore-apply-progress';
 
 const NO_BACKUP_ENTRY = 'none recorded';
+const NOT_APPLIED = 'not applied';
 const STATUS_VARIANT: Readonly<Record<TableApplyStatus, 'success' | 'destructive' | 'neutral' | 'warning'>> = {
     applied: 'success',
     failed: 'destructive',
     pending: 'warning',
     skipped: 'neutral',
 };
-const PHASE_TEXT: Readonly<Record<PromotePhase, string>> = {
+const PHASE_TEXT: Readonly<Record<Exclude<PromotePhase, 'cleanup'>, string>> = {
     backup: 'Taking the pre-promote backup before any live row is written.',
     staging: 'Loading archive rows into the staging schema. Nothing live has changed yet.',
     applying: 'Committing one transaction per table, in foreign-key order.',
-    cleanup: 'Every table is committed. Dropping the staging schema and reporting.',
 };
+/** The cleanup phase drops staging whatever committed, so it may not claim a commit it does not have. */
+const CLEANUP_TEXT: Readonly<Record<'every' | 'partial', string>> = {
+    every: 'Every table is committed. Dropping the staging schema and reporting.',
+    partial: 'Not every table is committed. Dropping the staging schema and reporting.',
+};
+
+/** A failed table rolled back, so it has no figures: zeros would read as an emptied table. */
+function recordCounts(record: TableApplyRecord): string {
+    if (record.liveBefore === null || record.liveAfter === null || record.merged === null) return NOT_APPLIED;
+    return `${record.liveBefore} to ${record.liveAfter} live rows, ${record.merged} written`;
+}
 
 /**
  * The figure the applier publishes while a promote runs: one row per table, with
@@ -45,10 +56,12 @@ export function PromoteProgressList({ progress, onRecheck }: { readonly progress
     }
     if (progress.state !== 'running') return null;
     const pending = progress.totalTables - progress.doneTables.length - (progress.currentTable === null ? 0 : 1);
+    const committed = progress.doneTables.length === progress.totalTables;
+    const phase = progress.phase === 'cleanup' ? CLEANUP_TEXT[committed ? 'every' : 'partial'] : PHASE_TEXT[progress.phase];
     return (
         <Stack gap={2} className="rounded-lg border border-border p-3">
             <Text variant="small" color="text-muted-foreground">
-                {`${PHASE_TEXT[progress.phase]} ${progress.doneTables.length} of ${progress.totalTables} table(s) committed.`}
+                {`${phase} ${progress.doneTables.length} of ${progress.totalTables} table(s) committed.`}
             </Text>
             <ul className="divide-y divide-border rounded-lg border border-border">
                 {progress.doneTables.map((table) => (
@@ -92,7 +105,7 @@ export function PromoteRecords({ report }: { readonly report: PromoteReport }) {
                                 <span className="text-sm text-white">{record.table}</span>
                                 <Badge variant={record.strategy === 'skip' ? 'neutral' : 'indigo'}>{record.strategy}</Badge>
                                 <Badge variant={STATUS_VARIANT[record.status]}>{record.status}</Badge>
-                                <span className="ml-auto text-xs text-muted-foreground">{`${record.liveBefore} to ${record.liveAfter} live rows, ${record.merged} written`}</span>
+                                <span className="ml-auto text-xs text-muted-foreground">{recordCounts(record)}</span>
                             </div>
                             {record.note !== undefined && <Text variant="small" color="text-muted-foreground">{record.note}</Text>}
                         </Stack>

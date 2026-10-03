@@ -4,9 +4,13 @@
  * directory, plus the age sweep that drops files no run is writing any more.
  *
  * The file is a progress figure, not a record: the report the promote returns
- * stays the full account of what committed and what stayed pending. Every write
- * and read here is best-effort, so a broken temp directory costs the watcher its
- * figure and never the restore that is mid-commit.
+ * stays the full account of what committed and what stayed pending. Nothing here
+ * clears a finished run. A run that ends overwrites its detail with a `done`
+ * marker, because a removed file reads as `waiting` and cannot say whether a
+ * promote finished, failed or never started, and the marker only tells a
+ * watcher to stop; the age sweep is the one thing that deletes a file. Every
+ * write and read here is best-effort, so a broken temp directory costs the
+ * watcher its figure and never the restore in mid-commit.
  */
 
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';

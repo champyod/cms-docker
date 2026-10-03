@@ -99,10 +99,19 @@ export async function dropStaging(staging: string, env: LiveDatabaseEnv): Promis
 // ---------------------------------------------------------------------------
 
 /**
- * One table, one transaction. The statement timeout is local to it, so a
- * stalled merge rolls that table back and leaves every earlier commit in place.
- * The row count afterwards must equal what the strategy promised, or the
- * transaction is rolled back rather than reported as applied.
+ * One table, one transaction, because a merge is an upsert on the primary key:
+ * an archive row that collides with a live row updates it and one that does not
+ * inserts, so the whole table is one all-or-nothing statement pair. Merge
+ * leaves live rows the archive does not carry alone, and overwrite deletes the
+ * rows it is about to replace inside the same transaction. The row count
+ * afterwards must equal what the strategy promised, or the transaction is
+ * rolled back rather than reported as applied.
+ *
+ * Restored rows are written with the promoting column set to NULL, because an
+ * archive's own `admin_id` names an account that must not be resurrected as the
+ * author of a row, and a single-column key has its sequence advanced inside the
+ * same transaction so the next live key cannot collide with a restored one; a
+ * composite key has no sequence to advance and says so in the note.
  */
 export async function applyOneTable(
   env: LiveDatabaseEnv,

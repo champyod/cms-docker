@@ -121,10 +121,11 @@ export interface TableApplyRecord {
   readonly table: string;
   readonly strategy: TableStrategy;
   readonly status: TableApplyStatus;
-  readonly liveBefore: number;
-  readonly liveAfter: number;
+  /** Null unless the table applied: a rolled-back table reports no figures rather than zeros. */
+  readonly liveBefore: number | null;
+  readonly liveAfter: number | null;
   /** Archive rows written: inserted plus updated for merge, inserted for overwrite. */
-  readonly merged: number;
+  readonly merged: number | null;
   readonly note?: string;
 }
 
