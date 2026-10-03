@@ -20,9 +20,11 @@ import { ARGV_PAYLOAD_MAX_BYTES } from '@/lib/restore-apply-runner';
 
 /**
  * Rows per page, and so the row bound the relay runs under. The byte bound a
- * page is actually held to is `ARGV_PAYLOAD_MAX_BYTES`: that is the one which
- * decides whether a chunk can be sent, and a wide page is re-read with fewer
- * rows rather than refused.
+ * page is held to is `ARGV_PAYLOAD_MAX_BYTES`: it is what decides how many rows
+ * are read at once, so a wide page is re-read with fewer rows rather than
+ * refused. That bound is measured on the page alone, while the staging load
+ * gates the finished statement, so a page which meets this budget can still be
+ * refused there and the relay reports it rather than paging down again.
  */
 export const RELAY_CHUNK_SIZE = 5_000;
 

@@ -71,8 +71,20 @@ describe('runStagingLoad', () => {
     expect(statements[0]).not.toMatch(/\$\d/);
 
     const oversized = JSON.stringify([{ id: 1, name: 'x'.repeat(ARGV_PAYLOAD_MAX_BYTES) }]);
-    await expect(runStagingLoad(runner, STAGING, 'users', ['id', 'name'], oversized, 600_000)).rejects.toThrow(/"users" carries a page of \d+ byte\(s\).*cannot be staged/);
+    await expect(runStagingLoad(runner, STAGING, 'users', ['id', 'name'], oversized, 600_000)).rejects.toThrow(/"users" carries a page whose staging statement is \d+ byte\(s\).*cannot be staged/);
     expect(statements).toHaveLength(1);
+  });
+
+  it('refuses a page that meets the payload budget but not the statement it becomes', async () => {
+    const { runner, statements } = recordingRunner();
+    const quotes = "'".repeat(64);
+    const filler = 'x'.repeat(ARGV_PAYLOAD_MAX_BYTES - 256);
+    const payload = JSON.stringify([{ id: 1, name: quotes }, { id: 2, name: filler }]);
+    expect(Buffer.byteLength(payload)).toBeLessThan(ARGV_PAYLOAD_MAX_BYTES);
+    expect(Buffer.byteLength(stagingLoadSql(STAGING, 'users', ['id', 'name'], payload))).toBeGreaterThan(ARGV_PAYLOAD_MAX_BYTES);
+
+    await expect(runStagingLoad(runner, STAGING, 'users', ['id', 'name'], payload, 600_000)).rejects.toThrow(/"users" carries a page whose staging statement is \d+ byte\(s\).*cannot be staged/);
+    expect(statements).toHaveLength(0);
   });
 });
 
@@ -89,6 +101,25 @@ describe('blob batches', () => {
     expect(blobBatchInsertSql([blob])).toBe(`BEGIN;\n${fsobjectInsertSql([blob])};\nCOMMIT;\n`);
     const huge: LargeObjectCopy = { digest: 'oversized', encoded: 'A'.repeat(ARGV_PAYLOAD_MAX_BYTES + 1), description: null };
     expect(() => blobBatchInsertSql([huge])).toThrow(/"oversized".*cannot be copied in one statement/);
+  });
+
+  it('counts a row by what its escaped values add to the insert, not by their plain length', () => {
+    const quotes = "''";
+    const plainText = 'ab';
+    const quoted: LargeObjectCopy = { digest: 'ab12cd34', encoded: 'A'.repeat(8), description: quotes };
+    const plain: LargeObjectCopy = { digest: 'ab12cd34', encoded: 'A'.repeat(8), description: plainText };
+    expect(Buffer.byteLength(quotes)).toBe(Buffer.byteLength(plainText));
+    expect(blobRowBytes(quoted) - blobRowBytes(plain)).toBe(2);
+    expect(Buffer.byteLength(fsobjectInsertSql([quoted])) - Buffer.byteLength(fsobjectInsertSql([plain]))).toBe(blobRowBytes(quoted) - blobRowBytes(plain));
+  });
+
+  it('refuses a file whose doubled quotes carry it past the ceiling', () => {
+    const quotes = "'".repeat(ARGV_PAYLOAD_MAX_BYTES / 2);
+    const dense: LargeObjectCopy = { digest: 'dense', encoded: 'A', description: quotes };
+    expect(Buffer.byteLength(quotes)).toBeLessThan(ARGV_PAYLOAD_MAX_BYTES);
+    expect(blobRowBytes(dense)).toBeGreaterThan(ARGV_PAYLOAD_MAX_BYTES);
+    expect(blobBatchFits(0, dense)).toBe(false);
+    expect(() => blobBatchInsertSql([dense])).toThrow(/"dense".*cannot be copied in one statement/);
   });
 });
 

@@ -13,15 +13,16 @@ import { LARGE_OBJECT_TABLE, fsobjectInsertSql, sequenceNameQuerySql, sequenceRe
 import type { LargeObjectCopy } from '@/lib/restore-apply-sql';
 
 /**
- * Ceiling on the payload one statement carries, in bytes.
+ * Ceiling on one statement's text, in bytes.
  *
  * A live statement is handed to `psql -c`, so its text rides in the argument
  * list of one `docker exec`. The bound that decides whether the kernel accepts
  * it is `MAX_ARG_STRLEN`, 128 KiB for a single argument on Linux; the stdout cap
  * this applier configures its exec call with bounds what comes back, not what
- * goes out. A chunk or a blob batch well inside the stdout cap can still be
- * refused whole by the argument limit, so both page down to stay under this
- * ceiling, which leaves the fixed SQL around a payload sitting in the headroom.
+ * goes out. Every gate below measures text as it will be sent, escaping
+ * included: a literal carrying apostrophes is longer on the wire than the
+ * payload it was built from, and the fixed SQL around that payload is counted
+ * against this same ceiling rather than assumed to fit beside it.
  */
 export const ARGV_PAYLOAD_MAX_BYTES = 100 * 1024;
 
@@ -84,23 +85,42 @@ async function sequenceResetStatements(runner: LiveStatementRunner, request: Tab
  *
  * The page is carried as a quoted literal rather than as a bound parameter,
  * because `psql -c` speaks the simple query protocol: the statement text is all
- * there is to send, so a `$1` in it would reach the server unbound.
+ * there is to send, so a `$1` in it would reach the server unbound. The gate
+ * measures the statement the builder returns rather than the page handed to it,
+ * so a page whose apostrophes are doubled on the way into the literal is
+ * measured at the size it is actually asked to carry.
  */
 export async function runStagingLoad(runner: LiveStatementRunner, stagingSchema: string, table: string, columns: readonly string[], payload: string, timeoutMs: number): Promise<void> {
-  const payloadBytes = Buffer.byteLength(payload);
-  if (payloadBytes > ARGV_PAYLOAD_MAX_BYTES) {
-    throw new Error(`"${table}" carries a page of ${payloadBytes} byte(s) of rows, past the ${ARGV_PAYLOAD_MAX_BYTES} bytes one \`psql -c\` argument can be asked to carry, so it cannot be staged.`);
+  const statement = stagingLoadSql(stagingSchema, table, columns, payload);
+  const statementBytes = Buffer.byteLength(statement);
+  if (statementBytes > ARGV_PAYLOAD_MAX_BYTES) {
+    throw new Error(`"${table}" carries a page whose staging statement is ${statementBytes} byte(s), past the ${ARGV_PAYLOAD_MAX_BYTES} bytes one \`psql -c\` argument can be asked to carry, so it cannot be staged.`);
   }
-  await runner.runSql(stagingLoadSql(stagingSchema, table, columns, payload), timeoutMs);
+  await runner.runSql(statement, timeoutMs);
 }
 
 /**
- * Bytes one blob row adds to its batch's insert. Every one of its three values
- * is copied into the statement, so this never overstates the row's cost, and the
- * flush it drives happens before the statement itself would pass the ceiling.
+ * Bytes one blob row contributes to its batch's insert: all three of its values
+ * as `fsobjectInsertSql` copies them, each literal measured after that builder
+ * doubles its apostrophes. A row joins a batch that has no statement yet, so
+ * this is the only place its cost can be known, and the flush it decides has to
+ * know it at the size the insert will really be.
+ *
+ * The SQL wrapped around those values is not counted here. `blobBatchInsertSql`
+ * measures the finished statement before it is sent, so what this leaves out is
+ * still refused there rather than reaching the argument list.
  */
 export function blobRowBytes(row: LargeObjectCopy): number {
-  return Buffer.byteLength(row.digest) + Buffer.byteLength(row.encoded) + (row.description === null ? 0 : Buffer.byteLength(row.description));
+  return escapedLiteralBytes(row.digest) + Buffer.byteLength(row.encoded) + (row.description === null ? 0 : escapedLiteralBytes(row.description));
+}
+
+/**
+ * Bytes one value costs once quoted: an apostrophe is written twice, so every
+ * one it holds costs a byte its plain length does not count. Mirrors the
+ * doubling `fsobjectInsertSql` and `stagingLoadSql` apply to a literal.
+ */
+function escapedLiteralBytes(value: string): number {
+  return Buffer.byteLength(value) + (value.match(/'/g)?.length ?? 0);
 }
 
 /** Whether appending one blob keeps its batch's insert inside one argument. */
