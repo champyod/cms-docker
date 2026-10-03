@@ -32,10 +32,25 @@ env_val() {
 # ---------------------------------------------------------------------------
 # Load environment files (no override of already-exported vars)
 # ---------------------------------------------------------------------------
-if [[ -f "${REPO_ROOT}/.env" ]]; then
+# --config is pre-parsed here because an alternate file has to be sourced before
+# the defaults below read it; the option loop further down only records it.
+CONFIG_FILE="${CONFIG_FILE:-}"
+for (( _i = 1; _i <= $#; _i++ )); do
+  if [[ "${!_i}" == "--config" ]]; then
+    _j=$(( _i + 1 )); CONFIG_FILE="${!_j:-}"
+  elif [[ "${!_i}" == --config=* ]]; then
+    CONFIG_FILE="${!_i#--config=}"
+  fi
+done
+
+ENV_FILE="${CONFIG_FILE:-${REPO_ROOT}/.env}"
+if [[ -n "$CONFIG_FILE" && ! -f "$CONFIG_FILE" ]]; then
+  log_die "config file not found: ${CONFIG_FILE}" 1
+fi
+if [[ -f "$ENV_FILE" ]]; then
   set -a
   # shellcheck disable=SC1091
-  source "${REPO_ROOT}/.env" 2>/dev/null || true
+  source "$ENV_FILE" 2>/dev/null || true
   set +a
 fi
 
@@ -110,6 +125,37 @@ MTLS_WORKER_KEY="${MTLS_WORKER_KEY:-config/mtls/worker-key.pem}"
 DRY_RUN=1
 AUTO_YES=0
 
+# Certificate-issuance retry behaviour. WHY: issuance runs in the window where the
+# DNS record and the inbound :80 forward upstream may still be propagating, so a
+# first-attempt failure is expected rather than conclusive. Let's Encrypt permits
+# only 5 failed validations per account and hostname per hour, which is why the
+# attempt cap stays modest and the delay grows up to CERT_RETRY_BACKOFF_CAP.
+readonly CERT_RETRY_ATTEMPTS_DEFAULT=8
+readonly CERT_RETRY_INTERVAL_DEFAULT=15
+readonly CERT_RETRY_BACKOFF_CAP=120
+AUTO_RETRY="${AUTO_RETRY:-0}"
+CERT_RETRY_ATTEMPTS="${CERT_RETRY_ATTEMPTS:-$CERT_RETRY_ATTEMPTS_DEFAULT}"
+CERT_RETRY_INTERVAL="${CERT_RETRY_INTERVAL:-$CERT_RETRY_INTERVAL_DEFAULT}"
+
+# Extended feature flags — every one defaults off so existing runs are unchanged.
+EXTRA_DOMAINS="${EXTRA_DOMAINS:-}"
+DEPLOY_HOOK="${DEPLOY_HOOK:-}"
+LE_STAGING="${LE_STAGING:-0}"
+FORCE_RENEWAL="${FORCE_RENEWAL:-0}"
+WAIT_PORT80_TIMEOUT="${WAIT_PORT80_TIMEOUT:-0}"
+CHECK_EXPIRY_DAYS="${CHECK_EXPIRY_DAYS:-0}"
+CHECK_EXPIRY_DAYS_DEFAULT=30
+JSON_OUTPUT="${JSON_OUTPUT:-0}"
+BACKUP_CERTS="${BACKUP_CERTS:-0}"
+USE_LOCK="${USE_LOCK:-0}"
+REVOKE_REASON="${REVOKE_REASON:-unspecified}"
+readonly LE_STAGING_DIRECTORY="https://acme-staging-v02.api.letsencrypt.org/directory"
+readonly PORT80_POLL_INTERVAL_S=5
+readonly PORT80_PROBE_TIMEOUT_S=5
+readonly CERT_DIR_NAME="letsencrypt"
+readonly CERT_BACKUP_KEEP=5
+readonly DOMAIN_LOCK_FILE=".domain.lock"
+
 # ---------------------------------------------------------------------------
 # Usage
 # ---------------------------------------------------------------------------
@@ -118,10 +164,12 @@ usage() {
 Usage: __domain.sh <command> [options]
 
 Commands:
-  setup     Configure domains, TLS certificates, and render nginx config
-  status    Show DNS resolution, cert expiry, renewal timer, connectivity
-  renew     Force-renew Let's Encrypt certs or swap provided certificates
-  preflight 9-check matrix: SSH, Tailscale, RPC, DB, DNS, HTTP, HTTPS, paths, funnel
+  setup        Configure domains, TLS certificates, and render nginx config
+  status       Show DNS resolution, cert expiry, renewal timer, connectivity
+  renew        Force-renew Let's Encrypt certs or swap provided certificates
+  preflight    9-check matrix: SSH, Tailscale, RPC, DB, DNS, HTTP, HTTPS, paths, funnel
+  check-expiry Exit non-zero when the cert is missing or expires within --days
+  revoke       Revoke the current certificate
 
 Options (setup):
   --cert <letsencrypt|provided|selfsigned>  Certificate type (default: letsencrypt)
@@ -135,6 +183,26 @@ Options (setup):
   --dry-run                   Print actions without executing (default)
   --apply                     Actually execute changes
   --yes, -y                   Skip optional prompts (HSM/Vault/DNSSEC/mTLS stay disabled)
+
+Retry options (setup, renew):
+  --auto-retry                Retry certificate issuance with backoff until it
+                              succeeds or --retry-attempts is reached
+  --retry-attempts <n>        Maximum issuance attempts with --auto-retry (default: 8)
+  --retry-interval <seconds>  First retry delay; doubles up to 120s (default: 15)
+  --retry-forever             Retry with no attempt limit (implies --auto-retry)
+
+Extended options:
+  --extra-domains "<names>"   Extra SANs, space-separated, added to the certificate
+  --deploy-hook <command>     Run <command> after a successful issue or renewal
+  --staging                   Use the Let's Encrypt staging CA (untrusted certs)
+  --force                     Re-issue even when the current certificate is valid
+  --wait-port80 <seconds>     Wait for HTTP :80 to answer before issuing
+  --backup-certs              Snapshot the certificate store before changes
+  --lock                      Serialise runs with flock
+  --json                      Emit `status` as JSON
+  --days <n>                  Expiry threshold for check-expiry (default: 30)
+  --reason <reason>           Revocation reason for revoke (default: unspecified)
+  --config <file>             Use an alternate env file instead of ./.env
 
 Optional features (disabled by default — prod stays off):
   HSM_ENABLED=0  Vault, DNSSEC/CAA, mTLS workers are opt-in via prompts
@@ -250,13 +318,17 @@ cmd_setup() {
   log_info "Certificate type: $CERT_TYPE"
   _prompt_optional_features
   _log_optional_features
+  [[ "$LE_STAGING" == "1" ]] && log_warn "Let's Encrypt STAGING mode — issued certificates are not browser-trusted"
 
   if [[ "$CERT_TYPE" == "letsencrypt" ]]; then
     [[ -n "$CERT_EMAIL" ]] || log_die "CERT_EMAIL is required for letsencrypt — set env or pass --email" 1
     _preflight_port80
   fi
 
-  local cert_dir="${REPO_ROOT}/config/letsencrypt"
+  _backup_certificates
+
+  local cert_dir
+  cert_dir="$(_cert_store_dir)"
   if [[ "$DRY_RUN" -eq 1 ]]; then
     log_info "[dry-run] would create directory: $cert_dir"
   else
@@ -288,6 +360,189 @@ cmd_setup() {
 }
 
 # ---------------------------------------------------------------------------
+# Certificate issuance retry helper
+# ---------------------------------------------------------------------------
+# Runs <command...> verbatim. With AUTO_RETRY=1 a non-zero exit is retried with
+# exponential backoff (doubling, capped at CERT_RETRY_BACKOFF_CAP) until
+# CERT_RETRY_ATTEMPTS is reached; CERT_RETRY_ATTEMPTS=0 retries without limit
+# (--retry-forever). Without AUTO_RETRY the first failure is returned as-is.
+_retry_certbot() {
+  local attempt=1 interval="$CERT_RETRY_INTERVAL"
+
+  while :; do
+    if "$@"; then
+      return 0
+    fi
+    if [[ "$AUTO_RETRY" -ne 1 ]]; then
+      return 1
+    fi
+    if (( CERT_RETRY_ATTEMPTS > 0 )) && (( attempt >= CERT_RETRY_ATTEMPTS )); then
+      log_warn "certificate issuance failed after ${attempt} attempt(s)"
+      return 1
+    fi
+    log_warn "attempt ${attempt}/${CERT_RETRY_ATTEMPTS} failed — retrying in ${interval}s"
+    sleep "$interval"
+    attempt=$(( attempt + 1 ))
+    interval=$(( interval * 2 ))
+    (( interval > CERT_RETRY_BACKOFF_CAP )) && interval="$CERT_RETRY_BACKOFF_CAP"
+  done
+}
+
+# ---------------------------------------------------------------------------
+# Certificate argument builders
+# ---------------------------------------------------------------------------
+# Populates CERT_DOMAINS with every -d name (the four configured hosts plus any
+# --extra-domains) so certonly and renew build identical SAN lists.
+build_cert_domains() {
+  CERT_DOMAINS=(-d "$DOMAIN_NAME" -d "$ADMIN_DOMAIN" -d "$OJ_DOMAIN" -d "$RANKING_DOMAIN")
+  local extra
+  for extra in $EXTRA_DOMAINS; do
+    CERT_DOMAINS+=(-d "$extra")
+  done
+}
+
+# Populates CERTBOT_FLAGS with the shared invocation flags. --staging, --force and
+# --deploy-hook each append only when requested, so the default call is unchanged.
+build_certbot_flags() {
+  CERTBOT_FLAGS=(--email "$CERT_EMAIL" --agree-tos --non-interactive)
+  [[ "$LE_STAGING" == "1" ]] && CERTBOT_FLAGS+=(--server "$LE_STAGING_DIRECTORY")
+  [[ "$FORCE_RENEWAL" == "1" ]] && CERTBOT_FLAGS+=(--force-renewal)
+  [[ -n "$DEPLOY_HOOK" ]] && CERTBOT_FLAGS+=(--deploy-hook "$DEPLOY_HOOK")
+  # Explicit success: as the last statement, a false [[ ]] above would otherwise
+  # become the function's return value and trip `set -e` at the call site.
+  return 0
+}
+
+# Populates RENEW_FLAGS for `certbot renew`. `--server` and `--email` do not belong
+# on renew and are deliberately omitted here.
+build_renew_flags() {
+  RENEW_FLAGS=(--force-renewal)
+  [[ -n "$DEPLOY_HOOK" ]] && RENEW_FLAGS+=(--deploy-hook "$DEPLOY_HOOK")
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# Port 80 readiness wait
+# ---------------------------------------------------------------------------
+# Polls the primary host over HTTP until it answers or WAIT_PORT80_TIMEOUT
+# elapses. WHY: spending a Let's Encrypt validation attempt on a record or
+# forward that is still propagating is what --auto-retry then has to recover
+# from, so a bounded wait first usually removes the failure entirely.
+_wait_for_port80() {
+  local timeout="${WAIT_PORT80_TIMEOUT:-0}" elapsed=0
+  (( timeout > 0 )) || return 0
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log_info "[dry-run] would wait up to ${timeout}s for port 80 at ${DOMAIN_NAME}"
+    return 0
+  fi
+
+  while (( elapsed < timeout )); do
+    if curl -sf -o /dev/null --max-time "$PORT80_PROBE_TIMEOUT_S" "http://${DOMAIN_NAME}/" 2>/dev/null; then
+      log_info "port 80 reachable after ${elapsed}s"
+      return 0
+    fi
+    sleep "$PORT80_POLL_INTERVAL_S"
+    elapsed=$(( elapsed + PORT80_POLL_INTERVAL_S ))
+  done
+  log_warn "port 80 not reachable within ${timeout}s — continuing anyway"
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# Run lock
+# ---------------------------------------------------------------------------
+# Serialises runs when --lock is set, so a scheduled renewal and a manual run
+# cannot race over the same certificate store.
+_acquire_run_lock() {
+  [[ "$USE_LOCK" == "1" ]] || return 0
+  exec 9>"${REPO_ROOT}/${DOMAIN_LOCK_FILE}"
+  if ! flock -n 9; then
+    log_die "another run holds ${DOMAIN_LOCK_FILE} — refusing to start" 1
+  fi
+  log_info "run lock acquired (${DOMAIN_LOCK_FILE})"
+}
+
+# ---------------------------------------------------------------------------
+# Certificate store helpers
+# ---------------------------------------------------------------------------
+_cert_store_dir() {
+  printf '%s' "${REPO_ROOT}/config/${CERT_DIR_NAME}"
+}
+
+# Prints remaining validity in whole days, or -1 when no certificate is present.
+_cert_days_left() {
+  local cert_file
+  cert_file="$(_cert_store_dir)/live/fullchain.pem"
+  if [[ ! -f "$cert_file" ]]; then
+    printf '%s' "-1"; return 0
+  fi
+
+  local expiry expiry_epoch now_epoch
+  expiry="$(openssl x509 -enddate -noout -in "$cert_file" 2>/dev/null | sed 's/notAfter=//')"
+  if [[ -z "$expiry" ]]; then
+    printf '%s' "-1"; return 0
+  fi
+  expiry_epoch="$(date -d "$expiry" +%s 2>/dev/null || date -j -f "%b %d %H:%M:%S %Y %Z" "$expiry" +%s 2>/dev/null || echo 0)"
+  now_epoch="$(date +%s)"
+  if (( expiry_epoch <= 0 )); then
+    printf '%s' "-1"; return 0
+  fi
+  printf '%s' "$(( (expiry_epoch - now_epoch) / 86400 ))"
+}
+
+# ---------------------------------------------------------------------------
+# Certificate store backup
+# ---------------------------------------------------------------------------
+# Snapshots the certificate store before it is modified, then prunes to
+# CERT_BACKUP_KEEP. The destination lives inside the gitignored store, so a
+# backup can never be committed.
+_backup_certificates() {
+  [[ "$BACKUP_CERTS" == "1" ]] || return 0
+  local src dest stamp
+  src="$(_cert_store_dir)"
+  if [[ ! -d "$src" ]]; then
+    log_info "no certificate store to back up yet"
+    return 0
+  fi
+  # LC_ALL=C keeps the stamp Gregorian on hosts whose locale uses a non-Gregorian
+  # calendar (e.g. a Buddhist-era Thai locale), which would otherwise emit a
+  # nonsensical year into the directory name.
+  stamp="$(LC_ALL=C date -u +%Y%m%dT%H%M%SZ)"
+  dest="${src}/backups/${stamp}"
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log_info "[dry-run] would back up ${src} -> ${dest}"
+    return 0
+  fi
+
+  mkdir -p "$dest"
+  if tar -czf "${dest}/${CERT_DIR_NAME}.tgz" --exclude="${CERT_DIR_NAME}/backups" \
+      -C "${REPO_ROOT}/config" "$CERT_DIR_NAME" 2>/dev/null; then
+    log_info "certificate backup: ${dest}/${CERT_DIR_NAME}.tgz"
+    _prune_cert_backups
+  else
+    log_warn "certificate backup failed"
+  fi
+}
+
+_prune_cert_backups() {
+  local dir
+  dir="$(_cert_store_dir)/backups"
+  [[ -d "$dir" ]] || return 0
+  ls -1dt "${dir}"/*/ 2>/dev/null | tail -n "+$(( CERT_BACKUP_KEEP + 1 ))" | xargs -r rm -rf
+}
+
+# ---------------------------------------------------------------------------
+# JSON encoding helper
+# ---------------------------------------------------------------------------
+_json_escape() {
+  local raw="${1:-}"
+  raw="${raw//\\/\\\\}"
+  printf '%s' "${raw//\"/\\\"}"
+}
+
+# ---------------------------------------------------------------------------
 # Let's Encrypt setup
 # ---------------------------------------------------------------------------
 _setup_letsencrypt() {
@@ -296,30 +551,34 @@ _setup_letsencrypt() {
     return 0
   fi
 
+  _wait_for_port80
+  build_cert_domains
+  build_certbot_flags
+
   if ! command -v certbot >/dev/null 2>&1; then
     log_warn "certbot not found on host — attempting via docker"
     _run_certbot_docker
     return
   fi
 
-  local cert_dir="${REPO_ROOT}/config/letsencrypt"
-  certbot certonly --webroot -w "${cert_dir}/www" \
-    -d "$DOMAIN_NAME" -d "$ADMIN_DOMAIN" -d "$OJ_DOMAIN" -d "$RANKING_DOMAIN" \
-    --email "$CERT_EMAIL" --agree-tos --non-interactive \
+  local cert_dir
+  cert_dir="$(_cert_store_dir)"
+  _retry_certbot certbot certonly --webroot -w "${cert_dir}/www" \
+    "${CERT_DOMAINS[@]}" "${CERTBOT_FLAGS[@]}" \
     --cert-path "${cert_dir}/live" --key-path "${cert_dir}/live" \
     || log_die "certbot certonly failed" 1
   log_info "Let's Encrypt certificates obtained"
 }
 
 _run_certbot_docker() {
-  local cert_dir="${REPO_ROOT}/config/letsencrypt"
+  local cert_dir
+  cert_dir="$(_cert_store_dir)"
   mkdir -p "${cert_dir}/www" "${cert_dir}/live"
-  docker run --rm \
+  _retry_certbot docker run --rm \
     -v "${cert_dir}/live:/etc/letsencrypt" \
     -v "${cert_dir}/www:/var/www/certbot" \
     certbot/certbot certonly --webroot -w /var/www/certbot \
-    -d "$DOMAIN_NAME" -d "$ADMIN_DOMAIN" -d "$OJ_DOMAIN" -d "$RANKING_DOMAIN" \
-    --email "$CERT_EMAIL" --agree-tos --non-interactive \
+    "${CERT_DOMAINS[@]}" "${CERTBOT_FLAGS[@]}" \
     || log_die "certbot docker run failed" 1
   log_info "Let's Encrypt certificates obtained via docker"
 }
@@ -516,6 +775,10 @@ _preflight_port80() {
 # Status subcommand
 # ---------------------------------------------------------------------------
 cmd_status() {
+  if [[ "$JSON_OUTPUT" == "1" ]]; then
+    cmd_status_json
+    return 0
+  fi
   log_info "Domain status for $DOMAIN_NAME"
   _log_optional_features
   echo ""
@@ -557,30 +820,26 @@ _status_dns() {
 }
 
 _status_cert_expiry() {
-  local cert_dir="${REPO_ROOT}/config/letsencrypt/live"
-  local cert_file="${cert_dir}/fullchain.pem"
+  local cert_file cert_expiry days_left
+  cert_file="$(_cert_store_dir)/live/fullchain.pem"
   if [[ ! -f "$cert_file" ]]; then
     log_warn "no certificate found at $cert_file"
     return 0
   fi
 
-  local expiry
-  expiry="$(openssl x509 -enddate -noout -in "$cert_file" 2>/dev/null | sed 's/notAfter=//')"
-  if [[ -n "$expiry" ]]; then
-    log_info "Certificate expiry: $expiry"
-    local expiry_epoch now_epoch days_left
-    expiry_epoch="$(date -d "$expiry" +%s 2>/dev/null || date -j -f "%b %d %H:%M:%S %Y %Z" "$expiry" +%s 2>/dev/null || echo 0)"
-    now_epoch="$(date +%s)"
-    if [[ "$expiry_epoch" -gt 0 ]]; then
-      days_left=$(( (expiry_epoch - now_epoch) / 86400 ))
-      if (( days_left < 7 )); then
-        log_warn "Certificate expires in $days_left days — renew immediately!"
-      elif (( days_left < 30 )); then
-        log_warn "Certificate expires in $days_left days"
-      else
-        log_info "Certificate valid for $days_left more days"
-      fi
-    fi
+  cert_expiry="$(openssl x509 -enddate -noout -in "$cert_file" 2>/dev/null | sed 's/notAfter=//')"
+  [[ -n "$cert_expiry" ]] && log_info "Certificate expiry: $cert_expiry"
+
+  days_left="$(_cert_days_left)"
+  if (( days_left < 0 )); then
+    return 0
+  fi
+  if (( days_left < 7 )); then
+    log_warn "Certificate expires in $days_left days — renew immediately!"
+  elif (( days_left < 30 )); then
+    log_warn "Certificate expires in $days_left days"
+  else
+    log_info "Certificate valid for $days_left more days"
   fi
 }
 
@@ -604,6 +863,104 @@ _status_connectivity() {
 }
 
 # ---------------------------------------------------------------------------
+# Shared status probes
+# ---------------------------------------------------------------------------
+# Prints the first resolved address for <host>, or nothing when it does not
+# resolve. Each lookup is bounded so a slow or unreachable resolver cannot stall
+# a status call.
+_resolve_host() {
+  local host="$1" lookup_timeout_s=3
+  if command -v dig >/dev/null 2>&1; then
+    timeout "$lookup_timeout_s" dig +short "$host" 2>/dev/null | head -1 || true
+  elif command -v getent >/dev/null 2>&1; then
+    timeout "$lookup_timeout_s" getent hosts "$host" 2>/dev/null | head -1 | awk '{print $1}' || true
+  fi
+  return 0
+}
+
+# Prints the detected renewal mechanism: certbot.timer, certbot-container or none.
+_renewal_mechanism() {
+  if systemctl is-enabled certbot.timer 2>/dev/null | grep -q enabled; then
+    printf 'certbot.timer'
+  elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q certbot; then
+    printf 'certbot-container'
+  else
+    printf 'none'
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# JSON status (--json)
+# ---------------------------------------------------------------------------
+# Emits the same facts as `status` as one JSON object for monitoring. WHY one
+# field per check rather than a formatted blob: consumers key on names, not on
+# parsing log lines.
+cmd_status_json() {
+  local dns_json="" host resolved
+  for host in "$DOMAIN_NAME" "$ADMIN_DOMAIN" "$OJ_DOMAIN" "$RANKING_DOMAIN"; do
+    resolved="$(_resolve_host "$host")"
+    dns_json+="\"$(_json_escape "$host")\":\"$(_json_escape "${resolved:-}")\","
+  done
+  dns_json="${dns_json%,}"
+
+  local days_left expiry
+  days_left="$(_cert_days_left)"
+  expiry="$(openssl x509 -enddate -noout -in "$(_cert_store_dir)/live/fullchain.pem" 2>/dev/null | sed 's/notAfter=//' || true)"
+
+  printf '{"domain":"%s","dns":{%s},"certificate":{"days_left":%s,"expiry":"%s"},"renewal":"%s"}\n' \
+    "$(_json_escape "$DOMAIN_NAME")" "$dns_json" \
+    "$days_left" "$(_json_escape "$expiry")" "$(_renewal_mechanism)"
+}
+
+# ---------------------------------------------------------------------------
+# Expiry check subcommand
+# ---------------------------------------------------------------------------
+# Exits non-zero when the certificate is missing or expires within the threshold,
+# so a monitor or cron job can alert on it.
+cmd_check_expiry() {
+  local threshold="${CHECK_EXPIRY_DAYS:-0}" days_left
+  (( threshold > 0 )) || threshold="$CHECK_EXPIRY_DAYS_DEFAULT"
+  days_left="$(_cert_days_left)"
+
+  if (( days_left < 0 )); then
+    log_warn "certificate check failed: no certificate found for ${DOMAIN_NAME}"
+    exit 1
+  fi
+  if (( days_left < threshold )); then
+    log_warn "certificate expires in ${days_left} day(s) — below threshold ${threshold}"
+    exit 1
+  fi
+  log_info "certificate valid for ${days_left} more day(s) (threshold ${threshold})"
+}
+
+# ---------------------------------------------------------------------------
+# Revoke subcommand
+# ---------------------------------------------------------------------------
+cmd_revoke() {
+  log_info "Certificate revocation — mode: $([ "$DRY_RUN" -eq 1 ] && echo 'DRY-RUN' || echo 'APPLY')"
+  local cert_file key_file
+  cert_file="$(_cert_store_dir)/live/fullchain.pem"
+  key_file="$(_cert_store_dir)/live/privkey.pem"
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log_info "[dry-run] would revoke certificate at ${cert_file} (reason: ${REVOKE_REASON})"
+    return 0
+  fi
+  if [[ ! -f "$cert_file" ]]; then
+    log_die "no certificate at ${cert_file} to revoke" 1
+  fi
+  if ! command -v certbot >/dev/null 2>&1; then
+    log_die "certbot not found on host — cannot revoke" 1
+  fi
+
+  _retry_certbot certbot revoke --cert-path "$cert_file" --key-path "$key_file" \
+    --reason "$REVOKE_REASON" --non-interactive \
+    || log_die "certbot revoke failed" 1
+  discord_alert "Certificate revoked for ${DOMAIN_NAME}" 16711680
+  log_info "Revocation complete"
+}
+
+# ---------------------------------------------------------------------------
 # Renew subcommand
 # ---------------------------------------------------------------------------
 cmd_renew() {
@@ -614,13 +971,16 @@ cmd_renew() {
     return 0
   fi
 
+  _backup_certificates
+  build_renew_flags
+
   if command -v certbot >/dev/null 2>&1; then
-    certbot renew --force-renewal --cert-name "$DOMAIN_NAME" || log_die "certbot renew failed" 1
+    _retry_certbot certbot renew "${RENEW_FLAGS[@]}" --cert-name "$DOMAIN_NAME" || log_die "certbot renew failed" 1
     log_info "certificates renewed via certbot"
   elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q certbot; then
     local container
     container="$(docker ps --format '{{.Names}}' | grep certbot | head -1)"
-    docker exec "$container" certbot renew --force-renewal || log_die "certbot renew failed in container" 1
+    _retry_certbot docker exec "$container" certbot renew "${RENEW_FLAGS[@]}" || log_die "certbot renew failed in container" 1
     log_info "certificates renewed via certbot container ($container)"
   else
     log_die "no certbot found on host or in docker" 1
@@ -813,16 +1173,40 @@ while [[ $# -gt 0 ]]; do
     --dry-run)    DRY_RUN=1; shift ;;
     --apply)      DRY_RUN=0; shift ;;
     --yes|-y)     AUTO_YES=1; shift ;;
+    --auto-retry) AUTO_RETRY=1; shift ;;
+    --retry-attempts) CERT_RETRY_ATTEMPTS="$2"; shift 2 ;;
+    --retry-interval) CERT_RETRY_INTERVAL="$2"; shift 2 ;;
+    --retry-forever) AUTO_RETRY=1; CERT_RETRY_ATTEMPTS=0; shift ;;
+    --extra-domains) EXTRA_DOMAINS="$2"; shift 2 ;;
+    --deploy-hook) DEPLOY_HOOK="$2"; shift 2 ;;
+    --staging)    LE_STAGING=1; shift ;;
+    --force)      FORCE_RENEWAL=1; shift ;;
+    --wait-port80) WAIT_PORT80_TIMEOUT="$2"; shift 2 ;;
+    --backup-certs) BACKUP_CERTS=1; shift ;;
+    --lock)       USE_LOCK=1; shift ;;
+    --json)       JSON_OUTPUT=1; shift ;;
+    --days)       CHECK_EXPIRY_DAYS="$2"; shift 2 ;;
+    --reason)     REVOKE_REASON="$2"; shift 2 ;;
+    --config)     CONFIG_FILE="$2"; shift 2 ;;
     --help|-h)    usage; exit 0 ;;
     *)            log_die "unknown option: $1 — see --help" 1 ;;
   esac
 done
+
+[[ "$CERT_RETRY_ATTEMPTS" =~ ^[0-9]+$ ]] || log_die "--retry-attempts must be a non-negative integer" 1
+[[ "$CERT_RETRY_INTERVAL" =~ ^[0-9]+$ ]] || log_die "--retry-interval must be a non-negative integer" 1
+[[ "$WAIT_PORT80_TIMEOUT" =~ ^[0-9]+$ ]] || log_die "--wait-port80 must be a non-negative integer" 1
+[[ "$CHECK_EXPIRY_DAYS" =~ ^[0-9]+$ ]] || log_die "--days must be a non-negative integer" 1
+
+_acquire_run_lock
 
 case "$cmd" in
   setup)    cmd_setup ;;
   status)   cmd_status ;;
   renew)    cmd_renew ;;
   preflight) cmd_preflight ;;
+  check-expiry) cmd_check_expiry ;;
+  revoke)   cmd_revoke ;;
   --help|-h|help) usage; exit 0 ;;
   "")       usage; exit 1 ;;
   *)        log_die "unknown command: $cmd — see --help" 1 ;;
