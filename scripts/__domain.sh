@@ -470,10 +470,39 @@ _cert_store_dir() {
   printf '%s' "${REPO_ROOT}/config/${CERT_DIR_NAME}"
 }
 
+# Prints the active fullchain path. certbot writes the live/<lineage>/ layout the
+# proxy reads; the flat live/fullchain.pem is accepted only as a legacy fallback,
+# since it is where the older provided/self-signed paths used to write.
+_cert_fullchain_path() {
+  local lineage flat
+  lineage="$(_cert_store_dir)/live/${DOMAIN_NAME}/fullchain.pem"
+  flat="$(_cert_store_dir)/live/fullchain.pem"
+  if [[ -f "$lineage" ]]; then
+    printf '%s' "$lineage"
+  elif [[ -f "$flat" ]]; then
+    printf '%s' "$flat"
+  else
+    printf '%s' "$lineage"
+  fi
+}
+
+_cert_privkey_path() {
+  local lineage flat
+  lineage="$(_cert_store_dir)/live/${DOMAIN_NAME}/privkey.pem"
+  flat="$(_cert_store_dir)/live/privkey.pem"
+  if [[ -f "$lineage" ]]; then
+    printf '%s' "$lineage"
+  elif [[ -f "$flat" ]]; then
+    printf '%s' "$flat"
+  else
+    printf '%s' "$lineage"
+  fi
+}
+
 # Prints remaining validity in whole days, or -1 when no certificate is present.
 _cert_days_left() {
   local cert_file
-  cert_file="$(_cert_store_dir)/live/fullchain.pem"
+  cert_file="$(_cert_fullchain_path)"
   if [[ ! -f "$cert_file" ]]; then
     printf '%s' "-1"; return 0
   fi
@@ -555,17 +584,22 @@ _setup_letsencrypt() {
   build_cert_domains
   build_certbot_flags
 
+  local cert_dir
+  cert_dir="$(_cert_store_dir)"
+  mkdir -p "${cert_dir}/www"
+
   if ! command -v certbot >/dev/null 2>&1; then
     log_warn "certbot not found on host — attempting via docker"
     _run_certbot_docker
     return
   fi
 
-  local cert_dir
-  cert_dir="$(_cert_store_dir)"
+  # --config-dir points certbot at the store the proxy bind-mounts, so the
+  # lineage lands at <store>/live/<domain>/ — the path nginx reads. The former
+  # --cert-path/--key-path were no-ops outside `certonly --csr`.
   _retry_certbot certbot certonly --webroot -w "${cert_dir}/www" \
     "${CERT_DOMAINS[@]}" "${CERTBOT_FLAGS[@]}" \
-    --cert-path "${cert_dir}/live" --key-path "${cert_dir}/live" \
+    --config-dir "$cert_dir" \
     || log_die "certbot certonly failed" 1
   log_info "Let's Encrypt certificates obtained"
 }
@@ -573,9 +607,12 @@ _setup_letsencrypt() {
 _run_certbot_docker() {
   local cert_dir
   cert_dir="$(_cert_store_dir)"
-  mkdir -p "${cert_dir}/www" "${cert_dir}/live"
+  mkdir -p "${cert_dir}/www"
+  # The store root is mounted at /etc/letsencrypt so certbot's lineage appears at
+  # <store>/live/<domain>/; mounting <store>/live here (the earlier form) nested
+  # a second live/ level and nginx never saw the certificate.
   _retry_certbot docker run --rm \
-    -v "${cert_dir}/live:/etc/letsencrypt" \
+    -v "${cert_dir}:/etc/letsencrypt" \
     -v "${cert_dir}/www:/var/www/certbot" \
     certbot/certbot certonly --webroot -w /var/www/certbot \
     "${CERT_DOMAINS[@]}" "${CERTBOT_FLAGS[@]}" \
@@ -604,7 +641,10 @@ _setup_provided_cert() {
     log_info "certificate passed openssl verify"
   fi
 
-  local dest_dir="${REPO_ROOT}/config/letsencrypt/live"
+  # The lineage directory nginx reads, not a flat live/ level: nginx requests
+  # live/<domain>/fullchain.pem, so a flat copy is invisible to it.
+  local dest_dir
+  dest_dir="$(_cert_store_dir)/live/${DOMAIN_NAME}"
   if [[ "$DRY_RUN" -eq 1 ]]; then
     log_info "[dry-run] would copy $CERT_PATH -> ${dest_dir}/fullchain.pem"
     log_info "[dry-run] would copy $KEY_PATH -> ${dest_dir}/privkey.pem"
@@ -621,7 +661,8 @@ _setup_provided_cert() {
 # Self-signed certificate setup
 # ---------------------------------------------------------------------------
 _setup_selfsigned() {
-  local dest_dir="${REPO_ROOT}/config/letsencrypt/live"
+  local dest_dir
+  dest_dir="$(_cert_store_dir)/live/${DOMAIN_NAME}"
   if [[ "$DRY_RUN" -eq 1 ]]; then
     log_info "[dry-run] would generate self-signed cert for $DOMAIN_NAME"
     return 0
@@ -821,7 +862,7 @@ _status_dns() {
 
 _status_cert_expiry() {
   local cert_file cert_expiry days_left
-  cert_file="$(_cert_store_dir)/live/fullchain.pem"
+  cert_file="$(_cert_fullchain_path)"
   if [[ ! -f "$cert_file" ]]; then
     log_warn "no certificate found at $cert_file"
     return 0
@@ -844,13 +885,12 @@ _status_cert_expiry() {
 }
 
 _status_renewal_timer() {
-  if systemctl is-enabled certbot.timer 2>/dev/null | grep -q enabled; then
-    log_info "Renewal timer: certbot.timer is enabled"
-  elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q certbot; then
-    log_info "Renewal timer: certbot container is running"
-  else
-    log_warn "No renewal mechanism detected (certbot.timer or certbot container)"
-  fi
+  case "$(_renewal_mechanism)" in
+    grader-cert-renew.timer) log_info "Renewal timer: grader-cert-renew.timer is enabled" ;;
+    certbot.timer)           log_info "Renewal timer: certbot.timer is enabled" ;;
+    certbot-container)       log_info "Renewal timer: certbot container is running" ;;
+    *)                       log_warn "No renewal mechanism detected (grader-cert-renew.timer, certbot.timer or certbot container)" ;;
+  esac
 }
 
 _status_connectivity() {
@@ -878,9 +918,14 @@ _resolve_host() {
   return 0
 }
 
-# Prints the detected renewal mechanism: certbot.timer, certbot-container or none.
+# Prints the detected renewal mechanism: grader-cert-renew.timer, certbot.timer,
+# certbot-container or none. WHY grader-cert-renew first: it is the unit this repo
+# ships (config/systemd/), and the earlier check only knew certbot.timer, so a
+# correctly configured host reported "no renewal mechanism".
 _renewal_mechanism() {
-  if systemctl is-enabled certbot.timer 2>/dev/null | grep -q enabled; then
+  if systemctl is-enabled grader-cert-renew.timer 2>/dev/null | grep -q enabled; then
+    printf 'grader-cert-renew.timer'
+  elif systemctl is-enabled certbot.timer 2>/dev/null | grep -q enabled; then
     printf 'certbot.timer'
   elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q certbot; then
     printf 'certbot-container'
@@ -905,7 +950,7 @@ cmd_status_json() {
 
   local days_left expiry
   days_left="$(_cert_days_left)"
-  expiry="$(openssl x509 -enddate -noout -in "$(_cert_store_dir)/live/fullchain.pem" 2>/dev/null | sed 's/notAfter=//' || true)"
+  expiry="$(openssl x509 -enddate -noout -in "$(_cert_fullchain_path)" 2>/dev/null | sed 's/notAfter=//' || true)"
 
   printf '{"domain":"%s","dns":{%s},"certificate":{"days_left":%s,"expiry":"%s"},"renewal":"%s"}\n' \
     "$(_json_escape "$DOMAIN_NAME")" "$dns_json" \
@@ -939,8 +984,8 @@ cmd_check_expiry() {
 cmd_revoke() {
   log_info "Certificate revocation — mode: $([ "$DRY_RUN" -eq 1 ] && echo 'DRY-RUN' || echo 'APPLY')"
   local cert_file key_file
-  cert_file="$(_cert_store_dir)/live/fullchain.pem"
-  key_file="$(_cert_store_dir)/live/privkey.pem"
+  cert_file="$(_cert_fullchain_path)"
+  key_file="$(_cert_privkey_path)"
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
     log_info "[dry-run] would revoke certificate at ${cert_file} (reason: ${REVOKE_REASON})"
