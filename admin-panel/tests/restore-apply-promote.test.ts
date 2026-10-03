@@ -13,6 +13,8 @@ const harness = vi.hoisted(() => ({
     dockerAlive: true,
     planErrors: [] as string[],
     stagingLoadFails: false,
+    lockRefusal: null as string | null,
+    trace: [] as string[],
 }));
 
 vi.mock('@/lib/restore-apply-progress', () => {
@@ -75,11 +77,28 @@ vi.mock('@/app/actions/restore-apply-measure', () => ({
     },
 }));
 
+vi.mock('@/app/actions/restore-apply-lock', () => ({
+    STAGING_LOCK_WAIT_MS: 60_000,
+    acquireStagingLock: vi.fn(async (_env: unknown, staging: string) => {
+        harness.trace.push(`lock:${staging}`);
+        if (harness.lockRefusal !== null) throw new Error(harness.lockRefusal);
+        return {
+            release: async () => {
+                harness.trace.push('release');
+            },
+        };
+    }),
+}));
+
 vi.mock('@/app/actions/restore-apply-steps', () => ({
     loadStaging: vi.fn(async () => {
+        harness.trace.push('staging');
         if (harness.stagingLoadFails) throw new Error('users could not be read out of the scratch container');
     }),
-    dropStaging: vi.fn(async () => null),
+    dropStaging: vi.fn(async () => {
+        harness.trace.push('drop');
+        return null;
+    }),
     applyOneTable: vi.fn(async (_env: unknown, _staging: string, table: string, strategy: string) => ({
         table,
         strategy,
@@ -135,12 +154,19 @@ function promote(strategies: ApplyStrategies = mergeAll(), token: string = confi
     return promotePreview(PREVIEW_ID, strategies, token);
 }
 
+/** A manifest that gains a full backup between the gate's two reads, which is what opens the gate. */
+function gateOpens(): void {
+    manifest(manifestWith({ ts: '2026-10-03T00:00:00Z', kind: 'full' }), manifestWith({ ts: '2026-10-03T00:00:00Z', kind: 'full' }, { ts: '2026-10-03T01:00:00Z', kind: 'full' }));
+}
+
 beforeEach(() => {
     harness.discord = [];
     harness.manifestBodies = [];
     harness.dockerAlive = true;
     harness.planErrors = [];
     harness.stagingLoadFails = false;
+    harness.lockRefusal = null;
+    harness.trace = [];
     vi.mocked(applyOneTable).mockReset();
     vi.mocked(applyOneTable).mockImplementation(async (_env, _staging, table, strategy) => ({ table, strategy, status: 'applied', liveBefore: 4, liveAfter: 9, merged: 5 }));
 });
@@ -238,6 +264,36 @@ describe('every abort reaches Discord', () => {
         expect(report.errors[0]).toMatch(/Staging load failed; no live row was written/);
         expect(harness.discord).toHaveLength(1);
         expect(harness.discord[0].message).toMatch(/No live row was written/);
+    });
+});
+
+describe('the staging lock', () => {
+    it('holds the schema from before the gate to after the staging schema is dropped', async () => {
+        gateOpens();
+        const report = await promote();
+        expect(report.ok).toBe(true);
+        expect(harness.trace).toEqual([`lock:${STAGING}`, 'staging', 'drop', 'release']);
+    });
+
+    it('releases the lock after a table stops the run, not before', async () => {
+        gateOpens();
+        vi.mocked(applyOneTable).mockImplementation(async (_env, _staging, table, strategy) => {
+            if (table === 'datasets') throw new Error('"datasets" rolled back');
+            return { table, strategy, status: 'applied', liveBefore: 4, liveAfter: 9, merged: 5 };
+        });
+        await promote();
+        expect(harness.trace.filter((entry) => entry.startsWith('lock') || entry === 'release' || entry === 'drop')).toEqual([`lock:${STAGING}`, 'drop', 'release']);
+    });
+
+    it('refuses a promote that cannot have the lock, without writing anything or releasing what it never took', async () => {
+        gateOpens();
+        harness.lockRefusal = 'restore_staging_a1b2c3d4 is held by another promote: canceling statement due to statement timeout';
+        const report = await promote();
+        expect(report.ok).toBe(false);
+        expect(report.errors[0]).toMatch(/could not take the staging lock/);
+        expect(harness.trace).toEqual([`lock:${STAGING}`]);
+        expect(harness.discord.at(-1)?.title).toBe('Restore Merge Stopped');
+        expect(harness.discord.at(-1)?.message).toMatch(/No live row was written/);
     });
 });
 

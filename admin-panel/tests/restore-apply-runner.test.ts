@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import { LOCK_RELEASE_TIMEOUT_MS, STAGING_LOCK_WAIT_MS, acquireStagingLock, advisoryKeyFor } from '@/app/actions/restore-apply-lock';
+import type { LockSessionRunner } from '@/app/actions/restore-apply-lock';
+import type { LiveDatabaseEnv } from '@/app/actions/restore-apply-measure';
 import { fsobjectInsertSql, mergeInsertSql, stagingLoadSql } from '@/lib/restore-apply';
 import type { LargeObjectCopy } from '@/lib/restore-apply';
 import { ARGV_PAYLOAD_MAX_BYTES, blobBatchFits, blobBatchInsertSql, blobRowBytes, runStagingLoad, runTableTransaction } from '@/lib/restore-apply-runner';
@@ -86,5 +89,65 @@ describe('blob batches', () => {
     expect(blobBatchInsertSql([blob])).toBe(`BEGIN;\n${fsobjectInsertSql([blob])};\nCOMMIT;\n`);
     const huge: LargeObjectCopy = { digest: 'oversized', encoded: 'A'.repeat(ARGV_PAYLOAD_MAX_BYTES + 1), description: null };
     expect(() => blobBatchInsertSql([huge])).toThrow(/"oversized".*cannot be copied in one statement/);
+  });
+});
+
+/**
+ * The lock takes and drops one live session, so a session that records its
+ * statements and its closes stands in for the held `psql` and orders the calls
+ * exactly as the lock makes them.
+ */
+function lockSession(refusal: string | null = null) {
+  const sent: string[] = [];
+  const calls: string[] = [];
+  const session: LockSessionRunner = {
+    runSql: (sql, timeoutMs) => {
+      sent.push(sql);
+      calls.push(`runSql:${timeoutMs}`);
+      return refusal === null ? Promise.resolve('cms-staging-lock-held') : Promise.reject(new Error(refusal));
+    },
+    close: () => {
+      calls.push('close');
+      return Promise.resolve();
+    },
+  };
+  return { session, sent, calls };
+}
+
+const env: LiveDatabaseEnv = { POSTGRES_USER: 'cmsuser', POSTGRES_PASSWORD: 'secret', POSTGRES_DB: 'cmsdb' };
+const heldWithin = [`runSql:${LOCK_RELEASE_TIMEOUT_MS + STAGING_LOCK_WAIT_MS}`];
+
+describe('advisoryKeyFor', () => {
+  it('names one lock per staging schema and keeps it inside the int4 range', () => {
+    expect(advisoryKeyFor(STAGING)).toEqual(advisoryKeyFor(STAGING));
+    expect(advisoryKeyFor(STAGING)).not.toEqual(advisoryKeyFor('restore_staging_00000000'));
+    for (const key of advisoryKeyFor(STAGING)) {
+      expect(Number.isInteger(key)).toBe(true);
+      expect(Math.abs(key)).toBeLessThanOrEqual(2147483648);
+    }
+  });
+});
+
+describe('acquireStagingLock', () => {
+  it('takes the lock with a bounded wait and holds the session open until told to release', async () => {
+    const { session, calls } = lockSession();
+    const lock = await acquireStagingLock(env, STAGING, session);
+    expect(calls).toEqual(heldWithin);
+    await lock.release();
+    expect(calls).toEqual([...heldWithin, 'close']);
+  });
+
+  it('closes the session it opened when the lock is refused, naming the schema and the reason', async () => {
+    const { session, calls } = lockSession('canceling statement due to statement timeout');
+    await expect(acquireStagingLock(env, STAGING, session)).rejects.toThrow(new RegExp(`${STAGING} is held by another promote.*statement timeout`));
+    expect(calls).toEqual([...heldWithin, 'close']);
+  });
+
+  it('asks for the session-level lock on its own key, without the schema in the SQL', async () => {
+    const { session, sent } = lockSession();
+    await acquireStagingLock(env, STAGING, session);
+    const [first, second] = advisoryKeyFor(STAGING);
+    expect(sent).toEqual([`SET statement_timeout = ${STAGING_LOCK_WAIT_MS};\nSELECT 'cms-staging-lock-held' FROM pg_advisory_lock(${first}, ${second})`]);
+    expect(sent[0]).not.toContain(STAGING);
   });
 });

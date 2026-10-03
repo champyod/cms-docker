@@ -15,6 +15,7 @@ import { WAITING_PROGRESS, readPromoteStatus, startPromoteProgress, sweepStalePr
 import type { PromoteProgressWriter, PromoteStatus } from '@/lib/restore-apply-progress';
 import { DOCKER_MAX_OUTPUT_BYTES, DOCKER_TIMEOUT_MS, measureFacts, preparePromote } from './restore-apply-measure';
 import type { LiveDatabaseEnv } from './restore-apply-measure';
+import { acquireStagingLock } from './restore-apply-lock';
 import { applyLargeObjects, applyOneTable, dropStaging, loadStaging } from './restore-apply-steps';
 import { describeFailure, runDocker, settle } from './restore-preview-run';
 
@@ -147,8 +148,9 @@ function preconditionError(identity: PromoteIdentity, strategiesValid: boolean, 
 }
 
 /**
- * Applies a validated preview to the live database: fresh full backup, staging
- * load, then one committed transaction per table in foreign-key order.
+ * Applies a validated preview to the live database under the staging lock, so a
+ * second operator cannot drop, reload and merge over this run: fresh full backup,
+ * staging load, then one committed transaction per table in foreign-key order.
  *
  * `confirmToken` must be the `reportId` of the `validatePromote` run this
  * promote follows, which is the double confirmation: the operator has seen the
@@ -174,10 +176,15 @@ export async function promotePreview(previewId: string, strategies: ApplyStrateg
   const setup = await settle(preparePromote(container, resolved, order));
   if (!setup.ok) return abortPromote(identity, [`Promote refused before writing: ${setup.error}`]);
   if (setup.value.planErrors.length > 0) return abortPromote(identity, setup.value.planErrors, { warnings: setup.value.warnings });
-  return runPromote({ ...identity, container, env: setup.value.env, order, strategies: resolved, facts: setup.value.facts, warnings: setup.value.warnings });
+  const locked = await settle(acquireStagingLock(setup.value.env, staging));
+  if (!locked.ok) return abortPromote(identity, [`Promote could not take the staging lock: ${locked.error}`]);
+  try {
+    return await runPromote({ ...identity, container, env: setup.value.env, order, strategies: resolved, facts: setup.value.facts, warnings: setup.value.warnings });
+  } finally {
+    await locked.value.release();
+  }
 }
 
-/** The backup gate, the staging load, the table transactions and the cleanup, in the order a promote owes them. */
 async function runPromote(run: PromoteRun): Promise<PromoteReport> {
   const progress = await startPromoteProgress(run.reportId, run.order.length);
   const gate = await settle(runPrePromoteBackup());
