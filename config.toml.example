@@ -5,19 +5,19 @@
 [core]
 COMPOSE_PROJECT_NAME = "cms-docker" # str; docker compose project name; must match existing container project
 ACCESS_METHOD = "public_port"    # str; "public_port" or "domain"
-PUBLIC_IP = "0.0.0.0"           # str; your VPS public IP; live_ip auto-detects
+PUBLIC_IP = "0.0.0.0"           # str; your VPS public IP; @gen=live_ip
 TAILSCALE_IP = ""               # str; Tailscale IP for RPC; empty=127.0.0.1 only
 REMOTE_WORKERS_ENABLED = false  # bool
-CMS_DOMAIN = "cms.local"        # str; base domain; sub-services are admin.${CMS_DOMAIN} etc.
+CMS_DOMAIN = "cms.local"        # str; base domain; sub-services are admin.${CMS_DOMAIN} etc.; @scope=base
 POSTGRES_HOST = "database"      # str
 POSTGRES_PORT = 5432            # port
 POSTGRES_PORT_EXTERNAL = 5432   # port
 POSTGRES_DB = "cmsdb"           # str
 POSTGRES_USER = "cmsuser"       # str
-POSTGRES_PASSWORD = ""          # secret; auto-generated if empty on first sync
-POSTGRES_BACKUP_PASSWORD = ""    # secret; auto-generated if empty; backup role cms_backup (BYPASSRLS + member of cmsuser for large-object reads)
+POSTGRES_PASSWORD = ""          # secret; @gen=rand_pw; generated on first sync
+POSTGRES_BACKUP_PASSWORD = ""    # secret; @gen=rand_pw; backup role cms_backup (BYPASSRLS + member of cmsuser for large-object reads)
 POSTGRES_HOST_AUTH_METHOD = "md5"
-CMS_SECRET_KEY = ""             # secret; auto-generated hex32 if empty; injected into cms.toml
+CMS_SECRET_KEY = ""             # secret; @gen=hex32; injected into cms.toml
 CMS_CONFIG = "/usr/local/etc/cms.toml"
 LOG_SERVICE_SHARD = 0           # num
 RESOURCE_SERVICE_SHARD = 0      # num
@@ -46,7 +46,7 @@ VITE_API_URL = "http://localhost:8889"
 SERVER_BASE_URL = "http://localhost"
 ADMIN_DOMAIN = "admin.cms.local"
 ADMIN_COOKIE_DURATION = 36000   # num; seconds
-AUTH_SECRET = ""                # secret; auto-generated hex32 if empty
+AUTH_SECRET = ""                # secret; @gen=hex32
 CAPTCHA_ENABLED = 0             # enum:0,1; effect: reduces brute-force before fail2ban
 CAPTCHA_PROVIDER = "turnstile"  # enum:turnstile,hcaptcha; only used if CAPTCHA_ENABLED=1
 CAPTCHA_SITE_KEY = ""           # str
@@ -58,7 +58,7 @@ RANKING_LISTEN_PORT = 8890      # port
 RANKING_PORT_EXTERNAL = 8890    # port
 RANKING_DOMAIN = "ranking.cms.local"
 RANKING_USERNAME = "admin"      # str
-RANKING_PASSWORD = ""           # secret; auto-generated if empty
+RANKING_PASSWORD = ""           # secret; @gen=rand_pw; prefixed with cms_ranking_
 RANKING_LOGO_PATH = ""          # str; host path to ranking logo (png/jpg/gif/bmp) e.g. "./config/assets/logo.png" — synced to ranking volume on ./cms config sync (hot-swap, overwrites old)
 CMS_RANKING_LOG_DIR = "/var/local/log/cms/ranking"
 CMS_RANKING_LIB_DIR = "/var/local/lib/cms/ranking"
@@ -77,16 +77,16 @@ WAF_PARANOIA = 1                # num
 WAF_ANOMALY_INBOUND = 5         # num
 
 [rpc]
-RPC_SECRET = ""               # secret; auto-generated hex32 if empty; shared inter-service RPC secret
+RPC_SECRET = ""               # secret; @gen=hex32; shared inter-service RPC secret
 RPC_ALLOW_BACKDOOR = false    # bool; allow remote start_backdoor/stop_backdoor via RPC (requires secret)
 
 [contest]
 CONTEST_ID = 1                  # num
-CONTEST_DOMAIN = ""             # str; FQDN contestants use; empty=CMS_DOMAIN
+CONTEST_DOMAIN = ""             # str; FQDN contestants use; @fallback=CMS_DOMAIN
 CONTEST_LISTEN_PORT = 8888      # port
 CONTEST_LISTEN_ADDRESS = "0.0.0.0"
 ACTIVE_CONTEST_PORT = 8888      # port; legacy alias — mapped to CONTEST_LISTEN_PORT when that is empty
-SECRET_KEY = ""                 # secret; auto-generated hex32 if empty
+SECRET_KEY = ""                 # secret; @gen=hex32
 COOKIE_DURATION = 10800         # num; seconds
 ACCESS_METHOD = "public_port"   # enum:public_port,domain
 NUM_PROXIES_USED = 1            # num
@@ -98,7 +98,7 @@ CONTEST_WEB_MEMORY_LIMIT = "2G" # str
 ENABLE_TLS = false              # bool
 
 [worker]
-CORE_SERVICES_HOST = "cms-log-service" # str; remote workers: main server IP
+CORE_SERVICES_HOST = "cms-log-service" # str; remote workers: main server IP; @gen=mirror:PUBLIC_IP
 WORKER_SHARD = 0                # num; MUST be unique per instance
 WORKER_NAME = "worker-0"        # str
 WORKER_PORT = 26000             # port
@@ -125,7 +125,7 @@ BACKUP_INTERVAL_MINS = 1440     # num
 BACKUP_MAX_COUNT = 50           # num
 BACKUP_MAX_AGE_DAYS = 10        # num
 BACKUP_MAX_SIZE_GB = 5          # num
-DOCKER_GID = 999                # num; find with: stat -c %g /var/run/docker.sock
+DOCKER_GID = 999                # num; find with: stat -c %g /var/run/docker.sock; @gen=docker_gid
 OFFSITE_TAILNET_NODE = ""       # str; Tailscale IP of remote backup node
 OFFSITE_ENCRYPT_KEY = ""        # secret; openssl rand -hex 32
 OFFSITE_BACKUP_PATH = "/var/local/backups/cms"
@@ -148,14 +148,14 @@ VAULT_PATH = "secret/cms"
 DNSSEC_ENABLED = 0              # enum:0,1; requires DNS control
 CAA_ENABLED = 0                 # enum:0,1
 CAA_ISSUER = "letsencrypt.org"
-MTLS_WORKERS_ENABLED = 0        # enum:0,1; mirrors [core]
-WAF_ENABLED = 0                 # enum:0,1; mirrors [admin]
-WAF_PORT = 8080
-WAF_BIND_IP = "127.0.0.1"
-WAF_PARANOIA = 1
-WAF_ANOMALY_INBOUND = 5
-WAF_ANOMALY_OUTBOUND = 4
-WAF_RULE_ENGINE = "DetectionOnly"
+MTLS_WORKERS_ENABLED = 0        # enum:0,1; @fallback=MTLS_WORKERS_ENABLED
+WAF_ENABLED = 0                 # enum:0,1; @fallback=WAF_ENABLED
+WAF_PORT = 8080                 # port; @fallback=WAF_PORT
+WAF_BIND_IP = "127.0.0.1"       # str; @scope=base
+WAF_PARANOIA = 1                # num; @fallback=WAF_PARANOIA
+WAF_ANOMALY_INBOUND = 5         # num; @fallback=WAF_ANOMALY_INBOUND
+WAF_ANOMALY_OUTBOUND = 4        # num
+WAF_RULE_ENGINE = "DetectionOnly" # str
 
 [tailscale]
 TAILSCALE_AUTHKEY = ""          # secret; tskey-auth-... from the Tailscale admin console (user-provided)
