@@ -112,6 +112,33 @@ fn run_app<B: ratatui::backend::Backend>(
                     continue;
                 }
 
+                // The exposure chooser owns its own key meanings (two cursors plus
+                // Enter-to-apply), so it is handled before the shared menu keys and
+                // consumes everything it recognises.
+                if *app.current_route() == app::Route::Exposure {
+                    match app.handle_exposure_key(key.code) {
+                        app::expose_keys::ExposureAction::Apply => {
+                            let message = match app.apply_exposure_choice() {
+                                Ok(text) => text,
+                                Err(reason) => format!("blocked: {reason}"),
+                            };
+                            app.set_toast(&message);
+                        }
+                        app::expose_keys::ExposureAction::Back => app.leave_exposure(),
+                        app::expose_keys::ExposureAction::Handled => {}
+                        app::expose_keys::ExposureAction::Ignored => {}
+                    }
+                    continue;
+                }
+
+                // 'e' opens the exposure chooser from the Ingress page.
+                if *app.current_route() == app::Route::Ingress
+                    && matches!(key.code, KeyCode::Char('e' | 'E'))
+                {
+                    app.push_route(app::Route::Exposure);
+                    continue;
+                }
+
                 // Page-specific keys (arrows, Enter) — only on non-Dashboard pages
                 match key.code {
                     KeyCode::Down | KeyCode::Up | KeyCode::Char('j' | 'k') => {

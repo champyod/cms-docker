@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Error for configuration file reads and parses.
 #[derive(Debug, thiserror::Error)]
@@ -62,6 +62,71 @@ pub fn config_show(path: &Path) -> Result<String, ConfigError> {
         return fs::read_to_string(path).map_err(ConfigError::Io);
     }
     Ok("No config.toml — run: ./cms config sync".to_string())
+}
+
+/// How many of the four vhosts have a domain configured in `config.toml`.
+///
+/// WHY these four keys and not `CMS_DOMAIN`: `DOMAIN_NAME` and the per-service domains
+/// are what `__domain.sh` passes to certbot, and a deployment that serves only the
+/// ranking board leaves the others empty. Counting `CMS_DOMAIN` instead would report a
+/// domain nginx that has nothing to serve.
+///
+/// # Fallback
+///
+/// Returns `0` when `config.toml` is missing or unparseable, which leaves every mode
+/// available rather than blocking on a file the TUI cannot read.
+#[must_use]
+pub fn count_configured_domains() -> usize {
+    let Ok(value) = read_toml(&repo_config_path()) else {
+        return 0;
+    };
+    let Some(admin) = value.get("admin") else {
+        return 0;
+    };
+    DOMAIN_KEYS
+        .iter()
+        .filter(|key| non_empty(admin.get(*key).and_then(toml_str)))
+        .count()
+}
+
+/// Whether `config.toml` selects domain access.
+///
+/// # Fallback
+///
+/// Returns `false` when `config.toml` is missing or unparseable, matching
+/// [`count_configured_domains`] so both fall back to the same permissive state.
+#[must_use]
+pub fn read_access_method_is_domain() -> bool {
+    let Ok(value) = read_toml(&repo_config_path()) else {
+        return false;
+    };
+    value
+        .get("core")
+        .and_then(|core| core.get("ACCESS_METHOD"))
+        .and_then(toml_str)
+        .is_some_and(|method| method.eq_ignore_ascii_case("domain"))
+}
+
+/// The four per-vhost domain keys, in the order `__domain.sh` resolves them.
+const DOMAIN_KEYS: [&str; 4] = [
+    "DOMAIN_NAME",
+    "ADMIN_DOMAIN",
+    "OJ_DOMAIN",
+    "RANKING_DOMAIN",
+];
+
+fn non_empty(value: Option<&str>) -> bool {
+    value.is_some_and(|text| !text.trim().is_empty())
+}
+
+fn toml_str(value: &toml::Value) -> Option<&str> {
+    value.as_str()
+}
+
+fn repo_config_path() -> PathBuf {
+    crate::core::runner::Runner::new()
+        .map(|runner| runner.repo_root().join("config.toml"))
+        .unwrap_or_else(|_| PathBuf::from("config.toml"))
 }
 
 #[cfg(test)]

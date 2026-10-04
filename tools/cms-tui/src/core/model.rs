@@ -79,6 +79,17 @@ pub struct AppState {
     pub services: Vec<Service>,
     pub configs: Vec<ConfigFile>,
     pub tasks: Vec<Task>,
+    /// How many of the four vhosts have a domain configured.
+    ///
+    /// WHY a count and not the names: the exposure chooser only needs to know whether
+    /// the domain nginx is serving anything at all, and carrying the names here would
+    /// duplicate the domain state that `config.toml` already owns.
+    pub domains_configured: usize,
+    /// Whether `ACCESS_METHOD` is `domain`.
+    ///
+    /// Together with `domains_configured` this decides whether the domain nginx owns
+    /// :80/:443, which is what makes `public` and `ts-http` illegal for every UI.
+    pub access_is_domain: bool,
 }
 
 impl Default for AppState {
@@ -95,6 +106,12 @@ impl AppState {
             services: Self::seed_services(),
             configs: Self::seed_configs(),
             tasks: Self::seed_tasks(),
+            // WHY read from config.toml rather than assumed: the exposure chooser's
+            // whole point is to reflect the box as configured, and defaulting either
+            // one would grey out modes that are in fact available, or offer modes that
+            // would collide with a running domain stack.
+            domains_configured: crate::core::config::count_configured_domains(),
+            access_is_domain: crate::core::config::read_access_method_is_domain(),
         }
     }
 

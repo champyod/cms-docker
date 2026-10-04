@@ -19,12 +19,26 @@ pub struct App {
     pub system_menu: ActionMenu,
     pub bootstrap_menu: ActionMenu,
     pub log_viewer: LogViewer,
+    /// The exposure chooser state, preserved across visits.
+    ///
+    /// WHY it lives on `App` rather than being rebuilt on entry: a rebuilt chooser
+    /// would forget which UI the operator had selected every time they came back from
+    /// running a certbot command, which on a five-UI list is the difference between
+    /// adjusting one row and hunting for it again.
+    pub exposure: crate::tui::pages::expose::ExposureView,
 }
 
 impl App {
     #[must_use]
     pub fn new() -> Self {
         let state = AppState::new();
+        // WHY the same helper the chooser uses rather than an inline comparison:
+        // "the domain nginx owns :80/:443" has one definition, and a second copy here
+        // is how the greying and the wiring drift apart.
+        let domain_active = crate::core::expose::domain_stack_is_active(
+            state.domains_configured,
+            state.access_is_domain,
+        );
         Self {
             route_stack: vec![Route::Dashboard],
             should_quit: false,
@@ -41,6 +55,7 @@ impl App {
             system_menu: crate::tui::menus::system_menu(),
             bootstrap_menu: crate::tui::menus::bootstrap_menu(),
             log_viewer: LogViewer::new(),
+            exposure: crate::tui::pages::expose::ExposureView::new(domain_active, false, None),
         }
     }
 
@@ -55,6 +70,9 @@ impl App {
             Route::Database => Some(&mut self.database_menu),
             Route::Worker => Some(&mut self.worker_menu),
             Route::Ingress => Some(&mut self.ingress_menu),
+            // The exposure chooser has no menu: it is a two-cursor form, so the key
+            // handler works on `exposure` directly rather than through an ActionMenu.
+            Route::Exposure => None,
             Route::Config => Some(&mut self.config_menu),
             Route::Backup => Some(&mut self.backup_menu),
             Route::System => Some(&mut self.system_menu),
@@ -134,7 +152,7 @@ impl App {
             Route::Bootstrap => {
                 self.bootstrap_menu = crate::tui::menus::bootstrap_menu();
             }
-            Route::Logs | Route::Dashboard => {}
+            Route::Logs | Route::Dashboard | Route::Exposure => {}
         }
     }
 

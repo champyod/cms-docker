@@ -7,6 +7,8 @@ pub mod catalog;
 pub mod config;
 pub mod dispatch;
 pub mod docker;
+pub mod expose;
+pub mod expose_input;
 pub mod model;
 pub mod runner;
 pub mod scripts;
