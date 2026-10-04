@@ -4,7 +4,7 @@ SHELL := /bin/bash
 COMPOSE_CMD := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
 # Explicit -f list (auto-merge of docker-compose.override.yml is disabled
 # whenever -f is passed, so the override must be included here when present)
-COMPOSE_FILES := $(wildcard docker-compose.yml docker-compose.override.yml)
+COMPOSE_FILES := $(wildcard docker-compose.yml docker-compose.override.yml docker-compose.expose.yml)
 COMPOSE_FLAGS := $(foreach f,$(COMPOSE_FILES),-f $(f))
 # Compose v5 does not auto-activate the profiles of depends_on targets, so
 # stack bring-up must request dependency profiles explicitly. Stop/clean

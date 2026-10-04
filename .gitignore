@@ -30,6 +30,7 @@ config.toml
 *.local
 *.pem.local
 docker-compose.override.yml
+docker-compose.expose.yml
 
 # VSCode settings
 .vscode/
