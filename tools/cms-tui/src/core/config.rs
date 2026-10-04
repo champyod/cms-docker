@@ -65,6 +65,10 @@ pub fn config_show(path: &Path) -> Result<String, ConfigError> {
 }
 
 #[cfg(test)]
+#[path = "config_annot_tests.rs"]
+mod annot_contract;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
