@@ -192,7 +192,9 @@ pub fn domain_stack_is_active(domains_configured: usize, access_is_domain: bool)
 /// this function never mutates state.
 pub fn mode_allowed(spec: &UiSpec, mode: Mode, tailscale_up: bool) -> Result<(), String> {
     if spec.unsupported.contains(&mode) {
-        return Err(format!("{spec} is published by the proxy itself — no {mode} mode"));
+        return Err(format!(
+            "{spec} is published by the proxy itself — no {mode} mode"
+        ));
     }
     if (mode == Mode::TsHttp || mode == Mode::TsHttps) && !tailscale_up {
         return Err("Tailscale is not running — run 'tailscale up' first".to_string());

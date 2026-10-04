@@ -100,10 +100,7 @@ pub fn is_tailscale_cgnat(address: Ipv4Addr) -> bool {
 /// and reported as not in use.
 #[must_use]
 pub fn port_is_in_use(port: u16) -> bool {
-    let Ok(output) = std::process::Command::new("ss")
-        .args(["-tlnp"])
-        .output()
-    else {
+    let Ok(output) = std::process::Command::new("ss").args(["-tlnp"]).output() else {
         return false;
     };
     if !output.status.success() {
@@ -169,7 +166,10 @@ mod tests {
         let address = parse_tailscale_ip("100.75.203.112").unwrap();
         assert_eq!(address.to_string(), "100.75.203.112");
         assert_eq!(parse_tailscale_ip("100.64.0.1").unwrap().octets()[1], 64);
-        assert_eq!(parse_tailscale_ip("100.127.255.255").unwrap().octets()[1], 127);
+        assert_eq!(
+            parse_tailscale_ip("100.127.255.255").unwrap().octets()[1],
+            127
+        );
     }
 
     #[test]

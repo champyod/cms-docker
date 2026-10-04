@@ -96,7 +96,10 @@ impl App {
     /// Returns the validation message when the typed port is not usable.
     pub fn prompt_expose_port(&mut self) -> Result<String, String> {
         let spec = self.exposure.ui();
-        print!("  Published port for {} [{}]: ", spec.name, spec.default_port);
+        print!(
+            "  Published port for {} [{}]: ",
+            spec.name, spec.default_port
+        );
         std::io::stdout().flush().ok();
         let mut line = String::new();
         std::io::stdin()
@@ -226,7 +229,10 @@ mod tests {
     fn enter_asks_to_apply_and_escape_goes_back() {
         let mut app = App::new();
         app.push_route(Route::Exposure);
-        assert_eq!(app.handle_exposure_key(KeyCode::Enter), ExposureAction::Apply);
+        assert_eq!(
+            app.handle_exposure_key(KeyCode::Enter),
+            ExposureAction::Apply
+        );
         assert_eq!(app.handle_exposure_key(KeyCode::Esc), ExposureAction::Back);
     }
 
@@ -234,8 +240,14 @@ mod tests {
     fn keys_belonging_to_other_pages_are_ignored() {
         let mut app = App::new();
         app.push_route(Route::Exposure);
-        assert_eq!(app.handle_exposure_key(KeyCode::Char('q')), ExposureAction::Ignored);
-        assert_eq!(app.handle_exposure_key(KeyCode::Char('1')), ExposureAction::Ignored);
+        assert_eq!(
+            app.handle_exposure_key(KeyCode::Char('q')),
+            ExposureAction::Ignored
+        );
+        assert_eq!(
+            app.handle_exposure_key(KeyCode::Char('1')),
+            ExposureAction::Ignored
+        );
     }
 
     #[test]

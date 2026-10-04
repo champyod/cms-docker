@@ -195,7 +195,10 @@ impl ExposureView {
                 Some(ip) => format!("http://{ip}:{port}"),
                 None => "http://<tailscale-ip>:<port>".to_string(),
             },
-            Mode::TsHttps => format!("https://<node>.<tailnet>.ts.net:{}", spec.default_https_port),
+            Mode::TsHttps => format!(
+                "https://<node>.<tailnet>.ts.net:{}",
+                spec.default_https_port
+            ),
             Mode::Domain => "https://<your-domain>/ (via nginx :443)".to_string(),
         }
     }
@@ -219,17 +222,16 @@ impl ExposureView {
                     Style::default().fg(Color::DarkGray),
                     format!("  [blocked: {reason}]"),
                 ),
-                None => (
-                    Style::default().fg(Color::Gray),
-                    String::new(),
-                ),
+                None => (Style::default().fg(Color::Gray), String::new()),
             };
 
             let mut spans = vec![
                 Span::styled(
                     format!("{marker} ({check}) "),
                     if is_highlighted {
-                        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD)
                     } else {
                         base_style
                     },
@@ -255,10 +257,9 @@ impl ExposureView {
         lines.insert(0, heading);
         lines.insert(1, Line::from(Span::raw("")));
 
-        let block = Block::default().borders(Borders::ALL).title(format!(
-            " {} — wiring ",
-            spec.name
-        ));
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(format!(" {} — wiring ", spec.name));
         f.render_widget(Paragraph::new(lines).block(block), area);
     }
 
@@ -331,10 +332,9 @@ pub fn render(f: &mut Frame, area: Rect, view: &ExposureView) {
         chunks[0],
     );
 
-    let hint = Paragraph::new(
-        " Choose how each UI is published. Blocked modes are greyed and skipped.",
-    )
-    .style(Style::default().fg(Color::DarkGray));
+    let hint =
+        Paragraph::new(" Choose how each UI is published. Blocked modes are greyed and skipped.")
+            .style(Style::default().fg(Color::DarkGray));
     f.render_widget(hint, chunks[1]);
 
     view.render_modes(f, chunks[2]);
@@ -498,7 +498,11 @@ mod tests {
         while view.mode() != Mode::Public {
             view.next_mode();
         }
-        assert!(view.url_preview().contains(&port.to_string()), "{}", view.url_preview());
+        assert!(
+            view.url_preview().contains(&port.to_string()),
+            "{}",
+            view.url_preview()
+        );
 
         while view.mode() != Mode::TsHttp {
             view.next_mode();

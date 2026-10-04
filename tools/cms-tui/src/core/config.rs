@@ -108,12 +108,7 @@ pub fn read_access_method_is_domain() -> bool {
 }
 
 /// The four per-vhost domain keys, in the order `__domain.sh` resolves them.
-const DOMAIN_KEYS: [&str; 4] = [
-    "DOMAIN_NAME",
-    "ADMIN_DOMAIN",
-    "OJ_DOMAIN",
-    "RANKING_DOMAIN",
-];
+const DOMAIN_KEYS: [&str; 4] = ["DOMAIN_NAME", "ADMIN_DOMAIN", "OJ_DOMAIN", "RANKING_DOMAIN"];
 
 fn non_empty(value: Option<&str>) -> bool {
     value.is_some_and(|text| !text.trim().is_empty())
