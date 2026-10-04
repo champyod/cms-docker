@@ -37,6 +37,13 @@ MTLS_WORKERS_ENABLED = 0        # enum:0,1; price: $0 self-CA; warning: cert dis
 MTLS_CA_CERT = "config/mtls/ca.pem"
 MTLS_WORKER_CERT = "config/mtls/worker.pem"
 MTLS_WORKER_KEY = "config/mtls/worker-key.pem"
+APT_PORTS_MIRROR = "ports.ubuntu.com"   # str; ARM64 apt mirror (Raspberry Pi worker builds)
+BASE_IMAGE = "ubuntu:noble"             # str; worker/base build image
+DB_BIND_IP = "127.0.0.1"                # str; address postgres publishes 5432 on
+CERT_EMAIL = ""                         # str; Let's Encrypt registration email
+CERTBOT_IMAGE = "certbot/certbot"       # str; certbot image; set certbot/dns-cloudflare for DNS-01
+TLS_CERTRESOLVER = "letsencrypt"        # str; traefik certresolver label
+CMS_RANKING_CONFIG = "/usr/local/etc/cms_ranking.toml"
 
 [admin]
 DEPLOYMENT_TYPE = "img"         # enum:img,src
@@ -80,6 +87,9 @@ WAF_ENABLED = 0                 # enum:0,1; warning: tune DetectionOnly 1 week f
 WAF_PORT = 8080                 # port
 WAF_PARANOIA = 1                # num
 WAF_ANOMALY_INBOUND = 5         # num
+DOMAIN_NGINX_HTTP_PORT = 80     # port; domain nginx HTTP publish port
+DOMAIN_NGINX_HTTPS_PORT = 443   # port; domain nginx HTTPS publish port
+RANKING_AUTH_DIRECTIVES = ""    # str; extra nginx auth directives for the ranking vhost
 
 [rpc]
 RPC_SECRET = ""               # secret; auto-generated hex32 if empty; shared inter-service RPC secret
@@ -101,6 +111,16 @@ SUBMIT_LOCAL_COPY = true        # bool
 CONTEST_WEB_CPU_LIMIT = "2"     # str
 CONTEST_WEB_MEMORY_LIMIT = "2G" # str
 ENABLE_TLS = false              # bool
+CONTEST_PORT_EXTERNAL = 8888    # port; host port contestants reach
+CONTEST_WEB_SERVER_SHARD = 0    # num
+CONTEST_WEB_CPU_RESERVATION = "0.1"     # str
+CONTEST_WEB_MEMORY_RESERVATION = "256M" # str
+NGINX_BIND_IP = "0.0.0.0"       # str; address the standalone contest nginx publishes 80/443 on
+NGINX_HTTP_PORT = 80            # port
+NGINX_HTTPS_PORT = 443          # port
+NGINX_EXTERNAL_PORT = 80        # port; legacy alias
+OJ_DOMAIN = ""                  # str; external judge host; empty=off
+OJ_BACKEND_PORT = 9000          # port
 
 [worker]
 CORE_SERVICES_HOST = "cms-log-service" # str; remote workers: main server IP
@@ -165,6 +185,16 @@ WAF_PARANOIA = 1
 WAF_ANOMALY_INBOUND = 5
 WAF_ANOMALY_OUTBOUND = 4
 WAF_RULE_ENGINE = "DetectionOnly"
+CMS_LOG_MAX_AGE_DAYS = 7            # num
+CMS_LOG_MAX_SIZE_GB = 5             # num
+CMS_LOG_PRUNE_INTERVAL_MINS = 60    # num
+FUNNEL_ENABLED = false              # bool; tailnet funnel (public ts.net behind basic auth)
+FUNNEL_REALM = "CMS restricted"     # str
+FUNNEL_CONTEST_LISTEN = 8443        # port
+FUNNEL_PANEL_LISTEN = 8892          # port
+FUNNEL_RANKING_LISTEN = 8893        # port
+VAULT_BIND_IP = "127.0.0.1"         # str
+VAULT_PORT = 8200                   # port
 
 [tailscale]
 TAILSCALE_AUTHKEY = ""          # secret; tskey-auth-... from the Tailscale admin console (user-provided)
