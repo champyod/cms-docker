@@ -80,10 +80,21 @@ print(json.dumps(body))
 # ---------------------------------------------------------------------------
 # Defaults
 # ---------------------------------------------------------------------------
-DOMAIN_NAME="${DOMAIN_NAME:-cms.local}"
-ADMIN_DOMAIN="${ADMIN_DOMAIN:-admin.cms.local}"
-OJ_DOMAIN="${OJ_DOMAIN:-oj.cms.local}"
-RANKING_DOMAIN="${RANKING_DOMAIN:-ranking.cms.local}"
+# Domains — all optional.
+#
+# Each is independent: any single one is enough to run the proxy, and a deployment
+# that serves only the contest UI leaves admin/oj/ranking empty. They default to
+# empty rather than to a .local name, because a leftover default would be handed
+# to certbot as a SAN and fail validation — a hard error the operator cannot see
+# the cause of. CERT_LINEAGE_DOMAIN is derived from whichever is set, because
+# certbot names the certificate lineage after the first -d it was given and every
+# vhost has to read the certificate from that exact path.
+# ---------------------------------------------------------------------------
+DOMAIN_NAME="${DOMAIN_NAME:-}"
+ADMIN_DOMAIN="${ADMIN_DOMAIN:-}"
+OJ_DOMAIN="${OJ_DOMAIN:-}"
+RANKING_DOMAIN="${RANKING_DOMAIN:-}"
+CERT_LINEAGE_DOMAIN="${CERT_LINEAGE_DOMAIN:-}"
 CERT_TYPE="${CERT_TYPE:-letsencrypt}"
 CERT_PATH=""
 KEY_PATH=""
@@ -173,10 +184,15 @@ Commands:
 
 Options (setup):
   --cert <letsencrypt|provided|selfsigned>  Certificate type (default: letsencrypt)
-  --domain <domain>           Primary domain (default: cms.local)
-  --admin-domain <domain>     Admin subdomain (default: admin.cms.local)
-  --oj-domain <domain>        OJ subdomain (default: oj.cms.local)
-  --ranking-domain <domain>   Ranking subdomain (default: ranking.cms.local)
+  --domain <domain>           Contest/primary host; optional
+  --admin-domain <domain>     Admin panel host; optional
+  --oj-domain <domain>        External OJ host; optional
+  --ranking-domain <domain>   Ranking host; optional
+
+  Every domain is optional and independent — at least one is required, and the rest
+  are simply left unset. An unset domain gets no server block, no DNS name and no
+  SAN on the certificate. Unset by default: a leftover default name would be handed
+  to certbot as a SAN and fail validation.
   --cert-path <path>          Path to fullchain.pem (required for --cert provided)
   --key-path <path>           Path to privkey.pem (required for --cert provided)
   --email <email>             Email for Let's Encrypt registration
@@ -310,11 +326,121 @@ _log_optional_features() {
 }
 
 # ---------------------------------------------------------------------------
+# Domain helpers
+# ---------------------------------------------------------------------------
+
+# Prints every configured domain, one per line, in render order.
+# WHY this rather than four separate tests at each call site: certbot's SAN list,
+# the ACME vhost, status, preflight and the template filter all need the same set,
+# and the moment they are enumerated separately they drift — an omitted domain
+# shows up as an ACME failure against a name nobody asked for.
+_configured_domains() {
+  local domain
+  for domain in "$DOMAIN_NAME" "$ADMIN_DOMAIN" "$OJ_DOMAIN" "$RANKING_DOMAIN"; do
+    if [[ -n "$domain" ]]; then
+      printf '%s\n' "$domain"
+    fi
+  done
+  # Explicit success: an unset trailing domain would otherwise make the last
+  # `if` false and return non-zero, which is fatal under `set -e`.
+  return 0
+}
+
+# Prints "label=domain" for every configured domain, one per line.
+# WHY the label travels with the name: status and preflight label their rows, and an
+# empty label would print `DNS [] example.com` — which reads as a bug in the script
+# rather than a domain the operator left unset.
+_configured_domain_labels() {
+  local label domain entry
+  for entry in "primary:$DOMAIN_NAME" "admin:$ADMIN_DOMAIN" "oj:$OJ_DOMAIN" "ranking:$RANKING_DOMAIN"; do
+    label="${entry%%:*}"
+    domain="${entry#*:}"
+    if [[ -n "$domain" ]]; then
+      printf '%s=%s\n' "$label" "$domain"
+    fi
+  done
+  return 0
+}
+
+# Derives CERT_LINEAGE_DOMAIN, ACME_HOST_NAMES and PRIMARY_DOMAIN from whatever is set.
+# WHY one place: certbot creates the lineage under the first -d it is handed, every
+# vhost reads the certificate from that path, and the :80 vhost has to answer for
+# every SAN. All three are consequences of the same configured set, so they are
+# computed once here rather than reassembled at each use.
+_resolve_domain_targets() {
+  PRIMARY_DOMAIN="$DOMAIN_NAME"
+  CERT_LINEAGE_DOMAIN="${CERT_LINEAGE_DOMAIN:-$DOMAIN_NAME}"
+
+  local first="" domain
+  while read -r domain; do
+    [[ -z "$first" ]] && first="$domain"
+  done < <(_configured_domains)
+
+  # The lineage belongs to the primary when there is one, since certbot is handed
+  # -d "$DOMAIN_NAME" first and names the directory after it.
+  [[ -z "$CERT_LINEAGE_DOMAIN" ]] && CERT_LINEAGE_DOMAIN="$first"
+  ACME_HOST_NAMES="$(_configured_domains | paste -sd' ' -)"
+  [[ -n "$ACME_HOST_NAMES" ]] || ACME_HOST_NAMES="_"
+}
+
+# Fails when no domain is configured at all.
+# WHY: without one there is no name to issue a certificate for, no server_name to
+# route on, and no SAN to validate — every later step would fail in a less obvious
+# place, so the setup refuses at the point where the cause is still visible.
+_require_at_least_one_domain() {
+  if [[ -z "$ACME_HOST_NAMES" || "$ACME_HOST_NAMES" == "_" ]]; then
+    log_die "no domain configured — pass at least one of --domain, --admin-domain, --oj-domain, --ranking-domain" 1
+  fi
+}
+
+# Prints every configured domain as a shell-safe space-separated list, for logs.
+_domain_list() {
+  _configured_domains | paste -sd' ' -
+}
+
+# ---------------------------------------------------------------------------
+# Template block filter
+# ---------------------------------------------------------------------------
+
+# Strips regions marked `# @block <name>` … `# @end block` for domains that are not
+# configured, so an unset domain never produces an empty server_name. Reads stdin and
+# writes stdout, so it composes in the envsubst pipeline.
+#
+# WHY stripping beats guarding with envsubst: a `${VAR}` that expands to nothing is
+# still emitted, and `server_name ;` is a syntax error that takes the whole config
+# down — including the vhosts that were fine. Removing the region means the output is
+# valid nginx for any subset of the four domains.
+_filter_optional_blocks() {
+  awk -v enabled_primary="$DOMAIN_NAME" \
+      -v enabled_admin="$ADMIN_DOMAIN" \
+      -v enabled_oj="$OJ_DOMAIN" \
+      -v enabled_ranking="$RANKING_DOMAIN" '
+    /^# @block / {
+      name = $3
+      keep = 1
+      if (name == "primary") keep = (enabled_primary != "")
+      if (name == "admin")   keep = (enabled_admin   != "")
+      if (name == "oj")      keep = (enabled_oj      != "")
+      if (name == "ranking") keep = (enabled_ranking != "")
+      if (keep) print
+      next
+    }
+    /^# @end block/ { name = ""; keep = 1; next }
+    { if (keep || name == "") print }
+  '
+}
+
+# ---------------------------------------------------------------------------
 # Setup subcommand
 # ---------------------------------------------------------------------------
 cmd_setup() {
+  _resolve_domain_targets
+  _require_at_least_one_domain
+
   log_info "Domain setup — mode: $([ "$DRY_RUN" -eq 1 ] && echo 'DRY-RUN' || echo 'APPLY')"
-  log_info "Primary: $DOMAIN_NAME  Admin: $ADMIN_DOMAIN  OJ: $OJ_DOMAIN  Ranking: $RANKING_DOMAIN"
+  log_info "Configured domains: $(_domain_list)"
+  [[ -n "$OJ_DOMAIN" ]] || log_info "OJ domain not set — OJ vhost and SAN omitted"
+  log_info "Certificate lineage: $CERT_LINEAGE_DOMAIN"
   log_info "Certificate type: $CERT_TYPE"
   _prompt_optional_features
   _log_optional_features
@@ -355,7 +481,7 @@ cmd_setup() {
 
   _validate_nginx_config
 
-  discord_alert "Domain setup completed for ${DOMAIN_NAME} (cert: ${CERT_TYPE})" 65280
+  discord_alert "Domain setup completed for $(_domain_list) (cert: ${CERT_TYPE})" 65280
   log_info "Domain setup complete"
 }
 
@@ -391,14 +517,25 @@ _retry_certbot() {
 # ---------------------------------------------------------------------------
 # Certificate argument builders
 # ---------------------------------------------------------------------------
-# Populates CERT_DOMAINS with every -d name (the four configured hosts plus any
-# --extra-domains) so certonly and renew build identical SAN lists.
+# Populates CERT_DOMAINS with a -d for every domain that is actually configured,
+# plus any --extra-domains, so certonly and renew build identical SAN lists.
+# WHY the emptiness test per domain: passing `-d ""` for an unset domain makes
+# certbot request a SAN with no name, which fails validation for the whole
+# certificate — not just the missing name. An unconfigured domain has to be absent
+# from the command line entirely.
 build_cert_domains() {
-  CERT_DOMAINS=(-d "$DOMAIN_NAME" -d "$ADMIN_DOMAIN" -d "$OJ_DOMAIN" -d "$RANKING_DOMAIN")
-  local extra
+  CERT_DOMAINS=()
+  local domain extra
+  while read -r domain; do
+    CERT_DOMAINS+=(-d "$domain")
+  done < <(_configured_domains)
   for extra in $EXTRA_DOMAINS; do
     CERT_DOMAINS+=(-d "$extra")
   done
+  # Explicit success: CERT_DOMAINS must carry at least one -d or certbot is called
+  # with no names at all, which fails with an error that names no domain.
+  (( ${#CERT_DOMAINS[@]} > 0 )) || log_die "no domain to certify — configure at least one domain" 1
+  return 0
 }
 
 # Populates CERTBOT_FLAGS with the shared invocation flags. --staging, --force and
@@ -433,12 +570,12 @@ _wait_for_port80() {
   (( timeout > 0 )) || return 0
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    log_info "[dry-run] would wait up to ${timeout}s for port 80 at ${DOMAIN_NAME}"
+    log_info "[dry-run] would wait up to ${timeout}s for port 80 at $CERT_LINEAGE_DOMAIN"
     return 0
   fi
 
   while (( elapsed < timeout )); do
-    if curl -sf -o /dev/null --max-time "$PORT80_PROBE_TIMEOUT_S" "http://${DOMAIN_NAME}/" 2>/dev/null; then
+    if curl -sf -o /dev/null --max-time "$PORT80_PROBE_TIMEOUT_S" "http://${CERT_LINEAGE_DOMAIN}/" 2>/dev/null; then
       log_info "port 80 reachable after ${elapsed}s"
       return 0
     fi
@@ -475,7 +612,7 @@ _cert_store_dir() {
 # since it is where the older provided/self-signed paths used to write.
 _cert_fullchain_path() {
   local lineage flat
-  lineage="$(_cert_store_dir)/live/${DOMAIN_NAME}/fullchain.pem"
+  lineage="$(_cert_store_dir)/live/${CERT_LINEAGE_DOMAIN}/fullchain.pem"
   flat="$(_cert_store_dir)/live/fullchain.pem"
   if [[ -f "$lineage" ]]; then
     printf '%s' "$lineage"
@@ -488,7 +625,7 @@ _cert_fullchain_path() {
 
 _cert_privkey_path() {
   local lineage flat
-  lineage="$(_cert_store_dir)/live/${DOMAIN_NAME}/privkey.pem"
+  lineage="$(_cert_store_dir)/live/${CERT_LINEAGE_DOMAIN}/privkey.pem"
   flat="$(_cert_store_dir)/live/privkey.pem"
   if [[ -f "$lineage" ]]; then
     printf '%s' "$lineage"
@@ -576,7 +713,7 @@ _json_escape() {
 # ---------------------------------------------------------------------------
 _setup_letsencrypt() {
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    log_info "[dry-run] would run certbot certonly for $DOMAIN_NAME, $ADMIN_DOMAIN, $OJ_DOMAIN, $RANKING_DOMAIN"
+    log_info "[dry-run] would run certbot certonly for $(_domain_list)"
     return 0
   fi
 
@@ -644,7 +781,7 @@ _setup_provided_cert() {
   # The lineage directory nginx reads, not a flat live/ level: nginx requests
   # live/<domain>/fullchain.pem, so a flat copy is invisible to it.
   local dest_dir
-  dest_dir="$(_cert_store_dir)/live/${DOMAIN_NAME}"
+  dest_dir="$(_cert_store_dir)/live/${CERT_LINEAGE_DOMAIN}"
   if [[ "$DRY_RUN" -eq 1 ]]; then
     log_info "[dry-run] would copy $CERT_PATH -> ${dest_dir}/fullchain.pem"
     log_info "[dry-run] would copy $KEY_PATH -> ${dest_dir}/privkey.pem"
@@ -662,9 +799,9 @@ _setup_provided_cert() {
 # ---------------------------------------------------------------------------
 _setup_selfsigned() {
   local dest_dir
-  dest_dir="$(_cert_store_dir)/live/${DOMAIN_NAME}"
+  dest_dir="$(_cert_store_dir)/live/${CERT_LINEAGE_DOMAIN}"
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    log_info "[dry-run] would generate self-signed cert for $DOMAIN_NAME"
+    log_info "[dry-run] would generate self-signed cert for $CERT_LINEAGE_DOMAIN"
     return 0
   fi
 
@@ -673,10 +810,10 @@ _setup_selfsigned() {
     -newkey rsa:2048 \
     -keyout "${dest_dir}/privkey.pem" \
     -out "${dest_dir}/fullchain.pem" \
-    -subj "/CN=${DOMAIN_NAME}/O=CMS/C=TH" \
+    -subj "/CN=${CERT_LINEAGE_DOMAIN}/O=CMS/C=TH" \
     2>/dev/null
   chmod 600 "${dest_dir}/privkey.pem"
-  log_info "self-signed certificate generated for $DOMAIN_NAME"
+  log_info "self-signed certificate generated for $CERT_LINEAGE_DOMAIN"
 }
 
 # ---------------------------------------------------------------------------
@@ -693,6 +830,7 @@ _render_nginx_config() {
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
     log_info "[dry-run] would render $template -> $output"
+    log_info "[dry-run] domains: $(_domain_list) | lineage: $CERT_LINEAGE_DOMAIN | ACME server_name: $ACME_HOST_NAMES"
     log_info "[dry-run] variables: DOMAIN_NAME=$DOMAIN_NAME HSTS_MAX_AGE=$HSTS_MAX_AGE REDIS_RATE_LIMIT=$REDIS_RATE_LIMIT PER_USER_LIMIT=$PER_USER_LIMIT REDIS_HOST=$REDIS_HOST REDIS_PORT=$REDIS_PORT MONITORING_ENABLED=$MONITORING_ENABLED WAF_ENABLED=$WAF_ENABLED WAF_PORT=$WAF_PORT WAF_PARANOIA=$WAF_PARANOIA WAF_ANOMALY_INBOUND=$WAF_ANOMALY_INBOUND WAF_RULE_ENGINE=$WAF_RULE_ENGINE"
     if [[ "${WAF_ENABLED:-0}" == "1" ]]; then
       log_info "[dry-run] WAF_ENABLED=1 — waf fronting note: grader-waf (OWASP CRS, PARANOIA=$WAF_PARANOIA, ANOMALY_INBOUND=$WAF_ANOMALY_INBOUND, RULE_ENGINE=$WAF_RULE_ENGINE) fronts grader-nginx-proxy via cms-network BACKEND=http://grader-nginx-proxy:80; host port ${WAF_BIND_IP}:${WAF_PORT} → 80 when --profile waf is used. See docs/waf-tuning.md"
@@ -703,6 +841,7 @@ _render_nginx_config() {
   fi
 
   export DOMAIN_NAME ADMIN_DOMAIN OJ_DOMAIN RANKING_DOMAIN HSTS_MAX_AGE
+  export CERT_LINEAGE_DOMAIN ACME_HOST_NAMES
   export CONTEST_LISTEN_PORT ADMIN_LISTEN_PORT RANKING_LISTEN_PORT OJ_BACKEND_PORT
   export RANKING_AUTH_DIRECTIVES="${RANKING_AUTH_DIRECTIVES:-}"
 
@@ -764,8 +903,9 @@ EOF
   fi
   export NGINX_METRICS_LOCATION="$nginx_metrics_location"
 
-  envsubst '${DOMAIN_NAME} ${ADMIN_DOMAIN} ${OJ_DOMAIN} ${RANKING_DOMAIN} ${HSTS_MAX_AGE} ${CONTEST_LISTEN_PORT} ${ADMIN_LISTEN_PORT} ${RANKING_LISTEN_PORT} ${OJ_BACKEND_PORT} ${RANKING_AUTH_DIRECTIVES} ${REDIS_UPSTREAM_BLOCK} ${REDIS_LUA_PLACEHOLDER} ${PER_USER_LOGIN_DIRECTIVES} ${PER_USER_RANKING_DIRECTIVES} ${NGINX_METRICS_LOCATION}' < "$template" > "$output"
-  log_info "nginx config rendered: $output (REDIS_RATE_LIMIT=${REDIS_RATE_LIMIT} PER_USER_LIMIT=${PER_USER_LIMIT} MONITORING_ENABLED=${MONITORING_ENABLED} WAF_ENABLED=${WAF_ENABLED:-0})"
+  envsubst '${DOMAIN_NAME} ${ADMIN_DOMAIN} ${OJ_DOMAIN} ${RANKING_DOMAIN} ${CERT_LINEAGE_DOMAIN} ${ACME_HOST_NAMES} ${HSTS_MAX_AGE} ${CONTEST_LISTEN_PORT} ${ADMIN_LISTEN_PORT} ${RANKING_LISTEN_PORT} ${OJ_BACKEND_PORT} ${RANKING_AUTH_DIRECTIVES} ${REDIS_UPSTREAM_BLOCK} ${REDIS_LUA_PLACEHOLDER} ${PER_USER_LOGIN_DIRECTIVES} ${PER_USER_RANKING_DIRECTIVES} ${NGINX_METRICS_LOCATION}' < "$template" \
+    | _filter_optional_blocks > "$output"
+  log_info "nginx config rendered: $output (domains: $(_domain_list) | lineage: $CERT_LINEAGE_DOMAIN | REDIS_RATE_LIMIT=${REDIS_RATE_LIMIT} PER_USER_LIMIT=${PER_USER_LIMIT} MONITORING_ENABLED=${MONITORING_ENABLED} WAF_ENABLED=${WAF_ENABLED:-0})"
   if [[ "${WAF_ENABLED:-0}" == "1" ]]; then
     log_info "WAF_ENABLED=1 — grader-waf is fronting grader-nginx-proxy (PARANOIA=${WAF_PARANOIA} ANOMALY_INBOUND=${WAF_ANOMALY_INBOUND} RULE_ENGINE=${WAF_RULE_ENGINE}, host ${WAF_BIND_IP}:${WAF_PORT}→80 when --profile waf up). CAPTCHA remains active alongside WAF."
   else
@@ -805,29 +945,46 @@ _preflight_port80() {
     return 0
   fi
 
-  if ! curl -sf -o /dev/null --max-time 5 "http://${DOMAIN_NAME}/" 2>/dev/null; then
-    log_warn "port 80 may not be reachable at $DOMAIN_NAME — LE challenge could fail"
-  else
-    log_info "port 80 reachable at $DOMAIN_NAME"
-  fi
+  # WHY every configured domain and not just the primary: one certificate carries
+  # every SAN, so Let's Encrypt validates each name against :80. A name that does
+  # not answer spends one of the 5 failed validations per hour allowed per account
+  # and hostname, so all of them are probed up front.
+  local domain checked=0
+  while read -r domain; do
+    checked=$((checked + 1))
+    if curl -sf -o /dev/null --max-time 5 "http://${domain}/" 2>/dev/null; then
+      log_info "port 80 reachable at $domain"
+    else
+      log_warn "port 80 may not be reachable at $domain — LE challenge could fail"
+    fi
+  done < <(_configured_domains)
+
+  (( checked > 0 )) || log_warn "no domain configured — nothing to probe on port 80"
+  return 0
 }
 
 # ---------------------------------------------------------------------------
 # Status subcommand
 # ---------------------------------------------------------------------------
 cmd_status() {
+  _resolve_domain_targets
+
   if [[ "$JSON_OUTPUT" == "1" ]]; then
     cmd_status_json
     return 0
   fi
-  log_info "Domain status for $DOMAIN_NAME"
+  log_info "Domain status for $(_domain_list)"
   _log_optional_features
   echo ""
 
-  _status_dns "$DOMAIN_NAME" "primary"
-  _status_dns "$ADMIN_DOMAIN" "admin"
-  _status_dns "$OJ_DOMAIN" "oj"
-  _status_dns "$RANKING_DOMAIN" "ranking"
+  # WHY only configured domains are probed: an unset name resolves nowhere and would
+  # be reported as NOT RESOLVED, which reads as a DNS fault on the operator's side
+  # when in fact they never asked for that name.
+  local entry label domain
+  while read -r entry; do
+    label="${entry%%=*}"; domain="${entry#*=}"
+    _status_dns "$domain" "$label"
+  done < <(_configured_domain_labels)
   echo ""
 
   _status_cert_expiry
@@ -836,10 +993,10 @@ cmd_status() {
   _status_renewal_timer
   echo ""
 
-  _status_connectivity "$DOMAIN_NAME" "primary"
-  _status_connectivity "$ADMIN_DOMAIN" "admin"
-  _status_connectivity "$OJ_DOMAIN" "oj"
-  _status_connectivity "$RANKING_DOMAIN" "ranking"
+  while read -r entry; do
+    label="${entry%%=*}"; domain="${entry#*=}"
+    _status_connectivity "$domain" "$label"
+  done < <(_configured_domain_labels)
 }
 
 _status_dns() {
@@ -942,18 +1099,21 @@ _renewal_mechanism() {
 # parsing log lines.
 cmd_status_json() {
   local dns_json="" host resolved
-  for host in "$DOMAIN_NAME" "$ADMIN_DOMAIN" "$OJ_DOMAIN" "$RANKING_DOMAIN"; do
+  # WHY only configured domains: an unset name is emitted as an empty string today,
+  # which a consumer reads as "DNS is broken for this name" rather than "not in use".
+  # The key stays the domain so existing consumers keep working.
+  while read -r host; do
     resolved="$(_resolve_host "$host")"
     dns_json+="\"$(_json_escape "$host")\":\"$(_json_escape "${resolved:-}")\","
-  done
+  done < <(_configured_domains)
   dns_json="${dns_json%,}"
 
   local days_left expiry
   days_left="$(_cert_days_left)"
   expiry="$(openssl x509 -enddate -noout -in "$(_cert_fullchain_path)" 2>/dev/null | sed 's/notAfter=//' || true)"
 
-  printf '{"domain":"%s","dns":{%s},"certificate":{"days_left":%s,"expiry":"%s"},"renewal":"%s"}\n' \
-    "$(_json_escape "$DOMAIN_NAME")" "$dns_json" \
+  printf '{"domains":"%s","primary":"%s","dns":{%s},"certificate":{"days_left":%s,"expiry":"%s"},"renewal":"%s"}\n' \
+    "$(_json_escape "$(_domain_list)")" "$(_json_escape "$PRIMARY_DOMAIN")" "$dns_json" \
     "$days_left" "$(_json_escape "$expiry")" "$(_renewal_mechanism)"
 }
 
@@ -963,12 +1123,13 @@ cmd_status_json() {
 # Exits non-zero when the certificate is missing or expires within the threshold,
 # so a monitor or cron job can alert on it.
 cmd_check_expiry() {
+  _resolve_domain_targets
   local threshold="${CHECK_EXPIRY_DAYS:-0}" days_left
   (( threshold > 0 )) || threshold="$CHECK_EXPIRY_DAYS_DEFAULT"
   days_left="$(_cert_days_left)"
 
   if (( days_left < 0 )); then
-    log_warn "certificate check failed: no certificate found for ${DOMAIN_NAME}"
+    log_warn "certificate check failed: no certificate found for ${CERT_LINEAGE_DOMAIN}"
     exit 1
   fi
   if (( days_left < threshold )); then
@@ -982,6 +1143,7 @@ cmd_check_expiry() {
 # Revoke subcommand
 # ---------------------------------------------------------------------------
 cmd_revoke() {
+  _resolve_domain_targets
   log_info "Certificate revocation — mode: $([ "$DRY_RUN" -eq 1 ] && echo 'DRY-RUN' || echo 'APPLY')"
   local cert_file key_file
   cert_file="$(_cert_fullchain_path)"
@@ -1001,7 +1163,7 @@ cmd_revoke() {
   _retry_certbot certbot revoke --cert-path "$cert_file" --key-path "$key_file" \
     --reason "$REVOKE_REASON" --non-interactive \
     || log_die "certbot revoke failed" 1
-  discord_alert "Certificate revoked for ${DOMAIN_NAME}" 16711680
+  discord_alert "Certificate revoked for ${CERT_LINEAGE_DOMAIN}" 16711680
   log_info "Revocation complete"
 }
 
@@ -1009,10 +1171,11 @@ cmd_revoke() {
 # Renew subcommand
 # ---------------------------------------------------------------------------
 cmd_renew() {
+  _resolve_domain_targets
   log_info "Certificate renewal — mode: $([ "$DRY_RUN" -eq 1 ] && echo 'DRY-RUN' || echo 'APPLY')"
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    log_info "[dry-run] would force-renew certificates for $DOMAIN_NAME"
+    log_info "[dry-run] would force-renew certificates for $CERT_LINEAGE_DOMAIN"
     return 0
   fi
 
@@ -1020,7 +1183,7 @@ cmd_renew() {
   build_renew_flags
 
   if command -v certbot >/dev/null 2>&1; then
-    _retry_certbot certbot renew "${RENEW_FLAGS[@]}" --cert-name "$DOMAIN_NAME" || log_die "certbot renew failed" 1
+    _retry_certbot certbot renew "${RENEW_FLAGS[@]}" --cert-name "$CERT_LINEAGE_DOMAIN" || log_die "certbot renew failed" 1
     log_info "certificates renewed via certbot"
   elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q certbot; then
     local container
@@ -1039,7 +1202,7 @@ cmd_renew() {
     log_info "nginx reloaded in $nginx_container"
   fi
 
-  discord_alert "Certificates renewed for ${DOMAIN_NAME}" 65280
+  discord_alert "Certificates renewed for ${CERT_LINEAGE_DOMAIN}" 65280
   log_info "Renewal complete"
 }
 
@@ -1047,7 +1210,8 @@ cmd_renew() {
 # Preflight subcommand — 9-check matrix
 # ---------------------------------------------------------------------------
 cmd_preflight() {
-  log_info "Preflight checks for $DOMAIN_NAME"
+  _resolve_domain_targets
+  log_info "Preflight checks for $(_domain_list)"
   _log_optional_features
   echo ""
   local pass=0 warn=0 fail=0
@@ -1138,8 +1302,12 @@ _check_database() {
 }
 
 _check_dns() {
-  printf '  %-30s' "DNS ($DOMAIN_NAME):"
-  if getent hosts "$DOMAIN_NAME" >/dev/null 2>&1; then
+  # WHY the lineage name and not the primary: when a deployment configures only
+  # admin or only ranking, the primary is empty and probing it would report a DNS
+  # failure for a name that was never requested. The lineage is by construction a
+  # domain that exists.
+  printf '  %-30s' "DNS ($CERT_LINEAGE_DOMAIN):"
+  if getent hosts "$CERT_LINEAGE_DOMAIN" >/dev/null 2>&1; then
     printf 'PASS\n'
     return 0
   else
@@ -1149,8 +1317,8 @@ _check_dns() {
 }
 
 _check_http80() {
-  printf '  %-30s' "HTTP :80 ($DOMAIN_NAME):"
-  if curl -sf -o /dev/null --max-time 5 "http://${DOMAIN_NAME}/" 2>/dev/null; then
+  printf '  %-30s' "HTTP :80 ($CERT_LINEAGE_DOMAIN):"
+  if curl -sf -o /dev/null --max-time 5 "http://${CERT_LINEAGE_DOMAIN}/" 2>/dev/null; then
     printf 'PASS\n'
     return 0
   else
@@ -1160,8 +1328,8 @@ _check_http80() {
 }
 
 _check_https443() {
-  printf '  %-30s' "HTTPS :443 ($DOMAIN_NAME):"
-  if curl -Ikso /dev/null --max-time 5 "https://${DOMAIN_NAME}/" 2>/dev/null; then
+  printf '  %-30s' "HTTPS :443 ($CERT_LINEAGE_DOMAIN):"
+  if curl -Ikso /dev/null --max-time 5 "https://${CERT_LINEAGE_DOMAIN}/" 2>/dev/null; then
     printf 'PASS\n'
     return 0
   else
@@ -1172,15 +1340,21 @@ _check_https443() {
 
 _check_domain_paths() {
   printf '  %-30s' "Domain paths:"
-  local ok=1
-  for d in "$DOMAIN_NAME" "$ADMIN_DOMAIN" "$OJ_DOMAIN" "$RANKING_DOMAIN"; do
-    if ! curl -Ikso /dev/null --max-time 5 "https://${d}/" 2>/dev/null; then
+  local ok=1 domain checked=0
+  while read -r domain; do
+    checked=$((checked + 1))
+    if ! curl -Ikso /dev/null --max-time 5 "https://${domain}/" 2>/dev/null; then
       ok=0
       break
     fi
-  done
+  done < <(_configured_domains)
+
+  if [[ "$checked" -eq 0 ]]; then
+    printf 'WARN (no domain configured)\n'
+    return 1
+  fi
   if [[ "$ok" -eq 1 ]]; then
-    printf 'PASS (all domains reachable)\n'
+    printf 'PASS (%d domain(s) reachable)\n' "$checked"
     return 0
   else
     printf 'WARN (some domains unreachable)\n'

@@ -2,6 +2,14 @@
 # Rendered by __domain.sh → config/grader.nginx.conf
 # Render with: envsubst '$DOMAIN_NAME $ADMIN_DOMAIN ...' < template > output
 # Only listed ${VAR} placeholders are substituted; $host/$remote_addr etc. left intact.
+#
+# Optional domains. Every region between `# @block <name>` and `# @end block` is
+# emitted only when that domain is configured; __domain.sh strips the others, so an
+# unset domain never reaches nginx as an empty server_name. ACME_HOST_NAMES lists
+# every configured name for the port-80 vhost, because Let's Encrypt validates all
+# SANs of one certificate against :80 and the challenge must answer for each of them.
+# CERT_LINEAGE_DOMAIN is the lineage certbot created the certificate under: the primary
+# domain when set, otherwise the first domain that is set.
 
 # Rate limit zones — local fallback (always defined, never removed)
 limit_req_zone $binary_remote_addr zone=admin_login:10m rate=5r/s;
@@ -47,9 +55,11 @@ upstream oj_backend {
 }
 
 # ── Server 1: HTTP → HTTPS redirect + ACME challenge ──────────────
+# Always rendered. default_server answers for any Host, which is what lets a single
+# :80 forward validate every SAN on the certificate.
 server {
     listen 80 default_server;
-    server_name ${DOMAIN_NAME};
+    server_name ${ACME_HOST_NAMES};
 
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
@@ -63,13 +73,14 @@ server {
     }
 }
 
-# ── Server 2: ${DOMAIN_NAME} (contest + ranking + WS) ─────────
+# @block primary
+# ── Server 2: primary (contest + ranking + WS) ─────────────────────
 server {
     listen 443 ssl http2;
     server_name ${DOMAIN_NAME};
 
-    ssl_certificate     /etc/letsencrypt/live/${DOMAIN_NAME}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN_NAME}/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/privkey.pem;
     include /etc/nginx/conf.d/nginx-ssl.conf;
     add_header Strict-Transport-Security "max-age=${HSTS_MAX_AGE}; includeSubDomains" always;
 
@@ -123,14 +134,16 @@ server {
     access_log /var/log/nginx/grader_access.log;
     error_log /var/log/nginx/grader_error.log;
 }
+# @end block
 
-# ── Server 3: admin.grader (Next.js panel + classic admin) ────────
+# @block admin
+# ── Server 3: admin panel (Next.js) + classic admin ───────────────
 server {
     listen 443 ssl http2;
     server_name ${ADMIN_DOMAIN};
 
-    ssl_certificate     /etc/letsencrypt/live/${DOMAIN_NAME}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN_NAME}/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/privkey.pem;
     include /etc/nginx/conf.d/nginx-ssl.conf;
     add_header Strict-Transport-Security "max-age=${HSTS_MAX_AGE}; includeSubDomains" always;
 
@@ -157,14 +170,16 @@ server {
     access_log /var/log/nginx/admin_access.log;
     error_log /var/log/nginx/admin_error.log;
 }
+# @end block
 
-# ── Server 4: oj.grader (external OJ backend via host-gateway) ────
+# @block oj
+# ── Server 4: external OJ backend via host-gateway ────────────────
 server {
     listen 443 ssl http2;
     server_name ${OJ_DOMAIN};
 
-    ssl_certificate     /etc/letsencrypt/live/${DOMAIN_NAME}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN_NAME}/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/privkey.pem;
     include /etc/nginx/conf.d/nginx-ssl.conf;
     add_header Strict-Transport-Security "max-age=${HSTS_MAX_AGE}; includeSubDomains" always;
 
@@ -186,14 +201,16 @@ server {
     access_log /var/log/nginx/oj_access.log;
     error_log /var/log/nginx/oj_error.log;
 }
+# @end block
 
-# ── Server 5: ranking.grader (always auth) ───────────────────────
+# @block ranking
+# ── Server 5: ranking (always auth) ────────────────────────────────
 server {
     listen 443 ssl http2;
     server_name ${RANKING_DOMAIN};
 
-    ssl_certificate     /etc/letsencrypt/live/${DOMAIN_NAME}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN_NAME}/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/privkey.pem;
     include /etc/nginx/conf.d/nginx-ssl.conf;
     add_header Strict-Transport-Security "max-age=${HSTS_MAX_AGE}; includeSubDomains" always;
 
@@ -222,3 +239,4 @@ server {
     access_log /var/log/nginx/ranking_access.log;
     error_log /var/log/nginx/ranking_error.log;
 }
+# @end block

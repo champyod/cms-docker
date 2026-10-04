@@ -11,10 +11,14 @@ services:
     restart: on-failure:5
     depends_on: []
     environment:
-      DOMAIN_NAME: ${DOMAIN_NAME:-cms.local}
-      ADMIN_DOMAIN: ${ADMIN_DOMAIN:-admin.cms.local}
-      OJ_DOMAIN: ${OJ_DOMAIN:-oj.cms.local}
-      RANKING_DOMAIN: ${RANKING_DOMAIN:-ranking.cms.local}
+      # WHY empty rather than a .local default: an unset domain must stay unset. A
+      # leftover default name becomes a server_name and a SAN for a name nobody
+      # requested, which fails ACME validation for the whole certificate. Every one of
+      # these is optional; the rendered config carries a vhost only for the ones set.
+      DOMAIN_NAME: ${DOMAIN_NAME:-}
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:-}
+      OJ_DOMAIN: ${OJ_DOMAIN:-}
+      RANKING_DOMAIN: ${RANKING_DOMAIN:-}
       CONTEST_LISTEN_PORT: ${CONTEST_LISTEN_PORT:-8888}
       ADMIN_LISTEN_PORT: ${ADMIN_LISTEN_PORT:-8889}
       RANKING_LISTEN_PORT: ${RANKING_LISTEN_PORT:-8890}
@@ -48,10 +52,14 @@ services:
     container_name: grader-certbot
     restart: on-failure:5
     environment:
-      DOMAIN_NAME: ${DOMAIN_NAME:-cms.local}
-      ADMIN_DOMAIN: ${ADMIN_DOMAIN:-admin.cms.local}
-      OJ_DOMAIN: ${OJ_DOMAIN:-oj.cms.local}
-      RANKING_DOMAIN: ${RANKING_DOMAIN:-ranking.cms.local}
+      # WHY empty rather than a .local default: an unset domain must stay unset. A
+      # leftover default name becomes a server_name and a SAN for a name nobody
+      # requested, which fails ACME validation for the whole certificate. Every one of
+      # these is optional; the rendered config carries a vhost only for the ones set.
+      DOMAIN_NAME: ${DOMAIN_NAME:-}
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:-}
+      OJ_DOMAIN: ${OJ_DOMAIN:-}
+      RANKING_DOMAIN: ${RANKING_DOMAIN:-}
       CERT_EMAIL: ${CERT_EMAIL:-}
     volumes:
       - ./config/letsencrypt:/etc/letsencrypt
@@ -60,7 +68,23 @@ services:
     # WHY: `renew` never creates a certificate, so a fresh stack had nothing on
     # :443 until someone ran certonly by hand. CERT_EMAIL must be set for the
     # bootstrap to succeed; otherwise it is skipped and only renewals run.
-    entrypoint: "/bin/sh -c 'trap exit TERM; if [ ! -d \"/etc/letsencrypt/live/$${DOMAIN_NAME}\" ]; then certbot certonly --webroot -w /var/www/certbot -d $${DOMAIN_NAME} -d $${ADMIN_DOMAIN} -d $${OJ_DOMAIN} -d $${RANKING_DOMAIN} --email $${CERT_EMAIL} --agree-tos --non-interactive || true; fi; while :; do certbot renew --webroot -w /var/www/certbot; sleep 12h & wait $${!}; done;'"
+    # WHY the shell loop builds the -d list instead of passing four flags: every domain
+    # is optional, and `certbot certonly -d ""` requests an unnamed SAN, which fails
+    # validation for the whole certificate instead of skipping the domain. The first
+    # domain that is set becomes the lineage directory, matching scripts/__domain.sh.
+    entrypoint: >
+      /bin/sh -c 'trap exit TERM;
+      LINEAGE="$${DOMAIN_NAME:-$${ADMIN_DOMAIN:-$${OJ_DOMAIN:-$${RANKING_DOMAIN}}}";
+      if [ -z "$$LINEAGE" ]; then
+        echo "no domain configured — set DOMAIN_NAME, ADMIN_DOMAIN, OJ_DOMAIN or RANKING_DOMAIN";
+      elif [ ! -d "/etc/letsencrypt/live/$$LINEAGE" ]; then
+        set --;
+        for d in "$$DOMAIN_NAME" "$$ADMIN_DOMAIN" "$$OJ_DOMAIN" "$$RANKING_DOMAIN"; do
+          [ -n "$$d" ] && set -- "$$@" -d "$$d";
+        done;
+        certbot certonly --webroot -w /var/www/certbot "$$@" --email "$$CERT_EMAIL" --agree-tos --non-interactive || true;
+      fi;
+      while :; do certbot renew --webroot -w /var/www/certbot; sleep 12h & wait $${!}; done;'
 
   redis-rate-limit:
     image: redis:7-alpine
