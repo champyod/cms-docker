@@ -5,6 +5,8 @@
 
 pub mod catalog;
 pub mod config;
+pub mod config_schema;
+pub mod config_schema_kinds;
 pub mod dispatch;
 pub mod docker;
 pub mod docker_targets;
