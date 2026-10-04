@@ -305,7 +305,6 @@ services:
       SERVICE_SHARD: ${CONTEST_WEB_SERVER_SHARD:-0}
       CONTEST_ID: ${CONTEST_ID:-1}
       CONTEST_LISTEN_PORT: ${CONTEST_LISTEN_PORT:-8888}
-      CONTEST_LISTEN_ADDRESS: ${CONTEST_LISTEN_ADDRESS:-0.0.0.0}
       SECRET_KEY: ${SECRET_KEY}
       COOKIE_DURATION: ${COOKIE_DURATION:-10800}
       MAX_SUBMISSION_LENGTH: ${MAX_SUBMISSION_LENGTH:-100000}
@@ -454,7 +453,6 @@ services:
     environment:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       ADMIN_LISTEN_PORT: ${ADMIN_LISTEN_PORT:-8889}
-      ADMIN_LISTEN_ADDRESS: ${ADMIN_LISTEN_ADDRESS:-0.0.0.0}
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
@@ -495,7 +493,6 @@ services:
     environment:
       CMS_RANKING_CONFIG: ${CMS_RANKING_CONFIG:-/usr/local/etc/cms_ranking.toml}
       RANKING_LISTEN_PORT: ${RANKING_LISTEN_PORT:-8890}
-      RANKING_LISTEN_ADDRESS: ${RANKING_LISTEN_ADDRESS:-0.0.0.0}
     volumes:
       - ./config/cms_ranking.toml:/usr/local/etc/cms_ranking.toml:ro
       - cms-logs:/var/local/log/cms

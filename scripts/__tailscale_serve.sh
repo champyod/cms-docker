@@ -92,24 +92,42 @@ cmd_setup() {
   if [ "$hide" = 1 ]; then
     local toml="config.toml"
     [ -f "$toml" ] || log_die "config.toml missing"
-    if grep -qE '^ADMIN_NEXT_LISTEN_ADDRESS\s*=\s*"127\.0\.0\.1"' "$toml" \
-       && grep -qE '^ADMIN_LISTEN_ADDRESS\s*=\s*"127\.0\.0\.1"' "$toml" \
-       && grep -qE '^RANKING_LISTEN_ADDRESS\s*=\s*"127\.0\.0\.1"' "$toml"; then
+    # WHY *_BIND_IP and not the old *_LISTEN_ADDRESS: compose binds the host port from
+    # *_BIND_IP, while *_LISTEN_ADDRESS was only injected into the container env and
+    # read by nothing. Hiding a port means narrowing what compose publishes, so the
+    # key written has to be the one compose reads.
+    local hide_keys="ADMIN_NEXT_BIND_IP ADMIN_BIND_IP RANKING_BIND_IP"
+    local key
+    for key in $hide_keys; do
+      # WHY fail loudly rather than append: appending an unknown key grew config.toml
+      # with orphans that no consumer reads, so the command appeared to succeed while
+      # the ports stayed published. A missing key is a config the operator must fix.
+      grep -qE "^${key}[[:space:]]*=" "$toml" \
+        || log_die "$key is absent from config.toml — run './cms config sync' to add it, then retry --hide-ports"
+    done
+    local needs_update=0
+    for key in $hide_keys; do
+      grep -qE "^${key}[[:space:]]*=[[:space:]]*\"127\.0\.0\.1\"" "$toml" || needs_update=1
+    done
+    if [ "$needs_update" -eq 0 ]; then
       log_info "raw ports already bound to loopback"
     else
       python3 - "$toml" <<'PYEOF'
 import re
+import sys
 from pathlib import Path
-p = Path("config.toml")
-t = p.read_text()
-for key in ("ADMIN_NEXT_LISTEN_ADDRESS", "ADMIN_LISTEN_ADDRESS", "RANKING_LISTEN_ADDRESS"):
-    pattern = rf'^{key}\s*=.*'
+
+path = Path(sys.argv[1])
+text = path.read_text()
+for key in ("ADMIN_NEXT_BIND_IP", "ADMIN_BIND_IP", "RANKING_BIND_IP"):
+    # A key confirmed present by the shell guard above: rewrite in place and never
+    # fall back to appending, because an appended key is one nothing reads.
+    pattern = rf'^{key}\s*=.*$'
     replacement = f'{key} = "127.0.0.1"'
-    if re.search(pattern, t, re.MULTILINE):
-        t = re.sub(pattern, replacement, t, flags=re.MULTILINE)
-    else:
-        t += f'\n{replacement}\n'
-p.write_text(t)
+    text, count = re.subn(pattern, replacement, text, count=1, flags=re.MULTILINE)
+    if count == 0:
+        sys.exit(f"{key} not found in {path} — refusing to append an unread key")
+path.write_text(text)
 PYEOF
       # WHY not 2>/dev/null: that discards the sync's own [WARN]/[FAIL] lines and
       # preflight failures, so a failure arrives here with no stated cause.

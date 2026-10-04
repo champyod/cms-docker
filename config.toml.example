@@ -37,7 +37,6 @@ MTLS_WORKER_KEY = "config/mtls/worker-key.pem"
 
 [admin]
 DEPLOYMENT_TYPE = "img"         # enum:img,src
-ADMIN_LISTEN_ADDRESS = "0.0.0.0"
 ADMIN_LISTEN_PORT = 8889        # port
 ADMIN_PORT_EXTERNAL = 8889      # port
 ADMIN_NEXT_PORT_EXTERNAL = 8891 # port
@@ -45,6 +44,9 @@ ADMIN_NEXT_DOMAIN = "admin-next.cms.local"
 VITE_API_URL = "http://localhost:8889"
 SERVER_BASE_URL = "http://localhost"
 ADMIN_DOMAIN = "admin.cms.local"
+ADMIN_BIND_IP = "127.0.0.1"     # str; address the classic admin UI is published on; loopback keeps it reachable only through the proxy — set it to 0.0.0.0 to expose the port to the LAN
+ADMIN_NEXT_BIND_IP = "127.0.0.1" # str; address the Next.js admin panel is published on
+RANKING_BIND_IP = "127.0.0.1"   # str; address the ranking board is published on
 ADMIN_COOKIE_DURATION = 36000   # num; seconds
 AUTH_SECRET = ""                # secret; auto-generated hex32 if empty
 CAPTCHA_ENABLED = 0             # enum:0,1; effect: reduces brute-force before fail2ban
@@ -53,7 +55,6 @@ CAPTCHA_SITE_KEY = ""           # str
 CAPTCHA_SECRET_KEY = ""         # secret
 CAPTCHA_THRESHOLD = 3           # num
 CAPTCHA_BAN_THRESHOLD = 5       # num
-RANKING_LISTEN_ADDRESS = "0.0.0.0"
 RANKING_LISTEN_PORT = 8890      # port
 RANKING_PORT_EXTERNAL = 8890    # port
 RANKING_DOMAIN = "ranking.cms.local"
@@ -85,7 +86,7 @@ RPC_ALLOW_BACKDOOR = false    # bool; allow remote start_backdoor/stop_backdoor 
 CONTEST_ID = 1                  # num; ACTIVE contest served by the contest stack; single source of truth (docker compose reads ${CONTEST_ID}); the admin panel writes here, never the generated .env
 CONTEST_DOMAIN = ""             # str; FQDN contestants use; empty=CMS_DOMAIN
 CONTEST_LISTEN_PORT = 8888      # port
-CONTEST_LISTEN_ADDRESS = "0.0.0.0"
+CONTEST_BIND_IP = "127.0.0.1"   # str; address the contest web UI is published on; loopback keeps it reachable only through the proxy — set it to 0.0.0.0 to expose the port to the LAN
 ACTIVE_CONTEST_PORT = 8888      # port; legacy alias — mapped to CONTEST_LISTEN_PORT when that is empty
 SECRET_KEY = ""                 # secret; auto-generated hex32 if empty
 COOKIE_DURATION = 10800         # num; seconds

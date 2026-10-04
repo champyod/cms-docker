@@ -374,6 +374,65 @@ migrate_missing_keys() {
   log_info "migrated $total new config keys: ${summary%"; "}"
 }
 
+# --- Retired listen-address keys ---
+# WHY: compose reads *_BIND_IP for the published port. The *_LISTEN_ADDRESS keys were
+# only injected into the container environment and read by nothing, so they were
+# removed from config.toml.example and from every compose environment block. Their old
+# default is the only value whose removal changes nothing.
+readonly RETIRED_LISTEN_ADDRESS_DEFAULT="0.0.0.0"
+readonly RETIRED_LISTEN_ADDRESS_KEYS=(
+  "CONTEST_LISTEN_ADDRESS"
+  "ADMIN_LISTEN_ADDRESS"
+  "RANKING_LISTEN_ADDRESS"
+  "ADMIN_NEXT_LISTEN_ADDRESS"
+)
+
+# Reads one key's value from a TOML file, ignoring comments and section headers.
+# Prints an empty string when the key is absent.
+toml_value_of_key() {
+  local file="$1" want="$2" line trimmed
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    trimmed="$(toml_trim "${line%%#*}")"
+    [[ "$trimmed" =~ ^\[[a-zA-Z0-9_]+\]$ ]] && continue
+    [[ "$trimmed" =~ ^([A-Za-z0-9_]+)[[:space:]]*=[[:space:]]*(.*)$ ]] || continue
+    if [[ "${BASH_REMATCH[1]}" == "$want" ]]; then
+      toml_value "${BASH_REMATCH[2]}"
+      return 0
+    fi
+  done < "$file"
+  return 0
+}
+
+# Aborts when a retired *_LISTEN_ADDRESS key still holds a non-default value.
+#
+# WHY this has to stop the sync: a server that set one to something other than 0.0.0.0
+# did so believing it controlled exposure. Dropping the key without asking lets compose
+# fall back to its own 0.0.0.0 default, publishing the port on MORE interfaces than
+# before — and it fails silently, reporting success. A key left at the old default is
+# not reported, because that value changed nothing while it existed and changes nothing
+# now.
+assert_no_stranded_listen_addresses() {
+  [[ -f "$TOML_FILE" ]] || return 0
+  local key value stranded=""
+  for key in "${RETIRED_LISTEN_ADDRESS_KEYS[@]}"; do
+    value="$(toml_value_of_key "$TOML_FILE" "$key")"
+    [[ -z "$value" || "$value" == "$RETIRED_LISTEN_ADDRESS_DEFAULT" ]] && continue
+    stranded+="  ${key} = \"${value}\""$'\n'
+  done
+  [[ -z "$stranded" ]] && return 0
+
+  log_error "config.toml sets retired keys to non-default values:"
+  printf '%s' "$stranded" >&2
+  log_error "These no longer control anything: compose binds the published port from"
+  log_error "*_BIND_IP, and these keys were only passed into the container environment."
+  log_error "Move each value to the matching *_BIND_IP key, then delete the retired one:"
+  log_error "  CONTEST_LISTEN_ADDRESS    -> CONTEST_BIND_IP"
+  log_error "  ADMIN_LISTEN_ADDRESS      -> ADMIN_BIND_IP"
+  log_error "  RANKING_LISTEN_ADDRESS    -> RANKING_BIND_IP"
+  log_error "  ADMIN_NEXT_LISTEN_ADDRESS -> ADMIN_NEXT_BIND_IP"
+  exit 1
+}
+
 # --- Retired split env files ---
 # WHY: compose loads only the merged .env (no compose file declares `env_file:`), so a
 # value living in .env.core/.env.contest/.env.worker/.env.infra/.env.tailscale/.env.admin
@@ -676,6 +735,16 @@ main() {
   # never reach old worktrees and downstream .env would fallback to defaults.
   migrate_missing_keys
 
+  # Refuse to proceed when a removed key still holds a value an operator may have set
+  # on purpose. WHY: *_LISTEN_ADDRESS is gone from config.toml.example and from every
+  # compose environment block because nothing ever read it — compose binds the host
+  # port from *_BIND_IP. A server that still carries the key with anything other than
+  # the old default 0.0.0.0 almost certainly relied on it, and silently dropping it
+  # would leave compose falling back to its own 0.0.0.0 default, publishing the port on
+  # MORE interfaces than before with no error. Stopping here keeps that decision with
+  # the operator, who can move the value onto the *_BIND_IP key that is now live.
+  assert_no_stranded_listen_addresses
+
   parse_toml "$TOML_FILE"
 
   # Ensure ranking config exists from sample (needed for logo_path injection)
@@ -710,13 +779,46 @@ main() {
     fi
   fi
 
-  # Derived values: CONTEST_DOMAIN → CMS_DOMAIN, DOMAIN_NAME → CMS_DOMAIN
+  # Derived values. WHY these run before the .env is written: a value that is only
+  # derived here never existed in config.toml, so it has to reach .env on this run or
+  # the deployment it belongs to comes up with an empty hostname.
+  #
+  # CONTEST_DOMAIN and DOMAIN_NAME both fall back to CMS_DOMAIN so a box with only a
+  # base domain still gets working names. Both keys are read from the section that
+  # defines them — DOMAIN_NAME lives in [admin] alongside the other domain keys, not
+  # in [infra]; reading infra.DOMAIN_NAME silently found nothing and wrote a second,
+  # differently-sectioned key the proxy never read.
   local cms_domain="${__TOML[core.CMS_DOMAIN]:-cms.local}"
   if [[ -z "${__TOML[contest.CONTEST_DOMAIN]:-}" ]]; then
     __TOML[contest.CONTEST_DOMAIN]="$cms_domain"
   fi
-  if [[ -z "${__TOML[infra.DOMAIN_NAME]:-}" ]]; then
-    __TOML[infra.DOMAIN_NAME]="$cms_domain"
+  if [[ -z "${__TOML[admin.DOMAIN_NAME]:-}" ]]; then
+    __TOML[admin.DOMAIN_NAME]="$cms_domain"
+  fi
+
+  # ── Public base URLs ──────────────────────────────────────────────
+  # WHY derived here rather than hand-written per deployment: VITE_API_URL and
+  # SERVER_BASE_URL left at their http://localhost defaults are baked into the admin
+  # panel bundle at build time, so a panel built with the defaults cannot reach a
+  # domain-based deployment at all — the browser asks localhost for the API. Deriving
+  # them from the same ACCESS_METHOD that decides the wiring keeps one switch in charge
+  # of every URL the browser will use.
+  local access_method="${__TOML[core.ACCESS_METHOD]:-public_port}"
+  local primary_domain="${__TOML[admin.DOMAIN_NAME]:-$cms_domain}"
+  local admin_domain="${__TOML[admin.ADMIN_DOMAIN]:-}"
+  local admin_port="${__TOML[admin.ADMIN_PORT_EXTERNAL]:-8889}"
+
+  if [[ "$access_method" == "domain" ]]; then
+    # Panel is served from admin_domain over the proxy, so it calls itself: no port,
+    # no loopback, and https to match the certificate.
+    local admin_origin="${admin_domain:-${primary_domain}}"
+    __TOML[admin.SERVER_BASE_URL]="https://${admin_origin}"
+    # The classic admin API is proxied under /classic/ on the same origin, so a
+    # relative path keeps the panel and the API on one host and one certificate.
+    __TOML[admin.VITE_API_URL]="https://${admin_origin}/classic"
+  else
+    __TOML[admin.SERVER_BASE_URL]="http://localhost"
+    __TOML[admin.VITE_API_URL]="http://localhost:${admin_port}"
   fi
 
   # Write unified .env with section headers for diff readability
