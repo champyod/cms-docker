@@ -155,6 +155,8 @@ VAULT_PATH = "secret/cms"
 DNSSEC_ENABLED = 0              # enum:0,1; requires DNS control
 CAA_ENABLED = 0                 # enum:0,1
 CAA_ISSUER = "letsencrypt.org"
+DNS_PROVIDER = ""               # enum:"",cloudflare; "" = HTTP-01 webroot, cloudflare = DNS-01 (wildcard / :80 unreachable)
+CLOUDFLARE_API_TOKEN = ""       # secret; DNS-01 only — zone:DNS:Edit token, turned into certbot's cloudflare.ini
 MTLS_WORKERS_ENABLED = 0        # enum:0,1; mirrors [core]
 WAF_ENABLED = 0                 # enum:0,1; mirrors [admin]
 WAF_PORT = 8080

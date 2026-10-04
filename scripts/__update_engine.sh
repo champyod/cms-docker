@@ -758,6 +758,8 @@ VAR_SPECS=(
   "Infra & Monitoring|[infra]|CAA_ENABLED|enum:0,1||0"
   "Infra & Monitoring|[infra]|CAA_ISSUER|str||letsencrypt.org"
   "Infra & Monitoring|[infra]|DNSSEC_ENABLED|enum:0,1||0"
+  "Infra & Monitoring|[infra]|DNS_PROVIDER|str||"
+  "Infra & Monitoring|[infra]|CLOUDFLARE_API_TOKEN|secret||"
   "Infra & Monitoring|[infra]|HSM_ENABLED|enum:0,1||0"
   "Infra & Monitoring|[infra]|HSM_KEY_LABEL|str||grader-privkey"
   "Infra & Monitoring|[infra]|HSM_MODULE|str||softhsm"

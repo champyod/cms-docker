@@ -48,7 +48,9 @@ services:
       - "${DOMAIN_NGINX_BIND_IP:-}:${DOMAIN_NGINX_HTTPS_PORT:-443}:443"
 
   certbot:
-    image: certbot/certbot
+    # For DNS-01 set CERTBOT_IMAGE=certbot/dns-cloudflare; the webroot default image
+    # carries no DNS plugin.
+    image: ${CERTBOT_IMAGE:-certbot/certbot}
     container_name: grader-certbot
     restart: unless-stopped
     environment:
@@ -61,6 +63,9 @@ services:
       OJ_DOMAIN: ${OJ_DOMAIN:-}
       RANKING_DOMAIN: ${RANKING_DOMAIN:-}
       CERT_EMAIL: ${CERT_EMAIL:-}
+      # Empty = HTTP-01 webroot. Set to e.g. cloudflare to issue/renew with DNS-01;
+      # the credentials ini is read from /etc/letsencrypt/<provider>.ini.
+      DNS_PROVIDER: ${DNS_PROVIDER:-}
     volumes:
       - ./config/letsencrypt:/etc/letsencrypt
       - ./config/letsencrypt/www:/var/www/certbot
@@ -75,6 +80,11 @@ services:
     entrypoint: >
       /bin/sh -c 'trap exit TERM;
       LINEAGE="$${DOMAIN_NAME:-$${ADMIN_DOMAIN:-$${OJ_DOMAIN:-$${RANKING_DOMAIN}}}";
+      if [ -n "$$DNS_PROVIDER" ]; then
+        CHALLENGE="--dns-$$DNS_PROVIDER --dns-$$DNS_PROVIDER-credentials /etc/letsencrypt/$$DNS_PROVIDER.ini";
+      else
+        CHALLENGE="--webroot -w /var/www/certbot";
+      fi;
       if [ -z "$$LINEAGE" ]; then
         echo "no domain configured — set DOMAIN_NAME, ADMIN_DOMAIN, OJ_DOMAIN or RANKING_DOMAIN";
       elif [ ! -d "/etc/letsencrypt/live/$$LINEAGE" ]; then
@@ -82,9 +92,9 @@ services:
         for d in "$$DOMAIN_NAME" "$$ADMIN_DOMAIN" "$$OJ_DOMAIN" "$$RANKING_DOMAIN"; do
           [ -n "$$d" ] && set -- "$$@" -d "$$d";
         done;
-        certbot certonly --webroot -w /var/www/certbot "$$@" --email "$$CERT_EMAIL" --agree-tos --non-interactive || true;
+        certbot certonly $$CHALLENGE "$$@" --email "$$CERT_EMAIL" --agree-tos --non-interactive || true;
       fi;
-      while :; do certbot renew --webroot -w /var/www/certbot; sleep 12h & wait $${!}; done;'
+      while :; do certbot renew $$CHALLENGE; sleep 12h & wait $${!}; done;'
 
   redis-rate-limit:
     image: redis:7-alpine

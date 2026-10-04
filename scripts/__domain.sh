@@ -160,6 +160,12 @@ JSON_OUTPUT="${JSON_OUTPUT:-0}"
 BACKUP_CERTS="${BACKUP_CERTS:-0}"
 USE_LOCK="${USE_LOCK:-0}"
 REVOKE_REASON="${REVOKE_REASON:-unspecified}"
+# DNS-01 challenge (optional). An empty DNS_PROVIDER keeps the HTTP-01 webroot path
+# exactly as before; setting it switches issuance to the provider's DNS plugin,
+# which is what a wildcard certificate or a host that cannot answer :80 requires.
+DNS_PROVIDER="${DNS_PROVIDER:-}"
+DNS_CREDENTIALS_FILE="${DNS_CREDENTIALS_FILE:-}"
+CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
 readonly LE_STAGING_DIRECTORY="https://acme-staging-v02.api.letsencrypt.org/directory"
 readonly PORT80_POLL_INTERVAL_S=5
 readonly PORT80_PROBE_TIMEOUT_S=5
@@ -218,6 +224,11 @@ Extended options:
   --json                      Emit `status` as JSON
   --days <n>                  Expiry threshold for check-expiry (default: 30)
   --reason <reason>           Revocation reason for revoke (default: unspecified)
+  --dns <provider>            Use a DNS-01 challenge (e.g. cloudflare) instead of
+                              HTTP-01 webroot; needed for wildcards or when :80 cannot
+                              be reached from Let's Encrypt
+  --dns-credentials <file>    Plugin credentials ini; defaults to a file generated
+                              from CLOUDFLARE_API_TOKEN for the cloudflare provider
   --config <file>             Use an alternate env file instead of ./.env
 
 Optional features (disabled by default — prod stays off):
@@ -559,6 +570,37 @@ build_renew_flags() {
 }
 
 # ---------------------------------------------------------------------------
+# DNS-01 challenge (optional)
+# ---------------------------------------------------------------------------
+# Populates DNS_CHALLENGE_ARGS with the certbot flags for DNS-01, and
+# DNS_CREDENTIALS_RESOLVED with the credentials file, when DNS_PROVIDER is set.
+# WHY the credentials file is generated: certbot's DNS plugins read an ini holding
+# an API token, and requiring the operator to hand-write one is the step they skip —
+# CLOUDFLARE_API_TOKEN is turned into exactly the file the cloudflare plugin expects.
+# An empty DNS_PROVIDER leaves both empty, so the HTTP-01 webroot path is unchanged.
+DNS_CHALLENGE_ARGS=()
+DNS_CREDENTIALS_RESOLVED=""
+_resolve_dns_challenge() {
+  DNS_CHALLENGE_ARGS=()
+  DNS_CREDENTIALS_RESOLVED=""
+  [[ -n "$DNS_PROVIDER" ]] || return 0
+
+  local creds="$DNS_CREDENTIALS_FILE"
+  if [[ -z "$creds" && "$DNS_PROVIDER" == "cloudflare" && -n "$CLOUDFLARE_API_TOKEN" ]]; then
+    creds="$(_cert_store_dir)/cloudflare.ini"
+    if [[ "$DRY_RUN" -eq 0 ]]; then
+      mkdir -p "$(dirname -- "$creds")"
+      ( umask 077; printf 'dns_cloudflare_api_token = %s\n' "$CLOUDFLARE_API_TOKEN" > "$creds" )
+    fi
+  fi
+  [[ -n "$creds" ]] || log_die "DNS-01 ($DNS_PROVIDER) requires --dns-credentials or CLOUDFLARE_API_TOKEN" 1
+
+  DNS_CREDENTIALS_RESOLVED="$creds"
+  DNS_CHALLENGE_ARGS=(--dns-"$DNS_PROVIDER" --dns-"$DNS_PROVIDER"-credentials "$creds")
+  return 0
+}
+
+# ---------------------------------------------------------------------------
 # Port 80 readiness wait
 # ---------------------------------------------------------------------------
 # Polls the primary host over HTTP until it answers or WAIT_PORT80_TIMEOUT
@@ -717,13 +759,18 @@ _setup_letsencrypt() {
     return 0
   fi
 
-  _wait_for_port80
   build_cert_domains
   build_certbot_flags
+  _resolve_dns_challenge
 
   local cert_dir
   cert_dir="$(_cert_store_dir)"
   mkdir -p "${cert_dir}/www"
+
+  # HTTP-01 only: waiting on :80 is pointless when validation is a TXT record.
+  if [[ -z "$DNS_PROVIDER" ]]; then
+    _wait_for_port80
+  fi
 
   if ! command -v certbot >/dev/null 2>&1; then
     log_warn "certbot not found on host — attempting via docker"
@@ -734,10 +781,17 @@ _setup_letsencrypt() {
   # --config-dir points certbot at the store the proxy bind-mounts, so the
   # lineage lands at <store>/live/<domain>/ — the path nginx reads. The former
   # --cert-path/--key-path were no-ops outside `certonly --csr`.
-  _retry_certbot certbot certonly --webroot -w "${cert_dir}/www" \
-    "${CERT_DOMAINS[@]}" "${CERTBOT_FLAGS[@]}" \
-    --config-dir "$cert_dir" \
-    || log_die "certbot certonly failed" 1
+  if [[ -n "$DNS_PROVIDER" ]]; then
+    _retry_certbot certbot certonly "${DNS_CHALLENGE_ARGS[@]}" \
+      "${CERT_DOMAINS[@]}" "${CERTBOT_FLAGS[@]}" \
+      --config-dir "$cert_dir" \
+      || log_die "certbot certonly failed" 1
+  else
+    _retry_certbot certbot certonly --webroot -w "${cert_dir}/www" \
+      "${CERT_DOMAINS[@]}" "${CERTBOT_FLAGS[@]}" \
+      --config-dir "$cert_dir" \
+      || log_die "certbot certonly failed" 1
+  fi
   log_info "Let's Encrypt certificates obtained"
 }
 
@@ -745,15 +799,27 @@ _run_certbot_docker() {
   local cert_dir
   cert_dir="$(_cert_store_dir)"
   mkdir -p "${cert_dir}/www"
+  _resolve_dns_challenge
   # The store root is mounted at /etc/letsencrypt so certbot's lineage appears at
   # <store>/live/<domain>/; mounting <store>/live here (the earlier form) nested
   # a second live/ level and nginx never saw the certificate.
-  _retry_certbot docker run --rm \
-    -v "${cert_dir}:/etc/letsencrypt" \
-    -v "${cert_dir}/www:/var/www/certbot" \
-    certbot/certbot certonly --webroot -w /var/www/certbot \
-    "${CERT_DOMAINS[@]}" "${CERTBOT_FLAGS[@]}" \
-    || log_die "certbot docker run failed" 1
+  if [[ -n "$DNS_PROVIDER" ]]; then
+    _retry_certbot docker run --rm \
+      -v "${cert_dir}:/etc/letsencrypt" \
+      -v "${cert_dir}/www:/var/www/certbot" \
+      -v "${DNS_CREDENTIALS_RESOLVED}:/etc/letsencrypt/dns-creds.ini:ro" \
+      "${CERTBOT_IMAGE:-certbot/dns-$DNS_PROVIDER}" certonly \
+      --dns-"$DNS_PROVIDER" --dns-"$DNS_PROVIDER"-credentials /etc/letsencrypt/dns-creds.ini \
+      "${CERT_DOMAINS[@]}" "${CERTBOT_FLAGS[@]}" \
+      || log_die "certbot docker run failed" 1
+  else
+    _retry_certbot docker run --rm \
+      -v "${cert_dir}:/etc/letsencrypt" \
+      -v "${cert_dir}/www:/var/www/certbot" \
+      certbot/certbot certonly --webroot -w /var/www/certbot \
+      "${CERT_DOMAINS[@]}" "${CERTBOT_FLAGS[@]}" \
+      || log_die "certbot docker run failed" 1
+  fi
   log_info "Let's Encrypt certificates obtained via docker"
 }
 
@@ -1406,6 +1472,8 @@ while [[ $# -gt 0 ]]; do
     --json)       JSON_OUTPUT=1; shift ;;
     --days)       CHECK_EXPIRY_DAYS="$2"; shift 2 ;;
     --reason)     REVOKE_REASON="$2"; shift 2 ;;
+    --dns)        DNS_PROVIDER="$2"; shift 2 ;;
+    --dns-credentials) DNS_CREDENTIALS_FILE="$2"; shift 2 ;;
     --config)     CONFIG_FILE="$2"; shift 2 ;;
     --help|-h)    usage; exit 0 ;;
     *)            log_die "unknown option: $1 — see --help" 1 ;;
