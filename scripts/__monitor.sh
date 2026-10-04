@@ -132,16 +132,48 @@ warn_webhook_unconfigured() {
 }
 
 # Post a prepared payload and report a non-2xx response instead of discarding it.
+# WHY the webhook is staged in a curl config file instead of passed on the command line:
+# the token in that URL is a credential, and a process command line is readable by every
+# account on the box for as long as the request lives. The body is already read from disk,
+# so the alert text — which names containers, hosts and a role — stays out of argv too.
+# WHY no RETURN trap removes the config file: a RETURN trap is not scoped to the function
+# that set it, so it fires at some later function's return instead. Every step below is
+# captured into a status rather than returned early, making this the only exit.
 post_discord_payload() {
     local payload_file="$1"
     local context="$2"
     local http_code
+    local conf_file
+    if ! conf_file="$(mktemp "${TMPDIR:-/tmp}/cms-monitor-request.XXXXXX")"; then
+        echo "[WARN] could not stage the Discord request — dropped $context." >&2
+        return 0
+    fi
+    chmod 600 "$conf_file" 2>/dev/null || true
+    cat > "$conf_file" <<EOF
+url = "${WEBHOOK_URL}"
+EOF
     # curl reports an unreachable endpoint as 000, which the case below also catches.
-    http_code=$(curl -s -o /dev/null -w '%{http_code}' -H "Content-Type: application/json" -X POST -d "@${payload_file}" "$WEBHOOK_URL" || true)
+    http_code=$(curl -s -o /dev/null -w '%{http_code}' -H "Content-Type: application/json" -X POST -d "@${payload_file}" -K "$conf_file" || true)
+    rm -f -- "$conf_file"
     case "$http_code" in
         2??) ;;
         *) echo "[WARN] Discord webhook delivery failed (HTTP ${http_code:-000}) — dropped $context." >&2 ;;
     esac
+}
+
+# WHY: alert bodies carry host metrics, and a fixed path in the shared temp directory leaves
+# them readable by any local user and clobberable by a second concurrent run. A per-body
+# mktemp file is private from creation, so the caller owns deleting it once the send is done.
+# Echoes that path, or fails with 1 when the body cannot be staged.
+stage_discord_body() {
+    local label="$1"
+    local body_file
+    if ! body_file="$(mktemp "${TMPDIR:-/tmp}/cms-monitor-body.XXXXXX")"; then
+        echo "[WARN] could not stage the Discord request — dropped $label." >&2
+        return 1
+    fi
+    chmod 600 "$body_file" 2>/dev/null || true
+    echo "$body_file"
 }
 
 send_discord_alert() {
@@ -156,7 +188,9 @@ send_discord_alert() {
         return 0
     fi
 
-    cat <<EOF > /tmp/discord_payload.json
+    local payload_file
+    payload_file="$(stage_discord_body "alert ($status)")" || return 0
+    cat <<EOF > "$payload_file"
 {
   "content": "$mention",
   "embeds": [
@@ -177,7 +211,8 @@ send_discord_alert() {
 }
 EOF
 
-    post_discord_payload /tmp/discord_payload.json "alert ($status)"
+    post_discord_payload "$payload_file" "alert ($status)"
+    rm -f -- "$payload_file"
 }
 
 send_discord_notification() {
@@ -191,7 +226,9 @@ send_discord_notification() {
         return 0
     fi
 
-    cat <<EOF > /tmp/discord_notif.json
+    local body_file
+    body_file="$(stage_discord_body "notification ($title)")" || return 0
+    cat <<EOF > "$body_file"
 {
   "embeds": [
     {
@@ -205,7 +242,8 @@ send_discord_notification() {
 }
 EOF
 
-    post_discord_payload /tmp/discord_notif.json "notification ($title)"
+    post_discord_payload "$body_file" "notification ($title)"
+    rm -f -- "$body_file"
 }
 
 # WHY: when the config file cannot be located the defaults below silently disarm every
@@ -407,12 +445,15 @@ flush_event_batch() {
     fi
 
     if command -v jq >/dev/null 2>&1; then
+        local digest_file
+        digest_file="$(stage_discord_body "docker event digest")" || return 0
         jq -n --rawfile lines "$batch_file" --argjson color "$worst_color" '
             ($lines | split("\n") | map(select(length > 0)) | .[0:25]
              | map(split("|") | {name: .[2], value: .[3], inline: false})) as $fields
             | {embeds: [{title: "Docker Events", color: $color, fields: $fields}]}' \
-            > /tmp/discord_digest.json
-        post_discord_payload /tmp/discord_digest.json "docker event digest"
+            > "$digest_file"
+        post_discord_payload "$digest_file" "docker event digest"
+        rm -f -- "$digest_file"
     else
         local joined
         joined=$(cut -d'|' -f3- "$batch_file" | paste -sd' / ' -)
@@ -423,8 +464,20 @@ flush_event_batch() {
 listen_docker_events() {
     echo "Starting Docker event listener..."
     # One-shot markers for terminal states; every other event is digested.
-    NOTIF_CACHE="/tmp/monitor_notif_cache"
-    touch "$NOTIF_CACHE"
+    # WHY a private temp file: these lines name containers, and a fixed name in the shared
+    # temp directory left them world-readable and never cleaned up, so one run's markers
+    # outlived it and suppressed the next run's alerts.
+    if ! NOTIF_CACHE="$(mktemp "${TMPDIR:-/tmp}/cms-monitor-notif.XXXXXX")"; then
+        echo "[WARN] could not create the docker event notification cache — listener stopped." >&2
+        return 1
+    fi
+    chmod 600 "$NOTIF_CACHE" 2>/dev/null || true
+    # WHY an EXIT trap and not a RETURN one: this is the same scoping trap post_discord_payload
+    # documents, and the reverse case bites here. The only caller backgrounds the function, so
+    # this trap dies with that subshell when the docker events stream ends, leaving the main
+    # loop's own exit path untouched — and the markers never outlive the run that wrote them.
+    # INT TERM beside EXIT so a signal shutdown cleans the file too, not just a normal stream end.
+    trap 'rm -f -- "$NOTIF_CACHE"' EXIT INT TERM
 
     docker events --filter 'event=start' --filter 'event=stop' --filter 'event=die' --filter 'event=restart' --format '{{.Status}} container {{.Actor.Attributes.name}}' | {
     while true; do

@@ -27,6 +27,22 @@ if [[ -n "${STUB_WEBHOOK_LOG:-}" ]]; then
     esac
     shift
   done
+  # WHY a leading @ is resolved to the file it names: an alert is built into a payload file and
+  # handed over as `@path` so that no part of it sits in argv, and a body is never anything but a
+  # JSON object — so a leading @ can only be curl's file syntax here. Recording the argument
+  # verbatim would put `@path` where the body belongs, and every reader of this log would read a
+  # staging path as though it were the alert. The file's own text is recorded instead, one JSON
+  # object per line as before, so a suite still counts alerts and reads their fields without
+  # caring which side of the file boundary the caller put the body on. An unreadable payload
+  # records an empty body, the same line a POST with no readable body leaves behind.
+  if [[ "$body" == @* ]]; then
+    body_file="${body#@}"
+    if [[ -r "$body_file" ]]; then
+      body="$(<"$body_file")"
+    else
+      body=""
+    fi
+  fi
   printf '%s\n' "$body" >> "${STUB_WEBHOOK_LOG}"
 fi
 exit 0

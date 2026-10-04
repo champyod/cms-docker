@@ -71,13 +71,26 @@ readonly EXIT_PARTIAL_BACKUP=3
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-json_escape() {
-  # JSON-escape a string via python3 (fallback to naive escaping)
-  if command -v python3 >/dev/null 2>&1; then
-    python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1"
-  else
-    printf '"%s"' "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\n/\\n/g; s/\r/\\r/g; s/\t/\\t/g')"
-  fi
+# json_escape_text <string> — the last-resort escaper, reached only on a box carrying no jq.
+# It escapes what JSON forbids unescaped and nothing more, which is why it is the fallback and
+# not the builder: one unescaped byte in the alert text is a payload Discord rejects, and an
+# alert nobody receives is the one failure that leaves no trace.
+# WHY the sentinels and not \n or \t in the patterns: sed reads line by line, so a newline is
+# never in the pattern space and no pattern can match one, and sed has no \t in a pattern either.
+# A byte either of those rules hides is swapped for one sed can see and put back as text, so a
+# line break or a tab in an alert is escaped rather than reaching the webhook raw — a raw control
+# character is a payload Discord rejects, and an alert nobody receives leaves no trace.
+json_escape_text() {
+  local line_break tab
+  line_break="$(printf '\036')"
+  tab="$(printf '\t')"
+  printf '%s' "$1" |
+    tr '\n' "$line_break" |
+    sed -e 's/\\/\\\\/g' \
+        -e 's/"/\\"/g' \
+        -e "s/${line_break}/\\\\n/g" \
+        -e "s/${tab}/\\\\t/g" \
+        -e 's/\r/\\r/g'
 }
 
 # WHY one flag rather than a test per path: the contract is that a run which announced a
@@ -94,41 +107,83 @@ send_degraded() {
   send_discord "$1" 16776960 "true"
 }
 
+# discord_payload_json <message> <color> <ts> <mention> — the alert body on stdout.
+# WHY jq and not python3: the monitor image ships jq (docker/monitor/Dockerfile) and ships no
+# python3, so a python3-first builder produced a payload only the host ever sent — the same move
+# the manifest note below records. The embed is the one python3 emitted, key for key and in the
+# same order, so every reader of an alert is unaffected.
+discord_payload_json() {
+  local message="$1" color="$2" ts="$3" mention="$4"
+  if command -v jq >/dev/null 2>&1; then
+    jq -c -n \
+      --arg msg "$message" \
+      --arg color "$color" \
+      --arg ts "$ts" \
+      --arg role "$ROLE_ID" \
+      --arg mention "$mention" \
+      '{embeds: [{title: "CMS Backup System", description: $msg, color: ($color | tonumber), timestamp: $ts}]}
+       + (if $mention == "true" and $role != "" then {content: ("<@&" + $role + ">")} else {} end)'
+    return
+  fi
+  local escaped_msg escaped_role
+  escaped_msg="$(json_escape_text "$message")"
+  escaped_role="$(json_escape_text "$ROLE_ID")"
+  if [[ "$mention" == "true" && -n "$ROLE_ID" ]]; then
+    printf '{"content": "<@&%s>", "embeds": [{"title": "CMS Backup System", "description": "%s", "color": %s, "timestamp": "%s"}]}' \
+      "$escaped_role" "$escaped_msg" "$color" "$ts"
+    return
+  fi
+  printf '{"embeds": [{"title": "CMS Backup System", "description": "%s", "color": %s, "timestamp": "%s"}]}' \
+    "$escaped_msg" "$color" "$ts"
+}
+
+# discord_post <payload_file> <conf_file> — deliver a prepared alert.
+# WHY the webhook lands in a curl config file instead of on the command line: the token in that
+# URL is a credential, and a process command line is readable by every account on the box for as
+# long as the request lives. The body is read from disk for the same reason, so no part of an
+# alert — which names containers, paths and a role — is ever in argv.
+discord_post() {
+  local payload_file="$1" conf_file="$2"
+  cat > "$conf_file" <<EOF
+url = "${WEBHOOK_URL}"
+EOF
+  curl -s -o /dev/null -X POST -H "Content-Type: application/json" \
+    -d "@${payload_file}" -K "$conf_file" 2>/dev/null
+}
+
 send_discord() {
   local message="$1"
   local color="${2:-3447003}"
   local mention="${3:-false}"
   [[ -z "$WEBHOOK_URL" ]] && return 0
 
-  local ts
-  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  local payload
-  local escaped_msg
-  escaped_msg="$(json_escape "$message")"
-  # json_escape already returns quoted string — strip outer quotes for embed
-  # Instead build payload via python to guarantee escaping
-  if command -v python3 >/dev/null 2>&1; then
-    payload="$(python3 -c '
-import json,sys
-msg=sys.argv[1]
-color=int(sys.argv[2])
-ts=sys.argv[3]
-role=sys.argv[4]
-mention=sys.argv[5]
-embed={"title":"CMS Backup System","description":msg,"color":color,"timestamp":ts}
-body={"embeds":[embed]}
-if mention=="true" and role:
-    body["content"]=f"<@&{role}>"
-print(json.dumps(body))
-' "$message" "$color" "$ts" "$ROLE_ID" "$mention")"
-  else
-    if [[ "$mention" == "true" && -n "$ROLE_ID" ]]; then
-      payload="{\"content\": \"<@&${ROLE_ID}>\", \"embeds\": [{\"title\": \"CMS Backup System\", \"description\": ${escaped_msg}, \"color\": ${color}, \"timestamp\": \"${ts}\"}]}"
-    else
-      payload="{\"embeds\": [{\"title\": \"CMS Backup System\", \"description\": ${escaped_msg}, \"color\": ${color}, \"timestamp\": \"${ts}\"}]}"
-    fi
+  local payload_file conf_file
+  if ! payload_file="$(mktemp "${TMPDIR:-/tmp}/cms-discord-payload.XXXXXX")"; then
+    log_warn "could not stage the Discord payload"
+    return 0
   fi
-  curl -s -H "Content-Type: application/json" -X POST -d "$payload" "$WEBHOOK_URL" >/dev/null 2>&1 || log_warn "Discord webhook POST failed"
+  chmod 600 "$payload_file" 2>/dev/null || true
+  if ! conf_file="$(mktemp "${TMPDIR:-/tmp}/cms-discord-request.XXXXXX")"; then
+    rm -f -- "$payload_file"
+    log_warn "could not stage the Discord request"
+    return 0
+  fi
+  chmod 600 "$conf_file" 2>/dev/null || true
+  # WHY the removal is one statement at the end and not a RETURN trap: a RETURN trap is not
+  # scoped to the function that set it, so it fires at some later function's return instead —
+  # with this function's locals already out of scope, where a bare name dies on set -u and takes
+  # the run's exit code with it. Every step below is captured into a status rather than returned
+  # early, so this removal is the only exit and the payload — which names a container, a path and
+  # a role, in a directory every local account can write to — is never left behind.
+  local build_status=0
+  discord_payload_json "$message" "$color" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$mention" \
+    > "$payload_file" || build_status=$?
+  if (( build_status != 0 )); then
+    log_warn "Discord payload could not be built"
+  else
+    discord_post "$payload_file" "$conf_file" || log_warn "Discord webhook POST failed"
+  fi
+  rm -f -- "$payload_file" "$conf_file"
 }
 
 file_size_bytes() {
@@ -493,18 +548,12 @@ run_backup() {
     exit "$disk_guard_status"
   fi
 
-  mkdir -p -m 700 "$BACKUP_DB_DIR" "$BACKUP_VOL_DIR"
-  chmod 700 "$BACKUP_DB_DIR" "$BACKUP_VOL_DIR" 2>/dev/null || true
-  chmod 700 "$BACKUP_ROOT" 2>/dev/null || true
-  # WHY the repair right after the owner-only baseline: the backup tree has two
-  # writers — the monitor container and the host operator — and __lib/common.sh's
-  # ensure_backup_dir_perms is the single place that keeps group rwx + setgid so
-  # both get in. Without it the 700 above locked the operator out and the next
-  # `config sync` failed at `touch backups/.gitkeep`. Archives stay 600; only the
-  # directories need to be shared.
-  if ! ensure_backup_dir_perms; then
-    log_warn "backup root is not dual-writable — the monitor and the operator may not both write ${BACKUP_ROOT}"
-  fi
+  # WHY g+rwx,g+s and not a mode clamp: it converges on the same dual-writer state
+  # ensure_backup_dir_perms establishes, because a forced 700 strips the group off the shared tree
+  # and locks the host operator out of its own backups. Ownership is that repair's alone.
+  mkdir -p "$BACKUP_DB_DIR" "$BACKUP_VOL_DIR"
+  chmod g+rwx,g+s "$BACKUP_DB_DIR" "$BACKUP_VOL_DIR" 2>/dev/null || true
+  chmod g+rwx,g+s "$BACKUP_ROOT" 2>/dev/null || true
 
   if [[ -z "$POSTGRES_PASSWORD_VAL" ]]; then
     log_warn "POSTGRES_PASSWORD is empty — pg_dump may fail if auth required"

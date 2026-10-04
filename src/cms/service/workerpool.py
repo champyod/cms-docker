@@ -227,6 +227,26 @@ class WorkerPool:
             plus=shard)
         return shard
 
+    def get_worker_operations(self, shard: int) -> list[ESOperation]:
+        """Return a copy of the operations currently assigned to a
+        worker, so that the caller can still inspect them after the
+        worker has been released.
+
+        An empty list is returned when the worker is not doing
+        anything, and this method never fails: the caller needs the
+        operations in order to requeue them whatever the state of the
+        pool is.
+
+        shard: the worker to inspect.
+
+        return: the operations currently assigned to the worker.
+
+        """
+        operations = self._operations.get(shard)
+        if not isinstance(operations, list):
+            return []
+        return list(operations)
+
     def release_worker(self, shard: int) -> bool | list[ESOperation]:
         """To be called by ES when it receives a notification that an
         operation finished.

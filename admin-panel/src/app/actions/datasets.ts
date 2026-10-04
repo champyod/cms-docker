@@ -6,6 +6,7 @@ import { ensurePermission, getPermissions } from '@/lib/permissions';
 import { recordAudit } from '@/lib/audit';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { cloneDatasetRecords } from '@/lib/dataset-cloning';
+import { validateTaskTypeParams, DEFAULT_TASK_TYPE } from '@/lib/tasktype-params';
 import type { Prisma } from '@prisma/client';
 
 export async function getDataset(id: number): Promise<Prisma.datasetsGetPayload<{ include: { testcases: { orderBy: { codename: 'asc' } }; managers: true; tasks_datasets_task_idTotasks: true } }> | null> {
@@ -37,6 +38,13 @@ export async function createDataset(
       score_type_parameters: data.score_type_parameters ?? [],
     }, effectivePermissions);
 
+    const storedTaskType = (allowed.task_type as string) ?? DEFAULT_TASK_TYPE;
+    const taskParams = validateTaskTypeParams(
+      storedTaskType,
+      'task_type_parameters' in allowed ? data.task_type_parameters : [],
+    );
+    if (!taskParams.isValid) return { success: false, error: taskParams.message };
+
     const dataset = await prisma.datasets.create({
       data: {
         task_id: taskId,
@@ -44,8 +52,8 @@ export async function createDataset(
         time_limit: allowed.time_limit !== undefined ? (allowed.time_limit as number | null) : null,
         memory_limit: allowed.memory_limit !== undefined && allowed.memory_limit
           ? BigInt((allowed.memory_limit as number) * 1024 * 1024) : null,
-        task_type: (allowed.task_type as string) ?? 'Batch',
-        task_type_parameters: (allowed.task_type_parameters as Prisma.InputJsonValue) ?? [],
+        task_type: storedTaskType,
+        task_type_parameters: taskParams.params as Prisma.InputJsonValue,
         score_type: (allowed.score_type as string) ?? 'Sum',
         score_type_parameters: (allowed.score_type_parameters as Prisma.InputJsonValue) ?? [],
         autojudge: false,

@@ -438,19 +438,19 @@ wait_core_healthy() {
   done
 }
 
-# Verdict for a finished pass: deployed / skipped / failed shard counts.
-# A registry-only row is a shard this host was never asked to run, so skipping it
-# leaves the selection uncovered — reported as failure, named specifically when
-# nothing ran at all, because that is the mis-registered-fleet signature.
+# Verdict for a finished pass: deployed / skipped / failed shard counts. A
+# registry-only row is a shard this host was never asked to run, so skipping it is
+# by design and a pass that deployed something and failed nothing has done its job
+# — only a pass that deployed nothing (mis-registered fleet) or failed fails.
 deploy_verdict() { # deployed skipped failed
-  if [ "$2" -gt 0 ] && [ "$1" -eq 0 ] && [ "$3" -eq 0 ]; then
+  if [ "$1" -eq 0 ] && [ "$3" -eq 0 ]; then
     log_warn "no shards matched this host - check WORKER_n host vs hostname -I and WORKER_SHARDn_LOCAL; worker list scope column shows local vs remote"
     return 1
   fi
   if [ "$2" -gt 0 ]; then
-    log_warn "deploy incomplete: $2 of $(( $1 + $2 + $3 )) shard(s) skipped as registry-only (remote)"
+    log_warn "deploy incomplete: $2 of $(( $1 + $2 + $3 )) shard(s) skipped as registry-only (remote); worker list scope column shows local vs remote"
   fi
-  if [ "$2" -gt 0 ] || [ "$3" -gt 0 ]; then
+  if [ "$1" -eq 0 ] || [ "$3" -gt 0 ]; then
     return 1
   fi
   return 0
@@ -757,8 +757,8 @@ attach_print_block() {
   echo "  # 4) Cgroups, then start and verify"
   echo "  sudo ./scripts/__worker_cgroup_setup.sh /sys/fs/cgroup/cms-isolate"
   echo "  ./cms config sync && ./cms worker deploy all && ./cms worker list"
-  # The deploy gate passes on a box whose shards resolve as remote (all skipped,
-  # exit 0), so a green list/deploy is not proof this box runs them. The scope
+  # The deploy gate fails a box whose shards all resolve as remote (zero match),
+  # and warns-but-passes a healthy split, so a green deploy is not proof this box runs them. The scope
   # column is the only per-shard statement of which box owns a row, so assert it.
   local alt=""
   for i in "${!shards[@]}"; do

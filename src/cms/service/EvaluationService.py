@@ -494,6 +494,32 @@ class EvaluationService(TriggeredService[ESOperation, EvaluationExecutor]):
         # enqueue() returns the number of successful pushes.
         return super().enqueue(operation, priority, timestamp) > 0
 
+    def _requeue_lost_operations(
+        self,
+        operations: list[ESOperation],
+        to_ignore: bool | list[ESOperation],
+        reason: str,
+    ):
+        """Put again in the queue the operations a worker did not
+        manage to execute, preserving their original priority and
+        timestamp.
+
+        operations: the operations that were assigned to the worker.
+        to_ignore: what the release of the worker returned, i.e. the
+            operations whose result is to be ignored, if any.
+        reason: why the operations are put again in the queue.
+
+        """
+        if not isinstance(to_ignore, list):
+            to_ignore = []
+        for operation in operations:
+            if operation in to_ignore:
+                continue
+            logger.info("Operation %s put again in the queue because of %s.",
+                        operation, reason)
+            priority, timestamp = operation.side_data
+            self.enqueue(operation, priority, timestamp)
+
     @with_post_finish_lock
     def action_finished(self, data: dict, shard: int, error=None):
         """Callback from a worker, to signal that is finished some
@@ -501,8 +527,14 @@ class EvaluationService(TriggeredService[ESOperation, EvaluationExecutor]):
 
         data: the JobGroup, exported to dict.
         shard: the shard finishing the action.
+        error: the error reported by the worker, if any.
 
         """
+        pool = self.get_executor().pool
+        # We grab the operations before releasing the worker, because
+        # the release clears them: if the worker failed we need them to
+        # put them again in the queue.
+        assigned_operations = pool.get_worker_operations(shard)
         # We notify the pool that the worker is available again for
         # further work (no matter how the current request turned out,
         # even if the worker encountered an error). If the pool
@@ -511,39 +543,37 @@ class EvaluationService(TriggeredService[ESOperation, EvaluationExecutor]):
         # this method and do nothing because in that case we know the
         # operation has returned to the queue and perhaps already been
         # reassigned to another worker.
-        to_ignore = self.get_executor().pool.release_worker(shard)
+        to_ignore = pool.release_worker(shard)
         if to_ignore is True:
             logger.info("Ignored result from worker %s as requested.", shard)
             return
 
-        job_group = None
-        job_group_success = True
         if error is not None:
             logger.error(
                 "Received error from Worker (see above), job group lost.")
-            job_group_success = False
+            self._requeue_lost_operations(assigned_operations, to_ignore,
+                                          "worker error")
+            return
 
-        else:
-            try:
-                job_group = JobGroup.import_from_dict(data)
-            except Exception:
-                logger.error("Couldn't build JobGroup for data %s.", data,
-                             exc_info=True)
-                job_group_success = False
+        try:
+            job_group = JobGroup.import_from_dict(data)
+        except Exception:
+            logger.error("Couldn't build JobGroup for data %s.", data,
+                         exc_info=True)
+            return
 
-        if job_group_success:
-            for job in job_group.jobs:
-                operation = job.operation
-                if job.success:
-                    logger.info("`%s' succeeded.", operation)
-                else:
-                    logger.error("`%s' failed, see worker logs and (possibly) "
-                                 "sandboxes at '%s'.",
-                                 operation, " ".join(job.sandboxes))
-                if isinstance(to_ignore, list) and operation in to_ignore:
-                    logger.info("`%s' result ignored as requested", operation)
-                else:
-                    self.result_cache.add(operation, Result(job, job.success))
+        for job in job_group.jobs:
+            operation = job.operation
+            if job.success:
+                logger.info("`%s' succeeded.", operation)
+            else:
+                logger.error("`%s' failed, see worker logs and (possibly) "
+                             "sandboxes at '%s'.",
+                             operation, " ".join(job.sandboxes))
+            if isinstance(to_ignore, list) and operation in to_ignore:
+                logger.info("`%s' result ignored as requested", operation)
+            else:
+                self.result_cache.add(operation, Result(job, job.success))
 
     @with_post_finish_lock
     def write_results(self, items: list[tuple[ESOperation, Result]]):
