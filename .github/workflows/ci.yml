@@ -177,6 +177,9 @@ jobs:
       - name: VAR_SPEC parity
         run: bash scripts/__check_spec_parity.sh
 
+      - name: Variable coverage
+        run: bash scripts/__check_var_coverage.sh
+
       - name: Audit coverage
         run: bash scripts/__check_audit_coverage.sh
 
