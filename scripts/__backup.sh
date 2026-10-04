@@ -496,6 +496,15 @@ run_backup() {
   mkdir -p -m 700 "$BACKUP_DB_DIR" "$BACKUP_VOL_DIR"
   chmod 700 "$BACKUP_DB_DIR" "$BACKUP_VOL_DIR" 2>/dev/null || true
   chmod 700 "$BACKUP_ROOT" 2>/dev/null || true
+  # WHY the repair right after the owner-only baseline: the backup tree has two
+  # writers — the monitor container and the host operator — and __lib/common.sh's
+  # ensure_backup_dir_perms is the single place that keeps group rwx + setgid so
+  # both get in. Without it the 700 above locked the operator out and the next
+  # `config sync` failed at `touch backups/.gitkeep`. Archives stay 600; only the
+  # directories need to be shared.
+  if ! ensure_backup_dir_perms; then
+    log_warn "backup root is not dual-writable — the monitor and the operator may not both write ${BACKUP_ROOT}"
+  fi
 
   if [[ -z "$POSTGRES_PASSWORD_VAL" ]]; then
     log_warn "POSTGRES_PASSWORD is empty — pg_dump may fail if auth required"
