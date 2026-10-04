@@ -8,7 +8,7 @@ services:
   nginx-proxy:
     image: nginx:alpine
     container_name: grader-nginx-proxy
-    restart: on-failure:5
+    restart: unless-stopped
     depends_on: []
     environment:
       # WHY empty rather than a .local default: an unset domain must stay unset. A
@@ -50,7 +50,7 @@ services:
   certbot:
     image: certbot/certbot
     container_name: grader-certbot
-    restart: on-failure:5
+    restart: unless-stopped
     environment:
       # WHY empty rather than a .local default: an unset domain must stay unset. A
       # leftover default name becomes a server_name and a SAN for a name nobody
@@ -89,7 +89,7 @@ services:
   redis-rate-limit:
     image: redis:7-alpine
     container_name: grader-redis-rate-limit
-    restart: on-failure:5
+    restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
     volumes:
       - redis-rate-limit-data:/data
@@ -112,7 +112,7 @@ services:
   hsm:
     image: opencrypto/softhsm
     container_name: grader-hsm
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - hsm
     environment:
@@ -139,7 +139,7 @@ services:
   vault-inline:
     image: hashicorp/vault:1.15
     container_name: grader-vault-inline
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - vault
     environment:

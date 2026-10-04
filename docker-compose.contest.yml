@@ -10,7 +10,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: cms-evaluation-service
-    restart: on-failure:5
+    restart: unless-stopped
     environment:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: EvaluationService
@@ -42,7 +42,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: cms-proxy-service
-    restart: on-failure:5
+    restart: unless-stopped
     environment:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: ProxyService
@@ -73,7 +73,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: cms-contest-web-server
-    restart: "no"
+    restart: unless-stopped
     environment:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: ContestWebServer
@@ -130,7 +130,7 @@ services:
   nginx-proxy:
     image: nginx:alpine
     container_name: cms-nginx-contest
-    restart: on-failure:5
+    restart: unless-stopped
     depends_on:
       - contest-web-server
     environment:

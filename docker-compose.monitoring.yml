@@ -10,7 +10,7 @@ services:
   prometheus:
     image: prom/prometheus:v2.52.0
     container_name: grader-prometheus
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - monitoring
     command:
@@ -36,7 +36,7 @@ services:
   grafana:
     image: grafana/grafana:11.2.2
     container_name: grader-grafana
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - monitoring
     environment:
@@ -69,7 +69,7 @@ services:
   node-exporter:
     image: prom/node-exporter:v1.8.2
     container_name: grader-node-exporter
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - monitoring
     command:

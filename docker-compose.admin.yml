@@ -10,7 +10,7 @@ services:
       dockerfile: Dockerfile
     image: cms-admin-panel-next
     container_name: cms-admin-panel-next
-    restart: on-failure:5
+    restart: unless-stopped
     environment:
       # API and Server Configuration
       VITE_API_URL: ${VITE_API_URL:-http://localhost:8889}
@@ -52,7 +52,7 @@ services:
       dockerfile: Dockerfile
     image: cms-admin-web-server
     container_name: cms-admin-web-server
-    restart: on-failure:5
+    restart: unless-stopped
     environment:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       ADMIN_LISTEN_PORT: ${ADMIN_LISTEN_PORT:-8889}
@@ -77,7 +77,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: cms-ranking-web-server
-    restart: on-failure:5
+    restart: unless-stopped
     environment:
       CMS_RANKING_CONFIG: ${CMS_RANKING_CONFIG:-/usr/local/etc/cms_ranking.toml}
       RANKING_LISTEN_PORT: ${RANKING_LISTEN_PORT:-8890}

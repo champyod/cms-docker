@@ -7,7 +7,7 @@ services:
   database:
     image: postgres:15
     container_name: cms-database
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - core
     environment:
@@ -37,7 +37,7 @@ services:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
     container_name: cms-log-service
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - core
     depends_on:
@@ -76,7 +76,7 @@ services:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
     container_name: cms-resource-service
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - core
     depends_on:
@@ -118,7 +118,7 @@ services:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
     container_name: cms-scoring-service
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - core
     depends_on:
@@ -160,7 +160,7 @@ services:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
     container_name: cms-checker-service
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - core
     depends_on:
@@ -203,7 +203,7 @@ services:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
     container_name: cms-evaluation-service
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - contest
     depends_on:
@@ -246,7 +246,7 @@ services:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
     container_name: cms-proxy-service
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - contest
     depends_on:
@@ -291,7 +291,7 @@ services:
     container_name: cms-contest-web-server
     # survive daemon/host restarts like every other service; admin-panel
     # lifecycle actions still work (stop/start overrides policy at runtime)
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - contest
     depends_on:
@@ -352,7 +352,7 @@ services:
   nginx-proxy:
     image: nginx:alpine
     container_name: cms-nginx-contest
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - contest
     depends_on:
@@ -396,7 +396,7 @@ services:
       dockerfile: Dockerfile
     image: ghcr.io/champyod/cms-docker-admin-panel:${IMG_TAG:-major-admin-panel}
     container_name: cms-admin-panel-next
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - admin
     depends_on:
@@ -442,7 +442,7 @@ services:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
     container_name: cms-admin-web-server
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - admin
     depends_on:
@@ -482,7 +482,7 @@ services:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
     container_name: cms-ranking-web-server
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - admin
     depends_on:
@@ -520,7 +520,7 @@ services:
       dockerfile: Dockerfile
     image: ghcr.io/champyod/cms-docker-worker:${IMG_TAG:-major-admin-panel}
     container_name: cms-worker-${WORKER_SHARD:-0}
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - worker
     environment:
@@ -588,7 +588,14 @@ services:
           CGROUP_BASE=${ISOLATE_CGROUP_PATH:-/sys/fs/cgroup/cms-isolate}
 
           if [ ! -d "$$CGROUP_BASE" ]; then
-            echo "ERROR: ISOLATE_CGROUP_PATH does not exist: $$CGROUP_BASE"
+            echo "ISOLATE_CGROUP_PATH missing (cgroupfs is rebuilt on every boot) — recreating $$CGROUP_BASE"
+            sudo mkdir -p "$$CGROUP_BASE" 2>/dev/null || true
+            sudo chmod 755 "$$CGROUP_BASE" 2>/dev/null || true
+            echo "+cpu +memory +pids" | sudo tee "$$CGROUP_BASE/cgroup.subtree_control" >/dev/null 2>&1 || true
+          fi
+
+          if [ ! -d "$$CGROUP_BASE" ]; then
+            echo "ERROR: ISOLATE_CGROUP_PATH does not exist and could not be created: $$CGROUP_BASE"
             echo "Run scripts/__worker_cgroup_setup.sh on the worker host first."
             exit 1
           fi
@@ -649,7 +656,7 @@ services:
         DOCKER_UID: ${DOCKER_UID:-1000}
     image: ghcr.io/champyod/cms-docker-monitor:${IMG_TAG:-major-admin-panel}
     container_name: cms-monitor
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - monitor
     pid: host
