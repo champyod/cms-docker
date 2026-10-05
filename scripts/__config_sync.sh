@@ -980,8 +980,8 @@ main() {
   parse_toml "$TOML_FILE"
 
   # Ensure ranking config exists from sample (needed for logo_path injection)
-  if [[ ! -f "config/cms_ranking.toml" && -f "config/cms_ranking.sample.toml" ]]; then
-    cp "config/cms_ranking.sample.toml" "config/cms_ranking.toml" && log_info "Created config/cms_ranking.toml from sample"
+  if [[ ! -f "config/cms_ranking.toml" && -f "config/cms.ranking.sample.toml" ]]; then
+    cp "config/cms.ranking.sample.toml" "config/cms_ranking.toml" && log_info "Created config/cms_ranking.toml from sample"
   fi
 
   # Ensure CMS config exists from sample — __inject_config.sh modifies but
