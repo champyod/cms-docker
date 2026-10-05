@@ -147,6 +147,17 @@ docs_path = "/usr/share/cms/docs"
 # impersonate an arbitrary user and bypass submit restrictions.
 #contest_admin_token = "CHANGE-ME"
 
+# Adaptive login CAPTCHA for /login, /register and /api/login. Same keys and
+# same escalation rule as the admin panel, kept in a shared table so the two
+# servers cannot drift apart.
+[contest_web_server.captcha]
+enabled = false
+provider = "turnstile"
+site_key = ""
+secret_key = ""
+threshold = 3
+ban_threshold = 5
+
 
 [admin_web_server]
 # Listening HTTP address and port for the AWS. By default only listens
@@ -164,6 +175,18 @@ cookie_duration = 36000
 # source IP address. For example, if you're using nginx as
 # a proxy, you will likely want to set this value to 1.
 num_proxies_used = 0
+
+# Adaptive login CAPTCHA, mirroring the Next.js admin panel. Left off and empty
+# by default so an existing deployment keeps logging in without one; enabling it
+# below the threshold still does not demand a captcha, because the panel only
+# escalates once an account or address has failed that many times.
+[admin_web_server.captcha]
+enabled = false
+provider = "turnstile"
+site_key = ""
+secret_key = ""
+threshold = 3
+ban_threshold = 5
 
 
 [proxy_service]

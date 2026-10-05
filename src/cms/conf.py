@@ -64,6 +64,11 @@ def default_path(name):
     return os.path.join(sys.prefix, name)
 
 
+# WHY declared before the section dataclasses: a field default is evaluated when
+# its class body runs, so any dataclass below referencing it needs it in place.
+field_helper = lambda T: dataclasses.field(default_factory=T)
+
+
 @dataclass()
 class GlobalConfig:
     temp_dir: str = "/tmp"
@@ -113,6 +118,26 @@ class WebServerConfig:
 
 
 @dataclass()
+class CaptchaConfig:
+    # Adaptive login CAPTCHA, mirroring the Next.js admin panel (captcha.ts).
+    # WHY a shared dataclass rather than one field set per server: both web
+    # servers verify against the same provider with the same keys and the same
+    # threshold, so the values must stay in lockstep across them. Duplicating
+    # them into AWSConfig and CWSConfig would let the two servers drift.
+    # WHY defaults are off/empty: an existing deployment that sets nothing keeps
+    # logging in without a captcha, so enabling this cannot break an upgrade.
+    enabled: bool = False
+    provider: str = "turnstile"
+    site_key: str = ""
+    secret_key: str = ""
+    # Failed logins before the captcha becomes mandatory on this account/IP.
+    threshold: int = 3
+    # Failures after which the counters are dropped, mirroring the panel's
+    # MAX_LOGIN_ATTEMPTS lockout (5), which bans rather than escalating.
+    ban_threshold: int = 5
+
+
+@dataclass()
 class CWSConfig:
     listen_address: tuple[str, ...] = ("127.0.0.1",)
     listen_port: tuple[int, ...] = (8888,)
@@ -132,6 +157,8 @@ class CWSConfig:
 
     contest_admin_token: str | None = None
 
+    captcha: CaptchaConfig = field_helper(CaptchaConfig)
+
 
 @dataclass()
 class AWSConfig:
@@ -139,6 +166,8 @@ class AWSConfig:
     listen_port: int = 8889
     cookie_duration: int = 10 * 60 * 60  # 10 hours
     num_proxies_used: int = 0
+
+    captcha: CaptchaConfig = field_helper(CaptchaConfig)
 
 
 @dataclass()
@@ -165,8 +194,6 @@ class TelegramBotConfig:
     bot_token: str
     chat_id: str
 
-
-field_helper = lambda T: dataclasses.field(default_factory=T)
 
 @dataclass(kw_only=True)
 class Config:

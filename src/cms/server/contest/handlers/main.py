@@ -52,6 +52,7 @@ from cms.db import User, Participation, Team
 from cms.grading.languagemanager import get_language
 from cms.grading.steps import COMPILATION_MESSAGES, EVALUATION_MESSAGES
 from cms.server import multi_contest
+from cms.server.captcha import extract_token
 from cms.server.contest.authentication import validate_login
 from cms.server.contest.communication import get_communications
 from cmscommon.crypto import hash_password, validate_password
@@ -92,6 +93,17 @@ class RegistrationHandler(ContestHandler):
     def post(self):
         if not self.contest.allow_registration:
             raise tornado.web.HTTPError(404)
+
+        # WHY 429 and not 403: this path already answers 403 for "the password
+        # is not correct", so a captcha refusal needs its own code for the
+        # browser's jQuery handler to tell apart from a genuine credential
+        # error. 429 also describes what actually happened, and the handler's
+        # own script shows the widget again after it.
+        if not self.captcha.verify(self.get_argument("username", ""),
+                                   self.request.remote_ip, extract_token(self)):
+            logger.info("CAPTCHA rejected on registration from IP %s.",
+                        self.request.remote_ip)
+            raise tornado.web.HTTPError(429)
 
         create_new_user = self.get_argument("new_user") == "true"
 
@@ -186,6 +198,10 @@ class RegistrationHandler(ContestHandler):
 
         # Check if password is correct
         if not validate_password(user.password, password):
+            # WHY count this: joining an existing account is the only
+            # registration path that guesses a credential, so it is the one
+            # that has to escalate into a captcha.
+            self.captcha.record_failure(username, self.request.remote_ip)
             raise tornado.web.HTTPError(403)
 
         return user
@@ -235,6 +251,16 @@ class LoginHandler(ContestHandler):
                            self.request.remote_ip)
             return None
 
+        # WHY the captcha comes before validate_login: a wrong or forged answer
+        # must not be worth anything to an attacker, so the credentials are not
+        # examined until the captcha has passed.
+        if not self.captcha.verify(
+                username, self.request.remote_ip, extract_token(self)):
+            logger.info("CAPTCHA rejected for user %r from IP %s.", username,
+                        self.request.remote_ip)
+            self.redirect(error_page)
+            return
+
         participation, cookie = validate_login(
             self.sql_session, self.contest, self.timestamp, username, password,
             ip_address)
@@ -251,8 +277,10 @@ class LoginHandler(ContestHandler):
             )
 
         if participation is None:
+            self.captcha.record_failure(username, self.request.remote_ip)
             self.redirect(error_page)
         else:
+            self.captcha.record_success(username, self.request.remote_ip)
             self.redirect(next_page)
 
 

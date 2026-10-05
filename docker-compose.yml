@@ -311,6 +311,15 @@ services:
       MAX_INPUT_LENGTH: ${MAX_INPUT_LENGTH:-5000000}
       SUBMIT_LOCAL_COPY: ${SUBMIT_LOCAL_COPY:-true}
       NUM_PROXIES_USED: ${NUM_PROXIES_USED:-1}
+      # Adaptive login CAPTCHA for /login, /register and /api/login.
+      # __inject_config.sh copies these into [contest_web_server.captcha] of the
+      # mounted cms.toml, which is the only config this process can read.
+      CAPTCHA_ENABLED: ${CAPTCHA_ENABLED:-0}
+      CAPTCHA_PROVIDER: ${CAPTCHA_PROVIDER:-turnstile}
+      CAPTCHA_SITE_KEY: ${CAPTCHA_SITE_KEY:-}
+      CAPTCHA_SECRET_KEY: ${CAPTCHA_SECRET_KEY:-}
+      CAPTCHA_THRESHOLD: ${CAPTCHA_THRESHOLD:-3}
+      CAPTCHA_BAN_THRESHOLD: ${CAPTCHA_BAN_THRESHOLD:-5}
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms

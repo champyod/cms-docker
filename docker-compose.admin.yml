@@ -64,6 +64,16 @@ services:
     environment:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       ADMIN_LISTEN_PORT: ${ADMIN_LISTEN_PORT:-8889}
+      # Adaptive login CAPTCHA. __inject_config.sh copies these into the
+      # [admin_web_server.captcha] table of the mounted cms.toml, which is where
+      # the Tornado process reads them from — it sees only CMS_CONFIG, so env
+      # vars alone would never reach it.
+      CAPTCHA_ENABLED: ${CAPTCHA_ENABLED:-0}
+      CAPTCHA_PROVIDER: ${CAPTCHA_PROVIDER:-turnstile}
+      CAPTCHA_SITE_KEY: ${CAPTCHA_SITE_KEY:-}
+      CAPTCHA_SECRET_KEY: ${CAPTCHA_SECRET_KEY:-}
+      CAPTCHA_THRESHOLD: ${CAPTCHA_THRESHOLD:-3}
+      CAPTCHA_BAN_THRESHOLD: ${CAPTCHA_BAN_THRESHOLD:-5}
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms

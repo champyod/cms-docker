@@ -58,6 +58,7 @@ import cms.db
 from cms.grading.scoretypes import get_score_type_class
 from cms.grading.tasktypes import get_task_type_class
 from cms.server import CommonRequestHandler, FileHandlerMixin
+from cms.server.captcha import Captcha
 from cmscommon.crypto import hash_password, parse_authentication
 from cmscommon.datetime import make_datetime
 from cms.db.permissions import (
@@ -381,6 +382,21 @@ class BaseHandler(CommonRequestHandler):
     AUTHENTICATED = "authenticated"
     current_user: Admin | None
     service: "AdminWebServer"
+
+    _aws_captcha: Captcha | None = None
+
+    @property
+    def captcha(self) -> Captcha:
+        """Return the AWS's adaptive login captcha.
+
+        Built once per process and cached on the class: the failure counters it
+        carries are process-wide, exactly as the admin panel's are, and
+        rebuilding it per request would reset them on every page load.
+
+        """
+        if BaseHandler._aws_captcha is None:
+            BaseHandler._aws_captcha = Captcha(config.admin_web_server.captcha)
+        return BaseHandler._aws_captcha
 
     def try_commit(self) -> bool:
         """Try to commit the current session.

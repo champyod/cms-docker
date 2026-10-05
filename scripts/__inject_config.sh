@@ -184,6 +184,27 @@ _set_contest('max_submission_length', 'MAX_SUBMISSION_LENGTH')
 _set_contest('max_input_length', 'MAX_INPUT_LENGTH')
 _set_contest('submit_local_copy', 'SUBMIT_LOCAL_COPY')
 
+# config.toml [admin] CAPTCHA_* -> cms.toml [<server>.captcha]. WHY both servers
+# get the same table: they verify against the same provider with the same keys,
+# and two copies of these values would be free to drift. An empty or absent
+# value leaves the shipped default, which is off — so a deployment that sets
+# nothing keeps logging in exactly as before.
+def _set_captcha(section):
+    global text
+    for key, env_var in (('enabled', 'CAPTCHA_ENABLED'),
+                         ('provider', 'CAPTCHA_PROVIDER'),
+                         ('site_key', 'CAPTCHA_SITE_KEY'),
+                         ('secret_key', 'CAPTCHA_SECRET_KEY'),
+                         ('threshold', 'CAPTCHA_THRESHOLD'),
+                         ('ban_threshold', 'CAPTCHA_BAN_THRESHOLD')):
+        raw = os.environ.get(env_var, "").strip()
+        if raw:
+            value = 'true' if raw == "1" else ('false' if raw == "0" else raw)
+            text = set_section_key(text, section, key, value)
+
+_set_captcha('admin_web_server.captcha')
+_set_captcha('contest_web_server.captcha')
+
 # Push target for score feed: same-network service by default. A remote
 # ranking node is only assumed when RANKING_REMOTE=1 (then RANKING_PUSH_HOST
 # or legacy TAILSCALE_IP supplies the address). Port 8890 is always enforced.

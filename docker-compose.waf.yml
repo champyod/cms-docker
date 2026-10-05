@@ -3,7 +3,10 @@
 #
 # Disabled by default:
 #   WAF_ENABLED=0 (default) — grader-waf container not started, no ports bound, nginx unaffected.
-#   CAPTCHA (Upgrade-2) remains active whether WAF is on or off; both can be on at once.
+#   CAPTCHA is independent of this file: it is enforced by the login handlers of the
+#   admin panel, the admin web server and the contest web server, all gated on
+#   CAPTCHA_ENABLED. Turning the WAF on or off changes nothing about it, and both can
+#   be on at once. See docs/LOGIN-CAPTCHA.md.
 #
 # Enable WAF (explicit opt-in):
 #   1. Render the nginx config the proxy serves, then start the domain stack:

@@ -30,6 +30,7 @@ import logging
 
 from cms import ServiceCoord, get_service_shards, get_service_address
 from cms.db import Admin, Contest, Question
+from cms.server.captcha import Captcha, extract_token
 from cms.server.jinja2_toolbox import markdown_filter
 from cmscommon.crypto import validate_password
 from cmscommon.datetime import make_datetime, make_timestamp
@@ -43,6 +44,15 @@ class LoginHandler(SimpleHandler("login.html", authenticated=False)):
     """Login handler.
 
     """
+    def get(self):
+        # WHY the page needs the client's own state: the captcha is adaptive,
+        # so the form has to carry the widget when this client is already over
+        # the threshold, instead of making it fail once more to find out.
+        self.r_params = self.render_params()
+        self.r_params.update(self.captcha.render_params(
+            self.get_argument("username", ""), self.request.remote_ip))
+        self.render("login.html", **self.r_params)
+
     def post(self):
         error_args = {"login_error": "true"}
         next_page: str = self.get_argument("next", None)
@@ -58,12 +68,25 @@ class LoginHandler(SimpleHandler("login.html", authenticated=False)):
 
         username: str = self.get_argument("username", "")
         password: str = self.get_argument("password", "")
+        client_ip: str = self.request.remote_ip
+
+        # WHY check the captcha before the password: a wrong or forged answer
+        # must not be worth anything to an attacker, so the credential is not
+        # even examined until the captcha has passed.
+        if not self.captcha.verify(
+                username, client_ip, extract_token(self)):
+            logger.info("CAPTCHA rejected for admin %r from IP %s.", username,
+                        client_ip)
+            self.redirect(error_page)
+            return
+
         admin: Admin | None = (
             self.sql_session.query(Admin).filter(Admin.username == username).first()
         )
 
         if admin is None:
             logger.warning("Nonexistent admin account: %s", username)
+            self.captcha.record_failure(username, client_ip)
             self.redirect(error_page)
             return
 
@@ -77,16 +100,16 @@ class LoginHandler(SimpleHandler("login.html", authenticated=False)):
         if not allowed or not admin.enabled:
             if not allowed:
                 logger.info("Login error for admin %r from IP %s.", username,
-                            self.request.remote_ip)
+                            client_ip)
+                self.captcha.record_failure(username, client_ip)
             elif not admin.enabled:
                 logger.info("Login successful for admin %r from IP %s, but "
-                            "account is disabled.", username,
-                            self.request.remote_ip)
+                            "account is disabled.", username, client_ip)
             self.redirect(error_page)
             return
 
-        logger.info("Admin logged in: %r from IP %s.", username,
-                    self.request.remote_ip)
+        logger.info("Admin logged in: %r from IP %s.", username, client_ip)
+        self.captcha.record_success(username, client_ip)
         self.service.auth_handler.set(admin.id)
         self.redirect(next_page)
 

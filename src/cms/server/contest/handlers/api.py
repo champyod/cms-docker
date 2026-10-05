@@ -25,6 +25,7 @@ import logging
 
 from cms.db.submission import Submission
 from cms.server import multi_contest
+from cms.server.captcha import extract_token
 from cms.server.contest.authentication import validate_login
 from cms.server.contest.submission import \
     UnacceptableSubmission, accept_submission
@@ -75,13 +76,24 @@ class ApiLoginHandler(ApiContestHandler):
                            self.request.remote_ip)
             return None
 
+        # WHY the captcha comes before validate_login: a wrong or forged answer must
+        # not reach the password check at all, or the layer only slows the part of the
+        # attempt that costs the attacker nothing.
+        if not self.captcha.verify(username, self.request.remote_ip,
+                                   extract_token(self)):
+            self.captcha.record_failure(username, self.request.remote_ip)
+            self.json({"error": "Login failed"}, 403)
+            return
+
         participation, login_data = validate_login(
             self.sql_session, self.contest, self.timestamp, username, password,
             ip_address, admin_token=admin_token)
 
         if participation is None:
+            self.captcha.record_failure(username, self.request.remote_ip)
             self.json({"error": "Login failed"}, 403)
         elif login_data is not None:
+            self.captcha.record_success(username, self.request.remote_ip)
             cookie_name = self.contest.name + "_login"
             self.json({"login_data": self.create_signed_value(
                 cookie_name, login_data).decode()})

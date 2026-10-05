@@ -35,6 +35,15 @@
       <input type="password" name="password" autocomplete="current-password">
     </label>
   </div>
+  {# WHY the widget renders only once the captcha is both configured and demanded:
+     showing it before the threshold would make it look mandatory and would block an
+     ordinary user who simply mistyped. The markup is built by cms.server.captcha so
+     the field names stay the ones the panel's client idiom already posts. #}
+  {% if captcha_widget %}
+  <div class="section">
+    {{ captcha_widget|safe }}
+  </div>
+  {% endif %}
   <div class="section">
     <button type="submit">Login</button>
     <button type="reset">Reset</button>

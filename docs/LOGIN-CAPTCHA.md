@@ -72,9 +72,31 @@ Two things to know about the secret:
 
 ### Where the values enter the container
 
-The six variables are passed into the `admin-panel-next` container by `docker-compose.yml`
-and `docker-compose.admin.yml`. Those two files are the only place the values reach the
-container, so if the settings ever move, both files must move with them.
+The six variables reach three containers, declared in `docker-compose.yml` and
+`docker-compose.admin.yml`: `admin-panel-next` reads them directly from its environment,
+while `admin-web-server` and `contest-web-server` cannot — the Python process reads only
+the TOML named by `CMS_CONFIG`. `scripts/__inject_config.sh` therefore copies each value
+into the `[admin_web_server.captcha]` and `[contest_web_server.captcha]` tables of
+`config/cms.toml` at injection time, and the servers read them from there.
+
+All three read the same keys, so moving a setting means moving it in both compose files
+and in the injection mapping.
+
+---
+
+## 2b. Which login paths are protected
+
+| Surface | Handler | Channel on failure |
+|---|---|---|
+| Admin panel | `admin-panel/src/app/actions/auth.ts` | JSON error |
+| Admin web server | `src/cms/server/admin/handlers/main.py` — `LoginHandler` | 302 to `?login_error=true` |
+| Contest web server | `src/cms/server/contest/handlers/main.py` — `LoginHandler`, `RegistrationHandler` | 302 to `?login_error=true` |
+| Contest API | `src/cms/server/contest/handlers/api.py` — `ApiLoginHandler` | 403 `{"error": ...}` |
+
+Registration is protected on the contest web server but not on the panel, which has no
+registration flow. The two Tornado servers verify the token themselves against the
+provider's siteverify endpoint rather than calling the panel: a network hop between
+services would make one service's outage a login outage.
 
 ---
 
