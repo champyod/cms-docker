@@ -357,6 +357,34 @@ services:
       retries: 3
       start_period: 40s
 
+  # Shared store for the login failure counters (LOGIN_RATE_LIMIT_REDIS_*).
+  # WHY declared here as well as in docker-compose.domain.yml: `make contest`
+  # merges only the base file, so a definition living solely in the domain stack
+  # is invisible to it and the contest server counts in process — a lockout then
+  # dies with the web server and is per replica. Profiles make the two entries
+  # mutually exclusive rather than competing: compose unions profile lists
+  # across merged files, so the domain stack (which activates no profile) keeps
+  # its own copy and starts exactly one container.
+  # WHY `contest` and not every profile: `make core` must not start it.
+  redis-rate-limit:
+    image: redis:7-alpine
+    container_name: grader-redis-rate-limit
+    restart: unless-stopped
+    profiles:
+      - contest
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis-rate-limit-data:/data
+    networks:
+      - cms-network
+    # No host ports — reachable only via cms-network as redis-rate-limit:6379
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
   # Optional: Nginx reverse proxy for contest web server (TLS via ENABLE_TLS=true)
   nginx-proxy:
     image: nginx:alpine
@@ -750,3 +778,7 @@ volumes:
     name: cms-nginx-logs-contest
   worker-tmp:
     name: cms-worker-tmp-${WORKER_SHARD:-0}
+  # Shared with docker-compose.domain.yml's same-named service: both stacks run
+  # the one container, so the appendonly data must survive whichever is up.
+  redis-rate-limit-data:
+    name: cms-redis-rate-limit-data

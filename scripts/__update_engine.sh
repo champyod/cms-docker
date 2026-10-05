@@ -688,6 +688,13 @@ VAR_SPECS=(
   "Admin Panel|[admin]|CAPTCHA_SECRET_KEY|secret||"
   "Admin Panel|[admin]|CAPTCHA_THRESHOLD|num||3"
   "Admin Panel|[admin]|CAPTCHA_BAN_THRESHOLD|num||5"
+  # Login counters in the shared redis-rate-limit instance. Named apart from
+  # REDIS_HOST/REDIS_RATE_LIMIT (the nginx limit_req store) so turning the nginx
+  # layer on cannot drag the Python login counters into the same switch: they
+  # answer different requests and nginx's limit_req is deliberately untouched.
+  "Admin Panel|[admin]|LOGIN_RATE_LIMIT_REDIS_ENABLED|enum:0,1||0"
+  "Admin Panel|[admin]|LOGIN_RATE_LIMIT_REDIS_HOST|str||redis-rate-limit"
+  "Admin Panel|[admin]|LOGIN_RATE_LIMIT_REDIS_PORT|port||6379"
   "Admin Panel|[admin]|PER_USER_LIMIT|num||1"
   "Admin Panel|[admin]|REDIS_HOST|str||redis-rate-limit"
   "Admin Panel|[admin]|REDIS_PORT|port||6379"

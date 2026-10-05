@@ -205,6 +205,34 @@ def _set_captcha(section):
 _set_captcha('admin_web_server.captcha')
 _set_captcha('contest_web_server.captcha')
 
+# config.toml [admin] LOGIN_RATE_LIMIT_REDIS_* -> cms.toml [<server>.captcha].
+# WHY these land in the captcha table rather than a new one: CaptchaConfig is the
+# single dataclass both web servers share (conf.py), so the login counters' backend
+# has to be carried on the same object the login handlers already receive. A Redis
+# that cannot be reached degrades to in-process counting and a captcha demanded on
+# every attempt, so an operator pointing this at a stopped instance taxes the
+# attacker rather than lifting the lockout — the default stays off and nothing about
+# an existing deployment changes until it is set.
+#
+# WHY redis_host is written quoted while the other two are bare: the global
+# '"127.0.0.1"' -> '"0.0.0.0"' substitution further down rewrites any quoted
+# loopback address in the file, and this one is a host to dial rather than an
+# address to bind. Quoting it keeps the substitution finding it and moving the
+# value on to 0.0.0.0, which is then plainly wrong rather than silently
+# dialing nothing.
+def _set_login_rate_limit(section):
+    global text
+    for key, env_var, quoted in (('redis_enabled', 'LOGIN_RATE_LIMIT_REDIS_ENABLED', False),
+                                 ('redis_host', 'LOGIN_RATE_LIMIT_REDIS_HOST', True),
+                                 ('redis_port', 'LOGIN_RATE_LIMIT_REDIS_PORT', False)):
+        raw = os.environ.get(env_var, "").strip()
+        if raw:
+            value = 'true' if raw == "1" else ('false' if raw == "0" else raw)
+            text = set_section_key(text, section, key, f'"{value}"' if quoted else value)
+
+_set_login_rate_limit('admin_web_server.captcha')
+_set_login_rate_limit('contest_web_server.captcha')
+
 # Push target for score feed: same-network service by default. A remote
 # ranking node is only assumed when RANKING_REMOTE=1 (then RANKING_PUSH_HOST
 # or legacy TAILSCALE_IP supplies the address). Port 8890 is always enforced.

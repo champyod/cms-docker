@@ -208,7 +208,11 @@ core-clean:
 # the core profile is required for project-graph validation, while the
 # service list keeps the operation scoped so dependencies are never touched.
 ADMIN_SERVICES := admin-panel-next admin-web-server ranking-web-server
-CONTEST_SERVICES := evaluation-service proxy-service contest-web-server nginx-proxy
+# redis-rate-limit is here because `make contest` starts it (the login failure
+# counters are configured to use it), so stop/down has to take it with them or a
+# stale instance outlives the stack. It shares container_name and volume with the
+# domain stack's copy, but the two are mutually exclusive by profile.
+CONTEST_SERVICES := evaluation-service proxy-service contest-web-server nginx-proxy redis-rate-limit
 
 admin-stop:
 	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile admin down $(ADMIN_SERVICES)

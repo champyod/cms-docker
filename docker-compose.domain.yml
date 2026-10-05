@@ -170,6 +170,12 @@ services:
     image: redis:7-alpine
     container_name: grader-redis-rate-limit
     restart: unless-stopped
+    # WHY the same service is declared in docker-compose.yml under the `contest`
+    # profile: `make contest` merges only the base file, and the login failure
+    # counters read this instance, so without a base copy the contest server
+    # silently falls back to counting in process. Profiles keep the two entries
+    # mutually exclusive — compose unions profile lists across merged files, so
+    # this stack (which activates no profile) starts its copy alone.
     command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
     volumes:
       - redis-rate-limit-data:/data

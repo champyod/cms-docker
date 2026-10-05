@@ -65,6 +65,9 @@ CAPTCHA_SITE_KEY = ""           # str
 CAPTCHA_SECRET_KEY = ""         # secret
 CAPTCHA_THRESHOLD = 3           # num
 CAPTCHA_BAN_THRESHOLD = 5       # num
+LOGIN_RATE_LIMIT_REDIS_ENABLED = 0  # enum:0,1; effect: keeps the login failure counters in a shared Redis so a lockout survives a web server restart
+LOGIN_RATE_LIMIT_REDIS_HOST = "redis-rate-limit" # str; compose service name; counts per process only unless LOGIN_RATE_LIMIT_REDIS_ENABLED=1
+LOGIN_RATE_LIMIT_REDIS_PORT = 6379 # port
 RANKING_LISTEN_PORT = 8890      # port
 RANKING_PORT_EXTERNAL = 8890    # port
 RANKING_DOMAIN = "ranking.cms.local"
