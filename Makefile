@@ -411,21 +411,46 @@ admin-create:
 # ---------------------------------------------------------------------------
 # New utility targets
 # ---------------------------------------------------------------------------
+# WHY the file lists below are built by globbing and filtered with [ -f ]/[ -e ]
+# rather than handed to the tool raw: `make lint` must stay green on a checkout
+# where one of the optional directories (src/tools/, src/docker/) is empty or
+# absent, and a tool handed a non-matching path fails before it lints anything.
+#
+# WHY overlay_base: an overlay stack references services defined in its base
+# (docker-compose.tailscale.yml and docker-compose.waf.yml both depend on
+# contest-web-server from docker-compose.contest.yml), so `config -q` only
+# succeeds for the pair. Validating the overlay standalone reports a false
+# failure; this mirrors the merge .github/workflows/ci.yml performs.
 lint:
 	@echo "Running lint checks..."
 	@echo "→ spec parity"
 	@bash scripts/__check_spec_parity.sh
+	@echo "→ variable coverage"
+	@bash scripts/__check_var_coverage.sh
 	@echo "→ audit coverage"
 	@bash scripts/__check_audit_coverage.sh
 	@echo "→ permission parity"
 	@bash scripts/__check_permission_parity.sh
 	@echo "→ RLS coverage"
 	@bash scripts/__check_rls_coverage.sh
+	@echo "→ RLS SQL freshness"
+	@bash scripts/__generate_rls_sql.sh --check
 	@echo "→ lib contract"
 	@bash scripts/__check_lib_contract.sh
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		echo "→ shellcheck"; \
-		shellcheck scripts/*.sh; \
+		files=(); \
+		for pattern in scripts/*.sh tools/*.sh src/tools/*.sh docker/*.sh src/docker/*.sh; do \
+			for f in $$pattern; do \
+				[ -f "$$f" ] && files+=("$$f"); \
+			done; \
+		done; \
+		if [ $${#files[@]} -eq 0 ]; then \
+			echo "no shell scripts found to lint"; \
+		else \
+			printf 'linting:\n'; printf '  %s\n' "$${files[@]}"; \
+			shellcheck -S error -x "$${files[@]}"; \
+		fi; \
 	else \
 		echo "→ shellcheck not found, skipping (install: apt install shellcheck)"; \
 	fi
@@ -437,7 +462,16 @@ lint:
 	fi
 	@if command -v yamllint >/dev/null 2>&1; then \
 		echo "→ yamllint"; \
-		yamllint docker-compose.yml; \
+		yamls=(); \
+		for y in .yamllint.yml .github/workflows .github/dependabot.yml docker-compose*.yml docker examples src/.readthedocs.yml; do \
+			[ -e "$$y" ] && yamls+=("$$y"); \
+		done; \
+		if [ $${#yamls[@]} -eq 0 ]; then \
+			echo "no yaml files found to lint"; \
+		else \
+			printf 'linting:\n'; printf '  %s\n' "$${yamls[@]}"; \
+			yamllint -c .yamllint.yml "$${yamls[@]}"; \
+		fi; \
 	else \
 		echo "→ yamllint not found, skipping (install: pip install yamllint)"; \
 	fi
@@ -445,10 +479,29 @@ lint:
 		echo "→ compose config validation"; \
 		bash scripts/__config_sync.sh --no-secrets >/dev/null 2>&1 || { echo "config sync failed — using dummy env vars" >&2; }; \
 		if [ -f .env ]; then \
-			docker compose --env-file .env -f docker-compose.yml config -q && echo "compose config OK" || { echo "compose config FAILED" >&2; exit 1; }; \
+			env_args=(--env-file .env); \
 		else \
-			POSTGRES_PASSWORD=x AUTH_SECRET=x SECRET_KEY=x CONTEST_ID=1 docker compose -f docker-compose.yml config -q && echo "compose config OK (dummy env)" || { echo "compose config FAILED" >&2; exit 1; }; \
+			env_args=(); \
+			export POSTGRES_PASSWORD=x AUTH_SECRET=x SECRET_KEY=x CONTEST_ID=1; \
 		fi; \
+		declare -A overlay_base=( \
+			[docker-compose.tailscale.yml]=docker-compose.contest.yml \
+			[docker-compose.waf.yml]=docker-compose.contest.yml \
+		); \
+		compose_failed=0; \
+		for f in docker-compose*.yml docker/docker-compose*.yml; do \
+			[ -f "$$f" ] || continue; \
+			base="$${overlay_base[$$f]:-}"; \
+			if [ -n "$$base" ]; then \
+				echo "compose config -- $$base + $$f"; \
+				docker compose "$${env_args[@]}" -f "$$base" -f "$$f" config -q || { echo "compose config FAILED ($$f)" >&2; compose_failed=1; }; \
+			else \
+				echo "compose config -- $$f"; \
+				docker compose "$${env_args[@]}" -f "$$f" config -q || { echo "compose config FAILED ($$f)" >&2; compose_failed=1; }; \
+			fi; \
+		done; \
+		if [ $$compose_failed -ne 0 ]; then exit 1; fi; \
+		echo "compose config OK"; \
 	else \
 		echo "→ docker not found, skipping compose validation"; \
 	fi
