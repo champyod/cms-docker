@@ -22,6 +22,31 @@ SCAN_FILES = ["cms", "Makefile", "README.md"] \
 scan_files = [f for f in SCAN_FILES if os.path.isfile(f)]
 
 PATH_RE = re.compile(r'(?:scripts|config|examples|docker|backups)/[A-Za-z0-9_./-]+')
+COMPOSE_MOUNT_RE = re.compile(r"- \./([^\s:]+):(/[^:\s]+)(?::ro)?\s*$", re.M)
+compose: str = open("docker-compose.yml", errors="replace").read()
+
+
+def git_ignored(paths: set[str]) -> set[str]:
+    if not paths:
+        return set()
+    proc = subprocess.run(["git", "check-ignore", "--stdin"],
+                          input="\n".join(sorted(paths)),
+                          capture_output=True, text=True)
+    return {p[2:] if p.startswith("./") else p for p in proc.stdout.split()}
+
+
+# WHY: a path git is told to ignore is an operator or runtime artefact that is
+# supposed to be absent on a clean checkout (config/cms.toml, config/
+# funnel.htpasswd, config/mtls/*.pem, ...). Reporting those made every
+# unbootstrapped clone fail the gate, which is the same as having no gate.
+# One batched `check-ignore` for the whole run rather than a subprocess per
+# path, and no hardcoded allowlist that would rot on the next operator file.
+IGNORED = git_ignored(
+    {m.rstrip('."\'').rstrip("/")
+     for f in scan_files
+     for m in PATH_RE.findall(open(f, errors="replace").read())}
+    | {m.group(1) for m in COMPOSE_MOUNT_RE.finditer(compose)})
+
 print("== A. stale-path audit ==")
 for f in scan_files:
     text = open(f, errors="replace").read()
@@ -33,7 +58,8 @@ for f in scan_files:
                 # ignore pure directory prefixes mentioned without a real file intent
                 if os.path.isdir(p.split("/", 1)[0]) and "." not in os.path.basename(p):
                     continue
-                track(f"A {f}: references missing path -> {p}")
+                if p not in IGNORED:
+                    track(f"A {f}: references missing path -> {p}")
 print(f"   scanned {len(scan_files)} files")
 
 # ---------- B. exec-bit audit ----------
@@ -88,12 +114,12 @@ if mode_cms != "100755": track(f"B cms: tracked {mode_cms}, must be 100755")
 
 # ---------- C. bind-mount audit ----------
 print("== C. bind-mount audit ==")
-comp = open("docker-compose.yml").read()
-for m in re.finditer(r"- \./([^\s:]+):(/[^:\s]+)(?::ro)?\s*$", comp, re.M):
+for m in COMPOSE_MOUNT_RE.finditer(compose):
     src, dst = m.group(1), m.group(2)
     checks += 1
     if not os.path.exists(src):
-        track(f"C compose mount source missing -> ./{src}")
+        if src not in IGNORED:
+            track(f"C compose mount source missing -> ./{src}")
     elif os.path.isfile(src) and "/usr/local/bin/" in dst and not os.access(src, os.X_OK):
         track(f"C {src} mounted to bin path {dst} but not executable on host/index")
 
@@ -101,7 +127,7 @@ for m in re.finditer(r"- \./([^\s:]+):(/[^:\s]+)(?::ro)?\s*$", comp, re.M):
 print("== D. compose profile-graph audit ==")
 svc_re = re.compile(r"\n  ([a-z0-9-]+):\n((?:    .*\n|\n)*?)(?=\n  [a-z0-9-]+:\n|\Z)")
 services = {}
-for name, body in svc_re.findall(comp):
+for name, body in svc_re.findall(compose):
     prof = re.search(r"profiles:\n((?:\s+-\s+\S+\n)+)", body)
     deps = re.search(r"depends_on:\n((?:\s+[a-z0-9_-]+[:\s]*\n)+)", body)
     plist = set(re.findall(r"-\s+(\S+)", prof.group(1))) if prof else {"default"}
