@@ -25,15 +25,27 @@ import unittest
 from datetime import timedelta
 from unittest.mock import patch
 
-from cmstestsuite.unit_tests.databasemixin import DatabaseMixin
+from cmstestsuite.unit_tests.databasemixin import DatabaseMixin, \
+    DatabaseObjectGeneratorMixin
 
 from cms import config
+from cms.conf import CaptchaConfig
+from cms.server.captcha import Captcha
 from cms.server.contest.authentication import validate_login, \
     authenticate_request
+from cms.server.login_counter_backend import InProcessBackend
+from cms.server.login_counters import FAILURE_WINDOW, LoginFailureCounters
 # Prefer build_password (which defaults to a plaintext method) over
 # hash_password (which defaults to bcrypt) as it is a lot faster.
 from cmscommon.crypto import build_password, hash_password
 from cmscommon.datetime import make_datetime
+
+
+# A routable, non-loopback address: a loopback client is exempt from the
+# per-IP bucket, which is the exemption the escalation cases below must not
+# accidentally lean on.
+LOCKOUT_IP = "203.0.113.7"
+BAN_THRESHOLD = 5
 
 
 class TestValidateLogin(DatabaseMixin, unittest.TestCase):
@@ -450,6 +462,178 @@ class TestAuthenticateRequest(DatabaseMixin, unittest.TestCase):
 
         self.assertImpersonationSuccess(ip_address="10.0.0.1")
         self.assertImpersonationSuccess(ip_address="10.0.1.1")
+
+
+class ManualClock:
+    """A clock the tests move by hand.
+
+    A failure window is measured in minutes, so letting one lapse by waiting
+    would make the suite slow and flaky. Driving the clock the backend already
+    accepts keeps the assertion on the behaviour rather than on a private
+    timestamp rewritten behind the code's back.
+    """
+
+    def __init__(self, now=1000.0):
+        self.now = now
+
+    def __call__(self):
+        return self.now
+
+    def advance(self, seconds):
+        self.now += seconds
+
+
+def build_captcha(clock=None, **overrides):
+    """Return a Captcha with injected counters and a stubbed verifier.
+
+    WHY built here rather than through ContestHandler's captcha property: that
+    property caches one Captcha on the class for the whole process, so a test
+    reading it would observe whatever an earlier test left there. Injecting the
+    counters keeps every case below independent of that shared state.
+    """
+    values = {
+        "enabled": True,
+        "provider": "turnstile",
+        "site_key": "site-key",
+        "secret_key": "secret",
+        "threshold": 3,
+        "ban_threshold": BAN_THRESHOLD,
+    }
+    values.update(overrides)
+    counts = LoginFailureCounters(
+        backend=InProcessBackend(clock=clock) if clock is not None
+        else InProcessBackend())
+    return Captcha(CaptchaConfig(**values), counters=counts,
+                   verify=lambda *_args: True)
+
+
+class TestLoginLockout(DatabaseObjectGeneratorMixin, unittest.TestCase):
+    """The lockout the login handlers gate on before validating a password.
+
+    Both handlers ask the Captcha whether an account and address are refused
+    and skip the credential check when it says yes, so the captcha's report is
+    the whole boundary: nothing below it would refuse anything.
+
+    WHY the object generator mixin rather than DatabaseMixin: the account under
+    test only has to exist, and the generator builds it without a session, so
+    the lockout behaviour is decided without standing a database up. What the
+    lockout reads is the captcha's own state, not the participation.
+    """
+
+    def setUp(self):
+        self.captcha = build_captcha()
+        self.user = self.get_user(
+            username="myuser", password=build_password("mypass"))
+        self.contest = self.get_contest(allow_password_authentication=True)
+        self.participation = self.get_participation(
+            contest=self.contest, user=self.user)
+
+    def fail_login(self, captcha, username="myuser", ip_address=LOCKOUT_IP):
+        """Refuse one login attempt, as a handler refusing a password does.
+
+        WHY nothing here asks the captcha to verify a token: a refusal past
+        the threshold is answered before validate_login is ever reached, and
+        an answer the captcha itself produces would test the captcha rather
+        than the lockout. The handlers likewise never record a failure on an
+        attempt they refuse for the lockout, so neither does this, which
+        keeps the counter a count of wrong passwords, not of refusals.
+        """
+        captcha.record_failure(username, ip_address)
+
+    def answer_login(self, captcha, username="myuser", ip_address=LOCKOUT_IP):
+        """Answer the lockout query of one attempt, as a handler does."""
+        return captcha.is_locked(username, ip_address)
+
+    def assertDemandsAToken(self, captcha, username="myuser",
+                            ip_address=LOCKOUT_IP):
+        """Assert this captcha stops the attempt before the password is read.
+
+        The captcha threshold sits below the ban threshold, so a run of
+        failures passes through a demand for a token on the way to the
+        refusal: an account can be challenged and still be guessable, and
+        the lockout is what bounds that guessing.
+        """
+        self.assertTrue(captcha.verify(username, ip_address, "good"))
+
+    def assertLocksOut(self, captcha, username="myuser",
+                       ip_address=LOCKOUT_IP):
+        """Assert this captcha refuses the attempt, and return nothing."""
+        self.assertTrue(self.answer_login(captcha, username, ip_address))
+
+    def assertNotLockedOut(self, captcha, username="myuser",
+                           ip_address=LOCKOUT_IP):
+        """Assert this captcha lets the attempt reach the password."""
+        self.assertFalse(self.answer_login(captcha, username, ip_address))
+
+    def test_the_ban_threshold_refuses_the_attempt(self):
+        for _ in range(BAN_THRESHOLD - 1):
+            self.fail_login(self.captcha)
+
+        # One failure short of the ban the attempt is only challenged, and a
+        # client that answers the challenge can still get in.
+        self.assertDemandsAToken(self.captcha)
+        self.assertNotLockedOut(self.captcha)
+
+        self.fail_login(self.captcha)
+        self.assertLocksOut(self.captcha)
+
+    def test_every_attempt_past_the_threshold_stays_refused(self):
+        # A count that restarted at the threshold re-armed itself on the next
+        # attempt, so the sixth guess was counted as the first and the account
+        # stayed guessable without limit: that is what the retained count buys.
+        for _ in range(BAN_THRESHOLD):
+            self.fail_login(self.captcha)
+        for _ in range(3):
+            self.fail_login(self.captcha)
+            self.assertLocksOut(self.captcha)
+
+    def test_a_successful_login_clears_the_failures_behind_it(self):
+        for _ in range(BAN_THRESHOLD - 1):
+            self.fail_login(self.captcha)
+
+        self.captcha.record_success("myuser", LOCKOUT_IP)
+
+        self.assertNotLockedOut(self.captcha)
+        self.assertEqual(self.captcha.counters.count("myuser", LOCKOUT_IP), 0)
+
+    def test_rotating_usernames_still_escalates_the_address(self):
+        # The per-account bucket is what an attacker on one account exhausts
+        # first, so rotating usernames must not buy a fresh allowance: every
+        # failure also feeds the address bucket.
+        for index in range(BAN_THRESHOLD):
+            self.fail_login(self.captcha, username="user-%d" % index)
+
+        self.assertLocksOut(self.captcha, username="user-0")
+        self.assertLocksOut(self.captcha, username="user-never-attempted")
+
+    def test_the_lockout_holds_with_no_captcha_configured(self):
+        # is_enabled() is False by default and for a deployment that sets
+        # nothing, so a lockout gated on it would be inert exactly where it is
+        # most needed. The refusal has to survive a captcha that cannot be
+        # demanded at all.
+        self.captcha = build_captcha(enabled=False, site_key="", secret_key="")
+        self.assertFalse(self.captcha.is_enabled())
+
+        for _ in range(BAN_THRESHOLD):
+            self.fail_login(self.captcha)
+
+        self.assertLocksOut(self.captcha)
+        self.fail_login(self.captcha)
+        self.assertLocksOut(self.captcha)
+
+    def test_a_lapsed_window_releases_the_lockout(self):
+        # A user who mistyped a few times, walked away and came back must not
+        # be held out forever, so the count has to lapse on its own.
+        clock = ManualClock()
+        self.captcha = build_captcha(clock=clock)
+        for _ in range(BAN_THRESHOLD - 1):
+            self.fail_login(self.captcha)
+        self.assertNotLockedOut(self.captcha)
+
+        clock.advance(FAILURE_WINDOW + 1)
+
+        self.assertEqual(self.captcha.counters.count("myuser", LOCKOUT_IP), 0)
+        self.assertNotLockedOut(self.captcha)
 
 
 if __name__ == "__main__":
