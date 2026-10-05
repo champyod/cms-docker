@@ -60,7 +60,7 @@ export function ResourceView(): React.JSX.Element {
           <CoreServicesStatus services={services} loading={loading} />
 
           <GaugeCard
-            icon={<Cpu className="w-4 h-4 text-indigo-400" />}
+            icon={<Cpu className="w-4 h-4 text-primary" />}
             label={dict.resources.cpuUsage}
             source={source}
             percent={serverStats?.cpu || 0}
@@ -68,7 +68,7 @@ export function ResourceView(): React.JSX.Element {
           />
 
           <GaugeCard
-            icon={<Database className="w-4 h-4 text-cyan-400" />}
+            icon={<Database className="w-4 h-4 text-info" />}
             label={dict.resources.memoryUsage}
             source={source}
             percent={serverStats?.memory || 0}
@@ -78,7 +78,7 @@ export function ResourceView(): React.JSX.Element {
 
         <div className="space-y-4">
           <div className="flex items-center gap-2 text-foreground">
-              <Activity className="w-5 h-5 text-indigo-400" />
+              <Activity className="w-5 h-5 text-primary" />
               <h2 className="text-xl font-bold">{dict.resources.workerNodes}</h2>
           </div>
           <WorkerGrid workers={workers} />
@@ -87,7 +87,7 @@ export function ResourceView(): React.JSX.Element {
         <div className="grid grid-cols-1 gap-6">
           <div>
             <div className="flex items-center gap-2 text-foreground mb-4">
-              <Network className="w-5 h-5 text-cyan-400" />
+              <Network className="w-5 h-5 text-info" />
               <h2 className="text-xl font-bold">{dict.resources.systemMetrics}</h2>
             </div>
             <MetricsCard serverStats={serverStats} />
@@ -114,10 +114,10 @@ export function MetricsCard({ serverStats }: { serverStats: ServerStats | null }
           </div>
           <div>
             <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{dict.resources.networkTotal}</div>
-            <div className="text-xs font-mono text-emerald-400">
+            <div className="text-xs font-mono text-success">
               {serverStats?.network ? `↓ ${formatBytes(serverStats.network.rx)}` : '-'}
             </div>
-            <div className="text-xs font-mono text-indigo-400">
+            <div className="text-xs font-mono text-primary">
               {serverStats?.network ? `↑ ${formatBytes(serverStats.network.tx)}` : '-'}
             </div>
           </div>

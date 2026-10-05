@@ -159,7 +159,7 @@ export function MonitorConfigSectionClient({
                 aria-label={target.enabled ? 'Disable target' : 'Enable target'}
               >
                 {target.enabled ? (
-                  <ToggleRight className="w-5 h-5 text-emerald-400" />
+                  <ToggleRight className="w-5 h-5 text-success" />
                 ) : (
                   <ToggleLeft className="w-5 h-5" />
                 )}

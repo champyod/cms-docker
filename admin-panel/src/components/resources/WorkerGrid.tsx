@@ -10,10 +10,10 @@ import { StatusPill, statusTone } from '@/components/core/StatusPill';
 import type { WorkerStat } from '@/lib/live-frames';
 
 const ICON_TONE: Record<string, string> = {
-  emerald: 'bg-emerald-500/10 text-emerald-400',
-  amber: 'bg-amber-500/10 text-amber-400',
-  blue: 'bg-blue-500/10 text-blue-400',
-  red: 'bg-red-500/10 text-red-400',
+  emerald: 'bg-success/10 text-success',
+  amber: 'bg-warning/10 text-warning',
+  blue: 'bg-info/10 text-info',
+  red: 'bg-destructive/10 text-destructive',
 };
 
 export function WorkerGrid({ workers }: { workers: WorkerStat[] }) {
@@ -44,7 +44,7 @@ export function WorkerGrid({ workers }: { workers: WorkerStat[] }) {
               <div className="min-w-0">
                 <h3
                   title={worker.name}
-                  className="text-sm font-bold text-foreground group-hover:text-indigo-400 transition-colors truncate"
+                  className="text-sm font-bold text-foreground group-hover:text-primary transition-colors truncate"
                 >
                   {worker.name}
                 </h3>
@@ -68,7 +68,7 @@ export function WorkerGrid({ workers }: { workers: WorkerStat[] }) {
               <div className="h-1 bg-muted/50 rounded-full overflow-hidden">
                 <div
                   className={`h-full transition-all duration-1000 ${
-                    worker.load > 80 ? 'bg-red-500' : worker.load > 50 ? 'bg-amber-500' : 'bg-indigo-500'
+                    worker.load > 80 ? 'bg-destructive' : worker.load > 50 ? 'bg-warning' : 'bg-primary'
                   }`}
                   style={{ width: `${worker.load}%` }}
                 />

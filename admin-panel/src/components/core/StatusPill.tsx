@@ -21,17 +21,17 @@ export function statusTone(status: string): StatusTone {
 }
 
 const DOT_TONE: Record<StatusTone, string> = {
-  emerald: 'bg-emerald-500',
-  amber: 'bg-amber-500',
-  blue: 'bg-blue-500',
-  red: 'bg-red-500',
+  emerald: 'bg-success',
+  amber: 'bg-warning',
+  blue: 'bg-info',
+  red: 'bg-destructive',
 };
 
 const TEXT_TONE: Record<StatusTone, string> = {
-  emerald: 'text-emerald-400',
-  amber: 'text-amber-400',
-  blue: 'text-blue-400',
-  red: 'text-red-400',
+  emerald: 'text-success',
+  amber: 'text-warning',
+  blue: 'text-info',
+  red: 'text-destructive',
 };
 
 /** One dot plus label for a status string; the only status renderer. */

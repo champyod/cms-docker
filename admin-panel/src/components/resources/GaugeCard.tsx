@@ -12,7 +12,7 @@ export interface GaugeCardProps {
 
 /** Single percentage gauge card (CPU/RAM); thresholds live here, not per page. */
 export function GaugeCard({ icon, label, source, percent, tone }: GaugeCardProps): React.JSX.Element {
-  const bar = tone === 'info' ? 'bg-cyan-500' : percent > 80 ? 'bg-red-500' : percent > 50 ? 'bg-amber-500' : 'bg-indigo-500';
+  const bar = tone === 'info' ? 'bg-info' : percent > 80 ? 'bg-destructive' : percent > 50 ? 'bg-warning' : 'bg-primary';
   return (
     <Card className="p-6 density:p-4 flex flex-col justify-center items-center text-center space-y-4 density:gap-2">
       <div className="flex items-center gap-2 mb-2">

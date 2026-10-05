@@ -15,6 +15,6 @@ describe('GaugeCard', () => {
     const html = renderToStaticMarkup(
       <GaugeCard icon={<span />} label="CPU" source={null} percent={91} tone="auto" />,
     );
-    expect(html).toContain('bg-red-500');
+    expect(html).toContain('bg-destructive');
   });
 });

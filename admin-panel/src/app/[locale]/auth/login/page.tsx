@@ -209,7 +209,7 @@ export default function LoginPage() {
         <form action={loginAction}>
           <Stack gap={6}>
             {state?.error && (
-              <Stack direction="row" align="center" gap={3} className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm animate-in fade-in slide-in-from-top-2">
+              <Stack direction="row" align="center" gap={3} className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm animate-in fade-in slide-in-from-top-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <p>{state.error}</p>
               </Stack>

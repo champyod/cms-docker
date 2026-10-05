@@ -49,8 +49,8 @@ export function MaintenanceBackupsCard({
     <Stack gap={6}>
       <Card className="p-6 h-full">
         <Stack direction="row" align="center" gap={3} className="mb-6">
-          <div className="p-2 bg-emerald-500/10 rounded-lg">
-            <Database className="w-5 h-5 text-emerald-400" />
+          <div className="p-2 bg-success/10 rounded-lg">
+            <Database className="w-5 h-5 text-success" />
           </div>
           <Text variant="h2">Submissions Backup</Text>
         </Stack>

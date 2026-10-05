@@ -49,7 +49,7 @@ export function RankingConnectionCard({
             </Button>
           )}
           <span className="text-sm text-muted-foreground">
-            Status: <span className={connected ? 'text-emerald-400' : 'text-amber-400'}>{connected ? 'Connected' : 'Disconnected'}</span>
+            Status: <span className={connected ? 'text-success' : 'text-warning'}>{connected ? 'Connected' : 'Disconnected'}</span>
           </span>
         </Stack>
         {errorMessage && <InlineAlert tone="destructive" className="rounded-xl border-destructive/20 text-destructive">{errorMessage}</InlineAlert>}

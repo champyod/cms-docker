@@ -20,7 +20,7 @@ export function CoreServicesStatus({ services, loading }: CoreServicesStatusProp
   return (
     <Card className="p-6 density:p-4">
       <div className="flex items-center gap-3 mb-4">
-        <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400">
+        <div className="p-2 rounded-lg bg-success/10 text-success">
           <ShieldCheck className="w-5 h-5" />
         </div>
         <h2 className="text-lg font-bold text-foreground">Core Services</h2>

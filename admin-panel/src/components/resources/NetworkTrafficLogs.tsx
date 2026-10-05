@@ -26,7 +26,7 @@ const TRAFFIC_COLUMNS: ResponsiveColumn<TrafficLog>[] = [
     mobileLabel: 'RX',
     cellClassName: 'py-2 density:py-1 px-3',
     render: (log) => (
-      <span className="block text-right font-mono text-xs text-emerald-400">{log.rx}</span>
+      <span className="block text-right font-mono text-xs text-success">{log.rx}</span>
     ),
   },
   {
@@ -35,7 +35,7 @@ const TRAFFIC_COLUMNS: ResponsiveColumn<TrafficLog>[] = [
     mobileLabel: 'TX',
     cellClassName: 'py-2 density:py-1 px-3',
     render: (log) => (
-      <span className="block text-right font-mono text-xs text-indigo-400">{log.tx}</span>
+      <span className="block text-right font-mono text-xs text-primary">{log.tx}</span>
     ),
   },
 ];
@@ -55,8 +55,8 @@ function TrafficHeader({ limit, onLimitChange }: { limit: number; onLimitChange:
   return (
     <div className="flex items-center justify-between mb-4">
       <div className="flex items-center gap-3">
-        <div className="p-2 rounded-lg bg-cyan-500/10">
-          <Network className="w-5 h-5 text-cyan-400" />
+        <div className="p-2 rounded-lg bg-info/10">
+          <Network className="w-5 h-5 text-info" />
         </div>
         <div>
           <h2 className="text-lg font-bold text-foreground">Network Traffic</h2>
@@ -68,7 +68,7 @@ function TrafficHeader({ limit, onLimitChange }: { limit: number; onLimitChange:
         <select
           value={limit}
           onChange={(e) => onLimitChange(parseInt(e.target.value))}
-          className="px-3 py-1.5 bg-muted border border-border rounded-lg text-foreground text-xs outline-none focus:border-cyan-500/50"
+          className="px-3 py-1.5 bg-muted border border-border rounded-lg text-foreground text-xs outline-none focus:border-info/50"
         >
           {TRAFFIC_LOG_LIMIT_OPTIONS.map((option) => (
             <option key={option} value={option}>Last {option}</option>
