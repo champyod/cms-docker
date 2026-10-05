@@ -95,7 +95,8 @@ Audited secrets:
   - htpasswd_rws (config/htpasswd_rws)
 
 Warning: --apply checks remote worker reference (WORKER / CORE_SERVICES_HOST)
-and warns if rotation would break RPC to 100.75.203.112.
+and warns if rotation would break RPC. Set WORKER_HOST to the worker address;
+unset means there is no worker to check.
 EOF
 }
 
@@ -209,10 +210,18 @@ _audit_env_file_key() {
 # ---------------------------------------------------------------------------
 # Remote worker reference check
 # ---------------------------------------------------------------------------
+# WHY WORKER_HOST has no default address: this check reports whether rotation would
+# cut RPC to a worker this deployment owns. An address baked here would report on a
+# machine the operator does not own and name another site's host in the help text.
+# Unset means "no worker configured", which is skipped rather than failed.
 _check_remote_worker_ref() {
   echo ""
   log_info "Remote worker RPC check"
-  local worker_host="${WORKER_HOST:-100.75.203.112}"
+  local worker_host="${WORKER_HOST:-}"
+  if [[ -z "$worker_host" ]]; then
+    log_info "  SKIPPED (set WORKER_HOST to check for worker references)"
+    return 0
+  fi
 
   # Check if WORKER entries reference remote host
   local remote_refs=0
@@ -384,7 +393,6 @@ cmd_apply() {
   _check_remote_worker_ref
 
   log_info "Secret rotation applied — verify services are healthy with: ./cms status"
-  log_info "IMPORTANT: Update worker on 100.75.203.112 if RPC is configured"
 }
 
 _update_config_toml() {
