@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""Mechanical regression audit for cms-docker: catches the failure classes
+"""Mechanical regression audit for this repo: catches the failure classes
 that produced P1-P5 (stale paths, exec-bit loss, CLI drift, profile-graph
 gaps, bind-mount perms)."""
 import os, re, subprocess, sys
+from pathlib import Path
 
-os.chdir("/mnt/Datas-Disk" if False else "/mnt/D-Datas-Disk/Champ/Coding/Github/Contest Management System/cms-docker")
+# Audit this repo, never whatever directory the caller happened to be in.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+os.chdir(REPO_ROOT)
 issues, checks = [], 0
 
 def track(msg):

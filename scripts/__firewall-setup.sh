@@ -6,8 +6,8 @@
 # --revert flushes custom rules added by this script.
 #
 # Rules:
-#   INPUT: allow lo, tailscale0 ALL, ens160 22 from 10.40.50.0/24,
-#          80, 443, established, drop else on ens160
+#   INPUT: allow lo, tailscale0 ALL, tcp 22 from SSH_LAN_CIDR on the main
+#          interface, 80, 443, established, drop else on that interface
 #   DOCKER-USER: mirrors INPUT rules + jump from FORWARD chain
 #
 # Usage:
@@ -32,7 +32,13 @@ source "${SCRIPT_DIR}/__lib/common.sh"
 # ---------------------------------------------------------------------------
 MODE="check"
 SSH_IFACE="${SSH_IFACE:-ens160}"
-SSH_LAN_CIDR="${SSH_LAN_CIDR:-10.40.50.0/24}"
+# SSH_LAN_CIDR has no default on purpose: the admin LAN is a property of the
+# site, not of this script, and guessing one either cuts SSH off from the real
+# operator network or lets an unrelated network in. Unset means the port 22
+# allow rule is omitted, and the catch-all DROP below then blocks SSH entirely —
+# so --apply refuses instead of enforcing a half rule set, and --revert leaves
+# any earlier port 22 rule alone rather than matching it against a blank value.
+SSH_LAN_CIDR="${SSH_LAN_CIDR:-}"
 TS_IFACE="${TS_IFACE:-tailscale0}"
 WEB_PORTS="80 443"
 RULES_FILE="/tmp/cms-firewall-rules.sh"
@@ -51,7 +57,10 @@ Modes:
 
 Environment:
   SSH_IFACE       Main network interface (default: ens160)
-  SSH_LAN_CIDR    SSH source CIDR (default: 10.40.50.0/24)
+  SSH_LAN_CIDR    SSH source CIDR. Site-specific and required — there is no
+                  default. Set it to the LAN you administer from: --apply
+                  refuses without it, --revert then leaves any earlier port 22
+                  rule in place.
   TS_IFACE        Tailscale interface (default: tailscale0)
 
 Rules applied:
@@ -100,8 +109,10 @@ preflight_checks() {
   fi
 
   printf '  %-30s' "4. SSH LAN reachable:"
-  if ip route get "$SSH_LAN_CIDR" >/dev/null 2>&1; then
-    printf 'PASS\n'; ((pass++))
+  if [[ -z "$SSH_LAN_CIDR" ]]; then
+    printf 'FAIL (SSH_LAN_CIDR unset)\n'; ((fail++))
+  elif ip route get "$SSH_LAN_CIDR" >/dev/null 2>&1; then
+    printf 'PASS (%s)\n' "$SSH_LAN_CIDR"; ((pass++))
   else
     printf 'WARN (CIDR not directly routable)\n'; ((warn++))
   fi
@@ -181,9 +192,18 @@ audit_docker_binds() {
 # Generate iptables rules
 # ---------------------------------------------------------------------------
 generate_rules() {
+  local ssh22_input ssh22_docker
+  if [[ -n "$SSH_LAN_CIDR" ]]; then
+    ssh22_input="iptables -A INPUT -i $SSH_IFACE -p tcp -m tcp --dport 22 -s $SSH_LAN_CIDR -j ACCEPT"
+    ssh22_docker="iptables -A DOCKER-USER -i $SSH_IFACE -p tcp -m tcp --dport 22 -s $SSH_LAN_CIDR -j ACCEPT"
+  else
+    ssh22_input="# SSH_LAN_CIDR is unset — port 22 is NOT allowed from any source on $SSH_IFACE"
+    ssh22_docker="# SSH_LAN_CIDR is unset — port 22 is NOT passed through DOCKER-USER"
+  fi
+
   cat <<RULES
 # CMS Firewall Rules — generated $(date -u +%Y-%m-%dT%H:%M:%SZ)
-# Interface: $SSH_IFACE  Tailscale: $TS_IFACE  SSH LAN: $SSH_LAN_CIDR
+# Interface: $SSH_IFACE  Tailscale: $TS_IFACE  SSH LAN: ${SSH_LAN_CIDR:-<unset>}
 
 # --- INPUT chain ---
 
@@ -193,8 +213,8 @@ iptables -A INPUT -i lo -j ACCEPT
 # Allow ALL on Tailscale (worker RPC, inter-node communication)
 iptables -A INPUT -i $TS_IFACE -j ACCEPT
 
-# Allow SSH from LAN only
-iptables -A INPUT -i $SSH_IFACE -p tcp -m tcp --dport 22 -s $SSH_LAN_CIDR -j ACCEPT
+# Allow SSH from the operator LAN only
+$ssh22_input
 
 # Allow HTTP and HTTPS
 iptables -A INPUT -i $SSH_IFACE -p tcp -m tcp --dport 80 -j ACCEPT
@@ -214,7 +234,7 @@ iptables -C FORWARD -j DOCKER-USER 2>/dev/null || iptables -I FORWARD -j DOCKER-
 # Mirror INPUT rules in DOCKER-USER
 iptables -A DOCKER-USER -i lo -j ACCEPT
 iptables -A DOCKER-USER -i $TS_IFACE -j ACCEPT
-iptables -A DOCKER-USER -i $SSH_IFACE -p tcp -m tcp --dport 22 -s $SSH_LAN_CIDR -j ACCEPT
+$ssh22_docker
 iptables -A DOCKER-USER -i $SSH_IFACE -p tcp -m tcp --dport 80 -j ACCEPT
 iptables -A DOCKER-USER -i $SSH_IFACE -p tcp -m tcp --dport 443 -j ACCEPT
 iptables -A DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
@@ -229,10 +249,18 @@ RULES
 flush_custom_rules() {
   log_info "Flushing custom CMS firewall rules"
 
+  # Without the CIDR there is no port 22 rule to match, so any rule applied
+  # earlier stays in place rather than being deleted by an unrelated value.
+  if [[ -z "$SSH_LAN_CIDR" ]]; then
+    log_warn "SSH_LAN_CIDR is unset — existing port 22 rules are left untouched"
+  fi
+
   # Remove rules matching our patterns from INPUT
   while iptables -D INPUT -i lo -j ACCEPT 2>/dev/null; do :; done
   while iptables -D INPUT -i "$TS_IFACE" -j ACCEPT 2>/dev/null; do :; done
-  while iptables -D INPUT -i "$SSH_IFACE" -p tcp -m tcp --dport 22 -s "$SSH_LAN_CIDR" -j ACCEPT 2>/dev/null; do :; done
+  if [[ -n "$SSH_LAN_CIDR" ]]; then
+    while iptables -D INPUT -i "$SSH_IFACE" -p tcp -m tcp --dport 22 -s "$SSH_LAN_CIDR" -j ACCEPT 2>/dev/null; do :; done
+  fi
   while iptables -D INPUT -i "$SSH_IFACE" -p tcp -m tcp --dport 80 -j ACCEPT 2>/dev/null; do :; done
   while iptables -D INPUT -i "$SSH_IFACE" -p tcp -m tcp --dport 443 -j ACCEPT 2>/dev/null; do :; done
   while iptables -D INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null; do :; done
@@ -241,7 +269,9 @@ flush_custom_rules() {
   # Remove DOCKER-USER rules
   while iptables -D DOCKER-USER -i lo -j ACCEPT 2>/dev/null; do :; done
   while iptables -D DOCKER-USER -i "$TS_IFACE" -j ACCEPT 2>/dev/null; do :; done
-  while iptables -D DOCKER-USER -i "$SSH_IFACE" -p tcp -m tcp --dport 22 -s "$SSH_LAN_CIDR" -j ACCEPT 2>/dev/null; do :; done
+  if [[ -n "$SSH_LAN_CIDR" ]]; then
+    while iptables -D DOCKER-USER -i "$SSH_IFACE" -p tcp -m tcp --dport 22 -s "$SSH_LAN_CIDR" -j ACCEPT 2>/dev/null; do :; done
+  fi
   while iptables -D DOCKER-USER -i "$SSH_IFACE" -p tcp -m tcp --dport 80 -j ACCEPT 2>/dev/null; do :; done
   while iptables -D DOCKER-USER -i "$SSH_IFACE" -p tcp -m tcp --dport 443 -j ACCEPT 2>/dev/null; do :; done
   while iptables -D DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null; do :; done
@@ -278,6 +308,9 @@ case "$MODE" in
   check)
     log_info "Firewall check mode (dry-run)"
     echo ""
+    if [[ -z "$SSH_LAN_CIDR" ]]; then
+      log_warn "SSH_LAN_CIDR is unset — port 22 would be dropped on ${SSH_IFACE}; set it to plan an SSH allow rule"
+    fi
     audit_docker_binds
     echo ""
     log_info "Planned iptables rules:"
@@ -292,6 +325,10 @@ case "$MODE" in
 
     if [[ $EUID -ne 0 ]]; then
       log_die "firewall --apply requires root — run with sudo" 1
+    fi
+
+    if [[ -z "$SSH_LAN_CIDR" ]]; then
+      log_die "SSH_LAN_CIDR is unset — the rules would drop SSH on ${SSH_IFACE}. Set it to the LAN you administer from and re-run." 1
     fi
 
     if ! preflight_checks; then
