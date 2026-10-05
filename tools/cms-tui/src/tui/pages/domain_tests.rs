@@ -109,14 +109,8 @@ fn any_other_key_cancels_the_live_run_question() {
     }
 }
 
-/// The submit key is the only way the page launches anything, and it works from any row
-/// so the operator does not have to aim before running the plan they just built.
-#[test]
-fn the_submit_key_works_from_any_row() {
-    let mut view = view();
-    view.form_mut().focus_row("--domain");
-    assert_eq!(view.handle_key(KeyCode::Char('r')), DomainAction::Submit);
-}
+#[path = "domain_submit_tests.rs"]
+mod submit;
 
 #[test]
 fn a_run_records_the_argv_it_launched() {

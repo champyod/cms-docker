@@ -53,12 +53,15 @@ impl App {
 
     /// Runs the plan the form currently describes.
     ///
-    /// A dry run still reaches the script: the script is what prints the plan, and running
-    /// it here means the preview and the actual output come from the same code path.
+    /// A dry run spawns nothing: it reports the argv it would run. The only thing a spawned dry
+    /// run could add is a child process, and this page has no terminal to show one — the
+    /// terminal is inherited only by the live path, so an operator would have to leave the form
+    /// to read what a dry run printed.
     ///
     /// # Errors
     ///
-    /// Returns `Err` when the repository root cannot be resolved or the script cannot start.
+    /// Returns `Err` only from an armed run, when the repository root cannot be resolved or
+    /// the script cannot start. A dry run reports its toast and cannot fail.
     pub fn run_domain_form(&mut self) -> Result<(), Box<dyn Error>> {
         let args = argv(self.domain.form(), self.domain.verb());
         let is_live = self.domain.is_apply();

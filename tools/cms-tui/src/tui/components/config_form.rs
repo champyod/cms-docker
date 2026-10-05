@@ -7,83 +7,9 @@ use ratatui::{
     Frame,
 };
 
-pub struct TextField {
-    label: String,
-    value: String,
-    cursor: usize,
-    focused: bool,
-}
-
-impl TextField {
-    const fn new(label: String, value: String, focused: bool) -> Self {
-        let cursor = value.len();
-        Self {
-            label,
-            value,
-            cursor,
-            focused,
-        }
-    }
-
-    fn insert_char(&mut self, ch: char) {
-        let clamped = self.cursor.min(self.value.len());
-        self.value.insert(clamped, ch);
-        self.cursor = clamped + ch.len_utf8();
-        // Clamp to value length (handles multi-byte but keeps byte index valid)
-        if self.cursor > self.value.len() {
-            self.cursor = self.value.len();
-        }
-    }
-
-    fn delete_before_cursor(&mut self) {
-        if self.cursor == 0 || self.value.is_empty() {
-            return;
-        }
-        let clamped = self.cursor.min(self.value.len());
-        if clamped == 0 {
-            return;
-        }
-        // Find previous char boundary
-        let prev = self.value[..clamped]
-            .char_indices()
-            .last()
-            .map_or(0, |(idx, _)| idx);
-        self.value.drain(prev..clamped);
-        self.cursor = prev;
-    }
-
-    fn move_cursor_left(&mut self) {
-        if self.cursor == 0 {
-            return;
-        }
-        let clamped = self.cursor.min(self.value.len());
-        if clamped == 0 {
-            self.cursor = 0;
-            return;
-        }
-        let prev = self.value[..clamped]
-            .char_indices()
-            .last()
-            .map_or(0, |(idx, _)| idx);
-        self.cursor = prev;
-    }
-
-    fn move_cursor_right(&mut self) {
-        if self.cursor >= self.value.len() {
-            self.cursor = self.value.len();
-            return;
-        }
-        let clamped = self.cursor.min(self.value.len());
-        if clamped >= self.value.len() {
-            return;
-        }
-        let ch_len = self.value[clamped..]
-            .chars()
-            .next()
-            .map_or(1, char::len_utf8);
-        self.cursor = (clamped + ch_len).min(self.value.len());
-    }
-}
+#[path = "config_field.rs"]
+mod config_field;
+pub use config_field::TextField;
 
 /// Config form with field focus handling.
 ///
@@ -149,6 +75,18 @@ impl ConfigForm {
         self.fields
             .get(self.active)
             .is_some_and(|field| field.label == label)
+    }
+
+    /// The label of the row focus is on, or `None` when the form has no rows.
+    ///
+    /// WHY a caller needs the name rather than a comparison: a page binds keys per row kind,
+    /// and the kind is declared by the label, so the page cannot answer without being told
+    /// which row it is on.
+    #[must_use]
+    pub fn focused_label(&self) -> Option<&str> {
+        self.fields
+            .get(self.active)
+            .map(|field| field.label.as_str())
     }
 
     /// Parks focus on the row named `label`, doing nothing when the form has no such row.

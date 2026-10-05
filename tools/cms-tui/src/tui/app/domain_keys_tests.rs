@@ -9,9 +9,13 @@ fn on_domain() -> App {
     app
 }
 
+/// The submit key is a binding rather than a character, so it is aimed at a row that takes no
+/// characters. A form opens on its first row, which is a text row, and `r` typed there has to
+/// stay a letter.
 #[test]
 fn the_submit_key_asks_the_loop_to_run_the_form() {
     let mut app = on_domain();
+    app.domain.form_mut().focus_row(APPLY_LABEL);
     assert_eq!(
         app.handle_domain_key(KeyCode::Char('r')),
         DomainKeyOutcome::Submit

@@ -9,7 +9,7 @@
 //! form with this many rows is a much easier accident than a typed subcommand. `revoke`
 //! stays reachable as a menu row, where the operator names it outright.
 
-use super::domain_fields::{all_specs, seed_value, spec_for, APPLY_LABEL};
+use super::domain_fields::{all_specs, seed_value, spec_for, FieldKind, APPLY_LABEL};
 use super::domain_request::{argv, request, wants_apply};
 use crate::tui::components::config_form::ConfigForm;
 use ratatui::crossterm::event::KeyCode;
@@ -111,7 +111,7 @@ impl DomainView {
         }
         match key {
             KeyCode::Char('a' | 'A' | ' ') if self.is_on_apply_row() => self.arm(),
-            KeyCode::Char('r' | 'R') => DomainAction::Submit,
+            KeyCode::Char('r' | 'R') if !self.is_on_typing_row() => DomainAction::Submit,
             KeyCode::Esc => DomainAction::Back,
             KeyCode::Enter if self.form.is_focused_row(APPLY_LABEL) => self.arm(),
             _ if is_typing_key(key) => {
@@ -162,6 +162,15 @@ impl DomainView {
         self.form.is_focused_row(APPLY_LABEL)
     }
 
+    /// Whether focus sits on a row the operator types into rather than flips.
+    ///
+    /// WHY the submit key is guarded on this: `r` is a letter every domain name is made of, so
+    /// an unguarded binding ran the plan partway through typing one, and a name could not be
+    /// entered at all.
+    fn is_on_typing_row(&self) -> bool {
+        self.form.focused_label().is_some_and(is_typing_row)
+    }
+
     fn set_apply(&mut self, is_on: bool) {
         if is_on != self.is_apply() {
             self.form.flip_row(APPLY_LABEL);
@@ -191,10 +200,14 @@ const fn is_typing_key(key: KeyCode) -> bool {
     matches!(key, KeyCode::Char(_) | KeyCode::Backspace)
 }
 
-/// Whether `label` names a row that accepts free text rather than a switch.
+/// Whether `label` names a row the operator types into rather than flips.
+///
+/// WHY text and number rows together: both take characters from the keyboard, so both have to
+/// keep the letters a page binding would otherwise claim. A switch row takes no characters, so
+/// a letter pressed on one is free to be a binding.
 #[must_use]
-pub fn is_text_row(label: &str) -> bool {
-    spec_for(label).is_some_and(|spec| spec.kind == super::domain_fields::FieldKind::Text)
+pub fn is_typing_row(label: &str) -> bool {
+    spec_for(label).is_some_and(|spec| matches!(spec.kind, FieldKind::Text | FieldKind::Integer))
 }
 
 /// Projects the form onto the shared request, for a caller that runs the argv itself.
@@ -205,7 +218,7 @@ pub fn submit_request(view: &DomainView) -> crate::core::domain_setup::DomainSet
 
 /// The keys the page's own help line advertises.
 pub const HELP: &str =
-    "[↑/↓] Row   [Space] Toggle   [a] Arm live run   [r] Run   [Esc] Back   [1-9] Page   [q] Quit";
+    "[↑/↓] Row   [Space] Toggle   [a] Arm live run   [r] Run on a switch   [Esc] Back   [1-9] Page   [q] Quit";
 
 #[cfg(test)]
 #[path = "domain_tests.rs"]
