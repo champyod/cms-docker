@@ -15,6 +15,12 @@
 # first so only the executable parse block is read.
 #
 # Exit 0 when every set matches. Exit 1 with `file:line` for each name that differs.
+#
+# Options:
+#   --list-baseline  print the accepted differences with the WHY recorded for each; exit 0
+#   --baseline       re-run with an empty allowlist, so every difference the comparison finds
+#                    is printed as a `baseline_entries` line to paste. This is how a new
+#                    entry gets its WHY written. Exits 1 while anything is found.
 set -eu
 if (set -o pipefail 2>/dev/null); then set -o pipefail; fi
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -192,16 +198,25 @@ BASELINE
 
 is_baselined() {
   local check="$1" pair="$2" name="$3"
+  [ "$show_all" -eq 0 ] || return 1
   baseline_entries | grep -qF -- "${check}|${pair}|${name}|"
 }
+
+# WHY `--baseline` empties the allowlist instead of widening the comparison: what an author
+# needs before writing a WHY is every item the matcher finds today, and the tolerated ones
+# are only visible once the tolerance is taken away. Reporting them together also puts a
+# newly drifted name beside the entries already there, which is what shows whether it is the
+# same fault or a new one.
 
 # WHY a flag for the option rather than a positional: a checker with no options cannot
 # be asked what it currently tolerates, and the tolerated set is the part a reviewer
 # has to read before trusting the exit code.
 show_baseline=0
+show_all=0
 for arg in "$@"; do
   case "$arg" in
     --list-baseline) show_baseline=1 ;;
+    --baseline) show_all=1 ;;
     *) log_die "unknown option: $arg" 1 ;;
   esac
 done
@@ -212,6 +227,21 @@ if [ "$show_baseline" -eq 1 ]; then
   done
   exit 0
 fi
+if [ "$show_all" -ne 0 ]; then
+  log_info "every difference found with the allowlist empty; each line below is one entry to paste into baseline_entries, and the reason field is the part a human has to write:"
+fi
+
+# Reports one difference: as a baseline-entry line under `--baseline`, as the operator-facing
+# warning otherwise. WHY the line leads with the check and the pair the matcher used: an
+# entry has to name both for is_baselined to find it again.
+report_difference() {
+  local check="$1" pair="$2" name="$3" message="$4"
+  if [ "$show_all" -ne 0 ]; then
+    printf '  %s|%s|%s|REASON: %s\n' "$check" "$pair" "$name" "$message"
+  else
+    log_warn "$message"
+  fi
+}
 
 # Reports every name of $3 that $4 does not carry, with the line it was found on.
 # WHY the report names file:line and not just the name: a bare missing word sends the
@@ -225,8 +255,9 @@ report_missing() {
     if is_baselined "surface-${label}" "$pair" "$name"; then continue; fi
     local line
     line=$(locate_name "$want_file" "$name")
-    log_warn "${label}: '${name}' declared in ${want_file#"${REPO_ROOT}/"}${line:+ (line ${line})}, absent from ${have_label}"
-    drift=1
+    report_difference "surface-${label}" "$pair" "$name" \
+      "${label}: '${name}' declared in ${want_file#"${REPO_ROOT}/"}${line:+ (line ${line})}, absent from ${have_label}"
+    drift=$((drift + 1))
   done < <("$want_fn")
 }
 
@@ -247,8 +278,9 @@ report_extra() {
     # otherwise read as an option, so the search silently returns nothing and the
     # finding arrives with no line.
     line=$(locate_name "$want_file" "$name")
-    log_warn "${label}: '${name}' declared in ${want_file#"${REPO_ROOT}/"}${line:+ (line ${line})}, which ${have_label} does not accept"
-    drift=1
+    report_difference "surface-${label}" "$pair" "$name" \
+      "${label}: '${name}' declared in ${want_file#"${REPO_ROOT}/"}${line:+ (line ${line})}, which ${have_label} does not accept"
+    drift=$((drift + 1))
   done < <("$want_fn")
 }
 
@@ -275,6 +307,9 @@ done < <(usage_flags)
 
 verb_count=$(script_verbs | wc -l)
 flag_count=$(script_flags | wc -l)
+if [ "$show_all" -ne 0 ] && [ "$drift" -ne 0 ]; then
+  log_die "domain surface: ${drift} difference(s) with the allowlist empty; each line above is one entry to paste into baseline_entries once its reason has been written"
+fi
 if [ "$drift" -ne 0 ]; then
   log_die "domain surface FAILED: see the drift lines above"
 fi

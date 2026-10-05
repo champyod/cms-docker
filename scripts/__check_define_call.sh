@@ -18,6 +18,12 @@
 #
 # Read-only: reads the tree, writes only to a temp dir removed on exit.
 # Exit 0 when nothing is found. Exit 1 with `file:line` for each finding.
+#
+# Options:
+#   --list-baseline  print the accepted findings with the WHY recorded for each; exit 0
+#   --baseline       re-run with an empty allowlist, so every finding this matcher can report
+#                    is printed as a `baseline_entries` line to paste. This is how a new entry
+#                    gets its WHY written. Exits 1 while anything is found.
 set -eu
 if (set -o pipefail 2>/dev/null); then set -o pipefail; fi
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -140,7 +146,13 @@ unguarded|scripts/__worker_cgroup_setup.sh|systemctl|Reached only after the scri
 BASELINE
 }
 
+# WHY `--baseline` empties the allowlist instead of widening a matcher: what an author needs
+# before writing a WHY is every finding this tree produces today, and the tolerated ones are
+# only visible once the tolerance is taken away. Reporting them together also puts a newly
+# appeared finding beside the entries already there, which is what shows whether it is the
+# same gap or a new one.
 is_baselined() {
+  [ "$show_all" -eq 0 ] || return 1
   baseline_entries | grep -qF -- "$1|$2|$3|"
 }
 
@@ -148,9 +160,11 @@ is_baselined() {
 # read before trusting an exit code, and a checker nobody can ask what it excuses is a
 # checker nobody audits.
 show_baseline=0
+show_all=0
 for arg in "$@"; do
   case "$arg" in
     --list-baseline) show_baseline=1 ;;
+    --baseline) show_all=1 ;;
     *) log_die "unknown option: $arg" 1 ;;
   esac
 done
@@ -165,6 +179,9 @@ if [ "$show_baseline" -eq 1 ]; then
   fi
   exit 0
 fi
+if [ "$show_all" -ne 0 ]; then
+  log_info "every finding with the allowlist empty; each line below is one entry to paste into baseline_entries, and the reason field is the part a human has to write:"
+fi
 
 # The files under test, in a fixed order so two runs report in the same sequence.
 script_files() {
@@ -176,6 +193,17 @@ script_files() {
 
 findings="${tmp_dir}/findings"
 : > "$findings"
+candidates="${tmp_dir}/candidates"
+: > "$candidates"
+
+# Records one finding twice: the message an operator reads, and the entry an author pastes.
+# WHY two files rather than one record parsed back apart: the reported message carries a
+# file:line the entry does not need, and re-deriving that line out of prose is how an entry
+# ends up naming the wrong file.
+record_finding() {
+  printf '%s\n' "$4" >> "$findings"
+  printf '%s|%s|%s|%s\n' "$1" "$2" "$3" "$4" >> "$candidates"
+}
 
 # Every function name the tree defines, so a call to a shared helper resolves.
 defined_cache="${tmp_dir}/defined"
@@ -192,15 +220,18 @@ definition_line() {
 # never run. WHY the search spans the tree and not the defining file: a helper in __lib
 # is called from a sibling script. The definition itself is one hit, so a total of one
 # means there is no caller.
+# WHY the checker excludes its own file from that search: its baseline names every accepted
+# dead function, so including it gave each one a phantom caller. An entry could then never
+# be reported again, and `--baseline` could not list it — a tolerated item nothing could see.
 check_dead_functions() {
   local rel="$1" plain="$2" fn hits
   while IFS= read -r fn; do
     [ -n "$fn" ] || continue
-    hits=$(grep -row --include='*.sh' -- "$fn" "$SCRIPTS_DIR" 2>/dev/null | wc -l)
+    hits=$(grep -row --include='*.sh' --exclude="${SELF_NAME}" -- "$fn" "$SCRIPTS_DIR" 2>/dev/null | wc -l)
     [ "$hits" -gt 1 ] && continue
     is_baselined "dead-fn" "$rel" "$fn" && continue
-    printf 'dead function: %s:%s defines %s() and no script in scripts/ calls it\n' \
-      "$rel" "$(definition_line "$plain" "$fn")" "$fn" >> "$findings"
+    record_finding "dead-fn" "$rel" "$fn" \
+      "dead function: ${rel}:$(definition_line "$plain" "$fn") defines ${fn}() and no script in scripts/ calls it"
   done < <(grep -oE '^[[:space:]]*[a-z_][a-zA-Z0-9_]*\(\)[[:space:]]*\{' "$plain" | sed -E 's/^[[:space:]]*//; s/\(\)[[:space:]]*\{$//')
 }
 
@@ -217,8 +248,8 @@ check_undefined_calls() {
     is_function_prefix "$name" || continue
     grep -qx -- "$name" "$defined_cache" && continue
     is_baselined "undefined" "$rel" "$name" && continue
-    printf 'undefined call: %s:%s calls %s, which no script in scripts/ defines\n' \
-      "$rel" "$(caller_line "$plain" "$name")" "$name" >> "$findings"
+    record_finding "undefined" "$rel" "$name" \
+      "undefined call: ${rel}:$(caller_line "$plain" "$name") calls ${name}, which no script in scripts/ defines"
   done < <(
     # WHY arithmetic initialisers are read too: `for (( _i = 1; ... ))` binds a counter
     # that a name-prefix filter would otherwise report as a call to a function.
@@ -252,8 +283,8 @@ check_unguarded_externals() {
     is_optional_external "$name" || continue
     printf '%s\n' "$guarded" | grep -qx -- "$name" && continue
     is_baselined "unguarded" "$rel" "$name" && continue
-    printf 'unguarded external: %s:%s runs %s with no "command -v %s" guard in this file\n' \
-      "$rel" "$(caller_line "$plain" "$name")" "$name" "$name" >> "$findings"
+    record_finding "unguarded" "$rel" "$name" \
+      "unguarded external: ${rel}:$(caller_line "$plain" "$name") runs ${name} with no \"command -v ${name}\" guard in this file"
   done < <(
     { grep -oE '(^[[:space:]]*|[;&|][[:space:]]*)[a-z][a-z0-9-]*([[:space:]]|$)' "$plain" || true
     } | sed -E 's/^[^a-z]*//; s/[[:space:]]+$//' | LC_ALL=C sort -u
@@ -282,6 +313,12 @@ if [ "$total" -eq 0 ]; then
   accepted=$(baseline_entries | grep -c . || true)
   log_info "define/call OK: no dead functions, no undefined calls, every optional external guarded (${accepted} pre-existing finding(s) on the baseline)"
   exit 0
+fi
+if [ "$show_all" -ne 0 ]; then
+  LC_ALL=C sort "$candidates" | while IFS='|' read -r check file name message; do
+    printf '  %-9s %-34s %-26s REASON NEEDED: %s\n' "$check" "$file" "$name" "$message"
+  done
+  log_die "define/call: ${total} finding(s) with the allowlist empty; each line above needs a WHY in baseline_entries before it is accepted"
 fi
 LC_ALL=C sort "$findings" | while IFS= read -r finding; do
   log_warn "$finding"
