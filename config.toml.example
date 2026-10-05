@@ -54,9 +54,9 @@ ADMIN_NEXT_DOMAIN = "admin-next.cms.local"
 VITE_API_URL = "http://localhost:8889"
 SERVER_BASE_URL = "http://localhost"
 ADMIN_DOMAIN = "admin.cms.local"
-ADMIN_BIND_IP = "127.0.0.1"     # str; address the classic admin UI is published on; loopback keeps it reachable only through the proxy — set it to 0.0.0.0 to expose the port to the LAN
-ADMIN_NEXT_BIND_IP = "127.0.0.1" # str; address the Next.js admin panel is published on
-RANKING_BIND_IP = "127.0.0.1"   # str; address the ranking board is published on
+ADMIN_BIND_IP = "127.0.0.1"     # csv; addresses the classic admin UI is published on; loopback keeps it reachable only through the proxy — set it to 0.0.0.0 to expose the port to the LAN
+ADMIN_NEXT_BIND_IP = "127.0.0.1" # csv; addresses the Next.js admin panel is published on
+RANKING_BIND_IP = "127.0.0.1"   # csv; addresses the ranking board is published on
 ADMIN_COOKIE_DURATION = 36000   # num; seconds
 AUTH_SECRET = ""                # secret; auto-generated hex32 if empty
 CAPTCHA_ENABLED = 0             # enum:0,1; effect: reduces brute-force before fail2ban
@@ -75,8 +75,23 @@ CMS_RANKING_LOG_DIR = "/var/local/log/cms/ranking"
 CMS_RANKING_LIB_DIR = "/var/local/lib/cms/ranking"
 DOMAIN_NAME = ""                # str; primary FQDN (e.g. grader.example.org); empty=cms.local
 DOMAIN_CERT_METHOD = "letsencrypt" # enum:letsencrypt,provided,selfsigned
+AUTO_RETRY = 0            # enum:0,1; retry cert issuance while DNS/:80 propagate
+CERT_RETRY_ATTEMPTS = 8   # num; 0 = unlimited
+CERT_RETRY_INTERVAL = 15  # num; seconds; doubles each attempt up to 120
+CERT_RETRY_FOREVER = 0    # enum:0,1; equal to --retry-forever (sets attempts to 0)
+EXTRA_DOMAINS = ""        # str; extra SAN hostnames, space separated
+DEPLOY_HOOK = ""          # str; command run after a successful renewal
+LE_STAGING = 0            # enum:0,1; use the Let's Encrypt test CA
+FORCE_RENEWAL = 0         # enum:0,1; reissue even if the current cert is still valid
+WAIT_PORT80_TIMEOUT = 0   # num; seconds to wait for :80 before issuing; 0 = no wait
+BACKUP_CERTS = 0          # enum:0,1; back up the cert store before replacing it
+AUTO_RENEW = 0            # enum:0,1; end a live setup by forcing a renewal
+CERT_RETRY_INTERVAL_CAP = 120  # num; seconds; ceiling the retry backoff grows to
+USE_LOCK = 0              # enum:0,1; flock to stop overlapping runs
+DNS_PROVIDER = ""         # str; DNS-01 provider (e.g. cloudflare); empty = HTTP-01
+DNS_CREDENTIALS_FILE = "" # str; credential file for the DNS plugin
 DOMAIN_NGINX_BIND_IP = "" # str; address the domain nginx publishes 80/443 on; empty=engine wildcard on every interface (IPv4 and IPv6) — the public entry, set it to the box address to narrow it
-HSTS_MAX_AGE = 300              # num; seconds; 31536000=1yr prod; 300=staging
+HSTS_MAX_AGE = 31536000        # num; seconds; 1 year. Lower it only while staging
 SOCKET_PROXY = 0                # enum:0,1
 MONITOR_ENHANCED = 0            # enum:0,1
 REDIS_RATE_LIMIT = 0            # enum:0,1
@@ -90,6 +105,17 @@ WAF_ANOMALY_INBOUND = 5         # num
 DOMAIN_NGINX_HTTP_PORT = 80     # port; domain nginx HTTP publish port
 DOMAIN_NGINX_HTTPS_PORT = 443   # port; domain nginx HTTPS publish port
 RANKING_AUTH_DIRECTIVES = ""    # str; extra nginx auth directives for the ranking vhost
+CONTEST_ROUTE_PATH = "/"        # str; sub-path the contest UI answers on the primary vhost; must start with "/" and be unique per vhost
+ADMIN_ROUTE_PATH = "/admin"     # str; sub-path the Next.js panel answers on the primary vhost
+ADMIN_CLASSIC_ROUTE_PATH = "/classic" # str; sub-path the classic admin API answers on the primary AND the admin vhost
+RANKING_ROUTE_PATH = "/ranking" # str; sub-path the ranking board answers on the primary vhost
+OJ_ROUTE_PATH = ""              # str; sub-path the external judge answers on the primary vhost; empty=served on the oj vhost only
+OJ_UPSTREAM = ""                # str; external judge upstream; empty=host.docker.internal with OJ_BACKEND_PORT (the judge runs on the host, the proxy in a container)
+CONTEST_UPSTREAM = "cms-contest-web-server" # str; container the contest route proxies to
+ADMIN_UPSTREAM = "cms-admin-panel-next"     # str; container the admin route proxies to
+ADMIN_CLASSIC_UPSTREAM = "cms-admin-web-server" # str; container the classic admin route proxies to
+RANKING_UPSTREAM = "cms-ranking-web-server" # str; container the ranking route proxies to
+ADMIN_NEXT_LISTEN_PORT = 3000   # port; container port the Next.js panel answers on
 
 [rpc]
 RPC_SECRET = ""               # secret; auto-generated hex32 if empty; shared inter-service RPC secret
@@ -99,7 +125,7 @@ RPC_ALLOW_BACKDOOR = false    # bool; allow remote start_backdoor/stop_backdoor 
 CONTEST_ID = 1                  # num; ACTIVE contest served by the contest stack; single source of truth (docker compose reads ${CONTEST_ID}); the admin panel writes here, never the generated .env
 CONTEST_DOMAIN = ""             # str; FQDN contestants use; empty=CMS_DOMAIN
 CONTEST_LISTEN_PORT = 8888      # port
-CONTEST_BIND_IP = "127.0.0.1"   # str; address the contest web UI is published on; loopback keeps it reachable only through the proxy — set it to 0.0.0.0 to expose the port to the LAN
+CONTEST_BIND_IP = "127.0.0.1"   # csv; addresses the contest web UI is published on; loopback keeps it reachable only through the proxy — set it to 0.0.0.0 to expose the port to the LAN
 ACTIVE_CONTEST_PORT = 8888      # port; legacy alias — mapped to CONTEST_LISTEN_PORT when that is empty
 SECRET_KEY = ""                 # secret; auto-generated hex32 if empty
 COOKIE_DURATION = 10800         # num; seconds

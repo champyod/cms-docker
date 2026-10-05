@@ -1,10 +1,10 @@
 use clap::{Subcommand, ValueEnum};
 
 pub mod commands;
-pub mod domain_args;
 mod resolve;
+pub mod setup_args;
 
-pub use domain_args::DomainSetupArgs;
+pub use setup_args::DomainSetupArgs;
 
 /// Database lifecycle subcommands (`db <init|reset|clean|sync>`).
 #[derive(ValueEnum, Clone, Debug)]
@@ -58,17 +58,21 @@ pub enum FunnelSub {
     Status,
 }
 
-/// Domain subcommands (`domain <setup|status|renew|preflight|check-expiry|revoke>`).
+/// Domain subcommands (`domain <setup|cert|proxy|status|renew|preflight|check-expiry|revoke>`).
 ///
-/// `Setup` carries the full flag set accepted by `scripts/__domain.sh setup`
-/// so flags typed after `./cms domain setup` reach the script instead of
-/// being rejected by clap. The payload is boxed because 23 flags make it
-/// ~320 bytes, which would otherwise inflate this enum and the outer
-/// `Commands` enum that holds it.
+/// `Setup`, `Cert` and `Proxy` carry the full flag set accepted by
+/// `scripts/__domain.sh`, so flags typed after `./cms domain <verb>` reach the script
+/// instead of being rejected by clap. The payload is boxed because 23 flags make it
+/// ~320 bytes, which would otherwise inflate this enum and the outer `Commands` enum
+/// that holds it.
 #[derive(Subcommand, Clone, Debug)]
 pub enum DomainCmd {
     /// Configure domains, TLS certificates, and render nginx config.
     Setup(Box<DomainSetupArgs>),
+    /// Issue the certificate only; nginx config is neither rendered nor reloaded.
+    Cert(Box<DomainSetupArgs>),
+    /// Render, validate and reload nginx only; the certificate store is untouched.
+    Proxy(Box<DomainSetupArgs>),
     /// Show DNS resolution, cert expiry, renewal timer, connectivity.
     Status,
     /// Force-renew LE certs or swap provided certificates.

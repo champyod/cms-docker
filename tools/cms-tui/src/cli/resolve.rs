@@ -1,4 +1,7 @@
 use crate::core::dispatch::DispatchKey;
+use crate::core::domain_setup::{
+    domain_setup_args, DomainRetryPolicy, DomainSetupRequest, DomainSwitches,
+};
 
 use super::{
     BackupSub, Commands, ConfigSub, ContestSub, DbSub, DomainCmd, FunnelSub, SecretsSub,
@@ -56,75 +59,85 @@ fn funnel_dispatch(sub: FunnelSub) -> (DispatchKey, &'static str) {
         FunnelSub::Status => (DispatchKey::FunnelStatus, "status"),
     }
 }
-struct DomainSetupArgs<'a> {
-    cert: &'a str,
-    domain: &'a Option<String>,
-    admin_domain: &'a Option<String>,
-    oj_domain: &'a Option<String>,
-    ranking_domain: &'a Option<String>,
-    cert_path: &'a Option<String>,
-    key_path: &'a Option<String>,
-    email: &'a Option<String>,
-    apply: bool,
-    yes: bool,
+/// Projects clap's parsed domain flags onto the shared [`DomainSetupRequest`] struct.
+///
+/// WHY this projection exists at all: clap owns `Option<u32>` for the numeric flags so
+/// "not typed" and "typed as 0" stay distinguishable, while the shared struct has to
+/// keep that same distinction for the TUI form. One conversion, three callers — the
+/// three setup-shaped verbs carry the same payload, so all three land here.
+fn domain_setup_from(cmd: &DomainCmd) -> DomainSetupRequest {
+    let (DomainCmd::Setup(args) | DomainCmd::Cert(args) | DomainCmd::Proxy(args)) = cmd else {
+        return DomainSetupRequest::default();
+    };
+    let args = args.as_ref();
+
+    DomainSetupRequest {
+        cert: args.cert.clone(),
+        domain: clone_or_empty(args.domain.as_ref()),
+        admin_domain: clone_or_empty(args.admin_domain.as_ref()),
+        oj_domain: clone_or_empty(args.oj_domain.as_ref()),
+        ranking_domain: clone_or_empty(args.ranking_domain.as_ref()),
+        cert_path: clone_or_empty(args.cert_path.as_ref()),
+        key_path: clone_or_empty(args.key_path.as_ref()),
+        email: clone_or_empty(args.email.as_ref()),
+        is_cert_only: args.cert_only,
+        is_proxy_only: args.proxy_only,
+        is_apply: args.apply,
+        is_yes: args.yes,
+        retry: DomainRetryPolicy {
+            is_auto_retry: args.auto_retry,
+            is_retry_forever: args.retry_forever,
+            attempts: args.retry_attempts,
+            interval: args.retry_interval,
+        },
+        wait_port80: args.wait_port80,
+        extra_domains: clone_or_empty(args.extra_domains.as_ref()),
+        dns: clone_or_empty(args.dns.as_ref()),
+        dns_credentials: clone_or_empty(args.dns_credentials.as_ref()),
+        switches: DomainSwitches {
+            is_staging: args.staging,
+            is_force: args.force,
+            is_backup_certs: args.backup_certs,
+            is_lock: args.lock,
+            is_auto_renew: args.auto_renew,
+        },
+        deploy_hook: clone_or_empty(args.deploy_hook.as_ref()),
+    }
 }
 
-fn domain_setup_args(params: DomainSetupArgs<'_>) -> Vec<String> {
-    let mut out: Vec<String> = vec!["setup".into(), "--cert".into(), params.cert.to_string()];
-    for (flag, value) in [
-        ("--domain", params.domain),
-        ("--admin-domain", params.admin_domain),
-        ("--oj-domain", params.oj_domain),
-        ("--ranking-domain", params.ranking_domain),
-        ("--cert-path", params.cert_path),
-        ("--key-path", params.key_path),
-        ("--email", params.email),
-    ] {
-        if let Some(value) = value {
-            out.push(flag.into());
-            out.push(value.clone());
-        }
-    }
-    if params.apply {
-        out.push("--apply".into());
-    }
-    if params.yes {
-        out.push("--yes".into());
-    }
-    out
+fn clone_or_empty(value: Option<&String>) -> String {
+    value.cloned().unwrap_or_default()
 }
 
 fn domain_dispatch(sub: &DomainCmd) -> (DispatchKey, Vec<String>) {
     match sub {
-        DomainCmd::Setup {
-            cert,
-            domain,
-            admin_domain,
-            oj_domain,
-            ranking_domain,
-            cert_path,
-            key_path,
-            email,
-            apply,
-            yes,
-        } => {
-            let args = domain_setup_args(DomainSetupArgs {
-                cert,
-                domain,
-                admin_domain,
-                oj_domain,
-                ranking_domain,
-                cert_path,
-                key_path,
-                email,
-                apply: *apply,
-                yes: *yes,
-            });
-            (DispatchKey::DomainSetup, args)
-        }
+        DomainCmd::Setup(_) => (
+            DispatchKey::DomainSetup,
+            domain_setup_args("setup", &domain_setup_from(sub)),
+        ),
+        DomainCmd::Cert(_) => (
+            DispatchKey::DomainCert,
+            domain_setup_args("cert", &domain_setup_from(sub)),
+        ),
+        DomainCmd::Proxy(_) => (
+            DispatchKey::DomainProxy,
+            domain_setup_args("proxy", &domain_setup_from(sub)),
+        ),
         DomainCmd::Status => (DispatchKey::DomainStatus, vec!["status".into()]),
         DomainCmd::Renew => (DispatchKey::DomainRenew, vec!["renew".into()]),
         DomainCmd::Preflight => (DispatchKey::DomainPreflight, vec!["preflight".into()]),
+        DomainCmd::CheckExpiry { days } => {
+            let mut args = vec!["check-expiry".into()];
+            if let Some(days) = days {
+                args.push("--days".into());
+                args.push(days.to_string());
+            }
+            (DispatchKey::DomainCheckExpiry, args)
+        }
+        DomainCmd::Revoke { reason } => (
+            DispatchKey::DomainRevoke,
+            vec!["revoke".into(), "--reason".into(), reason.clone()],
+        ),
     }
 }
 
@@ -185,38 +198,5 @@ pub(super) fn resolve_catalog(cmd: &Commands) -> Option<(DispatchKey, Vec<String
 }
 
 #[cfg(test)]
-mod tests {
-    use super::resolve_catalog;
-
-    // Parses a full `cms …` argv the same way `main` does, so the assertions
-    // exercise the real clap `Config` shape (trailing-var-arg forwarding).
-    fn parse(argv: &[&str]) -> Option<(crate::core::dispatch::DispatchKey, Vec<String>)> {
-        let args = <crate::Args as clap::Parser>::try_parse_from(argv).expect("parse ok");
-        resolve_catalog(&args.command.expect("has command"))
-    }
-
-    #[test]
-    fn config_sync_forwards_no_args() {
-        let (key, args) = parse(&["cms", "config", "sync"]).expect("resolves");
-        assert_eq!(key, crate::core::dispatch::DispatchKey::ConfigSync);
-        assert!(args.is_empty());
-    }
-
-    #[test]
-    fn config_sync_forwards_dry_run() {
-        let (key, args) = parse(&["cms", "config", "sync", "--dry-run"]).expect("resolves");
-        assert_eq!(key, crate::core::dispatch::DispatchKey::ConfigSync);
-        assert_eq!(args, vec!["--dry-run".to_string()]);
-    }
-
-    #[test]
-    fn config_sync_forwards_dry_run_and_no_secrets() {
-        let (key, args) =
-            parse(&["cms", "config", "sync", "--dry-run", "--no-secrets"]).expect("resolves");
-        assert_eq!(key, crate::core::dispatch::DispatchKey::ConfigSync);
-        assert_eq!(
-            args,
-            vec!["--dry-run".to_string(), "--no-secrets".to_string()]
-        );
-    }
-}
+#[path = "resolve_tests.rs"]
+mod tests;

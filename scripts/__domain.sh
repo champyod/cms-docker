@@ -7,6 +7,8 @@
 #
 # Usage:
 #   __domain.sh setup   [options]   configure domains + TLS + nginx
+#   __domain.sh cert    [options]   issue the certificate only
+#   __domain.sh proxy   [options]   render, validate and reload nginx only
 #   __domain.sh status              show DNS, cert expiry, renewal, connectivity
 #   __domain.sh renew               force-renew LE certs or swap provided certs
 #   __domain.sh preflight           9-check connectivity matrix
@@ -24,6 +26,8 @@ cd "$REPO_ROOT"
 
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/__lib/common.sh"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__domain_routes.sh"
 
 env_val() {
   awk -F= -v k="$2" '$1==k {v=$0; sub(/^[^=]*=/,"",v); gsub(/^[ \t]+|[ \t\r]+$/,"",v); print v; exit}' "$1" 2>/dev/null || true
@@ -141,7 +145,7 @@ ADMIN_DOMAIN="${ADMIN_DOMAIN:-}"
 OJ_DOMAIN="${OJ_DOMAIN:-}"
 RANKING_DOMAIN="${RANKING_DOMAIN:-}"
 CERT_LINEAGE_DOMAIN="${CERT_LINEAGE_DOMAIN:-}"
-CERT_TYPE="${CERT_TYPE:-letsencrypt}"
+DOMAIN_CERT_METHOD="${DOMAIN_CERT_METHOD:-letsencrypt}"
 CERT_PATH=""
 KEY_PATH=""
 CERT_EMAIL="${CERT_EMAIL:-}"
@@ -193,6 +197,14 @@ readonly CERT_RETRY_BACKOFF_CAP=120
 AUTO_RETRY="${AUTO_RETRY:-0}"
 CERT_RETRY_ATTEMPTS="${CERT_RETRY_ATTEMPTS:-$CERT_RETRY_ATTEMPTS_DEFAULT}"
 CERT_RETRY_INTERVAL="${CERT_RETRY_INTERVAL:-$CERT_RETRY_INTERVAL_DEFAULT}"
+# A truthy value here is equivalent to passing --retry-forever: it enables retry
+# and clears the attempt cap, so .env and the TUI form can express "keep trying"
+# without a command-line flag.
+CERT_RETRY_FOREVER="${CERT_RETRY_FOREVER:-0}"
+if [[ "$CERT_RETRY_FOREVER" == "1" ]]; then
+  AUTO_RETRY=1
+  CERT_RETRY_ATTEMPTS=0
+fi
 
 # Extended feature flags — every one defaults off so existing runs are unchanged.
 EXTRA_DOMAINS="${EXTRA_DOMAINS:-}"
@@ -205,6 +217,18 @@ CHECK_EXPIRY_DAYS_DEFAULT=30
 JSON_OUTPUT="${JSON_OUTPUT:-0}"
 BACKUP_CERTS="${BACKUP_CERTS:-0}"
 USE_LOCK="${USE_LOCK:-0}"
+# Narrows a setup run to one of the two concerns the command list spells out as
+# verbs: setup is both halves, cert is issuance only, proxy is render+validate+
+# reload only. WHY two independent flags rather than one scope value: every decision
+# downstream asks one of the two questions on its own — "issue a certificate?", "write
+# nginx config?" — and a single enum would make each of those a two-way comparison
+# instead of one test.
+SETUP_ISSUE_CERT=1
+SETUP_RENDER_PROXY=1
+# End a live setup by forcing a renewal, so a config change takes effect on the running
+# nginx without a second command. Zero by default: a bare setup must not renew a
+# certificate that is still valid.
+AUTO_RENEW="${AUTO_RENEW:-0}"
 REVOKE_REASON="${REVOKE_REASON:-unspecified}"
 # DNS-01 challenge (optional). An empty DNS_PROVIDER keeps the HTTP-01 webroot path
 # exactly as before; setting it switches issuance to the provider's DNS plugin,
@@ -228,13 +252,19 @@ Usage: __domain.sh <command> [options]
 
 Commands:
   setup        Configure domains, TLS certificates, and render nginx config
+  cert         Issue the certificate only — nginx config is neither rendered nor reloaded
+  proxy        Render, validate and reload nginx only — the certificate store is untouched
   status       Show DNS resolution, cert expiry, renewal timer, connectivity
   renew        Force-renew Let's Encrypt certs or swap provided certificates
   preflight    9-check matrix: SSH, Tailscale, RPC, DB, DNS, HTTP, HTTPS, paths, funnel
   check-expiry Exit non-zero when the cert is missing or expires within --days
   revoke       Revoke the current certificate
 
-Options (setup):
+  `cert` and `proxy` are the two halves of `setup` run separately, so a host that has to
+  answer a challenge or publish a config can do so one step at a time. `setup` remains
+  the full sequence, unchanged.
+
+Options (setup, cert, proxy):
   --cert <letsencrypt|provided|selfsigned>  Certificate type (default: letsencrypt)
   --domain <domain>           Contest/primary host; optional
   --admin-domain <domain>     Admin panel host; optional
@@ -250,6 +280,8 @@ Options (setup):
   --email <email>             Email for Let's Encrypt registration
   --dry-run                   Print actions without executing (default)
   --apply                     Actually execute changes
+  --auto-renew                End a live run by forcing a renewal, so the running nginx
+                              picks the new certificate up without a second command
   --yes, -y                   Skip optional prompts (HSM/Vault/DNSSEC/mTLS stay disabled)
 
 Retry options (setup, renew):
@@ -452,7 +484,18 @@ _require_at_least_one_domain() {
 
 # Prints every configured domain as a shell-safe space-separated list, for logs.
 _domain_list() {
-  _configured_domains | paste -sd' ' -
+  # Mirrors build_cert_domains: EXTRA_DOMAINS becomes a SAN entry, so a dry-run
+  # preview that omitted them would show fewer names than the real certbot call.
+  local domain extra
+  local all=()
+  while read -r domain; do
+    all+=("$domain")
+  done < <(_configured_domains)
+  for extra in $EXTRA_DOMAINS; do
+    all+=("$extra")
+  done
+  ((${#all[@]} > 0)) || return 0
+  printf '%s\n' "${all[@]}" | paste -sd' ' -
 }
 
 # ---------------------------------------------------------------------------
@@ -487,29 +530,19 @@ _filter_optional_blocks() {
   '
 }
 
-# ---------------------------------------------------------------------------
-# Setup subcommand
-# ---------------------------------------------------------------------------
-cmd_setup() {
-  _resolve_domain_targets
-  _require_at_least_one_domain
-
-  log_info "Domain setup — mode: $([ "$DRY_RUN" -eq 1 ] && echo 'DRY-RUN' || echo 'APPLY')"
-  log_info "Configured domains: $(_domain_list)"
-  [[ -n "$OJ_DOMAIN" ]] || log_info "OJ domain not set — OJ vhost and SAN omitted"
-  log_info "Certificate lineage: $CERT_LINEAGE_DOMAIN"
-  log_info "Certificate type: $CERT_TYPE"
-  _prompt_optional_features
-  _log_optional_features
-  [[ "$LE_STAGING" == "1" ]] && log_warn "Let's Encrypt STAGING mode — issued certificates are not browser-trusted"
-
-  if [[ "$CERT_TYPE" == "letsencrypt" ]]; then
-    [[ -n "$CERT_EMAIL" ]] || log_die "CERT_EMAIL is required for letsencrypt — set env or pass --email" 1
-    _preflight_port80
+# Announces which of the two concerns this run is scoped to. Emitted only for the
+# narrowed scopes, so a bare `setup` logs exactly what it logged before.
+_log_setup_scope() {
+  if [[ "$SETUP_ISSUE_CERT" == "1" ]] && [[ "$SETUP_RENDER_PROXY" == "0" ]]; then
+    log_info "Scope: certificate only — nginx config is neither rendered nor validated"
+  elif [[ "$SETUP_ISSUE_CERT" == "0" ]] && [[ "$SETUP_RENDER_PROXY" == "1" ]]; then
+    log_info "Scope: proxy only — no certificate store is read, written or issued"
   fi
+}
 
-  _backup_certificates
-
+# Puts the certificate store in place. Skipped under the proxy scope, which must not
+# create the store it was told not to touch.
+_ensure_cert_store_dir() {
   local cert_dir
   cert_dir="$(_cert_store_dir)"
   if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -518,10 +551,10 @@ cmd_setup() {
     mkdir -p "$cert_dir"
     log_info "created $cert_dir"
   fi
+}
 
-  _render_nginx_config
-
-  case "$CERT_TYPE" in
+_issue_certificate() {
+  case "$DOMAIN_CERT_METHOD" in
     letsencrypt)
       _setup_letsencrypt
       ;;
@@ -532,15 +565,119 @@ cmd_setup() {
       _setup_selfsigned
       ;;
     *)
-      log_die "unknown cert type: $CERT_TYPE — use letsencrypt, provided, or selfsigned" 1
+      log_die "unknown cert type: $DOMAIN_CERT_METHOD — use letsencrypt, provided, or selfsigned" 1
       ;;
   esac
+}
 
-  _validate_nginx_config
+# ---------------------------------------------------------------------------
+# Setup subcommand
+# ---------------------------------------------------------------------------
+# Runs one pass of the domain setup sequence. <issue_certificate> is the
+# certificate half, <render_proxy> the nginx half; the three commands are the three
+# combinations of those two booleans, so a narrowing is a smaller sequence and
+# never a second copy of it.
+_run_setup_scope() {
+  local issue_certificate="$1" render_proxy="$2"
+  _resolve_domain_targets
+  _require_at_least_one_domain
 
-  discord_alert "Domain setup completed for $(_domain_list) (cert: ${CERT_TYPE})" 65280
+  log_info "Domain setup — mode: $([ "$DRY_RUN" -eq 1 ] && echo 'DRY-RUN' || echo 'APPLY')"
+  log_info "Configured domains: $(_domain_list)"
+  [[ -n "$OJ_DOMAIN" ]] || log_info "OJ domain not set — OJ vhost and SAN omitted"
+  log_info "Certificate lineage: $CERT_LINEAGE_DOMAIN"
+  log_info "Certificate type: $DOMAIN_CERT_METHOD"
+  _log_setup_scope
+  _prompt_optional_features
+  _log_optional_features
+  [[ "$LE_STAGING" == "1" ]] && log_warn "Let's Encrypt STAGING mode — issued certificates are not browser-trusted"
+
+  # WHY the check belongs to the certificate half alone: the email is a
+  # certbot registration argument, and the port-80 probe exists because the HTTP-01
+  # challenge has to be answerable. Neither has anything to do with writing an
+  # nginx config, so `proxy` must not be asked for an email or blocked on :80.
+  if [[ "$issue_certificate" == "1" ]] && [[ "$DOMAIN_CERT_METHOD" == "letsencrypt" ]]; then
+    [[ -n "$CERT_EMAIL" ]] || log_die "CERT_EMAIL is required for letsencrypt — set env or pass --email" 1
+    _preflight_port80
+  fi
+
+  # WHY the backup and the store directory are part of the certificate half: both
+  # exist for the certificate store, and the proxy half must not even create the
+  # directory it was told not to touch.
+  if [[ "$issue_certificate" == "1" ]]; then
+    _backup_certificates
+    _ensure_cert_store_dir
+  fi
+
+  # WHY the three nginx steps are gated one at a time rather than as a block: the
+  # cert scope drops the render and, with it, the validation that gates that render,
+  # while the proxy scope drops only the issuance between them. A block could not
+  # express either shape. The order is unchanged, so a bare run renders, issues and
+  # validates exactly as it always did.
+  [[ "$render_proxy" == "1" ]] && _render_nginx_config
+
+  [[ "$issue_certificate" == "1" ]] && _issue_certificate
+
+  [[ "$render_proxy" == "1" ]] && _validate_nginx_config
+
+  # Explicit success: under the cert scope the last gate above is a false test, so
+  # the function would otherwise return non-zero and abort the run at the call site.
+  return 0
+}
+
+# Ends a setup: the reload belongs to the proxy half and nothing else.
+_run_setup_tail() {
+  # Reloaded only here: issuance and validation do not, so a plain `setup` still picks
+  # up the renewed certificate the same way it did before, from the rendered config.
+  if [[ "$SETUP_ISSUE_CERT" == "0" ]] && [[ "$SETUP_RENDER_PROXY" == "1" ]]; then
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      log_info "[dry-run] would reload the running nginx container"
+    else
+      _reload_running_nginx
+    fi
+  fi
+  _run_auto_renew
+
+  discord_alert "Domain setup completed for $(_domain_list) (cert: ${DOMAIN_CERT_METHOD})" 65280
   log_info "Domain setup complete"
 }
+
+# Ends a live run by forcing a renewal, so a config change takes effect on the running
+# nginx without a second command.
+#
+# WHY a dry run only announces it: renewing is the one step here that talks to the ACME
+# server, and a preview must not spend a rate-limit slot. It also must not call
+# cmd_renew, which opens with its own mode banner and would print a second, unrelated
+# header after the setup it belongs to.
+#
+# WHY the cert-only scope is excluded: cmd_renew ends by reloading nginx, and `cert`
+# promises nginx is left alone. A cert-only run that reloaded nginx would break that
+# promise, so the flag is honoured only where a reload was already in scope.
+_run_auto_renew() {
+  [[ "$AUTO_RENEW" == "1" ]] || return 0
+  [[ "$SETUP_RENDER_PROXY" == "1" ]] || return 0
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log_info "[dry-run] --auto-renew: would force-renew the certificate for ${CERT_LINEAGE_DOMAIN}"
+    return 0
+  fi
+  # WHY the flag is cleared around the call: cmd_renew has no path back into the setup
+  # scope, but a renew that somehow re-entered one would renew again. Clearing it makes
+  # the recursion impossible rather than merely unlikely.
+  local was_auto_renew="$AUTO_RENEW"
+  AUTO_RENEW=0
+  cmd_renew
+  AUTO_RENEW="$was_auto_renew"
+}
+
+# WHY the scope is the command and not a flag: a run either issues a certificate, writes
+# nginx config, or both. Spelling that as a flag gave one concern two names, and a flag
+# that contradicts the command it narrows is a case that has to be argued about. As verbs
+# each scope has exactly one spelling and nothing can contradict anything.
+cmd_setup() { _run_setup_scope 1 1; _run_setup_tail; }
+
+cmd_cert() { _run_setup_scope 1 0; _run_setup_tail; }
+
+cmd_proxy() { _run_setup_scope 0 1; _run_setup_tail; }
 
 # ---------------------------------------------------------------------------
 # Certificate issuance retry helper
@@ -1034,7 +1171,9 @@ EOF
   fi
   export NGINX_METRICS_LOCATION="$nginx_metrics_location"
 
-  envsubst '${DOMAIN_NAME} ${ADMIN_DOMAIN} ${OJ_DOMAIN} ${RANKING_DOMAIN} ${CERT_LINEAGE_DOMAIN} ${ACME_HOST_NAMES} ${HSTS_MAX_AGE} ${CONTEST_LISTEN_PORT} ${ADMIN_LISTEN_PORT} ${RANKING_LISTEN_PORT} ${OJ_BACKEND_PORT} ${RANKING_AUTH_DIRECTIVES} ${REDIS_UPSTREAM_BLOCK} ${REDIS_LUA_PLACEHOLDER} ${PER_USER_LOGIN_DIRECTIVES} ${PER_USER_RANKING_DIRECTIVES} ${NGINX_METRICS_LOCATION}' < "$template" \
+  _domain_routes_build
+
+  envsubst '${DOMAIN_NAME} ${ADMIN_DOMAIN} ${OJ_DOMAIN} ${RANKING_DOMAIN} ${CERT_LINEAGE_DOMAIN} ${ACME_HOST_NAMES} ${HSTS_MAX_AGE} ${CONTEST_LISTEN_PORT} ${ADMIN_LISTEN_PORT} ${RANKING_LISTEN_PORT} ${OJ_BACKEND_PORT} ${RANKING_AUTH_DIRECTIVES} ${REDIS_UPSTREAM_BLOCK} ${REDIS_LUA_PLACEHOLDER} ${PER_USER_LOGIN_DIRECTIVES} ${PER_USER_RANKING_DIRECTIVES} ${NGINX_METRICS_LOCATION} ${UPSTREAM_BLOCKS} ${PRIMARY_ROUTE_BLOCKS} ${ADMIN_ROUTE_BLOCKS} ${OJ_ROUTE_BLOCKS} ${RANKING_ROUTE_BLOCKS} ${PRIMARY_UPSTREAM}' < "$template" \
     | _filter_optional_blocks > "$output"
   log_info "nginx config rendered: $output (domains: $(_domain_list) | lineage: $CERT_LINEAGE_DOMAIN | REDIS_RATE_LIMIT=${REDIS_RATE_LIMIT} PER_USER_LIMIT=${PER_USER_LIMIT} MONITORING_ENABLED=${MONITORING_ENABLED} WAF_ENABLED=${WAF_ENABLED:-0})"
   if [[ "${WAF_ENABLED:-0}" == "1" ]]; then
@@ -1064,6 +1203,18 @@ _validate_nginx_config() {
   else
     log_warn "no nginx container running — skipping nginx -t"
   fi
+}
+
+# Reloads the first running nginx container so it picks up a freshly rendered config
+# or a renewed certificate. A container that is not running is not an error: the
+# caller has already produced the config on disk, and whether the proxy is up right
+# now is a separate question answered by status/preflight.
+_reload_running_nginx() {
+  docker ps --format '{{.Names}}' 2>/dev/null | grep -q nginx || return 0
+  local nginx_container
+  nginx_container="$(docker ps --format '{{.Names}}' | grep nginx | head -1)"
+  docker exec "$nginx_container" nginx -s reload 2>/dev/null || log_warn "nginx reload failed"
+  log_info "nginx reloaded in $nginx_container"
 }
 
 # ---------------------------------------------------------------------------
@@ -1326,12 +1477,7 @@ cmd_renew() {
   fi
 
   # Reload nginx to pick up new certs
-  if docker ps --format '{{.Names}}' 2>/dev/null | grep -q nginx; then
-    local nginx_container
-    nginx_container="$(docker ps --format '{{.Names}}' | grep nginx | head -1)"
-    docker exec "$nginx_container" nginx -s reload 2>/dev/null || log_warn "nginx reload failed"
-    log_info "nginx reloaded in $nginx_container"
-  fi
+  _reload_running_nginx
 
   discord_alert "Certificates renewed for ${CERT_LINEAGE_DOMAIN}" 65280
   log_info "Renewal complete"
@@ -1510,9 +1656,17 @@ _check_funnel() {
 cmd="${1:-}"
 shift || true
 
+# WHY the verb narrows the scope before any flag is read: the scope is decided by which
+# command was named, not by anything that follows it. A flag could contradict its
+# command; a verb cannot.
+case "$cmd" in
+  cert)  SETUP_ISSUE_CERT=1; SETUP_RENDER_PROXY=0 ;;
+  proxy) SETUP_ISSUE_CERT=0; SETUP_RENDER_PROXY=1 ;;
+esac
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --cert)       CERT_TYPE="$2"; shift 2 ;;
+    --cert)       DOMAIN_CERT_METHOD="$2"; shift 2 ;;
     --domain)     DOMAIN_NAME="$2"; shift 2 ;;
     --admin-domain) ADMIN_DOMAIN="$2"; shift 2 ;;
     --oj-domain)  OJ_DOMAIN="$2"; shift 2 ;;
@@ -1523,6 +1677,7 @@ while [[ $# -gt 0 ]]; do
     --dry-run)    DRY_RUN=1; shift ;;
     --apply)      DRY_RUN=0; shift ;;
     --yes|-y)     AUTO_YES=1; shift ;;
+    --auto-renew) AUTO_RENEW=1; shift ;;
     --auto-retry) AUTO_RETRY=1; shift ;;
     --retry-attempts) CERT_RETRY_ATTEMPTS="$2"; shift 2 ;;
     --retry-interval) CERT_RETRY_INTERVAL="$2"; shift 2 ;;
@@ -1554,6 +1709,8 @@ _acquire_run_lock
 
 case "$cmd" in
   setup)    cmd_setup ;;
+  cert)     cmd_cert ;;
+  proxy)    cmd_proxy ;;
   status)   cmd_status ;;
   renew)    cmd_renew ;;
   preflight) cmd_preflight ;;

@@ -38,6 +38,7 @@ PROXY_ADMIN_PANEL='
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;'
 
+RANKING_LISTEN_PORT="${RANKING_LISTEN_PORT:-8890}"
 RANKING_AUTH="${RANKING_AUTH_DIRECTIVES:-}"
 
 FUNNEL_SERVERS=""
@@ -62,7 +63,7 @@ server {
     auth_basic_user_file /etc/nginx/funnel.htpasswd;
 $PROXY_COMMON
     location / {
-        proxy_pass http://cms-ranking-web-server:8890;
+        proxy_pass http://cms-ranking-web-server:$RANKING_LISTEN_PORT;
         proxy_redirect off;
     }
 }"
@@ -96,7 +97,7 @@ $PROXY_COMMON
     }
     location /ranking/ {
         $RANKING_AUTH
-        proxy_pass http://cms-ranking-web-server:8890/;
+        proxy_pass http://cms-ranking-web-server:$RANKING_LISTEN_PORT/;
         proxy_redirect off;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
@@ -137,7 +138,7 @@ $PROXY_COMMON
     }
     location /ranking/ {
         $RANKING_AUTH
-        proxy_pass http://cms-ranking-web-server:8890/;
+        proxy_pass http://cms-ranking-web-server:$RANKING_LISTEN_PORT/;
         proxy_redirect off;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;

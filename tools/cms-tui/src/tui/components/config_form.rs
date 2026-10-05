@@ -1,3 +1,8 @@
+//! Focus engine over a list of [`Field`]s.
+//!
+//! WHY the form owns focus and nothing else: field kinds own editing, and the page that
+//! builds the form owns rendering, so a new kind never has to touch navigation.
+
 use crossterm::event::KeyCode;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -6,189 +11,198 @@ use ratatui::{
     Frame,
 };
 
-pub struct TextField {
-    label: String,
-    value: String,
-    cursor: usize,
-    focused: bool,
-}
+use super::edit_cursor::KeyOutcome;
+use super::form_field::{Field, FieldKind};
 
-impl TextField {
-    const fn new(label: String, value: String, focused: bool) -> Self {
-        let cursor = value.len();
-        Self {
-            label,
-            value,
-            cursor,
-            focused,
-        }
-    }
-
-    fn insert_char(&mut self, ch: char) {
-        let clamped = self.cursor.min(self.value.len());
-        self.value.insert(clamped, ch);
-        self.cursor = clamped + ch.len_utf8();
-        // Clamp to value length (handles multi-byte but keeps byte index valid)
-        if self.cursor > self.value.len() {
-            self.cursor = self.value.len();
-        }
-    }
-
-    fn delete_before_cursor(&mut self) {
-        if self.cursor == 0 || self.value.is_empty() {
-            return;
-        }
-        let clamped = self.cursor.min(self.value.len());
-        if clamped == 0 {
-            return;
-        }
-        // Find previous char boundary
-        let prev = self.value[..clamped]
-            .char_indices()
-            .last()
-            .map_or(0, |(idx, _)| idx);
-        self.value.drain(prev..clamped);
-        self.cursor = prev;
-    }
-
-    fn move_cursor_left(&mut self) {
-        if self.cursor == 0 {
-            return;
-        }
-        let clamped = self.cursor.min(self.value.len());
-        if clamped == 0 {
-            self.cursor = 0;
-            return;
-        }
-        let prev = self.value[..clamped]
-            .char_indices()
-            .last()
-            .map_or(0, |(idx, _)| idx);
-        self.cursor = prev;
-    }
-
-    fn move_cursor_right(&mut self) {
-        if self.cursor >= self.value.len() {
-            self.cursor = self.value.len();
-            return;
-        }
-        let clamped = self.cursor.min(self.value.len());
-        if clamped >= self.value.len() {
-            return;
-        }
-        let ch_len = self.value[clamped..]
-            .chars()
-            .next()
-            .map_or(1, char::len_utf8);
-        self.cursor = (clamped + ch_len).min(self.value.len());
-    }
-}
-
-/// Config form with field focus handling.
+/// A vertical list of fields with exactly one focused at a time.
 ///
-/// WHY: `handle_key` — Enter advances focus; on last field returns `true` to
-/// signal submit without an extra pseudo-field. Caller interprets `true` as
-/// "form submitted / confirmed".
+/// WHY `handle_key` returns a [`KeyOutcome`]: the page needs to know whether the
+/// keystroke was consumed by a field, refused by one, or left over for form-level
+/// bindings such as submit and cancel. A plain `bool` cannot express the third case,
+/// and guessing is how `s` stops working as submit once a text field exists.
 pub struct ConfigForm {
-    fields: Vec<TextField>,
+    fields: Vec<Field>,
     active: usize,
 }
 
 impl ConfigForm {
     #[must_use]
-    pub fn new(fields: Vec<(String, String)>) -> Self {
-        let mut text_fields: Vec<TextField> = fields
-            .into_iter()
-            .enumerate()
-            .map(|(idx, (label, value))| TextField::new(label, value, idx == 0))
-            .collect();
-        // Ensure focused state consistent even if empty
-        for (idx, field) in text_fields.iter_mut().enumerate() {
-            field.focused = idx == 0;
-        }
-        Self {
-            fields: text_fields,
-            active: 0,
-        }
+    pub fn new(fields: Vec<Field>) -> Self {
+        let mut form = Self { fields, active: 0 };
+        form.apply_focus();
+        form
+    }
+
+    /// Builds a form of plain text fields, all focused in turn.
+    #[must_use]
+    pub fn from_text_fields(fields: Vec<(String, String)>) -> Self {
+        Self::new(
+            fields
+                .into_iter()
+                .map(|(label, value)| Field::new(label, value, FieldKind::Text))
+                .collect(),
+        )
+    }
+
+    /// The fields, in display order.
+    #[must_use]
+    pub fn fields(&self) -> &[Field] {
+        &self.fields
     }
 
     #[must_use]
-    pub fn values(&self) -> Vec<(String, String)> {
-        self.fields
-            .iter()
-            .map(|field| (field.label.clone(), field.value.clone()))
-            .collect()
+    pub const fn len(&self) -> usize {
+        self.fields.len()
     }
 
-    fn set_active(&mut self, next: usize) {
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.fields.is_empty()
+    }
+
+    #[must_use]
+    pub const fn active(&self) -> usize {
+        self.active
+    }
+
+    /// Index of the field carrying `label`, if this form has one.
+    #[must_use]
+    pub fn index_of(&self, label: &str) -> Option<usize> {
+        self.fields.iter().position(|field| field.label() == label)
+    }
+
+    /// The value of the field carrying `label`.
+    ///
+    /// A missing field is not an error here: the page built this form from the same
+    /// table, so a label it cannot find means the table is wrong, and `""` lets the
+    /// caller fall back to the script default instead of panicking on a keystroke.
+    #[must_use]
+    pub fn value_of(&self, label: &str) -> &str {
+        self.index_of(label)
+            .and_then(|index| self.fields.get(index))
+            .map_or("", Field::value)
+    }
+
+    /// Whether the toggle carrying `label` is on; an unknown label reads as off.
+    #[must_use]
+    pub fn is_on(&self, label: &str) -> bool {
+        self.index_of(label)
+            .and_then(|index| self.fields.get(index))
+            .is_some_and(Field::is_on)
+    }
+
+    /// The numeric value of `label`, or `None` when blank or unparseable.
+    #[must_use]
+    pub fn number_of(&self, label: &str) -> Option<u32> {
+        self.value_of(label).trim().parse().ok()
+    }
+
+    /// Whether the field carrying `label` refused the last keystroke.
+    #[must_use]
+    pub fn notice_of(&self, label: &str) -> Option<&'static str> {
+        self.index_of(label)
+            .and_then(|index| self.fields.get(index))
+            .and_then(Field::notice)
+    }
+
+    /// Parks focus on the row named `label`, doing nothing when the form has no such row.
+    ///
+    /// WHY by label rather than by index: the domain page's rows come from a table, so a
+    /// test that counted rows would break every time a flag was added to the form.
+    pub fn goto_row(&mut self, label: &str) {
+        if let Some(index) = self.index_of(label) {
+            self.set_active(index);
+        }
+    }
+
+    /// Whether focus is on the row named `label`.
+    ///
+    /// WHY the page asks this rather than tracking its own row index: the apply row is a
+    /// table entry like every other, so a hand-tracked index would drift the moment a
+    /// flag was inserted above it.
+    #[must_use]
+    pub fn is_focused_row(&self, label: &str) -> bool {
+        self.active() == self.index_of(label).unwrap_or(usize::MAX)
+    }
+
+    /// Flips the toggle named `label`, reporting whether there was one to flip.
+    ///
+    /// WHY this and not a key press: arming a live run is not a keystroke the operator
+    /// typed into the row, and routing it through `handle_key` would make the page's
+    /// confirm step indistinguishable from editing the field.
+    pub fn flip_row(&mut self, label: &str) -> bool {
+        let Some(index) = self.index_of(label) else {
+            return false;
+        };
+        self.set_active(index);
+        self.edit_active(KeyCode::Char(' ')).is_edited()
+    }
+
+    /// Applies one keystroke to the focused field, moving focus for navigation keys.
+    ///
+    /// Enter is a navigation key for text and integer rows, and flips a checkbox
+    /// instead: a checkbox has no other way to accept focus, and this page's own submit
+    /// binding is a different key, so Enter cannot be doing two jobs at once.
+    pub fn handle_key(&mut self, key: KeyCode) -> KeyOutcome {
         if self.fields.is_empty() {
-            return;
+            return KeyOutcome::Ignored;
         }
-        let clamped = next.min(self.fields.len() - 1);
-        for (idx, field) in self.fields.iter_mut().enumerate() {
-            field.focused = idx == clamped;
+        let is_toggle = self.active_field().is_some_and(Field::is_toggle);
+        if is_toggle && key == KeyCode::Enter {
+            return self.edit_active(key);
         }
-        self.active = clamped;
+        if self.navigate(key) {
+            return KeyOutcome::Edited;
+        }
+        self.edit_active(key)
     }
 
-    fn active_field_mut(&mut self) -> Option<&mut TextField> {
+    fn edit_active(&mut self, key: KeyCode) -> KeyOutcome {
+        self.active_field_mut()
+            .map_or(KeyOutcome::Ignored, |field| field.handle_key(key))
+    }
+
+    /// Moves focus for the navigation keys, reporting whether it took one.
+    fn navigate(&mut self, key: KeyCode) -> bool {
+        let next = match key {
+            KeyCode::Down | KeyCode::Tab => self.active + 1,
+            KeyCode::Up | KeyCode::BackTab => self.active.saturating_sub(1),
+            KeyCode::Enter | KeyCode::Home => {
+                if key == KeyCode::Home {
+                    0
+                } else {
+                    self.active + 1
+                }
+            }
+            _ => return false,
+        };
+        self.set_active(next);
+        true
+    }
+
+    fn set_active(&mut self, requested: usize) {
+        self.active = requested.min(self.fields.len().saturating_sub(1));
+        self.apply_focus();
+    }
+
+    fn apply_focus(&mut self) {
+        for (index, field) in self.fields.iter_mut().enumerate() {
+            field.set_focused(index == self.active);
+        }
+    }
+
+    fn active_field(&self) -> Option<&Field> {
         if self.fields.is_empty() {
             return None;
         }
-        let idx = self.active.min(self.fields.len() - 1);
-        self.fields.get_mut(idx)
+        self.fields.get(self.active)
     }
 
-    pub fn handle_key(&mut self, key: KeyCode) -> bool {
+    fn active_field_mut(&mut self) -> Option<&mut Field> {
         if self.fields.is_empty() {
-            return false;
+            return None;
         }
-        match key {
-            KeyCode::Down => {
-                let next = (self.active + 1).min(self.fields.len() - 1);
-                self.set_active(next);
-                false
-            }
-            KeyCode::Up => {
-                let next = self.active.saturating_sub(1);
-                self.set_active(next);
-                false
-            }
-            KeyCode::Enter => {
-                if self.active >= self.fields.len() - 1 {
-                    true
-                } else {
-                    let next = self.active + 1;
-                    self.set_active(next);
-                    false
-                }
-            }
-            KeyCode::Left => {
-                if let Some(field) = self.active_field_mut() {
-                    field.move_cursor_left();
-                }
-                false
-            }
-            KeyCode::Right => {
-                if let Some(field) = self.active_field_mut() {
-                    field.move_cursor_right();
-                }
-                false
-            }
-            KeyCode::Backspace => {
-                if let Some(field) = self.active_field_mut() {
-                    field.delete_before_cursor();
-                }
-                false
-            }
-            KeyCode::Char(ch) => {
-                if let Some(field) = self.active_field_mut() {
-                    field.insert_char(ch);
-                }
-                false
-            }
-            _ => false,
-        }
+        self.fields.get_mut(self.active)
     }
 
     pub fn render(&self, f: &mut Frame, area: Rect) {
@@ -196,39 +210,30 @@ impl ConfigForm {
             return;
         }
         let constraints: Vec<Constraint> =
-            self.fields.iter().map(|_| Constraint::Length(3)).collect();
+            self.fields.iter().map(|_| Constraint::Length(1)).collect();
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints(constraints)
             .split(area);
 
-        for (idx, field) in self.fields.iter().enumerate() {
-            let display = build_display_value(field);
-            let block = Block::default()
-                .borders(Borders::ALL)
-                .title(field.label.as_str());
-            let style = if field.focused {
+        for (index, field) in self.fields.iter().enumerate() {
+            let Some(chunk) = chunks.get(index) else {
+                return;
+            };
+            let block = Block::default().borders(Borders::ALL).title(field.label());
+            let style = if field.is_focused() {
                 Style::default()
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
             };
-            let paragraph = Paragraph::new(display).block(block.style(style));
-            if let Some(chunk) = chunks.get(idx) {
-                f.render_widget(paragraph, *chunk);
-            }
+            f.render_widget(
+                Paragraph::new(field.display()).block(block.style(style)),
+                *chunk,
+            );
         }
     }
-}
-
-fn build_display_value(field: &TextField) -> String {
-    let cursor = field.cursor.min(field.value.len());
-    let mut out = String::with_capacity(field.value.len() + 1);
-    out.push_str(&field.value[..cursor]);
-    out.push('_');
-    out.push_str(&field.value[cursor..]);
-    out
 }
 
 #[cfg(test)]

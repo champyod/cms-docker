@@ -7,6 +7,7 @@ pub mod catalog;
 pub mod config;
 pub mod dispatch;
 pub mod docker;
+pub mod domain_setup;
 pub mod expose;
 pub mod expose_input;
 pub mod model;

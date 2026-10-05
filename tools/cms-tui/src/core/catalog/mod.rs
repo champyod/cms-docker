@@ -125,11 +125,76 @@ pub(crate) const ARGS_DOMAIN_SETUP: &[ArgSpec] = &[
         required: false,
         description: "Skip prompts",
     },
+    ArgSpec {
+        name: "auto-retry",
+        required: false,
+        description: "Retry issuance on failure",
+    },
+    ArgSpec {
+        name: "retry-attempts",
+        required: false,
+        description: "Retry cap (0 = unlimited)",
+    },
+    ArgSpec {
+        name: "retry-interval",
+        required: false,
+        description: "Seconds before first retry",
+    },
+    ArgSpec {
+        name: "retry-forever",
+        required: false,
+        description: "Retry without an attempt cap",
+    },
+    ArgSpec {
+        name: "wait-port80",
+        required: false,
+        description: "Wait for :80 before issuing",
+    },
+    ArgSpec {
+        name: "extra-domains",
+        required: false,
+        description: "Extra SAN hostnames",
+    },
+    ArgSpec {
+        name: "dns",
+        required: false,
+        description: "DNS-01 provider",
+    },
+    ArgSpec {
+        name: "dns-credentials",
+        required: false,
+        description: "DNS-01 credential file",
+    },
+    ArgSpec {
+        name: "staging",
+        required: false,
+        description: "Use the Let's Encrypt test CA",
+    },
+    ArgSpec {
+        name: "deploy-hook",
+        required: false,
+        description: "Command run after renewal",
+    },
+    ArgSpec {
+        name: "force",
+        required: false,
+        description: "Reissue a still-valid cert",
+    },
+    ArgSpec {
+        name: "backup-certs",
+        required: false,
+        description: "Back up the cert store",
+    },
+    ArgSpec {
+        name: "lock",
+        required: false,
+        description: "Hold a flock during the run",
+    },
 ];
 pub(crate) const ARGS_DOMAIN_VERB: &[ArgSpec] = &[ArgSpec {
     name: "verb",
     required: true,
-    description: "Domain verb (status|renew|preflight)",
+    description: "Domain verb (status|renew|preflight|check-expiry|revoke)",
 }];
 
 mod table;

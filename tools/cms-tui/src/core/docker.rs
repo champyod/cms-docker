@@ -268,7 +268,9 @@ mod tests {
 
 #[cfg(test)]
 mod additive_stack_tests {
-    use super::{clean_targets, deploy_targets, pull_targets, stop_targets, ADDITIVE_STACKS, ALL_STACKS};
+    use super::{
+        clean_targets, deploy_targets, pull_targets, stop_targets, ADDITIVE_STACKS, ALL_STACKS,
+    };
 
     #[test]
     fn additive_stacks_deploy_and_stop() {
@@ -290,7 +292,10 @@ mod additive_stack_tests {
     fn all_excludes_additive_stacks() {
         let all = deploy_targets("all").unwrap();
         for s in ADDITIVE_STACKS {
-            assert!(!all.contains(&s.to_string()), "deploy all must not include {s}");
+            assert!(
+                !all.contains(&s.to_string()),
+                "deploy all must not include {s}"
+            );
         }
         let stops = stop_targets("all").unwrap();
         assert_eq!(stops.len(), ALL_STACKS.len());

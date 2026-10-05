@@ -139,6 +139,33 @@ fn run_app<B: ratatui::backend::Backend>(
                     continue;
                 }
 
+                // 'd' opens the domain setup form from the Ingress page.
+                if *app.current_route() == app::Route::Ingress
+                    && matches!(key.code, KeyCode::Char('d' | 'D'))
+                {
+                    app.push_route(app::Route::Domain);
+                    continue;
+                }
+
+                // The domain form owns its rows, its arming step and its submit key, so
+                // it consumes every key it recognises before the shared menu keys.
+                if *app.current_route() == app::Route::Domain {
+                    match app.handle_domain_key(key.code) {
+                        pages::domain::DomainAction::Submit => {
+                            if let Err(reason) = app.run_domain_setup() {
+                                app.set_toast(&format!("Failed to run: {reason}"));
+                            }
+                        }
+                        pages::domain::DomainAction::Back => app.leave_domain(),
+                        pages::domain::DomainAction::Arming
+                        | pages::domain::DomainAction::Confirmed
+                        | pages::domain::DomainAction::Cancelled
+                        | pages::domain::DomainAction::Edited
+                        | pages::domain::DomainAction::Ignored => {}
+                    }
+                    continue;
+                }
+
                 // Page-specific keys (arrows, Enter) — only on non-Dashboard pages
                 match key.code {
                     KeyCode::Down | KeyCode::Up | KeyCode::Char('j' | 'k') => {

@@ -82,12 +82,20 @@ pub enum DispatchKey {
     UpdateServer,
     /// `./cms domain setup`
     DomainSetup,
+    /// `./cms domain cert`
+    DomainCert,
+    /// `./cms domain proxy`
+    DomainProxy,
     /// `./cms domain status`
     DomainStatus,
     /// `./cms domain renew`
     DomainRenew,
     /// `./cms domain preflight`
     DomainPreflight,
+    /// `./cms domain check-expiry`
+    DomainCheckExpiry,
+    /// `./cms domain revoke`
+    DomainRevoke,
     /// `./cms config sync`
     ConfigSync,
 }
@@ -149,9 +157,13 @@ mod tests {
         DispatchKey::ContestCreate,
         DispatchKey::UpdateServer,
         DispatchKey::DomainSetup,
+        DispatchKey::DomainCert,
+        DispatchKey::DomainProxy,
         DispatchKey::DomainStatus,
         DispatchKey::DomainRenew,
         DispatchKey::DomainPreflight,
+        DispatchKey::DomainCheckExpiry,
+        DispatchKey::DomainRevoke,
         DispatchKey::ConfigSync,
     ];
     #[test]

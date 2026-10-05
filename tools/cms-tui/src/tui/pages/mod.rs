@@ -3,6 +3,10 @@ pub mod bootstrap;
 pub mod config;
 pub mod dashboard;
 pub mod database;
+pub mod domain;
+pub mod domain_fields;
+pub mod domain_request;
+pub mod domain_values;
 pub mod expose;
 pub mod ingress;
 pub mod logs;
@@ -22,6 +26,7 @@ pub fn render_content(f: &mut Frame, area: Rect, app: &App) {
         Route::Worker => worker::render(f, area, app),
         Route::Ingress => ingress::render(f, area, app),
         Route::Exposure => expose::render(f, area, &app.exposure),
+        Route::Domain => domain::render(f, area, &app.domain),
         Route::Config => config::render(f, area, app),
         Route::Backup => backup::render(f, area, app),
         Route::System => system::render(f, area, app),
