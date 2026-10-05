@@ -183,6 +183,15 @@ domain:
 	@echo "Domain stack started (nginx-proxy + certbot + redis-rate-limit)."
 
 waf:
+	@if [ "$${WAF_ENABLED:-0}" != "1" ]; then \
+		echo "WAF_ENABLED is not 1 — the WAF is opt-in." >&2; \
+		echo "Set WAF_ENABLED = 1 in config.toml ([infra]), run './cms config sync', then 'make waf'." >&2; \
+		exit 1; \
+	fi; \
+	if [ ! -f config/grader.nginx.conf ]; then \
+		echo "config/grader.nginx.conf is missing — run './cms domain setup --apply' first" >&2; \
+		exit 1; \
+	fi
 	$(COMPOSE_CMD) $(WAF_COMPOSE_FLAGS) $(WAF_UP_PROFILES) up -d
 	@echo "WAF profile started. SecRuleEngine is DetectionOnly by default — see docs/waf-tuning.md."
 
