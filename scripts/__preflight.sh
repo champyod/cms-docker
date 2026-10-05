@@ -612,6 +612,35 @@ check_config_stale() {
   fi
 }
 
+# ===========================================================================
+# 11) Initial TLS certificate — the domain stack has no cert to serve :443
+# ===========================================================================
+# WHY this needs its own check: certbot's renewal loop runs forever whether or not
+# the first issuance ever succeeded, so a fresh domain stack with no certificate
+# looks identical to a healthy one from container state alone. The certbot
+# container records the outcome in certbot-status; __certbot_status.sh maps it to
+# PASS/WARN/FAIL. A pending issuance is WARN, not FAIL, because retriable
+# failures back off and retry on their own — only a terminal failure or an
+# exhausted attempt budget means someone has to act.
+check_certbot_issuance() {
+  local script="${REPO_ROOT}/scripts/__certbot_status.sh"
+  if [[ ! -f "$script" ]]; then
+    record_result "tls certificate" "PASS" "skipped (status helper absent)"
+    return 0
+  fi
+
+  local out rc
+  out="$(bash "$script" 2>&1)"
+  rc=$?
+  case "$rc" in
+    0) record_result "tls certificate" "PASS" "${out##*: }" ;;
+    1) record_result "tls certificate" "WARN" "${out##*: }" ;;
+    2) record_result "tls certificate" "FAIL" "${out##*: }" ;;
+    3) record_result "tls certificate" "PASS" "skipped (domain stack not running)" ;;
+    *) record_result "tls certificate" "WARN" "status helper exited $rc" ;;
+  esac
+}
+
 check_disk
 check_docker
 check_env
@@ -622,6 +651,7 @@ check_ports
 check_worker_cgroup
 check_monitor_backup_access
 check_config_stale
+check_certbot_issuance
 
 # ===========================================================================
 # Summary table

@@ -66,6 +66,16 @@ services:
       # Empty = HTTP-01 webroot. Set to e.g. cloudflare to issue/renew with DNS-01;
       # the credentials ini is read from /etc/letsencrypt/<provider>.ini.
       DNS_PROVIDER: ${DNS_PROVIDER:-}
+      # Initial-issuance retry policy. WHY the container needs its own copy: the
+      # host script (scripts/__domain.sh) handles --auto-retry/--retry-attempts for
+      # an operator-driven run, but this container is the unattended path — nothing
+      # re-runs it after a DNS record appears, so a transient failure would leave
+      # :443 unserved forever. ATTEMPTS=0 means retry indefinitely; each interval
+      # doubles up to RETRY_INTERVAL_CAP, so a slow DNS propagation is not hit with
+      # a fixed short loop that then gives up.
+      CERT_RETRY_ATTEMPTS: ${CERT_RETRY_ATTEMPTS:-0}
+      CERT_RETRY_INTERVAL: ${CERT_RETRY_INTERVAL:-60}
+      CERT_RETRY_INTERVAL_CAP: ${CERT_RETRY_INTERVAL_CAP:-600}
     volumes:
       - ./config/letsencrypt:/etc/letsencrypt
       - ./config/letsencrypt/www:/var/www/certbot
@@ -77,22 +87,82 @@ services:
     # is optional, and `certbot certonly -d ""` requests an unnamed SAN, which fails
     # validation for the whole certificate instead of skipping the domain. The first
     # domain that is set becomes the lineage directory, matching scripts/__domain.sh.
+    #
+    # WHY the issuance loop classifies failures instead of always retrying: a
+    # misconfigured challenge plugin or an unregistered email fails identically on
+    # every attempt, so retrying it forever hides a real misconfiguration behind a
+    # container that looks busy. Only failures that can succeed on a later attempt
+    # (DNS not yet propagated, connection refused, timeout, rate limit) are retried;
+    # anything else is reported and the loop stops, leaving the container in a
+    # state `certbot-status.sh` and the domain healthcheck can see.
+    #
+    # WHY a status file rather than only log output: docker logs rotate, and the
+    # renewal loop runs forever afterwards. The status file is what
+    # scripts/__certbot-status.sh reads to decide whether :443 will ever be
+    # served, so the answer survives a restart and does not need log archaeology.
+    # NOTE the folded block scalar (`>`) joins each source line with a space before
+    # the container's shell ever sees it, so a trailing `#` comment on a line that
+    # still carries code would swallow the rest of that line. Comments that describe
+    # the script therefore live here in the YAML, not inside the entrypoint string.
     entrypoint: >
       /bin/sh -c 'trap exit TERM;
-      LINEAGE="$${DOMAIN_NAME:-$${ADMIN_DOMAIN:-$${OJ_DOMAIN:-$${RANKING_DOMAIN}}}";
+      LINEAGE="$${DOMAIN_NAME:-$${ADMIN_DOMAIN:-$${OJ_DOMAIN:-$${RANKING_DOMAIN}}}}";
+      STATUS=/etc/letsencrypt/certbot-status;
       if [ -n "$$DNS_PROVIDER" ]; then
         CHALLENGE="--dns-$$DNS_PROVIDER --dns-$$DNS_PROVIDER-credentials /etc/letsencrypt/$$DNS_PROVIDER.ini";
       else
         CHALLENGE="--webroot -w /var/www/certbot";
       fi;
+      mark() { printf "%s %s\n" "$$1" "$$2" > "$$STATUS"; };
+      is_retriable() {
+        case "$$1" in
+          *"urn:ietf:params:acme:error:dns"*|*"Timeout during connect"*|*"Connection refused"*|\
+          *"Invalid response from http://"*|*"urn:ietf:params:acme:error:connection"*|\
+          *"urn:ietf:params:acme:error:rateLimited"*|*"too many certificates"*) return 0 ;;
+          *) return 1 ;;
+        esac;
+      };
       if [ -z "$$LINEAGE" ]; then
         echo "no domain configured — set DOMAIN_NAME, ADMIN_DOMAIN, OJ_DOMAIN or RANKING_DOMAIN";
+        mark error "no domain configured";
+      elif [ -z "$$CERT_EMAIL" ]; then
+        echo "CERT_EMAIL is empty — cannot register with Let.s Encrypt; set it in config.toml [core]";
+        mark error "CERT_EMAIL empty";
       elif [ ! -d "/etc/letsencrypt/live/$$LINEAGE" ]; then
         set --;
         for d in "$$DOMAIN_NAME" "$$ADMIN_DOMAIN" "$$OJ_DOMAIN" "$$RANKING_DOMAIN"; do
           [ -n "$$d" ] && set -- "$$@" -d "$$d";
         done;
-        certbot certonly $$CHALLENGE "$$@" --email "$$CERT_EMAIL" --agree-tos --non-interactive || true;
+        mark pending "attempting issuance for $$LINEAGE";
+        attempt=1; interval="$$CERT_RETRY_INTERVAL";
+        while :; do
+          out=$$(certbot certonly $$CHALLENGE "$$@" --email "$$CERT_EMAIL" --agree-tos --non-interactive 2>&1);
+          rc=$$?;
+          if [ $$rc -eq 0 ] && [ -d "/etc/letsencrypt/live/$$LINEAGE" ]; then
+            mark ok "certificate issued for $$LINEAGE";
+            break;
+          fi;
+          if ! is_retriable "$$out"; then
+            echo "certificate issuance failed for a reason retrying cannot fix:";
+            echo "$$out";
+            mark error "terminal failure for $$LINEAGE — see docker logs grader-certbot";
+            break;
+          fi;
+          if [ "$$CERT_RETRY_ATTEMPTS" -gt 0 ] && [ $$attempt -ge "$$CERT_RETRY_ATTEMPTS" ]; then
+            echo "certificate issuance still failing after $$attempt attempt(s):";
+            echo "$$out";
+            mark error "$$attempt attempts exhausted for $$LINEAGE";
+            break;
+          fi;
+          mark pending "attempt $$attempt failed (retriable) — retrying in $${interval}s";
+          echo "attempt $$attempt failed, retrying in $${interval}s";
+          sleep "$$interval";
+          attempt=$$(( attempt + 1 ));
+          interval=$$(( interval * 2 ));
+          [ $$interval -gt "$$CERT_RETRY_INTERVAL_CAP" ] && interval="$$CERT_RETRY_INTERVAL_CAP";
+        done;
+      else
+        mark ok "certificate present for $$LINEAGE";
       fi;
       while :; do certbot renew $$CHALLENGE; sleep 12h & wait $${!}; done;'
 
