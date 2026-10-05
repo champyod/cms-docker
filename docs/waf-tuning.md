@@ -89,7 +89,7 @@ Set `WAF_PORT=443` and move `DOMAIN_NGINX_HTTPS_PORT` off 443 (e.g., 8443), or r
 
 WAF and CAPTCHA are **independent layers**:
 
-- **CAPTCHA (Upgrade-2)**: per-IP failed-login counter → challenge at threshold 3, ban at 5. Handles brute-force.
+- **CAPTCHA**: failed-login counter → challenge at threshold 3, lockout at 5. Handles brute-force. The counter is per account plus, on some deployment paths, per source address — see [LOGIN-CAPTCHA.md](LOGIN-CAPTCHA.md) for which paths get the per-source ban.
 - **WAF**: per-request payload scoring → blocks exploit payloads at any endpoint.
 - **Both on**: WAF score can tighten `limit_req` (e.g., map WAF `X-ModSec-Score` to a lower `limit_req` burst) but CAPTCHA still handles credential stuffing even if WAF whitelists `/login` payloads. WAF **does not** replace CAPTCHA; CAPTCHA stays active when `WAF_ENABLED=0` and also when `WAF_ENABLED=1`.
 - **Policy**: leave `CAPTCHA_ENABLED` as before; WAF enablement does not change CAPTCHA files or envs.

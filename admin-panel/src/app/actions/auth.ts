@@ -11,7 +11,7 @@ import { getCaptchaEnv, getCaptchaPublicConfig, verifyCaptcha, type CaptchaProvi
 import { prisma } from '@/lib/prisma';
 import { safeAdminSelect, type SafeAdmin } from '@/lib/prisma-selects';
 import { redirect } from '@/lib/redirect';
-import { clearBucket, isRateLimited, pruneExpiredLoginBuckets, recordFailedAttempt } from '@/lib/auth-rate-limit';
+import { buildIpBucketKey, clearBucket, isRateLimited, pruneExpiredLoginBuckets, recordFailedAttempt } from '@/lib/auth-rate-limit';
 import { buildCaptchaRequiredState, extractCaptchaToken, isCaptchaRequiredForIp, shouldRequireCaptcha } from '@/lib/auth-captcha-helpers';
 
 const DUMMY_BCRYPT_HASH = '$2a$10$C6UzMDM.H6dfI/f/IKcEeO7ZBpQz0l8Dp5uJHnKzTKmPqR3sWbGyq';
@@ -32,15 +32,31 @@ interface AuthenticatedAdmin {
   authentication: string;
 }
 
-async function resolveBucketKey(username: string): Promise<string> {
-  const requestHeaders = await headers();
-  const ip = requestHeaders.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'local';
-  return `${username}|${ip}`;
-}
-
 async function resolveClientIp(): Promise<string> {
   const requestHeaders = await headers();
   return requestHeaders.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'local';
+}
+
+// A dual-stack socket hands back `::ffff:127.0.0.1` where a v4-only one reports
+// the bare address, so the prefix is stripped before the v4 test rather than
+// being tested for twice.
+function isLoopbackIp(ip: string): boolean {
+  if (ip === 'local' || ip === '::1') return true;
+  const address = ip.startsWith('::ffff:') ? ip.substring('::ffff:'.length) : ip;
+  return /^127\./.test(address);
+}
+
+// The username bucket keeps one attacker to one account from exhausting every
+// bucket, while the IP bucket stops the same source from resetting its counter
+// by rotating usernames. Both families must be tracked or either protection is
+// trivially bypassed. Loopback is the one exception: funnel, tailscale serve and
+// direct local access all present the same address to every user, so an IP
+// bucket there would be one shared counter that locks out unrelated accounts.
+async function resolveBucketKeys(username: string): Promise<readonly string[]> {
+  const requestHeaders = await headers();
+  const ip = requestHeaders.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'local';
+  if (isLoopbackIp(ip)) return [`${username}|${ip}`];
+  return [`${username}|${ip}`, buildIpBucketKey(ip)];
 }
 
 export async function getCaptchaState(username?: string): Promise<{ required: boolean; enabled: boolean; provider: CaptchaProvider; siteKey: string; threshold: number; banThreshold: number }> {
@@ -77,23 +93,23 @@ async function startAdminSession(admin: AuthenticatedAdmin): Promise<void> {
   await createSession(admin.id.toString(), admin.username);
 }
 
-async function completeLogin(admin: AuthenticatedAdmin, bucketKey: string): Promise<void> {
+async function completeLogin(admin: AuthenticatedAdmin, bucketKeys: readonly string[]): Promise<void> {
   await startAdminSession(admin);
   try {
     await prisma.admins.update({ where: { id: admin.id }, data: { last_login_at: new Date() } });
   } catch {
   }
-  clearBucket(bucketKey);
+  clearBucket(bucketKeys);
 }
 
 export async function login(_prevState: LoginActionState | null, formData: FormData): Promise<LoginActionState> {
   const username = String(formData.get('username') ?? '');
   const password = String(formData.get('password') ?? '');
   if (!username || !password) return { error: 'Username and password are required' };
-  const bucketKey = await resolveBucketKey(username);
+  const bucketKeys = await resolveBucketKeys(username);
   pruneExpiredLoginBuckets();
-  if (isRateLimited(bucketKey)) return { success: false, error: 'Too many attempts. Try again later.', ...buildCaptchaRequiredState() };
-  if (shouldRequireCaptcha(bucketKey)) {
+  if (isRateLimited(bucketKeys)) return { success: false, error: 'Too many attempts. Try again later.', ...buildCaptchaRequiredState() };
+  if (shouldRequireCaptcha(bucketKeys[0])) {
     const token = extractCaptchaToken(formData);
     if (!token) return { success: false, error: 'CAPTCHA verification required', ...buildCaptchaRequiredState() };
     const valid = await verifyCaptcha(token);
@@ -103,18 +119,18 @@ export async function login(_prevState: LoginActionState | null, formData: FormD
     const admin = await findActiveAdmin(username);
     if (!admin) {
       await bcrypt.compare(password, DUMMY_BCRYPT_HASH);
-      recordFailedAttempt(bucketKey);
+      recordFailedAttempt(bucketKeys);
       const nextState: LoginActionState = { error: 'Invalid credentials' };
-      if (shouldRequireCaptcha(bucketKey)) Object.assign(nextState, buildCaptchaRequiredState());
+      if (shouldRequireCaptcha(bucketKeys[0])) Object.assign(nextState, buildCaptchaRequiredState());
       return nextState;
     }
     if (!(await verifyStoredPassword(password, admin.authentication))) {
-      recordFailedAttempt(bucketKey);
+      recordFailedAttempt(bucketKeys);
       const nextState: LoginActionState = { error: 'Invalid credentials' };
-      if (shouldRequireCaptcha(bucketKey)) Object.assign(nextState, buildCaptchaRequiredState());
+      if (shouldRequireCaptcha(bucketKeys[0])) Object.assign(nextState, buildCaptchaRequiredState());
       return nextState;
     }
-    await completeLogin(admin, bucketKey);
+    await completeLogin(admin, bucketKeys);
   } catch (error) {
     console.error('Login error:', error);
     return { error: 'An unexpected error occurred' };

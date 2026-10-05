@@ -317,7 +317,56 @@ check_cms_toml() {
 }
 
 # ===========================================================================
-# 5) Secrets file permissions — warn if world-readable
+# 6) Login CAPTCHA settings — only meaningful when the admin panel enables it
+# ===========================================================================
+# The CAPTCHA secret is issued by the provider, so it can never be generated
+# locally. A missing key silently disables the challenge (isCaptchaConfigured
+# in the panel requires both keys) and a generated-hex placeholder passes every
+# "is it set" test while failing every verification call. Both states look
+# healthy at runtime and are caught here instead.
+captcha_is_active() {
+  local raw="${CAPTCHA_ENABLED:-}"
+  [[ "$raw" == "1" || "${raw,,}" == "true" ]]
+}
+
+check_captcha() {
+  if ! stack_includes "admin"; then
+    record_result "captcha config" "PASS" "skipped (--stack ${STACK})"
+    return 0
+  fi
+
+  if ! captcha_is_active; then
+    record_result "captcha config" "PASS" "CAPTCHA_ENABLED=${CAPTCHA_ENABLED:-0}"
+    return 0
+  fi
+
+  local captcha_issues=()
+  local site_key="${CAPTCHA_SITE_KEY:-}"
+  local secret_key="${CAPTCHA_SECRET_KEY:-}"
+
+  if [[ -z "$site_key" ]]; then
+    captcha_issues+=("CAPTCHA_SITE_KEY empty (CAPTCHA_ENABLED=1)")
+  fi
+  if [[ -z "$secret_key" ]]; then
+    captcha_issues+=("CAPTCHA_SECRET_KEY empty (CAPTCHA_ENABLED=1)")
+  elif [[ "$secret_key" =~ ^[0-9a-f]{64}$ ]]; then
+    captcha_issues+=("CAPTCHA_SECRET_KEY is a 64-char hex placeholder, not a provider secret — replace with the secret from the ${CAPTCHA_PROVIDER:-turnstile} dashboard")
+  fi
+
+  if [[ ${#captcha_issues[@]} -gt 0 ]]; then
+    local msg
+    msg=$(IFS='; '; echo "${captcha_issues[*]}")
+    printf '[FAIL] captcha env: %s\n' "$msg" >&2
+    printf '       Fix: paste the real CAPTCHA_SITE_KEY and CAPTCHA_SECRET_KEY from the provider dashboard, or set CAPTCHA_ENABLED=0 to run without it\n' >&2
+    record_result "captcha config" "FAIL" "$msg"
+    return 0
+  fi
+
+  record_result "captcha config" "PASS" "CAPTCHA_ENABLED=1, keys set"
+}
+
+# ===========================================================================
+# 7) Secrets file permissions — warn if world-readable
 # ===========================================================================
 check_secret_perms() {
   local files=("${REPO_ROOT}/.env" "${REPO_ROOT}/config/cms.toml")
@@ -356,7 +405,7 @@ check_secret_perms() {
 }
 
 # ===========================================================================
-# 6) Port-collision quick check (warn only) — ss -ltn probe per stack
+# 7) Port-collision quick check (warn only) — ss -ltn probe per stack
 # ===========================================================================
 check_ports() {
   local ports=()
@@ -415,7 +464,7 @@ check_ports() {
 }
 
 # ===========================================================================
-# 7) Worker cgroup check (--stack worker only)
+# 8) Worker cgroup check (--stack worker only)
 # ===========================================================================
 check_worker_cgroup() {
   if [[ "$STACK" != "worker" ]]; then
@@ -444,7 +493,7 @@ check_worker_cgroup() {
 }
 
 # ===========================================================================
-# 8) Monitor backup write access — backup-root ownership vs the container uid
+# 9) Monitor backup write access — backup-root ownership vs the container uid
 # ===========================================================================
 # The monitor container is not root, so it writes under the uid it was built
 # for. A backup root owned by a different uid then fails every cycle while the
@@ -567,6 +616,7 @@ check_disk
 check_docker
 check_env
 check_cms_toml
+check_captcha
 check_secret_perms
 check_ports
 check_worker_cgroup

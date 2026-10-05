@@ -154,7 +154,11 @@ server {
     proxy_read_timeout 90;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    # WHY: this vhost fronts the admin panel, which derives its login rate-limit
+    # key from the first entry of this header. Appending to a client-supplied
+    # value would let the client choose its own bucket, so assert the address
+    # the connection actually came from.
+    proxy_set_header X-Forwarded-For $remote_addr;
     proxy_set_header X-Forwarded-Proto $scheme;
 
     location / {

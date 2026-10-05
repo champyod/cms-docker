@@ -189,7 +189,10 @@ generate_secret_for() {
     GRAFANA_PASSWORD)    gen_hex32 ;;
     VAULT_TOKEN)         gen_hex32 ;;
     HSM_PIN)             gen_hex32 ;;
-    CAPTCHA_SECRET_KEY)  gen_hex32 ;;
+    # WHY no CAPTCHA_SECRET_KEY arm: that value is issued by the CAPTCHA
+    # provider's dashboard, so random hex can never authenticate against the
+    # provider API. Leaving it empty makes the preflight captcha check report
+    # it instead of shipping a silently broken value.
     *) echo "" ;;
   esac
 }
