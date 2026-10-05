@@ -968,6 +968,25 @@ resolver_timeout 3s;
 # Upstream deferred to lua request-time connect to avoid startup DNS failure when redis absent
 # upstream redis_rate_limit_backend { server ${REDIS_HOST}:${REDIS_PORT} max_fails=2 fail_timeout=10s; }
 # Local limit_req remains as primary until OpenResty image with resty.redis is deployed
+#
+# FAILURE BEHAVIOUR — a Redis outage cannot degrade or block anything, because no
+# request path reads Redis. The upstream above is commented out and the token bucket
+# below is commented out too, so the rendered config contains no `access_by_lua*`,
+# no `lua_shared_dict`, and no redis upstream at all: with REDIS_RATE_LIMIT=1 the
+# only redis-related directives emitted are the `resolver` lines above. The
+# grader-redis-rate-limit container starts, passes `redis-cli ping`, and is never
+# contacted.
+#
+# This answers the fail-open / fail-closed question: neither. Verified by rendering
+# with REDIS_RATE_LIMIT=1 and filtering comments out of the result — zero active
+# redis or lua directives. nginx therefore starts normally whether Redis is up or
+# down, and rate limiting is entirely the local `limit_req` zones.
+#
+# The commented token bucket is written to fail OPEN if it is ever enabled as-is:
+# `if ok then ... end` has no else branch, and ngx.exit(503) sits inside the success
+# branch, so an unreachable Redis would skip the check. It also calls require() and
+# red:connect() without pcall, so a failure would raise a Lua error (HTTP 500) rather
+# than degrade. Fix both before enabling — see docs/waf-tuning.md.
 EOF
 )
     redis_lua_placeholder=$(cat <<'EOLUA'
