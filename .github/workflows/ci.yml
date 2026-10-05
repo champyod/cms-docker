@@ -66,6 +66,7 @@ jobs:
               - 'scripts/__monitor.sh'
             rust:
               - 'tools/cms-tui/**'
+              - '.tools/cms-tui/**'
               - '.github/workflows/ci.yml'
 
   lint:
@@ -295,6 +296,62 @@ jobs:
       - name: Test
         working-directory: tools/cms-tui
         run: cargo test
+
+  # ./cms execs .tools/cms-tui/cms-tui-linux-<arch> before it will build from source,
+  # so that checked-in binary is what an operator actually runs. Without this job it
+  # stays at whatever the last person committed, and a merged change to the CLI looks
+  # like it did nothing: the new flags are in the source and absent from the binary.
+  release-binary:
+    name: Refresh vendored cms-tui
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: changes
+    if: github.event_name != 'workflow_dispatch' && needs.changes.outputs.rust == 'true'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install musl target
+        run: rustup target add x86_64-unknown-linux-musl
+
+      # A static build, because the box it runs on may not have the same libc. The
+      # repository's own .cargo/config.toml pins musl and strips, which is what makes
+      # the committed binary reproducible enough to diff meaningfully.
+      - name: Build release binary
+        working-directory: tools/cms-tui
+        run: cargo build --release
+
+      - name: Install into .tools
+        run: |
+          install -Dm755 tools/cms-tui/target/x86_64-unknown-linux-musl/release/cms-tui \
+            .tools/cms-tui/cms-tui-linux-x86_64
+          .tools/cms-tui/cms-tui-linux-x86_64 domain --help >/dev/null
+
+      # WHY the binary is committed rather than downloaded: `./cms` prefers it over a
+      # local build, so removing it would make every operator without cargo fall back
+      # to a bootstrap path that needs a toolchain they may not have.
+      - name: Commit when the binary changed
+        run: |
+          if git diff --quiet -- .tools/cms-tui/; then
+            echo "vendored binary already current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .tools/cms-tui/cms-tui-linux-x86_64
+          # WHY the message lives in a variable: a multi-line string inside this block
+          # scalar ends the YAML block early, and the workflow then fails to parse.
+          msg="build(cms-tui): refresh the vendored binary
+
+          ./cms runs this file before it builds from source, so a CLI change only
+          reaches the operator once this binary is rebuilt."
+          git commit -m "${msg}"
+          git push
 
   # Each image builds as its own PARALLEL job (kept separate on purpose — the
   # images are large and serialising them would multiply wall-clock time).
