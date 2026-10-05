@@ -54,8 +54,6 @@ services:
       - /sys/fs/cgroup:/sys/fs/cgroup:rw
     ports:
       - "${WORKER_BIND_ADDR:-0.0.0.0}:${WORKER_PORT:-26000}:${WORKER_PORT:-26000}"
-      # Expose for VPS connection (ResourceService)
-      - "2600${WORKER_SHARD:-0}:2600${WORKER_SHARD:-0}"
     networks:
       - cms-network
     privileged: true
