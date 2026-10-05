@@ -27,8 +27,43 @@ cd "$REPO_ROOT"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/__lib/common.sh"
 
-env_val() {
-  awk -F= -v k="$2" '$1==k {v=$0; sub(/^[^=]*=/,"",v); gsub(/^[ \t]+|[ \t\r]+$/,"",v); print v; exit}' "$1" 2>/dev/null || true
+# ---------------------------------------------------------------------------
+# External tool guards
+# ---------------------------------------------------------------------------
+# Reports whether <tool> is on PATH, naming what could not be done when it is not.
+# WHY every caller checks first instead of letting the command run: an absent tool
+# is otherwise indistinguishable from the failure the caller was probing for, so a
+# missing curl reads as an unreachable host and a missing envsubst as an empty
+# template.
+require_external() {
+  local tool="$1" purpose="${2:-this check}"
+  if ! command -v "$tool" >/dev/null 2>&1; then
+    log_warn "${tool} not found — cannot run ${purpose}"
+    return 1
+  fi
+  return 0
+}
+
+# The same test as require_external, without the warning. WHY the quiet twin: a
+# preflight row prints its padded label first, and a warning on stderr lands in the
+# middle of that row and reads as a broken line. The row's own SKIPPED text names the
+# missing tool instead.
+_external_present() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+# Runs <command...> under a <seconds> bound when GNU timeout is present. WHY the
+# bound is dropped rather than the lookup when timeout is missing: the bound exists
+# to stop a dead resolver from stalling a status call, and losing it costs a slow
+# answer where skipping it would cost every host reading as unresolved.
+_bounded() {
+  local seconds="$1"
+  shift
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$seconds" "$@"
+  else
+    "$@"
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -51,7 +86,7 @@ if [[ -n "$CONFIG_FILE" && ! -f "$CONFIG_FILE" ]]; then
 fi
 if [[ -f "$ENV_FILE" ]]; then
   set -a
-  # shellcheck disable=SC1091
+  # shellcheck disable=SC1090
   source "$ENV_FILE" 2>/dev/null || true
   set +a
 fi
@@ -66,7 +101,7 @@ discord_alert() {
   [[ -z "$webhook" ]] && { log_info "discord_alert: no DISCORD_WEBHOOK_URL set — skipping"; return 0; }
   local ts
   ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  if command -v python3 >/dev/null 2>&1; then
+  if command -v python3 >/dev/null 2>&1 && command -v curl >/dev/null 2>&1; then
     python3 -c '
 import json,sys
 msg,clr,ts=sys.argv[1],int(sys.argv[2]),sys.argv[3]
@@ -75,7 +110,7 @@ print(json.dumps(body))
 ' "$message" "$color" "$ts" | curl -s -H "Content-Type: application/json" -X POST -d @- "$webhook" >/dev/null 2>&1 \
       || log_warn "Discord webhook POST failed"
   else
-    log_warn "python3 not found — cannot send Discord alert"
+    log_warn "Discord alert skipped — sending one needs both python3 and curl"
   fi
 }
 
@@ -231,6 +266,11 @@ Extended options:
                               from CLOUDFLARE_API_TOKEN for the cloudflare provider
   --config <file>             Use an alternate env file instead of ./.env
 
+Preflight worker probe:
+  WORKER_HOST                 Host or IP of a remote worker to probe in `preflight`.
+                              Unset by default, and an unset value skips that one
+                              check instead of probing a built-in address.
+
 Optional features (disabled by default — prod stays off):
   HSM_ENABLED=0  Vault, DNSSEC/CAA, mTLS workers are opt-in via prompts
   HSM: --hsm PKCS#11 via config/hsm/* (SoftHSM dev / YubiHSM ~$800 / CloudHSM ~$30/mo)
@@ -258,7 +298,7 @@ _prompt_optional_features() {
       printf "  HSM module (softhsm|yubihsm|cloudhsm) [%s]: " "$HSM_MODULE"
       read -r ans || true
       [[ -n "$ans" ]] && HSM_MODULE="$ans"
-      printf "  HSM PIN (will be stored in .env.local — gitignored): "
+      printf "  HSM PIN (this run only — nothing here writes .env, so save it there to keep it): "
       read -r -s ans || true; echo ""
       [[ -n "$ans" ]] && HSM_PIN="$ans"
       printf "  HSM key label [%s]: " "$HSM_KEY_LABEL"
@@ -274,7 +314,7 @@ _prompt_optional_features() {
       printf "  Vault addr [%s]: " "$VAULT_ADDR"
       read -r ans || true
       [[ -n "$ans" ]] && VAULT_ADDR="$ans"
-      printf "  Vault token (gitignored via .env.local): "
+      printf "  Vault token (this run only — nothing here writes .env, so save it there to keep it): "
       read -r -s ans || true; echo ""
       [[ -n "$ans" ]] && VAULT_TOKEN="$ans"
       printf "  Vault path [%s]: " "$VAULT_PATH"
@@ -313,24 +353,29 @@ _prompt_optional_features() {
   fi
 }
 
+# Reports what each optional feature flag is set to and which component acts on it.
+# WHY no line here claims this script performs the work: these flags configure other
+# components — a compose profile, the config sync, the DNS zone. This script passes
+# no --hsm flag to certbot and writes no firewall rule, so a line implying otherwise
+# would be a false promise about what running it achieved.
 _log_optional_features() {
   if [[ "${HSM_ENABLED:-0}" == "1" ]]; then
-    log_info "HSM enabled (module=$HSM_MODULE label=$HSM_KEY_LABEL) — certbot will use --hsm with PKCS#11"
+    log_info "HSM enabled (module=$HSM_MODULE label=$HSM_KEY_LABEL) — started by the hsm profile in docker-compose.domain.yml; this script passes no --hsm flag to certbot"
   else
     log_info "HSM disabled (set HSM_ENABLED=1 in config.toml [infra] to enable)"
   fi
   if [[ "${VAULT_ENABLED:-0}" == "1" ]]; then
-    log_info "Vault enabled (addr=$VAULT_ADDR path=$VAULT_PATH) — secrets via Vault"
+    log_info "Vault enabled (addr=$VAULT_ADDR path=$VAULT_PATH) — started by docker-compose.vault.yml; rotation stays in scripts/__secrets-rotate.sh"
   else
     log_info "Vault disabled (set VAULT_ENABLED=1 in config.toml [infra] to enable; alternative: scripts/__secrets-rotate.sh)"
   fi
   if [[ "${DNSSEC_ENABLED:-0}" == "1" ]] || [[ "${CAA_ENABLED:-0}" == "1" ]]; then
-    log_info "DNSSEC=${DNSSEC_ENABLED} CAA=${CAA_ENABLED} (issuer=$CAA_ISSUER) — see docs/dnssec-caa-guide.md"
+    log_info "DNSSEC=${DNSSEC_ENABLED} CAA=${CAA_ENABLED} (issuer=$CAA_ISSUER) — published in the DNS zone, which this script does not touch; see docs/dnssec-caa-guide.md"
   else
     log_info "DNSSEC disabled (set DNSSEC_ENABLED=1 to enable) — CAA disabled (set CAA_ENABLED=1, CAA_ISSUER=letsencrypt.org)"
   fi
   if [[ "${MTLS_WORKERS_ENABLED:-0}" == "1" ]]; then
-    log_info "mTLS workers enabled (CA=$MTLS_CA_CERT) — firewall should restrict RPC to mTLS only"
+    log_info "mTLS workers enabled (CA=$MTLS_CA_CERT) — mounted by the worker service in docker-compose.yml; the RPC firewall rule belongs to scripts/__firewall-setup.sh"
   else
     log_info "mTLS workers disabled (set MTLS_WORKERS_ENABLED=1 to enable — TAILSCALE_IP allow ALL remains)"
   fi
@@ -535,6 +580,10 @@ _wait_for_port80() {
     return 0
   fi
 
+  if ! require_external curl "the port 80 wait"; then
+    return 0
+  fi
+
   while (( elapsed < timeout )); do
     if curl -sf -o /dev/null --max-time "$PORT80_PROBE_TIMEOUT_S" "http://${DOMAIN_NAME}/" 2>/dev/null; then
       log_info "port 80 reachable after ${elapsed}s"
@@ -554,6 +603,9 @@ _wait_for_port80() {
 # cannot race over the same certificate store.
 _acquire_run_lock() {
   [[ "$USE_LOCK" == "1" ]] || return 0
+  if ! command -v flock >/dev/null 2>&1; then
+    log_die "flock not found — cannot serialise runs; install util-linux or drop --lock" 1
+  fi
   exec 9>"${REPO_ROOT}/${DOMAIN_LOCK_FILE}"
   if ! flock -n 9; then
     log_die "another run holds ${DOMAIN_LOCK_FILE} — refusing to start" 1
@@ -597,16 +649,25 @@ _cert_privkey_path() {
   fi
 }
 
-# Prints remaining validity in whole days, or -1 when no certificate is present.
-_cert_days_left() {
-  local cert_file
-  cert_file="$(_cert_fullchain_path)"
-  if [[ ! -f "$cert_file" ]]; then
-    printf '%s' "-1"; return 0
+# Prints the notAfter date of <cert_file>, or nothing when there is no certificate
+# or no openssl to read it with. WHY the guard belongs here rather than at the call
+# sites: three readers need this value, and without openssl all three would see an
+# empty string and report an expired certificate where the truth is an unread one.
+_cert_expiry_date() {
+  local cert_file="$1"
+  [[ -f "$cert_file" ]] || return 0
+  if ! command -v openssl >/dev/null 2>&1; then
+    log_warn "openssl not found — expiry of ${cert_file} is unknown, not expired"
+    return 0
   fi
+  openssl x509 -enddate -noout -in "$cert_file" 2>/dev/null | sed 's/notAfter=//'
+}
 
-  local expiry expiry_epoch now_epoch
-  expiry="$(openssl x509 -enddate -noout -in "$cert_file" 2>/dev/null | sed 's/notAfter=//')"
+# Prints remaining validity in whole days, or -1 when it cannot be determined.
+_cert_days_left() {
+  local cert_file expiry expiry_epoch now_epoch
+  cert_file="$(_cert_fullchain_path)"
+  expiry="$(_cert_expiry_date "$cert_file")"
   if [[ -z "$expiry" ]]; then
     printf '%s' "-1"; return 0
   fi
@@ -792,7 +853,9 @@ _setup_provided_cert() {
     log_die "private key file not found: $KEY_PATH" 1
   fi
 
-  if ! openssl verify -untrusted "$CERT_PATH" "$CERT_PATH" >/dev/null 2>&1; then
+  if ! command -v openssl >/dev/null 2>&1; then
+    log_warn "openssl not found — provided certificate installed without a trust check"
+  elif ! openssl verify -untrusted "$CERT_PATH" "$CERT_PATH" >/dev/null 2>&1; then
     log_warn "certificate failed openssl verify — may not be trusted by clients"
   else
     log_info "certificate passed openssl verify"
@@ -823,6 +886,12 @@ _setup_selfsigned() {
   if [[ "$DRY_RUN" -eq 1 ]]; then
     log_info "[dry-run] would generate self-signed cert for $DOMAIN_NAME"
     return 0
+  fi
+
+  # Guarded before the directory is created so a host without openssl is not left
+  # with an empty lineage directory that later reads as a half-installed cert.
+  if ! command -v openssl >/dev/null 2>&1; then
+    log_die "openssl not found — cannot generate a self-signed certificate" 1
   fi
 
   mkdir -p "$dest_dir"
@@ -921,7 +990,17 @@ EOF
   fi
   export NGINX_METRICS_LOCATION="$nginx_metrics_location"
 
-  envsubst '${DOMAIN_NAME} ${ADMIN_DOMAIN} ${OJ_DOMAIN} ${RANKING_DOMAIN} ${HSTS_MAX_AGE} ${CONTEST_LISTEN_PORT} ${ADMIN_LISTEN_PORT} ${RANKING_LISTEN_PORT} ${OJ_BACKEND_PORT} ${RANKING_AUTH_DIRECTIVES} ${REDIS_UPSTREAM_BLOCK} ${REDIS_LUA_PLACEHOLDER} ${PER_USER_LOGIN_DIRECTIVES} ${PER_USER_RANKING_DIRECTIVES} ${NGINX_METRICS_LOCATION}' < "$template" > "$output"
+  # Guarded before the redirect, not after: `> "$output"` truncates the rendered
+  # config the instant the shell opens it, so an absent or failing envsubst would
+  # replace a working nginx config with a zero-byte file. Failing here keeps the
+  # previous config intact and says which package is missing.
+  if ! command -v envsubst >/dev/null 2>&1; then
+    log_die "envsubst not found — ${template} was not rendered; install gettext" 1
+  fi
+  if ! envsubst '${DOMAIN_NAME} ${ADMIN_DOMAIN} ${OJ_DOMAIN} ${RANKING_DOMAIN} ${HSTS_MAX_AGE} ${CONTEST_LISTEN_PORT} ${ADMIN_LISTEN_PORT} ${RANKING_LISTEN_PORT} ${OJ_BACKEND_PORT} ${RANKING_AUTH_DIRECTIVES} ${REDIS_UPSTREAM_BLOCK} ${REDIS_LUA_PLACEHOLDER} ${PER_USER_LOGIN_DIRECTIVES} ${PER_USER_RANKING_DIRECTIVES} ${NGINX_METRICS_LOCATION}' < "$template" > "$output"; then
+    log_warn "envsubst failed — ${output} is incomplete and must not be published"
+    return 0
+  fi
   log_info "nginx config rendered: $output (REDIS_RATE_LIMIT=${REDIS_RATE_LIMIT} PER_USER_LIMIT=${PER_USER_LIMIT} MONITORING_ENABLED=${MONITORING_ENABLED} WAF_ENABLED=${WAF_ENABLED:-0})"
   if [[ "${WAF_ENABLED:-0}" == "1" ]]; then
     log_info "WAF_ENABLED=1 — grader-waf is fronting grader-nginx-proxy (PARANOIA=${WAF_PARANOIA} ANOMALY_INBOUND=${WAF_ANOMALY_INBOUND} RULE_ENGINE=${WAF_RULE_ENGINE}, host ${WAF_BIND_IP}:${WAF_PORT}→80 when --profile waf up). CAPTCHA remains active alongside WAF."
@@ -939,6 +1018,9 @@ _validate_nginx_config() {
     return 0
   fi
 
+  if ! require_external docker "the nginx config test"; then
+    return 0
+  fi
   if docker ps --format '{{.Names}}' 2>/dev/null | grep -q 'nginx'; then
     local container
     container="$(docker ps --format '{{.Names}}' | grep 'nginx' | head -1)"
@@ -957,6 +1039,7 @@ _validate_nginx_config() {
 # caller has already produced the config on disk, and whether the proxy is up right
 # now is a separate question answered by status/preflight.
 _reload_running_nginx() {
+  require_external docker "the nginx reload" || return 0
   docker ps --format '{{.Names}}' 2>/dev/null | grep -q nginx || return 0
   local nginx_container
   nginx_container="$(docker ps --format '{{.Names}}' | grep nginx | head -1)"
@@ -974,6 +1057,7 @@ _preflight_port80() {
     return 0
   fi
 
+  require_external curl "the port 80 reachability check" || return 0
   if ! curl -sf -o /dev/null --max-time 5 "http://${DOMAIN_NAME}/" 2>/dev/null; then
     log_warn "port 80 may not be reachable at $DOMAIN_NAME — LE challenge could fail"
   else
@@ -1037,11 +1121,11 @@ _status_cert_expiry() {
     return 0
   fi
 
-  cert_expiry="$(openssl x509 -enddate -noout -in "$cert_file" 2>/dev/null | sed 's/notAfter=//')"
+  cert_expiry="$(_cert_expiry_date "$cert_file")"
   [[ -n "$cert_expiry" ]] && log_info "Certificate expiry: $cert_expiry"
 
   days_left="$(_cert_days_left)"
-  if (( days_left < 0 )); then
+  if [[ -z "$cert_expiry" ]]; then
     return 0
   fi
   if (( days_left < 7 )); then
@@ -1058,12 +1142,16 @@ _status_renewal_timer() {
     grader-cert-renew.timer) log_info "Renewal timer: grader-cert-renew.timer is enabled" ;;
     certbot.timer)           log_info "Renewal timer: certbot.timer is enabled" ;;
     certbot-container)       log_info "Renewal timer: certbot container is running" ;;
+    unknown)                 log_warn "Renewal timer: cannot tell — neither systemctl nor docker is available" ;;
     *)                       log_warn "No renewal mechanism detected (grader-cert-renew.timer, certbot.timer or certbot container)" ;;
   esac
 }
 
 _status_connectivity() {
   local domain="$1" label="$2"
+  if ! require_external curl "the HTTPS probe"; then
+    return 0
+  fi
   if curl -Ikso /dev/null --max-time 5 "https://${domain}/" 2>/dev/null; then
     log_info "HTTPS [$label] $domain — reachable"
   else
@@ -1080,27 +1168,35 @@ _status_connectivity() {
 _resolve_host() {
   local host="$1" lookup_timeout_s=3
   if command -v dig >/dev/null 2>&1; then
-    timeout "$lookup_timeout_s" dig +short "$host" 2>/dev/null | head -1 || true
+    _bounded "$lookup_timeout_s" dig +short "$host" 2>/dev/null | head -1 || true
   elif command -v getent >/dev/null 2>&1; then
-    timeout "$lookup_timeout_s" getent hosts "$host" 2>/dev/null | head -1 | awk '{print $1}' || true
+    _bounded "$lookup_timeout_s" getent hosts "$host" 2>/dev/null | head -1 | awk '{print $1}' || true
   fi
   return 0
 }
 
 # Prints the detected renewal mechanism: grader-cert-renew.timer, certbot.timer,
-# certbot-container or none. WHY grader-cert-renew first: it is the unit this repo
-# ships (config/systemd/), and the earlier check only knew certbot.timer, so a
-# correctly configured host reported "no renewal mechanism".
+# certbot-container, unknown or none. WHY grader-cert-renew first: it is the unit this
+# repo ships (config/systemd/), so a host that installs only it must not be reported
+# as having no renewal mechanism. WHY unknown is distinct from none: with neither
+# systemctl nor docker there is nothing to ask, and reporting "no renewal mechanism"
+# there would blame the host for a missing tool.
 _renewal_mechanism() {
-  if systemctl is-enabled grader-cert-renew.timer 2>/dev/null | grep -q enabled; then
-    printf 'grader-cert-renew.timer'
-  elif systemctl is-enabled certbot.timer 2>/dev/null | grep -q enabled; then
-    printf 'certbot.timer'
-  elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q certbot; then
-    printf 'certbot-container'
-  else
-    printf 'none'
+  if command -v systemctl >/dev/null 2>&1; then
+    if systemctl is-enabled grader-cert-renew.timer 2>/dev/null | grep -q enabled; then
+      printf 'grader-cert-renew.timer'; return 0
+    elif systemctl is-enabled certbot.timer 2>/dev/null | grep -q enabled; then
+      printf 'certbot.timer'; return 0
+    fi
   fi
+  if command -v docker >/dev/null 2>&1; then
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q certbot; then
+      printf 'certbot-container'; return 0
+    fi
+  elif ! command -v systemctl >/dev/null 2>&1; then
+    printf 'unknown'; return 0
+  fi
+  printf 'none'
 }
 
 # ---------------------------------------------------------------------------
@@ -1119,7 +1215,7 @@ cmd_status_json() {
 
   local days_left expiry
   days_left="$(_cert_days_left)"
-  expiry="$(openssl x509 -enddate -noout -in "$(_cert_fullchain_path)" 2>/dev/null | sed 's/notAfter=//' || true)"
+  expiry="$(_cert_expiry_date "$(_cert_fullchain_path)")"
 
   printf '{"domain":"%s","dns":{%s},"certificate":{"days_left":%s,"expiry":"%s"},"renewal":"%s"}\n' \
     "$(_json_escape "$DOMAIN_NAME")" "$dns_json" \
@@ -1134,6 +1230,10 @@ cmd_status_json() {
 cmd_check_expiry() {
   local threshold="${CHECK_EXPIRY_DAYS:-0}" days_left
   (( threshold > 0 )) || threshold="$CHECK_EXPIRY_DAYS_DEFAULT"
+  # Guarded before the read so a host without openssl learns exactly that, instead
+  # of being told the certificate is missing when it only cannot be examined.
+  command -v openssl >/dev/null 2>&1 \
+    || log_die "openssl not found — certificate expiry cannot be read" 1
   days_left="$(_cert_days_left)"
 
   if (( days_left < 0 )); then
@@ -1201,7 +1301,7 @@ cmd_renew() {
   fi
 
   # Reload nginx to pick up new certs
-  if docker ps --format '{{.Names}}' 2>/dev/null | grep -q nginx; then
+  if command -v docker >/dev/null 2>&1 && docker ps --format '{{.Names}}' 2>/dev/null | grep -q nginx; then
     local nginx_container
     nginx_container="$(docker ps --format '{{.Names}}' | grep nginx | head -1)"
     docker exec "$nginx_container" nginx -s reload 2>/dev/null || log_warn "nginx reload failed"
@@ -1215,42 +1315,46 @@ cmd_renew() {
 # ---------------------------------------------------------------------------
 # Preflight subcommand — 9-check matrix
 # ---------------------------------------------------------------------------
+# Runs one preflight check and applies the result to the counters. <severity> is hard
+# (a failed check aborts preflight) or soft (a failed check is only a warning).
+# WHY a third state exists: a check whose tool is absent can neither pass nor fail,
+# and recording only pass/fail would report a missing nc as an unreachable worker. A
+# check returns 2 to mean skipped.
+_tally_check() {
+  local severity="$1" rc=0
+  shift
+  "$@" || rc=$?
+  case "$rc" in
+    0) PREFLIGHT_PASS=$(( PREFLIGHT_PASS + 1 )) ;;
+    2) PREFLIGHT_SKIPPED=$(( PREFLIGHT_SKIPPED + 1 )) ;;
+    *) if [[ "$severity" == hard ]]; then
+         PREFLIGHT_FAIL=$(( PREFLIGHT_FAIL + 1 ))
+       else
+         PREFLIGHT_WARN=$(( PREFLIGHT_WARN + 1 ))
+       fi ;;
+  esac
+  return 0
+}
+
 cmd_preflight() {
   log_info "Preflight checks for $DOMAIN_NAME"
   _log_optional_features
   echo ""
-  local pass=0 warn=0 fail=0
+  PREFLIGHT_PASS=0; PREFLIGHT_WARN=0; PREFLIGHT_FAIL=0; PREFLIGHT_SKIPPED=0
 
-  # 1. SSH LAN
-  _check_ssh && { pass=$((pass + 1)); } || { fail=$((fail + 1)); }
-
-  # 2. Tailscale
-  _check_tailscale && { pass=$((pass + 1)); } || { fail=$((fail + 1)); }
-
-  # 3. Remote worker RPC
-  _check_worker_rpc && { pass=$((pass + 1)); } || { warn=$((warn + 1)); }
-
-  # 4. Database
-  _check_database && { pass=$((pass + 1)); } || { fail=$((fail + 1)); }
-
-  # 5. DNS resolution
-  _check_dns && { pass=$((pass + 1)); } || { warn=$((warn + 1)); }
-
-  # 6. HTTP port 80
-  _check_http80 && { pass=$((pass + 1)); } || { warn=$((warn + 1)); }
-
-  # 7. HTTPS port 443
-  _check_https443 && { pass=$((pass + 1)); } || { warn=$((warn + 1)); }
-
-  # 8. Domain paths
-  _check_domain_paths && { pass=$((pass + 1)); } || { warn=$((warn + 1)); }
-
-  # 9. Funnel still works
-  _check_funnel && { pass=$((pass + 1)); } || { warn=$((warn + 1)); }
+  _tally_check hard _check_ssh
+  _tally_check hard _check_tailscale
+  _tally_check soft _check_worker_rpc
+  _tally_check hard _check_database
+  _tally_check soft _check_dns
+  _tally_check soft _check_http80
+  _tally_check soft _check_https443
+  _tally_check soft _check_domain_paths
+  _tally_check soft _check_funnel
 
   echo ""
-  log_info "Preflight results: PASS=$pass  WARN=$warn  FAIL=$fail"
-  if (( fail > 0 )); then
+  log_info "Preflight results: PASS=$PREFLIGHT_PASS  WARN=$PREFLIGHT_WARN  FAIL=$PREFLIGHT_FAIL  SKIPPED=$PREFLIGHT_SKIPPED"
+  if (( PREFLIGHT_FAIL > 0 )); then
     log_warn "Some checks failed — review above output"
     exit 1
   fi
@@ -1258,6 +1362,7 @@ cmd_preflight() {
 
 _check_ssh() {
   printf '  %-30s' "SSH LAN:"
+  _external_present ss || { printf 'SKIPPED (ss not installed)\n'; return 2; }
   if ss -tlnp 2>/dev/null | grep -q ':22 '; then
     printf 'PASS (port 22 listening)\n'
     return 0
@@ -1269,7 +1374,8 @@ _check_ssh() {
 
 _check_tailscale() {
   printf '  %-30s' "Tailscale:"
-  if command -v tailscale >/dev/null 2>&1 && tailscale status >/dev/null 2>&1; then
+  _external_present tailscale || { printf 'SKIPPED (tailscale not installed)\n'; return 2; }
+  if tailscale status >/dev/null 2>&1; then
     local ts_ip
     ts_ip="$(tailscale ip -4 2>/dev/null || echo 'unknown')"
     printf 'PASS (%s)\n' "$ts_ip"
@@ -1280,10 +1386,19 @@ _check_tailscale() {
   fi
 }
 
+# WHY WORKER_HOST has no default address: a probe that quietly targets a hardcoded
+# host reports on a machine this deployment does not own, and the address is the one
+# thing an operator must be able to change per site. Unset means "no worker to
+# probe", which is skipped rather than failed.
 _check_worker_rpc() {
   printf '  %-30s' "Remote worker RPC:"
-  local worker_host="${WORKER_HOST:-100.75.203.112}"
+  local worker_host="${WORKER_HOST:-}"
   local worker_port="${WORKER_RPC_PORT:-26000}"
+  if [[ -z "$worker_host" ]]; then
+    printf 'SKIPPED (set WORKER_HOST in the env file to probe a worker)\n'
+    return 2
+  fi
+  _external_present nc || { printf 'SKIPPED (nc not installed)\n'; return 2; }
   if nc -zw3 "$worker_host" "$worker_port" 2>/dev/null; then
     printf 'PASS (%s:%s)\n' "$worker_host" "$worker_port"
     return 0
@@ -1295,6 +1410,7 @@ _check_worker_rpc() {
 
 _check_database() {
   printf '  %-30s' "Database:"
+  _external_present docker || { printf 'SKIPPED (docker not installed)\n'; return 2; }
   if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'cms-database'; then
     local health
     health="$(docker inspect -f '{{.State.Health.Status}}' cms-database 2>/dev/null || echo 'unknown')"
@@ -1308,6 +1424,7 @@ _check_database() {
 
 _check_dns() {
   printf '  %-30s' "DNS ($DOMAIN_NAME):"
+  _external_present getent || { printf 'SKIPPED (getent not installed)\n'; return 2; }
   if getent hosts "$DOMAIN_NAME" >/dev/null 2>&1; then
     printf 'PASS\n'
     return 0
@@ -1319,6 +1436,7 @@ _check_dns() {
 
 _check_http80() {
   printf '  %-30s' "HTTP :80 ($DOMAIN_NAME):"
+  _external_present curl || { printf 'SKIPPED (curl not installed)\n'; return 2; }
   if curl -sf -o /dev/null --max-time 5 "http://${DOMAIN_NAME}/" 2>/dev/null; then
     printf 'PASS\n'
     return 0
@@ -1330,6 +1448,7 @@ _check_http80() {
 
 _check_https443() {
   printf '  %-30s' "HTTPS :443 ($DOMAIN_NAME):"
+  _external_present curl || { printf 'SKIPPED (curl not installed)\n'; return 2; }
   if curl -Ikso /dev/null --max-time 5 "https://${DOMAIN_NAME}/" 2>/dev/null; then
     printf 'PASS\n'
     return 0
@@ -1341,6 +1460,7 @@ _check_https443() {
 
 _check_domain_paths() {
   printf '  %-30s' "Domain paths:"
+  _external_present curl || { printf 'SKIPPED (curl not installed)\n'; return 2; }
   local ok=1
   for d in "$DOMAIN_NAME" "$ADMIN_DOMAIN" "$OJ_DOMAIN" "$RANKING_DOMAIN"; do
     if ! curl -Ikso /dev/null --max-time 5 "https://${d}/" 2>/dev/null; then
@@ -1359,7 +1479,8 @@ _check_domain_paths() {
 
 _check_funnel() {
   printf '  %-30s' "Funnel:"
-  if command -v tailscale >/dev/null 2>&1 && tailscale serve status 2>/dev/null | grep -q 'https'; then
+  _external_present tailscale || { printf 'SKIPPED (tailscale not installed)\n'; return 2; }
+  if tailscale serve status 2>/dev/null | grep -q 'https'; then
     printf 'PASS\n'
     return 0
   else

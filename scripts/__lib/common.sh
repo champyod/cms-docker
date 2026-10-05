@@ -87,34 +87,6 @@ require_disk_free_gb() {
 }
 
 # ---------------------------------------------------------------------------
-# require_env <VAR> [source_file]
-# ---------------------------------------------------------------------------
-# Ensure environment variable VAR is set and non-empty.
-# On failure: logs a FAIL message indicating which .env section should define
-# the variable, then exits 1.
-require_env() {
-  local var_name="${1:?require_env: <VAR> required}"
-  local source_file="${2:-}"
-  local var_value=""
-
-  # Indirect expansion — safe under `set -u` via :- default.
-  var_value="${!var_name:-}"
-
-  if [[ -n "$var_value" ]]; then
-    return 0
-  fi
-
-  local hint=""
-  if [[ -n "$source_file" ]]; then
-    hint=" (expected in ${source_file})"
-  else
-    hint=" (check .env / .env.* for ${var_name})"
-  fi
-
-  log_die "required variable ${var_name} is empty or unset${hint}" 1
-}
-
-# ---------------------------------------------------------------------------
 # is_default_secret <value>
 # ---------------------------------------------------------------------------
 # Return 0 (true) when <value> matches the known-bad / default secret set:
@@ -185,46 +157,4 @@ env_unquote() {
     out+="$ch"
   done
   printf '%s' "$out"
-}
-
-# ---------------------------------------------------------------------------
-# ensure_docker_resource_network <name>
-# ---------------------------------------------------------------------------
-# Idempotently ensure a Docker network exists. Creates it if missing and logs
-# the action taken.
-ensure_docker_resource_network() {
-  local net_name="${1:?ensure_docker_resource_network: <name> required}"
-
-  if docker network inspect "$net_name" >/dev/null 2>&1; then
-    log_info "docker network '${net_name}' already exists"
-    return 0
-  fi
-
-  log_info "creating docker network '${net_name}'"
-  if docker network create "$net_name" >/dev/null 2>&1; then
-    log_info "docker network '${net_name}' created"
-  else
-    log_die "failed to create docker network '${net_name}'" 1
-  fi
-}
-
-# ---------------------------------------------------------------------------
-# ensure_docker_resource_volume <name>
-# ---------------------------------------------------------------------------
-# Idempotently ensure a Docker volume exists. Creates it if missing and logs
-# the action taken.
-ensure_docker_resource_volume() {
-  local vol_name="${1:?ensure_docker_resource_volume: <name> required}"
-
-  if docker volume inspect "$vol_name" >/dev/null 2>&1; then
-    log_info "docker volume '${vol_name}' already exists"
-    return 0
-  fi
-
-  log_info "creating docker volume '${vol_name}'"
-  if docker volume create "$vol_name" >/dev/null 2>&1; then
-    log_info "docker volume '${vol_name}' created"
-  else
-    log_die "failed to create docker volume '${vol_name}'" 1
-  fi
 }
