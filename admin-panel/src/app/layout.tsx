@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import { Toaster } from '@/components/core/Toaster';
 import { NO_FLASH_THEME_SCRIPT } from '@/lib/theme';
 import { NO_FLASH_DISPLAY_SCRIPT } from '@/lib/display-density';
+import { NO_FLASH_HIGH_CONTRAST_SCRIPT } from '@/lib/high-contrast';
 import '@fontsource/chakra-petch/400.css';
 import '@fontsource/chakra-petch/500.css';
 import '@fontsource/chakra-petch/600.css';
@@ -44,6 +45,7 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: NO_FLASH_THEME_SCRIPT }} />
         <script dangerouslySetInnerHTML={{ __html: NO_FLASH_DISPLAY_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: NO_FLASH_HIGH_CONTRAST_SCRIPT }} />
       </head>
       <body className="font-sans antialiased">
         {children}

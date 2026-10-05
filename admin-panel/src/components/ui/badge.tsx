@@ -9,16 +9,16 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
-        indigo: 'border-primary/20 bg-primary/10 text-primary',
-        cyan: 'border-info/20 bg-info/10 text-info',
-        emerald: 'border-success/20 bg-success/10 text-success',
-        amber: 'border-warning/20 bg-warning/10 text-warning',
-        red: 'border-destructive/20 bg-destructive/10 text-destructive',
-        neutral: 'border-border bg-secondary text-muted-foreground',
-        success: 'border-success/20 bg-success/10 text-success',
-        warning: 'border-warning/20 bg-warning/10 text-warning',
-        info: 'border-info/20 bg-info/10 text-info',
-        destructive: 'border-destructive/20 bg-destructive/10 text-destructive',
+        indigo: 'border-primary/20 bg-primary/10 text-primary high-contrast:border-primary high-contrast:bg-primary high-contrast:text-primary-foreground',
+        cyan: 'border-info/20 bg-info/10 text-info high-contrast:border-info high-contrast:bg-info high-contrast:text-info-foreground',
+        emerald: 'border-success/20 bg-success/10 text-success high-contrast:border-success high-contrast:bg-success high-contrast:text-success-foreground',
+        amber: 'border-warning/20 bg-warning/10 text-warning high-contrast:border-warning high-contrast:bg-warning high-contrast:text-warning-foreground',
+        red: 'border-destructive/20 bg-destructive/10 text-destructive high-contrast:border-destructive high-contrast:bg-destructive high-contrast:text-destructive-foreground',
+        neutral: 'border-border bg-secondary text-muted-foreground high-contrast:border-border high-contrast:bg-secondary high-contrast:text-foreground',
+        success: 'border-success/20 bg-success/10 text-success high-contrast:border-success high-contrast:bg-success high-contrast:text-success-foreground',
+        warning: 'border-warning/20 bg-warning/10 text-warning high-contrast:border-warning high-contrast:bg-warning high-contrast:text-warning-foreground',
+        info: 'border-info/20 bg-info/10 text-info high-contrast:border-info high-contrast:bg-info high-contrast:text-info-foreground',
+        destructive: 'border-destructive/20 bg-destructive/10 text-destructive high-contrast:border-destructive high-contrast:bg-destructive high-contrast:text-destructive-foreground',
       },
     },
     defaultVariants: {

@@ -5,16 +5,16 @@ import { cn } from '@/lib/utils';
 import type { LiveStatus } from '@/hooks/useLiveStream';
 
 const STATUS_STYLES: Record<LiveStatus, string> = {
-  live: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
-  connecting: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
-  reconnecting: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
-  paused: 'text-muted-foreground bg-muted/40 border-border',
+  live: 'text-success bg-success/10 border-success/20 high-contrast:bg-success high-contrast:text-success-foreground high-contrast:border-success',
+  connecting: 'text-warning bg-warning/10 border-warning/20 high-contrast:bg-warning high-contrast:text-warning-foreground high-contrast:border-warning',
+  reconnecting: 'text-warning bg-warning/10 border-warning/20 high-contrast:bg-warning high-contrast:text-warning-foreground high-contrast:border-warning',
+  paused: 'text-muted-foreground bg-muted/40 border-border high-contrast:text-foreground',
 };
 
 const DOT_STYLES: Record<LiveStatus, string> = {
-  live: 'bg-emerald-400',
-  connecting: 'bg-amber-400 animate-pulse',
-  reconnecting: 'bg-amber-400 animate-pulse',
+  live: 'bg-success high-contrast:bg-success-foreground',
+  connecting: 'bg-warning animate-pulse high-contrast:bg-warning-foreground',
+  reconnecting: 'bg-warning animate-pulse high-contrast:bg-warning-foreground',
   paused: 'bg-muted-foreground',
 };
 

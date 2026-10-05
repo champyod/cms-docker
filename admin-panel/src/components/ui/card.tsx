@@ -4,7 +4,9 @@ import { cn } from '@/lib/utils';
 
 // Why the surface lives here: this is the only place a card's base look is
 // written, so a core wrapper adds product policy on top instead of restating it.
-const CARD_SURFACE = 'rounded-xl border bg-card text-card-foreground shadow-sm';
+// The border is transparent at rest so the surface is defined by its fill, and
+// only gains a visible edge when the reader turns on high contrast.
+const CARD_SURFACE = 'rounded-xl border border-transparent bg-card text-card-foreground shadow-sm high-contrast:border-border';
 
 const Card = React.forwardRef<HTMLDivElement, React.ComponentProps<'div'>>(
   ({ className, children, ...props }, ref) => {

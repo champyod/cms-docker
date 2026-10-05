@@ -53,10 +53,10 @@ interface DensityScale {
 }
 
 const TONE_APPEARANCE: Record<InlineAlertTone, ToneAppearance> = {
-  info: { icon: Info, shell: 'border-info/30 bg-info/10', compactShell: 'border-info/20 bg-info/10', accent: 'text-info' },
-  success: { icon: CircleCheck, shell: 'border-success/30 bg-success/10', compactShell: 'border-success/20 bg-success/10', accent: 'text-success' },
-  warning: { icon: TriangleAlert, shell: 'border-warning/30 bg-warning/10', compactShell: 'border-warning/20 bg-warning/10', accent: 'text-warning' },
-  destructive: { icon: CircleAlert, shell: 'border-destructive/30 bg-destructive/10', compactShell: 'border-destructive/20 bg-destructive/10', accent: 'text-destructive' },
+  info: { icon: Info, shell: 'border-info/30 bg-info/10 high-contrast:border-info high-contrast:bg-info/20', compactShell: 'border-info/20 bg-info/10 high-contrast:border-info', accent: 'text-info' },
+  success: { icon: CircleCheck, shell: 'border-success/30 bg-success/10 high-contrast:border-success high-contrast:bg-success/20', compactShell: 'border-success/20 bg-success/10 high-contrast:border-success', accent: 'text-success' },
+  warning: { icon: TriangleAlert, shell: 'border-warning/30 bg-warning/10 high-contrast:border-warning high-contrast:bg-warning/20', compactShell: 'border-warning/20 bg-warning/10 high-contrast:border-warning', accent: 'text-warning' },
+  destructive: { icon: CircleAlert, shell: 'border-destructive/30 bg-destructive/10 high-contrast:border-destructive high-contrast:bg-destructive/20', compactShell: 'border-destructive/20 bg-destructive/10 high-contrast:border-destructive', accent: 'text-destructive' },
 };
 
 const DENSITY_SCALE: Record<InlineAlertDensity, DensityScale> = {

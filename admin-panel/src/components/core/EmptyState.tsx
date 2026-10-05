@@ -24,7 +24,7 @@ export function EmptyState({
       role="status"
       aria-live="polite"
       className={cn(
-        'bg-card text-card-foreground flex flex-col items-center justify-center gap-3 rounded-xl border px-6 py-12 text-center',
+        'bg-card text-card-foreground flex flex-col items-center justify-center gap-3 rounded-xl border border-transparent px-6 py-12 text-center high-contrast:border-border',
         className
       )}
     >

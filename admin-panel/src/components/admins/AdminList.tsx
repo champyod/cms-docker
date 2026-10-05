@@ -107,7 +107,7 @@ export function AdminList({
   const columnCount = showRowActions ? 7 : 6;
 
   const renderStatusToggle = (admin: AdminWithLogin) => {
-    const badge = <span className={cn('px-2 py-0.5 text-xs rounded-full', admin.enabled ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400')}>{admin.enabled ? 'Enabled' : 'Disabled'}</span>;
+    const badge = <span className={cn('px-2 py-0.5 text-xs rounded-full', admin.enabled ? 'bg-success/20 text-success high-contrast:bg-success high-contrast:text-success-foreground' : 'bg-destructive/20 text-destructive high-contrast:bg-destructive high-contrast:text-destructive-foreground')}>{admin.enabled ? 'Enabled' : 'Disabled'}</span>;
     if (!canUpdate) return badge;
     return (
       <Button variant="ghost" size="sm" onClick={() => handleToggleEnabled(admin)} className="h-auto p-1">
@@ -196,7 +196,7 @@ export function AdminList({
                     )}
                     {overrideCount > 0 && (
                       <span
-                        className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-amber-500/20 text-amber-400"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-warning/20 text-warning high-contrast:bg-warning high-contrast:text-warning-foreground"
                         title={`${overrideCount} per-person override${overrideCount === 1 ? '' : 's'}`}
                       >
                         <ShieldAlert className="w-3 h-3" />
