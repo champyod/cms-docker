@@ -173,10 +173,12 @@ fn numeric_flags_reject_a_non_number() {
 
 #[test]
 fn cert_and_proxy_pass_their_verb_first() {
-    for verb in ["cert", "proxy"] {
+    for (verb, expected_key) in [
+        ("cert", DispatchKey::DomainCert),
+        ("proxy", DispatchKey::DomainProxy),
+    ] {
         let (key, args) = dispatch(&["cms", "domain", verb, "--domain", "a.example"]);
-        assert_eq!(key, DispatchKey::DomainSetup);
-        assert_eq!(args[0], verb);
+        assert_eq!(key, expected_key);
         assert_eq!(
             args,
             argv(&[verb, "--cert", "letsencrypt", "--domain", "a.example"])
@@ -187,7 +189,7 @@ fn cert_and_proxy_pass_their_verb_first() {
 #[test]
 fn check_expiry_sends_days_and_config_only() {
     let (key, args) = dispatch(&["cms", "domain", "check-expiry", "--days", "7"]);
-    assert_eq!(key, DispatchKey::DomainStatus);
+    assert_eq!(key, DispatchKey::DomainCheckExpiry);
     assert_eq!(args, argv(&["check-expiry", "--days", "7"]));
 
     let (_, bare) = dispatch(&["cms", "domain", "check-expiry"]);
@@ -212,7 +214,7 @@ fn revoke_carries_reason_domain_and_mode() {
         "a.example",
         "--apply",
     ]);
-    assert_eq!(key, DispatchKey::DomainRenew);
+    assert_eq!(key, DispatchKey::DomainRevoke);
     assert_eq!(
         args,
         argv(&[
@@ -258,6 +260,36 @@ fn every_domain_verb_is_a_leaf_one_depth_under_domain() {
             "{verb} lost the domain script target"
         );
         assert_eq!(args[0], verb, "{verb} did not send itself to the script");
+    }
+}
+
+#[test]
+fn each_domain_verb_has_a_key_and_catalog_row_of_its_own() {
+    let verbs = [
+        "setup",
+        "cert",
+        "proxy",
+        "status",
+        "renew",
+        "preflight",
+        "check-expiry",
+        "revoke",
+    ];
+    let keys: Vec<DispatchKey> = verbs
+        .iter()
+        .map(|verb| dispatch(&["cms", "domain", verb]).0)
+        .collect();
+    for (index, key) in keys.iter().enumerate() {
+        assert!(
+            !keys[..index].contains(key),
+            "two domain verbs resolve to {key:?}"
+        );
+        let spec = crate::core::catalog::spec_for(*key).expect("catalog row");
+        assert_eq!(
+            spec.target,
+            crate::core::dispatch::DispatchTarget::Script("__domain.sh"),
+            "{key:?} lost the domain script target"
+        );
     }
 }
 

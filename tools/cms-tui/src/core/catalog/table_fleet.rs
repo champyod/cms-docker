@@ -1,7 +1,8 @@
 use super::{
-    CommandSpec, ARGS_DOMAIN_SETUP, ARGS_DOMAIN_VERB, ARGS_FUNNEL, ARGS_NONE, ARGS_TAILSCALE,
-    ARGS_WORKER, SCRIPT_CONFIG_SYNC, SCRIPT_CREATE_CONTESTS, SCRIPT_DOMAIN, SCRIPT_FUNNEL,
-    SCRIPT_TAILSCALE_SERVE, SCRIPT_UPDATE_SERVER, SCRIPT_WORKER_CGROUP, SCRIPT_WORKER_TUI,
+    CommandSpec, ARGS_DOMAIN_CHECK_EXPIRY, ARGS_DOMAIN_REVOKE, ARGS_DOMAIN_SETUP, ARGS_DOMAIN_VERB,
+    ARGS_FUNNEL, ARGS_NONE, ARGS_TAILSCALE, ARGS_WORKER, SCRIPT_CONFIG_SYNC,
+    SCRIPT_CREATE_CONTESTS, SCRIPT_DOMAIN, SCRIPT_FUNNEL, SCRIPT_TAILSCALE_SERVE,
+    SCRIPT_UPDATE_SERVER, SCRIPT_WORKER_CGROUP, SCRIPT_WORKER_TUI,
 };
 use crate::core::dispatch::{DispatchKey, DispatchTarget};
 
@@ -151,6 +152,24 @@ pub const FLEET_CATALOG: &[CommandSpec] = &[
         capture_output: false,
     },
     CommandSpec {
+        key: DispatchKey::DomainCert,
+        target: DispatchTarget::Script(SCRIPT_DOMAIN),
+        args: ARGS_DOMAIN_SETUP,
+        about: "Domain certificate issuance",
+        requires_tty: true,
+        requires_sudo: false,
+        capture_output: false,
+    },
+    CommandSpec {
+        key: DispatchKey::DomainProxy,
+        target: DispatchTarget::Script(SCRIPT_DOMAIN),
+        args: ARGS_DOMAIN_SETUP,
+        about: "Domain proxy config render",
+        requires_tty: true,
+        requires_sudo: false,
+        capture_output: false,
+    },
+    CommandSpec {
         key: DispatchKey::DomainStatus,
         target: DispatchTarget::Script(SCRIPT_DOMAIN),
         args: ARGS_DOMAIN_VERB,
@@ -176,6 +195,24 @@ pub const FLEET_CATALOG: &[CommandSpec] = &[
         requires_tty: false,
         requires_sudo: false,
         capture_output: true,
+    },
+    CommandSpec {
+        key: DispatchKey::DomainCheckExpiry,
+        target: DispatchTarget::Script(SCRIPT_DOMAIN),
+        args: ARGS_DOMAIN_CHECK_EXPIRY,
+        about: "Domain certificate expiry check",
+        requires_tty: false,
+        requires_sudo: false,
+        capture_output: true,
+    },
+    CommandSpec {
+        key: DispatchKey::DomainRevoke,
+        target: DispatchTarget::Script(SCRIPT_DOMAIN),
+        args: ARGS_DOMAIN_REVOKE,
+        about: "Domain certificate revocation",
+        requires_tty: true,
+        requires_sudo: false,
+        capture_output: false,
     },
     CommandSpec {
         key: DispatchKey::ConfigSync,

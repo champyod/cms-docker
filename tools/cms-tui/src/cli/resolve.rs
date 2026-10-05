@@ -2,7 +2,7 @@ use crate::core::dispatch::DispatchKey;
 
 use super::{
     domain_args::setup_args, BackupSub, Commands, ConfigSub, ContestSub, DbSub, DomainCmd,
-    DomainSetupFlags, FunnelSub, SecretsSub, TailscaleSub, WorkerSub,
+    FunnelSub, SecretsSub, TailscaleSub, WorkerSub,
 };
 
 fn db_key(sub: DbSub) -> DispatchKey {
@@ -56,34 +56,19 @@ fn funnel_dispatch(sub: FunnelSub) -> (DispatchKey, &'static str) {
         FunnelSub::Status => (DispatchKey::FunnelStatus, "status"),
     }
 }
-/// Builds the argv for the verbs whose whole flag surface is the shared set
-/// (`setup`, `cert`, `proxy`).
-///
-/// WHY these three share `DomainSetup`: the key only chooses the target script,
-/// and the verb that narrows the run travels in the argv the script reads first.
-/// Giving each verb its own key and catalog row — so the TUI can label and
-/// stream them apart — is the next step; until then the key is correct for all
-/// three because all three run `__domain.sh`.
-fn setup_scope_dispatch(verb: &str, flags: &DomainSetupFlags) -> (DispatchKey, Vec<String>) {
-    (DispatchKey::DomainSetup, setup_args(verb, flags))
-}
-
 fn domain_dispatch(sub: &DomainCmd) -> (DispatchKey, Vec<String>) {
     match sub {
-        DomainCmd::Setup { flags } => setup_scope_dispatch("setup", flags),
-        DomainCmd::Cert { flags } => setup_scope_dispatch("cert", flags),
-        DomainCmd::Proxy { flags } => setup_scope_dispatch("proxy", flags),
+        DomainCmd::Setup { flags } => (DispatchKey::DomainSetup, setup_args("setup", flags)),
+        DomainCmd::Cert { flags } => (DispatchKey::DomainCert, setup_args("cert", flags)),
+        DomainCmd::Proxy { flags } => (DispatchKey::DomainProxy, setup_args("proxy", flags)),
         DomainCmd::Status => (DispatchKey::DomainStatus, vec!["status".into()]),
         DomainCmd::Renew => (DispatchKey::DomainRenew, vec!["renew".into()]),
         DomainCmd::Preflight => (DispatchKey::DomainPreflight, vec!["preflight".into()]),
         DomainCmd::CheckExpiry { days, config } => {
-            // WHY `DomainStatus`: both read the certificate and print a result
-            // the caller consumes, so they share the streaming target until the
-            // catalog gives `check-expiry` a row of its own.
             let mut args = vec!["check-expiry".to_string()];
             push_optional(&mut args, "--days", days.map(|value| value.to_string()));
             push_optional(&mut args, "--config", config.clone());
-            (DispatchKey::DomainStatus, args)
+            (DispatchKey::DomainCheckExpiry, args)
         }
         DomainCmd::Revoke {
             reason,
@@ -106,10 +91,7 @@ fn domain_dispatch(sub: &DomainCmd) -> (DispatchKey, Vec<String>) {
                 args.push("--yes".into());
             }
             push_optional(&mut args, "--config", config.clone());
-            // WHY `DomainRenew`: revoking touches the ACME account the renewal
-            // owns and needs a terminal, which is the target `DomainRenew`
-            // declares; the reason is carried in the argv.
-            (DispatchKey::DomainRenew, args)
+            (DispatchKey::DomainRevoke, args)
         }
     }
 }

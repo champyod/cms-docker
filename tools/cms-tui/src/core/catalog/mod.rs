@@ -131,6 +131,50 @@ pub(crate) const ARGS_DOMAIN_VERB: &[ArgSpec] = &[ArgSpec {
     required: true,
     description: "Domain verb (status|renew|preflight)",
 }];
+pub(crate) const ARGS_DOMAIN_CHECK_EXPIRY: &[ArgSpec] = &[
+    ArgSpec {
+        name: "days",
+        required: false,
+        description: "Expiry threshold in days",
+    },
+    ArgSpec {
+        name: "config",
+        required: false,
+        description: "Alternate env file",
+    },
+];
+pub(crate) const ARGS_DOMAIN_REVOKE: &[ArgSpec] = &[
+    ArgSpec {
+        name: "reason",
+        required: false,
+        description: "Revocation reason",
+    },
+    ArgSpec {
+        name: "domain",
+        required: false,
+        description: "Primary domain",
+    },
+    ArgSpec {
+        name: "dry-run",
+        required: false,
+        description: "Print actions without executing (the script default)",
+    },
+    ArgSpec {
+        name: "apply",
+        required: false,
+        description: "Actually revoke",
+    },
+    ArgSpec {
+        name: "yes",
+        required: false,
+        description: "Skip prompts",
+    },
+    ArgSpec {
+        name: "config",
+        required: false,
+        description: "Alternate env file",
+    },
+];
 
 mod table;
 mod table_fleet;
