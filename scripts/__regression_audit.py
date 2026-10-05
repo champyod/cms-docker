@@ -105,12 +105,28 @@ CONTRACTS = {
     "__update_engine.sh": lambda a: all(x in ("--fresh","--fix","--dry-run") for x in a),
 }
 caller_files = scan_files
+# WHY: a script path carries CLI arguments only when something is actually
+# running it. In `log_die "scripts/__preflight.sh not found"` or
+# `PREFLIGHT_SCRIPT="scripts/__preflight.sh"` the words after the path are
+# English or a directory prefix, and reading them as arguments is what made
+# the audit report a human-readable message as CLI drift. Anchoring on a
+# command position (line start, `;`/`&`/`|`, a conditional keyword, or an
+# interpreter prefix) still matches every real invocation, and the argument
+# group is pinned to a run of flag/word tokens so that `cd`-less sibling
+# references in messages are not mistaken for arguments.
+COMMAND_POSITION = (
+    r"(?:^|[;&|!(]|\b(?:if|then|elif|else|while|until|do)\b)[ \t]*"
+    r"(?:(?:sudo|env|exec|command|nohup|timeout|nice|bash|sh|zsh|dash)"
+    r"(?:[ \t]+-\S+)*[ \t]+)*"
+)
+PATH_PREFIX = r"(?:[\w@.+-]+/)*"
+ARGS_RE = r"[ \t]+((?:--?[\w-]+[ \t]+[\w-]+|[\w-]+)*)"
 for script, validator in CONTRACTS.items():
-    pat = re.compile(re.escape(script) + r'"?\s+((?:--?[\w-]+\s+[\w-]+|[\w-]+)*)', )
+    pat = re.compile(
+        COMMAND_POSITION + PATH_PREFIX + re.escape(script) + r'"?\s*' + ARGS_RE)
     for f in caller_files:
         for i, line in enumerate(open(f, errors="replace"), 1):
-            stripped = line.strip()
-            if stripped.startswith("#") or re.search(r"\b(echo|die|warn|printf|Usage|usage)\b", line):
+            if line.strip().startswith("#"):
                 continue
             if script in line and ("$" not in line.split(script)[1][:2]):
                 m = pat.search(line)
