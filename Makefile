@@ -1,5 +1,15 @@
 SHELL := /bin/bash
 
+# Generated from config.toml by `make env`; gitignored. Pull it into make's own
+# environment so a recipe reading $${VAR} sees the same value the stack runs
+# with. WHY -include and not include: a fresh checkout has no .env yet, and a
+# plain include would make every target fail with "No such file or directory"
+# before an operator ever ran `make env`. WHY export: without it the values are
+# make variables only, and a shell recipe expands $${VAR} from the environment
+# it inherited rather than from make's own tables.
+-include .env
+export
+
 # Detect Docker Compose version (keep fallback)
 COMPOSE_CMD := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
 # Explicit -f list (auto-merge of docker-compose.override.yml is disabled
@@ -185,7 +195,8 @@ domain:
 waf:
 	@if [ "$${WAF_ENABLED:-0}" != "1" ]; then \
 		echo "WAF_ENABLED is not 1 — the WAF is opt-in." >&2; \
-		echo "Set WAF_ENABLED = 1 in config.toml ([infra]), run './cms config sync', then 'make waf'." >&2; \
+		echo "Read from .env (generated). Set WAF_ENABLED = 1 in config.toml ([infra]), run './cms config sync' to regenerate .env, then 'make waf'." >&2; \
+		echo "DetectionOnly is the setting to tune against first — see docs/waf-tuning.md before turning it on." >&2; \
 		exit 1; \
 	fi; \
 	if [ ! -f config/grader.nginx.conf ]; then \
