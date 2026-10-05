@@ -7,6 +7,8 @@
 #
 # Usage:
 #   __domain.sh setup   [options]   configure domains + TLS + nginx
+#   __domain.sh cert    [options]   issue the certificate only
+#   __domain.sh proxy   [options]   render, validate and reload nginx only
 #   __domain.sh status              show DNS, cert expiry, renewal, connectivity
 #   __domain.sh renew               force-renew LE certs or swap provided certs
 #   __domain.sh preflight           9-check connectivity matrix
@@ -148,7 +150,21 @@ CHECK_EXPIRY_DAYS_DEFAULT=30
 JSON_OUTPUT="${JSON_OUTPUT:-0}"
 BACKUP_CERTS="${BACKUP_CERTS:-0}"
 USE_LOCK="${USE_LOCK:-0}"
+# Narrows a setup run to one of the two concerns the command list spells out as
+# verbs: setup is both halves, cert is issuance only, proxy is render+validate+
+# reload only. WHY two independent flags rather than one scope value: every decision
+# downstream asks one of the two questions on its own — "issue a certificate?", "write
+# nginx config?" — and a single enum would make each of those a two-way comparison
+# instead of one test.
+SETUP_ISSUE_CERT=1
+SETUP_RENDER_PROXY=1
 REVOKE_REASON="${REVOKE_REASON:-unspecified}"
+# DNS-01 challenge (optional). An empty DNS_PROVIDER keeps the HTTP-01 webroot path
+# exactly as before; setting it switches issuance to the provider's DNS plugin,
+# which is what a wildcard certificate or a host that cannot answer :80 requires.
+DNS_PROVIDER="${DNS_PROVIDER:-}"
+DNS_CREDENTIALS_FILE="${DNS_CREDENTIALS_FILE:-}"
+CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
 readonly LE_STAGING_DIRECTORY="https://acme-staging-v02.api.letsencrypt.org/directory"
 readonly PORT80_POLL_INTERVAL_S=5
 readonly PORT80_PROBE_TIMEOUT_S=5
@@ -165,13 +181,19 @@ Usage: __domain.sh <command> [options]
 
 Commands:
   setup        Configure domains, TLS certificates, and render nginx config
+  cert         Issue the certificate only — nginx config is neither rendered nor reloaded
+  proxy        Render, validate and reload nginx only — the certificate store is untouched
   status       Show DNS resolution, cert expiry, renewal timer, connectivity
   renew        Force-renew Let's Encrypt certs or swap provided certificates
   preflight    9-check matrix: SSH, Tailscale, RPC, DB, DNS, HTTP, HTTPS, paths, funnel
   check-expiry Exit non-zero when the cert is missing or expires within --days
   revoke       Revoke the current certificate
 
-Options (setup):
+  `cert` and `proxy` are the two halves of `setup` run separately, so a host that has to
+  answer a challenge or publish a config can do so one step at a time. `setup` remains
+  the full sequence, unchanged.
+
+Options (setup, cert, proxy):
   --cert <letsencrypt|provided|selfsigned>  Certificate type (default: letsencrypt)
   --domain <domain>           Primary domain (default: cms.local)
   --admin-domain <domain>     Admin subdomain (default: admin.cms.local)
@@ -202,6 +224,11 @@ Extended options:
   --json                      Emit `status` as JSON
   --days <n>                  Expiry threshold for check-expiry (default: 30)
   --reason <reason>           Revocation reason for revoke (default: unspecified)
+  --dns <provider>            Use a DNS-01 challenge (e.g. cloudflare) instead of
+                              HTTP-01 webroot; needed for wildcards or when :80 cannot
+                              be reached from Let's Encrypt
+  --dns-credentials <file>    Plugin credentials ini; defaults to a file generated
+                              from CLOUDFLARE_API_TOKEN for the cloudflare provider
   --config <file>             Use an alternate env file instead of ./.env
 
 Optional features (disabled by default — prod stays off):
@@ -312,21 +339,19 @@ _log_optional_features() {
 # ---------------------------------------------------------------------------
 # Setup subcommand
 # ---------------------------------------------------------------------------
-cmd_setup() {
-  log_info "Domain setup — mode: $([ "$DRY_RUN" -eq 1 ] && echo 'DRY-RUN' || echo 'APPLY')"
-  log_info "Primary: $DOMAIN_NAME  Admin: $ADMIN_DOMAIN  OJ: $OJ_DOMAIN  Ranking: $RANKING_DOMAIN"
-  log_info "Certificate type: $CERT_TYPE"
-  _prompt_optional_features
-  _log_optional_features
-  [[ "$LE_STAGING" == "1" ]] && log_warn "Let's Encrypt STAGING mode — issued certificates are not browser-trusted"
-
-  if [[ "$CERT_TYPE" == "letsencrypt" ]]; then
-    [[ -n "$CERT_EMAIL" ]] || log_die "CERT_EMAIL is required for letsencrypt — set env or pass --email" 1
-    _preflight_port80
+# Announces which of the two concerns this run is scoped to. Emitted only for the
+# narrowed scopes, so a bare `setup` logs exactly what it logged before.
+_log_setup_scope() {
+  if [[ "$SETUP_ISSUE_CERT" == "1" ]] && [[ "$SETUP_RENDER_PROXY" == "0" ]]; then
+    log_info "Scope: certificate only — nginx config is neither rendered nor validated"
+  elif [[ "$SETUP_ISSUE_CERT" == "0" ]] && [[ "$SETUP_RENDER_PROXY" == "1" ]]; then
+    log_info "Scope: proxy only — no certificate store is read, written or issued"
   fi
+}
 
-  _backup_certificates
-
+# Puts the certificate store in place. Skipped under the proxy scope, which must not
+# create the store it was told not to touch.
+_ensure_cert_store_dir() {
   local cert_dir
   cert_dir="$(_cert_store_dir)"
   if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -335,9 +360,9 @@ cmd_setup() {
     mkdir -p "$cert_dir"
     log_info "created $cert_dir"
   fi
+}
 
-  _render_nginx_config
-
+_issue_certificate() {
   case "$CERT_TYPE" in
     letsencrypt)
       _setup_letsencrypt
@@ -352,12 +377,85 @@ cmd_setup() {
       log_die "unknown cert type: $CERT_TYPE — use letsencrypt, provided, or selfsigned" 1
       ;;
   esac
+}
 
-  _validate_nginx_config
+# Runs one pass of the domain setup sequence. <issue_certificate> is the
+# certificate half, <render_proxy> the nginx half; the three commands are the three
+# combinations of those two booleans, so a narrowing is a smaller sequence and
+# never a second copy of it.
+_run_setup_scope() {
+  local issue_certificate="$1" render_proxy="$2"
+  # The lineage directory is named after the primary host, so the four domains in the
+  # list below and the directory certbot files the certificate under are one fact.
+  local cert_lineage="$DOMAIN_NAME"
+
+  log_info "Domain setup — mode: $([ "$DRY_RUN" -eq 1 ] && echo 'DRY-RUN' || echo 'APPLY')"
+  log_info "Primary: $DOMAIN_NAME  Admin: $ADMIN_DOMAIN  OJ: $OJ_DOMAIN  Ranking: $RANKING_DOMAIN"
+  log_info "Certificate lineage: $cert_lineage"
+  log_info "Certificate type: $CERT_TYPE"
+  _log_setup_scope
+  _prompt_optional_features
+  _log_optional_features
+  [[ "$LE_STAGING" == "1" ]] && log_warn "Let's Encrypt STAGING mode — issued certificates are not browser-trusted"
+
+  # WHY the check belongs to the certificate half alone: the email is a
+  # certbot registration argument, and the port-80 probe exists because the HTTP-01
+  # challenge has to be answerable. Neither has anything to do with writing an
+  # nginx config, so `proxy` must not be asked for an email or blocked on :80.
+  if [[ "$issue_certificate" == "1" ]] && [[ "$CERT_TYPE" == "letsencrypt" ]]; then
+    [[ -n "$CERT_EMAIL" ]] || log_die "CERT_EMAIL is required for letsencrypt — set env or pass --email" 1
+    _preflight_port80
+  fi
+
+  # WHY the backup and the store directory are part of the certificate half: both
+  # exist for the certificate store, and the proxy half must not even create the
+  # directory it was told not to touch.
+  if [[ "$issue_certificate" == "1" ]]; then
+    _backup_certificates
+    _ensure_cert_store_dir
+  fi
+
+  # WHY the three nginx steps are gated one at a time rather than as a block: the
+  # cert scope drops the render and, with it, the validation that gates that render,
+  # while the proxy scope drops only the issuance between them. A block could not
+  # express either shape. The order is unchanged, so a bare run renders, issues and
+  # validates exactly as it always did.
+  [[ "$render_proxy" == "1" ]] && _render_nginx_config
+
+  [[ "$issue_certificate" == "1" ]] && _issue_certificate
+
+  [[ "$render_proxy" == "1" ]] && _validate_nginx_config
+
+  # Explicit success: under the cert scope the last gate above is a false test, so
+  # the function would otherwise return non-zero and abort the run at the call site.
+  return 0
+}
+
+# Ends a setup: the reload belongs to the proxy half and nothing else.
+_run_setup_tail() {
+  # Reloaded only here: issuance and validation do not, so a plain `setup` still picks
+  # up the renewed certificate the same way it did before, from the rendered config.
+  if [[ "$SETUP_ISSUE_CERT" == "0" ]] && [[ "$SETUP_RENDER_PROXY" == "1" ]]; then
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      log_info "[dry-run] would reload the running nginx container"
+    else
+      _reload_running_nginx
+    fi
+  fi
 
   discord_alert "Domain setup completed for ${DOMAIN_NAME} (cert: ${CERT_TYPE})" 65280
   log_info "Domain setup complete"
 }
+
+# WHY the scope is the command and not a flag: a run either issues a certificate, writes
+# nginx config, or both. Spelling that as a flag gave one concern two names, and a flag
+# that contradicts the command it narrows is a case that has to be argued about. As verbs
+# each scope has exactly one spelling and nothing can contradict anything.
+cmd_setup() { _run_setup_scope 1 1; _run_setup_tail; }
+
+cmd_cert() { _run_setup_scope 1 0; _run_setup_tail; }
+
+cmd_proxy() { _run_setup_scope 0 1; _run_setup_tail; }
 
 # ---------------------------------------------------------------------------
 # Certificate issuance retry helper
@@ -572,6 +670,41 @@ _json_escape() {
 }
 
 # ---------------------------------------------------------------------------
+# DNS-01 challenge (optional)
+# ---------------------------------------------------------------------------
+# Populates DNS_CHALLENGE_ARGS with the certbot flags for DNS-01, and
+# DNS_CREDENTIALS_RESOLVED with the credentials file, when DNS_PROVIDER is set.
+# WHY the credentials file is generated: certbot's DNS plugins read an ini holding
+# an API token, and requiring the operator to hand-write one is the step they skip —
+# CLOUDFLARE_API_TOKEN is turned into exactly the file the cloudflare plugin expects.
+# An empty DNS_PROVIDER leaves both empty, so the HTTP-01 webroot path is unchanged.
+#
+# WHY the generated file is safe to write: it lands inside the certificate store,
+# which is gitignored, and umask 077 keeps it unreadable to other users. The token is
+# never logged — only the provider name appears in any message.
+DNS_CHALLENGE_ARGS=()
+DNS_CREDENTIALS_RESOLVED=""
+_resolve_dns_challenge() {
+  DNS_CHALLENGE_ARGS=()
+  DNS_CREDENTIALS_RESOLVED=""
+  [[ -n "$DNS_PROVIDER" ]] || return 0
+
+  local creds="$DNS_CREDENTIALS_FILE"
+  if [[ -z "$creds" && "$DNS_PROVIDER" == "cloudflare" && -n "$CLOUDFLARE_API_TOKEN" ]]; then
+    creds="$(_cert_store_dir)/cloudflare.ini"
+    if [[ "$DRY_RUN" -eq 0 ]]; then
+      mkdir -p "$(dirname -- "$creds")"
+      ( umask 077; printf 'dns_cloudflare_api_token = %s\n' "$CLOUDFLARE_API_TOKEN" > "$creds" )
+    fi
+  fi
+  [[ -n "$creds" ]] || log_die "DNS-01 ($DNS_PROVIDER) requires --dns-credentials or CLOUDFLARE_API_TOKEN" 1
+
+  DNS_CREDENTIALS_RESOLVED="$creds"
+  DNS_CHALLENGE_ARGS=(--dns-"$DNS_PROVIDER" --dns-"$DNS_PROVIDER"-credentials "$creds")
+  return 0
+}
+
+# ---------------------------------------------------------------------------
 # Let's Encrypt setup
 # ---------------------------------------------------------------------------
 _setup_letsencrypt() {
@@ -580,13 +713,18 @@ _setup_letsencrypt() {
     return 0
   fi
 
-  _wait_for_port80
   build_cert_domains
   build_certbot_flags
+  _resolve_dns_challenge
 
   local cert_dir
   cert_dir="$(_cert_store_dir)"
   mkdir -p "${cert_dir}/www"
+
+  # HTTP-01 only: waiting on :80 is pointless when validation is a TXT record.
+  if [[ -z "$DNS_PROVIDER" ]]; then
+    _wait_for_port80
+  fi
 
   if ! command -v certbot >/dev/null 2>&1; then
     log_warn "certbot not found on host — attempting via docker"
@@ -597,10 +735,17 @@ _setup_letsencrypt() {
   # --config-dir points certbot at the store the proxy bind-mounts, so the
   # lineage lands at <store>/live/<domain>/ — the path nginx reads. The former
   # --cert-path/--key-path were no-ops outside `certonly --csr`.
-  _retry_certbot certbot certonly --webroot -w "${cert_dir}/www" \
-    "${CERT_DOMAINS[@]}" "${CERTBOT_FLAGS[@]}" \
-    --config-dir "$cert_dir" \
-    || log_die "certbot certonly failed" 1
+  if [[ -n "$DNS_PROVIDER" ]]; then
+    _retry_certbot certbot certonly "${DNS_CHALLENGE_ARGS[@]}" \
+      "${CERT_DOMAINS[@]}" "${CERTBOT_FLAGS[@]}" \
+      --config-dir "$cert_dir" \
+      || log_die "certbot certonly failed" 1
+  else
+    _retry_certbot certbot certonly --webroot -w "${cert_dir}/www" \
+      "${CERT_DOMAINS[@]}" "${CERTBOT_FLAGS[@]}" \
+      --config-dir "$cert_dir" \
+      || log_die "certbot certonly failed" 1
+  fi
   log_info "Let's Encrypt certificates obtained"
 }
 
@@ -608,15 +753,27 @@ _run_certbot_docker() {
   local cert_dir
   cert_dir="$(_cert_store_dir)"
   mkdir -p "${cert_dir}/www"
+  _resolve_dns_challenge
   # The store root is mounted at /etc/letsencrypt so certbot's lineage appears at
   # <store>/live/<domain>/; mounting <store>/live here (the earlier form) nested
   # a second live/ level and nginx never saw the certificate.
-  _retry_certbot docker run --rm \
-    -v "${cert_dir}:/etc/letsencrypt" \
-    -v "${cert_dir}/www:/var/www/certbot" \
-    certbot/certbot certonly --webroot -w /var/www/certbot \
-    "${CERT_DOMAINS[@]}" "${CERTBOT_FLAGS[@]}" \
-    || log_die "certbot docker run failed" 1
+  if [[ -n "$DNS_PROVIDER" ]]; then
+    _retry_certbot docker run --rm \
+      -v "${cert_dir}:/etc/letsencrypt" \
+      -v "${cert_dir}/www:/var/www/certbot" \
+      -v "${DNS_CREDENTIALS_RESOLVED}:/etc/letsencrypt/dns-creds.ini:ro" \
+      "${CERTBOT_IMAGE:-certbot/dns-$DNS_PROVIDER}" certonly \
+      --dns-"$DNS_PROVIDER" --dns-"$DNS_PROVIDER"-credentials /etc/letsencrypt/dns-creds.ini \
+      "${CERT_DOMAINS[@]}" "${CERTBOT_FLAGS[@]}" \
+      || log_die "certbot docker run failed" 1
+  else
+    _retry_certbot docker run --rm \
+      -v "${cert_dir}:/etc/letsencrypt" \
+      -v "${cert_dir}/www:/var/www/certbot" \
+      certbot/certbot certonly --webroot -w /var/www/certbot \
+      "${CERT_DOMAINS[@]}" "${CERTBOT_FLAGS[@]}" \
+      || log_die "certbot docker run failed" 1
+  fi
   log_info "Let's Encrypt certificates obtained via docker"
 }
 
@@ -793,6 +950,18 @@ _validate_nginx_config() {
   else
     log_warn "no nginx container running — skipping nginx -t"
   fi
+}
+
+# Reloads the first running nginx container so it picks up a freshly rendered config
+# or a renewed certificate. A container that is not running is not an error: the
+# caller has already produced the config on disk, and whether the proxy is up right
+# now is a separate question answered by status/preflight.
+_reload_running_nginx() {
+  docker ps --format '{{.Names}}' 2>/dev/null | grep -q nginx || return 0
+  local nginx_container
+  nginx_container="$(docker ps --format '{{.Names}}' | grep nginx | head -1)"
+  docker exec "$nginx_container" nginx -s reload 2>/dev/null || log_warn "nginx reload failed"
+  log_info "nginx reloaded in $nginx_container"
 }
 
 # ---------------------------------------------------------------------------
@@ -1205,6 +1374,14 @@ _check_funnel() {
 cmd="${1:-}"
 shift || true
 
+# WHY the verb narrows the scope before any flag is read: the scope is decided by which
+# command was named, not by anything that follows it. A flag could contradict its
+# command; a verb cannot.
+case "$cmd" in
+  cert)  SETUP_ISSUE_CERT=1; SETUP_RENDER_PROXY=0 ;;
+  proxy) SETUP_ISSUE_CERT=0; SETUP_RENDER_PROXY=1 ;;
+esac
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --cert)       CERT_TYPE="$2"; shift 2 ;;
@@ -1232,6 +1409,8 @@ while [[ $# -gt 0 ]]; do
     --json)       JSON_OUTPUT=1; shift ;;
     --days)       CHECK_EXPIRY_DAYS="$2"; shift 2 ;;
     --reason)     REVOKE_REASON="$2"; shift 2 ;;
+    --dns)        DNS_PROVIDER="$2"; shift 2 ;;
+    --dns-credentials) DNS_CREDENTIALS_FILE="$2"; shift 2 ;;
     --config)     CONFIG_FILE="$2"; shift 2 ;;
     --help|-h)    usage; exit 0 ;;
     *)            log_die "unknown option: $1 — see --help" 1 ;;
@@ -1247,6 +1426,8 @@ _acquire_run_lock
 
 case "$cmd" in
   setup)    cmd_setup ;;
+  cert)     cmd_cert ;;
+  proxy)    cmd_proxy ;;
   status)   cmd_status ;;
   renew)    cmd_renew ;;
   preflight) cmd_preflight ;;
