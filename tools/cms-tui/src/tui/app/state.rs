@@ -14,6 +14,7 @@ pub struct App {
     pub database_menu: ActionMenu,
     pub worker_menu: ActionMenu,
     pub ingress_menu: ActionMenu,
+    pub domain: crate::tui::pages::domain::DomainView,
     pub config_menu: ActionMenu,
     pub backup_menu: ActionMenu,
     pub system_menu: ActionMenu,
@@ -36,6 +37,7 @@ impl App {
             database_menu: crate::tui::menus::database_menu(),
             worker_menu: crate::tui::menus::worker_menu(),
             ingress_menu: crate::tui::menus::ingress_menu(),
+            domain: crate::tui::pages::domain::DomainView::from_values("setup", &[]),
             config_menu: crate::tui::menus::config_menu(),
             backup_menu: crate::tui::menus::backup_menu(),
             system_menu: crate::tui::menus::system_menu(),
@@ -59,7 +61,7 @@ impl App {
             Route::Backup => Some(&mut self.backup_menu),
             Route::System => Some(&mut self.system_menu),
             Route::Bootstrap => Some(&mut self.bootstrap_menu),
-            Route::Logs | Route::Dashboard => None,
+            Route::Logs | Route::Dashboard | Route::Domain => None,
         }
     }
 
@@ -134,7 +136,7 @@ impl App {
             Route::Bootstrap => {
                 self.bootstrap_menu = crate::tui::menus::bootstrap_menu();
             }
-            Route::Logs | Route::Dashboard => {}
+            Route::Logs | Route::Dashboard | Route::Domain => {}
         }
     }
 

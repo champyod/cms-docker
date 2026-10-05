@@ -158,7 +158,7 @@ impl App {
         }
     }
 
-    fn set_toast(&mut self, message: &str) {
+    pub(crate) fn set_toast(&mut self, message: &str) {
         self.last_toast = Some((message.to_string(), 50));
     }
 }

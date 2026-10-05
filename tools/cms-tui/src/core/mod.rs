@@ -8,6 +8,7 @@ pub mod config;
 pub mod dispatch;
 pub mod docker;
 pub mod docker_targets;
+pub mod domain_setup;
 pub mod model;
 pub mod runner;
 pub mod scripts;

@@ -1,3 +1,4 @@
+use crate::tui::pages::domain_fields;
 use ratatui::{
     crossterm::event::KeyCode,
     layout::{Constraint, Direction, Layout, Rect},
@@ -118,6 +119,67 @@ impl ConfigForm {
             .iter()
             .map(|field| (field.label.clone(), field.value.clone()))
             .collect()
+    }
+
+    /// The value of the row carrying `label`.
+    ///
+    /// WHY a missing row reads as blank instead of panicking: a page builds this form
+    /// from its own row table, so a label it cannot find means that table is wrong, and
+    /// a keystroke should not be able to take the interface down over it.
+    #[must_use]
+    pub fn value_of(&self, label: &str) -> &str {
+        self.fields
+            .iter()
+            .find(|field| field.label == label)
+            .map_or("", |field| field.value.as_str())
+    }
+
+    /// The labels, in display order.
+    #[must_use]
+    pub fn labels(&self) -> Vec<String> {
+        self.fields
+            .iter()
+            .map(|field| field.label.clone())
+            .collect()
+    }
+
+    /// Whether focus is on the row named `label`.
+    #[must_use]
+    pub fn is_focused_row(&self, label: &str) -> bool {
+        self.fields
+            .get(self.active)
+            .is_some_and(|field| field.label == label)
+    }
+
+    /// Parks focus on the row named `label`, doing nothing when the form has no such row.
+    ///
+    /// WHY by label rather than by index: rows come from a table, so a count-based
+    /// position breaks every time a flag is added above the one being aimed at.
+    pub fn focus_row(&mut self, label: &str) {
+        if let Some(index) = self.index_of(label) {
+            self.set_active(index);
+        }
+    }
+
+    /// Flips the row named `label` between the two words a switch reports.
+    ///
+    /// WHY a method rather than a keystroke: arming a live run is not text the operator
+    /// typed into the row, and routing it through `handle_key` would make the page's own
+    /// confirm step indistinguishable from editing the field.
+    pub fn flip_row(&mut self, label: &str) -> bool {
+        let Some(index) = self.index_of(label) else {
+            return false;
+        };
+        let Some(field) = self.fields.get_mut(index) else {
+            return false;
+        };
+        let is_on = domain_fields::is_truthy(&field.value);
+        field.value = domain_fields::on_off(!is_on);
+        true
+    }
+
+    fn index_of(&self, label: &str) -> Option<usize> {
+        self.fields.iter().position(|field| field.label == label)
     }
 
     fn set_active(&mut self, next: usize) {

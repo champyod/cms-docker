@@ -254,3 +254,13 @@ pub enum Commands {
 pub fn handle_command(cmd: Commands) -> Result<(), commands::CliError> {
     commands::handle(cmd)
 }
+
+/// The argv a parsed setup-scope flag set encodes, for callers outside this module.
+///
+/// WHY this is exposed: the TUI page builds the same argv from its own field state, and
+/// the test that keeps the two frontends honest needs both halves, not just the one the
+/// command line already covers.
+#[must_use]
+pub fn resolve_domain_setup_args(flags: &DomainSetupFlags) -> Vec<String> {
+    domain_args::setup_args("setup", flags)
+}

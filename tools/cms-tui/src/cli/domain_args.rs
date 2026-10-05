@@ -6,6 +6,9 @@
 //! but the CLI cannot forward would be rejected by the script's
 //! unknown-option branch. Every flag it reads is declared here once.
 
+use crate::core::domain_setup::{
+    domain_setup_args, DomainMode, DomainRetryPolicy, DomainSetupRequest, DomainSwitches,
+};
 use clap::Args;
 
 /// Every flag `scripts/__domain.sh` accepts, in the order its usage text and
@@ -98,71 +101,53 @@ pub struct DomainSetupFlags {
     pub config: Option<String>,
 }
 
+/// Projects clap's parsed flags onto the request the shared encoder reads.
+///
+/// WHY a projection rather than a second encoder: the TUI domain form builds the same
+/// struct from its live field state, and both frontends then call
+/// [`domain_setup_args`]. Two encoders are how "retry forever" ends up meaning one thing
+/// on the command line and another in the interface.
+fn to_request(flags: &DomainSetupFlags) -> DomainSetupRequest {
+    DomainSetupRequest {
+        cert: flags.cert.clone(),
+        domain: flags.domain.clone(),
+        admin_domain: flags.admin_domain.clone(),
+        oj_domain: flags.oj_domain.clone(),
+        ranking_domain: flags.ranking_domain.clone(),
+        cert_path: flags.cert_path.clone(),
+        key_path: flags.key_path.clone(),
+        email: flags.email.clone(),
+        extra_domains: flags.extra_domains.clone(),
+        dns: flags.dns.clone(),
+        dns_credentials: flags.dns_credentials.clone(),
+        deploy_hook: flags.deploy_hook.clone(),
+        config: flags.config.clone(),
+        reason: flags.reason.clone(),
+        days: flags.days,
+        wait_port80: flags.wait_port80,
+        retry: DomainRetryPolicy {
+            is_auto_retry: flags.auto_retry,
+            is_retry_forever: flags.retry_forever,
+            attempts: flags.retry_attempts,
+            interval: flags.retry_interval,
+        },
+        switches: DomainSwitches {
+            is_staging: flags.staging,
+            is_force: flags.force,
+            is_backup_certs: flags.backup_certs,
+            is_lock: flags.lock,
+            is_json: flags.json,
+        },
+        mode: DomainMode {
+            is_dry_run: flags.dry_run,
+            is_apply: flags.apply,
+            is_yes: flags.yes,
+        },
+    }
+}
+
 /// Builds the argv for `verb` out of `flags`, omitting every flag the caller
 /// left unset so the script keeps applying its own defaults.
 pub(super) fn setup_args(verb: &str, flags: &DomainSetupFlags) -> Vec<String> {
-    let mut out = vec![verb.to_string(), "--cert".into(), flags.cert.clone()];
-    push_value_flags(&mut out, flags);
-    push_number_flags(&mut out, flags);
-    push_switches(&mut out, flags);
-    out
-}
-
-fn push_value_flags(out: &mut Vec<String>, flags: &DomainSetupFlags) {
-    for (flag, value) in [
-        ("--domain", flags.domain.as_deref()),
-        ("--admin-domain", flags.admin_domain.as_deref()),
-        ("--oj-domain", flags.oj_domain.as_deref()),
-        ("--ranking-domain", flags.ranking_domain.as_deref()),
-        ("--cert-path", flags.cert_path.as_deref()),
-        ("--key-path", flags.key_path.as_deref()),
-        ("--email", flags.email.as_deref()),
-        ("--extra-domains", flags.extra_domains.as_deref()),
-        ("--deploy-hook", flags.deploy_hook.as_deref()),
-        ("--reason", flags.reason.as_deref()),
-        ("--dns", flags.dns.as_deref()),
-        ("--dns-credentials", flags.dns_credentials.as_deref()),
-        ("--config", flags.config.as_deref()),
-    ] {
-        if let Some(value) = value {
-            out.push(flag.to_string());
-            out.push(value.to_string());
-        }
-    }
-}
-
-fn push_number_flags(out: &mut Vec<String>, flags: &DomainSetupFlags) {
-    for (flag, value) in [
-        ("--retry-attempts", flags.retry_attempts),
-        ("--retry-interval", flags.retry_interval),
-        ("--wait-port80", flags.wait_port80),
-        ("--days", flags.days),
-    ] {
-        if let Some(value) = value {
-            out.push(flag.to_string());
-            out.push(value.to_string());
-        }
-    }
-}
-
-/// WHY `--dry-run` is emitted before `--apply`: the script resolves the pair in
-/// argv order, so a caller who passed both ends up applying rather than being
-/// rejected by a rule the script itself does not have.
-fn push_switches(out: &mut Vec<String>, flags: &DomainSetupFlags) {
-    for (flag, is_set) in [
-        ("--dry-run", flags.dry_run),
-        ("--apply", flags.apply),
-        ("--yes", flags.yes),
-        ("--auto-retry", flags.auto_retry),
-        ("--retry-forever", flags.retry_forever),
-        ("--staging", flags.staging),
-        ("--force", flags.force),
-        ("--backup-certs", flags.backup_certs),
-        ("--lock", flags.lock),
-        ("--json", flags.json),
-    ] {
-        if is_set {
-            out.push(flag.to_string());
-        }
-    }
+    domain_setup_args(verb, &to_request(flags))
 }

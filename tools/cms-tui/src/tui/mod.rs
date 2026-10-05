@@ -41,6 +41,41 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// Handles the keys that belong to a page which owns its own bindings.
+///
+/// Returns whether the page consumed the key. The domain form is one: its rows take
+/// characters, its arming step takes `y`, and its submit key launches the run — none of
+/// which the shared menu keys can express.
+fn handle_page_owned_key(app: &mut App, key: KeyCode) -> bool {
+    if *app.current_route() == app::Route::Domain {
+        handle_domain_key(app, key);
+        return true;
+    }
+    if *app.current_route() == app::Route::Ingress && matches!(key, KeyCode::Char('d' | 'D')) {
+        app.push_route(app::Route::Domain);
+        return true;
+    }
+    false
+}
+
+/// Dispatches one key to the domain form and acts on what it asked for.
+fn handle_domain_key(app: &mut App, key: KeyCode) {
+    use app::domain_keys::DomainKeyOutcome;
+    match app.handle_domain_key(key) {
+        DomainKeyOutcome::Submit => {
+            if let Err(reason) = app.run_domain_form() {
+                app.set_toast(&format!("Failed to run: {reason}"));
+            }
+        }
+        DomainKeyOutcome::Back => app.pop_route(),
+        DomainKeyOutcome::Arming
+        | DomainKeyOutcome::Confirmed
+        | DomainKeyOutcome::Cancelled
+        | DomainKeyOutcome::Edited
+        | DomainKeyOutcome::Ignored => {}
+    }
+}
+
 fn run_app<B>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(), Box<dyn Error>>
 where
     B: Backend,
@@ -115,6 +150,13 @@ where
                     if app.log_viewer.handle_key(key.code) {
                         app.pop_route();
                     }
+                    continue;
+                }
+
+                // Pages that own their own key meanings consume everything they recognise
+                // before the shared menu keys, so a form row and a menu never fight over
+                // one keystroke.
+                if handle_page_owned_key(app, key.code) {
                     continue;
                 }
 
