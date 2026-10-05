@@ -2,9 +2,14 @@
 """Mechanical regression audit for cms-docker: catches the failure classes
 that produced P1-P5 (stale paths, exec-bit loss, CLI drift, profile-graph
 gaps, bind-mount perms)."""
-import os, re, subprocess, sys
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
 
-os.chdir("/mnt/Datas-Disk" if False else "/mnt/D-Datas-Disk/Champ/Coding/Github/Contest Management System/cms-docker")
+os.chdir(Path(__file__).resolve().parent.parent)
+
 issues, checks = [], 0
 
 def track(msg):
