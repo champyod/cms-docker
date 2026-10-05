@@ -37,15 +37,49 @@ for f in scan_files:
 print(f"   scanned {len(scan_files)} files")
 
 # ---------- B. exec-bit audit ----------
+# WHY: `./p`, `p` in a make recipe, and a file bind-mount all hand the path to
+# the kernel's execve, so only those need 100755. `bash p`, `sh p` and
+# `source p` open the file for reading. Asserting 100755 for every `.sh`
+# extension flagged 16 correctly-moded scripts, so the demand is derived from
+# the call sites instead.
+DIRECT_EXEC_RE = re.compile(r'(?<![\w./-])\./([A-Za-z0-9_./-]+)')
+BIND_MOUNT_RE = re.compile(r'- \./([^\s:]+):/[^\s:]+')
+DATA_SUFFIXES = (".sql", ".py", ".gitkeep")
+
+
+def collect(files: list[str], pattern: re.Pattern[str]) -> set[str]:
+    found: set[str] = set()
+    for f in files:
+        text: str = open(f, errors="replace").read()
+        found |= {m.rstrip(".,;'\"") for m in pattern.findall(text)}
+    return found
+
+
+def direct_exec_paths(files: list[str]) -> set[str]:
+    return collect(files, DIRECT_EXEC_RE)
+
+
+def bind_mounted_paths(files: list[str]) -> set[str]:
+    # WHY: a directory mount publishes its contents for sourcing, not for
+    # execution, so only mounts whose source is a file are demanded.
+    return {src for src in collect(files, BIND_MOUNT_RE) if os.path.isfile(src)}
+
+
+def exec_bit_requirements() -> set[str]:
+    compose: list[str] = sorted(p.name for p in Path(".").glob("docker-compose*.yml"))
+    sources: list[str] = [f for f in scan_files + compose if os.path.isfile(f)]
+    return direct_exec_paths(sources) | bind_mounted_paths(sources)
+
+
 print("== B. exec-bit audit ==")
+needs_x = exec_bit_requirements()
 idx = subprocess.run(["git","ls-files","-s","scripts/"],capture_output=True,text=True).stdout
 for line in idx.splitlines():
     mode, path = line.split()[0], line.split()[3]
     checks += 1
-    needs_x = path.endswith(".sh") or re.match(r"scripts/__(cms|worker)", path)
-    if needs_x and mode != "100755":
+    if path in needs_x and mode != "100755":
         track(f"B {path}: tracked {mode}, must be 100755 (invoked/bind-mounted)")
-    if not needs_x and mode == "100755":
+    if path not in needs_x and mode == "100755" and path.endswith(DATA_SUFFIXES):
         track(f"B {path}: tracked 100755 but is data (.sql/.py) — review")
 # root entrypoint
 mode_cms = subprocess.run(["git","ls-files","-s","cms"],capture_output=True,text=True).stdout.split()[0]
