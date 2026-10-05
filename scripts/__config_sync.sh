@@ -149,8 +149,10 @@ toml_value() {
 }
 
 parse_toml() {
-  local file="$1" section="" line key val
+  local file="$1" section="" line key val lineno=0 seen_key
+  declare -A first_line=()
   while IFS= read -r line || [[ -n "$line" ]]; do
+    lineno=$((lineno + 1))
     line="$(toml_trim "$line")"
     [[ -z "$line" || "$line" == '#'* ]] && continue
     if [[ "$line" =~ ^\[([a-zA-Z0-9_]+)\][[:space:]]*(#.*)?$ ]]; then
@@ -158,7 +160,20 @@ parse_toml() {
     elif [[ "$line" =~ ^([A-Za-z0-9_]+)[[:space:]]*=[[:space:]]*(.*)$ ]]; then
       key="${BASH_REMATCH[1]}"
       val="$(toml_value "${BASH_REMATCH[2]}")"
-      __TOML["${section}.${key}"]="$val"
+      seen_key="${section}.${key}"
+      # WHY a repeated key keeps the FIRST value instead of the last: TOML parsers
+      # reject a duplicate key outright, but this reader does not, so the two
+      # disagree — a reader taking the last occurrence sees a different setting
+      # from one taking the first. Keeping the first preserves the value an
+      # operator wrote at the top of the section and only discards the later
+      # shadow. This used to overwrite silently, which is how a populated
+      # CERT_EMAIL could be lost to a later empty line with no message anywhere.
+      if [[ -n "${first_line[$seen_key]:-}" ]]; then
+        log_warn "duplicate key [${section}] ${key} at line ${lineno} — already defined at line ${first_line[$seen_key]}; keeping the first value, ignoring this one"
+        continue
+      fi
+      first_line["$seen_key"]="$lineno"
+      __TOML["${seen_key}"]="$val"
       case "$section" in
         core)      __CORE_KEYS+=("$key") ;;
         admin)     __ADMIN_KEYS+=("$key") ;;
