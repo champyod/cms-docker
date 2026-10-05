@@ -1,7 +1,8 @@
-# Admin login CAPTCHA — and where the per-IP ban actually applies
+# Login CAPTCHA and lockout — where each control applies, and what the per-IP ban covers
 
-The admin panel login form can sit behind a CAPTCHA (a puzzle that proves the request
-came from a person, not an automated script). The challenge is adaptive: nothing appears
+All three login surfaces — the admin panel, the admin web server and the contest web
+server with its API — can sit behind a CAPTCHA (a puzzle that proves the request came
+from a person, not an automated script). The challenge is adaptive: nothing appears
 until someone has already failed a few times. Failed logins are counted per account and,
 on some deployment paths, per source address, and the account is locked for 15 minutes
 once the count reaches 5.
@@ -93,18 +94,68 @@ and in the injection mapping.
 | Contest web server | `src/cms/server/contest/handlers/main.py` — `LoginHandler`, `RegistrationHandler` | 302 to `?login_error=true` |
 | Contest API | `src/cms/server/contest/handlers/api.py` — `ApiLoginHandler` | 403 `{"error": ...}` |
 
+On the two contest surfaces a *locked out* attempt is answered `429` with `Retry-After`
+instead, on the form and the API alike; the rows above are what a wrong password or a
+refused challenge still produces. See the lockout section below.
+
 Registration is protected on the contest web server but not on the panel, which has no
 registration flow. The two Tornado servers verify the token themselves against the
 provider's siteverify endpoint rather than calling the panel: a network hop between
 services would make one service's outage a login outage.
+
+### The lockout is not gated on the captcha being turned on
+
+The two thresholds above are separate mechanisms, and only the first one depends on the
+captcha being configured. `CAPTCHA_THRESHOLD` decides when a *solved challenge* is
+demanded, which is meaningless when no provider is configured, so
+`CAPTCHA_THRESHOLD` has no effect until `CAPTCHA_ENABLED=1` and both keys are set.
+
+The lockout is the other one. It refuses the attempt outright, so it is applied whether
+or not a captcha is configured: `is_locked` in `src/cms/server/captcha.py` reads the
+failure counters directly and is deliberately not gated on `is_enabled()`. A deployment
+that sets nothing still gets a lockout after `CAPTCHA_BAN_THRESHOLD` failures.
+
+A refused attempt answers `429` with `Retry-After`, on both the form and the API. That
+status is what tells a client, a proxy or a WAF to stop, as opposed to the `302` and
+`403` a wrong password produces — a refusal that looks like an ordinary failed login
+cannot be acted on. An API login carrying a non-empty `admin_token` is exempt, because
+the token proves the caller without the contestant's password.
+
+### Where the counts are kept
+
+The counters are held in memory per web-server process, so a restart clears them. They
+can be moved into the shared `redis-rate-limit` instance, which is what makes a lockout
+survive a restart and span replicas:
+
+| Key in `config.toml` `[admin]` | Default | Effect |
+|---|---|---|
+| `LOGIN_RATE_LIMIT_REDIS_ENABLED` | `0` | Keep the failure counts in the shared Redis rather than in process. |
+| `LOGIN_RATE_LIMIT_REDIS_HOST` | `redis-rate-limit` | Hostname of the instance, from inside the compose network. |
+| `LOGIN_RATE_LIMIT_REDIS_PORT` | `6379` | Port of that instance. |
+
+The keys reach the servers through the `[<server>.captcha]` table of the generated
+`config/cms.toml`, not as environment variables: the Python processes read exactly one
+environment variable, `CMS_CONFIG`, which names that file.
+
+**When the store is unreachable** the counts fall back to the process and the captcha is
+demanded on every attempt. That is deliberate and it is not the same as having no
+protection: an attacker guessing a password needs the attempt to stay silent and fast,
+while a real user solves a challenge once. A stopped Redis therefore taxes the attacker
+instead of lifting the restriction, which is the same fail-closed posture a captcha
+provider error already takes. The lockout does not apply while the store is down.
+
+`nginx`'s `limit_req` is a separate mechanism and is not affected by any of this. It is a
+flood valve, not a lockout: a client issuing one request per second never approaches its
+ceiling, so it bounds a burst and not a password-guessing run.
 
 ---
 
 ## 3. What the panel considers your address
 
 The panel derives the identity used for rate limiting from the first entry of the
-`X-Forwarded-For` request header (`admin-panel/src/app/actions/auth.ts`). When that header
-is absent it falls back to the literal string `local`.
+`x-forwarded-for` request header (`admin-panel/src/app/actions/auth.ts:37`, and again in
+`resolveBucketKeys` at line 57). When that header is absent it falls back to the literal
+string `local`.
 
 `isLoopbackIp` in the same file skips the per-IP counter when the resolved address is
 loopback — `127.x`, `::1`, the dual-stack form `::ffff:127.x`, or the `local` fallback.
