@@ -46,7 +46,8 @@ import typing
 from cms.conf import CaptchaConfig
 from cms.server.captcha_provider import (PROVIDER_SCRIPT, TOKEN_FIELDS,
                                          extract_token, verify_token)
-from cms.server.login_counters import LoginFailureCounters, is_loopback
+from cms.server.login_counters import (LoginFailureCounters, build_counters,
+                                        is_loopback)
 
 
 logger = logging.getLogger(__name__)
@@ -66,8 +67,11 @@ class Captcha:
                  verify: typing.Callable[[str, str, CaptchaConfig], bool]
                  | None = None) -> None:
         self.config = config
+        # WHY built from the config when not injected: the counts are kept in a
+        # shared Redis when one is configured, and that has to be decided once
+        # at construction rather than per request.
         self._counters = counters if counters is not None \
-            else LoginFailureCounters()
+            else build_counters(config)
         # WHY injectable: the verification call reaches the network, and the
         # test suite has to drive the decision logic without one.
         self._verify = verify if verify is not None else verify_token
@@ -76,6 +80,29 @@ class Captcha:
     @property
     def counters(self) -> LoginFailureCounters:
         return self._counters
+
+    @property
+    def degraded(self) -> bool:
+        """Return whether the shared counter store could not be reached.
+
+        True means the counts are process-local because Redis was unreachable,
+        so the lockout no longer spans the deployment. The caller sees it to
+        make the deployment's condition visible; nothing about the login
+        decision changes on its own.
+
+        """
+        return self._counters.degraded
+
+    def is_locked(self, username: str, ip: str) -> bool:
+        """Return whether this account and address are refused outright.
+
+        Deliberately NOT gated on `is_enabled`: the lockout is the boundary
+        that bounds guessing, and a captcha that is off or unconfigured must
+        not be what removes it. With the captcha off the refusal is a plain one
+        and no token is involved; with it on, the lockout still holds.
+
+        """
+        return self._counters.is_limited(username, ip)
 
     def is_enabled(self) -> bool:
         """Return whether the captcha can be enforced at all.
@@ -98,13 +125,22 @@ class Captcha:
     def is_required(self, username: str, ip: str) -> bool:
         """Return whether this attempt must carry a valid captcha token.
 
-        False whenever the captcha is not configured, and false below the
-        threshold: this is the adaptivity that distinguishes the captcha from
-        an always-on one.
+        False below the threshold: this is the adaptivity that distinguishes
+        the captcha from an always-on one.
+
+        True on every attempt while the counters are degraded, and only then:
+        the captcha is the only mechanism left to tax an attempt once the shared
+        counter store is unreachable, so degrading to "no restriction" would
+        hand the login form back to an attacker exactly when the lockout is no
+        longer holding across the deployment. A deployment with no captcha
+        configured has no token to demand, so the lockout refusal is its only
+        answer and it is unchanged.
 
         """
         if not self.is_enabled():
             return False
+        if self.degraded:
+            return True
         return self._counters.count(username, ip) >= self.threshold()
 
     def threshold(self) -> int:

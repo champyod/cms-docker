@@ -1,24 +1,38 @@
-"""In-memory failure counters for the adaptive login CAPTCHA.
+"""Failure counters for the adaptive login CAPTCHA and its lockout.
 
-Mirrors the admin panel's loginBuckets map. Split out of captcha.py so each file
-stays readable: this one owns the counting, the other the decision to demand.
+Mirrors the admin panel's loginBuckets map. The counting lives here, the
+decision to demand a captcha lives in captcha.py, and where the buckets are
+kept lives in login_counter_backend.py.
+
+Two independent things are enforced from the same counts: the *adaptive
+captcha*, demanded once `threshold` failures accumulate, and the *lockout*,
+an outright refusal at `ban_threshold` failures.
+
+The lockout is the security boundary. Counts are therefore retained for the
+whole window instead of being dropped at the threshold: a count that resets
+when the threshold is reached re-arms itself on every subsequent attempt, so an
+attacker who keeps guessing walks past the boundary meant to stop them.
 """
 
 import ipaddress
 import logging
 import threading
-import time
+import typing
+
+from cms.server.login_counter_backend import (CounterBackend, InProcessBackend,
+                                              build_backend)
 
 
-# Ceiling on tracked buckets. The panel caps its map the same way (MAX_LOGIN_
-# BUCKETS); without a cap, a run of failed logins on fresh usernames would
-# otherwise grow this map without bound.
+logger = logging.getLogger(__name__)
+
 # How long a failure count survives without a new failure, mirroring the
 # panel's LOGIN_LOCKOUT_MS (15 minutes). Each new failure restarts the window,
 # as incrementBucket does there.
 FAILURE_WINDOW = 15 * 60
 
-
+# Ceiling on tracked buckets. The panel caps its map the same way (MAX_LOGIN_
+# BUCKETS); without a cap, a run of failed logins on fresh usernames would
+# otherwise grow this map without bound.
 MAX_BUCKETS = 1000
 
 
@@ -32,36 +46,47 @@ def is_loopback(ip: str) -> bool:
         # would remove one of the two protections.
         return False
 
-logger = logging.getLogger(__name__)
 
 class LoginFailureCounters:
-    """In-memory failure counters for the adaptive captcha.
+    """Failure counters for the adaptive captcha and the login lockout.
 
-    Mirrors the panel's `loginBuckets` map: keys are `"{username}|{ip}"` for
+Mirrors the panel's `loginBuckets` map: keys are `"{username}|{ip}"` for
     the per-account family, each count lapses after `FAILURE_WINDOW` without a
-    new failure, counters are dropped once `ban_threshold` is reached, and the
-    map is capped.
+    new failure, and the map is capped. Both families are tracked because the
+    per-account bucket keeps one attacker on one account from exhausting the
+    map, and the per-IP bucket stops the same source from resetting its counter
+    by rotating usernames; tracking only one leaves the other bypassable.
 
-    Why both key families are tracked: the per-account bucket keeps one
-    attacker on one account from exhausting the map, and the per-IP bucket
-    stops the same source from resetting its counter by rotating usernames.
-    Tracking only one of them leaves the other trivially bypassable.
-
-    The counters live in process memory, exactly as the panel's do. They are
-    therefore per web-server process and are lost on restart; a restart
-    lowers the barrier rather than raising it, which is the safe direction to
-    fail in.
+    The buckets live in an injected backend, so the algorithm below is the same
+    whether the counts sit in this process or in a Redis that outlives a restart.
     """
 
-    def __init__(self) -> None:
-        # A login can be requested concurrently by several tornado threads, so
-        # the map needs a lock to keep a concurrent increment from losing one.
-        self._buckets: dict[str, tuple[int, float]] = {}
+    def __init__(self, backend: CounterBackend | None = None,
+                 degraded: bool = False) -> None:
+        # WHY a lock here as well as inside the backend: an operation touches
+        # both key families, and holding one lock across them keeps a concurrent
+        # read from seeing a half-recorded failure. The backend's own lock is
+        # always the inner one, so the order can never invert.
         self._lock = threading.Lock()
         # WHY a plain default rather than reading the config here: the counters
         # are standalone so the test suite can drive them without a config, and
-        # Captcha sets the real value from its own section when it is built.
+        # Captcha builds the configured backend when it is constructed.
+        self._backend = backend if backend is not None else InProcessBackend()
+        # WHY the counters own this flag: it is a property of where the counts
+        # are kept, and the captcha needs it to decide what to demand.
+        self._degraded = degraded
         self._ban_threshold = 5
+
+    @property
+    def degraded(self) -> bool:
+        """Return whether the shared backend is unreachable.
+
+        True means the counts are process-local because Redis could not be
+        reached, so a restart or another web server can clear them and the
+        lockout is not holding across the deployment.
+
+        """
+        return self._degraded
 
     def clear(self) -> None:
         """Forget every recorded failure.
@@ -71,19 +96,26 @@ class LoginFailureCounters:
 
         """
         with self._lock:
-            self._buckets.clear()
+            self._backend.clear()
 
     def clear_for(self, username: str, ip: str) -> None:
         """Forget the failures recorded against one account and address.
 
         Called after a successful login, as the panel's completeLogin clears
-        the buckets it incremented: whoever eventually gets the password right
-        starts from a clean count.
+        the buckets it incremented: whoever gets the password right starts over.
 
         """
         with self._lock:
-            self._buckets.pop(f"{username}|{ip}", None)
-            self._buckets.pop(self._ip_key(ip), None)
+            self._backend.delete([f"{username}|{ip}", self._ip_key(ip)])
+
+    def record_success(self, username: str, ip: str) -> None:
+        """Forget the failures behind an account and address after a login.
+
+        The counterpart to `record_failure`, and an alias of `clear_for`, so a
+        caller holding only the counters can pair the two without the captcha.
+
+        """
+        self.clear_for(username, ip)
 
     def count(self, username: str, ip: str) -> int:
         """Return the failures recorded for this account and address.
@@ -94,72 +126,125 @@ class LoginFailureCounters:
         usernames. Expired counters read as zero.
 
         """
-        now = time.monotonic()
         with self._lock:
-            account = self._live_count(f"{username}|{ip}", now)
-            address = self._live_count(self._ip_key(ip), now)
+            account = self._live_count(f"{username}|{ip}")
+            address = self._live_count(self._ip_key(ip))
         return max(account, address)
+
+    def is_limited(self, username: str, ip: str) -> bool:
+        """Return whether this account and address are locked out.
+
+        Mirrors the panel's `isBucketAtLimit`: at or past the ban threshold
+        while the window is still live. `count` already reads a lapsed window as
+        zero, so the two conditions are the same test.
+
+        This is a query, not an action: it never resets the count. The counter
+        keeping climbing is what makes the refusal hold on every later attempt
+        instead of handing out a fresh allowance after each one.
+
+        """
+        return self.count(username, ip) >= self._ban_threshold
 
     def record_failure(self, username: str, ip: str) -> None:
         """Count one more failed attempt against this account and address."""
         ban_threshold = self._ban_threshold
-        now = time.monotonic()
         with self._lock:
-            self._increment(f"{username}|{ip}", now, ban_threshold)
+            self._increment(f"{username}|{ip}", ban_threshold)
             if not is_loopback(ip):
-                self._increment(self._ip_key(ip), now, ban_threshold)
+                self._increment(self._ip_key(ip), ban_threshold)
 
     def set_ban_threshold(self, value: int) -> None:
-        """Set the failure count at which counters are dropped."""
-        self._ban_threshold = value
+        """Set the failure count at which the account or address is refused.
 
-    def _increment(self, key: str, now: float, ban_threshold: int) -> None:
-        """Bump one counter, resetting it if it has reached the ban."""
-        entry = self._buckets.get(key)
-        count = entry[0] if entry is not None else 0
-        count += 1
-        if count >= ban_threshold:
-            # WHY drop instead of keep counting: past the ban threshold the
-            # attempt is refused by the rate limiter, so a retained counter
-            # would pin the captcha on forever. This is the panel's behaviour
-            # (its isRateLimited/clearBucket pair), kept so the two surfaces
-            # escalate identically.
-            logger.info("Login failure counter for %r reached the ban "
-                        "threshold; resetting it.", key)
-            count = 0
-        # The stored second is the moment the count lapses, not the moment of
-        # the failure: a counter is live while now is before it.
-        self._buckets[key] = (count, now + FAILURE_WINDOW)
-        self._evict_if_full()
+        Clamped to at least one, so a misconfigured zero cannot express
+        "lock everyone out at all times" by accident.
 
-    def _evict_if_full(self) -> None:
-        """Keep the map bounded by dropping a counter that is cheapest to lose."""
-        if len(self._buckets) <= MAX_BUCKETS:
+        """
+        self._ban_threshold = max(1, value)
+
+    def _increment(self, key: str, ban_threshold: int) -> None:
+        """Bump one counter, keeping the window sliding.
+
+        WHY the count is not dropped at the threshold: dropping it there would
+        re-arm the counter on the very next attempt, which is the difference
+        between a lockout and an unlimited number of guesses.
+
+        """
+        if self._increment_backend(key) >= ban_threshold:
+            logger.info("Login failure counter for %r is at the ban "
+                        "threshold; refusing further attempts.", key)
+
+    def _increment_backend(self, key: str) -> int:
+        """Add one to *key* through the backend and return the new total.
+
+        Redis increments atomically, so two web server processes cannot lose
+        one another's failure between a read and a write.
+
+        """
+        increment = getattr(self._backend, "increment", None)
+        if increment is not None:
+            # WHY no eviction here: Redis expires each key on its own once its
+            # window lapses, so the map cannot grow past the keys still inside
+            # their window.
+            return int(increment(key, FAILURE_WINDOW))
+        previous = self._live_count(key)
+        self._backend.write(key, previous + 1, FAILURE_WINDOW)
+        self._evict_if_full(self._ban_threshold)
+        return previous + 1
+
+    def _evict_if_full(self, ban_threshold: int) -> None:
+        """Keep the map bounded by dropping a counter that is cheapest to lose.
+
+        WHY the ban threshold and not the map cap: the cap is the size of the
+        map, so every count is trivially below it and the comparison selects
+        nothing. The threshold is what actually marks a bucket as holding a
+        live lockout, and that is what must never be the victim.
+
+        """
+        if len(self._backend.keys()) <= MAX_BUCKETS:
             return
-        # Prefer a counter that is not itself holding a lockout, so an
-        # attacker cannot push out a live ban by flooding with fresh usernames.
-        disposable = [key for key, (count, _) in self._buckets.items()
-                      if count < MAX_BUCKETS]
-        victim = disposable[0] if disposable else next(iter(self._buckets))
-        del self._buckets[victim]
+        victim = self._disposable_key(ban_threshold)
+        if victim is not None:
+            self._backend.delete([victim])
+
+    def _disposable_key(self, ban_threshold: int) -> typing.Optional[str]:
+        """Return a bucket that is not holding a live lockout, if any.
+
+        Prefers the bucket closest to lapsing, so the ones with the most left
+        to do survive. Mirrors the panel's `evictSafestLoginBucket`.
+
+        """
+        fallback: typing.Optional[str] = None
+        shortest: typing.Optional[float] = None
+        for key in self._backend.keys():
+            bucket = self._backend.read(key)
+            if bucket is None or bucket[0] < ban_threshold:
+                return key
+            if shortest is None or bucket[1] < shortest:
+                shortest, fallback = bucket[1], key
+        return fallback
 
     def _ip_key(self, ip: str) -> str:
         """Return the per-IP bucket key.
 
         The `ip#` prefix is what the panel uses: usernames are operator-defined
         and may contain anything, so the family needs a separator shape that no
-        username key can ever take, and the prefix also keeps the two families
-        distinguishable.
+        username key can ever take.
 
         """
         return f"ip#{ip}"
 
-    def _live_count(self, key: str, now: float) -> int:
+    def _live_count(self, key: str) -> int:
         """Return a counter's value, or zero when its window has lapsed."""
-        entry = self._buckets.get(key)
-        if entry is None:
-            return 0
-        if now >= entry[1]:
-            del self._buckets[key]
-            return 0
-        return entry[0]
+        bucket = self._backend.read(key)
+        return 0 if bucket is None else bucket[0]
+
+
+def build_counters(config: typing.Any) -> LoginFailureCounters:
+    """Return the counters *config* asks for, and record how they are kept."""
+    backend, degraded = build_backend(config, FAILURE_WINDOW)
+    return LoginFailureCounters(backend, degraded)
+
+
+__all__ = ["LoginFailureCounters", "build_counters", "is_loopback",
+           "FAILURE_WINDOW", "MAX_BUCKETS"]

@@ -71,13 +71,35 @@ sys.modules["cms.log"] = _log
 
 conf = _load("cms.conf", "cms/conf.py")
 _load("cms.server.captcha_provider", "cms/server/captcha_provider.py")
-_load("cms.server.login_counters", "cms/server/login_counters.py")
+backend = _load("cms.server.login_counter_backend",
+                "cms/server/login_counter_backend.py")
+counters = _load("cms.server.login_counters", "cms/server/login_counters.py")
 captcha = _load("cms.server.captcha", "cms/server/captcha.py")
 
 REMOTE_IP = "203.0.113.7"
 
 
-def configured(verify=None, **overrides):
+class ManualClock:
+    """A clock the test moves by hand.
+
+    A failure window is measured in minutes, so asserting that one lapses
+    otherwise means either waiting for it or reading a private field and
+    rewriting the timestamp behind the code's back. Driving the clock the
+    backend already accepts keeps the assertion on the behaviour rather than on
+    the storage detail.
+    """
+
+    def __init__(self, now=1000.0):
+        self.now = now
+
+    def __call__(self):
+        return self.now
+
+    def advance(self, seconds):
+        self.now += seconds
+
+
+def configured(verify=None, clock=None, **overrides):
     """A captcha that is on and fully keyed, with the provider stubbed out."""
     values = {
         "enabled": True,
@@ -88,6 +110,12 @@ def configured(verify=None, **overrides):
         "ban_threshold": 5,
     }
     values.update(overrides)
+    if clock is not None:
+        counts = counters.LoginFailureCounters(
+            backend=backend.InProcessBackend(clock=clock))
+        return captcha.Captcha(conf.CaptchaConfig(**values), counters=counts,
+                               verify=verify if verify is not None
+                               else (lambda *_: True))
     return captcha.Captcha(conf.CaptchaConfig(**values),
                            verify=verify if verify is not None else (lambda *_: True))
 
@@ -174,11 +202,51 @@ class EscalationTest(unittest.TestCase):
         self.assertEqual(counters.count("admin", "127.0.0.1"), 3)
         self.assertEqual(counters.count("other", "127.0.0.1"), 0)
 
-    def test_past_the_ban_threshold_the_counter_restarts(self):
+    def test_the_ban_threshold_refuses_and_keeps_refusing(self):
+        # Reaching the threshold must REFUSE, not reset the count. A count that
+        # restarted there re-armed itself on the very next attempt, so the
+        # account was guessable without limit: the sixth guess was counted as
+        # the first, and so on forever. Every attempt past the threshold has to
+        # read as locked, which is only true while the count is retained.
         subject = configured(ban_threshold=5)
         for _ in range(5):
             subject.record_failure("admin", REMOTE_IP)
-        self.assertFalse(subject.is_required("admin", REMOTE_IP))
+        self.assertTrue(subject.is_locked("admin", REMOTE_IP))
+        for _ in range(3):
+            subject.record_failure("admin", REMOTE_IP)
+            self.assertTrue(subject.is_locked("admin", REMOTE_IP))
+
+    def test_a_lapsed_window_reads_as_no_failures(self):
+        # A count that never expired would strand a user who mistyped a few
+        # times, walked away, and came back: their old failures would still be
+        # counted against them an hour later.
+        clock = ManualClock()
+        subject = configured(ban_threshold=5, clock=clock)
+        for _ in range(4):
+            subject.record_failure("admin", REMOTE_IP)
+        self.assertFalse(subject.is_locked("admin", REMOTE_IP))
+
+        clock.advance(counters.FAILURE_WINDOW + 1)
+        self.assertEqual(subject.counters.count("admin", REMOTE_IP), 0)
+        self.assertFalse(subject.is_locked("admin", REMOTE_IP))
+
+    def test_the_window_slides_so_a_lockout_outlives_the_gap(self):
+        # Each failure must push the window forward, or an attacker pausing for
+        # most of a window between guesses would regain a fresh allowance every
+        # time: four failures spread across three windows still have to add up.
+        clock = ManualClock()
+        subject = configured(ban_threshold=5, clock=clock)
+        for _ in range(4):
+            subject.record_failure("admin", REMOTE_IP)
+            clock.advance(counters.FAILURE_WINDOW - 1)
+        self.assertEqual(subject.counters.count("admin", REMOTE_IP), 4)
+
+        subject.record_failure("admin", REMOTE_IP)
+        self.assertTrue(subject.is_locked("admin", REMOTE_IP))
+
+        # Going quiet for less than a window must not lift the lockout.
+        clock.advance(counters.FAILURE_WINDOW - 1)
+        self.assertTrue(subject.is_locked("admin", REMOTE_IP))
 
 
 class Form:

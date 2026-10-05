@@ -132,9 +132,18 @@ class CaptchaConfig:
     secret_key: str = ""
     # Failed logins before the captcha becomes mandatory on this account/IP.
     threshold: int = 3
-    # Failures after which the counters are dropped, mirroring the panel's
-    # MAX_LOGIN_ATTEMPTS lockout (5), which bans rather than escalating.
+    # Failures after which the account/address is refused outright, mirroring
+    # the panel's MAX_LOGIN_ATTEMPTS lockout (5). The count is retained while
+    # the refusal holds, so the lockout cannot be re-armed by trying again.
     ban_threshold: int = 5
+    # Shared Redis holding the login counters, so a lockout survives a web
+    # server restart and spans every process behind the proxy.
+    # WHY off by default: a deployment that sets nothing keeps the in-process
+    # counters, which are per process and lost on restart, so nothing about an
+    # upgrade changes until an operator opts in.
+    redis_enabled: bool = False
+    redis_host: str = "127.0.0.1"
+    redis_port: int = 6379
 
 
 @dataclass()
