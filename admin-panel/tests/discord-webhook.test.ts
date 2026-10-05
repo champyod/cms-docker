@@ -9,7 +9,6 @@ import {
   upsertTomlValue,
   validateDiscordRoleId,
   validateDiscordWebhookUrl,
-  validateNotificationEnvUpdates,
 } from '@/lib/discord-webhook';
 
 const WEBHOOK_URL = `https://discord.com/api/webhooks/${'1'.repeat(18)}/${'a'.repeat(24)}`;

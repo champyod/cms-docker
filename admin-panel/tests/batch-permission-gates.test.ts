@@ -44,9 +44,6 @@ describe('batch permission gates (static)', () => {
     expect(src).toContain("verifyApiPermission('participation:delete')");
     expect(src).toContain("verb: 'participation:create'");
     expect(src).toContain("verb: 'participation:delete'");
-    // contest participation ops must not use the old coarse participation:update verb
-    // (team ops correctly still use participation:update — don't assert globally)
-    const contestVerbs = [...src.matchAll(/handleContest[\s\S]*?revalidateUserContestPages\(\)/g)].join('');
     // simpler: just ensure both correct verbs exist; team verbs covered separately
     expect(src).toMatch(/participation:create/);
     expect(src).toMatch(/participation:delete/);
@@ -115,7 +112,7 @@ describe('batch permission enforcement (runtime)', () => {
     vi.doMock('@/lib/audit', () => ({ recordAudit: vi.fn(async () => {}) }));
     vi.doMock('@/lib/creds-file', async () => {
       const actual = await vi.importActual<typeof import('@/lib/creds-file')>('@/lib/creds-file');
-      return { ...actual, writeCredsCsv: vi.fn(async (c: string) => ({ token: 'tok', downloadUrl: '/api/users/credentials/tok' })) };
+      return { ...actual, writeCredsCsv: vi.fn(async (_content: string) => ({ token: 'tok', downloadUrl: '/api/users/credentials/tok' })) };
     });
     vi.doMock('next/cache', () => ({ revalidatePath: vi.fn() }));
     vi.doMock('@/lib/teams', () => ({ resolveTeamIdByCode: vi.fn(async () => 99) }));
