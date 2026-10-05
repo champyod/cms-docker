@@ -36,9 +36,28 @@ const touchTargetGuard = {
   },
 };
 
+// The repo marks intentionally-unused bindings with a leading underscore:
+// rest-omission destructuring (stripping sensitive fields before writing an
+// audit record) and unused callback parameters. Honour that convention while
+// leaving the rule itself at "warn" — anything genuinely unused still reports.
+const underscoreConvention = {
+  rules: {
+    "@typescript-eslint/no-unused-vars": [
+      "warn",
+      {
+        argsIgnorePattern: "^_",
+        varsIgnorePattern: "^_",
+        caughtErrorsIgnorePattern: "^_",
+        ignoreRestSiblings: true,
+      },
+    ],
+  },
+};
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  underscoreConvention,
   touchTargetGuard,
   // Override default ignores of eslint-config-next.
   globalIgnores([
