@@ -1128,10 +1128,10 @@ resolver_timeout 3s;
 # fail-open verdict as applying to it.
 #
 # The commented token bucket is written to fail OPEN if it is ever enabled as-is:
-# `if ok then ... end` has no else branch, and ngx.exit(503) sits inside the success
-# branch, so an unreachable Redis would skip the check. It also calls require() and
-# red:connect() without pcall, so a failure would raise a Lua error (HTTP 500) rather
-# than degrade. Fix both before enabling — see docs/waf-tuning.md.
+# its guard has no else branch, and ngx.exit(503) sits inside the success branch,
+# so an unreachable Redis would skip the check. It also calls require() and
+# red:connect() without pcall, so a failure would raise a Lua error (HTTP 500)
+# rather than degrade. Fix both before enabling — see docs/waf-tuning.md.
 EOF
 )
     redis_lua_placeholder=$(cat <<'EOLUA'
