@@ -1,7 +1,10 @@
 use clap::{Subcommand, ValueEnum};
 
 pub mod commands;
+mod domain_args;
 mod resolve;
+
+pub use domain_args::DomainSetupFlags;
 
 /// Database lifecycle subcommands (`db <init|reset|clean|sync>`).
 #[derive(ValueEnum, Clone, Debug)]
@@ -55,45 +58,29 @@ pub enum FunnelSub {
     Status,
 }
 
-/// Domain subcommands (`domain <setup|status|renew|preflight>`).
+/// Domain subcommands (`domain <setup|cert|proxy|status|renew|preflight|check-expiry|revoke>`).
 ///
-/// `Setup` carries the full flag set accepted by `scripts/__domain.sh setup`
-/// so flags typed after `./cms domain setup` reach the script instead of
-/// being rejected by clap.
+/// Every verb is one depth under `./cms domain` and carries the flags its own
+/// script function reads, so a flag typed after a verb reaches
+/// `scripts/__domain.sh` instead of being rejected by clap.
 #[derive(Subcommand, Clone, Debug)]
 pub enum DomainCmd {
     /// Configure domains, TLS certificates, and render nginx config.
+    // WHY the flag sets are boxed: clap flattens them into the variant, so
+    // unboxed they made every other subcommand variant carry ~400 bytes.
     Setup {
-        /// Certificate type (letsencrypt|provided|selfsigned).
-        #[arg(long, default_value = "letsencrypt")]
-        cert: String,
-        /// Primary domain (default from `DOMAIN_NAME` env).
-        #[arg(long)]
-        domain: Option<String>,
-        /// Admin subdomain.
-        #[arg(long)]
-        admin_domain: Option<String>,
-        /// OJ subdomain.
-        #[arg(long)]
-        oj_domain: Option<String>,
-        /// Ranking subdomain.
-        #[arg(long)]
-        ranking_domain: Option<String>,
-        /// Path to fullchain.pem (required for --cert provided).
-        #[arg(long)]
-        cert_path: Option<String>,
-        /// Path to privkey.pem (required for --cert provided).
-        #[arg(long)]
-        key_path: Option<String>,
-        /// Email for Let's Encrypt registration (required for letsencrypt).
-        #[arg(long)]
-        email: Option<String>,
-        /// Actually execute changes (default: dry-run, prints only).
-        #[arg(long, default_value_t = false)]
-        apply: bool,
-        /// Skip optional feature prompts.
-        #[arg(long, short = 'y', default_value_t = false)]
-        yes: bool,
+        #[command(flatten)]
+        flags: Box<DomainSetupFlags>,
+    },
+    /// Issue the certificate only; nginx config is neither rendered nor reloaded.
+    Cert {
+        #[command(flatten)]
+        flags: Box<DomainSetupFlags>,
+    },
+    /// Render, validate and reload nginx only; the certificate store is untouched.
+    Proxy {
+        #[command(flatten)]
+        flags: Box<DomainSetupFlags>,
     },
     /// Show DNS resolution, cert expiry, renewal timer, connectivity.
     Status,
@@ -101,6 +88,36 @@ pub enum DomainCmd {
     Renew,
     /// 9-check connectivity matrix.
     Preflight,
+    /// Exit non-zero when the certificate is missing or expires within `--days`.
+    CheckExpiry {
+        /// Expiry threshold in days.
+        #[arg(long)]
+        days: Option<u32>,
+        /// Alternate env file instead of ./.env.
+        #[arg(long)]
+        config: Option<String>,
+    },
+    /// Revoke the current certificate.
+    Revoke {
+        /// Revocation reason.
+        #[arg(long)]
+        reason: Option<String>,
+        /// Primary domain (default from the env file).
+        #[arg(long)]
+        domain: Option<String>,
+        /// Print actions without executing (the script default).
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+        /// Actually execute the revocation.
+        #[arg(long, default_value_t = false)]
+        apply: bool,
+        /// Skip optional feature prompts.
+        #[arg(long, short = 'y', default_value_t = false)]
+        yes: bool,
+        /// Alternate env file instead of ./.env.
+        #[arg(long)]
+        config: Option<String>,
+    },
 }
 
 /// Config subcommands (`config <sync|edit|show>`).
@@ -213,7 +230,7 @@ pub enum Commands {
     },
     /// Shard-aware full server update (git+img+db+verify).
     UpdateServer,
-    /// Domain HTTPS lifecycle (`domain <setup|status|renew|preflight>`).
+    /// Domain HTTPS lifecycle (`domain <setup|cert|proxy|status|renew|preflight|check-expiry|revoke>`).
     Domain {
         #[command(subcommand)]
         sub: DomainCmd,

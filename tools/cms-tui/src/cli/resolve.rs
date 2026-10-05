@@ -1,8 +1,8 @@
 use crate::core::dispatch::DispatchKey;
 
 use super::{
-    BackupSub, Commands, ConfigSub, ContestSub, DbSub, DomainCmd, FunnelSub, SecretsSub,
-    TailscaleSub, WorkerSub,
+    domain_args::setup_args, BackupSub, Commands, ConfigSub, ContestSub, DbSub, DomainCmd,
+    DomainSetupFlags, FunnelSub, SecretsSub, TailscaleSub, WorkerSub,
 };
 
 fn db_key(sub: DbSub) -> DispatchKey {
@@ -56,75 +56,70 @@ fn funnel_dispatch(sub: FunnelSub) -> (DispatchKey, &'static str) {
         FunnelSub::Status => (DispatchKey::FunnelStatus, "status"),
     }
 }
-struct DomainSetupArgs<'a> {
-    cert: &'a str,
-    domain: &'a Option<String>,
-    admin_domain: &'a Option<String>,
-    oj_domain: &'a Option<String>,
-    ranking_domain: &'a Option<String>,
-    cert_path: &'a Option<String>,
-    key_path: &'a Option<String>,
-    email: &'a Option<String>,
-    apply: bool,
-    yes: bool,
-}
-
-fn domain_setup_args(params: DomainSetupArgs<'_>) -> Vec<String> {
-    let mut out: Vec<String> = vec!["setup".into(), "--cert".into(), params.cert.to_string()];
-    for (flag, value) in [
-        ("--domain", params.domain),
-        ("--admin-domain", params.admin_domain),
-        ("--oj-domain", params.oj_domain),
-        ("--ranking-domain", params.ranking_domain),
-        ("--cert-path", params.cert_path),
-        ("--key-path", params.key_path),
-        ("--email", params.email),
-    ] {
-        if let Some(value) = value {
-            out.push(flag.into());
-            out.push(value.clone());
-        }
-    }
-    if params.apply {
-        out.push("--apply".into());
-    }
-    if params.yes {
-        out.push("--yes".into());
-    }
-    out
+/// Builds the argv for the verbs whose whole flag surface is the shared set
+/// (`setup`, `cert`, `proxy`).
+///
+/// WHY these three share `DomainSetup`: the key only chooses the target script,
+/// and the verb that narrows the run travels in the argv the script reads first.
+/// Giving each verb its own key and catalog row — so the TUI can label and
+/// stream them apart — is the next step; until then the key is correct for all
+/// three because all three run `__domain.sh`.
+fn setup_scope_dispatch(verb: &str, flags: &DomainSetupFlags) -> (DispatchKey, Vec<String>) {
+    (DispatchKey::DomainSetup, setup_args(verb, flags))
 }
 
 fn domain_dispatch(sub: &DomainCmd) -> (DispatchKey, Vec<String>) {
     match sub {
-        DomainCmd::Setup {
-            cert,
-            domain,
-            admin_domain,
-            oj_domain,
-            ranking_domain,
-            cert_path,
-            key_path,
-            email,
-            apply,
-            yes,
-        } => {
-            let args = domain_setup_args(DomainSetupArgs {
-                cert,
-                domain,
-                admin_domain,
-                oj_domain,
-                ranking_domain,
-                cert_path,
-                key_path,
-                email,
-                apply: *apply,
-                yes: *yes,
-            });
-            (DispatchKey::DomainSetup, args)
-        }
+        DomainCmd::Setup { flags } => setup_scope_dispatch("setup", flags),
+        DomainCmd::Cert { flags } => setup_scope_dispatch("cert", flags),
+        DomainCmd::Proxy { flags } => setup_scope_dispatch("proxy", flags),
         DomainCmd::Status => (DispatchKey::DomainStatus, vec!["status".into()]),
         DomainCmd::Renew => (DispatchKey::DomainRenew, vec!["renew".into()]),
         DomainCmd::Preflight => (DispatchKey::DomainPreflight, vec!["preflight".into()]),
+        DomainCmd::CheckExpiry { days, config } => {
+            // WHY `DomainStatus`: both read the certificate and print a result
+            // the caller consumes, so they share the streaming target until the
+            // catalog gives `check-expiry` a row of its own.
+            let mut args = vec!["check-expiry".to_string()];
+            push_optional(&mut args, "--days", days.map(|value| value.to_string()));
+            push_optional(&mut args, "--config", config.clone());
+            (DispatchKey::DomainStatus, args)
+        }
+        DomainCmd::Revoke {
+            reason,
+            domain,
+            dry_run,
+            apply,
+            yes,
+            config,
+        } => {
+            let mut args = vec!["revoke".to_string()];
+            push_optional(&mut args, "--reason", reason.clone());
+            push_optional(&mut args, "--domain", domain.clone());
+            if *dry_run {
+                args.push("--dry-run".into());
+            }
+            if *apply {
+                args.push("--apply".into());
+            }
+            if *yes {
+                args.push("--yes".into());
+            }
+            push_optional(&mut args, "--config", config.clone());
+            // WHY `DomainRenew`: revoking touches the ACME account the renewal
+            // owns and needs a terminal, which is the target `DomainRenew`
+            // declares; the reason is carried in the argv.
+            (DispatchKey::DomainRenew, args)
+        }
+    }
+}
+
+/// Appends `flag value` only when a value was given, so the script keeps
+/// applying the default it would have applied had the flag been omitted.
+fn push_optional(out: &mut Vec<String>, flag: &str, value: Option<String>) {
+    if let Some(value) = value {
+        out.push(flag.to_string());
+        out.push(value);
     }
 }
 
@@ -183,3 +178,7 @@ fn resolve_fleet(cmd: &Commands) -> Option<(DispatchKey, Vec<String>)> {
 pub(super) fn resolve_catalog(cmd: &Commands) -> Option<(DispatchKey, Vec<String>)> {
     resolve_basic(cmd).or_else(|| resolve_fleet(cmd))
 }
+
+#[cfg(test)]
+#[path = "resolve_tests.rs"]
+mod tests;
