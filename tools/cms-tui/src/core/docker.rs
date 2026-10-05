@@ -3,6 +3,14 @@ use super::runner::{RunError, Runner};
 /// The five make-target stacks that mirror `./cms deploy`/`stop`/`pull`.
 pub const ALL_STACKS: [&str; 5] = ["core", "admin", "contest", "worker", "infra"];
 
+/// Additive stacks that publish host ports and are excluded from `all`.
+///
+/// WHY excluded from `all`: `domain` binds host 80/443 and starts certbot, and
+/// `waf` adds the ModSecurity profile in front of it. A workstation running
+/// `make core` must not acquire a public listener or begin ACME issuance, so
+/// these are opt-in by name rather than part of the blanket rollout.
+pub const ADDITIVE_STACKS: [&str; 2] = ["domain", "waf"];
+
 /// Deploy order used by `./cms deploy all` (core first, worker last).
 const DEPLOY_ALL_ORDER: [&str; 5] = ["core", "infra", "admin", "contest", "worker"];
 
@@ -136,7 +144,7 @@ pub fn deploy_targets(stack: &str) -> Result<Vec<String>, DockerError> {
     if stack == "all" {
         return Ok(DEPLOY_ALL_ORDER.iter().map(ToString::to_string).collect());
     }
-    if ALL_STACKS.contains(&stack) {
+    if ALL_STACKS.contains(&stack) || ADDITIVE_STACKS.contains(&stack) {
         return Ok(vec![stack.to_string()]);
     }
     Err(DockerError::UnknownStack(stack.to_string()))
@@ -151,7 +159,7 @@ pub fn stop_targets(stack: &str) -> Result<Vec<String>, DockerError> {
     if stack.is_empty() || stack == "all" {
         return Ok(ALL_STACKS.iter().map(|s| format!("{s}-stop")).collect());
     }
-    if ALL_STACKS.contains(&stack) {
+    if ALL_STACKS.contains(&stack) || ADDITIVE_STACKS.contains(&stack) {
         return Ok(vec![format!("{stack}-stop")]);
     }
     Err(DockerError::UnknownStack(stack.to_string()))
@@ -166,7 +174,7 @@ pub fn clean_targets(stack: &str) -> Result<Vec<String>, DockerError> {
     if stack.is_empty() || stack == "all" {
         return Ok(ALL_STACKS.iter().map(|s| format!("{s}-clean")).collect());
     }
-    if ALL_STACKS.contains(&stack) {
+    if ALL_STACKS.contains(&stack) || ADDITIVE_STACKS.contains(&stack) {
         return Ok(vec![format!("{stack}-clean")]);
     }
     Err(DockerError::UnknownStack(stack.to_string()))
@@ -184,6 +192,10 @@ pub fn pull_targets(stack: &str) -> Result<Vec<String>, DockerError> {
     if ALL_STACKS.contains(&stack) {
         return Ok(vec![format!("pull-{stack}")]);
     }
+    // WHY no `pull-domain` / `pull-waf`: both stacks run stock upstream images
+    // (nginx:alpine, certbot/certbot, redis:7-alpine, owasp/modsecurity-crs) that
+    // carry no build context, so there is nothing for this repo to pull. Their
+    // images refresh on `docker compose up`, not through this path.
     Err(DockerError::UnknownStack(stack.to_string()))
 }
 
@@ -251,5 +263,37 @@ mod tests {
     fn pull_maps_per_stack_and_all() {
         assert_eq!(pull_targets("infra").unwrap(), vec!["pull-infra"]);
         assert_eq!(pull_targets("").unwrap(), vec!["pull"]);
+    }
+}
+
+#[cfg(test)]
+mod additive_stack_tests {
+    use super::{clean_targets, deploy_targets, pull_targets, stop_targets, ADDITIVE_STACKS, ALL_STACKS};
+
+    #[test]
+    fn additive_stacks_deploy_and_stop() {
+        for s in ADDITIVE_STACKS {
+            assert_eq!(deploy_targets(s).unwrap(), vec![s.to_string()]);
+            assert_eq!(stop_targets(s).unwrap(), vec![format!("{s}-stop")]);
+            assert_eq!(clean_targets(s).unwrap(), vec![format!("{s}-clean")]);
+        }
+    }
+
+    #[test]
+    fn pull_rejects_additive_stacks() {
+        for s in ADDITIVE_STACKS {
+            assert!(pull_targets(s).is_err());
+        }
+    }
+
+    #[test]
+    fn all_excludes_additive_stacks() {
+        let all = deploy_targets("all").unwrap();
+        for s in ADDITIVE_STACKS {
+            assert!(!all.contains(&s.to_string()), "deploy all must not include {s}");
+        }
+        let stops = stop_targets("all").unwrap();
+        assert_eq!(stops.len(), ALL_STACKS.len());
+        assert!(!stops.contains(&"domain-stop".to_string()));
     }
 }

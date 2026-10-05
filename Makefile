@@ -12,7 +12,26 @@ COMPOSE_FLAGS := $(foreach f,$(COMPOSE_FILES),-f $(f))
 ADMIN_UP_PROFILES   := --profile core --profile admin
 CONTEST_UP_PROFILES := --profile core --profile contest
 
-.PHONY: setup audit help env core admin contest worker infra core-stop admin-stop contest-stop contest-down worker-stop infra-stop core-clean admin-clean contest-clean worker-clean infra-clean db-clean clean pull pull-core pull-admin pull-contest pull-worker pull-infra core-img admin-img contest-img worker-img infra-img admin-dev admin-dev-stop contest-down cms-init admin-create prisma-sync lint smoke-test preflight backup db-reset
+# Additive stacks that publish host ports the default COMPOSE_FILES must never
+# pull in implicitly. WHY separate: docker-compose.domain.yml and
+# docker-compose.waf.yml define services with no `profiles:` key (grader-nginx-proxy
+# binds host 80/443, grader-certbot and grader-redis-rate-limit always start), so
+# folding them into COMPOSE_FILES would make `make core` issue certificates and
+# bind 443 on a workstation. These targets opt in per-stack.
+DOMAIN_COMPOSE_FILES := docker-compose.yml docker-compose.domain.yml
+WAF_COMPOSE_FILES    := docker-compose.yml docker-compose.domain.yml docker-compose.waf.yml
+DOMAIN_COMPOSE_FLAGS := -f docker-compose.yml -f docker-compose.domain.yml
+WAF_COMPOSE_FLAGS    := -f docker-compose.yml -f docker-compose.domain.yml -f docker-compose.waf.yml
+
+# WHY waf carries --profile core --profile contest: grader-waf's BACKEND is
+# http://grader-nginx-proxy:80, so the domain proxy must already be up. Compose
+# *unions* profiles across merged files rather than replacing them, and a
+# depends_on target is only visible when one of its profiles is active — so the
+# contest profile has to be requested or the merge fails validation with
+# `depends on undefined service "nginx-proxy"`.
+WAF_UP_PROFILES      := --profile core --profile contest --profile waf
+
+.PHONY: setup audit help env core admin contest worker infra domain waf core-stop admin-stop contest-stop contest-down worker-stop infra-stop domain-stop waf-stop core-clean admin-clean contest-clean worker-clean infra-clean domain-clean waf-clean db-clean clean pull pull-core pull-admin pull-contest pull-worker pull-infra core-img admin-img contest-img worker-img infra-img admin-dev admin-dev-stop contest-down cms-init admin-create prisma-sync lint smoke-test preflight backup db-reset
 
 help:
 	@echo "Available commands:"
@@ -22,16 +41,22 @@ help:
 	@echo "  make contest        - Build+start contest profile (CONTEST_ID canonical)"
 	@echo "  make worker         - Deploy worker fleet (pull/build + per-shard deploy)"
 	@echo "  make infra          - Build+start monitor profile (alias: infra → monitor)"
+	@echo "  make domain         - Start domain stack: grader-nginx-proxy (host 80/443) + certbot + redis-rate-limit"
+	@echo "  make waf            - Start WAF profile on top of the domain stack (OWASP CRS, DetectionOnly by default)"
 	@echo "  make core-stop      - Stop core profile (down --profile core)"
 	@echo "  make admin-stop     - Stop admin profile"
 	@echo "  make contest-stop   - Stop contest profile (stop — keeps containers, use contest-down to remove)"
 	@echo "  make worker-stop    - Stop worker fleet (all local shards)"
 	@echo "  make infra-stop     - Stop monitor profile"
+	@echo "  make domain-stop    - Stop domain stack (nginx-proxy, certbot, redis-rate-limit)"
+	@echo "  make waf-stop       - Stop the WAF profile (domain stack left running)"
 	@echo "  make core-clean     - Down -v core profile"
 	@echo "  make admin-clean    - Down -v admin profile"
 	@echo "  make contest-clean  - Down -v contest profile"
 	@echo "  make worker-clean   - Down -v worker profile"
 	@echo "  make infra-clean    - Down -v monitor profile"
+	@echo "  make domain-clean   - Down -v domain stack"
+	@echo "  make waf-clean      - Down -v WAF profile + domain stack"
 	@echo "  make db-clean       - Down -v ALL profiles (full reset)"
 	@echo "  make db-reset       - Reset DB (db-clean + core with DEPLOYMENT_TYPE=img override)"
 	@echo "  make clean          - Removes .env file"
@@ -138,6 +163,30 @@ infra:
 	@echo "Infra (monitor) profile started."
 
 # ---------------------------------------------------------------------------
+# Additive stacks — domain + WAF
+#
+# WHY these are separate targets: both compose files define services with no
+# `profiles:` key, so merging them into COMPOSE_FILES (line 7) would make every
+# default target bind host 80/443 and start certbot. `./cms domain setup`
+# renders config/grader.nginx.conf and requests certificates; these targets are
+# what actually serve them.
+#
+# WHY waf depends on nothing but compose: grader-waf's BACKEND is
+# http://grader-nginx-proxy:80, so the domain stack must already be up.
+# ---------------------------------------------------------------------------
+domain:
+	@if [ ! -f config/grader.nginx.conf ]; then \
+		echo "config/grader.nginx.conf is missing — run './cms domain setup --apply' first" >&2; \
+		exit 1; \
+	fi
+	$(COMPOSE_CMD) $(DOMAIN_COMPOSE_FLAGS) up -d
+	@echo "Domain stack started (nginx-proxy + certbot + redis-rate-limit)."
+
+waf:
+	$(COMPOSE_CMD) $(WAF_COMPOSE_FLAGS) $(WAF_UP_PROFILES) up -d
+	@echo "WAF profile started. SecRuleEngine is DetectionOnly by default — see docs/waf-tuning.md."
+
+# ---------------------------------------------------------------------------
 # Stop / clean / down variants per stack
 # ---------------------------------------------------------------------------
 core-stop:
@@ -179,6 +228,23 @@ infra-stop:
 
 infra-clean:
 	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile monitor down -v
+
+# Scoped by service name so a domain teardown never reaches into core/contest,
+# whose containers share the project. WHY an explicit list: the domain compose
+# file has no profiles, so an unscoped `down` would take every service it sees.
+DOMAIN_SERVICES := nginx-proxy certbot redis-rate-limit
+
+domain-stop:
+	$(COMPOSE_CMD) $(DOMAIN_COMPOSE_FLAGS) down $(DOMAIN_SERVICES)
+
+domain-clean:
+	$(COMPOSE_CMD) $(DOMAIN_COMPOSE_FLAGS) down -v $(DOMAIN_SERVICES)
+
+waf-stop:
+	$(COMPOSE_CMD) $(WAF_COMPOSE_FLAGS) $(WAF_UP_PROFILES) rm -f -s grader-waf
+
+waf-clean:
+	$(COMPOSE_CMD) $(WAF_COMPOSE_FLAGS) $(WAF_UP_PROFILES) rm -f -s -v grader-waf
 
 db-clean:
 	@echo "WARNING: This will delete all database data and reset everything."
