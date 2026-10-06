@@ -7,6 +7,7 @@ import path from 'path';
 import util from 'util';
 
 import { composeLocationFlags, type HostComposeLocation } from '@/lib/compose-location';
+import { scopedServiceList } from '@/lib/compose-command';
 import { DEPLOY_OPERATION_ID_REGEX, DEPLOY_STALE_LABEL, DEPLOY_STALE_MS, DEPLOY_UNOBSERVABLE_LABEL } from '@/lib/constants/deploy';
 import { parseDeployPercent, type DeployStatus } from '@/lib/deploy-percent.shared';
 import { getRepoRoot } from '@/lib/repo-root';
@@ -117,7 +118,9 @@ export function buildContestDeployCommand(plan: ContestDeployPlan): string {
   const invocation = ['docker', 'compose', composeLocationFlags(plan.location), plan.files, CONTEST_PROFILES.join(' ')]
     .filter((part) => part.length > 0)
     .join(' ');
-  const scope = CONTEST_SERVICES.join(' ');
+  // Why the scope is filtered through the shared list: this is a third copy of the contest stack's
+  // services, and naming a protected one here would reach its container without any guard seeing it.
+  const scope = scopedServiceList(CONTEST_SERVICES).join(' ');
   const recreate = `${invocation} up -d ${plan.mode === 'src' ? '--build' : '--no-build'} --force-recreate ${scope}`;
   // Refresh nginx after the web server is recreated (stale upstream DNS).
   // Single source of truth: scripts/__contest_dns_refresh.sh.

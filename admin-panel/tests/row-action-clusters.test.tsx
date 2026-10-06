@@ -29,7 +29,7 @@ vi.mock('sonner', () => ({ toast: { loading: vi.fn(), success: vi.fn(), error: v
 afterEach(() => cleanup());
 
 const CONTAINER_CONFIG = { autoRestart: true, maxRestarts: 3, currentRestarts: 0, discordNotifications: true };
-const CONTAINER = { id: 'abc123', name: 'api', image: 'cms/api', status: 'Up 2 days', created: '', isCmsContainer: true };
+const CONTAINER = { id: 'abc123', name: 'api', image: 'cms/api', status: 'Up 2 days', created: '', isCmsContainer: true, protected: false };
 const CONTEST: ContestRowData = { id: 4, name: 'Autumn', is_active: true, start: new Date('2026-01-01'), stop: new Date('2026-12-01') };
 const GROUP: GroupWithPermissions = { id: 3, name: 'Judges', description: null, is_seeded: false, permissionKeys: [] };
 const QUESTION: QuestionRow = { id: 9, subject: 'Scoring', text: 'How is it scored?', ignored: false, reply_timestamp: null, reply_subject: null, reply_text: null, question_timestamp: '2026-01-02T03:04:00Z', participations: { users: { username: 'ada' } } };

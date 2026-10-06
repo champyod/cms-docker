@@ -10,6 +10,7 @@ vi.mock('@/components/users/UserList', () => ({ UserList: vi.fn(() => null) }));
 vi.mock('@/i18n', () => ({
   getDictionary: vi.fn(async () => ({
     users: { title: 'Users', subtitle: 'Manage users' },
+    docs: { viewDocumentation: 'View Documentation' },
     navigation: {
       home: { label: 'Dashboard' },
       groups: { people: 'People' },

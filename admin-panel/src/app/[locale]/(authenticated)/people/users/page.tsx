@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { PageSurface } from '@/components/core/PageSurface';
 import { getUsers } from '@/app/actions/users';
 import { UserList } from '@/components/users/UserList';
+import { UserListHeader } from '@/components/users/UserListHeader';
 import { getDictionary } from '@/i18n';
 import type { Dictionary } from '@/lib/dictionary';
 import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
@@ -76,6 +77,16 @@ export default async function PeopleUsersPage({ params, searchParams }: {
       breadcrumbs={listBreadcrumbs(locale, 'people', 'people.users', dict)}
       title={usersLabel}
       description={dict.users.subtitle}
+      actions={
+        <UserListHeader
+          contests={contests}
+          canReadContests={canReadContests}
+          permissionKeys={[...result.effectivePermissions]}
+          navigation={dict.navigation}
+          locale={locale}
+          docsLabel={dict.docs.viewDocumentation}
+        />
+      }
     >
       <UserList
         initialUsers={result.users}

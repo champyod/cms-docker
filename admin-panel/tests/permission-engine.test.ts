@@ -176,9 +176,10 @@ describe('PERMISSION_REGISTRY', () => {
   });
 
   // Why pinned: MODULES / DOMAIN_VERBS edits must be deliberate, not silent.
-  // 200 + 5 RESERVED keys, minus 5 retired, plus 3 backup keys, plus 2 lane keys = 205.
-  it('holds exactly 205 keys', () => {
-    expect(PERMISSION_REGISTRY.length).toBe(205);
+  // 200 + 5 RESERVED keys, minus 5 retired, plus 3 backup keys, plus 2 lane keys,
+  // plus 2 platform-boundary keys (waf:control, domain:control) = 207.
+  it('holds exactly 207 keys', () => {
+    expect(PERMISSION_REGISTRY.length).toBe(207);
   });
 
   it.each(PERMISSION_REGISTRY)('entry $key equals ${module}:${verb}', (definition) => {

@@ -74,8 +74,19 @@ describe('PageSurface', () => {
     const html = renderPage();
     expect(html).toContain('pb-[env(safe-area-inset-bottom)]');
     expect(html).toContain('md:pb-0');
-    expect(html).toContain('gap-3 sm:flex-row');
     expect(html).not.toContain('<main');
+  });
+
+  it('stacks the description inside the title column instead of beside the title', () => {
+    const html = renderPage();
+    const titleColumnStart = html.indexOf('flex min-w-0 flex-col gap-2');
+    const titleColumnEnd = html.indexOf('</div>', html.indexOf('Manage contests'));
+    const titleColumn = html.slice(titleColumnStart, titleColumnEnd);
+    // The description has to close the same column the title opens, so the actions
+    // sibling sits after it rather than between the title and its description.
+    expect(titleColumn).toContain('<h1');
+    expect(titleColumn).toContain('Manage contests');
+    expect(html.indexOf('Manage contests')).toBeLessThan(html.indexOf('Create contest'));
   });
 
   it('uses the exact public prop set', () => {

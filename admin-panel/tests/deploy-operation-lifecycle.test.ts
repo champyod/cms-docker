@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { DEPLOY_EFFECT_LEASE_MS, DEPLOY_LOG_ACTIVITY_MS, DEPLOY_STALE_MS, DEPLOY_UNOBSERVABLE_LABEL, DEPLOY_UNOBSERVABLE_MS, DEPLOY_WALL_TIMEOUT_MS } from '@/lib/constants/deploy';
+import { PROTECTED_COMPOSE_SERVICES } from '@/lib/compose-command';
 import { claimDeployOutcome, cleanStaleOperations, patchDeployMeta, recordDeployOperationStart } from '@/lib/deploy-operation-store';
 import type { ContestDeployPlan } from '@/lib/deploy-store';
 
@@ -875,6 +876,18 @@ describe('contest deploy lifecycle', () => {
     expect(command).toBe(
       "docker compose --project-directory '/host/repo' --env-file '/host/repo/.env' -f docker-compose.yml -f docker-compose.override.yml --profile core --profile contest up -d --build --force-recreate evaluation-service proxy-service contest-web-server nginx-proxy && bash scripts/__contest_dns_refresh.sh",
     );
+  });
+
+  it('never names a protected service in the scope it hands compose', () => {
+    const command = store.buildContestDeployCommand({
+      files: '-f docker-compose.yml',
+      mode: 'img',
+      location: null,
+    });
+    // The deploy carries its own copy of the contest services, so a protected one added there would
+    // reach its container without any guard seeing it. The shared filter is what prevents that.
+    for (const service of PROTECTED_COMPOSE_SERVICES) expect(command).not.toContain(service);
+    expect(command).toContain('nginx-proxy');
   });
 
   it('recovers a completed outcome whose effects never ran, instead of reporting success forever', async () => {

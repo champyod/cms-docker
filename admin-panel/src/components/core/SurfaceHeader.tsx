@@ -47,12 +47,7 @@ export function SurfaceHeader({
       <PageHeader
         title={title}
         description={description}
-        actions={
-          actions ? (
-            <div className="flex flex-wrap items-center gap-2">{actions}</div>
-          ) : undefined
-        }
-        className="gap-3 sm:flex-row sm:items-start sm:justify-between"
+        actions={actions}
       />
       {status && <div data-testid="surface-status">{status}</div>}
     </header>

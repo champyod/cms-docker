@@ -12,6 +12,14 @@ import type { DeploymentMode } from '@/lib/deployment-mode';
 // the location is null, which is the shape every command below has unless a test says otherwise.
 const FILES = '-f docker-compose.yml';
 
+// The services each profile declares in docker-compose.yml, in the order the scopes render them.
+// Every action names its services: an unscoped invocation would also cover the protected
+// redis-rate-limit service of the contest profile (see tests/protected-compose-scope.test.ts).
+const CORE_SERVICES = 'database log-service resource-service scoring-service checker-service';
+const ADMIN_SERVICES = 'admin-panel-next admin-web-server ranking-web-server';
+const CONTEST_SERVICES = 'evaluation-service proxy-service contest-web-server nginx-proxy';
+const ALL_SERVICES = `${CORE_SERVICES} ${ADMIN_SERVICES} ${CONTEST_SERVICES}`;
+
 const HOST_CONTAINERISED: HostComposeLocation = {
   projectDirectory: '/host/contest system',
   envFile: '/repo-root/.env',
@@ -28,25 +36,25 @@ const compose = (
 describe('the stack controls run the unified project in the deployment mode', () => {
   it('img: an up pulls, then recreates without building', (): void => {
     expect(compose('up', 'admin', 'img')).toBe(
-      `(docker compose ${FILES} --profile core --profile admin pull || true) && docker compose ${FILES} --profile core --profile admin up -d --no-build`,
+      `(docker compose ${FILES} --profile core --profile admin pull ${ADMIN_SERVICES} || true) && docker compose ${FILES} --profile core --profile admin up -d --no-build ${ADMIN_SERVICES}`,
     );
   });
 
   it('src: an up builds from source and does not pull', (): void => {
     expect(compose('up', 'admin', 'src')).toBe(
-      `docker compose ${FILES} --profile core --profile admin up -d --build`,
+      `docker compose ${FILES} --profile core --profile admin up -d --build ${ADMIN_SERVICES}`,
     );
   });
 
   it('img: core pulls under its own profile, which needs no other', (): void => {
     expect(compose('up', 'core', 'img')).toBe(
-      `(docker compose ${FILES} --profile core pull || true) && docker compose ${FILES} --profile core up -d --no-build`,
+      `(docker compose ${FILES} --profile core pull ${CORE_SERVICES} || true) && docker compose ${FILES} --profile core up -d --no-build ${CORE_SERVICES}`,
     );
   });
 
   it('src: the contest stack builds under core and contest', (): void => {
     expect(compose('up', 'contest', 'src')).toBe(
-      `docker compose ${FILES} --profile core --profile contest up -d --build && bash scripts/__contest_dns_refresh.sh`,
+      `docker compose ${FILES} --profile core --profile contest up -d --build ${CONTEST_SERVICES} && bash scripts/__contest_dns_refresh.sh`,
     );
   });
 
@@ -54,41 +62,44 @@ describe('the stack controls run the unified project in the deployment mode', ()
   // containers, so it is started through the fleet script rather than recreated by compose.
   it('src: an all-up starts the fleet, then builds every offered stack', (): void => {
     expect(compose('up', undefined, 'src')).toBe(
-      `bash scripts/__admin_worker_control.sh start && docker compose ${FILES} --profile core --profile admin --profile contest up -d --build && bash scripts/__contest_dns_refresh.sh`,
+      `bash scripts/__admin_worker_control.sh start && docker compose ${FILES} --profile core --profile admin --profile contest up -d --build ${ALL_SERVICES} && bash scripts/__contest_dns_refresh.sh`,
     );
   });
 
   it('img: an all-up starts the fleet, then pulls and recreates', (): void => {
     expect(compose('up', undefined, 'img')).toBe(
-      `bash scripts/__admin_worker_control.sh start && (docker compose ${FILES} --profile core --profile admin --profile contest pull || true) && docker compose ${FILES} --profile core --profile admin --profile contest up -d --no-build && bash scripts/__contest_dns_refresh.sh`,
+      `bash scripts/__admin_worker_control.sh start && (docker compose ${FILES} --profile core --profile admin --profile contest pull ${ALL_SERVICES} || true) && docker compose ${FILES} --profile core --profile admin --profile contest up -d --no-build ${ALL_SERVICES} && bash scripts/__contest_dns_refresh.sh`,
     );
   });
 });
 
-// Core is enabled next to admin and contest for depends_on validation only, so the operations that
-// name what they act on have to name it: an unscoped down/restart/build would reach the database.
-describe('scoped operations name the stack\u2019s own services', () => {
+// Core is enabled next to admin and contest for depends_on validation only, so every operation has to
+// name what it acts on: leaving a list empty means the whole enabled project, which also covers the
+// protected redis-rate-limit service the contest profile declares.
+describe('every operation names the services it acts on', () => {
   it('down on the admin stack leaves core running', (): void => {
     expect(compose('down', 'admin', 'img')).toBe(
-      `docker compose ${FILES} --profile core --profile admin down admin-panel-next admin-web-server ranking-web-server`,
+      `docker compose ${FILES} --profile core --profile admin down ${ADMIN_SERVICES}`,
     );
   });
 
   it('restart on the contest stack leaves core running', (): void => {
     expect(compose('restart', 'contest', 'img')).toBe(
-      `docker compose ${FILES} --profile core --profile contest restart evaluation-service proxy-service contest-web-server nginx-proxy`,
+      `docker compose ${FILES} --profile core --profile contest restart ${CONTEST_SERVICES}`,
     );
   });
 
-  // An explicit build asks for a local image, so it takes no mode flag; core's own stack is the whole
-  // core profile, which is why nothing is named here.
-  it('build on core builds the core profile', (): void => {
-    expect(compose('build', 'core', 'img')).toBe(`docker compose ${FILES} --profile core build --no-cache`);
+  // An explicit build asks for a local image, so it takes no mode flag; core's own stack is named
+  // service by service rather than left to the whole core profile.
+  it('build on core builds the core services', (): void => {
+    expect(compose('build', 'core', 'img')).toBe(
+      `docker compose ${FILES} --profile core build --no-cache ${CORE_SERVICES}`,
+    );
   });
 
-  it('down on all covers the core profile as a whole', (): void => {
+  it('down on all names every offered stack\u2019s services', (): void => {
     expect(compose('down', undefined, 'img')).toBe(
-      `bash scripts/__admin_worker_control.sh stop && docker compose ${FILES} --profile core --profile admin --profile contest down`,
+      `bash scripts/__admin_worker_control.sh stop && docker compose ${FILES} --profile core --profile admin --profile contest down ${ALL_SERVICES}`,
     );
   });
 });
@@ -116,19 +127,19 @@ describe('the worker stack is never handed to compose', () => {
 describe('a containerised panel hands compose the host repository', () => {
   it('img: every compose step of the pull-and-recreate leads with the location', (): void => {
     expect(compose('up', 'admin', 'img', HOST_CONTAINERISED)).toBe(
-      `(docker compose ${HOST_LOCATION_FLAGS} ${FILES} --profile core --profile admin pull || true) && docker compose ${HOST_LOCATION_FLAGS} ${FILES} --profile core --profile admin up -d --no-build`,
+      `(docker compose ${HOST_LOCATION_FLAGS} ${FILES} --profile core --profile admin pull ${ADMIN_SERVICES} || true) && docker compose ${HOST_LOCATION_FLAGS} ${FILES} --profile core --profile admin up -d --no-build ${ADMIN_SERVICES}`,
     );
   });
 
   it('src: the recreate leads with the location', (): void => {
     expect(compose('up', 'contest', 'src', HOST_CONTAINERISED)).toBe(
-      `docker compose ${HOST_LOCATION_FLAGS} ${FILES} --profile core --profile contest up -d --build && bash scripts/__contest_dns_refresh.sh`,
+      `docker compose ${HOST_LOCATION_FLAGS} ${FILES} --profile core --profile contest up -d --build ${CONTEST_SERVICES} && bash scripts/__contest_dns_refresh.sh`,
     );
   });
 
   it('a scoped restart leads with the location', (): void => {
     expect(compose('restart', 'admin', 'img', HOST_CONTAINERISED)).toBe(
-      `docker compose ${HOST_LOCATION_FLAGS} ${FILES} --profile core --profile admin restart admin-panel-next admin-web-server ranking-web-server`,
+      `docker compose ${HOST_LOCATION_FLAGS} ${FILES} --profile core --profile admin restart ${ADMIN_SERVICES}`,
     );
   });
 });

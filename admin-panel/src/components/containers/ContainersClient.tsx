@@ -145,7 +145,9 @@ export function ContainersClient(): React.JSX.Element {
                 onResetRestartCount={controller.handleResetRestartCount}
                 onToggleDiscordNotifications={controller.handleToggleDiscordNotifications}
                 isSelected={controller.selectedIds.has(container.id)}
-                onToggleSelection={controller.handleToggleSelection}
+                // Why protected rows cannot be selected: bulk stop/restart is aimed at the selection,
+                // and the security boundary must not be reachable through a bulk action at all.
+                onToggleSelection={container.protected ? undefined : controller.handleToggleSelection}
               />
             ))}
 

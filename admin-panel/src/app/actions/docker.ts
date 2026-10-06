@@ -10,6 +10,7 @@ import { resolveHostComposeLocation } from '@/lib/compose-location';
 import { buildComposeFileFlags } from '@/lib/restart-planner';
 import { readDeploymentModeSetting } from '@/lib/deployment-mode-file';
 import { CONTAINER_ID_RE } from '@/lib/container-probes';
+import { isProtectedContainerId, PROTECTED_CONTAINER_ERROR } from '@/lib/protected-containers';
 
 const execPromise = util.promisify(exec);
 
@@ -43,6 +44,20 @@ export async function controlContainer(id: string, action: 'start' | 'stop' | 'r
     return { success: false, error: 'Invalid container id or action' };
   }
   try {
+    // Why the refusal sits before the shell-out: `container:control` is held by Storage Admin and
+    // expands out of `all:all`, so a permission check alone still lets an admin stop the WAF or the
+    // TLS proxy. A blocked attempt is exactly the event the audit log exists to answer, so it is
+    // recorded as a failure rather than silently returning.
+    if (await isProtectedContainerId(id)) {
+      await recordAudit({
+        verb: 'container:control',
+        entity: 'container',
+        entityId: String(id),
+        afterValues: { action, containerId: id, refusal: 'protected' },
+        result: 'failure',
+      });
+      return { success: false, error: PROTECTED_CONTAINER_ERROR };
+    }
     const { stdout, stderr } = await execPromise(`docker ${action} ${id}`);
     if (stderr && !stdout) throw new Error(stderr);
     await recordAudit({

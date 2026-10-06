@@ -75,6 +75,12 @@ const DOMAIN_VERBS: readonly { module: string; verb: string }[] = [
   { module: 'password', verb: 'reveal' },
   { module: 'container', verb: 'read' },
   { module: 'container', verb: 'control' },
+  // Why these two are minted only to be reserved: the WAF and the TLS/ingress stack are refused
+  // structurally in lib/protected-containers.ts, so no gate can ever read them. Having the keys in
+  // the registry is what lets an operator see "cannot be granted" instead of guessing whether a
+  // missing key means a missing capability or a forgotten one.
+  { module: 'waf', verb: 'control' },
+  { module: 'domain', verb: 'control' },
   { module: 'service', verb: 'restart' },
   { module: 'service', verb: 'deploy' },
   { module: 'deployment', verb: 'deploy' },
@@ -170,6 +176,8 @@ const RESERVED_KEYS: readonly { key: string; reason: string }[] = [
   { key: 'attachment:update', reason: 'Attachments upsert via the create path; no update path exists.' },
   { key: 'container:create', reason: 'Containers come from compose; no admin create path exists.' },
   { key: 'container:delete', reason: 'Containers come from compose; no admin delete path exists.' },
+  { key: 'waf:control', reason: 'WAF is a platform security boundary; lib/protected-containers.ts refuses it structurally, so no gate reads this key.' },
+  { key: 'domain:control', reason: 'TLS/ingress containers are a platform security boundary; lib/protected-containers.ts refuses them structurally, so no gate reads this key.' },
   { key: 'deployment:create', reason: 'Deploy operations are spawned by deploy, not created as rows.' },
   { key: 'deployment:update', reason: 'Deploy operations are immutable once spawned.' },
   { key: 'deployment:delete', reason: 'Deploy operations are settled, never deleted via UI.' },

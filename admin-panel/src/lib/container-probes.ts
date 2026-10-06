@@ -1,5 +1,6 @@
 import { exec } from 'child_process';
 import util from 'util';
+import { isProtectedContainerName } from '@/lib/protected-containers';
 
 const execPromise = util.promisify(exec);
 
@@ -21,6 +22,8 @@ export interface ContainerInfo {
   state: string;
   created: string;
   isCmsContainer: boolean;
+  /** Security/ingress boundary: listed and readable, but never controllable from the panel. */
+  protected: boolean;
 }
 
 export interface CoreServiceStatus {
@@ -70,6 +73,7 @@ export async function collectContainers(): Promise<ContainerInfo[]> {
         state: parsed.State,
         created: parsed.CreatedAt,
         isCmsContainer: name.startsWith('cms-') || name.includes('cms'),
+        protected: isProtectedContainerName(name),
       };
     });
   } catch (error) {

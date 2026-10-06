@@ -6,6 +6,7 @@ import { writeFile } from 'fs/promises';
 import { exec } from 'child_process';
 import util from 'util';
 import { CONTAINER_ID_RE } from '@/lib/container-probes';
+import { isProtectedContainerId, PROTECTED_CONTAINER_ERROR } from '@/lib/protected-containers';
 import {
   containerRestartConfigPath,
   readContainerRestartConfig,
@@ -47,6 +48,28 @@ export async function getContainerConfig(): Promise<ContainerRestartConfig> {
   return config;
 }
 
+/**
+ * The one refusal for a protected container.
+ *
+ * Why shared: every write below reaches a container by id and must refuse the security boundary
+ * identically. Returning the recorded refusal keeps each caller to one `if`, and the row is written
+ * as a failure because an attempt to re-policy the WAF or the TLS proxy is a security event.
+ */
+async function refuseProtectedContainer(
+  verb: string,
+  containerId: string,
+): Promise<{ success: false; error: string } | null> {
+  if (!(await isProtectedContainerId(containerId))) return null;
+  await recordAudit({
+    verb,
+    entity: 'container_config',
+    entityId: String(containerId),
+    afterValues: { containerId, refusal: 'protected' },
+    result: 'failure',
+  });
+  return { success: false, error: PROTECTED_CONTAINER_ERROR };
+}
+
 export async function updateContainerConfig(containerId: string, config: {
   autoRestart?: boolean;
   maxRestarts?: number;
@@ -55,6 +78,12 @@ export async function updateContainerConfig(containerId: string, config: {
 }) {
   await ensurePermission('container:update');
   try {
+    if (!CONTAINER_ID_RE.test(containerId)) {
+      return { success: false, error: 'Invalid container id or action' };
+    }
+    const refusal = await refuseProtectedContainer('container:update', containerId);
+    if (refusal) return refusal;
+
     const currentConfig = await readContainerConfigCore();
 
     const beforeEntry = currentConfig[containerId] ? { ...currentConfig[containerId] } : null;
@@ -91,6 +120,12 @@ export async function updateContainerConfig(containerId: string, config: {
 export async function resetRestartCount(containerId: string) {
   await ensurePermission('container:update');
   try {
+    if (!CONTAINER_ID_RE.test(containerId)) {
+      return { success: false, error: 'Invalid container id or action' };
+    }
+    const refusal = await refuseProtectedContainer('container:update', containerId);
+    if (refusal) return refusal;
+
     const currentConfig = await readContainerConfigCore();
 
     const hadEntry = Boolean(currentConfig[containerId]);
@@ -157,14 +192,15 @@ export async function syncContainerConfigWithDocker(containerId: string) {
     const dockerAutoRestart = policyName === 'on-failure' || policyName === 'always' || policyName === 'unless-stopped';
     const dockerMaxRestarts = policyName === 'on-failure' ? parseInt(maxRetries) || 5 : 999;
 
-    await updateContainerConfig(containerId, {
+    // Why the refusal is returned rather than swallowed: this call goes through
+    // updateContainerConfig, which refuses a protected container. Reporting success here would
+    // tell the caller the restart policy was synced when nothing was written.
+    return await updateContainerConfig(containerId, {
       autoRestart: dockerAutoRestart,
       maxRestarts: dockerMaxRestarts,
       currentRestarts: currentConfig.currentRestarts || 0,
       discordNotifications: currentConfig.discordNotifications ?? true,
     });
-
-    return { success: true };
   } catch (error) {
     console.error('Failed to sync container config:', error);
     return { success: false, error: (error as Error).message };

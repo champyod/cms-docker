@@ -73,6 +73,10 @@ const FIELD_PERMISSION_TABLE = {
     organization: { read: 'user:read', update: 'user:update' },
     country: { read: 'user:read', update: 'user:update' },
     participations: { read: 'participation:list' },
+    // Why: Prisma emits _count as a sibling key of the row, not a users column, so the
+    // readable-field filter drops it unless the table names it. Without this entry the
+    // Contests column renders 0 for every row.
+    _count: { read: 'participation:list' },
     led_teams: { read: 'team:list' },
   },
   teams: {

@@ -78,4 +78,22 @@ describe('users field-permissions READ contract', (): void => {
 
     expect(filtered).toEqual({});
   });
+
+  it('keeps the participation _count for a caller who can list participations', (): void => {
+    // Why: Prisma returns _count beside the row, not as a users column. The filter drops
+    // any key the table does not name, so without a _count entry the Contests column
+    // rendered 0 for every row.
+    const perms = new Set<string>(['user:list', 'user:read', 'participation:list']);
+    const filtered = filterReadableFields('users', { id: 7, username: 'ada', _count: { participations: 3 } }, perms);
+
+    expect(filtered['_count']).toEqual({ participations: 3 });
+  });
+
+  it('drops the participation _count for a caller without participation:list', (): void => {
+    const perms = new Set<string>(['user:list', 'user:read']);
+    const filtered = filterReadableFields('users', { id: 7, username: 'ada', _count: { participations: 3 } }, perms);
+
+    expect(filtered.username).toBe('ada');
+    expect('_count' in filtered).toBe(false);
+  });
 });

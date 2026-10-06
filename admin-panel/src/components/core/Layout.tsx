@@ -75,20 +75,19 @@ interface PageHeaderProps {
   className?: string;
 }
 
+// Why the layout lives here and not in a caller-supplied className: the title and its
+// description are one column that must stay stacked, while the actions sit beside the title.
+// Owning the direction here keeps `flex-row` from being merged onto the container by a
+// consumer, which would lift the description out of the title column. `items-start` keeps the
+// actions on the title's top edge when the title column is the taller of the two.
 export function PageHeader({ title, description, actions, className }: PageHeaderProps) {
   return (
-    <div className={cn("flex flex-col gap-2", className)}>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-             <h1 className="text-3xl font-bold tracking-tight text-foreground">
-                {title}
-            </h1>
-            {actions && <div>{actions}</div>}
-        </div>
-      {description && (
-        <p className="text-neutral-400">
-          {description}
-        </p>
-      )}
+    <div className={cn('flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between', className)}>
+      <div className="flex min-w-0 flex-col gap-2">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">{title}</h1>
+        {description && <p className="text-neutral-400">{description}</p>}
+      </div>
+      {actions && <div className="flex min-w-0 flex-wrap items-center gap-2">{actions}</div>}
     </div>
   );
 }

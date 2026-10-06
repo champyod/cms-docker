@@ -131,7 +131,7 @@ beforeEach(() => {
   mocks.collectNetworkTrafficLogs.mockResolvedValue({ success: true, logs: traffic('1MB') });
   mocks.collectContainers.mockReset();
   mocks.collectContainers.mockResolvedValue([
-    { id: 'abc123', name: 'cms-database', image: 'postgres', status: 'Up 2 hours', state: 'running', created: 'now', isCmsContainer: true },
+    { id: 'abc123', name: 'cms-database', image: 'postgres', status: 'Up 2 hours', state: 'running', created: 'now', isCmsContainer: true, protected: false },
   ]);
   mocks.collectContainerRestartCount.mockReset();
   mocks.collectContainerRestartCount.mockResolvedValue(2);

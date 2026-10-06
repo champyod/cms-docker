@@ -69,14 +69,30 @@ async function loadSignoutRouteOverSpyingAuth(): Promise<{ route: SignoutRoute; 
 
 async function callSignout(route: SignoutRoute, locale: string) {
   const { NextRequest } = await import('next/server');
+  const { isRedirectError } = await import('next/dist/client/components/redirect-error');
+  const { getURLFromRedirectError, getRedirectStatusCodeFromError } = await import(
+    'next/dist/client/components/redirect'
+  );
   const request = new NextRequest(new URL(`/${locale}/auth/signout`, ORIGIN));
-  return await route.GET(request, { params: Promise.resolve({ locale }) });
+  try {
+    return await route.GET(request, { params: Promise.resolve({ locale }) });
+  } catch (error) {
+    // The route delegates to Next's `redirect()`, which signals the target by throwing rather
+    // than by returning a Response. The framework catches that throw and turns it into a
+    // Location header, so the harness reproduces that translation to stay framework-faithful.
+    if (!isRedirectError(error)) throw error;
+    return new Response(null, {
+      status: getRedirectStatusCodeFromError(error),
+      headers: { location: getURLFromRedirectError(error) },
+    });
+  }
 }
 
 function redirectPathname(headers: Headers): string {
   const location = headers.get('location');
   if (location === null) throw new Error('signout response carried no Location header');
-  return new URL(location).pathname;
+  // The Location is host-relative, so resolve it against the origin to inspect its pathname.
+  return new URL(location, ORIGIN).pathname;
 }
 
 describe('signout locale resolution', () => {
@@ -103,7 +119,7 @@ describe('signout locale resolution', () => {
     },
   );
 
-  it('redirects rather than renders, and stays on the request origin', async () => {
+  it('redirects rather than renders, with a relative Location that leaks no host', async () => {
     const { store } = createCookieRecorder();
     const route = await loadSignoutRoute(store);
 
@@ -112,7 +128,11 @@ describe('signout locale resolution', () => {
     expect(response.status).toBe(307);
     const location = response.headers.get('location');
     if (location === null) throw new Error('signout response carried no Location header');
-    expect(new URL(location).origin).toBe(ORIGIN);
+    // A host-relative Location is what keeps the server's bind hostname (which Next derives
+    // independently of the Host header) out of the browser URL bar.
+    expect(new URL(location, ORIGIN).origin).toBe(ORIGIN);
+    expect(location.startsWith('/')).toBe(true);
+    expect(location).not.toMatch(/^https?:\/\//);
   });
 
   it('pins the default locale as a member of the supported set', () => {

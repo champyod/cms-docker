@@ -12,6 +12,16 @@ import type { HostComposeLocation } from '../src/lib/compose-location';
 const files = '-f docker-compose.yml';
 const ALL_PROFILES = '--profile core --profile admin --profile contest --profile monitor';
 
+// The services each profile declares in docker-compose.yml. Every restart names them: an unscoped
+// invocation also covers the protected redis-rate-limit service of the contest profile, which the
+// panel must never act on (see tests/protected-compose-scope.test.ts).
+const CORE_SERVICES = 'database log-service resource-service scoring-service checker-service';
+const ADMIN_SERVICES = 'admin-panel-next admin-web-server ranking-web-server';
+const CONTEST_SERVICES = 'evaluation-service proxy-service contest-web-server nginx-proxy';
+const CORE_CONTEST_SERVICES = `${CORE_SERVICES} ${CONTEST_SERVICES}`;
+const CORE_ADMIN_SERVICES = `${CORE_SERVICES} ${ADMIN_SERVICES}`;
+const ALL_SERVICES = `${CORE_SERVICES} ${ADMIN_SERVICES} ${CONTEST_SERVICES} monitor`;
+
 // The not-containerised case: the panel runs where the daemon does, so no host project directory is
 // threaded through and every command stays exactly as it was before the container fix. Written out
 // because buildRestartCommand takes the location the same way it takes files and mode.
@@ -35,7 +45,7 @@ describe('fleet worker restart commands', () => {
   it('keeps fleet workers separate from the all-services compose project', async (): Promise<void> => {
     expect(await buildRestartCommand('all', undefined, files, 'src', HOST_LOCATION)).toEqual({
       skip: false,
-      command: `bash scripts/__admin_worker_control.sh restart && docker compose ${files} ${ALL_PROFILES} up -d --build`,
+      command: `bash scripts/__admin_worker_control.sh restart && docker compose ${files} ${ALL_PROFILES} up -d --build ${ALL_SERVICES}`,
     });
   });
 });
@@ -55,20 +65,20 @@ const BRANCHES: BranchCase[] = [
   {
     name: 'core',
     type: 'core',
-    img: '(docker compose -f docker-compose.yml --profile core pull || true) && docker compose -f docker-compose.yml --profile core up -d --no-build --force-recreate',
-    src: 'docker compose -f docker-compose.yml --profile core up -d --build --force-recreate',
+    img: `(docker compose -f docker-compose.yml --profile core pull ${CORE_SERVICES} || true) && docker compose -f docker-compose.yml --profile core up -d --no-build --force-recreate ${CORE_SERVICES}`,
+    src: `docker compose -f docker-compose.yml --profile core up -d --build --force-recreate ${CORE_SERVICES}`,
   },
   {
     name: 'admin',
     type: 'admin',
-    img: '(docker compose -f docker-compose.yml --profile core --profile admin pull || true) && docker compose -f docker-compose.yml --profile core --profile admin up -d --no-build --force-recreate',
-    src: 'docker compose -f docker-compose.yml --profile core --profile admin up -d --build --force-recreate',
+    img: `(docker compose -f docker-compose.yml --profile core --profile admin pull ${CORE_ADMIN_SERVICES} || true) && docker compose -f docker-compose.yml --profile core --profile admin up -d --no-build --force-recreate ${CORE_ADMIN_SERVICES}`,
+    src: `docker compose -f docker-compose.yml --profile core --profile admin up -d --build --force-recreate ${CORE_ADMIN_SERVICES}`,
   },
   {
     name: 'all',
     type: 'all',
-    img: `bash scripts/__admin_worker_control.sh restart && (docker compose ${files} ${ALL_PROFILES} pull || true) && docker compose ${files} ${ALL_PROFILES} up -d --no-build`,
-    src: `bash scripts/__admin_worker_control.sh restart && docker compose ${files} ${ALL_PROFILES} up -d --build`,
+    img: `bash scripts/__admin_worker_control.sh restart && (docker compose ${files} ${ALL_PROFILES} pull ${ALL_SERVICES} || true) && docker compose ${files} ${ALL_PROFILES} up -d --no-build ${ALL_SERVICES}`,
+    src: `bash scripts/__admin_worker_control.sh restart && docker compose ${files} ${ALL_PROFILES} up -d --build ${ALL_SERVICES}`,
   },
 ];
 
@@ -122,14 +132,14 @@ describe('restart follows DEPLOYMENT_TYPE', () => {
   it('img: a contest-stack restart pulls and keeps the worker fleet out of the build', async (): Promise<void> => {
     expect(await buildRestartCommand('custom', ['contest-stack'], files, 'img', HOST_LOCATION)).toEqual({
       skip: false,
-      command: `bash scripts/__admin_worker_control.sh restart && (docker compose ${files} --profile core --profile contest pull || true) && docker compose ${files} --profile core --profile contest up -d --no-build --remove-orphans --force-recreate`,
+      command: `bash scripts/__admin_worker_control.sh restart && (docker compose ${files} --profile core --profile contest pull ${CORE_CONTEST_SERVICES} || true) && docker compose ${files} --profile core --profile contest up -d --no-build --remove-orphans --force-recreate ${CORE_CONTEST_SERVICES}`,
     });
   });
 
   it('src: a contest-stack restart builds and recreates', async (): Promise<void> => {
     expect(await buildRestartCommand('custom', ['contest-stack'], files, 'src', HOST_LOCATION)).toEqual({
       skip: false,
-      command: `bash scripts/__admin_worker_control.sh restart && docker compose ${files} --profile core --profile contest up -d --build --remove-orphans --force-recreate`,
+      command: `bash scripts/__admin_worker_control.sh restart && docker compose ${files} --profile core --profile contest up -d --build --remove-orphans --force-recreate ${CORE_CONTEST_SERVICES}`,
     });
   });
 });
@@ -256,20 +266,20 @@ describe('a containerised restart hands compose the host project directory', () 
     {
       name: 'core',
       type: 'core',
-      img: `(docker compose ${LOCATION_FLAGS} ${files} --profile core pull || true) && docker compose ${LOCATION_FLAGS} ${files} --profile core up -d --no-build --force-recreate`,
-      src: `docker compose ${LOCATION_FLAGS} ${files} --profile core up -d --build --force-recreate`,
+      img: `(docker compose ${LOCATION_FLAGS} ${files} --profile core pull ${CORE_SERVICES} || true) && docker compose ${LOCATION_FLAGS} ${files} --profile core up -d --no-build --force-recreate ${CORE_SERVICES}`,
+      src: `docker compose ${LOCATION_FLAGS} ${files} --profile core up -d --build --force-recreate ${CORE_SERVICES}`,
     },
     {
       name: 'admin',
       type: 'admin',
-      img: `(docker compose ${LOCATION_FLAGS} ${files} --profile core --profile admin pull || true) && docker compose ${LOCATION_FLAGS} ${files} --profile core --profile admin up -d --no-build --force-recreate`,
-      src: `docker compose ${LOCATION_FLAGS} ${files} --profile core --profile admin up -d --build --force-recreate`,
+      img: `(docker compose ${LOCATION_FLAGS} ${files} --profile core --profile admin pull ${CORE_ADMIN_SERVICES} || true) && docker compose ${LOCATION_FLAGS} ${files} --profile core --profile admin up -d --no-build --force-recreate ${CORE_ADMIN_SERVICES}`,
+      src: `docker compose ${LOCATION_FLAGS} ${files} --profile core --profile admin up -d --build --force-recreate ${CORE_ADMIN_SERVICES}`,
     },
     {
       name: 'all',
       type: 'all',
-      img: `bash scripts/__admin_worker_control.sh restart && (docker compose ${LOCATION_FLAGS} ${files} ${ALL_PROFILES} pull || true) && docker compose ${LOCATION_FLAGS} ${files} ${ALL_PROFILES} up -d --no-build`,
-      src: `bash scripts/__admin_worker_control.sh restart && docker compose ${LOCATION_FLAGS} ${files} ${ALL_PROFILES} up -d --build`,
+      img: `bash scripts/__admin_worker_control.sh restart && (docker compose ${LOCATION_FLAGS} ${files} ${ALL_PROFILES} pull ${ALL_SERVICES} || true) && docker compose ${LOCATION_FLAGS} ${files} ${ALL_PROFILES} up -d --no-build ${ALL_SERVICES}`,
+      src: `bash scripts/__admin_worker_control.sh restart && docker compose ${LOCATION_FLAGS} ${files} ${ALL_PROFILES} up -d --build ${ALL_SERVICES}`,
     },
   ];
 
@@ -306,14 +316,14 @@ describe('a containerised restart hands compose the host project directory', () 
   it('img: a contest-stack restart leads its compose half, keeping the fleet out of it', async (): Promise<void> => {
     expect(await buildRestartCommand('custom', ['contest-stack'], files, 'img', CONTAINERISED_LOCATION)).toEqual({
       skip: false,
-      command: `bash scripts/__admin_worker_control.sh restart && (docker compose ${LOCATION_FLAGS} ${files} --profile core --profile contest pull || true) && docker compose ${LOCATION_FLAGS} ${files} --profile core --profile contest up -d --no-build --remove-orphans --force-recreate`,
+      command: `bash scripts/__admin_worker_control.sh restart && (docker compose ${LOCATION_FLAGS} ${files} --profile core --profile contest pull ${CORE_CONTEST_SERVICES} || true) && docker compose ${LOCATION_FLAGS} ${files} --profile core --profile contest up -d --no-build --remove-orphans --force-recreate ${CORE_CONTEST_SERVICES}`,
     });
   });
 
   it('src: a contest-stack restart leads its compose half', async (): Promise<void> => {
     expect(await buildRestartCommand('custom', ['contest-stack'], files, 'src', CONTAINERISED_LOCATION)).toEqual({
       skip: false,
-      command: `bash scripts/__admin_worker_control.sh restart && docker compose ${LOCATION_FLAGS} ${files} --profile core --profile contest up -d --build --remove-orphans --force-recreate`,
+      command: `bash scripts/__admin_worker_control.sh restart && docker compose ${LOCATION_FLAGS} ${files} --profile core --profile contest up -d --build --remove-orphans --force-recreate ${CORE_CONTEST_SERVICES}`,
     });
   });
 
@@ -328,7 +338,7 @@ describe('a containerised restart hands compose the host project directory', () 
     const noEnvFile: HostComposeLocation = { projectDirectory: HOST_REPO, envFile: null };
     expect(await buildRestartCommand('core', undefined, files, 'src', noEnvFile)).toEqual({
       skip: false,
-      command: `docker compose --project-directory '${HOST_REPO}' ${files} --profile core up -d --build --force-recreate`,
+      command: `docker compose --project-directory '${HOST_REPO}' ${files} --profile core up -d --build --force-recreate ${CORE_SERVICES}`,
     });
   });
 

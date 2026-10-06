@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { getRepoRoot } from './repo-root';
 import { composeLocationFlags, type HostComposeLocation } from './compose-location';
-import { buildWorkerControlCommand } from './compose-command';
+import { buildWorkerControlCommand, scopedServiceList, STACK_SERVICES } from './compose-command';
 import type { DeploymentMode } from './deployment-mode';
 
 export interface RestartPolicies {
@@ -161,22 +161,42 @@ interface ComposeRestartTarget {
   services: readonly string[];
 }
 
+/** The services each profile exposes in the unified project, `monitor` included. */
+const PROFILE_SERVICES: Readonly<Record<ComposeProfile, readonly string[]>> = {
+  core: STACK_SERVICES.core,
+  admin: STACK_SERVICES.admin,
+  contest: STACK_SERVICES.contest,
+  monitor: ['monitor'],
+};
+
+/**
+ * The services a restart of these profiles is scoped to.
+ *
+ * Why every target names its services: an empty list means the whole enabled project, and the
+ * panel's own project declares a service that backs a protected container (see
+ * PROTECTED_COMPOSE_SERVICES). A stack restart carries no container id, so the name guard in
+ * lib/protected-containers.ts cannot see it — the scope is what bounds the reach.
+ */
+function servicesForProfiles(profiles: readonly ComposeProfile[]): readonly string[] {
+  return scopedServiceList(profiles.flatMap(profile => PROFILE_SERVICES[profile]));
+}
+
 const CORE_RESTART: ComposeRestartTarget = {
   profiles: ['core'],
   upFlags: ['--force-recreate'],
-  services: [],
+  services: servicesForProfiles(['core']),
 };
 
 const ADMIN_RESTART: ComposeRestartTarget = {
   profiles: ['core', 'admin'],
   upFlags: ['--force-recreate'],
-  services: [],
+  services: servicesForProfiles(['core', 'admin']),
 };
 
 const CONTEST_RESTART: ComposeRestartTarget = {
   profiles: ['core', 'contest'],
   upFlags: ['--remove-orphans', '--force-recreate'],
-  services: [],
+  services: servicesForProfiles(['core', 'contest']),
 };
 
 /**
@@ -188,7 +208,7 @@ const CONTEST_RESTART: ComposeRestartTarget = {
 const ALL_RESTART: ComposeRestartTarget = {
   profiles: ['core', 'admin', 'contest', 'monitor'],
   upFlags: [],
-  services: [],
+  services: servicesForProfiles(['core', 'admin', 'contest', 'monitor']),
 };
 
 /**
@@ -251,7 +271,10 @@ async function buildCustomRestartCommand(
   const services = collectContestServices(filteredList, policies);
   const isWorker = (service: string): boolean => /^(?:worker|cms-worker(?:-\d+)?)$/.test(service);
   const workers = services.filter(isWorker);
-  const scopedServices = services.filter(service => !isWorker(service)).map(asService);
+  // Why the protected services are dropped here too: this list arrives from the caller, so a
+  // custom restart naming redis-rate-limit would otherwise reach the container the guard in
+  // lib/protected-containers.ts exists to protect.
+  const scopedServices = scopedServiceList(services.filter(service => !isWorker(service)).map(asService));
   const commands: string[] = [];
   // A contest-stack recreation previously included workers through the merged
   // files; keep that coverage without handing them to the non-fleet project.
@@ -269,6 +292,9 @@ async function buildCustomRestartCommand(
       location,
     ));
   }
+  // Why an empty plan is a skip and not an empty command: dropping a protected service can leave
+  // nothing to act on, and an empty shell string would be executed rather than reported.
+  if (commands.length === 0) return { skip: true, message: 'Nothing to restart.' };
   return { skip: false, command: commands.join(' && ') };
 }
 

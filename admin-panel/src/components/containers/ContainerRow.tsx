@@ -3,7 +3,7 @@ import { RowActions, rowActionGroupLabel } from '@/components/core/RowActions';
 import { useDictionary } from '@/hooks/useDictionary';
 import { cn } from '@/lib/utils';
 import { ContainerInfo } from '@/app/actions/docker';
-import { Play, Square, RotateCcw, ScrollText, Settings, Bell, BellOff, Check } from 'lucide-react';
+import { Play, Square, RotateCcw, ScrollText, Settings, Bell, BellOff, Check, Lock } from 'lucide-react';
 
 type ContainerRef = { id: string; name: string };
 
@@ -45,7 +45,12 @@ function ContainerIdentity({ container }: { container: ContainerInfo }): React.J
       <div className="min-w-0">
         <div className="font-bold text-foreground text-sm group-hover:text-primary transition-colors flex flex-wrap items-center gap-2">
           <span className="truncate">{container.name}</span>
-          {!container.isCmsContainer && <span className="px-1.5 py-0.5 bg-muted text-muted-foreground text-xs rounded uppercase font-bold">External</span>}
+          {container.protected && (
+            <span className="px-1.5 py-0.5 bg-warning/10 text-warning border border-warning/20 text-xs rounded uppercase font-bold inline-flex items-center gap-1">
+              <Lock className="w-3 h-3" aria-hidden /> Platform
+            </span>
+          )}
+          {!container.isCmsContainer && !container.protected && <span className="px-1.5 py-0.5 bg-muted text-muted-foreground text-xs rounded uppercase font-bold">External</span>}
         </div>
         <div className="text-xs text-muted-foreground font-mono mt-0.5 truncate">{container.image} • {container.id.substring(0, 12)}</div>
       </div>
@@ -68,6 +73,26 @@ function ContainerActions({
 }): React.JSX.Element {
   const dict = useDictionary();
   const busy = actionLoading === container.id;
+
+  // Why only a log read: the WAF and the ingress stack are a security boundary, so the row offers no
+  // control at all — not even to a Superadmin, who holds container:control and would otherwise see
+  // Stop and Restart here. The server refuses regardless; this keeps the UI from offering it.
+  if (container.protected) {
+    return (
+      <div className="flex flex-wrap items-center gap-2 sm:gap-4 sm:justify-end">
+        <div className="hidden sm:block text-xs text-muted-foreground">Platform-managed — not controllable from the panel</div>
+        <div className={cn('px-2 py-0.5 rounded text-xs font-bold border', getStatusColor(container.state))}>{container.state.toUpperCase()}</div>
+        <RowActions
+          ariaLabel={rowActionGroupLabel(dict, 'containers')}
+          className="flex-wrap gap-2"
+          actions={[
+            { key: 'logs', label: 'View Logs', icon: ScrollText, onClick: () => onViewLogs({ id: container.id, name: container.name }), className: 'shrink-0' },
+          ]}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-2 sm:gap-4 sm:justify-end">
       <div className={cn('px-2 py-0.5 rounded text-xs font-bold border', getStatusColor(container.state))}>{container.state.toUpperCase()}</div>
