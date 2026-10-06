@@ -3,15 +3,14 @@ import { filterReadableFields } from '@/lib/field-permissions';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/server/authorization';
+import { NO_INTERVALS, toIntervalString, type IntervalColumns } from '@/lib/queries/read-model-format';
+import { enrichStatements, type TaskStatementSummary } from '@/lib/queries/task-statements';
+
+export type { TaskStatementSummary } from '@/lib/queries/task-statements';
 
 export type TaskDetailSummary = {
   id: number; name: string; title: string; contest: { id: number; name: string } | null;
   permissionKeys: readonly string[];
-};
-
-export type TaskStatementSummary = {
-  id: number; language: string; digest: string; filename: string;
-  size: number | null; uploadedAt: string | null;
 };
 
 export type TaskDatasetSummary = {
@@ -45,80 +44,8 @@ export type TaskFilesData = { taskId: number; attachments: readonly TaskAttachme
 
 export type TaskSettingsData = { task: TaskSettingsRecord; permissionKeys: readonly string[] };
 
-type RawStatement = { id: number; language: string; digest: string };
-type FsobjectSizeRow = { digest: string; size: number };
-type StatementAuditRow = { timestamp: Date; after_values: unknown };
-
-// Why the limit: the audit trail is append-only and unbounded, so an upload date
-// is only read from the most recent window of statement creations.
-const STATEMENT_AUDIT_LIMIT = 100;
-
-// Why one query: statement blobs live outside Prisma models and their sizes are
-// per statement, so a query per statement is N+1 round trips for a detail page.
-// fsobjects.digest is the primary key, so any digest matches at most one row.
-async function fetchStatementSizes(statements: readonly RawStatement[]): Promise<Map<string, number>> {
-  const digests = [...new Set(statements.map((statement) => statement.digest))];
-  if (digests.length === 0) return new Map();
-  try {
-    const rows = await prisma.$queryRaw<FsobjectSizeRow[]>`SELECT digest, octet_length(lo_get(loid))::int AS size FROM fsobjects WHERE digest = ANY(${digests}::varchar[])`;
-    return new Map(rows.map((row) => [row.digest, Number(row.size)]));
-  } catch {
-    // Why degrade, not throw: a missing or unreadable large object leaves the size
-    // unknown instead of failing the whole overview read.
-    return new Map();
-  }
-}
-
-// Why first-wins: audits are read newest-first, so the first row per language is
-// that language's latest upload.
-function indexLatestStatementUploads(audits: readonly StatementAuditRow[], taskId: number): Map<string, string> {
-  const uploads = new Map<string, string>();
-  const wantedId = String(taskId);
-  for (const audit of audits) {
-    const after = audit.after_values as Record<string, unknown> | null;
-    if (!after) continue;
-    if (String(after.taskId ?? after.task_id ?? '') !== wantedId) continue;
-    const language = String(after.language ?? '');
-    if (!uploads.has(language)) uploads.set(language, audit.timestamp.toISOString());
-  }
-  return uploads;
-}
-
-// Why: upload dates come from audit history, which is best-effort context —
-// an audit lookup failure degrades to unknown dates, never a failed read.
-async function fetchStatementUploadDates(taskId: number): Promise<Map<string, string>> {
-  try {
-    const audits = await prisma.audit_log.findMany({ where: { verb: 'statement:create', entity: 'statement' }, orderBy: { timestamp: 'desc' }, take: STATEMENT_AUDIT_LIMIT });
-    return indexLatestStatementUploads(audits, taskId);
-  } catch {
-    return new Map();
-  }
-}
-
-// Why enrichment lives here so the overview read keeps digest/file
-// metadata without depending on the task mutation service.
-async function enrichStatements(taskId: number, statements: readonly RawStatement[]): Promise<TaskStatementSummary[]> {
-  if (statements.length === 0) return [];
-  const [sizes, dates] = await Promise.all([fetchStatementSizes(statements), fetchStatementUploadDates(taskId)]);
-  return statements.map((statement) => ({
-    id: statement.id, language: statement.language, digest: statement.digest, filename: `${statement.language}.pdf`,
-    size: sizes.get(statement.digest) ?? null, uploadedAt: dates.get(statement.language) ?? null,
-  }));
-}
-
 function toMemoryString(value: bigint | number | string | null | undefined): string | null {
   if (value === null || value === undefined) return null;
-  return String(value);
-}
-
-function toIntervalString(value: unknown): string | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value === 'string' || typeof value === 'number') return String(value);
-  if (typeof value === 'object') {
-    const part = value as { days?: unknown; hours?: unknown; minutes?: unknown; seconds?: unknown };
-    const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
-    return String(num(part.days) * 86400 + num(part.hours) * 3600 + num(part.minutes) * 60 + num(part.seconds));
-  }
   return String(value);
 }
 
@@ -223,12 +150,6 @@ const taskSettingsSelect = {
   token_gen_initial: true, token_gen_number: true, token_gen_max: true,
   max_submission_number: true, max_user_test_number: true,
 } satisfies Prisma.tasksSelect;
-
-// Why: interval columns are Unsupported in the generated select types, so a
-// typed raw query carries them while the explicit select stays relation-free.
-type IntervalColumns = { token_min_interval: unknown; token_gen_interval: unknown; min_submission_interval: unknown; min_user_test_interval: unknown };
-
-const NO_INTERVALS: IntervalColumns = { token_min_interval: null, token_gen_interval: null, min_submission_interval: null, min_user_test_interval: null };
 
 async function fetchTaskIntervals(taskId: number): Promise<IntervalColumns> {
   try {
