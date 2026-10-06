@@ -22,121 +22,31 @@ failure, so every local script/style reference of a surface's entry point has
 to be covered by a first-party glob or by a credited asset.
 """
 
-import glob
-import json
-import re
 import unittest
 from fnmatch import fnmatch
 from pathlib import Path
-from urllib.parse import unquote
 
-# WHY resolved from __file__: the checkout may be tested from any working
-# directory, and a CWD-relative lookup would silently miss the file.
-REPO_ROOT = Path(__file__).resolve().parents[3]
-SRC_ROOT = REPO_ROOT / "src"
-CREDITS_PATH = REPO_ROOT / "credits.json"
-
-# Each surface's entry point, together with the static roots its web server
-# mounts. The first root that contains the reference wins, mirroring the
-# server's own static_files order.
-SURFACES = {
-    "contest": {
-        "entry_point": SRC_ROOT / "cms/server/contest/templates/base.html",
-        "static_roots": [
-            SRC_ROOT / "cms/server/static",
-            SRC_ROOT / "cms/server/contest/static",
-        ],
-        "jinja_static": True,
-    },
-    "admin": {
-        "entry_point": SRC_ROOT / "cms/server/admin/templates/base.html",
-        "static_roots": [
-            SRC_ROOT / "cms/server/static",
-            SRC_ROOT / "cms/server/admin/static",
-        ],
-        "jinja_static": True,
-    },
-    "ranking": {
-        "entry_point": SRC_ROOT / "cmsranking/static/Ranking.html",
-        "static_roots": [SRC_ROOT / "cmsranking/static"],
-        "jinja_static": False,
-    },
-}
-
-SURFACE_NAMES = ["contest", "admin", "ranking", "panel"]
-
-# Matches the src/href attribute of a script or link tag. Only those two tags
-# load a bundled asset; a plain anchor points at a route, not at a file.
-REFERENCES = re.compile(
-    r"""<(?:script|link)\b[^>]*?"""
-    r"""\b(?:src|href)\s*=\s*(?:"([^"]*)"|'([^']*)')""",
-    re.IGNORECASE,
+from cmstestsuite.unit_tests.credits_schema import (
+    CREDITS_PATH,
+    PANEL_MANIFEST,
+    REPO_ROOT,
+    SRC_ROOT,
+    SURFACE_ENTRY_POINTS,
+    SURFACE_NAMES,
+    existing_path,
+    load_json,
+    local_references,
+    misfiled_paths,
+    panel_direct_dependencies,
+    resolve_reference,
+    unknown_panel_assets,
+    uncredited_panel_dependencies,
 )
-# Jinja's url("static", "jq", "jquery-3.6.0.min.js") form: the path segments
-# are the quoted arguments after the leading "static".
-JINJA_STATIC_URL = re.compile(r"""url\(\s*"static"\s*,\s*([^)]*)\)""")
-QUOTED = re.compile(r"""["']([^"']*)["']""")
-
-ABSOLUTE_PREFIXES = ("http://", "https://", "//", "data:", "mailto:", "#")
 
 
 def load_credits() -> dict:
     """Read credits.json, failing loudly on a missing or malformed file."""
-    try:
-        raw = CREDITS_PATH.read_text(encoding="utf-8")
-    except OSError as error:
-        raise AssertionError(f"Cannot read credits file {CREDITS_PATH}: {error}")
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError as error:
-        raise AssertionError(f"{CREDITS_PATH.name} is not valid JSON: {error}")
-
-
-def _is_absolute(reference: str) -> bool:
-    return reference.startswith(ABSOLUTE_PREFIXES)
-
-
-def _jinja_static_references(text: str) -> set[str]:
-    """Static paths built by url("static", ...) inside a Jinja template."""
-    return {
-        "/".join(QUOTED.findall(match.group(1)))
-        for match in JINJA_STATIC_URL.finditer(text)
-    }
-
-
-def _literal_references(text: str) -> set[str]:
-    references = set()
-    for match in REFERENCES.finditer(text):
-        reference = match.group(1) if match.group(1) else match.group(2)
-        if "url(" not in reference:
-            references.add(reference)
-    return references
-
-
-def local_references(entry_point: Path, jinja_static: bool) -> set[str]:
-    """Local asset paths an entry point pulls in, relative to its static root.
-
-    Protocol-relative and absolute URLs are ignored: they are fetched from
-    another host, so they are not bundled assets of this checkout. Where an
-    entry point loads a library from a CDN with a local fallback, the fallback
-    is the bundled asset and is what must be credited.
-
-    The text is percent-decoded first because a fallback script tag written
-    through document.write() is stored in escaped form in the source.
-    """
-    text = unquote(entry_point.read_text(encoding="utf-8"))
-    references = _literal_references(text)
-    if jinja_static:
-        references |= _jinja_static_references(text)
-    return {ref for ref in references if not _is_absolute(ref)}
-
-
-def _resolve(surface: dict, reference: str) -> Path | None:
-    for root in surface["static_roots"]:
-        candidate = root / reference
-        if candidate.is_file():
-            return candidate
-    return None
+    return load_json(CREDITS_PATH, "credits file")
 
 
 def _matches(patterns: list[str], path: Path) -> bool:
@@ -200,13 +110,13 @@ class TestCredits(unittest.TestCase):
                             for line in lines))
 
     def _uncredited(self, name: str) -> list[str]:
-        surface_def = SURFACES[name]
+        surface_def = SURFACE_ENTRY_POINTS[name]
         surface = self._surface(name)
         first_party = surface.get("first_party", [])
         uncredited = []
         for reference in sorted(local_references(
                 surface_def["entry_point"], surface_def["jinja_static"])):
-            path = _resolve(surface_def, reference)
+            path = resolve_reference(surface_def, reference)
             if path is None or not _credited(surface["assets"], first_party, path):
                 uncredited.append(reference)
         return uncredited
@@ -217,9 +127,9 @@ class TestCredits(unittest.TestCase):
                 uncredited = self._uncredited(name)
                 self.assertEqual(
                     uncredited, [],
-                    f"{SURFACES[name]['entry_point'].name} loads assets that "
-                    f"{CREDITS_PATH.name} does not credit for {name}: "
-                    + ", ".join(uncredited))
+                    f"{SURFACE_ENTRY_POINTS[name]['entry_point'].name} loads "
+                    f"assets that {CREDITS_PATH.name} does not credit for "
+                    f"{name}: " + ", ".join(uncredited))
 
     def test_credited_paths_exist(self):
         for name in SURFACE_NAMES:
@@ -227,11 +137,46 @@ class TestCredits(unittest.TestCase):
                 missing = [pattern
                            for asset in self._surface(name)["assets"]
                            for pattern in asset.get("paths", [])
-                           if not glob.glob(str(SRC_ROOT / pattern))]
+                           if not existing_path(pattern)]
                 self.assertEqual(
                     missing, [],
                     f"{CREDITS_PATH.name} credits a path that is not in the "
                     f"tree: " + ", ".join(missing))
+
+    def test_each_surface_credits_only_its_own_tree(self):
+        # WHY: a per-surface list that points into another surface's tree
+        # duplicates credits and hides which surface actually ships a file.
+        offenders = misfiled_paths(self.credits)
+        self.assertEqual(
+            offenders, [],
+            f"{CREDITS_PATH.name} files an asset under a surface that does "
+            f"not ship it: "
+            + ", ".join(f"{s}/{a} -> {p}" for s, a, p in offenders))
+
+    def test_panel_credits_match_its_runtime_dependencies(self):
+        # WHY the panel needs this of its own: it has no HTML entry point to
+        # scan, so nothing else would notice a stale or invented dependency.
+        manifest = load_json(PANEL_MANIFEST, "panel manifest")
+        uncredited = uncredited_panel_dependencies(self.credits, manifest)
+        self.assertEqual(
+            uncredited, set(),
+            f"{CREDITS_PATH.name} credits no panel asset for these runtime "
+            f"dependencies: " + ", ".join(sorted(uncredited)))
+        unknown = unknown_panel_assets(self.credits, manifest)
+        self.assertEqual(
+            unknown, set(),
+            f"{CREDITS_PATH.name} credits panel assets that are not runtime "
+            f"dependencies of {PANEL_MANIFEST.name}: "
+            + ", ".join(sorted(unknown)))
+
+    def test_panel_credits_cover_every_runtime_dependency(self):
+        # Guards the manifest read itself: an empty dependency set would make
+        # the cross-check above pass while crediting nothing.
+        manifest = load_json(PANEL_MANIFEST, "panel manifest")
+        self.assertTrue(
+            panel_direct_dependencies(manifest),
+            f"{PANEL_MANIFEST.name} declares no runtime dependencies, so the "
+            f"panel credit cross-check would be vacuous")
 
 
 if __name__ == "__main__":
