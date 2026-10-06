@@ -630,8 +630,9 @@ check_certbot_issuance() {
   fi
 
   local out rc
-  out="$(bash "$script" 2>&1)"
-  rc=$?
+  # WHY chained: a standalone assignment adopts the substitution's status, so a
+  # non-zero one aborts the run under `set -e` before the case below can map it.
+  out="$(bash "$script" 2>&1)" && rc=0 || rc=$?
   case "$rc" in
     0) record_result "tls certificate" "PASS" "${out##*: }" ;;
     1) record_result "tls certificate" "WARN" "${out##*: }" ;;
