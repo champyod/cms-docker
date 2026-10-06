@@ -1,13 +1,24 @@
-{% extends "contest.html" %}
+{# WHY extends base.html and not contest.html: contest.html fills its body with
+   the participation branch, whose logged-out arm shows the login form instead
+   of the core block. Extending contest.html would give a visitor without an
+   account a login form at this URL. This page is reachable by anyone, so it
+   supplies its own body. #}
+{% extends "base.html" %}
 
-{% set page = "credits" %}
+{% block title %}Credits{% endblock title %}
 
-{% block core %}
-<div class="span9">
+{% block body %}
+<div id="main" class="container">
+    <div class="row">
+        <div class="span12">
 
 <div class="page-header">
     <h1>Credits</h1>
 </div>
+
+<p>
+    <a href="{{ contest_url() }}">&laquo; Back</a>
+</p>
 
 <h2>{{ credits.project.name }}</h2>
 
@@ -57,5 +68,7 @@
   </tbody>
 </table>
 
+        </div>
+    </div>
 </div>
-{% endblock core %}
+{% endblock body %}

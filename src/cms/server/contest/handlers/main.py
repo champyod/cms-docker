@@ -451,12 +451,12 @@ class DocumentationHandler(ContestHandler):
 class CreditsHandler(ContestHandler):
     """Displays the licence and the bundled third-party software.
 
-    Authenticated like the documentation page: the nav entry that reaches it
-    only exists on an authenticated page, and the offer of the corresponding
-    source is served to the contestants the server is serving.
+    Unauthenticated, like the home page: the footer links here from every page
+    including the login form, and section 13 of the licence addresses every
+    user interacting with the server, not only the ones holding an account.
+    Nothing rendered here is contest- or user-specific.
 
     """
-    @tornado.web.authenticated
     @multi_contest
     def get(self):
         self.render("credits.html",
