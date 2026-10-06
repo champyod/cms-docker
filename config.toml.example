@@ -224,3 +224,6 @@ VAULT_PORT = 8200                   # port
 [tailscale]
 TAILSCALE_AUTHKEY = ""          # secret; tskey-auth-... from the Tailscale admin console (user-provided)
 TAILSCALE_HOSTNAME = "cms-contest" # str; hostname the tailscale sidecar registers as
+TS_HTTPS_PANEL = 8843            # port; tailscale serve HTTPS -> admin panel :8891
+TS_HTTPS_CLASSIC = 8844          # port; tailscale serve HTTPS -> classic admin :8889
+TS_HTTPS_RANKING = 8845          # port; tailscale serve HTTPS -> ranking :8890

@@ -97,14 +97,16 @@ impl UiSpec {
         Self::ADMIN_PANEL,
     ];
 
+    /// WHY no `ts-https` key: `__tailscale_serve.sh` fronts only the admin surfaces,
+    /// so the key this would write has nothing to read it.
     const CONTEST_WEB: Self = Self {
         name: "contest-web",
         env_file: ".env.contest",
         bind_key: "CONTEST_BIND_IP",
         port_key: "CONTEST_PORT_EXTERNAL",
         default_port: 8888,
-        ts_serve_key: Some("TS_HTTPS_CONTEST"),
-        default_https_port: 8846,
+        ts_serve_key: None,
+        default_https_port: 0,
         unsupported: &[],
     };
 

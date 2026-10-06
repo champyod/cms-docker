@@ -77,7 +77,24 @@ or off, and no domain name moves a port to a different address.
 The one thing the two paths share is contention: while the domain proxy owns
 :80/:443, a UI also published on a routable address reaches the operator through two
 paths at once. That is why the exposure chooser greys out `public` and `ts-http` for
-every UI as soon as any vhost is configured.
+every UI — but keyed on whether the proxy is *running*, not on whether a vhost is
+*configured*, since a box can set names without having brought the stack up.
+
+## Two ways over the tailnet
+
+Reaching a UI through the tailnet has two distinct mechanisms, and they are not
+alternatives for one another.
+
+| Mechanism | Keys | What the tailnet sees |
+| --- | --- | --- |
+| Publish the port | `*_BIND_IP`, `INNER_IP` | The UI on its own port, **plain HTTP**, on the tailnet address |
+| `tailscale serve` | `TS_HTTPS_*` | The UI on its loopback port, fronted by a `tailscale serve` listener, **HTTPS** |
+
+The first moves the published address; the second keeps loopback and adds TLS at the
+edge. Only the admin surfaces have `tailscale serve` entries — `TS_HTTPS_PANEL`,
+`TS_HTTPS_CLASSIC` and `TS_HTTPS_RANKING` — because that is all
+`scripts/__tailscale_serve.sh` fronts. The contest UI has no such entry, so the
+chooser offers it no `ts-https` mode; its tailnet reach is the publish path above.
 
 ## Examples
 
