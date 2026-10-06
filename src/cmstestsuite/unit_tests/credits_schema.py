@@ -36,21 +36,14 @@ PANEL_MANIFEST = REPO_ROOT / "admin-panel" / "package.json"
 
 # WHY these roots: a surface may only credit files inside the tree it serves.
 # Listing them per surface is what lets a path that belongs to one surface be
-# rejected when it is filed under another.
+# rejected when it is filed under another. contest and admin each name
+# cms/server/static/ as well, because both servers mount it as a common static
+# root and both legitimately serve the same bundled jQuery from it.
 SURFACE_ROOTS = {
     "contest": ("cms/server/contest/", "cms/server/static/"),
     "admin": ("cms/server/admin/", "cms/server/static/"),
     "ranking": ("cmsranking/",),
     "panel": ("admin-panel/",),
-}
-
-# Shared root exceptions, one entry per legitimately shared file. Both
-# servers mount cms/server/static/ as a common root and both serve the same
-# bundled jQuery from it, so contest and admin each legitimately credit that
-# one file. Removing either line makes the ownership rule reject real files.
-SHARED_ROOT_EXCEPTIONS = {
-    "contest": ("cms/server/static/jq/jquery-3.6.0.min.js",),
-    "admin": ("cms/server/static/jq/jquery-3.6.0.min.js",),
 }
 
 SURFACE_NAMES = tuple(SURFACE_ROOTS)
@@ -181,11 +174,10 @@ def misfiled_paths(credits: dict) -> list[tuple[str, str, str]]:
     found = []
     for surface_name in SURFACE_NAMES:
         surface = credits.get("surfaces", {}).get(surface_name, {})
-        exceptions = SHARED_ROOT_EXCEPTIONS.get(surface_name, ())
         for asset in surface.get("assets", []):
             for pattern in asset.get("paths", []):
                 roots = SURFACE_ROOTS[surface_name]
-                if _is_under(pattern, roots) or pattern in exceptions:
+                if _is_under(pattern, roots):
                     continue
                 found.append((surface_name, asset.get("name", "?"), pattern))
     return found
