@@ -74,11 +74,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     # Detect Architecture
     ARCH=$(dpkg --print-architecture)
     
-    if [ "\$ARCH" = "amd64" ]; then
+    if [ "$ARCH" = "amd64" ]; then
         echo "Installing Isolate from UCW Repository (AMD64)..."
-        CODENAME=$(source /etc/os-release; echo \$VERSION_CODENAME)
+        CODENAME=$(source /etc/os-release; echo $VERSION_CODENAME)
         echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/isolate.asc]" \
-            "http://www.ucw.cz/isolate/debian/ \${CODENAME}-isolate main" \
+            "http://www.ucw.cz/isolate/debian/ ${CODENAME}-isolate main" \
             >/etc/apt/sources.list.d/isolate.list
         curl https://www.ucw.cz/isolate/debian/signing-key.asc \
             >/etc/apt/keyrings/isolate.asc
@@ -104,6 +104,24 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     if [ -f /etc/isolate ]; then
         sed -i 's@^cg_root .*@cg_root = /sys/fs/cgroup@' /etc/isolate
     fi
+
+    # Provision the sandbox identity unconditionally: the source branch above
+    # only ever creates the isolate group, and the apt package does not set up
+    # subuid/subgid either. Without the isolate user and its subordinate uid
+    # ranges, isolate's user-namespace sandboxing exits 2 with
+    # "User isolate not found in /etc/subuid" on every submission.
+    getent passwd isolate >/dev/null || \
+        useradd -r -d /var/local/lib/isolate -M -s /usr/sbin/nologin isolate
+    mkdir -p /var/local/lib/isolate
+    chown isolate:isolate /var/local/lib/isolate
+    # 231072 is the third block: ubuntu owns 100000-165535 and useradd grants
+    # cmsuser the next block (165536-231071) at :130, so this range collides with neither.
+    grep -q '^isolate:' /etc/subuid || echo 'isolate:231072:65536' >> /etc/subuid
+    grep -q '^isolate:' /etc/subgid || echo 'isolate:231072:65536' >> /etc/subgid
+    # Fail the image build here rather than ship a sandbox that cannot start.
+    getent passwd isolate >/dev/null
+    grep -q '^isolate:' /etc/subuid
+    grep -q '^isolate:' /etc/subgid
 EOF
 
 # Create cmsuser user with least-privilege sudo and access to isolate
