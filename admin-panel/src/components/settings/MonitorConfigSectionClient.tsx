@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Plus, Trash2, Play, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Trash2, Play, ToggleLeft, ToggleRight } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
-import { Input } from '@/components/core/Input';
 import { toast } from 'sonner';
 import { useDictionary } from '@/hooks/useDictionary';
 import { interpolate } from '@/lib/interpolate';
+import { MonitorTargetForm } from './MonitorTargetForm';
 import {
   addMonitorTarget,
   removeMonitorTarget,
@@ -186,68 +186,18 @@ export function MonitorConfigSectionClient({
           ))}
         </div>
       )}
-      <div className="bg-black/40 border border-border rounded-xl p-4 space-y-4">
-        <h3 className="text-sm font-medium text-foreground">Add Target</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Input
-            label="URL"
-            placeholder="https://example.com/health"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            className="col-span-1 md:col-span-2 lg:col-span-4"
-          />
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground ml-1">Interval (s)</label>
-            <select
-              value={interval}
-              onChange={(e) => setInterval_(Number(e.target.value))}
-              className="w-full h-10 px-3 bg-black/40 border border-border rounded-xl text-sm text-foreground"
-            >
-              <option value={30}>30</option>
-              <option value={60}>60</option>
-              <option value={120}>120</option>
-              <option value={300}>300</option>
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground ml-1">Timeout (s)</label>
-            <select
-              value={timeout}
-              onChange={(e) => setTimeout_(Number(e.target.value))}
-              className="w-full h-10 px-3 bg-black/40 border border-border rounded-xl text-sm text-foreground"
-            >
-              <option value={3}>3</option>
-              <option value={5}>5</option>
-              <option value={10}>10</option>
-              <option value={30}>30</option>
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground ml-1">Expected Status</label>
-            <select
-              value={expectedStatus}
-              onChange={(e) => setExpectedStatus(Number(e.target.value))}
-              className="w-full h-10 px-3 bg-black/40 border border-border rounded-xl text-sm text-foreground"
-            >
-              <option value={200}>200</option>
-              <option value={201}>201</option>
-              <option value={204}>204</option>
-              <option value={301}>301</option>
-            </select>
-          </div>
-          <div className="flex items-end">
-            <Button
-              variant="positive"
-              loading={adding}
-              onClick={handleAdd}
-              className="w-full"
-            >
-              <Plus className="w-4 h-4 mr-1" />
-              Add
-            </Button>
-          </div>
-        </div>
-      </div>
+      <MonitorTargetForm
+        url={url}
+        interval={interval}
+        timeout={timeout}
+        expectedStatus={expectedStatus}
+        adding={adding}
+        onUrlChange={setUrl}
+        onIntervalChange={setInterval_}
+        onTimeoutChange={setTimeout_}
+        onExpectedStatusChange={setExpectedStatus}
+        onAdd={handleAdd}
+      />
     </div>
   );
 }
