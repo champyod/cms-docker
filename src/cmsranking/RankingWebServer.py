@@ -43,6 +43,7 @@ from werkzeug.middleware.dispatcher import DispatcherMiddleware
 
 # Needed for initialization. Do not remove.
 import cmsranking.Logger  # noqa
+from cms.server.credits import get_surface, load_credits
 from cmscommon.eventsource import EventSource
 from cmsranking.Config import PublicConfig, load_config
 from cmsranking.Contest import Contest
@@ -491,6 +492,45 @@ class PublicConfigHandler:
         return response
 
 
+class CreditsHandler:
+    """Serve the credits of the one surface this server renders.
+
+    WHY a runtime endpoint rather than a generated page: a committed
+    generated copy drifts from the credits file as soon as either changes,
+    and this scoreboard is projected in front of an audience that must be
+    able to reach the licence offer and the asset list.
+    """
+
+    # The name of this surface in the credits file.
+    SURFACE = "ranking"
+
+    def __call__(self, environ, start_response):
+        return self.wsgi_app(environ, start_response)
+
+    @responder
+    def wsgi_app(self, environ, start_response):
+        response = Response()
+        response.status_code = 200
+        response.mimetype = "application/json"
+        response.data = json.dumps(self.payload(), sort_keys=True)
+
+        return response
+
+    def payload(self) -> dict:
+        """Return the project, its licence and this surface's credits.
+
+        WHY only this surface: the scoreboard is unauthenticated, and the
+        other surfaces' asset lists name internal components that no visitor
+        to this page needs to see.
+        """
+        credits = load_credits()
+        return {
+            "project": credits["project"],
+            "license": credits["license"],
+            "surface": get_surface(self.SURFACE),
+        }
+
+
 class RoutingHandler:
 
     def __init__(
@@ -501,6 +541,7 @@ class RoutingHandler:
         score_handler: ScoreHandler,
         history_handler: HistoryHandler,
         public_config_handler: PublicConfigHandler,
+        credits_handler: CreditsHandler,
     ):
         self.router = Map([
             Rule("/", methods=["GET"], endpoint="root"),
@@ -508,7 +549,8 @@ class RoutingHandler:
             Rule("/scores", methods=["GET"], endpoint="scores"),
             Rule("/events", methods=["GET"], endpoint="events"),
             Rule("/logo", methods=["GET"], endpoint="logo"),
-            Rule("/config", methods=["GET"], endpoint="public_config")
+            Rule("/config", methods=["GET"], endpoint="public_config"),
+            Rule("/credits", methods=["GET"], endpoint="credits"),
         ])
 
         self.event_handler = event_handler
@@ -517,6 +559,7 @@ class RoutingHandler:
         self.history_handler = history_handler
         self.root_handler = root_handler
         self.public_config_handler = public_config_handler
+        self.credits_handler = credits_handler
 
     def __call__(self, environ, start_response):
         return self.wsgi_app(environ, start_response)
@@ -540,6 +583,8 @@ class RoutingHandler:
             return self.history_handler(environ, start_response)
         elif endpoint == 'public_config':
             return self.public_config_handler(environ, start_response)
+        elif endpoint == 'credits':
+            return self.credits_handler(environ, start_response)
 
 
 def main() -> int:
@@ -632,7 +677,8 @@ def main() -> int:
             os.path.join(web_dir, 'img', 'logo.png')),
         ScoreHandler(stores),
         HistoryHandler(stores),
-        PublicConfigHandler(config.public))
+        PublicConfigHandler(config.public),
+        CreditsHandler())
 
     wsgi_app = SharedDataMiddleware(DispatcherMiddleware(
         toplevel_handler, {

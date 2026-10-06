@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset='utf-8'/>
+        <link rel="shortcut icon" href="img/favicon.ico" />
+        <link rel='stylesheet' href='Ranking.css'>
+        <title>Credits</title>
+        <style>
+/* WHY the styles are here and not in Ranking.css: that stylesheet lays the
+   scoreboard out as fixed, absolutely positioned panels, which has nothing to
+   offer a standalone page. The values below are taken from it so this page
+   looks like it belongs to the same application. */
+            #Credits {
+                max-width: 60em;
+                margin: 2em auto;
+                padding: 0 1.5em;
+                color: #444444;
+            }
+            #Credits h1 {
+                font-size: 1.8em;
+                color: black;
+            }
+            #Credits h2 {
+                font-size: 1.3em;
+                margin-top: 1.5em;
+                color: black;
+            }
+            #Credits a {
+                color: #00A3DA;
+            }
+            #Credits table {
+                width: 100%;
+                border-spacing: 2px;
+            }
+            #Credits th,
+            #Credits td {
+                padding: 0.25em 0.5em;
+                text-align: left;
+                vertical-align: top;
+            }
+            #Credits thead th {
+                background-color: #ECECEF;
+                border: 1px #D0D0D2 solid;
+                border-radius: 4px;
+            }
+            #Credits tbody tr:nth-child(even) {
+                background-color: #FFFFFF;
+            }
+            #Credits tbody tr:nth-child(odd) {
+                background-color: #F2F2F3;
+            }
+            #Credits code {
+                background-color: #F2F2F3;
+                border-radius: 3px;
+                padding: 0 0.25em;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="Credits">
+            <h1>Credits</h1>
+            <p><a href="./">&laquo; Back to the scoreboard</a></p>
+            <div id="Credits_body"></div>
+        </div>
+        <script>
+var Credits = new function () {
+    var self = this;
+
+    self.CREDITS_URL = "credits";
+    self.CONFIG_URL = "config";
+    self.COLUMNS = ["Software", "Copyright holder", "Licence", "Licence text"];
+
+    self.el = function (tag, text) {
+        var element = document.createElement(tag);
+        if (text !== undefined) {
+            element.appendChild(document.createTextNode(text));
+        }
+        return element;
+    };
+
+    self.link = function (text, url) {
+        var element = self.el("a", text);
+        element.href = url;
+        element.target = "_blank";
+        element.rel = "license noreferrer";
+        return element;
+    };
+
+    self.paragraph = function (parts) {
+        var element = self.el("p");
+        for (var i = 0; i < parts.length; i += 1) {
+            element.appendChild(parts[i]);
+        }
+        return element;
+    };
+
+    self.licence_paragraph = function (data) {
+        return self.paragraph([
+            self.el("span", data.project["name"] + " is released under the "),
+            self.link(data.license["name"], data.license["url"]),
+            self.el("span", " ("),
+            self.el("code", data.license["spdx_id"]),
+            self.el("span", ").")
+        ]);
+    };
+
+    self.source_paragraph = function (config) {
+        var url = config["source_url"];
+        return self.paragraph([
+            self.el("span", "As required by section 13 of that licence, the "
+                + "corresponding source of the software running here is offered at "),
+            self.link(url, url),
+            self.el("span", ".")
+        ]);
+    };
+
+    self.attribution_paragraphs = function (lines) {
+        var paragraphs = [];
+        for (var i = 0; i < lines.length; i += 1) {
+            paragraphs.push(self.paragraph([
+                self.el("span", "This ranking web is " + lines[i]["text"] + ": "),
+                self.link(lines[i]["url"], lines[i]["url"]),
+                self.el("span", ".")
+            ]));
+        }
+        return paragraphs;
+    };
+
+    self.head_row = function () {
+        var row = self.el("tr");
+        for (var i = 0; i < self.COLUMNS.length; i += 1) {
+            row.appendChild(self.el("th", self.COLUMNS[i]));
+        }
+        var head = self.el("thead");
+        head.appendChild(row);
+        return head;
+    };
+
+    self.licence_cell = function (urls) {
+        var cell = self.el("td");
+        for (var i = 0; i < urls.length; i += 1) {
+            if (i > 0) {
+                cell.appendChild(self.el("br"));
+            }
+            cell.appendChild(self.link(urls[i], urls[i]));
+        }
+        return cell;
+    };
+
+    self.asset_row = function (asset) {
+        var row = self.el("tr");
+        row.appendChild(self.el("td", asset["name"]));
+        row.appendChild(self.el("td", asset["holder"]));
+        row.appendChild(self.el("td", asset["license_id"]));
+        row.appendChild(self.licence_cell(asset["license_urls"]));
+        return row;
+    };
+
+    self.asset_table = function (assets) {
+        var table = self.el("table");
+        table.appendChild(self.head_row());
+        var body = self.el("tbody");
+        for (var i = 0; i < assets.length; i += 1) {
+            body.appendChild(self.asset_row(assets[i]));
+        }
+        table.appendChild(body);
+        return table;
+    };
+
+    self.render = function (data, config) {
+        var body = document.getElementById("Credits_body");
+        var paragraphs = self.attribution_paragraphs(data.surface["attribution"]);
+        body.appendChild(self.licence_paragraph(data));
+        body.appendChild(self.source_paragraph(config));
+        for (var i = 0; i < paragraphs.length; i += 1) {
+            body.appendChild(paragraphs[i]);
+        }
+        body.appendChild(self.el("h2", "Third-party software"));
+        body.appendChild(self.asset_table(data.surface["assets"]));
+    };
+
+    self.report_failure = function (error) {
+        console.error("Error while loading the credits of this scoreboard:",
+                      error);
+        document.getElementById("Credits_body").appendChild(
+            self.el("p", "The credits of this scoreboard could not be loaded."));
+    };
+
+    self.checked = function (response) {
+        if (!response.ok) {
+            throw new Error("HTTP " + response.status + " for " + response.url);
+        }
+        return response.json();
+    };
+
+    self.load = function () {
+        Promise.all([
+            fetch(self.CREDITS_URL).then(self.checked),
+            fetch(self.CONFIG_URL).then(self.checked)
+        ]).then(function (results) {
+            self.render(results[0], results[1]);
+        }, self.report_failure);
+    };
+}();
+
+Credits.load();
+        </script>
+    </body>
+</html>
