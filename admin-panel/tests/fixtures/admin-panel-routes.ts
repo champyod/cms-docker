@@ -62,6 +62,7 @@ export const EXPECTED_ROUTE_MANIFEST: readonly RouteFixture[] = [
   { id: 'system.maintenance', path: '/system/maintenance', kind: 'page', tabIds: [], legacyPaths: ['/maintenance'], enabled: true },
   { id: 'system.settings', path: '/system/settings', kind: 'page', tabIds: [], legacyPaths: ['/settings'], enabled: true },
   { id: 'system.docs', path: '/system/docs', kind: 'page', tabIds: [], legacyPaths: ['/docs'], enabled: true },
+  { id: 'system.about', path: '/system/about', kind: 'page', tabIds: [], legacyPaths: [], enabled: true },
   { id: 'system.search', path: '/search', kind: 'search', tabIds: [], legacyPaths: [], enabled: true },
   { id: 'auth.signout', path: '/auth/signout', kind: 'page', tabIds: [], legacyPaths: [], enabled: false },
 ];
@@ -109,6 +110,7 @@ export const EXPECTED_ROUTE_PERMISSIONS = {
   'system.maintenance': { any: ['maintenance:update', 'backup:create'] },
   'system.settings': { all: ['env:read', 'env:list', 'monitor:read', 'monitor:list'] },
   'system.docs': {},
+  'system.about': {},
   'system.search': { all: ['all:all'] },
   'auth.signout': {},
 } as const satisfies Readonly<Record<RouteId, PermissionRequirement>>;
@@ -119,5 +121,5 @@ export const EXPECTED_NAVIGATION_GROUPS: readonly NavigationGroupDescriptor[] = 
   { id: 'evaluation', labelKey: 'navigation.groups.evaluation', routeIds: ['evaluation.submissions', 'evaluation.lanes'] },
   { id: 'administration', labelKey: 'navigation.groups.administration', routeIds: ['administration.admins', 'administration.groups', 'administration.audit'] },
   { id: 'infrastructure', labelKey: 'navigation.groups.infrastructure', routeIds: ['infrastructure.deployments', 'infrastructure.containers', 'infrastructure.resources', 'infrastructure.ranking'] },
-  { id: 'system', labelKey: 'navigation.groups.system', routeIds: ['system.appearance', 'system.maintenance', 'system.settings', 'system.docs'] },
+  { id: 'system', labelKey: 'navigation.groups.system', routeIds: ['system.appearance', 'system.maintenance', 'system.settings', 'system.docs', 'system.about'] },
 ];

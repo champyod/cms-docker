@@ -116,18 +116,19 @@ describe('permittedNavItems', () => {
     expect(items.map((item) => item.id)).toEqual(['administration.admins']);
   });
 
-  it('builds the system rail from the same helper, Docs last', () => {
+  it('builds the system rail from the same helper, Docs then About last', () => {
     expect(permittedNavItems('system', 'en', en, new Set(['all:all']))).toEqual([
       { id: 'system.appearance', label: en.navigation.system.appearance.label, href: '/en/system/appearance' },
       { id: 'system.maintenance', label: en.navigation.system.maintenance.label, href: '/en/system/maintenance' },
       { id: 'system.settings', label: en.navigation.system.settings.label, href: '/en/system/settings' },
       { id: 'system.docs', label: en.navigation.system.docs.label, href: '/en/system/docs' },
+      { id: 'system.about', label: en.navigation.system.about.label, href: '/en/system/about' },
     ]);
   });
 
-  it('omits a gated system route the reader may not open while keeping public Docs', () => {
+  it('omits a gated system route the reader may not open while keeping the public routes', () => {
     const items = permittedNavItems('system', 'en', en, new Set(['backup:create']));
-    expect(items.map((item) => item.id)).toEqual(['system.maintenance', 'system.docs']);
+    expect(items.map((item) => item.id)).toEqual(['system.maintenance', 'system.docs', 'system.about']);
   });
 });
 

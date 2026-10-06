@@ -42,7 +42,7 @@ describe('buildNavVisibility', () => {
 
 describe('palette navigation destinations', () => {
   it('shows the requirement-free routes only when nothing is permitted', () => {
-    expect(paletteRouteIds([])).toEqual(['home', 'system.docs']);
+    expect(paletteRouteIds([])).toEqual(['home', 'system.docs', 'system.about']);
   });
 
   it('shows contest-scoped routes for contest permission only', () => {

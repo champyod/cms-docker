@@ -92,6 +92,7 @@ const SYSTEM_ROUTE_IDS = [
   'system.maintenance',
   'system.settings',
   'system.docs',
+  'system.about',
 ] as const satisfies readonly RouteId[];
 
 function tabIdsVisibleTo(effective: ReadonlySet<string>): string[] {
@@ -126,7 +127,7 @@ describe('target route registry', () => {
   });
 
   it('enables the direct three plus the Contest, Task, User, Team, and Evaluation routes', () => {
-    expect(ROUTE_REGISTRY).toHaveLength(44);
+    expect(ROUTE_REGISTRY).toHaveLength(45);
     const directIds = DIRECT_ROUTE_CASES.map(({ routeId }) => routeId);
     // Why: the Evaluation shell proves the Submission list, the lane module, and
     // the Submission record landing with its four tabs, and the Administration

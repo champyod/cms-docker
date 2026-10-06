@@ -14,6 +14,21 @@ const MODULE_TAB_SURFACES: readonly NavigationSurface[] = [
   'breadcrumbs',
 ];
 
+/**
+ * A module's non-landing page with no shortcut chord.
+ *
+ * Why: a chord is a global single-key jump to somewhere a reader is likely to be
+ * working, and a licence notice is a page they reach deliberately, so binding a
+ * letter to it would spend one of the few available letters on a destination that
+ * belongs on no work path.
+ */
+const MODULE_TAB_SURFACES_WITHOUT_CHORD: readonly NavigationSurface[] = [
+  'tabs',
+  'palette',
+  'search',
+  'breadcrumbs',
+];
+
 // Why: the platform slice groups the administration, infrastructure, and system
 // modules, and every descriptor here is enabled because its physical route landed
 // in the same commit. Search is the retained deep-link capability and is answered
@@ -33,6 +48,7 @@ export const PLATFORM_ROUTES: readonly RouteDescriptor[] = [
   enabledPageRoute('system.maintenance', '/system/maintenance', { any: ['maintenance:update', 'backup:create'] }, ['/maintenance'], MODULE_TAB_SURFACES),
   enabledPageRoute('system.settings', '/system/settings', { all: ['env:read', 'env:list', 'monitor:read', 'monitor:list'] }, ['/settings'], MODULE_TAB_SURFACES),
   enabledPageRoute('system.docs', '/system/docs', {}, ['/docs'], MODULE_TAB_SURFACES),
+  enabledPageRoute('system.about', '/system/about', {}, [], MODULE_TAB_SURFACES_WITHOUT_CHORD),
   { ...searchRoute('system.search', '/search', { all: ['all:all'] }, [], ['palette', 'search', 'shortcuts']), enabled: true },
 
   // Why disabled and surface-less: sign-out is a route handler, not a page, so it has

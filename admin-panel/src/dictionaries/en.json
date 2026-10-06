@@ -275,6 +275,23 @@
     "officialDocs": "CMS Official Docs",
     "viewDocumentation": "View Documentation"
   },
+  "about": {
+    "project": "Project",
+    "source": "Source",
+    "upstream": "Upstream",
+    "license": "Licence",
+    "attribution": "Attribution",
+    "firstParty": "First-party files",
+    "transitiveDependencies": "Transitive dependencies",
+    "softwareCount": "Third-party software ({count})",
+    "columns": {
+      "name": "Software",
+      "version": "Version",
+      "holder": "Copyright holder",
+      "license": "Licence",
+      "paths": "Used by"
+    }
+  },
   "confirmations": {
     "cancel": "Cancel",
     "captions": {
@@ -552,6 +569,7 @@
       "maintenance": { "label": "Maintenance", "description": "Configure automated backups and system notifications." },
       "settings": { "label": "Settings", "description": "Configure environment files and service restarts." },
       "docs": { "label": "Docs", "description": "Read CMS administration and contest-system documentation." },
+      "about": { "label": "About", "description": "Review the licence, attribution, and third-party software this panel ships." },
       "search": { "label": "Search" }
     },
     "auth": {

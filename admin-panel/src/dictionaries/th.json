@@ -275,6 +275,23 @@
     "officialDocs": "เอกสารทางการ CMS",
     "viewDocumentation": "ดูเอกสาร"
   },
+  "about": {
+    "project": "โครงการ",
+    "source": "ซอร์สโค้ด",
+    "upstream": "ต้นทาง",
+    "license": "สัญญาอนุญาต",
+    "attribution": "การให้เครดิต",
+    "firstParty": "ไฟล์ของโครงการเอง",
+    "transitiveDependencies": "การพึ่งพาโดยอ้อม",
+    "softwareCount": "ซอฟต์แวร์บุคคลที่สาม ({count})",
+    "columns": {
+      "name": "ซอฟต์แวร์",
+      "version": "รุ่น",
+      "holder": "ผู้ถือลิขสิทธิ์",
+      "license": "สัญญาอนุญาต",
+      "paths": "ถูกใช้โดย"
+    }
+  },
   "confirmations": {
     "cancel": "ยกเลิก",
     "captions": {
@@ -552,6 +569,7 @@
       "maintenance": { "label": "การบำรุงรักษา", "description": "กำหนดการสำรองข้อมูลอัตโนมัติและการแจ้งเตือนระบบ" },
       "settings": { "label": "การตั้งค่า", "description": "กำหนดไฟล์สภาพแวดล้อมและการเริ่มบริการใหม่" },
       "docs": { "label": "เอกสาร", "description": "อ่านเอกสารการดูแลระบบและระบบการแข่งขันของ CMS" },
+      "about": { "label": "เกี่ยวกับ", "description": "ตรวจสอบสัญญาอนุญาต การให้เครดิต และซอฟต์แวร์บุคคลที่สามที่แผงนี้ใช้" },
       "search": { "label": "ค้นหา" }
     },
     "auth": {

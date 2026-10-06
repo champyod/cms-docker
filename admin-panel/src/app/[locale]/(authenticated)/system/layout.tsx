@@ -35,6 +35,7 @@ export default async function SystemLayout({
     'system.maintenance': systemNav['maintenance']['description'],
     'system.settings': systemNav['settings']['description'],
     [DOCS_TAB_ID]: dict.docs.subtitle,
+    'system.about': systemNav['about']['description'],
   };
   // Why keyed by tab id: the header renders the one action the active tab id names, so
   // a tab whose action needs no panel state contributes it here, and the tabs that own

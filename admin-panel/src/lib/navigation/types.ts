@@ -44,6 +44,7 @@ export type RouteId =
   | 'system.maintenance'
   | 'system.settings'
   | 'system.docs'
+  | 'system.about'
   | 'system.search'
   | 'auth.signout';
 

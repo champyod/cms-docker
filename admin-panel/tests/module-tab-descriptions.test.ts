@@ -121,6 +121,7 @@ describe('module tab description coverage', () => {
       'system.maintenance',
       'system.settings',
       'system.docs',
+      'system.about',
     ]);
   });
 });

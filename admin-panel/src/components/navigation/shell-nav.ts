@@ -8,6 +8,7 @@ import {
   FileCode,
   Globe,
   Home,
+  Info,
   Palette,
   Rocket,
   ScrollText,
@@ -59,6 +60,7 @@ const ROUTE_ICONS: ReadonlyMap<RouteId, LucideIcon> = new Map<RouteId, LucideIco
   ['system.maintenance', Wrench],
   ['system.settings', Settings],
   ['system.docs', BookOpen],
+  ['system.about', Info],
   ['system.search', Search],
 ]);
 
