@@ -1,31 +1,19 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, X, ShieldCheck } from 'lucide-react';
-import { createAdmin, updateAdmin, getAdmins, revealAdminPassword } from '@/app/actions/admins';
 import {
   getAdminAccess,
-  setAdminGroups,
-  setAdminOverride,
-  clearAdminOverride,
   listGroupsWithPermissions,
   type GroupWithPermissions,
   type AdminAccessOverride,
 } from '@/app/actions/adminPermissions';
 import { Dialog } from '@/components/core/Dialog';
-import { Button } from '@/components/core/Button';
 import { InlineAlert } from '@/components/core/InlineAlert';
-import { Input } from '@/components/core/Input';
-import { Card } from '@/components/core/Card';
-import { PasswordFieldWithKind } from '@/components/core/PasswordFieldWithKind';
-import { SavedSecretReveal } from '@/components/core/SavedSecretReveal';
 import { toast } from 'sonner';
 import type { PasswordKind } from '@/lib/password-format';
-import { ACTION_PERMISSIONS, hasEffectivePermission, resolveEffectivePermissions, type OverrideEffect } from '@/lib/permission-engine';
-import { PERMISSION_REGISTRY } from '@/lib/permission-registry';
+import { ACTION_PERMISSIONS, hasEffectivePermission, resolveEffectivePermissions } from '@/lib/permission-engine';
 import type { AdminWithLogin } from '@/lib/prisma-selects';
-import { getFieldAccess, stripDisallowedFields } from '@/lib/field-permissions';
-import { RestrictedField } from '@/components/core/RestrictedField';
+import { getFieldAccess } from '@/lib/field-permissions';
 
 import {
   EMPTY_ADMIN_FORM,
@@ -34,6 +22,13 @@ import {
   type AdminFormState,
 } from './adminFormConfig';
 import { AdminModalFooter } from './adminModalSections';
+import { AdminAccountFields } from './AdminAccountFields';
+import { AdminAccessEditor } from './AdminAccessEditor';
+import {
+  persistAdminAccessChanges,
+  persistAdminAccount,
+  type OverrideDraft,
+} from './adminModalPersistence';
 
 interface AdminModalProps {
   isOpen: boolean;
@@ -42,18 +37,6 @@ interface AdminModalProps {
   initialData?: AdminWithLogin | null;
   callerPermissions: string[];
   canRevealPassword: boolean;
-}
-
-interface OverrideDraft {
-  permissionKey: string;
-  effect: OverrideEffect;
-  reason: string;
-}
-
-function sameIds(a: readonly number[], b: readonly number[]): boolean {
-  if (a.length !== b.length) return false;
-  const lookup = new Set(b);
-  return a.every((id) => lookup.has(id));
 }
 
 export function AdminModal({ isOpen, onClose, onSuccess, initialData, callerPermissions, canRevealPassword }: AdminModalProps) {
@@ -175,105 +158,6 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData, callerPerm
 
   const updateForm = (updates: Partial<AdminFormState>) => setFormData((current) => ({ ...current, ...updates }));
 
-  const handleGroupToggle = (groupId: number, checked: boolean) => {
-    setSelectedGroupIds((current) =>
-      checked ? Array.from(new Set([...current, groupId])) : current.filter((id) => id !== groupId),
-    );
-  };
-
-  const handleAddOverride = () => {
-    const used = new Set(overrides.map((override) => override.permissionKey));
-    const next = PERMISSION_REGISTRY.find((definition) => !used.has(definition.key));
-    if (!next) return;
-    setOverrides((current) => [...current, { permissionKey: next.key, effect: 'allow', reason: '' }]);
-  };
-
-  const handleOverrideKey = (index: number, permissionKey: string) => {
-    setOverrides((current) =>
-      current.map((override, position) => (position === index ? { ...override, permissionKey } : override)),
-    );
-  };
-
-  const handleOverrideEffect = (index: number, effect: OverrideEffect) => {
-    setOverrides((current) =>
-      current.map((override, position) => (position === index ? { ...override, effect } : override)),
-    );
-  };
-
-  const handleOverrideReason = (index: number, reason: string) => {
-    setOverrides((current) =>
-      current.map((override, position) => (position === index ? { ...override, reason } : override)),
-    );
-  };
-
-  const handleRemoveOverride = (index: number) => {
-    setOverrides((current) => current.filter((_, position) => position !== index));
-  };
-
-  const persistAccessChanges = async (adminId: number): Promise<string | null> => {
-    const groupChangePending = !sameIds(selectedGroupIds, originalGroupIds);
-    const originalByKey = new Map(originalOverrides.map((override) => [override.permissionKey, override]));
-    const changedOverrides: OverrideDraft[] = [];
-    for (const draft of overrides) {
-      const original = originalByKey.get(draft.permissionKey);
-      if (!original || original.effect !== draft.effect || (original.reason ?? '') !== draft.reason) {
-        changedOverrides.push(draft);
-      }
-    }
-    const removedOverrides = originalOverrides.filter(
-      (original) => !overrides.some((draft) => draft.permissionKey === original.permissionKey),
-    );
-
-    if (!groupChangePending && changedOverrides.length === 0 && removedOverrides.length === 0) return null;
-    if (!accessReason.trim()) return 'A reason is required for access changes';
-    for (const change of changedOverrides) {
-      if (!change.reason.trim()) return `A reason is required for the override on "${change.permissionKey}"`;
-    }
-
-    if (groupChangePending) {
-      const result = await setAdminGroups(adminId, selectedGroupIds, accessReason.trim());
-      if (!result.success) return result.error;
-    }
-    for (const change of changedOverrides) {
-      const result = await setAdminOverride(adminId, change.permissionKey, change.effect, change.reason.trim());
-      if (!result.success) return result.error;
-    }
-    for (const removed of removedOverrides) {
-      const result = await clearAdminOverride(adminId, removed.permissionKey);
-      if (!result.success) return result.error;
-    }
-    return null;
-  };
-
-  const persistAccount = async (): Promise<{ success: boolean; error?: string; adminId: number | null }> => {
-    if (initialData) {
-      const allowed = stripDisallowedFields('admins', formData as unknown as Record<string, unknown>, callerPermissionSet);
-      const updated = await updateAdmin(initialData.id, {
-        name: allowed.name as string | undefined,
-        passwordKind,
-        ...(allowed.password ? { password: allowed.password as string } : {}),
-      });
-      return { success: updated.success, error: updated.error, adminId: initialData.id };
-    }
-
-    // Why: the per-field update keys model the UPDATE contract, so a create payload is built straight
-    // from the validated form data — creation itself is gated by admin:create on the server.
-    const created = await createAdmin({
-      name: formData.name,
-      username: formData.username,
-      password: formData.password,
-      passwordKind,
-    });
-    if (!created.success) return { success: false, error: created.error, adminId: null };
-
-    const admins = await getAdmins();
-    const located = admins.find((admin) => admin.username === formData.username.trim());
-    if (!located) {
-      return { success: false, error: 'Admin created but could not be located to assign access', adminId: null };
-    }
-    return { success: true, adminId: located.id };
-  };
-
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     const validationError = validateAdminForm(formData, !!initialData);
@@ -285,13 +169,19 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData, callerPerm
     setLoading(true);
     setError('');
     try {
-      const account = await persistAccount();
+      const account = await persistAdminAccount({ initialData, formData, passwordKind, callerPermissionSet });
       if (!account.success || account.adminId === null) {
         setError(account.error || 'Operation failed');
         return;
       }
 
-      const accessFailure = await persistAccessChanges(account.adminId);
+      const accessFailure = await persistAdminAccessChanges(account.adminId, {
+        selectedGroupIds,
+        originalGroupIds,
+        overrides,
+        originalOverrides,
+        accessReason,
+      });
       if (accessFailure) {
         // Why: the account row is already saved, so surface the access failure without discarding the save.
         toast.error('Access update failed', { description: accessFailure });
@@ -316,181 +206,28 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData, callerPerm
     >
       {error && <InlineAlert tone="destructive" density="regular">{error}</InlineAlert>}
       <form onSubmit={handleSubmit} className="space-y-4">
-        <RestrictedField
-          canRead={initialData ? fieldAccess.name.canRead : canCreate}
-          canUpdate={initialData ? fieldAccess.name.canUpdate : canCreate}
-          label="Display Name"
-          lockHint="Read-only — you lack admin:update"
-        >
-          <Input
-            value={formData.name}
-            onChange={(e) => updateForm({ name: e.target.value })}
-            placeholder="e.g., John Doe"
-          />
-        </RestrictedField>
+        <AdminAccountFields
+          formData={formData}
+          initialData={initialData}
+          canCreate={canCreate}
+          fieldAccess={fieldAccess}
+          canRevealPassword={canRevealPassword}
+          passwordKind={passwordKind}
+          updateForm={updateForm}
+          onPasswordKind={setPasswordKind}
+        />
 
-        <RestrictedField
-          canRead={initialData ? fieldAccess.username.canRead : canCreate}
-          canUpdate={initialData ? fieldAccess.username.canUpdate : canCreate}
-          label="Username"
-          lockHint="Immutable after creation"
-        >
-          <Input
-            value={formData.username}
-            onChange={(e) => updateForm({ username: e.target.value })}
-            placeholder="e.g., johnd"
-            disabled={!!initialData}
-          />
-        </RestrictedField>
-
-        <RestrictedField
-          canRead={initialData ? fieldAccess.password.canRead : canCreate}
-          canUpdate={initialData ? fieldAccess.password.canUpdate : canCreate}
-          label={`Password ${initialData ? '(Leave empty to keep current)' : ''}`}
-          lockHint="Read-only — you lack admin:password:update"
-        >
-          <PasswordFieldWithKind
-            label=""
-            value={formData.password}
-            onChange={(password) => updateForm({ password })}
-            required={!initialData}
-            placeholder="••••••••"
-            kind={passwordKind}
-            onKind={setPasswordKind}
-          />
-          {initialData && (
-            <SavedSecretReveal
-              label="Saved password"
-              canReveal={canRevealPassword}
-              onReveal={() => revealAdminPassword(initialData.id)}
-            />
-          )}
-        </RestrictedField>
-
-        <Card className="space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-muted-foreground uppercase">Groups</span>
-            {loadingAccess && <span className="text-xs text-muted-foreground">Loading…</span>}
-          </div>
-          {accessError && <p className="text-xs text-destructive">{accessError}</p>}
-          <div className="space-y-2">
-            {groups.map((group) => (
-              <label
-                key={group.id}
-                className="flex items-center justify-between gap-3 p-3 bg-muted/50 rounded-lg border border-border cursor-pointer"
-              >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-foreground font-medium truncate">{group.name}</span>
-                    {group.is_seeded && (
-                      <span className="px-1.5 py-0.5 text-[0.625rem] rounded-full bg-muted text-muted-foreground">Seeded</span>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground truncate">{group.description ?? 'No description'}</p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="px-2 py-0.5 text-xs rounded-full bg-indigo-500/20 text-indigo-400">
-                    {group.permissionKeys.length}
-                  </span>
-                  <input
-                    type="checkbox"
-                    checked={selectedGroupIds.includes(group.id)}
-                    onChange={(event) => handleGroupToggle(group.id, event.target.checked)}
-                    className="w-5 h-5 rounded accent-primary"
-                  />
-                </div>
-              </label>
-            ))}
-            {!loadingAccess && groups.length === 0 && (
-              <p className="text-xs text-muted-foreground italic">No groups are defined yet.</p>
-            )}
-          </div>
-        </Card>
-
-        <Card className="space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-muted-foreground uppercase">Per-person overrides</span>
-            <Button variant="secondary" size="sm" onClick={handleAddOverride}>
-              <Plus className="w-4 h-4" />
-              Add override
-            </Button>
-          </div>
-          {overrides.length === 0 && (
-            <p className="text-xs text-muted-foreground italic">
-              This admin has no overrides — access matches their groups exactly.
-            </p>
-          )}
-          {overrides.map((draft, index) => (
-            <div
-              key={`${draft.permissionKey}-${index}`}
-              className="space-y-2 p-3 bg-muted/50 rounded-lg border border-border"
-            >
-              <div className="flex items-center gap-2">
-                <select
-                  value={draft.permissionKey}
-                  onChange={(event) => handleOverrideKey(index, event.target.value)}
-                  className="flex-1 h-9 min-w-0 rounded-md border border-input bg-transparent px-2 text-xs font-mono outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-                >
-                  {PERMISSION_REGISTRY.map((definition) => (
-                    <option key={definition.key} value={definition.key}>
-                      {definition.key}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={draft.effect}
-                  onChange={(event) => handleOverrideEffect(index, event.target.value as OverrideEffect)}
-                  className="h-9 rounded-md border border-input bg-transparent px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-                >
-                  <option value="allow">Allow</option>
-                  <option value="deny">Deny</option>
-                </select>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  iconOnly
-                  tooltip="Remove override"
-                  onClick={() => handleRemoveOverride(index)}
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-              <Input
-                value={draft.reason}
-                onChange={(event) => handleOverrideReason(index, event.target.value)}
-                placeholder="Reason (required)"
-              />
-            </div>
-          ))}
-        </Card>
-
-        <Card className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-muted-foreground uppercase">Effective access</span>
-            <span className="flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-indigo-500/20 text-indigo-400">
-              <ShieldCheck className="w-3 h-3" />
-              {effectivePermissions.size} permissions
-            </span>
-          </div>
-          <div className="max-h-40 overflow-y-auto flex flex-wrap gap-1">
-            {[...effectivePermissions].sort().map((key) => (
-              <span key={key} className="px-2 py-0.5 text-xs rounded-full bg-muted text-muted-foreground font-mono">
-                {key}
-              </span>
-            ))}
-            {effectivePermissions.size === 0 && (
-              <p className="text-xs text-muted-foreground italic">
-                No effective permissions — this admin will be denied everything.
-              </p>
-            )}
-          </div>
-        </Card>
-
-        <Input
-          label="Reason for access changes"
-          value={accessReason}
-          onChange={(event) => setAccessReason(event.target.value)}
-          placeholder="e.g., onboarding, role change"
+        <AdminAccessEditor
+          groups={groups}
+          selectedGroupIds={selectedGroupIds}
+          overrides={overrides}
+          loadingAccess={loadingAccess}
+          accessError={accessError}
+          accessReason={accessReason}
+          effectivePermissions={effectivePermissions}
+          onSelectedGroupIdsChange={setSelectedGroupIds}
+          onOverridesChange={setOverrides}
+          onAccessReasonChange={setAccessReason}
         />
 
         <AdminModalFooter loading={loading} isEdit={!!initialData} onClose={onClose} />
