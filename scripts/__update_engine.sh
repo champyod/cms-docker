@@ -642,6 +642,7 @@ VAR_SPECS=(
   "Core & Network|[core]|POSTGRES_BACKUP_PASSWORD|secret||rand_pw"
   "Core & Network|[core]|CMS_SECRET_KEY|secret||hex32"
   "Core & Network|[core]|CMS_DOMAIN|str||cms.local"
+  "Core & Network|[core]|CMS_SOURCE_URL|url||https://github.com/champyod/cms-docker"
   "Core & Network|[core]|CMS_CONFIG|str||/usr/local/etc/cms.toml"
   "Core & Network|[core]|CMS_LOG_DIR|str||/var/local/log/cms"
   "Core & Network|[core]|CMS_CACHE_DIR|str||/var/local/cache/cms"
@@ -847,6 +848,9 @@ VAR_SPECS=(
   "Infra & Monitoring|[infra]|VAULT_PORT|port||8200"
   "Tailscale|[tailscale]|TAILSCALE_AUTHKEY|secret||"
   "Tailscale|[tailscale]|TAILSCALE_HOSTNAME|str||cms-contest"
+  "Tailscale|[tailscale]|TS_HTTPS_PANEL|port||8843"
+  "Tailscale|[tailscale]|TS_HTTPS_CLASSIC|port||8844"
+  "Tailscale|[tailscale]|TS_HTTPS_RANKING|port||8845"
 )
 
 needs_fix() {
