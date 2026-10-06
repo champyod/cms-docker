@@ -1,15 +1,15 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Database, Save, Terminal } from 'lucide-react';
+import { Save } from 'lucide-react';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { Dialog } from '@/components/core/Dialog';
 import { ResponsiveModalShell } from '@/components/core/ResponsiveModalShell';
 import { ModalFooter } from '@/components/core/ModalFooter';
-import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/apiClient';
 import { DatasetGeneralForm } from './DatasetGeneralForm';
 import { DatasetManagersTab } from './DatasetManagersTab';
+import { DatasetModalTabs } from './DatasetModalTabs';
 
 interface Manager {
   id: number;
@@ -203,36 +203,11 @@ export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess, perm
       <ResponsiveModalShell
         sidebarWidthClass="sm:w-48"
         sidebar={
-          <>
-          <button
-            onClick={() => setActiveTab('general')}
-            className={cn(
-              'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors max-sm:flex-1 max-sm:justify-center max-sm:rounded-md max-sm:border max-sm:border-border',
-              activeTab === 'general'
-                ? 'bg-primary/10 text-primary ring-1 ring-ring/50'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-            )}
-          >
-            <Database className="w-4 h-4" />
-            General
-          </button>
-          <button
-            onClick={() => setActiveTab('managers')}
-            disabled={!dataset}
-            title={!dataset ? 'Save dataset first' : undefined}
-            className={cn(
-              'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors max-sm:flex-1 max-sm:justify-center max-sm:rounded-md max-sm:border max-sm:border-border',
-              activeTab === 'managers'
-                ? 'bg-primary/10 text-primary ring-1 ring-ring/50'
-                : !dataset
-                  ? 'cursor-not-allowed text-muted-foreground opacity-50'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-            )}
-          >
-            <Terminal className="w-4 h-4" />
-            Managers
-          </button>
-          </>
+          <DatasetModalTabs
+            activeTab={activeTab}
+            hasDataset={Boolean(dataset)}
+            onSelectTab={setActiveTab}
+          />
         }
       >
         <div className="p-6">
