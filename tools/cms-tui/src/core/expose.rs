@@ -222,7 +222,7 @@ pub fn mode_allowed(spec: &UiSpec, mode: Mode, tailscale_up: bool) -> Result<(),
 /// `ts-https` bind loopback and stay behind the proxy, and `domain` is the mode that
 /// turns the nginx on.
 #[must_use]
-pub fn mode_conflicts_with_domain(mode: Mode) -> bool {
+pub const fn mode_conflicts_with_domain(mode: Mode) -> bool {
     matches!(mode, Mode::Public | Mode::TsHttp)
 }
 

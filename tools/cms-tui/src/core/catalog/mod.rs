@@ -1,6 +1,7 @@
-//! Declarative command catalog — single source for key, target and argument
-//! metadata. Every CLI command declares its dispatch key, script/make target
-//! and argument specs here so the CLI and TUI can render from one table.
+//! Declarative command catalog — single source for key, target and argument metadata.
+//!
+//! Every CLI command declares its dispatch key, script/make target and argument specs
+//! here so the CLI and TUI can render from one table.
 
 use super::dispatch::{DispatchKey, DispatchTarget};
 

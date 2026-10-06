@@ -6,7 +6,7 @@ pub const ALL_STACKS: [&str; 5] = ["core", "admin", "contest", "worker", "infra"
 /// Additive stacks that publish host ports and are excluded from `all`.
 ///
 /// WHY excluded from `all`: `domain` binds host 80/443 and starts certbot, and
-/// `waf` adds the ModSecurity profile in front of it. A workstation running
+/// `waf` adds the `ModSecurity` profile in front of it. A workstation running
 /// `make core` must not acquire a public listener or begin ACME issuance, so
 /// these are opt-in by name rather than part of the blanket rollout.
 pub const ADDITIVE_STACKS: [&str; 2] = ["domain", "waf"];

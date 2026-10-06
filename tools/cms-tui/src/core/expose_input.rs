@@ -32,6 +32,11 @@ impl std::fmt::Display for Port {
     }
 }
 
+/// The message shown for a number that parses but is not a publishable port.
+fn out_of_range(number: u32) -> String {
+    format!("{number} is out of range — enter a port between {MIN_PORT} and {MAX_PORT}")
+}
+
 /// Validates a typed port.
 ///
 /// # Errors
@@ -39,6 +44,10 @@ impl std::fmt::Display for Port {
 /// Returns a message naming the accepted range when the text is not a number in
 /// `[1, 65535]`. A non-numeric value gets its own message, because "must be a number"
 /// is more useful than "must be between 1 and 65535" when the user typed letters.
+///
+/// WHY the range check is the narrowing conversion: `u16::try_from` rejects everything
+/// above 65535, so the same step that keeps the value in range also keeps it honest
+/// about not truncating a typed `70000` into a port that happens to exist.
 pub fn parse_port(input: &str) -> Result<Port, String> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
@@ -47,13 +56,10 @@ pub fn parse_port(input: &str) -> Result<Port, String> {
     let Ok(number) = trimmed.parse::<u32>() else {
         return Err(format!("'{trimmed}' is not a number — enter 1 to 65535"));
     };
-    if !(MIN_PORT as u32..=MAX_PORT as u32).contains(&number) {
-        return Err(format!(
-            "{number} is out of range — enter a port between {MIN_PORT} and {MAX_PORT}"
-        ));
+    match u16::try_from(number) {
+        Ok(port) if port >= MIN_PORT => Ok(Port(port)),
+        _ => Err(out_of_range(number)),
     }
-    #[allow(clippy::cast_possible_truncation)]
-    Ok(Port(number as u16))
 }
 
 /// Validates a typed Tailscale IPv4 address.
@@ -82,7 +88,7 @@ pub fn parse_tailscale_ip(input: &str) -> Result<Ipv4Addr, String> {
 
 /// Whether an address falls in the Tailscale CGNAT range `100.64.0.0/10`.
 #[must_use]
-pub fn is_tailscale_cgnat(address: Ipv4Addr) -> bool {
+pub const fn is_tailscale_cgnat(address: Ipv4Addr) -> bool {
     let [a, b, ..] = address.octets();
     a == 100 && (b >> 6) == 1
 }

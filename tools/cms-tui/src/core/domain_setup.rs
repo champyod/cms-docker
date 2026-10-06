@@ -23,19 +23,67 @@ pub struct DomainRetryPolicy {
     pub interval: Option<u32>,
 }
 
-/// The four flag-only switches that change how issuance runs, not what it issues.
+/// The flag-only switches that change how issuance runs, not what it issues.
+///
+/// WHY `backup_certs` and `auto_renew` live in [`DomainStorePolicy`] instead: those two
+/// are about what happens to the stored certificate around the run, while these three
+/// are about the run itself, and keeping them together here is what stops a fourth
+/// unrelated switch arriving without anyone noticing it no longer has a home.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct DomainSwitches {
     /// Passes `--staging` (the untrusted Let's Encrypt test CA).
     pub is_staging: bool,
     /// Passes `--force` to reissue a still-valid certificate.
     pub is_force: bool,
-    /// Passes `--backup-certs` to snapshot the cert store first.
-    pub is_backup_certs: bool,
     /// Passes `--lock` so a flock serialises overlapping runs.
     pub is_lock: bool,
+}
+
+/// What happens to the certificate store around a run.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DomainStorePolicy {
+    /// Passes `--backup-certs` to snapshot the cert store first.
+    pub is_backup_certs: bool,
     /// Passes `--auto-renew` so a live run ends by forcing a renewal.
     pub is_auto_renew: bool,
+}
+
+/// Which half of `setup` a request covers.
+///
+/// WHY this is an enum rather than two booleans: `--cert-only` and `--proxy-only` are
+/// the same single choice, so two independent flags could describe a request that no
+/// operator can mean.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum DomainScope {
+    /// The whole of `setup`: issue the certificate and render nginx, emitting neither
+    /// scope flag.
+    #[default]
+    Both,
+    /// Passes `--cert-only`: issue the certificate and leave nginx alone.
+    CertOnly,
+    /// Passes `--proxy-only`: render and reload nginx and leave the cert store alone.
+    ProxyOnly,
+    /// Passes both scope flags, exactly as the operator typed them.
+    ///
+    /// WHY this is representable instead of being resolved here: the CLI forwards what
+    /// was written and `__domain.sh` is the authority that refuses the pair. Picking
+    /// either half would turn a parse error into a run that quietly skips work the
+    /// operator asked for.
+    BothNarrowed,
+}
+
+/// Reads the two scope flags off a request as the single scope they name.
+///
+/// Total over all four combinations, so no pair of flags can be dropped or guessed at
+/// on the way to the encoder.
+#[must_use]
+pub const fn scope_from(cert_only: bool, proxy_only: bool) -> DomainScope {
+    match (cert_only, proxy_only) {
+        (false, false) => DomainScope::Both,
+        (true, false) => DomainScope::CertOnly,
+        (false, true) => DomainScope::ProxyOnly,
+        (true, true) => DomainScope::BothNarrowed,
+    }
 }
 
 /// Every value `scripts/__domain.sh setup` accepts, before it becomes argv.
@@ -53,10 +101,8 @@ pub struct DomainSetupRequest {
     pub cert_path: String,
     pub key_path: String,
     pub email: String,
-    /// Passes `--cert-only`: issue the certificate and leave nginx alone.
-    pub is_cert_only: bool,
-    /// Passes `--proxy-only`: render and reload nginx and leave the cert store alone.
-    pub is_proxy_only: bool,
+    /// The scope the request narrows to, as one choice rather than two flags.
+    pub scope: DomainScope,
     /// Passes `--apply`; without it the script only prints a dry-run plan.
     pub is_apply: bool,
     /// Passes `--yes` so the script does not prompt for optional features.
@@ -68,8 +114,10 @@ pub struct DomainSetupRequest {
     pub extra_domains: String,
     pub dns: String,
     pub dns_credentials: String,
-    /// The four run-mode switches.
+    /// The three switches that change how the run itself behaves.
     pub switches: DomainSwitches,
+    /// What happens to the certificate store around the run.
+    pub store: DomainStorePolicy,
     pub deploy_hook: String,
 }
 
@@ -117,12 +165,17 @@ fn opt_str(value: &str) -> Option<String> {
 }
 
 /// The flag-only flags, emitted in the order the CLI has always emitted them.
+///
+/// WHY this stays one table even though the switches now live in two structs: the
+/// order here is the order the script's own help lists and the order the CLI test
+/// assertions pin, and the two flags split into [`DomainStorePolicy`] interleave with
+/// the other three. One list is the only place that order is written down.
 const BOOL_FLAGS: [(&str, BoolFlagFn); 5] = [
     ("--staging", |s| s.switches.is_staging),
     ("--force", |s| s.switches.is_force),
-    ("--backup-certs", |s| s.switches.is_backup_certs),
+    ("--backup-certs", |s| s.store.is_backup_certs),
     ("--lock", |s| s.switches.is_lock),
-    ("--auto-renew", |s| s.switches.is_auto_renew),
+    ("--auto-renew", |s| s.store.is_auto_renew),
 ];
 
 /// Encodes a setup request as the argv `scripts/__domain.sh` expects.
@@ -155,11 +208,14 @@ pub fn domain_setup_args(verb: &str, setup: &DomainSetupRequest) -> Vec<String> 
     // WHY the scope pair trails the other booleans instead of joining BOOL_FLAGS: the
     // script rejects both together at parse time, so they have to be recognisable as
     // one choice rather than as two unrelated run-mode switches.
-    if setup.is_cert_only {
-        out.push("--cert-only".to_string());
-    }
-    if setup.is_proxy_only {
-        out.push("--proxy-only".to_string());
+    match setup.scope {
+        DomainScope::Both => {}
+        DomainScope::CertOnly => out.push("--cert-only".to_string()),
+        DomainScope::ProxyOnly => out.push("--proxy-only".to_string()),
+        DomainScope::BothNarrowed => {
+            out.push("--cert-only".to_string());
+            out.push("--proxy-only".to_string());
+        }
     }
     if setup.is_apply {
         out.push("--apply".to_string());

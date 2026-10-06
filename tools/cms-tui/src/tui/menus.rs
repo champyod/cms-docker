@@ -38,15 +38,9 @@ fn catalog_entry(
 
 fn capitalize(input: &str) -> String {
     let mut chars = input.chars();
-    match chars.next() {
-        None => String::new(),
-        Some(first) => {
-            let mut out = String::new();
-            out.extend(first.to_uppercase());
-            out.push_str(chars.as_str());
-            out
-        }
-    }
+    chars.next().map_or_else(String::new, |first| {
+        first.to_uppercase().chain(chars).collect()
+    })
 }
 
 fn stacks_deploy(items: &mut Vec<(String, String, bool, bool, bool)>) {
@@ -137,6 +131,7 @@ fn stacks_controls(items: &mut Vec<(String, String, bool, bool, bool)>) {
     ));
 }
 
+#[must_use]
 pub fn stacks_menu() -> ActionMenu {
     let mut items: Vec<(String, String, bool, bool, bool)> = Vec::new();
     stacks_deploy(&mut items);
@@ -144,6 +139,7 @@ pub fn stacks_menu() -> ActionMenu {
     ActionMenu::with_meta(items)
 }
 
+#[must_use]
 pub fn database_menu() -> ActionMenu {
     ActionMenu::with_meta(vec![
         catalog_entry("Initialize Database", DispatchKey::DbInit, &[]),
@@ -153,6 +149,7 @@ pub fn database_menu() -> ActionMenu {
     ])
 }
 
+#[must_use]
 pub fn worker_menu() -> ActionMenu {
     ActionMenu::with_meta(vec![
         catalog_entry("Worker Edit", DispatchKey::WorkerEdit, &[]),
@@ -172,6 +169,7 @@ pub fn worker_menu() -> ActionMenu {
     ])
 }
 
+#[must_use]
 pub fn ingress_menu() -> ActionMenu {
     ActionMenu::with_meta(vec![
         catalog_entry("Tailscale Setup", DispatchKey::TailscaleSetup, &["setup"]),
@@ -204,6 +202,7 @@ pub fn ingress_menu() -> ActionMenu {
     ])
 }
 
+#[must_use]
 pub fn config_menu() -> ActionMenu {
     let mut items = vec![
         catalog_entry(
@@ -240,6 +239,7 @@ pub fn config_menu() -> ActionMenu {
     ActionMenu::with_meta(items)
 }
 
+#[must_use]
 pub fn backup_menu() -> ActionMenu {
     ActionMenu::with_meta(vec![
         catalog_entry("Run Backup Now", DispatchKey::Backup, &[]),
@@ -249,6 +249,7 @@ pub fn backup_menu() -> ActionMenu {
     ])
 }
 
+#[must_use]
 pub fn system_menu() -> ActionMenu {
     ActionMenu::with_meta(vec![
         catalog_entry("Doctor (Preflight Checks)", DispatchKey::Doctor, &[]),
@@ -260,6 +261,7 @@ pub fn system_menu() -> ActionMenu {
     ])
 }
 
+#[must_use]
 pub fn bootstrap_menu() -> ActionMenu {
     ActionMenu::with_meta(vec![
         catalog_entry("Setup (Fresh Install)", DispatchKey::Setup, &["--fresh"]),

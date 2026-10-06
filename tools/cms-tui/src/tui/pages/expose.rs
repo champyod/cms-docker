@@ -25,8 +25,8 @@ pub struct ExposureView {
     mode: usize,
     /// Whether the domain nginx currently owns :80/:443.
     domain_active: bool,
-    /// Whether `tailscale` is running.
-    tailscale_up: bool,
+    /// Whether a tailnet is joined.
+    has_tailnet: bool,
     /// The Tailnet address, when one is known.
     tailscale_ip: Option<String>,
     /// Why the highlighted mode is unavailable, when it is.
@@ -38,12 +38,12 @@ pub struct ExposureView {
 impl ExposureView {
     /// Creates a view over the current host state.
     #[must_use]
-    pub fn new(domain_active: bool, tailscale_up: bool, tailscale_ip: Option<String>) -> Self {
+    pub const fn new(domain_active: bool, has_tailnet: bool, tailscale_ip: Option<String>) -> Self {
         Self {
             ui: 0,
             mode: 0,
             domain_active,
-            tailscale_up,
+            has_tailnet,
             tailscale_ip,
             notice: None,
             serve_active: false,
@@ -70,7 +70,7 @@ impl ExposureView {
 
     /// Records the Tailnet address so `ts-http` previews and binds resolve.
     pub fn set_tailscale_ip(&mut self, ip: Option<String>) {
-        self.tailscale_up = ip.is_some();
+        self.has_tailnet = ip.is_some();
         self.tailscale_ip = ip;
         self.recompute_notice();
     }
@@ -92,7 +92,7 @@ impl ExposureView {
     /// WHY the view tracks this: `local` and `ts-https` share the `127.0.0.1` bind
     /// address, so the bind value on its own cannot tell the operator whether the
     /// tailnet entry still needs to be removed or added.
-    pub fn set_serve_active(&mut self, active: bool) {
+    pub const fn set_serve_active(&mut self, active: bool) {
         self.serve_active = active;
     }
 
@@ -166,7 +166,7 @@ impl ExposureView {
     /// tool.
     #[must_use]
     pub fn block_reason(&self, mode: Mode) -> Option<String> {
-        if let Err(reason) = mode_allowed(self.ui(), mode, self.tailscale_up) {
+        if let Err(reason) = mode_allowed(self.ui(), mode, self.has_tailnet) {
             return Some(reason);
         }
         if self.domain_active && mode_conflicts_with_domain(mode) {
@@ -191,10 +191,10 @@ impl ExposureView {
         match self.mode() {
             Mode::Local => "localhost only".to_string(),
             Mode::Public => format!("http://<host>:{port}"),
-            Mode::TsHttp => match &self.tailscale_ip {
-                Some(ip) => format!("http://{ip}:{port}"),
-                None => "http://<tailscale-ip>:<port>".to_string(),
-            },
+            Mode::TsHttp => self.tailscale_ip.as_deref().map_or_else(
+                || format!("http://<tailscale-ip>:{port}"),
+                |ip| format!("http://{ip}:{port}"),
+            ),
             Mode::TsHttps => format!(
                 "https://<node>.<tailnet>.ts.net:{}",
                 spec.default_https_port
@@ -217,21 +217,21 @@ impl ExposureView {
             // WHY a blocked row is dimmed and annotated rather than dropped: hiding it
             // makes the operator think the mode does not exist, while dimming shows
             // the trade-off that produced the block.
-            let (base_style, suffix) = match &blocked {
-                Some(reason) => (
-                    Style::default().fg(Color::DarkGray),
-                    format!("  [blocked: {reason}]"),
-                ),
-                None => (Style::default().fg(Color::Gray), String::new()),
+            let suffix = blocked
+                .as_deref()
+                .map_or_else(String::new, |reason| format!("  [blocked: {reason}]"));
+            let base_style = if blocked.is_some() {
+                Style::default().fg(Color::DarkGray)
+            } else {
+                Style::default().fg(Color::Gray)
             };
 
             let mut spans = vec![
                 Span::styled(
                     format!("{marker} ({check}) "),
+                    // WHY no BOLD: the loop below bolds every span of a highlighted row.
                     if is_highlighted {
-                        Style::default()
-                            .fg(Color::Cyan)
-                            .add_modifier(Modifier::BOLD)
+                        Style::default().fg(Color::Cyan)
                     } else {
                         base_style
                     },
@@ -269,7 +269,7 @@ impl ExposureView {
         } else {
             "domain nginx inactive — public and ts-http are available"
         };
-        let tailscale_note = if self.tailscale_up {
+        let tailscale_note = if self.has_tailnet {
             format!(
                 "tailscale up{}",
                 self.tailscale_ip
@@ -386,11 +386,11 @@ pub fn domain_proxy_running() -> bool {
 /// modes after the operator has joined the tailnet.
 #[must_use]
 pub fn view_from_host() -> ExposureView {
-    let tailscale_up = std::process::Command::new("tailscale")
+    let has_tailnet = std::process::Command::new("tailscale")
         .arg("status")
         .output()
         .is_ok_and(|out| out.status.success());
-    let tailscale_ip = tailscale_up
+    let tailscale_ip = has_tailnet
         .then(|| {
             std::process::Command::new("tailscale")
                 .args(["ip", "-4"])
@@ -404,7 +404,7 @@ pub fn view_from_host() -> ExposureView {
 
     ExposureView::new(
         domain_stack_is_active(domain_proxy_running()),
-        tailscale_up,
+        has_tailnet,
         tailscale_ip,
     )
 }

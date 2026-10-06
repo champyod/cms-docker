@@ -1,7 +1,9 @@
 //! Encoder assertions for `__domain.sh setup`, kept out of the encoder file so both
 //! stay readable.
 
-use super::{domain_setup_args, DomainRetryPolicy, DomainSetupRequest, DomainSwitches};
+use super::{
+    domain_setup_args, DomainRetryPolicy, DomainSetupRequest, DomainStorePolicy, DomainSwitches,
+};
 
 /// The baseline every caller starts from: `cms domain setup` with no flags.
 fn base() -> DomainSetupRequest {
@@ -159,8 +161,10 @@ fn the_boolean_flags_keep_their_established_order() {
         switches: DomainSwitches {
             is_staging: true,
             is_force: true,
-            is_backup_certs: true,
             is_lock: true,
+        },
+        store: DomainStorePolicy {
+            is_backup_certs: true,
             is_auto_renew: true,
         },
         wait_port80: Some(60),

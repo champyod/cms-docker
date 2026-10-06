@@ -37,6 +37,14 @@ fn propagate_exit(code: i32) -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
+/// Runs one parsed `cms` command.
+///
+/// # Errors
+///
+/// Returns `Err` when the repo root cannot be located, when the docker client cannot be
+/// created or the underlying container operation fails, and when a dispatched command
+/// reports a non-zero exit status. Every such failure carries either the spawned
+/// process's own message or the failing status code, so the caller can print it as-is.
 pub fn handle(cmd: Commands) -> Result<(), Box<dyn std::error::Error>> {
     let runner = Runner::new()?;
     if let Some((key, args)) = resolve_catalog(&cmd) {
@@ -44,25 +52,36 @@ pub fn handle(cmd: Commands) -> Result<(), Box<dyn std::error::Error>> {
         return propagate_exit(run_target(&runner, key, &refs));
     }
     match cmd {
-        Commands::Deploy { target, img } => handle_deploy(target, img),
+        Commands::Deploy { target, img } => handle_deploy(&target, img),
         Commands::Stop { stack } => run_docker_exit(&DockerClient::new()?, |c| c.stop(&stack)),
         Commands::Clean { stack } => run_docker_exit(&DockerClient::new()?, |c| c.clean(&stack)),
         Commands::Pull { stack } => run_docker_exit(&DockerClient::new()?, |c| c.pull(&stack)),
-        Commands::Config { sub, .. } => handle_config(sub, &runner),
+        Commands::Config { sub, .. } => handle_config(&sub, &runner),
         _ => unreachable!("catalog should have handled remaining command"),
     }
 }
 
-fn handle_deploy(target: String, img: bool) -> Result<(), Box<dyn std::error::Error>> {
+/// Deploys one named stack, or every stack when `target` is `all`.
+///
+/// # Errors
+///
+/// Returns `Err` when the docker client cannot be created or the deploy run fails; a
+/// deploy whose steps report failure surfaces as `Err` carrying the exit status.
+fn handle_deploy(target: &str, img: bool) -> Result<(), Box<dyn std::error::Error>> {
     let client = DockerClient::new()?;
-    let report = client.deploy(&target, img)?;
+    let report = client.deploy(target, img)?;
     for (step, code) in &report.steps {
         println!("{step}: {}", if *code == 0 { "OK" } else { "FAILED" });
     }
     propagate_exit(i32::from(!report.is_success()))
 }
 
-fn handle_config(sub: ConfigSub, runner: &Runner) -> Result<(), Box<dyn std::error::Error>> {
+/// Handles the config verbs the dispatch catalog does not cover.
+///
+/// # Errors
+///
+/// Returns `Err` when reading `config.toml` fails or the editor exits non-zero.
+fn handle_config(sub: &ConfigSub, runner: &Runner) -> Result<(), Box<dyn std::error::Error>> {
     match sub {
         ConfigSub::Sync => unreachable!("sync is catalog-handled"),
         ConfigSub::Edit => propagate_exit(run_config_edit()),

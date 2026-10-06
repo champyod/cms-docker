@@ -77,17 +77,16 @@ impl App {
             Route::Database => Some(&mut self.database_menu),
             Route::Worker => Some(&mut self.worker_menu),
             Route::Ingress => Some(&mut self.ingress_menu),
-            // The exposure chooser has no menu: it is a two-cursor form, so the key
-            // handler works on `exposure` directly rather than through an ActionMenu.
-            Route::Exposure => None,
-            // Same for the domain form: its rows and its arming step are handled
-            // directly, so no ActionMenu is consulted for it.
-            Route::Domain => None,
+            // Exposure and Domain have no menu: the exposure chooser is a two-cursor
+            // form and the domain form owns its rows and its arming step, so both are
+            // driven straight off their view rather than through an ActionMenu.
+            // Dashboard and Logs render output rather than a list of actions, so they
+            // offer nothing for the shared menu keys to dispatch.
+            Route::Exposure | Route::Domain | Route::Dashboard | Route::Logs => None,
             Route::Config => Some(&mut self.config_menu),
             Route::Backup => Some(&mut self.backup_menu),
             Route::System => Some(&mut self.system_menu),
             Route::Bootstrap => Some(&mut self.bootstrap_menu),
-            Route::Logs | Route::Dashboard => None,
         }
     }
 
@@ -182,7 +181,8 @@ impl Default for App {
 /// WHY a fallback rather than a failure: the TUI has to open on a box that has not been
 /// set up yet, and an empty form is exactly right there.
 fn runner_repo_root() -> std::path::PathBuf {
-    crate::core::runner::Runner::new()
-        .map(|runner| runner.repo_root().to_path_buf())
-        .unwrap_or_else(|_| std::path::PathBuf::from("."))
+    crate::core::runner::Runner::new().map_or_else(
+        |_| std::path::PathBuf::from("."),
+        |runner| runner.repo_root().to_path_buf(),
+    )
 }

@@ -8,7 +8,8 @@
 
 use super::domain_fields::APPLY_LABEL;
 use crate::core::domain_setup::{
-    domain_setup_args, DomainRetryPolicy, DomainSetupRequest, DomainSwitches,
+    domain_setup_args, DomainRetryPolicy, DomainScope, DomainSetupRequest, DomainStorePolicy,
+    DomainSwitches,
 };
 use crate::tui::components::config_form::ConfigForm;
 
@@ -45,10 +46,9 @@ pub fn request(form: &ConfigForm) -> DomainSetupRequest {
         dns: text(form, "--dns"),
         dns_credentials: text(form, "--dns-credentials"),
         deploy_hook: text(form, "--deploy-hook"),
-        // WHY hardcoded off: the form has no row for these, and a setup form that
+        // WHY the whole scope: the form has no row for narrowing, and a setup form that
         // rendered nginx would quietly stop issuing the certificate it is named for.
-        is_cert_only: false,
-        is_proxy_only: false,
+        scope: DomainScope::Both,
         retry: DomainRetryPolicy {
             attempts: form.number_of("--retry-attempts"),
             interval: form.number_of("--retry-interval"),
@@ -59,8 +59,10 @@ pub fn request(form: &ConfigForm) -> DomainSetupRequest {
         switches: DomainSwitches {
             is_staging: form.is_on("--staging"),
             is_force: form.is_on("--force"),
-            is_backup_certs: form.is_on("--backup-certs"),
             is_lock: form.is_on("--lock"),
+        },
+        store: DomainStorePolicy {
+            is_backup_certs: form.is_on("--backup-certs"),
             is_auto_renew: form.is_on("--auto-renew"),
         },
         is_apply: wants_apply(form),

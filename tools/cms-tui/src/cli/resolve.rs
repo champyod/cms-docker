@@ -1,6 +1,7 @@
 use crate::core::dispatch::DispatchKey;
 use crate::core::domain_setup::{
-    domain_setup_args, DomainRetryPolicy, DomainSetupRequest, DomainSwitches,
+    domain_setup_args, scope_from, DomainRetryPolicy, DomainSetupRequest, DomainStorePolicy,
+    DomainSwitches,
 };
 
 use super::{
@@ -8,7 +9,7 @@ use super::{
     TailscaleSub, WorkerSub,
 };
 
-fn db_key(sub: DbSub) -> DispatchKey {
+const fn db_key(sub: &DbSub) -> DispatchKey {
     match sub {
         DbSub::Init => DispatchKey::DbInit,
         DbSub::Reset => DispatchKey::DbReset,
@@ -16,21 +17,21 @@ fn db_key(sub: DbSub) -> DispatchKey {
         DbSub::Sync => DispatchKey::DbSync,
     }
 }
-fn backup_key(sub: Option<BackupSub>) -> DispatchKey {
+const fn backup_key(sub: Option<&BackupSub>) -> DispatchKey {
     match sub {
         Some(BackupSub::Drill) => DispatchKey::BackupDrill,
         Some(BackupSub::Offsite) => DispatchKey::BackupOffsite,
         None => DispatchKey::Backup,
     }
 }
-fn secrets_dispatch(sub: SecretsSub) -> (DispatchKey, &'static str) {
+const fn secrets_dispatch(sub: &SecretsSub) -> (DispatchKey, &'static str) {
     match sub {
         SecretsSub::Rotate => (DispatchKey::SecretsRotate, "--apply"),
         SecretsSub::Audit => (DispatchKey::SecretsAudit, "--audit"),
         SecretsSub::Generate => (DispatchKey::SecretsGenerate, "--generate"),
     }
 }
-fn worker_dispatch(sub: WorkerSub, args: &[String]) -> (DispatchKey, Vec<String>) {
+fn worker_dispatch(sub: &WorkerSub, args: &[String]) -> (DispatchKey, Vec<String>) {
     let (key, mut out) = match sub {
         WorkerSub::Edit => (DispatchKey::WorkerEdit, Vec::new()),
         WorkerSub::Deploy => (DispatchKey::WorkerDeploy, vec!["deploy".into()]),
@@ -44,14 +45,14 @@ fn worker_dispatch(sub: WorkerSub, args: &[String]) -> (DispatchKey, Vec<String>
     }
     (key, out)
 }
-fn tailscale_dispatch(sub: TailscaleSub) -> (DispatchKey, &'static str) {
+const fn tailscale_dispatch(sub: &TailscaleSub) -> (DispatchKey, &'static str) {
     match sub {
         TailscaleSub::Setup => (DispatchKey::TailscaleSetup, "setup"),
         TailscaleSub::Status => (DispatchKey::TailscaleStatus, "status"),
         TailscaleSub::Remove => (DispatchKey::TailscaleRemove, "remove"),
     }
 }
-fn funnel_dispatch(sub: FunnelSub) -> (DispatchKey, &'static str) {
+const fn funnel_dispatch(sub: &FunnelSub) -> (DispatchKey, &'static str) {
     match sub {
         FunnelSub::Setup => (DispatchKey::FunnelSetup, "setup"),
         FunnelSub::Passwd => (DispatchKey::FunnelPasswd, "passwd"),
@@ -80,26 +81,27 @@ fn domain_setup_from(cmd: &DomainCmd) -> DomainSetupRequest {
         cert_path: clone_or_empty(args.cert_path.as_ref()),
         key_path: clone_or_empty(args.key_path.as_ref()),
         email: clone_or_empty(args.email.as_ref()),
-        is_cert_only: args.cert_only,
-        is_proxy_only: args.proxy_only,
-        is_apply: args.apply,
-        is_yes: args.yes,
+        scope: scope_from(args.scope.cert_only, args.scope.proxy_only),
+        is_apply: args.execution.apply,
+        is_yes: args.execution.yes,
         retry: DomainRetryPolicy {
-            is_auto_retry: args.auto_retry,
-            is_retry_forever: args.retry_forever,
-            attempts: args.retry_attempts,
-            interval: args.retry_interval,
+            is_auto_retry: args.retry.auto_retry,
+            is_retry_forever: args.retry.retry_forever,
+            attempts: args.retry.retry_attempts,
+            interval: args.retry.retry_interval,
         },
         wait_port80: args.wait_port80,
         extra_domains: clone_or_empty(args.extra_domains.as_ref()),
         dns: clone_or_empty(args.dns.as_ref()),
         dns_credentials: clone_or_empty(args.dns_credentials.as_ref()),
         switches: DomainSwitches {
-            is_staging: args.staging,
-            is_force: args.force,
-            is_backup_certs: args.backup_certs,
-            is_lock: args.lock,
-            is_auto_renew: args.auto_renew,
+            is_staging: args.run.staging,
+            is_force: args.run.force,
+            is_lock: args.run.lock,
+        },
+        store: DomainStorePolicy {
+            is_backup_certs: args.store.backup_certs,
+            is_auto_renew: args.store.auto_renew,
         },
         deploy_hook: clone_or_empty(args.deploy_hook.as_ref()),
     }
@@ -153,14 +155,14 @@ fn resolve_basic(cmd: &Commands) -> Option<(DispatchKey, Vec<String>)> {
             Some((key, Vec::new()))
         }
         Commands::Fix => Some((DispatchKey::Fix, vec!["--fix".into()])),
-        Commands::Db { sub } => Some((db_key(sub.clone()), Vec::new())),
+        Commands::Db { sub } => Some((db_key(sub), Vec::new())),
         Commands::AdminCreate => Some((DispatchKey::AdminCreate, Vec::new())),
         Commands::Status => Some((DispatchKey::Status, Vec::new())),
         Commands::Monitor => Some((DispatchKey::Monitor, Vec::new())),
-        Commands::Backup { sub } => Some((backup_key(sub.clone()), Vec::new())),
+        Commands::Backup { sub } => Some((backup_key(sub.as_ref()), Vec::new())),
         Commands::Restore { archive } => Some((DispatchKey::Restore, vec![archive.clone()])),
         Commands::Secrets { sub } => {
-            let (key, flag) = secrets_dispatch(sub.clone());
+            let (key, flag) = secrets_dispatch(sub);
             Some((key, vec![flag.to_string()]))
         }
         Commands::Doctor => Some((DispatchKey::Doctor, Vec::new())),
@@ -171,13 +173,13 @@ fn resolve_basic(cmd: &Commands) -> Option<(DispatchKey, Vec<String>)> {
 
 fn resolve_fleet(cmd: &Commands) -> Option<(DispatchKey, Vec<String>)> {
     match cmd {
-        Commands::Worker { sub, args } => Some(worker_dispatch(sub.clone(), args)),
+        Commands::Worker { sub, args } => Some(worker_dispatch(sub, args)),
         Commands::Tailscale { sub } => {
-            let (key, verb) = tailscale_dispatch(sub.clone());
+            let (key, verb) = tailscale_dispatch(sub);
             Some((key, vec![verb.to_string()]))
         }
         Commands::Funnel { sub } => {
-            let (key, verb) = funnel_dispatch(sub.clone());
+            let (key, verb) = funnel_dispatch(sub);
             Some((key, vec![verb.to_string()]))
         }
         Commands::Contest { sub } => match sub {
@@ -195,6 +197,60 @@ fn resolve_fleet(cmd: &Commands) -> Option<(DispatchKey, Vec<String>)> {
 
 pub(super) fn resolve_catalog(cmd: &Commands) -> Option<(DispatchKey, Vec<String>)> {
     resolve_basic(cmd).or_else(|| resolve_fleet(cmd))
+}
+
+#[cfg(test)]
+mod argv_probe {
+    use super::resolve_catalog;
+
+    #[test]
+    fn probe_cli_argv() {
+        for extra in [
+            vec![],
+            vec!["--cert-only"],
+            vec!["--proxy-only"],
+            vec!["--staging"],
+            vec!["--force"],
+            vec!["--backup-certs"],
+            vec!["--lock"],
+            vec!["--auto-renew"],
+            vec![
+                "--staging",
+                "--force",
+                "--backup-certs",
+                "--lock",
+                "--auto-renew",
+            ],
+            vec![
+                "--cert-only",
+                "--staging",
+                "--force",
+                "--backup-certs",
+                "--lock",
+                "--auto-renew",
+            ],
+            vec![
+                "--proxy-only",
+                "--staging",
+                "--force",
+                "--backup-certs",
+                "--lock",
+                "--auto-renew",
+            ],
+            vec!["--retry-forever", "--apply", "-y"],
+            vec!["--cert-only", "--proxy-only"],
+        ] {
+            let mut argv = vec!["cms", "domain", "setup"];
+            argv.extend(extra.iter().copied());
+            let parsed = <crate::Args as clap::Parser>::try_parse_from(argv).expect("parse");
+            let out = resolve_catalog(&parsed.command.expect("has command"));
+            let rendered = out.map_or_else(
+                || "<none>".to_string(),
+                |(k, a)| format!("{k:?} {}", a.join(" ")),
+            );
+            println!("PROBECLI|{}|{rendered}", extra.join(" "));
+        }
+    }
 }
 
 #[cfg(test)]
