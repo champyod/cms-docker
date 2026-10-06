@@ -642,6 +642,57 @@ check_certbot_issuance() {
   esac
 }
 
+# ===========================================================================
+# 12) Worker isolate sandbox probe — execute isolate, don't just inspect files
+# ===========================================================================
+# WHY a live probe: a worker image whose isolate setup is broken still builds,
+# deploys and reports healthy — the failure only surfaces when a grading job
+# asks for a sandbox. The probe therefore creates and destroys one empty
+# sandbox in a throwaway container started from the exact image the worker
+# stack deploys, granted the same privileges compose grants that service, so a
+# PASS means the whole chain (setuid binary, isolate account, subuid ranges)
+# works end to end. No submission runs and no host state is touched; a host
+# with no worker image yet has nothing to probe and skips rather than fails.
+check_isolate_sandbox() {
+  if ! stack_includes "worker"; then
+    record_result "isolate sandbox" "PASS" "skipped (--stack ${STACK})"
+    return 0
+  fi
+
+  if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+    record_result "isolate sandbox" "PASS" "skipped (docker unavailable)"
+    return 0
+  fi
+
+  local worker_image="ghcr.io/champyod/cms-docker-worker:${IMG_TAG:-major-admin-panel}"
+  if ! docker image inspect "$worker_image" >/dev/null 2>&1; then
+    record_result "isolate sandbox" "PASS" "skipped (worker image not built)"
+    return 0
+  fi
+
+  local probe_timeout=30
+  local out rc
+  # WHY chained: a standalone assignment adopts the substitution's status, so a
+  # non-zero probe would abort the run under `set -e` before rc is classified.
+  out="$(timeout "$probe_timeout" docker run --rm --privileged --network none \
+    "$worker_image" sh -c 'isolate --init && isolate --cleanup' 2>&1)" && rc=0 || rc=$?
+
+  if [[ $rc -eq 0 ]]; then
+    printf '[INFO] isolate sandbox probe passed: %s\n' "$worker_image"
+    record_result "isolate sandbox" "PASS" "sandbox create+cleanup ok"
+    return 0
+  fi
+
+  local last_line
+  last_line="$(printf '%s\n' "$out" | tail -n 1)"
+  printf '[FAIL] isolate sandbox probe failed (exit %s): %s\n' "$rc" "$last_line" >&2
+  if [[ $rc -eq 124 ]]; then
+    record_result "isolate sandbox" "FAIL" "probe timed out after ${probe_timeout}s"
+  else
+    record_result "isolate sandbox" "FAIL" "isolate exit ${rc}: ${last_line}"
+  fi
+}
+
 check_disk
 check_docker
 check_env
@@ -653,6 +704,7 @@ check_worker_cgroup
 check_monitor_backup_access
 check_config_stale
 check_certbot_issuance
+check_isolate_sandbox
 
 # ===========================================================================
 # Summary table
