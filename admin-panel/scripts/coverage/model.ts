@@ -59,6 +59,7 @@ export const ALLOWLIST: AllowEntry[] = [
   { id: "app/actions/participation-sql.ts#queryParticipationDetails", reason: "Read helper: every caller gates participation:read before invoking." },
   { id: "app/actions/participation-sql.ts#parseIpAllowlist", reason: "Pure validator: parses IP strings, performs no data access." },
   { id: "app/actions/testcase-support.ts#findDatasetOrError", reason: "Internal guard: verifies the dataset exists; every caller gates testcase:create before invoking." },
+  { id: "app/actions/admin-update-helpers.ts#handleAdminUpdateWrite", reason: "Internal write helper: the gated updateAdmin strips fields before invoking it." },
   { id: "app/api/users/bulk/bulkRowPreparation.ts#prepareRow", reason: "Row prep helper: every caller gates user:create before invoking." },
 ];
 

@@ -5,8 +5,8 @@ import { getSession } from '@/lib/auth';
 import { recordAudit } from '@/lib/audit';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import {
-  getTargetEffectivePermissions,
   hasEffectivePermission,
+  getTargetEffectivePermissions,
   isEffectiveSuperset,
   ACTION_PERMISSIONS,
 } from '@/lib/permission-engine';
@@ -14,7 +14,6 @@ import { ensurePermission, getPermissions, invalidateAccessCache } from '@/lib/p
 import { prisma } from '@/lib/prisma';
 import { safeAdminSelect, type AdminWithLogin } from '@/lib/prisma-selects';
 import {
-  buildAdminUpdateData,
   findAdminTarget,
   isCurrentlySuperadmin,
   isSelfDemotion,
@@ -28,6 +27,7 @@ import {
   DEFAULT_PASSWORD_KIND,
   type PasswordKind,
 } from '@/lib/password-format';
+import { handleAdminUpdateWrite } from './admin-update-helpers';
 
 interface ActionResult {
   success: boolean;
@@ -71,6 +71,7 @@ async function guardAdminMutation(
   return null;
 }
 
+
 export async function getAdmins(): Promise<AdminWithLogin[]> {
   await ensurePermission('admin:read');
   return prisma.admins.findMany({
@@ -108,46 +109,6 @@ export async function createAdmin(data: CreateAdminInput): Promise<ActionResult>
     }
     return { success: false, error: e.message };
   }
-}
-
-
-async function recordPasswordChangeAudit(adminId: number): Promise<void> {
-  // Why: a credential change is its own privilege (admin:password:update), so it gets its own verb;
-  // only the fact that the credential changed is recorded — never the value or its stored hash.
-  await recordAudit({
-    verb: 'admin:password:update',
-    entity: 'admin',
-    entityId: String(adminId),
-    afterValues: { passwordChanged: true },
-    result: 'success',
-  });
-}
-
-async function handleAdminUpdateWrite(
-  adminId: number,
-  allowed: Record<string, unknown>,
-): Promise<void> {
-  const beforeAdmin = await prisma.admins.findUnique({
-    where: { id: adminId },
-    select: { name: true, enabled: true, username: true },
-  });
-  const updateData = await buildAdminUpdateData(allowed as unknown as UpdateAdminInput);
-  await prisma.admins.update({ where: { id: adminId }, data: updateData });
-  await recordAudit({
-    verb: 'admin:update',
-    entity: 'admin',
-    entityId: String(adminId),
-    beforeValues: beforeAdmin
-      ? { name: beforeAdmin.name, enabled: beforeAdmin.enabled, username: beforeAdmin.username }
-      : undefined,
-    afterValues: { changedKeys: Object.keys(allowed) },
-    result: 'success',
-  });
-  if (updateData.authentication !== undefined) {
-    await recordPasswordChangeAudit(adminId);
-  }
-  invalidateAccessCache(String(adminId));
-  revalidatePath('/[locale]/administration/admins', 'page');
 }
 
 export async function updateAdmin(adminId: number, data: UpdateAdminInput): Promise<ActionResult> {
