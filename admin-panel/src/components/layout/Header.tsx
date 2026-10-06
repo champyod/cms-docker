@@ -115,7 +115,6 @@ export const Header: React.FC<{ className?: string; username?: string; permissio
         type="button"
         aria-label="Search navigation, entities, and actions (Control plus K)"
         onClick={() => setPaletteOpen(true)}
-        onFocus={() => setPaletteOpen(true)}
         className="group flex h-11 w-11 cursor-pointer items-center justify-center gap-2 rounded-full border border-input bg-muted/50 text-sm text-foreground outline-none transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 sm:h-9 sm:w-64 sm:justify-start sm:px-3"
       >
         <Search className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-focus-visible:text-primary" aria-hidden />
