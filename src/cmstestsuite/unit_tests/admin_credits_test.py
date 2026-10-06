@@ -33,49 +33,15 @@ from bs4 import BeautifulSoup
 
 from cms import config
 from cms.server.admin.handlers.main import CreditsHandler
-from cms.server.admin.jinja2_toolbox import AWS_ENVIRONMENT
-from cms.server.credits import (
-    CREDITS_FILE_NAME, CreditsError, get_surface, load_credits)
+from cms.server.credits import CREDITS_FILE_NAME, CreditsError, get_surface
+from cmstestsuite.unit_tests.admin_credits_render import (
+    CONTEST_ONLY, SURFACE, render, table_asset_names, template_path)
 from cmstestsuite.unit_tests.credits_schema import CREDITS_PATH, load_json
-from cmscommon.datetime import make_datetime
 
-SURFACE = "admin"
-
-# The third-party entries the contest web credits and the admin web must not
-# show, since it loads none of them: a table carrying any of these belongs to
-# the wrong surface.
-CONTEST_ONLY = ["Bootstrap 2.0.4", "jQuery Migrate 3.3.2", "Tango icon theme"]
-
-def template_path(name: str) -> Path:
-    """The absolute path of one admin template."""
-    return Path(__file__).resolve().parents[2] / "cms" / "server" / "admin" \
-        / "templates" / name
-
-
-def render(name: str, **params: object) -> str:
-    """Render one admin template the way an admin handler renders it.
-
-    params override the default render params, which is how a fork pointing the
-    offer at its own repository is exercised without a running server.
-
-    """
-    defaults = {
-        "config": config,
-        "contest": None,
-        "credits": load_credits(),
-        "timestamp": make_datetime(),
-        "url": lambda *args, **kwargs: "/" + "/".join(str(a) for a in args),
-    }
-    defaults.update(params)
-    return AWS_ENVIRONMENT.get_template(name).render(**defaults)
-
-
-def table_asset_names(html: str) -> list[str]:
-    """The software names of the third-party table of a rendered page."""
-    soup = BeautifulSoup(html, "html.parser")
-    table = soup.find(id="details").find("table")
-    return [row.find_all("td")[0].get_text().strip()
-            for row in table.find("tbody").find_all("tr", recursive=False)]
+__all__ = [
+    "CONTEST_ONLY", "SURFACE", "template_path", "render", "table_asset_names",
+    "CreditsPageTest", "NoticeTest", "RenderedAssetsAreCreditedTest",
+]
 
 
 class CreditsPageTest(unittest.TestCase):
