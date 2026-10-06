@@ -6,7 +6,7 @@ import { ensurePermission, getPermissions } from '@/lib/permissions';
 import { recordAudit } from '@/lib/audit';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { cloneDatasetRecords } from '@/lib/dataset-cloning';
-import { validateTaskTypeParams, DEFAULT_TASK_TYPE } from '@/lib/tasktype-params';
+import { isEmptyTaskTypeParams, validateTaskTypeParams, DEFAULT_TASK_TYPE } from '@/lib/tasktype-params';
 import type { Prisma } from '@prisma/client';
 
 export async function getDataset(id: number): Promise<Prisma.datasetsGetPayload<{ include: { testcases: { orderBy: { codename: 'asc' } }; managers: true; tasks_datasets_task_idTotasks: true } }> | null> {
@@ -195,9 +195,39 @@ export async function toggleAutojudge(datasetId: number): Promise<{ success: boo
   }
 }
 
+// Why the stored pair is re-read: the worker consumes task_type and its
+// parameters together, so an edit must validate the combination it leaves
+// behind — a type-only change re-checks the stored list, and an empty stored
+// list gains the new type's defaults rather than stranding the old type's values.
+async function buildTaskTypeParamsUpdate(
+  datasetId: number,
+  allowed: Partial<Record<string, unknown>>,
+  sentParams: unknown,
+): Promise<{ isValid: true; updateData: Record<string, unknown> } | { isValid: false; error: string }> {
+  const hasType = typeof allowed.task_type === 'string' && allowed.task_type !== '';
+  const hasParams = 'task_type_parameters' in allowed;
+  if (!hasType && !hasParams) return { isValid: true, updateData: {} };
+
+  const stored = await prisma.datasets.findUnique({
+    where: { id: datasetId },
+    select: { task_type: true, task_type_parameters: true },
+  });
+  const storedParams = stored?.task_type_parameters;
+  const taskParams = validateTaskTypeParams(
+    hasType ? (allowed.task_type as string) : (stored?.task_type ?? DEFAULT_TASK_TYPE),
+    hasParams ? sentParams : storedParams,
+  );
+  if (!taskParams.isValid) return { isValid: false, error: taskParams.message };
+
+  const updateData: Record<string, unknown> = {};
+  if (hasType) updateData.task_type = allowed.task_type;
+  if (hasParams || isEmptyTaskTypeParams(storedParams)) updateData.task_type_parameters = taskParams.params;
+  return { isValid: true, updateData };
+}
+
 export async function updateDataset(
   datasetId: number,
-  data: { time_limit?: number | null; memory_limit?: number | null; task_type?: string; score_type?: string }
+  data: { time_limit?: number | null; memory_limit?: number | null; task_type?: string; score_type?: string; task_type_parameters?: unknown; score_type_parameters?: unknown }
 ): Promise<{ success: boolean; error?: string }> {
   await ensurePermission('dataset:update');
   try {
@@ -209,8 +239,18 @@ export async function updateDataset(
     if ('memory_limit' in allowed) {
       updateData.memory_limit = allowed.memory_limit ? BigInt((allowed.memory_limit as number) * 1024 * 1024) : null;
     }
-    if ('task_type' in allowed) updateData.task_type = allowed.task_type;
     if ('score_type' in allowed) updateData.score_type = allowed.score_type;
+    if ('score_type_parameters' in allowed) {
+      const scoreParams = allowed.score_type_parameters;
+      if (typeof scoreParams !== 'number' && !Array.isArray(scoreParams)) {
+        return { success: false, error: 'Score parameters must be a number or an array' };
+      }
+      updateData.score_type_parameters = scoreParams;
+    }
+
+    const taskTypeUpdate = await buildTaskTypeParamsUpdate(datasetId, allowed, data.task_type_parameters);
+    if (!taskTypeUpdate.isValid) return { success: false, error: taskTypeUpdate.error };
+    Object.assign(updateData, taskTypeUpdate.updateData);
 
     if (Object.keys(updateData).length === 0) {
       return { success: false, error: 'No permitted fields to update' };
