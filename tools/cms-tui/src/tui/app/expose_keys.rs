@@ -209,9 +209,21 @@ mod tests {
         dir.join(".env.test")
     }
 
+    /// An `App` whose exposure chooser is pinned to a known host state.
+    ///
+    /// WHY the exposure view is replaced rather than left to `App::new`: that call
+    /// probes the live tailnet and the live domain proxy, so on a developer's box the
+    /// set of selectable modes would depend on what happens to be running. Pinning it
+    /// keeps the cursor assertions below about cursor movement only.
+    fn app_with_unblocked_modes() -> App {
+        let mut app = App::new();
+        app.exposure = crate::tui::pages::expose::ExposureView::new(false, true, None);
+        app
+    }
+
     #[test]
     fn arrow_keys_move_the_two_cursors_separately() {
-        let mut app = App::new();
+        let mut app = app_with_unblocked_modes();
         app.push_route(Route::Exposure);
         let start_ui = app.exposure.ui().name;
 

@@ -172,12 +172,21 @@ impl fmt::Display for UiSpec {
 /// Whether the domain nginx currently owns :80/:443 for the whole host.
 ///
 /// WHY this is a host-wide fact and not a per-UI one: the domain stack publishes one
-/// `nginx-proxy` container on 80 and 443 that reverse-proxies every configured
-/// vhost. Once it is up, any UI also bound to `0.0.0.0` on a port the operator is
-/// about to forward competes with it for the same inbound traffic.
+/// `nginx-proxy` container on 80 and 443 that reverse-proxies every configured vhost.
+/// Once it is up, any UI also bound to `0.0.0.0` on a port the operator is about to
+/// forward competes with it for the same inbound traffic.
+///
+/// WHY the running proxy is the input rather than the configured vhosts: `config.toml`
+/// records what the operator means to publish, and a box routinely carries vhost names
+/// for a stack that was never started. Reading that as "the proxy owns :80/:443" greys
+/// out `public` on behalf of a listener that does not exist, which locks the operator
+/// out of the one mode a domain-less box needs.
+///
+/// WHY the observation lives in the caller: this module is the tested rule, and the
+/// host is read at the edge so the rule stays a unit test rather than a subprocess.
 #[must_use]
-pub fn domain_stack_is_active(domains_configured: usize, access_is_domain: bool) -> bool {
-    access_is_domain && domains_configured > 0
+pub const fn domain_stack_is_active(domain_proxy_running: bool) -> bool {
+    domain_proxy_running
 }
 
 /// Whether a mode may be chosen for a UI right now.
@@ -325,11 +334,12 @@ mod tests {
     }
 
     #[test]
-    fn domain_stack_needs_both_a_domain_and_the_access_method() {
-        assert!(domain_stack_is_active(1, true));
-        assert!(domain_stack_is_active(4, true));
-        assert!(!domain_stack_is_active(0, true), "no domain configured");
-        assert!(!domain_stack_is_active(4, false), "still on public_port");
+    fn domain_stack_is_active_exactly_while_the_proxy_runs() {
+        assert!(domain_stack_is_active(true), "proxy owns :80/:443");
+        assert!(
+            !domain_stack_is_active(false),
+            "proxy down — public stays legal"
+        );
     }
 
     #[test]

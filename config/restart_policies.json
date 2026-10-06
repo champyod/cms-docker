@@ -35,7 +35,6 @@
     "CONTEST_ID": ["cms-contest-web-server", "cms-evaluation-service", "cms-proxy-service", "cms-nginx-contest"],
     "WORKER_SHARD": ["cms-worker"],
     "PUBLIC_IP": ["cms-admin-panel-next"],
-    "VITE_API_URL": ["cms-admin-panel-next"],
     "INNER_IP": ["cms-admin-panel-next"],
     "SECRET_KEY": ["cms-contest-web-server"],
     "COOKIE_DURATION": ["cms-contest-web-server"]

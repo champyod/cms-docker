@@ -441,8 +441,6 @@ services:
       database:
         condition: service_healthy
     environment:
-      VITE_API_URL: ${VITE_API_URL:-http://localhost:8889}
-      SERVER_BASE_URL: ${SERVER_BASE_URL:-http://localhost}
       PUBLIC_IP: ${PUBLIC_IP:-0.0.0.0}
       # WHY: single owner role cmsuser owns large objects, so admin panel connects as owner (PostgreSQL restricts large-object access to owner).
       DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}

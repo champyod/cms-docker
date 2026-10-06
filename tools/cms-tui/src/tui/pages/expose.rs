@@ -352,13 +352,40 @@ pub fn render(f: &mut Frame, area: Rect, view: &ExposureView) {
     f.render_widget(help, chunks[4]);
 }
 
+/// Whether the domain stack's reverse proxy is running right now.
+///
+/// WHY a container listing rather than the vhosts in `config.toml`: a box routinely
+/// carries domain names for a stack that was never started, and what the chooser must
+/// grey out is `public` competing with a listener that owns :80/:443 — not one the
+/// operator once meant to run.
+///
+/// WHY `docker ps` and not `__domain.sh status`: that script reaches certbot and DNS, so
+/// consulting it would make opening the chooser wait on certificate issuance. Listing
+/// containers is a read-only daemon query that answers the question on its own.
+///
+/// WHY the filter names the service rather than the container: `container_name` carries
+/// the deployment's compose project prefix, so matching `nginx-proxy` keeps this correct
+/// on a box that is not named the way this repo's default happens to be.
+///
+/// WHY an unreachable daemon reads as inactive: a probe that cannot reach docker holds
+/// no evidence of a proxy, and leaving `public` offered keeps a mode the operator can
+/// still see and read the notice on, whereas blocking it offers no way back.
+#[must_use]
+pub fn domain_proxy_running() -> bool {
+    std::process::Command::new("docker")
+        .args(["ps", "--quiet", "--filter", "status=running"])
+        .args(["--filter", "name=nginx-proxy"])
+        .output()
+        .is_ok_and(|out| out.status.success() && !out.stdout.iter().all(u8::is_ascii_whitespace))
+}
+
 /// Probes the live tailnet state, used when the operator opens the chooser.
 ///
 /// WHY a fresh probe per open rather than a value cached in [`App`]: `tailscale up` can
 /// happen while the TUI is open, and a cached answer would keep greying out the ts
 /// modes after the operator has joined the tailnet.
 #[must_use]
-pub fn view_from_host(domains_configured: usize, access_is_domain: bool) -> ExposureView {
+pub fn view_from_host() -> ExposureView {
     let tailscale_up = std::process::Command::new("tailscale")
         .arg("status")
         .output()
@@ -376,7 +403,7 @@ pub fn view_from_host(domains_configured: usize, access_is_domain: bool) -> Expo
         .flatten();
 
     ExposureView::new(
-        domain_stack_is_active(domains_configured, access_is_domain),
+        domain_stack_is_active(domain_proxy_running()),
         tailscale_up,
         tailscale_ip,
     )

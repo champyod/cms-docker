@@ -12,9 +12,6 @@ services:
     container_name: cms-admin-panel-next
     restart: unless-stopped
     environment:
-      # API and Server Configuration
-      VITE_API_URL: ${VITE_API_URL:-http://localhost:8889}
-      SERVER_BASE_URL: ${SERVER_BASE_URL:-http://localhost}
       PUBLIC_IP: ${PUBLIC_IP:-0.0.0.0}
 
       # Database — WHY: single owner role cmsuser owns large objects, so admin panel connects as owner (PostgreSQL restricts large-object access to owner).

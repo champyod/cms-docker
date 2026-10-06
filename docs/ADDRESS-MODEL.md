@@ -61,6 +61,24 @@ make core        # or ./cms deploy all
 The override uses Compose's `!override` tag to replace a service's `ports` list, so
 it needs Compose >= 2.24. The generated file is gitignored.
 
+## The domain path
+
+Publishing a name instead of an address is a separate concern, owned entirely by
+`scripts/__domain.sh`. It reads `ADMIN_DOMAIN`, `OJ_DOMAIN`, `RANKING_DOMAIN` and
+`DOMAIN_NAME`, obtains certificates, and runs one `nginx-proxy` that owns :80 and
+:443 for whichever vhosts those names cover.
+
+The two paths are independent on purpose. A domain says *what the box is called*;
+a bind key says *which address answers*. A deployment can be reached by name only,
+by address only, or by both at once, and each combination is a valid configuration
+rather than a mode to be switched between. So no bind key turns the domain stack on
+or off, and no domain name moves a port to a different address.
+
+The one thing the two paths share is contention: while the domain proxy owns
+:80/:443, a UI also published on a routable address reaches the operator through two
+paths at once. That is why the exposure chooser greys out `public` and `ts-http` for
+every UI as soon as any vhost is configured.
+
 ## Examples
 
 Public host, single address:

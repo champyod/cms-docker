@@ -47,7 +47,6 @@ export const CONFIG_SECTIONS: EnvConfigSection[] = [
     title: 'Admin Panel Config',
     filename: CONFIG_TOML_FILE,
     fields: [
-      { key: 'VITE_API_URL', tomlSection: 'admin', label: 'API URL', description: 'URL for the Admin API.' },
       { key: 'ADMIN_LISTEN_PORT', tomlSection: 'admin', label: 'Admin Port', description: 'Internal port for Admin Web Server.' },
     ]
   },

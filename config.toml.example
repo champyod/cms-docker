@@ -4,7 +4,6 @@
 
 [core]
 COMPOSE_PROJECT_NAME = "cms-docker" # str; docker compose project name; must match existing container project
-ACCESS_METHOD = "public_port"    # str; "public_port" or "domain"
 PUBLIC_IP = "0.0.0.0"           # str; your VPS public IP; live_ip auto-detects
 INNER_IP = ""                  # str; peer address: worker RPC bind + worker dial target; empty=127.0.0.1 only
 REMOTE_WORKERS_ENABLED = false  # bool
@@ -49,8 +48,6 @@ ADMIN_LISTEN_PORT = 8889        # port
 ADMIN_PORT_EXTERNAL = 8889      # port
 ADMIN_NEXT_PORT_EXTERNAL = 8891 # port
 ADMIN_NEXT_DOMAIN = "admin-next.cms.local"
-VITE_API_URL = "http://localhost:8889"
-SERVER_BASE_URL = "http://localhost"
 ADMIN_DOMAIN = "admin.cms.local"
 ADMIN_BIND_IP = "127.0.0.1"     # csv; addresses the classic admin UI is published on; loopback keeps it reachable only through the proxy — set it to 0.0.0.0 to expose the port to the LAN
 ADMIN_NEXT_BIND_IP = "127.0.0.1" # csv; addresses the Next.js admin panel is published on
@@ -131,7 +128,6 @@ CONTEST_BIND_IP = "127.0.0.1"   # csv; addresses the contest web UI is published
 ACTIVE_CONTEST_PORT = 8888      # port; legacy alias — mapped to CONTEST_LISTEN_PORT when that is empty
 SECRET_KEY = ""                 # secret; auto-generated hex32 if empty
 COOKIE_DURATION = 10800         # num; seconds
-ACCESS_METHOD = "public_port"   # enum:public_port,domain
 NUM_PROXIES_USED = 1            # num
 MAX_SUBMISSION_LENGTH = 100000  # num
 MAX_INPUT_LENGTH = 5000000      # num

@@ -40,10 +40,10 @@ impl App {
         let state = AppState::new();
         // WHY the same helper the chooser uses rather than an inline comparison:
         // "the domain nginx owns :80/:443" has one definition, and a second copy here
-        // is how the greying and the wiring drift apart.
+        // is how the greying and the wiring drift apart. The observation is made here
+        // because this is where the view is seeded — the rule itself stays pure.
         let domain_active = crate::core::expose::domain_stack_is_active(
-            state.domains_configured,
-            state.access_is_domain,
+            crate::tui::pages::expose::domain_proxy_running(),
         );
         Self {
             route_stack: vec![Route::Dashboard],

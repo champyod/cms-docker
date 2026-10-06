@@ -1028,31 +1028,6 @@ main() {
     __TOML[admin.DOMAIN_NAME]="$cms_domain"
   fi
 
-  # ── Public base URLs ──────────────────────────────────────────────
-  # WHY derived here rather than hand-written per deployment: VITE_API_URL and
-  # SERVER_BASE_URL left at their http://localhost defaults are baked into the admin
-  # panel bundle at build time, so a panel built with the defaults cannot reach a
-  # domain-based deployment at all — the browser asks localhost for the API. Deriving
-  # them from the same ACCESS_METHOD that decides the wiring keeps one switch in charge
-  # of every URL the browser will use.
-  local access_method="${__TOML[core.ACCESS_METHOD]:-public_port}"
-  local primary_domain="${__TOML[admin.DOMAIN_NAME]:-$cms_domain}"
-  local admin_domain="${__TOML[admin.ADMIN_DOMAIN]:-}"
-  local admin_port="${__TOML[admin.ADMIN_PORT_EXTERNAL]:-8889}"
-
-  if [[ "$access_method" == "domain" ]]; then
-    # Panel is served from admin_domain over the proxy, so it calls itself: no port,
-    # no loopback, and https to match the certificate.
-    local admin_origin="${admin_domain:-${primary_domain}}"
-    __TOML[admin.SERVER_BASE_URL]="https://${admin_origin}"
-    # The classic admin API is proxied under /classic/ on the same origin, so a
-    # relative path keeps the panel and the API on one host and one certificate.
-    __TOML[admin.VITE_API_URL]="https://${admin_origin}/classic"
-  else
-    __TOML[admin.SERVER_BASE_URL]="http://localhost"
-    __TOML[admin.VITE_API_URL]="http://localhost:${admin_port}"
-  fi
-
   # Write unified .env with section headers for diff readability
   if [[ "$DRY_RUN" -eq 0 ]]; then
     {

@@ -47,8 +47,14 @@ Edit `config.toml` (single source of truth), then regenerate the
 `.env.*` files with `./cms config sync`:
 
 ```bash
-ACCESS_METHOD=public_port
+# [core]
 PUBLIC_IP=203.0.113.45  # Replace with your actual IP
+# Publish each UI on that address; a comma list publishes on several at once.
+# Full model: docs/ADDRESS-MODEL.md
+ADMIN_BIND_IP=203.0.113.45
+NGINX_BIND_IP=203.0.113.45
+CONTEST_BIND_IP=203.0.113.45
+RANKING_BIND_IP=203.0.113.45
 ADMIN_PORT_EXTERNAL=8889
 RANKING_PORT_EXTERNAL=8890
 CONTEST_ID=1
@@ -183,14 +189,15 @@ ranking.example.com  → 203.0.113.45
 Edit `config.toml`, then `./cms config sync`:
 
 ```bash
-ACCESS_METHOD=domain
 PUBLIC_IP=203.0.113.45  # Your server IP
+# The proxy answers on the name, so the UI ports stay internal — leave their
+# bind keys unset and they keep the loopback default.
 ADMIN_DOMAIN=admin.example.com
 RANKING_DOMAIN=ranking.example.com
+CONTEST_DOMAIN=contest.example.com
 ADMIN_PORT_EXTERNAL=8889  # Internal port for reverse proxy
 RANKING_PORT_EXTERNAL=8890
 CONTEST_ID=1
-CONTEST_DOMAIN=contest.example.com
 CONTEST_PORT_EXTERNAL=8888  # Internal port for reverse proxy
 ```
 
@@ -513,8 +520,8 @@ dig contest.example.com
 MY_IP=$(curl -4 ifconfig.me)
 
 # 2. Edit config.toml (single source of truth)
-#    ACCESS_METHOD=public_port
 #    PUBLIC_IP=$MY_IP
+#    ADMIN_BIND_IP=NGINX_BIND_IP=CONTEST_BIND_IP=RANKING_BIND_IP=$MY_IP
 ./cms config sync
 
 # 3. Configure firewall
@@ -538,8 +545,8 @@ echo "Ranking: http://$MY_IP:8890"
 # Add A records pointing to your server IP
 
 # 2. Edit config.toml
-# [admin] ACCESS_METHOD = "domain"; ADMIN_DOMAIN = "admin.example.com"
-# [contest] ACCESS_METHOD = "domain"; CONTEST_DOMAIN = "contest.example.com"
+# [admin] ADMIN_DOMAIN = "admin.example.com"
+# [contest] CONTEST_DOMAIN = "contest.example.com"
 # Then: ./cms config sync
 
 # 3. Setup reverse proxy (Nginx or Traefik)
