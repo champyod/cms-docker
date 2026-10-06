@@ -31,6 +31,7 @@ import logging
 from cms import ServiceCoord, get_service_shards, get_service_address
 from cms.db import Admin, Contest, Question
 from cms.server.captcha import Captcha, extract_token
+from cms.server.credits import get_surface
 from cms.server.jinja2_toolbox import markdown_filter
 from cmscommon.crypto import validate_password
 from cmscommon.datetime import make_datetime, make_timestamp
@@ -200,4 +201,21 @@ class MarkdownRenderHandler(BaseHandler):
         data = self.get_argument("input")
         rendered = markdown_filter(data)
         self.write(rendered)
+
+
+class CreditsHandler(BaseHandler):
+    """Displays the licence and the bundled third-party software.
+
+    The admin web is reachable only by staff, so the section 13 offer is made
+    by the notice the sidebar repeats on every page, and this page is what that
+    notice points at for the full list. Nothing rendered here is contest- or
+    admin-specific.
+    """
+
+    @require_permission(BaseHandler.AUTHENTICATED)
+    def get(self):
+        self.r_params = self.render_params()
+        self.render("credits.html",
+                    credits_surface=get_surface("admin"),
+                    **self.r_params)
 

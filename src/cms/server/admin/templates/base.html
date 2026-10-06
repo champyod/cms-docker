@@ -240,7 +240,11 @@ $(document).ready(init);
           </div>
         {% endif %}
 {% endif %}
-        <div class="cr_notice">CMS <a href="http://github.com/cms-dev/cms/">codebase</a> is released under the<br/><a href="http://www.gnu.org/licenses/agpl.txt">GNU Affero General Public License</a>.</div>
+        {# WHY the offer is spelled out here and not only linked: section 13 asks for
+   a prominent offer, so the corresponding source has to be reachable as visible
+   text on the page itself. Kept to one compact block because the sidebar is
+   staff-only chrome whose vertical space belongs to the navigation. #}
+        <div class="cr_notice">{{ credits.project.name }} is released under the <a href="{{ credits.license.url }}" rel="license noreferrer" target="_blank">{{ credits.license.name }}</a>. Under section 13 of that licence the corresponding source of the software running here is offered at <a href="{{ config.global_.source_url }}" rel="author noreferrer" target="_blank">{{ config.global_.source_url }}</a>. <a href="{{ url("credits") }}">Credits</a> lists the third-party software it bundles.</div>
       </div>
 
       <div id="border"></div>

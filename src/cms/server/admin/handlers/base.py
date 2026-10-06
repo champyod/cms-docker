@@ -59,6 +59,7 @@ from cms.grading.scoretypes import get_score_type_class
 from cms.grading.tasktypes import get_task_type_class
 from cms.server import CommonRequestHandler, FileHandlerMixin
 from cms.server.captcha import Captcha
+from cms.server.credits import load_credits
 from cmscommon.crypto import hash_password, parse_authentication
 from cmscommon.datetime import make_datetime
 from cms.db.permissions import (
@@ -504,6 +505,12 @@ class BaseHandler(CommonRequestHandler):
         # FIXME These objects provide too broad an access: their usage
         # should be extracted into with narrower-scoped parameters.
         params["config"] = config
+        # WHY every AWS page carries the credits: AGPL-13 requires the offer of
+        # the Corresponding Source to reach the users interacting with this
+        # server, so the sidebar needs the deployment's own source URL, which a
+        # self-hosted fork configures, and the licence identity, which must not
+        # be typed into a template where it can drift from the credits file.
+        params["credits"] = load_credits()
         params["handler"] = self
         if self.current_user is not None:
             params["admin"] = self.current_user

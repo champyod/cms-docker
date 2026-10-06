@@ -74,7 +74,8 @@ from .main import \
     LogoutHandler, \
     ResourcesHandler, \
     NotificationsHandler, \
-    MarkdownRenderHandler
+    MarkdownRenderHandler, \
+    CreditsHandler
 from .submission import \
     SubmissionHandler, \
     SubmissionCommentHandler, \
@@ -118,6 +119,7 @@ HANDLERS = [
     (r"/notifications", NotificationsHandler),
     (r"/file/([a-f0-9]+)/([a-zA-Z0-9_.-]+)", FileFromDigestHandler),
     (r"/render_markdown", MarkdownRenderHandler),
+    (r"/credits", CreditsHandler),
 
     # Contest
 
