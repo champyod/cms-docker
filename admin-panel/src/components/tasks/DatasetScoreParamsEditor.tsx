@@ -1,7 +1,8 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus } from 'lucide-react';
+import { DatasetScoreSubtaskRow } from './DatasetScoreSubtaskRow';
 import {
   SCORE_PARAM_HELPERS,
   defaultSubtaskRow,
@@ -185,54 +186,15 @@ export function DatasetScoreParamsEditor({ scoreType, params, onParamsChange, on
       ) : (
         <div className="space-y-2">
           {rows.map((row, index) => (
-            <div key={index} className="flex items-end gap-2">
-              <div className="flex-1">
-                <label className="block text-xs font-bold text-muted-foreground uppercase mb-1.5">Max score</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
-                  value={row.maxScore}
-                  onChange={(e) => handleRowChange(index, 'maxScore', e.target.value)}
-                  className="w-full px-3 py-2 bg-muted/40 border border-border rounded-lg text-foreground focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring/50"
-                  placeholder="e.g. 40"
-                />
-              </div>
-              <div className="flex-1">
-                <label className="block text-xs font-bold text-muted-foreground uppercase mb-1.5">Testcases</label>
-                <input
-                  type="text"
-                  value={row.testcases}
-                  onChange={(e) => handleRowChange(index, 'testcases', e.target.value)}
-                  className="w-full px-3 py-2 bg-muted/40 border border-border rounded-lg text-foreground focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring/50"
-                  placeholder="3 or subtask1_.*"
-                />
-              </div>
-              {scoreType === 'GroupThreshold' && (
-                <div className="flex-1">
-                  <label className="block text-xs font-bold text-muted-foreground uppercase mb-1.5">Threshold</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="1"
-                    step="any"
-                    value={row.threshold}
-                    onChange={(e) => handleRowChange(index, 'threshold', e.target.value)}
-                    className="w-full px-3 py-2 bg-muted/40 border border-border rounded-lg text-foreground focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring/50"
-                    placeholder="e.g. 1"
-                  />
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={() => handleRemoveRow(index)}
-                disabled={rows.length <= 1}
-                aria-label={`Remove subtask ${index + 1}`}
-                className="mb-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-destructive disabled:opacity-30"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </div>
+            <DatasetScoreSubtaskRow
+              key={index}
+              row={row}
+              index={index}
+              scoreType={scoreType}
+              canRemove={rows.length > 1}
+              onFieldChange={handleRowChange}
+              onRemove={handleRemoveRow}
+            />
           ))}
           <button
             type="button"
