@@ -45,7 +45,7 @@ vi.stubGlobal('fetch', async () => {
   throw new Error('queue RPC unavailable in tests');
 });
 
-const { getLaneBoard } = await import('@/app/actions/evaluationLanes');
+const { getLaneBoard } = await import('@/app/actions/evaluation-lanes-board');
 
 function assignmentRow(submissionId: number, lane: string) {
   return { entity_id: String(submissionId), actor_id: 7, after_values: { lane, reason: null } };

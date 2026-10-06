@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
-import { getLaneBoard, type LaneBoard as LaneBoardData } from '@/app/actions/evaluationLanes';
+import { getLaneBoard } from '@/app/actions/evaluation-lanes-board';
+import { type LaneBoard as LaneBoardData } from '@/app/actions/evaluationLanes';
 import { PageSurface } from '@/components/core/PageSurface';
 import { LaneBoard } from '@/components/submissions/LaneBoard';
 import { getDictionary } from '@/i18n';
