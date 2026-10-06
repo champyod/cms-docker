@@ -155,7 +155,7 @@ PER_USER_LIMIT="${PER_USER_LIMIT:-1}"
 REDIS_HOST="${REDIS_HOST:-redis-rate-limit}"
 REDIS_PORT="${REDIS_PORT:-6379}"
 MONITORING_ENABLED="${MONITORING_ENABLED:-0}"
-TAILSCALE_IP="${TAILSCALE_IP:-127.0.0.1}"
+INNER_IP="${INNER_IP:-127.0.0.1}"
 WAF_ENABLED="${WAF_ENABLED:-0}"
 WAF_PORT="${WAF_PORT:-8080}"
 WAF_BIND_IP="${WAF_BIND_IP:-127.0.0.1}"
@@ -314,7 +314,7 @@ Optional features (disabled by default — prod stays off):
   HSM: --hsm PKCS#11 via config/hsm/* (SoftHSM dev / YubiHSM ~$800 / CloudHSM ~$30/mo)
   Vault: hashicorp/vault:1.15 via --profile vault (or see scripts/__secrets-rotate.sh)
   DNSSEC/CAA: DNS only — see docs/dnssec-caa-guide.md
-  mTLS: TAILSCALE_IP allow ALL when MTLS_WORKERS_ENABLED=0; mTLS only when 1
+  mTLS: INNER_IP allow ALL when MTLS_WORKERS_ENABLED=0; mTLS only when 1
 
 All commands default to dry-run. Use --apply to enforce.
 EOF
@@ -410,7 +410,7 @@ _log_optional_features() {
   if [[ "${MTLS_WORKERS_ENABLED:-0}" == "1" ]]; then
     log_info "mTLS workers enabled (CA=$MTLS_CA_CERT) — firewall should restrict RPC to mTLS only"
   else
-    log_info "mTLS workers disabled (set MTLS_WORKERS_ENABLED=1 to enable — TAILSCALE_IP allow ALL remains)"
+    log_info "mTLS workers disabled (set MTLS_WORKERS_ENABLED=1 to enable — INNER_IP allow ALL remains)"
   fi
 }
 
@@ -1164,11 +1164,11 @@ EOLUA
     nginx_metrics_location=$(cat <<EOF
 # Monitoring enabled (MONITORING_ENABLED=1) — stub_status for Prometheus
 # Scraped as nginx:80/metrics from prometheus job "nginx" (cms-network internal)
-# Restricted to loopback + Tailscale IP
+# Restricted to loopback + the inner peer address
 location /metrics {
     stub_status;
     allow 127.0.0.1;
-    allow ${TAILSCALE_IP:-127.0.0.1};
+    allow ${INNER_IP:-127.0.0.1};
     deny all;
     access_log off;
 }

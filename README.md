@@ -350,8 +350,8 @@ volumes/network declared once; no `external:` coupling between stacks.
 * Set `CONTEST_ID` in `config.toml` `[contest]` — the only source of truth, and
   where the admin panel writes it. Ports follow `CONTEST_PORT_EXTERNAL`.
 * Remote workers: point `config.toml` [worker] `CORE_SERVICES_HOST` /
-  `POSTGRES_*` at the main host, keep RPC bindings on the Tailscale IP
-  (`TAILSCALE_IP` in [core]), then `make worker` on that machine.
+  `POSTGRES_*` at the main host, keep RPC bindings on the inner peer address
+  (`INNER_IP` in [core]), then `make worker` on that machine.
 * Batch-create contests:
   `./scripts/__create_contests.sh -f examples/contests.yaml`
   (names must be codename-safe: `[A-Za-z0-9_-]`).

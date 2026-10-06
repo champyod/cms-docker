@@ -69,14 +69,14 @@ Full why/price/pros/cons and the rollover runbook live in
 
 ## 4. mTLS — mutual TLS for worker RPC (beyond Tailscale)
 
-- **Why:** authenticate workers with client certs, not just `TAILSCALE_IP` allowlist; defense-in-depth at RPC boundary (ports `29000`, `28000`, … `26000`).
+- **Why:** authenticate workers with client certs, not just the `INNER_IP` allowlist; defense-in-depth at RPC boundary (ports `29000`, `28000`, … `26000`).
 - **Price:** `$0` self-signed CA via `openssl`; alternatives free (CF Zero Trust).
 - **Pros:** worker identity `CN=worker-0` via cert, revocation via CRL, rotated independently of tailnet.
 - **Cons:** cert distribution to every worker node, rotation + CRL/OCSP plumbing.
 - **Maintenance:** CA at `config/mtls/ca.pem` (generate `openssl req -x509 -newkey rsa:4096`); worker certs at `config/mtls/worker-*.pem`; rotate ~ yearly; share CRL at `config/mtls/crl.pem`. All `*.pem.local` gitignored.
 - **Increase / lost:** without mTLS, any tailnet peer (or `0.0.0.0` if mis-set) can reach RPC; with mTLS, stolen tailnet key alone is insufficient — but lost CA key can issue rogue workers (guard CA).
-- **Interaction with `TAILSCALE_IP`:**
-  - `MTLS_WORKERS_ENABLED=0` (default): firewall / `cms.toml` stays `TAILSCALE_IP` allow ALL — existing behavior.
+- **Interaction with `INNER_IP`:**
+  - `MTLS_WORKERS_ENABLED=0` (default): firewall / `cms.toml` stays `INNER_IP` allow ALL — existing behavior.
   - `MTLS_WORKERS_ENABLED=1`: firewall SHOULD restrict RPC to mTLS only (e.g. `iptables -A INPUT -p tcp --dport 26000 -m conntrack …` or nginx `ssl_verify_client on`). See runbook below.
 - **How to enable:**
   ```bash
@@ -95,7 +95,7 @@ Full why/price/pros/cons and the rollover runbook live in
   # - ${MTLS_CA_CERT}:/etc/cms/mtls/ca.pem:ro
   # Then restart with that mount + enforce ssl_verify_client at proxy
   ```
-  When disabled: logs `mTLS workers disabled (set MTLS_WORKERS_ENABLED=1 … TAILSCALE_IP allow ALL remains)`.
+  When disabled: logs `mTLS workers disabled (set MTLS_WORKERS_ENABLED=1 … INNER_IP allow ALL remains)`.
 
 ---
 

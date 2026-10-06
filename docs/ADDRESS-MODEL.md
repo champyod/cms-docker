@@ -8,7 +8,8 @@ publish on more than one address.
 | Variable | Scope | Meaning |
 | --- | --- | --- |
 | `BIND_MODE` | system | `local` / `public` / `ts-http` / `domain`. Empty keeps each service's own default. |
-| `EXTRA_IPS` | system | Comma-separated extra addresses (e.g. the tailnet IP). Alias for the legacy `TAILSCALE_IP` when unset. |
+| `EXTRA_IPS` | system | Comma-separated extra addresses (e.g. the tailnet IP). Alias for `INNER_IP` when unset. |
+| `INNER_IP` | system | Comma-separated peer/private address. Any VPN address, or `0.0.0.0` to accept from anywhere. Empty resolves to `127.0.0.1`. |
 | `PUBLIC_IPS` | system | Comma-separated public addresses. Falls back to the legacy `PUBLIC_IP`. |
 | `<SVC>_BIND_IP` | service | Explicit bind for one service; wins outright. Comma list allowed. |
 | `<SVC>_EXTRA_IP` | service | Extra address for one service, overriding the system-wide extra for it. |
@@ -19,6 +20,17 @@ publish on more than one address.
 2. `<SVC>_EXTRA_IP`
 3. `BIND_MODE`: `local`/`domain` → `127.0.0.1`; `public` → `PUBLIC_IPS`; `ts-http` → `EXTRA_IPS`
 4. nothing set → the service keeps its compose default (nothing is emitted for it)
+
+## `INNER_IP` direction
+
+`INNER_IP` is read by both machines, and the same key names opposite things on each. It
+is one key rather than two on purpose: two keys would let the main server and its workers
+drift apart silently, and the drift would only surface as an unreachable worker fleet.
+
+| Machine | Meaning | Reader |
+| --- | --- | --- |
+| Main server | The address to bind worker-RPC ports to; `/metrics` allow-list entry | `__domain.sh`, `__render_expose.sh`, compose port bindings |
+| Worker | The main server's address to dial | `__worker_tui.sh`, read from the worker's own `config.toml` |
 
 ## Publishing on several addresses
 

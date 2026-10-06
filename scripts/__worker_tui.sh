@@ -136,11 +136,12 @@ toml_val() { # key -> value from config.toml (first hit, quotes stripped)
   sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*[\"']\\{0,1\\}\\([^\"'#]*\\)[\"']\\{0,1\\}.*/\\1/p" config.toml 2>/dev/null | head -n 1
 }
 
-# IP the workers must dial to reach this main server: explicit Tailscale IP
-# first, else the first non-loopback address. Empty when undeterminable.
+# Address of the main server as seen from this machine. On a worker the same
+# INNER_IP key names where to dial, because its config.toml holds the main
+# server's address; on the main server it names what to bind.
 main_reachable_ip() {
   local ip
-  ip="$(toml_val TAILSCALE_IP)"
+  ip="$(toml_val INNER_IP)"
   if [ -n "$ip" ]; then printf '%s' "$ip"; return 0; fi
   ip="$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -v '^127\.' | grep -v '^::1' | head -n 1 || true)"
   printf '%s' "${ip:-}"
@@ -646,7 +647,7 @@ attach_entry() {  # [shard-spec host port-spec [main-ip]] [--push user@host:/pat
     fi
   fi
   if [ -z "$main" ] || [[ "$main" =~ [[:space:]:] ]]; then
-    log_warn "main server IP required (no whitespace or ':') — set TAILSCALE_IP in config.toml or pass it explicitly"
+    log_warn "main server IP required (no whitespace or ':') — set INNER_IP in config.toml or pass it explicitly"
     return 1
   fi
   local s_list p_list

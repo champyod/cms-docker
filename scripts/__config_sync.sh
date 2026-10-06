@@ -392,31 +392,32 @@ migrate_missing_keys() {
   log_info "migrated $total new config keys: ${summary%"; "}"
 }
 
-# --- Retired listen-address keys ---
-# WHY: compose reads *_BIND_IP for the published port. The *_LISTEN_ADDRESS keys were
-# only injected into the container environment and read by nothing, so they were
-# removed from config.toml.example and from every compose environment block. Their old
-# default is the only value whose removal changes nothing.
+# --- Retired keys ---
+# WHY: a key that no reader resolves to any more is retired by moving its value onto
+# the key that now carries that job, so an operator's setting survives the rename
+# instead of silently reverting to a default.
 #
-# WHY the value travels to *_BIND_IP rather than being dropped: an operator who set one
-# of these believed it controlled what the published port was reachable on. Dropping the
-# key alone leaves compose falling back to its own 0.0.0.0 default and publishing the
-# port on MORE interfaces than before, with no error. Moving the value keeps the exposure
-# the operator chose, on the key that now carries it.
+# WHY the value travels rather than being dropped: an operator who set one of these
+# believed it controlled what the published port was reachable on, or where the
+# worker fleet dials. Dropping the key alone leaves the reader falling back to its
+# own default and changing behaviour with no error. Moving the value keeps what the
+# operator chose, on the key that now carries it.
 #
 # WHY only the keys these ones name: the map is written out rather than derived, so a
-# service whose published port has no retired address key cannot be given one.
-declare -A RETIRED_LISTEN_ADDRESS_TARGET=(
+# key with no retired-name mapping cannot be given one.
+declare -A RETIRED_KEY_TARGET=(
   [CONTEST_LISTEN_ADDRESS]=CONTEST_BIND_IP
   [ADMIN_LISTEN_ADDRESS]=ADMIN_BIND_IP
   [RANKING_LISTEN_ADDRESS]=RANKING_BIND_IP
   [ADMIN_NEXT_LISTEN_ADDRESS]=ADMIN_NEXT_BIND_IP
+  [TAILSCALE_IP]=INNER_IP
 )
-declare -a RETIRED_LISTEN_ADDRESS_KEYS=(
+declare -a RETIRED_KEYS=(
   "CONTEST_LISTEN_ADDRESS"
   "ADMIN_LISTEN_ADDRESS"
   "RANKING_LISTEN_ADDRESS"
   "ADMIN_NEXT_LISTEN_ADDRESS"
+  "TAILSCALE_IP"
 )
 declare -A RETIRED_BIND_VALUE=()
 declare -a RETIRED_BIND_ORDER=()
@@ -484,16 +485,16 @@ toml_section_of_key() {
 # published port is reachable on, so overwriting it would change network exposure
 # without telling anyone, and taking it would drop a setting an operator set on the key
 # that is now the live one. Neither is the operator's call to guess.
-plan_retired_listen_addresses() {
+plan_retired_keys() {
   local key target value live retired_section conflicts="" unreadable=""
   RETIRED_BIND_VALUE=()
   RETIRED_BIND_ORDER=()
   RETIRED_BIND_APPEND=()
   RETIRED_KEY_SECTION=()
-  for key in "${RETIRED_LISTEN_ADDRESS_KEYS[@]}"; do
+  for key in "${RETIRED_KEYS[@]}"; do
     toml_defines_key "$TOML_FILE" "$key" || continue
     retired_section="$(toml_section_of_key "$TOML_FILE" "$key")"
-    target="${RETIRED_LISTEN_ADDRESS_TARGET[$key]}"
+    target="${RETIRED_KEY_TARGET[$key]}"
     value="$(toml_value_of_key "$TOML_FILE" "$key")"
     live="$(toml_value_of_key "$TOML_FILE" "$target")"
     if [[ -n "$live" && "$live" != "$value" ]]; then
@@ -527,16 +528,17 @@ plan_retired_listen_addresses() {
   if [[ -n "$conflicts" ]]; then
     log_error "config.toml sets a retired key to a value its live replacement already differs from:"
     printf '%s' "$conflicts" >&2
-    log_error "A *_LISTEN_ADDRESS key is read by nothing, so the value on the left of an arrow"
-    log_error "had no effect; the *_BIND_IP value on the right is what the published port is"
-    log_error "bound to today. Moving one over the other would change network exposure, so"
-    log_error "the choice is yours: reconcile the two keys in $TOML_FILE by hand and sync again."
+    log_error "The retired key and its replacement are both live: the value on the left of"
+    log_error "an arrow still has a reader, and the one on the right is what that reader"
+    log_error "resolves to today. Moving one over the other would change network exposure"
+    log_error "or the worker dial target silently, so the choice is yours: reconcile the"
+    log_error "two keys in $TOML_FILE by hand and sync again."
     exit 1
   fi
   if [[ -n "$unreadable" ]]; then
     while IFS= read -r key; do
       [[ -n "$key" ]] || continue
-      log_warn "[$(toml_section_of_key "$TOML_FILE" "$key")] is a section this generator does not read, so ${RETIRED_LISTEN_ADDRESS_TARGET[$key]} = \"${RETIRED_BIND_VALUE[${RETIRED_LISTEN_ADDRESS_TARGET[$key]}]:-}\" cannot be stored: delete ${key} from $TOML_FILE by hand, then run the sync again and ${RETIRED_LISTEN_ADDRESS_TARGET[$key]} is merged in from ${TOML_EXAMPLE}"
+      log_warn "[$(toml_section_of_key "$TOML_FILE" "$key")] is a section this generator does not read, so ${RETIRED_KEY_TARGET[$key]} = \"${RETIRED_BIND_VALUE[${RETIRED_KEY_TARGET[$key]}]:-}\" cannot be stored: delete ${key} from $TOML_FILE by hand, then run the sync again and ${RETIRED_KEY_TARGET[$key]} is merged in from ${TOML_EXAMPLE}"
     done <<< "$unreadable"
   fi
 }
@@ -544,7 +546,7 @@ plan_retired_listen_addresses() {
 # Write config.toml with every retired key line removed and every migrated value in its
 # place, in a single pass. Every other byte is copied through, so comments, ordering and
 # blank lines survive — which is what makes a second run find nothing left to do.
-apply_retired_listen_addresses() {
+apply_retired_keys() {
   local tmp line trimmed key target
   (( ${#RETIRED_BIND_ORDER[@]} > 0 || ${#RETIRED_KEY_SECTION[@]} > 0 )) || return 0
   RETIRED_BIND_WRITTEN=()
@@ -553,8 +555,8 @@ apply_retired_listen_addresses() {
     trimmed="$(toml_trim "${line%%#*}")"
     if [[ "$trimmed" =~ ^([A-Za-z0-9_]+)[[:space:]]*= ]]; then
       key="${BASH_REMATCH[1]}"
-      if [[ -n "${RETIRED_LISTEN_ADDRESS_TARGET[$key]:-}" ]]; then
-        target="${RETIRED_LISTEN_ADDRESS_TARGET[$key]}"
+      if [[ -n "${RETIRED_KEY_TARGET[$key]:-}" ]]; then
+        target="${RETIRED_KEY_TARGET[$key]}"
         if [[ " ${RETIRED_BIND_APPEND[*]} " == *" ${target} "* ]]; then
           printf '%s\n' "$(toml_entry "$target" "${RETIRED_BIND_VALUE[$target]}")" >> "$tmp"
           RETIRED_BIND_WRITTEN["$target"]=1
@@ -580,11 +582,11 @@ apply_retired_listen_addresses() {
 # One line per retired key that left the file this run, naming where its value went. The
 # ledger is read here and not off the file, because the keys it reports are gone from it
 # by now — re-reading would report nothing on the one run that did the work.
-announce_retired_listen_addresses() {
+announce_retired_keys() {
   local key target value
-  for key in "${RETIRED_LISTEN_ADDRESS_KEYS[@]}"; do
+  for key in "${RETIRED_KEYS[@]}"; do
     [[ -n "${RETIRED_KEY_SECTION[$key]:-}" ]] || continue
-    target="${RETIRED_LISTEN_ADDRESS_TARGET[$key]}"
+    target="${RETIRED_KEY_TARGET[$key]}"
     value="${RETIRED_BIND_VALUE[$target]:-}"
     if [[ -z "$value" ]]; then
       log_info "removed retired ${key} from $TOML_FILE [${RETIRED_KEY_SECTION[$key]}] — it was empty and ${target} keeps its own value"
@@ -594,14 +596,13 @@ announce_retired_listen_addresses() {
   done
   for key in "${RETIRED_BIND_ORDER[@]}"; do
     [[ -n "${RETIRED_BIND_WRITTEN[$key]:-}" ]] && continue
-    log_warn "${key} = \"${RETIRED_BIND_VALUE[$key]}\" was collected but did not reach $TOML_FILE, so that port falls back to whatever BIND_MODE or the compose default resolves to"
+    log_warn "${key} = \"${RETIRED_BIND_VALUE[$key]}\" was collected but did not reach $TOML_FILE, so it falls back to whatever the reader's own default resolves to"
   done
 }
 
-# Move every retired *_LISTEN_ADDRESS value onto the *_BIND_IP key that now binds the
-# published port, then delete the retired line. The "never stamp a code default" rule:
-# the retired value is whatever the operator wrote, so 0.0.0.0 stays 0.0.0.0 and
-# 127.0.0.1 stays loopback.
+# Move every retired key's value onto the key that now carries that job, then delete the
+# retired line. The "never stamp a code default" rule: the retired value is whatever the
+# operator wrote, so 0.0.0.0 stays 0.0.0.0 and 127.0.0.1 stays loopback.
 #
 # WHY the check and the write are one step and not two passes over the file: config.toml
 # is rewritten by migrate_missing_keys, promote_split_keys_to_toml and the secret generator
@@ -609,13 +610,13 @@ announce_retired_listen_addresses() {
 # revision it was read from or the migration reports a write that did not land. This runs
 # on the file as it stands, which is why it replaces the abort rather than adding a step
 # to it, and why it reports only what actually moved.
-migrate_retired_listen_addresses() {
+migrate_retired_keys() {
   [[ -f "$TOML_FILE" ]] || return 0
   if [[ "$DRY_RUN" -eq 1 ]]; then
     local key target value live
-    for key in "${RETIRED_LISTEN_ADDRESS_KEYS[@]}"; do
+    for key in "${RETIRED_KEYS[@]}"; do
       toml_defines_key "$TOML_FILE" "$key" || continue
-      target="${RETIRED_LISTEN_ADDRESS_TARGET[$key]}"
+      target="${RETIRED_KEY_TARGET[$key]}"
       value="$(toml_value_of_key "$TOML_FILE" "$key")"
       live="$(toml_value_of_key "$TOML_FILE" "$target")"
       if [[ -n "$live" && "$live" != "$value" ]]; then
@@ -629,11 +630,11 @@ migrate_retired_listen_addresses() {
     done
     return 0
   fi
-  plan_retired_listen_addresses
+  plan_retired_keys
   # Announced only once the write has landed, so no line claims a migration that did
   # not happen and the retired keys are still in the file for the next run to try.
-  if apply_retired_listen_addresses; then
-    announce_retired_listen_addresses
+  if apply_retired_keys; then
+    announce_retired_keys
   else
     log_warn "could not write the retired-key migration into $TOML_FILE — $TOML_FILE left untouched, re-run './cms config sync'"
   fi
@@ -944,7 +945,7 @@ main() {
   # live 127.0.0.1 and only then be found to disagree — a conflict manufactured by our own
   # merge rather than one the operator wrote. Run first, the file is read exactly as it was
   # last written, and a genuine two-value conflict still stops the sync.
-  migrate_retired_listen_addresses
+  migrate_retired_keys
 
   # WHY: merge newly-added example keys into existing config before parsing and
   # secret generation — bootstrap only copies once, so updates would otherwise

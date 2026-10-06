@@ -39,7 +39,7 @@ export const CONFIG_SECTIONS: EnvConfigSection[] = [
     filename: CONFIG_TOML_FILE,
     fields: [
       { key: 'PUBLIC_IP', tomlSection: 'core', label: 'Public IP', description: 'Public facing IP address of this server.' },
-      { key: 'TAILSCALE_IP', tomlSection: 'core', label: 'Tailscale IP', description: 'Internal VPN IP (optional).' },
+      { key: 'INNER_IP', tomlSection: 'core', label: 'Internal IP', description: 'Peer address workers dial, and RPC binds to (optional; any VPN IP or 0.0.0.0).' },
       { key: 'APT_MIRROR', tomlSection: 'core', label: 'Ubuntu Mirror', description: 'Mirror for apt updates.' },
     ]
   },

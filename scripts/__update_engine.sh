@@ -630,7 +630,7 @@ walk_section() {
 VAR_SPECS=(
   "Core & Network|[core]|COMPOSE_PROJECT_NAME|str||cms-docker"
   "Core & Network|[core]|PUBLIC_IP|str||live_ip"
-  "Core & Network|[core]|TAILSCALE_IP|str||"
+  "Core & Network|[core]|INNER_IP|str||"
   "Core & Network|[core]|EXTRA_IPS|str||"
   "Core & Network|[core]|PUBLIC_IPS|str||"
   "Core & Network|[core]|BIND_MODE|str||"
@@ -807,7 +807,7 @@ VAR_SPECS=(
   "Infra & Monitoring|[infra]|GRAFANA_ADMIN_USER|str||admin"
   "Infra & Monitoring|[infra]|GRAFANA_PASSWORD|secret||admin"
   "Infra & Monitoring|[infra]|GRAFANA_ROOT_URL|url||http://localhost:3001/"
-  "Core & Network|[core]|TAILSCALE_IP|str||127.0.0.1"
+  
   "Infra & Monitoring|[infra]|CAA_ENABLED|enum:0,1||0"
   "Infra & Monitoring|[infra]|CAA_ISSUER|str||letsencrypt.org"
   "Infra & Monitoring|[infra]|DNSSEC_ENABLED|enum:0,1||0"

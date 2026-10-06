@@ -58,7 +58,7 @@ DB_PORT="$(get_env_val "POSTGRES_PORT")"
 CMS_SECRET="$(get_env_val "CMS_SECRET_KEY")"
 RPC_SECRET="$(get_env_val "RPC_SECRET")"
 RPC_ALLOW_BACKDOOR="$(get_env_val "RPC_ALLOW_BACKDOOR")"
-TAILSCALE_IP="$(get_env_val "TAILSCALE_IP")"
+INNER_IP="$(get_env_val "INNER_IP")"
 CORE_SERVICES_IP="$(get_env_val "CORE_SERVICES_IP")"
 
 DB_USER="${DB_USER:-$(get_worker_env_val "POSTGRES_USER")}"
@@ -92,7 +92,7 @@ echo "  - DB Host: $DB_HOST:$DB_PORT"
 echo "  - DB User: $DB_USER"
 echo "  - DB Name: $DB_NAME"
 
-export DB_USER DB_PASS DB_NAME DB_HOST DB_PORT CMS_SECRET RPC_SECRET RPC_ALLOW_BACKDOOR TAILSCALE_IP CORE_SERVICES_IP
+export DB_USER DB_PASS DB_NAME DB_HOST DB_PORT CMS_SECRET RPC_SECRET RPC_ALLOW_BACKDOOR INNER_IP CORE_SERVICES_IP
 
 # Scoreboard auth for the ranking push and the ranking web UI — exact-match reads
 # (never grep regex) from the merged .env. A missing value aborts the run: a built-in
@@ -235,10 +235,10 @@ _set_login_rate_limit('contest_web_server.captcha')
 
 # Push target for score feed: same-network service by default. A remote
 # ranking node is only assumed when RANKING_REMOTE=1 (then RANKING_PUSH_HOST
-# or legacy TAILSCALE_IP supplies the address). Port 8890 is always enforced.
+# or INNER_IP supplies the address). Port 8890 is always enforced.
 ranking_host = os.environ.get("RANKING_PUSH_HOST", "").strip()
 if os.environ.get("RANKING_REMOTE", "").strip() == "1" and not ranking_host:
-    ranking_host = os.environ.get("TAILSCALE_IP", "").strip()
+    ranking_host = os.environ.get("INNER_IP", "").strip()
 if not ranking_host:
     ranking_host = "cms-ranking-web-server"
 if ":" not in ranking_host.split("/")[-1]:

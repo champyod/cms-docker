@@ -17,7 +17,7 @@ services:
       SERVICE_SHARD: ${EVALUATION_SERVICE_SHARD:-0}
       CONTEST_ID: ${CONTEST_ID:-1}
     ports:
-      - "${TAILSCALE_IP:-127.0.0.1}:25000:25000"
+      - "${INNER_IP:-127.0.0.1}:25000:25000"
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
@@ -49,7 +49,7 @@ services:
       SERVICE_SHARD: ${PROXY_SERVICE_SHARD:-0}
       CONTEST_ID: ${CONTEST_ID:-1}
     ports:
-      - "${TAILSCALE_IP:-127.0.0.1}:28600:28600"
+      - "${INNER_IP:-127.0.0.1}:28600:28600"
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
