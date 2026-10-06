@@ -506,7 +506,7 @@ plan_retired_keys() {
     RETIRED_KEY_SECTION["$key"]="$retired_section"
     if [[ -z "$value" ]]; then
       # Nothing to carry across and nothing to expose: the target keeps whatever it
-      # already resolved to, and resolve_ips still applies BIND_MODE to it.
+      # already resolved to, and that value alone decides the published address.
       continue
     fi
     # A target that is defined nowhere gets its entry written where the retired line
@@ -639,6 +639,28 @@ migrate_retired_keys() {
     log_warn "could not write the retired-key migration into $TOML_FILE — $TOML_FILE left untouched, re-run './cms config sync'"
   fi
   return 0
+}
+
+# A key the sync refuses to carry forward, because it has no value to move.
+# WHY it cannot join RETIRED_KEYS: that path writes the retired value onto a live target
+# key, and this key has no target — it selected which address family the other keys
+# resolved against rather than naming an address of its own, so there is nothing to move
+# the value onto. Why it must stop the sync instead of warning: it silently chose the
+# address every published port would answer on, so an operator carrying it forward without
+# noticing would deploy ports on addresses they never picked. Stalling forces them to set
+# each service's *_BIND_IP by hand, which is the value that now decides. Handled by key
+# match on the config file only, so unrelated keys are never touched.
+# WHY this runs before migrate_retired_keys: the operator's own line is still in the file
+# at that point, so the message names the line they have to delete.
+abort_on_unmappable_retired_key() {
+  local key="$1" section value hint="$2" retired_section
+  [[ -f "$TOML_FILE" ]] || return 0
+  toml_defines_key "$TOML_FILE" "$key" || return 0
+  retired_section="$(toml_section_of_key "$TOML_FILE" "$key")"
+  value="$(toml_value_of_key "$TOML_FILE" "$key")"
+  log_error "[${retired_section}] ${key} = \"${value}\" is no longer read and has no equivalent key to move its value onto."
+  log_error "Delete the ${key} line from ${TOML_FILE} by hand, then run './cms config sync' again. ${hint}"
+  exit 1
 }
 
 # --- Retired split env files ---
@@ -937,6 +959,9 @@ main() {
       log_error "config.toml.example not found — cannot bootstrap"; exit 1
     fi
   fi
+
+  abort_on_unmappable_retired_key "BIND_MODE" \
+    "Each service's *_BIND_IP now decides its published address on its own; a comma-separated list publishes it on several addresses at once. Set the *_BIND_IP key of every service you want reachable."
 
   # Carry a retired *_LISTEN_ADDRESS value onto the *_BIND_IP key that now binds the
   # published port, and delete the retired line. WHY ahead of the merge rather than behind

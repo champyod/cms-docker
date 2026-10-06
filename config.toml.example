@@ -7,9 +7,6 @@ COMPOSE_PROJECT_NAME = "cms-docker" # str; docker compose project name; must mat
 ACCESS_METHOD = "public_port"    # str; "public_port" or "domain"
 PUBLIC_IP = "0.0.0.0"           # str; your VPS public IP; live_ip auto-detects
 INNER_IP = ""                  # str; peer address: worker RPC bind + worker dial target; empty=127.0.0.1 only
-EXTRA_IPS = ""                  # csv; system-wide extra addresses (e.g. tailnet) for service/UI ports
-PUBLIC_IPS = ""                 # csv; public addresses used when BIND_MODE=public
-BIND_MODE = ""                  # enum:"",local,public,ts-http,domain; "" keeps each service's own default
 REMOTE_WORKERS_ENABLED = false  # bool
 CMS_DOMAIN = "cms.local"        # str; base domain; sub-services are admin.${CMS_DOMAIN} etc.
 POSTGRES_HOST = "database"      # str

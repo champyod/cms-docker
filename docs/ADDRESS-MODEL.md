@@ -5,21 +5,31 @@ publish on more than one address.
 
 ## Variables
 
+Every published port is named by exactly one key, and that key alone decides the
+address it answers on. There is no system-wide switch.
+
 | Variable | Scope | Meaning |
 | --- | --- | --- |
-| `BIND_MODE` | system | `local` / `public` / `ts-http` / `domain`. Empty keeps each service's own default. |
-| `EXTRA_IPS` | system | Comma-separated extra addresses (e.g. the tailnet IP). Alias for `INNER_IP` when unset. |
-| `INNER_IP` | system | Comma-separated peer/private address. Any VPN address, or `0.0.0.0` to accept from anywhere. Empty resolves to `127.0.0.1`. |
-| `PUBLIC_IPS` | system | Comma-separated public addresses. Falls back to the legacy `PUBLIC_IP`. |
-| `<SVC>_BIND_IP` | service | Explicit bind for one service; wins outright. Comma list allowed. |
-| `<SVC>_EXTRA_IP` | service | Extra address for one service, overriding the system-wide extra for it. |
+| `<SVC>_BIND_IP` | front-door service | The address one service's published ports answer on. A comma list publishes on several at once. |
+| `INNER_IP` | peer-facing services | The address `database`, the six RPC services and `worker` publish on, and the address a worker dials to reach the main server. Empty leaves each on its compose default (`127.0.0.1`). |
+| `PUBLIC_IP` | not a bind key | Your box's public IP. Used for `CORE_SERVICES_HOST` and apt-mirror selection, **not** for binding a port. Keep it separate from `INNER_IP` — they answer different questions and merging them silently repoints one of the two. |
 
-## Resolution (highest priority first)
+The front-door keys are `CONTEST_BIND_IP`, `NGINX_BIND_IP`, `ADMIN_BIND_IP`,
+`ADMIN_NEXT_BIND_IP` and `RANKING_BIND_IP`. `database` uses `DB_BIND_IP` and
+`worker` uses `WORKER_BIND_ADDR`.
 
-1. `<SVC>_BIND_IP`
-2. `<SVC>_EXTRA_IP`
-3. `BIND_MODE`: `local`/`domain` → `127.0.0.1`; `public` → `PUBLIC_IPS`; `ts-http` → `EXTRA_IPS`
-4. nothing set → the service keeps its compose default (nothing is emitted for it)
+## Resolution
+
+1. `<SVC>_BIND_IP` — the service's own key. A comma-separated list is several
+   addresses, one published entry each.
+2. Nothing set → the service is not emitted and keeps its compose default. For
+   `database` and the six RPC services that default is `${INNER_IP:-127.0.0.1}`,
+   so an unset key means loopback, not every interface.
+
+A port answers on an address only when the key owning that port names that
+address. There is no fallback that puts the peer ports — postgres, the RPC
+services, the worker's 26000 — on an address set for the web tier, so widening
+the front door never widens the evaluation surface.
 
 ## `INNER_IP` direction
 
@@ -33,6 +43,10 @@ drift apart silently, and the drift would only surface as an unreachable worker 
 | Worker | The main server's address to dial | `__worker_tui.sh`, read from the worker's own `config.toml` |
 
 ## Publishing on several addresses
+
+`ADMIN_BIND_IP = "203.0.113.10,100.64.0.1"` publishes that service's ports on the
+public address and the tailnet address together. Comma-separated is how several
+addresses are published — there is no second key and no mode to set.
 
 docker compose pins one `host_ip` per port entry, so N addresses need N entries, and
 a single `${VAR}` cannot expand into several lines. `scripts/__render_expose.sh`
@@ -52,21 +66,24 @@ it needs Compose >= 2.24. The generated file is gitignored.
 Public host, single address:
 
 ```
-BIND_MODE = "public"
-PUBLIC_IPS = "203.0.113.10"
+ADMIN_BIND_IP = "203.0.113.10"
 ```
 
-Public plus tailnet, worker reachable on the tailnet only:
+Public plus tailnet on the same service:
 
 ```
-BIND_MODE = "public"
-PUBLIC_IPS = "203.0.113.10"
-EXTRA_IPS = "100.64.0.1"
-WORKER_EXTRA_IP = "100.64.0.1"
+ADMIN_BIND_IP = "203.0.113.10,100.64.0.1"
 ```
 
-Loopback only (local testing):
+Loopback only (local testing) — unset the key and the compose default keeps it there:
 
 ```
-BIND_MODE = "local"
+ADMIN_BIND_IP = ""
+```
+
+Workers reachable on the tailnet only:
+
+```
+INNER_IP = "100.64.0.1"
+WORKER_BIND_ADDR = "100.64.0.1"
 ```
