@@ -6,10 +6,12 @@ import { ModalFooter } from '@/components/core/ModalFooter';
 import { Button } from '@/components/core/Button';
 import { InlineAlert } from '@/components/core/InlineAlert';
 import { cn } from '@/lib/utils';
-import { Power, RotateCcw, Bell } from 'lucide-react';
+import { RotateCcw } from 'lucide-react';
 import { updateContainerConfig, resetRestartCount, getContainerConfig } from '@/app/actions/containerConfig';
 import { getDiscordWebhookStatus } from '@/lib/discord-notifier';
 import { toast } from 'sonner';
+import { ContainerAutoRestartSection } from './ContainerAutoRestartSection';
+import { ContainerDiscordSection } from './ContainerDiscordSection';
 
 interface ContainerSettingsModalProps {
   containerId: string;
@@ -142,47 +144,10 @@ export function ContainerSettingsModal({
       }
     >
       <div className="space-y-6">
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <label className="text-sm font-bold text-foreground flex items-center gap-2">
-                <Power className="w-4 h-4 text-success" />
-                Auto-Restart Policy
-              </label>
-              <p className="text-xs text-muted-foreground mt-1">
-                Automatically restart container on failure
-              </p>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={autoRestart}
-              aria-label={`Auto-restart ${autoRestart ? 'enabled' : 'disabled'} — click to ${autoRestart ? 'disable' : 'enable'}`}
-              onClick={() => setAutoRestart(!autoRestart)}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-            >
-              <span
-                className={cn(
-                  'pointer-events-none relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                  autoRestart ? 'bg-success' : 'bg-muted'
-                )}
-              >
-                <span
-                  className={cn(
-                    'inline-block h-4 w-4 transform rounded-full bg-card transition-transform',
-                    autoRestart ? 'translate-x-6' : 'translate-x-1'
-                  )}
-                />
-              </span>
-            </button>
-          </div>
-
-          {!autoRestart && (
-            <InlineAlert tone="warning" density="compact">
-              Container will NOT restart automatically on failure. You must start it manually via the UI.
-            </InlineAlert>
-          )}
-        </div>
+        <ContainerAutoRestartSection
+          autoRestart={autoRestart}
+          onToggle={() => setAutoRestart(!autoRestart)}
+        />
         <div className="space-y-3">
           <label className="text-sm font-bold text-foreground flex items-center gap-2">
             <RotateCcw className="w-4 h-4 text-primary" />
@@ -203,55 +168,11 @@ export function ContainerSettingsModal({
             Recommended: 5 attempts. Range: 1-20.
           </p>
         </div>
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <label className="text-sm font-bold text-foreground flex items-center gap-2">
-                <Bell className="w-4 h-4 text-info" />
-                Discord Notifications
-                {isDiscordConfigured === false && (
-                  <span className="px-2 py-0.5 bg-warning/10 border border-warning/20 text-warning text-xs font-bold rounded-full">Discord not configured</span>
-                )}
-              </label>
-              <p className="text-xs text-muted-foreground mt-1">
-                Send container events (start/stop/die/restart) to Discord webhook
-              </p>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={discordNotifications}
-              aria-label={`Discord notifications ${discordNotifications ? 'enabled' : 'disabled'} — click to ${discordNotifications ? 'disable' : 'enable'}`}
-              onClick={() => setDiscordNotifications(!discordNotifications)}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-            >
-              <span
-                className={cn(
-                  'pointer-events-none relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                  discordNotifications ? 'bg-info' : 'bg-muted'
-                )}
-              >
-                <span
-                  className={cn(
-                    'inline-block h-4 w-4 transform rounded-full bg-card transition-transform',
-                    discordNotifications ? 'translate-x-6' : 'translate-x-1'
-                  )}
-                />
-              </span>
-            </button>
-          </div>
-
-          {!discordNotifications && (
-            <InlineAlert tone="warning" density="compact">
-              Discord notifications disabled. Container events will not be sent to webhook.
-            </InlineAlert>
-          )}
-          {isDiscordConfigured === false && discordNotifications && (
-            <InlineAlert tone="warning" density="compact">
-              Discord webhook is not configured. Notifications will be skipped until DISCORD_WEBHOOK_URL is set.
-            </InlineAlert>
-          )}
-        </div>
+        <ContainerDiscordSection
+          discordNotifications={discordNotifications}
+          isDiscordConfigured={isDiscordConfigured}
+          onToggle={() => setDiscordNotifications(!discordNotifications)}
+        />
         <div className="bg-muted/40 border border-border rounded-lg p-4 space-y-2">
           <div className="text-xs font-bold text-muted-foreground">CURRENT STATUS</div>
           <div className="flex items-center justify-between">
