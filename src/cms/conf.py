@@ -71,6 +71,10 @@ field_helper = lambda T: dataclasses.field(default_factory=T)
 
 @dataclass()
 class GlobalConfig:
+    # WHY configurable rather than fixed in source: AGPL-13 requires the offer
+    # of the Corresponding Source to name the running deployment's own source,
+    # so a self-hosted fork must be able to point at its own repository.
+    source_url: str = "https://github.com/champyod/cms-docker"
     temp_dir: str = "/tmp"
     backdoor: bool = False
     file_log_debug: bool = False

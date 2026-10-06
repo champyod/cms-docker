@@ -19,6 +19,7 @@ POSTGRES_BACKUP_PASSWORD = ""    # secret; auto-generated if empty; backup role 
 POSTGRES_HOST_AUTH_METHOD = "md5"
 CMS_SECRET_KEY = ""             # secret; auto-generated hex32 if empty; injected into cms.toml
 CMS_CONFIG = "/usr/local/etc/cms.toml"
+CMS_SOURCE_URL = "https://github.com/champyod/cms-docker" # str; AGPL-13 Corresponding Source offer shown in the UI credits; point at your own fork
 LOG_SERVICE_SHARD = 0           # num
 RESOURCE_SERVICE_SHARD = 0      # num
 SCORING_SERVICE_SHARD = 0       # num
