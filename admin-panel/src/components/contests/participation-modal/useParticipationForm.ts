@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { getParticipationDetails, updateParticipation } from '@/app/actions/participations';
+import { getParticipationDetails } from '@/app/actions/participation-reads';
+import { updateParticipation } from '@/app/actions/participations';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import type { PasswordKind } from '@/lib/password-format';
 

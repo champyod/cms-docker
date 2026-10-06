@@ -5,13 +5,10 @@ import { revalidatePath } from 'next/cache';
 import { ensurePermission, getPermissions } from '@/lib/permissions';
 import { ACTION_PERMISSIONS } from '@/lib/permission-engine';
 import { stripDisallowedFields } from '@/lib/field-permissions';
-import { safeUserSelect } from '@/lib/prisma-selects';
 import { recordAudit } from '@/lib/audit';
 import {
   executeParticipationUpdate,
   parseIpAllowlist,
-  queryParticipationDetails,
-  type ParticipationDetails,
   type UpdateParticipationInput,
 } from './participation-sql';
 
@@ -20,20 +17,6 @@ const PLAINTEXT_PREFIX = 'plaintext:';
 interface ActionResult {
   success: boolean;
   error?: string;
-}
-
-export async function getParticipation(participationId: number) {
-  await ensurePermission('participation:read');
-  return prisma.participations.findUnique({
-    where: { id: participationId },
-    include: {
-      users: { select: safeUserSelect },
-      contests: true,
-      submissions: { orderBy: { timestamp: 'desc' }, take: 10 },
-      messages: { orderBy: { timestamp: 'desc' } },
-      questions: { orderBy: { question_timestamp: 'desc' } },
-    }
-  });
 }
 
 export async function updateParticipation(
@@ -162,25 +145,6 @@ export async function addTeamToContest(
   } catch (error) {
     return { success: false, error: (error as Error).message };
   }
-}
-
-export async function getParticipationDetails(id: number): Promise<ParticipationDetails | null> {
-  await ensurePermission('participation:read');
-  const p = await queryParticipationDetails(id);
-  if (!p) return null;
-
-  return {
-    id: p.id,
-    contest_id: p.contest_id,
-    user_id: p.user_id,
-    team_id: p.team_id,
-    hidden: p.hidden,
-    unrestricted: p.unrestricted,
-    delay_time_seconds: p.delay_time_seconds || 0,
-    extra_time_seconds: p.extra_time_seconds || 0,
-    starting_time: p.starting_time ? new Date(p.starting_time).toISOString().slice(0, 16) : '',
-    ip_string: p.ip_string || '',
-  };
 }
 
 export async function revealParticipationPassword(participationId: number): Promise<
