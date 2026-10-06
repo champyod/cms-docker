@@ -3,19 +3,15 @@
 import { useState, useEffect, useCallback, useMemo, useTransition } from 'react';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import { EmptyState } from '@/components/core/EmptyState';
-import { SidePanel } from '@/components/core/SidePanel';
-import {
-  ResponsiveTable,
-  type ResponsiveRowProps,
-} from '@/components/core/ResponsiveTable';
+import { ResponsiveTable } from '@/components/core/ResponsiveTable';
 import { TablePaginationControls } from '@/components/core/TablePaginationControls';
 import { getAuditEntry, getDistinctEntities } from '@/app/actions/audit';
-import type { AuditLogRow, AuditDetailRow } from '@/app/actions/audit';
-import { Filter, ChevronDown, ChevronUp } from 'lucide-react';
-import { toast } from 'sonner';
+import type { AuditDetailRow } from '@/app/actions/audit';
+import { Filter } from 'lucide-react';
 import { AuditFilters } from './AuditFilters';
 import { AuditToolbar } from './AuditToolbar';
-import { AuditDetailContent } from './AuditDetail';
+import { AuditDetailPanel } from './AuditDetailPanel';
+import { createAuditRowRenderers } from './auditRowRenderers';
 import {
   buildAuditColumns,
   formatTimestamp,
@@ -25,8 +21,6 @@ import {
 import type { AuditTableProps } from './auditTypes';
 
 export type { AuditTableProps } from './auditTypes';
-
-const COPY_FEEDBACK_DURATION_MS = 1500;
 
 export function AuditTable({
   entries,
@@ -55,7 +49,6 @@ export function AuditTable({
 
   const [entities, setEntities] = useState<string[]>([]);
   const [pageInput, setPageInput] = useState(String(currentPage));
-  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   useEffect(() => {
     if (!autoRefresh) return;
@@ -142,17 +135,6 @@ export function AuditTable({
     }
   };
 
-  const handleCopy = async (text: string, field: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      toast.error('Copy failed. Select the text to copy it manually.');
-      return;
-    }
-    setCopiedField(field);
-    setTimeout(() => setCopiedField(null), COPY_FEEDBACK_DURATION_MS);
-  };
-
   // Why: one column definition drives desktop rows and mobile cards, so
   // the two layouts cannot drift apart.
   const columns = useMemo(
@@ -160,33 +142,7 @@ export function AuditTable({
     [dict],
   );
 
-  const getRowProps = (entry: AuditLogRow): ResponsiveRowProps => ({
-    onClick: () => {
-      void handleRowClick(entry.id);
-    },
-    className: 'cursor-pointer',
-    'aria-expanded': expandedRowId === entry.id,
-  });
-
-  // Why: shared by desktop rows and mobile cards, with 44px targets kept
-  // in this fragment so both layouts stay touch-sized.
-  const renderRowActions = (entry: AuditLogRow) => {
-    const isExpanded = expandedRowId === entry.id;
-    return (
-      <button
-        type="button"
-        aria-expanded={isExpanded}
-        aria-label={`Toggle details for ${entry.verb} on ${entry.entity}`}
-        className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-        onClick={(e) => {
-          e.stopPropagation();
-          void handleRowClick(entry.id);
-        }}
-      >
-        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-      </button>
-    );
-  };
+  const { getRowProps, renderRowActions } = createAuditRowRenderers(expandedRowId, handleRowClick);
 
   const expandedEntry = expandedRowId === null
     ? undefined
@@ -242,34 +198,16 @@ export function AuditTable({
         emptyState={<EmptyState icon={Filter} title={dict.noEntries} />}
       />
 
-      {/* Why a side panel and not a block under the table: an entry's detail is
-          read against the rows above it, and a block below pushed the row the
-          reader clicked off the screen on every open. */}
-      <SidePanel
-        open={expandedEntry !== undefined && (loadingDetail || expandedDetail !== null || detailError !== null)}
-        onOpenChange={(open) => {
-          if (open || expandedRowId === null) return;
-          handleRowClick(expandedRowId);
+      <AuditDetailPanel
+        entry={expandedEntry}
+        dict={dict}
+        loading={loadingDetail}
+        error={detailError}
+        detail={expandedDetail}
+        onClose={() => {
+          if (expandedRowId !== null) void handleRowClick(expandedRowId);
         }}
-        title={expandedEntry === undefined ? dict.expandedDetails : `${expandedEntry.verb} · ${expandedEntry.entity_name ?? expandedEntry.entity}`}
-      >
-        {loadingDetail && <div className="text-sm text-muted-foreground animate-pulse">Loading details…</div>}
-        {detailError !== null && (
-          <div className="text-sm text-destructive">
-            {dict.detailLoadFailed}: {detailError}
-          </div>
-        )}
-        {expandedDetail && (
-          <AuditDetailContent
-            detail={expandedDetail}
-            dict={dict}
-            copiedField={copiedField}
-            onCopy={(text, field) => {
-              void handleCopy(text, field);
-            }}
-          />
-        )}
-      </SidePanel>
+      />
 
       {totalPages > 1 && (
         <TablePaginationControls
