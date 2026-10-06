@@ -55,6 +55,7 @@ from cms.locale import filter_language_codes
 from cms.server import FileHandlerMixin
 from cms.server.captcha import Captcha
 from cms.server.contest.authentication import authenticate_request
+from cms.server.credits import load_credits
 from cmscommon.datetime import get_timezone
 from .base import BaseHandler
 from ..phase_management import compute_actual_phase
@@ -261,6 +262,14 @@ class ContestHandler(BaseHandler):
             ret["tokens_tasks"] = next(iter(t_tokens))
         else:
             ret["tokens_tasks"] = TOKEN_MODE_MIXED
+
+        # WHY every CWS page carries these two: AGPL-13 requires the offer of
+        # the Corresponding Source to reach the users interacting with this
+        # server, so the footer needs the deployment's own source URL, which a
+        # self-hosted fork configures, and the licence identity, which must not
+        # be typed into a template where it can drift from the credits file.
+        ret["config"] = config
+        ret["credits"] = load_credits()
 
         return ret
 

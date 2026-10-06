@@ -55,6 +55,7 @@ from cms.server import multi_contest
 from cms.server.captcha import extract_token
 from cms.server.contest.authentication import validate_login
 from cms.server.contest.communication import get_communications
+from cms.server.credits import get_surface
 from cmscommon.crypto import hash_password, validate_password
 from cmscommon.datetime import make_datetime, make_timestamp
 from .contest import ContestHandler, api_login_required
@@ -444,4 +445,20 @@ class DocumentationHandler(ContestHandler):
                     COMPILATION_MESSAGES=COMPILATION_MESSAGES,
                     EVALUATION_MESSAGES=EVALUATION_MESSAGES,
                     language_docs=language_docs,
+                    **self.r_params)
+
+
+class CreditsHandler(ContestHandler):
+    """Displays the licence and the bundled third-party software.
+
+    Authenticated like the documentation page: the nav entry that reaches it
+    only exists on an authenticated page, and the offer of the corresponding
+    source is served to the contestants the server is serving.
+
+    """
+    @tornado.web.authenticated
+    @multi_contest
+    def get(self):
+        self.render("credits.html",
+                    credits_surface=get_surface("contest"),
                     **self.r_params)

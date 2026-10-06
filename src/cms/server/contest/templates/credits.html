@@ -1,0 +1,61 @@
+{% extends "contest.html" %}
+
+{% set page = "credits" %}
+
+{% block core %}
+<div class="span9">
+
+<div class="page-header">
+    <h1>Credits</h1>
+</div>
+
+<h2>{{ credits.project.name }}</h2>
+
+<p>
+    {{ credits.project.name }} is released under the
+    <a href="{{ credits.license.url }}" rel="license noreferrer" target="_blank">{{ credits.license.name }}</a>
+    (<code>{{ credits.license.spdx_id }}</code>).
+</p>
+
+<p>
+    As required by section 13 of that licence, the corresponding source of the
+    software running here is offered at
+    <a href="{{ config.global_.source_url }}" rel="author noreferrer" target="_blank">{{ config.global_.source_url }}</a>.
+</p>
+
+{% for line in credits_surface.attribution %}
+<p>
+    The contest web is {{ line.text }}:
+    <a href="{{ line.url }}" rel="author noreferrer" target="_blank">{{ line.url }}</a>.
+</p>
+{% endfor %}
+
+<h2>Third-party software</h2>
+
+<table class="table table-bordered">
+  <thead>
+    <tr>
+      <th style="width: 26%;">Software</th>
+      <th style="width: 30%;">Copyright holder</th>
+      <th style="width: 14%;">Licence</th>
+      <th>Licence text</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for asset in credits_surface.assets %}
+    <tr>
+      <td>{{ asset.name }}</td>
+      <td>{{ asset.holder }}</td>
+      <td>{{ asset.license_id }}</td>
+      <td>
+        {% for license_url in asset.license_urls %}
+        <a href="{{ license_url }}" rel="license noreferrer" target="_blank">{{ license_url }}</a>
+        {% endfor %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+</div>
+{% endblock core %}

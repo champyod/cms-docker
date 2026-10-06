@@ -194,6 +194,9 @@ $(document).ready(function () {
                             <li{% if page == "documentation" %} class="active"{% endif %}>
                                 <a href="{{ contest_url("documentation") }}">{% trans %}Documentation{% endtrans %}</a>
                             </li>
+                            <li{% if page == "credits" %} class="active"{% endif %}>
+                                <a href="{{ contest_url("credits") }}">Credits</a>
+                            </li>
     {% if actual_phase == 0 or participation.unrestricted %}{# FIXME maybe >= 0? #}
         {% if testing_enabled %}
                             <li{% if page == "test_interface" %} class="active"{% endif %}>
@@ -203,13 +206,19 @@ $(document).ready(function () {
     {% endif %}
                         </ul>
                     </div>
-                    <span class="license_notice">
-                    <a href="https://github.com/cms-dev/cms" rel="author noreferrer" target="_blank">{% trans %}Contest Management System{% endtrans %}</a>
-                    {% trans %}is released under the{% endtrans %}
-                    <a href="https://www.gnu.org/licenses/agpl" rel="license noreferrer" target="_blank">{% trans %}GNU Affero General Public License{% endtrans %}</a>.
-                    </span>
                 </div>
     {% block core %}{% endblock core %}
+            </div>
+            <div class="row">
+                <div class="span12">
+                    <p class="license_notice">
+                    {{ credits.project.name }} is released under the
+                    <a href="{{ credits.license.url }}" rel="license noreferrer" target="_blank">{{ credits.license.name }}</a>.
+                    Under section 13 of that licence the corresponding source of the software running here is offered at
+                    <a href="{{ config.global_.source_url }}" rel="author noreferrer" target="_blank">{{ config.global_.source_url }}</a>.
+                    <a href="{{ contest_url("credits") }}">Credits</a> lists the third-party software it bundles.
+                    </p>
+                </div>
             </div>
         </div>
 
