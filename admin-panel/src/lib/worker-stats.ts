@@ -75,10 +75,12 @@ export function mapEmitterRowsToStats(rows: EmitterRow[], shardCounts: Record<nu
     const shard = typeof row.shard === 'number' ? row.shard : index;
     const taskCount = shardCounts[shard] || 0;
     const state = textOf(row.state, 'unknown');
-    // Why reachable rescues absent: remote shards have no local container, so
-    // docker-only truth renders working remotes offline. Exited stays offline
-    // even if reachable; unreachable stays offline — real outages stay visible.
-    const isLive = state === 'running' || (state === 'absent' && row.reachable === true);
+    // Why reachable rescues absent and remote: remote shards have no local
+    // container, so docker-only truth renders working remotes offline. The
+    // emitter labels those rows remote; absent stays rescued because a stale
+    // emitter can still produce it. Exited stays offline even if reachable;
+    // unreachable stays offline — real outages stay visible.
+    const isLive = state === 'running' || ((state === 'absent' || state === 'remote') && row.reachable === true);
     return {
       id: `worker-${shard}`,
       name: textOf(row.endpoint, `worker-${shard}`),
