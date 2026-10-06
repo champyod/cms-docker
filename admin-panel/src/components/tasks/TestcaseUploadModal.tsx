@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Upload, Archive, File as FileIcon } from 'lucide-react';
-import { batchUploadTestcases } from '@/app/actions/testcases';
+import { batchUploadTestcases } from '@/app/actions/testcase-bulk';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { Dialog } from '@/components/core/Dialog';
 import { ModalFooter } from '@/components/core/ModalFooter';

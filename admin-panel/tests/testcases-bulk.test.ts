@@ -56,7 +56,7 @@ beforeEach(() => {
 
 describe('batchUploadTestcases', () => {
   it('rejects a non-integer dataset id', async () => {
-    const { batchUploadTestcases } = await import('@/app/actions/testcases');
+    const { batchUploadTestcases } = await import('@/app/actions/testcase-bulk');
     expect(await batchUploadTestcases(Number.NaN, [item('a')])).toEqual({
       success: false,
       error: 'Invalid dataset',
@@ -65,7 +65,7 @@ describe('batchUploadTestcases', () => {
 
   it('returns not found for a missing dataset', async () => {
     stubs.dataset = false;
-    const { batchUploadTestcases } = await import('@/app/actions/testcases');
+    const { batchUploadTestcases } = await import('@/app/actions/testcase-bulk');
     expect(await batchUploadTestcases(999, [item('a')])).toEqual({
       success: false,
       error: 'Dataset not found',
@@ -73,7 +73,7 @@ describe('batchUploadTestcases', () => {
   });
 
   it('rejects an empty list', async () => {
-    const { batchUploadTestcases } = await import('@/app/actions/testcases');
+    const { batchUploadTestcases } = await import('@/app/actions/testcase-bulk');
     expect(await batchUploadTestcases(3, [])).toEqual({
       success: false,
       error: 'No testcases provided',
@@ -81,7 +81,7 @@ describe('batchUploadTestcases', () => {
   });
 
   it('rejects more than the per-upload limit', async () => {
-    const { batchUploadTestcases } = await import('@/app/actions/testcases');
+    const { batchUploadTestcases } = await import('@/app/actions/testcase-bulk');
     const { MAX_BULK_TESTCASES } = await import('@/lib/testcase-limits');
     const many = Array.from({ length: MAX_BULK_TESTCASES + 1 }, (_, i) => item(`t${i}`));
     const result = await batchUploadTestcases(3, many);
@@ -90,7 +90,7 @@ describe('batchUploadTestcases', () => {
   });
 
   it('rejects files over the per-file limit', async () => {
-    const { batchUploadTestcases } = await import('@/app/actions/testcases');
+    const { batchUploadTestcases } = await import('@/app/actions/testcase-bulk');
     const { MAX_TESTCASE_FILE_BYTES } = await import('@/lib/testcase-limits');
     const result = await batchUploadTestcases(3, [item('big', MAX_TESTCASE_FILE_BYTES + 1)]);
     expect(result.success).toBe(false);
@@ -99,7 +99,7 @@ describe('batchUploadTestcases', () => {
 
   it('creates new rows, skips duplicates, and audits counts', async () => {
     stubs.existing = new Set(['dup']);
-    const { batchUploadTestcases } = await import('@/app/actions/testcases');
+    const { batchUploadTestcases } = await import('@/app/actions/testcase-bulk');
     const result = await batchUploadTestcases(3, [item('fresh'), item('dup')]);
     expect(result.success).toBe(true);
     expect(result.details).toEqual([
@@ -113,7 +113,7 @@ describe('batchUploadTestcases', () => {
 
   it('maps unknown database errors to a generic message', async () => {
     stubs.createError = new Error('relation "internal_schema" does not exist');
-    const { batchUploadTestcases } = await import('@/app/actions/testcases');
+    const { batchUploadTestcases } = await import('@/app/actions/testcase-bulk');
     const result = await batchUploadTestcases(3, [item('a')]);
     expect(result.success).toBe(false);
     expect(result.error).not.toContain('internal_schema');
