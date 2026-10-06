@@ -23,6 +23,18 @@ const execPromise = util.promisify(exec);
  * Matched on container name, not compose service: docker-compose.yml and
  * docker-compose.domain.yml both declare a service named `nginx-proxy`, so a
  * service-name match would also pin the contest front (cms-nginx-contest).
+ *
+ * Scope, so this is not mistaken for more than it is:
+ * - The panel is the boundary. The admin-panel container mounts the Docker socket
+ *   read-write (docker-compose.yml:462-464), so code inside it is root-equivalent and this
+ *   guard does not constrain that. It bounds what the panel's own actions do, which is what
+ *   was asked for.
+ * - The by-id refusal resolves the name and then acts, so the two docker calls are not
+ *   atomic. The panel exposes no rename action, and a container renamed by other means would
+ *   be acted on under whatever name the second call resolves.
+ * - Host-side make targets are out of scope. `make contest` (Makefile:132) runs an unscoped
+ *   `up -d`, so an operator on the host can still recreate grader-redis-rate-limit; that
+ *   operator already holds the socket.
  */
 export const PROTECTED_CONTAINER_NAMES: readonly string[] = [
   'grader-waf',
