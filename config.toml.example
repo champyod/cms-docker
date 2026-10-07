@@ -122,29 +122,29 @@ RPC_ALLOW_BACKDOOR = false    # bool; allow remote start_backdoor/stop_backdoor 
 
 [contest]
 CONTEST_ID = 1                  # num; ACTIVE contest served by the contest stack; single source of truth (docker compose reads ${CONTEST_ID}); the admin panel writes here, never the generated .env
-CONTEST_DOMAIN = ""             # str; FQDN contestants use; empty=CMS_DOMAIN
-CONTEST_LISTEN_PORT = 8888      # port
+CONTEST_DOMAIN = ""             # str; FQDN contestants reach the contest UI at — the traefik Host rule and the standalone nginx server_name; empty=CMS_DOMAIN
+CONTEST_LISTEN_PORT = 8888      # port; port the publish map, healthcheck, and every proxy upstream dial the contest server on — must match listen_port in config/cms.toml (this key never rewrites it)
 CONTEST_BIND_IP = "127.0.0.1"   # csv; addresses the contest web UI is published on; loopback keeps it reachable only through the proxy — set it to 0.0.0.0 to expose the port to the LAN
 ACTIVE_CONTEST_PORT = 8888      # port; legacy alias — mapped to CONTEST_LISTEN_PORT when that is empty
-SECRET_KEY = ""                 # secret; auto-generated hex32 if empty
-COOKIE_DURATION = 10800         # num; seconds
-NUM_PROXIES_USED = 1            # num
-MAX_SUBMISSION_LENGTH = 100000  # num
-MAX_INPUT_LENGTH = 5000000      # num
-SUBMIT_LOCAL_COPY = true        # bool
-CONTEST_WEB_CPU_LIMIT = "2"     # str
-CONTEST_WEB_MEMORY_LIMIT = "2G" # str
-ENABLE_TLS = false              # bool
-CONTEST_PORT_EXTERNAL = 8888    # port; host port contestants reach
-CONTEST_WEB_SERVER_SHARD = 0    # num
-CONTEST_WEB_CPU_RESERVATION = "0.1"     # str
-CONTEST_WEB_MEMORY_RESERVATION = "256M" # str
-NGINX_BIND_IP = "0.0.0.0"       # str; address the standalone contest nginx publishes 80/443 on
-NGINX_HTTP_PORT = 80            # port
-NGINX_HTTPS_PORT = 443          # port
-NGINX_EXTERNAL_PORT = 80        # port; legacy alias
-OJ_DOMAIN = ""                  # str; external judge host; empty=off
-OJ_BACKEND_PORT = 9000          # port
+SECRET_KEY = ""                 # secret; auto-generated hex32 if empty; reserved — preflight requires it and compose exports it to the contest container, but CMS reads its cookie key from cms.toml ([core] CMS_SECRET_KEY)
+COOKIE_DURATION = 10800         # num; seconds; contestant login-cookie lifetime — injected into cms.toml [contest_web_server] cookie_duration; refreshed on every request
+NUM_PROXIES_USED = 1            # num; proxies crossed before the contest server — injected into cms.toml num_proxies_used; decides whether CWS takes the real client IP from the proxy headers
+MAX_SUBMISSION_LENGTH = 100000  # num; bytes; max submission size — injected into cms.toml [contest_web_server] max_submission_length; raise the proxy's client_max_body_size with it
+MAX_INPUT_LENGTH = 5000000      # num; bytes; max user-test input size — injected into cms.toml [contest_web_server] max_input_length
+SUBMIT_LOCAL_COPY = true        # bool; write submissions to the data volume before storing them in the DB — injected into cms.toml [contest_web_server] submit_local_copy
+CONTEST_WEB_CPU_LIMIT = "2"     # str; CPU cap of the contest web server container — compose deploy.resources.limits.cpus
+CONTEST_WEB_MEMORY_LIMIT = "2G" # str; memory cap of the contest web server container — compose deploy.resources.limits.memory
+ENABLE_TLS = false              # bool; HTTPS for the contest UI — sets the traefik router's tls flag and makes the standalone contest nginx redirect :80 to a TLS :443 server
+CONTEST_PORT_EXTERNAL = 8888    # port; host port the contest UI is published on (CONTEST_BIND_IP:CONTEST_PORT_EXTERNAL:CONTEST_LISTEN_PORT)
+CONTEST_WEB_SERVER_SHARD = 0    # num; shard index handed to cmsContestWebServer; 0 = single instance — raise only when running multiple shards
+CONTEST_WEB_CPU_RESERVATION = "0.1"     # str; guaranteed CPU for the contest web server container — compose deploy.resources.reservations.cpus
+CONTEST_WEB_MEMORY_RESERVATION = "256M" # str; guaranteed memory for the contest web server container — compose deploy.resources.reservations.memory
+NGINX_BIND_IP = "0.0.0.0"       # csv; addresses the standalone contest nginx publishes NGINX_HTTP_PORT/NGINX_HTTPS_PORT on
+NGINX_HTTP_PORT = 80            # port; host port the standalone contest nginx publishes its HTTP listener on
+NGINX_HTTPS_PORT = 443          # port; host port the standalone contest nginx publishes its TLS listener on
+NGINX_EXTERNAL_PORT = 80        # port; reserved legacy key — only lands in an unread NGINX_PORT env on the standalone contest nginx; NGINX_HTTP_PORT/NGINX_HTTPS_PORT publish the real ports
+OJ_DOMAIN = ""                  # str; FQDN of the external judge vhost in the domain nginx; also a cert SAN; empty=no external judge
+OJ_BACKEND_PORT = 9000          # port; port the external judge answers on — paired with [admin] OJ_UPSTREAM for the oj route's proxy target
 
 [worker]
 CORE_SERVICES_HOST = "cms-log-service" # str; remote workers: main server IP
