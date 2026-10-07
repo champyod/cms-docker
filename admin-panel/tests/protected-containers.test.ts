@@ -54,8 +54,8 @@ describe('isProtectedContainerName', () => {
 
   it('leaves the CMS containers and name look-alikes alone', () => {
     expect(isProtectedContainerName('cms-database')).toBe(false);
-    // Why: both compose projects declare a service named nginx-proxy, so the contest front
-    // (cms-nginx-contest) must stay controllable while grader-nginx-proxy does not.
+    // Why: grader-nginx-proxy and cms-nginx-contest are distinct containers, so pinning the
+    // domain TLS terminator must leave the contest front controllable.
     expect(isProtectedContainerName('cms-nginx-contest')).toBe(false);
     expect(isProtectedContainerName('grader-waf-extra')).toBe(false);
     expect(isProtectedContainerName('not-grader-waf')).toBe(false);

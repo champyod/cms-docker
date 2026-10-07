@@ -107,7 +107,7 @@ docker compose -f docker-compose.yml -f docker-compose.override.yml config > /de
 
 Publishing a name instead of an address is a separate concern, owned entirely by
 `scripts/__domain.sh`. It reads `ADMIN_DOMAIN`, `OJ_DOMAIN`, `RANKING_DOMAIN` and
-`DOMAIN_NAME`, obtains certificates, and runs one `nginx-proxy` that owns :80 and
+`DOMAIN_NAME`, obtains certificates, and runs one `grader-nginx-proxy` that owns :80 and
 :443 for whichever vhosts those names cover.
 
 The two paths are independent on purpose. A domain says *what the box is called*;

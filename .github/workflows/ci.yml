@@ -139,7 +139,7 @@ jobs:
           # merged with their base instead of standalone.
           declare -A OVERLAY_BASE=(
             [docker-compose.tailscale.yml]=docker-compose.contest.yml
-            [docker-compose.waf.yml]=docker-compose.contest.yml
+            [docker-compose.waf.yml]=docker-compose.domain.yml
           )
           for f in docker-compose*.yml docker/docker-compose*.yml; do
             [ -f "$f" ] || continue

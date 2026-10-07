@@ -24,10 +24,11 @@ CONTEST_UP_PROFILES := --profile core --profile contest
 
 # Additive stacks that publish host ports the default COMPOSE_FILES must never
 # pull in implicitly. WHY separate: docker-compose.domain.yml and
-# docker-compose.waf.yml define services with no `profiles:` key (grader-nginx-proxy
-# binds host 80/443, grader-certbot and grader-redis-rate-limit always start), so
-# folding them into COMPOSE_FILES would make `make core` issue certificates and
-# bind 443 on a workstation. These targets opt in per-stack.
+# docker-compose.waf.yml define services with no `profiles:` key (the
+# grader-nginx-proxy service binds host 80/443, grader-certbot and
+# grader-redis-rate-limit always start), so folding them into COMPOSE_FILES would
+# make `make core` issue certificates and bind 443 on a workstation. These targets
+# opt in per-stack.
 DOMAIN_COMPOSE_FILES := docker-compose.yml docker-compose.domain.yml
 WAF_COMPOSE_FILES    := docker-compose.yml docker-compose.domain.yml docker-compose.waf.yml
 DOMAIN_COMPOSE_FLAGS := -f docker-compose.yml -f docker-compose.domain.yml
@@ -418,11 +419,13 @@ admin-create:
 # where one of the optional directories (src/tools/, src/docker/) is empty or
 # absent, and a tool handed a non-matching path fails before it lints anything.
 #
-# WHY overlay_base: an overlay stack references services defined in its base
-# (docker-compose.tailscale.yml and docker-compose.waf.yml both depend on
-# contest-web-server from docker-compose.contest.yml), so `config -q` only
-# succeeds for the pair. Validating the overlay standalone reports a false
-# failure; this mirrors the merge .github/workflows/ci.yml performs.
+# WHY overlay_base: an overlay stack references services defined in its base,
+# so `config -q` only succeeds for the pair. docker-compose.waf.yml declares
+# depends_on grader-nginx-proxy, the domain stack's proxy, so its base is
+# docker-compose.domain.yml; only docker-compose.tailscale.yml depends on
+# contest-web-server, so only its base is docker-compose.contest.yml.
+# Validating an overlay standalone reports a false failure; this mirrors the
+# merge .github/workflows/ci.yml performs.
 lint:
 	@echo "Running lint checks..."
 	@echo "→ spec parity"
@@ -488,7 +491,7 @@ lint:
 		fi; \
 		declare -A overlay_base=( \
 			[docker-compose.tailscale.yml]=docker-compose.contest.yml \
-			[docker-compose.waf.yml]=docker-compose.contest.yml \
+			[docker-compose.waf.yml]=docker-compose.domain.yml \
 		); \
 		compose_failed=0; \
 		for f in docker-compose*.yml docker/docker-compose*.yml; do \
