@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { NextRequest } from 'next/server';
 
 import { apiError, apiSuccess, verifyApiPermission } from '@/lib/api-utils';
+import { recordAudit } from '@/lib/audit';
 import {
   checkUploadFileName,
   getUploadMaxBytes,
@@ -91,6 +92,15 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     const previewId = newPreviewId();
     await writeQuarantineFile(file, previewId);
+    // The preview id is what the upload is quarantined as, so it is the id this
+    // record names: the file itself is deleted the moment the preview is.
+    await recordAudit({
+      verb: 'backup:upload',
+      entity: 'backup',
+      entityId: previewId,
+      afterValues: { fileName: file.name, sizeBytes: file.size },
+      result: 'success',
+    });
     return apiSuccess({
       previewId,
       fileName: file.name,

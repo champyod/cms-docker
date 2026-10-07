@@ -62,8 +62,17 @@ describe('notification events', () => {
     const keys = new Set(PERMISSION_REGISTRY.map((d) => d.key));
     // Why the exceptions: group membership changes audit as admin_groups:set and
     // override removals as override:clear — recordAudit verbs rather than permission
-    // keys (gated by group:assign and override:set respectively).
-    const auditOnlyVerbs = new Set(['admin_groups:set', 'override:clear']);
+    // keys (gated by group:assign and override:set respectively). A backup schedule
+    // edit is the same shape: one permission covers three verbs, because creating,
+    // changing and removing a schedule are all gated by backup:schedule (or
+    // backup:delete), so the verbs name the action rather than a key.
+    const auditOnlyVerbs = new Set([
+      'admin_groups:set',
+      'override:clear',
+      'backup_schedule:create',
+      'backup_schedule:update',
+      'backup_schedule:delete',
+    ]);
     for (const verb of CRITICAL_AUDIT_VERBS) {
       expect(keys.has(verb) || auditOnlyVerbs.has(verb)).toBe(true);
     }

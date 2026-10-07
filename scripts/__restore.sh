@@ -17,38 +17,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # ---------------------------------------------------------------------------
-# lib/common.sh contract: log_info/log_warn/log_die, require_disk_free_gb
-# File may not exist at runtime — source if present, else provide fallbacks.
+# lib/common.sh contract: log_info/log_warn/log_die, require_disk_free_gb and the
+# disk thresholds all come from the shared library. A missing library is a broken
+# delivery, reported as one, rather than met by a second, divergent copy of the
+# helpers — the fallback here printed `[ERROR]` where every other script prints
+# `[FAIL]`, which is exactly the drift one copy of the helpers prevents.
 # ---------------------------------------------------------------------------
-if [[ -f "${SCRIPT_DIR}/__lib/common.sh" ]]; then
-  # shellcheck source=/dev/null
-  source "${SCRIPT_DIR}/__lib/common.sh"
-else
-  log_info()  { printf '[INFO] %s\n' "$*"; }
-  log_warn()  { printf '[WARN] %s\n' "$*" >&2; }
-  log_die()   { printf '[ERROR] %s\n' "$*" >&2; exit 1; }
-  require_disk_free_gb() {
-    local target_path="${1:?require_disk_free_gb: <path> required}"
-    local floor_gb="${2:-3}"
-    local warn_gb="${3:-5}"
-    local avail_kb
-    avail_kb="$(df -Pk "$target_path" 2>/dev/null | awk 'NR==2{print $4}')"
-    if [[ -z "$avail_kb" || ! "$avail_kb" =~ ^[0-9]+$ ]]; then
-      log_warn "require_disk_free_gb: cannot determine free space for $target_path — skipping guard"
-      return 0
-    fi
-    local avail_gb
-    avail_gb="$(awk "BEGIN{printf \"%.2f\", $avail_kb/1024/1024}")"
-    local avail_int="${avail_gb%%.*}"
-    if ! [[ "$avail_int" =~ ^[0-9]+$ ]]; then avail_int=0; fi
-    if (( avail_int < floor_gb )); then
-      log_die "Insufficient disk space on $target_path: ${avail_gb}GB free < ${floor_gb}GB required" 2
-    fi
-    if (( avail_int < warn_gb )); then
-      log_warn "disk space low: ${avail_gb}G < warn ${warn_gb}G at ${target_path}"
-    fi
-  }
+if [[ ! -f "${SCRIPT_DIR}/__lib/common.sh" ]]; then
+  printf '[FAIL] %s\n' "missing ${SCRIPT_DIR}/__lib/common.sh — deliver scripts/__lib beside this script" >&2
+  exit 1
 fi
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__lib/common.sh"
 
 # ---------------------------------------------------------------------------
 # Load env (POSTGRES_* from .env.core).  Do not override already-exported.

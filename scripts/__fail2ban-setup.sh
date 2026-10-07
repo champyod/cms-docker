@@ -20,16 +20,16 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "$REPO_ROOT"
 
 # ---------------------------------------------------------------------------
-# lib/common.sh
+# lib/common.sh — the one source of log_info/log_warn/log_die. A missing library
+# is a broken delivery and is reported as one, so a second copy of the helpers
+# cannot drift from the one the rest of the scripts run.
 # ---------------------------------------------------------------------------
-if [[ -f "${SCRIPT_DIR}/__lib/common.sh" ]]; then
-  # shellcheck disable=SC1091
-  source "${SCRIPT_DIR}/__lib/common.sh"
-else
-  log_info()  { printf '[INFO] %s\n' "$*"; }
-  log_warn()  { printf '[WARN] %s\n' "$*" >&2; }
-  log_die()   { printf '[FAIL] %s\n' "${1:-fatal error}" >&2; exit "${2:-1}"; }
+if [[ ! -f "${SCRIPT_DIR}/__lib/common.sh" ]]; then
+  printf '[FAIL] %s\n' "missing ${SCRIPT_DIR}/__lib/common.sh — deliver scripts/__lib beside this script" >&2
+  exit 1
 fi
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/__lib/common.sh"
 
 # ---------------------------------------------------------------------------
 # Config

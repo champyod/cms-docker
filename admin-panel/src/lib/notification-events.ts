@@ -16,6 +16,9 @@ export const CRITICAL_AUDIT_VERBS: ReadonlySet<string> = new Set([
   'service:restart',
   'container:control',
   'contest:delete',
+  'backup_schedule:create',
+  'backup_schedule:update',
+  'backup_schedule:delete',
 ]);
 
 // Sensitive verbs whose FAILURE is also critical (possible break-in attempt).

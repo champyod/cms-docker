@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 
+import { recordAudit } from '@/lib/audit';
 import { logToDiscord } from '@/lib/discord-notifier';
 import { ensurePermission } from '@/lib/permissions';
 import { listBackupLocations, resolveDefaultLocationId } from '@/lib/backup-locations';
@@ -157,6 +158,13 @@ export async function createSchedule(input: ScheduleInput): Promise<ScheduleMuta
       `Admin created backup schedule **${schedule.name}**, every ${schedule.intervalMins} minute(s) over ${schedule.tables.length} table(s), first run ${created.nextRunAt.toISOString()}.`,
       BACKUP_LOG_COLOR,
     );
+    await recordAudit({
+      verb: 'backup_schedule:create',
+      entity: 'backup_schedule',
+      entityId: created.id,
+      afterValues: { name: schedule.name, intervalMins: schedule.intervalMins, locationId: schedule.locationId, tableCount: schedule.tables.length },
+      result: 'success',
+    });
     return { success: true, schedule: created, warnings: validation.warnings };
   } catch (error) {
     return { success: false, error: describeFailure(error) };
@@ -198,6 +206,14 @@ export async function updateSchedule(id: string, update: ScheduleUpdate): Promis
         BACKUP_LOG_COLOR,
       );
     }
+    await recordAudit({
+      verb: 'backup_schedule:update',
+      entity: 'backup_schedule',
+      entityId: saved.id,
+      beforeValues: { name: existing.name, intervalMins: existing.intervalMins, enabled: existing.enabled, locationId: existing.locationId },
+      afterValues: { name: saved.name, intervalMins: saved.intervalMins, enabled: saved.enabled, locationId: saved.locationId },
+      result: 'success',
+    });
     return { success: true, schedule: saved, warnings: validation.warnings };
   } catch (error) {
     return { success: false, error: describeFailure(error) };
@@ -220,6 +236,14 @@ export async function toggleSchedule(id: string): Promise<ScheduleMutationResult
       `Admin ${enabled ? 'enabled' : 'disabled'} backup schedule **${saved.name}**.`,
       BACKUP_LOG_COLOR,
     );
+    await recordAudit({
+      verb: 'backup_schedule:update',
+      entity: 'backup_schedule',
+      entityId: saved.id,
+      beforeValues: { enabled: existing.enabled },
+      afterValues: { enabled: saved.enabled },
+      result: 'success',
+    });
     return { success: true, schedule: saved };
   } catch (error) {
     return { success: false, error: describeFailure(error) };
@@ -233,6 +257,13 @@ export async function deleteSchedule(id: string): Promise<ScheduleMutationResult
     if (existing === null) return { success: false, error: `Schedule not found: ${id}` };
     await prisma.backup_schedules.delete({ where: { id } });
     await logToDiscord('Backup Schedule Deleted', `Admin deleted backup schedule **${existing.name}**.`, BACKUP_LOG_COLOR);
+    await recordAudit({
+      verb: 'backup_schedule:delete',
+      entity: 'backup_schedule',
+      entityId: existing.id,
+      beforeValues: { name: existing.name, intervalMins: existing.intervalMins, enabled: existing.enabled, locationId: existing.locationId },
+      result: 'success',
+    });
     return { success: true, message: `Deleted schedule ${existing.name}.` };
   } catch (error) {
     return { success: false, error: describeFailure(error) };
@@ -276,6 +307,15 @@ export async function settleRun(runId: string, note?: string): Promise<ScheduleM
       BACKUP_LOG_COLOR,
     );
     revalidatePath(BACKUP_RESTORE_PAGE, 'page');
+    await recordAudit({
+      verb: 'backup_run:settle',
+      entity: 'backup_run',
+      entityId: saved.id,
+      beforeValues: { status: existing.status },
+      afterValues: { status: saved.status },
+      reason: note,
+      result: 'success',
+    });
     return { success: true, message: `Settled run ${saved.id}.` };
   } catch (error) {
     return { success: false, error: describeFailure(error) };
