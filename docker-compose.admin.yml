@@ -32,6 +32,14 @@ services:
       REPO_ROOT: /repo-root
       DEPLOYMENT_TYPE: ${DEPLOYMENT_TYPE:-img}  # 'img' for pre-built images, 'src' for source builds
       IS_DOCKER: "true"
+
+      # Backup & Restore — read at runtime, so no env_file: only listed keys
+      # reach the container. BACKUP_DIR is deliberately NOT passed: the panel's
+      # default resolution (repo-root/backups via REPO_ROOT) is what matches
+      # cms-monitor's /app/backups mount, and a host-path BACKUP_DIR would
+      # name a directory this container cannot see.
+      BACKUP_LOCATIONS: ${BACKUP_LOCATIONS:-}
+      BACKUP_DEFAULT_LOCATION: ${BACKUP_DEFAULT_LOCATION:-default}
     volumes:
       # Mount Docker socket to allow managing other containers
       - /var/run/docker.sock:/var/run/docker.sock

@@ -221,6 +221,16 @@ FUNNEL_RANKING_LISTEN = 8893        # port
 VAULT_BIND_IP = "127.0.0.1"         # str
 VAULT_PORT = 8200                   # port
 
+[backup]
+# Named backup locations the admin panel's Backup & Restore page switches between.
+# The list travels as ONE JSON string because the config sync parser reads
+# `key = value` sections only — no array-of-tables. A location whose path sits
+# outside the repo root must be bind-mounted into BOTH cms-monitor (write) and
+# cms-admin-next (read) in the compose files before it can be used.
+# Key names double as the .env variable names (config sync writes keys verbatim).
+BACKUP_DEFAULT_LOCATION = "default"  # str; id of the location scheduled and manual backups target when no other is chosen
+BACKUP_LOCATIONS = '[{"id":"default","label":"Primary volume","path":"./backups"}]'  # str; JSON array of {id,label,path}; ids must be unique and non-empty
+
 [tailscale]
 TAILSCALE_AUTHKEY = ""          # secret; tskey-auth-... from the Tailscale admin console (user-provided)
 TAILSCALE_HOSTNAME = "cms-contest" # str; hostname the tailscale sidecar registers as

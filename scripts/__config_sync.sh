@@ -100,7 +100,7 @@ env_quote() {
 declare -A __TOML
 # Explicitly initialized empty: ${#arr[@]} must resolve under `set -u` even
 # when a TOML section has no keys.
-declare -a __CORE_KEYS=() __ADMIN_KEYS=() __CONTEST_KEYS=() __WORKER_KEYS=() __INFRA_KEYS=() __TAILSCALE_KEYS=() __RPC_KEYS=()
+declare -a __CORE_KEYS=() __ADMIN_KEYS=() __CONTEST_KEYS=() __WORKER_KEYS=() __INFRA_KEYS=() __TAILSCALE_KEYS=() __RPC_KEYS=() __BACKUP_KEYS=()
 
 # Trim surrounding whitespace (and a CR from a CRLF worktree) off one TOML line.
 # WHY not `xargs` (the previous trimming): xargs applies its own quote and backslash
@@ -182,6 +182,7 @@ parse_toml() {
         infra)     __INFRA_KEYS+=("$key") ;;
         tailscale) __TAILSCALE_KEYS+=("$key") ;;
         rpc)       __RPC_KEYS+=("$key") ;;
+        backup)    __BACKUP_KEYS+=("$key") ;;
       esac
     fi
   done < "$file"
@@ -518,7 +519,7 @@ plan_retired_keys() {
     if [[ -z "$(toml_section_of_key "$TOML_FILE" "$target")" ]]; then
       RETIRED_BIND_APPEND+=("$target")
       case " ${retired_section} " in
-        " core " | " admin " | " contest " | " worker " | " infra " | " tailscale " | " rpc " ) : ;;
+        " core " | " admin " | " contest " | " worker " | " infra " | " tailscale " | " rpc " | " backup " ) : ;;
         *) unreadable+="${key}"$'\n' ;;
       esac
     fi
@@ -997,6 +998,7 @@ main() {
     scan_and_generate_secrets worker  __WORKER_KEYS
     scan_and_generate_secrets infra   __INFRA_KEYS
     scan_and_generate_secrets rpc     __RPC_KEYS
+    scan_and_generate_secrets backup  __BACKUP_KEYS
 
     if [[ "$SECRETS_CHANGED" -eq 1 ]]; then
       log_info "Generated secrets in config.toml"
@@ -1006,7 +1008,7 @@ main() {
     if [[ "$DRY_RUN" -eq 0 && "$SECRETS_CHANGED" -eq 1 ]]; then
       __TOML=()
       __CORE_KEYS=(); __ADMIN_KEYS=(); __CONTEST_KEYS=()
-      __WORKER_KEYS=(); __INFRA_KEYS=(); __TAILSCALE_KEYS=(); __RPC_KEYS=()
+      __WORKER_KEYS=(); __INFRA_KEYS=(); __TAILSCALE_KEYS=(); __RPC_KEYS=(); __BACKUP_KEYS=()
       parse_toml "$TOML_FILE"
     fi
   fi
@@ -1041,6 +1043,7 @@ main() {
       write_section_block "infra"     __INFRA_KEYS
       write_section_block "tailscale" __TAILSCALE_KEYS
       write_section_block "rpc"       __RPC_KEYS
+      write_section_block "backup"    __BACKUP_KEYS
     } > .env
     chmod 600 .env
   else
@@ -1179,7 +1182,7 @@ main() {
   if [[ "$DRY_RUN" -eq 0 ]]; then
     local total_vars=$((${#__CORE_KEYS[@]} + ${#__ADMIN_KEYS[@]} + \
                         ${#__CONTEST_KEYS[@]} + ${#__WORKER_KEYS[@]} + ${#__INFRA_KEYS[@]} + \
-                        ${#__TAILSCALE_KEYS[@]} + ${#__RPC_KEYS[@]}))
+                        ${#__TAILSCALE_KEYS[@]} + ${#__RPC_KEYS[@]} + ${#__BACKUP_KEYS[@]}))
     chmod 600 .env admin-panel/.env 2>/dev/null || true
     log_info "Synced ${total_vars} vars from config.toml → .env"
   fi

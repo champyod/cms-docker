@@ -11,6 +11,8 @@ fi
 # - Full database, or a --tables selection turned into one -t per table
 # - Volume tar via helper container (cms-data:ro mount)
 # - manifest.json, rotation across BOTH dirs, disk guard, Discord webhook
+# - --root <path> retargets the archive set; --stdout streams the dump to the
+#   caller and archives nothing
 ###############################################################################
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -588,8 +590,47 @@ manifest_mark_pruned() {
 # ---------------------------------------------------------------------------
 # Main backup
 # ---------------------------------------------------------------------------
+# Echoes the reason a dump cannot start, or nothing when it can. Shared by
+# run_backup (which reports through Discord) and run_stdout_dump (which reports
+# to its caller), so the gates themselves must never alert or exit.
+dump_gate_error() {
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "docker not found in PATH"
+    return 0
+  fi
+  if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$CONTAINER_DB"; then
+    echo "Backup failed: container $CONTAINER_DB not running"
+    return 0
+  fi
+  if [[ -z "$POSTGRES_BACKUP_PASSWORD_VAL" ]]; then
+    echo "POSTGRES_BACKUP_PASSWORD is empty — backups REQUIRE cms_backup (BYPASSRLS); owner $POSTGRES_USER_VAL is blocked by FORCE RLS — run './cms config sync' to generate it"
+  fi
+  return 0
+}
+
 run_backup() {
   log_info "CMS backup starting — backup root: $BACKUP_ROOT"
+
+  # The gates run before anything is created: a dump that cannot start leaves
+  # no half-made directories or orphaned alerts behind.
+  local gate
+  gate="$(dump_gate_error)"
+  if [[ -n "$gate" ]]; then
+    log_warn "$gate"
+    send_discord "❌ **Backup Failed** — $gate" 16711680 "true"
+    return 1
+  fi
+
+  # WHY mkdir before the guard: the guard runs df, and df fails outright on a
+  # path that does not exist yet — the normal state of a --root target on its
+  # first run. The default root is pre-created by config sync; custom ones are
+  # not, and empty directories below a disk floor cost nothing.
+  mkdir -p "$BACKUP_DB_DIR" "$BACKUP_VOL_DIR"
+  # WHY g+rwx,g+s and not a mode clamp: it converges on the same dual-writer state
+  # ensure_backup_dir_perms establishes, because a forced 700 strips the group off the shared tree
+  # and locks the host operator out of its own backups. Ownership is that repair's alone.
+  chmod g+rwx,g+s "$BACKUP_DB_DIR" "$BACKUP_VOL_DIR" 2>/dev/null || true
+  chmod g+rwx,g+s "$BACKUP_ROOT" 2>/dev/null || true
 
   # Disk guard — abort when the backup filesystem has less free than the floor
   # WHY a subshell: require_disk_free_gb dies with its own exit code, and a die in a plain
@@ -602,28 +643,8 @@ run_backup() {
     exit "$disk_guard_status"
   fi
 
-  # WHY g+rwx,g+s and not a mode clamp: it converges on the same dual-writer state
-  # ensure_backup_dir_perms establishes, because a forced 700 strips the group off the shared tree
-  # and locks the host operator out of its own backups. Ownership is that repair's alone.
-  mkdir -p "$BACKUP_DB_DIR" "$BACKUP_VOL_DIR"
-  chmod g+rwx,g+s "$BACKUP_DB_DIR" "$BACKUP_VOL_DIR" 2>/dev/null || true
-  chmod g+rwx,g+s "$BACKUP_ROOT" 2>/dev/null || true
-
   if [[ -z "$POSTGRES_PASSWORD_VAL" ]]; then
     log_warn "POSTGRES_PASSWORD is empty — pg_dump may fail if auth required"
-  fi
-
-  if ! command -v docker >/dev/null 2>&1; then
-    local msg="docker not found in PATH"
-    send_discord "❌ **Backup Failed** — $msg" 16711680 "true"
-    log_die "$msg"
-  fi
-
-  if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$CONTAINER_DB"; then
-    local msg="Backup failed: container $CONTAINER_DB not running"
-    log_warn "$msg"
-    send_discord "❌ **Backup Failed** — $msg" 16711680 "true"
-    return 1
   fi
 
   local ts
@@ -666,11 +687,7 @@ run_backup() {
   # WHY cms_backup: BYPASSRLS role can dump under FORCE RLS; owner cmsuser is NOBYPASSRLS+FORCE RLS so dump as owner fails — backups REQUIRE cms_backup
   local pg_dump_user="$POSTGRES_BACKUP_USER_VAL"
   local pg_dump_pass="$POSTGRES_BACKUP_PASSWORD_VAL"
-  if [[ -z "$pg_dump_pass" ]]; then
-    log_warn "POSTGRES_BACKUP_PASSWORD is empty — backups REQUIRE cms_backup (BYPASSRLS); owner $POSTGRES_USER_VAL cannot dump under FORCE RLS — run './cms config sync' to generate it"
-    send_discord "❌ **Backup Failed** — POSTGRES_BACKUP_PASSWORD is not configured; run './cms config sync' to generate it" 16711680 "true"
-    return 1
-  fi
+  # Password validation is dump_gate_error's, at entry.
   # WHY the destination is created before the dump is written: pg_dump creates its own output file,
   # which on the container umask is readable by every account in that container for the whole
   # write, whereas writing into a file that already exists keeps the mode pg_dump leaves alone. A
@@ -841,23 +858,59 @@ run_cleanup_only() {
   fi
 }
 
+# --stdout entry: stream the dump to the caller and archive nothing — no file,
+# no manifest entry, no rotation, no webhook; the caller owns transport and
+# failure reporting. exec 3 holds the real stdout: log_info prints to fd 1, so
+# fd 1 is re-pointed at stderr and the dump bytes alone keep the original
+# channel. pg_dump's stderr passes through beside ours and never enters the
+# stream; a failure mid-stream leaves the caller with truncated bytes and a
+# non-zero exit, which is what marks the download incomplete.
+run_stdout_dump() {
+  exec 3>&1 1>&2
+
+  local gate
+  gate="$(dump_gate_error)"
+  if [[ -n "$gate" ]]; then
+    log_die "$gate"
+  fi
+
+  local pg_dump_user="$POSTGRES_BACKUP_USER_VAL"
+  local pg_dump_pass="$POSTGRES_BACKUP_PASSWORD_VAL"
+  if [[ "$BACKUP_KIND" == "selective" ]]; then
+    log_info "Streaming selective pg_dump (Fc) as $pg_dump_user for ${#SELECTED_TABLES[@]} table(s)"
+  else
+    log_info "Streaming full pg_dump (Fc) as $pg_dump_user to stdout"
+  fi
+  # No -f: pg_dump writes to stdout by default, so nothing is staged in the container.
+  if ! docker exec -e PGPASSWORD="$pg_dump_pass" "$CONTAINER_DB" \
+      pg_dump -U "$pg_dump_user" -d "$POSTGRES_DB_VAL" -Fc "${PG_SELECTION_ARGS[@]}" >&3; then
+    log_die "pg_dump as $pg_dump_user failed — see stderr above; backups REQUIRE cms_backup (BYPASSRLS)"
+  fi
+}
+
 # ---------------------------------------------------------------------------
 # Entry — flags are parsed before any work so a bad table name never reaches
 # pg_dump, and an unrecognised flag still runs the backup as it always has.
 # ---------------------------------------------------------------------------
 BACKUP_MODE="full"
+BACKUP_ROOT_OVERRIDE=""  # --root <path>: retargets db/, volumes/ and manifest.json
+BACKUP_STDOUT=0          # --stdout: stream the dump to the caller, archive nothing
 SELECTED_TABLES=()   # validated table names in the order pg_dump must dump them
 PG_SELECTION_ARGS=()  # one -t per selected table, plus -b for large objects
 BACKUP_KIND="full"
 SELECTED_TABLES_CSV=""
 
 usage() {
-  echo "Usage: $0 [--cleanup-only] [--tables <t1,t2,...>] [--large-objects]"
+  echo "Usage: $0 [--cleanup-only] [--tables <t1,t2,...>] [--large-objects] [--root <path>] [--stdout]"
   echo "Env: BACKUP_DIR, BACKUP_MAX_COUNT, BACKUP_MAX_AGE_DAYS, BACKUP_MAX_SIZE_GB"
   echo "     DISCORD_WEBHOOK_URL (env only), POSTGRES_* and POSTGRES_BACKUP_PASSWORD from .env"
   echo "Without --tables the whole database is dumped, exactly as before."
   echo "--large-objects adds pg_dump -b and is only meaningful together with --tables."
   echo "--tables accepts ^[a-z_]+$ names; the admin panel allowlists them first."
+  echo "--root <path> writes the archive set (db/, volumes/, manifest.json) under <path>"
+  echo "  instead of BACKUP_DIR; also retargets --cleanup-only. Path is used as given."
+  echo "--stdout streams the dump to stdout and archives nothing: no file, no manifest,"
+  echo "  no rotation, no webhook. Log lines move to stderr so they cannot corrupt it."
 }
 
 parse_args() {
@@ -883,6 +936,24 @@ parse_args() {
         ;;
       --large-objects|-b)
         include_large_objects=1
+        shift
+        ;;
+      --root)
+        if [[ $# -lt 2 || "$2" == -* ]]; then
+          log_die "--root requires a path"
+        fi
+        BACKUP_ROOT_OVERRIDE="$2"
+        shift 2
+        ;;
+      --root=*)
+        BACKUP_ROOT_OVERRIDE="${1#--root=}"
+        if [[ -z "$BACKUP_ROOT_OVERRIDE" ]]; then
+          log_die "--root requires a path"
+        fi
+        shift
+        ;;
+      --stdout)
+        BACKUP_STDOUT=1
         shift
         ;;
       --cleanup-only)
@@ -935,8 +1006,19 @@ parse_args() {
 
 parse_args "$@"
 
+# --root retargets the whole archive set: db/, volumes/ and manifest.json are
+# derived, so all three follow the new root for run_backup and run_cleanup_only
+# alike. An empty override means the flag was absent (a bare --root with no path
+# dies in parse_args), so BACKUP_DIR keeps its historical meaning.
+if [[ -n "$BACKUP_ROOT_OVERRIDE" ]]; then
+  BACKUP_ROOT="$BACKUP_ROOT_OVERRIDE"
+  BACKUP_DB_DIR="${BACKUP_ROOT}/db"
+  BACKUP_VOL_DIR="${BACKUP_ROOT}/volumes"
+  MANIFEST_FILE="${BACKUP_ROOT}/manifest.json"
+fi
+
 case "$BACKUP_MODE" in
   cleanup) run_cleanup_only ;;
   help) usage ;;
-  *) run_backup ;;
+  *) if [[ "$BACKUP_STDOUT" -eq 1 ]]; then run_stdout_dump; else run_backup; fi ;;
 esac

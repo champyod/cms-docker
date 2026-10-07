@@ -764,6 +764,8 @@ VAR_SPECS=(
   "Infra & Monitoring|[infra]|BACKUP_MAX_COUNT|num||50"
   "Infra & Monitoring|[infra]|BACKUP_MAX_AGE_DAYS|num||10"
   "Infra & Monitoring|[infra]|BACKUP_MAX_SIZE_GB|num||5"
+  "Infra & Monitoring|[backup]|BACKUP_DEFAULT_LOCATION|str||default"
+  "Infra & Monitoring|[backup]|BACKUP_LOCATIONS|str||[{\"id\":\"default\",\"label\":\"Primary volume\",\"path\":\"./backups\"}]"
   "Admin Panel|[admin]|DOMAIN_NAME|str||cms.local"
   "Admin Panel|[admin]|DOMAIN_NGINX_BIND_IP|str||"
   "Admin Panel|[admin]|DOMAIN_CERT_METHOD|str||letsencrypt"
