@@ -22,9 +22,14 @@ RUN bun install --frozen-lockfile
 # where the store is warm and registry access exists — bun installs flat, so
 # COPY --from resolves without a symlink farm. prisma is pinned to the app's
 # version so the CLI and the generated client cannot skew.
+# WHY the override is repeated here: this tree's node_modules is what the release
+# stage copies into the image, so a transitive dependency it resolves without the
+# app's own overrides ships the version the app deliberately replaced. deepmerge-ts
+# reaches prisma through @prisma/config > c12, where the range resolves to 7.1.5
+# against the 8.0.0 the app pins over it.
 RUN mkdir -p /prisma-cli \
  && cd /prisma-cli \
- && echo '{"private":true}' > package.json \
+ && echo '{"private":true,"overrides":{"deepmerge-ts":"8.0.0"}}' > package.json \
  && bun add prisma@6.19.3 tsx@4
 
 # Copy source code
@@ -45,9 +50,19 @@ FROM node:20-bookworm-slim AS release
 # commands, and running `make env` (./cms config sync) from inside the container.
 # WHY --no-install-recommends would otherwise drop curl's ca-certificates recommend,
 # which the docker install below needs for HTTPS, so list it explicitly.
+# WHY the removals: the convenience script installs the whole plugin set, but this
+# image only ever runs `docker` and `docker compose` — the Makefile resolves
+# COMPOSE_CMD with `docker compose version` and nothing here calls buildx, the model
+# plugin or rootless docker. They are attack surface with no caller, and they are
+# what the image scan reports on, so they are removed rather than shipped.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates curl make python3 && \
     curl -fsSL https://get.docker.com | sh && \
+    rm -f /usr/libexec/docker/cli-plugins/docker-buildx \
+          /usr/libexec/docker/cli-plugins/docker-model \
+          /usr/bin/rootlesskit \
+          /usr/bin/dockerd-rootless.sh \
+          /usr/bin/dockerd-rootless-setuptool.sh && \
     rm -rf /var/lib/apt/lists/*
 
 # WHY: the panel runs `make env` (./cms config sync) inside this container, and
@@ -58,6 +73,13 @@ RUN apt-get update && \
 RUN python3 --version \
  && printf 'import os, re, json\nimport urllib.parse\nfrom pathlib import Path\nPath("/tmp/cms-python-guard").write_text("ok")\nassert Path("/tmp/cms-python-guard").read_text() == "ok"\n' | python3 \
  && rm -f /tmp/cms-python-guard
+
+# WHY npm goes: this stage installs its dependencies with bun and starts the server
+# with `node server.js`, and nothing in the image invokes npm — not the Makefile, not
+# `cms`, not the panel. It is here only because the Node base image carries it, and
+# its bundled dependency tree is a large surface whose advisories are not ours to
+# patch, so it is removed rather than scanned forever.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 WORKDIR /app
 
