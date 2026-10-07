@@ -26,8 +26,10 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from cms.server.credits import (
+    CREDITS_FILE_ENV_VAR,
     CREDITS_FILE_NAME,
     CreditsError,
     find_credits_file,
@@ -54,12 +56,52 @@ class CreditsFileTest(unittest.TestCase):
         self.assertEqual(found, EXPECTED_CREDITS_FILE)
         self.assertTrue(found.is_file())
 
+    def test_configured_path_wins_over_the_upward_search(self):
+        # WHY a start directory with no file of its own: it stands in for the
+        # installed package of a container, where the walk reaches nothing and
+        # only the configured path can supply the credits.
+        with tempfile.TemporaryDirectory() as tree:
+            configured = Path(tree) / "credits-override.json"
+            configured.write_text('{"surfaces": {}}', encoding="utf-8")
+            with mock.patch.dict(os.environ,
+                                 {CREDITS_FILE_ENV_VAR: str(configured)}):
+                found = find_credits_file(Path(tree) / "pkg")
+        self.assertEqual(found, configured)
+
+    def test_unset_variable_keeps_the_upward_search(self):
+        with mock.patch.dict(os.environ):
+            os.environ.pop(CREDITS_FILE_ENV_VAR, None)
+            self.assertEqual(find_credits_file(), EXPECTED_CREDITS_FILE)
+
+    def test_configured_path_that_is_not_a_file_falls_back_to_the_search(self):
+        with tempfile.TemporaryDirectory() as tree:
+            found = Path(tree) / CREDITS_FILE_NAME
+            found.write_text("{}", encoding="utf-8")
+            absent = Path(tree) / "no-such-file.json"
+            with mock.patch.dict(os.environ,
+                                 {CREDITS_FILE_ENV_VAR: str(absent)}):
+                self.assertEqual(find_credits_file(Path(tree)), found)
+
     def test_missing_file_names_the_file_and_the_search(self):
         with tempfile.TemporaryDirectory() as empty:
-            with self.assertRaises(CreditsError) as context:
-                find_credits_file(Path(empty))
+            with mock.patch.dict(os.environ):
+                os.environ.pop(CREDITS_FILE_ENV_VAR, None)
+                with self.assertRaises(CreditsError) as context:
+                    find_credits_file(Path(empty))
         message = str(context.exception)
         self.assertIn(CREDITS_FILE_NAME, message)
+        self.assertIn(empty, message)
+
+    def test_missing_file_names_a_configured_path_that_is_not_a_file(self):
+        with tempfile.TemporaryDirectory() as empty:
+            configured = Path(empty) / "absent.json"
+            with mock.patch.dict(os.environ,
+                                 {CREDITS_FILE_ENV_VAR: str(configured)}):
+                with self.assertRaises(CreditsError) as context:
+                    find_credits_file(Path(empty))
+        message = str(context.exception)
+        self.assertIn(CREDITS_FILE_NAME, message)
+        self.assertIn(str(configured), message)
         self.assertIn(empty, message)
 
     def test_malformed_file_is_rejected(self):

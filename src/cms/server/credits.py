@@ -18,17 +18,20 @@
 """Read the credits every web surface serves.
 
 The credits file sits at the root of the checkout, outside the installed
-Python package, so it is located by walking up from this module rather than
-by a fixed number of parent directories: the depth at which the package sits
-differs between a checkout and the installed tree of a container image.
+Python package, so it is located from $CMS_CREDITS_FILE when the operator sets
+it, and otherwise by walking up from this module rather than by a fixed number
+of parent directories: the depth at which the package sits differs between a
+checkout and the installed tree of a container image.
 """
 
 import json
+import os
 from functools import lru_cache
 from pathlib import Path
 
 
 CREDITS_FILE_NAME = "credits.json"
+CREDITS_FILE_ENV_VAR = "CMS_CREDITS_FILE"
 
 
 class CreditsError(Exception):
@@ -38,15 +41,22 @@ class CreditsError(Exception):
 def find_credits_file(start: Path | None = None) -> Path:
     """Return the path of the credits file.
 
+    A path in $CMS_CREDITS_FILE wins when it names an existing file, because a
+    container installs the package away from the checkout and the upward walk
+    from the installed module would never reach the file.
+
     start: the directory the upward search begins from; it defaults to the
         directory holding this module.
 
-    raise (CreditsError): if neither it nor any directory above it holds the
-        file. A page rendered from an empty credits list would be a licence
-        compliance failure rather than a cosmetic one, so this never falls
-        back to no data.
+    raise (CreditsError): if neither the configured path nor any directory
+        above start holds the file. A page rendered from an empty credits list
+        would be a licence compliance failure rather than a cosmetic one, so
+        this never falls back to no data.
 
     """
+    configured = os.environ.get(CREDITS_FILE_ENV_VAR)
+    if configured is not None and Path(configured).is_file():
+        return Path(configured)
     first = Path(start).resolve() if start is not None \
         else Path(__file__).resolve().parent
     searched = [first, *first.parents]
@@ -54,9 +64,11 @@ def find_credits_file(start: Path | None = None) -> Path:
         candidate = directory / CREDITS_FILE_NAME
         if candidate.is_file():
             return candidate
-    raise CreditsError("%s not found: searched %s" % (
-        CREDITS_FILE_NAME, ", ".join(str(directory)
-                                     for directory in searched)))
+    raise CreditsError("%s not found: %s, searched %s" % (
+        CREDITS_FILE_NAME,
+        "%s=%s" % (CREDITS_FILE_ENV_VAR, configured) if configured is not None
+        else "%s unset" % CREDITS_FILE_ENV_VAR,
+        ", ".join(str(directory) for directory in searched)))
 
 
 @lru_cache(maxsize=None)
