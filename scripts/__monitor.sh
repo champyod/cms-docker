@@ -388,6 +388,16 @@ collect_docker_event() {
         return 0
     fi
 
+    # WHY suppress start events: every container start — the initial stack boot
+    # and every routine restart — fires a green "up" digest that carries no
+    # actionable signal. Recovery is already covered by check_once()'s RESOLVED
+    # alert when a previously-failing metric clears, and die/stop/restart events
+    # still report every incident. Filtering here keeps the listener running so
+    # those incident events keep flowing.
+    if [ "$event_type" = "start" ]; then
+        return 0
+    fi
+
     local container_id restart_count config auto_restart max_restarts
     container_id=$(docker ps -aqf "name=$cont_name" 2>/dev/null | head -1)
     restart_count=$(docker inspect "$container_id" --format='{{.RestartCount}}' 2>/dev/null || echo "0")
