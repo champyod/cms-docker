@@ -160,20 +160,20 @@ OJ_DOMAIN = ""                  # str; FQDN of the external judge vhost in the d
 OJ_BACKEND_PORT = 9000          # port; port the external judge answers on — paired with [admin] OJ_UPSTREAM for the oj route's proxy target
 
 [worker]
-CORE_SERVICES_HOST = "cms-log-service" # str; remote workers: main server IP
-WORKER_SHARD = 0                # num; MUST be unique per instance
-WORKER_NAME = "worker-0"        # str
-WORKER_PORT = 26000             # port
+CORE_SERVICES_HOST = "cms-log-service" # str; address of the core-services box — extra_hosts pins every cms-*-service hostname to it; a remote worker sets the main server IP
+WORKER_SHARD = 0                # num; shard index handed to cmsWorker — also names the container cms-worker-<n>; MUST be unique per instance
+WORKER_NAME = "worker-0"        # str; label exported to the worker container env (compose default worker-<shard>); the fleet TUI stamps it per shard — CMS itself does not read it
+WORKER_PORT = 26000             # port; worker RPC port — published as WORKER_BIND_ADDR:WORKER_PORT:WORKER_PORT; the core dials a worker at these coordinates (Worker list in config/cms.toml)
 WORKER_BIND_ADDR = "0.0.0.0"    # str; RPC bind address; a remote worker sets this to its own Tailscale IP so 26000 is not published on every interface
-WORKER_REPLICAS = 1             # num
-WORKER_CPU_LIMIT = "2"          # str
-WORKER_MEMORY_LIMIT = "2G"      # str
-WORKER_CPU_RESERVATION = "1"    # str
-WORKER_MEMORY_RESERVATION = "1G"
-ISOLATE_CGROUP_CONTROL = 1      # enum:0,1
-ISOLATE_CGROUP_PATH = "/sys/fs/cgroup/cms-isolate"
-KEEP_SANDBOX = false            # bool
-MAX_FILE_SIZE = 1048576         # num; KB
+WORKER_REPLICAS = 1             # num; worker container count — compose deploy.replicas
+WORKER_CPU_LIMIT = "2"          # str; worker container CPU cap — compose deploy.resources.limits.cpus; also the fleet TUI's global default for per-shard overrides
+WORKER_MEMORY_LIMIT = "2G"      # str; worker container memory cap — compose deploy.resources.limits.memory; also the fleet TUI's global default for per-shard overrides
+WORKER_CPU_RESERVATION = "1"    # str; guaranteed CPU for the worker container — compose deploy.resources.reservations.cpus
+WORKER_MEMORY_RESERVATION = "1G" # str; guaranteed memory for the worker container — compose deploy.resources.reservations.memory
+ISOLATE_CGROUP_CONTROL = 1      # enum:0,1; 1 = delegate a cgroup v2 subtree to the isolate sandboxes at container start; 0 = start without cgroup delegation
+ISOLATE_CGROUP_PATH = "/sys/fs/cgroup/cms-isolate" # str; cgroup v2 directory the isolate sandboxes run under — recreated at worker start if missing; host setup via scripts/__worker_cgroup_setup.sh
+KEEP_SANDBOX = false            # bool; reserved — compose exports it to the worker container env, but CMS reads keep_sandbox from config/cms.toml [worker]
+MAX_FILE_SIZE = 1048576         # num; KiB; reserved — compose exports it to the worker container env; the live cap is max_file_size in config/cms.toml [sandbox] (KiB; sandbox.fsize = value × 1024)
 
 [infra]
 DISCORD_WEBHOOK_URL = ""        # url; optional
