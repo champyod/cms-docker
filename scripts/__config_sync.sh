@@ -14,6 +14,11 @@ cd "$CMS_ROOT"
 
 TOML_FILE="config.toml"
 TOML_EXAMPLE="config.toml.example"
+# The file parse_toml actually reads. Points at TOML_FILE normally; in dry-run
+# mode migrate_missing_keys / migrate_db_config_keys write a simulated merge to
+# a temp file and re-point this, so downstream steps see the state a real run
+# would produce instead of failing on sections that have not been written yet.
+TOML_PARSE_SOURCE="$TOML_FILE"
 # The one env file compose and the scripts read; see migrate_split_env_files below.
 MERGED_ENV=".env"
 DRY_RUN=0
@@ -308,7 +313,7 @@ migrate_missing_keys() {
         existing_keys["${key}"]=1
       fi
     fi
-  done < "$TOML_FILE"
+  done < "$TOML_PARSE_SOURCE"
   declare -A missing_by_section
   declare -A missing_count
   declare -a sections_order=()
@@ -355,7 +360,9 @@ migrate_missing_keys() {
       fi
     done
     log_info "Would migrate $total new config keys: ${summary%"; "}"
-    return 0
+    # Fall through to the rewrite below so the simulated merge reaches
+    # parse_toml — returning here would leave [db_default] absent and
+    # make resolve_active_db_profile fail on a file a real run would fix.
   fi
   local tmp_new
   tmp_new="$(mktemp)"
@@ -381,7 +388,7 @@ migrate_missing_keys() {
       prev_sec="$header_sec"
     fi
     echo "$line" >> "$tmp_new"
-  done < "$TOML_FILE"
+  done < "$TOML_PARSE_SOURCE"
   if [[ -n "$prev_sec" && -n "${pending_missing[$prev_sec]:-}" ]]; then
     while IFS= read -r mline || [[ -n "$mline" ]]; do
       echo "$mline" >> "$tmp_new"
@@ -404,6 +411,12 @@ migrate_missing_keys() {
       unset pending_missing["$s"]
     fi
   done
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    # Discard the previous simulated file (if any) and keep the new merge for parse_toml.
+    [[ "$TOML_PARSE_SOURCE" != "$TOML_FILE" ]] && rm -f -- "$TOML_PARSE_SOURCE"
+    TOML_PARSE_SOURCE="$tmp_new"
+    return 0
+  fi
   cat "$tmp_new" > "$TOML_FILE"
   rm -f "$tmp_new"
   local summary=""
@@ -455,6 +468,25 @@ declare -a RETIRED_BIND_APPEND=()
 declare -A RETIRED_BIND_WRITTEN=()
 declare -A RETIRED_KEY_SECTION=()
 
+# The POSTGRES_* keys that moved from [core] into [db_default] profiles (89d92c37).
+# WHY a dedicated array and not RETIRED_KEY_TARGET: that map pairs a retired key
+# NAME with a replacement key NAME (TAILSCALE_IP -> INNER_IP), but POSTGRES_* keys
+# keep the same name — only the section they live in moved — so a name-to-name map
+# cannot express the move and the retired-key pass would strip both copies.
+declare -a DB_CONFIG_KEYS=(
+  "POSTGRES_HOST"
+  "POSTGRES_PORT"
+  "POSTGRES_PORT_EXTERNAL"
+  "POSTGRES_DB"
+  "POSTGRES_USER"
+  "POSTGRES_PASSWORD"
+  "POSTGRES_BACKUP_PASSWORD"
+  "POSTGRES_HOST_AUTH_METHOD"
+)
+# Key -> value collected from [core] for the section move; emptied as each key
+# is written into [db_default] so no value lands twice.
+declare -A DB_MIGRATE_VALS=()
+
 # Reads one key's value from a TOML file, ignoring comments and section headers.
 # Prints an empty string when the key is absent.
 toml_value_of_key() {
@@ -501,6 +533,49 @@ toml_section_of_key() {
     fi
   done < "$file"
   printf ''
+}
+
+# Reads <key> from <section> in <file>; prints empty when the section or key
+# is absent. Unlike toml_value_of_key (first match across all sections), this
+# is section-scoped, which is what the [core] -> [db_default] move needs when
+# the same key name exists in both sections.
+toml_value_in_section() {
+  local file="$1" want_sec="$2" want_key="$3" line trimmed sec=""
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    trimmed="$(toml_trim "${line%%#*}")"
+    if [[ "$trimmed" =~ ^\[([a-zA-Z0-9_]+)\]$ ]]; then
+      sec="${BASH_REMATCH[1]}"
+    elif [[ "$trimmed" =~ ^([A-Za-z0-9_]+)[[:space:]]*=[[:space:]]*(.*)$ ]]; then
+      [[ "${BASH_REMATCH[1]}" == "$want_key" && "$sec" == "$want_sec" ]] || continue
+      toml_value "${BASH_REMATCH[2]}"
+      return 0
+    fi
+  done < "$file"
+  printf ''
+}
+
+# True when <file> defines <key> inside <section>.
+toml_key_in_section() {
+  local file="$1" want_sec="$2" want_key="$3" line trimmed sec=""
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    trimmed="$(toml_trim "${line%%#*}")"
+    if [[ "$trimmed" =~ ^\[([a-zA-Z0-9_]+)\]$ ]]; then
+      sec="${BASH_REMATCH[1]}"
+    elif [[ "$trimmed" =~ ^([A-Za-z0-9_]+)[[:space:]]*=[[:space:]]*(.*)$ ]]; then
+      [[ "${BASH_REMATCH[1]}" == "$want_key" && "$sec" == "$want_sec" ]] && return 0
+    fi
+  done < "$file"
+  return 1
+}
+
+# True when <file> contains a [section] header.
+toml_section_exists() {
+  local file="$1" want="$2" line trimmed
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    trimmed="$(toml_trim "${line%%#*}")"
+    [[ "$trimmed" =~ ^\[([a-zA-Z0-9_]+)\]$ ]] && [[ "${BASH_REMATCH[1]}" == "$want" ]] && return 0
+  done < "$file"
+  return 1
 }
 
 # Collect the values every retired key hands to its live replacement, and abort first
@@ -664,6 +739,121 @@ migrate_retired_keys() {
     log_warn "could not write the retired-key migration into $TOML_FILE — $TOML_FILE left untouched, re-run './cms config sync'"
   fi
   return 0
+}
+
+# Move POSTGRES_* values still living in [core] onto the [db_default] profile and
+# delete the [core] lines — the move-plus-conflict-check contract of the retired-key
+# migration, applied to a section move (key names unchanged, only their section moved).
+# WHY before migrate_missing_keys: real values must reach [db_default] before the
+# example's empty placeholders could be merged in over them.
+migrate_db_config_keys() {
+  [[ -f "$TOML_PARSE_SOURCE" ]] || return 0
+  toml_key_in_section "$TOML_PARSE_SOURCE" "core" "POSTGRES_PASSWORD" || return 0
+  DB_MIGRATE_VALS=()
+  local key core_val db_val moved_keys
+  local -a conflicts=()
+  for key in "${DB_CONFIG_KEYS[@]}"; do
+    toml_key_in_section "$TOML_PARSE_SOURCE" "core" "$key" || continue
+    core_val="$(toml_value_in_section "$TOML_PARSE_SOURCE" "core" "$key")"
+    db_val="$(toml_value_in_section "$TOML_PARSE_SOURCE" "db_default" "$key")"
+    if [[ -n "$db_val" && -n "$core_val" && "$db_val" != "$core_val" ]]; then
+      conflicts+=("  [core] ${key} = \"${core_val}\"  ->  [db_default] ${key} = \"${db_val}\"")
+      continue
+    fi
+    DB_MIGRATE_VALS["$key"]="$core_val"
+  done
+  if [[ ${#conflicts[@]} -gt 0 ]]; then
+    log_error "config.toml still defines POSTGRES_* in [core] but [db_default] already holds different values:"
+    printf '%s\n' "${conflicts[@]}" >&2
+    log_error "Reconcile the two copies by hand in $TOML_FILE and run './cms config sync' again."
+    exit 1
+  fi
+  [[ ${#DB_MIGRATE_VALS[@]} -gt 0 ]] || return 0
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    for key in "${!DB_MIGRATE_VALS[@]}"; do
+      printf 'Would move [core] %s to [db_default]\n' "$key"
+    done
+    apply_db_config_migration || return 1
+    return 0
+  fi
+  moved_keys="${!DB_MIGRATE_VALS[*]}"
+  apply_db_config_migration || {
+    log_warn "could not write the POSTGRES_* migration into $TOML_FILE — re-run './cms config sync'"
+    return 1
+  }
+  log_info "moved POSTGRES_* from [core] to [db_default]: ${moved_keys}"
+  return 0
+}
+
+# Flush pending [db_default] writes at a section boundary — called both when the
+# loop crosses from one section to the next and after the last line is read.
+flush_db_section_edges() {
+  local sec="$1" has_db="$2" out="$3"
+  if [[ "$sec" == "core" && "$has_db" -eq 0 ]]; then
+    emit_db_default_section "$out"
+  fi
+  if [[ "$sec" == "db_default" && ${#DB_MIGRATE_VALS[@]} -gt 0 ]]; then
+    append_pending_db_keys "$out"
+  fi
+}
+
+# Rewrite config.toml: strip POSTGRES_* out of [core] and write them into
+# [db_default], creating the section when it does not exist yet. Every other
+# byte is copied through so comments and ordering survive.
+apply_db_config_migration() {
+  local key line trimmed sec="" has_db=0 tmp
+  toml_section_exists "$TOML_PARSE_SOURCE" "db_default" && has_db=1
+  tmp="$(mktemp)" || return 1
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    trimmed="$(toml_trim "${line%%#*}")"
+    if [[ "$trimmed" =~ ^\[([a-zA-Z0-9_]+)\]$ ]]; then
+      flush_db_section_edges "$sec" "$has_db" "$tmp"
+      sec="${BASH_REMATCH[1]}"
+      printf '%s\n' "$line" >> "$tmp"
+      continue
+    fi
+    if [[ "$trimmed" =~ ^([A-Za-z0-9_]+)[[:space:]]*= ]]; then
+      key="${BASH_REMATCH[1]}"
+      if [[ "$sec" == "core" && -n "${DB_MIGRATE_VALS[$key]+set}" ]]; then
+        continue
+      fi
+      if [[ "$sec" == "db_default" && -n "${DB_MIGRATE_VALS[$key]+set}" ]]; then
+        [[ -n "${DB_MIGRATE_VALS[$key]}" ]] && printf '%s\n' "$(toml_entry "$key" "${DB_MIGRATE_VALS[$key]}")" >> "$tmp"
+        unset "DB_MIGRATE_VALS[$key]"
+        continue
+      fi
+    fi
+    printf '%s\n' "$line" >> "$tmp"
+  done < "$TOML_PARSE_SOURCE"
+  flush_db_section_edges "$sec" "$has_db" "$tmp"
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    # config.toml stays untouched; point downstream steps at the simulated state.
+    [[ "$TOML_PARSE_SOURCE" != "$TOML_FILE" ]] && rm -f -- "$TOML_PARSE_SOURCE"
+    TOML_PARSE_SOURCE="$tmp"
+    return 0
+  fi
+  if ! cat "$tmp" > "$TOML_FILE"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  rm -f "$tmp"
+}
+
+# Write the [db_default] header and every still-pending non-empty value to <out>.
+emit_db_default_section() {
+  printf '\n[db_default]\n' >> "$1"
+  append_pending_db_keys "$1"
+}
+
+# Write every still-pending non-empty value to <out> and mark it written.
+append_pending_db_keys() {
+  local out="$1" key
+  for key in "${DB_CONFIG_KEYS[@]}"; do
+    [[ -n "${DB_MIGRATE_VALS[$key]+set}" ]] || continue
+    [[ -n "${DB_MIGRATE_VALS[$key]}" ]] || continue
+    printf '%s\n' "$(toml_entry "$key" "${DB_MIGRATE_VALS[$key]}")" >> "$out"
+    unset "DB_MIGRATE_VALS[$key]"
+  done
 }
 
 # A key the sync refuses to carry forward, because it has no value to move.
@@ -988,6 +1178,13 @@ main() {
   abort_on_unmappable_retired_key "BIND_MODE" \
     "Each service's *_BIND_IP now decides its published address on its own; a comma-separated list publishes it on several addresses at once. Set the *_BIND_IP key of every service you want reachable."
 
+  # Carry POSTGRES_* still living in [core] (old layout) onto [db_default] and delete
+  # the [core] lines. WHY first: migrate_missing_keys would otherwise inject empty
+  # placeholders from the example into [db_default] before the real values reached it,
+  # and resolve_active_db_profile would then overwrite the in-memory [core] values
+  # with those empties — the credential-loss path this migration closes.
+  migrate_db_config_keys
+
   # Carry a retired *_LISTEN_ADDRESS value onto the *_BIND_IP key that now binds the
   # published port, and delete the retired line. WHY ahead of the merge rather than behind
   # it: migrate_missing_keys copies the example's 127.0.0.1 into every admin/contest section
@@ -1002,7 +1199,7 @@ main() {
   # never reach old worktrees and downstream .env would fallback to defaults.
   migrate_missing_keys
 
-  parse_toml "$TOML_FILE"
+  parse_toml "$TOML_PARSE_SOURCE"
 
   # Ensure ranking config exists from sample (needed for logo_path injection)
   if [[ ! -f "config/cms_ranking.toml" && -f "config/cms.ranking.sample.toml" ]]; then
@@ -1216,6 +1413,11 @@ main() {
   if [[ "$DRY_RUN" -eq 0 ]] && [[ -f scripts/__preflight.sh ]]; then
     log_info "Running preflight checks..."
     bash scripts/__preflight.sh || log_warn "Preflight reported issues"
+  fi
+
+  # Discard the dry-run's simulated merge; it only ever existed for parse_toml.
+  if [[ "$DRY_RUN" -eq 1 && "$TOML_PARSE_SOURCE" != "$TOML_FILE" ]]; then
+    rm -f -- "$TOML_PARSE_SOURCE"
   fi
 }
 
