@@ -24,6 +24,11 @@ export interface TestcaseUploadPair {
   output: File;
 }
 
+// Codenames reach the DB and score-type regexes (e.g. subtask1_.*); keep them
+// to the character set the filename parsers can produce.
+const MAX_CODENAME_LENGTH = 255;
+const CODENAME_PATTERN = /^[A-Za-z0-9._-]+$/;
+
 export interface TestcaseUpload {
   datasetId: number;
   pairs: TestcaseUploadPair[];
@@ -36,6 +41,12 @@ function parsePair(formData: FormData, index: number): TestcaseUploadPair {
 
   if (typeof codename !== 'string' || codename.length === 0) {
     throw new TestcaseUploadError(`Every testcase needs a codename (pair ${index + 1})`, 400);
+  }
+  if (codename.length > MAX_CODENAME_LENGTH || !CODENAME_PATTERN.test(codename)) {
+    throw new TestcaseUploadError(
+      `Invalid codename "${codename.slice(0, 64)}": use 1-${MAX_CODENAME_LENGTH} characters of letters, digits, dot, underscore or dash`,
+      400,
+    );
   }
   if (!(input instanceof File) || !(output instanceof File)) {
     throw new TestcaseUploadError(`Missing input or output file for pair "${codename}"`, 400);

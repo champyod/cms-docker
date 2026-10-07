@@ -91,6 +91,21 @@ describe('POST /api/testcases validation', () => {
     expect(mocks.storeFile).not.toHaveBeenCalled();
   });
 
+  it('rejects a codename outside the safe charset', async () => {
+    const response = await postUpload(buildFormData([filePair('../../etc/passwd')]));
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toContain('Invalid codename');
+    expect(mocks.storeFile).not.toHaveBeenCalled();
+    expect(mocks.testcaseCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects a codename above the length limit', async () => {
+    const response = await postUpload(buildFormData([filePair('a'.repeat(256))]));
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toContain('Invalid codename');
+    expect(mocks.storeFile).not.toHaveBeenCalled();
+  });
+
   it('rejects an empty list', async () => {
     const response = await postUpload(buildFormData([]));
     expect(response.status).toBe(400);
