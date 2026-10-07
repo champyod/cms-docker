@@ -61,6 +61,48 @@ make core        # or ./cms deploy all
 The override uses Compose's `!override` tag to replace a service's `ports` list, so
 it needs Compose >= 2.24. The generated file is gitignored.
 
+## Hand-written local overrides
+
+`docker-compose.expose.yml` is generated from the bind keys above. A file called
+`docker-compose.override.yml` is not — it is yours, and it is where machine-specific
+pins and mounts live. Start from the committed skeleton:
+
+```
+cp docker-compose.override.yml.example docker-compose.override.yml
+```
+
+The name is the whole mechanism. The `Makefile` builds its `-f` list from
+`$(wildcard docker-compose.yml docker-compose.override.yml docker-compose.expose.yml)`,
+so the override joins every `core`/`admin`/`contest`/`worker`/`infra` target the moment
+the file exists, and Compose merges it over the base file. `make domain` and `make waf`
+use their own `-f` lists that do not include it, so a `grader-nginx-proxy:` block there
+is not read by those targets at all. Both files are gitignored — never commit either.
+
+### Every service block needs an image
+
+A service Compose has never seen before needs an `image:` or a `build:`, whichever comes
+first in the `-f` list. An override block that only sets environment or ports introduces
+exactly such an unknown service, and the run fails before any container starts:
+
+```
+service grader-nginx-proxy has neither an image nor a build context specified
+```
+
+This is the trap for `grader-nginx-proxy` specifically: it is declared in
+`docker-compose.domain.yml`, which the default `-f` list does not load, so a block
+naming it in the override merges against nothing. The fix is the `image:` line the
+example ships — repeat the image the service already uses, then override only the keys
+you actually own. Compose merges mappings key by key, so the rest of the service survives.
+
+Prefer overriding an existing key over adding a new block: `ports` merges by
+`{ip, target, published, protocol}` and appends anything that does not collide, so a plain
+`ports:` assignment leaves the base mapping in place alongside yours. Use `!override` to
+replace the list. Validate before bringing anything up:
+
+```
+docker compose -f docker-compose.yml -f docker-compose.override.yml config > /dev/null
+```
+
 ## The domain path
 
 Publishing a name instead of an address is a separate concern, owned entirely by
