@@ -2,37 +2,41 @@
 FROM node:20-bookworm-slim AS base
 WORKDIR /app
 
-# Install pnpm and dependencies
-# WHY: Prisma picks its engine binaries by probing the platform's OpenSSL. Slim
-# images ship none, so the install would fetch the wrong engine set and the
-# runtime would then look for (and download) an engine that was never installed.
+# WHY bun + frozen lockfile: the committed bun.lock is the tree `bun audit`
+# verifies — a pnpm --no-frozen-lockfile install could silently drift from it.
+# Prisma picks its engine binaries by probing the platform's OpenSSL, so slim
+# images need openssl at install time; bun's installer needs curl/unzip/certs.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends openssl \
- && rm -rf /var/lib/apt/lists/*
-RUN corepack enable && corepack prepare pnpm@9 --activate
-COPY package.json ./
-RUN pnpm install --no-frozen-lockfile
+ && apt-get install -y --no-install-recommends openssl curl ca-certificates unzip \
+ && rm -rf /var/lib/apt/lists/* \
+ && curl -fsSL https://bun.com/install | bash
+ENV BUN_INSTALL="/root/.bun"
+ENV PATH="${BUN_INSTALL}/bin:${PATH}"
+
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
 
 # WHY: the release stage has no host bind-mount and the standalone output only
 # carries runtime-traced modules, so migrations and the TypeScript permission
 # seed need tooling that travels with the image. Build it as its own tree here,
-# where the store is warm and registry access exists, in a hoisted layout —
-# pnpm's default virtual store is a symlink farm that COPY --from cannot resolve.
+# where the store is warm and registry access exists — bun installs flat, so
+# COPY --from resolves without a symlink farm. prisma is pinned to the app's
+# version so the CLI and the generated client cannot skew.
 RUN mkdir -p /prisma-cli \
  && cd /prisma-cli \
  && echo '{"private":true}' > package.json \
- && echo 'node-linker=hoisted' > .npmrc \
- && pnpm add prisma@6 tsx@4
+ && bun add prisma@6.19.3 tsx@4
 
 # Copy source code
 COPY . .
 
-# Generate Prisma client
-RUN pnpm prisma generate --schema=./prisma/schema.prisma
+# Generate Prisma client — invoke the bin directly so it runs under node via
+# its shebang, not under the Bun runtime.
+RUN ./node_modules/.bin/prisma generate --schema=./prisma/schema.prisma
 
 # Build the application
 # Provide dummy DATABASE_URL to avoid Prisma constructor error during static page generation
-RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" pnpm run build
+RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" bun run build
 
 # Production image, copy all the files and run next
 FROM node:20-bookworm-slim AS release
@@ -79,6 +83,13 @@ COPY --from=base /app/tsconfig.json ./tsconfig.json
 RUN CHECKPOINT_DISABLE=1 ./node_modules/.bin/prisma --version \
  && ./node_modules/.bin/tsx --version \
  && ./node_modules/.bin/tsx -e 'require("@/lib/prisma"); require("@/lib/permission-registry");'
+
+# Unprivileged runtime: compose grants the host docker group (group_add) so the
+# node user can still reach the mounted socket, and the cache dir must be
+# writable for Next's lazy cache writes.
+RUN mkdir -p /app/.next/cache \
+ && chown -R node:node /app/.next
+USER node
 
 # Expose port (Next.js defaults to 3000)
 EXPOSE 3000
