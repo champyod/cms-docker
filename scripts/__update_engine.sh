@@ -679,6 +679,7 @@ VAR_SPECS=(
   "Admin Panel|[admin]|RANKING_PASSWORD|secret||"
   "Admin Panel|[admin]|ADMIN_COOKIE_DURATION|num||36000"
   "Admin Panel|[admin]|AUTH_SECRET|secret||hex32"
+  "Admin Panel|[admin]|COOKIE_SECURE|bool||false"
   "Admin Panel|[admin]|CAPTCHA_ENABLED|enum:0,1||0"
   "Admin Panel|[admin]|CAPTCHA_PROVIDER|enum:turnstile,hcaptcha||turnstile"
   "Admin Panel|[admin]|CAPTCHA_SITE_KEY|str||"

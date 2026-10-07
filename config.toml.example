@@ -67,6 +67,7 @@ ADMIN_NEXT_BIND_IP = "127.0.0.1" # csv; addresses the Next.js admin panel is pub
 RANKING_BIND_IP = "127.0.0.1"   # csv; addresses the ranking board is published on
 ADMIN_COOKIE_DURATION = 36000   # num; seconds; reserved — no code reads it: the panel hardcodes its session and the injector never writes it to the classic admin's cms.toml
 AUTH_SECRET = ""                # secret; auto-generated hex32 if empty; signs the admin panel's session JWT
+COOKIE_SECURE = false           # bool; sends the admin session cookie with the Secure attribute so browsers never transmit it over plain HTTP; set true whenever admin access is served over TLS
 CAPTCHA_ENABLED = 0             # enum:0,1; effect: reduces brute-force before fail2ban
 CAPTCHA_PROVIDER = "turnstile"  # enum:turnstile,hcaptcha; only used if CAPTCHA_ENABLED=1
 CAPTCHA_SITE_KEY = ""           # str; public widget key from the provider dashboard — sent to the browser to render the challenge

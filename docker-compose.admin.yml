@@ -19,6 +19,9 @@ services:
 
       # Authentication
       AUTH_SECRET: ${AUTH_SECRET}
+      # WHY: the panel speaks the authenticated CMS RPC protocol (cms/io/rpc.py fails closed without it)
+      RPC_SECRET: ${RPC_SECRET}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
 
       # Adaptive login CAPTCHA
       CAPTCHA_ENABLED: ${CAPTCHA_ENABLED:-0}
@@ -37,12 +40,14 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       # Mount the root repository to allow editing config/env files on the host
       - ./:/repo-root
-      # Host procfs for true host-level metrics in Resources page
-      - /proc:/host/proc:ro
       - cms-logs:/var/local/log/cms
       - cms-ranking-data:/var/local/lib/cms/ranking:rw
     networks:
       - cms-network
+    # WHY: the image runs as the unprivileged node user; this supplementary
+    # group (host docker socket gid) is what keeps docker CLI access working.
+    group_add:
+      - "${DOCKER_GID:-999}"
     ports:
       - "${ADMIN_NEXT_BIND_IP:-0.0.0.0}:${ADMIN_NEXT_PORT_EXTERNAL:-8891}:3000"
     labels:
