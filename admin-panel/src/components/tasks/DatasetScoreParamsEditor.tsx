@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { DatasetScoreSubtaskRow } from './DatasetScoreSubtaskRow';
+import { SubtaskBoard } from './SubtaskBoard';
 import {
   SCORE_PARAM_HELPERS,
   defaultSubtaskRow,
@@ -15,15 +16,18 @@ import {
 interface EditorProps {
   scoreType: string;
   params: unknown;
+  testcases?: readonly string[];
   onParamsChange: (params: unknown) => void;
   onLintError: (error: string) => void;
 }
 
-export function DatasetScoreParamsEditor({ scoreType, params, onParamsChange, onLintError }: EditorProps): React.JSX.Element {
+type EditorView = 'board' | 'visual' | 'code';
+
+export function DatasetScoreParamsEditor({ scoreType, params, testcases = [], onParamsChange, onLintError }: EditorProps): React.JSX.Element {
   const pastedRef = useRef(false);
   const [pastedNotice, setPastedNotice] = useState(false);
   const [codePushed, setCodePushed] = useState(false);
-  const [view, setView] = useState<'visual' | 'code'>('visual');
+  const [view, setView] = useState<EditorView>(() => (testcases.length > 0 && scoreType !== 'Sum' ? 'board' : 'visual'));
   const [codeText, setCodeText] = useState('');
   const [sumValue, setSumValue] = useState<string>(() =>
     typeof params === 'number' ? String(params) : '',
@@ -137,26 +141,40 @@ export function DatasetScoreParamsEditor({ scoreType, params, onParamsChange, on
     onLintError(lintSubtaskRows(next, scoreType));
   };
 
+  // Why the guard: Sum holds a single multiplier, not subtask rows,
+  // so a stale board view must fall back to the rows view instead of
+  // rendering one meaningless group.
+  const effectiveView = view === 'board' && scoreType === 'Sum' ? 'visual' : view;
+
   return (
     <div onPasteCapture={() => { pastedRef.current = true; }}>
       <div className="flex items-center gap-1 mb-3">
+        {testcases.length > 0 && scoreType !== 'Sum' && (
+          <button
+            type="button"
+            onClick={() => setView('board')}
+            className={effectiveView === 'board' ? 'px-3 py-1 rounded-lg text-xs font-semibold bg-primary/15 text-primary' : 'px-3 py-1 rounded-lg text-xs text-muted-foreground hover:bg-muted'}
+          >
+            Board
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setView('visual')}
-          className={view === 'visual' ? 'px-3 py-1 rounded-lg text-xs font-semibold bg-primary/15 text-primary' : 'px-3 py-1 rounded-lg text-xs text-muted-foreground hover:bg-muted'}
+          className={effectiveView === 'visual' ? 'px-3 py-1 rounded-lg text-xs font-semibold bg-primary/15 text-primary' : 'px-3 py-1 rounded-lg text-xs text-muted-foreground hover:bg-muted'}
         >
-          Visual
+          Rows
         </button>
         <button
           type="button"
           onClick={() => { setCodeText(JSON.stringify(params, null, 2) ?? ''); setView('code'); }}
-          className={view === 'code' ? 'px-3 py-1 rounded-lg text-xs font-semibold bg-primary/15 text-primary' : 'px-3 py-1 rounded-lg text-xs text-muted-foreground hover:bg-muted'}
+          className={effectiveView === 'code' ? 'px-3 py-1 rounded-lg text-xs font-semibold bg-primary/15 text-primary' : 'px-3 py-1 rounded-lg text-xs text-muted-foreground hover:bg-muted'}
         >
           JSON
         </button>
       </div>
       <p className="text-xs text-muted-foreground mb-3">{SCORE_PARAM_HELPERS[scoreType] ?? 'Configure the score parameters.'}</p>
-      {view === 'code' ? (
+      {effectiveView === 'code' ? (
         <textarea
           value={codeText}
           onChange={(e) => handleCodeChange(e.target.value)}
@@ -164,6 +182,13 @@ export function DatasetScoreParamsEditor({ scoreType, params, onParamsChange, on
           spellCheck={false}
           className="w-full px-4 py-2.5 bg-muted/40 border border-border rounded-lg text-foreground font-mono text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring/50"
           placeholder='e.g. [[30, 3], [70, 5]]'
+        />
+      ) : effectiveView === 'board' ? (
+        <SubtaskBoard
+          scoreType={scoreType}
+          rows={rows}
+          testcases={testcases}
+          onRowsChange={(next) => applyRows(next, lintSubtaskRows(next, scoreType))}
         />
       ) : (
       <>

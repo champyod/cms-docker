@@ -34,7 +34,7 @@ export function paramsToRows(params: unknown): SubtaskRow[] {
   });
 }
 
-export function rowsToParams(rows: SubtaskRow[], scoreType: string): unknown[] {
+export function rowsToParams(rows: readonly SubtaskRow[], scoreType: string): unknown[] {
   return rows.map((row) => {
     const maxScore = Number(row.maxScore);
     const testcases = /^\d+$/.test(row.testcases.trim()) ? parseInt(row.testcases.trim(), 10) : row.testcases.trim();

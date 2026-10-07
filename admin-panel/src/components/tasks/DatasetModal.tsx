@@ -26,6 +26,7 @@ interface DatasetRecord {
   score_type: string;
   task_type_parameters?: unknown;
   score_type_parameters?: unknown;
+  testcases?: Array<{ id: number; codename: string; public: boolean }>;
 }
 
 interface DatasetModalProps {
@@ -214,6 +215,7 @@ export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess, perm
           {activeTab === 'general' && (
             <DatasetGeneralForm
               formData={formData}
+              testcases={dataset?.testcases?.map((testcase) => testcase.codename) ?? []}
               onChange={setFormData}
               onSubmit={handleSubmit}
               error={error}

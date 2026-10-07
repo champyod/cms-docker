@@ -1,6 +1,6 @@
 import { detectFileEncoding } from '@/lib/file-encoding';
 import type { FileEncoding } from '@/lib/file-encoding';
-import { parseFilename } from '@/utils/filenameParser';
+import { parseFilenameWithSubtask, parseSubtaskPrefix } from '@/utils/filenameParser';
 import { readBytesAsBase64 } from '@/lib/file-helpers';
 import { normalizeFileBytes } from '@/lib/file-encoding';
 
@@ -13,6 +13,7 @@ export interface EncodedFile {
 
 export interface FilePair {
   id: string;
+  subtask: string | null;
   inputFile?: EncodedFile;
   outputFile?: EncodedFile;
   status: 'ready' | 'missing_output' | 'missing_input' | 'error';
@@ -32,8 +33,8 @@ export async function buildPairs(sourceItems: SourceItem[], inputPattern: string
   const pairMap: Record<string, Partial<FilePair>> = {};
   for (const item of sourceItems) {
     const bytes = await item.getBytes();
-    const inputId = parseFilename(item.name, inputPattern);
-    const outputId = parseFilename(item.name, outputPattern);
+    const inputId = parseFilenameWithSubtask(item.name, inputPattern);
+    const outputId = parseFilenameWithSubtask(item.name, outputPattern);
     if (inputId) {
       if (!pairMap[inputId]) pairMap[inputId] = { id: inputId };
       pairMap[inputId].inputFile = createEncodedFile(item.name, bytes);
@@ -45,6 +46,7 @@ export async function buildPairs(sourceItems: SourceItem[], inputPattern: string
   return Object.values(pairMap)
     .map((pair) => {
       const resolved = pair as FilePair;
+      resolved.subtask = parseSubtaskPrefix(resolved.id);
       if (!resolved.inputFile) resolved.status = 'missing_input';
       else if (!resolved.outputFile) resolved.status = 'missing_output';
       else resolved.status = 'ready';

@@ -67,6 +67,7 @@ export function TaskDatasetsTab({ data, docsLinkLabel }: TaskDatasetsTabProps): 
           isOpen
           onClose={() => actions.closeTestcaseUpload()}
           datasetId={actions.uploadTargetDatasetId}
+          currentScoreType={data.datasets.find((dataset) => dataset.id === actions.uploadTargetDatasetId)?.score_type}
           onSuccess={refresh}
         />
       )}

@@ -22,6 +22,7 @@ const SCORE_TYPES = ['Sum', 'GroupMin', 'GroupMul', 'GroupThreshold'];
 
 interface DatasetGeneralFormProps {
   formData: DatasetFormData;
+  testcases?: readonly string[];
   onChange: (data: DatasetFormData) => void;
   onSubmit: (e: React.FormEvent) => void;
   error: string;
@@ -59,6 +60,7 @@ function formatTaskParamsText(params: unknown): string {
 
 export function DatasetGeneralForm({
   formData,
+  testcases = [],
   onChange,
   onSubmit,
   error,
@@ -178,6 +180,7 @@ export function DatasetGeneralForm({
           <DatasetScoreParamsEditor
             scoreType={formData.score_type}
             params={formData.score_type_parameters}
+            testcases={testcases}
             onParamsChange={onScoreParamsChange}
             onLintError={onScoreParamsError}
           />
