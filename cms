@@ -43,7 +43,7 @@ Commands:
   stop [stack]              stop one stack or all
   clean [stack]             clean one stack or all
   pull [stack]              pull images for one stack or all
-  db <init|reset|clean|sync> database lifecycle shortcuts
+  db <init|reset|clean|sync|use>  database lifecycle shortcuts (use <name> switches db profile)
   admin-create              create superadmin account
   status                    live service status dashboard
   monitor                   monitoring/backup operations UI
@@ -122,6 +122,81 @@ run_tui() {
 # Thin shim: every subcommand and TTY no-args goes through Rust cms-tui.
 # Single source: cli/mod.rs + core/dispatch.rs. No bash duplication.
 # Lifecycle below only runs for no-args non-TTY bootstrap.
+
+# `db use <name>` switches the active database profile. Handled here because
+# the Rust CLI predates profile switching; keep the config mutation in one
+# place (config.toml -> scripts/__config_sync.sh -> stack restart).
+cmd_db_use() {
+  local name="${1:-}"
+  if [[ -z "$name" ]]; then
+    echo "Usage: ./cms db use <name>" >&2
+    exit 1
+  fi
+  if [[ ! "$name" =~ ^[A-Za-z0-9_-]+$ ]]; then
+    echo "Error: invalid profile name '${name}' (allowed: letters, digits, '_', '-')." >&2
+    exit 1
+  fi
+  if ! grep -q "^\[db_${name}\]" config.toml; then
+    echo "Error: no [db_${name}] section in config.toml." >&2
+    echo "Available profiles:" >&2
+    grep -oE '^\[db_[^]]+\]' config.toml | sed -E 's/^\[db_(.+)\]$/  \1/' >&2
+    exit 1
+  fi
+
+  local tmp
+  tmp="$(mktemp)"
+  awk -v name="$name" '
+    /^\[core\]/ { in_core = 1 }
+    /^\[/ && !/^\[core\]/ { in_core = 0 }
+    in_core && /^ACTIVE_DATABASE[[:space:]]*=/ {
+      sub(/"[^"]*"/, "\"" name "\"")
+    }
+    { print }
+  ' config.toml > "$tmp" && mv "$tmp" config.toml
+  echo "ACTIVE_DATABASE set to \"${name}\" in config.toml"
+
+  bash scripts/__config_sync.sh
+
+  local deploy_type
+  deploy_type="$(grep -E '^DEPLOYMENT_TYPE=' .env 2>/dev/null | tail -n1 | cut -d '=' -f2 | cut -d '#' -f1 | tr -d '[:space:]' | tr -d '\"' | tr -d "'" || true)"
+
+  local has_core=false has_admin=false has_contest=false has_worker=false has_infra=false
+  if docker ps --format '{{.Names}}' 2>/dev/null | grep -qE '^cms-(database|log-service|resource-service|evaluation-service|scoring-service|proxy-service|checker-service)$'; then has_core=true; fi
+  if docker ps --format '{{.Names}}' 2>/dev/null | grep -qE '^cms-(admin-panel-next|admin-web-server|ranking-web-server)$'; then has_admin=true; fi
+  if docker ps --format '{{.Names}}' 2>/dev/null | grep -qE '^cms-contest-web-server($|-)'; then has_contest=true; fi
+  if docker ps --format '{{.Names}}' 2>/dev/null | grep -qE '^cms-worker($|-)'; then has_worker=true; fi
+  if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'cms-monitor'; then has_infra=true; fi
+
+  if [[ "$has_core" == false && "$has_admin" == false && "$has_contest" == false && "$has_worker" == false && "$has_infra" == false ]]; then
+    echo "No running CMS stacks detected — skipping restart."
+    return 0
+  fi
+
+  echo "Restarting affected stacks (core=$has_core admin=$has_admin contest=$has_contest worker=$has_worker infra=$has_infra)..."
+  if [[ "$deploy_type" == "img" ]]; then
+    [[ "$has_core" == true ]]    && make -e DEPLOYMENT_TYPE_OVERRIDE=img core
+    [[ "$has_infra" == true ]]   && make -e DEPLOYMENT_TYPE_OVERRIDE=img infra
+    [[ "$has_admin" == true ]]   && make -e DEPLOYMENT_TYPE_OVERRIDE=img admin
+    [[ "$has_contest" == true ]] && make -e DEPLOYMENT_TYPE_OVERRIDE=img contest
+    [[ "$has_worker" == true ]]  && make -e DEPLOYMENT_TYPE_OVERRIDE=img worker
+  else
+    [[ "$has_core" == true ]]    && make core
+    [[ "$has_infra" == true ]]   && make infra
+    [[ "$has_admin" == true ]]   && make admin
+    [[ "$has_contest" == true ]] && make contest
+    [[ "$has_worker" == true ]]  && make worker
+  fi
+}
+
+if [[ $# -ge 2 && "$1" == "db" && "$2" == "use" ]]; then
+  cmd_db_use "${3:-}"
+  exit $?
+fi
+
+if [[ $# -eq 1 && "$1" == "help" ]]; then
+  cmd_usage
+  exit 0
+fi
 
 if [[ $# -gt 0 ]]; then
   run_tui "$@"

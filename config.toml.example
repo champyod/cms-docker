@@ -8,14 +8,7 @@ PUBLIC_IP = "0.0.0.0"           # str; your VPS public IP; live_ip auto-detects
 INNER_IP = ""                  # str; peer address: worker RPC bind + worker dial target; empty=127.0.0.1 only
 REMOTE_WORKERS_ENABLED = false  # bool; reserved toggle — no code reads it; remote workers are actually enabled by binding INNER_IP
 CMS_DOMAIN = "cms.local"        # str; base domain — fallback for CONTEST_DOMAIN and DOMAIN_NAME when those are empty; each sub-service domain is its own [admin] key
-POSTGRES_HOST = "database"      # str; postgres host the services dial — the injector pins "database" (the compose service) into the main server's cms.toml
-POSTGRES_PORT = 5432            # port; postgres port inside the compose network — written into cms.toml, the db-init check, and the panel's host-side DATABASE_URL
-POSTGRES_PORT_EXTERNAL = 5432   # port; host port postgres publishes on DB_BIND_IP; the loopback default keeps the database host-local
-POSTGRES_DB = "cmsdb"           # str; database the postgres image creates on first init; used by the services, backup/restore, and DATABASE_URL
-POSTGRES_USER = "cmsuser"       # str; owner role the services and admin panel connect as; owns the database and its large objects
-POSTGRES_PASSWORD = ""          # secret; auto-generated if empty on first sync
-POSTGRES_BACKUP_PASSWORD = ""    # secret; auto-generated if empty; backup role cms_backup (BYPASSRLS + member of cmsuser for large-object reads)
-POSTGRES_HOST_AUTH_METHOD = "md5" # postgres image pg_hba auth method; md5 = password required (the dev/test compose files use trust)
+ACTIVE_DATABASE = "default"  # str; which [db_<name>] profile __config_sync.sh injects as POSTGRES_*
 CMS_SECRET_KEY = ""             # secret; auto-generated hex32 if empty; injected into cms.toml
 CMS_CONFIG = "/usr/local/etc/cms.toml" # container path of the generated cms.toml every CMS service reads at startup
 CMS_SOURCE_URL = "https://github.com/champyod/cms-docker" # str; AGPL-13 Corresponding Source offer shown in the UI credits; point at your own fork
@@ -41,6 +34,26 @@ CERT_EMAIL = ""                         # str; Let's Encrypt registration email
 CERTBOT_IMAGE = "certbot/certbot"       # str; certbot image; set certbot/dns-cloudflare for DNS-01
 TLS_CERTRESOLVER = "letsencrypt"        # str; traefik certresolver label
 CMS_RANKING_CONFIG = "/usr/local/etc/cms_ranking.toml" # container path of the generated cms_ranking.toml the ranking web server reads
+
+[db_default]
+POSTGRES_HOST = "database"      # str; postgres host the services dial — the injector pins "database" (the compose service) into the main server's cms.toml
+POSTGRES_PORT = 5432            # port; postgres port inside the compose network — written into cms.toml, the db-init check, and the panel's host-side DATABASE_URL
+POSTGRES_PORT_EXTERNAL = 5432   # port; host port postgres publishes on DB_BIND_IP; the loopback default keeps the database host-local
+POSTGRES_DB = "cmsdb"           # str; database the postgres image creates on first init; used by the services, backup/restore, and DATABASE_URL
+POSTGRES_USER = "cmsuser"       # str; owner role the services and admin panel connect as; owns the database and its large objects
+POSTGRES_PASSWORD = ""          # secret; auto-generated if empty on first sync
+POSTGRES_BACKUP_PASSWORD = ""    # secret; auto-generated if empty; backup role cms_backup (BYPASSRLS + member of cmsuser for large-object reads)
+POSTGRES_HOST_AUTH_METHOD = "md5" # postgres image pg_hba auth method; md5 = password required (the dev/test compose files use trust)
+
+# [db_staging]
+# POSTGRES_HOST = "database"
+# POSTGRES_PORT = 5432
+# POSTGRES_PORT_EXTERNAL = 5432
+# POSTGRES_DB = "cmsdb"
+# POSTGRES_USER = "cmsuser"
+# POSTGRES_PASSWORD = ""
+# POSTGRES_BACKUP_PASSWORD = ""
+# POSTGRES_HOST_AUTH_METHOD = "md5"
 
 [admin]
 DEPLOYMENT_TYPE = "img"         # enum:img,src; img = pull the GHCR images, src = build from source — read by the make <stack> targets
