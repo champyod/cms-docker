@@ -12,7 +12,7 @@
  */
 
 import { ensurePermission } from '@/lib/permissions';
-import { LARGE_OBJECT_TABLE, adminColumnFor, archiveDigestBytesForSql, archiveDigestDescriptionSql, archiveDigestListSql, catalogPrimaryKeys, countRowsSql, createStagingSchemaSql, createStagingTableSql, deleteDigestBatchSql, dropStagingSchemaSql, insertSelectSql, liveDigestQuerySql, mergeInsertSql, overwriteDeleteSql, relayTable, stagingNewRowCountSql } from '@/lib/restore-apply';
+import { ADMIN_ID_COLUMN, ADMIN_NULL_TABLES, LARGE_OBJECT_TABLE, adminColumnFor, archiveDigestBytesForSql, archiveDigestDescriptionSql, archiveDigestListSql, catalogPrimaryKeys, countRowsSql, createStagingSchemaSql, createStagingTableSql, deleteDigestBatchSql, dropStagingSchemaSql, insertSelectSql, liveDigestQuerySql, mergeInsertSql, overwriteDeleteSql, relayTable, stagingNewRowCountSql } from '@/lib/restore-apply';
 import type { ApplyFacts, ApplyStrategies, LargeObjectCopy, RelayPage, TableApplyRecord, TableStrategy } from '@/lib/restore-apply';
 import { blobBatchFits, blobBatchInsertSql, blobRowBytes, runStagingLoad, runTableTransaction } from '@/lib/restore-apply-runner';
 import type { LiveStatementRunner } from '@/lib/restore-apply-runner';
@@ -116,11 +116,14 @@ export async function dropStaging(staging: string, env: LiveDatabaseEnv): Promis
  * afterwards must equal what the strategy promised, or the transaction is
  * rolled back rather than reported as applied.
  *
- * Restored rows are written with the promoting column set to NULL, because an
- * archive's own `admin_id` names an account that must not be resurrected as the
- * author of a row, and a single-column key has its sequence advanced inside the
- * same transaction so the next live key cannot collide with a restored one; a
- * composite key has no sequence to advance and says so in the note.
+ * A restored author column is written NULL only when `admins` is not in this
+ * promote: the archive's own `admin_id` names an account that must not be
+ * resurrected as the author of a row, and with `admins` absent there is no live
+ * row for it to name. When `admins` is applied, the column is preserved, because
+ * the id then resolves to the row beside it. A single-column key has its sequence
+ * advanced inside the same transaction so the next live key cannot collide with a
+ * restored one; a composite key has no sequence to advance and says so in the
+ * note.
  */
 export async function applyOneTable(
   env: LiveDatabaseEnv,
@@ -166,7 +169,8 @@ export async function applyOneTable(
 
 function tableNote(table: string, strategy: TableStrategy, stagingRows: number, adminColumn: string | null, pkColumns: readonly string[]): { readonly note?: string } {
   const notes: string[] = [];
-  if (adminColumn !== null) notes.push(`${adminColumn} set to NULL on ${stagingRows} restored row(s)`);
+  if (adminColumn !== null) notes.push(`${adminColumn} set to NULL on ${stagingRows} restored row(s) because admins is not applied in this promote`);
+  else if (ADMIN_NULL_TABLES.includes(table)) notes.push(`${ADMIN_ID_COLUMN} preserved on ${stagingRows} restored row(s): admins is applied, so the archive id resolves to a co-restored row`);
   if (strategy === 'overwrite') notes.push(`replaced ${stagingRows} live row(s) the archive carries`);
   if (pkColumns.length !== 1) notes.push('composite key, so no sequence was advanced');
   return notes.length === 0 ? {} : { note: notes.join('; ') };

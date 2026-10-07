@@ -1,36 +1,30 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { BACKUP_TABLE_NAMES, BACKUP_TABLES, validateTableSelection } from '@/lib/backup-table-catalog';
+import { ADMIN_TABLE, BACKUP_TABLE_NAMES, BACKUP_TABLES, GRANT_TABLES, SCHEDULE_TABLE, validateTableSelection } from '@/lib/backup-table-catalog';
 
 const SCHEMA_SOURCE = readFileSync(fileURLToPath(new URL('../prisma/schema.prisma', import.meta.url)), 'utf8');
 
 /**
- * schema.prisma models the catalog leaves out on purpose: `admins` is never
- * archived because Epic 3 remaps admin_id to a live admins row instead, and
- * `monitor_targets`, `backup_schedules` and `backup_runs` are backup and
- * monitor configuration describing what to dump, not competition data to dump.
+ * schema.prisma models the catalog leaves out on purpose.
  *
- * The RBAC grant tables are out on the same reasoning as `admins`, one step
- * further: an archive of them would restore the permission rows themselves, so a
- * restore would overwrite who may act rather than what they may act on. A dump
- * that hands back the authority to run the restore is not a backup of the panel,
- * so `permissions`, `groups`, `group_permissions`, `admin_groups` and
- * `admin_permission_overrides` stay live-only, alongside `audit_log`, which is
- * an append-only record of what was authorized and must never be replayed.
+ * `monitor_targets` is infrastructure: it describes which external URLs the
+ * panel probes and at which interval, so it is monitor configuration that this
+ * host owns rather than competition data it serves. A restore that carried it
+ * would repoint the panel's alerting at endpoints the archive happened to name.
+ *
+ * `audit_log` is the append-only, hash-chained record of what was authorized and
+ * by whom. Its rows are only meaningful as the ordered result of real events, so
+ * replaying them into a restore would put actions in the trail that never
+ * happened, and replaying only part of it would break the chain outright. It is
+ * never restored; a restore is written to the trail by the actions it performs,
+ * which is the only honest way for it to appear there.
+ *
+ * Everything else in the schema is selectable: the RBAC grant tables are here
+ * because a restore that carried no privileges would land every admin with an
+ * empty permission set, which is a panel nobody can operate.
  */
-const MODELS_OUTSIDE_CATALOG: ReadonlySet<string> = new Set([
-  'admins',
-  'monitor_targets',
-  'backup_schedules',
-  'backup_runs',
-  'permissions',
-  'groups',
-  'group_permissions',
-  'admin_groups',
-  'admin_permission_overrides',
-  'audit_log',
-]);
+const MODELS_OUTSIDE_CATALOG: ReadonlySet<string> = new Set(['monitor_targets', 'audit_log']);
 
 /** The tasks/datasets cycle no dump order can satisfy; see the catalog header. */
 const UNSATISFIABLE_EDGES: ReadonlyArray<readonly [string, string]> = [['tasks', 'datasets']];
@@ -101,9 +95,30 @@ describe('BACKUP_TABLES', () => {
     expect(positionOf('user_test_results')).toBeLessThan(positionOf('user_test_executables'));
   });
 
+  it('places admins before every table that names it as the row author', () => {
+    for (const child of ['announcements', 'messages', 'questions', 'admin_groups', 'admin_permission_overrides']) {
+      expect(positionOf(ADMIN_TABLE)).toBeLessThan(positionOf(child));
+    }
+  });
+
+  it('orders each grant table after both of its parents', () => {
+    expect(positionOf('groups')).toBeLessThan(positionOf('group_permissions'));
+    expect(positionOf('permissions')).toBeLessThan(positionOf('group_permissions'));
+    expect(positionOf('groups')).toBeLessThan(positionOf('admin_groups'));
+    expect(positionOf(ADMIN_TABLE)).toBeLessThan(positionOf('admin_groups'));
+    expect(positionOf('permissions')).toBeLessThan(positionOf('admin_permission_overrides'));
+    expect(positionOf(ADMIN_TABLE)).toBeLessThan(positionOf('admin_permission_overrides'));
+  });
+
   it('places fsobjects last because it carries the large objects', () => {
     expect(positionOf('fsobjects')).toBe(BACKUP_TABLE_NAMES.length - 1);
     expect(BACKUP_TABLES.at(-1)?.needsLargeObjects).toBe(true);
+  });
+
+  it('flags admins and the grant tables sensitive, and nothing else', () => {
+    const flagged = BACKUP_TABLES.filter((table) => 'sensitive' in table && table.sensitive).map((table) => table.name);
+    expect(flagged).toEqual([ADMIN_TABLE, 'permissions', 'groups', 'group_permissions', 'admin_groups', 'admin_permission_overrides']);
+    expect(GRANT_TABLES).toEqual(flagged.filter((name) => name !== ADMIN_TABLE));
   });
 });
 
@@ -121,6 +136,21 @@ describe('schema parity', () => {
 
   it('does not exclude a model that schema.prisma no longer declares', () => {
     expect([...MODELS_OUTSIDE_CATALOG].filter((name) => !SCHEMA_MODELS.has(name))).toEqual([]);
+  });
+
+  it('keeps admins, the grant tables and the backup tables out of no exclusion', () => {
+    for (const name of [ADMIN_TABLE, ...GRANT_TABLES, SCHEDULE_TABLE, 'backup_runs']) {
+      expect(BACKUP_TABLE_NAMES).toContain(name);
+      expect(MODELS_OUTSIDE_CATALOG.has(name)).toBe(false);
+    }
+  });
+
+  it('confirms admins declares no parent of its own, so it is a catalog root', () => {
+    expect(SCHEMA_MODELS.get(ADMIN_TABLE)?.foreignKeys).toEqual([]);
+  });
+
+  it('confirms backup_runs.scheduleId is a bare scalar with no foreign key', () => {
+    expect(SCHEMA_MODELS.get('backup_runs')?.foreignKeys).toEqual([]);
   });
 });
 
@@ -161,12 +191,15 @@ describe('validateTableSelection', () => {
     expect(result.warnings[0]).toContain('entire database');
   });
 
-  it('reports only the unarchived admins for the whole catalog', () => {
+  it('reports the sensitivity warnings and nothing else for the whole catalog', () => {
     const result = validateTableSelection([...BACKUP_TABLE_NAMES]);
     expect(result.valid).toBe(true);
     expect(result.unknown).toEqual([]);
-    expect(result.warnings).toHaveLength(1);
-    expect(result.warnings[0]).toContain('admins');
+    const warned = result.warnings.join('\n');
+    expect(warned).toContain(ADMIN_TABLE);
+    expect(warned).toContain('admin_groups');
+    expect(warned).toContain(SCHEDULE_TABLE);
+    expect(missingParentWarnings([...result.warnings])).toEqual([]);
   });
 
   it('rejects a name outside the catalog', () => {
@@ -241,20 +274,34 @@ describe('validateTableSelection', () => {
   });
 
   it('warns about announcements missing contests, and only then', () => {
-    expect(missingParentWarnings(validateTableSelection(['contests', 'announcements']).warnings)).toEqual([]);
-    const warnings = missingParentWarnings(validateTableSelection(['announcements']).warnings);
+    expect(missingParentWarnings(validateTableSelection([ADMIN_TABLE, 'contests', 'announcements']).warnings)).toEqual([]);
+    const warnings = missingParentWarnings(validateTableSelection([ADMIN_TABLE, 'announcements']).warnings);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain('contests');
   });
 
-  it('warns that admins is never archived for every table that holds an admin_id', () => {
+  it('warns that a missing admins nulls the reference instead of failing the restore', () => {
     for (const name of ['announcements', 'messages', 'questions']) {
-      const result = validateTableSelection([name]);
-      expect(result.valid).toBe(true);
-      const warning = result.warnings.find((entry) => entry.includes('admins'));
-      expect(warning).toContain('admin_id');
-      expect(warning).toContain('Epic 3');
+      const warnings = missingParentWarnings(validateTableSelection([name]).warnings);
+      const adminWarning = warnings.find((warning) => warning.includes(ADMIN_TABLE));
+      expect(adminWarning, `${name} reported no admins warning`).toBeDefined();
+      expect(adminWarning).toContain('set to NULL');
+      expect(adminWarning).not.toContain('fail its foreign keys');
     }
+  });
+
+  it('warns about both grant parents of a grant table selected alone', () => {
+    const result = validateTableSelection(['admin_groups']);
+    expect(result.valid).toBe(true);
+    const warnings = missingParentWarnings(result.warnings);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(ADMIN_TABLE);
+    expect(warnings[0]).toContain('groups');
+  });
+
+  it('stays silent about grant parents once both are selected', () => {
+    const result = validateTableSelection([ADMIN_TABLE, 'groups', 'admin_groups']);
+    expect(missingParentWarnings(result.warnings)).toEqual([]);
   });
 
   it('warns about fsobjects for whichever flagged consumer is selected', () => {
@@ -274,5 +321,44 @@ describe('validateTableSelection', () => {
     const result = validateTableSelection(['contests', 'users', 'teams', 'participations']);
     expect(result.valid).toBe(true);
     expect(result.warnings).toEqual([]);
+  });
+});
+
+describe('sensitivity warnings', () => {
+  it('says admins carries login hashes and rewrites the username, hash and enabled flag', () => {
+    const warning = validateTableSelection([ADMIN_TABLE]).warnings.find((entry) => entry.includes(ADMIN_TABLE));
+    expect(warning).toContain('password hash');
+    expect(warning).toContain('username');
+    expect(warning).toContain('enabled');
+  });
+
+  it('says privileges travel only when the grant tables are co-selected', () => {
+    const alone = validateTableSelection([ADMIN_TABLE]).warnings.find((entry) => entry.includes(ADMIN_TABLE));
+    expect(alone).toContain('none are restored');
+    expect(alone).toContain('empty database has none at all');
+    const withGrants = validateTableSelection([ADMIN_TABLE, ...GRANT_TABLES]).warnings.find((entry) => entry.includes(ADMIN_TABLE));
+    expect(withGrants).toContain('Privileges do travel');
+    expect(withGrants).toContain('admin_groups');
+  });
+
+  it('names every selected grant table and points at the validate report', () => {
+    const result = validateTableSelection([...GRANT_TABLES]);
+    const warning = result.warnings.find((entry) => entry.includes('who may act'));
+    expect(warning).toBeDefined();
+    for (const table of GRANT_TABLES) expect(warning).toContain(`"${table}"`);
+    expect(warning).toContain('validate report');
+  });
+
+  it('says a restored enabled schedule resumes firing under the poller', () => {
+    const result = validateTableSelection([SCHEDULE_TABLE]);
+    expect(result.valid).toBe(true);
+    const warning = result.warnings.find((entry) => entry.includes(SCHEDULE_TABLE));
+    expect(warning).toContain('resumes firing');
+    expect(warning).toContain('interval');
+  });
+
+  it('says nothing about privilege while no sensitive table is selected', () => {
+    const result = validateTableSelection(['contests', 'users', 'teams']);
+    expect(result.warnings.join(' ')).not.toContain('who may act');
   });
 });

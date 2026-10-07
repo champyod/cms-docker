@@ -50,6 +50,7 @@ export type { LargeObjectCopy } from '@/lib/restore-apply-sql';
 
 // The read-only measurements the validation decisions are made from.
 export {
+  accountRowsSql,
   archiveDigestBytesForSql,
   archiveDigestBytesSql,
   archiveDigestDescriptionSql,
@@ -61,7 +62,9 @@ export {
   liveDigestQuerySql,
   liveFkParentQuerySql,
   livePrimaryKeyQuerySql,
+  membershipRowsSql,
   nameListLiteral,
+  overrideRowsSql,
   stagingSchemaTableCountSql,
 } from '@/lib/restore-apply-sql-queries';
 
@@ -83,6 +86,23 @@ export {
   planApply,
 } from '@/lib/restore-apply-plan';
 export type { ApplyFacts, ApplyPlan } from '@/lib/restore-apply-plan';
+
+// The privilege delta an admins restore carries, and the conflict that refuses one.
+export {
+  PRIVILEGE_DETAIL_LIMIT,
+  accountConflictErrors,
+  accountConflictsBetween,
+  accountDeltas,
+  grantsTravel,
+  membershipDeltas,
+  overrideDeltas,
+  parseAccounts,
+  parseMemberships,
+  parseOverrides,
+  privilegeDeltas,
+  privilegeWarnings,
+} from '@/lib/restore-apply-privileges';
+export type { AccountConflict, AccountDelta, AccountRow, MembershipDelta, MembershipRow, OverrideDelta, OverrideRow, PrivilegeDeltas, PrivilegeFacts } from '@/lib/restore-apply-privileges';
 
 // ---------------------------------------------------------------------------
 // Strategies and report shapes

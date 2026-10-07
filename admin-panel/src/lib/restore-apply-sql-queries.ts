@@ -84,3 +84,52 @@ export function archiveDigestDescriptionSql(digest: string): string {
 export function databaseSizeQuerySql(): string {
   return 'SELECT pg_database_size(current_database())::bigint::text';
 }
+
+// ---------------------------------------------------------------------------
+// Privilege rows, read on both sides of the comparison
+// ---------------------------------------------------------------------------
+
+/**
+ * Accounts are read as `username`+`enabled` rather than by id, because the delta
+ * the operator must see is "does this login exist, and can it be used", not
+ * "did the surrogate key change". The id is carried alongside so a username that
+ * lives under a different id on each side can be reported as a conflict instead
+ * of silently merged.
+ *
+ * Username and group name are the operator-facing text; a permission key is a
+ * dotted token. Neither can contain a tab, which is what makes this safe to read
+ * as one delimited column: `Codename` usernames and group names are drawn from a
+ * restricted charset, and a key never contains whitespace.
+ */
+const FIELD_SEPARATOR = '|';
+
+function delimited(fields: readonly string[]): string {
+  return `${fields.map((field) => `${field}::text`).join(` || '${FIELD_SEPARATOR}' || `)}`;
+}
+
+export function accountRowsSql(): string {
+  return `SELECT ${delimited(['id', 'username', 'enabled'])} FROM public.admins ORDER BY username, id`;
+}
+
+/**
+ * Archive usernames that already exist live under a different id are found by
+ * comparing the two halves of this row set rather than by one statement spanning
+ * both: the archive lives in the scratch container and the live rows do not, so
+ * no single query can see the pair. `accountConflictsBetween` in
+ * `restore-apply-privileges.ts` is where that comparison lives.
+ */
+export function membershipRowsSql(): string {
+  return [
+    `SELECT ${delimited(['a.username', 'g.name'])}`,
+    'FROM public.admin_groups AS m JOIN public.admins AS a ON a.id = m.admin_id JOIN public.groups AS g ON g.id = m.group_id',
+    'ORDER BY a.username, g.name',
+  ].join(' ');
+}
+
+export function overrideRowsSql(): string {
+  return [
+    `SELECT ${delimited(['a.username', 'p.key', 'o.effect'])}`,
+    'FROM public.admin_permission_overrides AS o JOIN public.admins AS a ON a.id = o.admin_id JOIN public.permissions AS p ON p.id = o.permission_id',
+    'ORDER BY a.username, p.key',
+  ].join(' ');
+}

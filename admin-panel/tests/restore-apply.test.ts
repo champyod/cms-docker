@@ -3,11 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { BACKUP_TABLE_NAMES } from '@/lib/backup-table-catalog';
 import {
   ADMIN_ID_COLUMN,
+  ADMIN_NULL_TABLES,
   DEFAULT_STRATEGY,
   LARGE_OBJECT_TABLE,
   LARGE_TABLE_ROW_WARN,
   PROMOTE_TOKEN_TTL_MS,
   TABLE_STRATEGIES,
+  adminColumnFor,
   applyOrder,
   buildReportId,
   checkConfirmToken,
@@ -18,7 +20,7 @@ import {
   planApply,
 } from '@/lib/restore-apply';
 import type { ApplyStrategies } from '@/lib/restore-apply';
-import { EPOCH, STAGING, liveFacts, mergeAll } from './restore-apply-fixtures';
+import { EPOCH, STAGING, liveFacts, mergeAll, privilegeFacts } from './restore-apply-fixtures';
 
 describe('normalizeStrategies', () => {
   it('defaults every catalog table to merge-upsert', () => {
@@ -34,9 +36,9 @@ describe('normalizeStrategies', () => {
   });
 
   it('refuses a table outside the catalog and a value outside the strategies', () => {
-    const unknownTable = normalizeStrategies({ admins: 'merge' } as unknown as ApplyStrategies);
+    const unknownTable = normalizeStrategies({ monitor_targets: 'merge' } as unknown as ApplyStrategies);
     expect(unknownTable.ok).toBe(false);
-    expect(unknownTable.unknown).toEqual(['admins']);
+    expect(unknownTable.unknown).toEqual(['monitor_targets']);
     const badValue = normalizeStrategies({ contests: 'truncate' } as unknown as ApplyStrategies);
     expect(badValue.ok).toBe(false);
     expect(badValue.unknown).toEqual(['contests']);
@@ -182,7 +184,7 @@ describe('planApply', () => {
   it('reports the archive-versus-live estimate and the admin_id note per table', () => {
     const rows = new Map(BACKUP_TABLE_NAMES.map((table) => [table, table === 'users' ? 40 : 10]));
     const live = new Map(BACKUP_TABLE_NAMES.map((table) => [table, table === 'users' ? 25 : 4]));
-    const plan = planApply(mergeAll(), liveFacts({ archiveRows: rows, liveRows: live }));
+    const plan = planApply(mergeAll({ admins: 'skip' }), liveFacts({ archiveRows: rows, liveRows: live }));
     const users = plan.tableReports.find((row) => row.table === 'users');
     expect(users).toMatchObject({ liveRows: 25, archiveRows: 40, newEstimate: 15 });
     const messages = plan.tableReports.find((row) => row.table === 'messages');
@@ -218,5 +220,60 @@ describe('planApply', () => {
     const rows = plan.tableReports.find((row) => row.table === LARGE_OBJECT_TABLE);
     expect(rows?.warnings.join(' ')).toContain('Overwrite replaces only the 10 row(s)');
     expect(rows?.warnings.join(' ')).toContain('30 live row(s) are left alone');
+  });
+
+  it('preserves admin_id when admins is applied in the same promote', () => {
+    const plan = planApply(mergeAll(), liveFacts());
+    for (const table of ADMIN_NULL_TABLES) {
+      const report = plan.tableReports.find((row) => row.table === table);
+      expect(report?.warnings.join(' '), table).toContain(`"${ADMIN_ID_COLUMN}" is preserved`);
+      expect(report?.warnings.join(' '), table).not.toContain('will be set to NULL');
+    }
+    expect(plan.warnings.join(' ')).not.toContain('"admins" is not applied in this promote');
+  });
+
+  it('nulls admin_id and says so when admins is skipped', () => {
+    const plan = planApply(mergeAll({ admins: 'skip' }), liveFacts());
+    const messages = plan.tableReports.find((row) => row.table === 'messages');
+    expect(messages?.warnings.join(' ')).toContain(`"${ADMIN_ID_COLUMN}" will be set to NULL on 10 restored row(s)`);
+    const warning = plan.warnings.find((entry) => entry.includes('is not applied in this promote'));
+    expect(warning).toContain('messages, questions');
+    expect(warning).toContain('Apply "admins" as well');
+  });
+
+  it('refuses the promote when a staged username exists live under another id', () => {
+    const privileges = privilegeFacts({
+      archiveAccounts: [{ id: 7, username: 'ada', enabled: true }],
+      liveAccounts: [{ id: 1, username: 'ada', enabled: true }],
+      accountConflicts: [{ username: 'ada', stagedId: 7, liveId: 1 }],
+    });
+    const plan = planApply(mergeAll(), liveFacts({ privileges }));
+    expect(plan.errors.some((error) => error.includes('cannot be applied') && error.includes('Rename or remove'))).toBe(true);
+  });
+
+  it('carries the privilege delta into the plan warnings', () => {
+    const privileges = privilegeFacts({
+      archiveAccounts: [{ id: 2, username: 'grace', enabled: true }],
+      liveAccounts: [{ id: 1, username: 'ada', enabled: true }],
+      archiveMemberships: [{ username: 'grace', groupName: 'Superadmin' }],
+      liveMemberships: [],
+    });
+    const warnings = planApply(mergeAll(), liveFacts({ privileges })).warnings.join('\n');
+    expect(warnings).toContain('adds 1 login(s) live does not have: grace');
+    expect(warnings).toContain('grace gains Superadmin');
+  });
+});
+
+describe('adminColumnFor', () => {
+  it('nulls the author column only while admins is absent from the promote', () => {
+    expect(adminColumnFor('messages', mergeAll({ admins: 'skip' }))).toBe(ADMIN_ID_COLUMN);
+    expect(adminColumnFor('messages', mergeAll())).toBeNull();
+    expect(adminColumnFor('messages', { messages: 'merge' })).toBe(ADMIN_ID_COLUMN);
+  });
+
+  it('names no admin column for a table that carries none, or a skipped one', () => {
+    expect(adminColumnFor('users', mergeAll({ admins: 'skip' }))).toBeNull();
+    expect(adminColumnFor('admins', mergeAll({ admins: 'skip' }))).toBeNull();
+    expect(adminColumnFor('messages', mergeAll({ admins: 'skip', messages: 'skip' }))).toBeNull();
   });
 });

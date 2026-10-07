@@ -38,6 +38,7 @@ import {
   planApply,
 } from '@/lib/restore-apply';
 import type { ApplyFacts, ApplyStrategies } from '@/lib/restore-apply';
+import { measurePrivileges } from './restore-apply-measure-privileges';
 import { readToc, scratchQuery } from './restore-preview-run';
 
 const execFileAsync = promisify(execFile);
@@ -158,7 +159,7 @@ async function measureDigests(container: string, strategies: ApplyStrategies): P
 export async function measureFacts(container: string, strategies: ApplyStrategies, order: readonly string[]): Promise<ApplyFacts> {
   await ensurePermission('backup:restore');
   const toc = await readToc(container);
-  const [liveColumns, livePkColumns, liveFkParents, liveRows, archiveRows, archiveColumns, databaseSizeBytes, digests] = await Promise.all([
+  const [liveColumns, livePkColumns, liveFkParents, liveRows, archiveRows, archiveColumns, databaseSizeBytes, digests, privileges] = await Promise.all([
     liveGrouped(liveColumnsQuerySql, BACKUP_TABLE_NAMES),
     liveGrouped(livePrimaryKeyQuerySql, BACKUP_TABLE_NAMES),
     liveGrouped(liveFkParentQuerySql, BACKUP_TABLE_NAMES),
@@ -167,8 +168,9 @@ export async function measureFacts(container: string, strategies: ApplyStrategie
     scratchColumns(container, order),
     liveScalar(databaseSizeQuerySql()),
     measureDigests(container, strategies),
+    measurePrivileges(container, strategies),
   ]);
-  return { scratchAlive: true, archiveTables: new Set(toc.catalogTables), archiveRows, archiveColumns, liveRows, liveColumns, livePkColumns, liveFkParents, ...digests, databaseSizeBytes };
+  return { scratchAlive: true, archiveTables: new Set(toc.catalogTables), archiveRows, archiveColumns, liveRows, liveColumns, livePkColumns, liveFkParents, ...digests, databaseSizeBytes, privileges };
 }
 
 /** Archive blobs must be self-consistent in the scratch container before any byte is copied. */

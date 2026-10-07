@@ -9,8 +9,10 @@
  * `restore-apply-sql.ts` and `restore-apply-sql-queries.ts`.
  */
 
-import { BACKUP_TABLES } from '@/lib/backup-table-catalog';
+import { ADMIN_TABLE, BACKUP_TABLES } from '@/lib/backup-table-catalog';
 import { ADMIN_ID_COLUMN, ADMIN_NULL_TABLES, LARGE_OBJECT_TABLE, isStagingSchemaName } from '@/lib/restore-apply-sql';
+import type { PrivilegeFacts } from '@/lib/restore-apply-privileges';
+import { accountConflictErrors, privilegeWarnings } from '@/lib/restore-apply-privileges';
 import type { ApplyStrategies, TableValidateReport } from '@/lib/restore-apply';
 
 // ---------------------------------------------------------------------------
@@ -26,8 +28,20 @@ export function catalogPrimaryKeys(table: string): readonly string[] {
   return BACKUP_TABLES.find((entry) => entry.name === table)?.pk ?? [];
 }
 
+/**
+ * The column whose archive value this table must not carry, or null.
+ *
+ * Only the three author columns qualify, and only while `admins` is absent from
+ * this promote: when it is applied, the archive's `admin_id` names a row the same
+ * restore is writing, so preserving it keeps the restored rows attributed to the
+ * admin that wrote them. Anything else — `admins` skipped, or named by no
+ * strategy at all — leaves the id pointing at a row this restore is not
+ * bringing, so the column is written NULL instead.
+ */
 export function adminColumnFor(table: string, strategies: ApplyStrategies): string | null {
-  return ADMIN_NULL_TABLES.includes(table) && strategies[table] !== 'skip' ? ADMIN_ID_COLUMN : null;
+  if (!ADMIN_NULL_TABLES.includes(table) || strategies[table] === 'skip') return null;
+  const adminsStrategy = strategies[ADMIN_TABLE];
+  return adminsStrategy === 'merge' || adminsStrategy === 'overwrite' ? null : ADMIN_ID_COLUMN;
 }
 
 // ---------------------------------------------------------------------------
@@ -90,6 +104,8 @@ export interface ApplyFacts {
   readonly missingDigestCount: number;
   readonly missingDigestBytes: number;
   readonly databaseSizeBytes: number;
+  /** The archive-versus-live account and grant rows the privilege rules are decided from. */
+  readonly privileges: PrivilegeFacts;
 }
 
 export interface ApplyPlan {
@@ -171,11 +187,16 @@ function fsobjectWarnings(facts: ApplyFacts, strategies: ApplyStrategies): reado
   ];
 }
 
-function adminWarnings(facts: ApplyFacts, strategies: ApplyStrategies): readonly string[] {
-  const affected = ADMIN_NULL_TABLES.filter((table) => strategies[table] !== 'skip');
+/** The three author tables whose `admin_id` the restore cannot keep, and what it does instead. */
+function nulledAdminIdTables(strategies: ApplyStrategies): readonly string[] {
+  return ADMIN_NULL_TABLES.filter((table) => adminColumnFor(table, strategies) !== null);
+}
+
+function adminWarnings(strategies: ApplyStrategies): readonly string[] {
+  const affected = nulledAdminIdTables(strategies);
   if (affected.length === 0) return [];
   return [
-    `"admins" is never archived, so ${affected.join(', ')} will have "${ADMIN_ID_COLUMN}" set to NULL on every restored row; the column is nullable in the live schema.`,
+    `"${ADMIN_TABLE}" is not applied in this promote, so ${affected.join(', ')} will have "${ADMIN_ID_COLUMN}" set to NULL on every restored row; the column is nullable in the live schema. Apply "${ADMIN_TABLE}" as well to keep each row attributed to the admin that wrote it.`,
   ];
 }
 
@@ -223,10 +244,12 @@ export function planApply(strategies: ApplyStrategies, facts: ApplyFacts): Apply
     errors.push(...tableErrors);
     const archiveRows = countOf(facts.archiveRows, table);
     const liveRows = countOf(facts.liveRows, table);
+    const nulledAdminId = adminColumnFor(table, strategies) !== null;
     const reportWarnings = [
       ...tableWarnings(facts, table, strategies),
-      ...(ADMIN_NULL_TABLES.includes(table) && strategies[table] !== 'skip'
-        ? [`"${ADMIN_ID_COLUMN}" will be set to NULL on ${archiveRows} restored row(s).`]
+      ...(nulledAdminId ? [`"${ADMIN_ID_COLUMN}" will be set to NULL on ${archiveRows} restored row(s).`] : []),
+      ...(!nulledAdminId && ADMIN_NULL_TABLES.includes(table) && strategies[table] !== 'skip'
+        ? [`"${ADMIN_ID_COLUMN}" is preserved: "${ADMIN_TABLE}" is applied in this promote, so the archive id resolves to a row this restore is writing.`]
         : []),
     ];
     tableReports.push({
@@ -239,7 +262,13 @@ export function planApply(strategies: ApplyStrategies, facts: ApplyFacts): Apply
     });
   }
   errors.push(...overwriteParentConflicts(facts, strategies));
-  warnings.push(...fsobjectWarnings(facts, strategies), ...adminWarnings(facts, strategies), ...spaceWarnings(facts, strategies));
+  errors.push(...accountConflictErrors(facts.privileges, strategies));
+  warnings.push(
+    ...fsobjectWarnings(facts, strategies),
+    ...adminWarnings(strategies),
+    ...privilegeWarnings(facts.privileges, strategies),
+    ...spaceWarnings(facts, strategies),
+  );
   if (strategies[LARGE_OBJECT_TABLE] !== 'skip' && !facts.archiveTables.has(LARGE_OBJECT_TABLE)) {
     errors.push(`"${LARGE_OBJECT_TABLE}" is applied but the archive carries no rows for it.`);
   }

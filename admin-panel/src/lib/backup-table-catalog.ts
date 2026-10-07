@@ -33,6 +33,14 @@ export interface BackupTable {
    * content-addressed subtree.
    */
   readonly needsLargeObjects?: boolean;
+  /**
+   * The table carries panel authority, or the material it is resolved from:
+   * login hashes, group membership, or the permission rows membership resolves
+   * to. Restoring one changes who may act rather than what they may act on, so
+   * the validator warns on every one of them and the restore preview reports the
+   * exact per-username differences before a single row is written.
+   */
+  readonly sensitive?: boolean;
 }
 
 export interface TableSelectionResult {
@@ -42,6 +50,11 @@ export interface TableSelectionResult {
 }
 
 const CATALOG = [
+  // Roots. Nothing the catalog selects above these resolves through one of them,
+  // and three content tables name `admins` as the author of a row, so it leads.
+  { name: 'admins', label: 'Admins', pk: ['id'], sensitive: true },
+  { name: 'permissions', label: 'Permissions', pk: ['id'], sensitive: true },
+  { name: 'groups', label: 'Groups', pk: ['id'], sensitive: true },
   { name: 'contests', label: 'Contests', pk: ['id'] },
   { name: 'announcements', label: 'Announcements', pk: ['id'] },
   { name: 'users', label: 'Users', pk: ['id'] },
@@ -66,6 +79,17 @@ const CATALOG = [
   { name: 'user_test_files', label: 'User Test Files', pk: ['id'], needsLargeObjects: true },
   { name: 'user_test_managers', label: 'User Test Managers', pk: ['id'], needsLargeObjects: true },
   { name: 'user_test_executables', label: 'User Test Executables', pk: ['id'], needsLargeObjects: true },
+  // No table in this catalog references any of these five, so they sit together
+  // after everything that consumes them rather than among the content tables:
+  // the three grant tables resolve through the roots above, and the two backup
+  // tables have no relation to anything at all — `backup_runs.scheduleId` is a
+  // bare string on purpose, because run history must outlive the schedule it
+  // came from.
+  { name: 'group_permissions', label: 'Group Permissions', pk: ['id'], sensitive: true },
+  { name: 'admin_groups', label: 'Admin Groups', pk: ['id'], sensitive: true },
+  { name: 'admin_permission_overrides', label: 'Admin Permission Overrides', pk: ['id'], sensitive: true },
+  { name: 'backup_schedules', label: 'Backup Schedules', pk: ['id'] },
+  { name: 'backup_runs', label: 'Backup Runs', pk: ['id'] },
   { name: 'fsobjects', label: 'File System Objects', pk: ['digest'], needsLargeObjects: true },
 ] as const satisfies readonly BackupTable[];
 
@@ -75,8 +99,13 @@ export const BACKUP_TABLE_NAMES: readonly string[] = CATALOG.map((table) => tabl
 
 type CatalogTableName = (typeof CATALOG)[number]['name'];
 
+export const ADMIN_TABLE = 'admins';
+export const SCHEDULE_TABLE = 'backup_schedules';
+
+/** The tables that decide who may act, from the permission key down to the link row. */
+export const GRANT_TABLES: readonly string[] = CATALOG.filter((table) => 'sensitive' in table && table.sensitive && table.name !== ADMIN_TABLE).map((table) => table.name);
+
 const LARGE_OBJECT_TABLE = 'fsobjects';
-const ADMIN_TABLE = 'admins';
 
 const EMPTY_SELECTION_WARNING = 'No tables selected: pg_dump with zero -t flags dumps the entire database, so an empty selection is rejected.';
 
@@ -86,22 +115,22 @@ const EMPTY_SELECTION_WARNING = 'No tables selected: pg_dump with zero -t flags 
  * warning about it would be unactionable. Keys are typed as catalog names, so a
  * misspelled key is a type error instead of a warning that never fires.
  *
- * `admins` is absent from this catalog and is still referenced by
- * `announcements`, `messages` and `questions`; see ADMIN_REFERENCE_TABLES for the
- * warning that covers it. The `tasks` -> `datasets` edge is omitted as the
- * deliberate cycle break above.
+ * The `tasks` -> `datasets` edge is omitted as the deliberate cycle break above.
  */
 const PARENT_TABLES: Readonly<Partial<Record<CatalogTableName, readonly string[]>>> = {
-  announcements: ['contests'],
+  admin_groups: [ADMIN_TABLE, 'groups'],
+  admin_permission_overrides: [ADMIN_TABLE, 'permissions'],
+  announcements: ['contests', ADMIN_TABLE],
   attachments: ['tasks'],
   datasets: ['tasks'],
   evaluations: ['datasets', 'submission_results', 'submissions', 'testcases'],
   executables: ['datasets', 'submission_results', 'submissions'],
   files: ['submissions'],
+  group_permissions: ['groups', 'permissions'],
   managers: ['datasets'],
-  messages: ['participations'],
+  messages: ['participations', ADMIN_TABLE],
   participations: ['contests', 'teams', 'users'],
-  questions: ['participations'],
+  questions: ['participations', ADMIN_TABLE],
   statements: ['tasks'],
   submission_results: ['datasets', 'submissions'],
   submissions: ['participations', 'tasks'],
@@ -117,21 +146,29 @@ const PARENT_TABLES: Readonly<Partial<Record<CatalogTableName, readonly string[]
 };
 
 /**
- * Tables holding a nullable `admin_id` that points at `admins`. `admins` is
- * deliberately not archived, so the reference cannot be restored as-is: it
- * stays dangling until Epic 3 remaps it to a live admins row. Kept apart from
- * PARENT_TABLES because the parent is outside the catalog and never selectable.
+ * Parent edges a nullable column makes optional. `admin_id` is nullable on all
+ * three tables that carry it, so a selection without `admins` costs the restored
+ * rows their authorship rather than the rows themselves: the applier writes
+ * NULL. Every other edge in PARENT_TABLES is NOT NULL and does fail the restore.
  */
-const ADMIN_REFERENCE_TABLES: readonly CatalogTableName[] = ['announcements', 'messages', 'questions'];
+const NULLABLE_PARENT_TABLES: Readonly<Partial<Record<CatalogTableName, readonly string[]>>> = {
+  announcements: [ADMIN_TABLE],
+  messages: [ADMIN_TABLE],
+  questions: [ADMIN_TABLE],
+};
 
 function buildMissingParentWarnings(selected: ReadonlySet<string>): string[] {
   const warnings: string[] = [];
   for (const table of CATALOG) {
     if (!selected.has(table.name)) continue;
-    const parents = PARENT_TABLES[table.name] ?? [];
-    const missing = parents.filter((parent) => !selected.has(parent));
-    if (missing.length > 0) {
-      warnings.push(`"${table.name}" references ${missing.join(', ')}, which is not selected; the restore will fail its foreign keys.`);
+    const missing = (PARENT_TABLES[table.name] ?? []).filter((parent) => !selected.has(parent));
+    const optional = (NULLABLE_PARENT_TABLES[table.name] ?? []).filter((parent) => !selected.has(parent));
+    const required = missing.filter((parent) => !optional.includes(parent));
+    if (required.length > 0) {
+      warnings.push(`"${table.name}" references ${required.join(', ')}, which is not selected; the restore will fail its foreign keys.`);
+    }
+    if (optional.length > 0) {
+      warnings.push(`"${table.name}" references ${optional.join(', ')}, which is not selected; its nullable reference will be set to NULL on every restored row.`);
     }
   }
   return warnings;
@@ -146,12 +183,30 @@ function buildLargeObjectWarnings(selected: ReadonlySet<string>): string[] {
   return [`"${LARGE_OBJECT_TABLE}" is missing: ${consumers.join(', ')} would be backed up without the large objects their digests point at.`];
 }
 
-function buildAdminReferenceWarnings(selected: ReadonlySet<string>): string[] {
-  const referencing = ADMIN_REFERENCE_TABLES.filter((name) => selected.has(name));
-  if (referencing.length === 0) return [];
-  return [
-    `"${ADMIN_TABLE}" is never archived: ${referencing.join(', ')} keep an admin_id that dangles after restore until Epic 3 remaps it to a live ${ADMIN_TABLE} row.`,
-  ];
+/** `admins` carries every panel login, so its warning says whether privileges ride along. */
+function buildAdminWarnings(selected: ReadonlySet<string>): string[] {
+  if (!selected.has(ADMIN_TABLE)) return [];
+  const grants = GRANT_TABLES.filter((table) => selected.has(table));
+  const privileges = grants.length === 0
+    ? 'Privileges do not live in this table, so none are restored: a restored admin keeps whatever group membership the live database already grants it, and one restored onto an empty database has none at all.'
+    : `Privileges do travel with this selection, because ${grants.join(', ')} ${grants.length === 1 ? 'is' : 'are'} selected too: the restore rewrites who may act, and the validate report lists the groups each admin gains and loses.`;
+  return [`"${ADMIN_TABLE}" carries every panel login: restoring it rewrites the username, password hash and enabled flag of each admin row it matches by primary key. ${privileges}`];
+}
+
+function buildGrantWarnings(selected: ReadonlySet<string>): string[] {
+  const grants = GRANT_TABLES.filter((table) => selected.has(table));
+  if (grants.length === 0) return [];
+  const named = grants.map((table) => `"${table}"`).join(', ');
+  return [`${named} decide who may act, so this is not a backup of competition data but of the panel's authority itself. The validate report shows which admin gains and loses which group and override before the double-confirm; read it.`];
+}
+
+function buildScheduleWarnings(selected: ReadonlySet<string>): string[] {
+  if (!selected.has(SCHEDULE_TABLE)) return [];
+  return [`"${SCHEDULE_TABLE}" restores the backup poller's own schedule: an archived schedule that was enabled resumes firing on its archived interval once restored, so a restore can start new backups on its own.`];
+}
+
+function buildSensitivityWarnings(selected: ReadonlySet<string>): string[] {
+  return [...buildAdminWarnings(selected), ...buildGrantWarnings(selected), ...buildScheduleWarnings(selected)];
 }
 
 /**
@@ -179,7 +234,7 @@ export function validateTableSelection(names: string[]): TableSelectionResult {
   const warnings = [
     ...buildMissingParentWarnings(selected),
     ...buildLargeObjectWarnings(selected),
-    ...buildAdminReferenceWarnings(selected),
+    ...buildSensitivityWarnings(selected),
   ];
   return { valid: true, unknown: [], warnings };
 }

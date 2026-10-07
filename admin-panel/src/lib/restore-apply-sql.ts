@@ -35,9 +35,13 @@ export function isStagingSchemaName(name: string): boolean {
 // ---------------------------------------------------------------------------
 
 /**
- * `admins` is never archived, so these three keep an `admin_id` that means
- * nothing live. The column is nullable on all three, so the apply writes NULL
- * and reports the row count it nulled.
+ * These three carry a nullable `admin_id` naming the admin that authored the row.
+ *
+ * When `admins` is applied in the same promote the rows are co-restored, so the
+ * archive's own id resolves to the row beside it and is written as-is. When
+ * `admins` is not applied the archive id names a row this restore is not
+ * bringing, so it would dangle; the column is nullable on all three and the
+ * apply writes NULL instead, reporting how many rows it nulled.
  */
 export const ADMIN_ID_COLUMN = 'admin_id';
 export const ADMIN_NULL_TABLES: readonly string[] = ['announcements', 'messages', 'questions'];
@@ -157,10 +161,10 @@ export function setLocalTimeoutSql(timeoutMs: number): string {
 /**
  * Merge-upsert: archive rows are inserted, and a row whose primary key already
  * exists live is updated from the archive except on the key itself and except
- * on the admin column, whose live value survives the merge because the
- * archive's admin_id names a row that was never archived. Both column lists are
- * explicit, so no statement can pick up a column the live table did not
- * declare.
+ * on the admin column when `adminColumn` names it. That exception is the only
+ * column whose archive value is discarded, and the caller passes it only when
+ * `admins` is not part of this promote. Both column lists are explicit, so no
+ * statement can pick up a column the live table did not declare.
  */
 export function mergeInsertSql(
   table: string,
