@@ -55,7 +55,14 @@ FROM node:20-bookworm-slim AS release
 # COMPOSE_CMD with `docker compose version` and nothing here calls buildx, the model
 # plugin or rootless docker. They are attack surface with no caller, and they are
 # what the image scan reports on, so they are removed rather than shipped.
+# WHY the upgrade: `node:20-bookworm-slim` lags the Debian point releases that are
+# already published, and the image scan reads what ships — libcap2, libgnutls30 and
+# libpcre2-8-0 all had fixes available that the base image had not picked up. Taking
+# them here means the image carries today's security updates instead of waiting for
+# upstream to rebuild, and it runs before the docker install so only base-image
+# packages are in scope for it.
 RUN apt-get update && \
+    apt-get -y dist-upgrade && \
     apt-get install -y --no-install-recommends ca-certificates curl make python3 && \
     curl -fsSL https://get.docker.com | sh && \
     rm -f /usr/libexec/docker/cli-plugins/docker-buildx \
