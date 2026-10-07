@@ -115,10 +115,10 @@ describe('validateScheduleInput', () => {
   });
 
   it('rejects a table outside the catalog', () => {
-    const result = validateScheduleInput(scheduleInput({ tables: ['contests', 'admins'] }));
+    const result = validateScheduleInput(scheduleInput({ tables: ['contests', 'monitor_targets'] }));
     expect(result.valid).toBe(false);
     expect(result.schedule).toBeNull();
-    expect(result.errors).toEqual(['Not in the backup table catalog: admins']);
+    expect(result.errors).toEqual(['Not in the backup table catalog: monitor_targets']);
   });
 
   it('rejects an empty selection that would dump the whole database', () => {

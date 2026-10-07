@@ -294,11 +294,11 @@ describe('buildBackupArgv', () => {
   });
 
   it('rejects a table outside the catalog instead of passing it to pg_dump', () => {
-    const result = buildBackupArgv(['contests', 'admins']);
+    const result = buildBackupArgv(['contests', 'monitor_targets']);
     expect(result.valid).toBe(false);
     expect(result.args).toEqual([]);
     expect(result.tables).toEqual([]);
-    expect(result.error).toBe('Not in the backup table catalog: admins');
+    expect(result.error).toBe('Not in the backup table catalog: monitor_targets');
   });
 
   it('rejects a name that could smuggle a shell metacharacter through', () => {
@@ -468,7 +468,7 @@ describe('fireSchedule on a launch', () => {
 });
 
 describe('fireSchedule on a selection that left the catalog', () => {
-  const LEFT_THE_CATALOG = schedule({ tables: ['contests', 'admins'] });
+  const LEFT_THE_CATALOG = schedule({ tables: ['contests', 'monitor_targets'] });
 
   it('advances the cadence on the schedule interval instead of leaving it due-past', async () => {
     const { calls, store, deps } = fakeDeps();
@@ -489,12 +489,12 @@ describe('fireSchedule on a selection that left the catalog', () => {
     const { launcher, deps } = fakeDeps();
     await fireSchedule(LEFT_THE_CATALOG, REFERENCE, deps);
     expect(launcher.alerts).toEqual([
-      { title: 'Scheduled Backup Rejected', body: 'Schedule **nightly** was skipped: Not in the backup table catalog: admins It will be retried on its own interval until its table selection is fixed.' },
+      { title: 'Scheduled Backup Rejected', body: 'Schedule **nightly** was skipped: Not in the backup table catalog: monitor_targets It will be retried on its own interval until its table selection is fixed.' },
     ]);
   });
 
   it('retries on cadence, not on every tick, and launches once the selection is fixed', async () => {
-    const row = mutableSchedule({ tables: ['contests', 'admins'] });
+    const row = mutableSchedule({ tables: ['contests', 'monitor_targets'] });
     const { store, launcher, deps } = fakeDeps();
     store.rows.push(row);
     await fireDueSchedules(store.rows, REFERENCE, deps);
