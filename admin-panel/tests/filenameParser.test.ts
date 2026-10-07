@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseFilename, validatePattern } from '@/utils/filenameParser';
+import { parseFilename, parseFilenameWithSubtask, parseSubtaskPrefix, validatePattern } from '@/utils/filenameParser';
 
 describe('parseFilename', () => {
   it('extracts a single-star id', () => {
@@ -45,5 +45,38 @@ describe('validatePattern', () => {
   it('rejects empty and starless patterns', () => {
     expect(validatePattern('')).toContain('empty');
     expect(validatePattern('fixed.txt')).toContain('*');
+  });
+});
+
+describe('parseFilenameWithSubtask', () => {
+  it('keeps plain numeric codenames unchanged', () => {
+    expect(parseFilenameWithSubtask('01.in', '*.in')).toBe('01');
+    expect(parseFilenameWithSubtask('task.12.in', 'task.*.in')).toBe('12');
+  });
+
+  it('keeps the full stem when a subtask prefix is present', () => {
+    expect(parseFilenameWithSubtask('subtask1_01.in', '*.in')).toBe('subtask1_01');
+    expect(parseFilenameWithSubtask('st2-03.out', '*.out')).toBe('st2-03');
+    expect(parseFilenameWithSubtask('group1_007.in', '**.in')).toBeNull();
+    expect(parseFilenameWithSubtask('group1_07.in', '**.in')).toBe('group1_07');
+  });
+
+  it('still rejects filenames with no numeric id', () => {
+    expect(parseFilenameWithSubtask('subtask.in', '*.in')).toBeNull();
+    expect(parseFilenameWithSubtask('subtask1.in', '*.in')).toBeNull();
+    expect(parseFilenameWithSubtask('readme.txt', '*.in')).toBeNull();
+  });
+});
+
+describe('parseSubtaskPrefix', () => {
+  it('extracts the prefix of a subtask-named codename', () => {
+    expect(parseSubtaskPrefix('subtask1_01')).toBe('subtask1');
+    expect(parseSubtaskPrefix('st2-03')).toBe('st2');
+  });
+
+  it('returns null for plain numeric codenames', () => {
+    expect(parseSubtaskPrefix('01')).toBeNull();
+    expect(parseSubtaskPrefix('task.12')).toBeNull();
+    expect(parseSubtaskPrefix('subtask_')).toBeNull();
   });
 });

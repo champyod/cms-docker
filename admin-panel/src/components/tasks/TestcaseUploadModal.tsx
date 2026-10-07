@@ -1,144 +1,87 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Upload, Archive } from 'lucide-react';
-import { batchUploadTestcases } from '@/app/actions/testcase-bulk';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
+import type { BulkItemResult } from '@/app/actions/testcase-support';
+import { apiClient } from '@/lib/apiClient';
 import { Dialog } from '@/components/core/Dialog';
 import { ModalFooter } from '@/components/core/ModalFooter';
-import type { FileEncoding } from '@/lib/file-encoding';
-import { validatePattern } from '@/utils/filenameParser';
-import { pairToUploadData } from './testcase-helpers';
-import { pairLocalFiles, pairZipFile } from './testcase-upload';
-import type { FilePair } from './testcase-helpers';
+import { buildUploadFormData } from './testcase-upload';
+import { buildUploadSubtaskRows, detectSubtaskGroups } from './subtask-board';
+import { rowsToParams } from './dataset-score-params';
 import { TestcaseUploadMethodStep } from './TestcaseUploadMethodStep';
 import { TestcasePatternInputs } from './TestcasePatternInputs';
 import { TestcasePairsList } from './TestcasePairsList';
 import { TestcasePreviewDialog } from './TestcasePreviewDialog';
+import { TestcaseSubtaskSummary } from './TestcaseSubtaskSummary';
+import { useTestcaseUpload } from './useTestcaseUpload';
 
 interface TestcaseUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
   datasetId: number;
+  currentScoreType?: string;
   onSuccess: () => void;
 }
 
-export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: TestcaseUploadModalProps): React.JSX.Element | null {
+export function TestcaseUploadModal({ isOpen, onClose, datasetId, currentScoreType = 'Sum', onSuccess }: TestcaseUploadModalProps): React.JSX.Element | null {
   const [step, setStep] = useState<1 | 2>(1);
-  const [uploadType, setUploadType] = useState<'files' | 'zip'>('files');
-  const [inputPattern, setInputPattern] = useState('*.in');
-  const [outputPattern, setOutputPattern] = useState('*.out');
-  const [inputPatternError, setInputPatternError] = useState('');
-  const [outputPatternError, setOutputPatternError] = useState('');
-  const [patternsPasted, setPatternsPasted] = useState(false);
-  const [pairs, setPairs] = useState<FilePair[]>([]);
+  const [applySubtasks, setApplySubtasks] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [processing, setProcessing] = useState(false);
   const [previewPairId, setPreviewPairId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const pastedPatternsRef = useRef(false);
-  const selectedFilesRef = useRef<{ uploadType: 'files' | 'zip'; files: File[] } | null>(null);
+  const upload = useTestcaseUpload(isOpen);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    setStep(1);
-    setPairs([]);
-    setLoading(false);
-    setProcessing(false);
-    setPreviewPairId(null);
-    setInputPatternError('');
-    setOutputPatternError('');
-    setPatternsPasted(false);
-    selectedFilesRef.current = null;
-  }, [isOpen]);
+  const [prevOpen, setPrevOpen] = useState(isOpen);
+  if (isOpen !== prevOpen) {
+    setPrevOpen(isOpen);
+    if (isOpen) {
+      setStep(1);
+      setApplySubtasks(false);
+      setLoading(false);
+      setPreviewPairId(null);
+    }
+  }
 
-  const processFilesList = async (files: File[]): Promise<void> => {
-    setProcessing(true);
+  // Why memoized: grouping walks every pair, and the pairs list
+  // rebuilds on each pattern edit, so the map runs once per change.
+  const detectedGroups = useMemo(() => detectSubtaskGroups(upload.pairs), [upload.pairs]);
+
+  const targetScoreType = currentScoreType === 'Sum' ? 'GroupMin' : currentScoreType;
+  const subtaskRows = useMemo(
+    () => buildUploadSubtaskRows(detectedGroups, upload.pairs.map((pair) => pair.id)),
+    [detectedGroups, upload.pairs],
+  );
+
+  const applySubtaskScores = async (): Promise<boolean> => {
+    if (!applySubtasks || detectedGroups.length === 0) return true;
     try {
-      setPairs(await pairLocalFiles(files, inputPattern, outputPattern));
-    } catch (error) {
-      console.error(error);
-      toast.error('Failed to process files');
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  const processZip = async (file: File): Promise<void> => {
-    setProcessing(true);
-    try {
-      setPairs(await pairZipFile(file, inputPattern, outputPattern));
-    } catch (error) {
-      console.error(error);
-      toast.error('Failed to process zip file');
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    if (!e.target.files?.length) return;
-    const files = Array.from(e.target.files);
-    selectedFilesRef.current = { uploadType, files };
-    if (uploadType === 'zip') void processZip(files[0]);
-    else void processFilesList(files);
-  };
-
-  const handlePatternChange = (side: 'input' | 'output', value: string): void => {
-    const setValue = side === 'input' ? setInputPattern : setOutputPattern;
-    const setLint = side === 'input' ? setInputPatternError : setOutputPatternError;
-    if (pastedPatternsRef.current) {
-      pastedPatternsRef.current = false;
-      setPatternsPasted(true);
-      setValue(value);
-      setLint('');
-      return;
-    }
-    setPatternsPasted(false);
-    setValue(value);
-    setLint(validatePattern(value));
-  };
-
-  useEffect(() => {
-    const selection = selectedFilesRef.current;
-    if (!selection || inputPatternError || outputPatternError) return;
-    const rebuildPairs = async (): Promise<void> => {
-      setProcessing(true);
-      try {
-        setPairs(selection.uploadType === 'zip'
-          ? await pairZipFile(selection.files[0], inputPattern, outputPattern)
-          : await pairLocalFiles(selection.files, inputPattern, outputPattern));
-      } catch (error) {
-        console.error(error);
-        toast.error('Failed to process files');
-      } finally {
-        setProcessing(false);
+      const result = await apiClient.put(`/api/datasets/${datasetId}`, {
+        action: 'update',
+        score_type: targetScoreType,
+        score_type_parameters: rowsToParams(subtaskRows, targetScoreType),
+      });
+      if (!result.success) {
+        toast.error('Testcases uploaded, but subtask scores were not applied', { description: result.error });
+        return false;
       }
-    };
-    void rebuildPairs();
-  }, [inputPattern, outputPattern, inputPatternError, outputPatternError]);
-
-  const updatePairEncoding = (pairId: string, side: 'input' | 'output', encoding: FileEncoding): void => {
-    setPairs((previous) =>
-      previous.map((pair) => {
-        if (pair.id !== pairId) return pair;
-        const next = { ...pair };
-        const target = side === 'input' ? next.inputFile : next.outputFile;
-        if (target) target.selectedEncoding = encoding;
-        return next;
-      })
-    );
+      return true;
+    } catch (error) {
+      console.error('Failed to apply subtask scores:', error);
+      toast.error('Testcases uploaded, but subtask scores were not applied');
+      return false;
+    }
   };
 
   const runAction = useActionFeedback();
 
   const handleUpload = async (): Promise<void> => {
-    const readyPairs = pairs.filter((pair) => pair.status === 'ready');
+    const readyPairs = upload.pairs.filter((pair) => pair.status === 'ready');
     if (readyPairs.length === 0) return;
     setLoading(true);
     try {
-      const uploadData = await Promise.all(readyPairs.map((pair) => pairToUploadData(pair)));
       const result = await runAction(
         {
           pending: `Uploading ${readyPairs.length} testcases...`,
@@ -146,7 +89,16 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
           failure: 'Upload failed',
           description: `${readyPairs.length} pairs saved successfully.`,
         },
-        () => batchUploadTestcases(datasetId, uploadData)
+        async () => {
+          const response = await apiClient.postFormData('/api/testcases', buildUploadFormData(readyPairs, datasetId));
+          if (!response.success) {
+            return { success: false as const, error: response.error };
+          }
+          const details = Array.isArray(response.details)
+            ? (response.details as BulkItemResult[])
+            : undefined;
+          return { success: true as const, details };
+        }
       );
       if (!result) return;
       if (result.success) {
@@ -154,6 +106,7 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
         if (skipped > 0) {
           toast.warning(`${skipped} pairs skipped`, { description: 'They already exist in this dataset.' });
         }
+        await applySubtaskScores();
         onSuccess();
         onClose();
       }
@@ -164,16 +117,15 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
     }
   };
 
-  const previewPair = previewPairId ? (pairs.find((pair) => pair.id === previewPairId) ?? null) : null;
+  const previewPair = previewPairId ? (upload.pairs.find((pair) => pair.id === previewPairId) ?? null) : null;
   if (!isOpen) return null;
 
-  const readyCount = pairs.filter((p) => p.status === 'ready').length;
+  const readyCount = upload.pairs.filter((pair) => pair.status === 'ready').length;
 
   // Why the guard: a submit already in flight cannot be recalled, so cancelling
-  // through it would close the dialog over an unresolved upload. The same pair
-  // of flags reaches the footer's cancelDisabled, so both states agree.
+  // through it would close the dialog over an unresolved upload.
   const cancel = (): void => {
-    if (!loading && !processing) { setPreviewPairId(null); onClose(); }
+    if (!loading && !upload.processing) { setPreviewPairId(null); onClose(); }
   };
 
   return (
@@ -192,8 +144,8 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
             onConfirm={handleUpload}
             confirmIcon={Upload}
             confirmLoading={loading}
-            confirmDisabled={loading || processing || step === 1 || readyCount === 0}
-            cancelDisabled={loading || processing}
+            confirmDisabled={loading || upload.processing || step === 1 || readyCount === 0}
+            cancelDisabled={loading || upload.processing}
           />
         }
         className="flex max-h-[70vh] w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-3xl"
@@ -202,45 +154,55 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, onSuccess }: T
           {step === 1 ? (
             <TestcaseUploadMethodStep
               onSelect={(uploadType) => {
-                setUploadType(uploadType);
+                upload.setUploadType(uploadType);
                 setStep(2);
               }}
             />
           ) : (
             <div className="flex min-h-0 flex-1 animate-in slide-in-from-right flex-col overflow-hidden duration-300">
               <TestcasePatternInputs
-                inputPattern={inputPattern}
-                outputPattern={outputPattern}
-                inputError={inputPatternError}
-                outputError={outputPatternError}
-                pastedNotice={patternsPasted}
-                onPasteCapture={() => { pastedPatternsRef.current = true; }}
-                onInputChange={(value) => handlePatternChange('input', value)}
-                onOutputChange={(value) => handlePatternChange('output', value)}
+                inputPattern={upload.inputPattern}
+                outputPattern={upload.outputPattern}
+                inputError={upload.inputPatternError}
+                outputError={upload.outputPatternError}
+                pastedNotice={upload.patternsPasted}
+                onPasteCapture={() => { upload.markPatternsPasted(); }}
+                onInputChange={(value) => upload.handlePatternChange('input', value)}
+                onOutputChange={(value) => upload.handlePatternChange('output', value)}
                 onBackToMethod={() => setStep(1)}
               />
 
               <div className="flex-1 space-y-4 overflow-y-auto p-4">
                 <div onClick={() => fileInputRef.current?.click()} className="group flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border p-6 transition-all hover:bg-muted/50 hover:border-ring/50">
-                  {uploadType === 'zip' ? <Archive className="h-8 w-8 text-muted-foreground transition-colors group-hover:text-info" /> : <Upload className="h-8 w-8 text-muted-foreground transition-colors group-hover:text-info" />}
-                  <p className="font-medium text-muted-foreground">{uploadType === 'zip' ? 'Click to select Zip file' : 'Click to select Input/Output files'}</p>
-                  <input ref={fileInputRef} type="file" multiple={uploadType === 'files'} accept={uploadType === 'zip' ? '.zip' : '.in,.out,.inp,.sol'} title="Select testcase files" aria-label="Select testcase files" className="hidden" onChange={handleFileSelect} />
+                  {upload.uploadType === 'zip' ? <Archive className="h-8 w-8 text-muted-foreground transition-colors group-hover:text-info" /> : <Upload className="h-8 w-8 text-muted-foreground transition-colors group-hover:text-info" />}
+                  <p className="font-medium text-muted-foreground">{upload.uploadType === 'zip' ? 'Click to select Zip file' : 'Click to select Input/Output files'}</p>
+                  <input ref={fileInputRef} type="file" multiple={upload.uploadType === 'files'} accept={upload.uploadType === 'zip' ? '.zip' : '.in,.out,.inp,.sol'} title="Select testcase files" aria-label="Select testcase files" className="hidden" onChange={upload.handleFileSelect} />
                 </div>
 
-                {processing && (
+                {upload.processing && (
                   <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
                     <span className="text-sm">Processing files...</span>
                   </div>
                 )}
 
-                {!processing && <TestcasePairsList pairs={pairs} onPreview={setPreviewPairId} />}
+                {!upload.processing && <TestcasePairsList pairs={upload.pairs} onPreview={setPreviewPairId} />}
+
+                {detectedGroups.length > 0 && (
+                  <TestcaseSubtaskSummary
+                    groups={detectedGroups}
+                    rows={subtaskRows}
+                    scoreType={targetScoreType}
+                    applySubtasks={applySubtasks}
+                    onApplyChange={setApplySubtasks}
+                  />
+                )}
               </div>
             </div>
           )}
         </div>
       </Dialog>
 
-      {previewPair && <TestcasePreviewDialog pair={previewPair} onClose={() => setPreviewPairId(null)} onUpdateEncoding={updatePairEncoding} />}
+      {previewPair && <TestcasePreviewDialog pair={previewPair} onClose={() => setPreviewPairId(null)} onUpdateEncoding={upload.updatePairEncoding} />}
     </>
   );
 }

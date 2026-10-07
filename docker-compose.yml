@@ -449,6 +449,9 @@ services:
       # WHY: single owner role cmsuser owns large objects, so admin panel connects as owner (PostgreSQL restricts large-object access to owner).
       DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
       AUTH_SECRET: ${AUTH_SECRET}
+      # WHY: the panel speaks the authenticated CMS RPC protocol (cms/io/rpc.py fails closed without it)
+      RPC_SECRET: ${RPC_SECRET}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
 
       # Adaptive login CAPTCHA
       CAPTCHA_ENABLED: ${CAPTCHA_ENABLED:-0}
@@ -464,11 +467,14 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./:/repo-root
-      - /proc:/host/proc:ro
       - cms-logs:/var/local/log/cms
       - cms-ranking-data:/var/local/lib/cms/ranking:rw
     networks:
       - cms-network
+    # WHY: the image runs as the unprivileged node user; this supplementary
+    # group (host docker socket gid) is what keeps docker CLI access working.
+    group_add:
+      - "${DOCKER_GID:-999}"
     ports:
       - "${ADMIN_NEXT_BIND_IP:-0.0.0.0}:${ADMIN_NEXT_PORT_EXTERNAL:-8891}:3000"
     labels:

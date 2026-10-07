@@ -227,6 +227,10 @@ jobs:
         working-directory: admin-panel
         run: bunx prisma generate
 
+      - name: Lint (eslint)
+        working-directory: admin-panel
+        run: bun run lint
+
       - name: Type check
         working-directory: admin-panel
         run: bunx tsc --noEmit
@@ -235,13 +239,14 @@ jobs:
         working-directory: admin-panel
         run: bun run test
 
-      # WHY advisory: the pinned dependency tree already carries known advisories,
-      # so a blocking audit would fail every run for reasons unrelated to the
-      # change under review. The findings stay visible in the log and summary.
+      # WHY blocking now: the tree audits clean at high/critical except
+      # braces@3.0.3 (GHSA-vfj7-8cjw-p6xm) — no fixed release exists, and the
+      # package sits only in the eslint glob chain (fast-glob > micromatch),
+      # never in the standalone production bundle. The ignore keeps that one
+      # visible in the log while every NEW advisory fails the run.
       - name: Dependency audit
         working-directory: admin-panel
-        continue-on-error: true
-        run: bun audit --audit-level=high
+        run: bun audit --audit-level=high --ignore GHSA-vfj7-8cjw-p6xm
 
       - name: Secret scan
         uses: gitleaks/gitleaks-action@v3
@@ -249,6 +254,46 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Findings land in the log and job summary, so the job needs no write scopes.
           GITLEAKS_ENABLE_COMMENTS: "false"
+
+  # WHY: the image jobs build and push but never inspect what ships — OS package
+  # CVEs in the base image and Dockerfile misconfigurations (root user, secrets
+  # baked into layers) only surface once someone pulls and runs the image.
+  container-scan:
+    name: Trivy (image CVEs, Dockerfile misconfig)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name != 'workflow_dispatch'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Plain docker build (not buildx) so the image lands in the local daemon
+      # where trivy can read it.
+      - name: Build admin panel image
+        run: docker build -t cms-admin-panel:scan ./admin-panel
+
+      # ignore-unfixed: base-image packages with no released fix would fail
+      # every run forever; exit-code 1 makes real, fixable CRITICAL/HIGH fail.
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: cms-admin-panel:scan
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          vuln-type: os,library
+          exit-code: "1"
+
+      # CRITICAL only: hadolint (lint job) already owns style-level Dockerfile
+      # findings, and misconfig severity mappings are the noisiest part of
+      # trivy config — fail only on what would leak or escalate outright.
+      - name: Trivy Dockerfile/compose misconfig scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: CRITICAL
+          exit-code: "1"
+          skip-setup-trivy: true
 
   # WHY: nothing else in this repository builds or tests the TUI crate. Every
   # other layer has a gate that fails on drift; this one did not, so the command

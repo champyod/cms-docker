@@ -23,7 +23,12 @@ export function TestcasePairsList({ pairs, onPreview }: PairsListProps): React.J
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold', pair.status === 'ready' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive')}>{pair.id}</div>
             <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <span className="truncate text-xs text-muted-foreground">In: <span className={pair.inputFile ? 'text-foreground' : 'text-destructive'}>{pair.inputFile?.name ?? 'Missing'}</span></span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="truncate text-xs text-muted-foreground">In: <span className={pair.inputFile ? 'text-foreground' : 'text-destructive'}>{pair.inputFile?.name ?? 'Missing'}</span></span>
+                {pair.subtask && (
+                  <span className="rounded-md border border-info/30 bg-info/10 px-1.5 py-px text-xs text-info">{pair.subtask}</span>
+                )}
+              </div>
               <span className="truncate text-xs text-muted-foreground">Out: <span className={pair.outputFile ? 'text-foreground' : 'text-destructive'}>{pair.outputFile?.name ?? 'Missing'}</span></span>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                 {pair.inputFile && <span>Input: <span className="text-info">{getEncodingLabel(pair.inputFile.selectedEncoding)}</span><span className="text-muted-foreground"> (detected {getEncodingLabel(pair.inputFile.detectedEncoding)})</span></span>}

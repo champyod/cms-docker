@@ -18,22 +18,22 @@ export function useDeployWorkers(setSaving: SetSaving) {
 
     const workersDirty = JSON.stringify(workers) !== originalWorkers;
 
-    const loadWorkers = useCallback(async () => {
-        const [workersResult, statusResult] = await Promise.all([getWorkers(), getWorkersLiveStatus()]);
-        const normalized = Array.isArray(workersResult) ? workersResult : [];
-        setWorkers(normalized);
-        setOriginalWorkers(JSON.stringify(normalized));
+    useEffect(() => {
+        void (async () => {
+            const [workersResult, statusResult] = await Promise.all([getWorkers(), getWorkersLiveStatus()]);
+            const normalized = Array.isArray(workersResult) ? workersResult : [];
+            setWorkers(normalized);
+            setOriginalWorkers(JSON.stringify(normalized));
 
-        if (statusResult && !statusResult.forbidden) {
-            setLiveWorkers(statusResult.workers ?? []);
-            setCanManageWorkers(statusResult.canManage);
-            setWorkersForbidden(false);
-        } else {
-            setWorkersForbidden(true);
-        }
+            if (statusResult && !statusResult.forbidden) {
+                setLiveWorkers(statusResult.workers ?? []);
+                setCanManageWorkers(statusResult.canManage);
+                setWorkersForbidden(false);
+            } else {
+                setWorkersForbidden(true);
+            }
+        })();
     }, []);
-
-    useEffect(() => { loadWorkers(); }, [loadWorkers]);
 
     // Poll worker telemetry so activity/lagging stay fresh.
     useEffect(() => {

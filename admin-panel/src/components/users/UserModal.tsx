@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 
 import { revealUserPassword } from '@/app/actions/users';
 import { Dialog } from '@/components/core/Dialog';
@@ -42,10 +42,14 @@ export function UserModal({ isOpen, onClose, user, contests = [], canReadContest
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
   const fieldAccess = useMemo(() => getFieldAccess('users', effective), [effective]);
 
-  useEffect(() => {
+  const [prevUser, setPrevUser] = useState<SafeUser | null | undefined>(undefined);
+  const [prevOpen, setPrevOpen] = useState(isOpen);
+  if (user !== prevUser || isOpen !== prevOpen) {
+    setPrevUser(user);
+    setPrevOpen(isOpen);
     setFormData(user ? formFromUser(user) : EMPTY_USER_FORM);
     setPasswordKind('bcrypt');
-  }, [user, isOpen]);
+  }
 
   const updateForm = (updates: Partial<UserFormState>) => setFormData({ ...formData, ...updates });
 

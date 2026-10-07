@@ -47,10 +47,15 @@ class ApiClient {
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
     try {
+      const defaultHeaders: Record<string, string> = {};
+      if (!(options.body instanceof FormData)) {
+        defaultHeaders['Content-Type'] = 'application/json';
+      }
+
       const resp = await fetch(path, {
         ...options,
         headers: {
-          'Content-Type': 'application/json',
+          ...defaultHeaders,
           ...options.headers,
         },
       });
@@ -84,11 +89,11 @@ class ApiClient {
     }
   }
 
-  async get<T = unknown>(path: string, options?: RequestInit) {
+  async get<T = unknown>(path: string, options?: RequestInit): Promise<ApiResponse<T>> {
     return this.request<T>(path, { ...options, method: 'GET' });
   }
 
-  async post<T = unknown>(path: string, body: unknown, options?: RequestInit) {
+  async post<T = unknown>(path: string, body: unknown, options?: RequestInit): Promise<ApiResponse<T>> {
     return this.request<T>(path, {
       ...options,
       method: 'POST',
@@ -96,7 +101,15 @@ class ApiClient {
     });
   }
 
-  async put<T = unknown>(path: string, body: unknown, options?: RequestInit) {
+  async postFormData<T = unknown>(path: string, formData: FormData, options?: RequestInit): Promise<ApiResponse<T>> {
+    return this.request<T>(path, {
+      ...options,
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  async put<T = unknown>(path: string, body: unknown, options?: RequestInit): Promise<ApiResponse<T>> {
     return this.request<T>(path, {
       ...options,
       method: 'PUT',
@@ -104,7 +117,7 @@ class ApiClient {
     });
   }
 
-  async delete<T = unknown>(path: string, options?: RequestInit) {
+  async delete<T = unknown>(path: string, options?: RequestInit): Promise<ApiResponse<T>> {
     return this.request<T>(path, { ...options, method: 'DELETE' });
   }
 }

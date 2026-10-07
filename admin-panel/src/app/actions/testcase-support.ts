@@ -1,12 +1,5 @@
 import { prisma } from '@/lib/prisma';
 
-export interface TestcaseInput {
-  codename: string;
-  inputBase64: string;
-  outputBase64: string;
-  isPublic: boolean;
-}
-
 export interface ActionResult {
   success: boolean;
   error?: string;
@@ -16,10 +9,6 @@ export interface BulkItemResult {
   codename: string;
   status: 'created' | 'skipped' | 'failed';
   error?: string;
-}
-
-export interface BulkUploadResult extends ActionResult {
-  details?: BulkItemResult[];
 }
 
 /** Error result when the dataset id is invalid or the dataset is missing. */
@@ -42,16 +31,4 @@ export function toSafeActionError(error: unknown): string {
   }
   console.error('Testcase upload failed', error);
   return 'Upload failed. Contact an administrator if this persists.';
-}
-
-/** Decoded byte size of one upload item, or null when the payload is malformed. */
-export function decodedItemSizes(tc: TestcaseInput): { inputBytes: number; outputBytes: number } | null {
-  try {
-    return {
-      inputBytes: Buffer.from(tc.inputBase64, 'base64').length,
-      outputBytes: Buffer.from(tc.outputBase64, 'base64').length,
-    };
-  } catch {
-    return null;
-  }
 }

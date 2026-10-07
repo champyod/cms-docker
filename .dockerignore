@@ -16,6 +16,27 @@ examples/
 *.md
 backups/
 drills/
+
+# Never ship live secrets or runtime state in image layers: config.toml and
+# .env are the generated sources of truth (auto-generated secrets), and the
+# live config/*.toml / nginx files carry the injected credentials.
+config.toml
+.env
+.env.*
+!.env.*.example
+!.env.example
+config/cms.toml
+config/grader.nginx.conf
+config/letsencrypt/
+config/container-restart.json
+config/modsecurity/modsec_audit.log
+config/modsecurity/modsec_debug.log
+prometheus-data/
+grafana-data/
+.agent/
+.omo/
+.tools/
+
 # Preserve src submodule completeness despite docs/md exclusions above
 !src/
 !src/**

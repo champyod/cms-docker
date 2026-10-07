@@ -8,3 +8,10 @@ updates:
     schedule:
       interval: "daily"
     open-pull-requests-limit: 30
+  # The admin panel ships from bun.lock; npm is the closest ecosystem Dependabot
+  # understands for it and it covers advisory PRs bun audit would only report.
+  - package-ecosystem: "npm"
+    directory: "/admin-panel"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 30

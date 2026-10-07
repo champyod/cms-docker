@@ -5,8 +5,7 @@ import { ensurePermission, getPermissions } from '@/lib/permissions';
 import { stripDisallowedFields, getFieldAccess, type FieldAccess } from '@/lib/field-permissions';
 import { revalidatePath } from 'next/cache';
 import { recordAudit } from '@/lib/audit';
-
-const EVALUATION_RPC_ENDPOINT = 'http://cms-admin-web-server:25000/rpc/EvaluationService/0/invalidate_submission';
+import { invalidateViaRpc } from '@/lib/evaluation-rpc';
 
 interface ActionResult {
   success: boolean;
@@ -90,8 +89,11 @@ export async function recalculateSubmission(submissionId: number, type: RecalcTy
       return { success: false, error: 'Submission not found' };
     }
 
-    const accepted = await invalidateViaRpc(submissionId, context.datasetId, rpcLevelFor(type));
-    if (!accepted) {
+    const rpcResult = await invalidateViaRpc(submissionId, context.datasetId, rpcLevelFor(type));
+    if (rpcResult.timedOut) {
+      return { success: false, error: 'Evaluation service did not respond in time' };
+    }
+    if (!rpcResult.accepted) {
       return { success: false, error: 'Resubmission failed: evaluation service did not accept the request' };
     }
 
@@ -107,6 +109,9 @@ export async function recalculateSubmission(submissionId: number, type: RecalcTy
     revalidateSubmissionSurfaces();
     return { success: true, message: 'Submission queued for recalculation' };
   } catch (error) {
+    // Why rethrow: redirect() signals login expiry by throwing NEXT_REDIRECT; swallowing it would trade the login bounce for an opaque toast.
+    const digest = (error as { digest?: string }).digest;
+    if (digest?.startsWith('NEXT_REDIRECT')) throw error;
     const e = error as Error;
     return { success: false, error: e.message };
   }
@@ -128,24 +133,6 @@ async function getRecalcContext(submissionId: number): Promise<{ datasetId: numb
 
 function rpcLevelFor(type: RecalcType): string {
   return type === 'full' ? 'compilation' : (type === 'evaluation' ? 'evaluation' : 'score');
-}
-
-async function invalidateViaRpc(submissionId: number, datasetId: number | null, level: string): Promise<boolean> {
-  try {
-    const response = await fetch(EVALUATION_RPC_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        level,
-        submission_id: submissionId,
-        dataset_id: datasetId
-      })
-    });
-
-    return response.ok;
-  } catch {
-    return false;
-  }
 }
 
 // Why the list path and the record path: a write here changes the list row and

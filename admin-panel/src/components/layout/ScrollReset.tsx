@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 
 import { isNestedRecordTabTransition } from '@/lib/list-state';
@@ -37,18 +37,26 @@ export function shouldResetMainScroll(previousPath: string | null, nextPath: str
 
 export function ScrollReset({ containerId = MAIN_SCROLL_CONTAINER_ID }: { containerId?: string }): null {
   const pathname = usePathname() ?? '';
-  const previousPathRef = useRef<string | null>(null);
+  const [previousPath, setPreviousPath] = useState<string | null>(null);
+  const [previousContainerId, setPreviousContainerId] = useState(containerId);
+  const [shouldReset, setShouldReset] = useState(false);
+
+  // Adjust during render: the layout effect below needs the reset decision for
+  // this exact transition, so it is derived here rather than read from a ref.
+  if (pathname !== previousPath || containerId !== previousContainerId) {
+    setShouldReset(shouldResetMainScroll(previousPath, pathname));
+    setPreviousPath(pathname);
+    setPreviousContainerId(containerId);
+  }
 
   // Layout effect (browser only): reset before paint so the next page never
   // flashes at the previous scroll offset.
   const usePositionReset = typeof window === 'undefined' ? useEffect : useLayoutEffect;
   usePositionReset(() => {
-    const previousPath = previousPathRef.current;
-    previousPathRef.current = pathname;
+    if (!shouldReset) return;
     if (typeof document === 'undefined') return;
-    if (!shouldResetMainScroll(previousPath, pathname)) return;
     resetScrollContainer(document, containerId);
-  }, [pathname, containerId]);
+  }, [pathname, containerId, shouldReset]);
 
   return null;
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { updateParticipation, sendMessage } from '@/app/actions/participations';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
@@ -16,12 +16,15 @@ export function useParticipationEditState(isOpen: boolean, participation: Partic
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
+  const openKey = isOpen ? `${participation.id}:${participation.hidden}:${participation.unrestricted}` : 'closed';
+  const [prevOpenKey, setPrevOpenKey] = useState(openKey);
+  if (openKey !== prevOpenKey) {
+    setPrevOpenKey(openKey);
     if (isOpen) {
       setFormData({ hidden: participation.hidden, unrestricted: participation.unrestricted, extra_time_minutes: 0, delay_time_minutes: 0, password: '', password_kind: 'plaintext' });
       setError('');
     }
-  }, [isOpen, participation.id, participation.hidden, participation.unrestricted]);
+  }
 
   const handleClose = () => { onClose(); };
 
