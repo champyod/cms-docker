@@ -18,10 +18,14 @@
 """Tests for the loader of the credits file.
 
 Every case is deterministic: the file is located relative to the module
-itself, and the failure cases build their own tree in a temporary directory
-rather than touching the one in the checkout.
+itself, the failure cases build their own tree in a temporary directory
+rather than touching the one in the checkout, and every case pins
+$CMS_CREDITS_FILE itself instead of inheriting the one the process happens to
+carry. A case that inherited it would pass in a checkout and read a different
+file inside the image, which is the situation these tests exist to pin down.
 """
 
+import json
 import os
 import tempfile
 import unittest
@@ -46,20 +50,45 @@ class CreditsFileTest(unittest.TestCase):
         # WHY chdir: the process cwd is where a relative lookup would read
         # from, so a loader that accidentally relied on it would pass every
         # test run from the package directory and fail in the container.
-        with tempfile.TemporaryDirectory() as elsewhere:
-            previous = os.getcwd()
-            os.chdir(elsewhere)
-            try:
-                found = find_credits_file()
-            finally:
-                os.chdir(previous)
+        with mock.patch.dict(os.environ):
+            os.environ.pop(CREDITS_FILE_ENV_VAR, None)
+            with tempfile.TemporaryDirectory() as elsewhere:
+                previous = os.getcwd()
+                os.chdir(elsewhere)
+                try:
+                    found = find_credits_file()
+                finally:
+                    os.chdir(previous)
         self.assertEqual(found, EXPECTED_CREDITS_FILE)
         self.assertTrue(found.is_file())
 
-    def test_configured_path_wins_over_the_upward_search(self):
-        # WHY a start directory with no file of its own: it stands in for the
-        # installed package of a container, where the walk reaches nothing and
-        # only the configured path can supply the credits.
+    def test_configured_path_is_used_when_no_start_is_given(self):
+        # WHY no start: this is the installed package of a container, where the
+        # walk reaches nothing and only the configured path can supply the
+        # credits. Every production caller passes no start.
+        with tempfile.TemporaryDirectory() as tree:
+            configured = Path(tree) / "credits-override.json"
+            configured.write_text('{"surfaces": {}}', encoding="utf-8")
+            with mock.patch.dict(os.environ,
+                                 {CREDITS_FILE_ENV_VAR: str(configured)}):
+                found = find_credits_file()
+        self.assertEqual(found, configured)
+
+    def test_explicit_start_wins_over_the_configured_path(self):
+        # WHY two files: a caller that names its own tree must not be answered
+        # from a path an operator configured for a different one.
+        with tempfile.TemporaryDirectory() as tree:
+            found = Path(tree) / CREDITS_FILE_NAME
+            found.write_text("{}", encoding="utf-8")
+            configured = Path(tree) / "credits-override.json"
+            configured.write_text('{"surfaces": {}}', encoding="utf-8")
+            with mock.patch.dict(os.environ,
+                                 {CREDITS_FILE_ENV_VAR: str(configured)}):
+                self.assertEqual(find_credits_file(Path(tree)), found)
+
+    def test_configured_path_is_the_fallback_of_an_explicit_start(self):
+        # WHY a start whose walk reaches nothing: that is the case the variable
+        # exists for, a tree that holds no credits file of its own.
         with tempfile.TemporaryDirectory() as tree:
             configured = Path(tree) / "credits-override.json"
             configured.write_text('{"surfaces": {}}', encoding="utf-8")
@@ -108,21 +137,45 @@ class CreditsFileTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tree:
             broken = Path(tree) / CREDITS_FILE_NAME
             broken.write_text("{ this is not json", encoding="utf-8")
-            with self.assertRaises(CreditsError) as context:
-                load_credits(Path(tree))
+            with mock.patch.dict(os.environ):
+                os.environ.pop(CREDITS_FILE_ENV_VAR, None)
+                with self.assertRaises(CreditsError) as context:
+                    load_credits(Path(tree))
         self.assertIn("not valid JSON", str(context.exception))
 
     def test_file_that_is_not_an_object_is_rejected(self):
         with tempfile.TemporaryDirectory() as tree:
             listed = Path(tree) / CREDITS_FILE_NAME
             listed.write_text("[]", encoding="utf-8")
-            with self.assertRaises(CreditsError) as context:
-                load_credits(Path(tree))
+            with mock.patch.dict(os.environ):
+                os.environ.pop(CREDITS_FILE_ENV_VAR, None)
+                with self.assertRaises(CreditsError) as context:
+                    load_credits(Path(tree))
         self.assertIn("JSON object", str(context.exception))
 
+    def test_the_cache_follows_the_configured_path(self):
+        # WHY one start and two values of the variable: a cache keyed on start
+        # alone would hand the first file back to the second, which is what a
+        # test suite and a server configured at different times each see.
+        with mock.patch.dict(os.environ):
+            os.environ.pop(CREDITS_FILE_ENV_VAR, None)
+            from_checkout = load_credits()
+            with tempfile.TemporaryDirectory() as tree:
+                configured = Path(tree) / CREDITS_FILE_NAME
+                configured.write_text('{"surfaces": {"contest": "override"}}',
+                                      encoding="utf-8")
+                os.environ[CREDITS_FILE_ENV_VAR] = str(configured)
+                from_image = load_credits()
+        self.assertEqual(
+            from_checkout,
+            json.loads(EXPECTED_CREDITS_FILE.read_text(encoding="utf-8")))
+        self.assertEqual(from_image["surfaces"]["contest"], "override")
+
     def test_contest_surface_is_returned(self):
-        surface = get_surface("contest")
-        self.assertEqual(surface, load_credits()["surfaces"]["contest"])
+        with mock.patch.dict(os.environ):
+            os.environ.pop(CREDITS_FILE_ENV_VAR, None)
+            surface = get_surface("contest")
+            self.assertEqual(surface, load_credits()["surfaces"]["contest"])
         self.assertEqual(
             [asset["name"] for asset in surface["assets"]],
             ["jQuery 3.6.0", "jQuery Migrate 3.3.2", "Bootstrap 2.0.4",
@@ -130,8 +183,10 @@ class CreditsFileTest(unittest.TestCase):
         self.assertTrue(surface["attribution"])
 
     def test_unknown_surface_is_rejected(self):
-        with self.assertRaises(CreditsError) as context:
-            get_surface("no-such-surface")
+        with mock.patch.dict(os.environ):
+            os.environ.pop(CREDITS_FILE_ENV_VAR, None)
+            with self.assertRaises(CreditsError) as context:
+                get_surface("no-such-surface")
         self.assertIn("no-such-surface", str(context.exception))
 
 

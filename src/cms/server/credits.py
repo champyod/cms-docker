@@ -18,10 +18,14 @@
 """Read the credits every web surface serves.
 
 The credits file sits at the root of the checkout, outside the installed
-Python package, so it is located from $CMS_CREDITS_FILE when the operator sets
-it, and otherwise by walking up from this module rather than by a fixed number
-of parent directories: the depth at which the package sits differs between a
-checkout and the installed tree of a container image.
+Python package, so it is located by walking up from this module rather than by
+a fixed number of parent directories: the depth at which the package sits
+differs between a checkout and the installed tree of a container image.
+$CMS_CREDITS_FILE names the file where that walk cannot reach one.
+
+An explicit start is an instruction from the caller about where its file is,
+so it outranks the variable; the variable is the operator's override and is
+consulted by the callers that pass no start, all of which in production do.
 """
 
 import json
@@ -41,12 +45,16 @@ class CreditsError(Exception):
 def find_credits_file(start: Path | None = None) -> Path:
     """Return the path of the credits file.
 
-    A path in $CMS_CREDITS_FILE wins when it names an existing file, because a
-    container installs the package away from the checkout and the upward walk
-    from the installed module would never reach the file.
+    An explicit start outranks $CMS_CREDITS_FILE: it names the tree the caller
+    means, so a file found above it wins over an operator default that was set
+    for a different tree. The variable is the fallback for that search, and it
+    is the only source consulted first where no start is given, because a
+    container installs the package away from the checkout and the walk from the
+    installed module never reaches the file.
 
-    start: the directory the upward search begins from; it defaults to the
-        directory holding this module.
+    start: the directory the upward search begins from; when it is None the
+        search begins at the directory holding this module and
+        $CMS_CREDITS_FILE is tried first.
 
     raise (CreditsError): if neither the configured path nor any directory
         above start holds the file. A page rendered from an empty credits list
@@ -54,8 +62,18 @@ def find_credits_file(start: Path | None = None) -> Path:
         this never falls back to no data.
 
     """
-    configured = os.environ.get(CREDITS_FILE_ENV_VAR)
-    if configured is not None and Path(configured).is_file():
+    return _resolve_credits_file(start, os.environ.get(CREDITS_FILE_ENV_VAR))
+
+
+def _resolve_credits_file(start: Path | None, configured: str | None) -> Path:
+    """Return the path of the credits file for a given value of the variable.
+
+    configured: the value $CMS_CREDITS_FILE holds, or None when it is unset;
+        passed in rather than read here so that the resolution is a function of
+        its arguments alone and load_credits() can cache on them.
+    """
+    if start is None and configured is not None \
+            and Path(configured).is_file():
         return Path(configured)
     first = Path(start).resolve() if start is not None \
         else Path(__file__).resolve().parent
@@ -64,6 +82,9 @@ def find_credits_file(start: Path | None = None) -> Path:
         candidate = directory / CREDITS_FILE_NAME
         if candidate.is_file():
             return candidate
+    if start is not None and configured is not None \
+            and Path(configured).is_file():
+        return Path(configured)
     raise CreditsError("%s not found: %s, searched %s" % (
         CREDITS_FILE_NAME,
         "%s=%s" % (CREDITS_FILE_ENV_VAR, configured) if configured is not None
@@ -71,13 +92,14 @@ def find_credits_file(start: Path | None = None) -> Path:
         ", ".join(str(directory) for directory in searched)))
 
 
-@lru_cache(maxsize=None)
 def load_credits(start: Path | None = None) -> dict:
     """Return the parsed contents of the credits file.
 
     The result is cached because the file is a build artifact that cannot
     change under a running server, and a notice taken from it is rendered on
-    every contest page.
+    every contest page. The cache is keyed on the value of $CMS_CREDITS_FILE as
+    well as on start, because that variable is an input of the resolution and
+    a key of start alone would serve one tree's credits for another's.
 
     start: forwarded to find_credits_file().
 
@@ -85,7 +107,12 @@ def load_credits(start: Path | None = None) -> dict:
         does not hold a JSON object.
 
     """
-    path = find_credits_file(start)
+    return _load_credits(start, os.environ.get(CREDITS_FILE_ENV_VAR))
+
+
+@lru_cache(maxsize=None)
+def _load_credits(start: Path | None, configured: str | None) -> dict:
+    path = _resolve_credits_file(start, configured)
     try:
         raw = path.read_text(encoding="utf-8")
     except OSError as error:
