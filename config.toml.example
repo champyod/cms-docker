@@ -43,36 +43,36 @@ TLS_CERTRESOLVER = "letsencrypt"        # str; traefik certresolver label
 CMS_RANKING_CONFIG = "/usr/local/etc/cms_ranking.toml" # container path of the generated cms_ranking.toml the ranking web server reads
 
 [admin]
-DEPLOYMENT_TYPE = "img"         # enum:img,src
-ADMIN_LISTEN_PORT = 8889        # port
-ADMIN_PORT_EXTERNAL = 8889      # port
-ADMIN_NEXT_PORT_EXTERNAL = 8891 # port
-ADMIN_NEXT_DOMAIN = "admin-next.cms.local"
-ADMIN_DOMAIN = "admin.cms.local"
+DEPLOYMENT_TYPE = "img"         # enum:img,src; img = pull the GHCR images, src = build from source — read by the make <stack> targets
+ADMIN_LISTEN_PORT = 8889        # port; container port the classic admin web server listens on — what the publish map and the proxies dial
+ADMIN_PORT_EXTERNAL = 8889      # port; host port the classic admin UI is published on (ADMIN_BIND_IP:ADMIN_PORT_EXTERNAL:ADMIN_LISTEN_PORT)
+ADMIN_NEXT_PORT_EXTERNAL = 8891 # port; host port the Next.js panel is published on (ADMIN_NEXT_BIND_IP:ADMIN_NEXT_PORT_EXTERNAL:3000)
+ADMIN_NEXT_DOMAIN = "admin-next.cms.local" # str; hostname the optional external Traefik routes to the Next.js panel — the domain nginx never uses it (the panel answers on ADMIN_DOMAIN and ADMIN_ROUTE_PATH)
+ADMIN_DOMAIN = "admin.cms.local" # str; FQDN of the admin vhost — the domain nginx serves the Next.js panel at its root and the classic admin at ADMIN_CLASSIC_ROUTE_PATH; also a cert SAN and Traefik Host() rule
 ADMIN_BIND_IP = "127.0.0.1"     # csv; addresses the classic admin UI is published on; loopback keeps it reachable only through the proxy — set it to 0.0.0.0 to expose the port to the LAN
 ADMIN_NEXT_BIND_IP = "127.0.0.1" # csv; addresses the Next.js admin panel is published on
 RANKING_BIND_IP = "127.0.0.1"   # csv; addresses the ranking board is published on
-ADMIN_COOKIE_DURATION = 36000   # num; seconds
-AUTH_SECRET = ""                # secret; auto-generated hex32 if empty
+ADMIN_COOKIE_DURATION = 36000   # num; seconds; reserved — no code reads it: the panel hardcodes its session and the injector never writes it to the classic admin's cms.toml
+AUTH_SECRET = ""                # secret; auto-generated hex32 if empty; signs the admin panel's session JWT
 CAPTCHA_ENABLED = 0             # enum:0,1; effect: reduces brute-force before fail2ban
 CAPTCHA_PROVIDER = "turnstile"  # enum:turnstile,hcaptcha; only used if CAPTCHA_ENABLED=1
-CAPTCHA_SITE_KEY = ""           # str
-CAPTCHA_SECRET_KEY = ""         # secret
-CAPTCHA_THRESHOLD = 3           # num
-CAPTCHA_BAN_THRESHOLD = 5       # num
+CAPTCHA_SITE_KEY = ""           # str; public widget key from the provider dashboard — sent to the browser to render the challenge
+CAPTCHA_SECRET_KEY = ""         # secret; server-side key from the provider dashboard — deliberately never auto-generated
+CAPTCHA_THRESHOLD = 3           # num; failed logins on one account or address before the login form demands a solved challenge
+CAPTCHA_BAN_THRESHOLD = 5       # num; lockout threshold enforced by the classic/contest Python servers — the Next.js panel's own lockout is hardcoded (5 fails, 15 min)
 LOGIN_RATE_LIMIT_REDIS_ENABLED = 0  # enum:0,1; effect: keeps the login failure counters in a shared Redis so a lockout survives a web server restart
 LOGIN_RATE_LIMIT_REDIS_HOST = "redis-rate-limit" # str; compose service name; counts per process only unless LOGIN_RATE_LIMIT_REDIS_ENABLED=1
-LOGIN_RATE_LIMIT_REDIS_PORT = 6379 # port
-RANKING_LISTEN_PORT = 8890      # port
-RANKING_PORT_EXTERNAL = 8890    # port
-RANKING_DOMAIN = "ranking.cms.local"
-RANKING_USERNAME = "admin"      # str
+LOGIN_RATE_LIMIT_REDIS_PORT = 6379 # port; port of the shared Redis the login counters dial when LOGIN_RATE_LIMIT_REDIS_ENABLED=1
+RANKING_LISTEN_PORT = 8890      # port; container port the ranking web server listens on — service env, publish map, and proxy target
+RANKING_PORT_EXTERNAL = 8890    # port; host port the ranking board is published on (RANKING_BIND_IP:RANKING_PORT_EXTERNAL:RANKING_LISTEN_PORT)
+RANKING_DOMAIN = "ranking.cms.local" # str; FQDN of the ranking vhost in the domain nginx; also a cert SAN and Traefik Host() rule
+RANKING_USERNAME = "admin"      # str; scoreboard auth username injected into cms.ranking.toml — guards the ranking UI and the ranking push
 RANKING_PASSWORD = ""           # secret; auto-generated if empty
 RANKING_LOGO_PATH = ""          # str; host path to ranking logo (png/jpg/gif/bmp) e.g. "./config/assets/logo.png" — synced to ranking volume on ./cms config sync (hot-swap, overwrites old)
-CMS_RANKING_LOG_DIR = "/var/local/log/cms/ranking"
-CMS_RANKING_LIB_DIR = "/var/local/lib/cms/ranking"
+CMS_RANKING_LOG_DIR = "/var/local/log/cms/ranking" # str; reserved — no code reads it; the injector never sets log_dir in cms.ranking.toml
+CMS_RANKING_LIB_DIR = "/var/local/lib/cms/ranking" # str; container path written as lib_dir into cms.ranking.toml and used by the logo hot-swap — must match the cms-ranking-data volume mount
 DOMAIN_NAME = ""                # str; primary FQDN (e.g. grader.example.org); empty=cms.local
-DOMAIN_CERT_METHOD = "letsencrypt" # enum:letsencrypt,provided,selfsigned
+DOMAIN_CERT_METHOD = "letsencrypt" # enum:letsencrypt,provided,selfsigned; how the primary domain certificate is obtained
 AUTO_RETRY = 0            # enum:0,1; retry cert issuance while DNS/:80 propagate
 CERT_RETRY_ATTEMPTS = 8   # num; 0 = unlimited
 CERT_RETRY_INTERVAL = 15  # num; seconds; doubles each attempt up to 120
@@ -89,17 +89,17 @@ USE_LOCK = 0              # enum:0,1; flock to stop overlapping runs
 DNS_PROVIDER = ""         # str; DNS-01 provider (e.g. cloudflare); empty = HTTP-01
 DNS_CREDENTIALS_FILE = "" # str; credential file for the DNS plugin
 DOMAIN_NGINX_BIND_IP = "" # str; address the domain nginx publishes 80/443 on; empty=engine wildcard on every interface (IPv4 and IPv6) — the public entry, set it to the box address to narrow it
-HSTS_MAX_AGE = 31536000        # num; seconds; 1 year. Lower it only while staging
-SOCKET_PROXY = 0                # enum:0,1
-MONITOR_ENHANCED = 0            # enum:0,1
-REDIS_RATE_LIMIT = 0            # enum:0,1
-PER_USER_LIMIT = 1              # num
-REDIS_HOST = "redis-rate-limit" # str
-REDIS_PORT = 6379               # port
+HSTS_MAX_AGE = 31536000        # num; seconds; Strict-Transport-Security max-age emitted on every domain nginx vhost; 1 year — lower it only while staging
+SOCKET_PROXY = 0                # enum:0,1; reserved toggle — no code reads it; the filtered-Docker-API proxy for the panel is started manually via docker-compose.socket-proxy.yml
+MONITOR_ENHANCED = 0            # enum:0,1; enables the monitor-targets editor in the admin panel settings (HTTP health checks)
+REDIS_RATE_LIMIT = 0            # enum:0,1; preparatory — with 1 the domain nginx emits only resolver lines for a future Redis token bucket; limiting stays the local limit_req zones
+PER_USER_LIMIT = 1              # num; 1 = per-user limit_req buckets (burst 20) on the domain nginx login and ranking-auth routes; 0 = disabled
+REDIS_HOST = "redis-rate-limit" # str; Redis host for the domain-nginx distributed rate limit — the upstream line that would use it is commented out (see REDIS_RATE_LIMIT)
+REDIS_PORT = 6379               # port; Redis port for the same commented-out rate-limit upstream
 WAF_ENABLED = 0                 # enum:0,1; warning: tune DetectionOnly 1 week first
-WAF_PORT = 8080                 # port
-WAF_PARANOIA = 1                # num
-WAF_ANOMALY_INBOUND = 5         # num
+WAF_PORT = 8080                 # port; host port grader-waf publishes on WAF_BIND_IP when the waf profile runs (the container listens on 8080 internally)
+WAF_PARANOIA = 1                # num; OWASP CRS paranoia level passed to the grader-waf container
+WAF_ANOMALY_INBOUND = 5         # num; CRS inbound anomaly-score threshold passed to the grader-waf container
 WAF_RESP_BODY_ACCESS = "Off"    # enum:Off,On,Force,Rejected; ModSecurity respBodyAccess; buffers every response body to inspect it
 DOMAIN_NGINX_HTTP_PORT = 80     # port; domain nginx HTTP publish port
 DOMAIN_NGINX_HTTPS_PORT = 443   # port; domain nginx HTTPS publish port
