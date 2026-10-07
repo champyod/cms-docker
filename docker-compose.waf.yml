@@ -15,16 +15,21 @@
 #   2. Start the WAF profile:
 #        make waf
 #      (equivalently: docker compose -f docker-compose.yml -f docker-compose.domain.yml
-#       -f docker-compose.waf.yml --profile core --profile contest --profile waf up -d)
-#      The core and contest profiles are required: the domain file overrides the
-#      `nginx-proxy` service name, and Compose only validates a depends_on target
-#      when one of its profiles is active.
+#       -f docker-compose.waf.yml --profile core --profile waf up -d)
+#      The core profile is required because grader-waf proxies to the domain
+#      stack's backends, and the domain stack's TLS proxy is the service
+#      `grader-nginx-proxy` (docker-compose.domain.yml) — not the contest
+#      `nginx-proxy`, so the contest profile must stay inactive or both proxies
+#      would contend for host 80/443.
 #   3. Keep SecRuleEngine DetectionOnly for ~1 week, review the audit log, then
 #      switch WAF_RULE_ENGINE to On (see docs/waf-tuning.md).
 #
 # Architecture:
-#   grader-waf (OWASP CRS nginx) → grader-nginx-proxy (existing nginx) → backends
+#   grader-waf (OWASP CRS nginx) → grader-nginx-proxy (domain stack nginx) → backends
 #   - grader-waf BACKEND=http://grader-nginx-proxy:80 (internal port 80, TLS terminates at grader-nginx-proxy or at grader-waf if routed via host)
+#   - `grader-nginx-proxy` is the compose *service* name in docker-compose.domain.yml.
+#     The contest profile's own proxy is a different service (`nginx-proxy`,
+#     container cms-nginx-contest) and is not in this chain.
 #   - The container listens on 8080 internally because the image runs unprivileged
 #     and refuses to bind below 1024; WAF_PORT (8080 default) is the host-side port.
 #   - When WAF_ENABLED=1, expose WAF on host WAF_PORT (default 8080) for testing alongside existing 443.
@@ -86,6 +91,9 @@ services:
       # and SecResponseBodyAccess from config.toml.
       MODSEC_RULE_ENGINE: ${WAF_RULE_ENGINE:-DetectionOnly}
       MODSEC_RESP_BODY_ACCESS: ${WAF_RESP_BODY_ACCESS:-Off}
+      # Service name of the domain stack's TLS proxy. It matches its
+      # container_name, so DNS, depends_on and `docker compose ... up <name>`
+      # all address it the same way.
       BACKEND: http://grader-nginx-proxy:80
       BACKEND_WS: http://grader-nginx-proxy:80
       PROXY: "1"
@@ -99,7 +107,7 @@ services:
       NGINX_ALWAYS_TLS_REDIRECT: "off"
       # Expose real IP via X-Forwarded-For passthrough to backend
     depends_on:
-      - nginx-proxy
+      - grader-nginx-proxy
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/healthz 2>/dev/null || wget --no-verbose --tries=1 --spider http://localhost:8080/ 2>/dev/null || exit 1"]
       interval: 15s

@@ -386,6 +386,10 @@ services:
       start_period: 10s
 
   # Optional: Nginx reverse proxy for contest web server (TLS via ENABLE_TLS=true)
+  # WHY the plain name: the contest stack is the default owner of this service
+  # name. The domain stack's TLS proxy is a distinct service named
+  # `grader-nginx-proxy` (docker-compose.domain.yml) — a same-named key here
+  # would merge the two blocks and drop one proxy from the project.
   nginx-proxy:
     image: nginx:alpine
     container_name: cms-nginx-contest
