@@ -4,6 +4,14 @@ import { useState, useEffect } from 'react';
 import { updateContestSettings, removeParticipant, removeTaskFromContest } from '@/app/actions/contests';
 import { setTestUser } from '@/app/actions/participations';
 import { useDeployContest } from '@/hooks/useDeployContest';
+import type { DeployPhase } from '@/hooks/useDeployContest';
+
+/** The phases a deploy never leaves on its own, which is when this panel is done watching it. */
+const TERMINAL_DEPLOY_PHASES: ReadonlySet<DeployPhase> = new Set(['completed', 'failed', 'timeout', 'already_running']);
+
+function isTerminalDeployPhase(phase: DeployPhase): boolean {
+  return TERMINAL_DEPLOY_PHASES.has(phase);
+}
 
 interface ContestLike { id: number; name: string; description: string; timezone: string | null; allow_questions: boolean; allow_user_tests: boolean; submissions_download_allowed: boolean; allow_password_authentication: boolean; allow_registration: boolean; analysis_enabled: boolean; token_mode: string; score_precision: number; start: string | Date | null; stop: string | Date | null; analysis_start: string | Date | null; analysis_stop: string | Date | null; }
 
@@ -34,12 +42,36 @@ export function useContestDetailState(contest: ContestLike) {
   const handleSetActive = () => setShowDeployModal(true);
   const confirmDeploy = () => deploy.deploy(contest.id);
 
+  const deployPhase = deploy.state.phase;
+  const deployError = deploy.state.error;
+  const resetDeployState = deploy.reset;
+
+  // Why clearing the flag here and not in the effect: a deploy that reaches a
+  // terminal phase means the panel is done with it, and adjusting state during
+  // render is how React asks a component to react to a changed value without a
+  // second render pass. The effect below cannot set it, because a state update in
+  // an effect body renders again before the effect has synchronised anything.
+  const [settledPhase, setSettledPhase] = useState(deployPhase);
+  if (settledPhase !== deployPhase) {
+    setSettledPhase(deployPhase);
+    if (isTerminalDeployPhase(deployPhase)) setShowDeployModal(false);
+  }
+
+  // The side effects of a finished deploy. Every one of them is external to this
+  // component — a dialog, a navigation, the provider's own state — so none of them
+  // is the render-cascading state update the rule above is about.
   useEffect(() => {
-    const p = deploy.state.phase;
-    if (p === 'completed') { setShowDeployModal(false); deploy.reset(); window.location.reload(); }
-    else if (p === 'failed' || p === 'timeout') { setShowDeployModal(false); deploy.reset(); alert('Deploy failed: ' + (deploy.state.error || 'Unknown error')); }
-    else if (p === 'already_running') { setShowDeployModal(false); deploy.reset(); alert('Another deploy is already in progress.'); }
-  }, [deploy.state.phase, deploy.state.error, deploy.reset, deploy.state]);
+    if (deployPhase === 'completed') {
+      resetDeployState();
+      window.location.reload();
+    } else if (deployPhase === 'failed' || deployPhase === 'timeout') {
+      resetDeployState();
+      alert('Deploy failed: ' + (deployError || 'Unknown error'));
+    } else if (deployPhase === 'already_running') {
+      resetDeployState();
+      alert('Another deploy is already in progress.');
+    }
+  }, [deployPhase, deployError, resetDeployState]);
 
   const handleOpenParticipationSettings = (participationId: number, username: string) => {
     setSelectedParticipation({ id: participationId, username });

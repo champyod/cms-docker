@@ -62,37 +62,49 @@ function useRunHistory() {
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
 
+    /**
+     * Starts a load and reports its outcome, with every state update inside a
+     * continuation rather than in this function's own body. That is what lets the
+     * mount effect start it: a state update reached directly from an effect body
+     * renders again before the effect has synchronised anything, and the history
+     * already starts in its loading state, so there is nothing to announce.
+     */
+    const start = useCallback(
+        (): Promise<void> => Promise.all([listRuns(RUN_HISTORY_LIMIT), listSchedules()])
+            .then(
+                ([runsResult, schedulesResult]) => {
+                    if (!schedulesResult.success) {
+                        setRuns([]);
+                        setLoadError(schedulesResult.error ?? NAMES_ERROR);
+                        return;
+                    }
+                    if (!runsResult.success) {
+                        setRuns([]);
+                        setLoadError(runsResult.error ?? RUNS_ERROR);
+                        return;
+                    }
+                    setScheduleNames(new Map((schedulesResult.schedules ?? []).map((entry) => [entry.id, entry.name])));
+                    setRuns(runsResult.runs ?? []);
+                },
+                (error: unknown) => {
+                    setRuns([]);
+                    setLoadError(describeError(error, RUNS_ERROR));
+                },
+            )
+            .finally(() => setIsLoading(false)),
+        [],
+    );
+
+    /** The Refresh path, where the click is what starts a load, so it is announced. */
     const reload = useCallback(async () => {
         setIsLoading(true);
         setLoadError(null);
-        try {
-            const [runsResult, schedulesResult] = await Promise.all([
-                listRuns(RUN_HISTORY_LIMIT),
-                listSchedules(),
-            ]);
-            if (!schedulesResult.success) {
-                setRuns([]);
-                setLoadError(schedulesResult.error ?? NAMES_ERROR);
-                return;
-            }
-            if (!runsResult.success) {
-                setRuns([]);
-                setLoadError(runsResult.error ?? RUNS_ERROR);
-                return;
-            }
-            setScheduleNames(new Map((schedulesResult.schedules ?? []).map((entry) => [entry.id, entry.name])));
-            setRuns(runsResult.runs ?? []);
-        } catch (error) {
-            setRuns([]);
-            setLoadError(describeError(error, RUNS_ERROR));
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
+        await start();
+    }, [start]);
 
     useEffect(() => {
-        void reload();
-    }, [reload]);
+        void start();
+    }, [start]);
 
     return { runs, scheduleNames, isLoading, loadError, reload };
 }

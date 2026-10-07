@@ -64,28 +64,43 @@ export function useScheduleList() {
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
 
+    /**
+     * Starts a load and reports its outcome, with every state update inside a
+     * continuation rather than in this function's own body. That is what lets the
+     * mount effect start it: a state update reached directly from an effect body
+     * renders again before the effect has synchronised anything, and the list
+     * already starts in its loading state, so there is nothing to announce.
+     */
+    const start = useCallback(
+        (): Promise<void> => listSchedules()
+            .then(
+                (result) => {
+                    if (!result.success) {
+                        setSchedules([]);
+                        setLoadError(result.error ?? LIST_ERROR);
+                        return;
+                    }
+                    setSchedules(result.schedules ?? []);
+                },
+                (error: unknown) => {
+                    setSchedules([]);
+                    setLoadError(describeError(error, LIST_ERROR));
+                },
+            )
+            .finally(() => setIsLoading(false)),
+        [],
+    );
+
+    /** The Refresh path, where the click is what starts a load, so it is announced. */
     const reload = useCallback(async () => {
         setIsLoading(true);
         setLoadError(null);
-        try {
-            const result = await listSchedules();
-            if (!result.success) {
-                setSchedules([]);
-                setLoadError(result.error ?? LIST_ERROR);
-                return;
-            }
-            setSchedules(result.schedules ?? []);
-        } catch (error) {
-            setSchedules([]);
-            setLoadError(describeError(error, LIST_ERROR));
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
+        await start();
+    }, [start]);
 
     useEffect(() => {
-        void reload();
-    }, [reload]);
+        void start();
+    }, [start]);
 
     return { schedules, isLoading, loadError, reload };
 }
