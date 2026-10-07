@@ -5,7 +5,7 @@ import { unlink } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { revalidatePath } from 'next/cache';
 
-import { BACKUP_TABLES, validateTableSelection } from '@/lib/backup-table-catalog';
+import { orderSelection, selectionNeedsLargeObjects, validateTableSelection } from '@/lib/backup-table-catalog';
 import type { TableSelectionResult } from '@/lib/backup-table-catalog';
 import { listArchives as readArchiveFiles, resolveArchivePath } from '@/lib/backup-archives';
 import type { BackupArchive } from '@/lib/backup-archives';
@@ -22,10 +22,6 @@ const BACKUP_MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
 const BACKUP_CONSOLE_COLOR = 16711680;
 /** The page the backup actions revalidate after a run. */
 const BACKUP_RESTORE_PAGE = '/[locale]/system/backup-restore';
-
-const LARGE_OBJECT_TABLES: ReadonlySet<string> = new Set(
-  BACKUP_TABLES.filter((table) => table.needsLargeObjects === true).map((table) => table.name),
-);
 
 /**
  * The dump is handed to cms-monitor detached, so this resolves the moment the
@@ -50,16 +46,6 @@ export interface ArchiveMutationResult {
   readonly success: boolean;
   readonly message?: string;
   readonly error?: string;
-}
-
-/** Catalog order is parent-before-child, so it is also the order pg_dump must restore in. */
-function orderSelection(tables: readonly string[]): string[] {
-  const selected = new Set(tables);
-  return BACKUP_TABLES.filter((table) => selected.has(table.name)).map((table) => table.name);
-}
-
-function selectionNeedsLargeObjects(tables: readonly string[]): boolean {
-  return tables.some((name) => LARGE_OBJECT_TABLES.has(name));
 }
 
 function describeInvalidSelection(validation: TableSelectionResult): string {

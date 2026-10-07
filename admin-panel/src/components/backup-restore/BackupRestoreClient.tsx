@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ArchiveRestore, FileDown } from 'lucide-react';
+import { ArchiveRestore } from 'lucide-react';
 
 import { EmptyState } from '@/components/core/EmptyState';
 import { Stack } from '@/components/core/Layout';
@@ -11,6 +11,7 @@ import { BackupSelectionSection } from '@/components/backup-restore/BackupSelect
 import { DirLocationSwitcher } from '@/components/backup-restore/DirLocationSwitcher';
 import type { DirLocation } from '@/components/backup-restore/DirLocationSwitcher';
 import { RestoreSection } from '@/components/backup-restore/RestoreSection';
+import { SaveToFileFlow } from '@/components/backup-restore/SaveToFileFlow';
 import { ScheduleRunsSection } from '@/components/backup-restore/ScheduleRunsSection';
 import { ScheduleSection } from '@/components/backup-restore/ScheduleSection';
 import { hasEffectivePermission } from '@/lib/permission-engine';
@@ -77,13 +78,7 @@ export function BackupRestoreClient({
 
             {activeTab.id === 'from-file' && <RestoreSection />}
 
-            {activeTab.id === 'to-file' && (
-                <EmptyState
-                    icon={FileDown}
-                    title="Save tables to a file"
-                    description="Pick catalog tables and download the dump through the browser; nothing is kept on the server."
-                />
-            )}
+            {activeTab.id === 'to-file' && <SaveToFileFlow />}
 
             {activeTab.id === 'from-dir' && (
                 <ArchiveBrowserSection refreshToken={archiveRefreshToken} locationId={activeLocationId} />

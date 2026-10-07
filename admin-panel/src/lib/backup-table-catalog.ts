@@ -97,7 +97,25 @@ export const BACKUP_TABLES: readonly BackupTable[] = CATALOG;
 
 export const BACKUP_TABLE_NAMES: readonly string[] = CATALOG.map((table) => table.name);
 
+/** The tables whose rows are incomplete without `fsobjects`, so a dump of one needs `pg_dump -b`. */
+export const TABLES_NEEDING_LARGE_OBJECTS: ReadonlySet<string> = new Set(
+  BACKUP_TABLES.filter((table) => table.needsLargeObjects === true).map((table) => table.name),
+);
+
 type CatalogTableName = (typeof CATALOG)[number]['name'];
+
+/**
+ * A selection in catalog order, which is parent-before-child: the order a restore
+ * needs, and the order a dump must therefore carry.
+ */
+export function orderSelection(tables: readonly string[]): readonly string[] {
+  const selected = new Set(tables);
+  return CATALOG.filter((table) => selected.has(table.name)).map((table) => table.name);
+}
+
+export function selectionNeedsLargeObjects(tables: readonly string[]): boolean {
+  return tables.some((name) => TABLES_NEEDING_LARGE_OBJECTS.has(name));
+}
 
 export const ADMIN_TABLE = 'admins';
 export const SCHEDULE_TABLE = 'backup_schedules';
