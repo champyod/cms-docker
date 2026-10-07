@@ -2,9 +2,9 @@
  * Pure decision logic for one backup-scheduler tick.
  *
  * No Prisma, no child process, no clock, no timers: everything here is a
- * function of its arguments and of the store and launcher ports `runner.ts`
- * hands in, so `runner.ts` can be the only module that touches the database and
- * the Docker socket, and the tests need neither of them.
+ * function of its arguments and of the store, launcher and location ports
+ * `runner.ts` hands in, so `runner.ts` can be the only module that touches the
+ * database, the config env and the Docker socket, and the tests need none of them.
  *
  * Table names become argv entries for `pg_dump` inside cms-monitor, so a name is
  * only ever re-admitted here through the catalog allowlist. A stored selection is
@@ -12,8 +12,11 @@
  * the write and the fire, and a stale row must not reach `pg_dump`.
  */
 
+import { isAbsolute } from 'node:path';
+
 import { BACKUP_TABLES, validateTableSelection } from '@/lib/backup-table-catalog';
 import { computeNextRun, isScheduleDue } from '@/lib/backup-schedules';
+import type { WriteRootResolution } from '@/lib/backup-locations';
 
 export const MONITOR_CONTAINER = 'cms-monitor';
 export const MONITOR_BACKUP_SCRIPT = '/usr/local/bin/cms-backup.sh';
@@ -42,6 +45,8 @@ export interface DueScheduleRow {
   readonly intervalMins: number;
   readonly enabled: boolean;
   readonly nextRunAt: Date;
+  /** Config location id; null targets the configured default, as every pre-location row does. */
+  readonly locationId: string | null;
 }
 
 export interface DueScheduleFilter {
@@ -108,6 +113,8 @@ export interface ScheduleLauncher {
 export interface SchedulerDeps {
   readonly store: SchedulerStore;
   readonly launcher: ScheduleLauncher;
+  /** Resolves where a due schedule writes; injected so config env stays out of this module. */
+  readonly resolveWriteRoot: (locationId: string | null) => WriteRootResolution;
   readonly shouldStop: () => boolean;
 }
 
@@ -169,26 +176,37 @@ function rejection(error: string): BackupArgvResult {
   return { valid: false, tables: [], args: [], error };
 }
 
-function buildArgv(tables: readonly string[], includeLargeObjects: boolean): string[] {
+function buildArgv(tables: readonly string[], includeLargeObjects: boolean, writeRoot: string | null): string[] {
   const args = ['exec', '-d', MONITOR_CONTAINER, 'bash', MONITOR_BACKUP_SCRIPT, '--tables', tables.join(',')];
   if (includeLargeObjects) args.push('--large-objects');
+  if (writeRoot !== null) args.push('--root', writeRoot);
   return args;
 }
 
 /**
  * The argv `docker exec -d cms-monitor bash cms-backup.sh` is given, built from
  * catalog-validated names only. An empty selection is refused rather than
- * emitted, because `pg_dump` with no `-t` dumps the whole database.
+ * emitted, because `pg_dump` with no `-t` dumps the whole database. A non-null
+ * writeRoot must be absolute: a relative one would resolve against the
+ * monitor's working directory and silently land somewhere else.
  */
-export function buildBackupArgv(tables: readonly string[]): BackupArgvResult {
+export function buildBackupArgv(tables: readonly string[], writeRoot: string | null = null): BackupArgvResult {
   if (!Array.isArray(tables) || !tables.every((table) => typeof table === 'string')) {
     return rejection(REJECTED_NOT_A_LIST);
+  }
+  if (writeRoot !== null && !isAbsolute(writeRoot)) {
+    return rejection(`Backup root must be an absolute path: ${writeRoot}`);
   }
   const validation = validateTableSelection([...tables]);
   if (validation.unknown.length > 0) return rejection(`${REJECTED_UNKNOWN_TABLES}: ${validation.unknown.join(', ')}`);
   if (!validation.valid) return rejection(REJECTED_EMPTY_SELECTION);
   const selection = orderSelection(tables);
-  return { valid: true, tables: selection, args: buildArgv(selection, selectionNeedsLargeObjects(selection)), error: null };
+  return {
+    valid: true,
+    tables: selection,
+    args: buildArgv(selection, selectionNeedsLargeObjects(selection), writeRoot),
+    error: null,
+  };
 }
 
 export function buildStartedRun(input: StartedRunInput): {
@@ -252,7 +270,7 @@ async function rejectSchedule(schedule: DueScheduleRow, argv: BackupArgvResult, 
   await deps.store.advanceSchedule(schedule, computeCadence(schedule, now));
   await deps.launcher.alert(
     'Scheduled Backup Rejected',
-    `Schedule **${schedule.name}** was skipped: ${argv.error} It will be retried on its own interval until its table selection is fixed.`,
+    `Schedule **${schedule.name}** was skipped: ${argv.error} It will be retried on its own interval until its configuration is fixed.`,
   );
 }
 
@@ -278,8 +296,18 @@ async function launchSchedule(schedule: DueScheduleRow, argv: BackupArgvResult, 
   await launchRun(schedule, argv, runId, now, deps);
 }
 
+/**
+ * An unknown location id is a config drift, not a dump: it is reported the same
+ * way a stale table selection is — cadence advances, the operator is alerted —
+ * rather than silently redirected to the default tree.
+ */
 export async function fireSchedule(schedule: DueScheduleRow, now: Date, deps: SchedulerDeps): Promise<void> {
-  const argv = buildBackupArgv(schedule.tables);
+  const writeRoot = deps.resolveWriteRoot(schedule.locationId);
+  if (!writeRoot.ok) {
+    await rejectSchedule(schedule, { valid: false, tables: [], args: [], error: writeRoot.error }, now, deps);
+    return;
+  }
+  const argv = buildBackupArgv(schedule.tables, writeRoot.root);
   if (!argv.valid) {
     await rejectSchedule(schedule, argv, now, deps);
     return;

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 
 import { logToDiscord } from '@/lib/discord-notifier';
 import { ensurePermission } from '@/lib/permissions';
+import { listBackupLocations, resolveDefaultLocationId } from '@/lib/backup-locations';
 import { computeNextRun, validateScheduleInput } from '@/lib/backup-schedules';
 import type { ScheduleInput } from '@/lib/backup-schedules';
 import { prisma } from '@/lib/prisma';
@@ -14,7 +15,8 @@ const MAX_RUN_LIMIT = 200;
 /** Same red as the backup-channel embeds in actions/backups.ts. */
 const BACKUP_LOG_COLOR = 16_711_680;
 /** Same page the backup actions revalidate after a run. */
-const MAINTENANCE_PAGE = '/[locale]/maintenance';
+/** The page the schedule actions revalidate after a mutation. */
+const BACKUP_RESTORE_PAGE = '/[locale]/system/backup-restore';
 
 export interface BackupSchedule {
   readonly id: string;
@@ -26,6 +28,7 @@ export interface BackupSchedule {
   readonly nextRunAt: Date;
   readonly createdAt: Date;
   readonly updatedAt: Date;
+  readonly locationId: string | null;
 }
 
 export interface BackupRun {
@@ -40,12 +43,27 @@ export interface BackupRun {
   readonly manifestTs: string | null;
 }
 
+/** One selectable backup location: the id the schedule stores, the label the form shows. */
+export interface BackupLocationOption {
+  readonly id: string;
+  readonly label: string;
+}
+
+/** The schedule form's location choices, plus the id a fresh form preselects. */
+export interface LocationOptionsResult {
+  readonly success: boolean;
+  readonly options?: readonly BackupLocationOption[];
+  readonly defaultId?: string;
+  readonly error?: string;
+}
+
 /** Fields a caller may change; the row's `id` is deliberately not settable. */
 export interface ScheduleUpdate {
   readonly name?: string;
   readonly tables?: readonly string[];
   readonly intervalMins?: number;
   readonly enabled?: boolean;
+  readonly locationId?: string | null;
 }
 
 export interface ScheduleListResult {
@@ -102,9 +120,24 @@ export async function listSchedules(): Promise<ScheduleListResult> {
   }
 }
 
+/** The schedule form's location choices: the configured list, which read the form preselects from. */
+export async function listBackupLocationOptions(): Promise<LocationOptionsResult> {
+  await ensurePermission('backup:schedule');
+  try {
+    const locations = listBackupLocations();
+    return {
+      success: true,
+      options: locations.map((location) => ({ id: location.id, label: location.label })),
+      defaultId: resolveDefaultLocationId(locations),
+    };
+  } catch (error) {
+    return { success: false, error: describeFailure(error) };
+  }
+}
+
 export async function createSchedule(input: ScheduleInput): Promise<ScheduleMutationResult> {
   await ensurePermission('backup:schedule');
-  const validation = validateScheduleInput(input);
+  const validation = validateScheduleInput(input, listBackupLocations().map((location) => location.id));
   if (!validation.valid || validation.schedule === null) {
     return { success: false, error: validation.errors.join(' ') };
   }
@@ -115,6 +148,7 @@ export async function createSchedule(input: ScheduleInput): Promise<ScheduleMuta
         name: schedule.name,
         tables: [...schedule.tables],
         intervalMins: schedule.intervalMins,
+        locationId: schedule.locationId,
         nextRunAt: computeNextRun(new Date(), schedule.intervalMins),
       },
     });
@@ -134,11 +168,15 @@ export async function updateSchedule(id: string, update: ScheduleUpdate): Promis
   try {
     const existing = await prisma.backup_schedules.findUnique({ where: { id } });
     if (existing === null) return { success: false, error: `Schedule not found: ${id}` };
-    const validation = validateScheduleInput({
-      name: update.name ?? existing.name,
-      tables: update.tables ?? existing.tables,
-      intervalMins: update.intervalMins ?? existing.intervalMins,
-    });
+    const validation = validateScheduleInput(
+      {
+        name: update.name ?? existing.name,
+        tables: update.tables ?? existing.tables,
+        intervalMins: update.intervalMins ?? existing.intervalMins,
+        locationId: update.locationId !== undefined ? update.locationId : existing.locationId,
+      },
+      listBackupLocations().map((location) => location.id),
+    );
     if (!validation.valid || validation.schedule === null) {
       return { success: false, error: validation.errors.join(' ') };
     }
@@ -149,6 +187,7 @@ export async function updateSchedule(id: string, update: ScheduleUpdate): Promis
       ...(update.tables !== undefined ? { tables: [...validated.tables] } : {}),
       ...(update.intervalMins !== undefined ? { intervalMins: validated.intervalMins } : {}),
       ...(update.enabled !== undefined ? { enabled: update.enabled } : {}),
+      ...(update.locationId !== undefined ? { locationId: validated.locationId } : {}),
       ...(nextRunAt !== undefined ? { nextRunAt } : {}),
     };
     const saved = await prisma.backup_schedules.update({ where: { id }, data });
@@ -236,7 +275,7 @@ export async function settleRun(runId: string, note?: string): Promise<ScheduleM
       `Admin settled backup run ${saved.id} (${saved.kind}, ${saved.tables.length} table(s), was ${existing.status}). Its schedule can fire again; the real result is in backups/manifest.json.`,
       BACKUP_LOG_COLOR,
     );
-    revalidatePath(MAINTENANCE_PAGE, 'page');
+    revalidatePath(BACKUP_RESTORE_PAGE, 'page');
     return { success: true, message: `Settled run ${saved.id}.` };
   } catch (error) {
     return { success: false, error: describeFailure(error) };

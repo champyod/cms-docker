@@ -13,6 +13,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 import { logToDiscord } from '@/lib/discord-notifier';
+import { resolveWriteRoot } from '@/lib/backup-locations';
 import { prisma } from '@/lib/prisma';
 import {
   buildDueScheduleFilter,
@@ -79,7 +80,7 @@ const launcher: ScheduleLauncher = {
 let isTicking = false;
 let isStopping = false;
 
-const deps: SchedulerDeps = { store, launcher, shouldStop: () => isStopping };
+const deps: SchedulerDeps = { store, launcher, resolveWriteRoot, shouldStop: () => isStopping };
 
 async function runDueSchedules(now: Date): Promise<void> {
   await fireDueSchedules(await store.findDueSchedules(now), now, deps);

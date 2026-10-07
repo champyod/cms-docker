@@ -60,7 +60,7 @@ function composeService(name: string): string {
 }
 
 function schedule(overrides: Partial<DueScheduleRow> = {}): DueScheduleRow {
-  return { id: 'sch_1', name: 'nightly', tables: ['contests', 'users'], intervalMins: 60, enabled: true, nextRunAt: REFERENCE, ...overrides };
+  return { id: 'sch_1', name: 'nightly', tables: ['contests', 'users'], intervalMins: 60, enabled: true, nextRunAt: REFERENCE, locationId: null, ...overrides };
 }
 
 function at(minutesFromReference: number): Date {
@@ -72,7 +72,7 @@ type MutableRow = { -readonly [Key in keyof DueScheduleRow]: DueScheduleRow[Key]
 /** A stored row the fake store can advance, the way Prisma would on the real one. */
 function mutableSchedule(overrides: Partial<DueScheduleRow> = {}): MutableRow {
   const base = schedule(overrides);
-  return { id: base.id, name: base.name, tables: base.tables, intervalMins: base.intervalMins, enabled: base.enabled, nextRunAt: base.nextRunAt };
+  return { id: base.id, name: base.name, tables: base.tables, intervalMins: base.intervalMins, enabled: base.enabled, nextRunAt: base.nextRunAt, locationId: base.locationId };
 }
 
 interface Alert {
@@ -85,6 +85,8 @@ interface FakeOptions {
   readonly staleRunIds?: readonly string[];
   readonly launchError?: Error;
   readonly stopped?: boolean;
+  /** Overrides what the location port resolves; defaults to "no --root flag". */
+  readonly writeRoot?: { readonly ok: true; readonly root: string | null } | { readonly ok: false; readonly error: string };
 }
 
 interface FakeStore extends SchedulerStore {
@@ -176,7 +178,17 @@ function fakeDeps(options: FakeOptions = {}): {
   const calls: string[] = [];
   const store = fakeStore(options, calls);
   const launcher = fakeLauncher(options, calls);
-  return { calls, store, launcher, deps: { store, launcher, shouldStop: () => options.stopped === true } };
+  return {
+    calls,
+    store,
+    launcher,
+    deps: {
+      store,
+      launcher,
+      resolveWriteRoot: () => options.writeRoot ?? { ok: true, root: null },
+      shouldStop: () => options.stopped === true,
+    },
+  };
 }
 
 describe('buildDueScheduleFilter', () => {
@@ -325,6 +337,49 @@ describe('buildBackupArgv', () => {
   it('never leaves an error null on a rejected selection', () => {
     expect(buildBackupArgv([]).error).not.toBeNull();
     expect(buildBackupArgv(['nope']).error).not.toBeNull();
+  });
+
+  it('appends --root for a non-default write root', () => {
+    const result = buildBackupArgv(['contests'], '/mnt/offsite/cms-backups');
+    expect(result.valid).toBe(true);
+    expect(result.args).toContain('--root');
+    expect(result.args.at(-1)).toBe('/mnt/offsite/cms-backups');
+  });
+
+  it('omits --root when the write root is null, keeping the monitor default', () => {
+    expect(buildBackupArgv(['contests'], null).args).not.toContain('--root');
+  });
+
+  it('rejects a relative write root that would resolve against the monitor cwd', () => {
+    const result = buildBackupArgv(['contests'], './backups');
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('absolute path');
+  });
+});
+
+describe('fireSchedule location handling', () => {
+  it('rejects an unknown location id instead of redirecting to the default tree', async () => {
+    const { launcher, deps } = fakeDeps({ writeRoot: { ok: false, error: 'Unknown backup location: ghost' } });
+    await fireSchedule(schedule({ locationId: 'ghost' }), REFERENCE, deps);
+    expect(launcher.launched).toEqual([]);
+    expect(launcher.alerts).toEqual([
+      { title: 'Scheduled Backup Rejected', body: 'Schedule **nightly** was skipped: Unknown backup location: ghost It will be retried on its own interval until its configuration is fixed.' },
+    ]);
+  });
+
+  it('hands the resolved root to the launcher through the argv', async () => {
+    const { launcher, deps } = fakeDeps({ writeRoot: { ok: true, root: '/mnt/offsite/cms-backups' } });
+    await fireSchedule(schedule({ locationId: 'secondary' }), REFERENCE, deps);
+    expect(launcher.launched).toHaveLength(1);
+    expect(launcher.launched[0]).toContain('--root');
+    expect(launcher.launched[0]?.at(-1)).toBe('/mnt/offsite/cms-backups');
+  });
+
+  it('launches with no --root when the root resolves to null', async () => {
+    const { launcher, deps } = fakeDeps({ writeRoot: { ok: true, root: null } });
+    await fireSchedule(schedule({ locationId: null }), REFERENCE, deps);
+    expect(launcher.launched).toHaveLength(1);
+    expect(launcher.launched[0]).not.toContain('--root');
   });
 });
 
@@ -489,7 +544,7 @@ describe('fireSchedule on a selection that left the catalog', () => {
     const { launcher, deps } = fakeDeps();
     await fireSchedule(LEFT_THE_CATALOG, REFERENCE, deps);
     expect(launcher.alerts).toEqual([
-      { title: 'Scheduled Backup Rejected', body: 'Schedule **nightly** was skipped: Not in the backup table catalog: monitor_targets It will be retried on its own interval until its table selection is fixed.' },
+      { title: 'Scheduled Backup Rejected', body: 'Schedule **nightly** was skipped: Not in the backup table catalog: monitor_targets It will be retried on its own interval until its configuration is fixed.' },
     ]);
   });
 

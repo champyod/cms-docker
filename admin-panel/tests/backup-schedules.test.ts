@@ -16,6 +16,10 @@ const MIGRATION_SOURCE = readFileSync(
   fileURLToPath(new URL('../prisma/migrations/20261002120000_backup_schedules/migration.sql', import.meta.url)),
   'utf8',
 );
+const LOCATION_MIGRATION_SOURCE = readFileSync(
+  fileURLToPath(new URL('../prisma/migrations/20261007000000_backup_schedule_location/migration.sql', import.meta.url)),
+  'utf8',
+);
 
 /** One UTC instant, so no assertion depends on the machine's timezone. */
 const REFERENCE = new Date('2026-03-01T12:00:00.000Z');
@@ -99,7 +103,36 @@ describe('validateScheduleInput', () => {
     const result = validateScheduleInput(scheduleInput());
     expect(result.valid).toBe(true);
     expect(result.errors).toEqual([]);
-    expect(result.schedule).toEqual({ name: 'nightly', tables: ['contests', 'users', 'teams'], intervalMins: 60 });
+    expect(result.schedule).toEqual({ name: 'nightly', tables: ['contests', 'users', 'teams'], intervalMins: 60, locationId: null });
+  });
+
+  it('normalizes an absent location to null, the default tree', () => {
+    expect(validateScheduleInput(scheduleInput(), ['default']).schedule?.locationId).toBeNull();
+  });
+
+  it('accepts a location id the caller knows', () => {
+    const result = validateScheduleInput(scheduleInput({ locationId: 'secondary' }), ['default', 'secondary']);
+    expect(result.valid).toBe(true);
+    expect(result.schedule?.locationId).toBe('secondary');
+  });
+
+  it('rejects a location id outside the registry instead of storing it', () => {
+    const result = validateScheduleInput(scheduleInput({ locationId: 'ghost' }), ['default']);
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual(['Unknown backup location: ghost']);
+    expect(result.schedule).toBeNull();
+  });
+
+  it('rejects every id when the caller passes no registry', () => {
+    const result = validateScheduleInput(scheduleInput({ locationId: 'default' }));
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual(['Unknown backup location: default']);
+  });
+
+  it('rejects a blank location id', () => {
+    const result = validateScheduleInput(scheduleInput({ locationId: '' }), ['default']);
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual(['Backup location must be a location id or empty for the default tree.']);
   });
 
   it('trims the name and stores tables in catalog order without duplicates', () => {
@@ -189,6 +222,7 @@ describe('schedule schema parity', () => {
     expect(fieldLine('backup_schedules', 'enabled')).toBe('enabled Boolean @default(true)');
     expect(fieldLine('backup_schedules', 'lastRunAt')).toBe('lastRunAt DateTime?');
     expect(fieldLine('backup_schedules', 'nextRunAt')).toBe('nextRunAt DateTime');
+    expect(fieldLine('backup_schedules', 'locationId')).toBe('locationId String?');
     expect(fieldLine('backup_schedules', 'createdAt')).toBe('createdAt DateTime @default(now())');
     expect(fieldLine('backup_schedules', 'updatedAt')).toBe('updatedAt DateTime @updatedAt');
   });
@@ -214,5 +248,9 @@ describe('schedule schema parity', () => {
     expect(MIGRATION_SOURCE).toContain('CREATE TABLE "backup_runs"');
     expect(MIGRATION_SOURCE).toContain('CONSTRAINT "backup_schedules_pkey" PRIMARY KEY ("id")');
     expect(MIGRATION_SOURCE).toContain('CONSTRAINT "backup_runs_pkey" PRIMARY KEY ("id")');
+  });
+
+  it('has a migration that adds locationId, so deploys upgrade without a reset', () => {
+    expect(LOCATION_MIGRATION_SOURCE).toContain('ALTER TABLE "backup_schedules" ADD COLUMN "locationId" TEXT');
   });
 });

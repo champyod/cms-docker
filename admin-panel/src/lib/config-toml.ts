@@ -16,6 +16,7 @@ export const CONFIG_TOML_SECTIONS = [
   'infra',
   'tailscale',
   'rpc',
+  'backup',
 ] as const;
 
 export type ConfigTomlSection = (typeof CONFIG_TOML_SECTIONS)[number];

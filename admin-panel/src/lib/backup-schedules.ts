@@ -22,10 +22,17 @@ export interface ScheduleInput {
   readonly name: string;
   readonly tables: readonly string[];
   readonly intervalMins: number;
+  /** Backup location id; null selects the default tree, as every pre-location row does. */
+  readonly locationId?: string | null;
 }
 
 /** A schedule that passed validation, normalized for persistence. */
-export type ValidatedSchedule = ScheduleInput;
+export interface ValidatedSchedule {
+  readonly name: string;
+  readonly tables: readonly string[];
+  readonly intervalMins: number;
+  readonly locationId: string | null;
+}
 
 export interface ScheduleValidationResult {
   readonly valid: boolean;
@@ -92,16 +99,40 @@ function checkInterval(intervalMins: unknown): string[] {
   return [];
 }
 
-export function validateScheduleInput(input: ScheduleInput): ScheduleValidationResult {
+/**
+ * Null is always valid — it is what every row that predates locations carries,
+ * and it targets the default tree. An id must appear in `knownLocationIds`,
+ * which defaults empty so a caller that forgets to pass the registry rejects
+ * every id instead of accepting one that may not exist.
+ */
+function checkLocationId(locationId: unknown, knownLocationIds: readonly string[]): string[] {
+  if (locationId === undefined || locationId === null) return [];
+  if (typeof locationId !== 'string' || locationId.length === 0) {
+    return ['Backup location must be a location id or empty for the default tree.'];
+  }
+  if (!knownLocationIds.includes(locationId)) return [`Unknown backup location: ${locationId}`];
+  return [];
+}
+
+export function validateScheduleInput(
+  input: ScheduleInput,
+  knownLocationIds: readonly string[] = [],
+): ScheduleValidationResult {
   const name = checkName(input.name);
   const tables = checkTables(input.tables);
   const interval = checkInterval(input.intervalMins);
-  const errors = [...name, ...tables.errors, ...interval];
+  const location = checkLocationId(input.locationId, knownLocationIds);
+  const errors = [...name, ...tables.errors, ...interval, ...location];
   if (errors.length > 0) return { valid: false, errors, warnings: [], schedule: null };
   return {
     valid: true,
     errors: [],
     warnings: tables.warnings,
-    schedule: { name: input.name.trim(), tables: tables.tables, intervalMins: input.intervalMins },
+    schedule: {
+      name: input.name.trim(),
+      tables: tables.tables,
+      intervalMins: input.intervalMins,
+      locationId: input.locationId ?? null,
+    },
   };
 }

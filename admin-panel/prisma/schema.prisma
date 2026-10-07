@@ -512,6 +512,11 @@ model backup_schedules {
   enabled      Boolean   @default(true)
   lastRunAt    DateTime?
   nextRunAt    DateTime
+  /// Backup location id from config.toml's [backup] list. Deliberately a bare
+  /// string, not a relation: locations are config, not rows, so they cannot be
+  /// foreign-keyed. NULL means the default tree — every row that predates
+  /// locations reads it that way, which keeps the migration a no-op.
+  locationId   String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 

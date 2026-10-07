@@ -73,10 +73,10 @@ async function readArchiveDirectory(directory: string, root: string): Promise<Ba
   return archives;
 }
 
-export async function listArchives(limit: number = MAX_ARCHIVES): Promise<BackupArchive[]> {
-  const root = await realpath(getBackupRoot()).catch(() => null);
-  if (root === null) return [];
-  const perDirectory = await Promise.all(ARCHIVE_DIRECTORIES.map((directory) => readArchiveDirectory(path.join(root, directory), root)));
+export async function listArchives(root: string = getBackupRoot(), limit: number = MAX_ARCHIVES): Promise<BackupArchive[]> {
+  const resolvedRoot = await realpath(root).catch(() => null);
+  if (resolvedRoot === null) return [];
+  const perDirectory = await Promise.all(ARCHIVE_DIRECTORIES.map((directory) => readArchiveDirectory(path.join(resolvedRoot, directory), resolvedRoot)));
   return capArchives(perDirectory.flat(), limit);
 }
 
@@ -90,13 +90,13 @@ function isInsideRoot(root: string, candidate: string): boolean {
  * pattern already excludes separators; the realpath comparison additionally
  * refuses a symlink planted inside the backup directories that points outside it.
  */
-export async function resolveArchivePath(name: string): Promise<string | null> {
+export async function resolveArchivePath(name: string, root: string = getBackupRoot()): Promise<string | null> {
   if (!isArchiveName(name)) return null;
-  const root = await realpath(getBackupRoot()).catch(() => null);
-  if (root === null) return null;
+  const resolvedRoot = await realpath(root).catch(() => null);
+  if (resolvedRoot === null) return null;
   for (const directory of ARCHIVE_DIRECTORIES) {
-    const resolved = await realpath(path.join(root, directory, name)).catch(() => null);
-    if (resolved !== null && isInsideRoot(root, resolved)) return resolved;
+    const resolved = await realpath(path.join(resolvedRoot, directory, name)).catch(() => null);
+    if (resolved !== null && isInsideRoot(resolvedRoot, resolved)) return resolved;
   }
   return null;
 }
