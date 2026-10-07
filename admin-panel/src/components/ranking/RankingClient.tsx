@@ -99,21 +99,23 @@ export function RankingClient({ permissionKeys }: RankingClientProps): React.JSX
 
   const buildLogoUrl = useCallback(() => `/api/ranking/logo?ts=${Date.now()}`, []);
 
-  const fetchLogo = useCallback(async () => {
-    const url = buildLogoUrl();
-    try {
-      const res = await fetch(url, { cache: 'no-store' });
-      const contentType = res.headers.get('content-type') ?? '';
-      if (contentType.startsWith('image/')) {
-        setLogoUrl(url);
-        return;
+  useEffect(() => {
+    void (async () => {
+      const url = buildLogoUrl();
+      try {
+        const res = await fetch(url, { cache: 'no-store' });
+        const contentType = res.headers.get('content-type') ?? '';
+        if (contentType.startsWith('image/')) {
+          setLogoUrl(url);
+          return;
+        }
+        const data = (await res.json()) as { success: boolean; exists?: boolean };
+        if (data.exists === false) setLogoUrl('');
+        else setLogoUrl(url);
+      } catch {
+        setLogoUrl('');
       }
-      const data = (await res.json()) as { success: boolean; exists?: boolean };
-      if (data.exists === false) setLogoUrl('');
-      else setLogoUrl(url);
-    } catch {
-      setLogoUrl('');
-    }
+    })();
   }, [buildLogoUrl]);
 
   const handleLogoUpload = useCallback(
@@ -142,10 +144,6 @@ export function RankingClient({ permissionKeys }: RankingClientProps): React.JSX
   useEffect(() => {
     queueMicrotask(() => void loadSession());
   }, [loadSession]);
-
-  useEffect(() => {
-    void fetchLogo();
-  }, [fetchLogo]);
 
   // Why these two buttons travel together: the snapshot read and the session that authorizes it
   // are this panel's state, so the header cannot offer either without this component.

@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useMemo, useState, useEffect } from 'react';
+import { createContext, useContext, useMemo, useState } from 'react';
 import { FileCode, Clock, Cpu, FileType, CheckSquare } from 'lucide-react';
 import type { TaskData } from '@/app/actions/tasks';
 import { apiClient } from '@/lib/apiClient';
@@ -122,11 +122,14 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
     return getFieldAccess('tasks', perms);
   }, [permissionKeys]);
 
-  useEffect(() => {
-    if (task) setFormData(mapTaskToForm(task));
-    else setFormData(EMPTY_FORM);
+  const [prevTask, setPrevTask] = useState<TaskRecord | null | undefined>(undefined);
+  const [prevOpen, setPrevOpen] = useState(isOpen);
+  if (task !== prevTask || isOpen !== prevOpen) {
+    setPrevTask(task);
+    setPrevOpen(isOpen);
+    setFormData(task ? mapTaskToForm(task) : EMPTY_FORM);
     setError('');
-  }, [task, isOpen]);
+  }
 
   const runAction = useActionFeedback();
 

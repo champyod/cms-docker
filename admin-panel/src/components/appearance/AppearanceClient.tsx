@@ -134,7 +134,7 @@ export function AppearanceClient(): React.JSX.Element {
   const [values, setValues] = useState<Record<string, string>>({});
   const [branding, setBranding] = useState<BrandingFields>({ rankingLogoPath: '', rankingUsername: '', rankingPassword: '' });
   const [saving, setSaving] = useState(false);
-  const [logoPreview] = useState<string>(`/api/ranking/logo?ts=${Date.now()}`);
+  const [logoPreview] = useState<string>(() => `/api/ranking/logo?ts=${Date.now()}`);
 
   useEffect(() => {
     let cancelled = false;

@@ -90,9 +90,11 @@ export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess, perm
     } finally {
       setLoadingManagers(false);
     }
-  }, [dataset?.id]);
+  }, [dataset]);
 
-  useEffect(() => {
+  const [prevTrigger, setPrevTrigger] = useState<{ isOpen: boolean; dataset?: DatasetRecord | null } | null>(null);
+  if (prevTrigger === null || prevTrigger.isOpen !== isOpen || prevTrigger.dataset !== dataset) {
+    setPrevTrigger({ isOpen, dataset });
     if (dataset) {
       setFormData({
         description: dataset.description,
@@ -103,7 +105,6 @@ export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess, perm
         score_type_parameters: dataset.score_type_parameters ?? [],
         task_type_parameters_text: taskParamsToText(dataset.task_type_parameters),
       });
-      void loadManagers();
     } else {
       setFormData(DEFAULT_FORM);
       setManagers([]);
@@ -112,6 +113,10 @@ export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess, perm
     setTaskParamsError('');
     setError('');
     setActiveTab('general');
+  }
+
+  useEffect(() => {
+    if (dataset) queueMicrotask(() => void loadManagers());
   }, [dataset, isOpen, loadManagers]);
 
   const runAction = useActionFeedback();

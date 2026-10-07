@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Upload, Archive } from 'lucide-react';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
@@ -31,15 +31,19 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, currentScoreTy
   const [applySubtasks, setApplySubtasks] = useState(false);
   const [loading, setLoading] = useState(false);
   const [previewPairId, setPreviewPairId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const upload = useTestcaseUpload(isOpen);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    setStep(1);
-    setApplySubtasks(false);
-    setLoading(false);
-    setPreviewPairId(null);
-  }, [isOpen]);
+  const [prevOpen, setPrevOpen] = useState(isOpen);
+  if (isOpen !== prevOpen) {
+    setPrevOpen(isOpen);
+    if (isOpen) {
+      setStep(1);
+      setApplySubtasks(false);
+      setLoading(false);
+      setPreviewPairId(null);
+    }
+  }
 
   // Why memoized: grouping walks every pair, and the pairs list
   // rebuilds on each pattern edit, so the map runs once per change.
@@ -169,10 +173,10 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, currentScoreTy
               />
 
               <div className="flex-1 space-y-4 overflow-y-auto p-4">
-                <div onClick={() => upload.fileInputRef.current?.click()} className="group flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border p-6 transition-all hover:bg-muted/50 hover:border-ring/50">
+                <div onClick={() => fileInputRef.current?.click()} className="group flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border p-6 transition-all hover:bg-muted/50 hover:border-ring/50">
                   {upload.uploadType === 'zip' ? <Archive className="h-8 w-8 text-muted-foreground transition-colors group-hover:text-info" /> : <Upload className="h-8 w-8 text-muted-foreground transition-colors group-hover:text-info" />}
                   <p className="font-medium text-muted-foreground">{upload.uploadType === 'zip' ? 'Click to select Zip file' : 'Click to select Input/Output files'}</p>
-                  <input ref={upload.fileInputRef} type="file" multiple={upload.uploadType === 'files'} accept={upload.uploadType === 'zip' ? '.zip' : '.in,.out,.inp,.sol'} title="Select testcase files" aria-label="Select testcase files" className="hidden" onChange={upload.handleFileSelect} />
+                  <input ref={fileInputRef} type="file" multiple={upload.uploadType === 'files'} accept={upload.uploadType === 'zip' ? '.zip' : '.in,.out,.inp,.sol'} title="Select testcase files" aria-label="Select testcase files" className="hidden" onChange={upload.handleFileSelect} />
                 </div>
 
                 {upload.processing && (

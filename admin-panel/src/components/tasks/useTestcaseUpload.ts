@@ -22,7 +22,6 @@ export interface TestcaseUploadState {
   patternsPasted: boolean;
   pairs: FilePair[];
   processing: boolean;
-  fileInputRef: React.RefObject<HTMLInputElement | null>;
   markPatternsPasted: () => void;
   handleFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
   handlePatternChange: (side: 'input' | 'output', value: string) => void;
@@ -38,20 +37,26 @@ export function useTestcaseUpload(isOpen: boolean): TestcaseUploadState {
   const [patternsPasted, setPatternsPasted] = useState(false);
   const [pairs, setPairs] = useState<FilePair[]>([]);
   const [processing, setProcessing] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const pastedPatternsRef = useRef(false);
   const selectedFilesRef = useRef<SelectedFiles | null>(null);
 
+  const [prevOpen, setPrevOpen] = useState(isOpen);
+  if (isOpen !== prevOpen) {
+    setPrevOpen(isOpen);
+    if (isOpen) {
+      setUploadType('files');
+      setInputPattern('*.in');
+      setOutputPattern('*.out');
+      setInputPatternError('');
+      setOutputPatternError('');
+      setPatternsPasted(false);
+      setPairs([]);
+      setProcessing(false);
+    }
+  }
+
   useEffect(() => {
     if (!isOpen) return;
-    setUploadType('files');
-    setInputPattern('*.in');
-    setOutputPattern('*.out');
-    setInputPatternError('');
-    setOutputPatternError('');
-    setPatternsPasted(false);
-    setPairs([]);
-    setProcessing(false);
     pastedPatternsRef.current = false;
     selectedFilesRef.current = null;
   }, [isOpen]);
@@ -150,7 +155,6 @@ export function useTestcaseUpload(isOpen: boolean): TestcaseUploadState {
     patternsPasted,
     pairs,
     processing,
-    fileInputRef,
     markPatternsPasted,
     handleFileSelect,
     handlePatternChange,
