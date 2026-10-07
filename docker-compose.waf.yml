@@ -3,19 +3,30 @@
 #
 # Disabled by default:
 #   WAF_ENABLED=0 (default) — grader-waf container not started, no ports bound, nginx unaffected.
-#   CAPTCHA (Upgrade-2) remains active whether WAF is on or off; both can be on at once.
+#   CAPTCHA is independent of this file: it is enforced by the login handlers of the
+#   admin panel, the admin web server and the contest web server, all gated on
+#   CAPTCHA_ENABLED. Turning the WAF on or off changes nothing about it, and both can
+#   be on at once. See docs/LOGIN-CAPTCHA.md.
 #
 # Enable WAF (explicit opt-in):
-#   1. Set WAF_ENABLED=1 in .env.infra (or .env) and optionally tune WAF_PARANOIA / WAF_ANOMALY_INBOUND / WAF_ANOMALY_OUTBOUND / WAF_PORT.
-#   2. Start with profile:
-#        docker compose --profile waf -f docker-compose.yml -f docker-compose.domain.yml -f docker-compose.waf.yml up -d
-#      Or domain-only:
-#        docker compose -f docker-compose.domain.yml -f docker-compose.waf.yml --profile waf up -d
-#   3. Keep SecRuleEngine DetectionOnly for ~1 week, review audit log, then switch to On (see docs/waf-tuning.md).
+#   1. Render the nginx config the proxy serves, then start the domain stack:
+#        ./cms domain setup --apply
+#        make domain
+#   2. Start the WAF profile:
+#        make waf
+#      (equivalently: docker compose -f docker-compose.yml -f docker-compose.domain.yml
+#       -f docker-compose.waf.yml --profile core --profile contest --profile waf up -d)
+#      The core and contest profiles are required: the domain file overrides the
+#      `nginx-proxy` service name, and Compose only validates a depends_on target
+#      when one of its profiles is active.
+#   3. Keep SecRuleEngine DetectionOnly for ~1 week, review the audit log, then
+#      switch WAF_RULE_ENGINE to On (see docs/waf-tuning.md).
 #
 # Architecture:
 #   grader-waf (OWASP CRS nginx) → grader-nginx-proxy (existing nginx) → backends
 #   - grader-waf BACKEND=http://grader-nginx-proxy:80 (internal port 80, TLS terminates at grader-nginx-proxy or at grader-waf if routed via host)
+#   - The container listens on 8080 internally because the image runs unprivileged
+#     and refuses to bind below 1024; WAF_PORT (8080 default) is the host-side port.
 #   - When WAF_ENABLED=1, expose WAF on host WAF_PORT (default 8080) for testing alongside existing 443.
 #     Production wiring (443 → WAF → nginx) requires host port 443 to be re-bound to grader-waf;
 #     document both patterns in docs/waf-tuning.md. Default keeps host 443 on grader-nginx-proxy so enabling WAF
@@ -32,7 +43,7 @@ services:
   grader-waf:
     image: owasp/modsecurity-crs:nginx-alpine
     container_name: grader-waf
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - waf
     networks:
@@ -42,28 +53,55 @@ services:
     # and profile `waf` is requested, WAF listens on WAF_PORT (8080 default) — change to 443 only
     # when intentionally fronting production traffic (see docs/waf-tuning.md "Wiring" section).
     ports:
-      - "${WAF_BIND_IP:-127.0.0.1}:${WAF_PORT:-8080}:80"
+      - "${WAF_BIND_IP:-127.0.0.1}:${WAF_PORT:-8080}:8080"
     volumes:
-      - ./config/modsecurity/modsecurity.conf:/etc/modsecurity/modsecurity.conf:ro
-      - ./config/modsecurity/crs-setup.conf:/etc/modsecurity/crs/crs-setup.conf:ro
+      # WHY these two paths: nginx loads /etc/modsecurity.d/setup.conf, whose
+      # Include chain reads /etc/modsecurity.d/modsecurity.conf and
+      # /etc/modsecurity.d/owasp-crs/crs-setup.conf (a symlink to /opt/owasp-crs).
+      # A file mounted under /etc/modsecurity/ — where this file used to be mounted —
+      # is never opened by the server. Verified against a running container: the old
+      # mount was present on disk and absent from the loaded configuration.
+      #
+      # WHY /etc/modsecurity.d/modsecurity.conf is NOT a mount point: entrypoint
+      # 90-copy-modsecurity-config.sh copies the generated config over it and exits
+      # non-zero on a read-only filesystem, so mounting it :ro stops the container.
+      # Instead MODSEC_* variables below set the directives in this file that the
+      # deployment actually changes, which is the mechanism the image supports.
+      - ./config/modsecurity/crs-setup.conf:/opt/owasp-crs/crs-setup.conf:ro
       # Persist audit logs to host for tuning (mounted volume, not host path dir required at compose parse)
       - waf-logs:/var/log
     environment:
+      # PARANOIA / ANOMALY_* are only honoured when MANUAL_MODE is unset, because
+      # 95-configure-rules.sh rewrites rules 900000/900110 from them. With the CRS
+      # file mounted at its real path and MANUAL_MODE=1, the mounted file is the
+      # single source of truth for the CRS knobs and these become inert; they are
+      # kept only so `docker compose config` documents the image defaults.
+      MANUAL_MODE: "1"
       PARANOIA: ${WAF_PARANOIA:-1}
       ANOMALY_INBOUND: ${WAF_ANOMALY_INBOUND:-5}
       ANOMALY_OUTBOUND: ${WAF_ANOMALY_OUTBOUND:-4}
+      # The ModSecurity engine directives that docker-compose.waf.yml tunes live
+      # here rather than in a mounted modsecurity.conf, because the image rebuilds
+      # that file on every start. This is the supported way to change SecRuleEngine
+      # and SecResponseBodyAccess from config.toml.
+      MODSEC_RULE_ENGINE: ${WAF_RULE_ENGINE:-DetectionOnly}
+      MODSEC_RESP_BODY_ACCESS: ${WAF_RESP_BODY_ACCESS:-Off}
       BACKEND: http://grader-nginx-proxy:80
       BACKEND_WS: http://grader-nginx-proxy:80
       PROXY: "1"
-      PORT: "80"
-      MODSEC_RULE_ENGINE: ${WAF_RULE_ENGINE:-DetectionOnly}
-      # Keep nginx access log quiet for health checks
-      NGINX_ALWAYS_TLS: "off"
+      # WHY 8080 and not 80: the image runs as the unprivileged `nginx` user and its
+      # 01-check-low-port.sh entrypoint aborts on any PORT below 1024. `PORT: "80"`
+      # crash-looped with exit 1 before reaching nginx at all.
+      PORT: "8080"
+      # The documented name is NGINX_ALWAYS_TLS_REDIRECT. The previous
+      # NGINX_ALWAYS_TLS was not a variable this image reads, so the setting was
+      # silently ignored.
+      NGINX_ALWAYS_TLS_REDIRECT: "off"
       # Expose real IP via X-Forwarded-For passthrough to backend
     depends_on:
       - nginx-proxy
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:80/healthz 2>/dev/null || wget --no-verbose --tries=1 --spider http://localhost:80/ 2>/dev/null || exit 1"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/healthz 2>/dev/null || wget --no-verbose --tries=1 --spider http://localhost:8080/ 2>/dev/null || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3

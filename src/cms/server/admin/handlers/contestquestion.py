@@ -83,7 +83,6 @@ class QuestionActionHandler(BaseHandler, metaclass=ABCMeta):
         question."""
         pass
 
-    @require_permission(BaseHandler.PERMISSION_MESSAGING)
     def post(self, contest_id, question_id):
         user_id = self.get_argument("user_id", None)
         if user_id is not None:
@@ -105,6 +104,10 @@ class QuestionReplyHandler(QuestionActionHandler):
     """Called when the manager replies to a question made by a user.
 
     """
+
+    @require_permission("question:answer")
+    def post(self, contest_id, question_id):
+        super().post(contest_id, question_id)
 
     def process_question(self, question):
         reply_subject_code: str = self.get_argument(
@@ -135,6 +138,10 @@ class QuestionIgnoreHandler(QuestionActionHandler):
     question.
 
     """
+    @require_permission("question:ignore")
+    def post(self, contest_id, question_id):
+        super().post(contest_id, question_id)
+
     def process_question(self, question):
         should_ignore = self.get_argument("ignore", "no") == "yes"
 
@@ -152,6 +159,10 @@ class QuestionIgnoreHandler(QuestionActionHandler):
 
 class QuestionClaimHandler(QuestionActionHandler):
     """Called when the manager chooses to claim or unclaim a question."""
+
+    @require_permission("question:answer")
+    def post(self, contest_id, question_id):
+        super().post(contest_id, question_id)
 
     def process_question(self, question):
         # Can claim/unclaim only a question not ignored or answered.

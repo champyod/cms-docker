@@ -10,18 +10,23 @@ services:
       dockerfile: Dockerfile
     image: cms-admin-panel-next
     container_name: cms-admin-panel-next
-    restart: on-failure:5
+    restart: unless-stopped
     environment:
-      # API and Server Configuration
-      VITE_API_URL: ${VITE_API_URL:-http://localhost:8889}
-      SERVER_BASE_URL: ${SERVER_BASE_URL:-http://localhost}
       PUBLIC_IP: ${PUBLIC_IP:-0.0.0.0}
 
-      # Database
+      # Database — WHY: single owner role cmsuser owns large objects, so admin panel connects as owner (PostgreSQL restricts large-object access to owner).
       DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
 
       # Authentication
       AUTH_SECRET: ${AUTH_SECRET}
+
+      # Adaptive login CAPTCHA
+      CAPTCHA_ENABLED: ${CAPTCHA_ENABLED:-0}
+      CAPTCHA_PROVIDER: ${CAPTCHA_PROVIDER:-turnstile}
+      CAPTCHA_SITE_KEY: ${CAPTCHA_SITE_KEY:-}
+      CAPTCHA_SECRET_KEY: ${CAPTCHA_SECRET_KEY:-}
+      CAPTCHA_THRESHOLD: ${CAPTCHA_THRESHOLD:-3}
+      CAPTCHA_BAN_THRESHOLD: ${CAPTCHA_BAN_THRESHOLD:-5}
 
       # Infrastructure Management
       REPO_ROOT: /repo-root
@@ -35,6 +40,7 @@ services:
       # Host procfs for true host-level metrics in Resources page
       - /proc:/host/proc:ro
       - cms-logs:/var/local/log/cms
+      - cms-ranking-data:/var/local/lib/cms/ranking:rw
     networks:
       - cms-network
     ports:
@@ -51,11 +57,20 @@ services:
       dockerfile: Dockerfile
     image: cms-admin-web-server
     container_name: cms-admin-web-server
-    restart: on-failure:5
+    restart: unless-stopped
     environment:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       ADMIN_LISTEN_PORT: ${ADMIN_LISTEN_PORT:-8889}
-      ADMIN_LISTEN_ADDRESS: ${ADMIN_LISTEN_ADDRESS:-0.0.0.0}
+      # Adaptive login CAPTCHA. __inject_config.sh copies these into the
+      # [admin_web_server.captcha] table of the mounted cms.toml, which is where
+      # the Tornado process reads them from — it sees only CMS_CONFIG, so env
+      # vars alone would never reach it.
+      CAPTCHA_ENABLED: ${CAPTCHA_ENABLED:-0}
+      CAPTCHA_PROVIDER: ${CAPTCHA_PROVIDER:-turnstile}
+      CAPTCHA_SITE_KEY: ${CAPTCHA_SITE_KEY:-}
+      CAPTCHA_SECRET_KEY: ${CAPTCHA_SECRET_KEY:-}
+      CAPTCHA_THRESHOLD: ${CAPTCHA_THRESHOLD:-3}
+      CAPTCHA_BAN_THRESHOLD: ${CAPTCHA_BAN_THRESHOLD:-5}
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
@@ -77,11 +92,10 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: cms-ranking-web-server
-    restart: on-failure:5
+    restart: unless-stopped
     environment:
       CMS_RANKING_CONFIG: ${CMS_RANKING_CONFIG:-/usr/local/etc/cms_ranking.toml}
       RANKING_LISTEN_PORT: ${RANKING_LISTEN_PORT:-8890}
-      RANKING_LISTEN_ADDRESS: ${RANKING_LISTEN_ADDRESS:-0.0.0.0}
     volumes:
       - ./config/cms_ranking.toml:/usr/local/etc/cms_ranking.toml:ro
       - cms-logs:/var/local/log/cms
@@ -96,30 +110,6 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.cms-ranking.rule=Host(`${RANKING_DOMAIN:-ranking.cms.local}`)"
       - "traefik.http.services.cms-ranking.loadbalancer.server.port=${RANKING_LISTEN_PORT:-8890}"
-
-  # Printing Service - Manages printing requests (optional)
-  printing-service:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: cms-printing-service
-    restart: on-failure:5
-    environment:
-      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
-      SERVICE_TYPE: PrintingService
-      SERVICE_SHARD: ${PRINTING_SERVICE_SHARD:-0}
-      PRINTING_ENABLED: ${PRINTING_ENABLED:-false}
-    volumes:
-      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
-      - cms-logs:/var/local/log/cms
-      - cms-cache:/var/local/cache/cms
-    networks:
-      - cms-network
-    privileged: true
-    profiles:
-      - printing
-    command: >
-      sh -c "if [ \"$${PRINTING_ENABLED}\" = \"true\" ]; then sleep 10 && cmsPrintingService $${PRINTING_SERVICE_SHARD:-0}; else echo 'Printing service disabled'; sleep infinity; fi"
 
 networks:
   cms-network:

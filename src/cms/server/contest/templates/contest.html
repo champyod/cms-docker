@@ -194,6 +194,9 @@ $(document).ready(function () {
                             <li{% if page == "documentation" %} class="active"{% endif %}>
                                 <a href="{{ contest_url("documentation") }}">{% trans %}Documentation{% endtrans %}</a>
                             </li>
+                            <li{% if page == "credits" %} class="active"{% endif %}>
+                                <a href="{{ contest_url("credits") }}">Credits</a>
+                            </li>
     {% if actual_phase == 0 or participation.unrestricted %}{# FIXME maybe >= 0? #}
         {% if testing_enabled %}
                             <li{% if page == "test_interface" %} class="active"{% endif %}>
@@ -203,11 +206,6 @@ $(document).ready(function () {
     {% endif %}
                         </ul>
                     </div>
-                    <span class="license_notice">
-                    <a href="https://github.com/cms-dev/cms" rel="author noreferrer" target="_blank">{% trans %}Contest Management System{% endtrans %}</a>
-                    {% trans %}is released under the{% endtrans %}
-                    <a href="https://www.gnu.org/licenses/agpl" rel="license noreferrer" target="_blank">{% trans %}GNU Affero General Public License{% endtrans %}</a>.
-                    </span>
                 </div>
     {% block core %}{% endblock core %}
             </div>

@@ -3,7 +3,8 @@
 import { execFile } from 'child_process';
 import path from 'path';
 import { promisify } from 'util';
-import { ensurePermission, getFreshPermissions, hasPermission } from '@/lib/permissions';
+import { ensurePermission, getFreshPermissions } from '@/lib/permissions';
+import { hasEffectivePermission } from '@/lib/permission-engine';
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
 import { getRepoRoot } from '@/lib/repo-root';
@@ -18,7 +19,7 @@ export async function getWorkerStatus(host: string, port?: number): Promise<{
   host: string;
   port?: number;
 }> {
-  await ensurePermission('all');
+  await ensurePermission('service:read');
   if (!HOST_RE.test(host)) {
     return { status: 'unknown', containerRunning: false, host, port };
   }
@@ -44,10 +45,6 @@ export async function getWorkerStatus(host: string, port?: number): Promise<{
   return { status, containerRunning, host, port };
 }
 
-// ---------------------------------------------------------------------------
-// Live worker telemetry (real sources: docker inspect/logs, TCP probe,
-// open-evaluation counts). Replaces the never-populated `services` table.
-// ---------------------------------------------------------------------------
 export interface WorkerLiveDetail {
     host: string;
     port: number;
@@ -60,9 +57,7 @@ export interface WorkerLiveDetail {
     activity: 'working' | 'connecting' | 'erroring' | 'idle' | 'unknown';
     lastLog: string;
     reachable: boolean;
-    /** Open (outcome-less) evaluations routed to this shard */
     tasks: number;
-    /** Backlog heuristic: tasks >= LAGGING_TASK_THRESHOLD */
     lagging: boolean;
 }
 
@@ -79,8 +74,8 @@ export async function getWorkersLiveStatus(): Promise<{
     if (!fresh) return { forbidden: true, canManage: false, workers: [] };
 
     // Viewing worker health is an operator concern (tasks); management stays superadmin.
-    const canView = hasPermission(fresh, 'tasks');
-    const canManage = hasPermission(fresh, 'all');
+    const canView = hasEffectivePermission(fresh, 'task:read');
+    const canManage = hasEffectivePermission(fresh, 'all:all');
     if (!canView) return { forbidden: true, canManage, workers: [] };
 
     let details: Array<Record<string, unknown>> = [];
@@ -104,8 +99,8 @@ export async function getWorkersLiveStatus(): Promise<{
         });
         tasksByShard = new Map(
             groups
-                .filter((g) => g.evaluation_shard !== null)
-                .map((g) => [g.evaluation_shard as number, g._count._all])
+                .filter((g: (typeof groups)[number]) => g.evaluation_shard !== null)
+                .map((g: (typeof groups)[number]) => [g.evaluation_shard as number, g._count._all])
         );
     } catch { /* table may not exist pre-init */ }
 
@@ -113,8 +108,13 @@ export async function getWorkersLiveStatus(): Promise<{
         typeof v === typeof fallback ? (v as T) : fallback;
 
     const workers: WorkerLiveDetail[] = details.map((d, index) => {
-        const host = String(d.host ?? '');
-        const port = Number(d.port ?? 0);
+        let host = String(d.host ?? '');
+        let port = Number(d.port ?? 0);
+        if (!host && typeof d.endpoint === 'string' && d.endpoint.includes(':')) {
+            const lastColon = d.endpoint.lastIndexOf(':');
+            host = d.endpoint.substring(0, lastColon);
+            port = Number(d.endpoint.substring(lastColon + 1)) || port;
+        }
         const shard = typeof d.shard === 'number' ? d.shard : index;
         const tasks = tasksByShard.get(shard) ?? 0;
         return {

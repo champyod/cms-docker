@@ -1,0 +1,15 @@
+{
+  "navigation": [
+    { "id": "contests", "label": "Contests", "detail": "Configuration and Timing", "color": "text-amber-400", "icon": "Trophy" },
+    { "id": "users", "label": "Users and Teams", "detail": "Authentication and Groups", "color": "text-cyan-400", "icon": "Users" },
+    { "id": "tasks", "label": "Tasks", "detail": "Problems, Datasets, Tests", "color": "text-indigo-400", "icon": "Code" },
+    { "id": "submissions", "label": "Submissions", "detail": "Monitoring and Rejudging", "color": "text-emerald-400", "icon": "Activity" },
+    { "id": "services", "label": "Services", "detail": "Status and Logs", "color": "text-purple-400", "icon": "Server" }
+  ],
+  "sections": {
+    "contests": { "title": "Contests", "docsUrl": "https://cms-dev.github.io/cms/Contest%20Definition.html" },
+    "users": { "title": "Users and Teams", "docsUrl": "https://cms-dev.github.io/cms/Users.html" },
+    "tasks": { "title": "Tasks and Datasets", "docsUrl": "https://cms-dev.github.io/cms/Task%20Types.html" },
+    "services": { "title": "Services", "docsUrl": "https://cms-dev.github.io/cms/Internals.html" }
+  }
+}

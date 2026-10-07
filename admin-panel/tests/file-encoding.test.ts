@@ -5,6 +5,7 @@ import {
   getEncodingLabel,
   normalizeFileBytes,
 } from '@/lib/file-encoding';
+import { calculateDigest } from '@/lib/fsobjects';
 
 const utf16leBytes = (text: string): Uint8Array => {
   const bytes = new Uint8Array(text.length * 2);
@@ -87,5 +88,14 @@ describe('getEncodingLabel', () => {
 
   it('falls back to the raw value for unknown encodings', () => {
     expect(getEncodingLabel('klingon' as never)).toBe('klingon');
+  });
+});
+
+describe('calculateDigest', () => {
+  it('uses the Python CMS SHA-1 digest format', () => {
+    const digest = calculateDigest(Buffer.from('hello'));
+
+    expect(digest).toHaveLength(40);
+    expect(digest).toBe('aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d');
   });
 });

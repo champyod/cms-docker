@@ -3,9 +3,9 @@
 #
 # Registers `tailscale serve` listeners that proxy tailnet HTTPS ports to the
 # loopback-bound CMS UIs, and optionally hides the raw plaintext ports by
-# rebinding them to 127.0.0.1 (.env.admin) so they are unreachable off-host.
+# rebinding them to 127.0.0.1 (.env) so they are unreachable off-host.
 #
-# Env knobs (.env.admin):
+# Env knobs (.env [admin] / [tailscale]):
 #   TAILSCALE_SERVE=1              master switch consumed by ./cms bootstrap
 #   TS_HTTPS_PANEL=8843            public https port  -> admin panel :8891
 #   TS_HTTPS_CLASSIC=8844          -> classic admin :8889
@@ -16,23 +16,28 @@
 #   __tailscale_serve.sh remove
 #   __tailscale_serve.sh status
 
-set -euo pipefail
-cd "$(dirname "$0")/.."
+set -eu
+# pipefail only if available
+if (set -o pipefail 2>/dev/null); then
+    set -o pipefail
+fi
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+cd "$REPO_ROOT"
 
-ADMIN_ENV=".env.admin"
+ADMIN_ENV=".env"
 DRY_RUN="${TS_DRY_RUN:-0}"
 
-log_info() { printf '[INFO] %s\n' "$*"; }
-log_warn() { printf '[WARN] %s\n' "$*" >&2; }
-die() { log_warn "ERROR: $*"; exit 1; }
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__lib/common.sh"
 
 env_val() {
   awk -F= -v k="$2" '$1==k {v=$0; sub(/^[^=]*=/,"",v); gsub(/^[ \t]+|[ \t\r]+$/,"",v); print v; exit}' "$1" 2>/dev/null || true
 }
 
 require_ts() {
-  command -v tailscale >/dev/null 2>&1 || die "tailscale CLI not found on host — install it and run 'tailscale up' first"
-  tailscale status >/dev/null 2>&1 || die "tailscale daemon not connected — run 'sudo tailscale up' first"
+  command -v tailscale >/dev/null 2>&1 || log_die "tailscale CLI not found on host — install it and run 'tailscale up' first"
+  tailscale status >/dev/null 2>&1 || log_die "tailscale daemon not connected — run 'sudo tailscale up' first"
 }
 
 ts_run() {  # try unprivileged first, fall back to sudo
@@ -75,7 +80,7 @@ cmd_setup() {
       printf '  would run: tailscale serve --bg --https=%s http://127.0.0.1:%s\n' "$hp" "$bp"
     else
       ts_run serve --bg --https="$hp" "http://127.0.0.1:$bp" \
-        || die "failed to register serve for $label (port $hp)"
+        || log_die "failed to register serve for $label (port $hp)"
     fi
   done < <(serve_map)
 
@@ -85,20 +90,49 @@ cmd_setup() {
   fi
 
   if [ "$hide" = 1 ]; then
-    [ -f "$ADMIN_ENV" ] || die "$ADMIN_ENV missing"
-    if grep -qE '^ADMIN_NEXT_BIND_IP=127\.0\.0\.1\b' "$ADMIN_ENV" \
-       && grep -qE '^ADMIN_BIND_IP=127\.0\.0\.1\b' "$ADMIN_ENV" \
-       && grep -qE '^RANKING_BIND_IP=127\.0\.0\.1\b' "$ADMIN_ENV"; then
+    local toml="config.toml"
+    [ -f "$toml" ] || log_die "config.toml missing"
+    # WHY *_BIND_IP and not the old *_LISTEN_ADDRESS: compose binds the host port from
+    # *_BIND_IP, while *_LISTEN_ADDRESS was only injected into the container env and
+    # read by nothing. Hiding a port means narrowing what compose publishes, so the
+    # key written has to be the one compose reads.
+    local hide_keys="ADMIN_NEXT_BIND_IP ADMIN_BIND_IP RANKING_BIND_IP"
+    local key
+    for key in $hide_keys; do
+      # WHY fail loudly rather than append: appending an unknown key grew config.toml
+      # with orphans that no consumer reads, so the command appeared to succeed while
+      # the ports stayed published. A missing key is a config the operator must fix.
+      grep -qE "^${key}[[:space:]]*=" "$toml" \
+        || log_die "$key is absent from config.toml — run './cms config sync' to add it, then retry --hide-ports"
+    done
+    local needs_update=0
+    for key in $hide_keys; do
+      grep -qE "^${key}[[:space:]]*=[[:space:]]*\"127\.0\.0\.1\"" "$toml" || needs_update=1
+    done
+    if [ "$needs_update" -eq 0 ]; then
       log_info "raw ports already bound to loopback"
     else
-      sed -i 's/^ADMIN_NEXT_BIND_IP=.*/ADMIN_NEXT_BIND_IP=127.0.0.1/;
-              s/^ADMIN_BIND_IP=.*/ADMIN_BIND_IP=127.0.0.1/;
-              s/^RANKING_BIND_IP=.*/RANKING_BIND_IP=127.0.0.1/' "$ADMIN_ENV"
-      # ensure keys exist even if commented out
-      grep -q '^ADMIN_NEXT_BIND_IP=' "$ADMIN_ENV" || echo 'ADMIN_NEXT_BIND_IP=127.0.0.1' >> "$ADMIN_ENV"
-      grep -q '^ADMIN_BIND_IP=' "$ADMIN_ENV" || echo 'ADMIN_BIND_IP=127.0.0.1' >> "$ADMIN_ENV"
-      grep -q '^RANKING_BIND_IP=' "$ADMIN_ENV" || echo 'RANKING_BIND_IP=127.0.0.1' >> "$ADMIN_ENV"
-      log_info ".env.admin binds moved to 127.0.0.1"
+      python3 - "$toml" <<'PYEOF'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+text = path.read_text()
+for key in ("ADMIN_NEXT_BIND_IP", "ADMIN_BIND_IP", "RANKING_BIND_IP"):
+    # A key confirmed present by the shell guard above: rewrite in place and never
+    # fall back to appending, because an appended key is one nothing reads.
+    pattern = rf'^{key}\s*=.*$'
+    replacement = f'{key} = "127.0.0.1"'
+    text, count = re.subn(pattern, replacement, text, count=1, flags=re.MULTILINE)
+    if count == 0:
+        sys.exit(f"{key} not found in {path} — refusing to append an unread key")
+path.write_text(text)
+PYEOF
+      # WHY not 2>/dev/null: that discards the sync's own [WARN]/[FAIL] lines and
+      # preflight failures, so a failure arrives here with no stated cause.
+      bash scripts/__config_sync.sh --no-secrets || log_warn "config sync after bind update failed"
+      log_info "bind addresses moved to 127.0.0.1 in config.toml"
     fi
     if [ "$redeploy" = 1 ]; then
       log_info "Recreating admin stack with loopback binds ..."
@@ -123,7 +157,7 @@ cmd_remove() {
 }
 
 cmd_status() {
-  tailscale serve status 2>/dev/null || sudo tailscale serve status 2>/dev/null || die "unable to query tailscale serve status"
+  tailscale serve status 2>/dev/null || sudo tailscale serve status 2>/dev/null || log_die "unable to query tailscale serve status"
   echo ""
   echo "Planned mapping:"
   serve_map | while IFS='|' read -r hp bp label; do
@@ -136,5 +170,5 @@ case "${1:-setup}" in
     cmd_setup "${2:-}" "${3:-}" ;;
   remove) cmd_remove ;;
   status) cmd_status ;;
-  *) die "usage: $0 [setup [--hide-ports] [--redeploy]|remove|status]" ;;
+  *) log_die "usage: $0 [setup [--hide-ports] [--redeploy]|remove|status]" ;;
 esac

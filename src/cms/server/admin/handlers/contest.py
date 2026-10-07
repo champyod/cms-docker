@@ -28,6 +28,8 @@
 
 """
 
+import re
+
 from cms import ServiceCoord, get_service_shards, get_service_address
 from cms.db import Contest, Participation, Submission
 from cmscommon.datetime import make_datetime
@@ -35,13 +37,17 @@ from cmscommon.datetime import make_datetime
 from .base import BaseHandler, SimpleContestHandler, SimpleHandler, \
     require_permission
 
+# Contest name is used as cookie name and URL segment, so it must be
+# cookie-token and URL-path safe.
+_CONTEST_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
 
 class AddContestHandler(
-        SimpleHandler("add_contest.html", permission_all=True)):
+        SimpleHandler("add_contest.html", permission="contest:create")):
     """Adds a new contest.
 
     """
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("contest:create")
     def post(self):
         fallback_page = self.url("contests", "add")
 
@@ -50,6 +56,8 @@ class AddContestHandler(
 
             self.get_string(attrs, "name", empty=None)
             assert attrs.get("name") is not None, "No contest name specified."
+            assert _CONTEST_NAME_RE.match(attrs["name"]), \
+                "Contest name must contain only letters, numbers, hyphens and underscores."
             attrs["description"] = attrs["name"]
 
             # Create the contest.
@@ -71,7 +79,7 @@ class AddContestHandler(
 
 
 class ContestHandler(SimpleContestHandler("contest.html")):
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("contest:update")
     def post(self, contest_id: str):
         contest = self.safe_get_item(Contest, contest_id)
 
@@ -82,6 +90,12 @@ class ContestHandler(SimpleContestHandler("contest.html")):
             self.get_string(attrs, "description")
 
             assert attrs.get("name") is not None, "No contest name specified."
+            # Only enforce the safe-name rule when the name is being changed,
+            # so an existing contest with a legacy invalid name can still be
+            # edited (e.g. to fix the name) without being locked out.
+            if attrs["name"] != contest.name:
+                assert _CONTEST_NAME_RE.match(attrs["name"]), \
+                    "Contest name must contain only letters, numbers, hyphens and underscores."
 
             allowed_localizations: str = self.get_argument("allowed_localizations", "")
             if allowed_localizations:
@@ -200,7 +214,7 @@ class RemoveContestHandler(BaseHandler):
 
     """
 
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("contest:delete")
     def get(self, contest_id):
         contest = self.safe_get_item(Contest, contest_id)
         submission_query = self.sql_session.query(Submission)\
@@ -211,7 +225,7 @@ class RemoveContestHandler(BaseHandler):
         self.render_params_for_remove_confirmation(submission_query)
         self.render("contest_remove.html", **self.r_params)
 
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("contest:delete")
     def delete(self, contest_id):
         contest = self.safe_get_item(Contest, contest_id)
 

@@ -5,7 +5,7 @@
 #   https://<node>.<tailnet>.ts.net:8443  -> nginx basic-auth -> admin panel
 #   https://<node>.<tailnet>.ts.net:10000 -> nginx basic-auth -> ranking
 #
-# Prereqs: FUNNEL_ENABLED=true in .env.admin, funnel enabled for the node
+# Prereqs: FUNNEL_ENABLED=true in .env, funnel enabled for the node
 #          in the tailnet ACL policy ("nodeAttr": ["funnel"]), and creds set
 #          via `./cms funnel passwd <user>`.
 #
@@ -15,15 +15,20 @@
 #   __funnel.sh status    show serve/funnel table
 #   __funnel.sh passwd <user> [password]   write config/funnel.htpasswd
 
-set -euo pipefail
-cd "$(dirname "$0")/.."
+set -eu
+# pipefail only if available
+if (set -o pipefail 2>/dev/null); then
+    set -o pipefail
+fi
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+cd "$REPO_ROOT"
 
 HTPASSWD="config/funnel.htpasswd"
-ADMIN_ENV=".env.admin"
+ADMIN_ENV=".env"
 
-log_info() { printf '[INFO] %s\n' "$*"; }
-log_warn() { printf '[WARN] %s\n' "$*" >&2; }
-die() { log_warn "ERROR: $*"; exit 1; }
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__lib/common.sh"
 
 env_val() { awk -F= -v k="$2" '$1==k {v=$0; sub(/^[^=]*=/,"",v); gsub(/^[ \t]+|[ \t\r]+$/,"",v); print v; exit}' "$1" 2>/dev/null || true; }
 
@@ -33,8 +38,8 @@ ts_run() {
 }
 
 require_ready() {
-  command -v tailscale >/dev/null 2>&1 || die "tailscale CLI missing"
-  [ "$(env_val "$ADMIN_ENV" FUNNEL_ENABLED || true)" = true ] || die "set FUNNEL_ENABLED=true in $ADMIN_ENV first"
+  command -v tailscale >/dev/null 2>&1 || log_die "tailscale CLI missing"
+  [ "$(env_val "$ADMIN_ENV" FUNNEL_ENABLED || true)" = true ] || log_die "set FUNNEL_ENABLED=true in $ADMIN_ENV first"
 }
 
 funnel_ports() {
@@ -44,17 +49,27 @@ funnel_ports() {
 
 ensure_htpasswd() {
   if [ ! -s "$HTPASSWD" ] || ! grep -qE '^[a-zA-Z0-9_.]+:' "$HTPASSWD"; then
-    die "no valid credentials in $HTPASSWD — run: ./cms funnel passwd <user>"
+    log_die "no valid credentials in $HTPASSWD — run: ./cms funnel passwd <user>"
   fi
 }
 
 cmd_passwd() {
   local user="${1:-}" pass="${2:-}"
-  [ -n "$user" ] || die "usage: $0 passwd <user> [password]"
+  [ -n "$user" ] || log_die "usage: $0 passwd <user> [password]"
+  case "$user" in *:*) log_die "htpasswd forbids ':' in username: $user" ;; esac
   mkdir -p "$(dirname "$HTPASSWD")"
   if [ -z "$pass" ]; then
-    printf 'Password for %s: ' "$user"
-    read -rs pass; echo ""
+    local attempts=0
+    while :; do
+      attempts=$((attempts + 1))
+      printf 'Password for %s: ' "$user"
+      read -rs pass; echo ""
+      if [ "${#pass}" -ge 8 ]; then break; fi
+      if [ "$attempts" -ge 3 ]; then log_die "password must be at least 8 characters"; fi
+      log_warn "password must be at least 8 characters (attempt $attempts/3)"
+    done
+  else
+    [ "${#pass}" -ge 8 ] || log_die "password must be at least 8 characters"
   fi
   local hash=""
   hash="$(openssl passwd -apr1 "$pass" 2>/dev/null || true)"
@@ -76,7 +91,7 @@ cmd_setup() {
   while IFS='|' read -r fp lp label; do
     log_info "funnel :$fp -> 127.0.0.1:$lp ($label, basic-auth protected)"
     ts_run funnel --bg --https="$fp" "http://127.0.0.1:$lp" \
-      || die "funnel registration failed for $label — check that funnel is allowed in your tailnet ACL policy"
+      || log_die "funnel registration failed for $label — check that funnel is allowed in your tailnet ACL policy"
   done < <(funnel_ports)
   [ -n "$fqdn" ] && log_info "Public URLs:"
   [ -n "$fqdn" ] && funnel_ports | while IFS='|' read -r fp lp label; do
@@ -109,5 +124,5 @@ case "${1:-status}" in
   remove) cmd_remove ;;
   status) cmd_status ;;
   passwd) shift; cmd_passwd "${@:-}" ;;
-  *) die "usage: $0 [setup|remove|status|passwd <user> [pw]]" ;;
+  *) log_die "usage: $0 [setup|remove|status|passwd <user> [pw]]" ;;
 esac

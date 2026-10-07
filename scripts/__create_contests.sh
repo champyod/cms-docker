@@ -49,7 +49,6 @@ usage() {
     exit 1
 }
 
-# Parse arguments
 FILE=""
 TYPE=""
 DRY_RUN=false
@@ -78,7 +77,6 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Validate file
 if [ -z "$FILE" ]; then
     echo -e "${RED}Error: Input file required${NC}"
     usage
@@ -89,7 +87,6 @@ if [ ! -f "$FILE" ]; then
     exit 1
 fi
 
-# Auto-detect file type
 if [ -z "$TYPE" ]; then
     case "$FILE" in
         *.yaml|*.yml)
@@ -110,14 +107,12 @@ echo "File: $FILE"
 echo "Type: $TYPE"
 echo ""
 
-# Check if running in Docker
 if [ -f "/.dockerenv" ]; then
     DOCKER_EXEC=""
 else
     DOCKER_EXEC="docker exec -i cms-log-service"
 fi
 
-# Function to create a single contest
 create_contest() {
     local name="$1"
     local description="$2"
@@ -128,7 +123,14 @@ create_contest() {
     local token_gen="${7:-30}"
     local max_sub="${8:-50}"
     local min_interval="${9:-60}"
-    
+
+    # Contest name is used as cookie name and URL path segment and must be
+    # cookie-token safe.
+    if ! printf '%s' "$name" | LC_ALL=C grep -Eq '^[A-Za-z0-9_-]+$'; then
+        echo -e "${RED}Error: invalid contest name '$name' — must match ^[A-Za-z0-9_-]+\$${NC}" >&2
+        exit 1
+    fi
+
     echo -e "${YELLOW}Creating contest: $name${NC}"
     
     if [ "$DRY_RUN" = true ]; then
@@ -141,48 +143,52 @@ create_contest() {
         return 0
     fi
     
-    # Create Python script to add contest
-    local python_script=$(cat <<EOF
+    # WHY: the contest fields are data, never program text. Embedding a value in
+    # the program broke on the quotes a description may contain and let whatever
+    # shell-ish text it carried run as Python, so the program is a quoted heredoc
+    # (no interpolation) and every value travels as an argument — the same channel
+    # __backup.sh and __check_permission_parity.sh use for their values.
+    local python_script
+    python_script=$(cat <<'PYEOF'
 import datetime
+import sys
 from cms.db import Contest, SessionGen
 from cms.db.filecacher import FileCacher
 
+name, description, start_time, end_time, token_mode = sys.argv[1:6]
+token_max, token_gen, max_sub, min_interval = (int(value) for value in sys.argv[6:10])
+
 with SessionGen() as session:
     contest = Contest(
-        # contest.name is stored in a codename-domain column ([A-Za-z0-9_-]+):
-        # spaces/other chars are rejected by the DB regardless of UI leniency.
-        name="$(printf '%s' "$name" | tr -c 'A-Za-z0-9_-' '_' )",
-        description="$description",
-        start=datetime.datetime.fromisoformat("${start_time}"),
-        stop=datetime.datetime.fromisoformat("${end_time}"),
-        token_mode="$token_mode",
-        token_max_number=$token_max,
+        name=name,
+        description=description,
+        start=datetime.datetime.fromisoformat(start_time),
+        stop=datetime.datetime.fromisoformat(end_time),
+        token_mode=token_mode,
+        token_max_number=token_max,
         token_min_interval=datetime.timedelta(seconds=0),
-        token_gen_interval=datetime.timedelta(minutes=$token_gen),
+        token_gen_interval=datetime.timedelta(minutes=token_gen),
         token_gen_number=0,
-        max_submission_number=$max_sub,
-        max_user_test_number=$max_sub,
-        min_submission_interval=datetime.timedelta(seconds=$min_interval),
-        min_user_test_interval=datetime.timedelta(seconds=$min_interval),
+        max_submission_number=max_sub,
+        max_user_test_number=max_sub,
+        min_submission_interval=datetime.timedelta(seconds=min_interval),
+        min_user_test_interval=datetime.timedelta(seconds=min_interval),
         score_precision=2
     )
     session.add(contest)
     session.commit()
     print(f"✓ Created contest: {contest.name} (ID: {contest.id})")
-EOF
+PYEOF
     )
     
-    # Execute via CMS
     if [ -z "$DOCKER_EXEC" ]; then
-        echo "$python_script" | python3
+        printf '%s' "$python_script" | python3 - "$name" "$description" "$start_time" "$end_time" "$token_mode" "$token_max" "$token_gen" "$max_sub" "$min_interval"
     else
-        echo "$python_script" | $DOCKER_EXEC python3
+        printf '%s' "$python_script" | $DOCKER_EXEC python3 - "$name" "$description" "$start_time" "$end_time" "$token_mode" "$token_max" "$token_gen" "$max_sub" "$min_interval"
     fi
 }
 
-# Process YAML file
 if [ "$TYPE" = "yaml" ]; then
-    # Check if yq is available
     if ! command -v yq &> /dev/null; then
         echo -e "${RED}Error: 'yq' is required for YAML processing${NC}"
         echo "Install with: sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64"
@@ -190,12 +196,10 @@ if [ "$TYPE" = "yaml" ]; then
         exit 1
     fi
     
-    # Get number of contests
     CONTEST_COUNT=$(yq '.contests | length' "$FILE")
     echo "Found $CONTEST_COUNT contest(s) to create"
     echo ""
     
-    # Process each contest
     for i in $(seq 0 $((CONTEST_COUNT - 1))); do
         NAME=$(yq ".contests[$i].name" "$FILE")
         DESC=$(yq ".contests[$i].description" "$FILE")
@@ -210,21 +214,17 @@ if [ "$TYPE" = "yaml" ]; then
         create_contest "$NAME" "$DESC" "$START" "$END" "$TOKEN_MODE" "$TOKEN_MAX" "$TOKEN_GEN" "$MAX_SUB" "$MIN_INT"
     done
     
-# Process JSON file
 elif [ "$TYPE" = "json" ]; then
-    # Check if jq is available
     if ! command -v jq &> /dev/null; then
         echo -e "${RED}Error: 'jq' is required for JSON processing${NC}"
         echo "Install with: sudo apt-get install jq"
         exit 1
     fi
     
-    # Get number of contests
     CONTEST_COUNT=$(jq '.contests | length' "$FILE")
     echo "Found $CONTEST_COUNT contest(s) to create"
     echo ""
     
-    # Process each contest
     for i in $(seq 0 $((CONTEST_COUNT - 1))); do
         NAME=$(jq -r ".contests[$i].name" "$FILE")
         DESC=$(jq -r ".contests[$i].description" "$FILE")

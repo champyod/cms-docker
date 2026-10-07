@@ -13,8 +13,8 @@ import {
  * presence) — broader than ContestData declares. Tests characterize that
  * runtime contract through this single widening point.
  */
-const validateRawContest = (data: Record<string, unknown>, isUpdate = false) =>
-  validateContestData(data as unknown as ContestData, isUpdate);
+const validateRawContest = (data: Record<string, unknown>) =>
+  validateContestData(data as unknown as ContestData);
 
 describe('parseInterval', () => {
   it.each([
@@ -184,9 +184,24 @@ describe('validateContestData', () => {
     expect(result.errors).toHaveLength(2);
   });
 
-  it('accepts an isUpdate flag without changing validation', () => {
-    const create = validateRawContest({ ...baseFuture, score_precision: -1 });
-    const update = validateRawContest({ ...baseFuture, score_precision: -1 }, true);
-    expect(update).toEqual(create);
+  it('rejects a contest name outside the allowed character set', () => {
+    const result = validateRawContest({ ...baseFuture, name: 'bad name' });
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({ field: 'name', code: 'invalid_name' })
+    );
+  });
+
+  it('accepts a contest name of letters, numbers, hyphens and underscores', () => {
+    const result = validateRawContest({ ...baseFuture, name: 'round-1_final' });
+    expect(result.errors.filter((error) => error.field === 'name')).toEqual([]);
+  });
+
+  it('validates the name on partial payloads, so updates are covered too', () => {
+    const result = validateRawContest({ name: 'has spaces' });
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({ field: 'name', code: 'invalid_name' })
+    );
   });
 });

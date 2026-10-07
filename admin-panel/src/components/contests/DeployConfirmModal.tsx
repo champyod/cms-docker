@@ -1,8 +1,12 @@
 'use client';
 
-import { Dialog as UIDialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { DialogFooter } from '@/components/core/Dialog';
-import { Button } from '@/components/core/Button';
+import {
+  DialogContent,
+  DialogHeader,
+  DialogRoot,
+  DialogTitle,
+} from '@/components/core/Dialog';
+import { ModalFooter } from '@/components/core/ModalFooter';
 import { CheckCircle2, Loader2, Rocket } from 'lucide-react';
 import type { DeployPhase } from '@/hooks/useDeployContest';
 
@@ -17,12 +21,16 @@ interface DeployConfirmModalProps {
   onConfirm: () => void;
 }
 
-/** Phase-aware deploy dialog shared by ContestList and ContestDetailView. Close is locked while a deploy runs. */
-export function DeployConfirmModal({ isOpen, phase, targetLabel, extraNote, onClose, onConfirm }: DeployConfirmModalProps) {
+// Why: deploying always replaces the active contest, so the consequence is the modal's default note —
+// callers may override it but can never forget it.
+const DEFAULT_EXTRA_NOTE = 'The previous active contest will be deactivated.';
+
+/** Phase-aware deploy dialog shared by ContestList and the Contest record header. Close is locked while a deploy runs. */
+export function DeployConfirmModal({ isOpen, phase, targetLabel, extraNote = DEFAULT_EXTRA_NOTE, onClose, onConfirm }: DeployConfirmModalProps) {
   const busy = BUSY_PHASES.includes(phase);
 
   return (
-    <UIDialog open={isOpen} onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
+    <DialogRoot open={isOpen} onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
       <DialogContent showCloseButton={!busy} className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{busy ? 'Deploying Contest...' : 'Confirm Deploy'}</DialogTitle>
@@ -32,12 +40,15 @@ export function DeployConfirmModal({ isOpen, phase, targetLabel, extraNote, onCl
             <>
               <p className="text-sm text-muted-foreground">
                 This will mark <strong className="text-foreground">{targetLabel}</strong> as the active contest,
-                update the .env file, and restart the contest stack.{extraNote ? ` ${extraNote}` : ''}
+                set CONTEST_ID in config.toml [contest], and restart the contest stack. {extraNote}
               </p>
-              <DialogFooter>
-                <Button variant="ghost" onClick={onClose}>Cancel</Button>
-                <Button variant="positive" icon={Rocket} onClick={onConfirm}>Deploy</Button>
-              </DialogFooter>
+              <ModalFooter
+                cancelLabel="Cancel"
+                confirmLabel="Deploy"
+                onCancel={onClose}
+                onConfirm={onConfirm}
+                confirmIcon={Rocket}
+              />
             </>
           )}
           {busy && (
@@ -56,6 +67,6 @@ export function DeployConfirmModal({ isOpen, phase, targetLabel, extraNote, onCl
           )}
         </div>
       </DialogContent>
-    </UIDialog>
+    </DialogRoot>
   );
 }

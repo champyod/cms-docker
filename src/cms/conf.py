@@ -64,8 +64,17 @@ def default_path(name):
     return os.path.join(sys.prefix, name)
 
 
+# WHY declared before the section dataclasses: a field default is evaluated when
+# its class body runs, so any dataclass below referencing it needs it in place.
+field_helper = lambda T: dataclasses.field(default_factory=T)
+
+
 @dataclass()
 class GlobalConfig:
+    # WHY configurable rather than fixed in source: AGPL-13 requires the offer
+    # of the Corresponding Source to name the running deployment's own source,
+    # so a self-hosted fork must be able to point at its own repository.
+    source_url: str = "https://github.com/champyod/cms-docker"
     temp_dir: str = "/tmp"
     backdoor: bool = False
     file_log_debug: bool = False
@@ -113,6 +122,35 @@ class WebServerConfig:
 
 
 @dataclass()
+class CaptchaConfig:
+    # Adaptive login CAPTCHA, mirroring the Next.js admin panel (captcha.ts).
+    # WHY a shared dataclass rather than one field set per server: both web
+    # servers verify against the same provider with the same keys and the same
+    # threshold, so the values must stay in lockstep across them. Duplicating
+    # them into AWSConfig and CWSConfig would let the two servers drift.
+    # WHY defaults are off/empty: an existing deployment that sets nothing keeps
+    # logging in without a captcha, so enabling this cannot break an upgrade.
+    enabled: bool = False
+    provider: str = "turnstile"
+    site_key: str = ""
+    secret_key: str = ""
+    # Failed logins before the captcha becomes mandatory on this account/IP.
+    threshold: int = 3
+    # Failures after which the account/address is refused outright, mirroring
+    # the panel's MAX_LOGIN_ATTEMPTS lockout (5). The count is retained while
+    # the refusal holds, so the lockout cannot be re-armed by trying again.
+    ban_threshold: int = 5
+    # Shared Redis holding the login counters, so a lockout survives a web
+    # server restart and spans every process behind the proxy.
+    # WHY off by default: a deployment that sets nothing keeps the in-process
+    # counters, which are per process and lost on restart, so nothing about an
+    # upgrade changes until an operator opts in.
+    redis_enabled: bool = False
+    redis_host: str = "127.0.0.1"
+    redis_port: int = 6379
+
+
+@dataclass()
 class CWSConfig:
     listen_address: tuple[str, ...] = ("127.0.0.1",)
     listen_port: tuple[int, ...] = (8888,)
@@ -132,6 +170,8 @@ class CWSConfig:
 
     contest_admin_token: str | None = None
 
+    captcha: CaptchaConfig = field_helper(CaptchaConfig)
+
 
 @dataclass()
 class AWSConfig:
@@ -140,11 +180,20 @@ class AWSConfig:
     cookie_duration: int = 10 * 60 * 60  # 10 hours
     num_proxies_used: int = 0
 
+    captcha: CaptchaConfig = field_helper(CaptchaConfig)
+
 
 @dataclass()
 class ProxyServiceConfig:
     rankings: tuple[str, ...] = ()
     https_certfile: str | None = None
+
+
+@dataclass()
+class RpcConfig:
+    secret: str | None = None
+    # WHY: backdoor RPC is high-risk; explicit opt-in required even with valid secret.
+    allow_backdoor: bool = False
 
 
 @dataclass()
@@ -158,8 +207,6 @@ class TelegramBotConfig:
     bot_token: str
     chat_id: str
 
-
-field_helper = lambda T: dataclasses.field(default_factory=T)
 
 @dataclass(kw_only=True)
 class Config:
@@ -176,6 +223,7 @@ class Config:
     contest_web_server: CWSConfig = field_helper(CWSConfig)
     admin_web_server: AWSConfig = field_helper(AWSConfig)
     proxy_service: ProxyServiceConfig = field_helper(ProxyServiceConfig)
+    rpc: RpcConfig = field_helper(RpcConfig)
     prometheus: PrometheusConfig = field_helper(PrometheusConfig)
     telegram_bot: TelegramBotConfig | None = None
     # This is the one that will be provided in the config file.
@@ -193,6 +241,14 @@ class Config:
         # If the configuration says to print detailed log on stdout,
         # change the log configuration.
         set_detailed_logs(self.global_.stream_log_detailed)
+
+        # WHY: refuse to run with publicly-known default cookie secret.
+        if not self.web_server.secret_key \
+                or self.web_server.secret_key == WebServerConfig.DEFAULT_SECRET_KEY:
+            raise ConfigError(
+                "web_server.secret_key is not set or is the shipped default; "
+                "set a real secret in config.toml (CMS_SECRET_KEY) and re-run "
+                "`make env` / `./cms config sync`")
 
 
 def make_config():

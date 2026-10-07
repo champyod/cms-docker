@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyApiPermission } from '@/lib/api-utils';
+import { recordAudit } from '@/lib/audit';
 import { CREDS_FILE_PREFIX } from '@/lib/creds-file';
 import fs from 'fs/promises';
 import path from 'path';
@@ -11,7 +12,10 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
-  const { authorized, response } = await verifyApiPermission('users');
+  // WHY password:reveal: this endpoint serves the credential CSV, i.e. plaintext
+  // passwords. The permission must match the data disclosed, not the user record
+  // the token is keyed to.
+  const { authorized, response } = await verifyApiPermission('password:reveal');
   if (!authorized) return response;
 
   const { token } = await params;
@@ -41,6 +45,14 @@ export async function GET(
     const content = await fs.readFile(usedPath, 'utf-8');
 
     const timestamp = Date.now();
+
+    await recordAudit({
+      verb: 'password:reveal',
+      entity: 'user',
+      afterValues: { credentialBatchConsumed: true },
+      result: 'success',
+    });
+
     return new NextResponse(content, {
       status: 200,
       headers: {
@@ -52,7 +64,6 @@ export async function GET(
     try {
       await fs.unlink(usedPath);
     } catch {
-      // ignore delete error
     }
   }
 }

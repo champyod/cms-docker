@@ -14,8 +14,8 @@ interface WorkerDisplayInfoProps {
 
 function WorkerDisplayInfo({ worker, status }: WorkerDisplayInfoProps): ReactElement {
   return (
-    <div className="flex-1">
-      <div className="font-mono text-sm text-foreground">{worker.host}:{worker.port}</div>
+    <div className="flex-1 min-w-0">
+      <div className="font-mono text-sm text-foreground truncate">{worker.host}:{worker.port}</div>
       <div className="flex items-center gap-2 mt-1">
         {status && (
           <>
@@ -24,7 +24,7 @@ function WorkerDisplayInfo({ worker, status }: WorkerDisplayInfoProps): ReactEle
               {status.status.toUpperCase()}
             </span>
             {!status.containerRunning && status.status !== 'connected' && (
-              <span className="text-[10px] text-muted-foreground">(container offline)</span>
+              <span className="text-xs text-muted-foreground">(container offline)</span>
             )}
           </>
         )}
@@ -41,17 +41,17 @@ interface WorkerEditFieldsProps {
 
 function WorkerEditFields({ editData, setEditData, onSave }: WorkerEditFieldsProps): ReactElement {
   return (
-    <div className="flex-1 flex gap-3">
+    <div className="flex-1 flex flex-col sm:flex-row gap-3">
       <input
         value={editData.host}
         onChange={e => setEditData({ ...editData, host: e.target.value })}
-        className="flex-1 bg-background/80 border border-border rounded-lg px-3 py-1.5 text-foreground text-sm font-mono focus:outline-none focus:border-ring/60"
+        className="flex-1 min-w-0 bg-background/80 border border-border rounded-lg px-3 py-1.5 text-foreground text-sm font-mono focus:outline-none focus:border-ring/60"
       />
       <input
         value={editData.port}
         onChange={e => setEditData({ ...editData, port: e.target.value })}
         type="number"
-        className="w-24 bg-background/80 border border-border rounded-lg px-3 py-1.5 text-foreground text-sm font-mono focus:outline-none focus:border-ring/60"
+        className="w-full sm:w-24 min-w-0 bg-background/80 border border-border rounded-lg px-3 py-1.5 text-foreground text-sm font-mono focus:outline-none focus:border-ring/60"
       />
       <Button size="sm" onClick={onSave}>Done</Button>
     </div>
@@ -59,24 +59,26 @@ function WorkerEditFields({ editData, setEditData, onSave }: WorkerEditFieldsPro
 }
 
 interface WorkerRowActionsProps {
-  canRetry: boolean;
+  showRetry: boolean;
   onRetry: () => void;
   onStartEdit: () => void;
   onRemove: () => void;
 }
 
-function WorkerRowActions({ canRetry, onRetry, onStartEdit, onRemove }: WorkerRowActionsProps): ReactElement {
+// Why the name: retry is offered while the worker is disconnected, which is a
+// connection state, not a permission — nothing here is permission-gated.
+function WorkerRowActions({ showRetry, onRetry, onStartEdit, onRemove }: WorkerRowActionsProps): ReactElement {
   return (
     <div className="flex items-center gap-1">
-      {canRetry && (
+      {showRetry && (
         <Button variant="ghost" size="sm" onClick={onRetry} className="text-info hover:text-info/80 opacity-100">
           <RefreshCw className="w-4 h-4" />
         </Button>
       )}
-      <Button variant="ghost" size="sm" onClick={onStartEdit} className="text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+      <Button variant="ghost" size="sm" onClick={onStartEdit} aria-label="Edit worker" className="shrink-0 text-muted-foreground hover:text-foreground">
         <Edit className="w-4 h-4" />
       </Button>
-      <Button variant="ghost" size="sm" onClick={onRemove} className="text-destructive/70 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity">
+      <Button variant="ghost" size="sm" onClick={onRemove} aria-label="Remove worker" className="shrink-0 text-destructive/70 hover:text-destructive">
         <Trash2 className="w-4 h-4" />
       </Button>
     </div>
@@ -110,7 +112,7 @@ export function WorkerNodeRow({ index, worker, status, editing, editor, onRetry,
           <>
             <WorkerDisplayInfo worker={worker} status={status} />
             <WorkerRowActions
-              canRetry={status?.status === 'disconnected'}
+              showRetry={status?.status === 'disconnected'}
               onRetry={onRetry}
               onStartEdit={() => editor.startEdit(index)}
               onRemove={onRemove}

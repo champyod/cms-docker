@@ -1,12 +1,18 @@
 #!/bin/bash
-set -euo pipefail
+set -eu
+# pipefail only if available
+if (set -o pipefail 2>/dev/null); then
+    set -o pipefail
+fi
 
-# Change directory to the project root
-cd "$(dirname "$0")/.."
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+cd "$REPO_ROOT"
 
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__lib/common.sh"
 log()  { printf '%s [UPDATE] %s\n' "$(date +'%Y-%m-%d %H:%M:%S')" "$*"; }
 warn() { printf '%s [UPDATE][WARN] %s\n' "$(date +'%Y-%m-%d %H:%M:%S')" "$*" >&2; }
-die()  { warn "ERROR: $*"; exit 1; }
 
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 RECORD_FILE="/tmp/cms-update-${TIMESTAMP}.txt"
@@ -40,15 +46,11 @@ record_pre_update_state() {
 record_pre_update_state
 
 # ---------------------------------------------------------------------------
-# (a) Pull latest code (+ submodules when present)
+# (a) Pull latest code
 # ---------------------------------------------------------------------------
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     log "Pulling latest code..."
-    git pull --ff-only || die "git pull failed; resolve manually and re-run."
-    if [ -f .gitmodules ]; then
-        log "Updating git submodules..."
-        git submodule update --init --recursive || die "git submodule update failed."
-    fi
+    git pull --ff-only || log_die "git pull failed; resolve manually and re-run."
 else
     warn "Not a git repository; skipping code pull."
 fi
@@ -57,25 +59,49 @@ fi
 # (b) Regenerate environment files so new variables land
 # ---------------------------------------------------------------------------
 log "Regenerating environment files (make env)..."
-make env || die "make env failed."
+make env || log_die "make env failed."
+
+# ---------------------------------------------------------------------------
+# (b2) Ensure DB roles exist BEFORE services restart with them
+# WHY: cms_backup must exist with its password before the restart so backups
+# succeed; RLS and owner-hardening are deferred to the post-restart
+# prisma-sync so they land after the new code is running.
+# Tolerant on a fresh install where the database container is not up yet —
+# prisma-sync re-applies the roles afterwards.
+# ---------------------------------------------------------------------------
+APPLY_SQL_SCRIPT="scripts/__apply_sql.sh"
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "cms-database"; then
+    if [ -x "$APPLY_SQL_SCRIPT" ]; then
+        log "Bootstrapping database roles (idempotent)..."
+        "$APPLY_SQL_SCRIPT" --bootstrap-roles || warn "Role bootstrap failed — prisma-sync will retry after the restart."
+    else
+        warn "$APPLY_SQL_SCRIPT missing — roles will be created during prisma-sync."
+    fi
+else
+    log "Database container not running yet; roles will be created during prisma-sync."
+fi
 
 # Deployment type must be detected AFTER env regeneration (branch switch may change it)
-DEPLOY_TYPE="$(grep -E '^DEPLOYMENT_TYPE=' .env.admin 2>/dev/null | tail -n1 | cut -d '=' -f2 | cut -d '#' -f1 | tr -d '[:space:]' | tr -d '\"' | tr -d "'" || true)"
-if [ -z "$DEPLOY_TYPE" ]; then
-    DEPLOY_TYPE="$(grep -E '^DEPLOYMENT_TYPE=' .env 2>/dev/null | tail -n1 | cut -d '=' -f2 | cut -d '#' -f1 | tr -d '[:space:]' | tr -d '\"' | tr -d "'" || true)"
-fi
+DEPLOY_TYPE="$(grep -E '^DEPLOYMENT_TYPE=' .env 2>/dev/null | tail -n1 | cut -d '=' -f2 | cut -d '#' -f1 | tr -d '[:space:]' | tr -d '\"' | tr -d "'" || true)"
 DEPLOY_TYPE="${DEPLOY_TYPE:-img}"
 log "Detected deployment type: ${DEPLOY_TYPE}"
 
 # ---------------------------------------------------------------------------
 # (c) Preflight checks — abort cleanly before touching running services
 # ---------------------------------------------------------------------------
+# WHY: preflight hard-fails when the monitor's uid cannot write the backup root,
+# so the ownership is repaired here first — at most one sudo prompt — and an
+# update self-heals instead of only being blocked.
+if ! ensure_backup_dir_perms; then
+    warn "Backup root not usable by the monitor; preflight below will block this update."
+fi
+
 PREFLIGHT_SCRIPT="scripts/__preflight.sh"
 if [ ! -x "$PREFLIGHT_SCRIPT" ]; then
-    die "scripts/__preflight.sh not found or not executable; refusing to update."
+    log_die "scripts/__preflight.sh not found or not executable; refusing to update."
 fi
 log "Running preflight checks..."
-"$PREFLIGHT_SCRIPT" --stack all || die "Preflight failed; aborting update cleanly."
+"$PREFLIGHT_SCRIPT" --stack all || log_die "Preflight failed; aborting update cleanly."
 
 # ---------------------------------------------------------------------------
 # (d) Safety backup before mutating anything
@@ -83,7 +109,20 @@ log "Running preflight checks..."
 BACKUP_SCRIPT="scripts/__backup.sh"
 if [ -x "$BACKUP_SCRIPT" ]; then
     log "Running safety backup..."
-    "$BACKUP_SCRIPT" || die "Backup failed; aborting update."
+    # WHY the status is read instead of collapsed into one "backup failed" line: the backup
+    # contract separates "no usable backup" (1) from "the dump was kept but the run is not
+    # whole" (3), and the two need different advice from the operator. Exit 3 leaves a
+    # database-only rollback point — a restore from it brings back rows but none of the
+    # uploaded files and submissions blobs that live in the volume — which is exactly the
+    # fact an operator must see before an update touches the services.
+    BACKUP_STATUS=0
+    "$BACKUP_SCRIPT" || BACKUP_STATUS=$?
+    if [ "$BACKUP_STATUS" -eq 3 ]; then
+        log_die "Backup partial (exit 3): the database dump was kept but the volume archive is missing. Aborting update — a rollback from this backup would not restore uploaded files or submissions."
+    fi
+    if [ "$BACKUP_STATUS" -ne 0 ]; then
+        log_die "Backup failed (exit ${BACKUP_STATUS}); no usable dump was kept. Aborting update."
+    fi
 else
     warn "__backup.sh missing or not executable — SKIPPING SAFETY BACKUP."
     warn "Continuing WITHOUT a fresh backup. Consider Ctrl+C now."
@@ -131,49 +170,35 @@ fi
 log "Detected active stacks: core=$HAS_CORE admin=$HAS_ADMIN contest=$HAS_CONTEST worker=$HAS_WORKER infra=$HAS_INFRA"
 
 update_worker_shards() {
-    local mode="$1" shard_name idx env_file
-    local shard_count
-    shard_count="$(docker ps -a --format '{{.Names}}' | grep -c '^cms-worker-[0-9]\+$' || true)"
-    shard_count="${shard_count:-0}"
-    if [ "$shard_count" -gt 0 ]; then
-        log "Updating $shard_count worker shard(s)..."
-        for shard_name in $(docker ps -a --format '{{.Names}}' | grep '^cms-worker-[0-9]\+$'); do
-            idx=${shard_name#cms-worker-}
-            env_file="workers/.env.worker.instance$idx"
-            if [ -f "$env_file" ]; then
-                log "Restarting shard $idx..."
-                if [ "$mode" = "img" ]; then
-                    docker compose --env-file "$env_file" -p "cms-worker-$idx" -f docker-compose.worker.yml -f docker-compose.worker.img.yml up -d --no-build
-                else
-                    log "Restarting shard $idx (source build)..."
-                    docker compose --env-file "$env_file" -p "cms-worker-$idx" -f docker-compose.worker.yml up -d --build
-                fi
-            fi
-        done
-    elif [ "$mode" = "img" ]; then
-        make worker-img
+    # WHY delegate to the canonical deploy path instead of re-running compose
+    # here: shards are owned by per-shard compose projects (cw<N>) that only
+    # __worker_tui.sh creates. A re-deploy from this script under a different
+    # project name and compose file made compose treat the live containers as
+    # foreign and attempt to CREATE them again, aborting the whole update with
+    # a "container name already in use" conflict. Going through the same entry
+    # point as `make worker` keeps project name, compose file, the shard
+    # registry (which shards exist, which are remote-only) and pull/build mode
+    # in one place, so the update path can no longer drift from a normal
+    # deploy.
+    local mode="$1"
+    if [ "$mode" = "img" ]; then
+        make -e DEPLOYMENT_TYPE_OVERRIDE=img worker
     else
         make worker
     fi
 }
 
-# Pull images
 if [ "$DEPLOY_TYPE" = "img" ]; then
-    log "Pulling latest images for active stacks..."
-    [ "$HAS_CORE" = true ] && make pull-core
-    [ "$HAS_ADMIN" = true ] && make pull-admin
-    [ "$HAS_CONTEST" = true ] && make pull-contest
-    [ "$HAS_WORKER" = true ] && make pull-worker
-    [ "$HAS_INFRA" = true ] && make pull-infra
+    log "Pulling latest images..."
+    make pull
 fi
 
-# Restart services based on type
 log "Restarting services..."
 if [ "$DEPLOY_TYPE" = "img" ]; then
-    [ "$HAS_CORE" = true ] && make core-img
-    [ "$HAS_INFRA" = true ] && make infra-img
-    [ "$HAS_ADMIN" = true ] && make admin-img
-    [ "$HAS_CONTEST" = true ] && make contest-img
+    [ "$HAS_CORE" = true ] && make -e DEPLOYMENT_TYPE_OVERRIDE=img core
+    [ "$HAS_INFRA" = true ] && make -e DEPLOYMENT_TYPE_OVERRIDE=img infra
+    [ "$HAS_ADMIN" = true ] && make -e DEPLOYMENT_TYPE_OVERRIDE=img admin
+    [ "$HAS_CONTEST" = true ] && make -e DEPLOYMENT_TYPE_OVERRIDE=img contest
     [ "$HAS_WORKER" = true ] && update_worker_shards img
 else
     [ "$HAS_CORE" = true ] && make core
@@ -183,10 +208,9 @@ else
     [ "$HAS_WORKER" = true ] && update_worker_shards src
 fi
 
-# Sync DB schema
-log "Syncing database schema..."
-make cms-init || die "make cms-init failed."
-make prisma-sync || die "make prisma-sync failed."
+log "Syncing database schema via Prisma Migrate..."
+make cms-init || log_die "make cms-init failed."
+make prisma-sync || log_die "make prisma-sync failed."
 
 # ---------------------------------------------------------------------------
 # (f) Post-update verification
@@ -237,13 +261,13 @@ else
 fi
 
 if [ "$HAS_ADMIN" = true ]; then
-    ADMIN_PORT="$(read_env_port .env.admin ADMIN_NEXT_PORT_EXTERNAL 8891)"
+    ADMIN_PORT="$(read_env_port .env ADMIN_NEXT_PORT_EXTERNAL 8891)"
     log "Checking admin panel on http://127.0.0.1:${ADMIN_PORT}/ ..."
     if http_ok "http://127.0.0.1:${ADMIN_PORT}/"; then ADMIN_RESULT="PASS"; else ADMIN_RESULT="FAIL"; fi
 fi
 
 if [ "$HAS_CONTEST" = true ]; then
-    CONTEST_PORT="$(read_contest_port .env.contest)"
+    CONTEST_PORT="$(read_contest_port .env)"
     log "Checking contest interface on http://127.0.0.1:${CONTEST_PORT}/ ..."
     if http_ok "http://127.0.0.1:${CONTEST_PORT}/"; then CONTEST_RESULT="PASS"; else CONTEST_RESULT="FAIL"; fi
 fi
@@ -270,10 +294,10 @@ Manual rollback steps:
        git checkout <git_head value from the record>
   3. Restore previous images using the recorded repo_digests, e.g.:
        docker pull ghcr.io/<owner>/<image>@<old repo_digest>
-     then pin that digest in the matching docker-compose.*.img.yml
-     "image:" entries (or check out the old commit and rebuild).
-  4. Bring stacks back up for every detected stack:
-       make core-img infra-img admin-img contest-img worker-img
+     then pin that digest via IMG_TAG in .env / the shard env file
+     (or check out the old commit and rebuild).
+4. Bring stacks back up for every detected stack, e.g.:
+        make -e DEPLOYMENT_TYPE_OVERRIDE=img core infra admin contest worker
   5. Re-run ./cms update-server once the cause is fixed.
 ================================================================
 EOF

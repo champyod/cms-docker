@@ -10,12 +10,26 @@ const SCHEMA_SOURCE = readFileSync(fileURLToPath(new URL('../prisma/schema.prism
  * archived because Epic 3 remaps admin_id to a live admins row instead, and
  * `monitor_targets`, `backup_schedules` and `backup_runs` are backup and
  * monitor configuration describing what to dump, not competition data to dump.
+ *
+ * The RBAC grant tables are out on the same reasoning as `admins`, one step
+ * further: an archive of them would restore the permission rows themselves, so a
+ * restore would overwrite who may act rather than what they may act on. A dump
+ * that hands back the authority to run the restore is not a backup of the panel,
+ * so `permissions`, `groups`, `group_permissions`, `admin_groups` and
+ * `admin_permission_overrides` stay live-only, alongside `audit_log`, which is
+ * an append-only record of what was authorized and must never be replayed.
  */
 const MODELS_OUTSIDE_CATALOG: ReadonlySet<string> = new Set([
   'admins',
   'monitor_targets',
   'backup_schedules',
   'backup_runs',
+  'permissions',
+  'groups',
+  'group_permissions',
+  'admin_groups',
+  'admin_permission_overrides',
+  'audit_log',
 ]);
 
 /** The tasks/datasets cycle no dump order can satisfy; see the catalog header. */

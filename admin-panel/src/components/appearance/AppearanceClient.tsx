@@ -1,0 +1,207 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import { Image as ImageIcon, Save, Settings2 } from 'lucide-react';
+import NextImage from 'next/image';
+
+import { DisplayTab } from '@/components/appearance/DisplayTab';
+import { Card } from '@/components/core/Card';
+import { Button } from '@/components/core/Button';
+import { Tabs } from '@/components/core/Tabs';
+import { toast } from 'sonner';
+import { readConfigToml, updateConfigToml } from '@/app/actions/appearance';
+import { usePublishModuleTabActions } from '@/components/navigation/ModuleTabActionSlot';
+
+type TabKey = 'branding' | 'services' | 'display';
+
+const TABS: { key: TabKey; label: string }[] = [
+  { key: 'branding', label: 'Branding' },
+  { key: 'services', label: 'Services' },
+  { key: 'display', label: 'Display' },
+];
+
+interface BrandingFields {
+  rankingLogoPath: string;
+  rankingUsername: string;
+  rankingPassword: string;
+}
+
+const SERVICE_GROUPS: { title: string; keys: string[] }[] = [
+  { title: 'Ranking', keys: ['RANKING_LISTEN_PORT', 'RANKING_DOMAIN', 'RANKING_LOGO_PATH'] },
+  { title: 'Contest', keys: ['CONTEST_ID', 'CONTEST_LISTEN_PORT', 'MAX_SUBMISSION_LENGTH'] },
+  { title: 'Worker', keys: ['WORKER_SHARD', 'WORKER_PORT', 'WORKER_REPLICAS'] },
+  { title: 'Infrastructure', keys: ['MONITOR_INTERVAL', 'BACKUP_INTERVAL_MINS', 'PROMETHEUS_PORT'] },
+];
+
+function AppearanceTabs({ active, onChange }: { active: TabKey; onChange: (key: TabKey) => void }) {
+  return (
+    <Tabs
+      items={TABS.map((tab) => ({ id: tab.key, label: tab.label }))}
+      activeId={active}
+      ariaLabel="Appearance sections"
+      onSelect={(id) => onChange(id as TabKey)}
+    />
+  );
+}
+
+function BrandingTab({
+  branding,
+  onFieldChange,
+  logoPreview,
+}: {
+  branding: BrandingFields;
+  onFieldChange: (key: keyof BrandingFields, value: string) => void;
+  logoPreview: string;
+}) {
+  return (
+    <div className="space-y-6">
+      <Card className="space-y-4">
+        <div className="flex items-center gap-2">
+          <ImageIcon className="size-4 text-primary" />
+          <h2 className="text-sm font-semibold text-foreground">Ranking Logo</h2>
+        </div>
+        <div className="flex justify-center rounded-xl bg-black/20 p-4">
+          {logoPreview ? (
+            <NextImage alt="Ranking logo preview" src={logoPreview} width={320} height={112} className="max-h-28 max-w-full h-auto w-auto object-contain" unoptimized />
+          ) : (
+            <span className="text-sm text-muted-foreground">No logo configured — upload on the Ranking page</span>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">Manage uploads on the Ranking page. This preview is read-only here and busts cache via ?ts.</p>
+      </Card>
+
+      <Card className="space-y-4">
+        <h2 className="text-sm font-semibold text-foreground">Branding Fields (read-only preview — save edits to config.toml)</h2>
+        <div className="grid gap-4">
+          <label className="space-y-1">
+            <span className="text-xs font-medium text-muted-foreground">RANKING_LOGO_PATH</span>
+            <input
+              value={branding.rankingLogoPath}
+              onChange={(e) => onFieldChange('rankingLogoPath', e.target.value)}
+              placeholder='e.g. "./config/assets/logo.png"'
+              className="h-11 w-full rounded-lg border border-input bg-card/50 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-ring/60"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs font-medium text-muted-foreground">RANKING_USERNAME</span>
+            <input
+              value={branding.rankingUsername}
+              onChange={(e) => onFieldChange('rankingUsername', e.target.value)}
+              className="h-11 w-full rounded-lg border border-input bg-card/50 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-ring/60"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs font-medium text-muted-foreground">RANKING_PASSWORD</span>
+            <input
+              value={branding.rankingPassword}
+              onChange={(e) => onFieldChange('rankingPassword', e.target.value)}
+              type="password"
+              className="h-11 w-full rounded-lg border border-input bg-card/50 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-ring/60"
+            />
+          </label>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function ServicesTab({ values }: { values: Record<string, string> }) {
+  return (
+    <div className="space-y-6">
+      {SERVICE_GROUPS.map((group) => (
+        <Card key={group.title} className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Settings2 className="size-4 text-primary" />
+            <h2 className="text-sm font-semibold text-foreground">{group.title}</h2>
+          </div>
+          <div className="grid gap-3">
+            {group.keys.map((key) => (
+              <div key={key} className="flex items-center justify-between rounded-lg border border-border bg-card/30 px-3 py-2">
+                <code className="text-xs font-mono text-primary">{key}</code>
+                <span className="max-w-3/5 truncate text-xs text-muted-foreground text-right">{values[key] ?? '—'}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">Read-only preview. Edit config.toml directly or extend save to these keys.</p>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+export function AppearanceClient(): React.JSX.Element {
+  const [active, setActive] = useState<TabKey>('branding');
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [branding, setBranding] = useState<BrandingFields>({ rankingLogoPath: '', rankingUsername: '', rankingPassword: '' });
+  const [saving, setSaving] = useState(false);
+  const [logoPreview] = useState<string>(`/api/ranking/logo?ts=${Date.now()}`);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const result = await readConfigToml();
+      if (cancelled) return;
+      if (result.success) {
+        setValues(result.values);
+        setBranding({
+          rankingLogoPath: (result.values['RANKING_LOGO_PATH'] ?? '').replace(/^"|"$/g, ''),
+          rankingUsername: (result.values['RANKING_USERNAME'] ?? '').replace(/^"|"$/g, ''),
+          rankingPassword: (result.values['RANKING_PASSWORD'] ?? '').replace(/^"|"$/g, ''),
+        });
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleFieldChange = useCallback((key: keyof BrandingFields, value: string) => {
+    setBranding((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  const handleSave = useCallback(async () => {
+    setSaving(true);
+    try {
+      const updates: Record<string, string> = {};
+      updates['RANKING_LOGO_PATH'] = `"${branding.rankingLogoPath}"`;
+      updates['RANKING_USERNAME'] = `"${branding.rankingUsername}"`;
+      updates['RANKING_PASSWORD'] = `"${branding.rankingPassword}"`;
+      const result = await updateConfigToml(updates);
+      if (result.success) {
+        toast.success('Saved', { description: 'config.toml updated. Run config sync to apply.' });
+      } else {
+        toast.error('Save failed', { description: result.error });
+      }
+    } catch (error) {
+      toast.error('Save failed', { description: (error as Error).message });
+    } finally {
+      setSaving(false);
+    }
+  }, [branding]);
+
+  // Why published only over Branding: the fields this Save writes belong to the Branding
+  // panel, so the same control shown over Services or Display would offer to save edits the
+  // reader cannot see on screen.
+  usePublishModuleTabActions(
+    'system.appearance',
+    active === 'branding' ? (
+      <Button size="sm" icon={Save} loading={saving} onClick={() => void handleSave()}>
+        Save to config.toml
+      </Button>
+    ) : null,
+  );
+
+  return (
+    <div className="space-y-6">
+      <AppearanceTabs active={active} onChange={setActive} />
+      {active === 'branding' ? (
+        <BrandingTab branding={branding} onFieldChange={handleFieldChange} logoPreview={logoPreview} />
+      ) : active === 'services' ? (
+        <ServicesTab values={values} />
+      ) : (
+        <DisplayTab />
+      )}
+    </div>
+  );
+}

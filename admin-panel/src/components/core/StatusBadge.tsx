@@ -38,9 +38,9 @@ export const STATUS_VARIANTS: Record<StatusType, StatusVariantConfig> = {
 };
 
 const CHIP_CLASSES: Record<SemanticVariant, string> = {
-  success: 'bg-success/10 text-success',
-  warning: 'bg-warning/10 text-warning',
-  destructive: 'bg-destructive/10 text-destructive',
+  success: 'bg-success/10 text-success high-contrast:bg-success high-contrast:text-success-foreground',
+  warning: 'bg-warning/10 text-warning high-contrast:bg-warning high-contrast:text-warning-foreground',
+  destructive: 'bg-destructive/10 text-destructive high-contrast:bg-destructive high-contrast:text-destructive-foreground',
 };
 
 export function mapStatusToVariant(status: StatusType): StatusVariantConfig {

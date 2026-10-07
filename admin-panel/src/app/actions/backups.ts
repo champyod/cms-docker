@@ -78,7 +78,7 @@ async function startBackupInMonitor(tables: readonly string[], includeLargeObjec
 }
 
 export async function triggerSelectiveBackup(tables: string[]): Promise<SelectiveBackupResult> {
-  await ensurePermission('all');
+  await ensurePermission('backup:create');
   if (!Array.isArray(tables) || !tables.every((table) => typeof table === 'string')) {
     return { success: false, started: false, error: 'Table selection must be a list of names.', warnings: [] };
   }
@@ -103,7 +103,7 @@ export async function triggerSelectiveBackup(tables: string[]): Promise<Selectiv
 }
 
 export async function listArchives(): Promise<ArchiveListResult> {
-  await ensurePermission('all');
+  await ensurePermission('backup:list');
   try {
     return { success: true, archives: await readArchiveFiles() };
   } catch (error) {
@@ -112,7 +112,7 @@ export async function listArchives(): Promise<ArchiveListResult> {
 }
 
 export async function deleteArchive(name: string): Promise<ArchiveMutationResult> {
-  await ensurePermission('all');
+  await ensurePermission('backup:delete');
   if (typeof name !== 'string') return { success: false, error: 'Archive name must be a string.' };
   const archivePath = await resolveArchivePath(name);
   if (archivePath === null) return { success: false, error: `Archive not found: ${name}` };

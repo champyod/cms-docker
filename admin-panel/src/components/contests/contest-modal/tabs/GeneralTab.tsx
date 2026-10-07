@@ -85,7 +85,7 @@ function StopTimeField({ formData, setFormData, validationErrors }: FieldProps) 
 
 function TimeFields(props: FieldProps) {
   return (
-    <div className="grid grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
       <StartTimeField {...props} />
       <StopTimeField {...props} />
     </div>
@@ -128,7 +128,7 @@ function LocalizationsField({ formData, setFormData, validationErrors }: FieldPr
 
 function LanguagesGrid({ formData, onLanguageToggle }: Pick<GeneralTabProps, 'formData' | 'onLanguageToggle'>) {
   return (
-    <div className="grid max-h-48 grid-cols-3 gap-2 overflow-y-auto rounded-xl border border-border bg-muted/20 p-4">
+    <div className="grid max-h-48 grid-cols-1 gap-2 overflow-y-auto rounded-xl border border-border bg-muted/20 p-4 sm:grid-cols-3">
       {PROGRAMMING_LANGUAGES.map(langStr => {
         const lang = langStr;
         const isSelected = formData.languages.includes(lang);
@@ -157,7 +157,6 @@ export function GeneralTab({ formData, setFormData, validationErrors, onLanguage
   const fields = { formData, setFormData, validationErrors };
   return (
     <div className="animate-in fade-in slide-in-from-right-4 space-y-6 duration-300">
-      {/* GENERAL TAB */}
       <NameField {...fields} />
       <DescriptionField {...fields} />
       <TimeFields {...fields} />

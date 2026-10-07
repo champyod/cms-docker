@@ -17,7 +17,7 @@
   <p>
     Reevaluate all {{ submission_count }} submissions for this dataset
     {{ macro_reevaluation_buttons.reevaluation_buttons(
-           admin.permission_all,
+           admin.has_permission('all:all'),
            url("dataset", shown_dataset.id),
            dataset_id=shown_dataset.id) }}
   </p>

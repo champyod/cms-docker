@@ -11,7 +11,7 @@ interface WorkerNodesHeaderProps {
 
 export function WorkerNodesHeader({ onToggleAddForm, onSave }: WorkerNodesHeaderProps): ReactElement {
   return (
-    <div className="p-6 border-b border-border flex items-center justify-between bg-muted/40">
+    <div className="p-6 border-b border-border flex flex-wrap items-center justify-between gap-3 bg-muted/40">
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
           <Server className="w-6 h-6 text-primary" />

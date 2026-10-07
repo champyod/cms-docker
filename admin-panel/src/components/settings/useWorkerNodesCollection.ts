@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { getWorkers } from '@/app/actions/workerConfig';
 import { getWorkerStatus } from '@/app/actions/workers';
 import { WorkerEndpoint, WorkerStatus } from './workerNodesTypes';
@@ -41,19 +41,18 @@ export function useWorkerNodesCollection(): WorkerNodesCollection {
   const [workerStatus, setWorkerStatus] = useState<WorkerStatus[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const loadWorkers = async (): Promise<void> => {
+  const loadWorkers = useCallback(async (): Promise<void> => {
     setLoading(true);
     const data = await getWorkers();
     setWorkers(data);
     const statuses = await fetchWorkerStatuses(data);
     setWorkerStatus(statuses);
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- mount-load pattern; behavior must not change
-    void loadWorkers();
-  }, []);
+    queueMicrotask(() => void loadWorkers());
+  }, [loadWorkers]);
 
   const replaceWorkers = (next: WorkerEndpoint[]): void => setWorkers(next);
 

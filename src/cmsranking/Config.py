@@ -40,6 +40,15 @@ def default_path(name):
 @dataclass
 class PublicConfig:
     show_id_column: bool = False
+    # WHY a shipped default rather than a bare config key: section 13 of the
+    # AGPL requires the offer to name the running deployment's own source, and
+    # the scoreboard is public and unauthenticated, so an operator who sets
+    # nothing must still get a working offer. A fork overrides it under
+    # [public] in cms_ranking.toml, so no URL is baked into the page.
+    # WHY the same value as project.url in credits.json: two spellings of the
+    # fork's own repository would drift, and a credits page advertising a
+    # different repository than the source offer would be self-contradictory.
+    source_url: str = "https://github.com/champyod/cms-docker"
 
 
 @dataclass
@@ -64,6 +73,13 @@ class Config:
 
     log_dir: str = default_path("log/ranking")
     lib_dir: str = default_path("lib/ranking")
+
+    # Optional explicit logo file inside container. When set and the file
+    # exists, RankingWebServer serves it for /logo; otherwise it falls back
+    # to lib_dir/logo.* + static/img/logo.png. Host-side ./cms config sync
+    # copies RANKING_LOGO_PATH into the ranking volume instead, so this field
+    # can remain None in most deployments.
+    logo_path: str | None = None
 
     def __post_init__(self):
         os.makedirs(self.lib_dir, exist_ok=True)

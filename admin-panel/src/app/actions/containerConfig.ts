@@ -1,37 +1,73 @@
 'use server';
 
 import { ensurePermission } from '@/lib/permissions';
-import { getRepoRoot } from '@/lib/repo-root';
-import { readFile, writeFile } from 'fs/promises';
+import { recordAudit } from '@/lib/audit';
+import { writeFile } from 'fs/promises';
 import { exec } from 'child_process';
 import util from 'util';
-import path from 'path';
+import { CONTAINER_ID_RE } from '@/lib/container-probes';
+import { isProtectedContainerId, PROTECTED_CONTAINER_ERROR } from '@/lib/protected-containers';
+import {
+  containerRestartConfigPath,
+  readContainerRestartConfig,
+  type ContainerRestartConfig,
+} from '@/lib/container-restart-store';
 
 const execPromise = util.promisify(exec);
 
-const CONTAINER_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/;
 const RESTART_POLICY_RE = /^(?:no|always|unless-stopped|on-failure:(?:[0-9]|1[0-9]|20))$/;
 
-const CONFIG_PATH = () => path.join(getRepoRoot(), 'config', 'container-restart.json');
+// Why re-exported: the containers stream sends this shape with every snapshot, and the components
+// that render it keep importing it from where they always did.
+export type { ContainerRestartConfig };
 
-export interface ContainerRestartConfig {
-  [containerId: string]: {
-    autoRestart: boolean;
-    maxRestarts: number;
-    currentRestarts: number;
-    lastRestartTime?: number;
-    discordNotifications: boolean;
-  };
+/**
+ * The stored restart config, unaudited. The update, reset, sync and initialise paths all need it
+ * as an input to the write they are about to record, and a view row per write would report reads
+ * nobody made — a restart policy is not disclosed by a panel that is already changing it.
+ */
+async function readContainerConfigCore(): Promise<ContainerRestartConfig> {
+  await ensurePermission('container:read');
+  return readContainerRestartConfig();
 }
 
+/**
+ * Why the read is audited: restart policy is what decides whether a container comes back on its
+ * own, so who looked at it is part of the answer to "who changed the restart behaviour". The row
+ * carries container ids only — the config holds no credentials, and a view log that echoed values
+ * would train the log to be treated as a values store.
+ */
 export async function getContainerConfig(): Promise<ContainerRestartConfig> {
-  await ensurePermission('all');
-  try {
-    const data = await readFile(CONFIG_PATH(), 'utf-8');
-    return JSON.parse(data);
-  } catch {
-    return {};
-  }
+  const config = await readContainerConfigCore();
+  await recordAudit({
+    verb: 'container:view',
+    entity: 'container_config',
+    afterValues: { containerIds: Object.keys(config) },
+    result: 'success',
+  });
+  return config;
+}
+
+/**
+ * The one refusal for a protected container.
+ *
+ * Why shared: every write below reaches a container by id and must refuse the security boundary
+ * identically. Returning the recorded refusal keeps each caller to one `if`, and the row is written
+ * as a failure because an attempt to re-policy the WAF or the TLS proxy is a security event.
+ */
+async function refuseProtectedContainer(
+  verb: string,
+  containerId: string,
+): Promise<{ success: false; error: string } | null> {
+  if (!(await isProtectedContainerId(containerId))) return null;
+  await recordAudit({
+    verb,
+    entity: 'container_config',
+    entityId: String(containerId),
+    afterValues: { containerId, refusal: 'protected' },
+    result: 'failure',
+  });
+  return { success: false, error: PROTECTED_CONTAINER_ERROR };
 }
 
 export async function updateContainerConfig(containerId: string, config: {
@@ -40,25 +76,40 @@ export async function updateContainerConfig(containerId: string, config: {
   currentRestarts?: number;
   discordNotifications?: boolean;
 }) {
-  await ensurePermission('all');
+  await ensurePermission('container:update');
   try {
-    const currentConfig = await getContainerConfig();
+    if (!CONTAINER_ID_RE.test(containerId)) {
+      return { success: false, error: 'Invalid container id or action' };
+    }
+    const refusal = await refuseProtectedContainer('container:update', containerId);
+    if (refusal) return refusal;
 
-    currentConfig[containerId] = {
+    const currentConfig = await readContainerConfigCore();
+
+    const beforeEntry = currentConfig[containerId] ? { ...currentConfig[containerId] } : null;
+
+    const afterEntry = {
       autoRestart: config.autoRestart ?? currentConfig[containerId]?.autoRestart ?? false,
       maxRestarts: config.maxRestarts ?? currentConfig[containerId]?.maxRestarts ?? 5,
       currentRestarts: config.currentRestarts ?? currentConfig[containerId]?.currentRestarts ?? 0,
       lastRestartTime: currentConfig[containerId]?.lastRestartTime,
       discordNotifications: config.discordNotifications ?? currentConfig[containerId]?.discordNotifications ?? true,
     };
+    currentConfig[containerId] = afterEntry;
+    await writeFile(containerRestartConfigPath(), JSON.stringify(currentConfig, null, 2));
 
-    await writeFile(CONFIG_PATH(), JSON.stringify(currentConfig, null, 2));
-
-    // Update Docker container restart policy
     if (config.autoRestart !== undefined) {
       await updateDockerRestartPolicy(containerId, currentConfig[containerId].autoRestart, currentConfig[containerId].maxRestarts);
     }
 
+    await recordAudit({
+      verb: 'container:update',
+      entity: 'container_config',
+      entityId: String(containerId),
+      beforeValues: beforeEntry,
+      afterValues: { containerId, config: afterEntry },
+      result: 'success',
+    });
     return { success: true };
   } catch (error) {
     console.error('Failed to update container config:', error);
@@ -67,15 +118,33 @@ export async function updateContainerConfig(containerId: string, config: {
 }
 
 export async function resetRestartCount(containerId: string) {
-  await ensurePermission('all');
+  await ensurePermission('container:update');
   try {
-    const currentConfig = await getContainerConfig();
+    if (!CONTAINER_ID_RE.test(containerId)) {
+      return { success: false, error: 'Invalid container id or action' };
+    }
+    const refusal = await refuseProtectedContainer('container:update', containerId);
+    if (refusal) return refusal;
 
+    const currentConfig = await readContainerConfigCore();
+
+    const hadEntry = Boolean(currentConfig[containerId]);
+    const beforeRestarts = currentConfig[containerId]?.currentRestarts ?? null;
     if (currentConfig[containerId]) {
       currentConfig[containerId].currentRestarts = 0;
-      await writeFile(CONFIG_PATH(), JSON.stringify(currentConfig, null, 2));
+      await writeFile(containerRestartConfigPath(), JSON.stringify(currentConfig, null, 2));
     }
 
+    if (hadEntry) {
+      await recordAudit({
+        verb: 'container:update',
+        entity: 'container_config',
+        entityId: String(containerId),
+        beforeValues: { currentRestarts: beforeRestarts },
+        afterValues: { currentRestarts: 0, action: 'resetRestartCount' },
+        result: 'success',
+      });
+    }
     return { success: true };
   } catch (error) {
     console.error('Failed to reset restart count:', error);
@@ -108,44 +177,30 @@ async function updateDockerRestartPolicy(containerId: string, autoRestart: boole
   }
 }
 
-export async function getContainerRestartCount(containerId: string): Promise<number> {
-  await ensurePermission('all');
-  if (!CONTAINER_ID_RE.test(containerId)) {
-    return 0;
-  }
-  try {
-    const { stdout } = await execPromise(`docker inspect ${containerId} --format='{{.RestartCount}}'`);
-    return parseInt(stdout.trim()) || 0;
-  } catch {
-    return 0;
-  }
-}
-
 export async function syncContainerConfigWithDocker(containerId: string) {
-  await ensurePermission('all');
+  await ensurePermission('container:update');
   if (!CONTAINER_ID_RE.test(containerId)) {
     return { success: false, error: 'Invalid container id or action' };
   }
   try {
-    // Get Docker restart policy
     const { stdout } = await execPromise(`docker inspect ${containerId} --format='{{.HostConfig.RestartPolicy.Name}}:{{.HostConfig.RestartPolicy.MaximumRetryCount}}'`);
     const [policyName, maxRetries] = stdout.trim().split(':');
 
-    const config = await getContainerConfig();
+    const config = await readContainerConfigCore();
     const currentConfig = config[containerId] || {};
 
-    // Sync with Docker settings
     const dockerAutoRestart = policyName === 'on-failure' || policyName === 'always' || policyName === 'unless-stopped';
     const dockerMaxRestarts = policyName === 'on-failure' ? parseInt(maxRetries) || 5 : 999;
 
-    await updateContainerConfig(containerId, {
+    // Why the refusal is returned rather than swallowed: this call goes through
+    // updateContainerConfig, which refuses a protected container. Reporting success here would
+    // tell the caller the restart policy was synced when nothing was written.
+    return await updateContainerConfig(containerId, {
       autoRestart: dockerAutoRestart,
       maxRestarts: dockerMaxRestarts,
       currentRestarts: currentConfig.currentRestarts || 0,
       discordNotifications: currentConfig.discordNotifications ?? true,
     });
-
-    return { success: true };
   } catch (error) {
     console.error('Failed to sync container config:', error);
     return { success: false, error: (error as Error).message };
@@ -153,11 +208,10 @@ export async function syncContainerConfigWithDocker(containerId: string) {
 }
 
 export async function initializeContainerConfig(containerId: string) {
-  await ensurePermission('all');
-  const config = await getContainerConfig();
+  await ensurePermission('container:update');
+  const config = await readContainerConfigCore();
 
   if (!config[containerId]) {
-    // Sync with Docker first
     await syncContainerConfigWithDocker(containerId);
   }
 }

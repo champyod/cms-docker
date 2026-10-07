@@ -147,6 +147,24 @@ docs_path = "/usr/share/cms/docs"
 # impersonate an arbitrary user and bypass submit restrictions.
 #contest_admin_token = "CHANGE-ME"
 
+# Adaptive login CAPTCHA for /login, /register and /api/login. Same keys and
+# same escalation rule as the admin panel, kept in a shared table so the two
+# servers cannot drift apart.
+[contest_web_server.captcha]
+enabled = false
+provider = "turnstile"
+site_key = ""
+secret_key = ""
+threshold = 3
+ban_threshold = 5
+# Shared store for the login failure counters. Off and unset by default so an
+# existing deployment keeps counting in process; an unreachable Redis counts
+# locally and demands the captcha on every attempt rather than dropping the
+# restriction, so naming one that is down cannot open the login.
+redis_enabled = false
+redis_host = "redis-rate-limit"
+redis_port = 6379
+
 
 [admin_web_server]
 # Listening HTTP address and port for the AWS. By default only listens
@@ -165,6 +183,23 @@ cookie_duration = 36000
 # a proxy, you will likely want to set this value to 1.
 num_proxies_used = 0
 
+# Adaptive login CAPTCHA, mirroring the Next.js admin panel. Left off and empty
+# by default so an existing deployment keeps logging in without one; enabling it
+# below the threshold still does not demand a captcha, because the panel only
+# escalates once an account or address has failed that many times.
+[admin_web_server.captcha]
+enabled = false
+provider = "turnstile"
+site_key = ""
+secret_key = ""
+threshold = 3
+ban_threshold = 5
+# Same shared store as the contest server: both verify the same way and count
+# the same failures, so one pair of keys keeps them in step.
+redis_enabled = false
+redis_host = "redis-rate-limit"
+redis_port = 6379
+
 
 [proxy_service]
 # List of URLs (with embedded username and password) of the RWSs where
@@ -176,6 +211,14 @@ rankings = ["http://usern4me:passw0rd@cms-ranking-web-server:8890/"]
 # see the documentation of requests for more info.)
 #https_certfile = "..."
 
+
+[rpc]
+# Shared secret for inter-service RPC authentication. Must be identical on
+# all hosts that need to talk over RPC. Leave commented/empty to use the
+# auto-generated value produced by `make env` / `./cms config sync`.
+#secret = "CHANGE-ME"
+# Allow remote backdoor RPC (high-risk); requires valid RPC secret as well.
+#allow_backdoor = false
 
 [prometheus]
 # Listening HTTP address and port for the exporter. If exposed this may

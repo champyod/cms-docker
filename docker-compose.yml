@@ -2,15 +2,12 @@
 # Services orchestrate the Competitive Management System platform
 
 services:
-  # ============================================================
-  # CORE SERVICES (profiles: core)
-  # ============================================================
 
   # PostgreSQL Database
   database:
     image: postgres:15
     container_name: cms-database
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - core
     environment:
@@ -40,7 +37,7 @@ services:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
     container_name: cms-log-service
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - core
     depends_on:
@@ -51,7 +48,7 @@ services:
       SERVICE_TYPE: LogService
       SERVICE_SHARD: ${LOG_SERVICE_SHARD:-0}
     ports:
-      - "${TAILSCALE_IP:-127.0.0.1}:29000:29000"
+      - "${INNER_IP:-127.0.0.1}:29000:29000"
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
@@ -79,7 +76,7 @@ services:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
     container_name: cms-resource-service
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - core
     depends_on:
@@ -92,7 +89,7 @@ services:
       SERVICE_TYPE: ResourceService
       SERVICE_SHARD: ${RESOURCE_SERVICE_SHARD:-0}
     ports:
-      - "${TAILSCALE_IP:-127.0.0.1}:28000:28000"
+      - "${INNER_IP:-127.0.0.1}:28000:28000"
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
@@ -121,7 +118,7 @@ services:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
     container_name: cms-scoring-service
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - core
     depends_on:
@@ -134,7 +131,7 @@ services:
       SERVICE_TYPE: ScoringService
       SERVICE_SHARD: ${SCORING_SERVICE_SHARD:-0}
     ports:
-      - "${TAILSCALE_IP:-127.0.0.1}:28500:28500"
+      - "${INNER_IP:-127.0.0.1}:28500:28500"
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
@@ -163,7 +160,7 @@ services:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
     container_name: cms-checker-service
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - core
     depends_on:
@@ -176,7 +173,7 @@ services:
       SERVICE_TYPE: Checker
       SERVICE_SHARD: ${CHECKER_SERVICE_SHARD:-0}
     ports:
-      - "${TAILSCALE_IP:-127.0.0.1}:22000:22000"
+      - "${INNER_IP:-127.0.0.1}:22000:22000"
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
@@ -197,10 +194,6 @@ services:
       retries: 5
       start_period: 60s
 
-  # ============================================================
-  # CONTEST SERVICES (profiles: contest)
-  # ============================================================
-
   # CMS Evaluation Service - Contest scoped evaluation queue
   evaluation-service:
     build:
@@ -210,7 +203,7 @@ services:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
     container_name: cms-evaluation-service
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - contest
     depends_on:
@@ -224,7 +217,7 @@ services:
       SERVICE_SHARD: ${EVALUATION_SERVICE_SHARD:-0}
       CONTEST_ID: ${CONTEST_ID:-1}
     ports:
-      - "${TAILSCALE_IP:-127.0.0.1}:25000:25000"
+      - "${INNER_IP:-127.0.0.1}:25000:25000"
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
@@ -253,7 +246,7 @@ services:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
     container_name: cms-proxy-service
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - contest
     depends_on:
@@ -267,7 +260,7 @@ services:
       SERVICE_SHARD: ${PROXY_SERVICE_SHARD:-0}
       CONTEST_ID: ${CONTEST_ID:-1}
     ports:
-      - "${TAILSCALE_IP:-127.0.0.1}:28600:28600"
+      - "${INNER_IP:-127.0.0.1}:28600:28600"
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
@@ -298,7 +291,7 @@ services:
     container_name: cms-contest-web-server
     # survive daemon/host restarts like every other service; admin-panel
     # lifecycle actions still work (stop/start overrides policy at runtime)
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - contest
     depends_on:
@@ -312,13 +305,21 @@ services:
       SERVICE_SHARD: ${CONTEST_WEB_SERVER_SHARD:-0}
       CONTEST_ID: ${CONTEST_ID:-1}
       CONTEST_LISTEN_PORT: ${CONTEST_LISTEN_PORT:-8888}
-      CONTEST_LISTEN_ADDRESS: ${CONTEST_LISTEN_ADDRESS:-0.0.0.0}
       SECRET_KEY: ${SECRET_KEY}
       COOKIE_DURATION: ${COOKIE_DURATION:-10800}
       MAX_SUBMISSION_LENGTH: ${MAX_SUBMISSION_LENGTH:-100000}
       MAX_INPUT_LENGTH: ${MAX_INPUT_LENGTH:-5000000}
       SUBMIT_LOCAL_COPY: ${SUBMIT_LOCAL_COPY:-true}
       NUM_PROXIES_USED: ${NUM_PROXIES_USED:-1}
+      # Adaptive login CAPTCHA for /login, /register and /api/login.
+      # __inject_config.sh copies these into [contest_web_server.captcha] of the
+      # mounted cms.toml, which is the only config this process can read.
+      CAPTCHA_ENABLED: ${CAPTCHA_ENABLED:-0}
+      CAPTCHA_PROVIDER: ${CAPTCHA_PROVIDER:-turnstile}
+      CAPTCHA_SITE_KEY: ${CAPTCHA_SITE_KEY:-}
+      CAPTCHA_SECRET_KEY: ${CAPTCHA_SECRET_KEY:-}
+      CAPTCHA_THRESHOLD: ${CAPTCHA_THRESHOLD:-3}
+      CAPTCHA_BAN_THRESHOLD: ${CAPTCHA_BAN_THRESHOLD:-5}
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
@@ -356,11 +357,39 @@ services:
       retries: 3
       start_period: 40s
 
+  # Shared store for the login failure counters (LOGIN_RATE_LIMIT_REDIS_*).
+  # WHY declared here as well as in docker-compose.domain.yml: `make contest`
+  # merges only the base file, so a definition living solely in the domain stack
+  # is invisible to it and the contest server counts in process — a lockout then
+  # dies with the web server and is per replica. Profiles make the two entries
+  # mutually exclusive rather than competing: compose unions profile lists
+  # across merged files, so the domain stack (which activates no profile) keeps
+  # its own copy and starts exactly one container.
+  # WHY `contest` and not every profile: `make core` must not start it.
+  redis-rate-limit:
+    image: redis:7-alpine
+    container_name: grader-redis-rate-limit
+    restart: unless-stopped
+    profiles:
+      - contest
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis-rate-limit-data:/data
+    networks:
+      - cms-network
+    # No host ports — reachable only via cms-network as redis-rate-limit:6379
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
   # Optional: Nginx reverse proxy for contest web server (TLS via ENABLE_TLS=true)
   nginx-proxy:
     image: nginx:alpine
     container_name: cms-nginx-contest
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - contest
     depends_on:
@@ -368,9 +397,17 @@ services:
         condition: service_healthy
       proxy-service:
         condition: service_healthy
+      # /ranking/ + funnel proxy into the admin profile; soft so contest-only bring-up skips them.
+      ranking-web-server:
+        condition: service_healthy
+        required: false
+      admin-panel-next:
+        condition: service_healthy
+        required: false
     environment:
       NGINX_HOST: ${CONTEST_DOMAIN:-contest.cms.local}
       CONTEST_LISTEN_PORT: ${CONTEST_LISTEN_PORT:-8888}
+      RANKING_LISTEN_PORT: ${RANKING_LISTEN_PORT:-8890}
       RANKING_AUTH_DIRECTIVES: ${RANKING_AUTH_DIRECTIVES:-}
       ENABLE_TLS: ${ENABLE_TLS:-false}
       FUNNEL_ENABLED: ${FUNNEL_ENABLED:-false}
@@ -386,8 +423,8 @@ services:
     ports:
       - "${NGINX_BIND_IP:-0.0.0.0}:${NGINX_HTTP_PORT:-80}:80"
       - "${NGINX_BIND_IP:-0.0.0.0}:${NGINX_HTTPS_PORT:-443}:443"
-      - "127.0.0.1:${FUNNEL_PANEL_LISTEN:-8892}:8892"
-      - "127.0.0.1:${FUNNEL_RANKING_LISTEN:-8893}:8893"
+      - "${FUNNEL_BIND_IP:-127.0.0.1}:${FUNNEL_PANEL_LISTEN:-8892}:8892"
+      - "${FUNNEL_BIND_IP:-127.0.0.1}:${FUNNEL_RANKING_LISTEN:-8893}:8893"
     command: ["/usr/local/bin/render.sh"]
 
 
@@ -397,18 +434,26 @@ services:
       dockerfile: Dockerfile
     image: ghcr.io/champyod/cms-docker-admin-panel:${IMG_TAG:-major-admin-panel}
     container_name: cms-admin-panel-next
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - admin
     depends_on:
       database:
         condition: service_healthy
     environment:
-      VITE_API_URL: ${VITE_API_URL:-http://localhost:8889}
-      SERVER_BASE_URL: ${SERVER_BASE_URL:-http://localhost}
       PUBLIC_IP: ${PUBLIC_IP:-0.0.0.0}
+      # WHY: single owner role cmsuser owns large objects, so admin panel connects as owner (PostgreSQL restricts large-object access to owner).
       DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
       AUTH_SECRET: ${AUTH_SECRET}
+
+      # Adaptive login CAPTCHA
+      CAPTCHA_ENABLED: ${CAPTCHA_ENABLED:-0}
+      CAPTCHA_PROVIDER: ${CAPTCHA_PROVIDER:-turnstile}
+      CAPTCHA_SITE_KEY: ${CAPTCHA_SITE_KEY:-}
+      CAPTCHA_SECRET_KEY: ${CAPTCHA_SECRET_KEY:-}
+      CAPTCHA_THRESHOLD: ${CAPTCHA_THRESHOLD:-3}
+      CAPTCHA_BAN_THRESHOLD: ${CAPTCHA_BAN_THRESHOLD:-5}
+
       REPO_ROOT: /repo-root
       DEPLOYMENT_TYPE: ${DEPLOYMENT_TYPE:-img}
       IS_DOCKER: "true"
@@ -417,6 +462,7 @@ services:
       - ./:/repo-root
       - /proc:/host/proc:ro
       - cms-logs:/var/local/log/cms
+      - cms-ranking-data:/var/local/lib/cms/ranking:rw
     networks:
       - cms-network
     ports:
@@ -441,7 +487,7 @@ services:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
     container_name: cms-admin-web-server
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - admin
     depends_on:
@@ -452,7 +498,6 @@ services:
     environment:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       ADMIN_LISTEN_PORT: ${ADMIN_LISTEN_PORT:-8889}
-      ADMIN_LISTEN_ADDRESS: ${ADMIN_LISTEN_ADDRESS:-0.0.0.0}
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
@@ -482,7 +527,7 @@ services:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
     container_name: cms-ranking-web-server
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - admin
     depends_on:
@@ -493,7 +538,6 @@ services:
     environment:
       CMS_RANKING_CONFIG: ${CMS_RANKING_CONFIG:-/usr/local/etc/cms_ranking.toml}
       RANKING_LISTEN_PORT: ${RANKING_LISTEN_PORT:-8890}
-      RANKING_LISTEN_ADDRESS: ${RANKING_LISTEN_ADDRESS:-0.0.0.0}
     volumes:
       - ./config/cms_ranking.toml:/usr/local/etc/cms_ranking.toml:ro
       - cms-logs:/var/local/log/cms
@@ -514,46 +558,6 @@ services:
       retries: 5
       start_period: 30s
 
-  # Printing Service - Manages printing requests (optional)
-  printing-service:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
-    image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
-    container_name: cms-printing-service
-    restart: on-failure:5
-    profiles:
-      - admin
-      - printing
-    depends_on:
-      database:
-        condition: service_healthy
-      log-service:
-        condition: service_healthy
-    environment:
-      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
-      SERVICE_TYPE: PrintingService
-      SERVICE_SHARD: ${PRINTING_SERVICE_SHARD:-0}
-      PRINTING_ENABLED: ${PRINTING_ENABLED:-false}
-    volumes:
-      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
-      - cms-logs:/var/local/log/cms
-      - cms-cache:/var/local/cache/cms
-    networks:
-      - cms-network
-    privileged: true
-    command: >
-      sh -c "if [ \"$${PRINTING_ENABLED}\" = \"true\" ]; then cmsPrintingService $${PRINTING_SERVICE_SHARD:-0}; else echo 'Printing service disabled'; sleep infinity; fi"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.cms-printing.rule=Host(`${PRINTING_DOMAIN:-printing.cms.local}`)"
-
-  # ============================================================
-  # WORKER SERVICES (profiles: worker)
-  # ============================================================
-
   # CMS Worker - Evaluates submissions in isolated sandboxes
   worker:
     build:
@@ -561,7 +565,7 @@ services:
       dockerfile: Dockerfile
     image: ghcr.io/champyod/cms-docker-worker:${IMG_TAG:-major-admin-panel}
     container_name: cms-worker-${WORKER_SHARD:-0}
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - worker
     environment:
@@ -601,7 +605,7 @@ services:
       # - ${MTLS_WORKER_CERT:-config/mtls/worker.pem}:/etc/cms/mtls/worker.pem:ro
       # - ${MTLS_WORKER_KEY:-config/mtls/worker-key.pem}:/etc/cms/mtls/worker-key.pem:ro
     ports:
-      - "${WORKER_PORT:-26000}:${WORKER_PORT:-26000}"
+      - "${WORKER_BIND_ADDR:-0.0.0.0}:${WORKER_PORT:-26000}:${WORKER_PORT:-26000}"
     networks:
       - cms-network
     privileged: true
@@ -629,7 +633,14 @@ services:
           CGROUP_BASE=${ISOLATE_CGROUP_PATH:-/sys/fs/cgroup/cms-isolate}
 
           if [ ! -d "$$CGROUP_BASE" ]; then
-            echo "ERROR: ISOLATE_CGROUP_PATH does not exist: $$CGROUP_BASE"
+            echo "ISOLATE_CGROUP_PATH missing (cgroupfs is rebuilt on every boot) — recreating $$CGROUP_BASE"
+            sudo mkdir -p "$$CGROUP_BASE" 2>/dev/null || true
+            sudo chmod 755 "$$CGROUP_BASE" 2>/dev/null || true
+            echo "+cpu +memory +pids" | sudo tee "$$CGROUP_BASE/cgroup.subtree_control" >/dev/null 2>&1 || true
+          fi
+
+          if [ ! -d "$$CGROUP_BASE" ]; then
+            echo "ERROR: ISOLATE_CGROUP_PATH does not exist and could not be created: $$CGROUP_BASE"
             echo "Run scripts/__worker_cgroup_setup.sh on the worker host first."
             exit 1
           fi
@@ -679,17 +690,18 @@ services:
       retries: 3
       start_period: 20s
 
-  # ============================================================
-  # MONITOR SERVICES (profiles: monitor)
-  # ============================================================
-
   monitor:
     build:
       context: .
       dockerfile: docker/monitor/Dockerfile
+      # WHY: the monitor writes backups through the ./backups bind mount, so the
+      # image's runtime uid must match that directory's owner on this host
+      # (stat -c %u backups). The default keeps hosts owning uid 1000 unchanged.
+      args:
+        DOCKER_UID: ${DOCKER_UID:-1000}
     image: ghcr.io/champyod/cms-docker-monitor:${IMG_TAG:-major-admin-panel}
     container_name: cms-monitor
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - monitor
     pid: host
@@ -698,20 +710,44 @@ services:
     environment:
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
       - DISCORD_ROLE_ID=${DISCORD_ROLE_ID}
+      # WHY: __monitor.sh resolves config/container-restart.json against REPO_ROOT; without
+      # it the mounted file below is never found and per-container policy silently no-ops.
+      - REPO_ROOT=/repo-root
       - MONITOR_INTERVAL=5
-      - MONITOR_COOLDOWN=300
       - DISK_PATH=/host
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
+      # WHY: the backup path does need database credentials — __monitor.sh itself runs
+      # no psql/pg_dump, so there is no DATABASE_URL, but the bind-mounted __backup.sh
+      # dumps as cms_backup (BYPASSRLS, the only role that survives FORCE RLS) with
+      # PGPASSWORD and then retries as the owner, reading both passwords from the
+      # environment. Empty defaults keep the service bootable when they are unset;
+      # __backup.sh warns each cycle when a dump credential is missing.
+      - POSTGRES_BACKUP_PASSWORD=${POSTGRES_BACKUP_PASSWORD:-}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-}
       - BACKUP_INTERVAL_MINS=${BACKUP_INTERVAL_MINS:-1440}
       - BACKUP_MAX_COUNT=${BACKUP_MAX_COUNT:-50}
       - BACKUP_MAX_AGE_DAYS=${BACKUP_MAX_AGE_DAYS:-10}
       - BACKUP_MAX_SIZE_GB=${BACKUP_MAX_SIZE_GB:-5}
       - BACKUP_DIR=/app/backups
+      # Rotation of the cms-logs volume: the CMS services write <epoch>.log files
+      # there with no rotation of their own, so the monitor prunes them (age, then
+      # oldest-first to the size cap).
+      - CMS_LOG_DIR=${CMS_LOG_DIR:-/var/local/log/cms}
+      - CMS_LOG_MAX_AGE_DAYS=${CMS_LOG_MAX_AGE_DAYS:-7}
+      - CMS_LOG_MAX_SIZE_GB=${CMS_LOG_MAX_SIZE_GB:-5}
+      - CMS_LOG_PRUNE_INTERVAL_MINS=${CMS_LOG_PRUNE_INTERVAL_MINS:-60}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /:/host:ro # Mount host root to /host to check disk usage
       - ./backups:/app/backups
+      # WHY both scripts are bind-mounted: they are host-side maintenance code that
+      # changes between releases, so the running monitor must not lag the checkout
+      # (the image copy stays as the fallback).
       - ./scripts/__backup.sh:/usr/local/bin/cms-backup.sh:ro
+      - ./scripts/__monitor.sh:/usr/local/bin/monitor.sh:ro
+      # WHY the lib is mounted too: cms-backup.sh sources ${SCRIPT_DIR}/__lib/common.sh and
+      # SCRIPT_DIR is /usr/local/bin in the container, so the lib has to sit beside the
+      # scripts — without this mount the source fails and every backup cycle aborts.
+      - ./scripts/__lib:/usr/local/bin/__lib:ro
       - ./config:/repo-root/config:ro # Mount config to read container restart settings
     networks:
       - cms-network
@@ -723,7 +759,7 @@ services:
       dockerfile: docker/scheduler/Dockerfile
     image: ghcr.io/champyod/cms-docker-scheduler:${IMG_TAG:-major-admin-panel}
     container_name: cms-scheduler
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - monitor
     depends_on:
@@ -746,18 +782,10 @@ services:
     networks:
       - cms-network
 
-# ============================================================
-# NETWORKS
-# ============================================================
-
 networks:
   cms-network:
     name: cms-network
     driver: bridge
-
-# ============================================================
-# VOLUMES
-# ============================================================
 
 volumes:
   cms-database-data:
@@ -778,3 +806,7 @@ volumes:
     name: cms-nginx-logs-contest
   worker-tmp:
     name: cms-worker-tmp-${WORKER_SHARD:-0}
+  # Shared with docker-compose.domain.yml's same-named service: both stacks run
+  # the one container, so the appendonly data must survive whichever is up.
+  redis-rate-limit-data:
+    name: cms-redis-rate-limit-data

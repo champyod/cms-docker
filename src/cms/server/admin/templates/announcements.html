@@ -9,7 +9,7 @@
 <h2 id="title_announcements" class="toggling_on">Announcements</h2>
 <div id="announcements">
   <div class="notifications">
-{% if admin.permission_all or admin.permission_messaging %}
+{% if admin.has_permission('message:send') %}
     <div class="notification communication">
       <div class="notification_msg">
         <form method="post" action="{{ url("contest", contest.id, "announcements", "add") }}">

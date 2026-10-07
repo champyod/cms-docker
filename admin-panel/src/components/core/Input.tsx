@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { Input as AdapterInput } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
@@ -8,6 +9,10 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   error?: string;
   icon?: React.ReactNode;
 }
+
+// Why the class is here and not the surface: the icon indent is field policy,
+// the field styling itself comes from the adapter.
+const ICON_INDENT = 'pl-10';
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ className, label, error, icon, ...props }, ref) => {
@@ -24,18 +29,10 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
               {icon}
             </div>
           )}
-          <input
+          <AdapterInput
             ref={ref}
             aria-invalid={error ? true : undefined}
-            className={cn(
-              "flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none",
-              "placeholder:text-muted-foreground",
-              "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
-              "aria-invalid:border-destructive aria-invalid:ring-destructive/20",
-              "disabled:cursor-not-allowed disabled:opacity-50",
-              icon && "pl-10",
-              className
-            )}
+            className={cn(icon && ICON_INDENT, className)}
             {...props}
           />
         </div>

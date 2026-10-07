@@ -1,16 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useSyncedState } from '@/hooks/useSyncedState';
-import { useRouter, usePathname } from 'next/navigation';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
+import { usePathname } from 'next/navigation';
+import { useAppRouter } from '@/hooks/useAppRouter';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
 import { Button } from '@/components/core/Button';
-import { Edit2, Trash2, Plus, FileText, Database, ExternalLink, AlertTriangle } from 'lucide-react';
+import { RowActions, rowActionGroupLabel, type RowAction } from '@/components/core/RowActions';
+import { Pencil, Trash2, Plus, FileText, Database, ExternalLink, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ROW_SELECTED_CLASSES } from '@/hooks/useShortcuts';
+import { ROW_SELECTED_CLASSES } from '@/hooks/shortcut-rows';
 import { EmptyState } from '@/components/core/EmptyState';
+import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
 import { TaskModal } from './TaskModal';
 import { apiClient } from '@/lib/apiClient';
+import { hasEffectivePermission, ACTION_PERMISSIONS } from '@/lib/permission-engine';
+import { buildRoute } from '@/lib/navigation/routes';
+import { useConfirm } from '@/hooks/useConfirm';
+import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
+import { useDictionary } from '@/hooks/useDictionary';
 import type { TaskDiagnostic } from '@/lib/task-diagnostics';
 
 interface TaskRow {
@@ -27,56 +36,69 @@ interface TaskRow {
 interface TaskListProps {
   initialTasks: TaskRow[];
   totalPages: number;
-  permissions: {
-    permission_all: boolean;
-    permission_tasks: boolean;
-    permission_users: boolean;
-    permission_contests: boolean;
-    permission_messaging: boolean;
-  };
+  permissionKeys: readonly string[];
 }
 
-export function TaskList({ initialTasks, permissions }: TaskListProps): React.JSX.Element {
-  const router = useRouter();
+function buildTaskRowActions(
+  task: TaskRow,
+  onEdit: (task: TaskRow) => void,
+  onDelete: (id: number) => void,
+): RowAction[] {
+  return [
+    { key: 'edit', label: 'Edit task', icon: Pencil, onClick: () => onEdit(task), permission: ACTION_PERMISSIONS.updateTask, className: 'text-muted-foreground hover:text-primary' },
+    { key: 'delete', label: 'Delete task', icon: Trash2, onClick: () => { void onDelete(task.id); }, permission: ACTION_PERMISSIONS.deleteTask, className: 'text-muted-foreground hover:text-destructive' },
+  ];
+}
+
+export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React.JSX.Element {
+  const router = useAppRouter();
   const pathname = usePathname();
   const locale = pathname.split('/')[1] ?? 'en';
   const [tasks] = useSyncedState(initialTasks);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
+  const confirm = useConfirm();
+  const { destructiveConfirm } = useConfirmationCopy();
+  const dict = useDictionary();
 
-  const isSuperAdmin = permissions?.permission_all ?? false;
-  const canManageTasks = isSuperAdmin || (permissions?.permission_tasks ?? false);
+  const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
+  const canCreateTasks = hasEffectivePermission(effective, ACTION_PERMISSIONS.createTask);
+  const canUpdateTasks = hasEffectivePermission(effective, ACTION_PERMISSIONS.updateTask);
+  const canDeleteTasks = hasEffectivePermission(effective, ACTION_PERMISSIONS.deleteTask);
 
   const handleEdit = (task: TaskRow): void => {
-    if (!canManageTasks) return;
+    if (!canUpdateTasks) return;
     setSelectedTask(task);
     setIsModalOpen(true);
   };
 
+  const runAction = useActionFeedback();
+
   const handleDelete = async (id: number): Promise<void> => {
-    if (!canManageTasks) return;
-    if (confirm('Are you sure you want to delete this task? This is IRREVERSIBLE.')) {
-      const result = await apiClient.delete(`/api/tasks/${id}`);
-      if (result.success) window.location.reload();
-      else alert(`Failed to delete task: ${result.error}`);
-    }
+    if (!canDeleteTasks) return;
+    if (!(await confirm(destructiveConfirm('task')))) return;
+    const result = await runAction(
+      { pending: 'Deleting task...', success: 'Task deleted', failure: 'Failed to delete task' },
+      () => apiClient.delete(`/api/tasks/${id}`)
+    );
+    if (result?.success) router.refresh();
   };
 
   const handleCreate = (): void => {
-    if (!canManageTasks) return;
+    if (!canCreateTasks) return;
     setSelectedTask(null);
     setIsModalOpen(true);
   };
 
   const handleSuccess = (): void => {
-    window.location.reload();
+    router.refresh();
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-bold text-foreground">All Tasks</h2>
-        {canManageTasks && (
+        {canCreateTasks && (
           <Button variant="positive" icon={Plus} onClick={handleCreate}>
             Create Task
           </Button>
@@ -84,7 +106,23 @@ export function TaskList({ initialTasks, permissions }: TaskListProps): React.JS
       </div>
 
       <div className="border border-border rounded-xl overflow-hidden bg-card">
-        <Table>
+        <Table
+          mobileCards={tasks.map((task) => (
+            <MobileCard key={task.id}>
+              <MobileCardRow label="ID" value={`#${task.id}`} />
+              <MobileCardRow label="Name" value={task.name} />
+              <MobileCardRow label="Title" value={task.title} />
+              <MobileCardRow label="Contest" value={task.contests ? task.contests.name : 'Unassigned'} />
+              <MobileCardRow label="Submissions" value={task._count?.submissions ?? 0} />
+              <RowActions
+                ariaLabel={rowActionGroupLabel(dict, 'tasks')}
+                className="justify-end gap-2 pt-2"
+                permissionKeys={permissionKeys}
+                actions={buildTaskRowActions(task, handleEdit, handleDelete)}
+              />
+            </MobileCard>
+          ))}
+        >
           <TableHeader>
             <TableRow className="border-b border-border hover:bg-muted/50">
               <TableHead className="text-muted-foreground">ID</TableHead>
@@ -99,15 +137,25 @@ export function TaskList({ initialTasks, permissions }: TaskListProps): React.JS
           <TableBody>
             {tasks.map((task) => {
               const hasErrors = task.diagnostics.some((d) => d.type === 'error');
+              const openDetail = () => router.push(buildRoute(locale, 'tasks.record', { id: task.id }));
               return (
-                <TableRow key={task.id} data-shortcut-row className={cn('border-b border-border hover:bg-muted/50 transition-colors', hasErrors && 'opacity-60', ROW_SELECTED_CLASSES)}>
+                <TableRow
+                  key={task.id}
+                  data-shortcut-row
+                  onClick={openDetail}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && event.target === event.currentTarget) openDetail();
+                  }}
+                  tabIndex={0}
+                  className={cn('border-b border-border hover:bg-muted/50 transition-colors cursor-pointer', hasErrors && 'opacity-60', ROW_SELECTED_CLASSES)}
+                >
                   <TableCell className="font-mono text-muted-foreground text-xs text-nowrap">#{task.id}</TableCell>
-                  <TableCell className="font-medium text-foreground max-w-[150px]">
+                  <TableCell className="font-medium text-foreground max-w-36">
                     <div className="flex items-center gap-2">
                       {task.diagnostics.length > 0 && (
                         <div className="group relative">
                           <AlertTriangle className={cn('w-4 h-4 cursor-help shrink-0', hasErrors ? 'text-destructive' : 'text-warning')} />
-                          <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block z-50 min-w-[200px] p-2 bg-popover border border-border rounded-lg shadow-xl text-xs space-y-1">
+                          <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block z-50 min-w-48 p-2 bg-popover border border-border rounded-lg shadow-xl text-xs space-y-1">
                             <p className="font-bold border-b border-border pb-1 mb-1">Task Issues</p>
                             {task.diagnostics.map((d, i) => (
                               <div key={i} className={`flex gap-1.5 ${d.type === 'error' ? 'text-destructive' : 'text-warning'}`}>
@@ -118,13 +166,13 @@ export function TaskList({ initialTasks, permissions }: TaskListProps): React.JS
                           </div>
                         </div>
                       )}
-                      <button onClick={() => router.push(`/${locale}/tasks/${task.id}`)} data-shortcut-primary className={cn('flex items-center gap-2 hover:text-primary transition-colors truncate', hasErrors && 'text-muted-foreground')}>
+                      <button onClick={(event) => { event.stopPropagation(); router.push(buildRoute(locale, 'tasks.record', { id: task.id })); }} data-shortcut-primary className={cn('flex items-center gap-2 hover:text-primary transition-colors truncate', hasErrors && 'text-muted-foreground')}>
                         {task.name}
                         <ExternalLink className="w-3 h-3 opacity-50" />
                       </button>
                     </div>
                   </TableCell>
-                  <TableCell className={`max-w-[200px] truncate ${hasErrors ? 'text-muted-foreground italic' : 'text-muted-foreground'}`} title={task.title}>
+                  <TableCell className={`max-w-48 truncate ${hasErrors ? 'text-muted-foreground italic' : 'text-muted-foreground'}`} title={task.title}>
                     {task.title}
                   </TableCell>
                   <TableCell>
@@ -148,14 +196,12 @@ export function TaskList({ initialTasks, permissions }: TaskListProps): React.JS
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{task._count?.submissions ?? 0}</TableCell>
                   <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      {canManageTasks && (
-                        <>
-                          <Button variant="ghost" size="sm" icon={Edit2} iconOnly tooltip="Edit task" onClick={() => handleEdit(task)} className="text-muted-foreground hover:text-primary" />
-                          <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete task" onClick={() => handleDelete(task.id)} className="text-muted-foreground hover:text-destructive" />
-                        </>
-                      )}
-                    </div>
+                    <RowActions
+                      ariaLabel={rowActionGroupLabel(dict, 'tasks')}
+                      className="justify-end gap-2"
+                      permissionKeys={permissionKeys}
+                      actions={buildTaskRowActions(task, handleEdit, handleDelete)}
+                    />
                   </TableCell>
                 </TableRow>
               );
@@ -171,7 +217,7 @@ export function TaskList({ initialTasks, permissions }: TaskListProps): React.JS
         </Table>
       </div>
 
-      <TaskModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} task={selectedTask as unknown as Parameters<typeof TaskModal>[0]['task']} onSuccess={handleSuccess} />
+      <TaskModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} task={selectedTask as unknown as Parameters<typeof TaskModal>[0]['task']} onSuccess={handleSuccess} permissionKeys={permissionKeys} />
     </div>
   );
 }

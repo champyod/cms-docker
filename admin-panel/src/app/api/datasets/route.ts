@@ -1,34 +1,71 @@
 import { prisma } from '@/lib/prisma';
+import type { Prisma } from '@prisma/client';
 import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
+import { recordAudit } from '@/lib/audit';
+import { validateTaskTypeParams, DEFAULT_TASK_TYPE } from '@/lib/tasktype-params';
+
+type ResolvedTaskType =
+  | { isValid: true; taskType: string; params: unknown[] }
+  | { isValid: false; response: Response };
+
+function resolveTaskType(data: { task_type?: string; task_type_parameters?: unknown }): ResolvedTaskType {
+  const taskType = data.task_type || DEFAULT_TASK_TYPE;
+  const result = validateTaskTypeParams(taskType, data.task_type_parameters);
+  if (!result.isValid) {
+    return { isValid: false, response: apiError({ message: result.message, status: 400 }) };
+  }
+  return { isValid: true, taskType, params: result.params };
+}
 
 export async function POST(req: NextRequest): Promise<Response> {
-  const { authorized, response } = await verifyApiPermission('tasks');
+  const { authorized, response } = await verifyApiPermission('dataset:create');
   if (!authorized) return response;
 
   try {
-    const data = (await req.json()) as { taskId: number; description: string; time_limit?: number; memory_limit?: number; task_type?: string; score_type?: string };
+    const data = (await req.json()) as { taskId: number; description: string; time_limit?: number; memory_limit?: number; task_type?: string; score_type?: string; task_type_parameters?: unknown; score_type_parameters?: unknown };
     const { taskId, ...datasetData } = data;
+
+    if (!Number.isInteger(taskId) || taskId <= 0) return apiError({ message: 'Valid task identifier is required', status: 400 });
+    const descriptionTrimmed = typeof datasetData.description === 'string' ? datasetData.description.trim() : '';
+    if (!descriptionTrimmed) return apiError({ message: 'Dataset description is required', status: 400 });
+    if (descriptionTrimmed.length > 500) return apiError({ message: 'Description must be at most 500 characters', status: 400 });
+    if (datasetData.time_limit !== undefined && datasetData.time_limit !== null) {
+      const timeLimit = Number(datasetData.time_limit);
+      if (!Number.isFinite(timeLimit) || timeLimit <= 0 || timeLimit > 60) return apiError({ message: 'Time limit must be between 1 and 60 seconds', status: 400 });
+    }
+    if (datasetData.memory_limit !== undefined && datasetData.memory_limit !== null) {
+      const memoryLimit = Number(datasetData.memory_limit);
+      if (!Number.isFinite(memoryLimit) || memoryLimit <= 0 || memoryLimit > 4096) return apiError({ message: 'Memory limit must be between 1 and 4096 megabytes', status: 400 });
+    }
+    const taskType = resolveTaskType(datasetData);
+    if (!taskType.isValid) return taskType.response;
 
     const dataset = await prisma.datasets.create({
       data: {
         task_id: taskId,
-        description: datasetData.description,
+        description: descriptionTrimmed,
         time_limit: datasetData.time_limit || null,
         memory_limit: datasetData.memory_limit ? BigInt(datasetData.memory_limit * 1024 * 1024) : null,
-        task_type: datasetData.task_type || 'Batch',
-        task_type_parameters: [],
+        task_type: taskType.taskType,
+        task_type_parameters: taskType.params as Prisma.InputJsonValue,
         score_type: datasetData.score_type || 'Sum',
-        score_type_parameters: [],
+        score_type_parameters: (datasetData.score_type_parameters ?? []) as Prisma.InputJsonValue,
         autojudge: false,
       }
     });
 
+    await recordAudit({
+      verb: 'dataset:create',
+      entity: 'dataset',
+      entityId: String(dataset.id),
+      afterValues: { taskId, description: descriptionTrimmed },
+      result: 'success',
+    });
     revalidatePath('/[locale]/tasks', 'page');
     revalidatePath(`/[locale]/tasks/${taskId}`, 'page');
 
-    // Convert BigInt to string before returning JSON
     const responseDataset = {
       ...dataset,
       memory_limit: dataset.memory_limit ? dataset.memory_limit.toString() : null

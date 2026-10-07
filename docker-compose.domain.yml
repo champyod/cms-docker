@@ -1,4 +1,5 @@
-# Domain nginx stack — ADDITIVE: does not replace or modify cms-nginx-contest.
+# Domain nginx stack — ${DOMAIN_NAME:-cms.local} + certbot
+# ADDITIVE: does not replace or modify cms-nginx-contest.
 # Usage: docker compose -f docker-compose.domain.yml up -d
 # Dev note: ports 80/443 may clash with existing nginx-proxy; use
 #           DOMAIN_NGINX_HTTP_PORT/DOMAIN_NGINX_HTTPS_PORT overrides.
@@ -7,13 +8,17 @@ services:
   nginx-proxy:
     image: nginx:alpine
     container_name: grader-nginx-proxy
-    restart: on-failure:5
+    restart: unless-stopped
     depends_on: []
     environment:
-      DOMAIN_NAME: ${DOMAIN_NAME}
-      ADMIN_DOMAIN: ${ADMIN_DOMAIN}
-      OJ_DOMAIN: ${OJ_DOMAIN}
-      RANKING_DOMAIN: ${RANKING_DOMAIN}
+      # WHY empty rather than a .local default: an unset domain must stay unset. A
+      # leftover default name becomes a server_name and a SAN for a name nobody
+      # requested, which fails ACME validation for the whole certificate. Every one of
+      # these is optional; the rendered config carries a vhost only for the ones set.
+      DOMAIN_NAME: ${DOMAIN_NAME:-}
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:-}
+      OJ_DOMAIN: ${OJ_DOMAIN:-}
+      RANKING_DOMAIN: ${RANKING_DOMAIN:-}
       CONTEST_LISTEN_PORT: ${CONTEST_LISTEN_PORT:-8888}
       ADMIN_LISTEN_PORT: ${ADMIN_LISTEN_PORT:-8889}
       RANKING_LISTEN_PORT: ${RANKING_LISTEN_PORT:-8890}
@@ -27,30 +32,150 @@ services:
     volumes:
       - ./config/grader.nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - ./config/nginx-ssl.conf:/etc/nginx/conf.d/nginx-ssl.conf:ro
-      - letsencrypt-certs:/etc/letsencrypt:ro
-      - certbot-webroot:/var/www/certbot:ro
+      # Host binds rather than named volumes, so the on-host certbot in
+      # scripts/__domain.sh writes exactly the tree nginx reads here.
+      - ./config/letsencrypt:/etc/letsencrypt:ro
+      - ./config/letsencrypt/www:/var/www/certbot:ro
       - nginx-logs:/var/log/nginx
     networks:
       - cms-network
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # WHY: an empty bind default omits the host field, so the engine publishes on
+    # its own dual-stack wildcard; naming 0.0.0.0 here would pin IPv4 only.
     ports:
-      - "${DOMAIN_NGINX_HTTP_PORT:-80}:80"
-      - "${DOMAIN_NGINX_HTTPS_PORT:-443}:443"
+      - "${DOMAIN_NGINX_BIND_IP:-}:${DOMAIN_NGINX_HTTP_PORT:-80}:80"
+      - "${DOMAIN_NGINX_BIND_IP:-}:${DOMAIN_NGINX_HTTPS_PORT:-443}:443"
 
   certbot:
-    image: certbot/certbot
+    # For DNS-01 set CERTBOT_IMAGE=certbot/dns-cloudflare; the webroot default image
+    # carries no DNS plugin.
+    image: ${CERTBOT_IMAGE:-certbot/certbot}
     container_name: grader-certbot
-    restart: on-failure:5
+    restart: unless-stopped
+    environment:
+      # WHY empty rather than a .local default: an unset domain must stay unset. A
+      # leftover default name becomes a server_name and a SAN for a name nobody
+      # requested, which fails ACME validation for the whole certificate. Every one of
+      # these is optional; the rendered config carries a vhost only for the ones set.
+      DOMAIN_NAME: ${DOMAIN_NAME:-}
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:-}
+      OJ_DOMAIN: ${OJ_DOMAIN:-}
+      RANKING_DOMAIN: ${RANKING_DOMAIN:-}
+      CERT_EMAIL: ${CERT_EMAIL:-}
+      # Empty = HTTP-01 webroot. Set to e.g. cloudflare to issue/renew with DNS-01;
+      # the credentials ini is read from /etc/letsencrypt/<provider>.ini.
+      DNS_PROVIDER: ${DNS_PROVIDER:-}
+      # Initial-issuance retry policy. WHY the container needs its own copy: the
+      # host script (scripts/__domain.sh) handles --auto-retry/--retry-attempts for
+      # an operator-driven run, but this container is the unattended path — nothing
+      # re-runs it after a DNS record appears, so a transient failure would leave
+      # :443 unserved forever. ATTEMPTS=0 means retry indefinitely; each interval
+      # doubles up to RETRY_INTERVAL_CAP, so a slow DNS propagation is not hit with
+      # a fixed short loop that then gives up.
+      CERT_RETRY_ATTEMPTS: ${CERT_RETRY_ATTEMPTS:-0}
+      CERT_RETRY_INTERVAL: ${CERT_RETRY_INTERVAL:-60}
+      CERT_RETRY_INTERVAL_CAP: ${CERT_RETRY_INTERVAL_CAP:-600}
     volumes:
-      - letsencrypt-certs:/etc/letsencrypt
-      - certbot-webroot:/var/www/certbot
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot; sleep 12h & wait $${!}; done;'"
+      - ./config/letsencrypt:/etc/letsencrypt
+      - ./config/letsencrypt/www:/var/www/certbot
+    # Bootstrap the first certificate when its lineage is absent, then renew.
+    # WHY: `renew` never creates a certificate, so a fresh stack had nothing on
+    # :443 until someone ran certonly by hand. CERT_EMAIL must be set for the
+    # bootstrap to succeed; otherwise it is skipped and only renewals run.
+    # WHY the shell loop builds the -d list instead of passing four flags: every domain
+    # is optional, and `certbot certonly -d ""` requests an unnamed SAN, which fails
+    # validation for the whole certificate instead of skipping the domain. The first
+    # domain that is set becomes the lineage directory, matching scripts/__domain.sh.
+    #
+    # WHY the issuance loop classifies failures instead of always retrying: a
+    # misconfigured challenge plugin or an unregistered email fails identically on
+    # every attempt, so retrying it forever hides a real misconfiguration behind a
+    # container that looks busy. Only failures that can succeed on a later attempt
+    # (DNS not yet propagated, connection refused, timeout, rate limit) are retried;
+    # anything else is reported and the loop stops, leaving the container in a
+    # state `certbot-status.sh` and the domain healthcheck can see.
+    #
+    # WHY a status file rather than only log output: docker logs rotate, and the
+    # renewal loop runs forever afterwards. The status file is what
+    # scripts/__certbot-status.sh reads to decide whether :443 will ever be
+    # served, so the answer survives a restart and does not need log archaeology.
+    # NOTE the folded block scalar (`>`) joins each source line with a space before
+    # the container's shell ever sees it, so a trailing `#` comment on a line that
+    # still carries code would swallow the rest of that line. Comments that describe
+    # the script therefore live here in the YAML, not inside the entrypoint string.
+    entrypoint: >
+      /bin/sh -c 'trap exit TERM;
+      LINEAGE="$${DOMAIN_NAME:-$${ADMIN_DOMAIN:-$${OJ_DOMAIN:-$${RANKING_DOMAIN}}}}";
+      STATUS=/etc/letsencrypt/certbot-status;
+      if [ -n "$$DNS_PROVIDER" ]; then
+        CHALLENGE="--dns-$$DNS_PROVIDER --dns-$$DNS_PROVIDER-credentials /etc/letsencrypt/$$DNS_PROVIDER.ini";
+      else
+        CHALLENGE="--webroot -w /var/www/certbot";
+      fi;
+      mark() { printf "%s %s\n" "$$1" "$$2" > "$$STATUS"; };
+      is_retriable() {
+        case "$$1" in
+          *"urn:ietf:params:acme:error:dns"*|*"Timeout during connect"*|*"Connection refused"*|\
+          *"Invalid response from http://"*|*"urn:ietf:params:acme:error:connection"*|\
+          *"urn:ietf:params:acme:error:rateLimited"*|*"too many certificates"*) return 0 ;;
+          *) return 1 ;;
+        esac;
+      };
+      if [ -z "$$LINEAGE" ]; then
+        echo "no domain configured — set DOMAIN_NAME, ADMIN_DOMAIN, OJ_DOMAIN or RANKING_DOMAIN";
+        mark error "no domain configured";
+      elif [ -z "$$CERT_EMAIL" ]; then
+        echo "CERT_EMAIL is empty — cannot register with Let.s Encrypt; set it in config.toml [core]";
+        mark error "CERT_EMAIL empty";
+      elif [ ! -d "/etc/letsencrypt/live/$$LINEAGE" ]; then
+        set --;
+        for d in "$$DOMAIN_NAME" "$$ADMIN_DOMAIN" "$$OJ_DOMAIN" "$$RANKING_DOMAIN"; do
+          [ -n "$$d" ] && set -- "$$@" -d "$$d";
+        done;
+        mark pending "attempting issuance for $$LINEAGE";
+        attempt=1; interval="$$CERT_RETRY_INTERVAL";
+        while :; do
+          out=$$(certbot certonly $$CHALLENGE "$$@" --email "$$CERT_EMAIL" --agree-tos --non-interactive 2>&1);
+          rc=$$?;
+          if [ $$rc -eq 0 ] && [ -d "/etc/letsencrypt/live/$$LINEAGE" ]; then
+            mark ok "certificate issued for $$LINEAGE";
+            break;
+          fi;
+          if ! is_retriable "$$out"; then
+            echo "certificate issuance failed for a reason retrying cannot fix:";
+            echo "$$out";
+            mark error "terminal failure for $$LINEAGE — see docker logs grader-certbot";
+            break;
+          fi;
+          if [ "$$CERT_RETRY_ATTEMPTS" -gt 0 ] && [ $$attempt -ge "$$CERT_RETRY_ATTEMPTS" ]; then
+            echo "certificate issuance still failing after $$attempt attempt(s):";
+            echo "$$out";
+            mark error "$$attempt attempts exhausted for $$LINEAGE";
+            break;
+          fi;
+          mark pending "attempt $$attempt failed (retriable) — retrying in $${interval}s";
+          echo "attempt $$attempt failed, retrying in $${interval}s";
+          sleep "$$interval";
+          attempt=$$(( attempt + 1 ));
+          interval=$$(( interval * 2 ));
+          [ $$interval -gt "$$CERT_RETRY_INTERVAL_CAP" ] && interval="$$CERT_RETRY_INTERVAL_CAP";
+        done;
+      else
+        mark ok "certificate present for $$LINEAGE";
+      fi;
+      while :; do certbot renew $$CHALLENGE; sleep 12h & wait $${!}; done;'
 
   redis-rate-limit:
     image: redis:7-alpine
     container_name: grader-redis-rate-limit
-    restart: on-failure:5
+    restart: unless-stopped
+    # WHY the same service is declared in docker-compose.yml under the `contest`
+    # profile: `make contest` merges only the base file, and the login failure
+    # counters read this instance, so without a base copy the contest server
+    # silently falls back to counting in process. Profiles keep the two entries
+    # mutually exclusive — compose unions profile lists across merged files, so
+    # this stack (which activates no profile) starts its copy alone.
     command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
     volumes:
       - redis-rate-limit-data:/data
@@ -67,13 +192,13 @@ services:
   # ── HSM (optional, profile: hsm) — SoftHSM for dev, YubiHSM for hardware ───
   # Disabled by default (HSM_ENABLED=0). Enable with: HSM_ENABLED=1 docker compose -f docker-compose.domain.yml --profile hsm up -d
   # Or: HSM_ENABLED=1 HSM_MODULE=softhsm ./cms domain setup --apply (certbot uses --hsm with PKCS#11 URI)
-  # SoftHSM token DB lives at config/hsm/tokens/* (+ *.db) — gitignored; see .env.infra.example HSM_*.
+  # SoftHSM token DB lives at config/hsm/tokens/* (+ *.db) — gitignored; see config.toml.example [infra] HSM_*.
   # YubiHSM needs host USB passthrough; replace image with yubico/yubihsm and mount /dev/bus/usb.
   # certbot HSM renewal example: certbot certonly --hsm --hsm-module /usr/lib/softhsm/libsofthsm2.so --hsm-pin "$HSM_PIN" -d "$DOMAIN_NAME"
   hsm:
     image: opencrypto/softhsm
     container_name: grader-hsm
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - hsm
     environment:
@@ -100,7 +225,7 @@ services:
   vault-inline:
     image: hashicorp/vault:1.15
     container_name: grader-vault-inline
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - vault
     environment:
@@ -123,12 +248,7 @@ services:
       retries: 5
       start_period: 20s
 
-# ── Volumes ───────────────────────────────────────────────────────
 volumes:
-  letsencrypt-certs:
-    name: cms-letsencrypt-certs
-  certbot-webroot:
-    name: cms-certbot-webroot
   nginx-logs:
     name: cms-nginx-logs-domain
   redis-rate-limit-data:
@@ -138,7 +258,6 @@ volumes:
   vault-data-inline:
     name: cms-vault-data-inline
 
-# ── Networks ──────────────────────────────────────────────────────
 networks:
   cms-network:
     name: cms-network

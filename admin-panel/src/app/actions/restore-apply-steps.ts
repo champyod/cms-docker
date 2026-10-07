@@ -3,8 +3,15 @@
  * per-table transactions, and the large-object copy. Each phase runs its own
  * statements and reports what it committed; the server action owns the order
  * they run in and the report the run produces.
+ *
+ * Why every export below carries `backup:restore` itself: this directory is
+ * scanned as a set of entry points, so a phase the apply server action
+ * composes is read as one that can be called on its own. The caller gates the
+ * same key, so the repeat check costs one cached session read and never widens
+ * or narrows what the caller may already do.
  */
 
+import { ensurePermission } from '@/lib/permissions';
 import { LARGE_OBJECT_TABLE, adminColumnFor, archiveDigestBytesForSql, archiveDigestDescriptionSql, archiveDigestListSql, catalogPrimaryKeys, countRowsSql, createStagingSchemaSql, createStagingTableSql, deleteDigestBatchSql, dropStagingSchemaSql, insertSelectSql, liveDigestQuerySql, mergeInsertSql, overwriteDeleteSql, relayTable, stagingNewRowCountSql } from '@/lib/restore-apply';
 import type { ApplyFacts, ApplyStrategies, LargeObjectCopy, RelayPage, TableApplyRecord, TableStrategy } from '@/lib/restore-apply';
 import { blobBatchFits, blobBatchInsertSql, blobRowBytes, runStagingLoad, runTableTransaction } from '@/lib/restore-apply-runner';
@@ -73,6 +80,7 @@ export async function loadStaging(
   facts: ApplyFacts,
   progress: PromoteProgressWriter,
 ): Promise<void> {
+  await ensurePermission('backup:restore');
   const runner = dockerStatementRunner(env);
   await runner.runSql(dropStagingSchemaSql(staging), DOCKER_TIMEOUT_MS);
   await runner.runSql(createStagingSchemaSql(staging), DOCKER_TIMEOUT_MS);
@@ -90,6 +98,7 @@ export async function loadStaging(
  * but they are disk the operator should know is still there.
  */
 export async function dropStaging(staging: string, env: LiveDatabaseEnv): Promise<string | null> {
+  await ensurePermission('backup:restore');
   const dropped = await settle(dockerStatementRunner(env).runSql(dropStagingSchemaSql(staging), DOCKER_TIMEOUT_MS));
   return dropped.ok ? null : `Staging schema ${staging} could not be dropped: ${describeFailure(dropped.error)}`;
 }
@@ -122,6 +131,7 @@ export async function applyOneTable(
   facts: ApplyFacts,
   runner: LiveStatementRunner = dockerStatementRunner(env),
 ): Promise<TableApplyRecord> {
+  await ensurePermission('backup:restore');
   const pkColumns = catalogPrimaryKeys(table);
   const adminColumn = adminColumnFor(table, strategies);
   const stagingRows = await runner.runCount(countRowsSql(staging, table));
@@ -178,6 +188,7 @@ export async function applyLargeObjects(
   strategy: TableStrategy,
   runner: LiveStatementRunner = dockerStatementRunner(env),
 ): Promise<TableApplyRecord> {
+  await ensurePermission('backup:restore');
   const liveBefore = await runner.runCount(liveDigestQuerySql());
   const digests = lines(await scratchQuery(container, archiveDigestListSql()));
   const liveDigests = await liveDigestSet();

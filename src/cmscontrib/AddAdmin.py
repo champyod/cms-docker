@@ -32,7 +32,7 @@ import sys
 from sqlalchemy.exc import IntegrityError
 
 from cms import utf8_decoder
-from cms.db import Admin, SessionGen
+from cms.db import Admin, AdminGroup, Group, SessionGen
 from cmscommon.crypto import generate_random_password, hash_password
 
 
@@ -45,10 +45,17 @@ def add_admin(username: str, password: str | None = None) -> bool:
         password = generate_random_password()
     admin = Admin(username=username,
                   authentication=hash_password(password),
-                  name=username,
-                  permission_all=True)
+                  name=username)
     try:
         with SessionGen() as session:
+            group = session.query(Group).filter(Group.name == "Superadmin").first()
+            if group is None:
+                logger.error(
+                    "Superadmin group not found. Run the permission seed "
+                    "first (e.g. make prisma-sync) before creating the first admin.")
+                return False
+            # WHY: group membership is now the superadmin marker (permission_all removed).
+            admin.admin_groups.append(AdminGroup(group_id=group.id))
             session.add(admin)
             session.commit()
     except IntegrityError:

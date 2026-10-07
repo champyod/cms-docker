@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Search } from 'lucide-react';
 import { addTaskToContest } from '@/app/actions/contests';
 import { Dialog } from '@/components/core/Dialog';
@@ -21,12 +22,18 @@ interface TaskSelectionModalProps {
 }
 
 export function TaskSelectionModal({ isOpen, onClose, contestId, availableTasks, onSuccess }: TaskSelectionModalProps) {
+  const router = useRouter();
   const [search, setSearch] = useState('');
   const [adding, setAdding] = useState<number | null>(null);
 
-  const filteredTasks = availableTasks.filter((task) =>
-    task.name.toLowerCase().includes(search.toLowerCase()) ||
-    task.title.toLowerCase().includes(search.toLowerCase())
+  // Whitespace-only input means "no filter", matching the command-palette team search.
+  const needle = search.trim().toLowerCase();
+  const filteredTasks = useMemo(
+    () =>
+      availableTasks.filter(
+        (task) => task.name.toLowerCase().includes(needle) || task.title.toLowerCase().includes(needle),
+      ),
+    [availableTasks, needle],
   );
 
   const handleAdd = async (taskId: number) => {
@@ -34,7 +41,7 @@ export function TaskSelectionModal({ isOpen, onClose, contestId, availableTasks,
     try {
       await addTaskToContest(contestId, taskId);
       if (onSuccess) onSuccess();
-      else window.location.reload();
+      else router.refresh();
     } catch (error) {
       console.error('Failed to add task:', error);
     } finally {

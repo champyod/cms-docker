@@ -2,7 +2,7 @@
 
 import type { ReactElement } from 'react';
 import { Card } from '@/components/core/Card';
-import { Button } from '@/components/core/Button';
+import { RowActions } from '@/components/core/RowActions';
 import { Save, RefreshCw } from 'lucide-react';
 import {
   EnvConfigField,
@@ -19,6 +19,10 @@ interface SectionActionsProps {
   onPersist: (filename: string, shouldRestart?: boolean) => Promise<void>;
 }
 
+function hasPendingChange(section: EnvConfigSection, data: EnvFilesData, originalData: EnvFilesData): boolean {
+  return section.fields.some((field) => data[section.filename]?.[field.key] !== originalData[section.filename]?.[field.key]);
+}
+
 function SectionActions({
   section,
   data,
@@ -27,33 +31,14 @@ function SectionActions({
   hasPendingRestarts,
   onPersist,
 }: SectionActionsProps): ReactElement {
-  const showRestartButton = hasPendingRestarts && section.fields.some(f => {
-    return data[section.filename]?.[f.key] !== originalData[section.filename]?.[f.key];
-  });
-
   return (
-    <div className="flex gap-2">
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={() => void onPersist(section.filename, false)}
-        disabled={saving}
-        icon={Save}
-      >
-        Save Only
-      </Button>
-      {showRestartButton && (
-        <Button
-          size="sm"
-          onClick={() => void onPersist(section.filename, true)}
-          disabled={saving}
-          loading={saving}
-          icon={RefreshCw}
-        >
-          Save & Restart
-        </Button>
-      )}
-    </div>
+    <RowActions
+      ariaLabel={section.title}
+      actions={[
+        { key: 'save', label: 'Save Only', icon: Save, onClick: () => { void onPersist(section.filename, false); }, disabled: saving },
+        { key: 'restart', label: 'Save & Restart', icon: RefreshCw, onClick: () => { void onPersist(section.filename, true); }, disabled: saving, loading: saving, showWhen: hasPendingRestarts && hasPendingChange(section, data, originalData) },
+      ]}
+    />
   );
 }
 
@@ -79,7 +64,7 @@ function ConfigFieldRow({ field, value, onChange }: FieldRowProps): ReactElement
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={field.placeholder}
-          className="w-full px-4 py-2 bg-card/50 border border-input rounded-lg text-foreground text-sm focus:outline-none focus:border-ring/60"
+          className="h-11 w-full px-4 py-2 bg-card/50 border border-input rounded-lg text-foreground text-sm focus:outline-none focus:border-ring/60"
         />
       </div>
     </div>
@@ -107,7 +92,7 @@ export function EnvSectionCard({
 }: EnvSectionCardProps): ReactElement {
   return (
     <Card className="p-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <h2 className="text-xl font-bold text-foreground">{section.title}</h2>
           <p className="text-muted-foreground text-sm mt-1">Editing {section.filename}</p>

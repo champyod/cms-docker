@@ -1,37 +1,30 @@
-import { getAdmins } from '@/app/actions/admins';
-import { AdminList } from '@/components/admins/AdminList';
-import { checkPermission } from '@/lib/permissions';
-import { getDictionary } from '@/i18n';
-import { PermissionDenied } from '@/components/PermissionDenied';
-import { Stack } from '@/components/core/Layout';
-import { Text } from '@/components/core/Typography';
+import { notFound, redirect } from 'next/navigation';
 
-export default async function AdminsPage({
+import { getRoutePermissions } from '@/lib/navigation/page-authorization';
+import { resolveLegacyRedirect } from '@/lib/navigation/redirects';
+import { AuthorizationError } from '@/lib/server/authorization';
+
+const LEGACY_PATH = '/admins';
+
+/**
+ * Why this route still exists: the Admins section used to share the tabbed
+ * /permissions page, so the old address stays reachable for existing bookmarks,
+ * chord history, and links. Only a reader whose permissions fail closed is
+ * concealed; a 401 and any unexpected storage failure keep propagating.
+ */
+export default async function AdminsRedirectPage({
   params,
 }: {
   params: Promise<{ locale: string }>;
-}) {
-  const { locale } = await params;
-  const dict = await getDictionary(locale);
-  const hasPermission = await checkPermission('all', false);
-
-  if (!hasPermission) {
-    return <PermissionDenied permission="permission_all" locale={locale} dict={dict} />;
+}): Promise<never> {
+  try {
+    const { locale } = await params;
+    const effective = await getRoutePermissions();
+    const target = resolveLegacyRedirect(locale, LEGACY_PATH, effective);
+    if (target === null) notFound();
+    redirect(target);
+  } catch (error: unknown) {
+    if (error instanceof AuthorizationError && error.status === 403) notFound();
+    throw error;
   }
-
-  const admins = await getAdmins();
-
-  return (
-    <Stack gap={8}>
-      <Stack gap={2}>
-        <Text variant="h1">Administrators</Text>
-        <Text variant="muted">Manage admin accounts and permissions.</Text>
-      </Stack>
-
-      <AdminList
-        initialAdmins={admins}
-        actionLabels={{ edit: dict.admins.actions.edit, delete: dict.admins.actions.delete }}
-      />
-    </Stack>
-  );
 }

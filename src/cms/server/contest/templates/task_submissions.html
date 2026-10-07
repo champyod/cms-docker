@@ -4,7 +4,7 @@
 
 {% set page = "task_submissions" %}
 
-{% set score_type = get_score_type(dataset=task.active_dataset) %}
+{% set score_type = get_score_type(dataset=task.active_dataset) if task.active_dataset is not none else undefined %}
 
 {# Whether tokens are allowed on this contest. #}
 {% set can_use_tokens_in_contest =
@@ -244,7 +244,7 @@ $(document).ready(function () {
 <h2 style="margin-bottom: 10px">{% trans %}Submit a solution{% endtrans %}</h2>
 
   {% set task_type = get_task_type(dataset=task.active_dataset) %}
-  {% if task_type.ALLOW_PARTIAL_SUBMISSION %}
+  {% if task_type is defined and task_type.ALLOW_PARTIAL_SUBMISSION %}
   <p><strong>{% trans %}You may submit any subset of outputs in a single submission.{% endtrans %}</strong></p>
   {% endif %}
 

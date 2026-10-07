@@ -363,7 +363,27 @@ class ProxyService(TriggeredService[ProxyOperation, ProxyExecutor]):
             tasks = dict()
 
             for task in contest.tasks:
-                score_type = task.active_dataset.score_type_object
+                # A task with no active dataset has no score type, and so
+                # no max score or extra headers, to announce.
+                if task.active_dataset is None:
+                    logger.warning("Skipping task %s of contest %s: it has "
+                                   "no active dataset.", task.name,
+                                   contest.name)
+                    continue
+
+                # Building the score type can raise, if the type is unknown
+                # or its parameters are malformed: such a task has no max
+                # score or extra headers to announce, so skip it instead of
+                # failing the whole initialization.
+                try:
+                    score_type = task.active_dataset.score_type_object
+                except Exception as error:
+                    logger.warning("Skipping task %s of contest %s: its score "
+                                   "type could not be built: %s: %s.",
+                                   task.name, contest.name,
+                                   type(error).__name__, error)
+                    continue
+
                 tasks[encode_id(task.name)] = {
                     "short_name": task.name,
                     "name": task.title,
@@ -571,6 +591,13 @@ class ProxyService(TriggeredService[ProxyOperation, ProxyExecutor]):
                              "%d (this ProxyService considers contest %d "
                              "only).", task_id, task.contest.id,
                              self.contest_id)
+                return
+
+            # Without an active dataset there is nothing to rescore: the
+            # stored scores belong to a dataset that is no longer active.
+            if dataset is None:
+                logger.warning("Skipping dataset update for task %d: it has "
+                               "no active dataset.", task.id)
                 return
 
             logger.info("Dataset update for task %d (dataset now is %d).",

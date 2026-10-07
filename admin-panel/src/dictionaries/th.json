@@ -14,9 +14,41 @@
     "contactAdmin": "ติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์การเข้าถึง",
     "returnToDashboard": "กลับไปหน้าแดชบอร์ด"
   },
+  "contests": {
+    "title": "การจัดการการแข่งขัน",
+    "subtitle": "สร้างและจัดการการแข่งขันโปรแกรมมิ่ง",
+    "allContests": "การแข่งขันทั้งหมด"
+  },
+  "tasks": {
+    "title": "งาน",
+    "subtitle": "จัดการงาน คำชี้แจง และกรณีทดสอบ",
+    "allTasks": "งานทั้งหมด",
+    "statements": {
+      "title": "คำชี้แจง",
+      "upload": "อัปโหลดคำชี้แจง",
+      "languageLabel": "ภาษา",
+      "tableEmptyTitle": "ไม่มีคำชี้แจง",
+      "tableEmptyDescription": "ยังไม่มีการอัปโหลดคำชี้แจง",
+      "columns": {
+        "language": "ภาษา",
+        "filename": "ชื่อไฟล์",
+        "size": "ขนาด",
+        "uploadedAt": "วันที่อัปโหลด",
+        "actions": "การดำเนินการ"
+      },
+      "filters": {
+        "all": "ทั้งหมด",
+        "filterByLanguage": "กรองตามภาษา"
+      },
+      "download": "ดาวน์โหลด",
+      "delete": "ลบคำชี้แจง",
+      "uploadDialogTitle": "เพิ่มคำชี้แจง"
+    }
+  },
   "users": {
-    "title": "User Management",
+    "title": "การจัดการผู้ใช้",
     "subtitle": "จัดการผู้ใช้งานและผู้เข้าร่วมการแข่งขัน",
+    "participations": "{count} การเข้าร่วมการแข่งขัน",
     "allUsers": "ผู้ใช้งานทั้งหมด",
     "bulkAddUsers": "เพิ่มผู้ใช้จำนวนมาก",
     "createUser": "สร้างผู้ใช้",
@@ -29,7 +61,40 @@
     "bulkEditTitle": "แก้ไขผู้ใช้ที่เลือก",
     "bulkCreateTemplate": "ดาวน์โหลดเทมเพลต CSV",
     "bulkCreateParse": "แยกวิเคราะห์และแสดงตัวอย่าง",
-    "bulkOverwriteApply": "ใช้ข้อมูลรับรอง"
+    "bulkOverwriteApply": "ใช้ข้อมูลรับรอง",
+    "profile": {
+      "username": "ชื่อผู้ใช้",
+      "name": "ชื่อ-นามสกุล",
+      "email": "อีเมล",
+      "timezone": "เขตเวลา",
+      "languages": "ภาษา",
+      "status": "สถานะ",
+      "organization": "องค์กร",
+      "country": "ประเทศ",
+      "participations": "การเข้าร่วม",
+      "teams": "ทีม",
+      "savedPassword": "รหัสผ่านที่บันทึกไว้"
+    },
+    "teamsTab": {
+      "emptyTitle": "ไม่พบทีม",
+      "emptyDescription": "ผู้ใช้นี้ยังไม่ได้รับการมอบหมายให้กับทีมใด",
+      "noTeam": "ไม่มีทีม",
+      "contestLabel": "การแข่งขัน #{id}"
+    },
+    "history": {
+      "accountAccess": "การเข้าถึงบัญชี",
+      "lastLogin": "เข้าสู่ระบบล่าสุด: {value}",
+      "contestLabel": "การแข่งขัน #{id}",
+      "taskLabel": "งาน #{id}",
+      "teamLabel": "ทีม #{id}",
+      "sections": {
+        "contests": { "title": "การแข่งขัน", "empty": "ไม่มีกิจกรรมการแข่งขัน" },
+        "participations": { "title": "การเข้าร่วม", "empty": "ไม่มีการเข้าร่วม" },
+        "teams": { "title": "ทีม", "empty": "ไม่มีทีม" },
+        "submissions": { "title": "การส่งคำตอบ", "empty": "ไม่มีการส่งคำตอบ" },
+        "recentActivity": { "title": "กิจกรรมล่าสุด", "empty": "ไม่มีกิจกรรมล่าสุด" }
+      }
+    }
   },
   "teams": {
     "title": "ทีม",
@@ -42,7 +107,22 @@
     "editTeamTooltip": "แก้ไขทีม",
     "deleteTeamTooltip": "ลบทีม",
     "tableEmptyTitle": "ไม่พบทีม",
-    "tableEmptyDescription": "ทีมจะปรากฏที่นี่เมื่อสร้างแล้ว"
+    "tableEmptyDescription": "ทีมจะปรากฏที่นี่เมื่อสร้างแล้ว",
+    "overview": {
+      "code": "รหัสทีม",
+      "name": "ชื่อทีม",
+      "readOnlyHint": "อ่านอย่างเดียว — คุณไม่มีสิทธิ์ team:update",
+      "saveChanges": "บันทึกการเปลี่ยนแปลง"
+    },
+    "members": {
+      "emptyTitle": "ยังไม่มีสมาชิกในทีมนี้",
+      "emptyDescription": "เพิ่มสมาชิกโดยกำหนดทีมนี้ให้กับการเข้าร่วมในการแข่งขัน",
+      "moreCount": "เพิ่มอีก {count} รายการ"
+    },
+    "contests": {
+      "emptyTitle": "ไม่พบการแข่งขัน",
+      "emptyDescription": "ทีมนี้ยังไม่ได้เข้าร่วมการแข่งขันใด"
+    }
   },
   "submissions": {
     "title": "การส่งคำตอบ",
@@ -51,12 +131,450 @@
     "readOnlyBadge": "อ่านอย่างเดียว",
     "tableEmptyTitle": "ไม่พบการส่งคำตอบ",
     "tableEmptyDescription": "การส่งคำตอบจะปรากฏที่นี่เมื่อผู้เข้าแข่งขันเริ่มส่ง",
-    "viewSubmission": "ดูการส่งคำตอบ"
+    "viewSubmission": "ดูการส่งคำตอบ",
+    "lanesDescription": "ลากการส่งคำตอบระหว่างแถว หรือย้ายแถวพร้อมระบุเหตุผล"
   },
   "admins": {
+    "title": "ผู้ดูแลระบบ",
+    "addAdmin": "เพิ่มผู้ดูแล",
     "actions": {
       "edit": "แก้ไข",
       "delete": "ลบ"
     }
+  },
+  "resources": {
+    "title": "การควบคุมทรัพยากร",
+    "subtitle": "ตรวจสอบและจัดการทรัพยากรเซิร์ฟเวอร์หลักและกิจกรรม worker แบบกระจาย",
+    "loading": "กำลังโหลดข้อมูลระบบ...",
+    "cpuUsage": "การใช้งาน CPU",
+    "memoryUsage": "การใช้งานหน่วยความจำ",
+    "hostSource": "(โฮสต์)",
+    "containerSource": "(คอนเทนเนอร์)",
+    "workerNodes": "โหนดเวิร์กเกอร์",
+    "systemMetrics": "ตัวชี้วัดระบบ",
+    "uptime": "เวลาทำงาน",
+    "loadAvg": "ค่าเฉลี่ยโหลด",
+    "networkTotal": "ยอดรวมเครือข่าย"
+  },
+  "containers": {
+    "upAll": "เริ่มทั้งหมด",
+    "selected": "เลือกแล้ว {count}",
+    "clearSelection": "ล้างการเลือก",
+    "restartSelection": "รีสตาร์ตคอนเทนเนอร์ที่เลือก",
+    "stopSelection": "หยุดคอนเทนเนอร์ที่เลือก",
+    "logsSelection": "ดูบันทึกของรายการที่เลือก",
+    "discordBadge": "ยังไม่ได้ตั้งค่า Discord",
+    "discordWarning": "ยังไม่ได้ตั้งค่า Discord — ระบบจะข้ามการแจ้งเตือน",
+    "stats": {
+      "total": "ทั้งหมด",
+      "running": "กำลังทำงาน",
+      "stopped": "หยุดแล้ว",
+      "uptime": "เวลาทำงาน"
+    },
+    "activeContainers": "คอนเทนเนอร์ที่ใช้งานอยู่",
+    "emptyTitle": "ไม่พบคอนเทนเนอร์ Docker บนโฮสต์นี้",
+    "restart": "รีสตาร์ต",
+    "remove": "หยุด",
+    "logs": "บันทึก",
+    "bulk": {
+      "selectedDescription": "เลือกแล้ว {count} คอนเทนเนอร์",
+      "cancel": "ยกเลิก",
+      "restartTitle": "ยืนยันการรีสตาร์ต",
+      "restartDescription": "การดำเนินการนี้จะรีสตาร์ตคอนเทนเนอร์ที่เลือกและบริการที่พึ่งพาอยู่",
+      "restartPreviewLabel": "รายการที่จะถูกรีสตาร์ต:",
+      "restartDependents": "รวมบริการที่พึ่งพาตามนโยบายการรีสตาร์ต",
+      "restartConfirm": "ยืนยันการรีสตาร์ต",
+      "stopTitle": "ยืนยันการหยุด",
+      "stopDescription": "การดำเนินการนี้จะหยุดคอนเทนเนอร์ที่เลือก และคุณสามารถเริ่มอีกครั้งได้จากศูนย์ควบคุม",
+      "stopConfirm": "ยืนยันการหยุด",
+      "logsTitle": "ดูบันทึก",
+      "logsDescription": "เปิดบันทึกของคอนเทนเนอร์ที่เลือกรายการแรก หากต้องการดูหลายรายการให้เปิดจากแต่ละแถว",
+      "logsConfirm": "ดูบันทึก"
+    }
+  },
+  "deployments": {
+    "refresh": "รีเฟรช"
+  },
+  "ranking": {
+    "refreshSnapshot": "รีเฟรชสแนปช็อต",
+    "disconnect": "ตัดการเชื่อมต่อ"
+  },
+  "settings": {
+    "title": "การตั้งค่าระบบ",
+    "subtitle": "กำหนดค่าไฟล์สภาพแวดล้อมและการรีสตาร์ทบริการ",
+    "deploymentMode": {
+      "img": "การรีสตาร์ทเป็นไปตามโหมดอิมเมจที่ประกาศไว้ใน config.toml: ระบบจะดึงอิมเมจล่าสุด แล้วสร้างคอนเทนเนอร์ใหม่โดยไม่ build ใหม่",
+      "src": "การรีสตาร์ทเป็นไปตามโหมดซอร์สที่ประกาศไว้ใน config.toml: ระบบจะ build อิมเมจใหม่จากซอร์ส แล้วสร้างคอนเทนเนอร์ใหม่ ใช้เวลานานกว่ามากและจะแทนที่อิมเมจที่กำลังทำงานอยู่",
+      "unresolved": "config.toml ส่วน [admin] ไม่ได้ประกาศค่า DEPLOYMENT_TYPE ที่อ่านได้ ระบบจึงจะดึงอิมเมจและไม่ build ใหม่ โปรดกำหนด DEPLOYMENT_TYPE เป็น \"img\" หรือ \"src\" ที่นั่นเพื่อให้ชัดเจน"
+    }
+  },
+  "groups": {
+    "title": "การจัดการกลุ่ม",
+    "createGroup": "สร้างกลุ่ม",
+    "editGroup": "แก้ไขกลุ่ม",
+    "name": "ชื่อ",
+    "description": "คำอธิบาย",
+    "isSeeded": "ข้อมูลเริ่มต้น",
+    "permissions": "สิทธิ์",
+    "save": "บันทึก",
+    "cancel": "ยกเลิก",
+    "reasonPlaceholder": "เหตุผลสำหรับการเปลี่ยนแปลงนี้ (จำเป็น)",
+    "deleteConfirm": "คุณแน่ใจหรือไม่ว่าต้องการลบกลุ่มนี้? การกระทำนี้ไม่สามารถย้อนกลับได้",
+    "noGroups": "ไม่พบกลุ่ม",
+    "noGroupsDescription": "สร้างกลุ่มเพื่อเริ่มต้น",
+    "deleteTooltip": "ลบกลุ่ม",
+    "editTooltip": "แก้ไขกลุ่ม",
+    "loadFailed": "ไม่สามารถโหลดกลุ่มได้"
+  },
+  "permissions": {
+    "title": "สิทธิ์การเข้าถึง",
+    "subtitle": "จัดการบัญชีผู้ดูแลและกลุ่มที่กำหนดสิทธิ์การเข้าถึงของผู้ดูแล"
+  },
+  "audit": {
+    "title": "บันทึกการตรวจสอบ",
+    "subtitle": "เรียกดูและตรวจสอบทุกการกระทำที่บันทึกไว้ในระบบ",
+    "columns": {
+      "timestamp": "เวลา",
+      "actor": "ผู้กระทำ",
+      "verb": "การกระทำ",
+      "entity": "เอนทิตี",
+      "entityName": "ชื่อ / หัวข้อ",
+      "result": "ผลลัพธ์",
+      "reason": "เหตุผล"
+    },
+    "filters": {
+      "entity": "เอนทิตี",
+      "verb": "การกระทำ",
+      "actorId": "รหัสผู้กระทำ",
+      "result": "ผลลัพธ์",
+      "allResults": "ผลลัพธ์ทั้งหมด",
+      "search": "ค้นหา",
+      "searchPlaceholder": "การกระทำ, เหตุผล, เอนทิตี…",
+      "fromDate": "จากวันที่",
+      "toDate": "ถึงวันที่",
+      "apply": "ใช้ตัวกรอง",
+      "clear": "ล้าง",
+      "allEntities": "ทุกเอนทิตี"
+    },
+    "noEntries": "ไม่พบรายการตรวจสอบ",
+    "exportCsv": "ส่งออก CSV",
+    "autoRefresh": "รีเฟรชอัตโนมัติ",
+    "pageInfo": "ทั้งหมด {total} รายการ",
+    "expandedDetails": "รายละเอียด",
+    "detailLoadFailed": "ไม่สามารถโหลดรายละเอียดได้",
+    "loadFailed": "ไม่สามารถโหลดบันทึกการตรวจสอบได้",
+    "beforeValues": "ก่อน",
+    "afterValues": "หลัง",
+    "ip": "ที่อยู่ IP",
+    "sessionId": "รหัสเซสชัน",
+    "entryHash": "แฮชรายการ",
+    "prevHash": "แฮชก่อนหน้า"
+  },
+  "docs": {
+    "subtitle": "คู่มือครอบคลุมสำหรับระบบจัดการการแข่งขัน",
+    "officialDocs": "เอกสารทางการ CMS",
+    "viewDocumentation": "ดูเอกสาร"
+  },
+  "about": {
+    "project": "โครงการ",
+    "source": "ซอร์สโค้ด",
+    "upstream": "ต้นทาง",
+    "license": "สัญญาอนุญาต",
+    "attribution": "การให้เครดิต",
+    "firstParty": "ไฟล์ของโครงการเอง",
+    "transitiveDependencies": "การพึ่งพาโดยอ้อม",
+    "softwareCount": "ซอฟต์แวร์บุคคลที่สาม ({count})",
+    "columns": {
+      "name": "ซอฟต์แวร์",
+      "version": "รุ่น",
+      "holder": "ผู้ถือลิขสิทธิ์",
+      "license": "สัญญาอนุญาต",
+      "paths": "ถูกใช้โดย"
+    }
+  },
+  "confirmations": {
+    "cancel": "ยกเลิก",
+    "captions": {
+      "destructive": "ย้อนกลับไม่ได้",
+      "recoverable": "ย้อนกลับได้",
+      "operational": "กระทบบริการ"
+    },
+    "nouns": {
+      "user": "ผู้ใช้",
+      "contest": "การแข่งขัน",
+      "admin": "ผู้ดูแลระบบ",
+      "announcement": "ประกาศ",
+      "team": "ทีม",
+      "task": "งาน",
+      "dataset": "ชุดข้อมูล",
+      "testcase": "กรณีทดสอบ",
+      "statement": "คำชี้แจง",
+      "managerFile": "ไฟล์ตัวจัดการ",
+      "attachment": "ไฟล์แนบ"
+    },
+    "destructive": {
+      "title": "ลบ{noun}นี้หรือไม่?",
+      "description": "การดำเนินการนี้จะลบ{noun}อย่างถาวร ไม่สามารถย้อนกลับได้",
+      "confirmLabel": "ลบ{noun}"
+    },
+    "removeParticipant": {
+      "title": "นำผู้เข้าร่วมรายนี้ออกหรือไม่?",
+      "description": "การดำเนินการนี้จะนำรายการของผู้เข้าร่วมออกจากการแข่งขันนี้อย่างถาวร ไม่สามารถย้อนกลับได้",
+      "confirmLabel": "นำผู้เข้าร่วมออก"
+    },
+    "removeTaskFromContest": {
+      "title": "นำงานนี้ออกจากการแข่งขันหรือไม่?",
+      "description": "งานจะถูกยกเลิกการเชื่อมโยงกับโจทย์และไม่ถูกลบ จึงสามารถเพิ่มกลับเข้าสู่การแข่งขันได้อีกครั้ง",
+      "confirmLabel": "นำงานออก"
+    },
+    "markTestUser": {
+      "title": "ทำเครื่องหมายผู้ใช้นี้เป็นผู้ใช้ทดสอบหรือไม่?",
+      "description": "ผู้เข้าร่วมจะถูกซ่อนและไม่มีข้อจำกัด ทั้งสองสถานะเปลี่ยนกลับได้ในการตั้งค่าผู้เข้าร่วม",
+      "confirmLabel": "ทำเครื่องหมายเป็นผู้ใช้ทดสอบ"
+    },
+    "recalculate": {
+      "title": "คำนวณผลการส่งคำตอบนี้ใหม่ ({type}) หรือไม่?",
+      "description": "ผลลัพธ์ปัจจุบันจะถูกล้างและคำนวณใหม่จากคำตอบที่ยังคงเก็บไว้",
+      "confirmLabel": "คำนวณใหม่",
+      "types": {
+        "score": "คะแนน",
+        "evaluation": "การประเมิน",
+        "full": "ทั้งหมด"
+      }
+    },
+    "fullServerUpdate": {
+      "title": "อัปเดตเซิร์ฟเวอร์แบบเต็มรูปแบบหรือไม่?",
+      "description": "ระบบจะดึงอิมเมจล่าสุด รีสตาร์ทบริการทั้งหมด และอัปเดตโครงสร้างฐานข้อมูล เซิร์ฟเวอร์จะไม่พร้อมใช้งานเป็นเวลาหลายนาที",
+      "confirmLabel": "อัปเดต"
+    },
+    "restartStack": {
+      "title": "รีสตาร์ท{label}หรือไม่?",
+      "description": "บริการที่เกี่ยวข้องจะรีสตาร์ทและไม่พร้อมใช้งานจนกว่าจะกลับมาทำงาน",
+      "confirmLabel": "รีสตาร์ท",
+      "labels": {
+        "core": "สแตกหลัก",
+        "admin": "สแตกผู้ดูแลระบบ",
+        "worker": "สแตกเวิร์กเกอร์",
+        "all": "บริการทั้งหมด"
+      }
+    },
+    "pullImages": {
+      "title": "ดึงอิมเมจล่าสุดหรือไม่?",
+      "description": "อิมเมจจะถูกดาวน์โหลดจาก registry โดยไม่รีสตาร์ทบริการที่กำลังทำงาน อาจใช้เวลาหลายนาที",
+      "confirmLabel": "ดึงอิมเมจ"
+    },
+    "rebuildStack": {
+      "title": "สร้างอิมเมจ {label} ใหม่จากซอร์สหรือไม่?",
+      "description": "อิมเมจจะถูกสร้างใหม่จากซอร์สปัจจุบันโดยไม่รีสตาร์ทบริการที่กำลังทำงาน อาจใช้เวลา 5-10 นาที",
+      "confirmLabel": "สร้างอิมเมจใหม่",
+      "labels": {
+        "core": "หลัก",
+        "admin": "ผู้ดูแลระบบ",
+        "worker": "เวิร์กเกอร์",
+        "all": "ทั้งหมด"
+      }
+    },
+    "manualBackup": {
+      "title": "เริ่มสำรองข้อมูลด้วยตนเองตอนนี้หรือไม่?",
+      "description": "การส่งคำตอบทั้งหมดจะถูกสำรองข้อมูลอยู่เบื้องหลัง เซิร์ฟเวอร์ยังคงทำงานต่อ",
+      "confirmLabel": "เริ่มสำรองข้อมูล"
+    },
+    "toggleOfficial": {
+      "title": "เปลี่ยนสถานะทางการหรือไม่?",
+      "description": "มีเพียงสถานะทางการที่เปลี่ยน ตัวการส่งคำตอบเองไม่ถูกแก้ไข และเปลี่ยนสถานะกลับได้",
+      "confirmLabel": "เปลี่ยนสถานะทางการ"
+    },
+    "discardUnsavedChanges": {
+      "title": "ทิ้งการเปลี่ยนแปลงที่ยังไม่บันทึกหรือไม่?",
+      "description": "รายการที่แก้ไขในฟอร์มนี้ยังไม่ถูกบันทึกและจะสูญหาย",
+      "confirmLabel": "ทิ้งการเปลี่ยนแปลง"
+    }
+  },
+  "sidePanel": {
+    "close": "ปิด"
+  },
+  "toasts": {
+    "deploy": {
+      "progressMessage": "กำลังติดตั้งการแข่งขัน #{contestId} — ดึงข้อมูล {percent}%",
+      "progressStatusMessage": "กำลังติดตั้งการแข่งขัน #{contestId} — {status}",
+      "progressDescription": "ความคืบหน้าการดึงข้อมูล {percent}%",
+      "waitingDescription": "กำลังรอผลลัพธ์การ build...",
+      "startedTitle": "กำลังติดตั้งการแข่งขัน #{contestId}",
+      "startingDescription": "กำลังเริ่มการติดตั้ง...",
+      "alreadyRunningTitle": "มีการติดตั้งทำงานอยู่แล้ว",
+      "alreadyRunningDescription": "มีการติดตั้งอีกรายการกำลังดำเนินการอยู่",
+      "startFailedTitle": "เริ่มการติดตั้งไม่สำเร็จ",
+      "startFailedDescription": "ไม่สามารถเริ่มการติดตั้งได้",
+      "watchingStoppedTitle": "การติดตั้งดำเนินต่อไปเบื้องหลัง",
+      "watchingStoppedDescription": "แผงควบคุมหยุดติดตามการติดตั้งนี้แล้ว การติดตั้งยังคงทำงานอยู่ และการแข่งขันจะถูกอัปเดตเมื่อดำเนินการเสร็จสิ้น",
+      "completedTitle": "ติดตั้งการแข่งขันแล้ว",
+      "completedDescription": "การแข่งขัน #{contestId} เปิดใช้งานแล้ว",
+      "failedTitle": "การติดตั้งล้มเหลว",
+      "failedDescription": "การติดตั้งไม่เสร็จสมบูรณ์",
+      "notFoundTitle": "ไม่พบการติดตั้ง",
+      "notFoundDescription": "ไม่รู้จักการดำเนินการนี้"
+    },
+    "maintenance": {
+      "saveFailed": "บันทึกไม่สำเร็จ: {error}",
+      "notificationSaveFailed": "ไม่ได้บันทึกการตั้งค่าการแจ้งเตือน: {error}",
+      "saved": "บันทึกการตั้งค่าการบำรุงรักษาเรียบร้อยแล้ว!",
+      "backupTriggered": "เริ่มสำรองข้อมูลเบื้องหลังแล้ว ตรวจสอบสถานะได้ที่ Discord",
+      "failed": "ล้มเหลว: {error}",
+      "notificationsSaved": "บันทึกการตั้งค่าการแจ้งเตือนลง config.toml และ .env แล้ว",
+      "notificationsSavedMonitorRecreated": "บันทึกการตั้งค่าการแจ้งเตือนและสร้าง monitor ใหม่แล้ว",
+      "monitorRestartFailed": "บันทึกการตั้งค่าแล้ว แต่รีสตาร์ท monitor ไม่สำเร็จ: {error}",
+      "testAlertDelivered": "ส่งข้อความทดสอบสำเร็จ (HTTP {status})",
+      "testAlertFailedFallback": "การส่งข้อความทดสอบล้มเหลว",
+      "testAlertFailed": "ส่งข้อความทดสอบไม่สำเร็จ: {message}"
+    },
+    "serviceControl": {
+      "actionFailed": "ข้อผิดพลาด: {error}",
+      "updateFailed": "เริ่มการอัปเดตไม่สำเร็จ",
+      "restartFailed": "รีสตาร์ทไม่สำเร็จ",
+      "pullFailed": "ดึงอิมเมจไม่สำเร็จ",
+      "rebuildFailed": "สร้างอิมเมจใหม่ไม่สำเร็จ"
+    },
+    "envConfig": {
+      "saveFailed": "บันทึก {filename} ไม่สำเร็จ: {error}",
+      "restarted": "บันทึกและรีสตาร์ทแล้ว: {services}",
+      "restartFailed": "บันทึกแล้ว แต่รีสตาร์ทไม่สำเร็จ: {error}",
+      "saved": "บันทึก {filename} เรียบร้อยแล้ว!",
+      "unexpectedError": "เกิดข้อผิดพลาดระหว่างการบันทึก"
+    },
+    "monitor": {
+      "errorTitle": "ข้อผิดพลาด",
+      "urlRequiredDescription": "จำเป็นต้องระบุ URL",
+      "addedTitle": "เพิ่มแล้ว",
+      "addedDescription": "เพิ่มเป้าหมายการตรวจสอบแล้ว",
+      "failureDescription": "ล้มเหลว",
+      "removedTitle": "นำออกแล้ว",
+      "removedDescription": "นำเป้าหมายออกแล้ว",
+      "testOkTitle": "ปกติ",
+      "testMismatchTitle": "ไม่ตรงตามที่คาดหวัง",
+      "testFailedTitle": "การทดสอบล้มเหลว",
+      "connectionErrorDescription": "การเชื่อมต่อผิดพลาด",
+      "resultDescription": "HTTP {status} (คาดหวัง {expectedStatus}) — {latency}ms"
+    },
+    "discord": {
+      "testAlertTitle": "ทดสอบการแจ้งเตือน CMS",
+      "testAlertDescription": "ข้อความทดสอบส่งจากแผงผู้ดูแลระบบ การส่งข้อความทำงานปกติ การแจ้งเตือนจาก monitor (CPU, หน่วยความจำ, ดิสก์ และเหตุการณ์ของคอนเทนเนอร์) จะมาที่นี่",
+      "configTomlMissing": "ไม่สามารถอัปเดต {configToml} ได้ — รัน './cms config sync' หนึ่งครั้งเพื่อให้ค่านี้มีแหล่งข้อมูลอ้างอิง แล้วลองใหม่อีกครั้ง",
+      "envWriteFailed": "อัปเดต {configToml} แล้ว แต่เขียน {envFile} ไม่สำเร็จ: {error}",
+      "noWebhookUrl": "ไม่มี URL ของเว็บฮุกให้ทดสอบ — กรอกและบันทึกก่อน หรือตั้งค่า DISCORD_WEBHOOK_URL ใน config.toml [infra]",
+      "deliveryFailed": "การส่งล้มเหลว"
+    },
+    "containers": {
+      "errorTitle": "ข้อผิดพลาด",
+      "restartFailedFallback": "ไม่สามารถรีสตาร์ตคอนเทนเนอร์ได้",
+      "stopFailedFallback": "ไม่สามารถหยุดคอนเทนเนอร์ได้",
+      "restartTriggered": "สั่งรีสตาร์ต {count} คอนเทนเนอร์แล้ว",
+      "stopTriggered": "สั่งหยุด {count} คอนเทนเนอร์แล้ว",
+      "controlSucceeded": "คำสั่ง {action} ของคอนเทนเนอร์เสร็จสมบูรณ์",
+      "composeSucceeded": "คำสั่ง compose {action} เสร็จสมบูรณ์",
+      "autoRestartEnabled": "เปิดการรีสตาร์ตอัตโนมัติแล้ว",
+      "autoRestartDisabled": "ปิดการรีสตาร์ตอัตโนมัติแล้ว",
+      "restartCountReset": "รีเซ็ตจำนวนการรีสตาร์ตแล้ว",
+      "discordEnabled": "เปิดการแจ้งเตือนผ่าน Discord แล้ว",
+      "discordDisabled": "ปิดการแจ้งเตือนผ่าน Discord แล้ว",
+      "discordNotConfiguredTitle": "ยังไม่ได้ตั้งค่า Discord",
+      "discordNotConfiguredDescription": "เว็บฮุกยังว่าง — ระบบจะข้ามการแจ้งเตือนจนกว่าจะตั้งค่าในหน้าการตั้งค่า"
+    },
+    "ranking": {
+      "logoUpdatedTitle": "อัปเดตโลโก้แล้ว",
+      "logoUpdatedDescription": "โลโก้อันดับถูกโหลดใหม่ทันที",
+      "uploadFailedTitle": "อัปโหลดไม่สำเร็จ",
+      "uploadFailedFallback": "ไม่สามารถอัปโหลดโลโก้ได้",
+      "snapshotFailed": "ไม่สามารถดึงสแนปช็อตอันดับได้",
+      "sessionFailed": "ไม่สามารถโหลดเซสชันอันดับได้",
+      "connectFailed": "เชื่อมต่ออันดับไม่สำเร็จ",
+      "disconnectFailed": "ตัดการเชื่อมต่ออันดับไม่สำเร็จ"
+    },
+    "deploySettings": {
+      "saveFailedTitle": "บันทึกไม่สำเร็จ",
+      "saveFailedFallback": "ไม่สามารถอัปเดต config.toml ได้",
+      "savedTitle": "บันทึกการตั้งค่าแล้ว",
+      "savedDescription": "อัปเดตการตั้งค่าการแข่งขันแล้ว",
+      "unexpectedErrorTitle": "เกิดข้อผิดพลาดที่ไม่คาดคิด"
+    }
+  },
+  "live": {
+    "connecting": "กำลังเชื่อมต่อ…",
+    "connected": "เชื่อมต่อสด",
+    "reconnecting": "กำลังเชื่อมต่อใหม่…",
+    "paused": "หยุดชั่วคราว"
+  },
+  "states": {
+    "retry": {
+      "label": "ลองอีกครั้ง",
+      "description": "ไม่สามารถโหลดข้อมูลได้ กรุณาลองอีกครั้ง"
+    },
+    "loading": {
+      "deployments": "กำลังโหลดข้อมูลการดีพลอย...",
+      "people": "กำลังโหลดข้อมูลบุคคล...",
+      "evaluation": "กำลังโหลดข้อมูลการประเมิน...",
+      "userProfile": "กำลังโหลดโปรไฟล์ผู้ใช้...",
+      "userTeams": "กำลังโหลดทีมของผู้ใช้...",
+      "userHistory": "กำลังโหลดประวัติผู้ใช้...",
+      "teamOverview": "กำลังโหลดภาพรวมทีม...",
+      "teamMembers": "กำลังโหลดสมาชิกทีม...",
+      "teamContests": "กำลังโหลดการแข่งขันของทีม...",
+      "submissionSummary": "กำลังโหลดสรุปการส่งคำตอบ...",
+      "submissionResults": "กำลังโหลดผลลัพธ์การส่งคำตอบ...",
+      "submissionLogs": "กำลังโหลดบันทึกการส่งคำตอบ...",
+      "submissionEvaluation": "กำลังโหลดการประเมินการส่งคำตอบ..."
+    },
+    "error": {
+      "people": "ไม่สามารถโหลดข้อมูลบุคคลได้",
+      "evaluation": "ไม่สามารถโหลดข้อมูลการประเมินได้",
+      "userRecord": "ไม่สามารถโหลดข้อมูลผู้ใช้นี้ได้",
+      "teamRecord": "ไม่สามารถโหลดข้อมูลทีมนี้ได้",
+      "submissionRecord": "ไม่สามารถโหลดข้อมูลการส่งคำตอบนี้ได้"
+    }
+  },
+  "rowActions": {
+    "admins": "การดำเนินการผู้ดูแลระบบ",
+    "contests": "การดำเนินการการแข่งขัน",
+    "containers": "การดำเนินการคอนเทนเนอร์",
+    "groups": "การดำเนินการกลุ่ม",
+    "questions": "การดำเนินการคำถาม",
+    "tasks": "การดำเนินการงาน",
+    "users": "การดำเนินการผู้ใช้"
+  },
+  "navigation": {
+    "groups": { "direct": "การแข่งขัน", "people": "บุคคล", "evaluation": "การประเมิน", "administration": "การดูแลระบบ", "infrastructure": "โครงสร้างพื้นฐาน", "system": "ระบบ" },
+    "home": { "label": "แดชบอร์ด" },
+    "contests": {
+      "list": { "label": "การแข่งขัน" },
+      "record": { "label": "การแข่งขัน" },
+      "tabs": {
+        "overview": { "label": "ภาพรวม" },
+        "tasks": { "label": "งาน" },
+        "participants": { "label": "ผู้เข้าร่วม" },
+        "communications": { "label": "การสื่อสาร" },
+        "settings": { "label": "การตั้งค่า" }
+      }
+    },
+    "tasks": { "list": { "label": "งาน" }, "record": { "label": "งาน" }, "tabs": { "overview": { "label": "ภาพรวม" }, "datasets": { "label": "ชุดข้อมูล" }, "files": { "label": "ไฟล์" }, "settings": { "label": "การตั้งค่า" } } },
+    "people": { "users": { "label": "ผู้ใช้" }, "user-record": { "label": "ผู้ใช้" }, "user-tabs": { "profile": { "label": "โปรไฟล์" }, "teams": { "label": "ทีม" }, "history": { "label": "ประวัติ" } }, "teams": { "label": "ทีม" }, "team-record": { "label": "ทีม" }, "team-tabs": { "overview": { "label": "ภาพรวม" }, "members": { "label": "สมาชิก" }, "contests": { "label": "การแข่งขัน" } } },
+    "evaluation": { "submissions": { "label": "การส่งคำตอบ" }, "submission-record": { "label": "การส่งคำตอบ" }, "submission-tabs": { "summary": { "label": "สรุป" }, "results": { "label": "ผลลัพธ์" }, "logs": { "label": "บันทึก" }, "evaluation": { "label": "การประเมิน" } }, "lanes": { "label": "แถวประเมิน" } },
+    "administration": { "admins": { "label": "ผู้ดูแลระบบ" }, "groups": { "label": "กลุ่ม", "description": "กำหนดสิทธิ์ของแต่ละกลุ่ม และตรวจสอบสิทธิ์การเข้าถึงที่กลุ่มนั้นให้" }, "audit": { "label": "บันทึกการตรวจสอบ" } },
+    "infrastructure": {
+      "deployments": { "label": "การดีพลอย", "description": "เลือก เปิดใช้งาน และจัดการระบบที่ดีพลอยอยู่ในปัจจุบัน" },
+      "containers": { "label": "คอนเทนเนอร์", "description": "จัดการและตรวจสอบบริการ Docker แบบเรียลไทม์" },
+      "resources": { "label": "ทรัพยากร", "description": "ตรวจสอบทรัพยากรเซิร์ฟเวอร์ เวิร์กเกอร์ บริการ และทราฟฟิกเครือข่าย" },
+      "ranking": { "label": "อันดับ", "description": "จัดการเซสชันอันดับที่มีการป้องกัน แสนปช็อต และตารางคะแนน" }
+    },
+    "system": {
+      "appearance": { "label": "รูปลักษณ์", "description": "กำหนดแบรนด์ ตัวอย่างบริการ และความหนาแน่นของจอแสดงผล" },
+      "maintenance": { "label": "การบำรุงรักษา", "description": "กำหนดการสำรองข้อมูลอัตโนมัติและการแจ้งเตือนระบบ" },
+      "settings": { "label": "การตั้งค่า", "description": "กำหนดไฟล์สภาพแวดล้อมและการเริ่มบริการใหม่" },
+      "docs": { "label": "เอกสาร", "description": "อ่านเอกสารการดูแลระบบและระบบการแข่งขันของ CMS" },
+      "about": { "label": "เกี่ยวกับ", "description": "ตรวจสอบสัญญาอนุญาต การให้เครดิต และซอฟต์แวร์บุคคลที่สามที่แผงนี้ใช้" },
+      "search": { "label": "ค้นหา" }
+    },
+    "auth": {
+      "signout": { "label": "ออกจากระบบ" }
+    },
+    "states": { "loading": "กำลังโหลด", "error": "ไม่สามารถโหลดได้", "notFound": "ไม่พบข้อมูล", "retry": "ลองอีกครั้ง" }
   }
 }

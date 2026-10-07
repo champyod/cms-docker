@@ -102,21 +102,21 @@
     <tbody>
         <tr>
             <th>{% trans %}Type{% endtrans %}</th>
-            <td colspan="2">{% set task_type = get_task_type(dataset=task.active_dataset) %}{{ task_type.name }}</td>
+            <td colspan="2">{% set task_type = get_task_type(dataset=task.active_dataset) %}{% if task_type is defined %}{{ task_type.name }}{% else %}{% trans %}N/A{% endtrans %}{% endif %}</td>
         </tr>
-{% if task.active_dataset.time_limit is not none %}
+{% if task.active_dataset is not none and task.active_dataset.time_limit is not none %}
         <tr>
             <th>{% trans %}Time limit{% endtrans %}</th>
             <td colspan="2">{{ task.active_dataset.time_limit|format_duration(length="long") }}</td>
         </tr>
 {% endif %}
-{% if task.active_dataset.memory_limit is not none %}
+{% if task.active_dataset is not none and task.active_dataset.memory_limit is not none %}
         <tr>
             <th>{% trans %}Memory limit{% endtrans %}</th>
             <td colspan="2">{{ task.active_dataset.memory_limit|format_size }}</td>
         </tr>
 {% endif %}
-{% set compilation_commands = task_type.get_compilation_commands(task.submission_format) %}
+{% set compilation_commands = task_type.get_compilation_commands(task.submission_format) if task_type is defined else none %}
 {% if compilation_commands is not none %}
 {% set allowed_languages = task.get_allowed_languages() %}
 {% set compilation_commands = compilation_commands|dictselect("in", allowed_languages, by="key") %}

@@ -212,20 +212,24 @@
             <th>{{ t_iter.name }}</th>
             <td>{{ t_iter.title }}</td>
             <td>
-    {% if t_iter.active_dataset.time_limit is not none %}
+    {% if t_iter.active_dataset is not none and t_iter.active_dataset.time_limit is not none %}
         {{ t_iter.active_dataset.time_limit|format_duration(length="long") }}
     {% else %}
         {% trans %}N/A{% endtrans %}
     {% endif %}
             </td>
             <td>
-    {% if t_iter.active_dataset.memory_limit is not none %}
+    {% if t_iter.active_dataset is not none and t_iter.active_dataset.memory_limit is not none %}
         {{ t_iter.active_dataset.memory_limit|format_size }}
     {% else %}
         {% trans %}N/A{% endtrans %}
     {% endif %}
             </td>
+    {% if t_iter.active_dataset is not none %}
             <td>{{ get_task_type(dataset=t_iter.active_dataset).name }}</td>
+    {% else %}
+            <td>{% trans %}N/A{% endtrans %}</td>
+    {% endif %}
             <td>{{ t_iter.submission_format|map("replace", ".%l", extensions)|join(" ") }}</td>
     {% if tokens_contest != TOKEN_MODE_DISABLED and tokens_tasks != TOKEN_MODE_DISABLED %}
             <td>

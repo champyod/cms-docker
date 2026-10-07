@@ -53,7 +53,7 @@ class UserHandler(BaseHandler):
                 .all()
         self.render("user.html", **self.r_params)
 
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("user:update")
     def post(self, user_id):
         fallback_page = self.url("user", user_id)
 
@@ -141,7 +141,7 @@ class RemoveUserHandler(BaseHandler):
 
     """
 
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("user:delete")
     def get(self, user_id):
         user = self.safe_get_item(User, user_id)
         submission_query = self.sql_session.query(Submission)\
@@ -155,7 +155,7 @@ class RemoveUserHandler(BaseHandler):
         self.r_params["participation_count"] = participation_query.count()
         self.render("user_remove.html", **self.r_params)
 
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("user:delete")
     def delete(self, user_id):
         user = self.safe_get_item(User, user_id)
 
@@ -173,7 +173,7 @@ class RemoveTeamHandler(BaseHandler):
 
     """
 
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("team:delete")
     def get(self, team_id):
         team = self.safe_get_item(Team, team_id)
         participation_query = self.sql_session.query(Participation).filter(
@@ -185,7 +185,7 @@ class RemoveTeamHandler(BaseHandler):
         self.r_params["participation_count"] = participation_query.count()
         self.render("team_remove.html", **self.r_params)
 
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("team:delete")
     def delete(self, team_id):
         team = self.safe_get_item(Team, team_id)
         try:
@@ -214,6 +214,7 @@ class TeamHandler(BaseHandler):
     If referred by GET, this handler will return a pre-filled HTML form.
     If referred by POST, this handler will sync the team data with the form's.
     """
+    @require_permission("team:read")
     def get(self, team_id):
         team = self.safe_get_item(Team, team_id)
 
@@ -221,6 +222,7 @@ class TeamHandler(BaseHandler):
         self.r_params["team"] = team
         self.render("team.html", **self.r_params)
 
+    @require_permission("team:update")
     def post(self, team_id):
         fallback_page = self.url("team", team_id)
 
@@ -250,8 +252,8 @@ class TeamHandler(BaseHandler):
         self.redirect(fallback_page)
 
 
-class AddTeamHandler(SimpleHandler("add_team.html", permission_all=True)):
-    @require_permission(BaseHandler.PERMISSION_ALL)
+class AddTeamHandler(SimpleHandler("add_team.html", permission="team:create")):
+    @require_permission("team:create")
     def post(self):
         fallback_page = self.url("teams", "add")
 
@@ -282,8 +284,8 @@ class AddTeamHandler(SimpleHandler("add_team.html", permission_all=True)):
         self.redirect(fallback_page)
 
 
-class AddUserHandler(SimpleHandler("add_user.html", permission_all=True)):
-    @require_permission(BaseHandler.PERMISSION_ALL)
+class AddUserHandler(SimpleHandler("add_user.html", permission="user:create")):
+    @require_permission("user:create")
     def post(self):
         fallback_page = self.url("users", "add")
 
@@ -324,7 +326,7 @@ class AddUserHandler(SimpleHandler("add_user.html", permission_all=True)):
 
 
 class AddParticipationHandler(BaseHandler):
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("participation:create")
     def post(self, user_id):
         fallback_page = self.url("user", user_id)
 
@@ -361,7 +363,7 @@ class AddParticipationHandler(BaseHandler):
 
 
 class EditParticipationHandler(BaseHandler):
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("participation:delete")
     def post(self, user_id):
         fallback_page = self.url("user", user_id)
 

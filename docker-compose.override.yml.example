@@ -1,0 +1,8 @@
+# Local-only compose overrides — copy to docker-compose.override.yml (gitignored).
+# Make targets and the admin panel pick it up automatically when present.
+# Never commit the live file: it holds machine-specific pins and mounts.
+
+# services:
+#   contest-web-server:
+#     ports:
+#       - "127.0.0.1:18888:8888"

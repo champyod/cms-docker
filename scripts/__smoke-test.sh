@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eu
+# pipefail only if available
+if (set -o pipefail 2>/dev/null); then
+    set -o pipefail
+fi
 # scripts/__smoke-test.sh — smoke test for CMS Docker unified compose.
 # See header usage for contract.
 
@@ -7,35 +11,16 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
 
-# --- defensive source of common.sh (optional) ---
-if [[ -f "${SCRIPT_DIR}/__lib/common.sh" ]]; then
-  # shellcheck source=lib/common.sh
-  source "${SCRIPT_DIR}/__lib/common.sh"
-else
-  # Fallback definitions when lib absent
-  DISK_FLOOR_GB=3
-  DISK_WARN_GB=5
-  log_info() { printf '[INFO] %s\n' "$*"; }
-  log_warn() { printf '[WARN] %s\n' "$*" >&2; }
-  log_die() { local m="${1:-fatal}"; local c="${2:-1}"; printf '[FAIL] %s\n' "$m" >&2; exit "$c"; }
-  require_disk_free_gb() {
-    local tp="${1:?path}"; local floor="${2:-$DISK_FLOOR_GB}"; local warn="${3:-$DISK_WARN_GB}"
-    local raw avail
-    raw=$(df -BG --output=avail "$tp" 2>/dev/null | tail -n 1) || log_die "unable to determine disk space for: $tp" 2
-    raw=$(printf '%s' "$raw" | tr -d '[:space:]'); avail="${raw%G}"; avail="${avail%%.*}"
-    [[ "$avail" =~ ^[0-9]+$ ]] || log_die "unable to parse disk space value: $raw" 2
-    (( avail < floor )) && log_die "disk space ${avail}G < floor ${floor}G at ${tp}" 2
-    if (( avail < warn )); then log_warn "disk space low: ${avail}G < warn ${warn}G at ${tp}"; else log_info "disk space OK: ${avail}G available at ${tp}"; fi
-  }
-  is_default_secret() {
-    local v="${1:-}"; [[ -z "$v" ]] && return 0
-    case "$v" in cmspassword|usern4me|passw0rd|8e045a51e4b102ea803c06f92841a1fb|DEFAULT_SECRET_KEY) return 0;; esac
-    [[ "$v" == CHANGE_ME* ]] && return 0
-    [[ "$v" == YOUR_* ]] && return 0
-    [[ "$v" == *PASSWORD_HERE* ]] && return 0
-    return 1
-  }
-fi
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__lib/common.sh"
+declare -F is_default_secret >/dev/null 2>&1 || is_default_secret() {
+  local v="${1:-}"; [[ -z "$v" ]] && return 0
+  case "$v" in cmspassword|usern4me|passw0rd|8e045a51e4b102ea803c06f92841a1fb|DEFAULT_SECRET_KEY|admin) return 0;; esac
+  [[ "$v" == CHANGE_ME* ]] && return 0
+  [[ "$v" == YOUR_* ]] && return 0
+  [[ "$v" == *PASSWORD_HERE* ]] && return 0
+  return 1
+}
 
 # ---------------------------------------------------------------------------
 # Defaults / arg parsing
@@ -44,11 +29,12 @@ MODE=""
 STACKS="core,admin"
 KEEP=0
 DRY_RUN=0
+WORKER_PROJECT=""
 
 print_usage() {
   cat <<'USAGE'
 Usage: smoke-test.sh [--mode img|src] [--stacks core,admin,contest] [--keep] [--dry-run] [-h]
-  --mode    img (GHCR) or src (build). Default: DEPLOYMENT_TYPE from .env.admin else img.
+  --mode    img (GHCR) or src (build). Default: DEPLOYMENT_TYPE from .env else img.
   --stacks  comma-separated subset of {core,admin,contest,worker,monitor}. Default: core,admin.
   --keep    do not teardown at end (implies SMOKE_KEEP_UP=1 handling).
   --dry-run print planned steps without executing.
@@ -75,27 +61,19 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Validate mode
 if [[ -n "$MODE" && "$MODE" != "img" && "$MODE" != "src" ]]; then
   log_die "invalid --mode: $MODE (expected img|src)" 2
 fi
 
-# Resolve default mode from .env.admin DEPLOYMENT_TYPE if not given
 if [[ -z "$MODE" ]]; then
-  if [[ -f "${REPO_ROOT}/.env.admin" ]]; then
-    MODE=$(grep -E '^DEPLOYMENT_TYPE=' "${REPO_ROOT}/.env.admin" | tail -n1 | cut -d= -f2 | tr -d '[:space:]' | tr -d '"' | tr -d "'" || true)
-  fi
-  if [[ -z "$MODE" && -f "${REPO_ROOT}/.env" ]]; then
+  if [[ -f "${REPO_ROOT}/.env" ]]; then
     MODE=$(grep -E '^DEPLOYMENT_TYPE=' "${REPO_ROOT}/.env" | tail -n1 | cut -d= -f2 | cut -d'#' -f1 | tr -d '[:space:]' | tr -d '"' | tr -d "'" || true)
   fi
   [[ -z "$MODE" ]] && MODE="img"
 fi
-# Normalize
 MODE=$(printf '%s' "$MODE" | tr '[:upper:]' '[:lower:]' | xargs)
 
-# Parse stacks
 IFS=',' read -ra STACK_ARR <<< "$STACKS"
-# trim + validate
 VALID_STACKS="core admin contest worker monitor"
 declare -a STACKS_NORM=()
 for s in "${STACK_ARR[@]}"; do
@@ -104,7 +82,6 @@ for s in "${STACK_ARR[@]}"; do
   if ! printf '%s' "$VALID_STACKS" | grep -qw "$s"; then
     log_die "invalid stack in --stacks: $s (expected core|admin|contest|worker|monitor)" 2
   fi
-  # de-dup
   skip=0; for e in "${STACKS_NORM[@]}"; do [[ "$e" == "$s" ]] && skip=1; done; [[ $skip -eq 1 ]] && continue
   STACKS_NORM+=("$s")
 done
@@ -174,11 +151,19 @@ dump_logs() {
   fi
 }
 
+teardown_worker() {
+  # The smoke worker belongs to a separate project, so the stack down cannot remove it.
+  if [[ -n "$WORKER_PROJECT" ]]; then
+    docker compose -p "$WORKER_PROJECT" -f "$COMPOSE_FILE" --profile worker down --remove-orphans 2>&1 || log_warn "worker compose down returned non-zero (ignored)"
+  fi
+}
+
 teardown() {
   if [[ "$SMOKE_KEEP_UP" == "1" || "$KEEP" -eq 1 ]]; then
     log_info "teardown skipped (--keep / SMOKE_KEEP_UP=1); stack left up"
     return 0
   fi
+  teardown_worker
   log_info "teardown: compose down for profiles: ${STACKS_NORM[*]} (without -v, volumes preserved)"
   local pargs
   pargs=$(compose_profiles_args)
@@ -192,6 +177,7 @@ on_fail_teardown() {
     log_warn "failure path: keeping stack up (SMOKE_KEEP_UP=1)"
   else
     # Dump attempt already done by caller; now down
+    teardown_worker
     local pargs
     pargs=$(compose_profiles_args)
     # shellcheck disable=SC2086
@@ -230,7 +216,6 @@ wait_healthy() {
       # container not yet created
       :
     fi
-    # Check if container is in unhealthy / exited
     local state_status
     state_status=$(docker inspect --format='{{.State.Status}}' "$container" 2>/dev/null || echo "unknown")
     if [[ "$state_status" == "exited" || "$state_status" == "dead" ]]; then
@@ -264,7 +249,6 @@ curl_wait() {
 resolve_contest_port() {
   # Prefer CONTEST_PORT_EXTERNAL if present, else ACTIVE_CONTEST_PORT, else default 8888
   local val=""
-  # Check compose file for env var names used in contest-web-server ports
   if grep -q 'CONTEST_PORT_EXTERNAL' "$COMPOSE_FILE" 2>/dev/null; then
     val="${CONTEST_PORT_EXTERNAL:-}"
     [[ -z "$val" ]] && val="${ACTIVE_CONTEST_PORT:-}"
@@ -336,25 +320,17 @@ if [[ ! -f "${REPO_ROOT}/.env" ]]; then
   exit 2
 fi
 
-# Load .env for checks (export)
 set -a
 # shellcheck disable=SC1090
 source "${REPO_ROOT}/.env" 2>/dev/null || true
 set +a
-
-# Also source .env.admin/.env.contest directly if .env missing parts (for placeholder detection)
-for _ef in "${REPO_ROOT}/.env.admin" "${REPO_ROOT}/.env.contest" "${REPO_ROOT}/.env.core"; do
-  if [[ -f "$_ef" ]]; then
-    set -a; source "$_ef" 2>/dev/null || true; set +a
-  fi
-done
 
 env_preflight_fail=0
 check_secret_var() {
   local var_name="$1"
   local val="${!var_name:-}"
   if [[ -z "$val" ]]; then
-    printf '[FAIL] %s is empty or unset (check .env / .env.*)\n' "$var_name" >&2
+    printf '[FAIL] %s is empty or unset (check .env — run ./cms config sync)\n' "$var_name" >&2
     return 1
   fi
   if is_default_secret "$val"; then
@@ -374,8 +350,7 @@ for _v in POSTGRES_PASSWORD AUTH_SECRET SECRET_KEY; do
 done
 
 if [[ "$env_preflight_fail" -ne 0 ]]; then
-  # List which file defines what for hint
-  printf '[FAIL] preflight env sanity failed — fix .env.* then run: make env\n' >&2
+  printf '[FAIL] preflight env sanity failed — fix config.toml then run: ./cms config sync\n' >&2
   exit 2
 fi
 log_info "preflight env sanity: POSTGRES_PASSWORD/AUTH_SECRET/SECRET_KEY OK"
@@ -395,7 +370,6 @@ if [[ "$MODE" == "img" ]]; then
   log_info "ensure images: img mode — pulling (profiles:${STACKS_NORM[*]})"
   # shellcheck disable=SC2086
   docker compose -f "$COMPOSE_FILE" $COMPOSE_PROFILES_ARGS pull 2>&1 || true
-  # Verify core image exists locally
   CORE_IMAGE="ghcr.io/champyod/cms-docker-core:${IMG_TAG}"
   if ! docker image inspect "$CORE_IMAGE" >/dev/null 2>&1; then
     log_warn "image ${CORE_IMAGE} not found locally after pull — falling back to build with explicit warning"
@@ -414,13 +388,11 @@ fi
 log_info "image sizes before proceeding:"
 log_image_sizes
 
-# Re-check disk after pull/build
 require_disk_free_gb "$REPO_ROOT"
 
 # ===========================================================================
 # 4. Up sequence with per-service wait helpers
 # ===========================================================================
-# Track overall failure
 SMOKE_FAILED=0
 
 # Helper to run a check and record matrix
@@ -450,7 +422,6 @@ run_curl_wait() {
     record_matrix "$svc" "http" "PASS" "$dur"
   else
     record_matrix "$svc" "http" "FAIL" "$dur"
-    # Try to dump logs of corresponding container if mappable
     local container_guess=""
     case "$svc" in
       admin-next) container_guess="cms-admin-panel-next" ;;
@@ -525,7 +496,6 @@ if printf '%s\n' "${STACKS_NORM[@]}" | grep -qx "contest"; then
   # shellcheck disable=SC2086
   docker compose -f "$COMPOSE_FILE" --profile core --profile contest up -d 2>&1 || fail_mid_flow "compose up contest failed"
   CONTEST_PORT_VAL=$(resolve_contest_port)
-  # Documented: read docker-compose.yml at runtime to discover env name — already done via resolve_contest_port
   run_curl_wait "contest" "http://127.0.0.1:${CONTEST_PORT_VAL}/" 120 || true
   if [[ "$SMOKE_FAILED" -ne 0 ]]; then
     log_warn "contest checks had failures (see matrix)"
@@ -538,9 +508,11 @@ fi
 # Worker/monitor explicit support
 if printf '%s\n' "${STACKS_NORM[@]}" | grep -qx "worker"; then
   log_info "up: worker profile (ISOLATE_CGROUP_CONTROL=0 override; real isolate needs host cgroup setup via scripts/__worker_cgroup_setup.sh)"
-  ISOLATE_CGROUP_CONTROL=0 docker compose -f "$COMPOSE_FILE" --profile worker up -d 2>&1 || fail_mid_flow "compose up worker failed"
-  # Health check for worker container(s) — name is cms-worker-${WORKER_SHARD:-0}
+  # Smoke tests need only the selected shard, not fleet seeding or a config.toml dependency.
   WORKER_SHARD_VAL="${WORKER_SHARD:-0}"
+  [[ "$WORKER_SHARD_VAL" =~ ^[0-9]+$ ]] || fail_mid_flow "WORKER_SHARD must be numeric"
+  WORKER_PROJECT="cw${WORKER_SHARD_VAL}"
+  ISOLATE_CGROUP_CONTROL=0 docker compose -p "$WORKER_PROJECT" -f "$COMPOSE_FILE" --profile worker up -d 2>&1 || fail_mid_flow "compose up worker failed"
   run_wait_healthy "cms-worker-${WORKER_SHARD_VAL}" 120 || true
 fi
 
@@ -557,7 +529,6 @@ fi
 # ===========================================================================
 print_matrix
 
-# Record artifact note if any failures dumped
 if [[ -n "$FAIL_DIR" && -d "$FAIL_DIR" ]]; then
   log_warn "failure artifacts in ${FAIL_DIR}/ (docker logs --tail 100)"
 fi
@@ -566,13 +537,11 @@ fi
 # 6. Teardown (unless --keep)
 # ===========================================================================
 if [[ "$SMOKE_FAILED" -ne 0 ]]; then
-  # On any failure mid-flow we already have dump; now handle keep vs down
   print_matrix
   on_fail_teardown
   exit 1
 fi
 
-# Success path teardown
 teardown
 
 # ===========================================================================

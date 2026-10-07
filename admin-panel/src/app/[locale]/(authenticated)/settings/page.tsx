@@ -1,32 +1,29 @@
-import { checkPermission } from '@/lib/permissions';
-import { getDictionary } from '@/i18n';
-import { PermissionDenied } from '@/components/PermissionDenied';
-import { EnvConfigView } from '@/components/settings/EnvConfigView';
-import { MonitorConfigSection } from '@/components/settings/MonitorConfigSection';
+import { notFound, redirect } from 'next/navigation';
 
-export default async function SettingsPage({
+import { getRoutePermissions } from '@/lib/navigation/page-authorization';
+import { resolveLegacyRedirect } from '@/lib/navigation/redirects';
+import { AuthorizationError } from '@/lib/server/authorization';
+
+const LEGACY_PATH = '/settings';
+
+/**
+ * Why this route still exists: the System Settings screen keeps its old address
+ * so existing bookmarks, chord history, and links land on the canonical module
+ * route. Only a reader whose permissions fail closed is concealed; a 401 and any
+ * unexpected storage failure keep propagating.
+ */
+export default async function SettingsRedirectPage({
   params,
 }: {
   params: Promise<{ locale: string }>;
-}) {
-  const { locale } = await params;
-  const dict = await getDictionary(locale);
-  const hasPermission = await checkPermission('all', false);
-
-  if (!hasPermission) {
-    return <PermissionDenied permission="permission_all" locale={locale} dict={dict} />;
+}): Promise<never> {
+  try {
+    const [{ locale }, effective] = await Promise.all([params, getRoutePermissions()]);
+    const target = resolveLegacyRedirect(locale, LEGACY_PATH, effective);
+    if (target === null) notFound();
+    redirect(target);
+  } catch (error: unknown) {
+    if (error instanceof AuthorizationError && error.status === 403) notFound();
+    throw error;
   }
-
-  return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-white mb-2">System Settings</h1>
-        <p className="text-neutral-400">Configure environment files and service restarts.</p>
-      </div>
-
-      <EnvConfigView />
-
-      <MonitorConfigSection />
-    </div>
-  );
 }

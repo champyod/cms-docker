@@ -15,11 +15,6 @@ export const safeAdminSelect = {
   username: true,
   name: true,
   enabled: true,
-  permission_all: true,
-  permission_messaging: true,
-  permission_tasks: true,
-  permission_users: true,
-  permission_contests: true,
 } satisfies Prisma.adminsSelect;
 
 export type SafeUser = Prisma.usersGetPayload<{ select: typeof safeUserSelect }>;
@@ -30,7 +25,6 @@ export type AdminWithLogin = Prisma.adminsGetPayload<{
   select: typeof safeAdminSelect & { last_login_at: true };
 }>;
 
-/** Case-insensitive search across user names, credentials, and enrolled team codes/names. */
 export function buildUserSearchWhere(search: string): Prisma.usersWhereInput {
   if (!search) return {};
 
@@ -66,17 +60,15 @@ export const submissionsListInclude = {
       contests: { select: { name: true } }
     }
   },
+  // Why these three only: the list columns read the score and the two outcome
+  // columns of the first result. The remaining result columns were selected and
+  // shipped to a client component without being rendered, which also let the
+  // BigInt compilation_memory column reach the server-to-client boundary.
   submission_results: {
     select: {
       score: true,
-      dataset_id: true,
       compilation_outcome: true,
-      evaluation_outcome: true,
-      compilation_time: true,
-      compilation_memory: true,
-      compilation_text: true,
-      compilation_stdout: true,
-      compilation_stderr: true
+      evaluation_outcome: true
     }
   },
   files: { select: { filename: true, digest: true } }

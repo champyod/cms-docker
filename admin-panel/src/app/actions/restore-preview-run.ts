@@ -6,6 +6,12 @@
  * Every effect the preview owns lives here or in the caller: this module owns
  * running docker and querying the scratch container and the live database, and
  * nothing here decides what a failure means for the preview as a whole.
+ *
+ * Why every export below carries `backup:restore` itself: this directory is
+ * scanned as a set of entry points, so a helper the preview server actions
+ * compose is read as one that can be called on its own. The callers gate the
+ * same key, so the repeat check costs one cached session read and never widens
+ * or narrows what a caller may already do.
  */
 
 import { execFile } from 'node:child_process';
@@ -14,6 +20,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { Prisma } from '@prisma/client';
 
+import { ensurePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import { MAX_PK_SAMPLE_ROWS, previewContainerName, previewQuarantineDir, scratchDatabaseEnv } from '@/lib/restore-preview-store';
 import { parseRestoreList, pkSampleExpression, qualifiedTable, summarizeToc } from '@/lib/restore-preview';
@@ -41,11 +48,13 @@ function delay(ms: number): Promise<void> {
 }
 
 export async function runDocker(args: string[], timeoutMs: number = DOCKER_TIMEOUT_MS): Promise<string> {
+  await ensurePermission('backup:restore');
   const { stdout } = await execFileAsync('docker', args, { timeout: timeoutMs, maxBuffer: DOCKER_MAX_OUTPUT_BYTES });
   return stdout;
 }
 
 export async function scratchQuery(container: string, sql: string, timeoutMs: number = DOCKER_TIMEOUT_MS): Promise<string> {
+  await ensurePermission('backup:restore');
   const env = scratchDatabaseEnv();
   return runDocker(
     ['exec', container, 'psql', '-U', env.POSTGRES_USER, '-d', env.POSTGRES_DB, '-t', '-A', '-c', sql],
@@ -55,6 +64,7 @@ export async function scratchQuery(container: string, sql: string, timeoutMs: nu
 
 /** Readiness is a real psql round trip, not pg_isready: the image runs a temporary server during initdb. */
 export async function waitForPostgres(container: string): Promise<void> {
+  await ensurePermission('backup:restore');
   for (let attempt = 1; attempt <= POSTGRES_READY_ATTEMPTS; attempt += 1) {
     const ready = await scratchQuery(container, 'SELECT 1').then(
       () => true,
@@ -67,6 +77,7 @@ export async function waitForPostgres(container: string): Promise<void> {
 }
 
 export async function parseJsonRows(stdout: string): Promise<unknown[]> {
+  await ensurePermission('backup:restore');
   const parsed: unknown = JSON.parse(stdout.trim() || '[]');
   if (!Array.isArray(parsed)) throw new Error('Scratch query did not return a JSON array.');
   return parsed;
@@ -82,6 +93,7 @@ export type Settled<T> = { readonly ok: true; readonly value: T } | { readonly o
 
 /** One failed measurement is reported beside the diff instead of aborting the whole preview. */
 export async function settle<T>(measurement: Promise<T>): Promise<Settled<T>> {
+  await ensurePermission('backup:restore');
   try {
     return { ok: true, value: await measurement };
   } catch (error) {
@@ -90,11 +102,13 @@ export async function settle<T>(measurement: Promise<T>): Promise<Settled<T>> {
 }
 
 export async function countArchiveRows(container: string, table: string): Promise<number> {
+  await ensurePermission('backup:restore');
   const sql = `SELECT count(*)::bigint::text FROM ${qualifiedTable(ARCHIVE_SCHEMA, table)}`;
   return toCount((await scratchQuery(container, sql)).trim());
 }
 
 export async function countLiveRows(table: string): Promise<number> {
+  await ensurePermission('backup:restore');
   const rows = await prisma.$queryRaw<{ count: string }[]>(
     Prisma.sql`SELECT count(*)::bigint::text AS "count" FROM ${Prisma.raw(qualifiedTable(ARCHIVE_SCHEMA, table))}`,
   );
@@ -107,6 +121,7 @@ export async function countLiveRows(table: string): Promise<number> {
  * sampled keys themselves are bound parameters.
  */
 export async function measureOverlap(container: string, pks: readonly string[], table: string): Promise<PkOverlapSample | null> {
+  await ensurePermission('backup:restore');
   const expression = pkSampleExpression(pks);
   const keySql = `SELECT (${expression})::text FROM ${qualifiedTable(ARCHIVE_SCHEMA, table)} LIMIT ${MAX_PK_SAMPLE_ROWS}`;
   const keys = (await scratchQuery(container, keySql))
@@ -123,11 +138,13 @@ export async function measureOverlap(container: string, pks: readonly string[], 
 }
 
 export async function readToc(container: string): Promise<TocSummary> {
+  await ensurePermission('backup:restore');
   const tocText = await runDocker(['exec', container, 'pg_restore', '--list', CONTAINER_DUMP_PATH]);
   return summarizeToc(parseRestoreList(tocText));
 }
 
 export async function resolveDumpFile(previewId: string): Promise<string | null> {
+  await ensurePermission('backup:restore');
   const dir = previewQuarantineDir(previewId);
   const entries = await readdir(dir).catch((error: NodeJS.ErrnoException) => {
     if (error.code === 'ENOENT') return [] as string[];
@@ -143,6 +160,7 @@ export async function resolveDumpFile(previewId: string): Promise<string | null>
 }
 
 export async function teardownPreview(previewId: string): Promise<void> {
+  await ensurePermission('backup:restore');
   try {
     await runDocker(['rm', '-f', previewContainerName(previewId)]);
   } catch (error) {

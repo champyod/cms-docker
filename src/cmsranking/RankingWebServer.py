@@ -43,6 +43,7 @@ from werkzeug.middleware.dispatcher import DispatcherMiddleware
 
 # Needed for initialization. Do not remove.
 import cmsranking.Logger  # noqa
+from cms.server.credits import get_surface, load_credits
 from cmscommon.eventsource import EventSource
 from cmsranking.Config import PublicConfig, load_config
 from cmsranking.Contest import Contest
@@ -491,6 +492,45 @@ class PublicConfigHandler:
         return response
 
 
+class CreditsHandler:
+    """Serve the credits of the one surface this server renders.
+
+    WHY a runtime endpoint rather than a generated page: a committed
+    generated copy drifts from the credits file as soon as either changes,
+    and this scoreboard is projected in front of an audience that must be
+    able to reach the licence offer and the asset list.
+    """
+
+    # The name of this surface in the credits file.
+    SURFACE = "ranking"
+
+    def __call__(self, environ, start_response):
+        return self.wsgi_app(environ, start_response)
+
+    @responder
+    def wsgi_app(self, environ, start_response):
+        response = Response()
+        response.status_code = 200
+        response.mimetype = "application/json"
+        response.data = json.dumps(self.payload(), sort_keys=True)
+
+        return response
+
+    def payload(self) -> dict:
+        """Return the project, its licence and this surface's credits.
+
+        WHY only this surface: the scoreboard is unauthenticated, and the
+        other surfaces' asset lists name internal components that no visitor
+        to this page needs to see.
+        """
+        credits = load_credits()
+        return {
+            "project": credits["project"],
+            "license": credits["license"],
+            "surface": get_surface(self.SURFACE),
+        }
+
+
 class RoutingHandler:
 
     def __init__(
@@ -501,6 +541,7 @@ class RoutingHandler:
         score_handler: ScoreHandler,
         history_handler: HistoryHandler,
         public_config_handler: PublicConfigHandler,
+        credits_handler: CreditsHandler,
     ):
         self.router = Map([
             Rule("/", methods=["GET"], endpoint="root"),
@@ -508,7 +549,8 @@ class RoutingHandler:
             Rule("/scores", methods=["GET"], endpoint="scores"),
             Rule("/events", methods=["GET"], endpoint="events"),
             Rule("/logo", methods=["GET"], endpoint="logo"),
-            Rule("/config", methods=["GET"], endpoint="public_config")
+            Rule("/config", methods=["GET"], endpoint="public_config"),
+            Rule("/credits", methods=["GET"], endpoint="credits"),
         ])
 
         self.event_handler = event_handler
@@ -517,6 +559,7 @@ class RoutingHandler:
         self.history_handler = history_handler
         self.root_handler = root_handler
         self.public_config_handler = public_config_handler
+        self.credits_handler = credits_handler
 
     def __call__(self, environ, start_response):
         return self.wsgi_app(environ, start_response)
@@ -540,6 +583,8 @@ class RoutingHandler:
             return self.history_handler(environ, start_response)
         elif endpoint == 'public_config':
             return self.public_config_handler(environ, start_response)
+        elif endpoint == 'credits':
+            return self.credits_handler(environ, start_response)
 
 
 def main() -> int:
@@ -609,15 +654,31 @@ def main() -> int:
     stores["scoring"] = ScoringStore(stores)
     stores["scoring"].init_store()
 
+    # Logo: prefer explicit config.logo_path when present, otherwise
+    # lib_dir/logo.* with static fallback. Hot-swap via host copy keeps
+    # lib_dir/logo.* updated; direct path allows bind-mounted custom logo.
+    if config.logo_path and os.path.isfile(config.logo_path):
+        logo_ext = os.path.splitext(config.logo_path)[1].lstrip(".").lower()
+        if logo_ext in ImageHandler.EXT_TO_MIME:
+            logo_location = os.path.splitext(config.logo_path)[0]
+        else:
+            logger.warning("logo_path has unsupported extension, using lib_dir fallback")
+            logo_location = os.path.join(config.lib_dir, "%(name)s")
+    else:
+        logo_location = os.path.join(config.lib_dir, "%(name)s")
+    if config.logo_path and not os.path.isfile(config.logo_path):
+        logger.info("logo_path %s not found, using lib_dir fallback", config.logo_path)
+
     toplevel_handler = RoutingHandler(
         RootHandler(web_dir),
         DataWatcher(stores, config.buffer_size),
         ImageHandler(
-            os.path.join(config.lib_dir, '%(name)s'),
+            logo_location,
             os.path.join(web_dir, 'img', 'logo.png')),
         ScoreHandler(stores),
         HistoryHandler(stores),
-        PublicConfigHandler(config.public))
+        PublicConfigHandler(config.public),
+        CreditsHandler())
 
     wsgi_app = SharedDataMiddleware(DispatcherMiddleware(
         toplevel_handler, {

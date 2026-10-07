@@ -2,6 +2,9 @@
 
 import { Eye, EyeOff, Reply } from 'lucide-react';
 import { Button } from '@/components/core/Button';
+import { RowActions, rowActionGroupLabel, type RowAction } from '@/components/core/RowActions';
+import { useDictionary } from '@/hooks/useDictionary';
+import { ACTION_PERMISSIONS } from '@/lib/permission-engine';
 
 export interface QuestionRow {
   id: number;
@@ -20,6 +23,7 @@ interface Props {
   replyingTo: number | null;
   replySubject: string;
   replyText: string;
+  permissionKeys: readonly string[];
   onReplyingTo: (id: number | null) => void;
   onReplySubject: (v: string) => void;
   onReplyText: (v: string) => void;
@@ -29,17 +33,40 @@ interface Props {
 
 const FIELD_CLASSES = 'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50';
 
+// Why module scope: every question row formats its own timestamp, so a per-row
+// formatter would be rebuilt for each card on every render.
+const QUESTION_TIME_FORMAT = new Intl.DateTimeFormat();
+
 function formatTime(date: Date | string): string {
-  return new Date(date).toLocaleString();
+  return QUESTION_TIME_FORMAT.format(new Date(date));
 }
 
-export function QuestionsPanel({ questions, replyingTo, replySubject, replyText, onReplyingTo, onReplySubject, onReplyText, onReply, onIgnore }: Props) {
+interface QuestionGates {
+  readonly showReply: boolean;
+}
+
+function buildQuestionActions(
+  question: QuestionRow,
+  gates: QuestionGates,
+  replyingTo: number | null,
+  onReplyingTo: (id: number | null) => void,
+  onIgnore: (id: number, ignored: boolean) => void,
+): RowAction[] {
+  const ignorePermission = question.ignored ? ACTION_PERMISSIONS.unignoreQuestion : ACTION_PERMISSIONS.ignoreQuestion;
+  return [
+    { key: 'reply', label: 'Reply', ariaLabel: `Reply to ${question.subject}`, icon: Reply, onClick: () => onReplyingTo(replyingTo === question.id ? null : question.id), permission: ACTION_PERMISSIONS.replyToQuestion, showWhen: gates.showReply, className: 'shrink-0 rounded-lg text-primary hover:bg-primary/20' },
+    { key: 'ignore', label: question.ignored ? 'Unignore' : 'Ignore', ariaLabel: question.ignored ? 'Unignore question' : 'Ignore question', icon: question.ignored ? Eye : EyeOff, onClick: () => onIgnore(question.id, question.ignored), permission: ignorePermission, className: 'shrink-0 rounded-lg' },
+  ];
+}
+
+export function QuestionsPanel({ questions, replyingTo, replySubject, replyText, permissionKeys, onReplyingTo, onReplySubject, onReplyText, onReply, onIgnore }: Props): React.JSX.Element {
+  const dict = useDictionary();
   if (questions.length === 0) return <p className="text-sm text-muted-foreground">No questions from contestants.</p>;
   return (
     <div className="space-y-3">
       {questions.map((q) => (
         <div key={q.id} className={`rounded-lg p-3 ${q.ignored ? 'bg-muted/50' : 'bg-muted/30'}`}>
-          <div className="flex items-start justify-between">
+          <div className="flex items-start justify-between gap-3">
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 <span className="font-medium text-foreground">{q.subject}</span>
@@ -55,12 +82,12 @@ export function QuestionsPanel({ questions, replyingTo, replySubject, replyText,
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-1">
-              {!q.reply_timestamp && (
-                <button onClick={() => onReplyingTo(replyingTo === q.id ? null : q.id)} aria-label={`Reply to ${q.subject}`} className="rounded p-1.5 text-primary transition-colors hover:bg-primary/20"><Reply className="h-4 w-4" /></button>
-              )}
-              <button onClick={() => onIgnore(q.id, q.ignored)} aria-label={q.ignored ? 'Unignore question' : 'Ignore question'} className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted"><EyeOff className={q.ignored ? 'hidden' : 'h-4 w-4'} /><Eye className={q.ignored ? 'h-4 w-4' : 'hidden'} /></button>
-            </div>
+            <RowActions
+              ariaLabel={rowActionGroupLabel(dict, 'questions')}
+              className="shrink-0"
+              permissionKeys={permissionKeys}
+              actions={buildQuestionActions(q, { showReply: q.reply_timestamp === null }, replyingTo, onReplyingTo, onIgnore)}
+            />
           </div>
           {replyingTo === q.id && (
             <div className="mt-3 space-y-2 rounded-lg bg-muted/30 p-3">

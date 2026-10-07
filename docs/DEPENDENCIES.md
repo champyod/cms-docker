@@ -41,9 +41,18 @@ The Admin Panel (`admin-panel`) uses this configuration to:
 
 ## Core Service Recovery
 
-To ensure "perfect" and orderly recovery upon reboot or restart:
+Services use `restart: unless-stopped`, so Docker brings the whole stack back up when
+the daemon starts after a host reboot. This replaced `restart: on-failure:5`, which
+restarts only on a non-zero exit and **never** starts containers on daemon/boot start —
+the cause of the 2026-10-03 outage.
+
+Within a running stack, ordering relies on:
 *   **Healthchecks:** Core services (`cms-database`, `cms-log-service`, etc.) are configured with Docker Healthchecks to report their actual readiness.
 *   **Startup Order:** Dependent services use `depends_on` with `condition: service_healthy` to wait until their prerequisites are fully operational before starting.
+
+`depends_on` applies only when services start through `docker compose`. Starting a
+container directly with `docker start <name>` bypasses it, so services race the
+database. Use `./cms deploy all` (see `docs/RECOVERY.md`).
 
 ### Recovery Chain
 1.  **Database:** Starts first. Checks `pg_isready`.

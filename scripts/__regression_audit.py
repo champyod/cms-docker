@@ -2,9 +2,14 @@
 """Mechanical regression audit for cms-docker: catches the failure classes
 that produced P1-P5 (stale paths, exec-bit loss, CLI drift, profile-graph
 gaps, bind-mount perms)."""
-import os, re, subprocess, sys
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
 
-os.chdir("/mnt/Datas-Disk" if False else "/mnt/D-Datas-Disk/Champ/Coding/Github/Contest Management System/cms-docker")
+os.chdir(Path(__file__).resolve().parent.parent)
+
 issues, checks = [], 0
 
 def track(msg):
@@ -17,6 +22,31 @@ SCAN_FILES = ["cms", "Makefile", "README.md"] \
 scan_files = [f for f in SCAN_FILES if os.path.isfile(f)]
 
 PATH_RE = re.compile(r'(?:scripts|config|examples|docker|backups)/[A-Za-z0-9_./-]+')
+COMPOSE_MOUNT_RE = re.compile(r"- \./([^\s:]+):(/[^:\s]+)(?::ro)?\s*$", re.M)
+compose: str = open("docker-compose.yml", errors="replace").read()
+
+
+def git_ignored(paths: set[str]) -> set[str]:
+    if not paths:
+        return set()
+    proc = subprocess.run(["git", "check-ignore", "--stdin"],
+                          input="\n".join(sorted(paths)),
+                          capture_output=True, text=True)
+    return {p[2:] if p.startswith("./") else p for p in proc.stdout.split()}
+
+
+# WHY: a path git is told to ignore is an operator or runtime artefact that is
+# supposed to be absent on a clean checkout (config/cms.toml, config/
+# funnel.htpasswd, config/mtls/*.pem, ...). Reporting those made every
+# unbootstrapped clone fail the gate, which is the same as having no gate.
+# One batched `check-ignore` for the whole run rather than a subprocess per
+# path, and no hardcoded allowlist that would rot on the next operator file.
+IGNORED = git_ignored(
+    {m.rstrip('."\'').rstrip("/")
+     for f in scan_files
+     for m in PATH_RE.findall(open(f, errors="replace").read())}
+    | {m.group(1) for m in COMPOSE_MOUNT_RE.finditer(compose)})
+
 print("== A. stale-path audit ==")
 for f in scan_files:
     text = open(f, errors="replace").read()
@@ -28,19 +58,54 @@ for f in scan_files:
                 # ignore pure directory prefixes mentioned without a real file intent
                 if os.path.isdir(p.split("/", 1)[0]) and "." not in os.path.basename(p):
                     continue
-                track(f"A {f}: references missing path -> {p}")
+                if p not in IGNORED:
+                    track(f"A {f}: references missing path -> {p}")
 print(f"   scanned {len(scan_files)} files")
 
 # ---------- B. exec-bit audit ----------
+# WHY: `./p`, `p` in a make recipe, and a file bind-mount all hand the path to
+# the kernel's execve, so only those need 100755. `bash p`, `sh p` and
+# `source p` open the file for reading. Asserting 100755 for every `.sh`
+# extension flagged 16 correctly-moded scripts, so the demand is derived from
+# the call sites instead.
+DIRECT_EXEC_RE = re.compile(r'(?<![\w./-])\./([A-Za-z0-9_./-]+)')
+BIND_MOUNT_RE = re.compile(r'- \./([^\s:]+):/[^\s:]+')
+DATA_SUFFIXES = (".sql", ".py", ".gitkeep")
+
+
+def collect(files: list[str], pattern: re.Pattern[str]) -> set[str]:
+    found: set[str] = set()
+    for f in files:
+        text: str = open(f, errors="replace").read()
+        found |= {m.rstrip(".,;'\"") for m in pattern.findall(text)}
+    return found
+
+
+def direct_exec_paths(files: list[str]) -> set[str]:
+    return collect(files, DIRECT_EXEC_RE)
+
+
+def bind_mounted_paths(files: list[str]) -> set[str]:
+    # WHY: a directory mount publishes its contents for sourcing, not for
+    # execution, so only mounts whose source is a file are demanded.
+    return {src for src in collect(files, BIND_MOUNT_RE) if os.path.isfile(src)}
+
+
+def exec_bit_requirements() -> set[str]:
+    compose: list[str] = sorted(p.name for p in Path(".").glob("docker-compose*.yml"))
+    sources: list[str] = [f for f in scan_files + compose if os.path.isfile(f)]
+    return direct_exec_paths(sources) | bind_mounted_paths(sources)
+
+
 print("== B. exec-bit audit ==")
+needs_x = exec_bit_requirements()
 idx = subprocess.run(["git","ls-files","-s","scripts/"],capture_output=True,text=True).stdout
 for line in idx.splitlines():
     mode, path = line.split()[0], line.split()[3]
     checks += 1
-    needs_x = path.endswith(".sh") or re.match(r"scripts/__(cms|worker)", path)
-    if needs_x and mode != "100755":
+    if path in needs_x and mode != "100755":
         track(f"B {path}: tracked {mode}, must be 100755 (invoked/bind-mounted)")
-    if not needs_x and mode == "100755":
+    if path not in needs_x and mode == "100755" and path.endswith(DATA_SUFFIXES):
         track(f"B {path}: tracked 100755 but is data (.sql/.py) — review")
 # root entrypoint
 mode_cms = subprocess.run(["git","ls-files","-s","cms"],capture_output=True,text=True).stdout.split()[0]
@@ -49,12 +114,12 @@ if mode_cms != "100755": track(f"B cms: tracked {mode_cms}, must be 100755")
 
 # ---------- C. bind-mount audit ----------
 print("== C. bind-mount audit ==")
-comp = open("docker-compose.yml").read()
-for m in re.finditer(r"- \./([^\s:]+):(/[^:\s]+)(?::ro)?\s*$", comp, re.M):
+for m in COMPOSE_MOUNT_RE.finditer(compose):
     src, dst = m.group(1), m.group(2)
     checks += 1
     if not os.path.exists(src):
-        track(f"C compose mount source missing -> ./{src}")
+        if src not in IGNORED:
+            track(f"C compose mount source missing -> ./{src}")
     elif os.path.isfile(src) and "/usr/local/bin/" in dst and not os.access(src, os.X_OK):
         track(f"C {src} mounted to bin path {dst} but not executable on host/index")
 
@@ -62,7 +127,7 @@ for m in re.finditer(r"- \./([^\s:]+):(/[^:\s]+)(?::ro)?\s*$", comp, re.M):
 print("== D. compose profile-graph audit ==")
 svc_re = re.compile(r"\n  ([a-z0-9-]+):\n((?:    .*\n|\n)*?)(?=\n  [a-z0-9-]+:\n|\Z)")
 services = {}
-for name, body in svc_re.findall(comp):
+for name, body in svc_re.findall(compose):
     prof = re.search(r"profiles:\n((?:\s+-\s+\S+\n)+)", body)
     deps = re.search(r"depends_on:\n((?:\s+[a-z0-9_-]+[:\s]*\n)+)", body)
     plist = set(re.findall(r"-\s+(\S+)", prof.group(1))) if prof else {"default"}
@@ -100,12 +165,28 @@ CONTRACTS = {
     "__update_engine.sh": lambda a: all(x in ("--fresh","--fix","--dry-run") for x in a),
 }
 caller_files = scan_files
+# WHY: a script path carries CLI arguments only when something is actually
+# running it. In `log_die "scripts/__preflight.sh not found"` or
+# `PREFLIGHT_SCRIPT="scripts/__preflight.sh"` the words after the path are
+# English or a directory prefix, and reading them as arguments is what made
+# the audit report a human-readable message as CLI drift. Anchoring on a
+# command position (line start, `;`/`&`/`|`, a conditional keyword, or an
+# interpreter prefix) still matches every real invocation, and the argument
+# group is pinned to a run of flag/word tokens so that `cd`-less sibling
+# references in messages are not mistaken for arguments.
+COMMAND_POSITION = (
+    r"(?:^|[;&|!(]|\b(?:if|then|elif|else|while|until|do)\b)[ \t]*"
+    r"(?:(?:sudo|env|exec|command|nohup|timeout|nice|bash|sh|zsh|dash)"
+    r"(?:[ \t]+-\S+)*[ \t]+)*"
+)
+PATH_PREFIX = r"(?:[\w@.+-]+/)*"
+ARGS_RE = r"[ \t]+((?:--?[\w-]+[ \t]+[\w-]+|[\w-]+)*)"
 for script, validator in CONTRACTS.items():
-    pat = re.compile(re.escape(script) + r'"?\s+((?:--?[\w-]+\s+[\w-]+|[\w-]+)*)', )
+    pat = re.compile(
+        COMMAND_POSITION + PATH_PREFIX + re.escape(script) + r'"?\s*' + ARGS_RE)
     for f in caller_files:
         for i, line in enumerate(open(f, errors="replace"), 1):
-            stripped = line.strip()
-            if stripped.startswith("#") or re.search(r"\b(echo|die|warn|printf|Usage|usage)\b", line):
+            if line.strip().startswith("#"):
                 continue
             if script in line and ("$" not in line.split(script)[1][:2]):
                 m = pat.search(line)

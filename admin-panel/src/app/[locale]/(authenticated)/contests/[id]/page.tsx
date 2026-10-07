@@ -1,77 +1,26 @@
-import { prisma } from '@/lib/prisma';
 import { notFound, redirect } from 'next/navigation';
-import { ContestDetailView } from '@/components/contests/ContestDetailView';
-import { getCurrentUser } from '@/app/actions/auth';
-import { checkPermission } from '@/lib/permissions';
-import { contestDetailInclude } from '@/lib/prisma-selects';
+import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
+import { isRoutePermitted } from '@/lib/navigation/permissions';
+import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
+import { buildRoute } from '@/lib/navigation/routes';
+import { parseRecordId } from '@/lib/queries/record-access';
 
-async function getContest(id: number) {
-  return prisma.contests.findUnique({
-    where: { id },
-    include: contestDetailInclude,
-  });
-}
-
-async function getAvailableUsers() {
-  return prisma.users.findMany({
-    orderBy: { username: 'asc' }
-  });
-}
-
-async function getAvailableTasks() {
-  return prisma.tasks.findMany({
-    where: { contest_id: null },
-    orderBy: { name: 'asc' }
-  });
-}
-
-async function getTeams() {
-  return prisma.teams.findMany({
-    orderBy: { name: 'asc' }
-  });
-}
-
-export default async function ContestDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string; locale: string }>;
-}) {
-  const { id, locale } = await params;
-  if (!await checkPermission('contests', false)) redirect(`/${locale}`);
-
-  const contestId = parseInt(id, 10);
-
-  if (isNaN(contestId)) {
-    notFound();
+async function authorizeContestLanding(): Promise<void> {
+  let effective: ReadonlySet<string>;
+  try {
+    effective = await requirePermission('contest:read');
+  } catch (error: unknown) {
+    if (error instanceof AuthorizationError && error.status === 403) notFound();
+    throw error;
   }
-
-  const [contest, availableUsers, availableTasks, teams, user] = await Promise.all([
-    getContest(contestId),
-    getAvailableUsers(),
-    getAvailableTasks(),
-    getTeams(),
-    getCurrentUser()
-  ]);
-
-  if (!contest) {
-    notFound();
-  }
-
-  if (!user) {
-    // Layout guard normally covers this; kept for the type-narrowing the render below relies on.
-    return null;
-  }
-
-  return (
-    <div className="space-y-8">
-      <ContestDetailView
-        contest={contest}
-        availableUsers={availableUsers}
-        availableTasks={availableTasks}
-        teams={teams}
-        user={user}
-      />
-    </div>
-  );
+  const route = ROUTE_REGISTRY.find((candidate) => candidate.id === 'contests.record');
+  if (!route || !route.enabled || !isRoutePermitted(route, effective)) notFound();
 }
 
+export default async function ContestDetailLanding({ params }: { params: Promise<{ locale: string; id: string }> }) {
+  const { locale, id } = await params;
+  const contestId = parseRecordId(id);
+  if (contestId === null) notFound();
+  await authorizeContestLanding();
+  redirect(buildRoute(locale, 'contests.tabs.overview', { id: contestId }));
+}

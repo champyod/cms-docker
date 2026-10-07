@@ -1,12 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog } from '@/components/core/Dialog';
+import { ModalFooter } from '@/components/core/ModalFooter';
 import { Button } from '@/components/core/Button';
+import { InlineAlert } from '@/components/core/InlineAlert';
 import { cn } from '@/lib/utils';
-import { Power, RotateCcw, Bell, AlertTriangle } from 'lucide-react';
-import { updateContainerConfig, resetRestartCount } from '@/app/actions/containerConfig';
-import { useToast } from '@/components/providers/ToastProvider';
+import { RotateCcw } from 'lucide-react';
+import { updateContainerConfig, resetRestartCount, getContainerConfig } from '@/app/actions/containerConfig';
+import { getDiscordWebhookStatus } from '@/lib/discord-notifier';
+import { toast } from 'sonner';
+import { ContainerAutoRestartSection } from './ContainerAutoRestartSection';
+import { ContainerDiscordSection } from './ContainerDiscordSection';
 
 interface ContainerSettingsModalProps {
   containerId: string;
@@ -32,7 +37,55 @@ export function ContainerSettingsModal({
   const [maxRestarts, setMaxRestarts] = useState(config.maxRestarts);
   const [discordNotifications, setDiscordNotifications] = useState(config.discordNotifications ?? true);
   const [saving, setSaving] = useState(false);
-  const { addToast } = useToast();
+  const [isDiscordConfigured, setIsDiscordConfigured] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    getDiscordWebhookStatus().then((status) => setIsDiscordConfigured(status.configured)).catch(() => setIsDiscordConfigured(false));
+  }, []);
+
+  // Why the server read on open: the stream snapshot this modal also receives can be a poll old,
+  // and an operator about to change a restart policy edits the values the server holds. Opening the
+  // settings is a human read of that config, so it is the one that belongs on the audit trail —
+  // the stream that carries the same values on every tick is not.
+  useEffect(() => {
+    let active = true;
+    getContainerConfig()
+      .then((fresh) => {
+        if (!active) return;
+        const entry = fresh[containerId];
+        // No entry means the container has never been configured; the snapshot's defaults stand.
+        if (!entry) return;
+        setAutoRestart(entry.autoRestart);
+        setMaxRestarts(entry.maxRestarts);
+        setDiscordNotifications(entry.discordNotifications ?? true);
+      })
+      .catch(() => {
+        // The snapshot already rendered the values, so a read that could not run leaves them as they are.
+      });
+    return (): void => { active = false; };
+  }, [containerId]);
+
+  // Why the server read on open: the stream snapshot this modal also receives can be a poll old,
+  // and an operator about to change a restart policy edits the values the server holds. Opening the
+  // settings is a human read of that config, so it is the one that belongs on the audit trail —
+  // the stream that carries the same values on every tick is not.
+  useEffect(() => {
+    let active = true;
+    getContainerConfig()
+      .then((fresh) => {
+        if (!active) return;
+        const entry = fresh[containerId];
+        // No entry means the container has never been configured; the snapshot's defaults stand.
+        if (!entry) return;
+        setAutoRestart(entry.autoRestart);
+        setMaxRestarts(entry.maxRestarts);
+        setDiscordNotifications(entry.discordNotifications ?? true);
+      })
+      .catch(() => {
+        // The snapshot already rendered the values, so a read that could not run leaves them as they are.
+      });
+    return (): void => { active = false; };
+  }, [containerId]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -43,11 +96,14 @@ export function ContainerSettingsModal({
     });
 
     if (res.success) {
-      addToast({ title: 'Success', message: 'Container settings updated', type: 'success' });
+      toast.success('Success', { description: 'Container settings updated' });
+      if (isDiscordConfigured === false && discordNotifications) {
+        toast.warning('Discord not configured', { description: 'Webhook is empty — notifications will be skipped until configured.' });
+      }
       onUpdate();
       onClose();
     } else {
-      addToast({ title: 'Error', message: res.error, type: 'error' });
+      toast.error('Error', { description: res.error });
     }
     setSaving(false);
   };
@@ -55,11 +111,11 @@ export function ContainerSettingsModal({
   const handleReset = async () => {
     const res = await resetRestartCount(containerId);
     if (res.success) {
-      addToast({ title: 'Success', message: 'Restart count reset to 0', type: 'success' });
+      toast.success('Success', { description: 'Restart count reset to 0' });
       onUpdate();
       onClose();
     } else {
-      addToast({ title: 'Error', message: res.error, type: 'error' });
+      toast.error('Error', { description: res.error });
     }
   };
 
@@ -71,60 +127,27 @@ export function ContainerSettingsModal({
       description={containerName}
       className="max-w-lg"
       footer={
-        <div className="flex items-center justify-between gap-3 w-full">
-          <Button variant="secondary" onClick={handleReset}>
-            <RotateCcw className="w-4 h-4 mr-2" />
-            Reset Restart Count
-          </Button>
-          <div className="flex gap-3">
-            <Button variant="ghost" onClick={onClose}>Cancel</Button>
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? 'Saving...' : 'Save Settings'}
+        <ModalFooter
+          className="flex-col gap-2 sm:flex-row"
+          cancelLabel="Cancel"
+          confirmLabel={saving ? 'Saving...' : 'Save Settings'}
+          onCancel={onClose}
+          onConfirm={handleSave}
+          confirmDisabled={saving}
+          leadingAction={
+            <Button variant="secondary" onClick={handleReset}>
+              <RotateCcw className="w-4 h-4 mr-2" />
+              Reset Restart Count
             </Button>
-          </div>
-        </div>
+          }
+        />
       }
     >
       <div className="space-y-6">
-        {/* Auto-Restart Toggle */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <label className="text-sm font-bold text-foreground flex items-center gap-2">
-                <Power className="w-4 h-4 text-success" />
-                Auto-Restart Policy
-              </label>
-              <p className="text-xs text-muted-foreground mt-1">
-                Automatically restart container on failure
-              </p>
-            </div>
-            <button
-              onClick={() => setAutoRestart(!autoRestart)}
-              className={cn(
-                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                autoRestart ? 'bg-success' : 'bg-muted'
-              )}
-            >
-              <span
-                className={cn(
-                  'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                  autoRestart ? 'translate-x-6' : 'translate-x-1'
-                )}
-              />
-            </button>
-          </div>
-
-          {!autoRestart && (
-            <div className="bg-warning/10 border border-warning/20 rounded-lg p-3">
-              <p className="text-xs text-warning flex items-start gap-1.5">
-                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                Container will NOT restart automatically on failure. You must start it manually via the UI.
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Max Restarts Limit */}
+        <ContainerAutoRestartSection
+          autoRestart={autoRestart}
+          onToggle={() => setAutoRestart(!autoRestart)}
+        />
         <div className="space-y-3">
           <label className="text-sm font-bold text-foreground flex items-center gap-2">
             <RotateCcw className="w-4 h-4 text-primary" />
@@ -145,46 +168,11 @@ export function ContainerSettingsModal({
             Recommended: 5 attempts. Range: 1-20.
           </p>
         </div>
-
-        {/* Discord Notifications */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <label className="text-sm font-bold text-foreground flex items-center gap-2">
-                <Bell className="w-4 h-4 text-info" />
-                Discord Notifications
-              </label>
-              <p className="text-xs text-muted-foreground mt-1">
-                Send container events (start/stop/die/restart) to Discord webhook
-              </p>
-            </div>
-            <button
-              onClick={() => setDiscordNotifications(!discordNotifications)}
-              className={cn(
-                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                discordNotifications ? 'bg-info' : 'bg-muted'
-              )}
-            >
-              <span
-                className={cn(
-                  'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                  discordNotifications ? 'translate-x-6' : 'translate-x-1'
-                )}
-              />
-            </button>
-          </div>
-
-          {!discordNotifications && (
-            <div className="bg-warning/10 border border-warning/20 rounded-lg p-3">
-              <p className="text-xs text-warning flex items-start gap-1.5">
-                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                Discord notifications disabled. Container events will not be sent to webhook.
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Current Status */}
+        <ContainerDiscordSection
+          discordNotifications={discordNotifications}
+          isDiscordConfigured={isDiscordConfigured}
+          onToggle={() => setDiscordNotifications(!discordNotifications)}
+        />
         <div className="bg-muted/40 border border-border rounded-lg p-4 space-y-2">
           <div className="text-xs font-bold text-muted-foreground">CURRENT STATUS</div>
           <div className="flex items-center justify-between">
@@ -206,12 +194,9 @@ export function ContainerSettingsModal({
             </span>
           </div>
           {config.currentRestarts >= config.maxRestarts && (
-            <div className="bg-destructive/10 border border-destructive/20 rounded p-2 mt-2">
-              <p className="text-xs text-destructive flex items-start gap-1.5">
-                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                Restart limit reached! Container will not auto-restart until count is reset.
-              </p>
-            </div>
+            <InlineAlert tone="destructive" density="compact" className="rounded p-2 mt-2">
+              Restart limit reached! Container will not auto-restart until count is reset.
+            </InlineAlert>
           )}
         </div>
       </div>

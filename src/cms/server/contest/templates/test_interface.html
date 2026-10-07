@@ -90,7 +90,7 @@ $(document).ready(function () {
 <ul class="nav nav-tabs">
 {% for task in contest.tasks %}
     {% set task_type = get_task_type(dataset=task.active_dataset) %}
-    {% if task_type.testable %}
+    {% if task_type is defined and task_type.testable %}
     <li{% if task == default_task %} class="active"{% endif %}><a href="#test_{{ task.name }}" data-toggle="tab">{{ task.name }}</a></li>
     {% endif %}
 {% endfor %}
@@ -99,7 +99,7 @@ $(document).ready(function () {
 <div class="tab-content">
 {% for task in contest.tasks %}
     {% set task_type = get_task_type(dataset=task.active_dataset) %}
-    {% if task_type.testable %}
+    {% if task_type is defined and task_type.testable %}
 <div class="tab-pane{% if task == default_task %} active{% endif %}" id="test_{{ task.name }}">
 
 <h2 style="margin-bottom: 10px">{% trans %}Submit a test{% endtrans %}</h2>
@@ -216,7 +216,7 @@ $(document).ready(function () {
     {% for t in user_tests[task.id]|sort(attribute="timestamp")|reverse %}
         {# loop.revindex is broken: https://github.com/pallets/jinja/issues/794 #}
         {% set t_idx = user_tests[task.id]|length - loop.index0 %}
-        {% set tr = t.get_result(t.task.active_dataset) or undefined %}
+        {% set tr = (t.get_result(t.task.active_dataset) or undefined) if t.task.active_dataset is not none else undefined %}
         {% include "user_test_row.html" %}
     {% else %}
         <tr>

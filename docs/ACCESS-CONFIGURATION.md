@@ -41,27 +41,28 @@ hostname -I | awk '{print $1}'
 
 Example output: `203.0.113.45`
 
-#### Step 2: Update Environment Files
+#### Step 2: Update Configuration
 
-**Edit `.env.core`:**
-```bash
-PUBLIC_IP=203.0.113.45  # Replace with your actual IP
-```
+Edit `config.toml` (single source of truth), then regenerate the
+`.env.*` files with `./cms config sync`:
 
-**Edit `.env.admin`:**
 ```bash
-ACCESS_METHOD=public_port
+# [core]
 PUBLIC_IP=203.0.113.45  # Replace with your actual IP
+# Publish each UI on that address; a comma list publishes on several at once.
+# Full model: docs/ADDRESS-MODEL.md
+ADMIN_BIND_IP=203.0.113.45
+NGINX_BIND_IP=203.0.113.45
+CONTEST_BIND_IP=203.0.113.45
+RANKING_BIND_IP=203.0.113.45
 ADMIN_PORT_EXTERNAL=8889
 RANKING_PORT_EXTERNAL=8890
-```
-
-**Edit `.env.contest`:**
-```bash
-ACCESS_METHOD=public_port
-PUBLIC_IP=203.0.113.45  # Replace with your actual IP
 CONTEST_ID=1
 CONTEST_PORT_EXTERNAL=8888
+```
+
+```bash
+./cms config sync
 ```
 
 #### Step 3: Configure Firewall
@@ -91,11 +92,10 @@ sudo firewall-cmd --reload
 # Deploy all stacks
 ./cms
 
-# Or manually
-docker compose -f docker-compose.core.yml --env-file .env.core up -d
-docker compose -f docker-compose.admin.yml --env-file .env.admin up -d
-docker compose -f docker-compose.contest.yml --env-file .env.contest up -d
-docker compose -f docker-compose.worker.yml --env-file .env.worker up -d
+# Or manually (compose loads .env automatically)
+docker compose --profile core up -d
+docker compose --profile admin up -d
+docker compose --profile contest up -d
 ```
 
 #### Step 5: Access CMS
@@ -184,25 +184,25 @@ ranking.example.com  → 203.0.113.45
 
 ### Configuration Steps
 
-#### Step 1: Update Environment Files
+#### Step 1: Update Configuration
 
-**Edit `.env.admin`:**
+Edit `config.toml`, then `./cms config sync`:
+
 ```bash
-ACCESS_METHOD=domain
 PUBLIC_IP=203.0.113.45  # Your server IP
+# The proxy answers on the name, so the UI ports stay internal — leave their
+# bind keys unset and they keep the loopback default.
 ADMIN_DOMAIN=admin.example.com
 RANKING_DOMAIN=ranking.example.com
+CONTEST_DOMAIN=contest.example.com
 ADMIN_PORT_EXTERNAL=8889  # Internal port for reverse proxy
 RANKING_PORT_EXTERNAL=8890
+CONTEST_ID=1
+CONTEST_PORT_EXTERNAL=8888  # Internal port for reverse proxy
 ```
 
-**Edit `.env.contest`:**
 ```bash
-ACCESS_METHOD=domain
-PUBLIC_IP=203.0.113.45
-CONTEST_ID=1
-CONTEST_DOMAIN=contest.example.com
-CONTEST_PORT_EXTERNAL=8888  # Internal port for reverse proxy
+./cms config sync
 ```
 
 #### Step 2: Setup Reverse Proxy
@@ -357,7 +357,7 @@ touch acme.json
 chmod 600 acme.json
 ```
 
-Update `.env.contest`:
+Update `config.toml`, then `./cms config sync`:
 ```bash
 ENABLE_TLS=true
 TLS_CERTRESOLVER=letsencrypt
@@ -371,28 +371,20 @@ Redeploy services.
 
 ### For Public Port Access
 
-When using public IP, remote workers need to connect to your server's public IP.
+When using public IP, remote workers connect to your server's public IP.
 
-**On Remote Worker Machine:**
-
-Edit worker configuration or use the connect script:
+**On the main server** — register the worker box as registry-only fleet rows:
 
 ```bash
-# Download and run worker connect script
-curl -fsSL http://203.0.113.45:8889/scripts/__worker_connect.sh -o worker-connect.sh
-chmod +x worker-connect.sh
-sudo ./worker-connect.sh
+./cms worker attach 10 WORKER-BOX-IP 26010   # multi-shard: 10-12 or 10,11,12
 ```
 
-When prompted, enter your **public IP**: `203.0.113.45`
-
-**Or manually configure:**
+**On the remote worker machine** (this repository checked out) — run the
+block printed by `attach`; it adds WORKER_N entries to `config.toml` [worker]
+and deploys the shards locally:
 
 ```bash
-# .env.worker on remote machine
-CORE_SERVICES_HOST=203.0.113.45
-WORKER_SHARD=10  # Use unique numbers for remote workers
-WORKER_NAME=remote-worker-10
+./cms config sync && ./cms worker deploy all && ./cms worker list
 ```
 
 ### Required Ports for Remote Workers
@@ -527,12 +519,10 @@ dig contest.example.com
 # 1. Get public IP
 MY_IP=$(curl -4 ifconfig.me)
 
-# 2. Update .env files
-echo "PUBLIC_IP=$MY_IP" >> .env.core
-echo "ACCESS_METHOD=public_port" >> .env.admin
-echo "PUBLIC_IP=$MY_IP" >> .env.admin
-echo "ACCESS_METHOD=public_port" >> .env.contest
-echo "PUBLIC_IP=$MY_IP" >> .env.contest
+# 2. Edit config.toml (single source of truth)
+#    PUBLIC_IP=$MY_IP
+#    ADMIN_BIND_IP=NGINX_BIND_IP=CONTEST_BIND_IP=RANKING_BIND_IP=$MY_IP
+./cms config sync
 
 # 3. Configure firewall
 sudo ufw allow 8888/tcp
@@ -554,11 +544,10 @@ echo "Ranking: http://$MY_IP:8890"
 # 1. Configure DNS (in your DNS provider)
 # Add A records pointing to your server IP
 
-# 2. Update .env files
-echo "ACCESS_METHOD=domain" >> .env.admin
-echo "ADMIN_DOMAIN=admin.example.com" >> .env.admin
-echo "ACCESS_METHOD=domain" >> .env.contest
-echo "CONTEST_DOMAIN=contest.example.com" >> .env.contest
+# 2. Edit config.toml
+# [admin] ADMIN_DOMAIN = "admin.example.com"
+# [contest] CONTEST_DOMAIN = "contest.example.com"
+# Then: ./cms config sync
 
 # 3. Setup reverse proxy (Nginx or Traefik)
 
@@ -592,4 +581,4 @@ sudo certbot --nginx -d contest.example.com -d admin.example.com
 
 ---
 
-**Need help?** See [DOCKER-DEPLOYMENT.md](DOCKER-DEPLOYMENT.md) or [QUICKSTART.md](QUICKSTART.md)
+**Need help?** See [README.md](../README.md) or [TROUBLESHOOTING.md](TROUBLESHOOTING.md)

@@ -1,15 +1,19 @@
 import { prisma } from '@/lib/prisma';
 import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
-import { buildUserSearchWhere, safeUserSelect, usersPageSelect } from '@/lib/prisma-selects';
+import { getPermissions } from '@/lib/permissions';
+import { filterReadableFieldsWith, getFieldAccess } from '@/lib/field-permissions';
+import { buildUserSearchWhere, safeUserSelect, usersPageSelect, type UsersPageRow } from '@/lib/prisma-selects';
 import { formatStoredPassword, isPasswordKind, DEFAULT_PASSWORD_KIND } from '@/lib/password-format';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
+import { recordAudit } from '@/lib/audit';
+import { normalizeLanguageCode } from '@/lib/constants/languages';
 
 const DEFAULT_USERS_PER_PAGE = 20;
 const MAX_USERS_PER_PAGE = 100;
 
 export async function GET(req: NextRequest) {
-  const { authorized, response } = await verifyApiPermission('users');
+  const { authorized, response } = await verifyApiPermission('user:list');
   if (!authorized) return response;
 
   try {
@@ -32,8 +36,14 @@ export async function GET(req: NextRequest) {
       prisma.users.count({ where }),
     ]);
 
+    const permissions = await getPermissions();
+    const usersFieldAccess = getFieldAccess('users', permissions);
+    const visibleUsers = users.map((user) =>
+      filterReadableFieldsWith(usersFieldAccess, user as unknown as Record<string, unknown>) as unknown as UsersPageRow,
+    );
+
     return apiSuccess({
-      users,
+      users: visibleUsers,
       total,
       totalPages: Math.max(Math.ceil(total / perPage), 1),
       currentPage: page,
@@ -46,33 +56,63 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { authorized, response } = await verifyApiPermission('users');
+  const { authorized, response } = await verifyApiPermission('user:create');
   if (!authorized) return response;
 
   try {
     const data = await req.json();
     const { first_name, last_name, username, email, password, timezone } = data;
 
+    const usernameTrimmed = typeof username === 'string' ? username.trim() : '';
+    const firstNameTrimmed = typeof first_name === 'string' ? first_name.trim() : '';
+    const lastNameTrimmed = typeof last_name === 'string' ? last_name.trim() : '';
+    if (!usernameTrimmed) return apiError({ message: 'Username is required', status: 400 });
+    if (!/^[A-Za-z0-9_.-]+$/.test(usernameTrimmed)) return apiError({ message: 'Username must contain only letters, numbers, dot, hyphen and underscore', status: 400 });
+    if (!firstNameTrimmed) return apiError({ message: 'First name is required', status: 400 });
+    if (!lastNameTrimmed) return apiError({ message: 'Last name is required', status: 400 });
+    if (email && typeof email === 'string' && email.trim().length > 0) {
+      const emailTrimmed = email.trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrimmed)) return apiError({ message: 'Invalid email format', status: 400 });
+    }
     if (!password) return apiError({ message: 'Password is required', status: 400 });
+    if (typeof password !== 'string' || password.length < 4) return apiError({ message: 'Password must be at least 4 characters', status: 400 });
 
     const passwordKind = isPasswordKind(data.passwordKind) ? data.passwordKind : DEFAULT_PASSWORD_KIND;
     const storedPassword = await formatStoredPassword(passwordKind, password);
+    // Why: accept caller-supplied preferred_languages but normalize to prevent silent mismatch with statement.language
+    const preferredLanguagesRaw = Array.isArray(data.preferred_languages) ? data.preferred_languages : [];
+    const seenPreferred = new Set<string>();
+    const preferredLanguages: string[] = [];
+    for (const raw of preferredLanguagesRaw) {
+      if (typeof raw !== 'string') continue;
+      const normalized = normalizeLanguageCode(raw);
+      if (!normalized || seenPreferred.has(normalized)) continue;
+      seenPreferred.add(normalized);
+      preferredLanguages.push(normalized);
+    }
 
     const created = await prisma.users.create({
       data: {
-        first_name,
-        last_name,
-        username,
-        email: email || null,
+        first_name: firstNameTrimmed,
+        last_name: lastNameTrimmed,
+        username: usernameTrimmed,
+        email: typeof email === 'string' && email.trim().length > 0 ? email.trim() : null,
         password: storedPassword,
-        timezone: timezone || null,
-        preferred_languages: [],
+        timezone: typeof timezone === 'string' && timezone.trim().length > 0 ? timezone.trim() : null,
+        preferred_languages: preferredLanguages,
       },
     });
 
     const user = await prisma.users.findUnique({ where: { id: created.id }, select: safeUserSelect });
 
-    revalidatePath('/[locale]/users', 'page');
+    await recordAudit({
+      verb: 'user:create',
+      entity: 'user',
+      entityId: String(created.id),
+      afterValues: { username: usernameTrimmed, first_name: firstNameTrimmed, last_name: lastNameTrimmed },
+      result: 'success',
+    });
+    revalidatePath('/[locale]/people/users', 'page');
     return apiSuccess({ user });
   } catch (error) {
     const e = error as { code?: string };

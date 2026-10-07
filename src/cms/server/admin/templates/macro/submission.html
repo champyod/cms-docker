@@ -188,7 +188,7 @@ dataset (Dataset|None): the dataset to show results for, or if not defined use
   </td>
   <td>
     {{ macro_reevaluation_buttons.reevaluation_buttons(
-           admin.permission_all,
+           admin.has_permission('all:all'),
            url("submission", s.id, dataset.id),
            submission_id=s.id,
            dataset_id=dataset.id) }}

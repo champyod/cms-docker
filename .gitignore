@@ -17,17 +17,20 @@ codecov/
 .dev/
 test_logs/
 
+# Customizable CMS Configuration
+config.toml
+
 # Environment Configuration
 .env
 .env.*
-!.env.*.example
-!.env.example
 
 # Local overrides — gitignored for inside info / prod stay-off
 .env.local
 .env.*.local
 *.local
 *.pem.local
+docker-compose.override.yml
+docker-compose.expose.yml
 
 # VSCode settings
 .vscode/
@@ -47,6 +50,7 @@ config/grader.nginx.conf
 config/letsencrypt/
 config/monitor_targets.json
 certbot-webroot/
+.domain.lock
 
 # Optional features — local HSM/Vault/mTLS artefacts (gitignored, not for prod by default)
 config/hsm/

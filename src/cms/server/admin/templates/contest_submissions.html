@@ -11,7 +11,7 @@
   <p>
     Reevaluate all {{ submission_count }} submissions in this contest (for all datasets)
     {{ macro_reevaluation_buttons.reevaluation_buttons(
-           admin.permission_all,
+           admin.has_permission("all:all"),
            url("contest", contest.id, "submissions"),
            contest_id=contest.id) }}
   </p>

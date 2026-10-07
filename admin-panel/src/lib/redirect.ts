@@ -5,12 +5,7 @@ import { redirect as nextRedirect } from 'next/navigation';
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES, type Locale } from '@/lib/locales';
 
 /**
- * Locale-aware redirect helper.
- * Extracts the current locale from the incoming request's referer header,
- * then prepends it to the path before redirecting.
- *
- * Use this everywhere instead of Next.js's raw `redirect()` to ensure locale
- * is always preserved in the URL.
+ * Wraps Next.js's raw `redirect()` to always preserve locale in the URL.
  *
  * @param path - Path to redirect to, e.g. "/dashboard" or "/auth/login"
  */

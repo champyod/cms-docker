@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
 import { addParticipant } from '@/app/actions/contests';
 import { Dialog } from '@/components/core/Dialog';
@@ -21,21 +21,28 @@ interface ParticipantModalProps {
   onSuccess: () => void;
 }
 
-export function ParticipantModal({ isOpen, onClose, contestId, availableUsers }: ParticipantModalProps) {
+export function ParticipantModal({ isOpen, onClose, contestId, availableUsers, onSuccess }: ParticipantModalProps) {
   const [search, setSearch] = useState('');
   const [adding, setAdding] = useState<number | null>(null);
 
-  const filteredUsers = availableUsers.filter((user) =>
-    user.username.toLowerCase().includes(search.toLowerCase()) ||
-    user.first_name.toLowerCase().includes(search.toLowerCase()) ||
-    user.last_name.toLowerCase().includes(search.toLowerCase())
+  // Whitespace-only input means "no filter", matching the command-palette team search.
+  const needle = search.trim().toLowerCase();
+  const filteredUsers = useMemo(
+    () =>
+      availableUsers.filter(
+        (user) =>
+          user.username.toLowerCase().includes(needle) ||
+          user.first_name.toLowerCase().includes(needle) ||
+          user.last_name.toLowerCase().includes(needle),
+      ),
+    [availableUsers, needle],
   );
 
   const handleAdd = async (userId: number) => {
     setAdding(userId);
     try {
       await addParticipant(contestId, userId);
-      window.location.reload();
+      onSuccess();
     } catch (error) {
       console.error('Failed to add participant:', error);
     } finally {

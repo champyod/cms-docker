@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Plus, Trash2, Play, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Trash2, Play, ToggleLeft, ToggleRight } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
-import { Input } from '@/components/core/Input';
-import { useToast } from '@/components/providers/ToastProvider';
+import { toast } from 'sonner';
+import { useDictionary } from '@/hooks/useDictionary';
+import { interpolate } from '@/lib/interpolate';
+import { MonitorTargetForm } from './MonitorTargetForm';
 import {
   addMonitorTarget,
   removeMonitorTarget,
@@ -32,6 +34,7 @@ interface MonitorConfigSectionClientProps {
 export function MonitorConfigSectionClient({
   initialTargets,
 }: MonitorConfigSectionClientProps): React.ReactElement {
+  const toasts = useDictionary().toasts.monitor;
   const [targets, setTargets] = useState<MonitorTarget[]>(initialTargets);
   const [url, setUrl] = useState('');
   const [interval, setInterval_] = useState(60);
@@ -39,11 +42,10 @@ export function MonitorConfigSectionClient({
   const [expectedStatus, setExpectedStatus] = useState(200);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
-  const { addToast } = useToast();
 
   const handleAdd = useCallback(async () => {
     if (!url.trim()) {
-      addToast({ type: 'error', title: 'Error', message: 'URL is required' });
+      toast.error(toasts.errorTitle, { description: toasts.urlRequiredDescription });
       return;
     }
     setAdding(true);
@@ -60,26 +62,26 @@ export function MonitorConfigSectionClient({
         setInterval_(60);
         setTimeout_(5);
         setExpectedStatus(200);
-        addToast({ type: 'success', title: 'Added', message: 'Monitor target added' });
+        toast.success(toasts.addedTitle, { description: toasts.addedDescription });
       } else {
-        addToast({ type: 'error', title: 'Error', message: result.error ?? 'Failed' });
+        toast.error(toasts.errorTitle, { description: result.error ?? toasts.failureDescription });
       }
     } finally {
       setAdding(false);
     }
-  }, [url, interval, timeout, expectedStatus, addToast]);
+  }, [url, interval, timeout, expectedStatus, toasts]);
 
   const handleRemove = useCallback(
     async (id: string) => {
       const result = await removeMonitorTarget(id);
       if (result.success) {
         setTargets((prev) => prev.filter((t) => t.id !== id));
-        addToast({ type: 'success', title: 'Removed', message: 'Target removed' });
+        toast.success(toasts.removedTitle, { description: toasts.removedDescription });
       } else {
-        addToast({ type: 'error', title: 'Error', message: result.error ?? 'Failed' });
+        toast.error(toasts.errorTitle, { description: result.error ?? toasts.failureDescription });
       }
     },
-    [addToast],
+    [toasts],
   );
 
   const handleToggle = useCallback(
@@ -90,10 +92,10 @@ export function MonitorConfigSectionClient({
           prev.map((t) => (t.id === id ? (result.data as MonitorTarget) : t)),
         );
       } else {
-        addToast({ type: 'error', title: 'Error', message: result.error ?? 'Failed' });
+        toast.error(toasts.errorTitle, { description: result.error ?? toasts.failureDescription });
       }
     },
-    [addToast],
+    [toasts],
   );
 
   const handleTest = useCallback(
@@ -108,26 +110,29 @@ export function MonitorConfigSectionClient({
             matched: boolean;
             latency: number;
           };
-          addToast({
-            type: d.matched ? 'success' : 'warning',
-            title: d.matched ? 'OK' : 'Mismatch',
-            message: `HTTP ${d.status} (expected ${d.expectedStatus}) — ${d.latency}ms`,
+          // sonner exposes one publisher per severity, so the dynamic type maps to a branch.
+          const description = interpolate(toasts.resultDescription, {
+            status: d.status,
+            expectedStatus: d.expectedStatus,
+            latency: d.latency,
           });
+          if (d.matched) toast.success(toasts.testOkTitle, { description });
+          else toast.warning(toasts.testMismatchTitle, { description });
         } else {
-          addToast({ type: 'error', title: 'Test Failed', message: result.error ?? 'Connection error' });
+          toast.error(toasts.testFailedTitle, {
+            description: result.error ?? toasts.connectionErrorDescription,
+          });
         }
       } finally {
         setTestingId(null);
       }
     },
-    [addToast],
+    [toasts],
   );
 
   return (
-    <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl p-6 space-y-6">
-      <h2 className="text-lg font-semibold text-white">Monitor Configuration</h2>
-
-      {/* Target List */}
+    <div className="bg-card backdrop-blur-xl border border-border rounded-2xl p-6 space-y-6">
+      <h2 className="text-lg font-semibold text-foreground">Monitor Configuration</h2>
       {targets.length === 0 ? (
         <p className="text-neutral-400 text-sm">No monitor targets configured.</p>
       ) : (
@@ -135,12 +140,12 @@ export function MonitorConfigSectionClient({
           {targets.map((target) => (
             <Card
               key={target.id}
-              className={`flex items-center gap-4 p-4 bg-black/40 border border-white/5 rounded-xl ${
+              className={`flex items-center gap-4 p-4 bg-black/40 border border-border rounded-xl ${
                 !target.enabled ? 'opacity-50' : ''
               }`}
             >
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-white truncate font-mono">{target.url}</p>
+                <p className="text-sm text-foreground truncate font-mono">{target.url}</p>
                 <p className="text-xs text-neutral-400">
                   {target.interval}s interval · {target.timeout}s timeout · HTTP{' '}
                   {target.expectedStatus}
@@ -150,11 +155,11 @@ export function MonitorConfigSectionClient({
               <button
                 type="button"
                 onClick={() => handleToggle(target.id)}
-                className="text-neutral-400 hover:text-white transition-colors"
+                className="flex size-11 shrink-0 items-center justify-center rounded-lg text-neutral-400 hover:text-foreground transition-colors"
                 aria-label={target.enabled ? 'Disable target' : 'Enable target'}
               >
                 {target.enabled ? (
-                  <ToggleRight className="w-5 h-5 text-emerald-400" />
+                  <ToggleRight className="w-5 h-5 text-success" />
                 ) : (
                   <ToggleLeft className="w-5 h-5" />
                 )}
@@ -181,70 +186,18 @@ export function MonitorConfigSectionClient({
           ))}
         </div>
       )}
-
-      {/* Add Form */}
-      <div className="bg-black/40 border border-white/5 rounded-xl p-4 space-y-4">
-        <h3 className="text-sm font-medium text-white">Add Target</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Input
-            label="URL"
-            placeholder="https://example.com/health"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            className="col-span-1 md:col-span-2 lg:col-span-4"
-          />
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground ml-1">Interval (s)</label>
-            <select
-              value={interval}
-              onChange={(e) => setInterval_(Number(e.target.value))}
-              className="w-full h-10 px-3 bg-black/40 border border-white/5 rounded-xl text-sm text-white"
-            >
-              <option value={30}>30</option>
-              <option value={60}>60</option>
-              <option value={120}>120</option>
-              <option value={300}>300</option>
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground ml-1">Timeout (s)</label>
-            <select
-              value={timeout}
-              onChange={(e) => setTimeout_(Number(e.target.value))}
-              className="w-full h-10 px-3 bg-black/40 border border-white/5 rounded-xl text-sm text-white"
-            >
-              <option value={3}>3</option>
-              <option value={5}>5</option>
-              <option value={10}>10</option>
-              <option value={30}>30</option>
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground ml-1">Expected Status</label>
-            <select
-              value={expectedStatus}
-              onChange={(e) => setExpectedStatus(Number(e.target.value))}
-              className="w-full h-10 px-3 bg-black/40 border border-white/5 rounded-xl text-sm text-white"
-            >
-              <option value={200}>200</option>
-              <option value={201}>201</option>
-              <option value={204}>204</option>
-              <option value={301}>301</option>
-            </select>
-          </div>
-          <div className="flex items-end">
-            <Button
-              variant="positive"
-              loading={adding}
-              onClick={handleAdd}
-              className="w-full"
-            >
-              <Plus className="w-4 h-4 mr-1" />
-              Add
-            </Button>
-          </div>
-        </div>
-      </div>
+      <MonitorTargetForm
+        url={url}
+        interval={interval}
+        timeout={timeout}
+        expectedStatus={expectedStatus}
+        adding={adding}
+        onUrlChange={setUrl}
+        onIntervalChange={setInterval_}
+        onTimeoutChange={setTimeout_}
+        onExpectedStatusChange={setExpectedStatus}
+        onAdd={handleAdd}
+      />
     </div>
   );
 }

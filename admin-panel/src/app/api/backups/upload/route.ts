@@ -73,7 +73,7 @@ async function writeQuarantineFile(file: File, previewId: string): Promise<void>
 }
 
 export async function POST(req: NextRequest): Promise<Response> {
-  const { authorized, response } = await verifyApiPermission('all');
+  const { authorized, response } = await verifyApiPermission('backup:restore');
   if (!authorized) return response;
 
   try {

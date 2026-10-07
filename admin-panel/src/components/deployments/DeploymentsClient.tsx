@@ -1,248 +1,133 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { readEnvFile, updateEnvFile } from '@/app/actions/env';
-import { getAvailableContests } from '@/app/actions/contests';
-import { getWorkers, updateWorkers } from '@/app/actions/workerConfig';
-import { getWorkersLiveStatus, WorkerLiveDetail } from '@/app/actions/workers';
+import { RefreshCw } from 'lucide-react';
+
 import { useDeployContest } from '@/hooks/useDeployContest';
-import { PageContent, PageHeader, Stack } from '@/components/core/Layout';
-import { Loading } from '@/components/core/Loading';
-import { useToast } from '@/components/providers/ToastProvider';
+import { Stack } from '@/components/core/Layout';
+import { Button } from '@/components/core/Button';
+import { SurfaceState } from '@/components/core/SurfaceState';
 import { MismatchBanner } from '@/components/deployments/MismatchBanner';
-import { ActiveContestCard, ContestOption } from '@/components/deployments/ActiveContestCard';
+import { DeployStatusPanel } from '@/components/deployments/DeployStatusPanel';
+import { ActiveContestCard } from '@/components/deployments/ActiveContestCard';
 import { ContestSettingsForm } from '@/components/deployments/ContestSettingsForm';
-import { WorkersPanel, WorkerConfig } from '@/components/deployments/WorkersPanel';
+import { WorkersPanel } from '@/components/deployments/WorkersPanel';
+import { useDeployWorkers } from '@/components/deployments/useDeployWorkers';
+import { useContestDeploymentSnapshot } from '@/components/deployments/useContestDeploymentSnapshot';
+import { usePublishModuleTabActions } from '@/components/navigation/ModuleTabActionSlot';
+import { useDictionary } from '@/hooks/useDictionary';
 
-export function DeploymentsClient() {
-    const { addToast } = useToast();
-    const { state: deployState, deploy: handleDeploy, reset: resetDeploy } = useDeployContest();
-    const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
-    const [availableContests, setAvailableContests] = useState<ContestOption[]>([]);
-    const [activeContestId, setActiveContestId] = useState<number | null>(null);
-    const [activeContestName, setActiveContestName] = useState<string | null>(null);
-    const [dbActiveContestId, setDbActiveContestId] = useState<number | null>(null);
-    const [selectedContestId, setSelectedContestId] = useState<number | null>(null);
-    const [globalSettings, setGlobalSettings] = useState<Record<string, string>>({});
-    const [originalGlobal, setOriginalGlobal] = useState<string>('{}');
-    const [workers, setWorkers] = useState<WorkerConfig[]>([]);
-    const [originalWorkers, setOriginalWorkers] = useState<string>('[]');
-    const [liveWorkers, setLiveWorkers] = useState<WorkerLiveDetail[]>([]);
-    const [workersForbidden, setWorkersForbidden] = useState(false);
-    const [canManageWorkers, setCanManageWorkers] = useState(true);
+export function DeploymentsClient(): React.JSX.Element {
+  const dict = useDictionary();
+  const { state: deployState, deploy: handleDeploy, cancel: cancelDeploy, reset: resetDeploy } = useDeployContest();
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [workersSaving, setWorkersSaving] = useState(false);
+  const snapshot = useContestDeploymentSnapshot({
+    setSaving: setSettingsSaving,
+    deployPhase: deployState.phase,
+  });
+  const workers = useDeployWorkers(setWorkersSaving);
+  const { applyDeployedContestId, loadData } = snapshot;
 
-    const isDirty = JSON.stringify(globalSettings) !== originalGlobal;
-    const workersDirty = JSON.stringify(workers) !== originalWorkers;
-    const hasChangedContest = selectedContestId !== null && selectedContestId !== activeContestId;
+  // Why the deploy spinner is derived, not mirrored into state: a state copy of the
+  // deploy phase needs an effect to clear it, and that effect renders a second time
+  // on every terminal phase. Reading the phase directly cannot go stale. The two
+  // write paths keep their own flags because they are not the deploy.
+  const deployInFlight = deployState.phase === 'deploying' || deployState.phase === 'polling';
+  const saving = settingsSaving || workersSaving || deployInFlight;
 
-    const applyEnvSnapshot = (envResult: Awaited<ReturnType<typeof readEnvFile>>) => {
-        let actualActiveId: number | null = null;
-        if (envResult.success && envResult.config) {
-            const activeId = parseInt(envResult.config.ACTIVE_CONTEST_ID || envResult.config.CONTEST_ID || '0');
-            actualActiveId = activeId > 0 ? activeId : null;
-            setActiveContestId(actualActiveId);
-            setSelectedContestId(actualActiveId);
+  // Why every source is re-read at every terminal phase: the operation settles server side — activating
+  // its contest, or rolling the configuration back — and can settle after this panel last read the
+  // database. A value held from before that settle reports a mismatch the deploy has already resolved.
+  // loadData is that read, and it takes all three sources in one pass: config.toml [contest] CONTEST_ID,
+  // the database rows, and the id the running container serves.
+  useEffect(() => {
+    const ended = deployState.phase === 'completed' || deployState.phase === 'failed' || deployState.phase === 'timeout';
+    if (!ended) return;
+    // Why the id is applied before the read rather than after it: the card stays on the contest this
+    // panel just deployed while the reads are in flight, and the read — not this line — is what the
+    // values on screen come from once it answers. Only a completed deploy applies it: a failed one
+    // leaves config.toml on whatever its rollback restored, and the read is what says so.
+    if (deployState.phase === 'completed' && deployState.contestId !== null) {
+      applyDeployedContestId(deployState.contestId);
+    }
+    void loadData({ silent: true });
+  }, [deployState.phase, deployState.contestId, applyDeployedContestId, loadData]);
 
-            const globals = { ...envResult.config };
-            delete globals.ACTIVE_CONTEST_ID;
-            delete globals.CONTEST_ID;
-            setGlobalSettings(globals);
-            setOriginalGlobal(JSON.stringify(globals));
-        }
-        return actualActiveId;
-    };
+  const handleActivateAndRestart = (): void => {
+    if (snapshot.selectedContestId === null || !snapshot.hasChangedContest) return;
+    handleDeploy(snapshot.selectedContestId);
+  };
 
-    const loadData = async () => {
-        setLoading(true);
-        const [envResult, contestsResult, workersResult, statusResult] = await Promise.all([
-            readEnvFile('.env.contest'),
-            getAvailableContests(),
-            getWorkers(),
-            getWorkersLiveStatus()
-        ]);
+  // Why the refresh is withdrawn while loading: the panel body is the loading surface during
+  // that read, and loadData is the read it would restart underneath itself.
+  usePublishModuleTabActions(
+    'infrastructure.deployments',
+    snapshot.loading ? null : (
+      <Button
+        variant="secondary"
+        size="sm"
+        icon={RefreshCw}
+        onClick={() => void loadData()}
+      >
+        {dict.deployments.refresh}
+      </Button>
+    ),
+  );
 
-        const actualActiveId = applyEnvSnapshot(envResult);
+  if (snapshot.loading) {
+    return <SurfaceState status={{ kind: 'loading', title: dict.states.loading.deployments }} />;
+  }
 
-        const databaseContests = contestsResult.success ? contestsResult.contests : [];
-        setAvailableContests(databaseContests);
+  return (
+    <Stack gap={8} className="pb-20">
+      {deployState.phase !== 'idle' && (
+        <DeployStatusPanel state={deployState} onCancel={cancelDeploy} onReset={resetDeploy} />
+      )}
 
-        const dbActive = databaseContests.find((c: { id: number; name: string; is_active: boolean }) => c.is_active === true);
-        const dbActiveId = dbActive ? dbActive.id : null;
-        setDbActiveContestId(dbActiveId);
+      {snapshot.hasMismatch && (
+        <MismatchBanner
+          activeContestId={snapshot.activeContestId}
+          activeContestName={snapshot.activeContestName}
+          dbActiveContestId={snapshot.dbActiveContestId}
+          containerContestId={snapshot.containerContestId}
+        />
+      )}
 
-        // Read the freshly parsed id, not the state binding — setState in this same tick leaves the closure stale.
-        const envActiveId = actualActiveId;
-        if (envActiveId) {
-            const match = databaseContests.find((c: { id: number; name: string; is_active: boolean }) => c.id === envActiveId);
-            if (match) setActiveContestName(match.name);
-        }
-
-        const normalizedWorkers = Array.isArray(workersResult) ? workersResult : [];
-        setWorkers(normalizedWorkers);
-        setOriginalWorkers(JSON.stringify(normalizedWorkers));
-
-        if (statusResult && !statusResult.forbidden) {
-            setLiveWorkers(statusResult.workers ?? []);
-            setCanManageWorkers(statusResult.canManage);
-            setWorkersForbidden(false);
-        } else {
-            setWorkersForbidden(true);
-        }
-
-        setLoading(false);
-    };
-
-    useEffect(() => { loadData(); }, []);
-
-    // Poll worker telemetry so activity/lagging stay fresh.
-    useEffect(() => {
-        const id = setInterval(async () => {
-            try {
-                const res = await getWorkersLiveStatus();
-                if (!res.forbidden) setLiveWorkers(res.workers ?? []);
-            } catch { /* keep last snapshot */ }
-        }, 20_000);
-        return () => clearInterval(id);
-    }, []);
-
-    const handleActivateAndRestart = () => {
-        if (!selectedContestId || !hasChangedContest) return;
-        setSaving(true);
-        handleDeploy(selectedContestId);
-    };
-
-    useEffect(() => {
-        if (deployState.phase === 'completed') {
-            setSaving(false);
-            const cId = deployState.contestId;
-            if (cId !== null) {
-                setActiveContestId(cId);
-                const match = availableContests.find(c => c.id === cId);
-                if (match) setActiveContestName(match.name);
-            }
-            addToast({ type: 'success', title: 'Contest Deployed', message: `Contest #${cId} is now active and stack restarted.` });
-            resetDeploy();
-        } else if (deployState.phase === 'failed' || deployState.phase === 'timeout') {
-            setSaving(false);
-            addToast({ type: 'error', title: 'Deploy Failed', message: deployState.error || 'Deploy did not complete successfully.' });
-            resetDeploy();
-        } else if (deployState.phase === 'already_running') {
-            setSaving(false);
-            addToast({ type: 'warning', title: 'Deploy Already Running', message: deployState.error || 'Another deploy is already in progress.' });
-            resetDeploy();
-        }
-    }, [deployState.phase]);
-
-    const handleSaveSettings = async () => {
-        setSaving(true);
-        try {
-            const result = await updateEnvFile('.env.contest', globalSettings);
-            if (!result.success) {
-                addToast({ type: 'error', title: 'Save Failed', message: result.error || 'Could not update env file' });
-                setSaving(false);
-                return;
-            }
-            setOriginalGlobal(JSON.stringify(globalSettings));
-            addToast({ type: 'success', title: 'Settings Saved', message: 'Contest settings updated.' });
-        } catch (error) {
-            addToast({ type: 'error', title: 'Unexpected Error', message: (error as Error).message });
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const handleSaveWorkers = async () => {
-        setSaving(true);
-        try {
-            const result = await updateWorkers(workers);
-            if (!result.success) {
-                addToast({ type: 'error', title: 'Worker Sync Failed', message: result.error || 'Could not sync worker config' });
-                setSaving(false);
-                return;
-            }
-            setOriginalWorkers(JSON.stringify(workers));
-            addToast({ type: 'success', title: 'Workers Synced', message: 'Worker configuration updated.' });
-        } catch (error) {
-            addToast({ type: 'error', title: 'Unexpected Error', message: (error as Error).message });
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const handleGlobalChange = (key: string, val: string) => {
-        setGlobalSettings(prev => ({ ...prev, [key]: val }));
-    };
-
-    const addGlobalWorker = () => setWorkers([...workers, { host: '', port: 26000 }]);
-    const removeGlobalWorker = (index: number) => setWorkers(workers.filter((_, i) => i !== index));
-    const updateGlobalWorker = (index: number, field: 'host' | 'port', value: string) => {
-        const newWorkers = [...workers];
-        if (field === 'port') {
-            newWorkers[index].port = parseInt(value) || 26000;
-        } else {
-            newWorkers[index].host = value;
-        }
-        setWorkers(newWorkers);
-    };
-
-    const hasMismatch = !deployState.phase.startsWith('deploy') && !deployState.phase.startsWith('poll') && activeContestId !== null && dbActiveContestId !== null && activeContestId !== dbActiveContestId;
-
-    if (loading) return <Loading text="Loading contest deployment..." fullScreen />;
-
-    return (
-        <PageContent className="pb-20">
-            <PageHeader
-                title="Active Contest Deployment"
-                description="Select, activate, and manage the currently deployed contest stack."
-            />
-
-            {hasMismatch && (
-                <MismatchBanner
-                    activeContestId={activeContestId}
-                    activeContestName={activeContestName}
-                    dbActiveContestId={dbActiveContestId}
-                />
-            )}
-
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-                <Stack gap={6} className="xl:col-span-2">
-                    {/* Active Contest Card */}
-                    <ActiveContestCard
-                        activeContestId={activeContestId}
-                        activeContestName={activeContestName}
-                        availableContests={availableContests}
-                        selectedContestId={selectedContestId}
-                        deployPhase={deployState.phase}
-                        hasChangedContest={hasChangedContest}
-                        onSelectContest={setSelectedContestId}
-                        onActivate={handleActivateAndRestart}
-                    />
-
-                    {/* Contest Settings */}
-                    <ContestSettingsForm
-                        globalSettings={globalSettings}
-                        saving={saving}
-                        isDirty={isDirty}
-                        onGlobalChange={handleGlobalChange}
-                        onSaveSettings={handleSaveSettings}
-                    />
-                </Stack>
-
-                {/* Right Column: Worker Nodes */}
-                <WorkersPanel
-                    workers={workers}
-                    status={liveWorkers}
-                    forbidden={workersForbidden}
-                    canManage={canManageWorkers}
-                    saving={saving}
-                    workersDirty={workersDirty}
-                    onSaveWorkers={handleSaveWorkers}
-                    onAddWorker={addGlobalWorker}
-                    onRemoveWorker={removeGlobalWorker}
-                    onUpdateWorker={updateGlobalWorker}
-                />
-            </div>
-        </PageContent>
-    );
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+        <Stack gap={6} className="xl:col-span-2">
+          <ActiveContestCard
+            activeContestId={snapshot.activeContestId}
+            activeContestName={snapshot.activeContestName}
+            availableContests={snapshot.availableContests}
+            selectedContestId={snapshot.selectedContestId}
+            deployPhase={deployState.phase}
+            hasChangedContest={snapshot.hasChangedContest}
+            onSelectContest={snapshot.setSelectedContestId}
+            onActivate={handleActivateAndRestart}
+            onCancel={cancelDeploy}
+          />
+          <ContestSettingsForm
+            globalSettings={snapshot.globalSettings}
+            saving={saving}
+            isDirty={snapshot.isDirty}
+            onGlobalChange={(key, value) => snapshot.setGlobalSettings((previous) => ({ ...previous, [key]: value }))}
+            onSaveSettings={() => void snapshot.saveSettings()}
+          />
+        </Stack>
+        <WorkersPanel
+          workers={workers.workers}
+          status={workers.liveWorkers}
+          forbidden={workers.workersForbidden}
+          canManage={workers.canManageWorkers}
+          saving={saving}
+          workersDirty={workers.workersDirty}
+          onSaveWorkers={workers.handleSaveWorkers}
+          onAddWorker={workers.addGlobalWorker}
+          onRemoveWorker={workers.removeGlobalWorker}
+          onUpdateWorker={workers.updateGlobalWorker}
+        />
+      </div>
+    </Stack>
+  );
 }

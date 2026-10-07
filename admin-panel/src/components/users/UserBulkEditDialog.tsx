@@ -2,8 +2,11 @@
 
 import { Download, Wand2 } from 'lucide-react';
 import { Button } from '@/components/core/Button';
-import { Dialog, DialogFooter } from '@/components/core/Dialog';
+import { Dialog } from '@/components/core/Dialog';
+import { ModalFooter } from '@/components/core/ModalFooter';
+import { InlineAlert } from '@/components/core/InlineAlert';
 import { PasswordKindSelector } from '@/components/core/PasswordFieldWithKind';
+import type { Dictionary } from '@/lib/dictionary';
 import { BulkEditPreviewTable, ContestSection, ProfileSection, TeamSection } from './bulkEditSections';
 import { buildEditExportCsv, type ContestOption, type SelectedUser } from './bulkEditActions';
 import { useBulkEditActions } from './useBulkEditActions';
@@ -13,10 +16,12 @@ interface UserBulkEditDialogProps {
   onClose: () => void;
   selectedUsers: SelectedUser[];
   contests: ContestOption[];
+  canReadContests: boolean;
+  navigation: Dictionary['navigation'];
   onSuccess: () => void;
 }
 
-export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, onSuccess }: UserBulkEditDialogProps) {
+export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, canReadContests, navigation, onSuccess }: UserBulkEditDialogProps) {
   const {
     loading, statusMessage, errorMessage,
     selectedContestId, setSelectedContestId,
@@ -38,6 +43,12 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
     exportSelectedRows(`users-selected-${Date.now()}.csv`, buildEditExportCsv);
   };
 
+  // Why the guard: an apply already in flight cannot be recalled, so cancelling
+  // through it would close the dialog over an unresolved write.
+  const cancel = (): void => {
+    if (!loading) onClose();
+  };
+
   return (
     <Dialog
       open={isOpen}
@@ -45,52 +56,50 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
         if (!open) onClose();
       }}
       title="Edit Selected Users"
+      description={navigation.people.users.label}
       className="sm:max-w-6xl"
     >
-      {/* CONTROLS */}
       <div className="space-y-4">
         <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs">
           Selected: {rows.length} user(s)
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-[11px] uppercase tracking-wider text-muted-foreground">New password storage</span>
+          <span className="text-xs uppercase tracking-wider text-muted-foreground">New password storage</span>
           <PasswordKindSelector kind={passwordKind} onKind={setPasswordKind} />
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button variant="ghost" icon={Wand2} onClick={() => runRegenerate('username')} disabled={loading || rows.length === 0}>
-            Regenerate Username
-          </Button>
-          <Button variant="ghost" icon={Wand2} onClick={() => runRegenerate('password')} disabled={loading || rows.length === 0}>
-            Regenerate Password
-          </Button>
-          <Button variant="secondary" icon={Download} onClick={handleExportSelectedRows} disabled={rows.length === 0}>
-            Export CSV
-          </Button>
+          <Button variant="ghost" icon={Wand2} iconOnly tooltip="Regenerate Username" onClick={() => runRegenerate('username')} disabled={loading || rows.length === 0} />
+          <Button variant="ghost" icon={Wand2} iconOnly tooltip="Regenerate Password" onClick={() => runRegenerate('password')} disabled={loading || rows.length === 0} />
+          <Button variant="secondary" icon={Download} iconOnly tooltip="Export CSV" onClick={handleExportSelectedRows} disabled={rows.length === 0} />
         </div>
 
-        <ContestSection
-          contests={contests}
-          selectedContestId={selectedContestId}
-          loading={loading}
-          hasRows={rows.length > 0}
-          onContestIdChange={setSelectedContestId}
-          onRunContestMutation={runContestMutation}
-        />
+        {canReadContests && (
+          <ContestSection
+            contests={contests}
+            selectedContestId={selectedContestId}
+            loading={loading}
+            hasRows={rows.length > 0}
+            onContestIdChange={setSelectedContestId}
+            onRunContestMutation={runContestMutation}
+          />
+        )}
 
-        <TeamSection
-          contests={contests}
-          teamContestId={teamContestId}
-          teamCode={teamCode}
-          teamsOptions={teamsOptions}
-          loading={loading}
-          hasRows={rows.length > 0}
-          onTeamContestIdChange={setTeamContestId}
-          onTeamCodeChange={setTeamCode}
-          onRunTeamSet={runTeamSet}
-          onRunTeamRemoveAny={runTeamRemoveAny}
-        />
+        {canReadContests && (
+          <TeamSection
+            contests={contests}
+            teamContestId={teamContestId}
+            teamCode={teamCode}
+            teamsOptions={teamsOptions}
+            loading={loading}
+            hasRows={rows.length > 0}
+            onTeamContestIdChange={setTeamContestId}
+            onTeamCodeChange={setTeamCode}
+            onRunTeamSet={runTeamSet}
+            onRunTeamRemoveAny={runTeamRemoveAny}
+          />
+        )}
 
         <ProfileSection
           timezone={timezone}
@@ -104,8 +113,8 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
           onRunEmailClear={runEmailClear}
         />
 
-        {statusMessage && <div className="rounded-lg border border-success/30 bg-success/10 p-3 text-xs text-success">{statusMessage}</div>}
-        {errorMessage && <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">{errorMessage}</div>}
+        {statusMessage && <InlineAlert tone="success" density="compact" className="border-success/30">{statusMessage}</InlineAlert>}
+        {errorMessage && <InlineAlert tone="destructive" density="compact" className="border-destructive/30">{errorMessage}</InlineAlert>}
 
         <BulkEditPreviewTable
           rows={rows}
@@ -122,16 +131,17 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
           </Button>
         </div>
       </div>
-
-      {/* FOOTER */}
-      <DialogFooter className="mt-4 pt-4 border-t border-border">
-        <Button variant="negativeOutline" onClick={onClose} disabled={loading}>
-          Cancel
-        </Button>
-        <Button variant="positiveOutline" loading={loading} onClick={() => applyCredentials(true)} disabled={loading}>
-          Done
-        </Button>
-      </DialogFooter>
+      <ModalFooter
+        className="mt-4 pt-4 border-t border-border"
+        cancelLabel="Cancel"
+        cancelVariant="negativeOutline"
+        confirmLabel="Done"
+        confirmVariant="positiveOutline"
+        onCancel={cancel}
+        onConfirm={(): void => void applyCredentials(true)}
+        confirmLoading={loading}
+        confirmDisabled={loading}
+      />
     </Dialog>
   );
 }

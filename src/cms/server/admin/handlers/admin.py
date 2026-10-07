@@ -22,12 +22,24 @@
 import logging
 
 from cms.db import Admin
+from cms.db.permissions import AdminGroup, Group
 from cmscommon.crypto import hash_password
 from cmscommon.datetime import make_datetime
-from .base import BaseHandler, SimpleHandler, require_permission
+from .base import (
+    BaseHandler,
+    SimpleHandler,
+    get_effective_permissions,
+    invalidate_permission_cache,
+    is_effective_superset,
+    require_permission,
+)
 
 
 logger = logging.getLogger(__name__)
+
+
+def _is_superadmin(admin) -> bool:
+    return any(ag.group.name == 'Superadmin' for ag in admin.admin_groups)
 
 
 def _admin_attrs(handler: BaseHandler) -> dict:
@@ -48,34 +60,37 @@ def _admin_attrs(handler: BaseHandler) -> dict:
     assert attrs.get("name") is not None, "No admin name specified."
 
     # Get the password and translate it to an authentication, if present.
+    # A form that hides the password field sends no argument at all, which
+    # carries the same meaning as an empty one: no new password.
     handler.get_string(attrs, "password", empty=None)
-    if attrs["password"] is not None:
-        attrs["authentication"] = hash_password(attrs["password"])
-    del attrs["password"]
+    password = attrs.pop("password", None)
+    if password is not None:
+        attrs["authentication"] = hash_password(password)
 
-    handler.get_bool(attrs, "permission_all")
-    handler.get_bool(attrs, "permission_messaging")
-    handler.get_bool(attrs, "permission_tasks")
-    handler.get_bool(attrs, "permission_users")
-    handler.get_bool(attrs, "permission_contests")
+    attrs["admin_groups"] = [
+        int(gid) for gid in handler.get_arguments("admin_groups")
+    ]
 
     handler.get_bool(attrs, "enabled")
 
     return attrs
 
 
-class AddAdminHandler(SimpleHandler("add_admin.html", permission_all=True)):
-    @require_permission(BaseHandler.PERMISSION_ALL)
+class AddAdminHandler(SimpleHandler("add_admin.html", permission="admin:create")):
+    @require_permission("admin:create")
     def post(self):
         fallback_page = self.url("admins", "add")
 
         try:
             attrs = _admin_attrs(self)
+            group_ids = attrs.pop("admin_groups", [])
             assert attrs.get("authentication") is not None, (
                 "Empty password not permitted."
             )
 
             admin = Admin(**attrs)
+            for gid in group_ids:
+                admin.admin_groups.append(AdminGroup(group_id=gid))
             self.sql_session.add(admin)
 
         except Exception as error:
@@ -94,7 +109,7 @@ class AddAdminHandler(SimpleHandler("add_admin.html", permission_all=True)):
 class AdminsHandler(BaseHandler):
     """Page to see all admins."""
 
-    @require_permission(BaseHandler.AUTHENTICATED)
+    @require_permission("admin:list")
     def get(self):
         self.r_params = self.render_params()
         self.r_params["admins"] = (
@@ -109,8 +124,9 @@ class AdminsHandler(BaseHandler):
 class AdminHandler(BaseHandler):
     """Admin handler, with a POST method to edit the admin."""
 
-    # Fields that an admin can change themself, regardless of the
-    # permission bits.
+    # Fields that a caller without all:all may submit, regardless of the
+    # permission bits. "authentication" is kept only on top of
+    # admin:password:update, which post() enforces separately.
     SELF_MODIFIABLE_FIELDS = [
         "name",
         "username",
@@ -125,9 +141,32 @@ class AdminHandler(BaseHandler):
         self.r_params["admin_being_edited"] = admin
         self.render("admin.html", **self.r_params)
 
-    @require_permission(BaseHandler.PERMISSION_ALL, self_allowed=True)
+    @require_permission(
+        ("admin:update", "admin:password:update"), self_allowed=True)
     def post(self, admin_id: str):
         admin = self.safe_get_item(Admin, admin_id)
+        # WHY: password mutation must respect target superset — deny if target
+        # holds permissions the caller lacks.
+        if str(admin.id) != str(self.current_user.id):
+            try:
+                caller_eff = get_effective_permissions(
+                    self.current_user.id, self.sql_session)
+                target_eff = get_effective_permissions(
+                    admin.id, self.sql_session)
+                if not is_effective_superset(
+                    caller_eff, target_eff, self.sql_session):
+                    self.service.add_notification(
+                        make_datetime(), "Operation denied",
+                        "Cannot mutate an admin with permissions you do not hold.")
+                    self.redirect(self.url("admin", admin_id))
+                    return
+            except Exception:
+                logger.error("Failed superset check for admin %s.", admin_id)
+                self.service.add_notification(
+                    make_datetime(), "Operation denied",
+                    "Permission check failed.")
+                self.redirect(self.url("admin", admin_id))
+                return
 
         try:
             new_attrs = _admin_attrs(self)
@@ -139,28 +178,118 @@ class AdminHandler(BaseHandler):
             self.redirect(self.url("admin", admin_id))
             return
 
-        # If the admin is allowed here because has permission_all,
-        # they can do anything they want, otherwise, if they are
-        # allowed because they are editing their own details, they can
-        # only change a subset of the fields.
-        if not self.current_user.permission_all:
-            for key in new_attrs.keys():
+        # WHY: a password hash is privilege-bearing, so writing one needs its
+        # own key even when the caller is editing their own account.
+        has_password_update = self.current_user.has_permission(
+            "admin:password:update")
+        if "authentication" in new_attrs and not has_password_update:
+            self.service.add_notification(
+                make_datetime(), "Operation denied",
+                "Cannot change an admin password without holding "
+                "admin:password:update."
+            )
+            self.redirect(self.url("admin", admin_id))
+            return
+
+        # If the admin is allowed here because they are editing their own
+        # details, they can only change a subset of the fields.
+        group_ids = new_attrs.pop("admin_groups", [])
+        if not self.current_user.has_permission("all:all"):
+            for key in list(new_attrs.keys()):
                 if key not in AdminHandler.SELF_MODIFIABLE_FIELDS:
                     del new_attrs[key]
+            # WHY: admin:password:update alone is a credential grant, not a
+            # grant to alter another admin's identity, so name and username
+            # survive only for self-edits or callers holding admin:update.
+            if not self.current_user.has_permission("admin:update") \
+                    and str(admin.id) != str(self.current_user.id):
+                new_attrs.pop("name", None)
+                new_attrs.pop("username", None)
+            # WHY: defence in depth — the refusal above already stops such a
+            # caller, and this keeps the rule true for any future ordering.
+            if not has_password_update:
+                new_attrs.pop("authentication", None)
         admin.set_attrs(new_attrs)
 
+        if self.current_user.has_permission("all:all"):
+            superadmin_gid = (
+                self.sql_session.query(Group.id)
+                .filter(Group.name == 'Superadmin')
+                .scalar()
+            )
+            if _is_superadmin(admin):
+                will_be_super = (
+                    superadmin_gid in group_ids
+                    if superadmin_gid else False
+                )
+                if not will_be_super or not admin.enabled:
+                    others = (
+                        self.sql_session.query(Admin)
+                        .join(AdminGroup,
+                              AdminGroup.admin_id == Admin.id)
+                        .filter(AdminGroup.group_id == superadmin_gid)
+                        .filter(Admin.enabled.is_(True))
+                        .filter(Admin.id != admin.id)
+                        .count()
+                    )
+                    if others == 0:
+                        self.service.add_notification(
+                            make_datetime(), "Operation denied",
+                            "Cannot remove the last superadmin."
+                        )
+                        self.redirect(self.url("admin", admin_id))
+                        return
+            admin.admin_groups = [
+                AdminGroup(group_id=gid) for gid in group_ids
+            ]
+
         if self.try_commit():
+            invalidate_permission_cache(int(admin.id))
             logger.info("Admin %s updated.", admin.id)
             self.redirect(self.url("admins"))
         else:
             self.redirect(self.url("admin", admin_id))
 
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("admin:delete")
     def delete(self, admin_id: str):
         admin = self.safe_get_item(Admin, admin_id)
+        try:
+            caller_eff = get_effective_permissions(
+                self.current_user.id, self.sql_session)
+            target_eff = get_effective_permissions(
+                admin.id, self.sql_session)
+            if not is_effective_superset(
+                caller_eff, target_eff, self.sql_session):
+                self.write("Cannot mutate an admin with permissions you do not hold.")
+                return
+        except Exception:
+            logger.error("Failed superset check for delete %s.", admin_id)
+            self.write("Permission check failed.")
+            return
 
+        if _is_superadmin(admin):
+            superadmin_gid = (
+                self.sql_session.query(Group.id)
+                .filter(Group.name == 'Superadmin')
+                .scalar()
+            )
+            others = (
+                self.sql_session.query(Admin)
+                .join(AdminGroup,
+                      AdminGroup.admin_id == Admin.id)
+                .filter(AdminGroup.group_id == superadmin_gid)
+                .filter(Admin.enabled.is_(True))
+                .filter(Admin.id != admin.id)
+                .count()
+            )
+            if others == 0:
+                self.write("Cannot delete the last superadmin.")
+                return
+
+        deleted_id = int(admin.id)
         self.sql_session.delete(admin)
-        self.try_commit()
+        if self.try_commit():
+            invalidate_permission_cache(deleted_id)
 
         # Page to redirect to.
         self.write("../admins")

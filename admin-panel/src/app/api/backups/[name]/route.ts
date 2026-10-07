@@ -22,7 +22,7 @@ function archiveDownloadResponse(blob: Blob, name: string): Response {
 }
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ name: string }> }): Promise<Response> {
-  const { authorized, response } = await verifyApiPermission('all');
+  const { authorized, response } = await verifyApiPermission('backup:list');
   if (!authorized) return response;
 
   const { name } = await params;

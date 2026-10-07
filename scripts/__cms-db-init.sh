@@ -1,37 +1,30 @@
 #!/bin/bash
-set -euo pipefail
+set -eu
+# pipefail only if available
+if (set -o pipefail 2>/dev/null); then
+    set -o pipefail
+fi
 
 ###############################################################################
 # CMS Database Initialization & Patching Script
 ###############################################################################
 
-# Source shared helpers if present — guard for absence.
-if [[ -f "__lib/common.sh" ]]; then
-  # shellcheck source=/dev/null
-  source "__lib/common.sh"
-elif [[ -f "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh" ]]; then
-  # shellcheck source=/dev/null
-  source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
-fi
-if ! declare -F log_info >/dev/null 2>&1; then
-  log_info() { printf '[INFO] %s\n' "$*"; }
-fi
-if ! declare -F log_warn >/dev/null 2>&1; then
-  log_warn() { printf '[WARN] %s\n' "$*" >&2; }
-fi
-if ! declare -F log_die >/dev/null 2>&1; then
-  log_die() { printf '[FAIL] %s\n' "${1:-fatal}" >&2; exit "${2:-1}"; }
-fi
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__lib/common.sh"
 
-ENV_FILE=".env.core"
+ENV_FILE=".env"
 if [[ ! -f "$ENV_FILE" ]]; then
-  log_die "Error: $ENV_FILE not found." 1
+  log_die "Error: $ENV_FILE not found — run 'make env' or './cms config sync' first." 1
 fi
 
-# Exact key match via awk (escapes regex metachars).
+# Exact key match via awk (escapes regex metachars), then env_unquote so a password
+# that __config_sync had to quote (it contains whitespace or a shell metacharacter)
+# is read as the shell would read it instead of coming back wrapped in quotes.
 get_env_val() {
-  local key="$1" file="$2"
-  awk -F= -v k="$key" '$1==k { v=$0; sub(/^[^=]*=/, "", v); print v; exit }' "$file" 2>/dev/null | tr -d '\r' || true
+  local key="$1" file="$2" raw
+  raw="$(awk -F= -v k="$key" '$1==k { v=$0; sub(/^[^=]*=/, "", v); print v; exit }' "$file" 2>/dev/null | tr -d '\r' || true)"
+  env_unquote "$raw"
 }
 
 DB_USER="$(get_env_val "POSTGRES_USER" "$ENV_FILE")"

@@ -1,27 +1,57 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { cn } from '@/lib/utils';
+import { hasEffectivePermission } from '@/lib/permission-engine';
 import { Bell, Search, User } from 'lucide-react';
-import { useToast } from '../providers/ToastProvider';
+import { toast } from 'sonner';
 import { getUnansweredQuestions } from '@/app/actions/questions';
-import { useRouter } from 'next/navigation';
+import { useAppRouter } from '@/hooks/useAppRouter';
+import { buildRoute } from '@/lib/navigation/routes';
 import { ThemeToggle } from './ThemeToggle';
+import { NotificationBell } from './NotificationBell';
 import { Button } from '@/components/core/Button';
 import { CommandPalette } from '../palette/CommandPalette';
 
-export const Header: React.FC<{ className?: string; username?: string }> = ({ className, username }) => {
-  const [searchQuery, setSearchQuery] = useState('');
+export const Header: React.FC<{ className?: string; username?: string; permissionKeys: readonly string[] }> = ({ className, username, permissionKeys }) => {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [hasNotifications, setHasNotifications] = useState(false);
   const lastCheckTimeRef = useRef(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const { addToast } = useToast();
-  const router = useRouter();
+  const authenticationExpiredRef = useRef(false);
+  const router = useAppRouter();
+  const canReadQuestions = hasEffectivePermission(new Set(permissionKeys), 'question:list');
 
-  // Poll for new questions every 30 seconds
+  const stopPolling = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }, []);
+
+  const handleAuthenticationExpired = useCallback(() => {
+    // Why: after 401 the session is invalid so polling would spam errors — stop and redirect once
+    if (authenticationExpiredRef.current) return;
+    authenticationExpiredRef.current = true;
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    const segments = window.location.pathname.split('/');
+    const locale = segments[1] || 'en';
+    router.push(`/${locale}/auth/login`);
+  }, [router]);
+
   useEffect(() => {
     const checkNotifications = async () => {
+      if (!canReadQuestions) return;
+      if (authenticationExpiredRef.current) {
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
+        return;
+      }
       try {
         const questions = await getUnansweredQuestions(null);
 
@@ -32,10 +62,9 @@ export const Header: React.FC<{ className?: string; username?: string }> = ({ cl
           const qTime = new Date(latest.question_timestamp).getTime();
 
           if (qTime > lastCheckTimeRef.current) {
-            addToast({
-              type: 'warning',
-              title: 'New Question Received!',
-              message: `From ${latest.participations?.users?.username || 'User'}: ${latest.subject.substring(0, 30)}...`,
+            toast.warning('New Question Received!', {
+              // Why: the alert must survive until an admin acknowledges the question.
+              description: `From ${latest.participations?.users?.username || 'User'}: ${latest.subject.substring(0, 30)}...`,
               duration: Infinity
             });
             lastCheckTimeRef.current = Date.now();
@@ -43,72 +72,62 @@ export const Header: React.FC<{ className?: string; username?: string }> = ({ cl
         } else {
           setHasNotifications(false);
         }
-      } catch (e) {
-        console.error('Failed to check notifications', e);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : '';
+        const isAuthenticationError = message.includes('Unauthorized') || message.includes('Missing') || message.includes('permission');
+        if (isAuthenticationError) {
+          handleAuthenticationExpired();
+          return;
+        }
+        console.error('Failed to check notifications', error);
       }
     };
 
-    // Initial check
-    checkNotifications();
+    const handleExternalExpiration = () => {
+      handleAuthenticationExpired();
+    };
 
-    intervalRef.current = setInterval(checkNotifications, 30000); // 30s
+    window.addEventListener('cms-authentication-expired', handleExternalExpiration);
+
+      checkNotifications();
+
+    intervalRef.current = setInterval(checkNotifications, 30 * 1000);
 
     return () => {
+      window.removeEventListener('cms-authentication-expired', handleExternalExpiration);
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [addToast]);
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      const locale = window.location.pathname.split('/')[1] || 'en';
-      router.push(`/${locale}/search?q=${encodeURIComponent(searchQuery)}`);
-    }
-  };
+  }, [canReadQuestions, handleAuthenticationExpired, stopPolling]);
 
   const handleNotificationsClick = () => {
     const locale = window.location.pathname.split('/')[1] || 'en';
-    router.push(`/${locale}/contests`);
+    router.push(buildRoute(locale, 'contests.list'));
   };
 
   return (
     <header
       className={cn(
-        'sticky top-0 z-10 flex h-16 shrink-0 items-center justify-end gap-3 border-b border-border bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/75',
+        'sticky top-0 z-10 flex h-16 shrink-0 items-center justify-end gap-3 border-b border-border bg-background/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/75 sm:px-6',
         className
       )}
     >
-      {/* Search Bar */}
-      <form onSubmit={handleSearch} className="relative group">
-        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <Search className="h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-        </div>
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="h-9 w-56 rounded-full border border-input bg-muted/50 pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-          placeholder="Search..."
-        />
-      </form>
-
-      {/* Command Palette Trigger */}
-      <Button
-        variant="ghost"
-        size="sm"
-        tooltip="Search commands (Ctrl+K)"
+      <button
+        type="button"
+        aria-label="Search navigation, entities, and actions (Control plus K)"
         onClick={() => setPaletteOpen(true)}
+        className="group flex h-11 w-11 cursor-pointer items-center justify-center gap-2 rounded-full border border-input bg-muted/50 text-sm text-foreground outline-none transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 sm:h-9 sm:w-64 sm:justify-start sm:px-3"
       >
-        <Search className="size-4" />
-        <kbd className="ml-1 hidden rounded border border-border bg-muted px-1.5 font-mono text-[10px] font-semibold text-muted-foreground sm:inline-flex">
+        <Search className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-focus-visible:text-primary" aria-hidden />
+        <span className="hidden flex-1 truncate text-left text-muted-foreground sm:inline" aria-hidden>
+          Search…
+        </span>
+        <kbd className="ml-auto hidden h-5 items-center rounded border border-border bg-muted px-1.5 font-mono text-xs font-semibold text-muted-foreground sm:inline-flex" aria-hidden>
           ⌘K
         </kbd>
-      </Button>
-
-      {/* Theme Toggle */}
+      </button>
       <ThemeToggle />
-
-      {/* Notifications */}
+      {hasEffectivePermission(new Set(permissionKeys), 'audit:read') && <NotificationBell />}
+      {canReadQuestions && (
       <Button variant="ghost" size="sm" iconOnly tooltip="Notifications" onClick={handleNotificationsClick}>
         <span className="relative flex">
           <Bell className="size-4" />
@@ -117,8 +136,7 @@ export const Header: React.FC<{ className?: string; username?: string }> = ({ cl
           )}
         </span>
       </Button>
-
-      {/* User Profile */}
+      )}
       <div className="flex items-center gap-3 pl-4 border-l border-border">
         <div className="text-right hidden md:block">
           <p className="text-sm font-medium text-foreground">{username || 'Admin User'}</p>
@@ -131,7 +149,7 @@ export const Header: React.FC<{ className?: string; username?: string }> = ({ cl
         </div>
       </div>
 
-      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} permissionKeys={permissionKeys} />
     </header>
   );
 };

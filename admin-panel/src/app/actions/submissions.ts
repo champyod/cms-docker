@@ -1,12 +1,11 @@
 'use server'
 
-import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { ensurePermission } from '@/lib/permissions';
-import { submissionsListInclude } from '@/lib/prisma-selects';
+import { ensurePermission, getPermissions } from '@/lib/permissions';
+import { stripDisallowedFields, getFieldAccess, type FieldAccess } from '@/lib/field-permissions';
 import { revalidatePath } from 'next/cache';
+import { recordAudit } from '@/lib/audit';
 
-const SUBMISSIONS_PER_PAGE = 20;
 const EVALUATION_RPC_ENDPOINT = 'http://cms-admin-web-server:25000/rpc/EvaluationService/0/invalidate_submission';
 
 interface ActionResult {
@@ -16,70 +15,28 @@ interface ActionResult {
 
 type RecalcType = 'score' | 'evaluation' | 'full';
 
-export async function getSubmissions({
-    page = 1,
-  contestId,
-  taskId,
-    userId,
-}: {
-    page?: number;
-  contestId?: number;
-  taskId?: number;
-    userId?: number;
-}) {
-  await ensurePermission('contests');
-
-  const skip = (page - 1) * SUBMISSIONS_PER_PAGE;
-  const where = buildSubmissionsWhere({ contestId, taskId, userId });
-
-  const [submissions, total] = await Promise.all([
-    prisma.submissions.findMany({
-      where,
-      skip,
-      take: SUBMISSIONS_PER_PAGE,
-      orderBy: { timestamp: 'desc' },
-      include: submissionsListInclude,
-    }),
-    prisma.submissions.count({ where }),
-  ]);
-
-  return {
-      submissions,
-    totalPages: Math.ceil(total / SUBMISSIONS_PER_PAGE),
-    total,
-  };
-}
-
-function buildSubmissionsWhere(filters: { contestId?: number; taskId?: number; userId?: number }): Prisma.submissionsWhereInput {
-  const participations: Record<string, unknown> = {};
-  if (filters.contestId) {
-    participations.contest_id = filters.contestId;
-  }
-  if (filters.userId) {
-    participations.user_id = filters.userId;
-  }
-
-  const where: Prisma.submissionsWhereInput = {};
-  if (filters.taskId) {
-    where.task_id = filters.taskId;
-  }
-  if (Object.keys(participations).length > 0) {
-    // Preserves the pre-refactor filter bytes exactly; relation-shape validation left to Prisma as before.
-    where.participations = participations as Prisma.submissionsWhereInput['participations'];
-  }
-  return where;
-}
-
-// Update submission comment
 export async function updateSubmissionComment(submissionId: number, comment: string): Promise<ActionResult> {
-    await ensurePermission('messaging');
+    await ensurePermission('submission:update');
 
     try {
+        const effectivePermissions = await getPermissions();
+        const allowed = stripDisallowedFields('submissions', { comment }, effectivePermissions);
+        if (!('comment' in allowed)) {
+            return { success: false, error: 'Permission denied for comment field' };
+        }
+
         await prisma.submissions.update({
             where: { id: submissionId },
-            data: { comment }
+            data: { comment: allowed.comment as string }
         });
-        revalidatePath('/[locale]/submissions');
+        await recordAudit({
+          verb: 'submission:update',
+          entity: 'submission',
+          entityId: String(submissionId),
+          afterValues: { comment: allowed.comment },
+          result: 'success',
+        });
+        revalidateSubmissionSurfaces();
       return { success: true };
   } catch (error) {
       const e = error as Error;
@@ -87,11 +44,16 @@ export async function updateSubmissionComment(submissionId: number, comment: str
     }
 }
 
-// Toggle official status
 export async function toggleSubmissionOfficial(submissionId: number): Promise<ActionResult> {
-    await ensurePermission('contests');
+    await ensurePermission('submission:update');
 
     try {
+        const effectivePermissions = await getPermissions();
+        const allowed = stripDisallowedFields('submissions', { official: true }, effectivePermissions);
+        if (!('official' in allowed)) {
+            return { success: false, error: 'Permission denied for official field' };
+        }
+
         const sub = await prisma.submissions.findUnique({ where: { id: submissionId } });
         if (!sub) return { success: false, error: 'Submission not found' };
 
@@ -99,7 +61,15 @@ export async function toggleSubmissionOfficial(submissionId: number): Promise<Ac
             where: { id: submissionId },
             data: { official: !sub.official }
         });
-        revalidatePath('/[locale]/submissions');
+        await recordAudit({
+          verb: 'submission:update',
+          entity: 'submission',
+          entityId: String(submissionId),
+          beforeValues: { official: sub.official },
+          afterValues: { official: !sub.official },
+          result: 'success',
+        });
+        revalidateSubmissionSurfaces();
         return { success: true };
   } catch (error) {
       const e = error as Error;
@@ -107,26 +77,34 @@ export async function toggleSubmissionOfficial(submissionId: number): Promise<Ac
    }
 }
 
-// Recalculate a submission's score/evaluation
 export async function recalculateSubmission(submissionId: number, type: RecalcType = 'score'): Promise<ActionResult & { message?: string }> {
-  await ensurePermission('contests');
-
   try {
+    await ensurePermission('submission:recompute');
+    // Why gates inside try: requeueing needs rejudge plus delete rights on both cleared tables, and a denial must return a failure, never a digest.
+    await ensurePermission('submission:rejudge');
+    await ensurePermission('evaluation:delete');
+    await ensurePermission('submissionresult:delete');
+
     const context = await getRecalcContext(submissionId);
     if (!context) {
       return { success: false, error: 'Submission not found' };
     }
 
-    // RPC-FIRST: call EvaluationService before touching DB
     const accepted = await invalidateViaRpc(submissionId, context.datasetId, rpcLevelFor(type));
     if (!accepted) {
       return { success: false, error: 'Resubmission failed: evaluation service did not accept the request' };
     }
 
-    // ONLY if RPC succeeded: clear DB entries to mark for re-evaluation
     await clearRecalculatedTables(submissionId, type);
 
-    revalidatePath('/[locale]/submissions');
+    await recordAudit({
+      verb: 'submission:recompute',
+      entity: 'submission',
+      entityId: String(submissionId),
+      afterValues: { type },
+      result: 'success',
+    });
+    revalidateSubmissionSurfaces();
     return { success: true, message: 'Submission queued for recalculation' };
   } catch (error) {
     const e = error as Error;
@@ -170,6 +148,16 @@ async function invalidateViaRpc(submissionId: number, datasetId: number | null, 
   }
 }
 
+// Why the list path and the record path: a write here changes the list row and
+// the record landing page, and a `page`-typed revalidatePath on the record path is
+// a working invalidation for that page. It does not invalidate the pages beneath
+// it, and the four tabs sit beneath `/[id]`, so an open tab is refreshed by the
+// caller's client-side router.refresh() once the action succeeds.
+function revalidateSubmissionSurfaces(): void {
+  revalidatePath('/[locale]/evaluation/submissions', 'page');
+  revalidatePath('/[locale]/evaluation/submissions/[id]', 'page');
+}
+
 async function clearRecalculatedTables(submissionId: number, type: RecalcType): Promise<void> {
   if (type === 'evaluation' || type === 'full') {
     await prisma.evaluations.deleteMany({
@@ -182,4 +170,10 @@ async function clearRecalculatedTables(submissionId: number, type: RecalcType): 
       where: { submission_id: submissionId }
     });
   }
+}
+
+/** Returns per-field read/update booleans for the submissions entity based on the current user's permissions. */
+export async function getSubmissionFieldAccess(): Promise<Record<string, FieldAccess>> {
+  const effectivePermissions = await getPermissions();
+  return getFieldAccess('submissions', effectivePermissions);
 }

@@ -91,7 +91,7 @@ function nextRunAtFor(existing: BackupSchedule, update: ScheduleUpdate, now: Dat
 }
 
 export async function listSchedules(): Promise<ScheduleListResult> {
-  await ensurePermission('all');
+  await ensurePermission('backup:schedule');
   try {
     const schedules = await prisma.backup_schedules.findMany({
       orderBy: [{ enabled: 'desc' }, { createdAt: 'desc' }],
@@ -103,7 +103,7 @@ export async function listSchedules(): Promise<ScheduleListResult> {
 }
 
 export async function createSchedule(input: ScheduleInput): Promise<ScheduleMutationResult> {
-  await ensurePermission('all');
+  await ensurePermission('backup:schedule');
   const validation = validateScheduleInput(input);
   if (!validation.valid || validation.schedule === null) {
     return { success: false, error: validation.errors.join(' ') };
@@ -130,7 +130,7 @@ export async function createSchedule(input: ScheduleInput): Promise<ScheduleMuta
 }
 
 export async function updateSchedule(id: string, update: ScheduleUpdate): Promise<ScheduleMutationResult> {
-  await ensurePermission('all');
+  await ensurePermission('backup:schedule');
   try {
     const existing = await prisma.backup_schedules.findUnique({ where: { id } });
     if (existing === null) return { success: false, error: `Schedule not found: ${id}` };
@@ -166,7 +166,7 @@ export async function updateSchedule(id: string, update: ScheduleUpdate): Promis
 }
 
 export async function toggleSchedule(id: string): Promise<ScheduleMutationResult> {
-  await ensurePermission('all');
+  await ensurePermission('backup:schedule');
   try {
     const existing = await prisma.backup_schedules.findUnique({ where: { id } });
     if (existing === null) return { success: false, error: `Schedule not found: ${id}` };
@@ -188,7 +188,7 @@ export async function toggleSchedule(id: string): Promise<ScheduleMutationResult
 }
 
 export async function deleteSchedule(id: string): Promise<ScheduleMutationResult> {
-  await ensurePermission('all');
+  await ensurePermission('backup:delete');
   try {
     const existing = await prisma.backup_schedules.findUnique({ where: { id } });
     if (existing === null) return { success: false, error: `Schedule not found: ${id}` };
@@ -201,7 +201,7 @@ export async function deleteSchedule(id: string): Promise<ScheduleMutationResult
 }
 
 export async function listRuns(limit: number = DEFAULT_RUN_LIMIT): Promise<RunListResult> {
-  await ensurePermission('all');
+  await ensurePermission('backup:schedule');
   try {
     const runs = await prisma.backup_runs.findMany({
       orderBy: { startedAt: 'desc' },
@@ -220,7 +220,7 @@ export async function listRuns(limit: number = DEFAULT_RUN_LIMIT): Promise<RunLi
  * result is in Discord and backups/manifest.json.
  */
 export async function settleRun(runId: string, note?: string): Promise<ScheduleMutationResult> {
-  await ensurePermission('all');
+  await ensurePermission('backup:settle');
   try {
     const existing = await prisma.backup_runs.findUnique({ where: { id: runId }, select: { id: true, status: true } });
     if (existing === null) return { success: false, error: `Run not found: ${runId}` };

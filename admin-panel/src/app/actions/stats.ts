@@ -104,7 +104,7 @@ function getProcBasePath(): '/host/proc' | '/proc' {
 }
 
 export async function getServerStats() {
-  await ensurePermission('all');
+  await ensurePermission('resource:read');
   const procBase = getProcBasePath();
 
   const cpus = os.cpus();
@@ -146,7 +146,7 @@ export async function getServerStats() {
 }
 
 export async function getWorkerStats(): Promise<ReturnType<typeof collectWorkerStats>> {
-  await ensurePermission('all');
+  await ensurePermission('resource:read');
   return collectWorkerStats();
 }
 

@@ -1,4 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// The lock is called directly here, so the gate it now carries would otherwise read a session this
+// test has no request scope for. What is under test is the statement it sends and the session it
+// holds open, not who may call it.
+vi.mock('@/lib/permissions', () => ({ ensurePermission: async () => undefined }));
 
 import { LOCK_RELEASE_TIMEOUT_MS, STAGING_LOCK_WAIT_MS, acquireStagingLock, advisoryKeyFor } from '@/app/actions/restore-apply-lock';
 import type { LockSessionRunner } from '@/app/actions/restore-apply-lock';

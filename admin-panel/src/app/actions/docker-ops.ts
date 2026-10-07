@@ -4,11 +4,19 @@ import { exec } from 'child_process';
 import util from 'util';
 import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
+import { readDeploymentModeSetting } from '@/lib/deployment-mode-file';
+import { buildRebuildCommand, type RebuildStack } from '@/lib/make-command';
+import { recordAudit } from '@/lib/audit';
 
 const execPromise = util.promisify(exec);
 
-export async function pullLatestImages() {
-  await ensurePermission('all');
+/** What a maintenance action reports back to the settings screen. */
+export type MaintenanceActionResult =
+  | { success: true; message: string; output: string }
+  | { success: false; error: string; output?: string };
+
+export async function pullLatestImages(): Promise<MaintenanceActionResult> {
+  await ensurePermission('container:control');
   try {
     const rootDir = getRepoRoot();
     const { stdout, stderr } = await execPromise('make pull', { cwd: rootDir, timeout: 300000 });
@@ -17,32 +25,33 @@ export async function pullLatestImages() {
       return { success: false, error: stderr, output: stdout };
     }
 
+    await recordAudit({
+      verb: 'container:control',
+      entity: 'container',
+      afterValues: { action: 'pull', target: 'images' },
+      result: 'success',
+    });
     return { success: true, message: 'Images pulled successfully', output: stdout };
   } catch (error) {
     return { success: false, error: (error as Error).message };
   }
 }
 
-export async function rebuildImages(stack: 'core' | 'admin' | 'worker' | 'all') {
-  await ensurePermission('all');
+/**
+ * Rebuilds a stack through the Makefile's own stack targets, in the mode config.toml declares.
+ *
+ * Why the mode is read here rather than left to the target: `make <stack>` takes DEPLOYMENT_TYPE from
+ * .env, which only `./cms config sync` writes, while this panel reads config.toml directly (see
+ * lib/deployment-mode-file.ts). The builder turns the mode into the target's own override variable, so
+ * the rebuild does what the deployment is configured to do — pull and recreate without building, or
+ * build from source — instead of always pulling the registry image.
+ */
+export async function rebuildImages(stack: RebuildStack): Promise<MaintenanceActionResult> {
+  await ensurePermission('container:control');
   try {
     const rootDir = getRepoRoot();
-    let cmd = '';
-
-    switch (stack) {
-      case 'core':
-        cmd = 'make core-img';
-        break;
-      case 'admin':
-        cmd = 'make admin-img';
-        break;
-      case 'worker':
-        cmd = 'make worker-img';
-        break;
-      case 'all':
-        cmd = 'make core-img && make admin-img && make worker-img';
-        break;
-    }
+    const mode = (await readDeploymentModeSetting(rootDir)).mode;
+    const cmd = buildRebuildCommand(stack, mode);
 
     const { stdout, stderr } = await execPromise(cmd, { cwd: rootDir, timeout: 600000 });
 
@@ -50,69 +59,15 @@ export async function rebuildImages(stack: 'core' | 'admin' | 'worker' | 'all') 
       return { success: false, error: stderr, output: stdout };
     }
 
+    await recordAudit({
+      verb: 'container:control',
+      entity: 'container',
+      beforeValues: { previousImages: stack },
+      afterValues: { action: 'rebuild', stack, mode, command: cmd },
+      result: 'success',
+    });
     return { success: true, message: `${stack} stack rebuilt successfully`, output: stdout };
   } catch (error) {
     return { success: false, error: (error as Error).message };
-  }
-}
-
-export async function getCoreServicesStatus() {
-  await ensurePermission('all');
-  try {
-    const services = [
-      'cms-database',
-      'cms-log-service',
-      'cms-resource-service',
-      'cms-scoring-service',
-      'cms-evaluation-service',
-      'cms-proxy-service',
-      'cms-checker-service'
-    ];
-
-    const statuses = await Promise.all(
-      services.map(async (service) => {
-        try {
-          const { stdout } = await execPromise(`docker inspect ${service} --format='{{.State.Status}}:{{.State.Health.Status}}'`);
-          const [state, health] = stdout.trim().split(':');
-          return {
-            name: service,
-            status: state === 'running' ? (health === 'healthy' || health === '' ? 'healthy' : health) : state
-          };
-        } catch {
-          return { name: service, status: 'stopped' };
-        }
-      })
-    );
-
-    return { success: true, services: statuses };
-  } catch (error) {
-    return { success: false, services: [], error: (error as Error).message };
-  }
-}
-
-export async function getNetworkTrafficLogs(limit: number = 50) {
-  await ensurePermission('all');
-  try {
-    const coercedLimit = Number.isInteger(Number(limit)) && Number(limit) >= 1 && Number(limit) <= 500 ? Number(limit) : 50;
-    // Read network traffic from docker stats
-    const { stdout } = await execPromise(
-      `docker stats --no-stream --format "{{.Name}}\t{{.NetIO}}" | head -n ${coercedLimit}`
-    );
-
-    const logs = stdout.trim().split('\n').map((line, index) => {
-      const [name, netIO] = line.split('\t');
-      const [rx, tx] = netIO.split(' / ');
-      return {
-        id: index,
-        timestamp: new Date().toISOString(),
-        container: name,
-        rx: rx.trim(),
-        tx: tx.trim()
-      };
-    });
-
-    return { success: true, logs };
-  } catch (error) {
-    return { success: false, logs: [], error: (error as Error).message };
   }
 }

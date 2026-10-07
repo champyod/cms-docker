@@ -1,12 +1,59 @@
 'use client';
 
-import { useState } from 'react';
-import { restartServices, updateServer } from '@/app/actions/services';
+import { useEffect, useState } from 'react';
+import { getDeploymentMode, restartServices, updateServer } from '@/app/actions/services';
 import { pullLatestImages, rebuildImages } from '@/app/actions/docker-ops';
+import { FALLBACK_DEPLOYMENT_MODE, deploymentModeCopyKey, type DeploymentModeSetting } from '@/lib/deployment-mode';
 import type { ReactElement } from 'react';
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
 import { RefreshCw, Download, Package, ArrowUpCircle } from 'lucide-react';
+import { toast } from 'sonner';
+import { useConfirm } from '@/hooks/useConfirm';
+import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
+import { useDictionary } from '@/hooks/useDictionary';
+import { interpolate } from '@/lib/interpolate';
+
+type DeploymentModeRead = { loaded: false } | { loaded: true; setting: DeploymentModeSetting };
+
+/**
+ * Why the panel reads config.toml for this instead of process.env: only `./cms config sync` copies
+ * the value into .env, so the environment can lag an edit made here, and the panel must describe the
+ * mode the next restart will actually use. A failed call is reported as unresolved (the state the
+ * server falls back on) rather than as a mode that was never read.
+ */
+function useDeploymentModeSetting(): DeploymentModeRead {
+  const [read, setRead] = useState<DeploymentModeRead>({ loaded: false });
+
+  useEffect(() => {
+    void (async () => {
+      const setting = await getDeploymentMode().catch((): DeploymentModeSetting => ({
+        mode: FALLBACK_DEPLOYMENT_MODE,
+        resolved: false,
+      }));
+      setRead({ loaded: true, setting });
+    })();
+  }, []);
+
+  return read;
+}
+
+/**
+ * States what a restart does in the deployment's own mode, because img (pull, no rebuild) and src
+ * (rebuild) differ in cost and in what ends up running. Renders nothing until the read lands, so it
+ * cannot claim a mode before it knows one.
+ */
+export function DeploymentModeNote(): ReactElement | null {
+  const read = useDeploymentModeSetting();
+  const copy = useDictionary().settings.deploymentMode;
+
+  if (!read.loaded) return null;
+  return (
+    <p className="text-sm text-muted-foreground" role="status">
+      {copy[deploymentModeCopyKey(read.setting)]}
+    </p>
+  );
+}
 
 export function ManualServiceControlCard(): ReactElement {
   return (
@@ -61,16 +108,20 @@ export function MaintenanceUpdatesCard(): ReactElement {
 
 function UpdateServerButton(): ReactElement {
   const [updating, setUpdating] = useState(false);
+  const confirm = useConfirm();
+  const { fullServerUpdateConfirm } = useConfirmationCopy();
+  const toasts = useDictionary().toasts.serviceControl;
 
   const handleUpdate = async (): Promise<void> => {
-    if (!confirm('This will pull the latest images, restart all services, and update the database schema. The server will be unavailable for a few minutes. Continue?')) return;
+    if (!(await confirm(fullServerUpdateConfirm()))) return;
     setUpdating(true);
     try {
       const res = await updateServer();
-      if (res.success) alert(res.message);
-      else alert('Error: ' + res.error);
+      // The action's own message is server-side English; only the panel's fallbacks are localised here.
+      if (res.success) toast.success(res.message);
+      else toast.error(interpolate(toasts.actionFailed, { error: res.error }));
     } catch {
-      alert('Failed to trigger update');
+      toast.error(toasts.updateFailed);
     }
     setUpdating(false);
   };
@@ -90,16 +141,19 @@ function UpdateServerButton(): ReactElement {
 
 function RestartButton({ type, label }: { type: 'core' | 'admin' | 'worker' | 'all', label: string }): ReactElement {
   const [restarting, setRestarting] = useState(false);
+  const confirm = useConfirm();
+  const { restartStackConfirm } = useConfirmationCopy();
+  const toasts = useDictionary().toasts.serviceControl;
 
   const handleRestart = async (): Promise<void> => {
-    if (!confirm(`Are you sure you want to ${label}? This will temporarily disrupt service.`)) return;
+    if (!(await confirm(restartStackConfirm(type)))) return;
     setRestarting(true);
     try {
       const res = await restartServices(type);
-      if (res.success) alert(res.message);
-      else alert('Error: ' + res.error);
+      if (res.success) toast.success(res.message);
+      else toast.error(interpolate(toasts.actionFailed, { error: res.error }));
     } catch {
-      alert('Failed to restart');
+      toast.error(toasts.restartFailed);
     }
     setRestarting(false);
   };
@@ -119,16 +173,19 @@ function RestartButton({ type, label }: { type: 'core' | 'admin' | 'worker' | 'a
 
 function PullImagesButton(): ReactElement {
   const [pulling, setPulling] = useState(false);
+  const confirm = useConfirm();
+  const { pullImagesConfirm } = useConfirmationCopy();
+  const toasts = useDictionary().toasts.serviceControl;
 
   const handlePull = async (): Promise<void> => {
-    if (!confirm('Pull latest images from registry? This may take several minutes.')) return;
+    if (!(await confirm(pullImagesConfirm()))) return;
     setPulling(true);
     try {
       const res = await pullLatestImages();
-      if (res.success) alert(res.message);
-      else alert('Error: ' + res.error);
+      if (res.success) toast.success(res.message);
+      else toast.error(interpolate(toasts.actionFailed, { error: res.error }));
     } catch {
-      alert('Failed to pull images');
+      toast.error(toasts.pullFailed);
     }
     setPulling(false);
   };
@@ -149,16 +206,19 @@ function PullImagesButton(): ReactElement {
 
 function RebuildButton({ stack, label }: { stack: 'core' | 'admin' | 'worker' | 'all', label: string }): ReactElement {
   const [rebuilding, setRebuilding] = useState(false);
+  const confirm = useConfirm();
+  const { rebuildStackConfirm } = useConfirmationCopy();
+  const toasts = useDictionary().toasts.serviceControl;
 
   const handleRebuild = async (): Promise<void> => {
-    if (!confirm(`Rebuild ${label} stack from source? This may take 5-10 minutes.`)) return;
+    if (!(await confirm(rebuildStackConfirm(stack)))) return;
     setRebuilding(true);
     try {
       const res = await rebuildImages(stack);
-      if (res.success) alert(res.message);
-      else alert('Error: ' + res.error);
+      if (res.success) toast.success(res.message);
+      else toast.error(interpolate(toasts.actionFailed, { error: res.error }));
     } catch {
-      alert('Failed to rebuild');
+      toast.error(toasts.rebuildFailed);
     }
     setRebuilding(false);
   };

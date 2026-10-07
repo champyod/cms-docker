@@ -1,10 +1,13 @@
 'use client';
 
 import React from 'react';
-import { cva } from 'class-variance-authority';
-import { motion, type HTMLMotionProps } from 'motion/react';
+
 import { Loader2, type LucideIcon } from 'lucide-react';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { motion, useReducedMotion, type HTMLMotionProps } from 'motion/react';
+
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/core/Tooltip';
+import { EmptyState } from '@/components/core/EmptyState';
+import { buttonVariants, type ButtonVariantName } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 export const BUTTON_VARIANTS = [
@@ -27,6 +30,19 @@ export const LEGACY_VARIANT_MAP: Record<LegacyButtonVariant, ButtonVariant> = {
   danger: 'negative',
 };
 
+// Why this map is exhaustive over BUTTON_VARIANTS: a public name with no entry
+// would silently fall back to the adapter default, so a renamed product variant
+// has to be given an adapter name here or fail to type-check.
+export const BUTTON_VARIANT_TO_ADAPTER: Record<ButtonVariant, ButtonVariantName> = {
+  positive: 'default',
+  positiveOutline: 'primaryOutline',
+  negative: 'destructive',
+  negativeOutline: 'destructiveOutline',
+  secondary: 'secondary',
+  ghost: 'ghost',
+  link: 'link',
+};
+
 export function resolveVariant(variant?: ButtonVariantInput): ButtonVariant {
   if (!variant) return 'positive';
   if (variant === 'primary') return LEGACY_VARIANT_MAP.primary;
@@ -34,37 +50,9 @@ export function resolveVariant(variant?: ButtonVariantInput): ButtonVariant {
   return variant;
 }
 
-const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0",
-  {
-    variants: {
-      variant: {
-        positive: 'bg-primary text-primary-foreground shadow-xs hover:bg-primary/90',
-        positiveOutline: 'border border-primary/50 bg-transparent text-primary hover:bg-primary/10',
-        negative:
-          'bg-destructive text-white shadow-xs hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40',
-        negativeOutline:
-          'border border-destructive/50 bg-transparent text-destructive hover:bg-destructive/10',
-        secondary: 'bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80',
-        ghost: 'hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50',
-        link: 'text-primary underline-offset-4 hover:underline',
-      },
-      size: {
-        sm: 'h-8 gap-1.5 px-3 text-sm rounded-lg',
-        md: 'h-10 px-4 py-2 rounded-xl',
-        lg: 'h-12 px-6 text-lg rounded-2xl',
-      },
-    },
-    defaultVariants: {
-      variant: 'positive',
-      size: 'md',
-    },
-  }
-);
-
 const ICON_ONLY_SIZE: Record<ButtonSize, string> = {
-  sm: 'h-8 w-8 p-0',
-  md: 'h-10 w-10 p-0',
+  sm: 'h-11 w-11 p-0',
+  md: 'h-11 w-11 p-0',
   lg: 'h-12 w-12 p-0',
 };
 
@@ -94,21 +82,39 @@ function TooltipShell({ label, children }: { label: string; children: React.Reac
   );
 }
 
+function getIconOnlyState(
+  children: React.ReactNode,
+  icon: LucideIcon | undefined,
+  iconOnly: boolean | undefined
+): { hasChildren: boolean; isIconOnly: boolean } {
+  const hasChildren = children !== null && children !== undefined;
+  return { hasChildren, isIconOnly: iconOnly ?? Boolean(icon && !hasChildren) };
+}
+
+function getAriaLabel(
+  isIconOnly: boolean,
+  tooltip: string | undefined,
+  children: React.ReactNode
+): string | undefined {
+  if (!isIconOnly) return undefined;
+  if (tooltip) return tooltip;
+  return typeof children === 'string' ? children : undefined;
+}
+
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   (
     { className, variant, size = 'md', loading, icon, iconOnly, tooltip, children, disabled, type = 'button', ...props },
     ref
   ) => {
     const resolvedVariant = resolveVariant(variant);
-    const hasChildren = children !== null && children !== undefined;
-    const isIconOnly = iconOnly ?? Boolean(icon && !hasChildren);
-
-    if (process.env.NODE_ENV !== 'production' && isIconOnly && !tooltip) {
-      console.warn('Button: iconOnly requires a `tooltip` prop for accessibility.');
+    const { hasChildren, isIconOnly } = getIconOnlyState(children, icon, iconOnly);
+    // Why the hook rather than a stylesheet: the hover and tap transforms are
+    // motion values, so a `prefers-reduced-motion` rule cannot reach them.
+    const shouldReduceMotion = useReducedMotion() === true;
+    if (!hasChildren && !icon && !loading) {
+      return <EmptyState title="No action available" description="Button content is empty" />;
     }
-
-    const ariaLabel = isIconOnly ? tooltip ?? (typeof children === 'string' ? children : undefined) : undefined;
-
+    const ariaLabel = getAriaLabel(isIconOnly, tooltip, children);
     const button = (
       <motion.button
         ref={ref}
@@ -116,20 +122,17 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={disabled || loading}
         aria-label={ariaLabel}
         aria-busy={loading || undefined}
-        whileHover={{ scale: 1.02, filter: 'brightness(1.05)' }}
-        whileTap={{ scale: 0.97 }}
+        whileHover={shouldReduceMotion ? undefined : { scale: 1.02, filter: 'brightness(1.05)' }}
+        whileTap={shouldReduceMotion ? undefined : { scale: 0.97 }}
         transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-        className={cn(buttonVariants({ variant: resolvedVariant, size }), isIconOnly && ICON_ONLY_SIZE[size], className)}
+        className={cn(buttonVariants({ variant: BUTTON_VARIANT_TO_ADAPTER[resolvedVariant], size }), isIconOnly && ICON_ONLY_SIZE[size], className)}
         {...props}
       >
         <LeadingIcon icon={icon} loading={loading} />
         {children}
       </motion.button>
     );
-
-    if (isIconOnly && tooltip) {
-      return <TooltipShell label={tooltip}>{button}</TooltipShell>;
-    }
+    if (isIconOnly && tooltip) return <TooltipShell label={tooltip}>{button}</TooltipShell>;
     return button;
   }
 );

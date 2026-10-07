@@ -1,44 +1,79 @@
 'use server'
 
-import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
-import { ensurePermission, invalidateAccessCache } from '@/lib/permissions';
-import { getSession, type AdminPermissions } from '@/lib/auth';
+import { getSession } from '@/lib/auth';
+import { recordAudit } from '@/lib/audit';
+import { stripDisallowedFields } from '@/lib/field-permissions';
+import {
+  hasEffectivePermission,
+  getTargetEffectivePermissions,
+  isEffectiveSuperset,
+  ACTION_PERMISSIONS,
+} from '@/lib/permission-engine';
+import { ensurePermission, getPermissions, invalidateAccessCache } from '@/lib/permissions';
+import { prisma } from '@/lib/prisma';
 import { safeAdminSelect, type AdminWithLogin } from '@/lib/prisma-selects';
+import {
+  findAdminTarget,
+  isCurrentlySuperadmin,
+  isSelfDemotion,
+  removesSuperadminStatusViaGroups,
+  wouldRemoveLastSuperadmin,
+  type UpdateAdminInput,
+} from '@/lib/admin-helpers';
 import {
   formatStoredPassword,
   parseStoredPassword,
   DEFAULT_PASSWORD_KIND,
   type PasswordKind,
 } from '@/lib/password-format';
+import { handleAdminUpdateWrite } from './admin-update-helpers';
 
 interface ActionResult {
   success: boolean;
   error?: string;
 }
 
-interface CreateAdminInput extends Partial<AdminPermissions> {
+interface AdminPermissionAssignment {
+  groupIds?: number[];
+  overrides?: { permissionKey: string; effect: 'allow' | 'deny' }[];
+}
+
+interface CreateAdminInput extends AdminPermissionAssignment {
   name: string;
   username: string;
   password: string;
   passwordKind?: PasswordKind;
 }
 
-interface UpdateAdminInput extends Partial<AdminPermissions> {
-  name?: string;
-  enabled?: boolean;
-  password?: string;
-  passwordKind?: PasswordKind;
+interface AdminMutationError {
+  success: false;
+  error: string;
 }
 
-type AdminUpdateData = {
-  name?: string;
-  enabled?: boolean;
-  authentication?: string;
-} & Partial<AdminPermissions>;
+type AdminMutationGuard = null | AdminMutationError;
+
+async function guardAdminMutation(
+  callerEffective: ReadonlySet<string>,
+  adminId: number,
+  sessionUserId: string,
+): Promise<AdminMutationGuard> {
+  // Why: a caller may only mutate admins whose permissions are a subset of their own
+  if (String(adminId) === sessionUserId) return null;
+  const targetResult = await getTargetEffectivePermissions(adminId);
+  if (targetResult.status === 'not_found') return null;
+  if (targetResult.status === 'error') {
+    return { success: false, error: 'Unable to verify target permissions' };
+  }
+  if (!isEffectiveSuperset(callerEffective, targetResult.effective)) {
+    return { success: false, error: 'Cannot mutate an admin with permissions you do not hold' };
+  }
+  return null;
+}
+
 
 export async function getAdmins(): Promise<AdminWithLogin[]> {
-  await ensurePermission('all');
+  await ensurePermission('admin:read');
   return prisma.admins.findMany({
     select: { ...safeAdminSelect, last_login_at: true },
     orderBy: { username: 'asc' }
@@ -46,22 +81,26 @@ export async function getAdmins(): Promise<AdminWithLogin[]> {
 }
 
 export async function createAdmin(data: CreateAdminInput): Promise<ActionResult> {
-  await ensurePermission('all');
+  await ensurePermission(ACTION_PERMISSIONS.createAdmin);
+  // WHY: creation is gated by `admin:create`; stripDisallowedFields models the UPDATE contract (per-field `update` keys) and must not be applied to create payloads
   try {
-    await prisma.admins.create({
+    const created = await prisma.admins.create({
       data: {
         name: data.name,
         username: data.username,
         authentication: await formatStoredPassword(data.passwordKind ?? DEFAULT_PASSWORD_KIND, data.password),
         enabled: true,
-        permission_all: data.permission_all ?? false,
-        permission_messaging: data.permission_messaging ?? false,
-        permission_tasks: data.permission_tasks ?? false,
-        permission_users: data.permission_users ?? false,
-        permission_contests: data.permission_contests ?? false,
-      }
+      },
+      select: { id: true },
     });
-    revalidatePath('/[locale]/admins', 'page');
+    await recordAudit({
+      verb: 'admin:create',
+      entity: 'admin',
+      entityId: String(created.id),
+      afterValues: { username: data.username, name: data.name },
+      result: 'success',
+    });
+    revalidatePath('/[locale]/administration/admins', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;
@@ -72,74 +111,43 @@ export async function createAdmin(data: CreateAdminInput): Promise<ActionResult>
   }
 }
 
-function findAdminTarget(adminId: number) {
-  return prisma.admins.findUnique({
-    where: { id: adminId },
-    select: { permission_all: true, enabled: true },
-  });
-}
-
-function isSelfDemotion(
-  sessionUserId: string,
-  adminId: number,
-  target: { permission_all: boolean } | null,
-  data: UpdateAdminInput
-): boolean {
-  return sessionUserId === String(adminId)
-    && target?.permission_all === true
-    && data.permission_all === false;
-}
-
-function removesSuperadminStatus(data: UpdateAdminInput): boolean {
-  return (data.permission_all !== undefined && !data.permission_all) || data.enabled === false;
-}
-
-async function wouldRemoveLastSuperadmin(adminId: number): Promise<boolean> {
-  const otherSupers = await prisma.admins.count({
-    where: { permission_all: true, enabled: true, NOT: { id: adminId } },
-  });
-  return otherSupers === 0;
-}
-
-async function buildAdminUpdateData(data: UpdateAdminInput): Promise<AdminUpdateData> {
-  const updateData: AdminUpdateData = {};
-  if (data.name) updateData.name = data.name;
-  if (data.enabled !== undefined) updateData.enabled = data.enabled;
-  if (data.permission_all !== undefined) updateData.permission_all = data.permission_all;
-  if (data.permission_messaging !== undefined) updateData.permission_messaging = data.permission_messaging;
-  if (data.permission_tasks !== undefined) updateData.permission_tasks = data.permission_tasks;
-  if (data.permission_users !== undefined) updateData.permission_users = data.permission_users;
-  if (data.permission_contests !== undefined) updateData.permission_contests = data.permission_contests;
-  if (data.password) updateData.authentication = await formatStoredPassword(data.passwordKind ?? DEFAULT_PASSWORD_KIND, data.password);
-  return updateData;
-}
-
 export async function updateAdmin(adminId: number, data: UpdateAdminInput): Promise<ActionResult> {
-  await ensurePermission('all');
+  // Why: the write is gated per field rather than by one blanket key, so a caller holding only
+  // admin:password:update can still reset a credential while every other field is stripped below.
+  const effectivePermissions = await getPermissions();
+  const allowed = stripDisallowedFields('admins', data as Record<string, unknown>, effectivePermissions);
+
+  const mayUpdateAdmin = hasEffectivePermission(effectivePermissions, ACTION_PERMISSIONS.updateAdmin);
+  const mayUpdatePassword = hasEffectivePermission(effectivePermissions, ACTION_PERMISSIONS.setAdminPassword);
+  if (!mayUpdateAdmin && !mayUpdatePassword) {
+    return { success: false, error: 'Not authorized' };
+  }
+  if (Object.keys(allowed).length === 0) {
+    return { success: false, error: 'You do not have permission to change these fields' };
+  }
 
   const session = await getSession();
   if (!session) {
     return { success: false, error: 'Not authenticated' };
   }
 
+  const mutationError = await guardAdminMutation(effectivePermissions, adminId, session.userId);
+  if (mutationError) return mutationError;
+
   const target = await findAdminTarget(adminId);
   if (isSelfDemotion(session.userId, adminId, target, data)) {
     return { success: false, error: 'Cannot demote your own superadmin account' };
   }
 
-  if (target?.permission_all === true && removesSuperadminStatus(data)) {
+  // WHY: prevent the last superadmin from being demoted or disabled
+  if (isCurrentlySuperadmin(target) && removesSuperadminStatusViaGroups(target, data)) {
     if (await wouldRemoveLastSuperadmin(adminId)) {
       return { success: false, error: 'Cannot remove the last superadmin' };
     }
   }
 
   try {
-    await prisma.admins.update({
-      where: { id: adminId },
-      data: await buildAdminUpdateData(data)
-    });
-    invalidateAccessCache(String(adminId));
-    revalidatePath('/[locale]/admins', 'page');
+    await handleAdminUpdateWrite(adminId, allowed as Record<string, unknown>);
     return { success: true };
   } catch (error) {
     return { success: false, error: (error as Error).message };
@@ -147,7 +155,7 @@ export async function updateAdmin(adminId: number, data: UpdateAdminInput): Prom
 }
 
 export async function deleteAdmin(adminId: number): Promise<ActionResult> {
-  await ensurePermission('all');
+  await ensurePermission(ACTION_PERMISSIONS.deleteAdmin);
 
   const session = await getSession();
   if (!session) {
@@ -158,15 +166,28 @@ export async function deleteAdmin(adminId: number): Promise<ActionResult> {
     return { success: false, error: 'Cannot delete your own account' };
   }
 
+  const callerEffective = await getPermissions();
+  const mutationError = await guardAdminMutation(callerEffective, adminId, session.userId);
+  if (mutationError) return mutationError;
+
   const target = await findAdminTarget(adminId);
-  if (target?.permission_all && await wouldRemoveLastSuperadmin(adminId)) {
+  // WHY: deleting a superadmin removes superadmin status — block if this is the last one
+  if (isCurrentlySuperadmin(target) && await wouldRemoveLastSuperadmin(adminId)) {
     return { success: false, error: 'Cannot remove the last superadmin' };
   }
 
   try {
+    const beforeDelete = await prisma.admins.findUnique({ where: { id: adminId }, select: { username: true, name: true, enabled: true } });
     await prisma.admins.delete({ where: { id: adminId } });
+    await recordAudit({
+      verb: 'admin:delete',
+      entity: 'admin',
+      entityId: String(adminId),
+      beforeValues: beforeDelete ? { username: beforeDelete.username, name: beforeDelete.name, enabled: beforeDelete.enabled } : undefined,
+      result: 'success',
+    });
     invalidateAccessCache(String(adminId));
-    revalidatePath('/[locale]/admins', 'page');
+    revalidatePath('/[locale]/administration/admins', 'page');
     return { success: true };
   } catch (error) {
     return { success: false, error: (error as Error).message };
@@ -176,14 +197,48 @@ export async function deleteAdmin(adminId: number): Promise<ActionResult> {
 export async function revealAdminPassword(id: number): Promise<
   { success: true; kind: 'plaintext'; value: string } | { success: true; kind: 'bcrypt' } | { success: false; error: string }
 > {
-  await ensurePermission('all');
+  await ensurePermission('password:reveal');
   try {
     const row = await prisma.admins.findUnique({ where: { id }, select: { authentication: true } });
-    if (!row) return { success: false, error: 'Admin not found' };
+    if (!row) {
+      await recordAudit({
+        verb: 'password:reveal',
+        entity: 'admin',
+        entityId: String(id),
+        beforeValues: { adminId: id },
+        // A named reason, not a message: this failed before any secret was read, and the reason
+        // belongs in the log while whatever the driver said does not.
+        afterValues: { error: 'NotFound' },
+        result: 'failure',
+      });
+      return { success: false, error: 'Admin not found' };
+    }
     const parsed = parseStoredPassword(row.authentication);
+    // Why kind only: the row records that this admin's secret was disclosed, never the secret.
+    // An admin credential is the one that re-grants every permission below it, so leaving this
+    // read unlogged made it the single sensitive read on the panel with no trail.
+    await recordAudit({
+      verb: 'password:reveal',
+      entity: 'admin',
+      entityId: String(id),
+      beforeValues: { adminId: id },
+      afterValues: { kind: parsed.kind },
+      result: 'success',
+    });
     if (parsed.kind === 'bcrypt') return { success: true, kind: 'bcrypt' };
     return { success: true, kind: 'plaintext', value: parsed.value };
-  } catch {
+  } catch (error) {
+    // Why this row exists: a reveal that fails is the shape a break-in attempt takes, and
+    // password:reveal is already a verb whose failure pages Discord. The error name is the whole
+    // payload — a message here can carry the query that was refused.
+    await recordAudit({
+      verb: 'password:reveal',
+      entity: 'admin',
+      entityId: String(id),
+      beforeValues: { adminId: id },
+      afterValues: { error: error instanceof Error ? error.name : 'UnknownError' },
+      result: 'failure',
+    });
     return { success: false, error: 'Unable to load password' };
   }
 }

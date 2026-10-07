@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { getParticipationDetails, updateParticipation } from '@/app/actions/participations';
+import { getParticipationDetails } from '@/app/actions/participation-reads';
+import { updateParticipation } from '@/app/actions/participations';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
 import type { PasswordKind } from '@/lib/password-format';
 
 export interface ParticipationFormData {
@@ -45,6 +47,8 @@ export function useParticipationForm(isOpen: boolean, participationId: number) {
     if (isOpen && participationId) void load();
   }, [isOpen, participationId, load]);
 
+  const runAction = useActionFeedback();
+
   const submit = async (onSuccess: () => void, onClose: () => void): Promise<void> => {
     setError('');
     setSaving(true);
@@ -58,11 +62,22 @@ export function useParticipationForm(isOpen: boolean, participationId: number) {
         payload.password = formData.password;
         payload.passwordKind = formData.password_kind;
       }
-      const result = await updateParticipation(participationId, payload);
-      if (result.success) { onSuccess(); onClose(); }
-      else setError(result.error || 'Failed to update participation');
-    } catch {
-      setError('An unexpected error occurred');
+      const result = await runAction(
+        {
+          pending: 'Saving participation...',
+          success: 'Participation saved',
+          failure: 'Save failed',
+          description: 'Settings updated successfully.',
+        },
+        () => updateParticipation(participationId, payload)
+      );
+      if (!result) return;
+      if (result.success) {
+        onSuccess();
+        onClose();
+      } else {
+        setError(result.error || 'Failed to update participation');
+      }
     } finally {
       setSaving(false);
     }

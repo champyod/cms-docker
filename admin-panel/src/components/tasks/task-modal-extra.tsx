@@ -22,7 +22,7 @@ export function TokensTab({ formData, onChange }: TabProps): React.JSX.Element {
         </select>
       </div>
       {formData.token_mode === 'finite' && (
-        <div className="grid grid-cols-2 gap-6 p-4 bg-muted/50 rounded-xl">
+        <div className="grid grid-cols-1 gap-6 p-4 bg-muted/50 rounded-xl md:grid-cols-2">
           <div><label className="block text-xs font-bold text-muted-foreground uppercase mb-2">Max Tokens</label><input type="number" value={formData.token_max_number ?? ''} onChange={(e) => onChange({ ...formData, token_max_number: e.target.value ? parseInt(e.target.value, 10) : null })} className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring" /></div>
           <div><label className="block text-xs font-bold text-muted-foreground uppercase mb-2">Min Interval (s)</label><input type="number" value={formData.token_min_interval ?? ''} onChange={(e) => onChange({ ...formData, token_min_interval: e.target.value ? parseInt(e.target.value, 10) : null })} className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring" /></div>
           <div><label className="block text-xs font-bold text-primary uppercase mb-2">Initial Tokens</label><input type="number" value={formData.token_gen_initial ?? ''} onChange={(e) => onChange({ ...formData, token_gen_initial: e.target.value ? parseInt(e.target.value, 10) : null })} placeholder="2" className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring" /></div>
@@ -50,7 +50,7 @@ export function LanguagesTab({ formData, onToggleLanguage, onToggleFormat }: Lan
             const active = (formData.submission_format ?? []).includes(fmt);
             return (
               <button key={fmt} type="button" onClick={() => onToggleFormat(fmt)} className={cn('flex items-center gap-3 rounded-lg border p-3 text-left transition-all', active ? 'border-ring/50 bg-primary/10 text-foreground' : 'border-border bg-muted/30 text-muted-foreground hover:bg-muted/50')}>
-                <div className={cn('flex h-4 w-4 items-center justify-center rounded border', active ? 'border-primary bg-primary' : 'border-muted-foreground/40')}>{active && <div className="h-2 w-2 rounded-sm bg-white" />}</div>
+                <div className={cn('flex h-4 w-4 items-center justify-center rounded border', active ? 'border-primary bg-primary' : 'border-muted-foreground/40')}>{active && <div className="h-2 w-2 rounded-sm bg-card" />}</div>
                 <span>{fmt}</span>
               </button>
             );

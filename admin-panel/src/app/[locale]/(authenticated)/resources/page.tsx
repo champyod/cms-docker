@@ -1,33 +1,29 @@
-import { ResourceView } from '@/components/resources/ResourceView';
-import { checkPermission } from '@/lib/permissions';
-import { getDictionary } from '@/i18n';
-import { PermissionDenied } from '@/components/PermissionDenied';
+import { notFound, redirect } from 'next/navigation';
 
-export default async function ResourcesPage({
+import { getRoutePermissions } from '@/lib/navigation/page-authorization';
+import { resolveLegacyRedirect } from '@/lib/navigation/redirects';
+import { AuthorizationError } from '@/lib/server/authorization';
+
+const LEGACY_PATH = '/resources';
+
+/**
+ * Why this route still exists: the Resource Control screen keeps its old address
+ * so existing bookmarks, chord history, and links land on the canonical module
+ * route. Only a reader whose permissions fail closed is concealed; a 401 and any
+ * unexpected storage failure keep propagating.
+ */
+export default async function ResourcesRedirectPage({
   params,
 }: {
   params: Promise<{ locale: string }>;
-}) {
-  const { locale } = await params;
-  const dict = await getDictionary(locale);
-  const hasPermission = await checkPermission('all', false);
-
-  if (!hasPermission) {
-    return <PermissionDenied permission="permission_all" locale={locale} dict={dict} />;
+}): Promise<never> {
+  try {
+    const [{ locale }, effective] = await Promise.all([params, getRoutePermissions()]);
+    const target = resolveLegacyRedirect(locale, LEGACY_PATH, effective);
+    if (target === null) notFound();
+    redirect(target);
+  } catch (error: unknown) {
+    if (error instanceof AuthorizationError && error.status === 403) notFound();
+    throw error;
   }
-
-  return (
-    <div className="space-y-8">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight text-white">
-          Resource Control
-        </h1>
-        <p className="text-neutral-400">
-          Monitor and manage main server resources and distributed worker activity.
-        </p>
-      </div>
-
-      <ResourceView />
-    </div>
-  );
 }

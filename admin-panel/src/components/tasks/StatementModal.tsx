@@ -2,10 +2,13 @@
 
 import { useState } from 'react';
 import { Upload } from 'lucide-react';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { Dialog } from '@/components/core/Dialog';
-import { Button } from '@/components/core/Button';
+import { ModalFooter } from '@/components/core/ModalFooter';
+import { LanguagePicker } from '@/components/core/LanguagePicker';
+import { InlineAlert } from '@/components/core/InlineAlert';
+import { normalizeLanguageCode } from '@/lib/constants/languages';
 import { apiClient } from '@/lib/apiClient';
-import { STATEMENT_LANGUAGES } from '@/lib/constants';
 import { readFileAsBase64 } from '@/lib/file-helpers';
 
 interface StatementModalProps {
@@ -17,31 +20,44 @@ interface StatementModalProps {
 }
 
 export function StatementModal({ isOpen, onClose, taskId, existingLanguages, onSuccess }: StatementModalProps): React.JSX.Element | null {
-  const [language, setLanguage] = useState('en');
+  const [language, setLanguage] = useState<string>('en');
   const [file, setFile] = useState<File | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const availableLanguages = STATEMENT_LANGUAGES.filter((l) => !existingLanguages.includes(l.code) || l.code === language);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string>('');
+  const runAction = useActionFeedback();
 
   if (!isOpen) return null;
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>): void {
     const selected = e.target.files?.[0];
     if (selected) setFile(selected);
-  };
+  }
 
-  const handleSubmit = async (e: React.FormEvent): Promise<void> => {
+  async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     if (!file) {
       setError('Please select a file');
+      return;
+    }
+    const normalizedLanguage = normalizeLanguageCode(language);
+    if (!normalizedLanguage) {
+      setError('Language is required');
       return;
     }
     setLoading(true);
     setError('');
     try {
       const base64 = await readFileAsBase64(file);
-      const result = await apiClient.post('/api/statements', { taskId, language, fileData: base64 });
+      const result = await runAction(
+        {
+          pending: 'Uploading statement...',
+          success: 'Statement uploaded',
+          failure: 'Upload failed',
+          description: `Statement (${normalizedLanguage}) saved successfully.`,
+        },
+        () => apiClient.post('/api/statements', { taskId, language: normalizedLanguage, fileData: base64 })
+      );
+      if (!result) return;
       if (result.success) {
         onSuccess();
         onClose();
@@ -49,12 +65,16 @@ export function StatementModal({ isOpen, onClose, taskId, existingLanguages, onS
       } else {
         setError(result.error ?? 'Failed to upload statement');
       }
-    } catch {
-      setError('An unexpected error occurred');
     } finally {
       setLoading(false);
     }
-  };
+  }
+
+  // Why the guard: a submit already in flight cannot be recalled, so cancelling
+  // through it would close the dialog over an unresolved upload.
+  function cancel(): void {
+    if (!loading) onClose();
+  }
 
   return (
     <Dialog
@@ -64,30 +84,21 @@ export function StatementModal({ isOpen, onClose, taskId, existingLanguages, onS
       }}
       title="Add Statement"
       footer={
-        <>
-          <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>
-            Cancel
-          </Button>
-          <Button type="submit" form="statement-form" variant="positive" icon={Upload} loading={loading} disabled={loading || !file}>
-            Upload Statement
-          </Button>
-        </>
+        <ModalFooter
+          formId="statement-form"
+          cancelLabel="Cancel"
+          confirmLabel="Upload Statement"
+          onCancel={cancel}
+          confirmIcon={Upload}
+          confirmLoading={loading}
+          confirmDisabled={loading || !file}
+        />
       }
       className="sm:max-w-md"
     >
-      {error && <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+      {error ? <InlineAlert tone="destructive" density="regular" className="mb-4">{error}</InlineAlert> : null}
       <form id="statement-form" onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="mb-2 block text-xs font-bold uppercase text-muted-foreground">Language</label>
-          <select value={language} onChange={(event) => setLanguage(event.target.value)} className="w-full rounded-lg border border-border bg-muted/50 px-4 py-3 text-foreground focus:border-ring focus:outline-none">
-            {availableLanguages.map((lang) => (
-              <option key={lang.code} value={lang.code}>
-                {lang.name} ({lang.code})
-              </option>
-            ))}
-          </select>
-        </div>
-
+        <LanguagePicker value={language} onChange={setLanguage} extraOptions={existingLanguages} placeholder="en" label="Language" id="statement-language" />
         <div>
           <label className="mb-2 block text-xs font-bold uppercase text-muted-foreground">PDF File</label>
           <div className="relative">

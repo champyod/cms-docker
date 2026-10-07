@@ -1,7 +1,7 @@
 {
   "dashboard": {
     "welcome": "Welcome back, Admin",
-    "description": "Here's what's happening with your contests today.",
+    "description": "Here is what is happening with your contests today.",
     "stats": {
       "totalUsers": "Total Users",
       "totalContests": "Total Contests",
@@ -14,9 +14,41 @@
     "contactAdmin": "Contact your administrator to request access.",
     "returnToDashboard": "Return to Dashboard"
   },
+  "contests": {
+    "title": "Contests Management",
+    "subtitle": "Create and manage programming contests.",
+    "allContests": "All Contests"
+  },
+  "tasks": {
+    "title": "Tasks",
+    "subtitle": "Manage programming tasks, statements, and test cases.",
+    "allTasks": "All Tasks",
+    "statements": {
+      "title": "Statements",
+      "upload": "Upload Statement",
+      "languageLabel": "Language",
+      "tableEmptyTitle": "No statements",
+      "tableEmptyDescription": "No statements uploaded yet.",
+      "columns": {
+        "language": "Language",
+        "filename": "Filename",
+        "size": "Size",
+        "uploadedAt": "Upload date",
+        "actions": "Actions"
+      },
+      "filters": {
+        "all": "All",
+        "filterByLanguage": "Filter by language"
+      },
+      "download": "Download",
+      "delete": "Delete statement",
+      "uploadDialogTitle": "Add Statement"
+    }
+  },
   "users": {
     "title": "User Management",
     "subtitle": "Manage system users and participants.",
+    "participations": "{count} participations",
     "allUsers": "All Users",
     "bulkAddUsers": "Bulk Add Users",
     "createUser": "Create User",
@@ -29,7 +61,40 @@
     "bulkEditTitle": "Edit Selected Users",
     "bulkCreateTemplate": "Download CSV Template",
     "bulkCreateParse": "Parse & Preview",
-    "bulkOverwriteApply": "Apply Credentials"
+    "bulkOverwriteApply": "Apply Credentials",
+    "profile": {
+      "username": "Username",
+      "name": "Name",
+      "email": "Email",
+      "timezone": "Timezone",
+      "languages": "Languages",
+      "status": "Status",
+      "organization": "Organization",
+      "country": "Country",
+      "participations": "Participations",
+      "teams": "Teams",
+      "savedPassword": "Saved password"
+    },
+    "teamsTab": {
+      "emptyTitle": "No teams found.",
+      "emptyDescription": "This user is not assigned to any team yet.",
+      "noTeam": "No team",
+      "contestLabel": "Contest #{id}"
+    },
+    "history": {
+      "accountAccess": "Account Access",
+      "lastLogin": "Last login: {value}",
+      "contestLabel": "Contest #{id}",
+      "taskLabel": "Task #{id}",
+      "teamLabel": "Team #{id}",
+      "sections": {
+        "contests": { "title": "Contests", "empty": "No contest activity." },
+        "participations": { "title": "Participations", "empty": "No participations." },
+        "teams": { "title": "Teams", "empty": "No teams." },
+        "submissions": { "title": "Submissions", "empty": "No submissions." },
+        "recentActivity": { "title": "Recent Activity", "empty": "No recent activity." }
+      }
+    }
   },
   "teams": {
     "title": "Teams",
@@ -42,7 +107,22 @@
     "editTeamTooltip": "Edit team",
     "deleteTeamTooltip": "Delete team",
     "tableEmptyTitle": "No teams found",
-    "tableEmptyDescription": "Teams will appear here once created."
+    "tableEmptyDescription": "Teams will appear here once created.",
+    "overview": {
+      "code": "Team Code",
+      "name": "Team Name",
+      "readOnlyHint": "Read-only — you lack team:update",
+      "saveChanges": "Save Changes"
+    },
+    "members": {
+      "emptyTitle": "No members in this team yet.",
+      "emptyDescription": "Add members by assigning this team to a participation in a contest.",
+      "moreCount": "+{count} more"
+    },
+    "contests": {
+      "emptyTitle": "No contests found.",
+      "emptyDescription": "This team is not participating in any contests yet."
+    }
   },
   "submissions": {
     "title": "Submissions",
@@ -51,12 +131,450 @@
     "readOnlyBadge": "Read-only",
     "tableEmptyTitle": "No submissions found",
     "tableEmptyDescription": "Submissions will appear here once contestants start submitting.",
-    "viewSubmission": "View submission"
+    "viewSubmission": "View submission",
+    "lanesDescription": "Drag submissions between lanes or move them with a reason."
   },
   "admins": {
+    "title": "Administrators",
+    "addAdmin": "Add Admin",
     "actions": {
       "edit": "Edit",
       "delete": "Delete"
     }
+  },
+  "resources": {
+    "title": "Resource Control",
+    "subtitle": "Monitor and manage main server resources and distributed worker activity.",
+    "loading": "Loading system metrics...",
+    "cpuUsage": "CPU Usage",
+    "memoryUsage": "RAM Usage",
+    "hostSource": "(Host)",
+    "containerSource": "(Container)",
+    "workerNodes": "Worker Nodes",
+    "systemMetrics": "System Metrics",
+    "uptime": "Uptime",
+    "loadAvg": "Load Avg",
+    "networkTotal": "Network Total"
+  },
+  "containers": {
+    "upAll": "Up All",
+    "selected": "{count} selected",
+    "clearSelection": "Clear selection",
+    "restartSelection": "Restart selected containers",
+    "stopSelection": "Stop selected containers",
+    "logsSelection": "View logs for selection",
+    "discordBadge": "Discord not configured",
+    "discordWarning": "Discord not configured — notifications will be skipped",
+    "stats": {
+      "total": "Total",
+      "running": "Running",
+      "stopped": "Stopped",
+      "uptime": "Uptime"
+    },
+    "activeContainers": "Active Containers",
+    "emptyTitle": "No Docker containers found on this host.",
+    "restart": "Restart",
+    "remove": "Remove",
+    "logs": "Logs",
+    "bulk": {
+      "selectedDescription": "{count} containers selected",
+      "cancel": "Cancel",
+      "restartTitle": "Confirm Restart",
+      "restartDescription": "This will restart the selected containers and their dependents.",
+      "restartPreviewLabel": "This will restart:",
+      "restartDependents": "Includes dependent services via restart policies",
+      "restartConfirm": "Confirm Restart",
+      "stopTitle": "Confirm Stop",
+      "stopDescription": "This will stop the selected containers. You can start them again from the control center.",
+      "stopConfirm": "Confirm Stop",
+      "logsTitle": "View Logs",
+      "logsDescription": "Open logs for the first selected container. Use individual rows for more containers.",
+      "logsConfirm": "View Logs"
+    }
+  },
+  "deployments": {
+    "refresh": "Refresh"
+  },
+  "ranking": {
+    "refreshSnapshot": "Refresh Snapshot",
+    "disconnect": "Disconnect"
+  },
+  "settings": {
+    "title": "System Settings",
+    "subtitle": "Configure environment files and service restarts.",
+    "deploymentMode": {
+      "img": "Restart follows the image mode declared in config.toml: it pulls the latest images, then recreates the containers without rebuilding.",
+      "src": "Restart follows the source mode declared in config.toml: it rebuilds the images from source, then recreates the containers. This is much slower and replaces the images that are running.",
+      "unresolved": "config.toml [admin] does not declare a readable DEPLOYMENT_TYPE, so restart pulls images and does not rebuild. Set DEPLOYMENT_TYPE to \"img\" or \"src\" there to make this explicit."
+    }
+  },
+  "groups": {
+    "title": "Groups Management",
+    "createGroup": "Create Group",
+    "editGroup": "Edit Group",
+    "name": "Name",
+    "description": "Description",
+    "isSeeded": "Seeded",
+    "permissions": "Permissions",
+    "save": "Save",
+    "cancel": "Cancel",
+    "reasonPlaceholder": "Reason for this change (required)",
+    "deleteConfirm": "Are you sure you want to delete this group? This action cannot be undone.",
+    "noGroups": "No groups found",
+    "noGroupsDescription": "Create a group to get started.",
+    "deleteTooltip": "Delete group",
+    "editTooltip": "Edit group",
+    "loadFailed": "Groups could not be loaded."
+  },
+  "permissions": {
+    "title": "Permissions",
+    "subtitle": "Manage administrator accounts and the groups that grant their access."
+  },
+  "audit": {
+    "title": "Audit Log",
+    "subtitle": "Browse and inspect every recorded action in the system.",
+    "columns": {
+      "timestamp": "Timestamp",
+      "actor": "Actor",
+      "verb": "Verb",
+      "entity": "Entity",
+      "entityName": "Name / Title",
+      "result": "Result",
+      "reason": "Reason"
+    },
+    "filters": {
+      "entity": "Entity",
+      "verb": "Verb",
+      "actorId": "Actor ID",
+      "result": "Result",
+      "allResults": "All results",
+      "search": "Search",
+      "searchPlaceholder": "verb, reason, entity…",
+      "fromDate": "From",
+      "toDate": "To",
+      "apply": "Apply",
+      "clear": "Clear",
+      "allEntities": "All Entities"
+    },
+    "noEntries": "No audit entries found.",
+    "exportCsv": "Export CSV",
+    "autoRefresh": "Auto-refresh",
+    "pageInfo": "{total} entries total",
+    "expandedDetails": "Details",
+    "detailLoadFailed": "Could not load details",
+    "loadFailed": "Audit log could not be loaded.",
+    "beforeValues": "Before",
+    "afterValues": "After",
+    "ip": "IP Address",
+    "sessionId": "Session ID",
+    "entryHash": "Entry Hash",
+    "prevHash": "Previous Hash"
+  },
+  "docs": {
+    "subtitle": "Comprehensive guide to the Contest Management System.",
+    "officialDocs": "CMS Official Docs",
+    "viewDocumentation": "View Documentation"
+  },
+  "about": {
+    "project": "Project",
+    "source": "Source",
+    "upstream": "Upstream",
+    "license": "Licence",
+    "attribution": "Attribution",
+    "firstParty": "First-party files",
+    "transitiveDependencies": "Transitive dependencies",
+    "softwareCount": "Third-party software ({count})",
+    "columns": {
+      "name": "Software",
+      "version": "Version",
+      "holder": "Copyright holder",
+      "license": "Licence",
+      "paths": "Used by"
+    }
+  },
+  "confirmations": {
+    "cancel": "Cancel",
+    "captions": {
+      "destructive": "Irreversible",
+      "recoverable": "Reversible",
+      "operational": "Service impact"
+    },
+    "nouns": {
+      "user": "user",
+      "contest": "contest",
+      "admin": "admin",
+      "announcement": "announcement",
+      "team": "team",
+      "task": "task",
+      "dataset": "dataset",
+      "testcase": "testcase",
+      "statement": "statement",
+      "managerFile": "manager file",
+      "attachment": "attachment"
+    },
+    "destructive": {
+      "title": "Delete this {noun}?",
+      "description": "This permanently deletes the {noun}. This cannot be undone.",
+      "confirmLabel": "Delete {noun}"
+    },
+    "removeParticipant": {
+      "title": "Remove this participant?",
+      "description": "This permanently removes the participant's entry from this contest. This cannot be undone.",
+      "confirmLabel": "Remove participant"
+    },
+    "removeTaskFromContest": {
+      "title": "Remove this task from the contest?",
+      "description": "The task is unassigned and is not deleted; it can be added to the contest again.",
+      "confirmLabel": "Remove task"
+    },
+    "markTestUser": {
+      "title": "Mark this user as a test user?",
+      "description": "The participant becomes hidden and unrestricted. Both flags can be changed back in the participation settings.",
+      "confirmLabel": "Mark as test user"
+    },
+    "recalculate": {
+      "title": "Recalculate this submission ({type})?",
+      "description": "Current results are cleared and recomputed from the submission, which is kept.",
+      "confirmLabel": "Recalculate",
+      "types": {
+        "score": "score",
+        "evaluation": "evaluation",
+        "full": "full"
+      }
+    },
+    "fullServerUpdate": {
+      "title": "Run a full server update?",
+      "description": "This pulls the latest images, restarts all services and updates the database schema. The server is unavailable for a few minutes.",
+      "confirmLabel": "Run update"
+    },
+    "restartStack": {
+      "title": "Restart {label}?",
+      "description": "The affected services restart and are unavailable until they come back up.",
+      "confirmLabel": "Restart",
+      "labels": {
+        "core": "Core Stack",
+        "admin": "Admin Stack",
+        "worker": "Worker Stack",
+        "all": "All Services"
+      }
+    },
+    "pullImages": {
+      "title": "Pull the latest images?",
+      "description": "Images are downloaded from the registry without restarting the running services. This may take several minutes.",
+      "confirmLabel": "Pull images"
+    },
+    "rebuildStack": {
+      "title": "Rebuild {label} images from source?",
+      "description": "Images are rebuilt from the current source without restarting the running services. This may take 5-10 minutes.",
+      "confirmLabel": "Rebuild images",
+      "labels": {
+        "core": "Core",
+        "admin": "Admin",
+        "worker": "Worker",
+        "all": "All"
+      }
+    },
+    "manualBackup": {
+      "title": "Trigger a manual backup now?",
+      "description": "All submissions are backed up in the background; the server keeps running.",
+      "confirmLabel": "Trigger backup"
+    },
+    "toggleOfficial": {
+      "title": "Change the official flag?",
+      "description": "Only the official flag changes; the submission itself is untouched and the flag can be changed back.",
+      "confirmLabel": "Change official flag"
+    },
+    "discardUnsavedChanges": {
+      "title": "Discard unsaved changes?",
+      "description": "The edits on this form have not been saved yet and will be lost.",
+      "confirmLabel": "Discard changes"
+    }
+  },
+  "sidePanel": {
+    "close": "Close"
+  },
+  "toasts": {
+    "deploy": {
+      "progressMessage": "Deploying contest #{contestId} — {percent}% pulling",
+      "progressStatusMessage": "Deploying contest #{contestId} — {status}",
+      "progressDescription": "Progress {percent}% pulling",
+      "waitingDescription": "Waiting for build output...",
+      "startedTitle": "Deploying contest #{contestId}",
+      "startingDescription": "Starting deployment...",
+      "alreadyRunningTitle": "Deploy already running",
+      "alreadyRunningDescription": "Another deployment is in progress.",
+      "startFailedTitle": "Deploy failed to start",
+      "startFailedDescription": "Could not initiate deployment.",
+      "watchingStoppedTitle": "Deploy continues in the background",
+      "watchingStoppedDescription": "The panel stopped watching this deploy. It keeps running, and the contest is updated when it finishes.",
+      "completedTitle": "Contest deployed",
+      "completedDescription": "Contest #{contestId} is now active.",
+      "failedTitle": "Deploy failed",
+      "failedDescription": "Deployment did not complete.",
+      "notFoundTitle": "Deploy not found",
+      "notFoundDescription": "Operation unknown."
+    },
+    "maintenance": {
+      "saveFailed": "Failed to save: {error}",
+      "notificationSaveFailed": "Notification settings not saved: {error}",
+      "saved": "Maintenance settings saved successfully!",
+      "backupTriggered": "Backup triggered in background. Check Discord for status.",
+      "failed": "Failed: {error}",
+      "notificationsSaved": "Notification settings saved to config.toml and .env.",
+      "notificationsSavedMonitorRecreated": "Notification settings saved and the monitor was recreated.",
+      "monitorRestartFailed": "Settings saved, but the monitor restart failed: {error}",
+      "testAlertDelivered": "Test alert delivered (HTTP {status}).",
+      "testAlertFailedFallback": "The test alert failed.",
+      "testAlertFailed": "Test alert failed: {message}"
+    },
+    "serviceControl": {
+      "actionFailed": "Error: {error}",
+      "updateFailed": "Failed to trigger update",
+      "restartFailed": "Failed to restart",
+      "pullFailed": "Failed to pull images",
+      "rebuildFailed": "Failed to rebuild"
+    },
+    "envConfig": {
+      "saveFailed": "Failed to save {filename}: {error}",
+      "restarted": "Saved and restarted: {services}",
+      "restartFailed": "Saved, but failed to restart: {error}",
+      "saved": "Saved {filename} successfully!",
+      "unexpectedError": "An error occurred while saving."
+    },
+    "monitor": {
+      "errorTitle": "Error",
+      "urlRequiredDescription": "URL is required",
+      "addedTitle": "Added",
+      "addedDescription": "Monitor target added",
+      "failureDescription": "Failed",
+      "removedTitle": "Removed",
+      "removedDescription": "Target removed",
+      "testOkTitle": "OK",
+      "testMismatchTitle": "Mismatch",
+      "testFailedTitle": "Test Failed",
+      "connectionErrorDescription": "Connection error",
+      "resultDescription": "HTTP {status} (expected {expectedStatus}) — {latency}ms"
+    },
+    "discord": {
+      "testAlertTitle": "CMS Alert Test",
+      "testAlertDescription": "Test alert sent from the admin panel. Delivery is working — monitor alerts (CPU, memory, disk and container events) will arrive here.",
+      "configTomlMissing": "Could not update {configToml} — run './cms config sync' once so the value has a source of truth, then retry.",
+      "envWriteFailed": "{configToml} was updated, but writing {envFile} failed: {error}",
+      "noWebhookUrl": "No webhook URL to test — enter one and save it, or set DISCORD_WEBHOOK_URL in config.toml [infra].",
+      "deliveryFailed": "Delivery failed"
+    },
+    "containers": {
+      "errorTitle": "Error",
+      "restartFailedFallback": "Failed to restart container",
+      "stopFailedFallback": "Failed to stop container",
+      "restartTriggered": "Restart triggered for {count} containers",
+      "stopTriggered": "Stop triggered for {count} containers",
+      "controlSucceeded": "Container {action} completed successfully",
+      "composeSucceeded": "Compose {action} completed",
+      "autoRestartEnabled": "Auto-restart enabled",
+      "autoRestartDisabled": "Auto-restart disabled",
+      "restartCountReset": "Restart count reset",
+      "discordEnabled": "Discord notifications enabled",
+      "discordDisabled": "Discord notifications disabled",
+      "discordNotConfiguredTitle": "Discord not configured",
+      "discordNotConfiguredDescription": "Webhook is empty — notifications will be skipped until configured in settings."
+    },
+    "ranking": {
+      "logoUpdatedTitle": "Logo updated",
+      "logoUpdatedDescription": "Ranking logo hot reloaded",
+      "uploadFailedTitle": "Upload failed",
+      "uploadFailedFallback": "Failed to upload logo",
+      "snapshotFailed": "Failed to fetch ranking snapshot",
+      "sessionFailed": "Failed to load ranking session",
+      "connectFailed": "Failed to connect ranking",
+      "disconnectFailed": "Failed to disconnect ranking"
+    },
+    "deploySettings": {
+      "saveFailedTitle": "Save Failed",
+      "saveFailedFallback": "Could not update config.toml",
+      "savedTitle": "Settings Saved",
+      "savedDescription": "Contest settings updated.",
+      "unexpectedErrorTitle": "Unexpected Error"
+    }
+  },
+  "live": {
+    "connecting": "Connecting…",
+    "connected": "Live",
+    "reconnecting": "Reconnecting…",
+    "paused": "Paused"
+  },
+  "states": {
+    "retry": {
+      "label": "Retry",
+      "description": "The data could not be loaded. Retry the request."
+    },
+    "loading": {
+      "deployments": "Loading contest deployment...",
+      "people": "Loading people...",
+      "evaluation": "Loading evaluation...",
+      "userProfile": "Loading user profile...",
+      "userTeams": "Loading user teams...",
+      "userHistory": "Loading user history...",
+      "teamOverview": "Loading team overview...",
+      "teamMembers": "Loading team members...",
+      "teamContests": "Loading team contests...",
+      "submissionSummary": "Loading submission summary...",
+      "submissionResults": "Loading submission results...",
+      "submissionLogs": "Loading submission logs...",
+      "submissionEvaluation": "Loading submission evaluation..."
+    },
+    "error": {
+      "people": "People could not be loaded",
+      "evaluation": "Evaluation could not be loaded",
+      "userRecord": "This user could not be loaded",
+      "teamRecord": "This team could not be loaded",
+      "submissionRecord": "This submission could not be loaded"
+    }
+  },
+  "rowActions": {
+    "admins": "Administrator actions",
+    "contests": "Contest actions",
+    "containers": "Container actions",
+    "groups": "Group actions",
+    "questions": "Question actions",
+    "tasks": "Task actions",
+    "users": "User actions"
+  },
+  "navigation": {
+    "groups": { "direct": "Direct", "people": "People", "evaluation": "Evaluation", "administration": "Administration", "infrastructure": "Infrastructure", "system": "System" },
+    "home": { "label": "Dashboard" },
+    "contests": {
+      "list": { "label": "Contests" },
+      "record": { "label": "Contest" },
+      "tabs": {
+        "overview": { "label": "Overview" },
+        "tasks": { "label": "Tasks" },
+        "participants": { "label": "Participants" },
+        "communications": { "label": "Communications" },
+        "settings": { "label": "Settings" }
+      }
+    },
+    "tasks": { "list": { "label": "Tasks" }, "record": { "label": "Task" }, "tabs": { "overview": { "label": "Overview" }, "datasets": { "label": "Datasets" }, "files": { "label": "Files" }, "settings": { "label": "Settings" } } },
+    "people": { "users": { "label": "Users" }, "user-record": { "label": "User" }, "user-tabs": { "profile": { "label": "Profile" }, "teams": { "label": "Teams" }, "history": { "label": "History" } }, "teams": { "label": "Teams" }, "team-record": { "label": "Team" }, "team-tabs": { "overview": { "label": "Overview" }, "members": { "label": "Members" }, "contests": { "label": "Contests" } } },
+    "evaluation": { "submissions": { "label": "Submissions" }, "submission-record": { "label": "Submission" }, "submission-tabs": { "summary": { "label": "Summary" }, "results": { "label": "Results" }, "logs": { "label": "Logs" }, "evaluation": { "label": "Evaluation" } }, "lanes": { "label": "Evaluation Lanes" } },
+    "administration": { "admins": { "label": "Admins" }, "groups": { "label": "Groups", "description": "Assign permissions to each group and review the access it grants." }, "audit": { "label": "Audit" } },
+    "infrastructure": {
+      "deployments": { "label": "Deployments", "description": "Select, activate, and manage the currently deployed contest stack." },
+      "containers": { "label": "Containers", "description": "Manage and monitor Docker services in real time." },
+      "resources": { "label": "Resources", "description": "Monitor server resources, workers, services, and network traffic." },
+      "ranking": { "label": "Ranking", "description": "Manage the protected ranking session, snapshot, and scoreboard." }
+    },
+    "system": {
+      "appearance": { "label": "Appearance", "description": "Configure branding, service previews, and display density." },
+      "maintenance": { "label": "Maintenance", "description": "Configure automated backups and system notifications." },
+      "settings": { "label": "Settings", "description": "Configure environment files and service restarts." },
+      "docs": { "label": "Docs", "description": "Read CMS administration and contest-system documentation." },
+      "about": { "label": "About", "description": "Review the licence, attribution, and third-party software this panel ships." },
+      "search": { "label": "Search" }
+    },
+    "auth": {
+      "signout": { "label": "Sign out" }
+    },
+    "states": { "loading": "Loading", "error": "could not be loaded", "notFound": "Not found", "retry": "Try again" }
   }
 }

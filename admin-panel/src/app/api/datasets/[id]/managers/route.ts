@@ -1,11 +1,14 @@
 import { prisma } from '@/lib/prisma';
-import { verifyApiAuth, verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
+import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { NextRequest } from 'next/server';
 import { storeFile } from '@/lib/fsobjects';
+import { recordAudit } from '@/lib/audit';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<Response> {
-  const { authorized, response } = await verifyApiAuth();
+  const { authorized, response } = await verifyApiPermission('manager:read');
   if (!authorized) return response as Response;
+  const listCheck = await verifyApiPermission('manager:list');
+  if (!listCheck.authorized) return listCheck.response as Response;
 
   const datasetId = parseInt((await params).id, 10);
   if (Number.isNaN(datasetId)) return apiError({ message: 'Invalid ID', status: 400 });
@@ -23,7 +26,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<Response> {
-  const { authorized, response } = await verifyApiPermission('tasks');
+  const { authorized, response } = await verifyApiPermission('manager:create');
   if (!authorized) return response as Response;
 
   const datasetId = parseInt((await params).id, 10);
@@ -40,7 +43,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const buffer = Buffer.from(fileData, 'base64');
     const digest = await storeFile(buffer, 'Uploaded via Admin API (Manager)');
 
-    // Upsert manager
     await prisma.$executeRaw`
       INSERT INTO managers (dataset_id, filename, digest)
       VALUES (${datasetId}, ${filename}, ${digest})
@@ -48,6 +50,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       DO UPDATE SET digest = ${digest}
     `;
 
+    await recordAudit({
+      verb: 'manager:create',
+      entity: 'manager',
+      afterValues: { datasetId, filename },
+      result: 'success',
+    });
     return apiSuccess({ digest });
   } catch (error) {
     return apiError(error);

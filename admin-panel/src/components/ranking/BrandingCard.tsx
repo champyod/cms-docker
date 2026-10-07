@@ -1,0 +1,94 @@
+'use client';
+
+import { useCallback, useRef } from 'react';
+
+import { Loader2 } from 'lucide-react';
+import Image from 'next/image';
+
+import { Card } from '@/components/core/Card';
+import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+
+const ACCEPTED_TYPES = '.png,.jpg,.jpeg,.gif,.bmp';
+
+interface BrandingCardProps {
+  previewUrl: string;
+  loading: boolean;
+  onUpload: (file: File) => Promise<void>;
+  error?: string;
+  readOnly: boolean;
+}
+
+function PreviewImage({ previewUrl, onClick }: { previewUrl: string; onClick: () => void }) {
+  if (!previewUrl) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex h-32 w-full items-center justify-center rounded-xl border border-dashed border-border bg-black/20 text-sm text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+      >
+        No ranking logo — click to upload
+      </button>
+    );
+  }
+
+  return (
+    <button type="button" onClick={onClick} className="flex w-full justify-center rounded-xl bg-black/20 p-4">
+      <Image alt="Ranking logo" src={previewUrl} width={320} height={128} className="max-h-32 w-auto object-contain" unoptimized />
+    </button>
+  );
+}
+
+function LoadingOverlay() {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/30 backdrop-blur-sm">
+      <Loader2 className="h-8 w-8 animate-spin text-foreground" aria-label="Uploading" />
+    </div>
+  );
+}
+
+export function BrandingCard({ previewUrl, loading, onUpload, error, readOnly }: BrandingCardProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleClick = useCallback(() => {
+    if (loading || readOnly) return;
+    inputRef.current?.click();
+  }, [loading, readOnly]);
+
+  const handleChange = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      event.target.value = '';
+      try {
+        await onUpload(file);
+      } catch (err) {
+        const message = (err as Error).message || 'Upload failed';
+        toast.error('Upload failed', { description: message });
+      }
+    },
+    [onUpload],
+  );
+
+  return (
+    <Card className="space-y-4">
+      <div>
+        <h2 className="text-sm font-semibold tracking-tight text-foreground">Ranking Branding</h2>
+        {!readOnly && (
+          <p className="text-xs text-muted-foreground">Click the preview to upload a new ranking logo. Accepted: png, jpg, jpeg, gif, bmp (max 5MB).</p>
+        )}
+      </div>
+
+      <div className="relative">
+        <div className={cn('transition-all', loading && 'blur-sm pointer-events-none')}>
+          <PreviewImage previewUrl={previewUrl} onClick={handleClick} />
+        </div>
+        {loading && <LoadingOverlay />}
+      </div>
+
+      {error && <p className="text-xs text-destructive">{error}</p>}
+
+      <input ref={inputRef} type="file" accept={ACCEPTED_TYPES} className="hidden" onChange={handleChange} aria-hidden />
+    </Card>
+  );
+}

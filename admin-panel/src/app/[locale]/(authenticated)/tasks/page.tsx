@@ -1,10 +1,10 @@
 import { getTasks } from '@/app/actions/tasks';
+import { PageSurface } from '@/components/core/PageSurface';
 import { TaskList } from '@/components/tasks/TaskList';
-import { checkPermission, getPermissions } from '@/lib/permissions';
 import { getDictionary } from '@/i18n';
-import { PermissionDenied } from '@/components/PermissionDenied';
-import { Stack } from '@/components/core/Layout';
-import { Text } from '@/components/core/Typography';
+import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
+import { checkPermission, getPermissions } from '@/lib/permissions';
+import { notFound } from 'next/navigation';
 
 export default async function TasksPage({
   params: paramsPromise,
@@ -12,13 +12,14 @@ export default async function TasksPage({
 }: {
   params: Promise<{ locale: string }>;
   searchParams: Promise<{ page?: string; search?: string }>;
-}) {
+}): Promise<React.JSX.Element> {
   const { locale } = await paramsPromise;
   const dict = await getDictionary(locale);
-  const hasPermission = await checkPermission('tasks', false);
+  const hasPermission = await checkPermission('task:list', false);
 
+  // Why: return 404 for forbidden access so existence is indistinguishable from missing page
   if (!hasPermission) {
-    return <PermissionDenied permission="permission_tasks" locale={locale} dict={dict} />;
+    notFound();
   }
 
   const permissions = await getPermissions();
@@ -29,13 +30,12 @@ export default async function TasksPage({
   const { tasks, totalPages } = await getTasks({ page, search });
 
   return (
-    <Stack gap={8}>
-      <Stack gap={2}>
-        <Text variant="h1">Tasks</Text>
-        <Text variant="muted">Manage programming tasks, statements, and test cases.</Text>
-      </Stack>
-
-      <TaskList initialTasks={tasks} totalPages={totalPages} permissions={permissions} />
-    </Stack>
+    <PageSurface
+      breadcrumbs={listBreadcrumbs(locale, 'direct', 'tasks.list', dict)}
+      title={dict.tasks.title}
+      description={dict.tasks.subtitle}
+    >
+      <TaskList initialTasks={tasks} totalPages={totalPages} permissionKeys={Array.from(permissions)} />
+    </PageSurface>
   );
 }

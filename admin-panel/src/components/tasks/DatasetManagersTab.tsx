@@ -1,11 +1,15 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { FileText, Loader2, Trash2, Terminal, Upload } from 'lucide-react';
+import { FileText, Loader2, Trash2, FileCode, Upload } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
 import { apiClient } from '@/lib/apiClient';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { readFileAsBase64 } from '@/lib/file-helpers';
+import { useConfirm } from '@/hooks/useConfirm';
+import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
+import { hasEffectivePermission } from '@/lib/permission-engine';
 
 interface Manager {
   id: number;
@@ -18,6 +22,7 @@ interface DatasetManagersTabProps {
   managers: Manager[];
   loadingManagers: boolean;
   onReload: () => void;
+  permissionKeys: readonly string[];
 }
 
 export function DatasetManagersTab({
@@ -25,9 +30,18 @@ export function DatasetManagersTab({
   managers,
   loadingManagers,
   onReload,
+  permissionKeys,
 }: DatasetManagersTabProps): React.JSX.Element {
+  const effective = new Set(permissionKeys);
+  // Why these keys: the managers routes enforce manager:create on upload,
+  // manager:delete on removal, and manager:read on load.
+  const canUpload = hasEffectivePermission(effective, 'manager:create');
+  const canDelete = hasEffectivePermission(effective, 'manager:delete');
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const confirm = useConfirm();
+  const { destructiveConfirm } = useConfirmationCopy();
+  const runAction = useActionFeedback();
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
     const file = e.target.files?.[0];
@@ -35,12 +49,20 @@ export function DatasetManagersTab({
     setUploading(true);
     try {
       const base64 = await readFileAsBase64(file);
-      const res = await apiClient.post(`/api/datasets/${datasetId}/managers`, {
-        filename: file.name,
-        fileData: base64,
-      });
-      if (res.success) onReload();
-      else alert(res.error ?? 'Upload failed');
+      const res = await runAction(
+        {
+          pending: 'Uploading manager file...',
+          success: 'Manager file uploaded',
+          failure: 'Upload failed',
+          description: `"${file.name}" saved successfully.`,
+        },
+        () =>
+          apiClient.post(`/api/datasets/${datasetId}/managers`, {
+            filename: file.name,
+            fileData: base64,
+          })
+      );
+      if (res?.success) onReload();
     } catch (err) {
       console.error(err);
     } finally {
@@ -50,10 +72,13 @@ export function DatasetManagersTab({
   };
 
   const handleDelete = async (id: number): Promise<void> => {
-    if (!confirm('Delete this manager file?')) return;
+    if (!(await confirm(destructiveConfirm('managerFile')))) return;
     try {
-      const res = await apiClient.delete(`/api/managers/${id}`);
-      if (res.success) onReload();
+      const res = await runAction(
+        { pending: 'Deleting manager file...', success: 'Manager file deleted', failure: 'Delete failed' },
+        () => apiClient.delete(`/api/managers/${id}`)
+      );
+      if (res?.success) onReload();
     } catch (err) {
       console.error(err);
     }
@@ -68,6 +93,7 @@ export function DatasetManagersTab({
         </div>
         <div>
           <input type="file" ref={fileInputRef} className="hidden" onChange={handleUpload} />
+          {canUpload && (
           <Button
             variant="positiveOutline"
             size="sm"
@@ -78,6 +104,7 @@ export function DatasetManagersTab({
           >
             Upload File
           </Button>
+          )}
         </div>
       </div>
 
@@ -87,7 +114,7 @@ export function DatasetManagersTab({
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
         ) : managers.length === 0 ? (
-          <EmptyState icon={Terminal} title="No manager files uploaded" description="Upload files like `checker`, `grader`, `*.lib.h`." />
+          <EmptyState icon={FileCode} title="No manager files uploaded" description="Upload files like `checker`, `grader`, `*.lib.h`." />
         ) : (
           managers.map((manager) => (
             <div key={manager.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border border-border">
@@ -95,17 +122,19 @@ export function DatasetManagersTab({
                 <FileText className="w-4 h-4 text-success" />
                 <div>
                   <div className="text-sm font-medium text-foreground">{manager.filename}</div>
-                  <div className="text-xs text-muted-foreground font-mono">{manager.digest.substring(0, 8)}...</div>
+                  <div className="text-xs text-muted-foreground font-mono">{manager.digest ? `${manager.digest.substring(0, 8)}...` : 'no digest'}</div>
                 </div>
               </div>
+              {canDelete && (
               <Button
                 variant="ghost"
                 size="sm"
                 icon={Trash2}
                 iconOnly
                 tooltip="Delete manager file"
-                onClick={() => handleDelete(manager.id)}
+                onClick={() => { void handleDelete(manager.id); }}
               />
+              )}
             </div>
           ))
         )}

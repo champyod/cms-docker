@@ -1,41 +1,19 @@
 import { notFound, redirect } from 'next/navigation';
-import { getTeamWithDetails } from '@/app/actions/teams';
-import { TeamDetailView } from '@/components/teams/TeamDetailView';
-import { checkPermission } from '@/lib/permissions';
+import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
+import { buildRoute } from '@/lib/navigation/routes';
+import { parseRecordId } from '@/lib/queries/record-access';
 
-export default async function TeamDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string; locale: string }>;
-}) {
-  const { id, locale } = await params;
-  if (!await checkPermission('users', false)) redirect(`/${locale}`);
-
-  const teamId = parseInt(id, 10);
-
-  if (isNaN(teamId)) {
-    notFound();
+export default async function LegacyTeamDetailPage({ params }: { params: Promise<{ locale: string; id: string }> }): Promise<never> {
+  const { locale, id: rawId } = await params;
+  const id = parseRecordId(rawId);
+  if (id === null) notFound();
+  // Why: a bookmark without team:read sees the concealed 404 surface instead of
+  // a redirect that would advertise the canonical record.
+  try {
+    await requirePermission('team:read');
+  } catch (error: unknown) {
+    if (error instanceof AuthorizationError && error.status === 403) notFound();
+    throw error;
   }
-
-  const team = await getTeamWithDetails(teamId);
-
-  if (!team) {
-    notFound();
-  }
-
-  // Serialize dates for client component
-  const serializedTeam = {
-    ...team,
-    contests: team.contests.map(c => ({
-      ...c,
-      start: c.start.toISOString(),
-      stop: c.stop.toISOString(),
-    })),
-  };
-
-  return (
-    <div className="space-y-8">
-      <TeamDetailView team={serializedTeam} />
-    </div>
-  );
+  redirect(buildRoute(locale, 'people.team-record', { id }));
 }

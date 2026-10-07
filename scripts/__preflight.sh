@@ -4,7 +4,11 @@
 # Checks run in order; hard failures accumulate and produce exit 2 at the end.
 # Warnings never block the run.
 
-set -euo pipefail
+set -eu
+# pipefail only if available
+if (set -o pipefail 2>/dev/null); then
+    set -o pipefail
+fi
 
 # ---------------------------------------------------------------------------
 # Resolve repository root and load shared helpers.
@@ -183,7 +187,7 @@ check_env() {
     local val
     val="${POSTGRES_PASSWORD:-}"
     if [[ -z "$val" ]]; then
-      core_fail="POSTGRES_PASSWORD empty (set in .env.core → .env)"
+      core_fail="POSTGRES_PASSWORD empty (set in config.toml [core], then run: ./cms config sync)"
     elif is_default_secret "$val"; then
       core_fail="POSTGRES_PASSWORD is a default/placeholder value"
     fi
@@ -230,11 +234,8 @@ check_env() {
     local contest_issues=()
     local cid="${CONTEST_ID:-}"
     local skey="${SECRET_KEY:-}"
-    # Also check CONTEST_ID via ACTIVE_CONTEST_ID alias if needed — but spec
-    # says contest→CONTEST_ID; also check ACTIVE_CONTEST_ID emptiness as hint.
     if [[ -z "$cid" ]]; then
-      # Check if ACTIVE_CONTEST_ID / CONTESTS_DEPLOY_CONFIG present as fallback hint
-      contest_issues+=("CONTEST_ID empty (set CONTEST_ID numeric in .env.contest)")
+      contest_issues+=("CONTEST_ID empty (set CONTEST_ID numeric in config.toml [contest])")
     elif ! [[ "$cid" =~ ^[0-9]+$ ]]; then
       contest_issues+=("CONTEST_ID='${cid}' not numeric")
     fi
@@ -316,7 +317,56 @@ check_cms_toml() {
 }
 
 # ===========================================================================
-# 5) Secrets file permissions — warn if world-readable
+# 6) Login CAPTCHA settings — only meaningful when the admin panel enables it
+# ===========================================================================
+# The CAPTCHA secret is issued by the provider, so it can never be generated
+# locally. A missing key silently disables the challenge (isCaptchaConfigured
+# in the panel requires both keys) and a generated-hex placeholder passes every
+# "is it set" test while failing every verification call. Both states look
+# healthy at runtime and are caught here instead.
+captcha_is_active() {
+  local raw="${CAPTCHA_ENABLED:-}"
+  [[ "$raw" == "1" || "${raw,,}" == "true" ]]
+}
+
+check_captcha() {
+  if ! stack_includes "admin"; then
+    record_result "captcha config" "PASS" "skipped (--stack ${STACK})"
+    return 0
+  fi
+
+  if ! captcha_is_active; then
+    record_result "captcha config" "PASS" "CAPTCHA_ENABLED=${CAPTCHA_ENABLED:-0}"
+    return 0
+  fi
+
+  local captcha_issues=()
+  local site_key="${CAPTCHA_SITE_KEY:-}"
+  local secret_key="${CAPTCHA_SECRET_KEY:-}"
+
+  if [[ -z "$site_key" ]]; then
+    captcha_issues+=("CAPTCHA_SITE_KEY empty (CAPTCHA_ENABLED=1)")
+  fi
+  if [[ -z "$secret_key" ]]; then
+    captcha_issues+=("CAPTCHA_SECRET_KEY empty (CAPTCHA_ENABLED=1)")
+  elif [[ "$secret_key" =~ ^[0-9a-f]{64}$ ]]; then
+    captcha_issues+=("CAPTCHA_SECRET_KEY is a 64-char hex placeholder, not a provider secret — replace with the secret from the ${CAPTCHA_PROVIDER:-turnstile} dashboard")
+  fi
+
+  if [[ ${#captcha_issues[@]} -gt 0 ]]; then
+    local msg
+    msg=$(IFS='; '; echo "${captcha_issues[*]}")
+    printf '[FAIL] captcha env: %s\n' "$msg" >&2
+    printf '       Fix: paste the real CAPTCHA_SITE_KEY and CAPTCHA_SECRET_KEY from the provider dashboard, or set CAPTCHA_ENABLED=0 to run without it\n' >&2
+    record_result "captcha config" "FAIL" "$msg"
+    return 0
+  fi
+
+  record_result "captcha config" "PASS" "CAPTCHA_ENABLED=1, keys set"
+}
+
+# ===========================================================================
+# 7) Secrets file permissions — warn if world-readable
 # ===========================================================================
 check_secret_perms() {
   local files=("${REPO_ROOT}/.env" "${REPO_ROOT}/config/cms.toml")
@@ -355,7 +405,7 @@ check_secret_perms() {
 }
 
 # ===========================================================================
-# 6) Port-collision quick check (warn only) — ss -ltn probe per stack
+# 7) Port-collision quick check (warn only) — ss -ltn probe per stack
 # ===========================================================================
 check_ports() {
   local ports=()
@@ -408,14 +458,13 @@ check_ports() {
     detail=$(IFS=', '; echo "${busy[*]}")
     record_result "port collisions" "WARN" "port(s) ${detail} already bound"
   else
-    # Build port list for PASS detail
     port_list=$(IFS=','; echo "${ports[*]}")
     record_result "port collisions" "PASS" "ports ${port_list} free"
   fi
 }
 
 # ===========================================================================
-# 7) Worker cgroup check (--stack worker only)
+# 8) Worker cgroup check (--stack worker only)
 # ===========================================================================
 check_worker_cgroup() {
   if [[ "$STACK" != "worker" ]]; then
@@ -444,17 +493,218 @@ check_worker_cgroup() {
 }
 
 # ===========================================================================
+# 9) Monitor backup write access — backup-root ownership vs the container uid
+# ===========================================================================
+# The monitor container is not root, so it writes under the uid it was built
+# for. A backup root owned by a different uid then fails every cycle while the
+# host shell — which owns that directory — reports the same path as writable.
+# Ownership and mode are therefore read from the filesystem, never from `test
+# -w`, which answers for the operator instead of for the container.
+#
+# Prints which rule grants the container write access to the backup root and
+# returns 0, or returns 1 when no rule applies. <mode> is read on its last three
+# octal digits so a setuid or sticky digit cannot shift the group/other columns.
+# Creating a directory inside the root also needs the search bit, so a class
+# counts only when its octal digit carries write and execute together — 3 or 7.
+backup_root_write_rule() {
+  local owner_uid="$1" group_gid="$2" mode="$3" container_uid="$4" container_gid="$5"
+  local perms="$mode"
+  # WHY pad: stat -c %a prints the minimal octal form, so a mode below 100
+  # arrives shorter than the three columns indexed below and every offset
+  # slice of it would come back empty. Zeros are prefixed and the last three
+  # digits kept, which left-pads short modes and still trims a setuid or
+  # sticky digit, and it never parses the value as a number, so a leading
+  # zero in <mode> survives. A non-numeric mode is left untouched and the
+  # column tests below reject it.
+  if [[ "$perms" =~ ^[0-9]+$ ]]; then
+    perms="000${perms}"
+  fi
+  perms="${perms: -3}"
+  if [[ "$owner_uid" == "$container_uid" && "${perms:0:1}" =~ [37] ]]; then
+    printf 'owner uid %s\n' "$owner_uid"
+    return 0
+  fi
+  if [[ "$group_gid" == "$container_gid" && "${perms:1:1}" =~ [37] ]]; then
+    printf 'group %s write (mode %s)\n' "$group_gid" "$mode"
+    return 0
+  fi
+  if [[ "${perms:2:1}" =~ [37] ]]; then
+    printf 'other-write (mode %s)\n' "$mode"
+    return 0
+  fi
+  return 1
+}
+
+check_monitor_backup_access() {
+  if ! stack_includes "monitor"; then
+    record_result "monitor backup access" "PASS" "skipped (--stack ${STACK})"
+    return 0
+  fi
+
+  local backup_root="${BACKUP_DIR:-${REPO_ROOT}/backups}"
+  local container_uid="${DOCKER_UID:-1000}"
+  # WHY ${container_uid} and not ${DOCKER_GID:-999}: docker/monitor/Dockerfile
+  # creates the monitor group with addgroup -g ${DOCKER_UID}, so the container gid
+  # is the same number as its uid; DOCKER_GID is granted on docker.sock alone and
+  # never reaches file access.
+  local container_gid="${container_uid}"
+
+  # Inspect only — a box that has never written a backup has no root to judge.
+  if [[ ! -d "$backup_root" ]]; then
+    record_result "monitor backup access" "PASS" "no backup root yet (${backup_root})"
+    return 0
+  fi
+
+  local stat_line
+  if ! stat_line=$(stat -c '%u %g %a' "$backup_root" 2>/dev/null) || [[ -z "$stat_line" ]]; then
+    printf '[FAIL] cannot read ownership of %s\n' "$backup_root" >&2
+    record_result "monitor backup access" "FAIL" "stat failed on ${backup_root}"
+    return 0
+  fi
+
+  local owner_uid group_gid mode rule=""
+  read -r owner_uid group_gid mode <<<"$stat_line"
+  if ! rule=$(backup_root_write_rule "$owner_uid" "$group_gid" "$mode" "$container_uid" "$container_gid"); then
+    printf '[FAIL] monitor cannot write %s: uid %s mode %s, container runs as uid %s gid %s\n' \
+      "$backup_root" "$owner_uid" "$mode" "$container_uid" "$container_gid" >&2
+    printf '       Fix: sudo chown -R %s %s   or: export DOCKER_UID=%s\n' \
+      "$container_uid" "$backup_root" "$owner_uid" >&2
+    record_result "monitor backup access" "FAIL" \
+      "uid ${owner_uid} mode ${mode}; container uid ${container_uid} cannot write"
+    return 0
+  fi
+
+  record_result "monitor backup access" "PASS" "$rule"
+}
+
+# ===========================================================================
 # Main — run checks in order
 # ===========================================================================
 printf '=== CMS Preflight Checks (stack: %s) ===\n' "$STACK"
+
+check_config_stale() {
+  # Warn-only: a container started before config.toml last changed may run
+  # stale values (edits apply on recreate, not while running).
+  if [[ ! -f "$REPO_ROOT/config.toml" ]]; then
+    record_result "config freshness" "PASS" "no config.toml"
+    return 0
+  fi
+  if ! command -v docker >/dev/null 2>&1; then
+    record_result "config freshness" "PASS" "docker unavailable"
+    return 0
+  fi
+  local cfg_mtime stale_list name started started_epoch
+  cfg_mtime=$(stat -c %Y "$REPO_ROOT/config.toml" 2>/dev/null || echo 0)
+  stale_list=""
+  while read -r name _rest; do
+    [[ "$name" == cms-* ]] || continue
+    started=$(docker inspect -f '{{.State.StartedAt}}' "$name" 2>/dev/null || echo "")
+    [[ -n "$started" ]] || continue
+    started_epoch=$(date -d "$started" +%s 2>/dev/null || echo 0)
+    if [[ "$started_epoch" -lt "$cfg_mtime" ]]; then
+      stale_list="${stale_list:+$stale_list, }$name"
+    fi
+  done < <(docker ps --format '{{.Names}}' 2>/dev/null || true)
+  if [[ -n "$stale_list" ]]; then
+    record_result "config freshness" "WARN" "predates config.toml: $stale_list"
+  else
+    record_result "config freshness" "PASS" "containers newer than config"
+  fi
+}
+
+# ===========================================================================
+# 11) Initial TLS certificate — the domain stack has no cert to serve :443
+# ===========================================================================
+# WHY this needs its own check: certbot's renewal loop runs forever whether or not
+# the first issuance ever succeeded, so a fresh domain stack with no certificate
+# looks identical to a healthy one from container state alone. The certbot
+# container records the outcome in certbot-status; __certbot_status.sh maps it to
+# PASS/WARN/FAIL. A pending issuance is WARN, not FAIL, because retriable
+# failures back off and retry on their own — only a terminal failure or an
+# exhausted attempt budget means someone has to act.
+check_certbot_issuance() {
+  local script="${REPO_ROOT}/scripts/__certbot_status.sh"
+  if [[ ! -f "$script" ]]; then
+    record_result "tls certificate" "PASS" "skipped (status helper absent)"
+    return 0
+  fi
+
+  local out rc
+  # WHY chained: a standalone assignment adopts the substitution's status, so a
+  # non-zero one aborts the run under `set -e` before the case below can map it.
+  out="$(bash "$script" 2>&1)" && rc=0 || rc=$?
+  case "$rc" in
+    0) record_result "tls certificate" "PASS" "${out##*: }" ;;
+    1) record_result "tls certificate" "WARN" "${out##*: }" ;;
+    2) record_result "tls certificate" "FAIL" "${out##*: }" ;;
+    3) record_result "tls certificate" "PASS" "skipped (domain stack not running)" ;;
+    *) record_result "tls certificate" "WARN" "status helper exited $rc" ;;
+  esac
+}
+
+# ===========================================================================
+# 12) Worker isolate sandbox probe — execute isolate, don't just inspect files
+# ===========================================================================
+# WHY a live probe: a worker image whose isolate setup is broken still builds,
+# deploys and reports healthy — the failure only surfaces when a grading job
+# asks for a sandbox. The probe therefore creates and destroys one empty
+# sandbox in a throwaway container started from the exact image the worker
+# stack deploys, granted the same privileges compose grants that service, so a
+# PASS means the whole chain (setuid binary, isolate account, subuid ranges)
+# works end to end. No submission runs and no host state is touched; a host
+# with no worker image yet has nothing to probe and skips rather than fails.
+check_isolate_sandbox() {
+  if ! stack_includes "worker"; then
+    record_result "isolate sandbox" "PASS" "skipped (--stack ${STACK})"
+    return 0
+  fi
+
+  if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+    record_result "isolate sandbox" "PASS" "skipped (docker unavailable)"
+    return 0
+  fi
+
+  local worker_image="ghcr.io/champyod/cms-docker-worker:${IMG_TAG:-major-admin-panel}"
+  if ! docker image inspect "$worker_image" >/dev/null 2>&1; then
+    record_result "isolate sandbox" "PASS" "skipped (worker image not built)"
+    return 0
+  fi
+
+  local probe_timeout=30
+  local out rc
+  # WHY chained: a standalone assignment adopts the substitution's status, so a
+  # non-zero probe would abort the run under `set -e` before rc is classified.
+  out="$(timeout "$probe_timeout" docker run --rm --privileged --network none \
+    "$worker_image" sh -c 'isolate --init && isolate --cleanup' 2>&1)" && rc=0 || rc=$?
+
+  if [[ $rc -eq 0 ]]; then
+    printf '[INFO] isolate sandbox probe passed: %s\n' "$worker_image"
+    record_result "isolate sandbox" "PASS" "sandbox create+cleanup ok"
+    return 0
+  fi
+
+  local last_line
+  last_line="$(printf '%s\n' "$out" | tail -n 1)"
+  printf '[FAIL] isolate sandbox probe failed (exit %s): %s\n' "$rc" "$last_line" >&2
+  if [[ $rc -eq 124 ]]; then
+    record_result "isolate sandbox" "FAIL" "probe timed out after ${probe_timeout}s"
+  else
+    record_result "isolate sandbox" "FAIL" "isolate exit ${rc}: ${last_line}"
+  fi
+}
 
 check_disk
 check_docker
 check_env
 check_cms_toml
+check_captcha
 check_secret_perms
 check_ports
 check_worker_cgroup
+check_monitor_backup_access
+check_config_stale
+check_certbot_issuance
+check_isolate_sandbox
 
 # ===========================================================================
 # Summary table
@@ -468,7 +718,6 @@ for i in "${!CHECK_NAMES[@]}"; do
   local_name="${CHECK_NAMES[$i]}"
   local_status="${CHECK_STATUS[$i]}"
   local_detail="${CHECK_DETAIL[$i]}"
-  # Truncate detail to fit table width
   local_detail_trunc="${local_detail:0:44}"
   printf '│ %-23s │ %-6s │ %-44s │\n' "$local_name" "$local_status" "$local_detail_trunc"
 done

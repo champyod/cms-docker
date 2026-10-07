@@ -33,7 +33,7 @@ Common issues and solutions for CMS Docker deployment.
 docker ps --filter "name=cms-"
 
 # 2. Check service logs
-docker logs cms-contest-web-server-1
+docker logs cms-contest-web-server
 docker logs cms-admin-web-server
 
 # 3. Check if ports are listening
@@ -49,9 +49,9 @@ curl http://localhost:8890
 
 **A. Services not running:**
 ```bash
-# Restart services
-docker compose -f docker-compose.contest.yml restart
-docker compose -f docker-compose.admin.yml restart
+# Restart services (every stack comes up from the unified project, by profile)
+docker compose -f docker-compose.yml --profile core --profile contest restart
+docker compose -f docker-compose.yml --profile core --profile admin restart admin-panel-next admin-web-server ranking-web-server
 ```
 
 **B. Firewall blocking:**
@@ -72,7 +72,7 @@ sudo ufw reload
 sudo lsof -i :8888
 
 # Kill the process or change CMS port
-# Edit .env.contest
+# Edit config.toml [contest], then: ./cms config sync
 CONTEST_PORT_EXTERNAL=8887
 ```
 
@@ -187,12 +187,6 @@ docker build --network=host -t cms:latest .
 docker build --progress=plain --no-cache -t cms:latest .
 ```
 
-**C. Missing git submodules:**
-```bash
-# Initialize submodules
-git submodule update --init --recursive
-```
-
 ---
 
 ## Network Issues
@@ -208,8 +202,8 @@ git submodule update --init --recursive
 docker network inspect cms-network
 
 # Test connectivity
-docker exec cms-contest-web-server-1 ping cms-database
-docker exec cms-worker ping cms-log-service
+docker exec cms-contest-web-server ping cms-database
+docker exec cms-worker-0 ping cms-log-service
 ```
 
 **Solutions:**
@@ -219,8 +213,8 @@ docker exec cms-worker ping cms-log-service
 docker network rm cms-network
 docker network create cms-network
 
-# Redeploy services
-docker compose -f docker-compose.core.yml up -d
+# Redeploy services (deployment mode decides pull+recreate vs build)
+make core
 ```
 
 ### DNS Resolution Fails
@@ -237,8 +231,8 @@ docker compose -f docker-compose.core.yml up -d
 sudo systemctl restart docker
 
 # Recreate containers
-docker compose -f docker-compose.core.yml down
-docker compose -f docker-compose.core.yml up -d
+make core-stop
+make core
 ```
 
 ### Remote Workers Can't Connect
@@ -308,13 +302,13 @@ docker exec cms-log-service cmsInitDB
 **D. Database corrupted:**
 ```bash
 # Stop all services
-./scripts/__stop_all.sh
+./cms stop
 
 # Remove database volume
 docker volume rm cms-db-data
 
 # Redeploy and reinitialize
-docker compose -f docker-compose.core.yml up -d
+make core
 sleep 30
 docker exec cms-log-service cmsInitDB
 ```
@@ -370,7 +364,7 @@ docker exec cms-log-service cmsInitDB
 docker exec -it cms-admin-web-server cmsAddAdmin username
 
 # If still fails, check database connection
-docker exec cms-admin-web-server cat /usr/local/etc/cms.conf
+docker exec cms-admin-web-server cat /usr/local/etc/cms.toml
 ```
 
 ---
@@ -399,10 +393,10 @@ docker inspect CONTAINER_NAME | grep RestartCount
 **A. Configuration error:**
 ```bash
 # Check config
-docker exec CONTAINER_NAME cat /usr/local/etc/cms.conf
+docker exec CONTAINER_NAME cat /usr/local/etc/cms.toml
 
-# Validate JSON
-cat config/cms.conf | python3 -m json.tool
+# Validate TOML
+python3 -c "import tomllib; tomllib.load(open('config/cms.toml','rb'))"
 ```
 
 **B. Resource limits:**
@@ -420,10 +414,10 @@ deploy:
 
 **C. Dependency not ready:**
 ```bash
-# Ensure services start in order
-docker compose -f docker-compose.core.yml up -d
+# Ensure services start in order (core first, then the stack that depends on it)
+make core
 sleep 30  # Wait for database
-docker compose -f docker-compose.admin.yml up -d
+make admin
 ```
 
 ### Service Not Responding
@@ -449,8 +443,8 @@ docker restart CONTAINER_NAME
 # Check logs for errors
 docker logs -f CONTAINER_NAME
 
-# Recreate container
-docker compose -f docker-compose.FILE.yml up -d --force-recreate
+# Recreate container (SERVICE_NAME is the compose service, e.g. log-service)
+docker compose -f docker-compose.yml --profile core up -d --force-recreate SERVICE_NAME
 ```
 
 ### Logs Show Errors
@@ -498,7 +492,7 @@ docker exec CONTAINER_NAME ping TARGET_SERVICE
 
 ```bash
 # Check worker status
-docker logs cms-worker
+docker logs cms-worker-0
 
 # Check if worker is registered
 docker exec cms-resource-service cmsResourceService -l
@@ -508,14 +502,13 @@ docker exec cms-resource-service cmsResourceService -l
 
 ```bash
 # Restart worker
-docker restart cms-worker
+docker restart cms-worker-0
 
 # Check worker connection
-docker exec cms-worker ping cms-log-service
+docker exec cms-worker-0 ping cms-log-service
 
-# Ensure worker shard is unique
-# Check .env.worker
-WORKER_SHARD=0  # Must be unique
+# Ensure the worker shard is unique per instance
+# (WORKER_SHARD is managed via ./cms worker edit / config.toml)
 ```
 
 ### Worker Sandbox Errors
@@ -526,7 +519,7 @@ WORKER_SHARD=0  # Must be unique
 
 ```bash
 # Ensure privileged mode
-# In docker-compose.worker.yml:
+# In the worker service of docker-compose.yml:
 privileged: true
 security_opt:
   - seccomp:unconfined
@@ -537,7 +530,7 @@ uname -r
 # Should be 3.10+
 
 # Check cgroups
-docker exec cms-worker mount | grep cgroup
+docker exec cms-worker-0 mount | grep cgroup
 ```
 
 ### Worker Out of Memory
@@ -548,15 +541,15 @@ docker exec cms-worker mount | grep cgroup
 
 ```bash
 # Increase memory limit
-# In .env.worker:
-WORKER_MEMORY=8g
+# In config.toml [worker]:
+WORKER_MEMORY_LIMIT = "8g"
 
 # Check memory usage
-docker stats cms-worker
+docker stats cms-worker-0
 
-# Reduce parallel evaluations
-# In cms.conf:
-"max_jobs_per_worker": 1
+# Reduce parallel evaluations: run fewer worker shards or lower
+# WORKER_CPU_LIMIT / WORKER_MEMORY_LIMIT (config.toml → ./cms config sync),
+# or add worker capacity via ./cms worker edit
 ```
 
 ---
@@ -574,7 +567,8 @@ docker stats cms-worker
 docker stats
 
 # Check database queries
-docker exec cms-database pg_stat_activity
+docker exec cms-database psql -U cmsuser -d cmsdb -c \
+  "SELECT pid, state, query FROM pg_stat_activity;"
 
 # Check network latency
 ping YOUR_SERVER_IP
@@ -609,8 +603,8 @@ docker exec cms-database psql -U cmsuser -d cmsdb -c \
   "SELECT count(*) FROM pg_stat_activity;"
 
 # Increase max connections
-# Edit cms.conf database section
-"max_connections": 200
+# In docker-compose.yml (database service command/env, e.g. -c max_connections=200),
+# or POSTGRES tuning via config.toml → ./cms config sync
 ```
 
 ### High CPU Usage
@@ -693,7 +687,7 @@ docker exec cms-database psql -U cmsuser -c \
 
 # Regenerate secret keys
 openssl rand -hex 32
-# Update .env.contest files
+# Store them in config.toml (POSTGRES_PASSWORD, AUTH_SECRET, SECRET_KEY), then: ./cms config sync
 
 # Restrict firewall
 sudo ufw default deny incoming

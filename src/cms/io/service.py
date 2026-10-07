@@ -79,6 +79,7 @@ def repeater(func: Callable[[], Any], period: float):
 class Service:
 
     def __init__(self, shard: int = 0):
+        self._is_fatal_exit = False
         signal.signal(signal.SIGINT, lambda unused_x, unused_y: self.exit())
         signal.signal(signal.SIGTERM, lambda unused_x, unused_y: self.exit())
 
@@ -238,11 +239,17 @@ class Service:
         else:
             gevent.spawn_later(seconds, repeater, func, seconds)
 
-    def exit(self):
+    def exit(self, fatal: bool = False):
         """Terminate the service at the next step.
+
+        fatal: if True, run() reports failure, so the process exits
+            with a nonzero status and the supervisor restarts it.
 
         """
         logger.warning("%s received request to shut down.", self._my_coord)
+        # WHY: a fatal quit must stay fatal when a signal lands before
+        # the main loop returns, so the flag is never cleared.
+        self._is_fatal_exit = self._is_fatal_exit or fatal
         self.rpc_server.stop()
 
     def get_backdoor_path(self) -> str:
@@ -251,11 +258,8 @@ class Service:
         """
         return os.path.join(config.global_.run_dir, "%s_%d" % (self.name, self.shard))
 
-    @rpc_method
-    def start_backdoor(self, backlog=50):
-        """Start a backdoor server on a local UNIX domain socket.
-
-        """
+    def _start_backdoor_impl(self, backlog: int = 50) -> None:
+        """Internal backdoor startup; bypasses RPC opt-in check for local use."""
         backdoor_path = self.get_backdoor_path()
         try:
             os.remove(backdoor_path)
@@ -273,11 +277,8 @@ class Service:
         self.backdoor = BackdoorServer(backdoor_sock, locals={'service': self})
         self.backdoor.start()
 
-    @rpc_method
-    def stop_backdoor(self):
-        """Stop a backdoor server started by start_backdoor.
-
-        """
+    def _stop_backdoor_impl(self) -> None:
+        """Internal backdoor shutdown; bypasses RPC opt-in check for local use."""
         if self.backdoor is not None:
             self.backdoor.stop()
         backdoor_path = self.get_backdoor_path()
@@ -286,10 +287,37 @@ class Service:
         except FileNotFoundError:
             pass
 
+    @rpc_method
+    def start_backdoor(self, backlog=50):
+        """Start a backdoor server on a local UNIX domain socket.
+
+        """
+        # WHY: remote backdoor is high-risk; require explicit opt-in even with valid RPC secret.
+        if not getattr(getattr(config, "rpc", None), "allow_backdoor", False):
+            logger.error(
+                "Backdoor RPC start_backdoor rejected (not enabled) for %s",
+                self._my_coord)
+            raise RuntimeError("Backdoor RPC is disabled.")
+        self._start_backdoor_impl(backlog)
+
+    @rpc_method
+    def stop_backdoor(self):
+        """Stop a backdoor server started by start_backdoor.
+
+        """
+        # WHY: remote backdoor is high-risk; require explicit opt-in even with valid RPC secret.
+        if not getattr(getattr(config, "rpc", None), "allow_backdoor", False):
+            logger.error(
+                "Backdoor RPC stop_backdoor rejected (not enabled) for %s",
+                self._my_coord)
+            raise RuntimeError("Backdoor RPC is disabled.")
+        self._stop_backdoor_impl()
+
     def run(self) -> bool:
         """Starts the main loop of the service.
 
-        return: True if successful.
+        return: True if successful, False if the service was asked to
+            quit fatally.
 
         """
         try:
@@ -317,7 +345,7 @@ class Service:
                 raise
 
         if config.global_.backdoor:
-            self.start_backdoor()
+            self._start_backdoor_impl()
 
         logger.info("%s %d up and running!", *self._my_coord)
 
@@ -327,10 +355,10 @@ class Service:
         logger.info("%s %d is shutting down", *self._my_coord)
 
         if config.global_.backdoor:
-            self.stop_backdoor()
+            self._stop_backdoor_impl()
 
         self._disconnect_all()
-        return True
+        return not self._is_fatal_exit
 
     def _disconnect_all(self):
         """Disconnect all remote services.
@@ -351,11 +379,13 @@ class Service:
         return string
 
     @rpc_method
-    def quit(self, reason: str = ""):
+    def quit(self, reason: str = "", fatal: bool = False):
         """Shut down the service
 
         reason: why, oh why, you want me down?
+        fatal: if True, run() reports failure, so the process exits
+            with a nonzero status and the supervisor restarts it.
 
         """
-        logger.info("Trying to exit as asked by another service (%s).", reason)
-        self.exit()
+        logger.warning("Trying to exit as asked by another service (%s).", reason)
+        self.exit(fatal=fatal)

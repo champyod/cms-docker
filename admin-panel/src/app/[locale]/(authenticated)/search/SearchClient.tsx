@@ -3,6 +3,7 @@
 import { useSearchParams, usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { searchAll } from '@/app/actions/search';
+import { buildRoute } from '@/lib/navigation/routes';
 import { Users, Trophy, ClipboardList, Shield, SearchX } from 'lucide-react';
 import Link from 'next/link';
 import { SearchResultCard, SectionHeader } from '@/components/search/SearchComponents';
@@ -16,20 +17,18 @@ export default function SearchClient() {
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
   const query = searchParams.get('q') || '';
-  const [results, setResults] = useState<SearchResults | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [resultForQuery, setResultForQuery] = useState<{ query: string; data: SearchResults } | null>(null);
+
+  const results = resultForQuery?.query === query ? resultForQuery.data : null;
+  const loading = query.length > 0 && resultForQuery?.query !== query;
 
   useEffect(() => {
-    if (!query) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset-on-empty-query; behavior must not change
-      setResults(null);
-      return;
-    }
-    setLoading(true);
-    searchAll(query).then(data => {
-      setResults(data);
-      setLoading(false);
+    if (!query) return;
+    let cancelled = false;
+    searchAll(query).then((data) => {
+      if (!cancelled) setResultForQuery({ query, data });
     });
+    return () => { cancelled = true; };
   }, [query]);
 
   if (!query) return <div className="text-muted-foreground">Please enter a search term.</div>;
@@ -42,54 +41,47 @@ export default function SearchClient() {
       
       {!loading && results && (
         <div className="space-y-8">
-            {/* Users */}
             {results.users.length > 0 && (
                 <section>
                     <SectionHeader title="Users" count={results.users.length} icon={Users} iconColor="text-blue-400" />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {results.users.map((u) => (
-                            <Link href={`/${locale}/users?search=${encodeURIComponent(u.username)}`} key={u.id}>
+                        {results.users.map((u: SearchResults['users'][number]) => (
+                            <Link href={buildRoute(locale, 'people.user-tabs.profile', { id: u.id })} key={u.id}>
                                 <SearchResultCard title={u.username} subtitle={`${u.first_name} ${u.last_name}`} />
                             </Link>
                         ))}
                     </div>
                 </section>
             )}
-
-            {/* Tasks */}
             {results.tasks.length > 0 && (
                 <section>
                     <SectionHeader title="Tasks" count={results.tasks.length} icon={ClipboardList} iconColor="text-emerald-400" />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {results.tasks.map((t) => (
-                            <Link href={`/${locale}/tasks/${t.id}`} key={t.id}>
+                        {results.tasks.map((t: SearchResults['tasks'][number]) => (
+                            <Link href={buildRoute(locale, 'tasks.record', { id: t.id })} key={t.id}>
                                 <SearchResultCard title={t.name} subtitle={t.title} />
                             </Link>
                         ))}
                     </div>
                 </section>
             )}
-
-            {/* Contests */}
             {results.contests.length > 0 && (
                 <section>
                      <SectionHeader title="Contests" count={results.contests.length} icon={Trophy} iconColor="text-amber-400" />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {results.contests.map((c) => (
-                            <Link href={`/${locale}/contests/${c.id}`} key={c.id}>
+                        {results.contests.map((c: SearchResults['contests'][number]) => (
+                            <Link href={buildRoute(locale, 'contests.record', { id: c.id })} key={c.id}>
                                 <SearchResultCard title={c.name} subtitle={c.description} />
                             </Link>
                         ))}
                     </div>
                 </section>
             )}
-            
-             {/* Admins */}
             {results.admins.length > 0 && (
                 <section>
                     <SectionHeader title="Admins" count={results.admins.length} icon={Shield} iconColor="text-purple-400" />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {results.admins.map((a) => (
+                        {results.admins.map((a: SearchResults['admins'][number]) => (
                             <div key={a.id} className="cursor-default">
                                 <SearchResultCard title={a.username} subtitle={a.name} className="cursor-default hover:bg-accent/50" />
                             </div>

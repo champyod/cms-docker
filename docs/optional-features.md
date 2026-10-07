@@ -4,7 +4,7 @@ All four are **available but disabled by default** (`=0`), asked in `scripts/__d
 
 | # | Feature | Env flag (default) | Enable via | Compose profile |
 |---|---------|--------------------|------------|-----------------|
-| 1 | HSM | `HSM_ENABLED=0` | `HSM_ENABLED=1 ./scripts/__domain.sh setup --apply` — prompts for `HSM_MODULE`/`HSM_PIN`/`HSM_KEY_LABEL` | `hsm` — `docker compose -f docker-compose.domain.yml --profile hsm up -d` (or `--profile hsm` via main) |
+| 1 | HSM | `HSM_ENABLED=0` | `HSM_ENABLED=1 ./scripts/__domain.sh setup --apply` — prompts for `HSM_MODULE`/`HSM_PIN`/`HSM_KEY_LABEL` | `hsm` — `docker compose -f docker-compose.domain.yml --profile hsm up -d` |
 | 2 | Vault | `VAULT_ENABLED=0` | `VAULT_ENABLED=1` with `VAULT_ADDR`/`VAULT_TOKEN`/`VAULT_PATH` | `vault` — `docker compose -f docker-compose.vault.yml --profile vault up -d` |
 | 3 | DNSSEC + CAA | `DNSSEC_ENABLED=0`, `CAA_ENABLED=0` | `DNSSEC_ENABLED=1` / `CAA_ENABLED=1` (`CAA_ISSUER=letsencrypt.org`) | none — DNS only (see `docs/dnssec-caa-guide.md`) |
 | 4 | mTLS workers | `MTLS_WORKERS_ENABLED=0` | `MTLS_WORKERS_ENABLED=1` with `MTLS_CA_CERT` etc. | worker service env `MTLS_*` — no extra profile; volumes documented in `docker-compose.yml` |
@@ -15,7 +15,7 @@ Local real secrets/artefacts are **gitignored**: `.env.local`, `.env.*.local`, `
 
 ## 1. HSM — Hardware Security Module for TLS key
 
-- **Why / where:** `docs/infra-glossary-complete.html` infra glossary already covers upgrade suggestion; practical use is `certbot --hsm` with PKCS#11 URI so grader private key never lives on disk.
+- **Why / where:** practical use is `certbot --hsm` with PKCS#11 URI so grader private key never lives on disk.
 - **Price:** `$0` SoftHSM (software emulation, dev) | ~`$800` YubiHSM 2 (USB HSM) | ~`$30/mo` AWS CloudHSM (managed).
 - **Pros:** key never on disk, survives disk leak; PKCS#11 `pkcs11:token=grader;object=grader-privkey` flow.
 - **Cons:** renewal switches from file to PKCS#11 URI; PIN rotation; backup ceremony.
@@ -60,34 +60,23 @@ Local real secrets/artefacts are **gitignored**: `.env.local`, `.env.*.local`, `
 
 ## 3. DNSSEC + CAA — DNS integrity + CA restriction (DNS only)
 
-- **Why:** DNSSEC signs the zone (spoof/BGP hijack resistance); CAA says “only `letsencrypt.org` may issue for `grader.mwit.ac.th`”.
-- **Price:** `$0` at registry/DNS, but needs DNS control + computer center coordination for `DS` at parent (`.ac.th`).
-- **Pros:** resolver-validated DNS; CAA blocks rogue CA issuance.
-- **Cons:** KSK/ZSK rollovers; DS mismatch or clock skew → `SERVFAIL` for all clients.
-- **Maintenance:** ZSK ~90 days, KSK ~ yearly; `DS` at parent; monitor `dig +dnssec` + `delv`. See `docs/dnssec-caa-guide.md`.
-- **Increase / lost:** without → DNS spoof could point `grader` to attacker; with correctly operated → authenticity, but mis-op → outage (so disabled default).
-- **How to enable:** see `docs/dnssec-caa-guide.md`. In short:
-  ```bash
-  echo 'DNSSEC_ENABLED=1' >> .env.local
-  echo 'CAA_ENABLED=1' >> .env.local
-  echo 'CAA_ISSUER=letsencrypt.org' >> .env.local
-  # then publish CAA:  grader.mwit.ac.th. IN CAA 0 issue "letsencrypt.org"
-  # and DS from `dnssec-dsfromkey` at parent
-  dig CAA grader.mwit.ac.th +short  # verify
-  dig +dnssec grader.mwit.ac.th @1.1.1.1  # verify AD flag
-  ```
-  No compose change. `__domain.sh status` logs `DNSSEC=… CAA=…`.
+Full why/price/pros/cons and the rollover runbook live in
+[dnssec-caa-guide.md](dnssec-caa-guide.md) — kept there, not duplicated here.
+
+- **Flags:** `DNSSEC_ENABLED=0`, `CAA_ENABLED=0`, `CAA_ISSUER=letsencrypt.org` — DNS-only, no compose change.
+- **Enable:** set the flags in `.env.local`, publish the CAA record and the `DS` at the parent zone per the guide, then verify with `dig +dnssec` (AD flag) and `dig CAA`.
+- **Status:** `__domain.sh status` logs `DNSSEC=… CAA=…`.
 
 ## 4. mTLS — mutual TLS for worker RPC (beyond Tailscale)
 
-- **Why:** authenticate workers with client certs, not just `TAILSCALE_IP` allowlist; defense-in-depth at RPC boundary (ports `29000`, `28000`, … `26000`).
+- **Why:** authenticate workers with client certs, not just the `INNER_IP` allowlist; defense-in-depth at RPC boundary (ports `29000`, `28000`, … `26000`).
 - **Price:** `$0` self-signed CA via `openssl`; alternatives free (CF Zero Trust).
 - **Pros:** worker identity `CN=worker-0` via cert, revocation via CRL, rotated independently of tailnet.
 - **Cons:** cert distribution to every worker node, rotation + CRL/OCSP plumbing.
 - **Maintenance:** CA at `config/mtls/ca.pem` (generate `openssl req -x509 -newkey rsa:4096`); worker certs at `config/mtls/worker-*.pem`; rotate ~ yearly; share CRL at `config/mtls/crl.pem`. All `*.pem.local` gitignored.
 - **Increase / lost:** without mTLS, any tailnet peer (or `0.0.0.0` if mis-set) can reach RPC; with mTLS, stolen tailnet key alone is insufficient — but lost CA key can issue rogue workers (guard CA).
-- **Interaction with `TAILSCALE_IP`:**
-  - `MTLS_WORKERS_ENABLED=0` (default): firewall / `cms.toml` stays `TAILSCALE_IP` allow ALL — existing behavior.
+- **Interaction with `INNER_IP`:**
+  - `MTLS_WORKERS_ENABLED=0` (default): firewall / `cms.toml` stays `INNER_IP` allow ALL — existing behavior.
   - `MTLS_WORKERS_ENABLED=1`: firewall SHOULD restrict RPC to mTLS only (e.g. `iptables -A INPUT -p tcp --dport 26000 -m conntrack …` or nginx `ssl_verify_client on`). See runbook below.
 - **How to enable:**
   ```bash
@@ -106,7 +95,7 @@ Local real secrets/artefacts are **gitignored**: `.env.local`, `.env.*.local`, `
   # - ${MTLS_CA_CERT}:/etc/cms/mtls/ca.pem:ro
   # Then restart with that mount + enforce ssl_verify_client at proxy
   ```
-  When disabled: logs `mTLS workers disabled (set MTLS_WORKERS_ENABLED=1 … TAILSCALE_IP allow ALL remains)`.
+  When disabled: logs `mTLS workers disabled (set MTLS_WORKERS_ENABLED=1 … INNER_IP allow ALL remains)`.
 
 ---
 
@@ -123,7 +112,7 @@ bash -n scripts/__domain.sh && bash -n scripts/__secrets-rotate.sh
 docker compose config > /dev/null
 docker compose -f docker-compose.domain.yml config > /dev/null
 docker compose -f docker-compose.vault.yml --profile vault config | grep -q vault
-grep -q 'HSM_ENABLED=0' .env.infra.example && grep -q 'VAULT_ENABLED=0' .env.infra.example
-grep -q 'DNSSEC_ENABLED=0' .env.infra.example && grep -q 'MTLS_WORKERS_ENABLED=0' .env.infra.example
+grep -q 'HSM_ENABLED = 0' config.toml.example && grep -q 'VAULT_ENABLED = 0' config.toml.example
+grep -q 'DNSSEC_ENABLED = 0' config.toml.example && grep -q 'MTLS_WORKERS_ENABLED = 0' config.toml.example
 git check-ignore -q .env.local config/hsm/tokens/foo.db config/mtls/ca.pem.local && echo "gitignore ok"
 ```

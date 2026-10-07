@@ -4,10 +4,10 @@ import fs from 'fs/promises';
 import path from 'path';
 import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
+import { recordAudit } from '@/lib/audit';
 
 const HOST_RE = /^[a-zA-Z0-9]([a-zA-Z0-9_.-]{0,62}[a-zA-Z0-9])?$/;
 
-// Helper to find cms.toml
 async function getCmsConfigPath() {
   const possiblePaths = [
     path.join(getRepoRoot(), 'config/cms.toml'),
@@ -82,28 +82,54 @@ function parseWorkersFromEnvCore(content: string): Array<{ host: string; port: n
     .map(({ host, port }) => ({ host, port }));
 }
 
+/**
+ * The worker endpoints, taken from cms.toml's Worker block when it declares any and from the
+ * generated env file otherwise. Kept separate from the audit call so the read reports one result
+ * per request rather than one per candidate source.
+ */
+async function readWorkerEndpoints(configPath: string | null): Promise<WorkerEntry[]> {
+  if (configPath) {
+    const content = await fs.readFile(configPath, 'utf-8');
+    const workerBlock = extractWorkerBlock(content);
+    if (workerBlock) {
+      const workers = parseWorkersFromBlock(workerBlock);
+      if (workers.length > 0) return workers;
+    }
+  }
+
+  const envCorePath = path.join(getRepoRoot(), '.env');
+  const envCoreContent = await fs.readFile(envCorePath, 'utf-8');
+  return parseWorkersFromEnvCore(envCoreContent);
+}
+
 export async function getWorkers() {
-  await ensurePermission('all');
+  await ensurePermission('settings:read');
+  await ensurePermission('settings:list');
 
   const configPath = await getCmsConfigPath();
 
   try {
-    if (configPath) {
-      const content = await fs.readFile(configPath, 'utf-8');
-      const workerBlock = extractWorkerBlock(content);
-      if (workerBlock) {
-        const workers = parseWorkersFromBlock(workerBlock);
-        if (workers.length > 0) return workers;
-      }
-    }
-
-    const envCorePath = path.join(getRepoRoot(), '.env.core');
-    const envCoreContent = await fs.readFile(envCorePath, 'utf-8');
-    return parseWorkersFromEnvCore(envCoreContent);
+    const workers = await readWorkerEndpoints(configPath);
+    // Why count and not the endpoints: these are the deployment's internal hosts and ports, and
+    // an audit table is the wrong place to keep them. The row answers who asked and how much
+    // the request revealed, which is what a later disclosure has to be weighed against.
+    await recordAudit({
+      verb: 'worker_config:view',
+      entity: 'worker_config',
+      afterValues: { count: workers.length },
+      result: 'success',
+    });
+    return workers;
   } catch (error) {
     console.error('Failed to parse workers from cms.toml', error);
+    await recordAudit({
+      verb: 'worker_config:view',
+      entity: 'worker_config',
+      afterValues: { error: error instanceof Error ? error.name : 'UnknownError' },
+      result: 'failure',
+    });
+    return [];
   }
-  return [];
 }
 
 type WorkerEntry = { host: string; port: number };
@@ -130,7 +156,7 @@ function applyWorkerBlock(content: string, workers: WorkerEntry[]): string | nul
 }
 
 export async function updateWorkers(workers: { host: string; port: number }[]) {
-  await ensurePermission('all');
+  await ensurePermission('settings:update');
 
   const invalidEntries = findInvalidWorkerEntries(workers);
   if (invalidEntries.length > 0) {
@@ -148,7 +174,16 @@ export async function updateWorkers(workers: { host: string; port: number }[]) {
       return { success: false, error: 'Worker configuration block not found in cms.toml' };
     }
 
+    const previousBlock = extractWorkerBlock(content);
+    const previousWorkers = previousBlock ? parseWorkersFromBlock(previousBlock) : [];
     await fs.writeFile(configPath, updated);
+    await recordAudit({
+      verb: 'settings:update',
+      entity: 'worker_config',
+      beforeValues: { workers: previousWorkers },
+      afterValues: { workers },
+      result: 'success',
+    });
     return { success: true };
   } catch (error) {
     console.error('Failed to update workers', error);

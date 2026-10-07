@@ -35,7 +35,7 @@ interface RankingEntry {
 }
 
 export async function getRanking(contestId: number) {
-  await ensurePermission('contests');
+  await ensurePermission('ranking:list');
 
   const [participations, tasks] = await Promise.all([
     prisma.participations.findMany({

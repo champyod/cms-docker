@@ -87,7 +87,7 @@ function previewWarnings(toc: TocSummary | null): readonly string[] {
  * `cms-restore-preview-` for an operator sweep.
  */
 export async function startPreview(previewId: string): Promise<PreviewStartResult> {
-  await ensurePermission('all');
+  await ensurePermission('backup:restore');
   if (!isPreviewId(previewId)) return { success: false, started: false, error: 'Unknown preview id.', warnings: [] };
   const dump = await resolveDumpFile(previewId);
   if (dump === null) {
@@ -141,7 +141,7 @@ export async function startPreview(previewId: string): Promise<PreviewStartResul
  * table is only measured when the TOC says the archive has it.
  */
 export async function getPreviewTables(previewId: string): Promise<PreviewTablesResult> {
-  await ensurePermission('all');
+  await ensurePermission('backup:restore');
   const unknown: PreviewTablesResult = { success: false, previewId, tables: [], failures: [], warnings: [], error: 'Unknown preview id.' };
   if (!isPreviewId(previewId)) return unknown;
   const container = previewContainerName(previewId);
@@ -188,7 +188,7 @@ export async function getSampleRows(
   table: string,
   count: number = MAX_SAMPLE_ROWS,
 ): Promise<PreviewSampleResult> {
-  await ensurePermission('all');
+  await ensurePermission('backup:restore');
   const missing: PreviewSampleResult = { success: false, table, columns: [], rows: [], error: 'Unknown preview id.' };
   if (!isPreviewId(previewId)) return missing;
   const catalogTable = BACKUP_TABLES.find((entry) => entry.name === table);
@@ -213,7 +213,7 @@ export async function getSampleRows(
 
 /** Removes the scratch container and the quarantined dump. Best effort in the sense that an already-gone container or directory is success. */
 export async function deletePreview(previewId: string): Promise<PreviewDeletionResult> {
-  await ensurePermission('all');
+  await ensurePermission('backup:restore');
   if (!isPreviewId(previewId)) return { success: false, error: 'Unknown preview id.' };
   try {
     await teardownPreview(previewId);

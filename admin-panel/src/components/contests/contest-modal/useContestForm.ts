@@ -26,7 +26,8 @@ interface ContestSyncArgs {
 
 interface AutoAnalysisArgs {
   isOpen: boolean;
-  formData: ContestFormData;
+  stop: string;
+  analysisEnabled: boolean;
   analysisEditedRef: RefObject<boolean>;
   setFormData: SetContestForm;
 }
@@ -48,16 +49,17 @@ function applyContestSyncEffect({
 
 function applyAutoAnalysisWindow({
   isOpen,
-  formData,
+  stop,
+  analysisEnabled,
   analysisEditedRef,
   setFormData,
 }: AutoAnalysisArgs): void {
   if (!isOpen) return;
-  if (!formData.stop) return;
-  const stopDate = new Date(formData.stop);
+  if (!stop) return;
+  const stopDate = new Date(stop);
   if (isNaN(stopDate.getTime())) return;
 
-  if (!formData.analysis_enabled || !analysisEditedRef.current) {
+  if (!analysisEnabled || !analysisEditedRef.current) {
     const newStart = new Date(stopDate.getTime() + 1000);
     const newStop = new Date(stopDate.getTime() + 3601000);
     setFormData(prev => ({
@@ -92,7 +94,13 @@ export function useContestForm(
   }, [contest, isOpen]);
 
   useEffect(() => {
-    applyAutoAnalysisWindow({ isOpen, formData, analysisEditedRef, setFormData });
+    applyAutoAnalysisWindow({
+      isOpen,
+      stop: formData.stop,
+      analysisEnabled: formData.analysis_enabled,
+      analysisEditedRef,
+      setFormData,
+    });
   }, [formData.stop, formData.analysis_enabled, isOpen]);
 
   const handleLanguageToggle = (lang: string) => setFormData(prev => toggleLanguage(prev, lang));

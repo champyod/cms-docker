@@ -21,7 +21,7 @@
   Leaving the password field empty will keep the previous password.
 </form>
 
-{% if admin.permission_all %}
+{% if admin.has_permission("admin:delete") %}
 <hr/>
 
 <a onclick="CMS.AWSUtils.ajax_delete('{{ url("admin", admin_being_edited.id) }}'); ">Delete this admin</a>

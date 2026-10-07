@@ -1,0 +1,532 @@
+{
+  "project": {
+    "name": "CMS Docker",
+    "upstream": {
+      "name": "CMS (cms-dev)",
+      "url": "https://github.com/cms-dev/cms"
+    },
+    "url": "https://github.com/champyod/cms-docker"
+  },
+  "license": {
+    "spdx_id": "AGPL-3.0",
+    "name": "GNU Affero General Public License v3.0 or later",
+    "url": "https://www.gnu.org/licenses/agpl-3.0.html"
+  },
+  "surfaces": {
+    "contest": {
+      "title": "Contest web interface",
+      "attribution": [
+        {
+          "text": "a fork of CMS (cms-dev)",
+          "url": "https://github.com/cms-dev/cms"
+        }
+      ],
+      "first_party": [
+        "cms/server/static/favicon.ico",
+        "cms/server/static/loading.gif",
+        "cms/server/contest/static/cws_*.css",
+        "cms/server/contest/static/cws_*.js"
+      ],
+      "assets": [
+        {
+          "name": "jQuery 3.6.0",
+          "holder": "OpenJS Foundation and other contributors",
+          "license_id": "MIT",
+          "license_urls": [
+            "https://opensource.org/licenses/MIT"
+          ],
+          "paths": [
+            "cms/server/static/jq/jquery-3.6.0.min.js"
+          ]
+        },
+        {
+          "name": "jQuery Migrate 3.3.2",
+          "holder": "OpenJS Foundation and other contributors",
+          "license_id": "MIT",
+          "license_urls": [
+            "https://opensource.org/licenses/MIT"
+          ],
+          "paths": [
+            "cms/server/static/jq/jquery-migrate-3.3.2.min.js"
+          ]
+        },
+        {
+          "name": "Bootstrap 2.0.4",
+          "holder": "Twitter, Inc.",
+          "license_id": "Apache-2.0",
+          "license_urls": [
+            "https://www.apache.org/licenses/LICENSE-2.0"
+          ],
+          "paths": [
+            "cms/server/contest/static/css/bootstrap.css",
+            "cms/server/contest/static/js/bootstrap.js",
+            "cms/server/contest/static/img/glyphicons-halflings*.png"
+          ]
+        },
+        {
+          "name": "Tango icon theme",
+          "holder": "Tango Desktop Project",
+          "license_id": "public-domain",
+          "license_urls": [
+            "https://tango.freedesktop.org/"
+          ],
+          "paths": [
+            "cms/server/contest/static/img/mimetypes/*.png"
+          ]
+        }
+      ]
+    },
+    "admin": {
+      "title": "Admin web interface",
+      "attribution": [
+        {
+          "text": "a fork of CMS (cms-dev)",
+          "url": "https://github.com/cms-dev/cms"
+        }
+      ],
+      "first_party": [
+        "cms/server/static/favicon.ico",
+        "cms/server/static/loading.gif",
+        "cms/server/admin/static/aws_*.css",
+        "cms/server/admin/static/aws_*.js",
+        "cms/server/admin/static/web_rpc.js"
+      ],
+      "assets": [
+        {
+          "name": "jQuery 3.6.0",
+          "holder": "OpenJS Foundation and other contributors",
+          "license_id": "MIT",
+          "license_urls": [
+            "https://opensource.org/licenses/MIT"
+          ],
+          "paths": [
+            "cms/server/static/jq/jquery-3.6.0.min.js"
+          ]
+        },
+        {
+          "name": "jqPlot",
+          "holder": "Chris Leonello",
+          "license_id": "MIT OR GPL-2.0-only",
+          "license_urls": [
+            "https://opensource.org/licenses/MIT",
+            "https://www.gnu.org/licenses/old-licenses/gpl-2.0.html"
+          ],
+          "paths": [
+            "cms/server/admin/static/jq/jquery.jqplot*",
+            "cms/server/admin/static/jq/jqplot*"
+          ]
+        },
+        {
+          "name": "Prism 1.30.0",
+          "holder": "Lea Verou",
+          "license_id": "MIT",
+          "license_urls": [
+            "https://opensource.org/licenses/MIT"
+          ],
+          "paths": [
+            "cms/server/admin/static/prism.css",
+            "cms/server/admin/static/prism.js"
+          ]
+        },
+        {
+          "name": "CSS Reset 2.0",
+          "holder": "Eric A. Meyer",
+          "license_id": "public-domain",
+          "license_urls": [
+            "https://meyerweb.com/eric/tools/css/reset/"
+          ],
+          "paths": [
+            "cms/server/admin/static/reset.css"
+          ]
+        }
+      ]
+    },
+    "ranking": {
+      "title": "Public ranking board",
+      "attribution": [
+        {
+          "text": "a fork of CMS (cms-dev)",
+          "url": "https://github.com/cms-dev/cms"
+        }
+      ],
+      "first_party": [
+        "cmsranking/static/Ranking.css",
+        "cmsranking/static/Chart.js",
+        "cmsranking/static/Config.js",
+        "cmsranking/static/DataStore.js",
+        "cmsranking/static/HistoryStore.js",
+        "cmsranking/static/Overview.js",
+        "cmsranking/static/Ranking.js",
+        "cmsranking/static/Scoreboard.js",
+        "cmsranking/static/TeamSearch.js",
+        "cmsranking/static/TimeView.js",
+        "cmsranking/static/UserDetail.js",
+        "cmsranking/static/img/favicon.ico"
+      ],
+      "assets": [
+        {
+          "name": "jQuery 3.6.0",
+          "holder": "OpenJS Foundation and other contributors",
+          "license_id": "MIT",
+          "license_urls": [
+            "https://opensource.org/licenses/MIT"
+          ],
+          "paths": [
+            "cmsranking/static/lib/jquery.js"
+          ]
+        },
+        {
+          "name": "EventSource",
+          "holder": "Remy Sharp",
+          "license_id": "MIT",
+          "license_urls": [
+            "https://rem.mit-license.org/"
+          ],
+          "paths": [
+            "cmsranking/static/lib/eventsource.js"
+          ]
+        },
+        {
+          "name": "Raphael",
+          "holder": "Dmitry Baranovskiy, Sencha Labs, Adobe Systems",
+          "license_id": "MIT AND Apache-2.0",
+          "license_urls": [
+            "https://opensource.org/licenses/MIT",
+            "https://www.apache.org/licenses/LICENSE-2.0"
+          ],
+          "paths": [
+            "cmsranking/static/lib/raphael.js"
+          ]
+        },
+        {
+          "name": "explorerCanvas",
+          "holder": "Google Inc.",
+          "license_id": "Apache-2.0",
+          "license_urls": [
+            "https://www.apache.org/licenses/LICENSE-2.0"
+          ],
+          "paths": [
+            "cmsranking/static/lib/explorercanvas.js"
+          ]
+        },
+        {
+          "name": "Ranking icons and images",
+          "holder": "Luca Wehrstedt",
+          "license_id": "CC-BY-SA-3.0",
+          "license_urls": [
+            "https://creativecommons.org/licenses/by-sa/3.0/"
+          ],
+          "paths": [
+            "cmsranking/images/*",
+            "cmsranking/static/img/*.png"
+          ]
+        }
+      ]
+    },
+    "panel": {
+      "title": "Admin panel",
+      "attribution": [
+        {
+          "text": "Admin panel by CCYod",
+          "url": "https://github.com/champyod"
+        }
+      ],
+      "first_party": [
+        "admin-panel/src/**",
+        "admin-panel/public/**"
+      ],
+      "transitive_dependencies": "Packages reached only through the direct dependencies below are resolved and version-pinned by admin-panel/bun.lock, which ships alongside this file, and are not enumerated individually.",
+      "assets": [
+        {
+          "name": "@dnd-kit/core",
+          "holder": "Claudéric Demers",
+          "version": "6.3.1",
+          "license_id": "MIT",
+          "license_urls": [
+            "https://opensource.org/licenses/MIT"
+          ],
+          "paths": [
+            "admin-panel/node_modules/@dnd-kit/core"
+          ]
+        },
+        {
+          "name": "@dnd-kit/sortable",
+          "holder": "Claudéric Demers",
+          "version": "10.0.0",
+          "license_id": "MIT",
+          "license_urls": [
+            "https://opensource.org/licenses/MIT"
+          ],
+          "paths": [
+            "admin-panel/node_modules/@dnd-kit/sortable"
+          ]
+        },
+        {
+          "name": "@dnd-kit/utilities",
+          "holder": "Claudéric Demers",
+          "version": "3.2.2",
+          "license_id": "MIT",
+          "license_urls": [
+            "https://opensource.org/licenses/MIT"
+          ],
+          "paths": [
+            "admin-panel/node_modules/@dnd-kit/utilities"
+          ]
+        },
+        {
+          "name": "@fontsource/chakra-petch",
+          "holder": "The Chakra Petch Project Authors",
+          "version": "5.3.0",
+          "license_id": "OFL-1.1",
+          "license_urls": [
+            "https://scripts.sil.org/OFL"
+          ],
+          "paths": [
+            "admin-panel/node_modules/@fontsource/chakra-petch"
+          ]
+        },
+        {
+          "name": "@prisma/client",
+          "holder": "Tim Suchanek",
+          "version": "6.19.1",
+          "license_id": "Apache-2.0",
+          "license_urls": [
+            "https://www.apache.org/licenses/LICENSE-2.0"
+          ],
+          "paths": [
+            "admin-panel/node_modules/@prisma/client"
+          ]
+        },
+        {
+          "name": "@radix-ui/react-dialog",
+          "holder": "WorkOS",
+          "version": "1.1.23",
+          "license_id": "MIT",
+          "license_urls": [
+            "https://opensource.org/licenses/MIT"
+          ],
+          "paths": [
+            "admin-panel/node_modules/@radix-ui/react-dialog"
+          ]
+        },
+        {
+          "name": "@radix-ui/react-slot",
+          "holder": "WorkOS",
+          "version": "1.3.3",
+          "license_id": "MIT",
+          "license_urls": [
+            "https://opensource.org/licenses/MIT"
+          ],
+          "paths": [
+            "admin-panel/node_modules/@radix-ui/react-slot"
+          ]
+        },
+        {
+          "name": "@radix-ui/react-tooltip",
+          "holder": "WorkOS",
+          "version": "1.2.16",
+          "license_id": "MIT",
+          "license_urls": [
+            "https://opensource.org/licenses/MIT"
+          ],
+          "paths": [
+            "admin-panel/node_modules/@radix-ui/react-tooltip"
+          ]
+        },
+        {
+          "name": "bcryptjs",
+          "holder": "Nevins Bartolomeo and Shane Girish",
+          "version": "3.0.3",
+          "license_id": "BSD-3-Clause",
+          "license_urls": [
+            "https://opensource.org/license/bsd-3-clause"
+          ],
+          "paths": [
+            "admin-panel/node_modules/bcryptjs"
+          ]
+        },
+        {
+          "name": "class-variance-authority",
+          "holder": "Joe Bell",
+          "version": "0.7.1",
+          "license_id": "Apache-2.0",
+          "license_urls": [
+            "https://www.apache.org/licenses/LICENSE-2.0"
+          ],
+          "paths": [
+            "admin-panel/node_modules/class-variance-authority"
+          ]
+        },
+        {
+          "name": "clsx",
+          "holder": "Luke Edwards",
+          "version": "2.1.1",
+          "license_id": "MIT",
+          "license_urls": [
+            "https://opensource.org/licenses/MIT"
+          ],
+          "paths": [
+            "admin-panel/node_modules/clsx"
+          ]
+        },
+        {
+          "name": "cmdk",
+          "holder": "Paco Coursey",
+          "version": "1.1.1",
+          "license_id": "MIT",
+          "license_urls": [
+            "https://opensource.org/licenses/MIT"
+          ],
+          "paths": [
+            "admin-panel/node_modules/cmdk"
+          ]
+        },
+        {
+          "name": "jose",
+          "holder": "Filip Skokan",
+          "version": "6.1.3",
+          "license_id": "MIT",
+          "license_urls": [
+            "https://opensource.org/licenses/MIT"
+          ],
+          "paths": [
+            "admin-panel/node_modules/jose"
+          ]
+        },
+        {
+          "name": "jszip",
+          "holder": "Stuart Knightley",
+          "version": "3.10.1",
+          "license_id": "(MIT OR GPL-3.0-or-later)",
+          "license_urls": [
+            "https://opensource.org/licenses/MIT",
+            "https://www.gnu.org/licenses/gpl-3.0.html"
+          ],
+          "paths": [
+            "admin-panel/node_modules/jszip"
+          ]
+        },
+        {
+          "name": "lucide-animated",
+          "holder": "marciomrb",
+          "version": "1.0.5",
+          "license_id": "MIT",
+          "license_urls": [
+            "https://opensource.org/licenses/MIT"
+          ],
+          "paths": [
+            "admin-panel/node_modules/lucide-animated"
+          ]
+        },
+        {
+          "name": "lucide-react",
+          "holder": "Lucide Contributors",
+          "version": "0.562.0",
+          "license_id": "ISC",
+          "license_urls": [
+            "https://opensource.org/license/isc-license-txt"
+          ],
+          "paths": [
+            "admin-panel/node_modules/lucide-react"
+          ]
+        },
+        {
+          "name": "motion",
+          "holder": "Motion B.V.",
+          "version": "13.1.1",
+          "license_id": "MIT",
+          "license_urls": [
+            "https://opensource.org/licenses/MIT"
+          ],
+          "paths": [
+            "admin-panel/node_modules/motion"
+          ]
+        },
+        {
+          "name": "next",
+          "holder": "Vercel, Inc.",
+          "version": "16.3.5",
+          "license_id": "MIT",
+          "license_urls": [
+            "https://opensource.org/licenses/MIT"
+          ],
+          "paths": [
+            "admin-panel/node_modules/next"
+          ]
+        },
+        {
+          "name": "pg",
+          "holder": "Brian Carlson",
+          "version": "8.16.3",
+          "license_id": "MIT",
+          "license_urls": [
+            "https://opensource.org/licenses/MIT"
+          ],
+          "paths": [
+            "admin-panel/node_modules/pg"
+          ]
+        },
+        {
+          "name": "prisma",
+          "holder": "Tim Suchanek",
+          "version": "6.19.1",
+          "license_id": "Apache-2.0",
+          "license_urls": [
+            "https://www.apache.org/licenses/LICENSE-2.0"
+          ],
+          "paths": [
+            "admin-panel/node_modules/prisma"
+          ]
+        },
+        {
+          "name": "react",
+          "holder": "Meta Platforms, Inc. and affiliates",
+          "version": "19.2.3",
+          "license_id": "MIT",
+          "license_urls": [
+            "https://opensource.org/licenses/MIT"
+          ],
+          "paths": [
+            "admin-panel/node_modules/react"
+          ]
+        },
+        {
+          "name": "react-dom",
+          "holder": "Meta Platforms, Inc. and affiliates",
+          "version": "19.2.3",
+          "license_id": "MIT",
+          "license_urls": [
+            "https://opensource.org/licenses/MIT"
+          ],
+          "paths": [
+            "admin-panel/node_modules/react-dom"
+          ]
+        },
+        {
+          "name": "sonner",
+          "holder": "Emil Kowalski",
+          "version": "2.0.8",
+          "license_id": "MIT",
+          "license_urls": [
+            "https://opensource.org/licenses/MIT"
+          ],
+          "paths": [
+            "admin-panel/node_modules/sonner"
+          ]
+        },
+        {
+          "name": "tailwind-merge",
+          "holder": "Dany Castillo",
+          "version": "3.4.0",
+          "license_id": "MIT",
+          "license_urls": [
+            "https://opensource.org/licenses/MIT"
+          ],
+          "paths": [
+            "admin-panel/node_modules/tailwind-merge"
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -17,9 +17,14 @@ describe('safeAdminSelect', () => {
   it('never exposes authentication hash', () => {
     expect(Object.keys(safeAdminSelect)).not.toContain('authentication');
   });
-  it('exposes permission flags', () => {
-    for (const key of ['permission_all', 'permission_users', 'permission_tasks', 'permission_contests', 'permission_messaging']) {
+  it('exposes identity fields', () => {
+    for (const key of ['id', 'username', 'name', 'enabled']) {
       expect(Object.keys(safeAdminSelect)).toContain(key);
+    }
+  });
+  it('does not expose permission booleans', () => {
+    for (const key of ['permission_all', 'permission_users', 'permission_tasks', 'permission_contests', 'permission_messaging']) {
+      expect(Object.keys(safeAdminSelect)).not.toContain(key);
     }
   });
 });

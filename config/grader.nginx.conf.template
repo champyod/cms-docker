@@ -2,6 +2,19 @@
 # Rendered by __domain.sh → config/grader.nginx.conf
 # Render with: envsubst '$DOMAIN_NAME $ADMIN_DOMAIN ...' < template > output
 # Only listed ${VAR} placeholders are substituted; $host/$remote_addr etc. left intact.
+#
+# Optional domains. Every region between `# @block <name>` and `# @end block` is
+# emitted only when that domain is configured; __domain.sh strips the others, so an
+# unset domain never reaches nginx as an empty server_name. ACME_HOST_NAMES lists
+# every configured name for the port-80 vhost, because Let's Encrypt validates all
+# SANs of one certificate against :80 and the challenge must answer for each of them.
+# CERT_LINEAGE_DOMAIN is the lineage certbot created the certificate under: the primary
+# domain when set, otherwise the first domain that is set.
+#
+# Routing. No upstream, path prefix or service name is written here: the upstreams and
+# every `location` block come from the route table in __domain_routes.sh, which owns
+# the only copy of that mapping. A route answers both on the vhost named by its domain
+# and at its configured sub-path on the primary vhost.
 
 # Rate limit zones — local fallback (always defined, never removed)
 limit_req_zone $binary_remote_addr zone=admin_login:10m rate=5r/s;
@@ -25,31 +38,18 @@ ${REDIS_UPSTREAM_BLOCK}
 ${REDIS_LUA_PLACEHOLDER}
 
 # ── Upstreams ──────────────────────────────────────────────────────
-upstream cms_contest {
-    least_conn;
-    server cms-contest-web-server:${CONTEST_LISTEN_PORT};
-}
-
-upstream cms_admin_panel {
-    server cms-admin-panel-next:3000;
-}
-
-upstream cms_classic_admin {
-    server cms-admin-web-server:${ADMIN_LISTEN_PORT};
-}
-
-upstream cms_ranking {
-    server cms-ranking-web-server:${RANKING_LISTEN_PORT};
-}
-
-upstream oj_backend {
-    server host.docker.internal:${OJ_BACKEND_PORT};
-}
+# One upstream per route-table row, named after the row. Built by
+# __domain_routes.sh, which holds the only copy of the service → container mapping;
+# an upstream is emitted for every row whether or not a domain is configured for it,
+# because a route still answers on the primary vhost without one of its own.
+${UPSTREAM_BLOCKS}
 
 # ── Server 1: HTTP → HTTPS redirect + ACME challenge ──────────────
+# Always rendered. default_server answers for any Host, which is what lets a single
+# :80 forward validate every SAN on the certificate.
 server {
     listen 80 default_server;
-    server_name ${DOMAIN_NAME};
+    server_name ${ACME_HOST_NAMES};
 
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
@@ -63,13 +63,14 @@ server {
     }
 }
 
-# ── Server 2: grader.mwit.ac.th (contest + ranking + WS) ─────────
+# @block primary
+# ── Server 2: primary (contest + ranking + WS) ─────────────────────
 server {
     listen 443 ssl http2;
     server_name ${DOMAIN_NAME};
 
-    ssl_certificate     /etc/letsencrypt/live/${DOMAIN_NAME}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN_NAME}/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/privkey.pem;
     include /etc/nginx/conf.d/nginx-ssl.conf;
     add_header Strict-Transport-Security "max-age=${HSTS_MAX_AGE}; includeSubDomains" always;
 
@@ -86,36 +87,24 @@ server {
     location = /login {
         limit_req zone=admin_login burst=20 nodelay;
         ${PER_USER_LOGIN_DIRECTIVES}
-        proxy_pass http://cms_contest;
+        proxy_pass http://${PRIMARY_UPSTREAM};
         proxy_redirect off;
     }
 
-    location / {
-        proxy_pass http://cms_contest;
-        proxy_redirect off;
-    }
-
-    location /ranking/ {
-        ${RANKING_AUTH_DIRECTIVES}
-        proxy_pass http://cms_ranking/;
-        proxy_redirect off;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_buffering off;
-        limit_req zone=ranking_auth burst=10 nodelay;
-        ${PER_USER_RANKING_DIRECTIVES}
-    }
+    # Every route in the table, at its configured sub-path. The root route is the
+    # one that owns this vhost; the rest sit in front of it. Built by
+    # __domain_routes.sh because envsubst cannot repeat a placeholder.
+    ${PRIMARY_ROUTE_BLOCKS}
 
     location /ws {
-        proxy_pass http://cms_contest;
+        proxy_pass http://${PRIMARY_UPSTREAM};
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
     }
 
     location ~* \.(jpg|jpeg|png|gif|ico|css|js)$ {
-        proxy_pass http://cms_contest;
+        proxy_pass http://${PRIMARY_UPSTREAM};
         expires 1d;
         add_header Cache-Control "public, immutable";
     }
@@ -123,14 +112,16 @@ server {
     access_log /var/log/nginx/grader_access.log;
     error_log /var/log/nginx/grader_error.log;
 }
+# @end block
 
-# ── Server 3: admin.grader (Next.js panel + classic admin) ────────
+# @block admin
+# ── Server 3: admin panel (Next.js) + classic admin ───────────────
 server {
     listen 443 ssl http2;
     server_name ${ADMIN_DOMAIN};
 
-    ssl_certificate     /etc/letsencrypt/live/${DOMAIN_NAME}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN_NAME}/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/privkey.pem;
     include /etc/nginx/conf.d/nginx-ssl.conf;
     add_header Strict-Transport-Security "max-age=${HSTS_MAX_AGE}; includeSubDomains" always;
 
@@ -141,30 +132,30 @@ server {
     proxy_read_timeout 90;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    # WHY: this vhost fronts the admin panel, which derives its login rate-limit
+    # key from the first entry of this header. Appending to a client-supplied
+    # value would let the client choose its own bucket, so assert the address
+    # the connection actually came from.
+    proxy_set_header X-Forwarded-For $remote_addr;
     proxy_set_header X-Forwarded-Proto $scheme;
 
-    location / {
-        proxy_pass http://cms_admin_panel;
-        proxy_redirect off;
-    }
-
-    location /classic/ {
-        proxy_pass http://cms_classic_admin/;
-        proxy_redirect off;
-    }
+    # The routes that answer on this vhost: the one that owns it, plus any table
+    # row that names the same domain with a path of its own.
+    ${ADMIN_ROUTE_BLOCKS}
 
     access_log /var/log/nginx/admin_access.log;
     error_log /var/log/nginx/admin_error.log;
 }
+# @end block
 
-# ── Server 4: oj.grader (external OJ backend via host-gateway) ────
+# @block oj
+# ── Server 4: external OJ backend via host-gateway ────────────────
 server {
     listen 443 ssl http2;
     server_name ${OJ_DOMAIN};
 
-    ssl_certificate     /etc/letsencrypt/live/${DOMAIN_NAME}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN_NAME}/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/privkey.pem;
     include /etc/nginx/conf.d/nginx-ssl.conf;
     add_header Strict-Transport-Security "max-age=${HSTS_MAX_AGE}; includeSubDomains" always;
 
@@ -178,22 +169,21 @@ server {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
 
-    location / {
-        proxy_pass http://oj_backend;
-        proxy_redirect off;
-    }
+    ${OJ_ROUTE_BLOCKS}
 
     access_log /var/log/nginx/oj_access.log;
     error_log /var/log/nginx/oj_error.log;
 }
+# @end block
 
-# ── Server 5: ranking.grader (always auth) ───────────────────────
+# @block ranking
+# ── Server 5: ranking (always auth) ────────────────────────────────
 server {
     listen 443 ssl http2;
     server_name ${RANKING_DOMAIN};
 
-    ssl_certificate     /etc/letsencrypt/live/${DOMAIN_NAME}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN_NAME}/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/privkey.pem;
     include /etc/nginx/conf.d/nginx-ssl.conf;
     add_header Strict-Transport-Security "max-age=${HSTS_MAX_AGE}; includeSubDomains" always;
 
@@ -207,18 +197,9 @@ server {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
 
-    location / {
-        ${RANKING_AUTH_DIRECTIVES}
-        proxy_pass http://cms_ranking/;
-        proxy_redirect off;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_buffering off;
-        limit_req zone=ranking_auth burst=10 nodelay;
-        ${PER_USER_RANKING_DIRECTIVES}
-    }
+    ${RANKING_ROUTE_BLOCKS}
 
     access_log /var/log/nginx/ranking_access.log;
     error_log /var/log/nginx/ranking_error.log;
 }
+# @end block

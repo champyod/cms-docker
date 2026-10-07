@@ -19,7 +19,10 @@ HOSTNAME=$(hostname)
 
 # Settings
 CHECK_INTERVAL=${MONITOR_INTERVAL:-10}
-COOLDOWN=${MONITOR_COOLDOWN:-300}
+# Digest window: docker events arriving within this many seconds share one embed.
+EVENT_BATCH_WINDOW=${MONITOR_EVENT_WINDOW:-15}
+# Discord allows 25 fields per embed; a fuller window flushes and continues.
+EVENT_BATCH_MAX=25
 CPU_THRESHOLD=${MONITOR_CPU_THRESHOLD:-80}
 MEM_THRESHOLD=${MONITOR_MEM_THRESHOLD:-80}
 DISK_THRESHOLD=${MONITOR_DISK_THRESHOLD:-80}
@@ -28,22 +31,29 @@ DISK_THRESHOLD=${MONITOR_DISK_THRESHOLD:-80}
 BACKUP_INTERVAL_MINS=${BACKUP_INTERVAL_MINS:-1440}
 LAST_BACKUP_TIME=0
 
+# Log retention. The CMS services open a fresh <epoch>.log under CMS_LOG_DIR at
+# every start and never rotate it (src/cms/io/service.py, service/LogService.py),
+# so the volume grows without bound. Caps mirror the backup retention knobs.
+CMS_LOG_DIR=${CMS_LOG_DIR:-/var/local/log/cms}
+CMS_LOG_MAX_AGE_DAYS=${CMS_LOG_MAX_AGE_DAYS:-7}
+CMS_LOG_MAX_SIZE_GB=${CMS_LOG_MAX_SIZE_GB:-5}
+CMS_LOG_PRUNE_INTERVAL_MINS=${CMS_LOG_PRUNE_INTERVAL_MINS:-60}
+LAST_LOG_PRUNE_TIME=0
+
 # Mode
 DAEMON_MODE=false
 
 usage() {
-    echo "Usage: $0 [-d] [-i interval] [-c cooldown]"
+    echo "Usage: $0 [-d] [-i interval]"
     echo "  -d          Daemon mode"
     echo "  -i seconds  Check interval"
-    echo "  -c seconds  Cooldown"
     exit 1
 }
 
-while getopts "di:c:h" opt; do
+while getopts "di:h" opt; do
     case $opt in
         d) DAEMON_MODE=true ;;
         i) CHECK_INTERVAL=$OPTARG ;;
-        c) COOLDOWN=$OPTARG ;;
         h) usage ;;
         *) usage ;;
     esac
@@ -113,14 +123,74 @@ is_integer() {
     [[ "$1" =~ ^[0-9]+$ ]]
 }
 
+# WHY: an unset webhook is the silent-non-delivery failure mode — the operator believes
+# alerting is on while every message is dropped. Report it on stderr (docker logs) so it
+# reaches the surface the operator actually reads, and never abort the daemon loop.
+warn_webhook_unconfigured() {
+    echo "[WARN] DISCORD_WEBHOOK_URL is unset — dropped $1." >&2
+    echo "[WARN] Set it in config.toml [infra] then run './cms config sync', or from the admin panel (Maintenance → Discord Notifications), and recreate the monitor container." >&2
+}
+
+# Post a prepared payload and report a non-2xx response instead of discarding it.
+# WHY the webhook is staged in a curl config file instead of passed on the command line:
+# the token in that URL is a credential, and a process command line is readable by every
+# account on the box for as long as the request lives. The body is already read from disk,
+# so the alert text — which names containers, hosts and a role — stays out of argv too.
+# WHY no RETURN trap removes the config file: a RETURN trap is not scoped to the function
+# that set it, so it fires at some later function's return instead. Every step below is
+# captured into a status rather than returned early, making this the only exit.
+post_discord_payload() {
+    local payload_file="$1"
+    local context="$2"
+    local http_code
+    local conf_file
+    if ! conf_file="$(mktemp "${TMPDIR:-/tmp}/cms-monitor-request.XXXXXX")"; then
+        echo "[WARN] could not stage the Discord request — dropped $context." >&2
+        return 0
+    fi
+    chmod 600 "$conf_file" 2>/dev/null || true
+    cat > "$conf_file" <<EOF
+url = "${WEBHOOK_URL}"
+EOF
+    # curl reports an unreachable endpoint as 000, which the case below also catches.
+    http_code=$(curl -s -o /dev/null -w '%{http_code}' -H "Content-Type: application/json" -X POST -d "@${payload_file}" -K "$conf_file" || true)
+    rm -f -- "$conf_file"
+    case "$http_code" in
+        2??) ;;
+        *) echo "[WARN] Discord webhook delivery failed (HTTP ${http_code:-000}) — dropped $context." >&2 ;;
+    esac
+}
+
+# WHY: alert bodies carry host metrics, and a fixed path in the shared temp directory leaves
+# them readable by any local user and clobberable by a second concurrent run. A per-body
+# mktemp file is private from creation, so the caller owns deleting it once the send is done.
+# Echoes that path, or fails with 1 when the body cannot be staged.
+stage_discord_body() {
+    local label="$1"
+    local body_file
+    if ! body_file="$(mktemp "${TMPDIR:-/tmp}/cms-monitor-body.XXXXXX")"; then
+        echo "[WARN] could not stage the Discord request — dropped $label." >&2
+        return 1
+    fi
+    chmod 600 "$body_file" 2>/dev/null || true
+    echo "$body_file"
+}
+
 send_discord_alert() {
     local status="$1"
     local message="$2"
     local color="$3"
     local mention="$4"
     local timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    
-    cat <<EOF > /tmp/discord_payload.json
+
+    if [ -z "$WEBHOOK_URL" ]; then
+        warn_webhook_unconfigured "alert ($status)"
+        return 0
+    fi
+
+    local payload_file
+    payload_file="$(stage_discord_body "alert ($status)")" || return 0
+    cat <<EOF > "$payload_file"
 {
   "content": "$mention",
   "embeds": [
@@ -141,9 +211,8 @@ send_discord_alert() {
 }
 EOF
 
-    if [ -n "$WEBHOOK_URL" ]; then
-        curl -s -H "Content-Type: application/json" -X POST -d @/tmp/discord_payload.json "$WEBHOOK_URL" > /dev/null
-    fi
+    post_discord_payload "$payload_file" "alert ($status)"
+    rm -f -- "$payload_file"
 }
 
 send_discord_notification() {
@@ -151,8 +220,15 @@ send_discord_notification() {
     local message="$2"
     local color="$3"
     local timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    
-    cat <<EOF > /tmp/discord_notif.json
+
+    if [ -z "$WEBHOOK_URL" ]; then
+        warn_webhook_unconfigured "notification ($title)"
+        return 0
+    fi
+
+    local body_file
+    body_file="$(stage_discord_body "notification ($title)")" || return 0
+    cat <<EOF > "$body_file"
 {
   "embeds": [
     {
@@ -166,9 +242,21 @@ send_discord_notification() {
 }
 EOF
 
-    if [ -n "$WEBHOOK_URL" ]; then
-        curl -s -H "Content-Type: application/json" -X POST -d @/tmp/discord_notif.json "$WEBHOOK_URL" > /dev/null
+    post_discord_payload "$body_file" "notification ($title)"
+    rm -f -- "$body_file"
+}
+
+# WHY: when the config file cannot be located the defaults below silently disarm every
+# per-container policy (autoRestart / maxRestarts / discordNotifications), so say it once
+# per process instead of quietly behaving as if nothing were configured.
+RESTART_CONFIG_NOTICE_SHOWN=false
+warn_restart_config_missing() {
+    if [ "$RESTART_CONFIG_NOTICE_SHOWN" = "true" ]; then
+        return 0
     fi
+    RESTART_CONFIG_NOTICE_SHOWN=true
+    echo "[WARN] container restart config not found at $1 — per-container autoRestart/maxRestarts/discordNotifications are ignored." >&2
+    echo "[WARN] When the monitor runs in a container set REPO_ROOT=/repo-root; config/ is mounted at /repo-root/config." >&2
 }
 
 get_container_restart_config() {
@@ -176,6 +264,7 @@ get_container_restart_config() {
     local config_file="${REPO_ROOT:-$(dirname "$0")/..}/config/container-restart.json"
 
     if [ ! -f "$config_file" ]; then
+        warn_restart_config_missing "$config_file"
         echo "false:5:0:true"
         return
     fi
@@ -185,7 +274,9 @@ get_container_restart_config() {
         local auto_restart=$(jq -r ".[\"$container_id\"].autoRestart // false" "$config_file" 2>/dev/null || echo "false")
         local max_restarts=$(jq -r ".[\"$container_id\"].maxRestarts // 5" "$config_file" 2>/dev/null || echo "5")
         local current_restarts=$(jq -r ".[\"$container_id\"].currentRestarts // 0" "$config_file" 2>/dev/null || echo "0")
-        local discord_notifications=$(jq -r ".[\"$container_id\"].discordNotifications // true" "$config_file" 2>/dev/null || echo "true")
+        # WHY: jq's // treats boolean false as "empty" too, so `.discordNotifications // true`
+        # always reported true and silently ignored a stored opt-out; has() keeps false intact.
+        local discord_notifications=$(jq -r "if (.[\"$container_id\"] | has(\"discordNotifications\")) then .[\"$container_id\"].discordNotifications else true end" "$config_file" 2>/dev/null || echo "true")
         echo "$auto_restart:$max_restarts:$current_restarts:$discord_notifications"
     else
         echo "false:5:0:true"
@@ -196,13 +287,11 @@ should_suppress_notification() {
     local container_name="$1"
     local event_type="$2"
 
-    # Get container ID
     local container_id=$(docker ps -aqf "name=$container_name" 2>/dev/null | head -1)
     if [ -z "$container_id" ]; then
         return 1  # Don't suppress if we can't find container
     fi
 
-    # Get config
     local config=$(get_container_restart_config "$container_id")
     local auto_restart=$(echo "$config" | cut -d: -f1)
     local max_restarts=$(echo "$config" | cut -d: -f2)
@@ -213,11 +302,13 @@ should_suppress_notification() {
         return 0  # Suppress
     fi
 
-    # Get restart count from Docker
     local restart_count=$(docker inspect "$container_id" --format='{{.RestartCount}}' 2>/dev/null || echo "0")
 
     # If auto-restart is disabled and container is dying/restarting, suppress after first notification
-    if [ "$auto_restart" = "false" ] && [ "$event_type" = "die" ] || [ "$event_type" = "restart" ]; then
+    # WHY braces: && and || bind equally and associate left to right, so the un-braced form
+    # reads as (A && B) || C — that made every restart event satisfy the guard on its own
+    # and suppress alerts the intent never covered (under-alerting).
+    if [ "$auto_restart" = "false" ] && { [ "$event_type" = "die" ] || [ "$event_type" = "restart" ]; }; then
         # Check if we already notified about this container being disabled
         if grep -q "^${container_name}:disabled:notified" "$NOTIF_CACHE" 2>/dev/null; then
             return 0  # Suppress
@@ -225,7 +316,9 @@ should_suppress_notification() {
     fi
 
     # If restart count exceeds max, suppress repeated die/restart notifications
-    if [ "$restart_count" -ge "$max_restarts" ] && [ "$event_type" = "die" ] || [ "$event_type" = "restart" ]; then
+    # WHY braces: same precedence trap as above — restart events must only be suppressed
+    # when the restart limit is genuinely reached, not unconditionally.
+    if [ "$restart_count" -ge "$max_restarts" ] && { [ "$event_type" = "die" ] || [ "$event_type" = "restart" ]; }; then
         # Check if we already notified about limit reached
         if grep -q "^${container_name}:limit:notified" "$NOTIF_CACHE" 2>/dev/null; then
             return 0  # Suppress
@@ -235,80 +328,179 @@ should_suppress_notification() {
     return 1  # Don't suppress
 }
 
+# ---------------------------------------------------------------------------
+# Log retention
+# ---------------------------------------------------------------------------
+# WHY the prune runs inside the log-service container: that tree belongs to
+# cmsuser (uid 1001) with mode 750, while the monitor runs as uid 1000 and so
+# cannot unlink those files; the remedy documented in docs/TROUBLESHOOTING.md
+# writes into the same container for the same reason. Files past the age cap go
+# first, then oldest-first until the tree is back under the size cap.
+prune_cms_logs() {
+    local log_dir="$CMS_LOG_DIR"
+    local age_days="$CMS_LOG_MAX_AGE_DAYS"
+    local max_kb=$(( CMS_LOG_MAX_SIZE_GB * 1024 * 1024 ))
+    local container="cms-log-service"
+
+    if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$container"; then
+        echo "[WARN] log retention skipped: $container is not running." >&2
+        return 0
+    fi
+
+    docker exec "$container" sh -c '
+        dir="$1"; age_days="$2"; max_kb="$3"
+        [ -d "$dir" ] || exit 0
+        # Age first: a file no service writes to any more is the cheapest to drop.
+        find "$dir" -type f -name "*.log" -mtime +"$age_days" -delete 2>/dev/null
+        used_kb=$(du -sk "$dir" | cut -f1)
+        [ "$used_kb" -le "$max_kb" ] && exit 0
+        excess=$(( (used_kb - max_kb) * 1024 ))
+        listing=$(find "$dir" -type f -name "*.log" -exec stat -c "%Y %s %n" {} + 2>/dev/null | sort -n)
+        # The newest file is the one a service is still appending to. Unlinking it
+        # would keep its blocks until that service restarts, so when it is the only
+        # one left to pay the excess it is truncated in place instead (logrotate
+        # copytruncate): the space comes back now and the writer is undisturbed.
+        newest=$(printf "%s\n" "$listing" | tail -n 1 | cut -d" " -f3-)
+        printf "%s\n" "$listing" | while IFS=" " read -r _mtime size path; do
+            [ "$excess" -gt 0 ] || break
+            [ -n "$path" ] || continue
+            if [ "$path" = "$newest" ]; then
+                truncate -s 0 -- "$path" 2>/dev/null || : > "$path"
+            elif ! rm -f -- "$path"; then
+                continue
+            fi
+            excess=$(( excess - size ))
+        done
+    ' sh "$log_dir" "$age_days" "$max_kb" || echo "[WARN] log retention pass failed." >&2
+}
+
+# Appends one docker event as a digest line: rank|color|name|value.
+# Rank picks the embed color (down outranks restarting outranks up).
+collect_docker_event() {
+    local event="$1" batch_file="$2"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Docker Event: $event"
+
+    local cont_name event_type
+    cont_name=$(echo "$event" | awk '{print $3}')
+    event_type=$(echo "$event" | awk '{print $1}')
+
+    if should_suppress_notification "$cont_name" "$event_type"; then
+        return 0
+    fi
+
+    local container_id restart_count config auto_restart max_restarts
+    container_id=$(docker ps -aqf "name=$cont_name" 2>/dev/null | head -1)
+    restart_count=$(docker inspect "$container_id" --format='{{.RestartCount}}' 2>/dev/null || echo "0")
+    config=$(get_container_restart_config "$container_id")
+    auto_restart=$(echo "$config" | cut -d: -f1)
+    max_restarts=$(echo "$config" | cut -d: -f2)
+
+    local stamp emoji status rank color detail
+    stamp=$(date '+[%d %m %Y - %H:%M:%S]')
+    rank=0; color=65280; emoji="🟢"; status="up"; detail="$event"
+    case "$event" in
+        *"die"*|*"stop"*)
+            rank=2; color=16711680; emoji="🔴"; status="down"
+            if [ "$auto_restart" = "false" ]; then
+                detail="$event (Auto-restart DISABLED)"
+                echo "${cont_name}:disabled:notified" >> "$NOTIF_CACHE"
+            elif [ "$restart_count" -ge "$max_restarts" ]; then
+                detail="$event (Restart limit $restart_count/$max_restarts)"
+                echo "${cont_name}:limit:notified" >> "$NOTIF_CACHE"
+            else
+                detail="$event (Restarts $restart_count/$max_restarts)"
+            fi
+            ;;
+        *"restart"*)
+            rank=1; color=16753920; emoji="🟠"; status="restarting"
+            if [ "$restart_count" -ge "$max_restarts" ]; then
+                detail="$event (Restart limit $restart_count/$max_restarts)"
+                echo "${cont_name}:limit:notified" >> "$NOTIF_CACHE"
+            else
+                detail="$event (Restarts $restart_count/$max_restarts)"
+            fi
+            ;;
+    esac
+    printf '%s|%s|%s %s|%s %s [%s]\n' "$rank" "$color" "$emoji" "$cont_name" "$stamp" "$detail" "$status" >> "$batch_file"
+}
+
+# Sends one embed for the collected batch; worst rank sets the embed color.
+flush_event_batch() {
+    local batch_file="$1"
+    [ -s "$batch_file" ] || return 0
+    local event_count
+    event_count=$(wc -l < "$batch_file")
+
+    local worst_rank worst_color rank color
+    worst_rank=-1; worst_color=3447003
+    while IFS='|' read -r rank color _ _; do
+        if [ "${rank:-0}" -gt "$worst_rank" ]; then
+            worst_rank=$rank; worst_color=$color
+        fi
+    done < "$batch_file"
+
+    if [ -z "$WEBHOOK_URL" ]; then
+        warn_webhook_unconfigured "docker event digest ($event_count events)"
+        return 0
+    fi
+
+    if command -v jq >/dev/null 2>&1; then
+        local digest_file
+        digest_file="$(stage_discord_body "docker event digest")" || return 0
+        jq -n --rawfile lines "$batch_file" --argjson color "$worst_color" '
+            ($lines | split("\n") | map(select(length > 0)) | .[0:25]
+             | map(split("|") | {name: .[2], value: .[3], inline: false})) as $fields
+            | {embeds: [{title: "Docker Events", color: $color, fields: $fields}]}' \
+            > "$digest_file"
+        post_discord_payload "$digest_file" "docker event digest"
+        rm -f -- "$digest_file"
+    else
+        local joined
+        joined=$(cut -d'|' -f3- "$batch_file" | paste -sd' / ' -)
+        send_discord_notification "Docker Events ($event_count)" "$joined" "$worst_color"
+    fi
+}
+
 listen_docker_events() {
     echo "Starting Docker event listener..."
-    # Track last notification time per container to prevent spam
-    NOTIF_CACHE="/tmp/monitor_notif_cache"
-    touch "$NOTIF_CACHE"
+    # One-shot markers for terminal states; every other event is digested.
+    # WHY a private temp file: these lines name containers, and a fixed name in the shared
+    # temp directory left them world-readable and never cleaned up, so one run's markers
+    # outlived it and suppressed the next run's alerts.
+    if ! NOTIF_CACHE="$(mktemp "${TMPDIR:-/tmp}/cms-monitor-notif.XXXXXX")"; then
+        echo "[WARN] could not create the docker event notification cache — listener stopped." >&2
+        return 1
+    fi
+    chmod 600 "$NOTIF_CACHE" 2>/dev/null || true
+    # WHY an EXIT trap and not a RETURN one: this is the same scoping trap post_discord_payload
+    # documents, and the reverse case bites here. The only caller backgrounds the function, so
+    # this trap dies with that subshell when the docker events stream ends, leaving the main
+    # loop's own exit path untouched — and the markers never outlive the run that wrote them.
+    # INT TERM beside EXIT so a signal shutdown cleans the file too, not just a normal stream end.
+    trap 'rm -f -- "$NOTIF_CACHE"' EXIT INT TERM
 
-    docker events --filter 'event=start' --filter 'event=stop' --filter 'event=die' --filter 'event=restart' --format '{{.Status}} container {{.Actor.Attributes.name}}' | while read -r event; do
-        # Log the event immediately (keep this first)
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Docker Event: $event"
-
-        # Cooldown Logic: Don't notify for the same container more than once every 60s
-        CONT_NAME=$(echo "$event" | awk '{print $3}')
-        EVENT_TYPE=$(echo "$event" | awk '{print $1}')
-        CURRENT_TIME=$(date +%s)
-        LAST_NOTIF=$(grep "^${CONT_NAME}:" "$NOTIF_CACHE" | grep -v ":disabled:" | grep -v ":limit:" | cut -d: -f2 | tail -1 || echo "0")
-
-        # Check if we should suppress this notification
-        if should_suppress_notification "$CONT_NAME" "$EVENT_TYPE"; then
-            continue
+    docker events --filter 'event=start' --filter 'event=stop' --filter 'event=die' --filter 'event=restart' --format '{{.Status}} container {{.Actor.Attributes.name}}' | {
+    while true; do
+        batch_file=$(mktemp)
+        # First event blocks; the window runs from its arrival.
+        if ! IFS= read -r first_event; then
+            rm -f "$batch_file"
+            break
         fi
-
-        if [ $((CURRENT_TIME - LAST_NOTIF)) -lt 60 ]; then
-            continue
-        fi
-
-        # Get container info for enhanced notification
-        local container_id=$(docker ps -aqf "name=$CONT_NAME" 2>/dev/null | head -1)
-        local restart_count=$(docker inspect "$container_id" --format='{{.RestartCount}}' 2>/dev/null || echo "0")
-        local config=$(get_container_restart_config "$container_id")
-        local auto_restart=$(echo "$config" | cut -d: -f1)
-        local max_restarts=$(echo "$config" | cut -d: -f2)
-
-        # Update cache
-        grep -v "^${CONT_NAME}:" "$NOTIF_CACHE" > "${NOTIF_CACHE}.tmp" || true
-        echo "${CONT_NAME}:${CURRENT_TIME}" >> "${NOTIF_CACHE}.tmp"
-        mv "${NOTIF_CACHE}.tmp" "$NOTIF_CACHE"
-
-        COLOR=3447003
-        MESSAGE="🔄 **$event**"
-
-        case "$event" in
-            *"start"*)
-                COLOR=65280
-                ;;
-            *"stop"*)
-                COLOR=16711680
-                ;;
-            *"die"*)
-                COLOR=16711680
-                # Add warning if auto-restart is disabled
-                if [ "$auto_restart" = "false" ]; then
-                    MESSAGE="🔴 **$event** (Auto-restart: DISABLED - requires manual intervention)"
-                    echo "${CONT_NAME}:disabled:notified" >> "$NOTIF_CACHE"
-                # Add warning if restart limit reached
-                elif [ "$restart_count" -ge "$max_restarts" ]; then
-                    MESSAGE="🚨 **$event** (Restart limit reached: $restart_count/$max_restarts - stopped auto-restart)"
-                    echo "${CONT_NAME}:limit:notified" >> "$NOTIF_CACHE"
-                else
-                    MESSAGE="⚠️ **$event** (Restarts: $restart_count/$max_restarts)"
-                fi
-                ;;
-            *"restart"*)
-                COLOR=16753920
-                if [ "$restart_count" -ge "$max_restarts" ]; then
-                    MESSAGE="🚨 **$event** (Restart limit reached: $restart_count/$max_restarts)"
-                    echo "${CONT_NAME}:limit:notified" >> "$NOTIF_CACHE"
-                else
-                    MESSAGE="🔄 **$event** (Restarts: $restart_count/$max_restarts)"
-                fi
-                ;;
-        esac
-
-        send_discord_notification "Docker Event" "$MESSAGE" $COLOR
+        collect_docker_event "$first_event" "$batch_file"
+        end_time=$(( $(date +%s) + EVENT_BATCH_WINDOW ))
+        event_count=1
+        while [ "$event_count" -lt "$EVENT_BATCH_MAX" ]; do
+            remaining=$(( end_time - $(date +%s) ))
+            [ "$remaining" -le 0 ] && break
+            IFS= read -r -t "$remaining" event || break
+            collect_docker_event "$event" "$batch_file"
+            event_count=$(( event_count + 1 ))
+        done
+        flush_event_batch "$batch_file"
+        rm -f "$batch_file"
     done
+    }
 }
 
 check_once() {
@@ -333,14 +525,9 @@ check_once() {
     if [ "$IS_ALERT" = true ]; then
         if [ "$PREV_STATE" = "OK" ]; then
             send_discord_alert "WARNING" "$FAIL_REASON" 16711680 "${ROLE_ID:+<@&$ROLE_ID>}"
-            LAST_ALERT_TIME=$CURRENT_TIME
             PREV_STATE="ALERT"
         elif [ "$PREV_STATE" = "ALERT" ]; then
-            TIME_DIFF=$((CURRENT_TIME - LAST_ALERT_TIME))
-            if [ "$TIME_DIFF" -ge "$COOLDOWN" ]; then
-                send_discord_alert "WARNING (Ongoing)" "$FAIL_REASON" 16711680 "${ROLE_ID:+<@&$ROLE_ID>}"
-                LAST_ALERT_TIME=$CURRENT_TIME
-            fi
+            send_discord_alert "WARNING (Ongoing)" "$FAIL_REASON" 16711680 "${ROLE_ID:+<@&$ROLE_ID>}"
         fi
     else
         if [ "$PREV_STATE" = "ALERT" ]; then
@@ -359,11 +546,84 @@ check_once() {
     elif [ "$BACKUP_INTERVAL_MINS" -gt 0 ] && [ "$LAST_BACKUP_TIME" -eq 0 ]; then
         LAST_BACKUP_TIME=$CURRENT_TIME
     fi
+
+    # First pass prunes straight away, so a volume that is already over the cap
+    # is brought back under it without waiting for the interval to elapse.
+    if is_integer "$CMS_LOG_PRUNE_INTERVAL_MINS" && [ "$CMS_LOG_PRUNE_INTERVAL_MINS" -gt 0 ] \
+       && [ $((CURRENT_TIME - LAST_LOG_PRUNE_TIME)) -ge $((CMS_LOG_PRUNE_INTERVAL_MINS * 60)) ]; then
+        prune_cms_logs
+        LAST_LOG_PRUNE_TIME=$CURRENT_TIME
+    fi
 }
 
 PREV_STATE="OK"
-LAST_ALERT_TIME=0
 LAST_BACKUP_TIME=0
+
+# WHY: the backup script sources __lib/common.sh, so a container that never received
+# the lib aborts every backup cycle at that source. Warn loudly but keep looping —
+# alerting, disk checks and log pruning are all still useful without backups.
+CMS_BACKUP_SCRIPT="/usr/local/bin/cms-backup.sh"
+CMS_BACKUP_LIB="${CMS_BACKUP_SCRIPT%/*}/__lib/common.sh"
+if ! grep -q '__lib/' "$CMS_BACKUP_SCRIPT" 2>/dev/null || [ ! -r "$CMS_BACKUP_LIB" ]; then
+    echo "[WARN] ===========================================================" >&2
+    if ! grep -q '__lib/' "$CMS_BACKUP_SCRIPT" 2>/dev/null; then
+        echo "[WARN] $CMS_BACKUP_SCRIPT is missing or unreadable, so no backup" >&2
+        echo "[WARN] will run in this container." >&2
+    else
+        echo "[WARN] $CMS_BACKUP_LIB is missing or unreadable, so every backup" >&2
+        echo "[WARN] cycle will abort at its source line." >&2
+    fi
+    echo "[WARN] Mount or copy scripts/__lib next to the backup script, then" >&2
+    echo "[WARN] recreate the monitor container so it picks the lib up." >&2
+    echo "[WARN] Monitoring continues without backups." >&2
+    echo "[WARN] ===========================================================" >&2
+fi
+
+# WHY: __backup.sh writes its archives under ${BACKUP_DIR:-${REPO_ROOT}/backups} and the
+# compose monitor service pins that env to the bind-mounted volume, so the probe has to
+# aim at the same path — a probe anywhere else calls a broken box healthy. The default
+# only covers a run that reaches this script without the env.
+BACKUP_ROOT="${BACKUP_DIR:-/app/backups}"
+
+# WHY: when the runtime uid does not own the backup tree, every backup write is denied
+# while the monitor itself looks healthy, and the only symptom is a permission line from
+# a detached backup process one whole interval later. One write attempt at startup names
+# the box immediately; it warns and returns, because alerting, disk checks and log
+# pruning are all still worth running without backups.
+probe_backup_dir_writable() {
+    local backup_root="$1" probe runtime_uid
+    runtime_uid=$(id -u)
+    probe="${backup_root}/.cms-write-probe.$$"
+    # WHY the braces: 2>/dev/null must be applied before the failing redirect, or bash
+    # prints its own "Permission denied" line with the probe filename and pid.
+    if { : > "$probe"; } 2>/dev/null; then
+        rm -f "$probe"
+        return 0
+    fi
+
+    echo "[WARN] ===========================================================" >&2
+    echo "[WARN] $backup_root is not writable by uid $runtime_uid, so every" >&2
+    echo "[WARN] backup cycle in this container will fail." >&2
+    echo "[WARN] Fix on the host: chown -R $runtime_uid <backup dir>, or set" >&2
+    echo "[WARN] DOCKER_UID in config.toml [infra] to that directory's owner" >&2
+    echo "[WARN] (stat -c %u <backup dir>), then recreate the monitor container." >&2
+    echo "[WARN] Monitoring continues without backups." >&2
+    echo "[WARN] ===========================================================" >&2
+}
+
+probe_backup_dir_writable "$BACKUP_ROOT"
+
+# WHY: say up front whether this run can deliver anything — starting a monitor with no
+# webhook otherwise looks healthy while every alert is dropped.
+if [ -z "$WEBHOOK_URL" ]; then
+    echo "[WARN] ===========================================================" >&2
+    echo "[WARN] DISCORD_WEBHOOK_URL is unset — incidents will be detected" >&2
+    echo "[WARN] but NO alert will be delivered for this run." >&2
+    echo "[WARN] Set it in config.toml [infra] and run './cms config sync'," >&2
+    echo "[WARN] or use the admin panel Maintenance page, then recreate the" >&2
+    echo "[WARN] monitor container so it picks the value up." >&2
+    echo "[WARN] ===========================================================" >&2
+fi
 
 if [ "$DAEMON_MODE" = true ]; then
     listen_docker_events &

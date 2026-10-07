@@ -1,0 +1,41 @@
+import type { SafeUser } from '@/lib/prisma-selects';
+
+export const DEFAULT_TIMEZONE = 'Asia/Bangkok';
+
+export interface UserFormState {
+  first_name: string;
+  last_name: string;
+  username: string;
+  email: string;
+  password: string;
+  timezone: string;
+  contestId: string;
+  teamCode: string;
+  preferred_languages: string[];
+}
+
+export const EMPTY_USER_FORM: UserFormState = {
+  first_name: '',
+  last_name: '',
+  username: '',
+  email: '',
+  password: '',
+  timezone: DEFAULT_TIMEZONE,
+  contestId: '',
+  teamCode: '',
+  preferred_languages: [],
+};
+
+// Why the narrow row: the form reads six identity columns, and the list row is a
+// structural supertype of it, so every existing caller still passes one unchanged.
+export function formFromUser(user: SafeUser): UserFormState {
+  return {
+    ...EMPTY_USER_FORM,
+    first_name: user.first_name,
+    last_name: user.last_name,
+    username: user.username,
+    email: user.email ?? '',
+    timezone: user.timezone ?? DEFAULT_TIMEZONE,
+    preferred_languages: Array.isArray(user.preferred_languages) ? [...user.preferred_languages] : [],
+  };
+}

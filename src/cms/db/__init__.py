@@ -58,6 +58,9 @@ __all__ = [
     "User", "Team", "Participation", "Message", "Question",
     # admin
     "Admin",
+    # permissions
+    "Permission", "Group", "GroupPermission", "AdminGroup",
+    "AdminPermissionOverride", "AuditLog",
     # task
     "Task", "Statement", "Attachment", "Dataset", "Manager", "Testcase",
     # submission
@@ -79,7 +82,7 @@ __all__ = [
 
 # Instantiate or import these objects.
 
-version = 48
+version = 49
 
 engine = create_engine(config.database.url, echo=config.database.debug,
                        pool_timeout=60, pool_recycle=120)
@@ -101,6 +104,12 @@ from .submission import Submission, File, Token, SubmissionResult, \
     Executable, Evaluation
 from .usertest import UserTest, UserTestFile, UserTestManager, \
     UserTestResult, UserTestExecutable
+# WHY: must be imported before configure_mappers() below, otherwise the
+# Admin.admin_groups string reference cannot be resolved and every entry
+# point importing cms.db fails. Tables stay in metadata for mapper
+# resolution; Prisma migrations own their creation (cmsInitDB excludes them).
+from .permissions import Permission, Group, GroupPermission, AdminGroup, \
+    AdminPermissionOverride, AuditLog
 
 from .init import init_db
 from .drop import drop_db

@@ -5,25 +5,50 @@ import { exec } from 'child_process';
 import util from 'util';
 import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
+import { resolveHostComposeLocation } from '@/lib/compose-location';
 import { logToDiscord } from '@/lib/discord-notifier';
-import { buildRestartCommand, getRestartPolicies } from '@/lib/restart-planner';
+import { recordAudit } from '@/lib/audit';
+import { readDeploymentModeSetting } from '@/lib/deployment-mode-file';
+import type { DeploymentModeSetting } from '@/lib/deployment-mode';
+import { CONFIG_TOML_FILE } from '@/lib/config-toml';
 import {
-  runDeployContest,
-  fetchDeployStatus,
-} from '@/lib/deploy-operations';
-import type {
-  DeployContestResult,
-  DeployStatusResult,
-} from '@/lib/deploy-operations';
+  analyzeContainerDependencies as analyzeContainerDependenciesLib,
+  buildComposeFileFlags,
+  buildRestartCommand,
+  getRestartPolicies,
+} from '@/lib/restart-planner';
 
 const execPromise = util.promisify(exec);
 
-async function getContestComposeFile(): Promise<string> {
-    return 'docker-compose.contest.yml';
+/**
+ * The mode the next restart uses, so the operator can see what that restart does before running it.
+ * Gated like the rest of the read-only service surface: this decides whether a restart pulls or rebuilds.
+ */
+export async function getDeploymentMode(): Promise<DeploymentModeSetting> {
+    await ensurePermission('service:read');
+    const setting = await readDeploymentModeSetting();
+    // Why entity config rather than deployment: what this reads is config.toml's
+    // [admin] DEPLOYMENT_TYPE, the same key updateConfigTomlValues writes, so the view row lands
+    // on the entity the edit that would change it also uses. Keys and the resolved flag only.
+    await recordAudit({
+      verb: 'config:view',
+      entity: 'config',
+      afterValues: { file: CONFIG_TOML_FILE, requestedKeys: ['admin.DEPLOYMENT_TYPE'], resolved: setting.resolved },
+      result: 'success',
+    });
+    return setting;
+}
+
+// Why: client components must not import the fs-backed planner directly —
+// Turbopack bundles client imports for the browser and cannot resolve
+// node:fs. Exposed as a server action (permission-gated like its siblings).
+export async function analyzeContainerDependencies(containerNames: string[]): Promise<string[]> {
+    await ensurePermission('container:read');
+    return analyzeContainerDependenciesLib(containerNames);
 }
 
 export async function analyzeRestartRequirements(changedKeys: string[]) {
-    await ensurePermission('all');
+    await ensurePermission('service:read');
     const policies = await getRestartPolicies();
     if (!policies) return { requiredRestarts: [] };
 
@@ -57,32 +82,43 @@ export async function analyzeRestartRequirements(changedKeys: string[]) {
 }
 
 export async function restartServices(type: 'all' | 'core' | 'admin' | 'worker' | 'custom', customList?: string[]) {
-  await ensurePermission('all');
+  await ensurePermission('service:restart');
   try {
     const rootDir = getRepoRoot();
     await execPromise('make env', { cwd: rootDir });
 
-    const contestComposeFile = await getContestComposeFile();
-    const files = [
-      'docker-compose.core.yml',
-      'docker-compose.admin.yml',
-      'docker-compose.worker.yml',
-      contestComposeFile,
-      'docker-compose.monitor.yml'
-    ].map(f => `-f ${f}`).join(' ');
+    // Why: the restart runs the same project the make targets and ./cms deploy. The partial stack
+    // files declare locally-built image names (cms-monitor, cms-admin-panel-next) that no registry
+    // serves, so an image-mode pull against them can only fail.
+    const files = await buildComposeFileFlags();
 
-    const plan = await buildRestartCommand(type, customList, files);
+    // Why: inside the panel container the repo is the /repo-root bind mount, so relative bind
+    // sources in docker-compose.yml would resolve to a host path the daemon does not have. Compose
+    // has to be told the host repository directory instead. Resolved once per restart and threaded
+    // through the planner like files/mode. On the host the resolution is null and the command is
+    // left as before; when it cannot be determined we refuse rather than compose against a guess.
+    const location = await resolveHostComposeLocation();
+    if (!location.ok) {
+      return { success: false, error: location.error };
+    }
+
+    const plan = await buildRestartCommand(type, customList, files, (await readDeploymentModeSetting()).mode, location.location);
     if (plan.skip) return { success: true, message: plan.message };
 
     await logToDiscord('Service Restart', `Admin triggered restart: **${type}** ${customList ? `(${customList.join(', ')})` : ''}`, 16753920, true);
 
     const { stdout, stderr } = await execPromise(plan.command, { cwd: rootDir, timeout: 120000 });
 
-    // Check if command actually succeeded
     if (stderr && stderr.includes('error')) {
       return { success: false, error: stderr };
     }
 
+    await recordAudit({
+      verb: 'service:restart',
+      entity: 'service',
+      afterValues: { type, customList: customList ?? null },
+      result: 'success',
+    });
     return { success: true, message: `Services (${type}) restarted.`, output: stdout };
   } catch (error) {
     console.error('Restart error:', error);
@@ -90,86 +126,60 @@ export async function restartServices(type: 'all' | 'core' | 'admin' | 'worker' 
   }
 }
 
-/** @deprecated Use deployContest() instead for async, non-blocking deploys. */
-export async function saveAndRestartContest(contestId: number) {
-  await ensurePermission('all');
-  try {
-    const rootDir = getRepoRoot();
-    const { writeActiveContestId } = await import('./env');
-    const result = await writeActiveContestId(contestId);
-    if (!result.success) return { success: false, error: 'Failed to update contest env file' };
-
-    const cmd = `docker compose -f docker-compose.contest.yml up -d --build --force-recreate`;
-
-    await logToDiscord('Contest Restart', `Admin activated contest ID **${contestId}** and restarted contest stack.`, 16753920, true);
-
-    const { stdout, stderr } = await execPromise(cmd, { cwd: rootDir, timeout: 120000 });
-
-    if (stderr && stderr.includes('error')) {
-      return { success: false, error: stderr };
-    }
-
-    return { success: true, message: `Contest ${contestId} activated and stack restarted.`, output: stdout };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
-  }
-}
-
-export async function deployContest(contestId: number): Promise<DeployContestResult> {
-  await ensurePermission('all');
-  return runDeployContest(contestId);
-}
-
-export async function getDeployStatus(operationId: string): Promise<DeployStatusResult> {
-  await ensurePermission('all');
-  return fetchDeployStatus(operationId);
-}
-
-export async function triggerManualBackup() {
-    await ensurePermission('all');
-    try {
-        const rootDir = getRepoRoot();
-        await logToDiscord('Manual Backup', 'Admin triggered a manual submissions backup.', 3447003);
-        const cmd = 'docker exec -d cms-monitor bash /usr/local/bin/cms-backup.sh';
-        await execPromise(cmd, { cwd: rootDir });
-        return { success: true, message: 'Backup process started in background.' };
-    } catch (error) {
-        return { success: false, error: (error as Error).message };
-    }
-}
-
 export async function getServiceStatus() {
-    await ensurePermission('all');
+    await ensurePermission('service:read');
+    await ensurePermission('service:list');
     try {
         const { stdout } = await execPromise('docker ps -a --format "{{json .}}"');
-        if (!stdout.trim()) return { status: 'down' as const, running: 0, total: 0 };
-
-        const lines = stdout.trim().split('\n');
-        let running = 0;
-        let total = 0;
-
-        for (const line of lines) {
-            const parsed = JSON.parse(line);
-            const name = parsed.Names || '';
-            if (name.startsWith('cms-') || name.includes('cms')) {
-                total++;
-                if (parsed.State === 'running') running++;
-            }
-        }
-
-        const status = total === 0 ? 'down' as const
-            : running === total ? 'ok' as const
-            : running === 0 ? 'down' as const
-            : 'degraded' as const;
-
-        return { status, running, total };
-    } catch {
+        const summary = summariseCmsContainers(stdout);
+        // Why counts and not names: the row answers "who looked at the stack's health", and the
+        // container list it would otherwise carry is what the caller is about to see anyway.
+        await recordAudit({
+            verb: 'service:view',
+            entity: 'service',
+            afterValues: { status: summary.status, running: summary.running, total: summary.total },
+            result: 'success',
+        });
+        return summary;
+    } catch (error) {
+        await recordAudit({
+            verb: 'service:view',
+            entity: 'service',
+            afterValues: { error: error instanceof Error ? error.name : 'UnknownError' },
+            result: 'failure',
+        });
         return { status: 'down' as const, running: 0, total: 0 };
     }
 }
 
+type ServiceStatusSummary = { status: 'ok' | 'degraded' | 'down'; running: number; total: number };
+
+function summariseCmsContainers(stdout: string): ServiceStatusSummary {
+    if (!stdout.trim()) return { status: 'down', running: 0, total: 0 };
+
+    const lines = stdout.trim().split('\n');
+    let running = 0;
+    let total = 0;
+
+    for (const line of lines) {
+        const parsed = JSON.parse(line);
+        const name = parsed.Names || '';
+        if (name.startsWith('cms-') || name.includes('cms')) {
+            total++;
+            if (parsed.State === 'running') running++;
+        }
+    }
+
+    const status = total === 0 ? 'down'
+        : running === total ? 'ok'
+        : running === 0 ? 'down'
+        : 'degraded';
+
+    return { status, running, total };
+}
+
 export async function updateServer() {
-    await ensurePermission('all');
+    await ensurePermission('service:deploy');
     try {
         const rootDir = getRepoRoot();
         await logToDiscord('Server Update', 'Admin triggered a server update.', 16753920, true);
@@ -177,6 +187,12 @@ export async function updateServer() {
         const cmd = `nohup ${path.join(rootDir, 'scripts/__update-server.sh')} > ${path.join(rootDir, 'update.log')} 2>&1 &`;
         await execPromise(cmd);
 
+        await recordAudit({
+          verb: 'service:deploy',
+          entity: 'service',
+          afterValues: { action: 'updateServer' },
+          result: 'success',
+        });
         return { success: true, message: 'Server update started in background. Check logs or wait a few minutes.' };
     } catch (error) {
         return { success: false, error: (error as Error).message };

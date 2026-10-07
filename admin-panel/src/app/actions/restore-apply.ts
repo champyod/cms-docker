@@ -37,7 +37,7 @@ const PRE_PROMOTE_BACKUP_POLL_MS = 10_000;
 
 /** Read-only phase: the report whose `reportId` the operator must confirm with before `promotePreview` writes anything. */
 export async function validatePromote(previewId: string, strategies: ApplyStrategies): Promise<ValidateReport> {
-  await ensurePermission('all');
+  await ensurePermission('backup:restore');
   await sweepStaleProgress();
   const generatedAtMs = Date.now();
   const staging = isPreviewId(previewId) ? stagingSchemaName(previewId) : 'restore_staging_00000000';
@@ -162,7 +162,7 @@ function preconditionError(identity: PromoteIdentity, strategiesValid: boolean, 
  * tables set to `skip` resumes exactly the pending ones.
  */
 export async function promotePreview(previewId: string, strategies: ApplyStrategies, confirmToken: string): Promise<PromoteReport> {
-  await ensurePermission('all');
+  await ensurePermission('backup:restore');
   const staging = isPreviewId(previewId) ? stagingSchemaName(previewId) : 'restore_staging_00000000';
   const identity: PromoteIdentity = { previewId, reportId: typeof confirmToken === 'string' ? confirmToken : '', staging };
   const { ok, resolved, unknown } = normalizeStrategies(strategies ?? {});
@@ -245,7 +245,7 @@ async function finish(run: PromoteRun, backupEntry: string, applied: ApplyOutcom
 
 /** A report id this preview was not issued is refused rather than answered, so one run's figure cannot be shown against another's. */
 export async function getPromoteStatus(previewId: string, reportId: string): Promise<PromoteStatus> {
-  await ensurePermission('all');
+  await ensurePermission('backup:restore');
   if (!isPreviewId(previewId) || parseReportId(stagingSchemaName(previewId), reportId) === null) return WAITING_PROGRESS;
   return readPromoteStatus(reportId);
 }

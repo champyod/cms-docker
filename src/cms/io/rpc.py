@@ -22,9 +22,12 @@
 
 from collections.abc import Callable
 import functools
+import hmac
 import json
 import logging
+import random
 import socket
+import time
 import traceback
 from typing import Any
 import typing
@@ -44,6 +47,33 @@ if typing.TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+
+def _get_rpc_secret() -> str | None:
+    """Return configured RPC secret (or None if unset)."""
+    try:
+        from cms import config as cms_config
+        secret = getattr(getattr(cms_config, "rpc", None), "secret", None)
+        if isinstance(secret, str) and secret:
+            return secret
+    except Exception:
+        pass
+    return None
+
+
+def _check_rpc_secret(presented: object, configured: str | None) -> bool:
+    """Verify presented secret against configured one.
+
+    Fail closed: missing configured or missing/wrong presented -> False.
+    Uses hmac.compare_digest to avoid timing leaks.
+
+    """
+    # WHY: fail closed — unauthenticated RPC must never execute methods.
+    if not configured:
+        return False
+    if not isinstance(presented, str) or not presented:
+        return False
+    return hmac.compare_digest(presented, configured)
 
 
 class RPCError(Exception):
@@ -411,6 +441,52 @@ class RemoteServiceServer(RemoteServiceBase):
 
         method_name = request["__method"]
 
+        # WHY: authenticate before dispatching; fail closed and never log secret.
+        configured_secret = _get_rpc_secret()
+        presented_secret = request.get("__secret")
+        if not _check_rpc_secret(presented_secret, configured_secret):
+            logger.error(
+                "RPC authentication failed for service %s method %s from %s",
+                getattr(self.local_service, "name", "?"),
+                method_name, self._repr_remote())
+            response["__error"] = "RPC authentication failed."
+            # Do not execute method — send error response only.
+            # Encode and send below without method dispatch.
+            try:
+                data = json.dumps(response).encode('utf-8')
+            except (TypeError, ValueError):
+                logger.warning("JSON encoding failed.", exc_info=True)
+                return
+            try:
+                self._write(data)
+            except OSError:
+                return
+            return
+
+        # Gate backdoor RPC behind explicit opt-in even when secret is valid.
+        if method_name in ("start_backdoor", "stop_backdoor"):
+            try:
+                from cms import config as cms_config
+                allow = bool(getattr(getattr(cms_config, "rpc", None),
+                                     "allow_backdoor", False))
+            except Exception:
+                allow = False
+            if not allow:
+                logger.error(
+                    "RPC backdoor method %s rejected (not enabled) from %s",
+                    method_name, self._repr_remote())
+                response["__error"] = "Backdoor RPC is disabled."
+                try:
+                    data = json.dumps(response).encode('utf-8')
+                except (TypeError, ValueError):
+                    logger.warning("JSON encoding failed.", exc_info=True)
+                    return
+                try:
+                    self._write(data)
+                except OSError:
+                    return
+                return
+
         if not hasattr(self.local_service, method_name):
             response["__error"] = "Method %s doesn't exist." % method_name
         else:
@@ -455,6 +531,14 @@ class RemoteServiceClient(RemoteServiceBase):
     the reader loop should be started by calling run.
 
     """
+    # Reconnect policy: exponential backoff from auto_retry up to this cap.
+    RETRY_MAX_INTERVAL = 30.0
+    # Breaker: after this many consecutive capped waits, probe at cooldown pace.
+    BREAKER_CAPPED_WAITS = 3
+    BREAKER_COOLDOWN = 120.0
+    # Log every failure while fresh, then at most this often per target.
+    RETRY_LOG_INTERVAL = 60.0
+
     def __init__(
         self, remote_service_coord: ServiceCoord, auto_retry: float | None = None
     ):
@@ -463,8 +547,8 @@ class RemoteServiceClient(RemoteServiceBase):
         remote_service_coord: the coordinates (i.e. name
             and shard) of the service to which to send RPC requests.
         auto_retry: if a number is given then it's the
-            interval (in seconds) between attempts to reconnect to the
-            remote service in case the connection is lost; if not given
+            base interval (in seconds) for reconnect attempts with
+            exponential backoff up to RETRY_MAX_INTERVAL; if not given
             no automatic reconnection attempts will occur.
 
         raise (KeyError): if the coordinates are not specified in the
@@ -523,15 +607,47 @@ class RemoteServiceClient(RemoteServiceBase):
                 self.initialize(sock, self.remote_service_coord)
                 break
 
+    def _retry_delay(self, failures: int) -> float:
+        """Backoff for the n-th consecutive failure, capped with jitter."""
+        base = self.auto_retry if self.auto_retry else 0.0
+        delay = min(self.RETRY_MAX_INTERVAL, base * 2.0 ** max(failures - 1, 0))
+        return min(self.RETRY_MAX_INTERVAL, delay + random.uniform(0.0, base))
+
+    def _log_retry(self, failures: int, delay: float, now: float) -> float:
+        """Throttled reconnect notice; returns the last-log timestamp."""
+        last = getattr(self, "_last_retry_log", 0.0)
+        if failures <= 3 or now - last >= self.RETRY_LOG_INTERVAL:
+            logger.warning(
+                "Couldn't reach %s (%d consecutive failures, "
+                "next try in %.0fs).",
+                self._repr_remote(), failures, delay)
+            return now
+        return last
+
     def _run(self):
         """Maintain the connection up, if required.
 
         """
+        failures = 0
+        capped_waits = 0
         while True:
             self._connect()
-            while not self.connected and self.auto_retry is not None:
-                gevent.sleep(self.auto_retry)
-                self._connect()
+            if not self.connected and self.auto_retry is not None:
+                failures += 1
+                delay = self._retry_delay(failures)
+                if delay >= self.RETRY_MAX_INTERVAL:
+                    capped_waits += 1
+                else:
+                    capped_waits = 0
+                # Breaker: prolonged outage, probe at cooldown pace instead.
+                if capped_waits > self.BREAKER_CAPPED_WAITS:
+                    delay = self.BREAKER_COOLDOWN
+                now = time.monotonic()
+                self._last_retry_log = self._log_retry(failures, delay, now)
+                gevent.sleep(delay)
+                continue
+            failures = 0
+            capped_waits = 0
             if self.connected:
                 self.run()
             if self.auto_retry is None:
@@ -640,9 +756,13 @@ class RemoteServiceClient(RemoteServiceBase):
         id_ = uuid.uuid4().hex
 
         # Build the request.
-        request = {"__id": id_,
+        # WHY: include RPC secret so receiver can authenticate sender.
+        secret = _get_rpc_secret()
+        request: dict[str, object] = {"__id": id_,
                    "__method": method,
                    "__data": data}
+        if secret:
+            request["__secret"] = secret
 
         result = gevent.event.AsyncResult()
 

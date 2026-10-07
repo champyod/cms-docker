@@ -50,7 +50,7 @@ Deploy stacks in this order:
    POSTGRES_USER=cmsuser
    POSTGRES_PASSWORD=CHANGE_THIS_PASSWORD
    POSTGRES_HOST_AUTH_METHOD=md5
-   CMS_CONFIG=/usr/local/etc/cms.conf
+   CMS_CONFIG=/usr/local/etc/cms.toml
    LOG_SERVICE_SHARD=0
    RESOURCE_SERVICE_SHARD=0
    SCORING_SERVICE_SHARD=0
@@ -93,19 +93,19 @@ Deploy stacks in this order:
 2. **Environment Variables**
 
    ```
-   CMS_CONFIG=/usr/local/etc/cms.conf
-   CMS_RANKING_CONFIG=/usr/local/etc/cms.ranking.conf
+   CMS_CONFIG=/usr/local/etc/cms.toml
+   CMS_RANKING_CONFIG=/usr/local/etc/cms_ranking.toml
    ADMIN_LISTEN_ADDRESS=0.0.0.0
    ADMIN_LISTEN_PORT=8889
    ADMIN_PORT_EXTERNAL=8889
    ADMIN_DOMAIN=admin.cms.local
    ADMIN_COOKIE_DURATION=36000
+   ADMIN_NEXT_PORT_EXTERNAL=8891
+   ADMIN_NEXT_DOMAIN=admin-next.cms.local
    RANKING_LISTEN_ADDRESS=0.0.0.0
    RANKING_LISTEN_PORT=8890
    RANKING_PORT_EXTERNAL=8890
    RANKING_DOMAIN=ranking.cms.local
-   PRINTING_SERVICE_SHARD=0
-   PRINTING_ENABLED=false
    ```
 
 3. **Deploy Stack**
@@ -116,7 +116,8 @@ Deploy stacks in this order:
    - Follow prompts to set password
 
 5. **Access Admin Interface**
-   - Open browser: `http://your-server-ip:8889`
+   - Modern Admin Panel (Next.js): `http://your-server-ip:8891` — manage everything here
+   - Classic Admin (legacy Python): `http://your-server-ip:8889`
    - Login with created credentials
 
 ---
@@ -144,7 +145,7 @@ Deploy stacks in this order:
 3. **Environment Variables**
 
    ```
-   CMS_CONFIG=/usr/local/etc/cms.conf
+   CMS_CONFIG=/usr/local/etc/cms.toml
    CONTEST_ID=1
    CONTEST_WEB_SERVER_SHARD=0
    CONTEST_LISTEN_ADDRESS=0.0.0.0
@@ -156,7 +157,7 @@ Deploy stacks in this order:
    MAX_SUBMISSION_LENGTH=100000
    MAX_INPUT_LENGTH=5000000
    SUBMIT_LOCAL_COPY=true
-   NUM_PROXIES_USED=0
+   NUM_PROXIES_USED=1
    ENABLE_TLS=false
    CONTEST_WEB_CPU_LIMIT=2
    CONTEST_WEB_MEMORY_LIMIT=2G
@@ -193,7 +194,7 @@ Repeat the process for each contest:
 
    ```
    CORE_SERVICES_HOST=cms-log-service
-   CMS_CONFIG=/usr/local/etc/cms.conf
+   CMS_CONFIG=/usr/local/etc/cms.toml
    WORKER_SHARD=0
    WORKER_NAME=worker-0
    KEEP_SANDBOX=false
@@ -246,24 +247,16 @@ Continue as needed.
      portainer/agent:latest
    ```
 
-3. **Use Auto-Connect Script**
-   
-   Download and run the worker connection script:
+3. **Register the Worker (on the main server)**
    ```bash
-   curl -fsSL http://YOUR-MAIN-SERVER/scripts/__worker_connect.sh | sudo bash
+   ./cms worker attach 10 WORKER-BOX-IP 26010
    ```
-   
-   Or manually:
-   ```bash
-   wget http://YOUR-MAIN-SERVER/scripts/__worker_connect.sh
-   chmod +x worker-connect.sh
-   sudo ./worker-connect.sh
-   ```
+   Writes registry-only rows and prints the worker-side setup block.
 
-4. **Follow Prompts**
-   - Enter your main CMS server IP
-   - Choose worker shard number (10, 11, 12... for remote workers)
-   - Let the script complete
+4. **Deploy on the Worker Machine**
+   - From this repository's checkout on the worker box, run the block
+     printed by `worker attach` (appends rows, then
+     `./cms config sync && ./cms worker deploy all`)
 
 ### Add Remote Environment to Portainer
 
@@ -302,12 +295,12 @@ Continue as needed.
 
 **Option 1: Via Console**
 1. Open console for any CMS container
-2. Edit: `nano /usr/local/etc/cms.conf`
+2. Edit: `nano /usr/local/etc/cms.toml`
 3. Save and restart services
 
 **Option 2: Via Volume Upload**
 1. Browse the volume containing configs
-2. Upload updated `cms.conf`
+2. Upload updated `cms.toml`
 3. Restart affected stacks
 
 ---
@@ -440,7 +433,7 @@ Use Nginx or Traefik for load balancing.
 
 1. **Verify Password**
    - Check env vars match in all stacks
-   - Update `cms.conf` if needed
+   - Update `cms.toml` if needed
 
 2. **Check Network**
    - All containers should be on `cms-network`
@@ -536,7 +529,7 @@ Use Nginx or Traefik for load balancing.
 ### Required Environment Variables
 
 **All Stacks:**
-- `CMS_CONFIG=/usr/local/etc/cms.conf`
+- `CMS_CONFIG=/usr/local/etc/cms.toml`
 
 **Core:**
 - `POSTGRES_PASSWORD` (change this!)
@@ -552,7 +545,8 @@ Use Nginx or Traefik for load balancing.
 
 ### Default Ports
 - Contest: 8888
-- Admin: 8889
+- Modern Admin Panel (Next.js): 8891
+- Classic Admin: 8889
 - Ranking: 8890
 - Database: 5432
 

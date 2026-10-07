@@ -263,9 +263,46 @@ class Contest(Base):
         CheckConstraint("min_user_test_interval > '0 seconds'"),
         nullable=True)
 
-    # Per-participation queue fairness penalty in seconds.
+    # Queue-time evaluation throttle policy (throttle family).
+    # Delay in seconds applied per pending submission of the same
+    # participation when scheduling evaluation operations. Read
+    # new-first; the legacy queue_fairness_penalty_seconds below stays
+    # one release as fallback.
+    evaluation_throttle_delay_s: int = Column(
+        Integer,
+        CheckConstraint("evaluation_throttle_delay_s >= 0"),
+        nullable=False,
+        default=0)
+
+    # Sliding window in seconds for the per-participation evaluation
+    # rate cap, with at most evaluation_throttle_max submissions inside
+    # the window. Consumed by the lane policy behind the final-open
+    # bypass; zero disables the cap.
+    evaluation_throttle_window_s: int = Column(
+        Integer,
+        CheckConstraint("evaluation_throttle_window_s >= 0"),
+        nullable=False,
+        default=0)
+    evaluation_throttle_max: int = Column(
+        Integer,
+        CheckConstraint("evaluation_throttle_max >= 0"),
+        nullable=False,
+        default=0)
+
+    # Manual final-round toggle. When true, the queue-time lane and
+    # throttle policy is bypassed for this contest.
+    evaluation_final_open: bool = Column(
+        Boolean,
+        nullable=False,
+        default=False)
+    evaluation_final_open_at: datetime | None = Column(
+        DateTime,
+        nullable=True)
+
+    # Per-participation queue fairness penalty in seconds (legacy).
     # Effective scheduling timestamp: submission_time + n * queue_fairness_penalty_seconds,
     # where n is the number of this participation's pending submissions.
+    # Fallback for evaluation_throttle_delay_s; kept one release.
     queue_fairness_penalty_seconds: int = Column(
         Integer,
         CheckConstraint("queue_fairness_penalty_seconds >= 0"),

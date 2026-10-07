@@ -1,13 +1,18 @@
 import { revalidatePath } from 'next/cache';
 import type { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { apiError, apiSuccess } from '@/lib/api-utils';
+import { apiError, apiSuccess, verifyApiPermission } from '@/lib/api-utils';
 import type { BatchActionRequest } from './credentialActions';
+import { recordAudit } from '@/lib/audit';
 
 const PROFILE_MODES = ['timezone', 'email-domain', 'clear-email'] as const;
 const EMAIL_DOMAIN_PATTERN = /^[a-z0-9.-]+\.[a-z]{2,}$/i;
 
 export async function handleProfile({ body, userIds }: BatchActionRequest): Promise<NextResponse> {
+  // WHY user:update: every mode here writes columns on users.
+  const { authorized, response } = await verifyApiPermission('user:update');
+  if (!authorized) return response;
+
   if (userIds.length === 0) {
     return apiError({ message: 'userIds is required', status: 400 });
   }
@@ -39,7 +44,13 @@ async function applyTimezone(body: Record<string, unknown>, userIds: number[]) {
     data: { timezone },
   });
 
-  revalidatePath('/[locale]/users', 'page');
+  await recordAudit({
+    verb: 'user:update',
+    entity: 'user',
+    afterValues: { action: 'batch-profile-timezone', timezone, userIds, updatedCount: result.count },
+    result: 'success',
+  });
+  revalidatePath('/[locale]/people/users', 'page');
   return apiSuccess({ success: true, updatedCount: result.count });
 }
 
@@ -49,7 +60,13 @@ async function applyClearEmail(userIds: number[]) {
     data: { email: null },
   });
 
-  revalidatePath('/[locale]/users', 'page');
+  await recordAudit({
+    verb: 'user:update',
+    entity: 'user',
+    afterValues: { action: 'batch-profile-clear-email', userIds, updatedCount: result.count },
+    result: 'success',
+  });
+  revalidatePath('/[locale]/people/users', 'page');
   return apiSuccess({ success: true, updatedCount: result.count });
 }
 
@@ -74,6 +91,12 @@ async function applyEmailDomain(body: Record<string, unknown>, userIds: number[]
     updatedCount += 1;
   }
 
-  revalidatePath('/[locale]/users', 'page');
+  await recordAudit({
+    verb: 'user:update',
+    entity: 'user',
+    afterValues: { action: 'batch-profile-email-domain', emailDomain, userIds, updatedCount },
+    result: 'success',
+  });
+  revalidatePath('/[locale]/people/users', 'page');
   return apiSuccess({ success: true, updatedCount });
 }

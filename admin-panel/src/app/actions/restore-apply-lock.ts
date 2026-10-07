@@ -7,12 +7,18 @@
  * ask for this key, so what the lock stops is a second operator's drop, reload
  * and merge interleaving with this one. The wait is bounded by a statement
  * timeout, so a promote that cannot have the lock refuses instead of hanging.
+ *
+ * Why the lock carries `backup:restore` itself: this directory is scanned as a
+ * set of entry points, so the lock is read as one that can be taken on its
+ * own. The promote gates the same key, so the repeat check costs one cached
+ * session read and never widens or narrows what the caller may already do.
  */
 
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { ensurePermission } from '@/lib/permissions';
 import type { LiveDatabaseEnv } from './restore-apply-measure';
 import { describeFailure } from './restore-preview-run';
 
@@ -54,6 +60,7 @@ export function advisoryKeyFor(staging: string): readonly [number, number] {
  * behind; a grant hands back a release that ends that same session.
  */
 export async function acquireStagingLock(env: LiveDatabaseEnv, staging: string, session: LockSessionRunner = dockerLockSession(env)): Promise<StagingLock> {
+  await ensurePermission('backup:restore');
   const [first, second] = advisoryKeyFor(staging);
   const request = [`SET statement_timeout = ${STAGING_LOCK_WAIT_MS}`, `SELECT '${LOCK_HELD_MARKER}' FROM pg_advisory_lock(${first}, ${second})`].join(';\n');
   try {

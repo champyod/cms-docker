@@ -2,18 +2,30 @@ import * as React from 'react';
 
 import { cn } from '@/lib/utils';
 
-function Card({ className, ...props }: React.ComponentProps<'div'>) {
-  return (
-    <div
-      data-slot="card"
-      className={cn(
-        'bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm',
-        className
-      )}
-      {...props}
-    />
-  );
-}
+// Why the surface lives here: this is the only place a card's base look is
+// written, so a core wrapper adds product policy on top instead of restating it.
+// The border is transparent at rest so the surface is defined by its fill, and
+// only gains a visible edge when the reader turns on high contrast.
+const CARD_SURFACE = 'rounded-xl border border-transparent bg-card text-card-foreground shadow-sm high-contrast:border-border';
+
+const Card = React.forwardRef<HTMLDivElement, React.ComponentProps<'div'>>(
+  ({ className, children, ...props }, ref) => {
+    const isEmpty = children === null || children === undefined;
+    if (isEmpty) {
+      return (
+        <div ref={ref} data-slot="card" className={cn(CARD_SURFACE, 'p-6', className)} {...props}>
+          <div className="text-sm text-muted-foreground text-center">No content available</div>
+        </div>
+      );
+    }
+    return (
+      <div ref={ref} data-slot="card" className={cn(CARD_SURFACE, className)} {...props}>
+        {children}
+      </div>
+    );
+  }
+);
+Card.displayName = 'Card';
 
 function CardHeader({ className, ...props }: React.ComponentProps<'div'>) {
   return (

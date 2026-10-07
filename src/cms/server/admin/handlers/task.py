@@ -47,8 +47,8 @@ from .base import BaseHandler, SimpleHandler, require_permission
 logger = logging.getLogger(__name__)
 
 
-class AddTaskHandler(SimpleHandler("add_task.html", permission_all=True)):
-    @require_permission(BaseHandler.PERMISSION_ALL)
+class AddTaskHandler(SimpleHandler("add_task.html", permission="task:create")):
+    @require_permission("task:create")
     def post(self):
         fallback_page = self.url("tasks", "add")
 
@@ -121,7 +121,7 @@ class TaskHandler(BaseHandler):
                 .order_by(Submission.timestamp.desc()).all()
         self.render("task.html", **self.r_params)
 
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("task:update")
     def post(self, task_id):
         task = self.safe_get_item(Task, task_id)
 
@@ -227,7 +227,7 @@ class AddStatementHandler(BaseHandler):
     """Add a statement to a task.
 
     """
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("statement:create")
     def get(self, task_id):
         task = self.safe_get_item(Task, task_id)
         self.contest = task.contest
@@ -236,7 +236,7 @@ class AddStatementHandler(BaseHandler):
         self.r_params["task"] = task
         self.render("add_statement.html", **self.r_params)
 
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("statement:create")
     def post(self, task_id):
         fallback_page = self.url("task", task_id, "statements", "add")
 
@@ -295,7 +295,7 @@ class StatementHandler(BaseHandler):
     """
     # No page for single statements.
 
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("statement:delete")
     def delete(self, task_id, statement_id):
         statement = self.safe_get_item(Statement, statement_id)
         task = self.safe_get_item(Task, task_id)
@@ -315,7 +315,7 @@ class AddAttachmentHandler(BaseHandler):
     """Add an attachment to a task.
 
     """
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("attachment:create")
     def get(self, task_id):
         task = self.safe_get_item(Task, task_id)
         self.contest = task.contest
@@ -324,7 +324,7 @@ class AddAttachmentHandler(BaseHandler):
         self.r_params["task"] = task
         self.render("add_attachment.html", **self.r_params)
 
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("attachment:create")
     def post(self, task_id):
         fallback_page = self.url("task", task_id, "attachments", "add")
 
@@ -367,7 +367,7 @@ class AttachmentHandler(BaseHandler):
     """
     # No page for single attachments.
 
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("attachment:delete")
     def delete(self, task_id, attachment_id):
         attachment = self.safe_get_item(Attachment, attachment_id)
         task = self.safe_get_item(Task, task_id)
@@ -393,7 +393,7 @@ class AddDatasetHandler(BaseHandler):
     If referred by POST, this handler will create the dataset.
 
     """
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("dataset:create")
     def get(self, task_id):
         task = self.safe_get_item(Task, task_id)
         self.contest = task.contest
@@ -409,7 +409,7 @@ class AddDatasetHandler(BaseHandler):
         self.r_params["default_description"] = description
         self.render("add_dataset.html", **self.r_params)
 
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("dataset:create")
     def post(self, task_id):
         fallback_page = self.url("task", task_id, "add_dataset")
 
@@ -489,7 +489,7 @@ class RemoveTaskHandler(BaseHandler):
 
     """
 
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("task:delete")
     def get(self, task_id):
         task = self.safe_get_item(Task, task_id)
         submission_query = self.sql_session.query(Submission)\
@@ -499,7 +499,7 @@ class RemoveTaskHandler(BaseHandler):
         self.r_params["task"] = task
         self.render("task_remove.html", **self.r_params)
 
-    @require_permission(BaseHandler.PERMISSION_ALL)
+    @require_permission("task:delete")
     def delete(self, task_id):
         task = self.safe_get_item(Task, task_id)
         contest_id = task.contest_id

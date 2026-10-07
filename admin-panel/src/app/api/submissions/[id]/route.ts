@@ -1,6 +1,7 @@
 import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
+import { recordAudit } from '@/lib/audit';
 import {
   updateSubmissionComment,
   toggleSubmissionOfficial,
@@ -32,7 +33,7 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { authorized, response } = await verifyApiPermission('contests');
+  const { authorized, response } = await verifyApiPermission('submission:update');
   if (!authorized) return response;
 
   const id = parseInt((await params).id);
@@ -46,6 +47,14 @@ export async function PUT(
     return apiError({ message: result.error ?? 'Update failed', status });
   }
 
-  revalidatePath('/[locale]/submissions', 'page');
+  await recordAudit({
+    verb: 'submission:update',
+    entity: 'submission',
+    entityId: String(id),
+    afterValues: { action: (data as { action?: string }).action, submissionId: id },
+    result: 'success',
+  });
+  revalidatePath('/[locale]/evaluation/submissions', 'page');
+  revalidatePath('/[locale]/evaluation/submissions/[id]', 'page');
   return apiSuccess({ message: 'Submission updated successfully' });
 }

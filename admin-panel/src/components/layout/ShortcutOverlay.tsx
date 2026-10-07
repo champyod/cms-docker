@@ -1,17 +1,50 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { useMemo } from 'react';
+import { usePathname } from 'next/navigation';
 import { Dialog } from '@/components/core/Dialog';
-import { NAVIGATION_BINDINGS, useShortcuts } from '@/hooks/useShortcuts';
+import { shellItemLabel } from '@/components/navigation/shell-nav';
+import { useDictionary } from '@/hooks/useDictionary';
+import { bindingsForPermissions } from '@/hooks/shortcut-chord';
+import { extractLocale, useShortcuts } from '@/hooks/useShortcuts';
+import { buildRoute } from '@/lib/navigation/routes';
 
 export interface ShortcutOverlayProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
+/** A permitted chord destination, resolved for display. */
+export interface ShortcutRouteBinding {
+  readonly key: string;
+  readonly label: string;
+  readonly href: string;
+}
+
+// Why the join lives here and not in the hook: the chord layer knows only the key
+// and the frozen route id, because a module under `hooks/` must not reach into
+// `components/` to resolve a label. This is the one component that renders a
+// chord list, so this is the one place the presentation needs resolving.
+function useShortcutBindings(
+  permissionKeys: readonly string[],
+): readonly ShortcutRouteBinding[] {
+  const dictionary = useDictionary();
+  const locale = extractLocale(usePathname() ?? '');
+  return useMemo(
+    () =>
+      bindingsForPermissions(permissionKeys).map((entry) => ({
+        key: entry.key,
+        label: shellItemLabel(dictionary, entry.routeId),
+        href: buildRoute(locale, entry.routeId),
+      })),
+    [permissionKeys, locale, dictionary],
+  );
+}
+
 function Kbd({ children }: { children: ReactNode }) {
   return (
-    <kbd className="inline-flex h-5 min-w-5 select-none items-center justify-center rounded border border-border bg-muted px-1 font-mono text-[10px] font-semibold text-muted-foreground">
+    <kbd className="inline-flex h-5 min-w-5 select-none items-center justify-center rounded border border-border bg-muted px-1 font-mono text-xs font-semibold text-muted-foreground">
       {children}
     </kbd>
   );
@@ -39,7 +72,7 @@ function ShortcutGroup({ title, children }: { title: string; children: ReactNode
   );
 }
 
-export function ShortcutOverlay({ open, onOpenChange }: ShortcutOverlayProps) {
+export function ShortcutOverlay({ open, onOpenChange, bindings = [] }: ShortcutOverlayProps & { bindings?: readonly ShortcutRouteBinding[] }) {
   return (
     <Dialog
       open={open}
@@ -48,7 +81,6 @@ export function ShortcutOverlay({ open, onOpenChange }: ShortcutOverlayProps) {
       description="Press ? anywhere to toggle this list."
       className="sm:max-w-xl"
     >
-      {/* General + Lists */}
       <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
         <ShortcutGroup title="General">
           <ShortcutRow keys={['?']} label="Toggle shortcut list" />
@@ -61,11 +93,9 @@ export function ShortcutOverlay({ open, onOpenChange }: ShortcutOverlayProps) {
           <ShortcutRow keys={['Enter']} label="Open selected row" />
         </ShortcutGroup>
       </div>
-
-      {/* Go to */}
       <ShortcutGroup title="Go to — press g, then key">
         <div className="grid gap-x-8 sm:grid-cols-2">
-          {NAVIGATION_BINDINGS.map((binding) => (
+          {bindings.map((binding) => (
             <ShortcutRow
               key={binding.key}
               keys={['g', binding.key.toUpperCase()]}
@@ -78,11 +108,13 @@ export function ShortcutOverlay({ open, onOpenChange }: ShortcutOverlayProps) {
   );
 }
 
-export function ShortcutLayer() {
-  const { isOverlayOpen, closeOverlay } = useShortcuts();
+export function ShortcutLayer({ permissionKeys }: { permissionKeys: readonly string[] }) {
+  const { isOverlayOpen, closeOverlay } = useShortcuts(permissionKeys);
+  const bindings = useShortcutBindings(permissionKeys);
   return (
     <ShortcutOverlay
       open={isOverlayOpen}
+      bindings={bindings}
       onOpenChange={(next) => {
         if (!next) closeOverlay();
       }}

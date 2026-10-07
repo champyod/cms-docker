@@ -91,7 +91,7 @@ function WorkersPanelInner({
     const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
     return (
         <Stack gap={6}>
-            <Stack direction="row" align="center" gap={2} className="px-2">
+            <Stack direction="row" align="center" gap={2} className="px-2 flex-wrap">
                 <Text variant="h2">Worker Nodes</Text>
                 {workersDirty && (
                     <Button
@@ -128,10 +128,10 @@ function WorkersPanelInner({
                         const setExpanded = (v: boolean) => setExpandedIndex(v ? index : null);
                         return (
                             <Stack key={index} gap={1} data-shortcut-row className="bg-muted/30 p-3 rounded-lg border border-border relative group">
-                                <Stack direction="row" align="center" justify="between" className="mb-1">
-                                    <Stack direction="row" align="center" gap={1.5}>
+                                <Stack direction="row" align="center" justify="between" className="mb-1 flex-wrap gap-y-2">
+                                    <Stack direction="row" align="center" gap={1.5} className="flex-wrap gap-x-1.5 gap-y-1">
                                         <div className={`w-2 h-2 rounded-full ${dot.cls}`} />
-                                        <Text variant="label" className="text-[10px] uppercase font-bold tracking-widest" color={dot.tone}>
+                                        <Text variant="label" className="text-xs uppercase font-bold tracking-widest" color={dot.tone}>
                                             {dot.label}
                                         </Text>
                                         {detail && (
@@ -147,7 +147,7 @@ function WorkersPanelInner({
                                     {canManage && (
                                         <button
                                             onClick={() => onRemoveWorker(index)}
-                                            className="p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-colors opacity-0 group-hover:opacity-100"
+                                            className="flex size-11 shrink-0 items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-colors"
                                             aria-label={`Remove worker ${worker.host}`}
                                         >
                                             <Trash2 className="w-3.5 h-3.5" />
@@ -180,7 +180,7 @@ function WorkersPanelInner({
 
                                 {detail && (
                                     <>
-                                        <Stack direction="row" align="center" gap={2} className="mt-2 flex-wrap text-[11px] text-muted-foreground">
+                                        <Stack direction="row" align="center" gap={2} className="mt-2 flex-wrap text-xs text-muted-foreground">
                                             <span>state: {detail.state}</span>
                                             {detail.health !== 'none' && <span>health: {detail.health}</span>}
                                             {detail.uptime && <span>up {detail.uptime}</span>}
@@ -199,14 +199,14 @@ function WorkersPanelInner({
                                             </button>
                                         </Stack>
                                         {expanded && detail.lastLog && (
-                                            <pre className="mt-1 p-2 bg-background/80 rounded text-[11px] text-muted-foreground overflow-x-auto whitespace-pre-wrap">
+                                            <pre className="mt-1 p-2 bg-background/80 rounded text-xs text-muted-foreground overflow-x-auto whitespace-pre-wrap">
                                                 {detail.lastLog}
                                             </pre>
                                         )}
                                     </>
                                 )}
                                 {!detail && !forbidden && (
-                                    <Text variant="label" color="text-muted-foreground" className="text-[11px] mt-1">
+                                    <Text variant="label" color="text-muted-foreground" className="text-xs mt-1">
                                         No telemetry yet — is this worker deployed?
                                     </Text>
                                 )}

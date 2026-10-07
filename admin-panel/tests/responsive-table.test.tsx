@@ -1,0 +1,125 @@
+// @vitest-environment happy-dom
+import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render } from '@testing-library/react';
+import { ResponsiveTable, type ResponsiveColumn } from '@/components/core/ResponsiveTable';
+
+interface Person {
+  id: number;
+  name: string;
+  email: string;
+}
+
+const ROWS: Person[] = [
+  { id: 1, name: 'Ada Lovelace', email: 'ada@example.com' },
+];
+
+const COLUMNS: ResponsiveColumn<Person>[] = [
+  { key: 'name', header: 'Name', render: (row) => row.name },
+  { key: 'email', header: 'Email', mobileLabel: 'E-mail', hideOnMobile: true, render: (row) => row.email },
+];
+
+function baseProps() {
+  return {
+    columns: COLUMNS,
+    rows: ROWS,
+    getRowKey: (row: Person): number => row.id,
+  };
+}
+
+describe('ResponsiveTable', () => {
+  it('renders desktop headers and cells from a single column definition', () => {
+    const { getByRole, getAllByRole } = render(<ResponsiveTable {...baseProps()} />);
+    expect(getByRole('table')).toBeTruthy();
+    expect(getAllByRole('columnheader').map((cell: Element) => cell.textContent)).toEqual(['Name', 'Email']);
+    expect(getByRole('table').textContent).toContain('Ada Lovelace');
+  });
+
+  it('renders mobile cards with labels and honours hideOnMobile', () => {
+    const { container } = render(<ResponsiveTable {...baseProps()} />);
+    const mobile = container.querySelector('.space-y-3.md\\:hidden');
+    expect(mobile?.textContent).toContain('Name');
+    expect(mobile?.textContent).toContain('Ada Lovelace');
+    expect(mobile?.textContent).not.toContain('ada@example.com');
+  });
+
+  it('shares the row actions slot between desktop and mobile layouts', () => {
+    const { container, getAllByRole } = render(
+      <ResponsiveTable {...baseProps()} renderRowActions={(row) => <button>Edit {row.id}</button>} />
+    );
+    expect(getAllByRole('button', { name: 'Edit 1' })).toHaveLength(2);
+    expect(container.querySelector('.space-y-3.md\\:hidden')?.textContent).toContain('Edit 1');
+  });
+
+  it('spaces the action cluster identically in both layouts', () => {
+    // Why pinned: the cluster wrapper used to be written out twice, so a change
+    // to one layout's spacing silently left the other at the old value.
+    const { container } = render(
+      <ResponsiveTable {...baseProps()} renderRowActions={(row) => <button>Edit {row.id}</button>} />
+    );
+    const clusters = Array.from(container.querySelectorAll('div')).filter(
+      (node) => node.className === 'flex items-center justify-end gap-1 pt-2' || node.className === 'flex items-center justify-end gap-1'
+    );
+    expect(clusters).toHaveLength(2);
+  });
+
+  it('passes a custom empty state through when rows are empty', () => {
+    const { getByText } = render(
+      <ResponsiveTable {...baseProps()} rows={[]} emptyState={<p>No people yet</p>} />
+    );
+    expect(getByText('No people yet')).toBeTruthy();
+  });
+
+  it('spreads getRowProps onto desktop rows only, keeping the mobile card clickable', () => {
+    const onClick = vi.fn();
+    const { container } = render(
+      <ResponsiveTable
+        {...baseProps()}
+        getRowProps={(row) => ({ 'data-shortcut-row': row.id, className: 'cursor-pointer', onClick })}
+      />
+    );
+    const desktopRow = container.querySelector('tbody tr');
+    expect(desktopRow?.getAttribute('data-shortcut-row')).toBe('1');
+    const mobileCard = container.querySelector('.space-y-3.md\\:hidden > div');
+    // Why: the mobile card sits in a `md:hidden` container that stays in the
+    // DOM, so a second marker makes j/k walk 2N elements and lets Enter fire an
+    // action nobody can see. The marker belongs to the desktop row alone.
+    expect(mobileCard?.hasAttribute('data-shortcut-row')).toBe(false);
+    expect(mobileCard?.className).toContain('cursor-pointer');
+    if (!mobileCard) throw new Error('Missing mobile card');
+    fireEvent.click(mobileCard);
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('omits null column values from mobile cards but keeps the desktop cell', () => {
+    interface Item {
+      id: number;
+      name: string;
+    }
+    const columns: ResponsiveColumn<Item>[] = [
+      { key: 'name', header: 'Name', render: (row) => row.name },
+      { key: 'badge', header: 'Badge', render: () => null },
+    ];
+    const { container } = render(
+      <ResponsiveTable columns={columns} rows={[{ id: 1, name: 'Plain' }]} getRowKey={(row) => row.id} />
+    );
+    const mobile = container.querySelector('.space-y-3.md\\:hidden');
+    expect(mobile?.textContent).toContain('Plain');
+    expect(mobile?.textContent).not.toContain('Badge');
+    // Why: container-scoped — earlier renders in this file stay mounted
+    // (no auto-cleanup), so a global role query would match stale tables.
+    expect(container.querySelectorAll('table tbody td')).toHaveLength(2);
+  });
+
+  it('exposes the row key as the record identity on the desktop row only', () => {
+    // Why pinned: session restore and the j/k chord both address a record by its
+    // row key, and React's key never reaches the DOM. The mobile card stays out of
+    // it for the same reason it stays out of the shortcut marker — the `md:hidden`
+    // container stays mounted, so a second identity element is a second record.
+    const { container } = render(
+      <ResponsiveTable {...baseProps()} rows={[{ id: 7, name: 'Grace', email: 'grace@example.com' }]} />
+    );
+    const desktopRow = container.querySelector('tbody tr');
+    expect(desktopRow?.getAttribute('data-row-id')).toBe('7');
+    expect(container.querySelector('.space-y-3.md\\:hidden > div')?.hasAttribute('data-row-id')).toBe(false);
+  });
+});

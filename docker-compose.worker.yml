@@ -14,8 +14,9 @@ services:
         APT_PORTS_MIRROR: ${APT_PORTS_MIRROR:-ports.ubuntu.com}
         # Use debian:bookworm for Raspberry Pi (has native arm64 isolate packages)
         BASE_IMAGE: ${BASE_IMAGE:-ubuntu:noble}
+    image: ghcr.io/champyod/cms-docker-worker:${IMG_TAG:-major-admin-panel}
     container_name: cms-worker-${WORKER_SHARD:-0}
-    restart: on-failure:5
+    restart: unless-stopped
     environment:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: Worker
@@ -52,9 +53,7 @@ services:
       # Mount cgroups for isolate (cgroup v1 and v2)
       - /sys/fs/cgroup:/sys/fs/cgroup:rw
     ports:
-      - "${WORKER_PORT:-26000}:${WORKER_PORT:-26000}"
-      # Expose for VPS connection (ResourceService)
-      - "2600${WORKER_SHARD:-0}:2600${WORKER_SHARD:-0}"
+      - "${WORKER_BIND_ADDR:-0.0.0.0}:${WORKER_PORT:-26000}:${WORKER_PORT:-26000}"
     networks:
       - cms-network
     privileged: true
@@ -82,7 +81,14 @@ services:
           CGROUP_BASE=${ISOLATE_CGROUP_PATH:-/sys/fs/cgroup/cms-isolate}
 
           if [ ! -d "$$CGROUP_BASE" ]; then
-            echo "ERROR: ISOLATE_CGROUP_PATH does not exist: $$CGROUP_BASE"
+            echo "ISOLATE_CGROUP_PATH missing (cgroupfs is rebuilt on every boot) — recreating $$CGROUP_BASE"
+            sudo mkdir -p "$$CGROUP_BASE" 2>/dev/null || true
+            sudo chmod 755 "$$CGROUP_BASE" 2>/dev/null || true
+            echo "+cpu +memory +pids" | sudo tee "$$CGROUP_BASE/cgroup.subtree_control" >/dev/null 2>&1 || true
+          fi
+
+          if [ ! -d "$$CGROUP_BASE" ]; then
+            echo "ERROR: ISOLATE_CGROUP_PATH does not exist and could not be created: $$CGROUP_BASE"
             echo "Run scripts/__worker_cgroup_setup.sh on the worker host first."
             exit 1
           fi

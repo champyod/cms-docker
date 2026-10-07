@@ -62,23 +62,19 @@ The modern Admin Panel (port 8891) provides a unified interface to manage all wo
 ### Managing Workers via Admin UI
 1.  Navigate to **Infrastructure** → **Resources** in the Admin Panel.
 2.  Add or remove worker entries by specifying their `Hostname/IP` and `Port`.
-3.  The system automatically updates `.env.core` with `WORKER_N` variables.
-4.  Run `make env` (or click **Apply Changes** in the UI) to regenerate `config/cms.toml`.
+3.  The system automatically updates `config.toml` [worker] with `WORKER_N` entries.
+4.  Run `./cms config sync` (or click **Apply Changes** in the UI) to regenerate `config/cms.toml`.
 5.  The system will guide you through restarting the core services to finalize the connection.
 
 ### Security: Tailscale & VPNs
 By default, RPC ports are restricted to `127.0.0.1` for security. To enable remote workers:
 1.  **Tailscale (Recommended)**: Run `./cms setup` and provide your Tailscale IP when prompted. This binds services only to the Tailscale interface.
 2.  **Other VPNs**: Follow the same process but provide your VPN interface IP.
-3.  **Public Access (Dangerous)**: Set `TAILSCALE_IP=0.0.0.0` in `.env.core` and run `make env && make core-img`. This exposes evaluation ports to the entire internet.
+3.  **Public Access (Dangerous)**: Set `INNER_IP=0.0.0.0` in `config.toml`, then `./cms config sync && make core-img`. This exposes evaluation ports to the entire internet.
 
 ---
 
 ## Quick Setup
-... (rest of the file)
-
-... (rest of the file)
-
 
 For users who want more control:
 
@@ -105,29 +101,30 @@ cd ~/cms-worker
 
 ### Step 3: Create Environment File
 
-Create `.env.worker`:
+Edit `config.toml` [worker] section:
 
-```bash
+```toml
+[worker]
 # Worker Configuration
-WORKER_SHARD=1  # MUST be unique per worker
-WORKER_NAME=worker-remote-1
-ISOLATE_CGROUP_CONTROL=1
-ISOLATE_CGROUP_PATH=/sys/fs/cgroup/cms-isolate
+WORKER_SHARD = 1  # MUST be unique per worker
+WORKER_NAME = "worker-remote-1"
+ISOLATE_CGROUP_CONTROL = 1
+ISOLATE_CGROUP_PATH = "/sys/fs/cgroup/cms-isolate"
 
 # Main Server Connection
-CORE_SERVICES_HOST=203.0.113.45  # Your main server public IP
+CORE_SERVICES_HOST = "203.0.113.45"  # Your main server public IP
 
 # Resource Limits
-WORKER_CPUS=4
-WORKER_MEMORY=4g
+WORKER_CPU_LIMIT = "4"
+WORKER_MEMORY_LIMIT = "4g"
 
 # Service Ports (must match main server)
-LOG_SERVICE_PORT=22000
-RESOURCE_SERVICE_PORT=25000
-SCORING_SERVICE_PORT=28000
-CHECKER_PORT=28500
-EVALUATION_SERVICE_PORT=28600
-PROXY_SERVICE_PORT=29000
+LOG_SERVICE_PORT=29000
+RESOURCE_SERVICE_PORT=28000
+SCORING_SERVICE_PORT=28500
+CHECKER_PORT=22000
+EVALUATION_SERVICE_PORT=25000
+PROXY_SERVICE_PORT=28600
 ```
 
 ### Step 4: Create docker-compose.yml
@@ -148,7 +145,7 @@ services:
       - apparmor:unconfined
     
     environment:
-      - CMS_CONFIG=/usr/local/etc/cms.conf
+      - CMS_CONFIG=/usr/local/etc/cms.toml
       - WORKER_SHARD=${WORKER_SHARD}
       - WORKER_NAME=${WORKER_NAME:-worker-${WORKER_SHARD}}
       - CORE_SERVICES_HOST=${CORE_SERVICES_HOST}
@@ -156,7 +153,7 @@ services:
       - ISOLATE_CGROUP_PATH=${ISOLATE_CGROUP_PATH:-/sys/fs/cgroup/cms-isolate}
     
     volumes:
-      - ./config/cms.conf:/usr/local/etc/cms.conf:ro
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-worker-cache:/var/local/cache/cms
       - cms-worker-log:/var/local/log/cms
       - /sys/fs/cgroup:/sys/fs/cgroup:rw
@@ -176,35 +173,45 @@ volumes:
   cms-worker-log:
 ```
 
-### Step 5: Download Configuration
+### Step 5: Get the worker configuration
 
-Get `cms.conf` from main server:
+Recommended — the fleet flow generates it for you. On the **main server**,
+run:
+
+```bash
+./cms worker attach <shard-spec> <this-box-ip> <port-spec> [main-ip]
+```
+
+This registers the box as registry-only fleet rows and prints a block; on
+**this worker box** (this repository checked out), run that block — it sets
+`CORE_SERVICES_HOST` to the main server (prompted with the Tailscale IP
+default, hard-fails when undeterminable), appends the `WORKER_N` rows under
+`[worker]`, checks all six core ports are reachable, then runs cgroup setup
+and deploys. No manual `config.toml` editing on either side. Its
+`./cms config sync` generates `config/cms.toml` with the core services
+pointed at the main server.
+
+Manual alternative (no fleet): copy `config/cms.toml` from the main server,
+then edit the `[core_services]` host entries to the main server IP:
 
 ```bash
 mkdir -p config
-
-# Method 1: SCP
-scp user@YOUR_SERVER_IP:/path/to/cms-docker/config/cms.conf config/
-
-# Method 2: Manual copy/paste
-nano config/cms.conf
-# Paste content from main server
+scp user@YOUR_SERVER_IP:/path/to/cms-docker/config/cms.toml config/
 ```
 
-Edit `config/cms.conf` to use main server IP:
+Manual path only — edit `config/cms.toml` to point the core services at the
+main server IP (host entries below become `YOUR_SERVER_IP`; ports are the
+fixed RPC ports from Step 3):
 
-```json
-{
-    "core_services": {
-        "LogService":        [["YOUR_SERVER_IP", 22000]],
-        "ResourceService":   [["YOUR_SERVER_IP", 25000]],
-        "ScoringService":    [["YOUR_SERVER_IP", 28000]],
-        "Checker":           [["YOUR_SERVER_IP", 28500]],
-        "EvaluationService": [["YOUR_SERVER_IP", 28600]],
-        "Worker":            [],
-        "ProxyService":      [["YOUR_SERVER_IP", 29000]]
-    }
-}
+```toml
+[core_services]
+LogService        = [["YOUR_SERVER_IP", 29000]]
+ResourceService   = [["YOUR_SERVER_IP", 28000]]
+ScoringService    = [["YOUR_SERVER_IP", 28500]]
+Checker           = [["YOUR_SERVER_IP", 22000]]
+EvaluationService = [["YOUR_SERVER_IP", 25000]]
+Worker            = []
+ProxyService      = [["YOUR_SERVER_IP", 28600]]
 ```
 
 ### Step 6: Pull Docker Image
@@ -349,27 +356,24 @@ Via Web Console:
 
 ### Automated Deployment
 
-Script to deploy multiple workers:
+Attach every worker box from the main server — each run writes
+registry-only rows (`LOCAL=0`) and prints the block to run on that box:
 
 ```bash
 #!/bin/bash
 # deploy-workers.sh
 
-MAIN_SERVER_IP="203.0.113.45"
 WORKERS=("worker1-ip" "worker2-ip" "worker3-ip")
 
 for i in "${!WORKERS[@]}"; do
-  WORKER_IP="${WORKERS[$i]}"
   SHARD=$((i + 1))
-  
-  echo "Deploying worker $SHARD on $WORKER_IP..."
-  
-  ssh root@$WORKER_IP "curl -fsSL http://$MAIN_SERVER_IP/scripts/__worker_connect.sh | \
-    WORKER_SHARD=$SHARD \
-    MAIN_SERVER_IP=$MAIN_SERVER_IP \
-    bash"
+  ./cms worker attach "$SHARD" "${WORKERS[$i]}" "$((26000 + SHARD))"
 done
 ```
+
+On each worker box (this repository checked out), run the block printed by
+`worker attach` — it appends WORKER_N entries to its `config.toml` [worker]
+section and deploys the shards locally (`./cms config sync && ./cms worker deploy all`).
 
 ### Worker Management
 
@@ -406,7 +410,11 @@ aws ec2 run-instances \
   --key-name your-key \
   --security-group-ids sg-workers \
   --user-data '#!/bin/bash
-curl -fsSL http://YOUR_SERVER_IP/scripts/__worker_connect.sh | bash'
+git clone https://github.com/champyod/cms-docker /opt/cms-docker
+cd /opt/cms-docker
+./cms config sync
+# Add WORKER_1 = "WORKER_IP:26001" to config.toml [worker] section
+./cms config sync && ./cms worker deploy all'
 
 # Or use EC2 launch template
 ```
@@ -420,7 +428,11 @@ gcloud compute instances create cms-worker-1 \
   --image-family ubuntu-2004-lts \
   --image-project ubuntu-os-cloud \
   --metadata startup-script='#!/bin/bash
-curl -fsSL http://YOUR_SERVER_IP/scripts/__worker_connect.sh | bash'
+git clone https://github.com/champyod/cms-docker /opt/cms-docker
+cd /opt/cms-docker
+./cms config sync
+# Add WORKER_1 = "WORKER_IP:26001" to config.toml [worker] section
+./cms config sync && ./cms worker deploy all'
 ```
 
 ### Azure VM
@@ -443,7 +455,11 @@ Via Web Console:
 3. Add User Data:
    ```bash
    #!/bin/bash
-   curl -fsSL http://YOUR_SERVER_IP/scripts/__worker_connect.sh | bash
+   git clone https://github.com/champyod/cms-docker /opt/cms-docker
+   cd /opt/cms-docker
+   ./cms config sync
+   # Add WORKER_1 = "WORKER_IP:26001" to config.toml [worker] section
+   ./cms config sync && ./cms worker deploy all
    ```
 
 ---
@@ -532,19 +548,17 @@ docker stats cms-worker-1
 
 **Adjust limits:**
 ```bash
-# In .env.worker
-WORKER_CPUS=8
-WORKER_MEMORY=8g
+# In config.toml [worker]
+WORKER_CPU_LIMIT = "8"
+WORKER_MEMORY_LIMIT = "8g"
 ```
 
 ### Connection Timeout
 
-**Increase timeout in cms.conf:**
-```json
-{
-    "timeout": 30
-}
-```
+Connection behavior follows the core services config — inspect and edit
+`config.toml` with `./cms config edit`, then `./cms config sync` and
+restart the affected stack. Worker-side resource tuning uses
+`WORKER_CPUS` / `WORKER_MEMORY` (above).
 
 ---
 

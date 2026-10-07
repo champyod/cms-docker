@@ -4,7 +4,7 @@
 # Scans .env files for weak/default secrets, generates new credentials,
 # and applies them with stack restarts. Never rotates without explicit --apply.
 #
-# Alternative: HashiCorp Vault (optional, VAULT_ENABLED=0) — see .env.infra.example VAULT_*
+# Alternative: HashiCorp Vault (optional, VAULT_ENABLED=0) — see config.toml.example [infra] VAULT_*
 #   Vault provides auto-rotation + audit via hashicorp/vault:1.15 (--profile vault)
 #   This script works without Vault; Vault is opt-in, disabled by default, local overrides gitignored via .env.local
 #
@@ -14,28 +14,27 @@
 #   __secrets-rotate.sh --apply              overwrite .env files + restart stacks
 #   Vault alternative: VAULT_ENABLED=1 docker compose -f docker-compose.vault.yml --profile vault up -d
 
-set -euo pipefail
+set -eu
+# pipefail only if available
+if (set -o pipefail 2>/dev/null); then
+    set -o pipefail
+fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "$REPO_ROOT"
 
-# ---------------------------------------------------------------------------
-# lib/common.sh
-# ---------------------------------------------------------------------------
-if [[ -f "${SCRIPT_DIR}/__lib/common.sh" ]]; then
-  # shellcheck disable=SC1091
-  source "${SCRIPT_DIR}/__lib/common.sh"
-else
-  log_info()  { printf '[INFO] %s\n' "$*"; }
-  log_warn()  { printf '[WARN] %s\n' "$*" >&2; }
-  log_die()   { printf '[FAIL] %s\n' "${1:-fatal error}" >&2; exit "${2:-1}"; }
-fi
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__lib/common.sh"
+# shellcheck disable=SC1091
+[ -f "${SCRIPT_DIR}/__lib/worker_secrets.sh" ] && source "${SCRIPT_DIR}/__lib/worker_secrets.sh"
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 env_val() {
-  awk -F= -v k="$2" '$1==k {v=$0; sub(/^[^=]*=/,"",v); gsub(/^[ \t]+|[ \t\r]+$/,"",v); print v; exit}' "$1" 2>/dev/null || true
+  local file="$1" key="$2" raw
+  raw="$(awk -F= -v k="$key" '$1==k {v=$0; sub(/^[^=]*=/,"",v); gsub(/^[ \t]+|[ \t\r]+$/,"",v); print v; exit}' "$file" 2>/dev/null || true)"
+  env_unquote "$raw"
 }
 
 is_weak_secret() {
@@ -64,14 +63,12 @@ is_default_htpasswd() {
 # ---------------------------------------------------------------------------
 # Load environment
 # ---------------------------------------------------------------------------
-for env_file in "${REPO_ROOT}/.env.core" "${REPO_ROOT}/.env.admin" "${REPO_ROOT}/.env.infra" "${REPO_ROOT}/.env"; do
-  if [[ -f "$env_file" ]]; then
-    set -a
-    # shellcheck disable=SC1091
-    source "$env_file" 2>/dev/null || true
-    set +a
-  fi
-done
+if [[ -f "${REPO_ROOT}/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "${REPO_ROOT}/.env" 2>/dev/null || true
+  set +a
+fi
 
 # ---------------------------------------------------------------------------
 # Usage
@@ -87,13 +84,15 @@ Modes:
 
 Options:
   --out <file>            Output file for --generate (default: .env.new)
+  --push user@host:/path  Push shared secrets to a worker box (repeatable,
+                          applied pre-restart so remotes cut over together)
   --help                  Show this help
 
 Audited secrets:
-  - POSTGRES_PASSWORD (.env.core) — both file + inline
-  - RANKING_PASSWORD (.env.admin)
-  - CMS_SECRET_KEY (.env.core / cms.toml)
-  - AUTH_SECRET (.env.admin)
+  - POSTGRES_PASSWORD (.env) — both file + inline
+  - RANKING_PASSWORD (.env)
+  - CMS_SECRET_KEY (.env / cms.toml)
+  - AUTH_SECRET (.env)
   - SECRET_KEY (admin-panel/.env)
   - AUTH_SECRET (admin-panel/.env)
   - funnel.htpasswd (config/funnel.htpasswd)
@@ -112,16 +111,16 @@ cmd_audit() {
   echo ""
   local weak=0 total=0
 
-  # POSTGRES_PASSWORD in .env.core
-  _audit_env_key ".env.core" "POSTGRES_PASSWORD" && ((weak++))
+  # POSTGRES_PASSWORD in .env
+  _audit_env_key ".env" "POSTGRES_PASSWORD" && ((weak++))
   ((total++))
 
-  # RANKING_PASSWORD in .env.admin
-  _audit_env_key ".env.admin" "RANKING_PASSWORD" && ((weak++))
+  # RANKING_PASSWORD in .env
+  _audit_env_key ".env" "RANKING_PASSWORD" && ((weak++))
   ((total++))
 
-  # AUTH_SECRET in .env.admin
-  _audit_env_key ".env.admin" "AUTH_SECRET" && ((weak++))
+  # AUTH_SECRET in .env
+  _audit_env_key ".env" "AUTH_SECRET" && ((weak++))
   ((total++))
 
   # AUTH_SECRET in admin-panel/.env
@@ -196,8 +195,9 @@ _audit_env_key() {
 
 _audit_env_file_key() {
   local file="$1" key="$2"
-  local val
-  val="$(awk -F= -v k="$2" '$1==k {v=$0; sub(/^[^=]*=/,"",v); gsub(/^[ \t]+|[ \t\r]+$/,"",v); print v; exit}' "$file" 2>/dev/null || true)"
+  local val raw
+  raw="$(awk -F= -v k="$2" '$1==k {v=$0; sub(/^[^=]*=/,"",v); gsub(/^[ \t]+|[ \t\r]+$/,"",v); print v; exit}' "$file" 2>/dev/null || true)"
+  val="$(env_unquote "$raw")"
   if is_weak_secret "$val"; then
     log_warn "WEAK: $key in $file — default/placeholder value"
     return 0
@@ -216,34 +216,22 @@ _audit_env_file_key() {
 _check_remote_worker_ref() {
   echo ""
   log_info "Remote worker RPC check"
-  local worker_host="${WORKER_HOST:-100.75.203.112}"
-
-  # Check if WORKER entries reference remote host
+  # Registry-derived: any fleet host that is not this box must be pushed.
+  local remote_hosts host
+  remote_hosts="$(awk -F= '/^WORKER_[0-9]+=/{v=$0; sub(/^[^=]*=/,"",v); print v}' .env 2>/dev/null | cut -d: -f1 | sort -u || true)"
   local remote_refs=0
-  for env_file in .env.core .env.admin .env.worker; do
-    if [[ -f "$env_file" ]]; then
-      local matches
-      matches="$(grep -c "$worker_host" "$env_file" 2>/dev/null || true)"
-      if (( matches > 0 )); then
-        log_warn "  $env_file references $worker_host ($matches lines) — rotation may break RPC"
-        remote_refs=1
-      fi
-    fi
+  for host in $remote_hosts; do
+    case "$host" in
+      0.0.0.0|127.*|localhost|"") continue ;;
+    esac
+    log_warn "  fleet references remote $host — push new secrets or RPC breaks"
+    remote_refs=1
   done
-
-  # Check CORE_SERVICES_HOST
-  if [[ -n "${CORE_SERVICES_HOST:-}" ]]; then
-    if [[ "$CORE_SERVICES_HOST" == *"$worker_host"* ]]; then
-      log_warn "  CORE_SERVICES_HOST points to $worker_host — rotation requires worker update"
-      remote_refs=1
-    fi
-  fi
 
   if [[ "$remote_refs" -eq 0 ]]; then
     log_info "  No remote worker references found — rotation is safe"
   else
-    log_warn "  After rotation, update worker on $worker_host with new credentials"
-    log_warn "  SSH to $worker_host and update .env.worker, then: cd /path/to/cms && make worker"
+    log_warn "  After rotation, push to each remote: --push user@host:/remote/repo/path (repeatable)"
   fi
 }
 
@@ -276,18 +264,18 @@ cmd_generate() {
   # Write output
   cat > "$outfile" <<SECRETS
 # Generated secrets — $(date -u +%Y-%m-%dT%H:%M:%SZ)
-# Review these values, then run: ./cms secrets --apply
+# Review these values, then run: ./cms secrets rotate
 
-# Database password (.env.core)
+# Database password (.env)
 POSTGRES_PASSWORD=${postgres_password}
 
-# Ranking password (.env.admin)
+# Ranking password (.env)
 RANKING_PASSWORD=${ranking_password}
 
 # CMS secret key (config/cms.toml)
 CMS_SECRET_KEY=${cms_secret}
 
-# Next.js admin panel secrets (.env.admin + admin-panel/.env)
+# Next.js admin panel secrets (.env + admin-panel/.env)
 AUTH_SECRET=${auth_secret}
 SECRET_KEY=${secret_key}
 
@@ -315,6 +303,9 @@ SECRETS
 # Apply subcommand
 # ---------------------------------------------------------------------------
 cmd_apply() {
+  local secrets_file="${GENERATE_OUT:-.env.new}"
+  _ensure_secrets_file "$secrets_file"
+
   log_info "Applying secret rotation"
   echo ""
 
@@ -327,38 +318,29 @@ cmd_apply() {
     fi
   fi
 
-  local secrets_file="${GENERATE_OUT:-.env.new}"
-  if [[ ! -f "$secrets_file" ]]; then
-    log_die "secrets file not found: $secrets_file — run --generate first" 1
-  fi
-
   # Source generated secrets
   # shellcheck disable=SC1091
   source "$secrets_file" 2>/dev/null || true
 
-  # Update .env.core — POSTGRES_PASSWORD
+  # Update config.toml with new secrets, then re-run sync
+  local toml_updated=0
   if [[ -n "${POSTGRES_PASSWORD:-}" ]]; then
-    _update_env_key ".env.core" "POSTGRES_PASSWORD" "$POSTGRES_PASSWORD"
+    _update_config_toml "POSTGRES_PASSWORD" "$POSTGRES_PASSWORD" && toml_updated=1
   fi
-
-  # Update .env.admin — RANKING_PASSWORD, AUTH_SECRET
   if [[ -n "${RANKING_PASSWORD:-}" ]]; then
-    _update_env_key ".env.admin" "RANKING_PASSWORD" "$RANKING_PASSWORD"
+    _update_config_toml "RANKING_PASSWORD" "$RANKING_PASSWORD" && toml_updated=1
   fi
   if [[ -n "${AUTH_SECRET:-}" ]]; then
-    _update_env_key ".env.admin" "AUTH_SECRET" "$AUTH_SECRET"
+    _update_config_toml "AUTH_SECRET" "$AUTH_SECRET" && toml_updated=1
+  fi
+  if [[ -n "${CMS_SECRET_KEY:-}" ]]; then
+    _update_config_toml "CMS_SECRET_KEY" "$CMS_SECRET_KEY" && toml_updated=1
   fi
 
-  # Update admin-panel/.env — AUTH_SECRET, SECRET_KEY
+  # Update admin-panel/.env — AUTH_SECRET, SECRET_KEY (separate consumer)
   if [[ -f "admin-panel/.env" ]]; then
     [[ -n "${AUTH_SECRET:-}" ]] && _update_env_file_key "admin-panel/.env" "AUTH_SECRET" "$AUTH_SECRET"
     [[ -n "${SECRET_KEY:-}" ]] && _update_env_file_key "admin-panel/.env" "SECRET_KEY" "$SECRET_KEY"
-  fi
-
-  # Update config/cms.toml — CMS_SECRET_KEY
-  if [[ -f "config/cms.toml" ]] && [[ -n "${CMS_SECRET_KEY:-}" ]]; then
-    sed -i "s|^CMS_SECRET_KEY\s*=.*|CMS_SECRET_KEY = ${CMS_SECRET_KEY}|" config/cms.toml
-    log_info "Updated CMS_SECRET_KEY in config/cms.toml"
   fi
 
   # Update htpasswd
@@ -368,10 +350,20 @@ cmd_apply() {
     log_info "Updated config/funnel.htpasswd"
   fi
 
-  # Regenerate combined .env
-  if [[ -f "Makefile" ]]; then
-    log_info "Regenerating combined .env via make env"
-    make env 2>/dev/null || log_warn "make env failed — manual intervention may be needed"
+  # Regenerate .env from config.toml
+  if [[ "$toml_updated" -eq 1 ]] && [[ -f "scripts/__config_sync.sh" ]]; then
+    log_info "Regenerating .env via config sync"
+    bash scripts/__config_sync.sh || log_warn "config sync failed — manual intervention may be needed"
+  fi
+
+  # Grace ordering: remotes carry the new secrets before local stacks
+  # restart. Single-valid secrets (DB passwords) still have a cutover
+  # window — this narrows it to one command instead of manual copy.
+  if [[ "${#PUSH_TARGETS[@]}" -gt 0 ]] && declare -F push_worker_secrets >/dev/null; then
+    local target
+    for target in "${PUSH_TARGETS[@]}"; do
+      push_worker_secrets "$target" "" || log_warn "push to $target failed — update it manually before restarting"
+    done
   fi
 
   # Restart core stack (database needs new password)
@@ -394,19 +386,42 @@ cmd_apply() {
   _check_remote_worker_ref
 
   log_info "Secret rotation applied — verify services are healthy with: ./cms status"
-  log_info "IMPORTANT: Update worker on 100.75.203.112 if RPC is configured"
 }
 
-_update_env_key() {
-  local file="$1" key="$2" value="$3"
-  if [[ -f "$file" ]]; then
-    if grep -q "^${key}=" "$file"; then
-      sed -i "s|^${key}=.*|${key}=${value}|" "$file"
-      log_info "Updated $key in $file"
-    else
-      echo "${key}=${value}" >> "$file"
-      log_info "Added $key to $file"
+# WHY: a missing secrets file makes the apply prompt unanswerable — the operator
+# confirms an overwrite of values that do not exist yet — so the file is checked
+# first and generated in place when a terminal is there to ask on.
+_ensure_secrets_file() {
+  local secrets_file="$1"
+  [[ -f "$secrets_file" ]] && return 0
+
+  local answer
+  if [[ -t 0 ]]; then
+    read -r -p "No generated secrets found. Generate now? [y/N] " answer || answer=""
+    if [[ "$answer" =~ ^[Yy] ]]; then
+      cmd_generate || true
+      [[ -f "$secrets_file" ]] && return 0
+      log_warn "generation produced no $secrets_file"
     fi
+  fi
+
+  log_die "secrets file not found: $secrets_file — run --generate first" 1
+}
+
+_update_config_toml() {
+  local key="$1" value="$2" toml="${REPO_ROOT}/config.toml"
+  if [[ ! -f "$toml" ]]; then
+    log_warn "config.toml not found — cannot update $key"
+    return 1
+  fi
+  # Update existing key across all sections (sed matches key = anywhere)
+  if grep -q "^${key}\s*=" "$toml"; then
+    sed -i "s|^${key}\s*=.*|${key} = \"${value}\"|" "$toml"
+    log_info "Updated $key in config.toml"
+    return 0
+  else
+    log_warn "$key not found in config.toml — cannot update"
+    return 1
   fi
 }
 
@@ -426,6 +441,7 @@ _update_env_file_key() {
 # ---------------------------------------------------------------------------
 MODE=""
 GENERATE_OUT=".env.new"
+PUSH_TARGETS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -433,6 +449,8 @@ while [[ $# -gt 0 ]]; do
     --generate) MODE="generate"; shift ;;
     --apply)    MODE="apply"; shift ;;
     --out)      GENERATE_OUT="$2"; shift 2 ;;
+    --push)     PUSH_TARGETS+=("$2"); shift 2 ;;
+    --push=*)   PUSH_TARGETS+=("${1#--push=}"); shift ;;
     --help|-h)  usage; exit 0 ;;
     *)          log_die "unknown option: $1 — see --help" 1 ;;
   esac

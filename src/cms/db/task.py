@@ -201,6 +201,14 @@ class Task(Base):
         CheckConstraint("min_user_test_interval > '0 seconds'"),
         nullable=True)
 
+    # Task-level override for the contest evaluation throttle delay, in
+    # seconds. When set, wins over the contest-level
+    # evaluation_throttle_delay_s for this task only.
+    evaluation_throttle_delay_s: int | None = Column(
+        Integer,
+        CheckConstraint("evaluation_throttle_delay_s >= 0"),
+        nullable=True)
+
     # What information users can see about the evaluations of their
     # submissions. Offering full information might help some users to
     # reverse engineer task data.

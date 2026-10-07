@@ -7,7 +7,7 @@ export function InfoButton({ text }: { text: string }): React.JSX.Element {
   return (
     <div className="group relative inline-block ml-1.5 align-middle">
       <Info className="w-3.5 h-3.5 text-muted-foreground hover:text-primary cursor-help transition-colors" />
-      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-popover border border-border rounded-lg text-[11px] font-medium text-muted-foreground w-48 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none shadow-xl">
+      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-popover border border-border rounded-lg text-xs font-medium text-muted-foreground w-48 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none shadow-xl">
         {text}
         <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-popover" />
       </div>
@@ -55,7 +55,7 @@ export function GeneralTab({ formData, onChange }: TabProps): React.JSX.Element 
 export function GradingTab({ formData, onChange }: TabProps): React.JSX.Element {
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <div>
           <label className="block text-xs font-bold text-muted-foreground uppercase mb-2">
             Score Mode
@@ -105,7 +105,7 @@ export function GradingTab({ formData, onChange }: TabProps): React.JSX.Element 
 export function LimitsTab({ formData, onChange }: TabProps): React.JSX.Element {
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <div>
           <label className="block text-xs font-bold text-muted-foreground uppercase mb-2">
             Max Submissions

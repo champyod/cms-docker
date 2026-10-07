@@ -26,12 +26,13 @@
 14. [Comment Policy](#comment-policy)
 15. [Security Policies](#security-policies)
 16. [Docker & Infrastructure](#docker--infrastructure)
-17. [Database & Prisma](#database--prisma)
-18. [Python CMS Layer](#python-cms-layer)
-19. [Environment Variables](#environment-variables)
-20. [Directory Structure](#directory-structure)
-21. [Common Tasks](#common-tasks)
-22. [Troubleshooting](#troubleshooting)
+17. [TUI & Operations](#tui--operations)
+18. [Database & Prisma](#database--prisma)
+19. [Python CMS Layer](#python-cms-layer)
+20. [Environment Variables](#environment-variables)
+21. [Directory Structure](#directory-structure)
+22. [Common Tasks](#common-tasks)
+23. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -59,7 +60,7 @@
 
 8. **NO SECRETS IN CLIENT CODE**: Never expose database credentials, API keys, or internal tokens to the browser. Only `NEXT_PUBLIC_` prefixed vars reach the client.
 
-9. **DOCKER SOCKET = ROOT**: Any code touching Docker (container control, service restart) MUST require `permission_all` (superadmin only).
+9. **DOCKER SOCKET = ROOT**: Any code touching Docker (container control, service restart) MUST require the `container:control` / `service:restart` permission keys — granted through a group, never hardcoded.
 
 10. **PASSWORD STORAGE FORMAT**: Passwords use `bcrypt:<hash>` or `plaintext:<value>` prefix. Never store raw unprefixed values — the legacy `cmscommon.crypto.validate_password` raises on them. Dual-mode is user-selectable per save (bcrypt | plain text) with bcrypt as the default; plaintext makes the stored value revealable in edit forms via click-to-reveal. Generated bulk credentials may also be stored as plaintext when explicitly chosen.
 
@@ -143,8 +144,8 @@ Docker Stacks:
 | Type | Pattern | Example |
 |------|---------|---------|
 | Server Action | `verbNoun` | `getContests()`, `createUser()`, `switchContest()` |
-| API permission | `verifyApiPermission` | `verifyApiPermission('contests')` |
-| Server permission | `ensurePermission` | `ensurePermission('tasks')` |
+| API permission | `verifyApiPermission` | `verifyApiPermission('contest:update')` |
+| Server permission | `ensurePermission` | `ensurePermission('task:update')` |
 | Client API call | `apiClient.verb` | `apiClient.post('/api/users', data)` |
 | Event handler | `handleVerb` | `handleSubmit()`, `handleDelete()` |
 | Format helper | `formatNoun` | `formatDateForInput()` |
@@ -319,7 +320,7 @@ import { prisma } from '@/lib/prisma';
 import { verifyApiPermission, apiSuccess, apiError, sanitize } from '@/lib/api-utils';
 
 export async function GET(req: NextRequest) {
-  const { authorized, response } = await verifyApiPermission('contests');
+  const { authorized, response } = await verifyApiPermission('contest:list');
   if (!authorized) return response;
 
   try {
@@ -331,7 +332,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { authorized, response } = await verifyApiPermission('contests');
+  const { authorized, response } = await verifyApiPermission('contest:create');
   if (!authorized) return response;
 
   try {
@@ -416,7 +417,7 @@ export async function getContests({ page = 1, search = '' }) {
 }
 
 export async function deleteContest(id: number) {
-  await ensurePermission('contests');
+  await ensurePermission('contest:delete');
   try {
     await prisma.contests.delete({ where: { id } });
     revalidatePath('/[locale]/contests');
@@ -500,36 +501,44 @@ export default async function ContestsPage({ params: { locale } }) {
 1. User submits credentials → `login()` Server Action
 2. Action queries `admins` table via Prisma
 3. Password verified: `plaintext:` → `timingSafeEqual`, `bcrypt:` → `bcrypt.compare`
-4. JWT created with `jose` (HS256, 2h expiry) containing `{ userId, username, permissions }`
+4. JWT created with `jose` (HS256, 2h expiry) containing `{ userId, username }`
 5. JWT stored in HTTP-only cookie (`session`), 7-day expiry
 6. Session read via `getSession()` → `decrypt()` → JWT payload
+7. Effective permissions resolved per request from groups + overrides (never from the token)
 
-### Permission Types
+### Permission Model
+
+Permissions are fine-grained keys of the form `module:verb` (for example `task:update`, `contest:switch`, `submission:rejudge`). The complete key set lives in `src/lib/permission-registry.ts`.
+
+Permissions are granted to **groups**, and admins are inserted into groups to inherit them. An admin may additionally carry **per-person overrides** that allow or deny a single key; a deny always wins. Nothing is granted or denied in code — group membership is the only source.
+
+### Permission Resolution
 
 ```typescript
-type Permission = 'all' | 'tasks' | 'users' | 'contests' | 'messaging';
+getFreshPermissions(userId)              // admin_groups → group_permissions → permissions.key
+                                         //   ⊕ allow overrides  ⊖ deny overrides  (deny wins)
+resolveEffectivePermissions(keys, overrides)
+hasEffectivePermission(effective, key)   // also honors all:all
 ```
 
-- `permission_all` (superadmin) — bypasses all checks, required for Docker/infra operations
-- `permission_tasks` — manage tasks, datasets, testcases
-- `permission_users` — manage users, teams, participations
-- `permission_contests` — manage contests, switch active contest
-- `permission_messaging` — manage questions/announcements
+`all:all` is a normal, checked, audited permission — it is not a code-level bypass.
 
 ### Where Permissions Are Checked
 
 | Layer | Function | Purpose |
 |-------|----------|---------|
-| API Routes | `verifyApiPermission('contests')` | Returns 401/403 response |
-| Server Actions | `ensurePermission('tasks')` | Throws error if unauthorized |
-| Pages | `checkPermission('users')` | Redirects to login if unauthorized |
-| Sidebar (client) | `permissions?.permission_tasks` | Hides nav links (UX only) |
+| API Routes | `verifyApiPermission('contest:update')` | Returns 401/403 response |
+| Server Actions | `ensurePermission('task:update')` | Throws error if unauthorized |
+| Pages | `checkPermission('user:list')` | Redirects to login if unauthorized |
+| Sidebar (client) | `hasEffectivePermission(effective, 'task:list')` | Hides nav links (UX only) |
+| Field level | `getFieldAccess('tasks', effective)` | Hides/locks individual fields |
 
 ### Rules
 
 - Server-side checks are the security boundary. Client-side checks are UX convenience.
 - Always check permissions before any data mutation.
-- `permission_all` is required for: container control, service restart, env editing, admin management.
+- Every mutating operation writes an `audit_log` entry; destructive operations require a reason.
+- Both admins (Next.js and the legacy Python admin) resolve from the same tables and neither bypasses a check.
 
 ---
 
@@ -786,7 +795,7 @@ if (stored.startsWith('plaintext:')) {
 
 ### Docker Socket Security
 
-The admin panel mounts `/var/run/docker.sock`. All Docker operations (`getContainers`, `controlContainer`, `restartServices`) require `permission_all`.
+The admin panel mounts `/var/run/docker.sock`. All Docker operations (`getContainers`, `controlContainer`, `restartServices`) require the `container:control` / `service:restart` permission keys, granted through a group.
 
 ### Security Checklist
 
@@ -794,7 +803,7 @@ The admin panel mounts `/var/run/docker.sock`. All Docker operations (`getContai
 - [ ] All Server Actions call `ensurePermission()` before mutations
 - [ ] New passwords use `bcrypt:` prefix
 - [ ] No secrets in `NEXT_PUBLIC_` env vars
-- [ ] Docker operations require `permission_all`
+- [ ] Docker operations require `container:control` / `service:restart`
 - [ ] User input validated before database writes
 - [ ] Redirects use root paths (not hardcoded locale)
 
@@ -809,29 +818,40 @@ docker-compose.core.yml              # DB, RPC services, evaluation
 docker-compose.admin.yml             # Admin panel (Next.js + Python)
 docker-compose.contests.generated.yml # Per-contest web servers (generated)
 docker-compose.worker.yml            # Sandboxed workers
-docker-compose.monitor.yml           # Backups, health monitoring
+# monitor                            # Backups, health monitoring (profile in docker-compose.yml)
 ```
 
 ### Makefile Targets
 
 ```bash
-make env           # Generate .env, cms.toml, admin-panel/.env
-make core          # Deploy core stack (source build)
-make core-img      # Deploy core stack (pre-built images)
-make admin         # Deploy admin panel
-make contest       # Deploy contest interfaces
-make worker        # Deploy workers
-make admin-create  # Create superadmin account interactively
-make prisma-sync   # Sync Prisma schema to DB
-make db-clean      # Reset everything (destructive)
+make env            # Generate .env, cms.toml, admin-panel/.env
+make core           # Deploy core stack (DEPLOYMENT_TYPE=img → pull+up, else src build)
+make admin          # Deploy admin panel
+make contest        # Deploy contest interfaces (CONTEST_ID canonical)
+make worker         # Deploy workers
+make infra          # Deploy monitor/backup stack (alias: infra → monitor)
+make pull           # Pull images for ALL profiles (offline-tolerant, warns on failure)
+make stack-stop     # core|admin|contest|worker|infra -stop (contest-down removes containers)
+make stack-clean    # down -v per stack
+make db-clean       # down -v ALL profiles (destructive)
+make db-reset       # db-clean + core with img override
+make cms-init       # Initialize CMS database
+make admin-create   # Create superadmin account interactively
+make prisma-sync    # Sync Prisma schema to DB
+make lint           # shellcheck/hadolint/yamllint + compose config validation
+make preflight      # Run scripts/__preflight.sh
+make smoke-test     # Run scripts/__smoke-test.sh
+make backup         # Run cms-monitor backup
 ```
+
+**Deprecated**: `core-img`/`admin-img`/`contest-img`/`worker-img`/`infra-img` aliases and `pull-core` style shorthands still exist but print warnings — use `make <stack>` with `DEPLOYMENT_TYPE=img` or `make pull` instead.
 
 **IMPORTANT: Production Deployment**
 
-For production/final server deployments, **always use the `-img` variants**:
-- `make core-img` instead of `make core`
+For production/final server deployments, **always use `DEPLOYMENT_TYPE=img`**:
+- `make core DEPLOYMENT_TYPE=img` instead of `make core` (source build)
 - Pre-built images are faster and more reliable for production
-- Source builds (`make core`) are primarily for development
+- Source builds (`make core` no override) are primarily for development
 
 Deployment workflow:
 ```bash
@@ -841,11 +861,12 @@ git pull origin main
 # 2. Regenerate environment files
 make env
 
-# 3. Deploy with pre-built images (production)
-make core-img      # Use -img variant for production
-make admin
-make contest
-make worker
+# 3. Pull + deploy with pre-built images (production)
+make pull
+make core DEPLOYMENT_TYPE=img  # Use img variant for production
+make admin DEPLOYMENT_TYPE=img
+make contest DEPLOYMENT_TYPE=img
+make worker DEPLOYMENT_TYPE=img
 
 # 4. Sync database if schema changed
 make prisma-sync
@@ -857,7 +878,72 @@ The admin panel can:
 - **List/control containers** via Docker socket mount
 - **Edit .env files** on host via `/repo-root` mount
 - **Restart services** via `docker compose` commands
-- **Switch active contest** by editing `.env.contest` and rebuilding
+- **Switch active contest** by setting `CONTEST_ID` in `config.toml` `[contest]` and redeploying (the Deployments page writes it there, syncs, then recreates the contest stack)
+
+---
+
+## TUI & OPERATIONS
+
+### Control Plane Entry Point
+
+`./cms` with no args opens the **dashboard TUI** (six panels); `./cms <command>` runs CLI commands non-interactively. TTY-gated: commands that mutate or stream (deploy, update, backup, monitor, expose, worker TUI, funnel, tailscale, domain) refuse to run without a terminal — headless/batch use the underlying Makefile targets or `--apply`/flag forms instead.
+
+### Dashboard Keys
+
+```
+Tab/w  cycle panels (active border highlighted)   r  refresh all panels now
+j/k    move row cursor within panel               s  toggle SERVICES detail columns
+Enter  drill into focused row                     d  deploy all workers  → ./cms worker deploy all
+                                                  a  deploy ALL stacks   → ./cms deploy all (–img prompt)
+?      help overlay                               u  update server      → ./cms update-server
+q      quit (terminal restored)                   f  features launcher  → 16-cmd picker
+                                                  b  backup now         → ./cms backup
+```
+
+Panels: `WORKERS` (Enter → fleet TUI), `SERVICES` (per-service logs/restart/status), `STACKS` (per-stack deploy/stop), `DATABASE` (init/reset/clean/sync), `BACKUPS` (backup now), `UPDATES` (update-server). Mutating keys go through `dash::act` — confirm + audit + spinner.
+
+### Worker Fleet
+
+```bash
+./cms worker edit      # fleet editor: add/edit/delete shards, deploy-all
+./cms worker deploy    # deploy all shards
+./cms worker stop|list # stop all / list fleet
+./cms worker attach    # attach a remote box: shard spec (4-7 / 4,5,6), host, port base
+./cms worker cgroup    # set up sandbox cgroups
+```
+
+Fleet row format (pipe-separated, 6 fields): `shard|host|port|local|memory|cpu`. `fleet_save` writes `WORKER_<shard>=<host>:<port>` to `.env.core` and `WORKER_SHARD<n>_{LOCAL,MEMORY,CPU}` to `.env.worker`. Shard/host/port/memory/cpu are validated on add/edit (numeric shard+port, no `:`/whitespace in host, `^[0-9]+[MG]i?$` memory, `^[0-9]+(\.[0-9]+)?$` cpus). `attach` expands shard specs (`4`, `4,5,6,7`, `4-7`) into per-shard rows written with `LOCAL=0` (registry-only); re-attaching an existing shard replaces its row, and `./cms config sync` preserves all `WORKER_N` rows.
+
+### Secrets Rotation
+
+```bash
+./cms secrets audit     # report insecure/weak secrets (safe)
+./cms secrets generate  # print replacements (use --out FILE to save)
+./cms secrets rotate    # rotate flagged secrets in place (guarded: --apply required)
+```
+
+Secret inputs are masked (`tui::input --password`, gum `--password`), validated by type (hex32 for key/secret, e.g. `OFFSITE_ENCRYPT_KEY`; password strength checks in funnel). `is_default_secret` flags `admin`/placeholder values in Fix Mode.
+
+### Backup & Update
+
+```bash
+./cms backup            # run backup now
+./cms backup drill      # backup + test restore of latest archive
+./cms backup offsite    # sync backups to offsite node (dry-run by default; --apply executes)
+./cms restore <archive> # restore a backup archive
+./cms update            # interactive config update wizard (config only)
+./cms update-server     # shard-aware FULL server update (git + img + db + verify)
+./cms fix               # non-interactive repair of missing/insecure config (validate_value + generators)
+```
+
+Offsite sync config: `.env.infra`/`.env.core` — `BACKUP_DIR`, `OFFSITE_TAILNET_NODE`, `OFFSITE_REMOTE_PATH`; optional `OFFSITE_ENCRYPT_KEY` enables GPG-encrypted archives (`.gpg` suffix). Offsite sync sources `__lib/common.sh`, resolves `__offsite-sync.sh`.
+
+### Input Validation Conventions
+
+- `validate_value` (in `scripts/__update_engine.sh`) enforces typed inputs: `port` (positive int ≤65535), `ip` (octet range 0-255, octal-guarded), `hostname`, `memory` (`^[0-9]+[MG]i?$`), `cpu` (`^[0-9]+(\.[0-9]+)?$`), `path`, `url`, `str`.
+- Interactive prompts use `tui::input` with retry loop (3 attempts) — invalid values re-prompt with error line, never silently accepted.
+- Required vars (`R` flag in `VAR_SPECS`) reject empty; secrets auto-generate from seeded generators (`hex32`, `rand_pw`) when a default exists.
+- Simple legacy scripts (funnel) validate inline with the same regex patterns.
 
 ---
 
@@ -871,7 +957,13 @@ The admin panel can:
 
 | Model | Purpose |
 |-------|---------|
-| `admins` | Admin accounts with granular permissions |
+| `admins` | Admin accounts (permissions come from group membership) |
+| `permissions` | Fine-grained `module:verb` permission keys |
+| `groups` | Permission groups (pre-seeded, ordinary, deletable) |
+| `group_permissions` | Group ↔ permission grants |
+| `admin_groups` | Admin ↔ group membership |
+| `admin_permission_overrides` | Per-person allow/deny deltas (deny wins) |
+| `audit_log` | Append-only, hash-chained record of every action |
 | `contests` | Contest configuration (times, tokens, limits) |
 | `tasks` | Problem definitions with submission format |
 | `datasets` | Test data with time/memory limits |
@@ -886,7 +978,7 @@ The admin panel can:
 PostgreSQL `interval` type is returned by Prisma as objects or strings. Use `parseInterval()` helper:
 
 ```typescript
-const parseInterval = (val: any): number => {
+const parseInterval = (val: unknown): number => {
   if (!val) return 0;
   if (typeof val === 'number') return val;
   if (typeof val === 'string') {
@@ -963,37 +1055,27 @@ If you modify the CMS Python source:
 
 ## ENVIRONMENT VARIABLES
 
-### Source of Truth: `.env.core`
+### Source of truth: `config.toml`
+
+Every runtime value lives in `config.toml` (seeded from `config.toml.example` on first run). Nothing is edited by hand in a generated file.
+
+### Generated outputs
+
+`make env` (or `./cms config sync`) renders exactly two files from `config.toml`:
+
+| File | Consumer | Contents |
+|------|----------|----------|
+| `.env` | all compose services and shell scripts | every variable, grouped under `### [section] ###` headers |
+| `admin-panel/.env` | the Next.js server, run outside compose | `DATABASE_URL` (localhost DSN) + `AUTH_SECRET` |
+
+`.env.contest` is not one of them: it is an optional, operator-maintained per-contest override for a few deploy scripts. `CONTEST_ID` — which contest the stack serves — lives in `config.toml` `[contest]`, and the admin panel writes it there, never into a generated file.
+
+Generated files are output-only: never edit them directly — the next `config sync` overwrites them. Change `config.toml` and re-run sync instead.
 
 ```bash
-POSTGRES_USER=cmsuser
-POSTGRES_PASSWORD=YOUR_DB_PASSWORD
-POSTGRES_DB=cmsdb
-POSTGRES_PORT_EXTERNAL=5432
-```
-
-### Admin Panel: `.env.admin`
-
-```bash
-ADMIN_NEXT_PORT_EXTERNAL=8891
-DEPLOYMENT_TYPE=img|src
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
-DISCORD_ROLE_ID=123456789
-```
-
-### Generated: `admin-panel/.env`
-
-```bash
+# admin-panel/.env
 DATABASE_URL="postgresql://cmsuser:password@localhost:5432/cmsdb"
 AUTH_SECRET=your-secret-here   # Optional, random if missing
-```
-
-### Generation Flow
-
-```
-.env.core + .env.admin + .env.contest + .env.worker + .env.infra
-                    ↓ make env
-              .env (combined) + admin-panel/.env + config/cms.toml
 ```
 
 ---
@@ -1129,12 +1211,12 @@ cms-docker/
 | Prisma error | Run `make prisma-sync`, check DATABASE_URL |
 | Locale links broken | Check for hardcoded `/en/` — use `/${locale}/` |
 | Permission denied | Check `ensurePermission()` / `verifyApiPermission()` calls |
-| Docker control fails | Ensure Docker socket is mounted and user has `permission_all` |
+| Docker control fails | Ensure Docker socket is mounted and the admin's group grants `container:control` |
 | Interval fields show 0 | Use `parseInterval()` helper to parse Postgres interval objects |
 | Toast not showing | Ensure component is wrapped in `ToastProvider` |
 | Notification polling loop | Use `useRef` for mutable state in polling effects, not `useState` in deps |
 | `.env` not applied | Run `make env` to regenerate combined .env files |
-| Contest not switching | Check `.env.contest` format: `CONTESTS_DEPLOY_CONFIG=1:8888` |
+| Contest not switching | Check `CONTEST_ID` in `config.toml` `[contest]` is the wanted contest id, then run `./cms config sync` and redeploy the contest stack |
 
 ---
 

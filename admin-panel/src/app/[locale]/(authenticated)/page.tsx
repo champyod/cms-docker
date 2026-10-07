@@ -1,6 +1,7 @@
 import { checkPermission } from '@/lib/permissions';
 import { getDictionary } from '@/i18n';
-import { PermissionDenied } from '@/components/PermissionDenied';
+import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
+import { notFound } from 'next/navigation';
 import { Card } from '@/components/core/Card';
 import {
   Users,
@@ -12,8 +13,9 @@ import {
 } from 'lucide-react';
 import { prisma } from '@/lib/prisma';
 import { getServiceStatus } from '@/app/actions/services';
+import { PageSurface } from '@/components/core/PageSurface';
 import { StatusBadge, StatusType } from '@/components/core/StatusBadge';
-import { PageContent, PageHeader, Grid, Stack } from '@/components/core/Layout';
+import { Grid, Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
 import { EmptyState } from '@/components/core/EmptyState';
 
@@ -92,10 +94,11 @@ export default async function DashboardPage({
 }) {
   const { locale } = await paramsPromise;
   const dict = await getDictionary(locale);
-  const hasPermission = await checkPermission('all', false);
+  const hasPermission = await checkPermission('all:all', false);
 
+  // Why: return 404 for forbidden access so existence is indistinguishable from missing page
   if (!hasPermission) {
-    return <PermissionDenied permission="permission_all" locale={locale} dict={dict} />;
+    notFound();
   }
 
   const [stats, serviceStatus, recentActivity] = await Promise.all([
@@ -105,12 +108,11 @@ export default async function DashboardPage({
   ]);
 
   return (
-    <PageContent>
-      <PageHeader 
-        title={dict.dashboard.welcome}
-        description={dict.dashboard.description}
-      />
-
+    <PageSurface
+      breadcrumbs={listBreadcrumbs(locale, 'direct', 'home', dict)}
+      title={dict.dashboard.welcome}
+      description={dict.dashboard.description}
+    >
       <Grid cols={4}>
         <Card className="p-6 flex flex-col gap-4 relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
@@ -121,13 +123,13 @@ export default async function DashboardPage({
               <Text variant="small" color="text-neutral-400">{dict.dashboard.stats.totalUsers}</Text>
               <Text variant="h1">{stats.usersCount}</Text>
             </Stack>
-            <div className="p-2 bg-indigo-500/10 rounded-lg text-indigo-400">
+            <div className="p-2 bg-primary/10 rounded-lg text-primary">
               <Users className="w-5 h-5" />
             </div>
           </Stack>
-          <Stack direction="row" align="center" gap={2} className="z-10 text-green-400">
+          <Stack direction="row" align="center" gap={2} className="z-10 text-success">
             <ArrowUpRight className="w-4 h-4" />
-            <Text variant="small" color="text-green-400">Active Contesters</Text>
+            <Text variant="small" color="text-success">Active Contesters</Text>
           </Stack>
         </Card>
 
@@ -140,13 +142,13 @@ export default async function DashboardPage({
               <Text variant="small" color="text-neutral-400">{dict.dashboard.stats.totalContests}</Text>
               <Text variant="h1">{stats.contestsCount}</Text>
             </Stack>
-            <div className="p-2 bg-amber-500/10 rounded-lg text-amber-400">
+            <div className="p-2 bg-warning/10 rounded-lg text-warning">
               <Trophy className="w-5 h-5" />
             </div>
           </Stack>
-          <Stack direction="row" align="center" gap={2} className="z-10 text-amber-400">
+          <Stack direction="row" align="center" gap={2} className="z-10 text-warning">
             <Activity className="w-4 h-4" />
-            <Text variant="small" color="text-amber-400">{stats.activeContestsCount} Active Now</Text>
+            <Text variant="small" color="text-warning">{stats.activeContestsCount} Active Now</Text>
           </Stack>
         </Card>
 
@@ -159,7 +161,7 @@ export default async function DashboardPage({
               <Text variant="small" color="text-neutral-400">{dict.dashboard.stats.totalSubmissions}</Text>
               <Text variant="h1">{stats.submissionsCount}</Text>
             </Stack>
-            <div className="p-2 bg-cyan-500/10 rounded-lg text-cyan-400">
+            <div className="p-2 bg-info/10 rounded-lg text-info">
               <FileCode className="w-5 h-5" />
             </div>
           </Stack>
@@ -184,14 +186,14 @@ export default async function DashboardPage({
             <Stack gap={3}>
               {recentActivity.map((item) => (
                 <Stack key={item.id} direction="row" align="center" gap={4} className="p-3 rounded-lg bg-muted/50 border border-border">
-                  <div className="p-2 bg-cyan-500/10 rounded-lg text-cyan-400">
+                  <div className="p-2 bg-info/10 rounded-lg text-info">
                     <FileCode className="w-4 h-4" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <Text variant="small">
-                      <span className="font-medium text-indigo-400">{item.username}</span>
+                      <span className="font-medium text-primary">{item.username}</span>
                       {' submitted to '}
-                      <span className="font-medium text-amber-400">{item.taskName}</span>
+                      <span className="font-medium text-warning">{item.taskName}</span>
                     </Text>
                   </div>
                   <Text variant="muted" className="whitespace-nowrap">
@@ -205,6 +207,6 @@ export default async function DashboardPage({
           )}
         </Card>
       </Stack>
-    </PageContent>
+    </PageSurface>
   );
 }

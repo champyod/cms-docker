@@ -85,7 +85,7 @@
               <input type="hidden" name="official" value="no"/>
               Yes
               <input
-              {% if not admin.permission_all %}
+              {% if not admin.has_permission('all:all') %}
                   disabled
               {% endif %}
                type="submit" value="Make unofficial" />
@@ -93,7 +93,7 @@
               <input type="hidden" name="official" value="yes"/>
               No
               <input
-              {% if not admin.permission_all %}
+              {% if not admin.has_permission('all:all') %}
                   disabled
               {% endif %}
                type="submit" value="Make official" />
@@ -177,7 +177,7 @@
                            },
                            function(response) { utils.redirect_if_ok('{{ url("submission", s.id, shown_dataset.id) }}', response); }
           );"
-          {% if not admin.permission_all %}
+          {% if not admin.has_permission('all:all') %}
           disabled
           {% endif %}>
             Rerun and archive
@@ -202,7 +202,7 @@
         <td>Reevaluate</td>
         <td>
           {{ macro_reevaluation_buttons.reevaluation_buttons(
-                 admin.permission_all,
+                 admin.has_permission('all:all'),
                  url("submission", s.id, shown_dataset.id),
                  submission_id=s.id,
                  dataset_id=shown_dataset.id) }}
@@ -220,7 +220,7 @@
     {{ xsrf_form_html|safe }}
     <textarea name="comment" cols="40" rows="3">{{ s.comment }}</textarea><br/>
     <input
-{% if not admin.permission_all %}
+{% if not admin.has_permission('all:all') %}
        disabled
 {% endif %}
        type="submit"/>
@@ -321,7 +321,7 @@
                        },
                        function(response) { utils.redirect_if_ok('{{ url("submission", s.id, shown_dataset.id) }}', response); }
             );"
-            {% if not admin.permission_all %}
+            {% if not admin.has_permission('all:all') %}
             disabled
             {% endif %}>
               Rerun and archive

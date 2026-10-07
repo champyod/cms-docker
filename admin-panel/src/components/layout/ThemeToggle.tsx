@@ -5,8 +5,18 @@ import { Moon, Sun } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { useTheme } from '@/hooks/useTheme';
 
-export function ThemeToggle() {
+export function ThemeToggle(): React.JSX.Element {
   const { theme, toggleTheme } = useTheme();
+  // Placeholder while the theme is unresolved; the real icon renders after mount.
+  if (theme === null) {
+    return (
+      <Button variant="ghost" size="sm" iconOnly tooltip="Switch theme" onClick={toggleTheme}>
+        <span className="flex" suppressHydrationWarning>
+          <Moon className="size-4" aria-hidden />
+        </span>
+      </Button>
+    );
+  }
   const isDark = theme === 'dark';
   const Icon = isDark ? Sun : Moon;
 

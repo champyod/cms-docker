@@ -79,10 +79,9 @@ export function AnalysisTab({ formData, setFormData, validationErrors, analysisE
   const fields = { formData, setFormData, validationErrors, analysisEditedRef };
   return (
     <div className="animate-in fade-in slide-in-from-right-4 space-y-6 duration-300">
-      {/* ANALYSIS TAB */}
       <AnalysisToggleRow formData={formData} setFormData={setFormData} />
       {formData.analysis_enabled && (
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <AnalysisStartField {...fields} />
           <AnalysisStopField {...fields} />
         </div>

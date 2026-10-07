@@ -44,7 +44,7 @@ class AddAnnouncementHandler(BaseHandler):
     """Called to actually add an announcement
 
     """
-    @require_permission(BaseHandler.PERMISSION_MESSAGING)
+    @require_permission("announcement:create")
     def post(self, contest_id: str):
         self.contest = self.safe_get_item(Contest, contest_id)
 
@@ -67,7 +67,7 @@ class AnnouncementHandler(BaseHandler):
     """
     # No page to show a single attachment.
 
-    @require_permission(BaseHandler.PERMISSION_MESSAGING)
+    @require_permission("announcement:delete")
     def delete(self, contest_id: str, ann_id: str):
         ann = self.safe_get_item(Announcement, ann_id)
         self.contest = self.safe_get_item(Contest, contest_id)

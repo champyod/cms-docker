@@ -1,8 +1,10 @@
 'use server';
 
 import { prisma } from '@/lib/prisma';
-import { ensurePermission } from '@/lib/permissions';
+import { ensurePermission, getPermissions } from '@/lib/permissions';
+import { stripDisallowedFields } from '@/lib/field-permissions';
 import { revalidatePath } from 'next/cache';
+import { recordAudit } from '@/lib/audit';
 
 interface AddMonitorTargetInput {
   url: string;
@@ -13,7 +15,8 @@ interface AddMonitorTargetInput {
 }
 
 export async function getMonitorTargets() {
-  await ensurePermission('all');
+  await ensurePermission('monitor:read');
+  await ensurePermission('monitor:list');
   try {
     const targets = await prisma.monitor_targets.findMany({
       orderBy: { createdAt: 'desc' },
@@ -25,16 +28,34 @@ export async function getMonitorTargets() {
 }
 
 export async function addMonitorTarget(input: AddMonitorTargetInput) {
-  await ensurePermission('all');
+  await ensurePermission('monitor:create');
+  const permissions = await getPermissions();
+  const allowed = stripDisallowedFields('monitor_targets', {
+    url: input.url,
+    interval: input.interval ?? 60,
+    timeout: input.timeout ?? 5,
+    expectedStatus: input.expectedStatus ?? 200,
+    alertDiscord: input.alertDiscord ?? true,
+  }, permissions);
+  if (allowed.url === undefined) {
+    return { success: false, error: 'Insufficient field permissions' };
+  }
   try {
     const target = await prisma.monitor_targets.create({
       data: {
-        url: input.url,
-        interval: input.interval ?? 60,
-        timeout: input.timeout ?? 5,
-        expectedStatus: input.expectedStatus ?? 200,
-        alertDiscord: input.alertDiscord ?? true,
+        url: allowed.url,
+        interval: allowed.interval ?? 60,
+        timeout: allowed.timeout ?? 5,
+        expectedStatus: allowed.expectedStatus ?? 200,
+        alertDiscord: allowed.alertDiscord ?? true,
       },
+    });
+    await recordAudit({
+      verb: 'monitor:create',
+      entity: 'monitor_target',
+      entityId: String(target.id),
+      afterValues: allowed,
+      result: 'success',
     });
     revalidatePath('/settings', 'page');
     return { success: true, data: target };
@@ -47,11 +68,29 @@ export async function updateMonitorTarget(
   id: string,
   data: Partial<AddMonitorTargetInput>,
 ) {
-  await ensurePermission('all');
+  await ensurePermission('monitor:update');
+  const permissions = await getPermissions();
+  const allowed = stripDisallowedFields('monitor_targets', {
+    ...(data.url !== undefined && { url: data.url }),
+    ...(data.interval !== undefined && { interval: data.interval }),
+    ...(data.timeout !== undefined && { timeout: data.timeout }),
+    ...(data.expectedStatus !== undefined && { expectedStatus: data.expectedStatus }),
+    ...(data.alertDiscord !== undefined && { alertDiscord: data.alertDiscord }),
+  }, permissions);
+  if (Object.keys(allowed).length === 0) {
+    return { success: false, error: 'No permitted fields to update' };
+  }
   try {
     const target = await prisma.monitor_targets.update({
       where: { id },
-      data,
+      data: allowed,
+    });
+    await recordAudit({
+      verb: 'monitor:update',
+      entity: 'monitor_target',
+      entityId: String(id),
+      afterValues: allowed,
+      result: 'success',
     });
     revalidatePath('/settings', 'page');
     return { success: true, data: target };
@@ -61,9 +100,22 @@ export async function updateMonitorTarget(
 }
 
 export async function removeMonitorTarget(id: string) {
-  await ensurePermission('all');
+  await ensurePermission('monitor:delete');
+  let beforeValues: unknown = undefined;
+  try {
+    beforeValues = await prisma.monitor_targets.findUnique({ where: { id } });
+  } catch {
+    beforeValues = undefined;
+  }
   try {
     await prisma.monitor_targets.delete({ where: { id } });
+    await recordAudit({
+      verb: 'monitor:delete',
+      entity: 'monitor_target',
+      entityId: String(id),
+      beforeValues,
+      result: 'success',
+    });
     revalidatePath('/settings', 'page');
     return { success: true };
   } catch (error) {
@@ -72,15 +124,28 @@ export async function removeMonitorTarget(id: string) {
 }
 
 export async function toggleMonitorTarget(id: string) {
-  await ensurePermission('all');
+  await ensurePermission('monitor:update');
   try {
     const existing = await prisma.monitor_targets.findUnique({ where: { id } });
     if (!existing) {
       return { success: false, error: 'Target not found' };
     }
+    const permissions = await getPermissions();
+    const allowed = stripDisallowedFields('monitor_targets', { enabled: !existing.enabled }, permissions);
+    if (allowed.enabled === undefined) {
+      return { success: false, error: 'Insufficient permissions to toggle enabled' };
+    }
     const target = await prisma.monitor_targets.update({
       where: { id },
-      data: { enabled: !existing.enabled },
+      data: { enabled: allowed.enabled },
+    });
+    await recordAudit({
+      verb: 'monitor:update',
+      entity: 'monitor_target',
+      entityId: String(id),
+      beforeValues: { enabled: existing.enabled },
+      afterValues: { enabled: allowed.enabled },
+      result: 'success',
     });
     revalidatePath('/settings', 'page');
     return { success: true, data: target };
@@ -90,7 +155,7 @@ export async function toggleMonitorTarget(id: string) {
 }
 
 export async function testMonitorTarget(id: string) {
-  await ensurePermission('all');
+  await ensurePermission('monitor:test');
   try {
     const target = await prisma.monitor_targets.findUnique({ where: { id } });
     if (!target) {

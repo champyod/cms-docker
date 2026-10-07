@@ -4,9 +4,11 @@ import { useMemo, useState } from 'react';
 import { FileSpreadsheet } from 'lucide-react';
 
 import { Button } from '@/components/core/Button';
-import { Dialog, DialogFooter } from '@/components/core/Dialog';
+import { Dialog } from '@/components/core/Dialog';
+import { ModalFooter } from '@/components/core/ModalFooter';
 import { PasswordKindSelector } from '@/components/core/PasswordFieldWithKind';
 import { apiClient } from '@/lib/apiClient';
+import type { Dictionary } from '@/lib/dictionary';
 import type { PasswordKind } from '@/lib/password-format';
 import {
   buildPreviewRows,
@@ -28,6 +30,8 @@ interface UserBulkCreateCsvProps {
   onClose: () => void;
   onSuccess: () => void;
   contests: Array<{ id: number; name: string }>;
+  canReadContests: boolean;
+  navigation: Dictionary['navigation'];
 }
 
 function downloadCsv(filename: string, content: string): void {
@@ -44,7 +48,7 @@ function downloadCsv(filename: string, content: string): void {
   URL.revokeObjectURL(url);
 }
 
-export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests }: UserBulkCreateCsvProps) {
+export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests, canReadContests, navigation }: UserBulkCreateCsvProps) {
   const [csvText, setCsvText] = useState('');
   const [headerWarnings, setHeaderWarnings] = useState<string[]>([]);
   const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
@@ -148,6 +152,12 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests }: User
     });
   };
 
+  // Why the guard: a submit already in flight cannot be recalled, so cancelling
+  // through it would close the dialog over an unresolved create.
+  const cancel = (): void => {
+    if (!submitting) onClose();
+  };
+
   return (
     <Dialog
       open={isOpen}
@@ -155,18 +165,19 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests }: User
         if (!open) onClose();
       }}
       title="Bulk Add Users (CSV)"
+      description={navigation.people.users.label}
       className="sm:max-w-6xl"
     >
-      {/* INPUT */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <span className="text-[11px] uppercase tracking-wider text-muted-foreground">New password storage</span>
+          <span className="text-xs uppercase tracking-wider text-muted-foreground">New password storage</span>
           <PasswordKindSelector kind={passwordKind} onKind={setPasswordKind} />
         </div>
 
         <BulkCreateInputSection
-          contests={contests}
+          contests={canReadContests ? contests : []}
           contestId={contestId}
+          canReadContests={canReadContests}
           csvText={csvText}
           placeholder={placeholder}
           onContestIdChange={setContestId}
@@ -207,24 +218,17 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests }: User
           <SubmitResultBanner result={submitResult} onDownloadCredentials={handleExportCreatedCredentials} />
         )}
       </div>
-
-      {/* FOOTER */}
-      <DialogFooter className="mt-4 pt-4 border-t border-border">
-        <Button variant="negativeOutline" onClick={onClose} disabled={submitting}>
-          Cancel
-        </Button>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Generation mode: {generationMode}</span>
-          <Button
-            variant="positive"
-            loading={submitting}
-            onClick={handleSubmitBulk}
-            disabled={submitting || previewRows.length === 0}
-          >
-            Create Users from Preview
-          </Button>
-        </div>
-      </DialogFooter>
+      <ModalFooter
+        className="mt-4 pt-4 border-t border-border"
+        cancelLabel="Cancel"
+        cancelVariant="negativeOutline"
+        confirmLabel="Create Users from Preview"
+        onCancel={cancel}
+        onConfirm={handleSubmitBulk}
+        confirmLoading={submitting}
+        confirmDisabled={submitting || previewRows.length === 0}
+        leadingAction={<span className="text-xs text-muted-foreground">Generation mode: {generationMode}</span>}
+      />
     </Dialog>
   );
 }

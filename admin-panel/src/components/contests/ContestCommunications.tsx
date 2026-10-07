@@ -12,13 +12,14 @@ import { RankingTable, type RankingEntry, type TaskCol } from './contest-communi
 interface ContestCommunicationsProps {
   contestId: number;
   adminId: number;
+  permissionKeys?: readonly string[];
 }
 
-const TAB_BASE = 'flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors';
+const TAB_BASE = 'flex flex-none items-center gap-2 whitespace-nowrap px-4 py-3 text-sm font-medium transition-colors';
 const TAB_ACTIVE = 'border-b-2 border-primary text-primary';
 const TAB_INACTIVE = 'border-b-2 border-transparent text-muted-foreground hover:text-foreground';
 
-export function ContestCommunications({ contestId, adminId }: ContestCommunicationsProps) {
+export function ContestCommunications({ contestId, adminId, permissionKeys = [] }: ContestCommunicationsProps): React.JSX.Element {
   const { activeTab, setActiveTab, loadData, loading, announcements, questions, ranking, showAnnouncementForm, announcementSubject, announcementText, replyingTo, replySubject, replyText, setShowAnnouncementForm, setAnnouncementSubject, setAnnouncementText, setReplyingTo, setReplySubject, setReplyText, handleCreateAnnouncement, handleDeleteAnnouncement, handleReply, handleIgnore } = useContestCommunications(contestId, adminId);
 
   useEffect(() => {
@@ -27,7 +28,7 @@ export function ContestCommunications({ contestId, adminId }: ContestCommunicati
 
   return (
     <Card className="overflow-hidden">
-      <div className="flex border-b border-border">
+      <div className="flex overflow-x-auto border-b border-border">
         <button onClick={() => setActiveTab('announcements')} className={cn(TAB_BASE, activeTab === 'announcements' ? TAB_ACTIVE : TAB_INACTIVE)}>
           <Megaphone className="h-4 w-4" />Announcements
         </button>
@@ -41,8 +42,8 @@ export function ContestCommunications({ contestId, adminId }: ContestCommunicati
       <div className="p-4">
         {loading ? <div className="text-sm text-muted-foreground">Loading...</div> : (
           <>
-            {activeTab === 'announcements' && <AnnouncementsPanel announcements={announcements as AnnouncementRow[]} showForm={showAnnouncementForm} subject={announcementSubject} text={announcementText} onShowForm={setShowAnnouncementForm} onSubject={setAnnouncementSubject} onText={setAnnouncementText} onCreate={handleCreateAnnouncement} onDelete={handleDeleteAnnouncement} />}
-            {activeTab === 'questions' && <QuestionsPanel questions={questions as QuestionRow[]} replyingTo={replyingTo} replySubject={replySubject} replyText={replyText} onReplyingTo={setReplyingTo} onReplySubject={setReplySubject} onReplyText={setReplyText} onReply={handleReply} onIgnore={handleIgnore} />}
+            {activeTab === 'announcements' && <AnnouncementsPanel announcements={announcements as AnnouncementRow[]} showForm={showAnnouncementForm} subject={announcementSubject} text={announcementText} permissionKeys={permissionKeys} onShowForm={setShowAnnouncementForm} onSubject={setAnnouncementSubject} onText={setAnnouncementText} onCreate={handleCreateAnnouncement} onDelete={handleDeleteAnnouncement} />}
+            {activeTab === 'questions' && <QuestionsPanel questions={questions as QuestionRow[]} replyingTo={replyingTo} replySubject={replySubject} replyText={replyText} permissionKeys={permissionKeys} onReplyingTo={setReplyingTo} onReplySubject={setReplySubject} onReplyText={setReplyText} onReply={handleReply} onIgnore={handleIgnore} />}
             {activeTab === 'ranking' && <RankingTable ranking={ranking as { ranking: RankingEntry[]; tasks: TaskCol[] } | null} />}
           </>
         )}

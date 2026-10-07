@@ -15,16 +15,22 @@ export function ToggleSwitch({ checked, onToggle }: ToggleSwitchProps) {
       aria-checked={checked}
       onClick={onToggle}
       className={cn(
-        'relative h-6 w-12 rounded-full transition-colors',
-        checked ? 'bg-primary' : 'bg-muted'
+        'flex min-h-11 min-w-11 items-center justify-center sm:min-h-0 sm:min-w-0'
       )}
     >
       <div
         className={cn(
-          'absolute top-1 size-4 rounded-full bg-background transition-all',
-          checked ? 'left-7' : 'left-1'
+          'relative h-6 w-12 rounded-full transition-colors',
+          checked ? 'bg-primary' : 'bg-muted'
         )}
-      />
+      >
+        <div
+          className={cn(
+            'absolute top-1 size-4 rounded-full bg-background transition-all',
+            checked ? 'left-7' : 'left-1'
+          )}
+        />
+      </div>
     </button>
   );
 }

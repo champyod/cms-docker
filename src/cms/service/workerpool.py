@@ -45,6 +45,11 @@ if typing.TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# WHY: a shard that goes silent is almost always an unreachable
+# endpoint (firewall, wrong host, wrong port) rather than a broken
+# shard, so the operator is told what to look at.
+REACHABILITY_HINT = "evaluation service cannot reach shard - check network/firewall"
+
 
 class WorkerPool:
     """This class keeps the state of the workers attached to ES, and
@@ -222,6 +227,26 @@ class WorkerPool:
             plus=shard)
         return shard
 
+    def get_worker_operations(self, shard: int) -> list[ESOperation]:
+        """Return a copy of the operations currently assigned to a
+        worker, so that the caller can still inspect them after the
+        worker has been released.
+
+        An empty list is returned when the worker is not doing
+        anything, and this method never fails: the caller needs the
+        operations in order to requeue them whatever the state of the
+        pool is.
+
+        shard: the worker to inspect.
+
+        return: the operations currently assigned to the worker.
+
+        """
+        operations = self._operations.get(shard)
+        if not isinstance(operations, list):
+            return []
+        return list(operations)
+
     def release_worker(self, shard: int) -> bool | list[ESOperation]:
         """To be called by ES when it receives a notification that an
         operation finished.
@@ -383,7 +408,11 @@ class WorkerPool:
                     self._ignore[shard] = True
                     self.release_worker(shard)
                     self._worker[shard].quit(
-                        reason="No response in %s." % active_for)
+                        reason="No response in %s - %s."
+                               % (active_for, REACHABILITY_HINT),
+                        # WHY: an unresponsive worker hung a job, so it
+                        # must die nonzero to be restarted by on-failure.
+                        fatal=True)
 
         return lost_operations
 

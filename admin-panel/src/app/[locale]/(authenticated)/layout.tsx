@@ -1,11 +1,18 @@
 import { Sidebar, SIDEBAR_STORAGE_KEY } from "@/components/layout/Sidebar";
+import { MobileNav } from "@/components/layout/MobileNav";
 import { Header } from "@/components/layout/Header";
-import { getSession, refreshSession } from "@/lib/auth";
+import { getSession, readSessionStatus } from "@/lib/auth";
+import { getFreshPermissions } from "@/lib/permissions";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { PageBackground } from "@/components/core/PageBackground";
 import { Stack } from "@/components/core/Layout";
 import { ShortcutLayer } from "@/components/layout/ShortcutOverlay";
+import { MAIN_SCROLL_CONTAINER_ID, ScrollReset } from "@/components/layout/ScrollReset";
+import { DeployContestProvider } from "@/components/providers/DeployContestProvider";
+import { DictionaryProvider } from "@/components/providers/DictionaryProvider";
+import { ConfirmProvider } from "@/components/providers/ConfirmProvider";
+import { getDictionary } from "@/i18n";
 
 export default async function AuthenticatedLayout({
   children,
@@ -23,26 +30,46 @@ export default async function AuthenticatedLayout({
     redirect(`/${locale}/auth/login`);
   }
 
-  await refreshSession(session);
+  // Why: liveness is read-only here because rendering cannot write cookies; the session
+  // slide and the disabled-admin clear happen on the proxy response. Anything but active
+  // means timeout or revoked, so redirect once.
+  const sessionStatus = await readSessionStatus(session.userId);
+  if (sessionStatus.state !== "active") {
+    redirect(`/${locale}/auth/login`);
+  }
 
   const sidebarExpanded = (await cookies()).get(SIDEBAR_STORAGE_KEY)?.value !== '0';
 
-  return (
-    <PageBackground className="flex h-screen overflow-hidden">
-      <Sidebar
-        className="z-20"
-        locale={locale}
-        permissions={session.permissions}
-        initialExpanded={sidebarExpanded}
-      />
-      <Stack as="main" className="flex-1 min-h-0 relative overflow-hidden" gap={0}>
-        <Header className="z-10" username={session.username} />
+  // Why: loaded here rather than in each page so the dialog and toast copy every client component
+  // renders shares one source, and the Thai locale reaches strings the user must act on.
+  const dict = await getDictionary(locale);
 
-        <div className="flex-1 overflow-y-auto p-8 z-10 scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20">
-          {children}
-        </div>
-      </Stack>
-      <ShortcutLayer />
-    </PageBackground>
+  // Why: Sidebar must reflect current database permissions not stale token claims
+  const freshPermissions = await getFreshPermissions(session.userId);
+  const permissionKeys: readonly string[] = freshPermissions ? Array.from(freshPermissions) : [];
+
+  return (
+    <DictionaryProvider dict={dict}>
+      <ConfirmProvider>
+        <PageBackground className="flex h-screen overflow-hidden" data-authenticated-shell="true">
+          <Sidebar
+            className="z-20 hidden md:flex"
+            locale={locale}
+            permissionKeys={permissionKeys}
+            initialExpanded={sidebarExpanded}
+          />
+          <Stack as="main" className="flex-1 min-h-0 relative overflow-hidden" gap={0}>
+            <Header className="z-10" username={session.username} permissionKeys={permissionKeys} />
+
+            <div id={MAIN_SCROLL_CONTAINER_ID} className="flex-1 overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8 lg:pb-8 z-10 scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20">
+              <DeployContestProvider>{children}</DeployContestProvider>
+            </div>
+            <ScrollReset containerId={MAIN_SCROLL_CONTAINER_ID} />
+          </Stack>
+          <MobileNav locale={locale} permissionKeys={permissionKeys} />
+          <ShortcutLayer permissionKeys={permissionKeys} />
+        </PageBackground>
+      </ConfirmProvider>
+    </DictionaryProvider>
   );
 }

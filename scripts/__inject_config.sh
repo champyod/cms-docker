@@ -1,27 +1,16 @@
 #!/bin/bash
-set -euo pipefail
-
-# Source shared helpers if present — guard for absence per contract.
-if [[ -f "__lib/common.sh" ]]; then
-  # shellcheck source=/dev/null
-  source "__lib/common.sh"
-elif [[ -f "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh" ]]; then
-  # shellcheck source=/dev/null
-  source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
-fi
-# Fallback log helpers when common.sh is absent.
-if ! declare -F log_info >/dev/null 2>&1; then
-  log_info() { printf '[INFO] %s\n' "$*"; }
-fi
-if ! declare -F log_warn >/dev/null 2>&1; then
-  log_warn() { printf '[WARN] %s\n' "$*" >&2; }
-fi
-if ! declare -F log_die >/dev/null 2>&1; then
-  log_die() { printf '[FAIL] %s\n' "${1:-fatal}" >&2; exit "${2:-1}"; }
+set -eu
+# pipefail only if available
+if (set -o pipefail 2>/dev/null); then
+    set -o pipefail
 fi
 
-ENV_FILE=".env.core"
-WORKER_ENV_FILE=".env.worker"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__lib/common.sh"
+
+ENV_FILE=".env"
+WORKER_ENV_FILE=".env"
 CONFIG_FILE="config/cms.toml"
 RANKING_CONFIG_FILE="config/cms_ranking.toml"
 SKIP_RANKING=false
@@ -41,24 +30,24 @@ if [[ ! -f "$RANKING_CONFIG_FILE" ]]; then
   SKIP_RANKING=true
 fi
 
-# Exact key match via awk -F= (avoids regex metachars in key).
+# Exact key match via awk -F= (avoids regex metachars in key). Values are passed
+# through env_unquote because __config_sync quotes any value containing whitespace or
+# a shell metacharacter — without it a quoted password would be injected into
+# cms.toml (and a quoted RPC secret into [rpc]) with its quotes still attached.
 get_env_val() {
   local key="$1"
   local file="$ENV_FILE"
-  awk -F= -v k="$key" '$1==k { v=$0; sub(/^[^=]*=/, "", v); print v; exit }' "$file" 2>/dev/null | tr -d '\r' || true
+  local raw
+  raw="$(awk -F= -v k="$key" '$1==k { v=$0; sub(/^[^=]*=/, "", v); print v; exit }' "$file" 2>/dev/null | tr -d '\r' || true)"
+  env_unquote "$raw"
 }
 get_worker_env_val() {
   local key="$1"
   local file="$WORKER_ENV_FILE"
+  local raw
   [[ -f "$file" ]] || return 0
-  awk -F= -v k="$key" '$1==k { v=$0; sub(/^[^=]*=/, "", v); print v; exit }' "$file" 2>/dev/null | tr -d '\r' || true
-}
-
-# Helper: exact match from arbitrary file (for .env.contest).
-get_kv_from_file() {
-  local key="$1" file="$2"
-  [[ -f "$file" ]] || return 0
-  awk -F= -v k="$key" '$1==k { v=$0; sub(/^[^=]*=/, "", v); print v; exit }' "$file" 2>/dev/null | tr -d '\r' || true
+  raw="$(awk -F= -v k="$key" '$1==k { v=$0; sub(/^[^=]*=/, "", v); print v; exit }' "$file" 2>/dev/null | tr -d '\r' || true)"
+  env_unquote "$raw"
 }
 
 DB_USER="$(get_env_val "POSTGRES_USER")"
@@ -67,7 +56,9 @@ DB_NAME="$(get_env_val "POSTGRES_DB")"
 DB_HOST="$(get_env_val "POSTGRES_HOST")"
 DB_PORT="$(get_env_val "POSTGRES_PORT")"
 CMS_SECRET="$(get_env_val "CMS_SECRET_KEY")"
-TAILSCALE_IP="$(get_env_val "TAILSCALE_IP")"
+RPC_SECRET="$(get_env_val "RPC_SECRET")"
+RPC_ALLOW_BACKDOOR="$(get_env_val "RPC_ALLOW_BACKDOOR")"
+INNER_IP="$(get_env_val "INNER_IP")"
 CORE_SERVICES_IP="$(get_env_val "CORE_SERVICES_IP")"
 
 DB_USER="${DB_USER:-$(get_worker_env_val "POSTGRES_USER")}"
@@ -76,6 +67,9 @@ DB_NAME="${DB_NAME:-$(get_worker_env_val "POSTGRES_DB")}"
 DB_HOST="${DB_HOST:-$(get_worker_env_val "POSTGRES_HOST")}"
 DB_PORT="${DB_PORT:-$(get_worker_env_val "POSTGRES_PORT")}"
 
+# WHY: Python services run as the owner role cmsuser — they need full DML and
+# large-object lifecycle; no additional DML role exists.
+
 DB_USER="${DB_USER:-cmsuser}"
 DB_PASS="${DB_PASS:-your_password_here}"
 DB_NAME="${DB_NAME:-cmsdb}"
@@ -83,7 +77,7 @@ DB_NAME="${DB_NAME:-cmsdb}"
 # reach Postgres through the compose network service name ("database") — never a
 # routable IP, which is unreachable from inside the docker bridge and breaks RPC.
 # REMOTE workers have no such container: set WORKER_DB_HOST (+ WORKER_DB_PORT)
-# in .env.worker so cms.toml points at the main server's routable address instead.
+# in .env so cms.toml points at the main server's routable address instead.
 if [[ -n "$(get_worker_env_val "WORKER_DB_HOST")" ]]; then
   DB_HOST="$(get_worker_env_val "WORKER_DB_HOST")"
   _W_DB_PORT="$(get_worker_env_val "WORKER_DB_PORT")"
@@ -98,13 +92,18 @@ echo "  - DB Host: $DB_HOST:$DB_PORT"
 echo "  - DB User: $DB_USER"
 echo "  - DB Name: $DB_NAME"
 
-export DB_USER DB_PASS DB_NAME DB_HOST DB_PORT CMS_SECRET TAILSCALE_IP CORE_SERVICES_IP
+export DB_USER DB_PASS DB_NAME DB_HOST DB_PORT CMS_SECRET RPC_SECRET RPC_ALLOW_BACKDOOR INNER_IP CORE_SERVICES_IP
 
-# Ranking Scoreboard auth — exact-match reads, never via grep regex.
-R_USER="$(get_kv_from_file "RANKING_USERNAME" ".env.contest")"
-R_PASS="$(get_kv_from_file "RANKING_PASSWORD" ".env.contest")"
-R_USER="${R_USER:-usern4me}"
-R_PASS="${R_PASS:-passw0rd}"
+# Scoreboard auth for the ranking push and the ranking web UI — exact-match reads
+# (never grep regex) from the merged .env. A missing value aborts the run: a built-in
+# fallback would publish default credentials on a live ranking service.
+R_USER="$(get_env_val "RANKING_USERNAME")"
+R_PASS="$(get_env_val "RANKING_PASSWORD")"
+if [[ -z "$R_USER" || -z "$R_PASS" ]]; then
+  echo "Error: RANKING_USERNAME / RANKING_PASSWORD missing from $ENV_FILE." >&2
+  echo "Fix: set them in config.toml [admin], then run: ./cms config sync" >&2
+  exit 1
+fi
 export R_USER R_PASS
 
 # Perform replacements using Python for robustness — secrets via env, never argv.
@@ -120,6 +119,29 @@ if not config_path.exists():
 text = config_path.read_text()
 
 def toml_escape(v): return v.replace("\\", "\\\\").replace('"', '\\"')
+
+# Section-scoped: keys like num_proxies_used exist in multiple sections, so a
+# global sub would cross-contaminate them. Appends the key if absent.
+def set_section_key(text, section, key, value):
+    lines = text.splitlines()
+    out, in_section, replaced = [], False, False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith('[') and stripped.endswith(']'):
+            if in_section and not replaced:
+                out.append(f'{key} = {value}')
+                replaced = True
+            in_section = stripped == f'[{section}]'
+            out.append(line)
+            continue
+        if in_section and not replaced and re.match(rf'^{re.escape(key)}\s*=', line):
+            out.append(f'{key} = {value}')
+            replaced = True
+            continue
+        out.append(line)
+    if in_section and not replaced:
+        out.append(f'{key} = {value}')
+    return "\n".join(out)
 
 user = os.environ.get("DB_USER", "cmsuser")
 pw = os.environ.get("DB_PASS", "your_password_here")
@@ -145,15 +167,78 @@ cms_secret = os.environ.get("CMS_SECRET", "")
 if cms_secret:
     text = re.sub(r'^secret_key = ".*"', lambda m: f'secret_key = "{toml_escape(cms_secret)}"', text, flags=re.MULTILINE)
 
-r_user = os.environ.get("R_USER", "usern4me")
-r_pass = os.environ.get("R_PASS", "passw0rd")
+r_user = os.environ["R_USER"]
+r_pass = os.environ["R_PASS"]
+
+# config.toml [contest] -> cms.toml [contest_web_server] (previously never synced,
+# so config.toml edits like NUM_PROXIES_USED never reached the CMS).
+def _set_contest(key, env_var):
+    global text
+    raw = os.environ.get(env_var, "").strip()
+    if raw:
+        text = set_section_key(text, 'contest_web_server', key, raw)
+
+_set_contest('num_proxies_used', 'NUM_PROXIES_USED')
+_set_contest('cookie_duration', 'COOKIE_DURATION')
+_set_contest('max_submission_length', 'MAX_SUBMISSION_LENGTH')
+_set_contest('max_input_length', 'MAX_INPUT_LENGTH')
+_set_contest('submit_local_copy', 'SUBMIT_LOCAL_COPY')
+
+# config.toml [admin] CAPTCHA_* -> cms.toml [<server>.captcha]. WHY both servers
+# get the same table: they verify against the same provider with the same keys,
+# and two copies of these values would be free to drift. An empty or absent
+# value leaves the shipped default, which is off — so a deployment that sets
+# nothing keeps logging in exactly as before.
+def _set_captcha(section):
+    global text
+    for key, env_var in (('enabled', 'CAPTCHA_ENABLED'),
+                         ('provider', 'CAPTCHA_PROVIDER'),
+                         ('site_key', 'CAPTCHA_SITE_KEY'),
+                         ('secret_key', 'CAPTCHA_SECRET_KEY'),
+                         ('threshold', 'CAPTCHA_THRESHOLD'),
+                         ('ban_threshold', 'CAPTCHA_BAN_THRESHOLD')):
+        raw = os.environ.get(env_var, "").strip()
+        if raw:
+            value = 'true' if raw == "1" else ('false' if raw == "0" else raw)
+            text = set_section_key(text, section, key, value)
+
+_set_captcha('admin_web_server.captcha')
+_set_captcha('contest_web_server.captcha')
+
+# config.toml [admin] LOGIN_RATE_LIMIT_REDIS_* -> cms.toml [<server>.captcha].
+# WHY these land in the captcha table rather than a new one: CaptchaConfig is the
+# single dataclass both web servers share (conf.py), so the login counters' backend
+# has to be carried on the same object the login handlers already receive. A Redis
+# that cannot be reached degrades to in-process counting and a captcha demanded on
+# every attempt, so an operator pointing this at a stopped instance taxes the
+# attacker rather than lifting the lockout — the default stays off and nothing about
+# an existing deployment changes until it is set.
+#
+# WHY redis_host is written quoted while the other two are bare: the global
+# '"127.0.0.1"' -> '"0.0.0.0"' substitution further down rewrites any quoted
+# loopback address in the file, and this one is a host to dial rather than an
+# address to bind. Quoting it keeps the substitution finding it and moving the
+# value on to 0.0.0.0, which is then plainly wrong rather than silently
+# dialing nothing.
+def _set_login_rate_limit(section):
+    global text
+    for key, env_var, quoted in (('redis_enabled', 'LOGIN_RATE_LIMIT_REDIS_ENABLED', False),
+                                 ('redis_host', 'LOGIN_RATE_LIMIT_REDIS_HOST', True),
+                                 ('redis_port', 'LOGIN_RATE_LIMIT_REDIS_PORT', False)):
+        raw = os.environ.get(env_var, "").strip()
+        if raw:
+            value = 'true' if raw == "1" else ('false' if raw == "0" else raw)
+            text = set_section_key(text, section, key, f'"{value}"' if quoted else value)
+
+_set_login_rate_limit('admin_web_server.captcha')
+_set_login_rate_limit('contest_web_server.captcha')
 
 # Push target for score feed: same-network service by default. A remote
 # ranking node is only assumed when RANKING_REMOTE=1 (then RANKING_PUSH_HOST
-# or legacy TAILSCALE_IP supplies the address). Port 8890 is always enforced.
+# or INNER_IP supplies the address). Port 8890 is always enforced.
 ranking_host = os.environ.get("RANKING_PUSH_HOST", "").strip()
 if os.environ.get("RANKING_REMOTE", "").strip() == "1" and not ranking_host:
-    ranking_host = os.environ.get("TAILSCALE_IP", "").strip()
+    ranking_host = os.environ.get("INNER_IP", "").strip()
 if not ranking_host:
     ranking_host = "cms-ranking-web-server"
 if ":" not in ranking_host.split("/")[-1]:
@@ -184,6 +269,30 @@ if 'log_dir =' not in text:
 if 'cache_dir =' not in text:
     text = text.replace('log_dir = "/var/local/log/cms"', 'log_dir = "/var/local/log/cms"\ncache_dir = "/var/local/cache/cms"\ndata_dir = "/var/local/lib/cms"')
 
+# Inject RPC shared secret and backdoor flag into [rpc] section.
+rpc_secret = os.environ.get("RPC_SECRET", "").strip()
+rpc_backdoor = os.environ.get("RPC_ALLOW_BACKDOOR", "").strip().lower()
+# Normalize bool for TOML
+if rpc_backdoor in ("true", "1", "yes"):
+    rpc_backdoor_val = "true"
+elif rpc_backdoor in ("false", "0", "no", ""):
+    rpc_backdoor_val = "false"
+else:
+    rpc_backdoor_val = "false"
+if rpc_secret:
+    if re.search(r'^\s*secret\s*=', text, re.MULTILINE):
+        text = re.sub(r'^\s*secret\s*=.*', lambda m: f'secret = "{toml_escape(rpc_secret)}"', text, flags=re.MULTILINE)
+    elif re.search(r'^\[rpc\]', text, re.MULTILINE):
+        text = re.sub(r'^(\[rpc\].*)', lambda m: m.group(1) + f'\nsecret = "{toml_escape(rpc_secret)}"', text, flags=re.MULTILINE, count=1)
+    else:
+        text += f'\n[rpc]\nsecret = "{toml_escape(rpc_secret)}"\n'
+# Ensure allow_backdoor is present when [rpc] exists
+if re.search(r'^\[rpc\]', text, re.MULTILINE):
+    if re.search(r'^\s*allow_backdoor\s*=', text, re.MULTILINE):
+        text = re.sub(r'^\s*allow_backdoor\s*=.*', lambda m: f'allow_backdoor = {rpc_backdoor_val}', text, flags=re.MULTILINE)
+    else:
+        text = re.sub(r'^(\[rpc\].*)', lambda m: m.group(1) + f'\nallow_backdoor = {rpc_backdoor_val}', text, flags=re.MULTILINE, count=1)
+
 config_path.write_text(text)
 PY
 
@@ -200,6 +309,36 @@ if p.exists():
     def toml_escape(v): return v.replace("\\", "\\\\").replace('"', '\\"')
     t = re.sub(r'^username = ".*"', lambda m: f'username = "{toml_escape(u)}"', t, flags=re.MULTILINE)
     t = re.sub(r'^password = ".*"', lambda m: f'password = "{toml_escape(pw)}"', t, flags=re.MULTILINE)
+    # Sync RANKING_LOGO_PATH -> container-side logo_path (if host file set)
+    admin_logo = ""
+    try:
+        for line in Path(".env").read_text().splitlines():
+            if line.startswith("RANKING_LOGO_PATH="):
+                admin_logo = line.split("=",1)[1].strip().strip('"').strip("'")
+                break
+    except: pass
+    lib_dir = "/var/local/lib/cms/ranking"
+    try:
+        for line in Path(".env").read_text().splitlines():
+            if line.startswith("CMS_RANKING_LIB_DIR="):
+                lib_dir = line.split("=",1)[1].strip().strip('"').strip("'") or lib_dir
+                break
+    except: pass
+    t = re.sub(r'^\s*(#\s*)?lib_dir\s*=.*', f'lib_dir = "{lib_dir}"', t, flags=re.MULTILINE)
+    if admin_logo:
+        ext = admin_logo.rsplit(".",1)[-1].lower() if "." in admin_logo else "png"
+        if ext == "jpeg": ext = "jpg"
+        if ext not in ("png","jpg","gif","bmp"): ext = "png"
+        container_logo = f"{lib_dir}/logo.{ext}"
+        if re.search(r'^logo_path\s*=', t, re.MULTILINE):
+            t = re.sub(r'^logo_path\s*=.*', lambda m: f'logo_path = "{toml_escape(container_logo)}"', t, flags=re.MULTILINE)
+        else:
+            if re.search(r'^lib_dir\s*=', t, re.MULTILINE):
+                t = re.sub(r'^(lib_dir\s*=.*)', lambda m: m.group(1) + f'\nlogo_path = "{toml_escape(container_logo)}"', t, flags=re.MULTILINE, count=1)
+            else:
+                t = "lib_dir = \"{}\"\nlogo_path = \"{}\"\n{}".format(lib_dir, container_logo, t)
+    else:
+        t = re.sub(r'^logo_path\s*=.*\n?', '', t, flags=re.MULTILINE)
     p.write_text(t)
 PY
 fi
@@ -208,7 +347,7 @@ fi
 echo "Building contest web server configuration..."
 CWS_ARRAY=""
 CWS_COUNT=0
-DEPLOY_CONFIG="$(get_kv_from_file "CONTESTS_DEPLOY_CONFIG" ".env.contest")"
+DEPLOY_CONFIG="$(get_env_val "CONTESTS_DEPLOY_CONFIG")"
 if [[ -n "${DEPLOY_CONFIG:-}" ]] && [[ "$DEPLOY_CONFIG" != "[]" ]]; then
   CWS_SECTION="$(DEPLOY_CONFIG="$DEPLOY_CONFIG" python3 - << 'PY'
 import json, os

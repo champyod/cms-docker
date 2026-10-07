@@ -651,7 +651,7 @@ describe('scheduler compose service', () => {
 
   it('is named cms-scheduler and restarts like its siblings', () => {
     expect(service).toContain('container_name: cms-scheduler');
-    expect(service).toContain('restart: on-failure:5');
+    expect(service).toContain('restart: unless-stopped');
   });
 
   it('joins the monitor profile, so make infra and make all start it', () => {

@@ -51,12 +51,28 @@ export function parseIpAllowlist(raw: string | undefined): { validIps: string[];
     return { validIps: [], error: `Too many IP entries (max ${MAX_IP_ENTRIES})` };
   }
 
-  const validIps = entries.filter(ip => {
-    if (!CIDR_PATTERN.test(ip)) return false;
-    const addr = ip.split('/')[0] ?? '';
-    return addr.split('.').every(octet => Number(octet) <= 255);
-  });
-  return { validIps };
+  for (const ip of entries) {
+    if (!CIDR_PATTERN.test(ip)) {
+      return { validIps: [], error: `Invalid IP or CIDR: ${ip}` };
+    }
+    const [addr = '', mask = ''] = ip.split('/');
+    const octets = addr.split('.').map(Number);
+    if (!octets.every(octet => Number.isInteger(octet) && octet >= 0 && octet <= 255)) {
+      return { validIps: [], error: `Invalid IP or CIDR: ${ip}` };
+    }
+    // Why reject here: Postgres throws 22P02 on misaligned masks
+    // (10.10.0.0/10), so fail at the form with the network address named.
+    if (mask !== '') {
+      const bits = Number(mask);
+      const addrInt = octets.reduce((acc, octet) => acc * 256 + octet, 0) >>> 0;
+      const maskInt = bits === 0 ? 0 : (0xffffffff << (32 - bits)) >>> 0;
+      if ((addrInt & maskInt) >>> 0 !== addrInt) {
+        const net = [24, 16, 8, 0].map(shift => (addrInt & maskInt) >>> shift & 255).join('.');
+        return { validIps: [], error: `Misaligned CIDR ${ip}: use ${net}/${bits}` };
+      }
+    }
+  }
+  return { validIps: entries };
 }
 
 /** Raw SQL is required here: interval and cidr columns have no Prisma scalar mapping. */

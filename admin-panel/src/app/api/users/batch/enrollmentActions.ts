@@ -1,15 +1,16 @@
 import { revalidatePath } from 'next/cache';
 import type { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { apiError, apiSuccess } from '@/lib/api-utils';
+import { apiError, apiSuccess, verifyApiPermission } from '@/lib/api-utils';
 import { resolveTeamIdByCode } from '@/lib/teams';
 import type { BatchActionRequest } from './credentialActions';
+import { recordAudit } from '@/lib/audit';
 
 const CONTEST_MODES = ['add', 'remove'] as const;
 const TEAM_MODES = ['set', 'remove-any'] as const;
 
 function revalidateUserContestPages(): void {
-  revalidatePath('/[locale]/users', 'page');
+  revalidatePath('/[locale]/people/users', 'page');
   revalidatePath('/[locale]/contests', 'page');
 }
 
@@ -53,10 +54,25 @@ export async function handleContest({ body, userIds }: BatchActionRequest): Prom
   }
 
   if (mode === 'add') {
+    // WHY participation:create: this inserts participations rows.
+    const { authorized, response } = await verifyApiPermission('participation:create');
+    if (!authorized) return response;
+
     const addedCount = await addUsersToContest(contestId, userIds);
+    await recordAudit({
+      verb: 'participation:create',
+      entity: 'contest',
+      entityId: String(contestId),
+      afterValues: { action: 'batch-contest-add', contestId, userIds, addedCount },
+      result: 'success',
+    });
     revalidateUserContestPages();
     return apiSuccess({ success: true, addedCount, removedCount: 0 });
   }
+
+  // WHY participation:delete: this removes participations rows.
+  const { authorized, response } = await verifyApiPermission('participation:delete');
+  if (!authorized) return response;
 
   const removed = await prisma.participations.deleteMany({
     where: {
@@ -65,6 +81,13 @@ export async function handleContest({ body, userIds }: BatchActionRequest): Prom
     },
   });
 
+  await recordAudit({
+    verb: 'participation:delete',
+    entity: 'contest',
+    entityId: String(contestId),
+    afterValues: { action: 'batch-contest-remove', contestId, userIds, removedCount: removed.count },
+    result: 'success',
+  });
   revalidateUserContestPages();
   return apiSuccess({ success: true, addedCount: 0, removedCount: removed.count });
 }
@@ -116,6 +139,13 @@ async function assignTeamByCode(
   const teamId = await resolveTeamIdByCode(teamCode);
   const updatedCount = await assignTeamToUsers(contestId, teamId, userIds);
 
+  await recordAudit({
+    verb: 'participation:update',
+    entity: 'team',
+    entityId: String(teamId),
+    afterValues: { action: 'batch-team-set', contestId, teamCode, teamId, userIds, updatedCount },
+    result: 'success',
+  });
   revalidateUserContestPages();
   return apiSuccess({ success: true, updatedCount, teamId, teamCode });
 }
@@ -131,8 +161,19 @@ export async function handleTeam({ body, userIds }: BatchActionRequest): Promise
     return apiError({ message: 'Invalid team mode', status: 400 });
   }
 
+  // WHY participation:update: both modes write participations.team_id, so the
+  // table being written decides the permission, not the wording of the action.
+  const { authorized, response } = await verifyApiPermission('participation:update');
+  if (!authorized) return response;
+
   if (mode === 'remove-any') {
     const updatedCount = await removeUsersFromAnyTeam(userIds);
+    await recordAudit({
+      verb: 'participation:update',
+      entity: 'team',
+      afterValues: { action: 'batch-team-remove-any', userIds, updatedCount },
+      result: 'success',
+    });
     revalidateUserContestPages();
     return apiSuccess({ success: true, updatedCount });
   }

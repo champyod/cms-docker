@@ -56,7 +56,7 @@ No vendor, no subscription.
 
 ## 6. Maintenance
 
-- **Weekly**: `docker compose --profile waf logs grader-waf | grep ModSecurity` — scan for new FP spikes.
+- **Weekly**: `docker compose -f docker-compose.domain.yml -f docker-compose.waf.yml --profile waf logs grader-waf | grep ModSecurity` — scan for new FP spikes.
 - **Rule update**: bump `owasp/modsecurity-crs:nginx-alpine` tag monthly; re-run DetectionOnly for 24 h after upgrade.
 - **Threshold**: if FPs cluster just above 5, raise `WAF_ANOMALY_INBOUND=8` for that deployment, or whitelist per-location (section 8).
 - **Log rotation**: `waf-logs` is a Docker volume; cap with `docker system prune` or add a logrotate sidecar if needed.
@@ -89,7 +89,7 @@ Set `WAF_PORT=443` and move `DOMAIN_NGINX_HTTPS_PORT` off 443 (e.g., 8443), or r
 
 WAF and CAPTCHA are **independent layers**:
 
-- **CAPTCHA (Upgrade-2)**: per-IP failed-login counter → challenge at threshold 3, ban at 5. Handles brute-force.
+- **CAPTCHA**: failed-login counter → challenge at threshold 3, lockout at 5. Handles brute-force. The counter is per account plus, on some deployment paths, per source address — see [LOGIN-CAPTCHA.md](LOGIN-CAPTCHA.md) for which paths get the per-source ban.
 - **WAF**: per-request payload scoring → blocks exploit payloads at any endpoint.
 - **Both on**: WAF score can tighten `limit_req` (e.g., map WAF `X-ModSec-Score` to a lower `limit_req` burst) but CAPTCHA still handles credential stuffing even if WAF whitelists `/login` payloads. WAF **does not** replace CAPTCHA; CAPTCHA stays active when `WAF_ENABLED=0` and also when `WAF_ENABLED=1`.
 - **Policy**: leave `CAPTCHA_ENABLED` as before; WAF enablement does not change CAPTCHA files or envs.
@@ -103,10 +103,11 @@ WAF and CAPTCHA are **independent layers**:
 `config/modsecurity/modsecurity.conf` already sets `SecRuleEngine DetectionOnly`. Start WAF:
 
 ```bash
-cp .env.infra.example .env.infra   # ensure WAF_ENABLED=0 initially
+./cms config sync   # ensure WAF_ENABLED=0 initially (config.toml [infra])
 # when ready to observe:
 WAF_ENABLED=1 WAF_PORT=8080 docker compose -f docker-compose.domain.yml -f docker-compose.waf.yml --profile waf up -d
-# or: echo WAF_ENABLED=1 >> .env.infra && docker compose --profile waf -f docker-compose.yml -f docker-compose.domain.yml -f docker-compose.waf.yml up -d
+# or: set WAF_ENABLED=1 in config.toml [infra], ./cms config sync, then:
+# docker compose --profile waf -f docker-compose.yml -f docker-compose.domain.yml -f docker-compose.waf.yml up -d
 ```
 
 Verify: `curl -i http://127.0.0.1:8080/` should return the grader page via WAF; `docker logs grader-waf` shows CRS init.
@@ -136,7 +137,7 @@ SecRule REQUEST_URI "@beginsWith /api/submissions" "id:1001,phase:1,pass,nolog,c
 SecRule REMOTE_ADDR "@ipMatch 10.0.0.0/8,192.168.0.0/16" "id:1002,phase:1,pass,nolog,ctl:ruleEngine=DetectionOnly"
 
 # Raise threshold globally instead of per-rule (alternative)
-# WAF_ANOMALY_INBOUND=8  in .env.infra and restart grader-waf
+# WAF_ANOMALY_INBOUND=8 in config.toml [infra], then ./cms config sync and restart grader-waf
 ```
 
 Or use CRS update-target helpers:
@@ -164,7 +165,7 @@ WAF_RULE_ENGINE=On docker compose --profile waf -f docker-compose.domain.yml -f 
 
 # Option B: edit config/modsecurity/modsecurity.conf → SecRuleEngine On
 # then:
-docker compose --profile waf restart grader-waf
+docker compose -f docker-compose.domain.yml -f docker-compose.waf.yml --profile waf restart grader-waf
 ```
 
 Monitor `modsec_audit.log` for blocked legitimate traffic; if any, revert to DetectionOnly, add exclusion, re-enable.

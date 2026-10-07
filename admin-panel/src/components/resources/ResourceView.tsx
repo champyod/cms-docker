@@ -1,170 +1,133 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { getServerStats, getWorkerStats } from '@/app/actions/stats';
+import { useCallback, useState } from 'react';
 import { WorkerGrid } from '@/components/resources/WorkerGrid';
 import { CoreServicesStatus } from '@/components/resources/CoreServicesStatus';
 import { NetworkTrafficLogs } from '@/components/resources/NetworkTrafficLogs';
+import { GaugeCard } from '@/components/resources/GaugeCard';
 import { Activity, Cpu, Database, Network } from 'lucide-react';
 import { Card } from '@/components/core/Card';
+import { LiveIndicator } from '@/components/core/LiveIndicator';
+import { SurfaceState } from '@/components/core/SurfaceState';
+import { usePublishModuleTabActions } from '@/components/navigation/ModuleTabActionSlot';
+import { useLiveStream } from '@/hooks/useLiveStream';
+import { useDictionary } from '@/hooks/useDictionary';
+import { TRAFFIC_LOG_LIMIT_DEFAULT } from '@/lib/constants/live-stream';
+import type { ResourceFrame, ServerStats, TrafficLog, WorkerStat, CoreServiceStatus } from '@/lib/live-frames';
 
-export function ResourceView() {
-  const [serverStats, setServerStats] = useState<Awaited<ReturnType<typeof getServerStats>> | null>(null);
-  const [workers, setWorkers] = useState<Awaited<ReturnType<typeof getWorkerStats>>>([]);
+export function ResourceView(): React.JSX.Element {
+  const dict = useDictionary();
+  const [serverStats, setServerStats] = useState<ServerStats | null>(null);
+  const [workers, setWorkers] = useState<WorkerStat[]>([]);
+  const [services, setServices] = useState<CoreServiceStatus[]>([]);
+  const [traffic, setTraffic] = useState<TrafficLog[]>([]);
+  const [trafficLimit, setTrafficLimit] = useState<number>(TRAFFIC_LOG_LIMIT_DEFAULT);
   const [loading, setLoading] = useState(true);
-  const serverInFlightRef = useRef(false);
-  const workersInFlightRef = useRef(false);
 
-  const fetchServerStats = async () => {
-    if (serverInFlightRef.current) return;
-    serverInFlightRef.current = true;
-    try {
-      const sStats = await getServerStats();
-      setServerStats(sStats);
-    } catch (error) {
-      console.error('Failed to fetch server stats:', error);
-    } finally {
-      serverInFlightRef.current = false;
-      setLoading(false);
-    }
-  };
-
-  const fetchWorkerStats = async () => {
-    if (workersInFlightRef.current) return;
-    workersInFlightRef.current = true;
-    try {
-      const wStats = await getWorkerStats();
-      setWorkers(wStats);
-    } catch (error) {
-      console.error('Failed to fetch worker stats:', error);
-    } finally {
-      workersInFlightRef.current = false;
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const tickServer = async () => {
-      if (cancelled) return;
-      if (document.hidden) return;
-      await fetchServerStats();
-    };
-
-    const tickWorkers = async () => {
-      if (cancelled) return;
-      if (document.hidden) return;
-      await fetchWorkerStats();
-    };
-
-    void tickServer();
-    void tickWorkers();
-
-    const serverInterval = setInterval(() => { void tickServer(); }, 1000);
-    const workersInterval = setInterval(() => { void tickWorkers(); }, 5000);
-
-    const onVisibilityChange = () => {
-      if (!document.hidden) {
-        void tickServer();
-      }
-    };
-
-    document.addEventListener('visibilitychange', onVisibilityChange);
-
-    return () => {
-      cancelled = true;
-      clearInterval(serverInterval);
-      clearInterval(workersInterval);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-    };
+  // Why every section is optional in the frame: a section is left out when this viewer may not read
+  // it or when its probe failed, and the card must then keep the last reading it had rather than
+  // blanking out. The same handler covers all four cards because they arrive on one connection.
+  const onFrame = useCallback((frame: ResourceFrame): void => {
+    if (frame.server) setServerStats(frame.server);
+    if (frame.workers) setWorkers(frame.workers);
+    if (frame.services) setServices(frame.services);
+    if (frame.traffic) setTraffic(frame.traffic);
+    setLoading(false);
   }, []);
 
-  if (loading && !serverStats) {
-    return <div className="text-muted-foreground">Loading system metrics...</div>;
+  const { status } = useLiveStream<ResourceFrame>({
+    url: `/api/resources/stream?trafficLimit=${trafficLimit}`,
+    onFrame,
+  });
+
+  const source = serverStats?.source === 'host' ? dict.resources.hostSource : dict.resources.containerSource;
+  const awaitingFirstFrame = loading && !serverStats;
+
+  // Why the indicator is published from here and withdrawn while loading: the stream status
+  // is this hook's own, and the loading surface below replaces the panel body entirely.
+  usePublishModuleTabActions(
+    'infrastructure.resources',
+    awaitingFirstFrame ? null : <LiveIndicator status={status} />,
+  );
+
+  if (awaitingFirstFrame) {
+    return <SurfaceState status={{ kind: 'loading', title: dict.resources.loading }} />;
   }
 
   return (
-    <div className="space-y-8">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <CoreServicesStatus />
+    <div className="space-y-4 density:space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <CoreServicesStatus services={services} loading={loading} />
 
-          <Card className="p-6 flex flex-col justify-center items-center text-center space-y-4">
-            <div className="flex items-center gap-2 text-indigo-400 mb-2">
-                <Cpu className="w-4 h-4" />
-              <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">CPU Usage {serverStats?.source === 'host' ? '(Host)' : '(Container)'}</span>
-            </div>
-            <div className="text-4xl font-bold text-foreground font-mono">{serverStats?.cpu || 0}%</div>
-            <div className="w-full h-1.5 bg-muted/50 rounded-full overflow-hidden">
-                <div 
-                    className={`h-full transition-all duration-1000 ${
-                        (serverStats?.cpu || 0) > 80 ? 'bg-red-500' : (serverStats?.cpu || 0) > 50 ? 'bg-amber-500' : 'bg-indigo-500'
-                    }`}
-                    style={{ width: `${serverStats?.cpu || 0}%` }} 
-                />
-            </div>
-          </Card>
+          <GaugeCard
+            icon={<Cpu className="w-4 h-4 text-primary" />}
+            label={dict.resources.cpuUsage}
+            source={source}
+            percent={serverStats?.cpu || 0}
+            tone="auto"
+          />
 
-           <Card className="p-6 flex flex-col justify-center items-center text-center space-y-4">
-            <div className="flex items-center gap-2 text-cyan-400 mb-2">
-                <Database className="w-4 h-4" />
-              <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">RAM Usage {serverStats?.source === 'host' ? '(Host)' : '(Container)'}</span>
-            </div>
-            <div className="text-4xl font-bold text-foreground font-mono">{serverStats?.memory || 0}%</div>
-            <div className="w-full h-1.5 bg-muted/50 rounded-full overflow-hidden">
-                <div 
-                    className="h-full bg-cyan-500 transition-all duration-1000" 
-                    style={{ width: `${serverStats?.memory || 0}%` }} 
-                />
-            </div>
-          </Card>
-      </div>
-
-      <div className="space-y-4">
-        <div className="flex items-center gap-2 text-foreground">
-            <Activity className="w-5 h-5 text-indigo-400" />
-            <h2 className="text-xl font-bold">Worker Nodes</h2>
+          <GaugeCard
+            icon={<Database className="w-4 h-4 text-info" />}
+            label={dict.resources.memoryUsage}
+            source={source}
+            percent={serverStats?.memory || 0}
+            tone="info"
+          />
         </div>
-        <WorkerGrid workers={workers} />
-      </div>
 
-      <div className="grid grid-cols-1 gap-6">
-        <div>
-          <div className="flex items-center gap-2 text-foreground mb-4">
-            <Network className="w-5 h-5 text-cyan-400" />
-            <h2 className="text-xl font-bold">System Metrics</h2>
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 text-foreground">
+              <Activity className="w-5 h-5 text-primary" />
+              <h2 className="text-xl font-bold">{dict.resources.workerNodes}</h2>
           </div>
-          <div className="grid grid-cols-1 gap-6">
-            <Card className="p-4">
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div>
-                  <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Uptime</div>
-                  <div className="text-lg font-mono text-foreground">{serverStats?.uptime || '-'}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Load Avg</div>
-                  <div className="text-lg font-mono text-foreground">{serverStats?.loadAvg?.[0] || '-'}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Network Total</div>
-                  <div className="text-xs font-mono text-emerald-400">
-                    {serverStats?.network ? `↓ ${formatBytes(serverStats.network.rx)}` : '-'}
-                  </div>
-                  <div className="text-xs font-mono text-indigo-400">
-                    {serverStats?.network ? `↑ ${formatBytes(serverStats.network.tx)}` : '-'}
-                  </div>
-                </div>
-              </div>
-            </Card>
-          </div>
+          <WorkerGrid workers={workers} />
         </div>
-        <NetworkTrafficLogs />
-      </div>
+
+        <div className="grid grid-cols-1 gap-6">
+          <div>
+            <div className="flex items-center gap-2 text-foreground mb-4">
+              <Network className="w-5 h-5 text-info" />
+              <h2 className="text-xl font-bold">{dict.resources.systemMetrics}</h2>
+            </div>
+            <MetricsCard serverStats={serverStats} />
+          </div>
+          <NetworkTrafficLogs logs={traffic} limit={trafficLimit} onLimitChange={setTrafficLimit} loading={loading} />
+        </div>
     </div>
   );
 }
 
-function formatBytes(bytes: number) {
+export function MetricsCard({ serverStats }: { serverStats: ServerStats | null }): React.JSX.Element {
+  const dict = useDictionary();
+  return (
+    <div className="grid grid-cols-1 gap-6">
+      <Card className="p-4 density:p-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 text-center">
+          <div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{dict.resources.uptime}</div>
+            <div className="text-lg font-mono text-foreground">{serverStats?.uptime || '-'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{dict.resources.loadAvg}</div>
+            <div className="text-lg font-mono text-foreground">{serverStats?.loadAvg?.[0] || '-'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{dict.resources.networkTotal}</div>
+            <div className="text-xs font-mono text-success">
+              {serverStats?.network ? `↓ ${formatBytes(serverStats.network.rx)}` : '-'}
+            </div>
+            <div className="text-xs font-mono text-primary">
+              {serverStats?.network ? `↑ ${formatBytes(serverStats.network.tx)}` : '-'}
+            </div>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function formatBytes(bytes: number): string {
     if (bytes === 0) return '0 B';
     const k = 1024;
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];

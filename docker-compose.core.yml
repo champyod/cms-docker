@@ -7,7 +7,7 @@ services:
   database:
     image: postgres:15
     container_name: cms-database
-    restart: on-failure:5
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-cmsdb}
       POSTGRES_USER: ${POSTGRES_USER:-cmsuser}
@@ -34,7 +34,7 @@ services:
       args:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     container_name: cms-log-service
-    restart: on-failure:5
+    restart: unless-stopped
     depends_on:
       database:
         condition: service_healthy
@@ -43,7 +43,7 @@ services:
       SERVICE_TYPE: LogService
       SERVICE_SHARD: ${LOG_SERVICE_SHARD:-0}
     ports:
-      - "${TAILSCALE_IP:-127.0.0.1}:29000:29000"
+      - "${INNER_IP:-127.0.0.1}:29000:29000"
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
@@ -69,7 +69,7 @@ services:
       args:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     container_name: cms-resource-service
-    restart: on-failure:5
+    restart: unless-stopped
     depends_on:
       database:
         condition: service_healthy
@@ -80,7 +80,7 @@ services:
       SERVICE_TYPE: ResourceService
       SERVICE_SHARD: ${RESOURCE_SERVICE_SHARD:-0}
     ports:
-      - "${TAILSCALE_IP:-127.0.0.1}:28000:28000"
+      - "${INNER_IP:-127.0.0.1}:28000:28000"
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
@@ -107,7 +107,7 @@ services:
       args:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     container_name: cms-scoring-service
-    restart: on-failure:5
+    restart: unless-stopped
     depends_on:
       database:
         condition: service_healthy
@@ -118,7 +118,7 @@ services:
       SERVICE_TYPE: ScoringService
       SERVICE_SHARD: ${SCORING_SERVICE_SHARD:-0}
     ports:
-      - "${TAILSCALE_IP:-127.0.0.1}:28500:28500"
+      - "${INNER_IP:-127.0.0.1}:28500:28500"
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
@@ -145,7 +145,7 @@ services:
       args:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     container_name: cms-checker-service
-    restart: on-failure:5
+    restart: unless-stopped
     depends_on:
       database:
         condition: service_healthy
@@ -156,7 +156,7 @@ services:
       SERVICE_TYPE: Checker
       SERVICE_SHARD: ${CHECKER_SERVICE_SHARD:-0}
     ports:
-      - "${TAILSCALE_IP:-127.0.0.1}:22000:22000"
+      - "${INNER_IP:-127.0.0.1}:22000:22000"
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms

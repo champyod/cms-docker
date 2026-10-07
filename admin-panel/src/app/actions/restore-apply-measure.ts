@@ -6,6 +6,12 @@
  * Every query here either reads or runs a statement on behalf of a caller: the
  * server action owns when a measurement is taken, and the plan module owns what
  * the result means. Nothing here writes a live row.
+ *
+ * Why every export below carries `backup:restore` itself: this directory is
+ * scanned as a set of entry points, so a helper the apply server actions
+ * compose is read as one that can be called on its own. The callers gate the
+ * same key, so the repeat check costs one cached session read and never widens
+ * or narrows what a caller may already do.
  */
 
 import { execFile } from 'node:child_process';
@@ -13,6 +19,7 @@ import { promisify } from 'node:util';
 import { Prisma } from '@prisma/client';
 
 import { BACKUP_TABLE_NAMES } from '@/lib/backup-table-catalog';
+import { ensurePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import { scratchDatabaseEnv } from '@/lib/restore-preview-store';
 import {
@@ -59,6 +66,7 @@ export function lines(stdout: string): string[] {
 }
 
 export async function countFrom(value: string): Promise<number> {
+  await ensurePermission('backup:restore');
   const parsed = Number(value.trim());
   if (!Number.isFinite(parsed)) throw new Error(`Expected a numeric value, got: ${value}`);
   return parsed;
@@ -115,6 +123,7 @@ function scratchColumnsQuery(table: string): string {
 }
 
 export async function liveDigestSet(): Promise<Set<string>> {
+  await ensurePermission('backup:restore');
   const rows = await prisma.$queryRaw<{ value: string }[]>(Prisma.sql`${Prisma.raw(liveDigestListQuerySql())}`);
   return new Set(rows.map((row) => row.value));
 }
@@ -147,6 +156,7 @@ async function measureDigests(container: string, strategies: ApplyStrategies): P
 }
 
 export async function measureFacts(container: string, strategies: ApplyStrategies, order: readonly string[]): Promise<ApplyFacts> {
+  await ensurePermission('backup:restore');
   const toc = await readToc(container);
   const [liveColumns, livePkColumns, liveFkParents, liveRows, archiveRows, archiveColumns, databaseSizeBytes, digests] = await Promise.all([
     liveGrouped(liveColumnsQuerySql, BACKUP_TABLE_NAMES),
@@ -163,6 +173,7 @@ export async function measureFacts(container: string, strategies: ApplyStrategie
 
 /** Archive blobs must be self-consistent in the scratch container before any byte is copied. */
 export async function assertArchiveBlobsIntact(container: string, strategies: ApplyStrategies): Promise<void> {
+  await ensurePermission('backup:restore');
   if (strategies[LARGE_OBJECT_TABLE] === 'skip') return;
   const dangling = await countFrom(await scratchQuery(container, archiveDigestIntegritySql()));
   if (dangling > 0) {
@@ -177,6 +188,7 @@ export async function assertArchiveBlobsIntact(container: string, strategies: Ap
 // ---------------------------------------------------------------------------
 
 export async function runLiveSql(env: LiveDatabaseEnv, sql: string, timeoutMs: number): Promise<string> {
+  await ensurePermission('backup:restore');
   const { stdout } = await execFileAsync(
     'docker',
     ['exec', '-e', `PGPASSWORD=${env.POSTGRES_PASSWORD}`, LIVE_CONTAINER, 'psql', '-v', 'ON_ERROR_STOP=1', '-U', env.POSTGRES_USER, '-d', env.POSTGRES_DB, '-t', '-A', '-c', sql],
@@ -186,6 +198,7 @@ export async function runLiveSql(env: LiveDatabaseEnv, sql: string, timeoutMs: n
 }
 
 export async function liveCount(env: LiveDatabaseEnv, sql: string): Promise<number> {
+  await ensurePermission('backup:restore');
   return countFrom(await runLiveSql(env, sql, DOCKER_TIMEOUT_MS));
 }
 
@@ -201,6 +214,7 @@ export interface PromoteSetup {
  * moved.
  */
 export async function preparePromote(container: string, strategies: ApplyStrategies, order: readonly string[]): Promise<PromoteSetup & { readonly planErrors: readonly string[] }> {
+  await ensurePermission('backup:restore');
   const facts = await measureFacts(container, strategies, order);
   const plan = planApply(strategies, facts);
   await assertArchiveBlobsIntact(container, strategies);

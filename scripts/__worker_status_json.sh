@@ -2,18 +2,21 @@
 # Emit live worker detail as JSON for dashboards (admin panel /deployments).
 #
 # Sources (no phantom tables): docker inspect (state/health/uptime/restarts),
-# container logs (activity classification), .env.contest (assigned contest),
-# TCP probe (reachability incl. remote workers), cms.toml registry via
-# scripts/__worker_tui.sh fleet semantics (WORKER_N in .env.core).
+# container logs (activity classification), .env (assigned contest, from
+# config.toml [contest] CONTEST_ID), TCP probe (reachability incl. remote workers),
+# cms.toml registry via scripts/__worker_tui.sh fleet semantics (WORKER_N in .env).
 #
 # Usage:
 #   __worker_status_json.sh [--pretty]
 
-set -euo pipefail
+set -eu
+# pipefail only if available
+if (set -o pipefail 2>/dev/null); then
+    set -o pipefail
+fi
 cd "$(dirname "$0")/.."
 
-CORE_ENV=".env.core"
-CONTEST_ENV=".env.contest"
+CORE_ENV=".env"
 
 env_val() { awk -F= -v k="$2" '$1==k {v=$0; sub(/^[^=]*=/,"",v); gsub(/^[ \t]+|[ \t\r]+$/,"",v); print v; exit}' "$1" 2>/dev/null || true; }
 
@@ -22,6 +25,20 @@ json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' ' | 
 tcp_probe() { # host port -> 0 if connectable within 2s
   local h="$1" p="$2"
   (timeout 2 bash -c "</dev/tcp/$h/$p") >/dev/null 2>&1
+}
+
+# Local-address matcher, kept in lockstep with is_local_host in
+# scripts/__worker_tui.sh:156 — the TUI binds the rows this script labels, so
+# a disagreement would flip a worker between "absent" and "remote".
+is_local_host() {
+  local h="$1" ip
+  case "$h" in
+    0.0.0.0|127.0.0.1|localhost) return 0 ;;
+  esac
+  [ "$h" = "$(hostname -s 2>/dev/null)" ] && return 0
+  [ "$h" = "$(hostname -f 2>/dev/null)" ] && return 0
+  for ip in $(hostname -I 2>/dev/null); do [ "$h" = "$ip" ] && return 0; done
+  return 1
 }
 
 classify_activity() { # last-log-line -> state word
@@ -37,10 +54,22 @@ classify_activity() { # last-log-line -> state word
 worker_row() { # shard host port
   local s="$1" h="$2" p="$3"
   local cname="cms-worker-$s"
-  local raw st health started restarts uptime="" lastlog="" act="unknown" reach=false contest
-  contest="$(env_val "$CONTEST_ENV" CONTEST_ID)"
-  raw="$(docker inspect -f '{{.State.Status}}|{{if .Config.Healthcheck}}{{.State.Health.Status}}{{else}}none{{end}}|{{.State.StartedAt}}|{{.RestartCount}}' "$cname" 2>/dev/null || true)"
-  if [ -z "$raw" ]; then st="absent"; health="none"; else
+  local raw="" st health started restarts uptime="" lastlog="" act="unknown" reach=false contest
+  local is_local=false
+  contest="$(env_val "$CORE_ENV" CONTEST_ID)"
+  # A container exists only on the box its row addresses, so the local daemon
+  # is queried for local rows only; for a remote row its empty answer means
+  # "not here", not "not deployed".
+  if is_local_host "$h"; then
+    is_local=true
+    raw="$(docker inspect -f '{{.State.Status}}|{{if .Config.Healthcheck}}{{.State.Health.Status}}{{else}}none{{end}}|{{.State.StartedAt}}|{{.RestartCount}}' "$cname" 2>/dev/null || true)"
+  fi
+  if [ -z "$raw" ]; then
+    health="none"
+    # absent = should have been deployed here and was not; remote = lives on
+    # another box, where reachability is the only truthful liveness signal.
+    if [ "$is_local" = true ]; then st="absent"; else st="remote"; fi
+  else
     IFS='|' read -r st health started restarts <<<"$raw"
     if [ "$st" = running ] && command -v date >/dev/null; then
       local secs

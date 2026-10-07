@@ -19,6 +19,26 @@ PROXY_COMMON='
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;'
 
+# WHY: the admin panel reads the first entry of X-Forwarded-For and uses it as a
+# login rate-limit key. The append form above keeps whatever a client sent in
+# front of the real address, so a client could pick its own bucket and walk past
+# the lockout; a same-level second proxy_set_header does not replace the first,
+# so the panel's gateway needs its own block that asserts $remote_addr.
+PROXY_ADMIN_PANEL='
+    client_max_body_size 10M;
+    client_body_buffer_size 128k;
+    proxy_connect_timeout 90;
+    proxy_send_timeout 90;
+    proxy_read_timeout 90;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;'
+
+RANKING_LISTEN_PORT="${RANKING_LISTEN_PORT:-8890}"
 RANKING_AUTH="${RANKING_AUTH_DIRECTIVES:-}"
 
 FUNNEL_SERVERS=""
@@ -30,7 +50,7 @@ server {
     server_name _;
     auth_basic           \"@FUNNEL_REALM@\";
     auth_basic_user_file /etc/nginx/funnel.htpasswd;
-$PROXY_COMMON
+$PROXY_ADMIN_PANEL
     location / {
         proxy_pass http://admin_panel_next;
         proxy_redirect off;
@@ -43,7 +63,7 @@ server {
     auth_basic_user_file /etc/nginx/funnel.htpasswd;
 $PROXY_COMMON
     location / {
-        proxy_pass http://cms-ranking-web-server:8890;
+        proxy_pass http://cms-ranking-web-server:$RANKING_LISTEN_PORT;
         proxy_redirect off;
     }
 }"
@@ -77,7 +97,7 @@ $PROXY_COMMON
     }
     location /ranking/ {
         $RANKING_AUTH
-        proxy_pass http://cms-ranking-web-server:8890/;
+        proxy_pass http://cms-ranking-web-server:$RANKING_LISTEN_PORT/;
         proxy_redirect off;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
@@ -118,7 +138,7 @@ $PROXY_COMMON
     }
     location /ranking/ {
         $RANKING_AUTH
-        proxy_pass http://cms-ranking-web-server:8890/;
+        proxy_pass http://cms-ranking-web-server:$RANKING_LISTEN_PORT/;
         proxy_redirect off;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;

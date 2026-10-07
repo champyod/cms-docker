@@ -1,90 +1,165 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Shield } from 'lucide-react';
-import { createAdmin, updateAdmin, revealAdminPassword } from '@/app/actions/admins';
+import { useState, useEffect, useMemo } from 'react';
+import {
+  getAdminAccess,
+  listGroupsWithPermissions,
+  type GroupWithPermissions,
+  type AdminAccessOverride,
+} from '@/app/actions/adminPermissions';
 import { Dialog } from '@/components/core/Dialog';
-import type { PasswordRevealState } from '@/components/core/PasswordFieldWithKind';
+import { InlineAlert } from '@/components/core/InlineAlert';
+import { toast } from 'sonner';
 import type { PasswordKind } from '@/lib/password-format';
+import { ACTION_PERMISSIONS, hasEffectivePermission, resolveEffectivePermissions } from '@/lib/permission-engine';
 import type { AdminWithLogin } from '@/lib/prisma-selects';
+import { getFieldAccess } from '@/lib/field-permissions';
 
 import {
   EMPTY_ADMIN_FORM,
-  ROLE_PRESETS,
   formFromAdmin,
   validateAdminForm,
   type AdminFormState,
 } from './adminFormConfig';
+import { AdminModalFooter } from './adminModalSections';
+import { AdminAccountFields } from './AdminAccountFields';
+import { AdminAccessEditor } from './AdminAccessEditor';
 import {
-  AdminFormFields,
-  AdminModalFooter,
-  AdminPermissionCheckboxes,
-  AdminRoleSelector,
-} from './adminModalSections';
+  persistAdminAccessChanges,
+  persistAdminAccount,
+  type OverrideDraft,
+} from './adminModalPersistence';
 
 interface AdminModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
   initialData?: AdminWithLogin | null;
+  callerPermissions: string[];
+  canRevealPassword: boolean;
 }
 
-export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminModalProps) {
+export function AdminModal({ isOpen, onClose, onSuccess, initialData, callerPermissions, canRevealPassword }: AdminModalProps) {
   const [formData, setFormData] = useState<AdminFormState>(EMPTY_ADMIN_FORM);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [passwordKind, setPasswordKind] = useState<PasswordKind>('bcrypt');
-  const [reveal, setReveal] = useState<PasswordRevealState>({ state: 'none' });
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- mount-load or modal-reset pattern; behavior must not change
+  const [groups, setGroups] = useState<GroupWithPermissions[]>([]);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>([]);
+  const [originalGroupIds, setOriginalGroupIds] = useState<number[]>([]);
+  const [overrides, setOverrides] = useState<OverrideDraft[]>([]);
+  const [originalOverrides, setOriginalOverrides] = useState<AdminAccessOverride[]>([]);
+  const [accessReason, setAccessReason] = useState('');
+  const [loadingAccess, setLoadingAccess] = useState(false);
+  const [accessError, setAccessError] = useState('');
+
+  const sessionKey = `${isOpen}:${initialData?.id ?? 'new'}`;
+  const [renderedSession, setRenderedSession] = useState(sessionKey);
+  if (renderedSession !== sessionKey) {
+    setRenderedSession(sessionKey);
     setFormData(initialData ? formFromAdmin(initialData) : EMPTY_ADMIN_FORM);
     setError('');
     setPasswordKind('bcrypt');
-    setReveal({ state: 'none' });
-    if (!initialData || !isOpen) return;
+    setGroups([]);
+    setSelectedGroupIds([]);
+    setOriginalGroupIds([]);
+    setOverrides([]);
+    setOriginalOverrides([]);
+    setAccessReason('');
+    setAccessError('');
+  }
+
+  useEffect(() => {
+    if (!isOpen) return;
 
     let cancelled = false;
     void (async () => {
+      setLoadingAccess(true);
       try {
-        const result = await revealAdminPassword(initialData.id);
-        if (cancelled || !result.success) return;
-        setReveal(
-          result.kind === 'plaintext'
-            ? { state: 'plaintext', value: result.value }
-            : { state: 'bcrypt' }
-        );
-      } catch {
-        if (!cancelled) setReveal({ state: 'none' });
+        const groupsResult = await listGroupsWithPermissions();
+        if (cancelled) return;
+        if (groupsResult.success) {
+          setGroups(groupsResult.data);
+        } else {
+          setAccessError(groupsResult.error);
+        }
+
+        if (initialData) {
+          const accessResult = await getAdminAccess(initialData.id);
+          if (cancelled) return;
+          if (accessResult.success) {
+            const groupIds = accessResult.data.groups.map((group) => group.id);
+            setSelectedGroupIds(groupIds);
+            setOriginalGroupIds(groupIds);
+            setOverrides(
+              accessResult.data.overrides.map((override) => ({
+                permissionKey: override.permissionKey,
+                effect: override.effect,
+                reason: override.reason ?? '',
+              })),
+            );
+            setOriginalOverrides(accessResult.data.overrides);
+          } else {
+            setAccessError(accessResult.error);
+          }
+        }
+      } catch (loadFailure) {
+        if (!cancelled) {
+          setAccessError(loadFailure instanceof Error ? loadFailure.message : 'Unable to load access data');
+        }
+      } finally {
+        if (!cancelled) setLoadingAccess(false);
       }
     })();
+
     return () => {
       cancelled = true;
     };
-  }, [initialData, isOpen]);
+  }, [canRevealPassword, initialData, isOpen]);
+
+  // Why: the effective-access preview is computed on the client from the group permission keys and
+  // override drafts so it updates instantly while editing, mirroring resolveEffectivePermissions (deny wins).
+  const groupPermissionKeys = useMemo(() => {
+    const keys: string[] = [];
+    for (const groupId of selectedGroupIds) {
+      const group = groups.find((candidate) => candidate.id === groupId);
+      if (group) keys.push(...group.permissionKeys);
+    }
+    return keys;
+  }, [groups, selectedGroupIds]);
+
+  const effectivePermissions = useMemo(
+    () =>
+      resolveEffectivePermissions(
+        groupPermissionKeys,
+        overrides.map((override) => ({ permissionKey: override.permissionKey, effect: override.effect })),
+      ),
+    [groupPermissionKeys, overrides],
+  );
+
+  // Why: what this caller may edit is decided by the caller's own keys; the target's resolved set
+  // above only feeds the "Effective access" preview, so editing a powerful admin cannot unlock fields.
+  const callerPermissionSet = useMemo(() => new Set(callerPermissions), [callerPermissions]);
+
+  const fieldAccess = useMemo(
+    () => getFieldAccess('admins', callerPermissionSet),
+    [callerPermissionSet],
+  );
+
+  // Why: creating an admin is gated by admin:create on the server, so a create form is editable
+  // whenever the caller holds that key; the per-field update keys only govern editing an existing row.
+  const canCreate = useMemo(
+    () => hasEffectivePermission(callerPermissionSet, ACTION_PERMISSIONS.createAdmin),
+    [callerPermissionSet],
+  );
 
   if (!isOpen) return null;
 
-  const updateForm = (updates: Partial<AdminFormState>) => setFormData({ ...formData, ...updates });
+  const updateForm = (updates: Partial<AdminFormState>) => setFormData((current) => ({ ...current, ...updates }));
 
-  const submitAdmin = async (): Promise<{ success: boolean; error?: string }> => {
-    if (!initialData) {
-      return createAdmin({ ...formData, passwordKind });
-    }
-    return updateAdmin(initialData.id, {
-      name: formData.name,
-      permission_all: formData.permission_all,
-      permission_messaging: formData.permission_messaging,
-      permission_tasks: formData.permission_tasks,
-      permission_users: formData.permission_users,
-      permission_contests: formData.permission_contests,
-      passwordKind,
-      ...(formData.password ? { password: formData.password } : {})
-    });
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     const validationError = validateAdminForm(formData, !!initialData);
     if (validationError) {
       setError(validationError);
@@ -93,15 +168,33 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
 
     setLoading(true);
     setError('');
+    try {
+      const account = await persistAdminAccount({ initialData, formData, passwordKind, callerPermissionSet });
+      if (!account.success || account.adminId === null) {
+        setError(account.error || 'Operation failed');
+        return;
+      }
 
-    const result = await submitAdmin();
-    if (result.success) {
+      const accessFailure = await persistAdminAccessChanges(account.adminId, {
+        selectedGroupIds,
+        originalGroupIds,
+        overrides,
+        originalOverrides,
+        accessReason,
+      });
+      if (accessFailure) {
+        // Why: the account row is already saved, so surface the access failure without discarding the save.
+        toast.error('Access update failed', { description: accessFailure });
+        return;
+      }
+
       onSuccess();
       onClose();
-    } else {
-      setError(result.error || 'Operation failed');
+    } catch (submitFailure) {
+      setError(submitFailure instanceof Error ? submitFailure.message : 'Operation failed');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -109,49 +202,34 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData }: AdminMod
       open={isOpen}
       onOpenChange={(open) => { if (!open) onClose(); }}
       title={initialData ? 'Edit Administrator' : 'Add Administrator'}
-      className="max-w-md"
+      className="max-w-md max-h-[85vh] overflow-y-auto"
     >
-      {error && (
-        <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive text-sm">
-          {error}
-        </div>
-      )}
-
-      {/* FORM */}
+      {error && <InlineAlert tone="destructive" density="regular">{error}</InlineAlert>}
       <form onSubmit={handleSubmit} className="space-y-4">
-        <AdminFormFields
+        <AdminAccountFields
           formData={formData}
-          isEdit={!!initialData}
-          onChange={updateForm}
+          initialData={initialData}
+          canCreate={canCreate}
+          fieldAccess={fieldAccess}
+          canRevealPassword={canRevealPassword}
           passwordKind={passwordKind}
+          updateForm={updateForm}
           onPasswordKind={setPasswordKind}
-          reveal={{ ...reveal, onReveal: () => undefined }}
         />
 
-        {/* ROLE */}
-        <AdminRoleSelector
-          isSuperadmin={formData.permission_all}
-          onSelectRole={(role) => updateForm(ROLE_PRESETS[role])}
+        <AdminAccessEditor
+          groups={groups}
+          selectedGroupIds={selectedGroupIds}
+          overrides={overrides}
+          loadingAccess={loadingAccess}
+          accessError={accessError}
+          accessReason={accessReason}
+          effectivePermissions={effectivePermissions}
+          onSelectedGroupIdsChange={setSelectedGroupIds}
+          onOverridesChange={setOverrides}
+          onAccessReasonChange={setAccessReason}
         />
 
-        {/* PERMISSIONS */}
-        <div className="space-y-3 pt-2">
-          {!formData.permission_all ? (
-            <AdminPermissionCheckboxes formData={formData} onChange={updateForm} />
-          ) : (
-            <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-lg">
-              <div className="flex items-center gap-2 mb-1">
-                <Shield className="w-4 h-4 text-indigo-400" />
-                <span className="text-sm font-bold text-indigo-400">Full Access Granted</span>
-              </div>
-              <p className="text-xs text-muted-foreground italic">
-                Superadmins have full control over the system, including infrastructure, settings, and other administrators.
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* FOOTER */}
         <AdminModalFooter loading={loading} isEdit={!!initialData} onClose={onClose} />
       </form>
     </Dialog>

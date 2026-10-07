@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import { Upload } from 'lucide-react';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { Dialog } from '@/components/core/Dialog';
-import { Button } from '@/components/core/Button';
+import { ModalFooter } from '@/components/core/ModalFooter';
+import { InlineAlert } from '@/components/core/InlineAlert';
 import { apiClient } from '@/lib/apiClient';
 import { readFileAsBase64 } from '@/lib/file-helpers';
 
@@ -19,6 +21,7 @@ export function AttachmentModal({ isOpen, onClose, taskId, onSuccess }: Attachme
   const [customFilename, setCustomFilename] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const runAction = useActionFeedback();
 
   if (!isOpen) return null;
 
@@ -44,7 +47,16 @@ export function AttachmentModal({ isOpen, onClose, taskId, onSuccess }: Attachme
     setError('');
     try {
       const base64 = await readFileAsBase64(file);
-      const result = await apiClient.post('/api/attachments', { taskId, filename, fileData: base64 });
+      const result = await runAction(
+        {
+          pending: 'Uploading attachment...',
+          success: 'Attachment uploaded',
+          failure: 'Upload failed',
+          description: `"${filename}" saved successfully.`,
+        },
+        () => apiClient.post('/api/attachments', { taskId, filename, fileData: base64 })
+      );
+      if (!result) return;
       if (result.success) {
         onSuccess();
         onClose();
@@ -53,11 +65,15 @@ export function AttachmentModal({ isOpen, onClose, taskId, onSuccess }: Attachme
       } else {
         setError(result.error ?? 'Failed to upload attachment');
       }
-    } catch {
-      setError('An unexpected error occurred');
     } finally {
       setLoading(false);
     }
+  };
+
+  // Why the guard: a submit already in flight cannot be recalled, so cancelling
+  // through it would close the dialog over an unresolved upload.
+  const cancel = (): void => {
+    if (!loading) onClose();
   };
 
   return (
@@ -68,18 +84,19 @@ export function AttachmentModal({ isOpen, onClose, taskId, onSuccess }: Attachme
       }}
       title="Add Attachment"
       footer={
-        <>
-          <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>
-            Cancel
-          </Button>
-          <Button type="submit" form="attachment-form" variant="positive" icon={Upload} loading={loading} disabled={loading || !file}>
-            Upload Attachment
-          </Button>
-        </>
+        <ModalFooter
+          formId="attachment-form"
+          cancelLabel="Cancel"
+          confirmLabel="Upload Attachment"
+          onCancel={cancel}
+          confirmIcon={Upload}
+          confirmLoading={loading}
+          confirmDisabled={loading || !file}
+        />
       }
       className="sm:max-w-md"
     >
-      {error && <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+      {error && <InlineAlert tone="destructive" density="regular" className="mb-4">{error}</InlineAlert>}
       <form id="attachment-form" onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="mb-2 block text-xs font-bold uppercase text-muted-foreground">File</label>

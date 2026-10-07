@@ -1,10 +1,19 @@
 import crypto from 'crypto';
 import fs from 'fs/promises';
-import path from 'path';
 import os from 'os';
+import path from 'path';
 
 const MAX_CLEANUP_SCAN_FILES = 500;
+
 const CREDS_FILE_MAX_AGE_MS = 15 * 60 * 1000;
+
+const CREDS_CSV_HEADER = 'id,username,password';
+
+export interface CredentialRow {
+  id: number;
+  username?: string;
+  password?: string;
+}
 
 /** Filename prefix shared by the writer (batch/bulk routes) and reader (credentials download route). */
 export const CREDS_FILE_PREFIX = 'cms-creds-';
@@ -18,7 +27,9 @@ export async function cleanupExpiredCreds(): Promise<void> {
   try {
     const dir = os.tmpdir();
     const files = await fs.readdir(dir);
-    if (files.length > MAX_CLEANUP_SCAN_FILES) return;
+    if (files.length > MAX_CLEANUP_SCAN_FILES) {
+      return;
+    }
     const now = Date.now();
     await Promise.all(
       files
@@ -31,21 +42,34 @@ export async function cleanupExpiredCreds(): Promise<void> {
               await fs.unlink(full);
             }
           } catch {
-            // ignore per-file errors
           }
         })
     );
   } catch {
-    // ignore cleanup errors
   }
 }
 
+/** Why prefix: Excel and LibreOffice execute a cell that opens with one of these
+ * characters as a formula, so a stored value must arrive at the sheet as text. */
+const FORMULA_PREFIX = /^[=+\-@\t\r]/;
+
 export function csvEscape(value: string): string {
   const str = String(value ?? '');
+  if (FORMULA_PREFIX.test(str)) {
+    return `"'${str.replace(/"/g, '""')}"`;
+  }
   if (str.includes('"') || str.includes(',') || str.includes('\n') || str.includes('\r')) {
     return `"${str.replace(/"/g, '""')}"`;
   }
   return str;
+}
+
+export function buildCredsCsv(rows: CredentialRow[]): string {
+  const lines: string[] = [CREDS_CSV_HEADER];
+  for (const row of rows) {
+    lines.push(`${row.id},${csvEscape(row.username ?? '')},${csvEscape(row.password ?? '')}`);
+  }
+  return `${lines.join('\n')}\n`;
 }
 
 export async function writeCredsCsv(content: string): Promise<{ token: string; downloadUrl: string }> {

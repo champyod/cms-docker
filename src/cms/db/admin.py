@@ -20,6 +20,7 @@
 
 from sqlalchemy.schema import Column
 from sqlalchemy.types import Boolean, Integer, Unicode
+from sqlalchemy.orm import relationship
 
 from .types import Codename
 from .base import Base
@@ -54,20 +55,16 @@ class Admin(Base):
     # they did not exist.
     enabled: bool = Column(Boolean, nullable=False, default=True)
 
-    # All-access bit. If this is set, the admin can do any operation
-    # in AWS, regardless of the value of the other access bits.
-    permission_all: bool = Column(Boolean, nullable=False, default=False)
+    # WHY: link Admin to AdminGroup so the permissions system can resolve
+    # group membership; backref provides AdminGroup.admin automatically.
+    admin_groups = relationship("AdminGroup", backref="admin")
 
-    # Messaging-access bit. If this is set, the admin can communicate
-    # with the contestants via announcement, private messages and
-    # questions.
-    permission_messaging: bool = Column(Boolean, nullable=False, default=False)
+    def has_permission(self, *keys: str) -> bool:
+        """Check whether the admin holds any of the given permission keys.
 
-    # Task management bit. If this is set, the admin can create/edit/delete tasks.
-    permission_tasks: bool = Column(Boolean, nullable=False, default=False)
-
-    # User management bit. If this is set, the admin can create/edit/delete users.
-    permission_users: bool = Column(Boolean, nullable=False, default=False)
-
-    # Contest management bit. If this is set, the admin can create/edit/delete contests.
-    permission_contests: bool = Column(Boolean, nullable=False, default=False)
+        ``effective_permissions`` is populated by the request handler from the
+        admin's group grants and per-person overrides. The ``all:all`` key
+        grants every capability.
+        """
+        permissions = getattr(self, "effective_permissions", None) or frozenset()
+        return "all:all" in permissions or any(key in permissions for key in keys)

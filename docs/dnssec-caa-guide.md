@@ -1,6 +1,6 @@
 # DNSSEC + CAA Guide — optional DNS hardening (disabled by default)
 
-> **Status:** `DNSSEC_ENABLED=0` and `CAA_ENABLED=0` by default (see `.env.infra.example`).
+> **Status:** `DNSSEC_ENABLED=0` and `CAA_ENABLED=0` by default (see `config.toml.example` `[infra]`).
 > No compose change needed — DNS only. Prod stays off unless explicitly enabled.
 > TUI prompts in `scripts/__domain.sh` ask, never force. Local overrides gitignored.
 
@@ -100,7 +100,7 @@ Multiple `issue` lines mean OR (any listed may issue).
 ### 3. Enable locally
 
 ```bash
-# .env.infra or .env.local (gitignored)
+# config.toml [infra] or .env.local (gitignored)
 CAA_ENABLED=1
 CAA_ISSUER=letsencrypt.org
 ```

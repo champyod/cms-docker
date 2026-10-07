@@ -1,39 +1,52 @@
 #!/bin/bash
 # Worker fleet TUI — manage the WORKER_<shard>=<host>:<port> registry in
-# .env.core and deploy each local entry as its own compose project
+# config.toml [worker] and deploy each local entry as its own compose project
 # (cms-worker-<shard>, host port <port>).
 #
 # Data model (backward compatible):
-#   .env.core   : WORKER_<shard>=host:port      <- registry, rendered into
-#                                                  config/cms.toml by make env
-#   .env.worker : all existing vars untouched    <- per-host worker defaults
-#                 WORKER_SHARD<n>_LOCAL=0        <- OPTIONAL: registry-only,
+#   config.toml [worker] : WORKER_<shard> = "host:port"  <- registry (source);
+#                          scripts/__config_sync.sh renders it into .env
+#   .env                 : WORKER_<shard>=host:port      <- rendered copy of the
+#                                                     rows above, never a row
+#                                                     source of its own
+#   config.toml [worker] : all existing vars untouched    <- per-host worker defaults
+#                 WORKER_SHARD<n>_LOCAL = 0       <- OPTIONAL: registry-only,
 #                                                 skip local deployment
 #                 WORKER_SHARD<n>_MEMORY/_CPU    <- OPTIONAL per-shard overrides
 #
 # Usage:
-#   scripts/__worker_tui.sh                        interactive TUI (tty)
-#   scripts/__worker_tui.sh deploy [all|<shard>]   non-interactive deploy
-#   scripts/__worker_tui.sh stop [all|<shard>]
+#   scripts/__worker_tui.sh                              interactive TUI (tty)
+#   scripts/__worker_tui.sh attach [spec host port-spec [main-ip]] [--push user@host:/path] attach a remote
+#                                    worker box: registry-only rows for
+#                                    spec "4", "4,5,6,7" or "4-7"
+#   scripts/__worker_tui.sh deploy [all|<shard>|<spec>]  non-interactive deploy
+#   scripts/__worker_tui.sh stop [all|<shard>|<spec>]
 #   scripts/__worker_tui.sh list
 
-set -euo pipefail
-cd "$(dirname "$0")/.."
+set -eu
+# pipefail only if available
+if (set -o pipefail 2>/dev/null); then
+    set -o pipefail
+fi
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+cd "$REPO_ROOT"
 
-CORE_ENV=".env.core"
-WORKER_ENV=".env.worker"
+CORE_ENV=".env"
+WORKER_ENV=".env"
+TOML_FILE="config.toml"
 
 WORKERS=()      # rows: "shard|host|port|local(1/0)|memory|cpus"
 CUR=0
 SELECTED=()
+FLEET_DRIFT_WARNED=0   # drift is reported once per process, not on every render
 
 # shellcheck disable=SC1091
-[ -f scripts/__lib/common.sh ] && source scripts/__lib/common.sh
+source "${SCRIPT_DIR}/__lib/common.sh"
 # shellcheck disable=SC1091
-[ -f scripts/__lib/form.sh ] && source scripts/__lib/form.sh
-log_info() { printf '[INFO] %s\n' "$*"; }
-log_warn() { printf '[WARN] %s\n' "$*" >&2; }
-die() { log_warn "ERROR: $*"; exit 1; }
+[ -f "${SCRIPT_DIR}/__lib/form.sh" ] && source "${SCRIPT_DIR}/__lib/form.sh"
+# shellcheck disable=SC1091
+[ -f "${SCRIPT_DIR}/__lib/worker_secrets.sh" ] && source "${SCRIPT_DIR}/__lib/worker_secrets.sh"
 
 C_DIM=$'\033[2m'; C_G=$'\033[32m'; C_R=$'\033[31m'; C_Y=$'\033[33m'; C_B=$'\033[1m'; C_0=$'\033[0m'
 
@@ -41,62 +54,283 @@ env_val() { # file key -> value (exact key match, first hit)
   awk -F= -v k="$2" '$1==k {v=$0; sub(/^[^=]*=/,"",v); gsub(/^[ \t]+|[ \t\r]+$/,"",v); print v; exit}' "$1" 2>/dev/null || true
 }
 
-global_memory() { env_val "$WORKER_ENV" WORKER_MEMORY_LIMIT || true; }
-global_cpus()   { env_val "$WORKER_ENV" WORKER_CPU_LIMIT   || true; }
+global_memory() { worker_default WORKER_MEMORY_LIMIT || true; }
+global_cpus()   { worker_default WORKER_CPU_LIMIT   || true; }
 core_host_ip()  { env_val "$CORE_ENV"   CORE_SERVICES_HOST || true; }
 
 # ---------------------------------------------------------------------------
-# Registry persistence (.env.core WORKER_N block + optional flags in worker env)
+# Registry readers — config.toml is the source, .env is the rendered copy
 # ---------------------------------------------------------------------------
-fleet_load() {
-  WORKERS=()
-  local tmp line key idx hp host port mem cpu loc
-  tmp="$(mktemp)"
-  awk -F= '/^WORKER_[0-9]+=/ {print}' "$CORE_ENV" 2>/dev/null \
-    | sort -t_ -k3,3n > "$tmp" || true
-  while IFS= read -r line || [ -n "$line" ]; do
-    [ -z "$line" ] && continue
-    key="${line%%=*}"; hp="${line#*=}"
-    idx="${key#WORKER_}"
-    host="${hp%%:*}"; port="${hp##*:}"
-    if ! [[ "$idx" =~ ^[0-9]+$ ]]; then log_warn "skipping malformed: $line"; continue; fi
-    if ! [[ "$port" =~ ^[0-9]+$ ]]; then log_warn "skipping bad port: $line"; continue; fi
-    mem="$(env_val "$WORKER_ENV" "WORKER_SHARD${idx}_MEMORY")"; mem="${mem:-$(global_memory)}"; mem="${mem:-512M}"
-    cpu="$(env_val "$WORKER_ENV" "WORKER_SHARD${idx}_CPU")";     cpu="${cpu:-$(global_cpus)}";     cpu="${cpu:-0.5}"
-    loc="$(env_val "$WORKER_ENV" "WORKER_SHARD${idx}_LOCAL")";   loc="${loc:-1}"
-    WORKERS+=("$idx|$host|$port|$loc|$mem|$cpu")
-  done < "$tmp"
-  rm -f "$tmp"
+# One reader for both registry sources. config.toml carries a section header and
+# a quoted or commented value; the .env render is flat and bare, so the section
+# argument is what distinguishes them ("worker" vs "" for sectionless). Emits
+# "key<TAB>raw-value"; row_value decodes the raw side.
+registry_keys() { # file key-regex section ("" = sectionless file)
+  local file="$1" keyre="$2" section="$3"
+  [ -f "$file" ] || return 0
+  awk -v k="$keyre" -v sec="$section" '
+    function emit(line,   e, key, val) {
+      e = index(line, "=")
+      key = substr(line, 1, e - 1)
+      val = substr(line, e + 1)
+      gsub(/^[ \t]+|[ \t\r]+$/, "", key)
+      printf "%s\t%s\n", key, val
+    }
+    sec != "" && /^[ \t]*\[/ { inside = ($0 ~ ("^[ \t]*\\[" sec "\\][ \t]*$")); next }
+    (sec == "" || inside) && $0 ~ ("^[ \t]*" k "[ \t]*=") { emit($0) }
+  ' "$file" 2>/dev/null || true
 }
 
-fleet_save() {  # rewrites WORKER_N block in .env.core, preserves everything else
-  [ -f "$CORE_ENV" ] || die "$CORE_ENV missing"
-  local tmp row s h p l m c wtmp
-  tmp="$(mktemp)"
-  grep -v '^WORKER_[0-9]*=' "$CORE_ENV" > "$tmp"
+trim() { # strip leading and trailing whitespace
+  local s="$1"
+  s="${s#"${s%%[![:space:]]*}"}"
+  printf '%s' "${s%"${s##*[![:space:]]}"}"
+}
+
+# Raw right-hand side -> the bare value. Strips any inline comment and one layer
+# of quotes. Values here are host:port, shard numbers, memory and cpu limits, so
+# a "#" is always a comment and never part of the value.
+# WHY the comment is cut before the quotes are stripped: a trailing
+# `WORKER_4 = "h:p" # note` ends in the comment, not the closing quote, so
+# quote-first would leave the quotes attached and the row would fail its port
+# check as malformed.
+row_value() {
+  local v; v="$(trim "$1")"
+  v="$(trim "${v%%#*}")"
+  case "$v" in
+    \"*\") v="${v#\"}"; v="${v%\"}" ;;
+    \'*\') v="${v#\'}"; v="${v%\'}" ;;
+  esac
+  trim "$v"
+}
+
+# WORKER_SHARD<n>_<suffix>: config.toml [worker] first, then the .env render,
+# so an override committed to config.toml is not masked by a stale .env.
+shard_val() { # shard suffix -> value ("" when unset)
+  local key="WORKER_SHARD$1_$2" v
+  {
+    registry_keys "$TOML_FILE" "$key" worker
+    registry_keys "$CORE_ENV"   "$key" ""
+  } | while IFS=$'\t' read -r _ raw; do
+    v="$(row_value "$raw")"
+    if [ -n "$v" ]; then printf '%s' "$v"; break; fi
+  done
+  return 0
+}
+
+# Worker-wide default (memory/cpu) from config.toml [worker], else the .env
+# render. Same precedence as shard_val: the source file wins over its render.
+worker_default() { # key -> value ("" when unset)
+  local v
+  {
+    registry_keys "$TOML_FILE" "$1" worker
+    registry_keys "$CORE_ENV"   "$1" ""
+  } | while IFS=$'\t' read -r _ raw; do
+    v="$(row_value "$raw")"
+    if [ -n "$v" ]; then printf '%s' "$v"; break; fi
+  done
+  return 0
+}
+
+toml_val() { # key -> value from config.toml (first hit, quotes stripped)
+  sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*[\"']\\{0,1\\}\\([^\"'#]*\\)[\"']\\{0,1\\}.*/\\1/p" config.toml 2>/dev/null | head -n 1
+}
+
+# Address of the main server as seen from this machine. On a worker the same
+# INNER_IP key names where to dial, because its config.toml holds the main
+# server's address; on the main server it names what to bind.
+main_reachable_ip() {
+  local ip
+  ip="$(toml_val INNER_IP)"
+  if [ -n "$ip" ]; then printf '%s' "$ip"; return 0; fi
+  ip="$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -v '^127\.' | grep -v '^::1' | head -n 1 || true)"
+  printf '%s' "${ip:-}"
+}
+
+# ---------------------------------------------------------------------------
+# Registry persistence (config.toml [worker] source + .env render)
+# ---------------------------------------------------------------------------
+# Shared-registry rule: both boxes hold identical rows; each box binds the
+# rows addressed at itself and advertises the rest. An explicit LOCAL flag
+# still wins, so old per-box rows keep working unchanged.
+is_local_host() {
+  local h="$1" ip
+  case "$h" in
+    0.0.0.0|127.0.0.1|localhost) return 0 ;;
+  esac
+  [ "$h" = "$(hostname -s 2>/dev/null)" ] && return 0
+  [ "$h" = "$(hostname -f 2>/dev/null)" ] && return 0
+  for ip in $(hostname -I 2>/dev/null); do [ "$h" = "$ip" ] && return 0; done
+  return 1
+}
+
+# WORKER_<n> rows as "shard<TAB>host:port", read from config.toml [worker] only.
+# WHY config.toml alone: scripts/__config_sync.sh rebuilds .env from config.toml
+# on every run, so config.toml is the source and .env is only its render. A row
+# no config.toml entry backs is therefore an orphan: compose never sees it, so it
+# can never be deployed, and a shard listed only in .env resolves to nothing.
+# Both disagreement shapes still warn once, so an orphan is never dropped
+# quietly either.
+registry_rows() {
+  local -A toml_v=() env_v=()
+  local -a keys=() drift=()
+  local k raw line
+  while IFS=$'\t' read -r k raw; do
+    [ -n "$k" ] || continue
+    toml_v["${k#WORKER_}"]="$(row_value "$raw")"
+  done < <(registry_keys "$TOML_FILE" 'WORKER_[0-9]+' worker)
+  while IFS=$'\t' read -r k raw; do
+    [ -n "$k" ] || continue
+    env_v["${k#WORKER_}"]="$(row_value "$raw")"
+  done < <(registry_keys "$CORE_ENV" 'WORKER_[0-9]+' "")
+
+  # WHY the length guard: ${!arr[@]} has no empty-safe "+" form, so an unset
+  # assoc array under `set -u` needs the count checked before the key loop.
+  if [ "${#toml_v[@]}" -gt 0 ]; then
+    for k in "${!toml_v[@]}"; do
+      keys+=("$k")
+      [ -z "${env_v[$k]+set}" ] && drift+=("shard $k is in config.toml but not in the .env render — run ./cms config sync")
+    done
+  fi
+  if [ "${#env_v[@]}" -gt 0 ]; then
+    for k in "${!env_v[@]}"; do
+      if [ -z "${toml_v[$k]+set}" ]; then
+        drift+=("shard $k exists only in .env (${env_v[$k]}) and no config.toml row backs it - not in the fleet")
+        continue
+      fi
+      if [ "${toml_v[$k]}" != "${env_v[$k]}" ]; then
+        drift+=("shard $k: .env=${env_v[$k]} vs config.toml=${toml_v[$k]}")
+      fi
+    done
+  fi
+
+  if [ "${#drift[@]}" -gt 0 ] && [ "$FLEET_DRIFT_WARNED" -eq 0 ]; then
+    FLEET_DRIFT_WARNED=1
+    log_warn "registry drift: .env and config.toml disagree - config.toml wins"
+    printf '%s\n' "${drift[@]}" | sort | while IFS= read -r line; do log_warn "  $line"; done
+    log_warn "reconcile with: ./cms config sync"
+  fi
+
+  printf '%s\n' ${keys[@]+"${keys[@]}"} | sort -n -u | while IFS= read -r k; do
+    [ -n "$k" ] || continue
+    printf '%s\t%s\n' "$k" "${toml_v[$k]}"
+  done
+}
+
+fleet_load() {
+  WORKERS=()
+  local idx hp host port mem cpu loc explicit
+  while IFS=$'\t' read -r idx hp || [ -n "${idx:-}" ]; do
+    [ -n "${idx:-}" ] || continue
+    host="${hp%%:*}"; port="${hp##*:}"
+    if ! [[ "$port" =~ ^[0-9]+$ ]]; then log_warn "skipping bad port: WORKER_$idx=$hp"; continue; fi
+    mem="$(shard_val "$idx" MEMORY)"; mem="${mem:-$(global_memory)}"; mem="${mem:-512M}"
+    cpu="$(shard_val "$idx" CPU)";     cpu="${cpu:-$(global_cpus)}";     cpu="${cpu:-0.5}"
+    explicit="$(shard_val "$idx" LOCAL)"
+    if [ -n "$explicit" ]; then
+      loc="$explicit"
+    elif is_local_host "$host"; then
+      loc=1
+    else
+      loc=0
+    fi
+    WORKERS+=("$idx|$host|$port|$loc|$mem|$cpu")
+  done < <(registry_rows)
+}
+
+fleet_save() {  # writes config.toml [worker], then re-renders .env from it
+  local toml="$TOML_FILE"
+  [ -f "$toml" ] || log_die "config.toml missing — run ./cms first"
+  local row s h p l m c
+  local gm gc; gm="$(global_memory)"; gc="$(global_cpus)"
+
+  local fleet_block=""
   for row in "${WORKERS[@]}"; do
     IFS='|' read -r s h p l m c <<<"$row"
-    echo "WORKER_$s=$h:$p" >> "$tmp"
+    fleet_block+="WORKER_${s} = \"${h}:${p}\"\n"
+    if [ "$l" != "1" ]; then
+      fleet_block+="WORKER_SHARD${s}_LOCAL = ${l}\n"
+    fi
+    [ -n "$gm" ] && [ "$m" != "$gm" ] && fleet_block+="WORKER_SHARD${s}_MEMORY = \"${m}\"\n"
+    [ -n "$gc" ] && [ "$c" != "$gc" ] && fleet_block+="WORKER_SHARD${s}_CPU = \"${c}\"\n"
   done
-  mv "$tmp" "$CORE_ENV"
 
-  if [ -f "$WORKER_ENV" ]; then
-    wtmp="$(mktemp)"
-    grep -vE '^WORKER_SHARD[0-9]+_(LOCAL|MEMORY|CPU)=' "$WORKER_ENV" > "$wtmp" || true
-    local gm gc; gm="$(global_memory)"; gc="$(global_cpus)"
-    for row in "${WORKERS[@]}"; do
-      IFS='|' read -r s h p l m c <<<"$row"
-      [ "$l" != "1" ] && echo "WORKER_SHARD${s}_LOCAL=$l" >> "$wtmp"
-      [ -n "$gm" ] && [ "$m" != "$gm" ] && echo "WORKER_SHARD${s}_MEMORY=$m" >> "$wtmp"
-      [ -n "$gc" ] && [ "$c" != "$gc" ] && echo "WORKER_SHARD${s}_CPU=$c" >> "$wtmp"
-    done
-    mv "$wtmp" "$WORKER_ENV"
+  # Update config.toml: remove old fleet entries, insert new ones under [worker].
+  # WHY: fleet rows end in a double quote (WORKER_0 = "0.0.0.0:26000"), so embedding
+  # the block in a Python literal terminated that literal early and broke the deploy.
+  # Pass it as data through the environment (same channel the other scripts use for
+  # values — see __inject_config.sh: "secrets via env, never argv"), and quit the
+  # heredoc so the program is never subject to shell interpolation either.
+  FLEET_BLOCK="$(printf '%b' "$fleet_block")" python3 - "$toml" <<'PYEOF'
+import os
+import re
+import sys
+from pathlib import Path
+
+toml_path = sys.argv[1]
+fleet_text = os.environ.get("FLEET_BLOCK", "")
+
+text = Path(toml_path).read_text()
+lines = text.splitlines()
+new_lines = []
+in_worker = False
+
+for line in lines:
+    stripped = line.strip()
+    if stripped.startswith('[') and stripped.endswith(']'):
+        in_worker = (stripped == '[worker]')
+        new_lines.append(line)
+        continue
+    if in_worker:
+        key = stripped.split('=')[0].strip() if '=' in stripped else ''
+        if re.match(r'^WORKER_\d+$', key) or re.match(r'^WORKER_SHARD\d+_(LOCAL|MEMORY|CPU)$', key):
+            continue  # Skip old fleet entries
+    new_lines.append(line)
+
+# Find insertion point: last non-empty line in [worker] section
+insert_idx = len(new_lines)
+in_worker = False
+for i, line in enumerate(new_lines):
+    stripped = line.strip()
+    if stripped == '[worker]':
+        in_worker = True
+        continue
+    if in_worker:
+        if stripped.startswith('[') and stripped.endswith(']'):
+            insert_idx = i
+            break
+        if stripped and not stripped.startswith('#'):
+            insert_idx = i + 1
+
+fleet_lines = [l for l in fleet_text.strip().splitlines() if l.strip()]
+for j, fl in enumerate(fleet_lines):
+    new_lines.insert(insert_idx + j, fl)
+
+Path(toml_path).write_text('\n'.join(new_lines) + '\n')
+PYEOF
+
+  # WHY not 2>/dev/null: that discards the sync's own [WARN]/[ERROR] lines and
+  # preflight failures, so a failure arrives with no stated cause.
+  bash scripts/__config_sync.sh --no-secrets || log_warn "config sync after fleet_save failed"
+
+  # Both files must now carry the fleet. The sync is the only writer of .env, so
+  # a row missing from it after a successful sync means the two files will drift
+  # on the next load — assert instead of assuming, since a silent divergence here
+  # is what produced an unresolvable fleet.
+  FLEET_DRIFT_WARNED=0
+  local missing="" k raw
+  while IFS=$'\t' read -r k raw || [ -n "${k:-}" ]; do
+    [ -n "${k:-}" ] || continue
+    [ -n "$(env_val "$CORE_ENV" "$k")" ] || missing+=" $k"
+  done < <(registry_keys "$toml" 'WORKER_[0-9]+' worker)
+  if [ -n "$missing" ]; then
+    log_warn "fleet saved to config.toml but .env render is missing:$missing — run: ./cms config sync"
   fi
 }
 
 require_env_files() {
-  [ -f "$CORE_ENV" ] || die "$CORE_ENV missing — run ./cms first"
-  [ -f "$WORKER_ENV" ] || die "$WORKER_ENV missing — run ./cms first"
+  [ -f "$CORE_ENV" ] || log_die "$CORE_ENV missing — run ./cms config sync first"
+  [ -f "config.toml" ] || log_die "config.toml missing — run ./cms config sync first"
 }
 
 # ---------------------------------------------------------------------------
@@ -125,12 +359,17 @@ worker_status() {
 # ---------------------------------------------------------------------------
 # Deployment — one compose project per local shard
 # ---------------------------------------------------------------------------
+# deploy_worker exit codes: 0 deployed, 1 compose failure, DEPLOY_SKIP_REMOTE a
+# registry-only row. WHY a third code: a skip is not a success, and a caller that
+# cannot tell the two apart reads an all-remote run as a completed deploy.
+readonly DEPLOY_SKIP_REMOTE=3
+
 deploy_worker() {
   local row="$1" s h p l m c proj
   IFS='|' read -r s h p l m c <<<"$row"
   if [ "$l" != "1" ]; then
     log_info "shard $s is registry-only (REMOTE) — skipping local deploy"
-    return 0
+    return "$DEPLOY_SKIP_REMOTE"
   fi
   proj="cw$s"
   log_info "Deploying worker shard $s (port $p, mem $m, cpus $c, project $proj) ..."
@@ -160,42 +399,180 @@ seed_if_empty() {
   WORKERS=("0|0.0.0.0|$p|1|$(global_memory || echo 512M)|$(global_cpus || echo 0.5)")
   fleet_save
   log_info "Seeded registry entry WORKER_0=0.0.0.0:$p into $CORE_ENV"
-  log_info "Run 'make env' next so config/cms.toml picks it up."
+}
+
+# Core ports a worker box must reach on the main server. The attach block asks
+# the operator to confirm all six open, so the deploy gate holds the same line.
+readonly CORE_PROBE_PORTS="25000 28000 28500 29000 22000 28600"
+readonly CORE_PROBE_TIMEOUT=3
+
+# The core runs on another box when CORE_SERVICES_HOST names a non-local host.
+core_is_remote() {
+  local h
+  h="$(core_host_ip)"
+  [ -n "$h" ] || return 1
+  if is_local_host "$h"; then return 1; fi
+  return 0
+}
+
+core_port_open() { # host port
+  timeout "$CORE_PROBE_TIMEOUT" bash -c "</dev/tcp/$1/$2" 2>/dev/null
+}
+
+# Workers dial log-service at boot; refuse to start into a down core. A remote
+# core has no local container to inspect, so probe its ports — a worker-only box
+# otherwise waits out the whole timeout for a container that cannot exist.
+wait_core_healthy() {
+  local timeout="${1:-120}" elapsed=0 state host port
+  if core_is_remote; then
+    host="$(core_host_ip)"
+    for port in $CORE_PROBE_PORTS; do
+      core_port_open "$host" "$port" && return 0
+    done
+    return 1
+  fi
+  while :; do
+    state=$(docker inspect -f '{{.State.Health.Status}}' cms-log-service 2>/dev/null || echo missing)
+    [ "$state" = healthy ] && return 0
+    [ "$elapsed" -ge "$timeout" ] && return 1
+    sleep 5; elapsed=$((elapsed + 5))
+  done
+}
+
+# Verdict for a finished pass: deployed / skipped / failed shard counts. A
+# registry-only row is a shard this host was never asked to run, so skipping it is
+# by design and a pass that deployed something and failed nothing has done its job
+# — only a pass that deployed nothing (mis-registered fleet) or failed fails.
+deploy_verdict() { # deployed skipped failed
+  if [ "$1" -eq 0 ] && [ "$3" -eq 0 ]; then
+    log_warn "no shards matched this host - check WORKER_n host vs hostname -I and WORKER_SHARDn_LOCAL; worker list scope column shows local vs remote"
+    return 1
+  fi
+  if [ "$2" -gt 0 ]; then
+    log_warn "deploy incomplete: $2 of $(( $1 + $2 + $3 )) shard(s) skipped as registry-only (remote); worker list scope column shows local vs remote"
+  fi
+  if [ "$1" -eq 0 ] || [ "$3" -gt 0 ]; then
+    return 1
+  fi
+  return 0
 }
 
 cmd_deploy() {
   require_env_files
   seed_if_empty
-  local target="${1:-all}" rc=0 row s
+  if ! wait_core_healthy 120; then
+    if core_is_remote; then
+      log_warn "remote core $(core_host_ip) unreachable - check network/firewall, not make core"
+    else
+      log_warn "cms-log-service is not healthy — start core first: make core (workers would only crash-loop on connect)"
+    fi
+    return 1
+  fi
+  local target="${1:-all}" row s hit w_list drc
+  local deployed=0 skipped=0 failed=0 rc=0
+  local -a want=()
+  if [ "$target" != "all" ]; then
+    w_list="$(expand_spec "$target")" || { log_warn "bad shard spec: $target"; return 1; }
+    mapfile -t want <<< "$w_list"
+  fi
   for row in "${WORKERS[@]}"; do
     s="${row%%|*}"
-    [ "$target" != all ] && [ "$target" != "$s" ] && continue
-    deploy_worker "$row" || rc=1
+    if [ "$target" != all ]; then
+      hit=0
+      for w in "${want[@]}"; do [ "$s" = "$w" ] && hit=1; done
+      [ "$hit" = 1 ] || continue
+    fi
+    drc=0
+    deploy_worker "$row" || drc=$?
+    case "$drc" in
+      0) deployed=$((deployed + 1)) ;;
+      "$DEPLOY_SKIP_REMOTE") skipped=$((skipped + 1)) ;;
+      *) failed=$((failed + 1)) ;;
+    esac
   done
+  deploy_verdict "$deployed" "$skipped" "$failed" || rc=1
   return "$rc"
 }
 
 cmd_stop() {
   require_env_files; fleet_load
-  local target="${1:-all}" row s
-  for row in "${WORKERS[@]}"; do
+  local target="${1:-all}" row s hit w_list
+  local -a want=()
+  if [ "$target" != "all" ]; then
+    w_list="$(expand_spec "$target")" || { log_warn "bad shard spec: $target"; return 1; }
+    mapfile -t want <<< "$w_list"
+  fi
+  for row in ${WORKERS[@]+"${WORKERS[@]}"}; do
     s="${row%%|*}"
-    [ "$target" != all ] && [ "$target" != "$s" ] && continue
+    if [ "$target" != all ]; then
+      hit=0
+      for w in "${want[@]}"; do [ "$s" = "$w" ] && hit=1; done
+      [ "$hit" = 1 ] || continue
+    fi
     stop_worker "$row"
   done
 }
 
 refresh_hint() {
   echo ""
-  log_info "Registry changed -> run 'make env' (or ./cms) to regenerate config/cms.toml."
+  log_info "Registry saved to config.toml — .env refreshed automatically (no manual step)."
 }
 
 next_free_shard() {
-  local used=" " s row
-  for row in "${WORKERS[@]}"; do used+=" ${row%%|*} "; done
-  s=0
-  while [[ "$used" == *" $s "* ]]; do s=$((s+1)); done
-  echo "$s"
+  # Suggest max(existing)+1: remote fleets use sparse shard numbers
+  # (e.g. 10, 11, 12), so a first-gap suggestion would offer 0.
+  local max=0 s row
+  for row in ${WORKERS[@]+"${WORKERS[@]}"}; do
+    s="${row%%|*}"
+    [ "$s" -gt "$max" ] && max="$s"
+  done
+  echo "$((max + 1))"
+}
+
+# Expand "4", "4,5,6,7", "4-7" or "4,6-8" into a sorted, deduplicated list
+# (one number per line). Fails on anything else.
+expand_spec() {
+  local spec="${1// /}"
+  [ -n "$spec" ] || return 1
+  (
+    set -f
+    IFS=','
+    local -a out=()
+    local item a b
+    for item in $spec; do
+      if [[ "$item" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+        a="${BASH_REMATCH[1]}"; b="${BASH_REMATCH[2]}"
+        [ "$a" -le "$b" ] || exit 1
+        while [ "$a" -le "$b" ]; do out+=("$a"); a=$((a+1)); done
+      elif [[ "$item" =~ ^[0-9]+$ ]]; then
+        out+=("$item")
+      else
+        exit 1
+      fi
+    done
+    [ "${#out[@]}" -gt 0 ] || exit 1
+    printf '%s\n' "${out[@]}" | sort -n -u
+  )
+}
+
+# Ports for an attach batch: a single number is the base port (one per shard,
+# incrementing); a range or comma list must resolve to exactly #shards ports.
+resolve_ports() {
+  local spec="${1// /}" count="$2" base i
+  [ -n "$spec" ] && [ -n "$count" ] || return 1
+  if [[ "$spec" == *-* || "$spec" == *,* ]]; then
+    expand_spec "$spec" || return 1
+  else
+    [[ "$spec" =~ ^[0-9]+$ ]] || return 1
+    base="$spec"
+    [ "$base" -ge 1 ] && [ "$base" -le 65535 ] || return 1
+    i=0
+    while [ "$i" -lt "$count" ]; do
+      [ "$((base + i))" -le 65535 ] || return 1
+      echo "$((base + i))"
+      i=$((i+1))
+    done
+  fi
 }
 
 add_entry() {
@@ -210,15 +587,15 @@ add_entry() {
     s="$FORM_OUT_shard"; h="$FORM_OUT_host"; p="$FORM_OUT_port"; m="$FORM_OUT_memory"; c="$FORM_OUT_cpus"
     [[ "$s" =~ ^[0-9]+$ ]] || { log_warn "shard must be numeric"; return 0; }
     [[ "$p" =~ ^[0-9]+$ ]] || { log_warn "port must be numeric"; return 0; }
-    fleet_load; WORKERS+=("$s|$h|$p|$m|$c"); toml_save
-    log_info "Added shard $s ($h:$p). Run 'make env' to refresh cms.toml."
+    fleet_load; WORKERS+=("$s|$h|$p|1|$m|$c"); fleet_save
+    log_info "Added shard $s ($h:$p)."
   fi
 }
 
 edit_entry() {
   fleet_load
-  local row="${ROWS[$CUR]}" s h p m c
-  IFS='|' read -r s h p m c <<<"$row"
+  local row="${WORKERS[$CUR]}" s h p l m c
+  IFS='|' read -r s h p l m c <<<"$row"
   if ui_form_edit "Edit shard $s" \
       "shard|Shard|$s" \
       "port|Port|$p" \
@@ -228,9 +605,171 @@ edit_entry() {
     s="$FORM_OUT_shard"; h="$FORM_OUT_host"; p="$FORM_OUT_port"; m="$FORM_OUT_memory"; c="$FORM_OUT_cpus"
     [[ "$s" =~ ^[0-9]+$ ]] || { log_warn "shard must be numeric"; return 0; }
     [[ "$p" =~ ^[0-9]+$ ]] || { log_warn "port must be numeric"; return 0; }
-    ROWS[$CUR]="$s|$h|$p|$m|$c"; toml_save
+    WORKERS[$CUR]="$s|$h|$p|$l|$m|$c"; fleet_save
     log_info "Updated shard $s ($h:$p). Re-deploy to apply."
   fi
+}
+
+# Attach a remote worker box: write its shards into the registry as
+# registry-only (LOCAL=0) rows the core routes to, then print the block to
+# run on the worker box (same rows, no LOCAL override → deploy locally there).
+attach_entry() {  # [shard-spec host port-spec [main-ip]] [--push user@host:/path] — prompts when args are omitted
+  require_env_files
+  local spec="" host="" pspec="" main="" push_target=""
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      --push=*) push_target="${arg#--push=}" ;;
+      *) if [ -z "$spec" ]; then spec="$arg";
+         elif [ -z "$host" ]; then host="$arg";
+         elif [ -z "$pspec" ]; then pspec="$arg";
+         elif [ -z "$main" ]; then main="$arg"; fi ;;
+    esac
+  done
+  if [ -z "$spec" ] || [ -z "$host" ] || [ -z "$pspec" ]; then
+    [ -t 0 ] && [ -t 1 ] || log_die "usage: $0 attach <shard-spec> <host> <port-spec> [main-ip]"
+    printf 'Shards to attach (e.g. 4,5,6,7 or 4-7): '
+    IFS= read -r spec || return 0
+    printf 'Worker box host/IP for the core to reach it on: '
+    IFS= read -r host || return 0
+    printf 'Ports (base e.g. 26004, or explicit 26004-26007): '
+    IFS= read -r pspec || return 0
+  fi
+  if [ -z "$main" ]; then
+    local guess
+    guess="$(main_reachable_ip)"
+    if [ -t 0 ] && [ -t 1 ]; then
+      printf 'Main server IP the workers must dial [%s]: ' "$guess"
+      IFS= read -r main || return 0
+      [ -z "$main" ] && main="$guess"
+    else
+      main="$guess"
+    fi
+  fi
+  if [ -z "$main" ] || [[ "$main" =~ [[:space:]:] ]]; then
+    log_warn "main server IP required (no whitespace or ':') — set INNER_IP in config.toml or pass it explicitly"
+    return 1
+  fi
+  local s_list p_list
+  s_list="$(expand_spec "$spec")" || { log_warn "bad shard spec: $spec"; return 1; }
+  local -a shards=() ports=()
+  mapfile -t shards <<< "$s_list"
+  p_list="$(resolve_ports "$pspec" "${#shards[@]}")" || {
+    log_warn "bad port spec: $pspec"; return 1; }
+  mapfile -t ports <<< "$p_list"
+  if [ "${#ports[@]}" -ne "${#shards[@]}" ]; then
+    log_warn "got ${#ports[@]} port(s) for ${#shards[@]} shard(s)"
+    return 1
+  fi
+  if [ -z "$host" ] || [[ "$host" =~ [[:space:]:] ]]; then
+    log_warn "host required — no whitespace or ':' allowed"
+    return 1
+  fi
+  local i p
+  for i in "${shards[@]}"; do
+    [ "$i" -ge 0 ] || { log_warn "shard must be >= 0: $i"; return 1; }
+  done
+  for p in "${ports[@]}"; do
+    { [ "$p" -ge 1 ] && [ "$p" -le 65535 ]; } || { log_warn "port out of range: $p"; return 1; }
+  done
+  attach_write_rows "$host" "${shards[@]}" --- "${ports[@]}" || return 1
+  attach_print_block "$main" "$host" "${shards[@]}" --- "${ports[@]}"
+  if [ -n "$push_target" ]; then
+    push_worker_secrets "$push_target" "" || log_warn "secret push failed — copy shared secrets manually"
+  fi
+}
+
+# Replace the given shards' registry rows with LOCAL=0 entries and save.
+# Uses "---" as a separator because shard and port lists are both numeric.
+attach_write_rows() {
+  local host="$1"; shift
+  local -a shards=() ports=() kept=() added=()
+  local arg
+  while [ "$1" != "---" ]; do shards+=("$1"); shift; done
+  shift
+  for arg in "$@"; do ports+=("$arg"); done
+  local gm gc row s keep i
+  gm="$(global_memory)"; gc="$(global_cpus)"
+  fleet_load
+  for row in ${WORKERS[@]+"${WORKERS[@]}"}; do
+    s="${row%%|*}"; keep=1
+    for i in "${shards[@]}"; do [ "$s" = "$i" ] && keep=0; done
+    if [ "$keep" = 1 ]; then kept+=("$row"); else log_info "Replacing registry row for shard $s"; fi
+  done
+  for i in "${!shards[@]}"; do
+    added+=("${shards[$i]}|$host|${ports[$i]}|0|${gm:-512M}|${gc:-0.5}")
+  done
+  WORKERS=("${kept[@]+"${kept[@]}"}" "${added[@]+"${added[@]}"}")
+  fleet_save
+  log_info "Attached ${#shards[@]} shard(s) as registry-only rows (LOCAL=0):"
+  for i in "${!shards[@]}"; do
+    printf '  WORKER_%s=%s:%s\n' "${shards[$i]}" "$host" "${ports[$i]}"
+  done
+  attach_selfmatch_verdict "$host" "${shards[@]}"
+  refresh_hint
+}
+
+# Does this box claim the shards an attach just wrote? Every row is registry-only,
+# so a shard addressed at this box runs nowhere, and the only statement of that was
+# deploy_verdict refusing the deploy much later. is_local_host is the same matcher
+# the scope column applies, so the answer here is the answer ./cms worker list
+# gives. Informational only — deploy_verdict stays the enforcing gate.
+attach_selfmatch_verdict() { # host shard...
+  local host="$1"; shift
+  local s
+  if is_local_host "$host"; then
+    log_info "Self-match: $host is this box, so the rows above are addressed here —"
+    for s in "$@"; do
+      printf '  %-30s' "shard $s:"
+      printf 'PASS (host is this box; scope=remote since attach wrote LOCAL=0 — set WORKER_SHARD%s_LOCAL = 1 to run it here)\n' "$s"
+    done
+    return 0
+  fi
+  log_info "This box claims none of the $# attached shard(s) at $host: every row is registry-only (scope=remote) on another host, so nothing deploys here. Informational, not a failure."
+}
+
+# Print the worker-side setup block (paste on the worker box).
+# Why sed-append instead of a heredoc: the file ends in [tailscale], so
+# appended WORKER lines would land in the wrong section (and a second
+# [worker] header duplicates it). Appending under the existing header keeps
+# every key in its section with no manual editing.
+attach_print_block() {
+  local main="$1"; shift
+  local host="$1"; shift
+  local -a shards=() ports=()
+  while [ "$1" != "---" ]; do shards+=("$1"); shift; done
+  shift
+  local arg
+  for arg in "$@"; do ports+=("$arg"); done
+  local i
+  echo ""
+  log_info "On the worker box ($host), from a fresh checkout of this repository:"
+  echo "  # 1) Point the worker at this main server (no manual editing)"
+  echo "  sed -i 's|^CORE_SERVICES_HOST.*|CORE_SERVICES_HOST = \"$main\"|' config.toml"
+  echo "  grep -q '^CORE_SERVICES_HOST' config.toml || echo 'CORE_SERVICES_HOST = \"$main\"' >> config.toml"
+  echo "  # 2) Register this box's shards (appended under [worker])"
+  printf '  sed -i \x27/^\\[worker\\]/a'
+  for i in "${!shards[@]}"; do
+    printf ' \\\n  WORKER_%s = \"%s:%s\"' "${shards[$i]}" "$host" "${ports[$i]}"
+  done
+  printf '\x27 config.toml\n'
+  echo "  # 3) Confirm the core ports are reachable from here (all six must say open)"
+  echo "  for p in 25000 28000 28500 29000 22000 28600; do timeout 3 bash -c \"</dev/tcp/$main/\$p\" && echo \"\$p open\" || echo \"\$p CLOSED\"; done"
+  echo "  # 4) Cgroups, then start and verify"
+  echo "  sudo ./scripts/__worker_cgroup_setup.sh /sys/fs/cgroup/cms-isolate"
+  echo "  ./cms config sync && ./cms worker deploy all && ./cms worker list"
+  # The deploy gate fails a box whose shards all resolve as remote (zero match),
+  # and warns-but-passes a healthy split, so a green deploy is not proof this box runs them. The scope
+  # column is the only per-shard statement of which box owns a row, so assert it.
+  local alt=""
+  for i in "${!shards[@]}"; do
+    [ -n "$alt" ] && alt+="|"
+    alt+="${shards[$i]}"
+  done
+  echo "  # 5) Confirm this box owns the shards (scope must read local, not remote)"
+  echo "  ./cms worker list | awk '\$1 ~ /^(${alt})\$/ && \$4 != \"local\" { print \"NOT LOCAL: \" \$0; bad = 1 } END { exit (bad ? 1 : 0) }' \\"
+  echo "    && echo 'all shards local — this box is running them' \\"
+  echo "    || echo 'NOT local: this box did not claim them — set WORKER_SHARD<n>_LOCAL = 1 under [worker] in config.toml'"
 }
 
 render() {
@@ -254,7 +793,7 @@ render() {
   done
   [ "${#WORKERS[@]}" -eq 0 ] && printf ' %s(no entries — press a to add)%s\n' "$C_DIM" "$C_0"
   echo ""
-  echo " ↑↓ move · space select · a add · e edit · d delete · D deploy sel/all · K stop · L logs · r refresh · q quit"
+  echo " ↑↓ move · space select · a add · A attach remote box · e edit · d delete · D deploy sel/all · K stop · L logs · r refresh · q quit"
 }
 
 tui_loop() {
@@ -288,8 +827,9 @@ tui_loop() {
             SELECTED+=("$CUR")
           fi
         fi ;;
-      a) add_entry || true ;;
-      e) fleet_load || true; { [ "${#WORKERS[@]}" -gt 0 ] && edit_entry "$CUR"; } || true ;;
+      a) add_entry ;;
+      A) attach_entry "" "" "" || true ;;
+      e) fleet_load || true; { [ "${#WORKERS[@]}" -gt 0 ] && edit_entry "$CUR"; } ;;
       d)
         fleet_load || true
         if [ "${#WORKERS[@]}" -gt 0 ]; then
@@ -346,11 +886,14 @@ list_plain() {
 
 case "${1:-tui}" in
   tui)
-    [ -t 0 ] && [ -t 1 ] || die "interactive TUI needs a terminal — use: $0 deploy|stop|list"
+    [ -t 0 ] && [ -t 1 ] || log_die "interactive TUI needs a terminal — use: $0 deploy|stop|list"
     require_env_files
     tui_loop ;;
+  attach)
+    shift
+    attach_entry "${1:-}" "${2:-}" "${3:-}" "${4:-}" ;;
   deploy) cmd_deploy "${2:-all}" ;;
   stop)   cmd_stop "${2:-all}" ;;
   list)   list_plain ;;
-  *) die "usage: $0 [tui|deploy [all|shard]|stop [all|shard]|list]" ;;
+  *) log_die "usage: $0 [tui|attach [spec host port-spec]|deploy [all|shard|spec]|stop [all|shard|spec]|list]" ;;
 esac

@@ -1,10 +1,20 @@
 SHELL := /bin/bash
 
+# Generated from config.toml by `make env`; gitignored. Pull it into make's own
+# environment so a recipe reading $${VAR} sees the same value the stack runs
+# with. WHY -include and not include: a fresh checkout has no .env yet, and a
+# plain include would make every target fail with "No such file or directory"
+# before an operator ever ran `make env`. WHY export: without it the values are
+# make variables only, and a shell recipe expands $${VAR} from the environment
+# it inherited rather than from make's own tables.
+-include .env
+export
+
 # Detect Docker Compose version (keep fallback)
 COMPOSE_CMD := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
 # Explicit -f list (auto-merge of docker-compose.override.yml is disabled
 # whenever -f is passed, so the override must be included here when present)
-COMPOSE_FILES := $(wildcard docker-compose.yml docker-compose.override.yml)
+COMPOSE_FILES := $(wildcard docker-compose.yml docker-compose.override.yml docker-compose.expose.yml)
 COMPOSE_FLAGS := $(foreach f,$(COMPOSE_FILES),-f $(f))
 # Compose v5 does not auto-activate the profiles of depends_on targets, so
 # stack bring-up must request dependency profiles explicitly. Stop/clean
@@ -12,34 +22,58 @@ COMPOSE_FLAGS := $(foreach f,$(COMPOSE_FILES),-f $(f))
 ADMIN_UP_PROFILES   := --profile core --profile admin
 CONTEST_UP_PROFILES := --profile core --profile contest
 
-.PHONY: setup audit help env core admin contest worker infra core-stop admin-stop contest-stop contest-down worker-stop infra-stop core-clean admin-clean contest-clean worker-clean infra-clean db-clean clean pull pull-core pull-admin pull-contest pull-worker pull-infra core-img admin-img contest-img worker-img infra-img admin-dev admin-dev-stop contest-down cms-init admin-create prisma-sync lint smoke-test preflight backup db-reset
+# Additive stacks that publish host ports the default COMPOSE_FILES must never
+# pull in implicitly. WHY separate: docker-compose.domain.yml and
+# docker-compose.waf.yml define services with no `profiles:` key (grader-nginx-proxy
+# binds host 80/443, grader-certbot and grader-redis-rate-limit always start), so
+# folding them into COMPOSE_FILES would make `make core` issue certificates and
+# bind 443 on a workstation. These targets opt in per-stack.
+DOMAIN_COMPOSE_FILES := docker-compose.yml docker-compose.domain.yml
+WAF_COMPOSE_FILES    := docker-compose.yml docker-compose.domain.yml docker-compose.waf.yml
+DOMAIN_COMPOSE_FLAGS := -f docker-compose.yml -f docker-compose.domain.yml
+WAF_COMPOSE_FLAGS    := -f docker-compose.yml -f docker-compose.domain.yml -f docker-compose.waf.yml
+
+# WHY waf carries --profile core --profile contest: grader-waf's BACKEND is
+# http://grader-nginx-proxy:80, so the domain proxy must already be up. Compose
+# *unions* profiles across merged files rather than replacing them, and a
+# depends_on target is only visible when one of its profiles is active — so the
+# contest profile has to be requested or the merge fails validation with
+# `depends on undefined service "nginx-proxy"`.
+WAF_UP_PROFILES      := --profile core --profile contest --profile waf
+
+.PHONY: setup audit help env core admin contest worker infra domain waf core-stop admin-stop contest-stop contest-down worker-stop infra-stop domain-stop waf-stop core-clean admin-clean contest-clean worker-clean infra-clean domain-clean waf-clean db-clean clean pull pull-core pull-admin pull-contest pull-worker pull-infra core-img admin-img contest-img worker-img infra-img admin-dev admin-dev-stop contest-down cms-init admin-create prisma-sync lint smoke-test preflight backup db-reset
 
 help:
 	@echo "Available commands:"
-	@echo "  make env            - Generates .env file from .env.* configuration files"
+	@echo "  make env            - Generates .env file from config.toml"
 	@echo "  make core           - Build+start core profile (DEPLOYMENT_TYPE=img → pull+up --no-build, src → up --build)"
 	@echo "  make admin          - Build+start admin profile"
 	@echo "  make contest        - Build+start contest profile (CONTEST_ID canonical)"
-	@echo "  make worker         - Build+start worker profile"
+	@echo "  make worker         - Deploy worker fleet (pull/build + per-shard deploy)"
 	@echo "  make infra          - Build+start monitor profile (alias: infra → monitor)"
+	@echo "  make domain         - Start domain stack: grader-nginx-proxy (host 80/443) + certbot + redis-rate-limit"
+	@echo "  make waf            - Start WAF profile on top of the domain stack (OWASP CRS, DetectionOnly by default)"
 	@echo "  make core-stop      - Stop core profile (down --profile core)"
 	@echo "  make admin-stop     - Stop admin profile"
 	@echo "  make contest-stop   - Stop contest profile (stop — keeps containers, use contest-down to remove)"
-	@echo "  make contest-down   - Down contest profile (removes containers/networks)"
-	@echo "  make worker-stop    - Stop worker profile"
+	@echo "  make worker-stop    - Stop worker fleet (all local shards)"
 	@echo "  make infra-stop     - Stop monitor profile"
+	@echo "  make domain-stop    - Stop domain stack (nginx-proxy, certbot, redis-rate-limit)"
+	@echo "  make waf-stop       - Stop the WAF profile (domain stack left running)"
 	@echo "  make core-clean     - Down -v core profile"
 	@echo "  make admin-clean    - Down -v admin profile"
 	@echo "  make contest-clean  - Down -v contest profile"
 	@echo "  make worker-clean   - Down -v worker profile"
 	@echo "  make infra-clean    - Down -v monitor profile"
+	@echo "  make domain-clean   - Down -v domain stack"
+	@echo "  make waf-clean      - Down -v WAF profile + domain stack"
 	@echo "  make db-clean       - Down -v ALL profiles (full reset)"
 	@echo "  make db-reset       - Reset DB (db-clean + core with DEPLOYMENT_TYPE=img override)"
 	@echo "  make clean          - Removes .env file"
 	@echo "  make pull           - Pull images for all profiles (offline-tolerant, warns on failure)"
 	@echo "  make cms-init       - Initialize CMS database"
 	@echo "  make admin-create   - Create first superadmin account"
-	@echo "  make prisma-sync    - Sync Prisma schema to DB (fail+instruct on missing deps)"
+	@echo "  make prisma-sync    - Apply Prisma migrations (migrate deploy) + seed permissions"
 	@echo "  make lint           - Run shellcheck/hadolint/yamllint + compose config validation"
 	@echo "  make smoke-test     - Run scripts/__smoke-test.sh"
 	@echo "  make preflight      - Run scripts/__preflight.sh"
@@ -54,185 +88,9 @@ help:
 # env — hardened merge flow
 # ---------------------------------------------------------------------------
 env:
-	@echo "Generating .env file..."
-	@# --- Template missing env files from examples with secret generation (only NEW files) ---
-	@if [ ! -f .env.core ] && [ -f .env.core.example ]; then \
-		CORE_PW=$$(openssl rand -base64 24 2>/dev/null | tr -d "/+= " | cut -c1-24); \
-		CORE_PW=$${CORE_PW:-cms$$(date +%s)}; \
-		sed "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$$CORE_PW|" .env.core.example > .env.core; \
-		echo "Templated .env.core from .env.core.example (generated POSTGRES_PASSWORD)"; \
-	fi
-	@if [ ! -f .env.admin ] && [ -f .env.admin.example ]; then \
-		RANK_PW=$$(openssl rand -base64 18 2>/dev/null | tr -d "/+= " | cut -c1-18); \
-		RANK_PW=$${RANK_PW:-rank$$(date +%s)}; \
-		sed "s|^RANKING_PASSWORD=.*|RANKING_PASSWORD=cms_ranking_$$RANK_PW|" .env.admin.example > .env.admin.tmp_rank && mv .env.admin.tmp_rank .env.admin; \
-		echo "Templated .env.admin (generated RANKING_PASSWORD)"; \
-		if grep -q "CHANGE_ME_GENERATE" .env.admin 2>/dev/null; then \
-			NEW_SECRET=$$(openssl rand -hex 32 2>/dev/null || echo "CHANGE_ME_GENERATE_FAILED"); \
-			if [ "$$NEW_SECRET" != "CHANGE_ME_GENERATE_FAILED" ]; then \
-				sed -i "s/CHANGE_ME_GENERATE_WITH_OPENSSL_RAND_HEX_32/$$NEW_SECRET/" .env.admin; \
-				echo "Generated AUTH_SECRET for new .env.admin"; \
-			fi; \
-		fi; \
-		echo "Templated .env.admin from .env.admin.example"; \
-	fi
-	@if [ ! -f .env.contest ] && [ -f .env.contest.example ]; then \
-		cp .env.contest.example .env.contest; \
-		if grep -q "^SECRET_KEY=$$" .env.contest 2>/dev/null || grep -q "^SECRET_KEY= *$$" .env.contest 2>/dev/null; then \
-			NEW_SECRET=$$(openssl rand -hex 32 2>/dev/null || echo ""); \
-			if [ -n "$$NEW_SECRET" ]; then \
-				sed -i "s/^SECRET_KEY=.*/SECRET_KEY=$$NEW_SECRET/" .env.contest; \
-				echo "Generated SECRET_KEY for new .env.contest"; \
-			fi; \
-		fi; \
-		echo "Templated .env.contest from .env.contest.example"; \
-	fi
-	@if [ ! -f .env.worker ] && [ -f .env.worker.example ]; then \
-		cp .env.worker.example .env.worker; \
-		echo "Templated .env.worker from .env.worker.example"; \
-	fi
-	@if [ ! -f .env.infra ] && [ -f .env.infra.example ]; then \
-		cp .env.infra.example .env.infra; \
-		echo "Templated .env.infra from .env.infra.example"; \
-	fi
-	@echo "# Auto-generated .env file from .env.* files" > .env
-	@echo "" >> .env
-	@# Core Environment
-	@if [ -f .env.core ]; then \
-		echo "### .env.core ###" >> .env; \
-		cat .env.core >> .env; \
-		echo "" >> .env; \
-	elif [ -f .env.core.example ]; then \
-		echo "### .env.core.example (Template used - please create .env.core) ###" >> .env; \
-		cat .env.core.example >> .env; \
-		echo "" >> .env; \
-		echo "WARNING: Using .env.core.example template"; \
-	fi
-	@# Admin Environment
-	@if [ -f .env.admin ]; then \
-		echo "### .env.admin ###" >> .env; \
-		cat .env.admin >> .env; \
-		echo "" >> .env; \
-	elif [ -f .env.admin.example ]; then \
-		echo "### .env.admin.example (Template used - please create .env.admin) ###" >> .env; \
-		cat .env.admin.example >> .env; \
-		echo "" >> .env; \
-		echo "WARNING: Using .env.admin.example template"; \
-	fi
-	@# Contest Environment
-	@if [ -f .env.contest ]; then \
-		echo "### .env.contest ###" >> .env; \
-		cat .env.contest >> .env; \
-		echo "" >> .env; \
-	elif [ -f .env.contest.example ]; then \
-		echo "### .env.contest.example (Template used - please create .env.contest) ###" >> .env; \
-		cat .env.contest.example >> .env; \
-		echo "" >> .env; \
-		echo "WARNING: Using .env.contest.example template"; \
-	fi
-	@# Worker Environment
-	@if [ -f .env.worker ]; then \
-		echo "### .env.worker ###" >> .env; \
-		cat .env.worker >> .env; \
-		echo "" >> .env; \
-	elif [ -f .env.worker.example ]; then \
-		echo "### .env.worker.example (Template used - please create .env.worker) ###" >> .env; \
-		cat .env.worker.example >> .env; \
-		echo "" >> .env; \
-		echo "WARNING: Using .env.worker.example template"; \
-	fi
-	@# Infra Environment
-	@if [ -f .env.infra ]; then \
-		echo "### .env.infra ###" >> .env; \
-		cat .env.infra >> .env; \
-		echo "" >> .env; \
-	elif [ -f .env.infra.example ]; then \
-		echo "### .env.infra.example (Template used - please create .env.infra) ###" >> .env; \
-		cat .env.infra.example >> .env; \
-		echo "" >> .env; \
-		echo "WARNING: Using .env.infra.example template"; \
-	fi
-	@# Local Environment
-	@if [ -f .env.local ]; then \
-		echo "### .env.local ###" >> .env; \
-		cat .env.local >> .env; \
-		echo "" >> .env; \
-	fi
-	@# Domain variables (DOMAIN_NAME, CERT_TYPE, HSTS_MAX_AGE, OFFSITE_*, SOCKET_PROXY, MONITOR_ENHANCED)
-	@# are passed through to .env automatically via the cat merges above.
-	@# Legacy map: ACTIVE_CONTEST_ID → CONTEST_ID
-	@ACTIVE_VAL=$$(grep "^ACTIVE_CONTEST_ID=" .env.contest 2>/dev/null | cut -d '=' -f2- | tr -d '\r' | xargs); \
-	CONTEST_VAL=$$(grep "^CONTEST_ID=" .env 2>/dev/null | grep -v "^#" | cut -d '=' -f2- | tr -d '\r' | xargs); \
-	if [ -n "$$ACTIVE_VAL" ] && [ -z "$$CONTEST_VAL" ]; then \
-		echo "CONTEST_ID=$$ACTIVE_VAL" >> .env; \
-		echo "[deprecated] ACTIVE_CONTEST_ID is deprecated, use CONTEST_ID (mapped $$ACTIVE_VAL → CONTEST_ID)" >&2; \
-	fi
-	@# Map CMS_DOMAIN → CONTEST_DOMAIN when ACCESS_METHOD=domain
-	@CMS_DOM=$$(grep "^CMS_DOMAIN=" .env.core 2>/dev/null | cut -d '=' -f2- | tr -d '\r' | xargs); \
-	EXIST_DOM=$$(grep "^CONTEST_DOMAIN=" .env 2>/dev/null | grep -v "^#" | cut -d '=' -f2- | tr -d '\r' | xargs); \
-	if [ -n "$$CMS_DOM" ] && [ -z "$$EXIST_DOM" ]; then \
-		echo "CONTEST_DOMAIN=$$CMS_DOM" >> .env; \
-		echo "Mapped CMS_DOMAIN=$$CMS_DOM → CONTEST_DOMAIN"; \
-	fi
-	@chmod 600 .env
-	@# Generate admin-panel/.env for Prisma and Next.js
-	@echo "Generating admin-panel/.env..."
-	@if [ -f .env.core ]; then \
-		DB_USER=$$(grep "^POSTGRES_USER=" .env.core | cut -d '=' -f2- | tr -d '\r' | xargs); \
-		DB_PASS=$$(grep "^POSTGRES_PASSWORD=" .env.core | cut -d '=' -f2- | tr -d '\r' | xargs); \
-		DB_NAME=$$(grep "^POSTGRES_DB=" .env.core | cut -d '=' -f2- | tr -d '\r' | xargs); \
-		DB_HOST=$$(grep "^POSTGRES_HOST=" .env.core | cut -d '=' -f2- | tr -d '\r' | xargs); \
-		DB_PORT=$$(grep "^POSTGRES_PORT=" .env.core | cut -d '=' -f2- | tr -d '\r' | xargs); \
-		DB_PORT=$${DB_PORT:-5432}; \
-		echo "DATABASE_URL=\"postgresql://$$DB_USER:$$DB_PASS@localhost:$$DB_PORT/$$DB_NAME\"" > admin-panel/.env; \
-		if [ -f .env.admin ]; then \
-			AUTH_SECRET=$$(grep "^AUTH_SECRET=" .env.admin | cut -d '=' -f2- | tr -d '\r' | xargs); \
-			[ -n "$$AUTH_SECRET" ] && echo "AUTH_SECRET=$$AUTH_SECRET" >> admin-panel/.env; \
-		fi; \
-		chmod 600 admin-panel/.env 2>/dev/null || true; \
-	else \
-		echo "# Please configure .env.core first" > admin-panel/.env; \
-		chmod 600 admin-panel/.env 2>/dev/null || true; \
-	fi
-	@# Configuration Files
-	@if [ -d config/cms.toml ]; then \
-		echo "Removing directory config/cms.toml (created by Docker volumes)..."; \
-		rm -rf config/cms.toml; \
-	fi
-	@if [ ! -f config/cms.toml ]; then \
-		echo "Refreshing config/cms.toml from sample..."; \
-		cp config/cms.sample.toml config/cms.toml; \
-	fi
-	@if [ -d config/cms.ranking.toml ]; then \
-		echo "Removing directory config/cms.ranking.toml (created by Docker volumes)..."; \
-		rm -rf config/cms.ranking.toml; \
-	fi
-	@if [ ! -f config/cms.ranking.toml ]; then \
-		echo "Copying config/cms.ranking.sample.toml to config/cms.ranking.toml..."; \
-		cp config/cms.ranking.sample.toml config/cms.ranking.toml; \
-		echo "Setting bind address to 0.0.0.0 in config/cms.ranking.toml..."; \
-		sed -i 's/"127.0.0.1"/"0.0.0.0"/g' config/cms.ranking.toml; \
-	fi
-	@echo "Injecting database configuration and service addresses into config/cms.toml..."; \
-	chmod +x scripts/__inject_config.sh && ./scripts/__inject_config.sh;
-	@if [ -f config/cms_ranking.toml ]; then \
-		echo "Updating config/cms_ranking.toml..."; \
-		sed -i 's/"127.0.0.1"/"0.0.0.0"/g' config/cms_ranking.toml; \
-	fi
-	fi
-	@mkdir -p backups && touch backups/.gitkeep
-	@echo "Ensured backups/.gitkeep exists (monitor mount needs host dir)"
-	@echo "Hint: if running monitor non-root, ensure ownership: chown 1000:1000 backups (or match container UID)"
-	@echo ".env file generated. You can now run: ./cms   (one-stop bootstrap)"
-	@if [ -x scripts/__preflight.sh ]; then \
-		echo "Running preflight checks..."; \
-		./scripts/__preflight.sh; \
-	elif [ -f scripts/__preflight.sh ]; then \
-		echo "Running preflight checks..."; \
-		bash scripts/__preflight.sh; \
-	else \
-		echo "preflight.sh missing — skipping preflight checks"; \
-	fi
+	@echo "[deprecated] 'make env' is now an alias for './cms config sync'"
+	@echo "  Edit config.toml, then run: ./cms config sync"
+	@bash scripts/__config_sync.sh
 
 # ---------------------------------------------------------------------------
 # Canonical profile targets — DEPLOYMENT_TYPE=img → pull + up --no-build, src → up --build
@@ -243,11 +101,8 @@ env:
 setup:
 	@./cms $(CMS_ARGS)
 
-
-# Source Build Targets (Development)
 core:
 	@DEPLOY_TYPE="$${DEPLOYMENT_TYPE_OVERRIDE:-}"; \
-	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env.admin 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
 	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
 	if [ "$$DEPLOY_TYPE" = "img" ]; then \
@@ -262,7 +117,6 @@ core:
 
 admin:
 	@DEPLOY_TYPE="$${DEPLOYMENT_TYPE_OVERRIDE:-}"; \
-	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env.admin 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
 	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
 	if [ "$$DEPLOY_TYPE" = "img" ]; then \
@@ -277,7 +131,6 @@ admin:
 
 contest:
 	@DEPLOY_TYPE="$${DEPLOYMENT_TYPE_OVERRIDE:-}"; \
-	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env.admin 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
 	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
 	if [ "$$DEPLOY_TYPE" = "img" ]; then \
@@ -288,26 +141,25 @@ contest:
 		echo "DEPLOYMENT_TYPE=src → building contest images..."; \
 		$(COMPOSE_CMD) $(COMPOSE_FLAGS) $(CONTEST_UP_PROFILES) up -d --build; \
 	fi
+	@bash scripts/__contest_dns_refresh.sh
 	@echo "Contest profile started (CONTEST_ID canonical)."
 
 worker:
 	@DEPLOY_TYPE="$${DEPLOYMENT_TYPE_OVERRIDE:-}"; \
-	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env.admin 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
 	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
 	if [ "$$DEPLOY_TYPE" = "img" ]; then \
 		echo "DEPLOYMENT_TYPE=img → pulling worker images..."; \
 		$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile worker pull || true; \
-		$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile worker up -d --no-build; \
 	else \
-		echo "DEPLOYMENT_TYPE=src → building worker images..."; \
-		$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile worker up -d --build; \
-	fi
-	@echo "Worker profile started."
+		echo "DEPLOYMENT_TYPE=src → building worker image..."; \
+		$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile worker build; \
+	fi; \
+	bash scripts/__worker_tui.sh deploy all
+	@echo "Worker fleet deployed."
 
 infra:
 	@DEPLOY_TYPE="$${DEPLOYMENT_TYPE_OVERRIDE:-}"; \
-	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env.admin 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
 	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
 	if [ "$$DEPLOY_TYPE" = "img" ]; then \
@@ -321,6 +173,40 @@ infra:
 	@echo "Infra (monitor) profile started."
 
 # ---------------------------------------------------------------------------
+# Additive stacks — domain + WAF
+#
+# WHY these are separate targets: both compose files define services with no
+# `profiles:` key, so merging them into COMPOSE_FILES (line 7) would make every
+# default target bind host 80/443 and start certbot. `./cms domain setup`
+# renders config/grader.nginx.conf and requests certificates; these targets are
+# what actually serve them.
+#
+# WHY waf depends on nothing but compose: grader-waf's BACKEND is
+# http://grader-nginx-proxy:80, so the domain stack must already be up.
+# ---------------------------------------------------------------------------
+domain:
+	@if [ ! -f config/grader.nginx.conf ]; then \
+		echo "config/grader.nginx.conf is missing — run './cms domain setup --apply' first" >&2; \
+		exit 1; \
+	fi
+	$(COMPOSE_CMD) $(DOMAIN_COMPOSE_FLAGS) up -d
+	@echo "Domain stack started (nginx-proxy + certbot + redis-rate-limit)."
+
+waf:
+	@if [ "$${WAF_ENABLED:-0}" != "1" ]; then \
+		echo "WAF_ENABLED is not 1 — the WAF is opt-in." >&2; \
+		echo "Read from .env (generated). Set WAF_ENABLED = 1 in config.toml ([infra]), run './cms config sync' to regenerate .env, then 'make waf'." >&2; \
+		echo "DetectionOnly is the setting to tune against first — see docs/waf-tuning.md before turning it on." >&2; \
+		exit 1; \
+	fi; \
+	if [ ! -f config/grader.nginx.conf ]; then \
+		echo "config/grader.nginx.conf is missing — run './cms domain setup --apply' first" >&2; \
+		exit 1; \
+	fi
+	$(COMPOSE_CMD) $(WAF_COMPOSE_FLAGS) $(WAF_UP_PROFILES) up -d
+	@echo "WAF profile started. SecRuleEngine is DetectionOnly by default — see docs/waf-tuning.md."
+
+# ---------------------------------------------------------------------------
 # Stop / clean / down variants per stack
 # ---------------------------------------------------------------------------
 core-stop:
@@ -332,8 +218,12 @@ core-clean:
 # Teardown targets pass dependency profiles plus an explicit service list:
 # the core profile is required for project-graph validation, while the
 # service list keeps the operation scoped so dependencies are never touched.
-ADMIN_SERVICES := admin-panel-next admin-web-server ranking-web-server printing-service
-CONTEST_SERVICES := evaluation-service proxy-service contest-web-server nginx-proxy
+ADMIN_SERVICES := admin-panel-next admin-web-server ranking-web-server
+# redis-rate-limit is here because `make contest` starts it (the login failure
+# counters are configured to use it), so stop/down has to take it with them or a
+# stale instance outlives the stack. It shares container_name and volume with the
+# domain stack's copy, but the two are mutually exclusive by profile.
+CONTEST_SERVICES := evaluation-service proxy-service contest-web-server nginx-proxy redis-rate-limit
 
 admin-stop:
 	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile admin down $(ADMIN_SERVICES)
@@ -352,7 +242,7 @@ contest-clean:
 	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile contest down -v $(CONTEST_SERVICES)
 
 worker-stop:
-	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile worker down
+	bash scripts/__worker_tui.sh stop all
 
 worker-clean:
 	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile worker down -v
@@ -362,6 +252,23 @@ infra-stop:
 
 infra-clean:
 	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile monitor down -v
+
+# Scoped by service name so a domain teardown never reaches into core/contest,
+# whose containers share the project. WHY an explicit list: the domain compose
+# file has no profiles, so an unscoped `down` would take every service it sees.
+DOMAIN_SERVICES := nginx-proxy certbot redis-rate-limit
+
+domain-stop:
+	$(COMPOSE_CMD) $(DOMAIN_COMPOSE_FLAGS) down $(DOMAIN_SERVICES)
+
+domain-clean:
+	$(COMPOSE_CMD) $(DOMAIN_COMPOSE_FLAGS) down -v $(DOMAIN_SERVICES)
+
+waf-stop:
+	$(COMPOSE_CMD) $(WAF_COMPOSE_FLAGS) $(WAF_UP_PROFILES) rm -f -s grader-waf
+
+waf-clean:
+	$(COMPOSE_CMD) $(WAF_COMPOSE_FLAGS) $(WAF_UP_PROFILES) rm -f -s -v grader-waf
 
 db-clean:
 	@echo "WARNING: This will delete all database data and reset everything."
@@ -450,29 +357,50 @@ cms-init:
 	@chmod +x scripts/__cms-db-init.sh && ./scripts/__cms-db-init.sh
 
 prisma-sync:
-	@echo "Synchronizing Admin Panel schema (forcing Prisma v6)..."
-	@export PATH="$(HOME)/.bun/bin:$(PATH)"; \
-	DEPLOY_TYPE="$${DEPLOYMENT_TYPE_OVERRIDE:-}"; \
-	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env.admin 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
-	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
-	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
-	if [ "$$DEPLOY_TYPE" = "img" ] && docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-admin-panel-next$$'; then \
-		echo "img mode -> running prisma db push inside cms-admin-panel-next (no host toolchain needed)"; \
-		docker exec cms-admin-panel-next sh -lc "cd /repo-root/admin-panel && { ./node_modules/.bin/prisma db push $${PRISMA_ARGS:-} || npx --yes prisma@6 db push $${PRISMA_ARGS:-}; }"; \
-		st=$$?; \
-		if [ $$st -ne 0 ]; then echo "Schema sync needs confirmation? Re-run with: make prisma-sync PRISMA_ARGS=--accept-data-loss" >&2; fi; \
-	elif [ ! -d "admin-panel" ]; then \
-		echo "ERROR: admin-panel directory not found. Clone the repository with admin-panel/ or check your working directory." >&2; \
-		exit 1; \
-	elif command -v bun >/dev/null 2>&1; then \
-		cd admin-panel && bun x prisma@6 db push $${PRISMA_ARGS:-}; \
-	elif command -v npm >/dev/null 2>&1; then \
-		cd admin-panel && npx prisma@6 db push $${PRISMA_ARGS:-}; \
+	@echo "Synchronizing Admin Panel schema via Prisma Migrate (forcing Prisma v6)..."
+	@# WHY: schema sync is a migration operation that needs DDL, so it runs as the owner role — never the runtime DML role.
+	@# WHY: both tools are located by scripts/__resolve_tool.sh, which walks every plausible location on both sides of the container boundary — the image, the host bind-mount, a global install, and the package runners the image already carries — and accepts the first candidate that actually runs. A deployment host has no admin-panel/node_modules and an out-of-date image carries no bundled runner, so a miss inside the container must fall through to the host: an inline probe that stops at the first miss leaves the update unable to finish.
+	@# WHY: the resolver reports which side it found the tool on, because the database is reached by service name from the container and by loopback from the host.
+	@# WHY: a failed migration and a failed seed are both fatal — without the seed the administrators hold groups that grant nothing.
+	@# WHY: seeding is system initialisation, so it also runs as the owner; it must work before the runtime roles exist.
+	@bash scripts/__apply_sql.sh --bootstrap-roles || echo "WARN: role bootstrap failed — retry after restart" >&2;
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	OWNER_URL_NET="postgresql://$${POSTGRES_USER:-cmsuser}:$${POSTGRES_PASSWORD}@database:5432/$${POSTGRES_DB:-cmsdb}"; \
+	OWNER_URL_LOCAL="postgresql://$${POSTGRES_USER:-cmsuser}:$${POSTGRES_PASSWORD}@localhost:5432/$${POSTGRES_DB:-cmsdb}"; \
+	export PATH="$$HOME/.bun/bin:$$PATH"; \
+	run_tool() { \
+		if [ "$$1" = "container" ]; then \
+			docker exec -e DATABASE_URL="$$OWNER_URL_NET" cms-admin-panel-next sh -lc "cd $$2 && $$3"; \
+		else \
+			( cd "$$2" && DATABASE_URL="$$OWNER_URL_LOCAL" $$3 ); \
+		fi; \
+	}; \
+	SEED_RESOLVE="$$(bash scripts/__resolve_tool.sh tsx)" || exit 1; \
+	IFS=$$'\t' read -r SEED_WHERE SEED_DIR SEED_CMD <<< "$$SEED_RESOLVE"; \
+	echo "  Permission seed: $$SEED_CMD prisma/seed-permissions.ts (cwd $$SEED_DIR, $$SEED_WHERE)"; \
+	PRISMA_RESOLVE="$$(bash scripts/__resolve_tool.sh prisma)" || exit 1; \
+	IFS=$$'\t' read -r PRISMA_WHERE PRISMA_DIR PRISMA_CMD <<< "$$PRISMA_RESOLVE"; \
+	echo "  Prisma CLI: $$PRISMA_CMD (cwd $$PRISMA_DIR, $$PRISMA_WHERE)"; \
+	echo "Checking if baseline is needed (P3005 mitigation)..."; \
+	_need_baseline=0; \
+	if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-database$$'; then \
+		if docker exec -i -e PGPASSWORD="$$POSTGRES_PASSWORD" cms-database psql -U "$${POSTGRES_USER:-cmsuser}" -d "$${POSTGRES_DB:-cmsdb}" -tAc "SELECT (to_regclass('public._prisma_migrations') IS NULL AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public'))" 2>/dev/null | grep -q "t"; then _need_baseline=1; fi; \
+	elif command -v psql >/dev/null 2>&1; then \
+		if PGPASSWORD="$$POSTGRES_PASSWORD" psql -h localhost -p "$${POSTGRES_PORT:-5432}" -U "$${POSTGRES_USER:-cmsuser}" -d "$${POSTGRES_DB:-cmsdb}" -tAc "SELECT (to_regclass('public._prisma_migrations') IS NULL AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public'))" 2>/dev/null | grep -q "t"; then _need_baseline=1; fi; \
+	fi; \
+	if [ "$$_need_baseline" = "1" ]; then \
+		echo "Baseline needed — marking 20260910000000_baseline_marker as applied..."; \
+		run_tool "$$PRISMA_WHERE" "$$PRISMA_DIR" "$$PRISMA_CMD migrate resolve --applied 20260910000000_baseline_marker --schema=./prisma/schema.prisma"; \
+		st=$$?; if [ $$st -ne 0 ]; then echo "Baseline resolve failed — check logs above" >&2; exit $$st; fi; \
 	else \
-		echo "ERROR: Neither 'bun' nor 'npm' found in PATH. Install Bun (https://bun.sh) or Node.js/npm, then run: make prisma-sync" >&2; \
-		echo "  Fix: curl -fsSL https://bun.sh/install | bash && export PATH=\"\$$HOME/.bun/bin:\$$PATH\"" >&2; \
-		exit 1; \
-	fi
+		echo "Baseline not needed (empty DB or already migrated)"; \
+	fi; \
+	echo "Running prisma migrate deploy (owner credentials)..."; \
+	run_tool "$$PRISMA_WHERE" "$$PRISMA_DIR" "$$PRISMA_CMD migrate deploy --schema=./prisma/schema.prisma"; \
+	st=$$?; if [ $$st -ne 0 ]; then echo "Migration deploy failed — check logs above" >&2; exit $$st; fi; \
+	echo "Seeding permission groups and permissions..."; \
+	run_tool "$$SEED_WHERE" "$$SEED_DIR" "$$SEED_CMD prisma/seed-permissions.ts"; \
+	st=$$?; if [ $$st -ne 0 ]; then echo "Permission seed failed — admins have no effective permissions until seeding succeeds; check logs above and rerun make prisma-sync." >&2; exit $$st; fi
 
 admin-create:
 	@echo "Creating first Superadmin account..."
@@ -483,11 +411,46 @@ admin-create:
 # ---------------------------------------------------------------------------
 # New utility targets
 # ---------------------------------------------------------------------------
+# WHY the file lists below are built by globbing and filtered with [ -f ]/[ -e ]
+# rather than handed to the tool raw: `make lint` must stay green on a checkout
+# where one of the optional directories (src/tools/, src/docker/) is empty or
+# absent, and a tool handed a non-matching path fails before it lints anything.
+#
+# WHY overlay_base: an overlay stack references services defined in its base
+# (docker-compose.tailscale.yml and docker-compose.waf.yml both depend on
+# contest-web-server from docker-compose.contest.yml), so `config -q` only
+# succeeds for the pair. Validating the overlay standalone reports a false
+# failure; this mirrors the merge .github/workflows/ci.yml performs.
 lint:
 	@echo "Running lint checks..."
+	@echo "→ spec parity"
+	@bash scripts/__check_spec_parity.sh
+	@echo "→ variable coverage"
+	@bash scripts/__check_var_coverage.sh
+	@echo "→ audit coverage"
+	@bash scripts/__check_audit_coverage.sh
+	@echo "→ permission parity"
+	@bash scripts/__check_permission_parity.sh
+	@echo "→ RLS coverage"
+	@bash scripts/__check_rls_coverage.sh
+	@echo "→ RLS SQL freshness"
+	@bash scripts/__generate_rls_sql.sh --check
+	@echo "→ lib contract"
+	@bash scripts/__check_lib_contract.sh
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		echo "→ shellcheck"; \
-		shellcheck scripts/*.sh; \
+		files=(); \
+		for pattern in scripts/*.sh tools/*.sh src/tools/*.sh docker/*.sh src/docker/*.sh; do \
+			for f in $$pattern; do \
+				[ -f "$$f" ] && files+=("$$f"); \
+			done; \
+		done; \
+		if [ $${#files[@]} -eq 0 ]; then \
+			echo "no shell scripts found to lint"; \
+		else \
+			printf 'linting:\n'; printf '  %s\n' "$${files[@]}"; \
+			shellcheck -S error -x "$${files[@]}"; \
+		fi; \
 	else \
 		echo "→ shellcheck not found, skipping (install: apt install shellcheck)"; \
 	fi
@@ -499,13 +462,46 @@ lint:
 	fi
 	@if command -v yamllint >/dev/null 2>&1; then \
 		echo "→ yamllint"; \
-		yamllint docker-compose.yml; \
+		yamls=(); \
+		for y in .yamllint.yml .github/workflows .github/dependabot.yml docker-compose*.yml docker examples src/.readthedocs.yml; do \
+			[ -e "$$y" ] && yamls+=("$$y"); \
+		done; \
+		if [ $${#yamls[@]} -eq 0 ]; then \
+			echo "no yaml files found to lint"; \
+		else \
+			printf 'linting:\n'; printf '  %s\n' "$${yamls[@]}"; \
+			yamllint -c .yamllint.yml "$${yamls[@]}"; \
+		fi; \
 	else \
 		echo "→ yamllint not found, skipping (install: pip install yamllint)"; \
 	fi
 	@if command -v docker >/dev/null 2>&1; then \
 		echo "→ compose config validation"; \
-		docker compose --env-file .env.core.example -f docker-compose.yml config -q && echo "compose config OK" || { echo "compose config FAILED" >&2; exit 1; }; \
+		bash scripts/__config_sync.sh --no-secrets >/dev/null 2>&1 || { echo "config sync failed — using dummy env vars" >&2; }; \
+		if [ -f .env ]; then \
+			env_args=(--env-file .env); \
+		else \
+			env_args=(); \
+			export POSTGRES_PASSWORD=x AUTH_SECRET=x SECRET_KEY=x CONTEST_ID=1; \
+		fi; \
+		declare -A overlay_base=( \
+			[docker-compose.tailscale.yml]=docker-compose.contest.yml \
+			[docker-compose.waf.yml]=docker-compose.contest.yml \
+		); \
+		compose_failed=0; \
+		for f in docker-compose*.yml docker/docker-compose*.yml; do \
+			[ -f "$$f" ] || continue; \
+			base="$${overlay_base[$$f]:-}"; \
+			if [ -n "$$base" ]; then \
+				echo "compose config -- $$base + $$f"; \
+				docker compose "$${env_args[@]}" -f "$$base" -f "$$f" config -q || { echo "compose config FAILED ($$f)" >&2; compose_failed=1; }; \
+			else \
+				echo "compose config -- $$f"; \
+				docker compose "$${env_args[@]}" -f "$$f" config -q || { echo "compose config FAILED ($$f)" >&2; compose_failed=1; }; \
+			fi; \
+		done; \
+		if [ $$compose_failed -ne 0 ]; then exit 1; fi; \
+		echo "compose config OK"; \
 	else \
 		echo "→ docker not found, skipping compose validation"; \
 	fi
@@ -540,32 +536,6 @@ backup:
 		echo "ERROR: cms-monitor not running and scripts/__backup.sh not found or not executable." >&2; \
 		exit 1; \
 	fi
-
-# Image Based Targets (Production/User)
-core-img:
-	docker compose -f docker-compose.core.img.yml up -d
-
-admin-img:
-	docker compose -f docker-compose.admin.img.yml up -d
-
-worker-img:
-	docker compose -f docker-compose.worker.img.yml up -d
-
-# Utilities
-pull:
-	docker compose -f docker-compose.core.img.yml -f docker-compose.admin.img.yml -f docker-compose.worker.img.yml pull
-
-cms-init:
-	docker compose -f docker-compose.core.yml run --rm log-service cmsInitDB
-
-create-admin:
-	docker compose -f docker-compose.core.yml run --rm log-service cmsAddAdmin
-
-up:
-	docker compose -f docker-compose.core.img.yml -f docker-compose.admin.img.yml -f docker-compose.worker.img.yml up -d
-
-down:
-	docker compose -f docker-compose.core.yml -f docker-compose.admin.yml -f docker-compose.worker.yml -f docker-compose.core.img.yml -f docker-compose.admin.img.yml -f docker-compose.worker.img.yml down
 
 clean:
 	rm -f .env
