@@ -189,6 +189,13 @@ ENV PATH="/home/cmsuser/cms/bin:$PATH"
 # Install CMS package from the src directory
 RUN --mount=type=cache,target=/home/cmsuser/.cache/pip,uid=1001 cd src && python3 install.py cms --devel
 
+# credits.json sits at the checkout root, outside the installed package, so the
+# loader's upward walk from site-packages never reaches the copy under src/.
+# Place it beside the venv (an ancestor of site-packages) so the walk finds it,
+# and pin CMS_CREDITS_FILE so resolution does not depend on the walk at all.
+COPY --chown=cmsuser:cmsuser credits.json /home/cmsuser/cms/credits.json
+ENV CMS_CREDITS_FILE=/home/cmsuser/cms/credits.json
+
 RUN <<EOF
 #!/bin/bash -ex
     sed 's|/cmsuser:your_password_here@localhost:5432/cmsdb"|/postgres@testdb:5432/cmsdbfortesting"|' \

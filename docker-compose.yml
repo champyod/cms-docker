@@ -536,9 +536,13 @@ services:
       log-service:
         condition: service_healthy
     environment:
+      # `import cms` builds the config at import time (conf.make_config), so this
+      # service needs the main cms.toml too, not just the ranking one.
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       CMS_RANKING_CONFIG: ${CMS_RANKING_CONFIG:-/usr/local/etc/cms_ranking.toml}
       RANKING_LISTEN_PORT: ${RANKING_LISTEN_PORT:-8890}
     volumes:
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - ./config/cms_ranking.toml:/usr/local/etc/cms_ranking.toml:ro
       - cms-logs:/var/local/log/cms
       - cms-ranking-data:/var/local/lib/cms/ranking
