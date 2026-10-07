@@ -386,6 +386,10 @@ services:
       start_period: 10s
 
   # Optional: Nginx reverse proxy for contest web server (TLS via ENABLE_TLS=true)
+  # WHY the plain name: the contest stack is the default owner of this service
+  # name. The domain stack's TLS proxy is a distinct service named
+  # `grader-nginx-proxy` (docker-compose.domain.yml) — a same-named key here
+  # would merge the two blocks and drop one proxy from the project.
   nginx-proxy:
     image: nginx:alpine
     container_name: cms-nginx-contest
@@ -536,9 +540,13 @@ services:
       log-service:
         condition: service_healthy
     environment:
+      # `import cms` builds the config at import time (conf.make_config), so this
+      # service needs the main cms.toml too, not just the ranking one.
+      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       CMS_RANKING_CONFIG: ${CMS_RANKING_CONFIG:-/usr/local/etc/cms_ranking.toml}
       RANKING_LISTEN_PORT: ${RANKING_LISTEN_PORT:-8890}
     volumes:
+      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - ./config/cms_ranking.toml:/usr/local/etc/cms_ranking.toml:ro
       - cms-logs:/var/local/log/cms
       - cms-ranking-data:/var/local/lib/cms/ranking

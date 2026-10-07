@@ -65,7 +65,9 @@ No vendor, no subscription.
 
 ## 7. Wiring (How WAF Sits in Front of Nginx)
 
-Default: **no wiring change**. With `WAF_ENABLED=0` (default), `grader-waf` is not started; host 80/443 stay on `grader-nginx-proxy`.
+Default: **no wiring change**. With `WAF_ENABLED=0` (default), `grader-waf` is not started; host 80/443 stay on `grader-nginx-proxy` — the compose service name in `docker-compose.domain.yml`, which also equals its container name.
+
+Not in this chain: the contest profile's proxy, service `nginx-proxy` / container `cms-nginx-contest` in `docker-compose.yml`. It is a separate service on its own profile and is never fronted by the WAF.
 
 When `WAF_ENABLED=1` + `--profile waf`:
 

@@ -1,8 +1,35 @@
 # Local-only compose overrides — copy to docker-compose.override.yml (gitignored).
 # Make targets and the admin panel pick it up automatically when present.
 # Never commit the live file: it holds machine-specific pins and mounts.
+#
+# The Makefile builds its -f list from $(wildcard docker-compose.yml
+# docker-compose.override.yml docker-compose.expose.yml), so a file with exactly that
+# name is merged after docker-compose.yml on every stack target. Any other filename is
+# silently ignored.
 
-# services:
-#   contest-web-server:
-#     ports:
-#       - "127.0.0.1:18888:8888"
+services:
+  # Extends `nginx-proxy` — the contest front door declared in docker-compose.yml
+  # (container cms-nginx-contest, profile `contest`). The domain stack's TLS proxy is a
+  # different service, `grader-nginx-proxy`, and it is not reachable from this file.
+  nginx-proxy:
+    # WHY this key is here even though the base file already sets it: a service that
+    # resolves to neither an image nor a build context is rejected before anything
+    # starts ("service ... has neither an image nor a build context specified"). Keeping
+    # the image makes the block valid on its own, so the file also passes when it is the
+    # only file handed to `docker compose config`. Keep it in step with docker-compose.yml.
+    image: nginx:alpine
+    # Ports merge rather than replace: a plain assignment appends to the base list, which
+    # can leave two mappings bound to the same container port. `!override` replaces the
+    # list outright and needs Compose >= 2.24, the same floor docker-compose.expose.yml
+    # already assumes.
+    # ports: !override
+    #   - "127.0.0.1:8080:80"
+
+  # Same shape for any other service in the base file — name the image it extends, then
+  # override only the keys you own. Nothing else in this file is read, so a block for a
+  # service the merged model does not define (grader-nginx-proxy, say) creates a new
+  # service and needs the image line above for exactly the same reason.
+  # contest-web-server:
+  #   image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
+  #   ports:
+  #     - "127.0.0.1:18888:8888"

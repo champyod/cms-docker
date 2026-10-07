@@ -24,16 +24,23 @@ case is deterministic: the template is rendered through the admin Jinja2
 environment with the render params a handler supplies, and no socket is opened.
 """
 
+import os
 import re
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from bs4 import BeautifulSoup
 
 from cms import config
 from cms.server.admin.handlers.main import CreditsHandler
-from cms.server.credits import CREDITS_FILE_NAME, CreditsError, get_surface
+from cms.server.credits import (
+    CREDITS_FILE_ENV_VAR,
+    CREDITS_FILE_NAME,
+    CreditsError,
+    get_surface,
+)
 from cmstestsuite.unit_tests.admin_credits_render import (
     CONTEST_ONLY, SURFACE, render, table_asset_names, template_path)
 from cmstestsuite.unit_tests.credits_schema import CREDITS_PATH, load_json
@@ -105,9 +112,14 @@ class CreditsPageTest(unittest.TestCase):
     def test_a_missing_credits_file_is_reported_rather_than_emptied(self):
         # WHY: a table with no rows would read as "this web bundles nothing",
         # which is the opposite of what a missing file means.
-        with tempfile.TemporaryDirectory() as directory:
-            with self.assertRaises(CreditsError) as caught:
-                get_surface(SURFACE, Path(directory))
+        # WHY the variable is unset: it is the fallback for an explicit start
+        # whose walk finds nothing, so an ambient value would answer here and
+        # the case would depend on how the process happened to be started.
+        with mock.patch.dict(os.environ):
+            os.environ.pop(CREDITS_FILE_ENV_VAR, None)
+            with tempfile.TemporaryDirectory() as directory:
+                with self.assertRaises(CreditsError) as caught:
+                    get_surface(SURFACE, Path(directory))
         self.assertIn(CREDITS_FILE_NAME, str(caught.exception))
 
 

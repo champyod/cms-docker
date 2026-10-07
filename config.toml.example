@@ -6,73 +6,86 @@
 COMPOSE_PROJECT_NAME = "cms-docker" # str; docker compose project name; must match existing container project
 PUBLIC_IP = "0.0.0.0"           # str; your VPS public IP; live_ip auto-detects
 INNER_IP = ""                  # str; peer address: worker RPC bind + worker dial target; empty=127.0.0.1 only
-REMOTE_WORKERS_ENABLED = false  # bool
-CMS_DOMAIN = "cms.local"        # str; base domain; sub-services are admin.${CMS_DOMAIN} etc.
-POSTGRES_HOST = "database"      # str
-POSTGRES_PORT = 5432            # port
-POSTGRES_PORT_EXTERNAL = 5432   # port
-POSTGRES_DB = "cmsdb"           # str
-POSTGRES_USER = "cmsuser"       # str
-POSTGRES_PASSWORD = ""          # secret; auto-generated if empty on first sync
-POSTGRES_BACKUP_PASSWORD = ""    # secret; auto-generated if empty; backup role cms_backup (BYPASSRLS + member of cmsuser for large-object reads)
-POSTGRES_HOST_AUTH_METHOD = "md5"
+REMOTE_WORKERS_ENABLED = false  # bool; reserved toggle — no code reads it; remote workers are actually enabled by binding INNER_IP
+CMS_DOMAIN = "cms.local"        # str; base domain — fallback for CONTEST_DOMAIN and DOMAIN_NAME when those are empty; each sub-service domain is its own [admin] key
+ACTIVE_DATABASE = "default"  # str; which [db_<name>] profile __config_sync.sh injects as POSTGRES_*
 CMS_SECRET_KEY = ""             # secret; auto-generated hex32 if empty; injected into cms.toml
-CMS_CONFIG = "/usr/local/etc/cms.toml"
+CMS_CONFIG = "/usr/local/etc/cms.toml" # container path of the generated cms.toml every CMS service reads at startup
 CMS_SOURCE_URL = "https://github.com/champyod/cms-docker" # str; AGPL-13 Corresponding Source offer shown in the UI credits; point at your own fork
-LOG_SERVICE_SHARD = 0           # num
-RESOURCE_SERVICE_SHARD = 0      # num
-SCORING_SERVICE_SHARD = 0       # num
-EVALUATION_SERVICE_SHARD = 0    # num
-PROXY_SERVICE_SHARD = 0         # num
-CHECKER_SERVICE_SHARD = 0       # num
-CMS_LOG_DIR = "/var/local/log/cms"
-CMS_CACHE_DIR = "/var/local/cache/cms"
-CMS_DATA_DIR = "/var/local/lib/cms"
-IMG_TAG = "major-admin-panel"   # str
-APT_MIRROR = "archive.ubuntu.com"
+LOG_SERVICE_SHARD = 0           # num; shard index handed to cmsLogService; 0 = single instance — raise only when running multiple shards
+RESOURCE_SERVICE_SHARD = 0      # num; shard index handed to cmsResourceService; 0 = single instance — raise only when running multiple shards
+SCORING_SERVICE_SHARD = 0       # num; shard index handed to cmsScoringService; 0 = single instance — raise only when running multiple shards
+EVALUATION_SERVICE_SHARD = 0    # num; shard index handed to cmsEvaluationService; 0 = single instance — raise only when running multiple shards
+PROXY_SERVICE_SHARD = 0         # num; shard index handed to cmsProxyService; 0 = single instance — raise only when running multiple shards
+CHECKER_SERVICE_SHARD = 0       # num; shard index handed to cmsChecker; 0 = single instance — raise only when running multiple shards
+CMS_LOG_DIR = "/var/local/log/cms"    # container path of the cms-logs volume; services write <epoch>.log here and the monitor prunes it — must match the compose mount
+CMS_CACHE_DIR = "/var/local/cache/cms" # container path of the cms-cache volume; read by the update engine's disk sizing — must match the compose mount
+CMS_DATA_DIR = "/var/local/lib/cms"   # container path of the cms-data volume (submissions and service state); read by the update engine's disk sizing — must match the compose mount
+IMG_TAG = "major-admin-panel"   # str; tag of the ghcr.io/champyod/cms-docker-* images to pull and run — pin it to the deployed release
+APT_MIRROR = "archive.ubuntu.com" # Ubuntu apt mirror baked into image builds (Dockerfile build-arg); set a nearby mirror for faster builds
 MTLS_WORKERS_ENABLED = 0        # enum:0,1; price: $0 self-CA; warning: cert distribution
-MTLS_CA_CERT = "config/mtls/ca.pem"
-MTLS_WORKER_CERT = "config/mtls/worker.pem"
-MTLS_WORKER_KEY = "config/mtls/worker-key.pem"
+MTLS_CA_CERT = "config/mtls/ca.pem" # host path of the mTLS CA cert for worker RPC; only used when MTLS_WORKERS_ENABLED=1
+MTLS_WORKER_CERT = "config/mtls/worker.pem" # host path of the worker client cert for mTLS worker RPC; only used when MTLS_WORKERS_ENABLED=1
+MTLS_WORKER_KEY = "config/mtls/worker-key.pem" # host path of the worker client key for mTLS worker RPC; only used when MTLS_WORKERS_ENABLED=1
 APT_PORTS_MIRROR = "ports.ubuntu.com"   # str; ARM64 apt mirror (Raspberry Pi worker builds)
 BASE_IMAGE = "ubuntu:noble"             # str; worker/base build image
 DB_BIND_IP = "127.0.0.1"                # str; address postgres publishes 5432 on
 CERT_EMAIL = ""                         # str; Let's Encrypt registration email
 CERTBOT_IMAGE = "certbot/certbot"       # str; certbot image; set certbot/dns-cloudflare for DNS-01
 TLS_CERTRESOLVER = "letsencrypt"        # str; traefik certresolver label
-CMS_RANKING_CONFIG = "/usr/local/etc/cms_ranking.toml"
+CMS_RANKING_CONFIG = "/usr/local/etc/cms_ranking.toml" # container path of the generated cms_ranking.toml the ranking web server reads
+
+[db_default]
+POSTGRES_HOST = "database"      # str; postgres host the services dial — the injector pins "database" (the compose service) into the main server's cms.toml
+POSTGRES_PORT = 5432            # port; postgres port inside the compose network — written into cms.toml, the db-init check, and the panel's host-side DATABASE_URL
+POSTGRES_PORT_EXTERNAL = 5432   # port; host port postgres publishes on DB_BIND_IP; the loopback default keeps the database host-local
+POSTGRES_DB = "cmsdb"           # str; database the postgres image creates on first init; used by the services, backup/restore, and DATABASE_URL
+POSTGRES_USER = "cmsuser"       # str; owner role the services and admin panel connect as; owns the database and its large objects
+POSTGRES_PASSWORD = ""          # secret; auto-generated if empty on first sync
+POSTGRES_BACKUP_PASSWORD = ""    # secret; auto-generated if empty; backup role cms_backup (BYPASSRLS + member of cmsuser for large-object reads)
+POSTGRES_HOST_AUTH_METHOD = "md5" # postgres image pg_hba auth method; md5 = password required (the dev/test compose files use trust)
+
+# [db_staging]
+# POSTGRES_HOST = "database"
+# POSTGRES_PORT = 5432
+# POSTGRES_PORT_EXTERNAL = 5432
+# POSTGRES_DB = "cmsdb"
+# POSTGRES_USER = "cmsuser"
+# POSTGRES_PASSWORD = ""
+# POSTGRES_BACKUP_PASSWORD = ""
+# POSTGRES_HOST_AUTH_METHOD = "md5"
 
 [admin]
-DEPLOYMENT_TYPE = "img"         # enum:img,src
-ADMIN_LISTEN_PORT = 8889        # port
-ADMIN_PORT_EXTERNAL = 8889      # port
-ADMIN_NEXT_PORT_EXTERNAL = 8891 # port
-ADMIN_NEXT_DOMAIN = "admin-next.cms.local"
-ADMIN_DOMAIN = "admin.cms.local"
+DEPLOYMENT_TYPE = "img"         # enum:img,src; img = pull the GHCR images, src = build from source — read by the make <stack> targets
+ADMIN_LISTEN_PORT = 8889        # port; container port the classic admin web server listens on — what the publish map and the proxies dial
+ADMIN_PORT_EXTERNAL = 8889      # port; host port the classic admin UI is published on (ADMIN_BIND_IP:ADMIN_PORT_EXTERNAL:ADMIN_LISTEN_PORT)
+ADMIN_NEXT_PORT_EXTERNAL = 8891 # port; host port the Next.js panel is published on (ADMIN_NEXT_BIND_IP:ADMIN_NEXT_PORT_EXTERNAL:3000)
+ADMIN_NEXT_DOMAIN = "admin-next.cms.local" # str; hostname the optional external Traefik routes to the Next.js panel — the domain nginx never uses it (the panel answers on ADMIN_DOMAIN and ADMIN_ROUTE_PATH)
+ADMIN_DOMAIN = "admin.cms.local" # str; FQDN of the admin vhost — the domain nginx serves the Next.js panel at its root and the classic admin at ADMIN_CLASSIC_ROUTE_PATH; also a cert SAN and Traefik Host() rule
 ADMIN_BIND_IP = "127.0.0.1"     # csv; addresses the classic admin UI is published on; loopback keeps it reachable only through the proxy — set it to 0.0.0.0 to expose the port to the LAN
 ADMIN_NEXT_BIND_IP = "127.0.0.1" # csv; addresses the Next.js admin panel is published on
 RANKING_BIND_IP = "127.0.0.1"   # csv; addresses the ranking board is published on
-ADMIN_COOKIE_DURATION = 36000   # num; seconds
-AUTH_SECRET = ""                # secret; auto-generated hex32 if empty
+ADMIN_COOKIE_DURATION = 36000   # num; seconds; reserved — no code reads it: the panel hardcodes its session and the injector never writes it to the classic admin's cms.toml
+AUTH_SECRET = ""                # secret; auto-generated hex32 if empty; signs the admin panel's session JWT
 CAPTCHA_ENABLED = 0             # enum:0,1; effect: reduces brute-force before fail2ban
 CAPTCHA_PROVIDER = "turnstile"  # enum:turnstile,hcaptcha; only used if CAPTCHA_ENABLED=1
-CAPTCHA_SITE_KEY = ""           # str
-CAPTCHA_SECRET_KEY = ""         # secret
-CAPTCHA_THRESHOLD = 3           # num
-CAPTCHA_BAN_THRESHOLD = 5       # num
+CAPTCHA_SITE_KEY = ""           # str; public widget key from the provider dashboard — sent to the browser to render the challenge
+CAPTCHA_SECRET_KEY = ""         # secret; server-side key from the provider dashboard — deliberately never auto-generated
+CAPTCHA_THRESHOLD = 3           # num; failed logins on one account or address before the login form demands a solved challenge
+CAPTCHA_BAN_THRESHOLD = 5       # num; lockout threshold enforced by the classic/contest Python servers — the Next.js panel's own lockout is hardcoded (5 fails, 15 min)
 LOGIN_RATE_LIMIT_REDIS_ENABLED = 0  # enum:0,1; effect: keeps the login failure counters in a shared Redis so a lockout survives a web server restart
 LOGIN_RATE_LIMIT_REDIS_HOST = "redis-rate-limit" # str; compose service name; counts per process only unless LOGIN_RATE_LIMIT_REDIS_ENABLED=1
-LOGIN_RATE_LIMIT_REDIS_PORT = 6379 # port
-RANKING_LISTEN_PORT = 8890      # port
-RANKING_PORT_EXTERNAL = 8890    # port
-RANKING_DOMAIN = "ranking.cms.local"
-RANKING_USERNAME = "admin"      # str
+LOGIN_RATE_LIMIT_REDIS_PORT = 6379 # port; port of the shared Redis the login counters dial when LOGIN_RATE_LIMIT_REDIS_ENABLED=1
+RANKING_LISTEN_PORT = 8890      # port; container port the ranking web server listens on — service env, publish map, and proxy target
+RANKING_PORT_EXTERNAL = 8890    # port; host port the ranking board is published on (RANKING_BIND_IP:RANKING_PORT_EXTERNAL:RANKING_LISTEN_PORT)
+RANKING_DOMAIN = "ranking.cms.local" # str; FQDN of the ranking vhost in the domain nginx; also a cert SAN and Traefik Host() rule
+RANKING_USERNAME = "admin"      # str; scoreboard auth username injected into cms.ranking.toml — guards the ranking UI and the ranking push
 RANKING_PASSWORD = ""           # secret; auto-generated if empty
 RANKING_LOGO_PATH = ""          # str; host path to ranking logo (png/jpg/gif/bmp) e.g. "./config/assets/logo.png" — synced to ranking volume on ./cms config sync (hot-swap, overwrites old)
-CMS_RANKING_LOG_DIR = "/var/local/log/cms/ranking"
-CMS_RANKING_LIB_DIR = "/var/local/lib/cms/ranking"
+CMS_RANKING_LOG_DIR = "/var/local/log/cms/ranking" # str; reserved — no code reads it; the injector never sets log_dir in cms.ranking.toml
+CMS_RANKING_LIB_DIR = "/var/local/lib/cms/ranking" # str; container path written as lib_dir into cms.ranking.toml and used by the logo hot-swap — must match the cms-ranking-data volume mount
 DOMAIN_NAME = ""                # str; primary FQDN (e.g. grader.example.org); empty=cms.local
-DOMAIN_CERT_METHOD = "letsencrypt" # enum:letsencrypt,provided,selfsigned
+DOMAIN_CERT_METHOD = "letsencrypt" # enum:letsencrypt,provided,selfsigned; how the primary domain certificate is obtained
 AUTO_RETRY = 0            # enum:0,1; retry cert issuance while DNS/:80 propagate
 CERT_RETRY_ATTEMPTS = 8   # num; 0 = unlimited
 CERT_RETRY_INTERVAL = 15  # num; seconds; doubles each attempt up to 120
@@ -89,17 +102,17 @@ USE_LOCK = 0              # enum:0,1; flock to stop overlapping runs
 DNS_PROVIDER = ""         # str; DNS-01 provider (e.g. cloudflare); empty = HTTP-01
 DNS_CREDENTIALS_FILE = "" # str; credential file for the DNS plugin
 DOMAIN_NGINX_BIND_IP = "" # str; address the domain nginx publishes 80/443 on; empty=engine wildcard on every interface (IPv4 and IPv6) — the public entry, set it to the box address to narrow it
-HSTS_MAX_AGE = 31536000        # num; seconds; 1 year. Lower it only while staging
-SOCKET_PROXY = 0                # enum:0,1
-MONITOR_ENHANCED = 0            # enum:0,1
-REDIS_RATE_LIMIT = 0            # enum:0,1
-PER_USER_LIMIT = 1              # num
-REDIS_HOST = "redis-rate-limit" # str
-REDIS_PORT = 6379               # port
+HSTS_MAX_AGE = 31536000        # num; seconds; Strict-Transport-Security max-age emitted on every domain nginx vhost; 1 year — lower it only while staging
+SOCKET_PROXY = 0                # enum:0,1; reserved toggle — no code reads it; the filtered-Docker-API proxy for the panel is started manually via docker-compose.socket-proxy.yml
+MONITOR_ENHANCED = 0            # enum:0,1; enables the monitor-targets editor in the admin panel settings (HTTP health checks)
+REDIS_RATE_LIMIT = 0            # enum:0,1; preparatory — with 1 the domain nginx emits only resolver lines for a future Redis token bucket; limiting stays the local limit_req zones
+PER_USER_LIMIT = 1              # num; 1 = per-user limit_req buckets (burst 20) on the domain nginx login and ranking-auth routes; 0 = disabled
+REDIS_HOST = "redis-rate-limit" # str; Redis host for the domain-nginx distributed rate limit — the upstream line that would use it is commented out (see REDIS_RATE_LIMIT)
+REDIS_PORT = 6379               # port; Redis port for the same commented-out rate-limit upstream
 WAF_ENABLED = 0                 # enum:0,1; warning: tune DetectionOnly 1 week first
-WAF_PORT = 8080                 # port
-WAF_PARANOIA = 1                # num
-WAF_ANOMALY_INBOUND = 5         # num
+WAF_PORT = 8080                 # port; host port grader-waf publishes on WAF_BIND_IP when the waf profile runs (the container listens on 8080 internally)
+WAF_PARANOIA = 1                # num; OWASP CRS paranoia level passed to the grader-waf container
+WAF_ANOMALY_INBOUND = 5         # num; CRS inbound anomaly-score threshold passed to the grader-waf container
 WAF_RESP_BODY_ACCESS = "Off"    # enum:Off,On,Force,Rejected; ModSecurity respBodyAccess; buffers every response body to inspect it
 DOMAIN_NGINX_HTTP_PORT = 80     # port; domain nginx HTTP publish port
 DOMAIN_NGINX_HTTPS_PORT = 443   # port; domain nginx HTTPS publish port
@@ -122,104 +135,104 @@ RPC_ALLOW_BACKDOOR = false    # bool; allow remote start_backdoor/stop_backdoor 
 
 [contest]
 CONTEST_ID = 1                  # num; ACTIVE contest served by the contest stack; single source of truth (docker compose reads ${CONTEST_ID}); the admin panel writes here, never the generated .env
-CONTEST_DOMAIN = ""             # str; FQDN contestants use; empty=CMS_DOMAIN
-CONTEST_LISTEN_PORT = 8888      # port
+CONTEST_DOMAIN = ""             # str; FQDN contestants reach the contest UI at — the traefik Host rule and the standalone nginx server_name; empty=CMS_DOMAIN
+CONTEST_LISTEN_PORT = 8888      # port; port the publish map, healthcheck, and every proxy upstream dial the contest server on — must match listen_port in config/cms.toml (this key never rewrites it)
 CONTEST_BIND_IP = "127.0.0.1"   # csv; addresses the contest web UI is published on; loopback keeps it reachable only through the proxy — set it to 0.0.0.0 to expose the port to the LAN
 ACTIVE_CONTEST_PORT = 8888      # port; legacy alias — mapped to CONTEST_LISTEN_PORT when that is empty
-SECRET_KEY = ""                 # secret; auto-generated hex32 if empty
-COOKIE_DURATION = 10800         # num; seconds
-NUM_PROXIES_USED = 1            # num
-MAX_SUBMISSION_LENGTH = 100000  # num
-MAX_INPUT_LENGTH = 5000000      # num
-SUBMIT_LOCAL_COPY = true        # bool
-CONTEST_WEB_CPU_LIMIT = "2"     # str
-CONTEST_WEB_MEMORY_LIMIT = "2G" # str
-ENABLE_TLS = false              # bool
-CONTEST_PORT_EXTERNAL = 8888    # port; host port contestants reach
-CONTEST_WEB_SERVER_SHARD = 0    # num
-CONTEST_WEB_CPU_RESERVATION = "0.1"     # str
-CONTEST_WEB_MEMORY_RESERVATION = "256M" # str
-NGINX_BIND_IP = "0.0.0.0"       # str; address the standalone contest nginx publishes 80/443 on
-NGINX_HTTP_PORT = 80            # port
-NGINX_HTTPS_PORT = 443          # port
-NGINX_EXTERNAL_PORT = 80        # port; legacy alias
-OJ_DOMAIN = ""                  # str; external judge host; empty=off
-OJ_BACKEND_PORT = 9000          # port
+SECRET_KEY = ""                 # secret; auto-generated hex32 if empty; reserved — preflight requires it and compose exports it to the contest container, but CMS reads its cookie key from cms.toml ([core] CMS_SECRET_KEY)
+COOKIE_DURATION = 10800         # num; seconds; contestant login-cookie lifetime — injected into cms.toml [contest_web_server] cookie_duration; refreshed on every request
+NUM_PROXIES_USED = 1            # num; proxies crossed before the contest server — injected into cms.toml num_proxies_used; decides whether CWS takes the real client IP from the proxy headers
+MAX_SUBMISSION_LENGTH = 100000  # num; bytes; max submission size — injected into cms.toml [contest_web_server] max_submission_length; raise the proxy's client_max_body_size with it
+MAX_INPUT_LENGTH = 5000000      # num; bytes; max user-test input size — injected into cms.toml [contest_web_server] max_input_length
+SUBMIT_LOCAL_COPY = true        # bool; write submissions to the data volume before storing them in the DB — injected into cms.toml [contest_web_server] submit_local_copy
+CONTEST_WEB_CPU_LIMIT = "2"     # str; CPU cap of the contest web server container — compose deploy.resources.limits.cpus
+CONTEST_WEB_MEMORY_LIMIT = "2G" # str; memory cap of the contest web server container — compose deploy.resources.limits.memory
+ENABLE_TLS = false              # bool; HTTPS for the contest UI — sets the traefik router's tls flag and makes the standalone contest nginx redirect :80 to a TLS :443 server
+CONTEST_PORT_EXTERNAL = 8888    # port; host port the contest UI is published on (CONTEST_BIND_IP:CONTEST_PORT_EXTERNAL:CONTEST_LISTEN_PORT)
+CONTEST_WEB_SERVER_SHARD = 0    # num; shard index handed to cmsContestWebServer; 0 = single instance — raise only when running multiple shards
+CONTEST_WEB_CPU_RESERVATION = "0.1"     # str; guaranteed CPU for the contest web server container — compose deploy.resources.reservations.cpus
+CONTEST_WEB_MEMORY_RESERVATION = "256M" # str; guaranteed memory for the contest web server container — compose deploy.resources.reservations.memory
+NGINX_BIND_IP = "0.0.0.0"       # csv; addresses the standalone contest nginx publishes NGINX_HTTP_PORT/NGINX_HTTPS_PORT on
+NGINX_HTTP_PORT = 80            # port; host port the standalone contest nginx publishes its HTTP listener on
+NGINX_HTTPS_PORT = 443          # port; host port the standalone contest nginx publishes its TLS listener on
+NGINX_EXTERNAL_PORT = 80        # port; reserved legacy key — only lands in an unread NGINX_PORT env on the standalone contest nginx; NGINX_HTTP_PORT/NGINX_HTTPS_PORT publish the real ports
+OJ_DOMAIN = ""                  # str; FQDN of the external judge vhost in the domain nginx; also a cert SAN; empty=no external judge
+OJ_BACKEND_PORT = 9000          # port; port the external judge answers on — paired with [admin] OJ_UPSTREAM for the oj route's proxy target
 
 [worker]
-CORE_SERVICES_HOST = "cms-log-service" # str; remote workers: main server IP
-WORKER_SHARD = 0                # num; MUST be unique per instance
-WORKER_NAME = "worker-0"        # str
-WORKER_PORT = 26000             # port
+CORE_SERVICES_HOST = "cms-log-service" # str; address of the core-services box — extra_hosts pins every cms-*-service hostname to it; a remote worker sets the main server IP
+WORKER_SHARD = 0                # num; shard index handed to cmsWorker — also names the container cms-worker-<n>; MUST be unique per instance
+WORKER_NAME = "worker-0"        # str; label exported to the worker container env (compose default worker-<shard>); the fleet TUI stamps it per shard — CMS itself does not read it
+WORKER_PORT = 26000             # port; worker RPC port — published as WORKER_BIND_ADDR:WORKER_PORT:WORKER_PORT; the core dials a worker at these coordinates (Worker list in config/cms.toml)
 WORKER_BIND_ADDR = "0.0.0.0"    # str; RPC bind address; a remote worker sets this to its own Tailscale IP so 26000 is not published on every interface
-WORKER_REPLICAS = 1             # num
-WORKER_CPU_LIMIT = "2"          # str
-WORKER_MEMORY_LIMIT = "2G"      # str
-WORKER_CPU_RESERVATION = "1"    # str
-WORKER_MEMORY_RESERVATION = "1G"
-ISOLATE_CGROUP_CONTROL = 1      # enum:0,1
-ISOLATE_CGROUP_PATH = "/sys/fs/cgroup/cms-isolate"
-KEEP_SANDBOX = false            # bool
-MAX_FILE_SIZE = 1048576         # num; KB
+WORKER_REPLICAS = 1             # num; worker container count — compose deploy.replicas
+WORKER_CPU_LIMIT = "2"          # str; worker container CPU cap — compose deploy.resources.limits.cpus; also the fleet TUI's global default for per-shard overrides
+WORKER_MEMORY_LIMIT = "2G"      # str; worker container memory cap — compose deploy.resources.limits.memory; also the fleet TUI's global default for per-shard overrides
+WORKER_CPU_RESERVATION = "1"    # str; guaranteed CPU for the worker container — compose deploy.resources.reservations.cpus
+WORKER_MEMORY_RESERVATION = "1G" # str; guaranteed memory for the worker container — compose deploy.resources.reservations.memory
+ISOLATE_CGROUP_CONTROL = 1      # enum:0,1; 1 = delegate a cgroup v2 subtree to the isolate sandboxes at container start; 0 = start without cgroup delegation
+ISOLATE_CGROUP_PATH = "/sys/fs/cgroup/cms-isolate" # str; cgroup v2 directory the isolate sandboxes run under — recreated at worker start if missing; host setup via scripts/__worker_cgroup_setup.sh
+KEEP_SANDBOX = false            # bool; reserved — compose exports it to the worker container env, but CMS reads keep_sandbox from config/cms.toml [worker]
+MAX_FILE_SIZE = 1048576         # num; KiB; reserved — compose exports it to the worker container env; the live cap is max_file_size in config/cms.toml [sandbox] (KiB; sandbox.fsize = value × 1024)
 
 [infra]
-DISCORD_WEBHOOK_URL = ""        # url; optional
-DISCORD_ROLE_ID = ""            # str
-MONITOR_CPU_THRESHOLD = 80      # num; percent
-MONITOR_MEM_THRESHOLD = 80      # num
-MONITOR_DISK_THRESHOLD = 80     # num
-MONITOR_INTERVAL = 10           # num; seconds
-DISK_PATH = "/host"             # str
-BACKUP_INTERVAL_MINS = 1440     # num
-BACKUP_MAX_COUNT = 50           # num
-BACKUP_MAX_AGE_DAYS = 10        # num
-BACKUP_MAX_SIZE_GB = 5          # num
-DOCKER_GID = 999                # num; find with: stat -c %g /var/run/docker.sock
+DISCORD_WEBHOOK_URL = ""        # url; Discord webhook the monitor and backup scripts POST alerts to — empty drops alerts with a warning
+DISCORD_ROLE_ID = ""            # str; Discord role id prepended as a <@&id> mention on monitor/backup alerts; empty = no mention
+MONITOR_CPU_THRESHOLD = 80      # num; percent; cpu usage above this triggers a Discord WARNING from the monitor
+MONITOR_MEM_THRESHOLD = 80      # num; percent; memory usage above this triggers a Discord WARNING from the monitor
+MONITOR_DISK_THRESHOLD = 80     # num; percent; disk usage on DISK_PATH above this triggers a Discord WARNING from the monitor
+MONITOR_INTERVAL = 10           # num; seconds between the monitor container's check cycles
+DISK_PATH = "/host"             # str; filesystem path the monitor's disk check measures — the compose monitor service mounts the host root at /host read-only
+BACKUP_INTERVAL_MINS = 1440     # num; minutes between automatic backups — the monitor runs __backup.sh once the last backup is this old
+BACKUP_MAX_COUNT = 50           # num; retention cap — oldest archives pruned once the backup count exceeds this
+BACKUP_MAX_AGE_DAYS = 10        # num; retention cap — backup archives older than this many days are deleted
+BACKUP_MAX_SIZE_GB = 5          # num; retention cap — oldest archives pruned when the backup tree exceeds this size
+DOCKER_GID = 999                # num; host group of /var/run/docker.sock, added to the monitor container via group_add for docker API access; find with: stat -c %g /var/run/docker.sock
 DOCKER_UID = 1000               # num; find with: stat -c %u backups (monitor image build arg; backup write access)
-OFFSITE_TAILNET_NODE = ""       # str; Tailscale IP of remote backup node
-OFFSITE_ENCRYPT_KEY = ""        # secret; openssl rand -hex 32
-OFFSITE_BACKUP_PATH = "/var/local/backups/cms"
-MONITORING_ENABLED = 0          # enum:0,1
-PROMETHEUS_PORT = 9090          # port
-PROMETHEUS_BIND_IP = "127.0.0.1"
-GRAFANA_PORT = 3001             # port
-GRAFANA_BIND_IP = "127.0.0.1"
+OFFSITE_TAILNET_NODE = ""       # str; Tailscale IP/hostname of the offsite backup target — __offsite-sync.sh rsyncs archives to it over ssh (required, no default)
+OFFSITE_ENCRYPT_KEY = ""        # secret; optional gpg --symmetric passphrase — archives are encrypted before offsite transfer when set; generate with: openssl rand -hex 32
+OFFSITE_BACKUP_PATH = "/var/local/backups/cms" # str; reserved — no code reads it; __offsite-sync.sh uses OFFSITE_REMOTE_PATH for the remote destination
+MONITORING_ENABLED = 0          # enum:0,1; 1 = render nginx stub_status /metrics so Prometheus can scrape it (re-run domain setup --apply to regenerate the vhost)
+PROMETHEUS_PORT = 9090          # port; host port Prometheus publishes on (PROMETHEUS_BIND_IP:PROMETHEUS_PORT:9090)
+PROMETHEUS_BIND_IP = "127.0.0.1" # str; address Prometheus publishes on; loopback keeps the metrics API host-local
+GRAFANA_PORT = 3001             # port; host port Grafana publishes on (GRAFANA_BIND_IP:GRAFANA_PORT:3000)
+GRAFANA_BIND_IP = "127.0.0.1"   # str; address Grafana publishes on; loopback keeps dashboards host-local
 FUNNEL_BIND_IP = "127.0.0.1"     # str; address the funnel panel/ranking gateways publish on; loopback keeps them reachable only through the proxy, set it to the tailnet IP to reach them directly
-GRAFANA_ADMIN_USER = "admin"    # str
-GRAFANA_PASSWORD = ""           # secret; default 'admin' is insecure
-GRAFANA_ROOT_URL = "http://localhost:3001/"
+GRAFANA_ADMIN_USER = "admin"    # str; Grafana admin login (GF_SECURITY_ADMIN_USER)
+GRAFANA_PASSWORD = ""           # secret; Grafana admin password (GF_SECURITY_ADMIN_PASSWORD) — empty falls back to the insecure image default 'admin'
+GRAFANA_ROOT_URL = "http://localhost:3001/" # url; GF_SERVER_ROOT_URL — external URL Grafana builds links and redirects from
 HSM_ENABLED = 0                 # enum:0,1; price: $0 SoftHSM | ~$800 YubiHSM 2
-HSM_MODULE = "softhsm"          # enum:softhsm,yubihsm,cloudhsm
-HSM_PIN = ""                    # secret
-HSM_KEY_LABEL = "grader-privkey"
+HSM_MODULE = "softhsm"          # enum:softhsm,yubihsm,cloudhsm; HSM backend the certbot PKCS#11 integration targets — softhsm ships as a container in docker-compose.domain.yml
+HSM_PIN = ""                    # secret; PKCS#11 user PIN for the HSM token — passed to the softhsm container and certbot --hsm-pin
+HSM_KEY_LABEL = "grader-privkey" # str; label of the grader's private key object on the HSM token
 VAULT_ENABLED = 0               # enum:0,1; price: $0 self-hosted | ~$0.40/secret/mo cloud
-VAULT_ADDR = "http://vault:8200"
-VAULT_TOKEN = ""                # secret
-VAULT_PATH = "secret/cms"
+VAULT_ADDR = "http://vault:8200" # url; Vault server address domain setup reads secrets from — http://vault:8200 reaches the compose vault service
+VAULT_TOKEN = ""                # secret; Vault access token — auto-generated hex32 when empty
+VAULT_PATH = "secret/cms"       # str; Vault KV path the CMS secrets are stored under
 DNSSEC_ENABLED = 0              # enum:0,1; requires DNS control
-CAA_ENABLED = 0                 # enum:0,1
-CAA_ISSUER = "letsencrypt.org"
+CAA_ENABLED = 0                 # enum:0,1; 1 = publish a DNS CAA record restricting issuance to CAA_ISSUER — set at your DNS provider (docs/dnssec-caa-guide.md)
+CAA_ISSUER = "letsencrypt.org"  # str; certificate authority allowed to issue for the domain when CAA_ENABLED=1
 DNS_PROVIDER = ""               # enum:"",cloudflare; "" = HTTP-01 webroot, cloudflare = DNS-01 (wildcard / :80 unreachable)
 CLOUDFLARE_API_TOKEN = ""       # secret; DNS-01 only — zone:DNS:Edit token, turned into certbot's cloudflare.ini
 MTLS_WORKERS_ENABLED = 0        # enum:0,1; mirrors [core]
 WAF_ENABLED = 0                 # enum:0,1; mirrors [admin]
-WAF_PORT = 8080
-WAF_BIND_IP = "127.0.0.1"
-WAF_PARANOIA = 1
-WAF_ANOMALY_INBOUND = 5
-WAF_ANOMALY_OUTBOUND = 4
-WAF_RULE_ENGINE = "DetectionOnly"
-WAF_RESP_BODY_ACCESS = "Off"    # mirrors [admin]
-CMS_LOG_MAX_AGE_DAYS = 7            # num
-CMS_LOG_MAX_SIZE_GB = 5             # num
-CMS_LOG_PRUNE_INTERVAL_MINS = 60    # num
+WAF_PORT = 8080                 # port; host port the WAF container publishes on (WAF_BIND_IP:WAF_PORT:8080) when the waf profile is up — set 443 to front the domain nginx
+WAF_BIND_IP = "127.0.0.1"       # str; address the WAF publishes on; loopback keeps it host-local until fronted
+WAF_PARANOIA = 1                # num; OWASP CRS paranoia level — passed to the WAF container as PARANOIA
+WAF_ANOMALY_INBOUND = 5         # num; CRS inbound anomaly score threshold (ANOMALY_INBOUND) — requests scoring over it trip the WAF
+WAF_ANOMALY_OUTBOUND = 4        # num; CRS outbound anomaly score threshold (ANOMALY_OUTBOUND) for response inspection
+WAF_RULE_ENGINE = "DetectionOnly" # str; ModSecurity SecRuleEngine (MODSEC_RULE_ENGINE) — DetectionOnly logs without blocking, On enforces
+WAF_RESP_BODY_ACCESS = "Off"    # enum:Off,On,Force,Rejected; mirrors [admin]
+CMS_LOG_MAX_AGE_DAYS = 7            # num; CMS service logs older than this many days are deleted by the monitor's log-retention pass
+CMS_LOG_MAX_SIZE_GB = 5             # num; oldest CMS logs pruned (newest truncated) once the log tree exceeds this size
+CMS_LOG_PRUNE_INTERVAL_MINS = 60    # num; minutes between the monitor's CMS log-retention passes
 FUNNEL_ENABLED = false              # bool; tailnet funnel (public ts.net behind basic auth)
-FUNNEL_REALM = "CMS restricted"     # str
-FUNNEL_CONTEST_LISTEN = 8443        # port
-FUNNEL_PANEL_LISTEN = 8892          # port
-FUNNEL_RANKING_LISTEN = 8893        # port
-VAULT_BIND_IP = "127.0.0.1"         # str
-VAULT_PORT = 8200                   # port
+FUNNEL_REALM = "CMS restricted"     # str; basic-auth realm label on the funnel gateways (nginx auth_basic)
+FUNNEL_CONTEST_LISTEN = 8443        # port; listen port of the funnel contest gateway — terminates TLS (ssl http2) for the public ts.net vhost
+FUNNEL_PANEL_LISTEN = 8892          # port; listen port of the funnel admin-panel gateway — published on FUNNEL_BIND_IP behind basic auth
+FUNNEL_RANKING_LISTEN = 8893        # port; listen port of the funnel ranking gateway — published on FUNNEL_BIND_IP behind basic auth
+VAULT_BIND_IP = "127.0.0.1"         # str; address Vault publishes on; loopback keeps the secrets API host-local
+VAULT_PORT = 8200                   # port; host port Vault publishes on (VAULT_BIND_IP:VAULT_PORT:8200)
 
 [backup]
 # Named backup locations the admin panel's Backup & Restore page switches between.

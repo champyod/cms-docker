@@ -20,9 +20,11 @@ const execPromise = util.promisify(exec);
  * by excluding the protected service from every compose scope
  * (PROTECTED_COMPOSE_SERVICES in lib/compose-command.ts).
  *
- * Matched on container name, not compose service: docker-compose.yml and
- * docker-compose.domain.yml both declare a service named `nginx-proxy`, so a
- * service-name match would also pin the contest front (cms-nginx-contest).
+ * Matched on container name, not compose service: the two proxies are distinct
+ * services now — grader-nginx-proxy (domain.yml) and nginx-proxy
+ * (docker-compose.yml) — but only the container name is stable across a rename,
+ * and `docker inspect` returns container names. Pinning the TLS terminator must
+ * not pin the contest front (cms-nginx-contest), which stays controllable.
  *
  * Scope, so this is not mistaken for more than it is:
  * - The panel is the boundary. The admin-panel container mounts the Docker socket

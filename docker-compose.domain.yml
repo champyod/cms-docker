@@ -1,11 +1,17 @@
 # Domain nginx stack — ${DOMAIN_NAME:-cms.local} + certbot
 # ADDITIVE: does not replace or modify cms-nginx-contest.
 # Usage: docker compose -f docker-compose.domain.yml up -d
-# Dev note: ports 80/443 may clash with existing nginx-proxy; use
+# Dev note: ports 80/443 may clash with the contest `nginx-proxy`; use
 #           DOMAIN_NGINX_HTTP_PORT/DOMAIN_NGINX_HTTPS_PORT overrides.
+#
+# WHY the service is named grader-nginx-proxy rather than nginx-proxy: a merged
+# project combines same-named services into one, so a shared `nginx-proxy` key
+# meant the domain block silently overrode the contest block (or the reverse,
+# depending on -f order) and whichever proxy lost had no entry at all. The name
+# matches container_name, so the service and container are addressed identically.
 
 services:
-  nginx-proxy:
+  grader-nginx-proxy:
     image: nginx:alpine
     container_name: grader-nginx-proxy
     restart: unless-stopped

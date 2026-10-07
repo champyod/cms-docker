@@ -190,6 +190,30 @@ parse_toml() {
 
 is_secret_key() { [[ "$1" =~ (PASSWORD|SECRET|TOKEN|KEY|ENCRYPT) ]]; }
 
+# Projects the active [db_<name>] profile into the core namespace so every
+# existing core.POSTGRES_* consumer keeps working unchanged. WHY it runs after
+# the secrets block: a secret-generation re-parse resets __TOML and the key
+# arrays, so an earlier copy would be wiped from memory.
+resolve_active_db_profile() {
+  local name="${__TOML[core.ACTIVE_DATABASE]:-default}"
+  local prefix="db_${name}." key full_key found=0
+  for full_key in "${!__TOML[@]}"; do
+    [[ "$full_key" == "${prefix}POSTGRES_"* ]] || continue
+    found=1
+    key="${full_key#"$prefix"}"
+    __TOML["core.${key}"]="${__TOML[$full_key]}"
+    if [[ " ${__CORE_KEYS[*]} " != *" ${key} "* ]]; then
+      __CORE_KEYS+=("$key")
+    fi
+  done
+  if [[ "$found" -eq 0 ]]; then
+    log_error "ACTIVE_DATABASE is \"${name}\" but ${TOML_FILE} has no [db_${name}] section with POSTGRES_* keys; add [db_${name}] or fix core.ACTIVE_DATABASE."
+    exit 1
+  fi
+  [[ "$DRY_RUN" -eq 1 ]] && echo "Active database profile: db_${name}"
+  return 0
+}
+
 # Returns generated secret value for a given key name, empty if none.
 generate_secret_for() {
   local key="$1"
@@ -1012,6 +1036,8 @@ main() {
       parse_toml "$TOML_FILE"
     fi
   fi
+
+  resolve_active_db_profile
 
   # Derived values. WHY these run before the .env is written: a value that is only
   # derived here never existed in config.toml, so it has to reach .env on this run or

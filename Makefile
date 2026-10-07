@@ -24,22 +24,22 @@ CONTEST_UP_PROFILES := --profile core --profile contest
 
 # Additive stacks that publish host ports the default COMPOSE_FILES must never
 # pull in implicitly. WHY separate: docker-compose.domain.yml and
-# docker-compose.waf.yml define services with no `profiles:` key (grader-nginx-proxy
-# binds host 80/443, grader-certbot and grader-redis-rate-limit always start), so
-# folding them into COMPOSE_FILES would make `make core` issue certificates and
-# bind 443 on a workstation. These targets opt in per-stack.
+# docker-compose.waf.yml define services with no `profiles:` key (the
+# grader-nginx-proxy service binds host 80/443, grader-certbot and
+# grader-redis-rate-limit always start), so folding them into COMPOSE_FILES would
+# make `make core` issue certificates and bind 443 on a workstation. These targets
+# opt in per-stack.
 DOMAIN_COMPOSE_FILES := docker-compose.yml docker-compose.domain.yml
 WAF_COMPOSE_FILES    := docker-compose.yml docker-compose.domain.yml docker-compose.waf.yml
 DOMAIN_COMPOSE_FLAGS := -f docker-compose.yml -f docker-compose.domain.yml
 WAF_COMPOSE_FLAGS    := -f docker-compose.yml -f docker-compose.domain.yml -f docker-compose.waf.yml
 
-# WHY waf carries --profile core --profile contest: grader-waf's BACKEND is
-# http://grader-nginx-proxy:80, so the domain proxy must already be up. Compose
-# *unions* profiles across merged files rather than replacing them, and a
-# depends_on target is only visible when one of its profiles is active — so the
-# contest profile has to be requested or the merge fails validation with
-# `depends on undefined service "nginx-proxy"`.
-WAF_UP_PROFILES      := --profile core --profile contest --profile waf
+# WHY waf carries --profile core only: grader-waf's BACKEND is
+# http://grader-nginx-proxy:80, the domain stack's proxy, which has no profile.
+# --profile contest must stay OUT of this list: it would activate the contest
+# profile's separate `nginx-proxy` service (container cms-nginx-contest), which
+# binds the same host 80/443 and would fail to publish.
+WAF_UP_PROFILES      := --profile core --profile waf
 
 .PHONY: setup audit help env core admin contest worker infra domain waf core-stop admin-stop contest-stop contest-down worker-stop infra-stop domain-stop waf-stop core-clean admin-clean contest-clean worker-clean infra-clean domain-clean waf-clean db-clean clean pull pull-core pull-admin pull-contest pull-worker pull-infra core-img admin-img contest-img worker-img infra-img admin-dev admin-dev-stop contest-down cms-init admin-create prisma-sync lint smoke-test preflight backup db-reset
 
@@ -58,7 +58,7 @@ help:
 	@echo "  make contest-stop   - Stop contest profile (stop — keeps containers, use contest-down to remove)"
 	@echo "  make worker-stop    - Stop worker fleet (all local shards)"
 	@echo "  make infra-stop     - Stop monitor profile"
-	@echo "  make domain-stop    - Stop domain stack (nginx-proxy, certbot, redis-rate-limit)"
+	@echo "  make domain-stop    - Stop domain stack (grader-nginx-proxy, certbot, redis-rate-limit)"
 	@echo "  make waf-stop       - Stop the WAF profile (domain stack left running)"
 	@echo "  make core-clean     - Down -v core profile"
 	@echo "  make admin-clean    - Down -v admin profile"
@@ -182,7 +182,10 @@ infra:
 # what actually serve them.
 #
 # WHY waf depends on nothing but compose: grader-waf's BACKEND is
-# http://grader-nginx-proxy:80, so the domain stack must already be up.
+# http://grader-nginx-proxy:80, the domain stack's proxy, so the domain stack must
+# already be up. The merged project now holds two distinct proxies — the domain
+# `grader-nginx-proxy` and the contest `nginx-proxy` (cms-nginx-contest, contest
+# profile) — instead of one key that merged two definitions into a single service.
 # ---------------------------------------------------------------------------
 domain:
 	@if [ ! -f config/grader.nginx.conf ]; then \
@@ -190,7 +193,7 @@ domain:
 		exit 1; \
 	fi
 	$(COMPOSE_CMD) $(DOMAIN_COMPOSE_FLAGS) up -d
-	@echo "Domain stack started (nginx-proxy + certbot + redis-rate-limit)."
+	@echo "Domain stack started (grader-nginx-proxy + certbot + redis-rate-limit)."
 
 waf:
 	@if [ "$${WAF_ENABLED:-0}" != "1" ]; then \
@@ -256,7 +259,7 @@ infra-clean:
 # Scoped by service name so a domain teardown never reaches into core/contest,
 # whose containers share the project. WHY an explicit list: the domain compose
 # file has no profiles, so an unscoped `down` would take every service it sees.
-DOMAIN_SERVICES := nginx-proxy certbot redis-rate-limit
+DOMAIN_SERVICES := grader-nginx-proxy certbot redis-rate-limit
 
 domain-stop:
 	$(COMPOSE_CMD) $(DOMAIN_COMPOSE_FLAGS) down $(DOMAIN_SERVICES)
@@ -416,11 +419,13 @@ admin-create:
 # where one of the optional directories (src/tools/, src/docker/) is empty or
 # absent, and a tool handed a non-matching path fails before it lints anything.
 #
-# WHY overlay_base: an overlay stack references services defined in its base
-# (docker-compose.tailscale.yml and docker-compose.waf.yml both depend on
-# contest-web-server from docker-compose.contest.yml), so `config -q` only
-# succeeds for the pair. Validating the overlay standalone reports a false
-# failure; this mirrors the merge .github/workflows/ci.yml performs.
+# WHY overlay_base: an overlay stack references services defined in its base,
+# so `config -q` only succeeds for the pair. docker-compose.waf.yml declares
+# depends_on grader-nginx-proxy, the domain stack's proxy, so its base is
+# docker-compose.domain.yml; only docker-compose.tailscale.yml depends on
+# contest-web-server, so only its base is docker-compose.contest.yml.
+# Validating an overlay standalone reports a false failure; this mirrors the
+# merge .github/workflows/ci.yml performs.
 lint:
 	@echo "Running lint checks..."
 	@echo "→ spec parity"
@@ -486,7 +491,7 @@ lint:
 		fi; \
 		declare -A overlay_base=( \
 			[docker-compose.tailscale.yml]=docker-compose.contest.yml \
-			[docker-compose.waf.yml]=docker-compose.contest.yml \
+			[docker-compose.waf.yml]=docker-compose.domain.yml \
 		); \
 		compose_failed=0; \
 		for f in docker-compose*.yml docker/docker-compose*.yml; do \

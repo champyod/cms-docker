@@ -70,7 +70,14 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked <<EOF
 #!/bin/bash -ex
     export DEBIAN_FRONTEND=noninteractive
-    
+
+    # Create the isolate user as a system user before anything installs it: the
+    # apt package's postinst would otherwise assign it the next free uid (1001),
+    # which collides with cmsuser's hardcoded -u 1001 in the later block. A
+    # system uid keeps it out of the regular-user range entirely.
+    getent passwd isolate >/dev/null || \
+        useradd -r -d /var/local/lib/isolate -M -s /usr/sbin/nologin isolate
+
     # Detect Architecture
     ARCH=$(dpkg --print-architecture)
     
@@ -181,6 +188,13 @@ ENV PATH="/home/cmsuser/cms/bin:$PATH"
 
 # Install CMS package from the src directory
 RUN --mount=type=cache,target=/home/cmsuser/.cache/pip,uid=1001 cd src && python3 install.py cms --devel
+
+# credits.json sits at the checkout root, outside the installed package, so the
+# loader's upward walk from site-packages never reaches the copy under src/.
+# Place it beside the venv (an ancestor of site-packages) so the walk finds it,
+# and pin CMS_CREDITS_FILE so resolution does not depend on the walk at all.
+COPY --chown=cmsuser:cmsuser credits.json /home/cmsuser/cms/credits.json
+ENV CMS_CREDITS_FILE=/home/cmsuser/cms/credits.json
 
 RUN <<EOF
 #!/bin/bash -ex

@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import SystemAboutPage from '@/app/[locale]/(authenticated)/system/about/page';
 import en from '@/dictionaries/en.json';
-import rootCredits from '../../credits.json';
 import { panelCredits } from '@/lib/credits';
 
 // The dictionary loader is server-only; the page is exercised with the real
@@ -27,7 +26,32 @@ const PAGE_SOURCE_PATH = path.resolve(
   'page.tsx',
 );
 
-const ROOT_CREDITS = rootCredits;
+// The repo-root credits.json sits outside the admin-panel build context, so it
+// cannot be a compile-time import. It is read at runtime instead — vitest runs
+// from the repo, where the file is present.
+interface RootCreditsAsset {
+  name: string;
+}
+interface RootCreditsAttribution {
+  text: string;
+  url: string;
+}
+interface RootCreditsSurface {
+  title: string;
+  assets: RootCreditsAsset[];
+  attribution: RootCreditsAttribution[];
+  first_party: unknown;
+  transitive_dependencies?: unknown;
+}
+interface RootCreditsJson {
+  project: { url: string };
+  license: { spdx_id: string; name: string };
+  surfaces: Record<string, RootCreditsSurface>;
+}
+
+const ROOT_CREDITS = JSON.parse(
+  fs.readFileSync(ROOT_CREDITS_PATH, 'utf8'),
+) as RootCreditsJson;
 const OTHER_SURFACE_KEYS = ['contest', 'admin', 'ranking'] as const;
 
 afterEach(() => {
