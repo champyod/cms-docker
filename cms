@@ -138,8 +138,14 @@ cmd_db_use() {
   fi
   if ! grep -q "^\[db_${name}\]" config.toml; then
     echo "Error: no [db_${name}] section in config.toml." >&2
-    echo "Available profiles:" >&2
-    grep -oE '^\[db_[^]]+\]' config.toml | sed -E 's/^\[db_(.+)\]$/  \1/' >&2
+    if ! grep -q '^\[db_' config.toml; then
+      # Old layout: POSTGRES_* still live in [core], no [db_*] profile exists yet.
+      echo "No [db_*] profile sections found — your config.toml uses the old layout." >&2
+      echo "Run './cms config sync' to migrate POSTGRES_* into [db_default], then retry." >&2
+    else
+      echo "Available profiles:" >&2
+      grep -oE '^\[db_[^]]+\]' config.toml | sed -E 's/^\[db_(.+)\]$/  \1/' >&2
+    fi
     exit 1
   fi
 
