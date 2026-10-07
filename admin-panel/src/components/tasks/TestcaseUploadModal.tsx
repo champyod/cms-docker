@@ -3,12 +3,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Upload, Archive } from 'lucide-react';
-import { batchUploadTestcases } from '@/app/actions/testcase-bulk';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
+import type { BulkItemResult } from '@/app/actions/testcase-support';
 import { apiClient } from '@/lib/apiClient';
 import { Dialog } from '@/components/core/Dialog';
 import { ModalFooter } from '@/components/core/ModalFooter';
-import { pairToUploadData } from './testcase-helpers';
+import { buildUploadFormData } from './testcase-upload';
 import { buildUploadSubtaskRows, detectSubtaskGroups } from './subtask-board';
 import { rowsToParams } from './dataset-score-params';
 import { TestcaseUploadMethodStep } from './TestcaseUploadMethodStep';
@@ -78,7 +78,6 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, currentScoreTy
     if (readyPairs.length === 0) return;
     setLoading(true);
     try {
-      const uploadData = await Promise.all(readyPairs.map((pair) => pairToUploadData(pair)));
       const result = await runAction(
         {
           pending: `Uploading ${readyPairs.length} testcases...`,
@@ -86,7 +85,16 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, currentScoreTy
           failure: 'Upload failed',
           description: `${readyPairs.length} pairs saved successfully.`,
         },
-        () => batchUploadTestcases(datasetId, uploadData)
+        async () => {
+          const response = await apiClient.postFormData('/api/testcases', buildUploadFormData(readyPairs, datasetId));
+          if (!response.success) {
+            return { success: false as const, error: response.error };
+          }
+          const details = Array.isArray(response.details)
+            ? (response.details as BulkItemResult[])
+            : undefined;
+          return { success: true as const, details };
+        }
       );
       if (!result) return;
       if (result.success) {

@@ -23,10 +23,14 @@ export async function storeFile(
     `;
     const lobOid = result[0].loid;
 
-    await prisma.$executeRaw`
+    const inserted = await prisma.$executeRaw`
       INSERT INTO fsobjects (digest, loid, description)
       VALUES (${digest}, ${lobOid}, ${description})
+      ON CONFLICT (digest) DO NOTHING
     `;
+    if (inserted === 0) {
+      await prisma.$queryRaw`SELECT lo_unlink(${lobOid})`;
+    }
   }
 
   return digest;

@@ -1,8 +1,6 @@
 import { detectFileEncoding } from '@/lib/file-encoding';
 import type { FileEncoding } from '@/lib/file-encoding';
 import { parseFilenameWithSubtask, parseSubtaskPrefix } from '@/utils/filenameParser';
-import { readBytesAsBase64 } from '@/lib/file-helpers';
-import { normalizeFileBytes } from '@/lib/file-encoding';
 
 export interface EncodedFile {
   name: string;
@@ -57,14 +55,4 @@ export async function buildPairs(sourceItems: SourceItem[], inputPattern: string
 
 export async function readBlobBytes(blob: Blob): Promise<Uint8Array> {
   return new Uint8Array(await blob.arrayBuffer());
-}
-
-export async function pairToUploadData(pair: FilePair): Promise<{ codename: string; inputBase64: string; outputBase64: string; isPublic: boolean }> {
-  if (!pair.inputFile || !pair.outputFile) throw new Error(`Pair ${pair.id} is missing input or output data`);
-  return {
-    codename: pair.id,
-    inputBase64: await readBytesAsBase64(normalizeFileBytes(pair.inputFile.bytes, pair.inputFile.selectedEncoding)),
-    outputBase64: await readBytesAsBase64(normalizeFileBytes(pair.outputFile.bytes, pair.outputFile.selectedEncoding)),
-    isPublic: false,
-  };
 }
