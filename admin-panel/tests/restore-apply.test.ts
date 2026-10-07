@@ -13,13 +13,18 @@ import {
   applyOrder,
   buildReportId,
   checkConfirmToken,
+  conflictMessage,
+  detectUniqueConflicts,
+  fkOverwriteConflictMessage,
+  fkOverwriteConflicts,
   isTableStrategy,
   normalizeStrategies,
   overwriteParentConflicts,
   parseReportId,
   planApply,
+  uniqueValueConflictMessage,
 } from '@/lib/restore-apply';
-import type { ApplyStrategies } from '@/lib/restore-apply';
+import type { ApplyStrategies, FkOverwriteConflict } from '@/lib/restore-apply';
 import { EPOCH, STAGING, liveFacts, mergeAll, privilegeFacts } from './restore-apply-fixtures';
 
 describe('normalizeStrategies', () => {
@@ -275,5 +280,75 @@ describe('adminColumnFor', () => {
     expect(adminColumnFor('users', mergeAll({ admins: 'skip' }))).toBeNull();
     expect(adminColumnFor('admins', mergeAll({ admins: 'skip' }))).toBeNull();
     expect(adminColumnFor('messages', mergeAll({ admins: 'skip', messages: 'skip' }))).toBeNull();
+  });
+});
+
+describe('the conflicts a plan carries', () => {
+  it('carries none for a promote that breaks no rule', () => {
+    const plan = planApply(mergeAll(), liveFacts());
+    expect(plan.conflicts).toEqual([]);
+    expect(plan.errors).toEqual([]);
+  });
+
+  it('carries an overwrite-parent conflict structurally, and the same fact in the error list', () => {
+    const plan = planApply(normalizeStrategies({ contests: 'overwrite' }).resolved, liveFacts());
+    expect(plan.conflicts).toEqual([
+      { id: 'fk:contests', kind: 'fk-overwrite', table: 'contests', children: ['announcements', 'tasks', 'participations'] },
+    ]);
+    expect(plan.errors).toContain(fkOverwriteConflictMessage(plan.conflicts[0] as FkOverwriteConflict));
+    expect(plan.errors).toContain(conflictMessage(plan.conflicts[0]!));
+  });
+
+  it('raises one account-username conflict per conflicting username, each resolvable on one row', () => {
+    const privileges = privilegeFacts({
+      archiveAccounts: [{ id: 7, username: 'ada', enabled: true }, { id: 8, username: 'grace', enabled: true }],
+      liveAccounts: [{ id: 1, username: 'ada', enabled: true }, { id: 2, username: 'grace', enabled: true }],
+      accountConflicts: [
+        { username: 'ada', stagedId: 7, liveId: 1 },
+        { username: 'grace', stagedId: 8, liveId: 2 },
+      ],
+    });
+    const plan = planApply(mergeAll(), liveFacts({ privileges }));
+    expect(plan.conflicts).toHaveLength(2);
+    const accounts = plan.conflicts.filter((conflict) => conflict.kind === 'account-username');
+    expect(accounts.map((conflict) => conflict.kind === 'account-username' && conflict.pair.username)).toEqual(['ada', 'grace']);
+    expect(new Set(accounts.map((conflict) => conflict.id)).size).toBe(2);
+    expect(plan.errors).toEqual(plan.conflicts.map(conflictMessage));
+  });
+
+  it('reports an overwrite-parent conflict and an account conflict side by side', () => {
+    const privileges = privilegeFacts({
+      archiveAccounts: [{ id: 7, username: 'ada', enabled: true }],
+      liveAccounts: [{ id: 1, username: 'ada', enabled: true }],
+      accountConflicts: [{ username: 'ada', stagedId: 7, liveId: 1 }],
+    });
+    const plan = planApply(normalizeStrategies({ contests: 'overwrite' }).resolved, liveFacts({ privileges }));
+    expect(plan.conflicts.map((conflict) => conflict.kind)).toEqual(['fk-overwrite', 'account-username']);
+    expect(plan.errors).toHaveLength(2);
+  });
+
+  it('keeps the structured FK conflicts equal to the messages the string form returns', () => {
+    const strategies = normalizeStrategies({ contests: 'overwrite', submissions: 'overwrite' }).resolved;
+    const structured = fkOverwriteConflicts(liveFacts(), strategies);
+    expect(structured.map((conflict) => conflict.table)).toEqual(['contests', 'submissions']);
+    expect(overwriteParentConflicts(liveFacts(), strategies)).toEqual(structured.map(fkOverwriteConflictMessage));
+  });
+
+  it('carries a unique conflict the measurement found, and warns that the check was incomplete', () => {
+    const [conflict] = detectUniqueConflicts(
+      { table: 'executables', name: 'executables_name_key', columns: ['name'] },
+      [{ values: ['runner'], key: ['7'] }],
+      [{ values: ['runner'], key: ['1'] }],
+    );
+    const plan = planApply(mergeAll(), liveFacts({ uniqueConflicts: [conflict!], uniqueCheckSkipped: true }));
+    expect(plan.conflicts).toContainEqual(conflict);
+    expect(plan.errors).toContain(uniqueValueConflictMessage(conflict!));
+    expect(plan.warnings.some((warning) => warning.includes('did not cover every row'))).toBe(true);
+  });
+
+  it('says nothing about the unique check when it ran to completion', () => {
+    const plan = planApply(mergeAll(), liveFacts());
+    expect(plan.conflicts).toEqual([]);
+    expect(plan.warnings.some((warning) => warning.includes('did not cover every row'))).toBe(false);
   });
 });

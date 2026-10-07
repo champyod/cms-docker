@@ -13,9 +13,9 @@ import { EmptyState } from '@/components/core/EmptyState';
 import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
 import { RUN_STATUS_FAILED, RUN_STATUS_SETTLED, RUN_STATUS_STARTED } from '@/scheduler/tick';
-import { summarizeTables } from '@/components/maintenance/ScheduleSection';
-import { useSettleRun } from '@/components/maintenance/useSchedules';
-import type { Notice } from '@/components/maintenance/useSchedules';
+import { summarizeTables } from '@/components/backup-restore/ScheduleSection';
+import { useSettleRun } from '@/components/backup-restore/useSchedules';
+import type { Notice } from '@/components/backup-restore/useSchedules';
 
 /** The action clamps any larger value to its own maximum, so this only bounds the row count. */
 const RUN_HISTORY_LIMIT = 50;

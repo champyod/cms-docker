@@ -25,6 +25,8 @@ import {
   setLocalTimeoutSql,
   stagingLoadSql,
   stagingSchemaName,
+  uniqueIndexesSql,
+  uniquePairRowsSql,
 } from '@/lib/restore-apply';
 import type { LargeObjectCopy } from '@/lib/restore-apply';
 import { PREVIEW_ID, STAGING } from './restore-apply-fixtures';
@@ -205,5 +207,43 @@ describe('large objects', () => {
     expect(archiveDigestBytesSql()).toContain('* 2048');
     expect(archiveDigestBytesForSql('abc')).toContain('lo_get');
     expect(liveDigestQuerySql()).not.toContain('lo_get');
+  });
+});
+
+describe('unique-index check queries', () => {
+  it('reads only the unique indexes of the live public schema', () => {
+    const sql = uniqueIndexesSql();
+    expect(sql).toContain('FROM pg_indexes');
+    expect(sql).toContain("schemaname = 'public'");
+    expect(sql).toContain("indexdef LIKE 'CREATE UNIQUE INDEX%'");
+    expect(sql).toContain('ORDER BY tablename, indexname');
+  });
+
+  it('carries a value-and-key pair per row as JSON, so no separator has to be trusted', () => {
+    const sql = uniquePairRowsSql('public', 'files', ['submission_id', 'filename'], ['id'], 5_000);
+    expect(sql).toContain('json_build_array("submission_id"::text, "filename"::text)');
+    expect(sql).toContain('json_build_array("id"::text)');
+    expect(sql).toContain('FROM "public"."files"');
+    expect(sql).toContain('LIMIT 5000');
+    expect(sql).not.toContain('||');
+  });
+
+  it('excludes a row with a NULL in the value or the key, which never collides', () => {
+    const sql = uniquePairRowsSql('public', 'files', ['submission_id', 'filename'], ['id'], 10);
+    expect(sql).toContain('WHERE "submission_id" IS NOT NULL AND "filename" IS NOT NULL AND "id" IS NOT NULL');
+  });
+
+  it('bounds a limit that would not bound the read', () => {
+    expect(uniquePairRowsSql('public', 'files', ['filename'], ['id'], 0)).toContain('LIMIT 1');
+    expect(uniquePairRowsSql('public', 'files', ['filename'], ['id'], 12.7)).toContain('LIMIT 12');
+  });
+
+  it('refuses a table or column outside the identifier allowlist', () => {
+    expect(() => uniquePairRowsSql('public', 'files; DROP TABLE users', ['filename'], ['id'], 10)).toThrow(/identifier/);
+    expect(() => uniquePairRowsSql('public', 'files', ['filename; --'], ['id'], 10)).toThrow(/identifier/);
+  });
+
+  it('reads the scratch side from the schema it is given', () => {
+    expect(uniquePairRowsSql('public', 'users', ['name'], ['id'], 10)).toContain('FROM "public"."users"');
   });
 });

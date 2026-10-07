@@ -18,17 +18,11 @@ import { BACKUP_TABLE_NAMES } from '@/lib/backup-table-catalog';
 // The upload route reads the preview identity rules from here; they live in the store.
 export { checkUploadFileName, getUploadMaxBytes, isPreviewId, previewDumpPath, previewQuarantineDir } from '@/lib/restore-preview-store';
 
-/** Postgres identifiers accepted in generated SQL; anything else is refused before it is quoted. */
-export const IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_$]*$/;
-
-export function quoteIdentifier(name: string): string {
-  if (!IDENTIFIER_PATTERN.test(name)) throw new Error(`Refusing to build SQL from identifier: ${name}`);
-  return `"${name}"`;
-}
-
-export function qualifiedTable(schema: string, table: string): string {
-  return `${quoteIdentifier(schema)}.${quoteIdentifier(table)}`;
-}
+// The identifier rules live in their own module, because this one reaches
+// `node:os` and the conflict vocabulary that quotes with them is shared with the
+// panel. Re-exported here so every existing import keeps resolving.
+import { IDENTIFIER_PATTERN, qualifiedTable, quoteIdentifier } from '@/lib/sql-identifier';
+export { IDENTIFIER_PATTERN, qualifiedTable, quoteIdentifier };
 
 // ---------------------------------------------------------------------------
 // pg_restore --list TOC parsing

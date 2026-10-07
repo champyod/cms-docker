@@ -42,7 +42,7 @@ export async function validatePromote(previewId: string, strategies: ApplyStrate
   const generatedAtMs = Date.now();
   const staging = isPreviewId(previewId) ? stagingSchemaName(previewId) : 'restore_staging_00000000';
   const reportId = buildReportId(staging, generatedAtMs);
-  const fail = (errors: readonly string[]): ValidateReport => ({ ok: false, reportId, generatedAt: new Date(generatedAtMs).toISOString(), previewId, stagingSchema: staging, tableReports: [], errors, warnings: [] });
+  const fail = (errors: readonly string[]): ValidateReport => ({ ok: false, reportId, generatedAt: new Date(generatedAtMs).toISOString(), previewId, stagingSchema: staging, tableReports: [], errors, warnings: [], conflicts: [] });
   if (!isPreviewId(previewId)) return fail(['Unknown preview id.']);
   const { ok, resolved, unknown } = normalizeStrategies(strategies ?? {});
   if (!ok) return fail([`Not a catalog table or not a valid strategy: ${unknown.join(', ')}`]);
@@ -54,7 +54,7 @@ export async function validatePromote(previewId: string, strategies: ApplyStrate
   try {
     const facts = await measureFacts(container, resolved, order);
     const plan = planApply(resolved, facts);
-    return { ok: plan.errors.length === 0, reportId, generatedAt: new Date(generatedAtMs).toISOString(), previewId, stagingSchema: staging, tableReports: plan.tableReports, errors: plan.errors, warnings: plan.warnings };
+    return { ok: plan.errors.length === 0, reportId, generatedAt: new Date(generatedAtMs).toISOString(), previewId, stagingSchema: staging, tableReports: plan.tableReports, errors: plan.errors, warnings: plan.warnings, conflicts: plan.conflicts };
   } catch (error) {
     return fail([`Validation could not measure the live database: ${describeFailure(error)}`]);
   }

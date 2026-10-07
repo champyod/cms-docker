@@ -42,6 +42,7 @@ export type RouteId =
   | 'infrastructure.ranking'
   | 'system.appearance'
   | 'system.maintenance'
+  | 'system.backup-restore'
   | 'system.settings'
   | 'system.docs'
   | 'system.about'

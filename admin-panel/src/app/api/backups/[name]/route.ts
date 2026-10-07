@@ -2,6 +2,7 @@ import { openAsBlob } from 'node:fs';
 import { NextRequest } from 'next/server';
 import { apiError, verifyApiPermission } from '@/lib/api-utils';
 import { resolveArchivePath } from '@/lib/backup-archives';
+import { resolveReadRoot } from '@/lib/backup-locations';
 
 const ATTACHMENT_CONTENT_TYPE = 'application/octet-stream';
 
@@ -21,12 +22,15 @@ function archiveDownloadResponse(blob: Blob, name: string): Response {
   });
 }
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ name: string }> }): Promise<Response> {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ name: string }> }): Promise<Response> {
   const { authorized, response } = await verifyApiPermission('backup:list');
   if (!authorized) return response;
 
   const { name } = await params;
-  const archivePath = await resolveArchivePath(name);
+  const locationId = req.nextUrl.searchParams.get('location') ?? undefined;
+  const readTarget = resolveReadRoot(locationId);
+  if (!readTarget.ok) return apiError({ message: readTarget.error, status: 400 });
+  const archivePath = await resolveArchivePath(name, readTarget.root);
   if (archivePath === null) return apiError({ message: 'Archive not found', status: 404 });
 
   return archiveDownloadResponse(await openAsBlob(archivePath), name);

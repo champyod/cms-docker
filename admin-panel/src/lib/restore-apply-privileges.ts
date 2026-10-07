@@ -14,6 +14,8 @@
  */
 
 import { ADMIN_TABLE, GRANT_TABLES } from '@/lib/backup-table-catalog';
+import { accountUsernameConflictId, accountUsernameConflictMessage } from '@/lib/restore-apply-conflicts';
+import type { AccountUsernameConflict } from '@/lib/restore-apply-conflicts';
 
 /** One account as both sides of a promote see it. */
 export interface AccountRow {
@@ -232,21 +234,43 @@ export function accountConflictsBetween(
 }
 
 /**
- * Refuses a promote that would roll a table back on the `username` unique index.
+ * The index `admins.username` is unique by, in the name Prisma generates for it.
+ *
+ * Carried so the account conflict names the same index a generic unique check
+ * would have named, which is what lets one prompt vocabulary cover both. The
+ * generic check does not read this index, so the fact is reported once.
+ */
+export const ADMIN_USERNAME_INDEX = 'admins_username_key';
+
+/**
+ * Refuses a promote that would roll a table back on the `username` unique index,
+ * as the structured conflicts the operator is prompted about.
  *
  * The merge upserts on `id` alone, so an archive username that already exists
  * live under a different id does not conflict on the primary key and proceeds to
  * violate `admins.username`'s unique index instead. Nothing partial is written:
  * the statement pair runs in one transaction, so the whole `admins` table is lost
  * to a conflict the operator could have been told about while reading the report.
+ *
+ * One username is one conflict, because a resolution rewrites one archive row:
+ * folding them together would offer a single choice that had to mean something
+ * different for each row it covered.
  */
-export function accountConflictErrors(facts: PrivilegeFacts, strategies: Readonly<Record<string, string>>): readonly string[] {
+export function accountConflictList(facts: PrivilegeFacts, strategies: Readonly<Record<string, string>>): readonly AccountUsernameConflict[] {
   if (strategies[ADMIN_TABLE] !== 'merge' && strategies[ADMIN_TABLE] !== 'overwrite') return [];
-  if (facts.accountConflicts.length === 0) return [];
-  const names = facts.accountConflicts.map((conflict) => `"${conflict.username}" (archive id ${conflict.stagedId}, live id ${conflict.liveId})`);
-  return [
-    `"${ADMIN_TABLE}" cannot be applied: ${names.join(', ')} ${facts.accountConflicts.length === 1 ? 'exists' : 'exist'} in the archive and live under different ids, and "username" is unique, so the merge would violate it and roll the whole table back. Rename or remove one side of each pair, then validate again.`,
-  ];
+  return facts.accountConflicts.map((conflict) => ({
+    id: accountUsernameConflictId(ADMIN_TABLE, conflict.stagedId),
+    kind: 'account-username',
+    table: ADMIN_TABLE,
+    index: ADMIN_USERNAME_INDEX,
+    columns: ['username'],
+    pair: { username: conflict.username, stagedId: conflict.stagedId, liveId: conflict.liveId },
+  }));
+}
+
+/** The refusal as text, kept as the shape the validate report's error list has always carried. */
+export function accountConflictErrors(facts: PrivilegeFacts, strategies: Readonly<Record<string, string>>): readonly string[] {
+  return accountConflictList(facts, strategies).map(accountUsernameConflictMessage);
 }
 
 function accountDeltaWarnings(facts: PrivilegeFacts, deltas: PrivilegeDeltas): readonly string[] {

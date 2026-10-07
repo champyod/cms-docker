@@ -7,7 +7,7 @@ import { Button } from '@/components/core/Button';
 import { Input } from '@/components/core/Input';
 import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
-import { PROMOTE_PROGRESS_WINDOW_MS } from '@/components/maintenance/useRestorePreview';
+import { PROMOTE_PROGRESS_WINDOW_MS } from '@/components/backup-restore/useRestorePreview';
 // Type-only: the runtime module reaches node:os through restore-preview-store and must stay out of the client bundle.
 import type { PromoteReport, TableApplyRecord, TableApplyStatus, ValidateReport } from '@/lib/restore-apply';
 import type { PromotePhase, PromoteProgressView } from '@/lib/restore-apply-progress';
@@ -122,14 +122,17 @@ export function PromoteRecords({ report }: { readonly report: PromoteReport }) {
 }
 
 /**
- * The two writes this panel can make, in order. Promote stays locked until a
- * validation passed and the operator retyped the archive timestamp, because the
- * server binds the other half of the gate to that report id and refuses it once
- * the live database has moved on underneath the measurement.
+ * The promote itself, once a measurement has passed.
+ *
+ * There is no separate validate button: a measurement is what the mode choice
+ * runs, and every resolution runs it again, so the report on screen is always the
+ * one the gate is bound to. Promote stays locked until that report passed and the
+ * operator retyped the archive timestamp, because the server binds the other half
+ * of the gate to the report id and refuses it once the live database has moved on
+ * underneath the measurement.
  */
 export function RestorePromoteGate({
     isBusy,
-    isValidating,
     isPromoting,
     validate,
     promote,
@@ -139,12 +142,10 @@ export function RestorePromoteGate({
     confirmText,
     requiredPhrase,
     canPromote,
-    onValidate,
     onPromote,
     onConfirm,
 }: {
     readonly isBusy: boolean;
-    readonly isValidating: boolean;
     readonly isPromoting: boolean;
     readonly validate: ValidateReport | null;
     readonly promote: PromoteReport | null;
@@ -154,16 +155,12 @@ export function RestorePromoteGate({
     readonly confirmText: string;
     readonly requiredPhrase: string;
     readonly canPromote: boolean;
-    readonly onValidate: () => void;
     readonly onPromote: () => void;
     readonly onConfirm: (value: string) => void;
 }) {
     return (
         <Stack gap={4}>
             <Stack direction="row" gap={3} className="flex-wrap items-center">
-                <Button variant="secondary" icon={ShieldCheck} loading={isValidating} disabled={isBusy} onClick={onValidate}>
-                    Validate before promoting
-                </Button>
                 <Button variant="negative" icon={ShieldCheck} loading={isPromoting} disabled={!canPromote} onClick={onPromote}>
                     Promote to live database
                 </Button>
@@ -171,7 +168,9 @@ export function RestorePromoteGate({
                     <Text variant="small" color="text-muted-foreground">
                         {validate.ok
                             ? `Validated ${validate.tableReports.length} table(s) at ${validate.generatedAt}.`
-                            : 'Validation failed, so promote is locked until the strategies or the archive change.'}
+                            : validate.conflicts.length > 0
+                                ? `${validate.conflicts.length} conflict(s) are still waiting for a decision.`
+                                : 'Validation failed, so promote is locked until the selection or the archive change.'}
                     </Text>
                 )}
             </Stack>

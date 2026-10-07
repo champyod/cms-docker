@@ -120,6 +120,7 @@ describe('permittedNavItems', () => {
     expect(permittedNavItems('system', 'en', en, new Set(['all:all']))).toEqual([
       { id: 'system.appearance', label: en.navigation.system.appearance.label, href: '/en/system/appearance' },
       { id: 'system.maintenance', label: en.navigation.system.maintenance.label, href: '/en/system/maintenance' },
+      { id: 'system.backup-restore', label: en.navigation.system['backup-restore'].label, href: '/en/system/backup-restore' },
       { id: 'system.settings', label: en.navigation.system.settings.label, href: '/en/system/settings' },
       { id: 'system.docs', label: en.navigation.system.docs.label, href: '/en/system/docs' },
       { id: 'system.about', label: en.navigation.system.about.label, href: '/en/system/about' },
@@ -128,7 +129,7 @@ describe('permittedNavItems', () => {
 
   it('omits a gated system route the reader may not open while keeping the public routes', () => {
     const items = permittedNavItems('system', 'en', en, new Set(['backup:create']));
-    expect(items.map((item) => item.id)).toEqual(['system.maintenance', 'system.docs', 'system.about']);
+    expect(items.map((item) => item.id)).toEqual(['system.maintenance', 'system.backup-restore', 'system.docs', 'system.about']);
   });
 });
 

@@ -33,6 +33,7 @@ export default async function SystemLayout({
   const descriptions: ModuleTabDescriptions = {
     [APPEARANCE_TAB_ID]: systemNav['appearance']['description'],
     'system.maintenance': systemNav['maintenance']['description'],
+    'system.backup-restore': systemNav['backup-restore']['description'],
     'system.settings': systemNav['settings']['description'],
     [DOCS_TAB_ID]: dict.docs.subtitle,
     'system.about': systemNav['about']['description'],

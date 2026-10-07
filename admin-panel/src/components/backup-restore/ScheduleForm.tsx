@@ -2,15 +2,19 @@
 
 import { Button } from '@/components/core/Button';
 import { Input } from '@/components/core/Input';
+import { SelectField } from '@/components/core/FormField';
 import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
 import { BACKUP_TABLES } from '@/lib/backup-table-catalog';
 import { MAX_INTERVAL_MINS, MAX_NAME_LENGTH, MIN_INTERVAL_MINS } from '@/lib/backup-schedules';
+import type { BackupLocationOption } from '@/app/actions/schedules';
 
 export interface FormValues {
     readonly name: string;
     readonly interval: string;
     readonly tables: readonly string[];
+    /** null selects the default tree, which follows the configured default location at fire time. */
+    readonly locationId: string | null;
 }
 
 /** Catalog order is parent-before-child, so the form submits the order pg_dump is handed. */
@@ -53,6 +57,7 @@ interface ScheduleFormProps {
     readonly warnings: readonly string[];
     readonly busy: boolean;
     readonly submitLabel: string;
+    readonly locationOptions: readonly BackupLocationOption[];
     readonly onChange: (values: FormValues) => void;
     readonly onToggleTable: (name: string) => void;
     readonly onSubmit: () => void;
@@ -60,8 +65,14 @@ interface ScheduleFormProps {
 }
 
 export function ScheduleForm(props: ScheduleFormProps) {
-    const { values, errors, warnings, busy, submitLabel, onChange, onToggleTable, onSubmit, onCancel } = props;
+    const { values, errors, warnings, busy, submitLabel, locationOptions, onChange, onToggleTable, onSubmit, onCancel } = props;
     const selected = orderSelection(values.tables);
+    // A schedule can outlive the config entry it names; showing that id rather than
+    // silently falling back to the first option keeps the stale target visible.
+    const staleLocationId =
+        values.locationId !== null && !locationOptions.some((option) => option.id === values.locationId)
+            ? values.locationId
+            : null;
     return (
         <Stack gap={3}>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -82,6 +93,23 @@ export function ScheduleForm(props: ScheduleFormProps) {
                     onChange={(event) => onChange({ ...values, interval: event.target.value })}
                 />
             </div>
+
+            <SelectField
+                id="schedule-location"
+                label="Backup location"
+                hint="The default follows config's default location; picking a location pins this schedule to it."
+                value={values.locationId ?? ''}
+                disabled={busy}
+                onChange={(event) => onChange({ ...values, locationId: event.target.value === '' ? null : event.target.value })}
+            >
+                <option value="">Default tree</option>
+                {staleLocationId !== null && <option value={staleLocationId}>{staleLocationId} (not in config)</option>}
+                {locationOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                        {option.label}
+                    </option>
+                ))}
+            </SelectField>
 
             <TableChecklist selected={selected} disabled={busy} onToggle={onToggleTable} />
 

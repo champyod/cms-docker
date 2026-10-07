@@ -60,6 +60,7 @@ export const EXPECTED_ROUTE_MANIFEST: readonly RouteFixture[] = [
 
   { id: 'system.appearance', path: '/system/appearance', kind: 'page', tabIds: [], legacyPaths: ['/appearance'], enabled: true },
   { id: 'system.maintenance', path: '/system/maintenance', kind: 'page', tabIds: [], legacyPaths: ['/maintenance'], enabled: true },
+  { id: 'system.backup-restore', path: '/system/backup-restore', kind: 'page', tabIds: [], legacyPaths: [], enabled: true },
   { id: 'system.settings', path: '/system/settings', kind: 'page', tabIds: [], legacyPaths: ['/settings'], enabled: true },
   { id: 'system.docs', path: '/system/docs', kind: 'page', tabIds: [], legacyPaths: ['/docs'], enabled: true },
   { id: 'system.about', path: '/system/about', kind: 'page', tabIds: [], legacyPaths: [], enabled: true },
@@ -108,6 +109,7 @@ export const EXPECTED_ROUTE_PERMISSIONS = {
   'infrastructure.ranking': { all: ['ranking:list', 'ranking:read'] },
   'system.appearance': { all: ['appearance:read', 'appearance:list'] },
   'system.maintenance': { any: ['maintenance:update', 'backup:create'] },
+  'system.backup-restore': { any: ['backup:create', 'backup:list', 'backup:restore', 'backup:schedule'] },
   'system.settings': { all: ['env:read', 'env:list', 'monitor:read', 'monitor:list'] },
   'system.docs': {},
   'system.about': {},
@@ -121,5 +123,5 @@ export const EXPECTED_NAVIGATION_GROUPS: readonly NavigationGroupDescriptor[] = 
   { id: 'evaluation', labelKey: 'navigation.groups.evaluation', routeIds: ['evaluation.submissions', 'evaluation.lanes'] },
   { id: 'administration', labelKey: 'navigation.groups.administration', routeIds: ['administration.admins', 'administration.groups', 'administration.audit'] },
   { id: 'infrastructure', labelKey: 'navigation.groups.infrastructure', routeIds: ['infrastructure.deployments', 'infrastructure.containers', 'infrastructure.resources', 'infrastructure.ranking'] },
-  { id: 'system', labelKey: 'navigation.groups.system', routeIds: ['system.appearance', 'system.maintenance', 'system.settings', 'system.docs', 'system.about'] },
+  { id: 'system', labelKey: 'navigation.groups.system', routeIds: ['system.appearance', 'system.maintenance', 'system.backup-restore', 'system.settings', 'system.docs', 'system.about'] },
 ];

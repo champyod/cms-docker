@@ -7,7 +7,7 @@ import { Badge } from '@/components/core/Badge';
 import { Button } from '@/components/core/Button';
 import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
-import type { BusyRow } from '@/components/maintenance/useSchedules';
+import type { BusyRow } from '@/components/backup-restore/useSchedules';
 
 const SUMMARIZED_TABLE_COUNT = 4;
 const MINUTES_PER_HOUR = 60;

@@ -90,6 +90,7 @@ const INFRASTRUCTURE_ROUTE_IDS = [
 const SYSTEM_ROUTE_IDS = [
   'system.appearance',
   'system.maintenance',
+  'system.backup-restore',
   'system.settings',
   'system.docs',
   'system.about',
@@ -127,7 +128,7 @@ describe('target route registry', () => {
   });
 
   it('enables the direct three plus the Contest, Task, User, Team, and Evaluation routes', () => {
-    expect(ROUTE_REGISTRY).toHaveLength(45);
+    expect(ROUTE_REGISTRY).toHaveLength(46);
     const directIds = DIRECT_ROUTE_CASES.map(({ routeId }) => routeId);
     // Why: the Evaluation shell proves the Submission list, the lane module, and
     // the Submission record landing with its four tabs, and the Administration

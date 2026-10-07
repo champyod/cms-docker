@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { Save } from 'lucide-react';
 
 import { Button } from '@/components/core/Button';
@@ -10,11 +9,6 @@ import { MaintenanceBackupsCard } from '@/components/system/MaintenanceBackupsCa
 import { MaintenanceNotificationsCard } from '@/components/system/MaintenanceNotificationsCard';
 import { usePublishModuleTabActions } from '@/components/navigation/ModuleTabActionSlot';
 import { useMaintenanceController } from '@/components/system/useMaintenanceController';
-import { ArchiveBrowserSection } from '@/components/maintenance/ArchiveBrowserSection';
-import { BackupSelectionSection } from '@/components/maintenance/BackupSelectionSection';
-import { RestoreSection } from '@/components/maintenance/RestoreSection';
-import { ScheduleRunsSection } from '@/components/maintenance/ScheduleRunsSection';
-import { ScheduleSection } from '@/components/maintenance/ScheduleSection';
 import { useDictionary } from '@/hooks/useDictionary';
 import type { Locale } from '@/lib/locales';
 
@@ -30,9 +24,6 @@ export function MaintenanceClient({
   const dict = useDictionary();
   const controller = useMaintenanceController(locale, permissionKeys);
   const { loading, saving, canConfigure, handleSave } = controller;
-  // A selective dump is launched detached, so the archive browser is told to look again rather
-  // than showing the pre-run list until the operator presses Refresh.
-  const [archiveRefreshToken, setArchiveRefreshToken] = useState(0);
 
   // Why published from here and withdrawn while loading: the pending state the Save labels
   // itself with belongs to this controller, and the loading surface below replaces the panel
@@ -53,17 +44,10 @@ export function MaintenanceClient({
 
   return (
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-      {/* The advanced backup operations belong under the backup policy they extend, so they
-          stack in this column. The policy card keeps its own archive list: it is the only
-          archive view gated on `backup:list`, and the sections below reach their own
-          `backup:*` actions. */}
+      {/* Backup operations moved to Backup & Restore; this page keeps the policy
+          knobs those operations run under, and the notifications card. */}
       <Stack gap={6}>
         <MaintenanceBackupsCard controller={controller} />
-        <BackupSelectionSection onBackupComplete={() => setArchiveRefreshToken((token) => token + 1)} />
-        <ArchiveBrowserSection refreshToken={archiveRefreshToken} />
-        <ScheduleSection />
-        <ScheduleRunsSection />
-        <RestoreSection />
       </Stack>
       <MaintenanceNotificationsCard controller={controller} />
     </div>

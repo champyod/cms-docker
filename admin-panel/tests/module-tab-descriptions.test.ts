@@ -119,6 +119,7 @@ describe('module tab description coverage', () => {
     expect(uncovered).toEqual([
       'system.appearance',
       'system.maintenance',
+      'system.backup-restore',
       'system.settings',
       'system.docs',
       'system.about',

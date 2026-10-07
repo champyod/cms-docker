@@ -1,22 +1,25 @@
 'use client';
 
-import { DatabaseZap, PlayCircle, Trash2 } from 'lucide-react';
+import { DatabaseZap, PlayCircle, ShieldCheck, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
 import { Input } from '@/components/core/Input';
 import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
-import { formatBytes } from '@/components/maintenance/archive-browser-helpers';
-import { RestorePreviewTable } from '@/components/maintenance/RestorePreviewTable';
-import { RestorePromoteGate } from '@/components/maintenance/RestorePreviewPanel';
-import { DUMP_SUFFIX, type PreviewPhase, useRestorePreview } from '@/components/maintenance/useRestorePreview';
+import { formatBytes } from '@/components/backup-restore/archive-browser-helpers';
+import { RestoreConflictDialog } from '@/components/backup-restore/RestoreConflictDialog';
+import { RestoreModeDialog } from '@/components/backup-restore/RestoreModeDialog';
+import { RestorePreviewTable } from '@/components/backup-restore/RestorePreviewTable';
+import { RestorePromoteGate } from '@/components/backup-restore/RestorePreviewPanel';
+import { DUMP_SUFFIX, type PreviewPhase, useRestorePreview } from '@/components/backup-restore/useRestorePreview';
 
 const STAGE_TEXT: Readonly<Record<Exclude<PreviewPhase, 'idle'>, string>> = {
     uploading: 'Uploading the dump to quarantine...',
     restoring: 'Starting a throwaway postgres container and restoring the dump into it. A large dump takes several minutes, and nothing is reported until the restore finishes.',
     measuring: 'Reading archive and live row counts for every catalog table...',
     validating: 'Measuring the live database against the archive. This phase only reads.',
+    resolving: 'Rewriting the archive row on the scratch copy, then measuring again...',
     promoting: 'Running the pre-promote backup, then committing one transaction per table in foreign-key order. This page stays here until the run finishes or fails.',
     deleting: 'Removing the scratch container and the quarantined dump...',
 };
@@ -36,8 +39,9 @@ function NoticeList({ tone, items }: { readonly tone: 'error' | 'warning'; reado
 export function RestoreSection() {
     const {
         phase, isBusy, feedback, selectedFile, uploadFraction, archive, run, promoteProgress, recheckPromoteProgress, warnings, problems,
-        requiredPhrase, canPromote, setConfirm, handleFileChange, handleBuildPreview, handleValidate,
-        handlePromote, handleStrategyChange, handleViewSample, handleDeletePreview,
+        currentConflict, currentConflictValue, requiredPhrase, canPromote, setConfirm, handleFileChange, handleBuildPreview,
+        handleToggleTable, handleOpenMode, handleDismissMode, handleChooseMode, handleResolveConflict,
+        handlePromote, handleViewSample, handleDeletePreview,
     } = useRestorePreview();
 
     const stageText = phase === 'idle'
@@ -95,18 +99,24 @@ export function RestoreSection() {
                     <Stack gap={4}>
                         <RestorePreviewTable
                             rows={run.rows}
-                            strategies={run.strategies}
-                            isLocked={isBusy}
+                            selection={run.selection}
                             sampleTable={run.sampleTable}
                             isSampleLoading={run.sampleLoading}
                             sample={run.sample}
                             sampleError={run.sampleError}
-                            onStrategyChange={handleStrategyChange}
+                            onToggle={handleToggleTable}
                             onViewSample={(table) => void handleViewSample(table)}
                         />
+                        <Button
+                            variant="secondary"
+                            icon={ShieldCheck}
+                            disabled={isBusy || run.selection.length === 0}
+                            onClick={handleOpenMode}
+                        >
+                            {run.selection.length === 0 ? 'Select at least one table' : `Apply ${run.selection.length} selected table(s)`}
+                        </Button>
                         <RestorePromoteGate
                             isBusy={isBusy}
-                            isValidating={phase === 'validating'}
                             isPromoting={phase === 'promoting'}
                             validate={run.validate}
                             promote={run.promote}
@@ -116,12 +126,28 @@ export function RestoreSection() {
                             confirmText={run.confirm}
                             requiredPhrase={requiredPhrase}
                             canPromote={canPromote}
-                            onValidate={() => void handleValidate()}
                             onPromote={() => void handlePromote()}
                             onConfirm={setConfirm}
                         />
                     </Stack>
                 )}
+
+                <RestoreModeDialog
+                    open={run.modeOpen}
+                    tableCount={run.selection.length}
+                    isBusy={isBusy}
+                    onChoose={(mode) => void handleChooseMode(mode)}
+                    onDismiss={handleDismissMode}
+                />
+                <RestoreConflictDialog
+                    conflict={currentConflict}
+                    currentValue={currentConflictValue}
+                    isBusy={isBusy}
+                    onChoose={(choice) => void handleResolveConflict(choice)}
+                    // Leaving a conflict unanswered skips it, which is the only safe default:
+                    // the table is left out rather than a choice being made on the operator's behalf.
+                    onDismiss={() => void handleResolveConflict({ action: 'skip-table' })}
+                />
             </Stack>
         </Card>
     );

@@ -81,6 +81,8 @@ export function liveFacts(overrides: Partial<ApplyFacts> = {}): ApplyFacts {
     missingDigestBytes: 10 * 1024 * 1024,
     databaseSizeBytes: 1024 * 1024 * 1024,
     privileges: privilegeFacts(),
+    uniqueConflicts: [],
+    uniqueCheckSkipped: false,
     ...overrides,
   };
 }

@@ -46,6 +46,13 @@ export const PLATFORM_ROUTES: readonly RouteDescriptor[] = [
 
   enabledPageRoute('system.appearance', '/system/appearance', { all: ['appearance:read', 'appearance:list'] }, ['/appearance']),
   enabledPageRoute('system.maintenance', '/system/maintenance', { any: ['maintenance:update', 'backup:create'] }, ['/maintenance'], MODULE_TAB_SURFACES),
+  enabledPageRoute(
+    'system.backup-restore',
+    '/system/backup-restore',
+    { any: ['backup:create', 'backup:list', 'backup:restore', 'backup:schedule'] },
+    [],
+    MODULE_TAB_SURFACES,
+  ),
   enabledPageRoute('system.settings', '/system/settings', { all: ['env:read', 'env:list', 'monitor:read', 'monitor:list'] }, ['/settings'], MODULE_TAB_SURFACES),
   enabledPageRoute('system.docs', '/system/docs', {}, ['/docs'], MODULE_TAB_SURFACES),
   enabledPageRoute('system.about', '/system/about', {}, [], MODULE_TAB_SURFACES_WITHOUT_CHORD),

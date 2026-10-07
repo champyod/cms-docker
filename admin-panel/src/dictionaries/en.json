@@ -567,6 +567,7 @@
     "system": {
       "appearance": { "label": "Appearance", "description": "Configure branding, service previews, and display density." },
       "maintenance": { "label": "Maintenance", "description": "Configure automated backups and system notifications." },
+      "backup-restore": { "label": "Backup & Restore", "description": "Transfer database tables to and from files and backup locations." },
       "settings": { "label": "Settings", "description": "Configure environment files and service restarts." },
       "docs": { "label": "Docs", "description": "Read CMS administration and contest-system documentation." },
       "about": { "label": "About", "description": "Review the licence, attribution, and third-party software this panel ships." },

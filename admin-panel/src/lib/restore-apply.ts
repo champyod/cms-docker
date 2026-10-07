@@ -15,6 +15,8 @@
  */
 
 import { BACKUP_TABLE_NAMES } from '@/lib/backup-table-catalog';
+// The report below carries conflicts, and a re-export does not bring the name into scope here.
+import type { RestoreConflict } from '@/lib/restore-apply-conflicts';
 
 export { qualifiedTable, quoteIdentifier } from '@/lib/restore-preview';
 
@@ -42,11 +44,15 @@ export {
   sequenceNameQuerySql,
   sequenceResetSql,
   setLocalTimeoutSql,
+  scratchDeleteRowSql,
+  scratchRewriteBatchSql,
+  scratchUpdateKeySql,
+  scratchUpdateValueSql,
   stagingLoadSql,
   stagingNewRowCountSql,
   stagingSchemaName,
 } from '@/lib/restore-apply-sql';
-export type { LargeObjectCopy } from '@/lib/restore-apply-sql';
+export type { LargeObjectCopy, ScratchRewrite } from '@/lib/restore-apply-sql';
 
 // The read-only measurements the validation decisions are made from.
 export {
@@ -57,6 +63,7 @@ export {
   archiveDigestIntegritySql,
   archiveDigestListSql,
   databaseSizeQuerySql,
+  fkEdgesSql,
   liveColumnsQuerySql,
   liveDigestListQuerySql,
   liveDigestQuerySql,
@@ -66,6 +73,8 @@ export {
   nameListLiteral,
   overrideRowsSql,
   stagingSchemaTableCountSql,
+  uniqueIndexesSql,
+  uniquePairRowsSql,
 } from '@/lib/restore-apply-sql-queries';
 
 // The chunked row transport the staging load pages through.
@@ -82,6 +91,7 @@ export {
   catalogPrimaryKeys,
   checkConfirmToken,
   overwriteParentConflicts,
+  fkOverwriteConflicts,
   parseReportId,
   planApply,
 } from '@/lib/restore-apply-plan';
@@ -90,7 +100,9 @@ export type { ApplyFacts, ApplyPlan } from '@/lib/restore-apply-plan';
 // The privilege delta an admins restore carries, and the conflict that refuses one.
 export {
   PRIVILEGE_DETAIL_LIMIT,
+  ADMIN_USERNAME_INDEX,
   accountConflictErrors,
+  accountConflictList,
   accountConflictsBetween,
   accountDeltas,
   grantsTravel,
@@ -103,6 +115,32 @@ export {
   privilegeWarnings,
 } from '@/lib/restore-apply-privileges';
 export type { AccountConflict, AccountDelta, AccountRow, MembershipDelta, MembershipRow, OverrideDelta, OverrideRow, PrivilegeDeltas, PrivilegeFacts } from '@/lib/restore-apply-privileges';
+
+// The blocking conflicts and the vocabulary an operator resolves them with.
+export {
+  MAX_CASCADE_DEPTH,
+  UNIQUE_CHECK_ROW_LIMIT,
+  accountUsernameConflictId,
+  accountUsernameConflictMessage,
+  buildRestoreStrategies,
+  conflictMessage,
+  detectUniqueConflicts,
+  displayKey,
+  displayValues,
+  fkOverwriteConflictId,
+  fkOverwriteConflictMessage,
+  isPrivilegeOwnedIndex,
+  parseFkEdges,
+  parseUniqueIndexes,
+  parseUniqueValueRows,
+  planKeyRenameCascade,
+  regenerateSuggestion,
+  uniqueCheckWasTruncated,
+  uniqueConflictId,
+  uniqueIndexNeedsCheck,
+  uniqueValueConflictMessage,
+} from '@/lib/restore-apply-conflicts';
+export type { AccountUsernameConflict, AccountUsernamePair, FkEdge, FkEdgeRow, FkOverwriteConflict, KeyRenameStep, RestoreConflict, RestoreMode, UniqueIndex, UniqueIndexRow, UniqueValueConflict, UniqueValueRow } from '@/lib/restore-apply-conflicts';
 
 // ---------------------------------------------------------------------------
 // Strategies and report shapes
@@ -133,6 +171,8 @@ export interface ValidateReport {
   readonly tableReports: readonly TableValidateReport[];
   readonly errors: readonly string[];
   readonly warnings: readonly string[];
+  /** The blocking conflicts, one prompt each, resolved before the promote is offered. */
+  readonly conflicts: readonly RestoreConflict[];
 }
 
 export type TableApplyStatus = 'applied' | 'skipped' | 'failed' | 'pending';

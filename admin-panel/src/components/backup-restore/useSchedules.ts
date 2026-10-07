@@ -5,20 +5,22 @@ import { useCallback, useEffect, useState } from 'react';
 import {
     createSchedule,
     deleteSchedule,
+    listBackupLocationOptions,
     listSchedules,
     settleRun,
     toggleSchedule,
     updateSchedule,
 } from '@/app/actions/schedules';
 // Type-only: the runtime module reaches Prisma and must stay out of the client bundle.
-import type { BackupSchedule, ScheduleMutationResult } from '@/app/actions/schedules';
-import { orderSelection, type FormValues } from '@/components/maintenance/ScheduleForm';
+import type { BackupLocationOption, BackupSchedule, ScheduleMutationResult } from '@/app/actions/schedules';
+import { orderSelection, type FormValues } from '@/components/backup-restore/ScheduleForm';
 import { MAX_INTERVAL_MINS, MIN_INTERVAL_MINS, validateScheduleInput } from '@/lib/backup-schedules';
 
 const DEFAULT_INTERVAL_MINS = 1440;
 const LIST_ERROR = 'Could not read the backup schedules.';
 const SAVE_ERROR = 'Could not save the schedule.';
 const SETTLE_ERROR = 'Could not settle the backup run.';
+const LOCATIONS_ERROR = 'Could not read the backup locations; only the default tree can be chosen.';
 const SETTLE_CONFIRM = 'Settle this backup run? It closes the row and lets its schedule fire again. Check Discord and backups/manifest.json for the real result first.';
 
 export interface Notice {
@@ -44,6 +46,7 @@ const EMPTY_FORM: FormValues = {
     name: '',
     interval: String(DEFAULT_INTERVAL_MINS),
     tables: [],
+    locationId: null,
 };
 
 function describeError(error: unknown, fallback: string): string {
@@ -177,13 +180,45 @@ export function useScheduleForm(reload: () => Promise<void>, report: Report) {
     const [errors, setErrors] = useState<readonly string[]>([]);
     const [warnings, setWarnings] = useState<readonly string[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [locationOptions, setLocationOptions] = useState<readonly BackupLocationOption[]>([]);
+    const [locationDefaultId, setLocationDefaultId] = useState<string | null>(null);
+    const [locationError, setLocationError] = useState<string | null>(null);
 
-    const open = useCallback((nextMode: FormMode, nextValues: FormValues = EMPTY_FORM) => {
-        setMode(nextMode);
-        setValues(nextValues);
-        setErrors([]);
-        setWarnings([]);
+    // Read once for the whole session: the list comes from config, and a failure
+    // must not hide the form — it degrades the select to the default tree and says so.
+    useEffect(() => {
+        let cancelled = false;
+        void listBackupLocationOptions()
+            .then((result) => {
+                if (cancelled) return;
+                if (!result.success) {
+                    setLocationError(result.error ?? LOCATIONS_ERROR);
+                    return;
+                }
+                setLocationOptions(result.options ?? []);
+                setLocationDefaultId(result.defaultId ?? null);
+            })
+            .catch((error: unknown) => {
+                if (cancelled) return;
+                setLocationError(describeError(error, LOCATIONS_ERROR));
+            });
+        return () => {
+            cancelled = true;
+        };
     }, []);
+
+    const open = useCallback(
+        (nextMode: FormMode, nextValues?: FormValues) => {
+            setMode(nextMode);
+            setValues(
+                nextValues ??
+                    (nextMode?.kind === 'create' ? { ...EMPTY_FORM, locationId: locationDefaultId } : EMPTY_FORM),
+            );
+            setErrors([]);
+            setWarnings([]);
+        },
+        [locationDefaultId],
+    );
 
     const toggleTable = useCallback((tableName: string) => {
         setValues((current) => ({
@@ -195,11 +230,15 @@ export function useScheduleForm(reload: () => Promise<void>, report: Report) {
     }, []);
 
     const submit = useCallback(async () => {
-        const validation = validateScheduleInput({
-            name: values.name,
-            tables: orderSelection(values.tables),
-            intervalMins: parseInterval(values.interval),
-        });
+        const validation = validateScheduleInput(
+            {
+                name: values.name,
+                tables: orderSelection(values.tables),
+                intervalMins: parseInterval(values.interval),
+                locationId: values.locationId,
+            },
+            locationOptions.map((option) => option.id),
+        );
         const { schedule } = validation;
         if (mode === null || !validation.valid || schedule === null) {
             setErrors(validation.errors);
@@ -227,7 +266,7 @@ export function useScheduleForm(reload: () => Promise<void>, report: Report) {
         } finally {
             setIsSubmitting(false);
         }
-    }, [mode, open, reload, report, values]);
+    }, [locationOptions, mode, open, reload, report, values]);
 
-    return { mode, values, setValues, errors, warnings, isSubmitting, open, toggleTable, submit };
+    return { mode, values, setValues, errors, warnings, isSubmitting, locationOptions, locationError, open, toggleTable, submit };
 }

@@ -18,6 +18,8 @@ export interface BackupRunStatus {
 
 export interface BackupSelectionSectionProps {
     readonly onBackupComplete: () => void;
+    /** Backup location the dump writes to; undefined keeps the legacy default tree. */
+    readonly locationId?: string;
 }
 
 function describeError(error: unknown, fallback: string): string {
@@ -55,7 +57,7 @@ function TableRow({ table, selected, disabled, onToggle }: TableRowProps) {
     );
 }
 
-export function BackupSelectionSection({ onBackupComplete }: BackupSelectionSectionProps) {
+export function BackupSelectionSection({ onBackupComplete, locationId }: BackupSelectionSectionProps) {
     const [selected, setSelected] = useState<readonly string[]>([]);
     const [isRunning, setIsRunning] = useState(false);
     const [status, setStatus] = useState<BackupRunStatus | null>(null);
@@ -86,7 +88,7 @@ export function BackupSelectionSection({ onBackupComplete }: BackupSelectionSect
         setIsRunning(true);
         setStatus(null);
         try {
-            const result = await triggerSelectiveBackup(orderedSelection);
+            const result = await triggerSelectiveBackup(orderedSelection, locationId);
             if (result.success) {
                 setStatus({ tone: 'started', message: result.message ?? `Selective backup of ${orderedSelection.length} table(s) started in the background.` });
                 onBackupComplete();

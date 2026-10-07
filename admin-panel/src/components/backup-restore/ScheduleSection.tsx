@@ -10,20 +10,25 @@ import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
 import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
-import { ScheduleForm, type FormValues } from '@/components/maintenance/ScheduleForm';
-import { ScheduleRow } from '@/components/maintenance/ScheduleRow';
+import { ScheduleForm, type FormValues } from '@/components/backup-restore/ScheduleForm';
+import { ScheduleRow } from '@/components/backup-restore/ScheduleRow';
 import {
     useScheduleForm,
     useScheduleList,
     useScheduleMutations,
     type Notice,
-} from '@/components/maintenance/useSchedules';
+} from '@/components/backup-restore/useSchedules';
 
 // ScheduleRunsSection imports summarizeTables from here; the re-export keeps that import path stable.
-export { formatInterval, summarizeTables } from '@/components/maintenance/ScheduleRow';
+export { formatInterval, summarizeTables } from '@/components/backup-restore/ScheduleRow';
 
 function toFormValues(schedule: BackupSchedule): FormValues {
-    return { name: schedule.name, interval: String(schedule.intervalMins), tables: schedule.tables };
+    return {
+        name: schedule.name,
+        interval: String(schedule.intervalMins),
+        tables: schedule.tables,
+        locationId: schedule.locationId,
+    };
 }
 
 export function ScheduleSection() {
@@ -88,6 +93,7 @@ export function ScheduleSection() {
                             warnings={form.warnings}
                             busy={form.isSubmitting}
                             submitLabel="Create schedule"
+                            locationOptions={form.locationOptions}
                             onChange={form.setValues}
                             onToggleTable={form.toggleTable}
                             onSubmit={() => void form.submit()}
@@ -109,6 +115,7 @@ export function ScheduleSection() {
                                             warnings={form.warnings}
                                             busy={form.isSubmitting}
                                             submitLabel="Save changes"
+                                            locationOptions={form.locationOptions}
                                             onChange={form.setValues}
                                             onToggleTable={form.toggleTable}
                                             onSubmit={() => void form.submit()}
@@ -127,6 +134,12 @@ export function ScheduleSection() {
                             </li>
                         ))}
                     </ul>
+                )}
+
+                {form.locationError !== null && (
+                    <Text variant="small" role="alert" className="text-destructive">
+                        {form.locationError}
+                    </Text>
                 )}
 
                 {notice !== null && notice.message.length > 0 && (

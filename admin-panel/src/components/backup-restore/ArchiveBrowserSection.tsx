@@ -15,12 +15,14 @@ import {
     formatBytes,
     formatDate,
     sortNewestFirst,
-} from '@/components/maintenance/archive-browser-helpers';
+} from '@/components/backup-restore/archive-browser-helpers';
 // Type-only: the runtime module pulls in node:fs and must stay out of the client bundle.
 import type { BackupArchive } from '@/lib/backup-archives';
 
 export interface ArchiveBrowserSectionProps {
     readonly refreshToken: number;
+    /** Backup location to list; undefined keeps the legacy default tree. */
+    readonly locationId?: string;
 }
 
 /** Bounded backoff: a selective dump is started detached, so the archive appears later. */
@@ -33,7 +35,7 @@ const BACKUP_WATCH_MESSAGE: Readonly<Record<Exclude<BackupWatchState, 'idle'>, s
     timedOut: 'Backup is still running in the background. It can take several minutes — use Refresh to check again.',
 };
 
-export function ArchiveBrowserSection({ refreshToken }: ArchiveBrowserSectionProps) {
+export function ArchiveBrowserSection({ refreshToken, locationId }: ArchiveBrowserSectionProps) {
     const [archives, setArchives] = useState<readonly BackupArchive[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
@@ -50,7 +52,7 @@ export function ArchiveBrowserSection({ refreshToken }: ArchiveBrowserSectionPro
         setIsLoading(true);
         setLoadError(null);
         try {
-            const result = await listArchives();
+            const result = await listArchives(locationId);
             if (result.success) {
                 const sorted = sortNewestFirst(result.archives ?? []);
                 knownArchivesRef.current = sorted;
@@ -65,7 +67,7 @@ export function ArchiveBrowserSection({ refreshToken }: ArchiveBrowserSectionPro
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [locationId]);
 
     const waitForPollDelay = useCallback(
         (ms: number): Promise<void> =>
@@ -94,7 +96,7 @@ export function ArchiveBrowserSection({ refreshToken }: ArchiveBrowserSectionPro
                 for (const delayMs of POLL_BACKOFF_MS) {
                     await waitForPollDelay(delayMs);
                     if (pollGenerationRef.current !== generation) return;
-                    const result = await listArchives().catch(() => null);
+                    const result = await listArchives(locationId).catch(() => null);
                     if (result === null || !result.success) continue;
                     const sorted = sortNewestFirst(result.archives ?? []);
                     if (archiveFingerprint(sorted) === baseline) continue;
@@ -108,7 +110,7 @@ export function ArchiveBrowserSection({ refreshToken }: ArchiveBrowserSectionPro
                 cancelPollDelayRef.current = null;
             }
         },
-        [waitForPollDelay],
+        [locationId, waitForPollDelay],
     );
 
     useEffect(() => () => {
@@ -132,7 +134,7 @@ export function ArchiveBrowserSection({ refreshToken }: ArchiveBrowserSectionPro
         setDeletingName(name);
         setNotice(null);
         try {
-            const result = await deleteArchive(name);
+            const result = await deleteArchive(name, locationId);
             if (result.success) {
                 setNotice(result.message ?? `Deleted archive ${name}.`);
                 await loadArchives();
@@ -198,7 +200,7 @@ export function ArchiveBrowserSection({ refreshToken }: ArchiveBrowserSectionPro
                                     </p>
                                 </div>
                                 <a
-                                    href={`/api/backups/${encodeURIComponent(archive.name)}`}
+                                    href={`/api/backups/${encodeURIComponent(archive.name)}${locationId === undefined ? '' : `?location=${encodeURIComponent(locationId)}`}`}
                                     target="_blank"
                                     rel="noreferrer"
                                     className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-sm font-medium text-primary hover:bg-primary/10 transition-colors shrink-0"

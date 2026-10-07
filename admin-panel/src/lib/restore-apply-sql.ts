@@ -248,3 +248,76 @@ export function sequenceResetSql(table: string, pkColumn: string, sequenceName: 
 export function sequenceNameQuerySql(table: string, pkColumn: string): string {
   return `SELECT coalesce(pg_catalog.pg_get_serial_sequence('public.${table}', '${pkColumn}'), '')`;
 }
+
+// ---------------------------------------------------------------------------
+// Conflict resolutions, written against the scratch copy
+// ---------------------------------------------------------------------------
+
+/**
+ * A key value as a literal. The value was read out of the catalog as text, so
+ * the server casts it back to the column's own type; there is no bind parameter
+ * here because `psql -c` speaks the simple query protocol and would leave one
+ * unbound.
+ */
+function keyLiteral(value: string): string {
+  return `'${sqlLiteral(value)}'`;
+}
+
+/** One row identified by its whole key, matched positionally against the key's columns. */
+function rowComparison(columns: readonly string[], values: readonly string[]): string {
+  if (columns.length !== values.length) throw new Error(`Refusing to compare ${columns.length} column(s) against ${values.length} value(s).`);
+  const names = columns.map(quoteIdentifier);
+  const literals = values.map(keyLiteral);
+  return names.length === 1 ? `${names[0]} = ${literals[0]}` : `(${names.join(', ')}) = (${literals.join(', ')})`;
+}
+
+/**
+ * Removes the archive row that collides with a live unique value.
+ *
+ * This is how "keep live" resolves a unique conflict: the live row keeps the
+ * value, and the archive row that would have carried it is not restored at all.
+ * Only the scratch copy is touched; nothing here reaches the live database.
+ */
+export function scratchDeleteRowSql(table: string, keyColumns: readonly string[], keyValues: readonly string[]): string {
+  return `DELETE FROM ${qualifiedTable('public', table)} WHERE ${rowComparison(keyColumns, keyValues)}`;
+}
+
+/**
+ * Rewrites a key on the scratch copy.
+ *
+ * This is how "take archive" resolves a unique conflict: the archive row takes
+ * the live row's key, so the merge's upsert lands on the live row and overwrites
+ * it with the archive's values instead of inserting a second row that would
+ * violate the unique index.
+ */
+export function scratchUpdateKeySql(table: string, keyColumns: readonly string[], fromValues: readonly string[], toValues: readonly string[]): string {
+  if (keyColumns.length !== toValues.length) throw new Error(`Refusing to rewrite ${keyColumns.length} column(s) from ${toValues.length} value(s).`);
+  const assignments = keyColumns.map((column, index) => `${quoteIdentifier(column)} = ${keyLiteral(toValues[index] ?? '')}`).join(', ');
+  return `UPDATE ${qualifiedTable('public', table)} SET ${assignments} WHERE ${rowComparison(keyColumns, fromValues)}`;
+}
+
+/** Rewrites one value of one row, which is how "autogenerate" resolves a unique conflict. */
+export function scratchUpdateValueSql(table: string, keyColumns: readonly string[], keyValues: readonly string[], column: string, newValue: string): string {
+  return `UPDATE ${qualifiedTable('public', table)} SET ${quoteIdentifier(column)} = ${keyLiteral(newValue)} WHERE ${rowComparison(keyColumns, keyValues)}`;
+}
+
+/** One scratch rewrite, as the planner produced it. */
+export interface ScratchRewrite {
+  readonly table: string;
+  readonly sql: string;
+}
+
+/**
+ * A rename and every rewrite it cascades into, as one transaction.
+ *
+ * Foreign-key triggers are switched off for the whole batch rather than replaced
+ * by a rewrite order. A child's referencing column can itself be part of its own
+ * key, so following the reference once is not always enough: the rewrite has to
+ * reach the rows that point at the child's new key as well, and no single column
+ * order makes every step of that legal while this schema's constraints — which
+ * are not deferrable — are enforced.
+ */
+export function scratchRewriteBatchSql(rewrites: readonly ScratchRewrite[]): string {
+  if (rewrites.length === 0) throw new Error('Refusing to build a scratch rewrite batch with no statements');
+  return ['BEGIN', 'SET LOCAL session_replication_role = replica', ...rewrites.map((rewrite) => `${rewrite.sql};`), 'COMMIT'].join('\n');
+}

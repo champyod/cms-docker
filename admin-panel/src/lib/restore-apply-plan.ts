@@ -12,7 +12,9 @@
 import { ADMIN_TABLE, BACKUP_TABLES } from '@/lib/backup-table-catalog';
 import { ADMIN_ID_COLUMN, ADMIN_NULL_TABLES, LARGE_OBJECT_TABLE, isStagingSchemaName } from '@/lib/restore-apply-sql';
 import type { PrivilegeFacts } from '@/lib/restore-apply-privileges';
-import { accountConflictErrors, privilegeWarnings } from '@/lib/restore-apply-privileges';
+import { accountConflictList, privilegeWarnings } from '@/lib/restore-apply-privileges';
+import { conflictMessage, fkOverwriteConflictId, fkOverwriteConflictMessage } from '@/lib/restore-apply-conflicts';
+import type { FkOverwriteConflict, RestoreConflict, UniqueValueConflict } from '@/lib/restore-apply-conflicts';
 import type { ApplyStrategies, TableValidateReport } from '@/lib/restore-apply';
 
 // ---------------------------------------------------------------------------
@@ -106,12 +108,27 @@ export interface ApplyFacts {
   readonly databaseSizeBytes: number;
   /** The archive-versus-live account and grant rows the privilege rules are decided from. */
   readonly privileges: PrivilegeFacts;
+  /** Unique values the archive and the live table both hold under different rows. */
+  readonly uniqueConflicts: readonly UniqueValueConflict[];
+  /**
+   * True when a unique check did not run to completion — the read hit its row cap,
+   * or an index could not be read out of the catalog. The conflicts found are then
+   * a lower bound, which the report says out loud rather than presenting as all of
+   * them.
+   */
+  readonly uniqueCheckSkipped: boolean;
 }
 
 export interface ApplyPlan {
   readonly tableReports: readonly TableValidateReport[];
   readonly errors: readonly string[];
   readonly warnings: readonly string[];
+  /**
+   * Every blocking conflict, structured so the client can prompt for one at a
+   * time. `errors` carries the same facts as messages, because a refusal has to
+   * read as a reason whether or not the operator is looking at the prompts.
+   */
+  readonly conflicts: readonly RestoreConflict[];
 }
 
 const SPACE_WARN_RATIO = 0.1;
@@ -144,25 +161,26 @@ function absentParents(facts: ApplyFacts, strategies: ApplyStrategies, table: st
 }
 
 /**
- * Prisma creates this schema's foreign keys as plain non-deferrable
- * constraints, so a per-table overwrite of a parent cannot delete the live
- * rows its applied children still reference. Rejecting the combination keeps
- * one transaction per table without a deferred-constraint assumption that the
- * database does not support.
+ * A table cannot be overwritten while an applied child references it: this
+ * schema's foreign keys are created as plain non-deferrable constraints, so a
+ * per-table overwrite would delete rows its applied children still reference.
+ * Rejecting the combination keeps one transaction per table without a
+ * deferred-constraint assumption that the database does not support.
  */
-export function overwriteParentConflicts(facts: ApplyFacts, strategies: ApplyStrategies): readonly string[] {
+export function fkOverwriteConflicts(facts: ApplyFacts, strategies: ApplyStrategies): readonly FkOverwriteConflict[] {
   const order = applyOrder(strategies);
-  const errors: string[] = [];
+  const conflicts: FkOverwriteConflict[] = [];
   for (const table of order) {
     if (strategies[table] !== 'overwrite') continue;
     const children = order.filter((candidate) => columnsOf(facts.liveFkParents, candidate).includes(table));
-    if (children.length > 0) {
-      errors.push(
-        `"${table}" cannot be overwritten while ${children.join(', ')} reference it: this schema's foreign keys are not deferrable, so a per-table delete would break them. Skip ${children.join(', ')} or merge them instead.`,
-      );
-    }
+    if (children.length > 0) conflicts.push({ id: fkOverwriteConflictId(table), kind: 'fk-overwrite', table, children });
   }
-  return errors;
+  return conflicts;
+}
+
+/** The same conflicts as text, kept as the shape the validate report's error list has always carried. */
+export function overwriteParentConflicts(facts: ApplyFacts, strategies: ApplyStrategies): readonly string[] {
+  return fkOverwriteConflicts(facts, strategies).map(fkOverwriteConflictMessage);
 }
 
 function spaceWarnings(facts: ApplyFacts, strategies: ApplyStrategies): readonly string[] {
@@ -261,16 +279,25 @@ export function planApply(strategies: ApplyStrategies, facts: ApplyFacts): Apply
       warnings: reportWarnings,
     });
   }
-  errors.push(...overwriteParentConflicts(facts, strategies));
-  errors.push(...accountConflictErrors(facts.privileges, strategies));
+  const conflicts: RestoreConflict[] = [
+    ...fkOverwriteConflicts(facts, strategies),
+    ...accountConflictList(facts.privileges, strategies),
+    ...facts.uniqueConflicts,
+  ];
+  errors.push(...conflicts.map(conflictMessage));
   warnings.push(
     ...fsobjectWarnings(facts, strategies),
     ...adminWarnings(strategies),
     ...privilegeWarnings(facts.privileges, strategies),
     ...spaceWarnings(facts, strategies),
   );
+  if (facts.uniqueCheckSkipped) {
+    warnings.push(
+      'The unique-value check did not cover every row: a read hit its row cap, or an index could not be read out. A unique conflict beyond what was checked would surface as a rolled-back table during the promote rather than a prompt here, so re-run the validate on a smaller selection if that matters.',
+    );
+  }
   if (strategies[LARGE_OBJECT_TABLE] !== 'skip' && !facts.archiveTables.has(LARGE_OBJECT_TABLE)) {
     errors.push(`"${LARGE_OBJECT_TABLE}" is applied but the archive carries no rows for it.`);
   }
-  return { tableReports, errors, warnings };
+  return { tableReports, errors, warnings, conflicts };
 }

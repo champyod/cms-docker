@@ -86,6 +86,76 @@ export function databaseSizeQuerySql(): string {
 }
 
 // ---------------------------------------------------------------------------
+// Unique-index checks
+// ---------------------------------------------------------------------------
+
+/**
+ * Every unique index on the live `public` schema, as postgres describes it.
+ *
+ * `pg_indexes` is read rather than `pg_index`/`pg_attribute` because the check
+ * needs the column list in the same shape a reader can see it, and an index whose
+ * columns cannot be read out is refused rather than acted on. A primary-key index
+ * is unique and appears here too; the caller drops it because its columns already
+ * contain the key the upsert matches on.
+ */
+export function uniqueIndexesSql(): string {
+  return [
+    'SELECT tablename AS "table", indexname AS "name", indexdef AS "definition"',
+    'FROM pg_indexes',
+    "WHERE schemaname = 'public' AND indexdef LIKE 'CREATE UNIQUE INDEX%'",
+    'ORDER BY tablename, indexname',
+  ].join(' ');
+}
+
+/** One side's unique values and the rows carrying them, as JSON so no separator has to be trusted. */
+export function uniquePairRowsSql(
+  schema: string,
+  table: string,
+  indexColumns: readonly string[],
+  pkColumns: readonly string[],
+  limit: number,
+): string {
+  const values = jsonTextArray(indexColumns);
+  const key = jsonTextArray(pkColumns);
+  const notNull = [...indexColumns, ...pkColumns].map((column) => `${quoteIdentifier(column)} IS NOT NULL`).join(' AND ');
+  return `SELECT coalesce(json_agg(v), '[]'::json)::text FROM (SELECT json_build_array(${values}, ${key}) AS v FROM ${qualifiedTable(schema, table)} WHERE ${notNull} LIMIT ${boundedRowLimit(limit)}) s`;
+}
+
+function jsonTextArray(columns: readonly string[]): string {
+  return `json_build_array(${columns.map((column) => `${quoteIdentifier(column)}::text`).join(', ')})`;
+}
+
+/** A NULL in a unique column never collides with another row by default, so those rows are not compared. */
+function boundedRowLimit(limit: number): number {
+  return Math.max(1, Math.trunc(limit));
+}
+
+/**
+ * Every foreign-key column pair in the scratch copy, one row per column.
+ *
+ * `pg_constraint` is read rather than `information_schema` because the column
+ * mapping has to survive a composite key: `unnest(conkey, confkey)` pairs the
+ * referencing and referenced columns positionally, which is the only thing that
+ * keeps a two-column key aligned. `parent_table` is carried per row so the caller
+ * can group a constraint's rows back into one edge.
+ */
+export function fkEdgesSql(): string {
+  return [
+    'SELECT con.conname AS "constraint", c.relname AS "childTable", a.attname AS "childColumn",',
+    'pc.relname AS "parentTable", pa.attname AS "parentColumn"',
+    'FROM pg_constraint AS con',
+    'JOIN pg_class AS c ON c.oid = con.conrelid',
+    'JOIN pg_class AS pc ON pc.oid = con.confrelid',
+    'JOIN pg_namespace AS n ON n.oid = c.relnamespace',
+    'JOIN LATERAL unnest(con.conkey, con.confkey) WITH ORDINALITY AS k(child_attnum, parent_attnum, position) ON true',
+    'JOIN pg_attribute AS a ON a.attrelid = c.oid AND a.attnum = k.child_attnum',
+    'JOIN pg_attribute AS pa ON pa.attrelid = pc.oid AND pa.attnum = k.parent_attnum',
+    "WHERE con.contype = 'f' AND n.nspname = 'public'",
+    'ORDER BY c.relname, con.conname, k.position',
+  ].join(' ');
+}
+
+// ---------------------------------------------------------------------------
 // Privilege rows, read on both sides of the comparison
 // ---------------------------------------------------------------------------
 

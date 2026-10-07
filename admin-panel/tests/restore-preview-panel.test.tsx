@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import { PromoteProgressList, PromoteRecords } from '@/components/maintenance/RestorePreviewPanel';
+import { PromoteProgressList, PromoteRecords } from '@/components/backup-restore/RestorePreviewPanel';
 import type { PromoteReport, TableApplyRecord } from '@/lib/restore-apply';
 import type { PromotePhase, PromoteProgressView } from '@/lib/restore-apply-progress';
 
