@@ -10,7 +10,7 @@ use super::{
 use crate::tui::components::form_field::FieldKind;
 
 /// Flags the encoder emits, excluding the ones that are always present.
-const ENCODED_FLAGS: [&str; 18] = [
+const ENCODED_FLAGS: [&str; 23] = [
     "--domain",
     "--admin-domain",
     "--oj-domain",
@@ -21,6 +21,11 @@ const ENCODED_FLAGS: [&str; 18] = [
     "--extra-domains",
     "--dns",
     "--dns-credentials",
+    "--challenge",
+    "--ca",
+    "--acme-server",
+    "--acme-client",
+    "--tls-address",
     "--deploy-hook",
     "--retry-attempts",
     "--retry-interval",
@@ -140,8 +145,8 @@ fn the_retry_and_dns_rows_read_the_keys_the_script_sources() {
         ("--backup-certs", "BACKUP_CERTS"),
         ("--lock", "USE_LOCK"),
         ("--wait-port80", "WAIT_PORT80_TIMEOUT"),
-        ("--dns", "DNS_PROVIDER"),
-        ("--dns-credentials", "DNS_CREDENTIALS_FILE"),
+        ("--dns", "ACME_DNS_PROVIDER"),
+        ("--dns-credentials", "ACME_DNS_CREDENTIALS_FILE"),
         ("--extra-domains", "EXTRA_DOMAINS"),
         ("--deploy-hook", "DEPLOY_HOOK"),
         ("--oj-domain", "CONTEST_DOMAIN"),

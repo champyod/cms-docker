@@ -70,9 +70,9 @@ services:
       - "${DOMAIN_NGINX_BIND_IP:-}:${DOMAIN_NGINX_HTTPS_PORT:-443}:443"
 
   certbot:
-    # For DNS-01 set CERTBOT_IMAGE=certbot/dns-cloudflare; the webroot default image
-    # carries no DNS plugin.
-    image: ${CERTBOT_IMAGE:-certbot/certbot}
+    # For DNS-01 set ACME_CERTBOT_IMAGE=certbot/dns-cloudflare; the webroot default
+    # image carries no DNS plugin.
+    image: ${ACME_CERTBOT_IMAGE:-certbot/certbot}
     container_name: grader-certbot
     restart: unless-stopped
     environment:
@@ -89,7 +89,12 @@ services:
       CERT_EMAIL: ${CERT_EMAIL:-}
       # Empty = HTTP-01 webroot. Set to e.g. cloudflare to issue/renew with DNS-01;
       # the credentials ini is read from /etc/letsencrypt/<provider>.ini.
-      DNS_PROVIDER: ${DNS_PROVIDER:-}
+      ACME_DNS_PROVIDER: ${ACME_DNS_PROVIDER:-}
+      # renew carries no --server: certbot reuses the directory the lineage was issued against.
+      ACME_CHALLENGE: ${ACME_CHALLENGE:-}
+      ACME_CA: ${ACME_CA:-}
+      ACME_DIRECTORY_URL: ${ACME_DIRECTORY_URL:-}
+      LE_STAGING: ${LE_STAGING:-}
       # Initial-issuance retry policy. WHY the container needs its own copy: the
       # host script (scripts/__domain.sh) handles --auto-retry/--retry-attempts for
       # an operator-driven run, but this container is the unattended path — nothing
@@ -133,10 +138,21 @@ services:
       /bin/sh -c 'trap exit TERM;
       LINEAGE="$${CERT_LINEAGE_DOMAIN:-$${DOMAIN_NAME:-$${ADMIN_DOMAIN:-$${OJ_DOMAIN:-$${RANKING_DOMAIN}}}}}";
       STATUS=/etc/letsencrypt/certbot-status;
-      if [ -n "$$DNS_PROVIDER" ]; then
-        CHALLENGE="--dns-$$DNS_PROVIDER --dns-$$DNS_PROVIDER-credentials /etc/letsencrypt/$$DNS_PROVIDER.ini";
-      else
-        CHALLENGE="--webroot -w /var/www/certbot";
+      MODE="http-01";
+      CHALLENGE="--webroot -w /var/www/certbot";
+      SERVER="";
+      if [ -n "$$ACME_DIRECTORY_URL" ]; then SERVER="--server $$ACME_DIRECTORY_URL";
+      elif [ "$$ACME_CA" = "letsencrypt-staging" ] || [ "$$LE_STAGING" = "1" ]; then SERVER="--server https://acme-staging-v02.api.letsencrypt.org/directory";
+      elif [ "$$ACME_CA" = "zerossl" ]; then SERVER="--server https://acme.zerossl.com/v2/DV90";
+      elif [ "$$ACME_CA" = "buypass" ]; then SERVER="--server https://api.buypass.com/acme/directory";
+      fi;
+      if [ "$$ACME_CHALLENGE" = "tls-alpn-01" ]; then MODE="external";
+      elif [ "$$ACME_CHALLENGE" = "dns-01" ]; then
+        if [ -n "$$ACME_DNS_PROVIDER" ]; then
+          MODE="dns-01";
+          CHALLENGE="--dns-$$ACME_DNS_PROVIDER --dns-$$ACME_DNS_PROVIDER-credentials /etc/letsencrypt/$$ACME_DNS_PROVIDER.ini";
+        else MODE="dns-01-error";
+        fi;
       fi;
       mark() { printf "%s %s\n" "$$1" "$$2" > "$$STATUS"; };
       is_retriable() {
@@ -151,6 +167,15 @@ services:
       elif [ -z "$$CERT_EMAIL" ]; then
         echo "CERT_EMAIL is empty — cannot register with Let.s Encrypt; set it in config.toml [core]";
         mark error "CERT_EMAIL empty";
+      elif [ "$$MODE" = "external" ]; then
+        echo "ACME_CHALLENGE=tls-alpn-01 cannot be answered by certbot, which never shipped TLS-ALPN-01.";
+        echo "Renew with ./cms domain renew — it takes host :443 from grader-nginx-proxy for the run.";
+        mark external "tls-alpn-01 is host-driven: run ./cms domain renew";
+        while :; do sleep 12h & wait $${!}; done;
+      elif [ "$$MODE" = "dns-01-error" ]; then
+        echo "ACME_CHALLENGE=dns-01 also needs ACME_DNS_PROVIDER (e.g. cloudflare) in config.toml [admin]";
+        mark error "ACME_CHALLENGE=dns-01 needs ACME_DNS_PROVIDER";
+        while :; do sleep 12h & wait $${!}; done;
       elif [ ! -d "/etc/letsencrypt/live/$$LINEAGE" ]; then
         set --;
         for d in "$$DOMAIN_NAME" "$$ADMIN_DOMAIN" "$$OJ_DOMAIN" "$$RANKING_DOMAIN"; do
@@ -159,7 +184,7 @@ services:
         mark pending "attempting issuance for $$LINEAGE";
         attempt=1; interval="$$CERT_RETRY_INTERVAL";
         while :; do
-          out=$$(certbot certonly $$CHALLENGE "$$@" --cert-name "$$LINEAGE" --email "$$CERT_EMAIL" --agree-tos --non-interactive 2>&1);
+          out=$$(certbot certonly $$CHALLENGE $$SERVER "$$@" --cert-name "$$LINEAGE" --email "$$CERT_EMAIL" --agree-tos --non-interactive 2>&1);
           rc=$$?;
           if [ $$rc -eq 0 ] && [ -d "/etc/letsencrypt/live/$$LINEAGE" ]; then
             mark ok "certificate issued for $$LINEAGE";

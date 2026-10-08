@@ -147,5 +147,33 @@ else
 fi
 
 echo ""
+echo "=== Test 8: retired ACME keys move onto the ACME_* namespace ==="
+setup_test_root
+# Written after the [core] block so CERTBOT_IMAGE is still inside it when the pass runs.
+cat >> "$TEST_ROOT/config.toml" <<'TOML'
+CERTBOT_IMAGE = "certbot/dns-cloudflare"
+
+[admin]
+DNS_PROVIDER = "cloudflare"
+DNS_CREDENTIALS_FILE = "/etc/lego/cloudflare.ini"
+TOML
+sync_rc=0
+run_sync || sync_rc=$?
+assert_exit 0 "$sync_rc" "sync with retired ACME keys exits 0"
+assert_not_grep "$TEST_ROOT/config.toml" '^DNS_PROVIDER' "DNS_PROVIDER line is gone"
+assert_not_grep "$TEST_ROOT/config.toml" '^DNS_CREDENTIALS_FILE' "DNS_CREDENTIALS_FILE line is gone"
+assert_not_grep "$TEST_ROOT/config.toml" '^CERTBOT_IMAGE' "CERTBOT_IMAGE line is gone"
+assert_grep "$TEST_ROOT/config.toml" 'ACME_DNS_PROVIDER = "cloudflare"' "the DNS provider value was carried across"
+assert_grep "$TEST_ROOT/config.toml" 'ACME_DNS_CREDENTIALS_FILE = "/etc/lego/cloudflare.ini"' "the credentials path was carried across"
+assert_grep "$TEST_ROOT/config.toml" 'ACME_CERTBOT_IMAGE = "certbot/dns-cloudflare"' "the certbot image was carried across"
+if [[ -f "$TEST_ROOT/.env" ]]; then
+  assert_grep "$TEST_ROOT/.env" '^ACME_DNS_PROVIDER=cloudflare' ".env carries the DNS provider under its new name"
+  assert_grep "$TEST_ROOT/.env" '^ACME_CERTBOT_IMAGE=certbot/dns-cloudflare' ".env carries the certbot image under its new name"
+  assert_not_grep "$TEST_ROOT/.env" '^CERTBOT_IMAGE=' ".env no longer carries the old certbot image name"
+else
+  fail ".env was not created for the ACME migration"
+fi
+
+echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 [[ "$FAIL" -eq 0 ]]

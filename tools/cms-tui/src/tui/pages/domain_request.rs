@@ -45,6 +45,11 @@ pub fn request(form: &ConfigForm) -> DomainSetupRequest {
         extra_domains: text(form, "--extra-domains"),
         dns: text(form, "--dns"),
         dns_credentials: text(form, "--dns-credentials"),
+        challenge: text(form, "--challenge"),
+        ca: text(form, "--ca"),
+        acme_server: text(form, "--acme-server"),
+        acme_client: text(form, "--acme-client"),
+        tls_address: text(form, "--tls-address"),
         deploy_hook: text(form, "--deploy-hook"),
         // WHY the whole scope: the form has no row for narrowing, and a setup form that
         // rendered nginx would quietly stop issuing the certificate it is named for.

@@ -31,7 +31,7 @@ APT_PORTS_MIRROR = "ports.ubuntu.com"   # str; ARM64 apt mirror (Raspberry Pi wo
 BASE_IMAGE = "ubuntu:noble"             # str; worker/base build image
 DB_BIND_IP = "127.0.0.1"                # str; address postgres publishes 5432 on
 CERT_EMAIL = ""                         # str; Let's Encrypt registration email
-CERTBOT_IMAGE = "certbot/certbot"       # str; certbot image; set certbot/dns-cloudflare for DNS-01
+ACME_CERTBOT_IMAGE = "certbot/certbot"  # str; certbot image; set certbot/dns-cloudflare for DNS-01
 TLS_CERTRESOLVER = "letsencrypt"        # str; traefik certresolver label
 CMS_RANKING_CONFIG = "/usr/local/etc/cms_ranking.toml" # container path of the generated cms_ranking.toml the ranking web server reads
 
@@ -101,8 +101,18 @@ BACKUP_CERTS = 0          # enum:0,1; back up the cert store before replacing it
 AUTO_RENEW = 0            # enum:0,1; end a live setup by forcing a renewal
 CERT_RETRY_INTERVAL_CAP = 120  # num; seconds; ceiling the retry backoff grows to
 USE_LOCK = 0              # enum:0,1; flock to stop overlapping runs
-DNS_PROVIDER = ""         # str; DNS-01 provider (e.g. cloudflare); empty = HTTP-01
-DNS_CREDENTIALS_FILE = "" # str; credential file for the DNS plugin
+ACME_CHALLENGE = "http-01" # enum:http-01,dns-01,tls-alpn-01; how the CA proves you own the name — http-01 needs an answerable :80, dns-01 needs ACME_DNS_PROVIDER, tls-alpn-01 needs ACME_CLIENT=lego and a free :443
+ACME_CLIENT = "certbot"   # enum:certbot,lego; which client runs the challenge — tls-alpn-01 requires lego, since certbot never shipped that challenge and removed the code in 5.0.0
+ACME_CA = "letsencrypt"   # enum:letsencrypt,letsencrypt-staging,zerossl,buypass,custom; which ACME directory issues the certificate; LE_STAGING=1 is an alias for letsencrypt-staging
+ACME_DIRECTORY_URL = ""   # str; explicit ACME directory URL, taking precedence over ACME_CA — use for a CA not named by the enum
+ACME_DNS_PROVIDER = ""    # str; DNS-01 plugin name (e.g. cloudflare), invoked as --dns-<name>; required by ACME_CHALLENGE=dns-01
+ACME_DNS_CREDENTIALS_FILE = "" # str; credential file for the DNS plugin; empty derives one from CLOUDFLARE_API_TOKEN
+ACME_TLS_ALPN_ADDRESS = ":443" # str; lego --tls.address (interface:port) it binds while the proxy releases :443; leave :443 to bind every interface
+ACME_LEGO_IMAGE = "goacme/lego:v5.5.2" # str; pinned lego image, so a challenge run never silently upgrades under a live handover
+ACME_HTTP01_ON_443 = 0    # enum:0,1; 1 = serve the challenge on :443 and have :80 redirect there, for a host whose port 80 only redirects (Let's Encrypt follows up to 10 redirects)
+ACME_HANDOVER_TIMEOUT = 60 # num; seconds to wait for :443 to free after the proxy stops, and to return before it is restarted
+ACME_RENEW_AT_UTC = "03:00" # str; HH:MM UTC at which an unattended tls-alpn-01 renewal may take :443; empty disables it and leaves renewal to you
+ACME_RENEW_BEFORE_DAYS = 7 # num; days of validity left before a tls-alpn-01 certificate counts as due; the handover waits for ACME_RENEW_AT_UTC on the first such day
 DOMAIN_NGINX_BIND_IP = "" # str; address the domain nginx publishes 80/443 on; empty=engine wildcard on every interface (IPv4 and IPv6) — the public entry, set it to the box address to narrow it
 HSTS_MAX_AGE = 31536000        # num; seconds; Strict-Transport-Security max-age emitted on every domain nginx vhost; 1 year — lower it only while staging
 SOCKET_PROXY = 0                # enum:0,1; reserved toggle — no code reads it; the filtered-Docker-API proxy for the panel is started manually via docker-compose.socket-proxy.yml
@@ -214,7 +224,7 @@ VAULT_PATH = "secret/cms"       # str; Vault KV path the CMS secrets are stored 
 DNSSEC_ENABLED = 0              # enum:0,1; requires DNS control
 CAA_ENABLED = 0                 # enum:0,1; 1 = publish a DNS CAA record restricting issuance to CAA_ISSUER — set at your DNS provider (docs/dnssec-caa-guide.md)
 CAA_ISSUER = "letsencrypt.org"  # str; certificate authority allowed to issue for the domain when CAA_ENABLED=1
-DNS_PROVIDER = ""               # enum:"",cloudflare; "" = HTTP-01 webroot, cloudflare = DNS-01 (wildcard / :80 unreachable)
+ACME_DNS_PROVIDER = ""          # enum:"",cloudflare; mirror of [admin] — "" = HTTP-01 webroot, cloudflare = DNS-01 (wildcard / :80 unreachable)
 CLOUDFLARE_API_TOKEN = ""       # secret; DNS-01 only — zone:DNS:Edit token, turned into certbot's cloudflare.ini
 MTLS_WORKERS_ENABLED = 0        # enum:0,1; mirrors [core]
 WAF_ENABLED = 0                 # enum:0,1; mirrors [admin]

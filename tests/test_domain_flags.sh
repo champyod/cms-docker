@@ -100,7 +100,10 @@ for pair in \
   '--retry-attempts 3' '--retry-interval 20' '--wait-port80 60' \
   '--extra-domains a.example.org' '--dns cloudflare' \
   '--dns-credentials /tmp/creds.ini' '--deploy-hook reload-nginx' \
-  '--cert provided' '--cert-path /tmp/f.pem' '--key-path /tmp/k.pem'
+  '--cert provided' '--cert-path /tmp/f.pem' '--key-path /tmp/k.pem' \
+  '--challenge http-01' '--ca letsencrypt' \
+  '--acme-server https://acme.example/directory' '--acme-client certbot' \
+  '--tls-address 192.0.2.10:443'
 do
   dir="$(sandbox)"
   # shellcheck disable=SC2086

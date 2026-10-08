@@ -139,8 +139,13 @@ pub const FIELDS: &[FieldSpec] = &[
     switch("--auto-renew", "AUTO_RENEW"),
     number("--wait-port80", "WAIT_PORT80_TIMEOUT"),
     text("--extra-domains", "EXTRA_DOMAINS"),
-    text("--dns", "DNS_PROVIDER"),
-    text("--dns-credentials", "DNS_CREDENTIALS_FILE"),
+    text("--dns", "ACME_DNS_PROVIDER"),
+    text("--dns-credentials", "ACME_DNS_CREDENTIALS_FILE"),
+    text("--challenge", "ACME_CHALLENGE"),
+    text("--ca", "ACME_CA"),
+    text("--acme-server", "ACME_DIRECTORY_URL"),
+    text("--acme-client", "ACME_CLIENT"),
+    text("--tls-address", "ACME_TLS_ALPN_ADDRESS"),
     text("--deploy-hook", "DEPLOY_HOOK"),
 ];
 

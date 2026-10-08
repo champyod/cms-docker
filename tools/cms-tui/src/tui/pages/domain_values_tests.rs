@@ -70,7 +70,7 @@ fn env_values_prefill_the_rows_that_read_them() {
     write(
         &root,
         ".env",
-        "DNS_PROVIDER=cloudflare\nWAIT_PORT80_TIMEOUT=45\nUSE_LOCK=1\n",
+        "ACME_DNS_PROVIDER=cloudflare\nWAIT_PORT80_TIMEOUT=45\nUSE_LOCK=1\n",
     );
     let form = form_from_disk(&root);
     assert_eq!(form.value_of("--dns"), "cloudflare");

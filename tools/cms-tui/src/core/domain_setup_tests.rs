@@ -45,6 +45,9 @@ fn every_value_flag_is_emitted_in_script_order() {
         extra_domains: "a.example.org b.example.org".to_string(),
         dns: "cloudflare".to_string(),
         dns_credentials: "/etc/certs/dns.ini".to_string(),
+        challenge: "tls-alpn-01".to_string(),
+        ca: "zerossl".to_string(),
+        acme_client: "lego".to_string(),
         deploy_hook: "systemctl reload nginx".to_string(),
         ..base()
     };
@@ -72,6 +75,12 @@ fn every_value_flag_is_emitted_in_script_order() {
             "cloudflare",
             "--dns-credentials",
             "/etc/certs/dns.ini",
+            "--challenge",
+            "tls-alpn-01",
+            "--ca",
+            "zerossl",
+            "--acme-client",
+            "lego",
             "--deploy-hook",
             "systemctl reload nginx",
             "--yes",

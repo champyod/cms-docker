@@ -6,6 +6,8 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 WorkingDirectory=@CMS_DIR@
-ExecStart=/usr/bin/env bash -c 'certbot renew --quiet --deploy-hook "@CMS_DIR@/scripts/__cert_reload.sh"'
+# One command for every certificate in the store, and --due so a timer never reissues one that is fine.
+ExecStart=/usr/bin/env bash -c '"@CMS_DIR@/scripts/__domain.sh" renew --due --apply'
 ExecStartPost=/usr/bin/env bash -c 'test -f .env && . .env && test -n "${DISCORD_WEBHOOK_URL:-}" && curl -sS -X POST "${DISCORD_WEBHOOK_URL}" -H "Content-Type: application/json" -d "{\"content\":\":lock: SSL cert renewed on $(hostname)\"}" || true'
-TimeoutStartSec=300
+# Seconds a TLS-ALPN-01 handover may take: stop the proxy, issue, start it again.
+TimeoutStartSec=600

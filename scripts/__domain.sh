@@ -28,6 +28,12 @@ cd "$REPO_ROOT"
 source "${SCRIPT_DIR}/__lib/common.sh"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/__domain_routes.sh"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__acme.sh"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__acme_tls_alpn.sh"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__cert_import.sh"
 
 env_val() {
   awk -F= -v k="$2" '$1==k {v=$0; sub(/^[^=]*=/,"",v); gsub(/^[ \t]+|[ \t\r]+$/,"",v); print v; exit}' "$1" 2>/dev/null || true
@@ -230,13 +236,42 @@ SETUP_RENDER_PROXY=1
 # certificate that is still valid.
 AUTO_RENEW="${AUTO_RENEW:-0}"
 REVOKE_REASON="${REVOKE_REASON:-unspecified}"
-# DNS-01 challenge (optional). An empty DNS_PROVIDER keeps the HTTP-01 webroot path
-# exactly as before; setting it switches issuance to the provider's DNS plugin,
-# which is what a wildcard certificate or a host that cannot answer :80 requires.
-DNS_PROVIDER="${DNS_PROVIDER:-}"
-DNS_CREDENTIALS_FILE="${DNS_CREDENTIALS_FILE:-}"
+# An empty ACME_DNS_PROVIDER keeps HTTP-01; setting it switches issuance to the plugin.
+ACME_DNS_PROVIDER="${ACME_DNS_PROVIDER:-}"
+ACME_DNS_CREDENTIALS_FILE="${ACME_DNS_CREDENTIALS_FILE:-}"
+ACME_CERTBOT_IMAGE="${ACME_CERTBOT_IMAGE:-${CERTBOT_IMAGE:-}}"
+# The pre-namespace names are still read, so an un-synced .env drops DNS-01 no further
+# than one warning telling the operator to run './cms config sync'.
+if [[ -z "${ACME_DNS_PROVIDER}" && -n "${DNS_PROVIDER:-}" ]]; then
+  ACME_DNS_PROVIDER="$DNS_PROVIDER"
+  log_warn "DNS_PROVIDER is deprecated — ACME_DNS_PROVIDER carries it now; run './cms config sync'"
+fi
+if [[ -z "${ACME_DNS_CREDENTIALS_FILE}" && -n "${DNS_CREDENTIALS_FILE:-}" ]]; then
+  ACME_DNS_CREDENTIALS_FILE="$DNS_CREDENTIALS_FILE"
+  log_warn "DNS_CREDENTIALS_FILE is deprecated — ACME_DNS_CREDENTIALS_FILE carries it now; run './cms config sync'"
+fi
 CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
-readonly LE_STAGING_DIRECTORY="https://acme-staging-v02.api.letsencrypt.org/directory"
+# Defaults reproduce what existed before these keys: HTTP-01 through certbot.
+ACME_CHALLENGE="${ACME_CHALLENGE:-http-01}"
+ACME_CLIENT="${ACME_CLIENT:-certbot}"
+ACME_CA="${ACME_CA:-letsencrypt}"
+ACME_DIRECTORY_URL="${ACME_DIRECTORY_URL:-}"
+ACME_TLS_ALPN_ADDRESS="${ACME_TLS_ALPN_ADDRESS:-:443}"
+ACME_LEGO_IMAGE="${ACME_LEGO_IMAGE:-goacme/lego:v5.5.2}"
+ACME_HTTP01_ON_443="${ACME_HTTP01_ON_443:-0}"
+ACME_HANDOVER_TIMEOUT="${ACME_HANDOVER_TIMEOUT:-$ACME_HANDOVER_TIMEOUT_DEFAULT}"
+# `-` not `:-`: an explicit empty window means "never", and 0 means "due on issue".
+ACME_RENEW_AT_UTC="${ACME_RENEW_AT_UTC-$ACME_RENEW_AT_UTC_DEFAULT}"
+ACME_RENEW_BEFORE_DAYS="${ACME_RENEW_BEFORE_DAYS-$ACME_RENEW_BEFORE_DAYS_DEFAULT}"
+# 0 means `renew --due`, which asks the CA; without it the run forces a reissue now.
+RENEW_DUE_ONLY=0
+
+# The configured value of every key a flag can override, captured before argv is read.
+CONFIGURED_DOMAIN_CERT_METHOD="$DOMAIN_CERT_METHOD"
+CONFIGURED_ACME_CHALLENGE="$ACME_CHALLENGE"
+CONFIGURED_ACME_CA="$ACME_CA"
+CONFIGURED_ACME_DIRECTORY_URL="$ACME_DIRECTORY_URL"
+CONFIGURED_ACME_CLIENT="$ACME_CLIENT"
 readonly PORT80_POLL_INTERVAL_S=5
 readonly PORT80_PROBE_TIMEOUT_S=5
 readonly CERT_DIR_NAME="letsencrypt"
@@ -297,6 +332,8 @@ Extended options:
   --deploy-hook <command>     Run <command> after a successful issue or renewal
   --staging                   Use the Let's Encrypt staging CA (untrusted certs)
   --force                     Re-issue even when the current certificate is valid
+  --due                       Renew only what the CA reports as due instead of
+                              reissuing now — what a scheduler passes
   --wait-port80 <seconds>     Wait for HTTP :80 to answer before issuing
   --backup-certs              Snapshot the certificate store before changes
   --lock                      Serialise runs with flock
@@ -308,6 +345,17 @@ Extended options:
                               be reached from Let's Encrypt
   --dns-credentials <file>    Plugin credentials ini; defaults to a file generated
                               from CLOUDFLARE_API_TOKEN for the cloudflare provider
+  --challenge <http-01|dns-01|tls-alpn-01>
+                              Override ACME_CHALLENGE. tls-alpn-01 answers on :443
+                              and needs --acme-client lego
+  --ca <name>                 Override ACME_CA (letsencrypt, letsencrypt-staging,
+                              zerossl, buypass, custom)
+  --acme-server <url>         Override ACME_DIRECTORY_URL, for a CA the --ca list
+                              does not name
+  --acme-client <certbot|lego>
+                              Override ACME_CLIENT; lego is the only tls-alpn-01 client
+  --tls-address <addr>        Override ACME_TLS_ALPN_ADDRESS, the :443 address lego
+                              binds while the proxy is stopped
   --config <file>             Use an alternate env file instead of ./.env
 
 Optional features (disabled by default — prod stays off):
@@ -574,15 +622,8 @@ _issue_certificate() {
 # ---------------------------------------------------------------------------
 # Setup subcommand
 # ---------------------------------------------------------------------------
-# Runs one pass of the domain setup sequence. <issue_certificate> is the
-# certificate half, <render_proxy> the nginx half; the three commands are the three
-# combinations of those two booleans, so a narrowing is a smaller sequence and
-# never a second copy of it.
-_run_setup_scope() {
-  local issue_certificate="$1" render_proxy="$2"
-  _resolve_domain_targets
-  _require_at_least_one_domain
-
+# Announces what this run is about, before anything changes.
+_log_setup_banner() {
   log_info "Domain setup — mode: $([ "$DRY_RUN" -eq 1 ] && echo 'DRY-RUN' || echo 'APPLY')"
   log_info "Configured domains: $(_domain_list)"
   [[ -n "$OJ_DOMAIN" ]] || log_info "OJ domain not set — OJ vhost and SAN omitted"
@@ -592,45 +633,47 @@ _run_setup_scope() {
   _prompt_optional_features
   _log_optional_features
   [[ "$LE_STAGING" == "1" ]] && log_warn "Let's Encrypt STAGING mode — issued certificates are not browser-trusted"
+  return 0
+}
 
-  # WHY the check belongs to the certificate half alone: the email is a
-  # certbot registration argument, and the port-80 probe exists because the HTTP-01
-  # challenge has to be answerable. Neither has anything to do with writing an
-  # nginx config, so `proxy` must not be asked for an email or blocked on :80.
+# Runs one pass of the domain setup sequence. <issue_certificate> is the
+# certificate half, <render_proxy> the nginx half; the three commands are the three
+# combinations of those two booleans, so a narrowing is a smaller sequence and
+# never a second copy of it.
+_run_setup_scope() {
+  local issue_certificate="$1" render_proxy="$2"
+  _resolve_domain_targets
+  _require_at_least_one_domain
+  _log_setup_banner
+
+  # Only the certificate half: the email and the :80 probe belong to issuance, not to
+  # writing an nginx config, so `proxy` must not be asked for either.
   if [[ "$issue_certificate" == "1" ]] && [[ "$DOMAIN_CERT_METHOD" == "letsencrypt" ]]; then
-    [[ -n "$CERT_EMAIL" ]] || log_die "CERT_EMAIL is required for letsencrypt — set env or pass --email" 1
-    _preflight_port80
+    acme_describe_run
   fi
 
-  # WHY the backup and the store directory are part of the certificate half: both
-  # exist for the certificate store, and the proxy half must not even create the
-  # directory it was told not to touch.
+  # Only the certificate half, because the proxy half must not create a store it was
+  # told not to touch.
   if [[ "$issue_certificate" == "1" ]]; then
     _backup_certificates
     _ensure_cert_store_dir
+    cert_migrate_flat_store
   fi
 
-  # WHY the three nginx steps are gated one at a time rather than as a block: the
-  # cert scope drops the render and, with it, the validation that gates that render,
-  # while the proxy scope drops only the issuance between them. A block could not
-  # express either shape. The order is unchanged, so a bare run renders, issues and
-  # validates exactly as it always did.
+  # The three steps are gated one at a time: the cert scope drops the render, the proxy
+  # scope drops the issuance, and a block could express neither.
   [[ "$render_proxy" == "1" ]] && _render_nginx_config
-
   [[ "$issue_certificate" == "1" ]] && _issue_certificate
-
   [[ "$render_proxy" == "1" ]] && _validate_nginx_config
 
-  # Explicit success: under the cert scope the last gate above is a false test, so
-  # the function would otherwise return non-zero and abort the run at the call site.
+  # Explicit success: the last gate is false under the cert scope, and set -e would abort.
   return 0
 }
 
 # Ends a setup: the reload belongs to the proxy half and nothing else.
 _run_setup_tail() {
-  # Reloaded only here: issuance and validation do not, so a plain `setup` still picks
-  # up the renewed certificate the same way it did before, from the rendered config.
-  if [[ "$SETUP_ISSUE_CERT" == "0" ]] && [[ "$SETUP_RENDER_PROXY" == "1" ]]; then
+  # nginx picks up a new certificate only on reload; `cert` promises to leave it alone.
+  if [[ "$SETUP_RENDER_PROXY" == "1" ]]; then
     if [[ "$DRY_RUN" -eq 1 ]]; then
       log_info "[dry-run] would reload the running nginx container"
     else
@@ -733,11 +776,13 @@ build_cert_domains() {
   return 0
 }
 
-# Populates CERTBOT_FLAGS with the shared invocation flags. --staging, --force and
-# --deploy-hook each append only when requested, so the default call is unchanged.
+# Populates CERTBOT_FLAGS with the shared invocation flags. The ACME directory, --force
+# and --deploy-hook each append only when requested, so the default call is unchanged.
 build_certbot_flags() {
   CERTBOT_FLAGS=(--email "$CERT_EMAIL" --agree-tos --non-interactive)
-  [[ "$LE_STAGING" == "1" ]] && CERTBOT_FLAGS+=(--server "$LE_STAGING_DIRECTORY")
+  local server_url
+  server_url="$(acme_resolve_directory)"
+  [[ -n "$server_url" ]] && CERTBOT_FLAGS+=(--server "$server_url")
   [[ "$FORCE_RENEWAL" == "1" ]] && CERTBOT_FLAGS+=(--force-renewal)
   [[ -n "$DEPLOY_HOOK" ]] && CERTBOT_FLAGS+=(--deploy-hook "$DEPLOY_HOOK")
   # Explicit success: as the last statement, a false [[ ]] above would otherwise
@@ -745,10 +790,10 @@ build_certbot_flags() {
   return 0
 }
 
-# Populates RENEW_FLAGS for `certbot renew`. `--server` and `--email` do not belong
-# on renew and are deliberately omitted here.
+# Populates RENEW_FLAGS; `--server` and `--email` do not belong on renew.
 build_renew_flags() {
-  RENEW_FLAGS=(--force-renewal)
+  RENEW_FLAGS=()
+  [[ "$RENEW_DUE_ONLY" == "1" ]] || RENEW_FLAGS+=(--force-renewal)
   [[ -n "$DEPLOY_HOOK" ]] && RENEW_FLAGS+=(--deploy-hook "$DEPLOY_HOOK")
   return 0
 }
@@ -757,30 +802,30 @@ build_renew_flags() {
 # DNS-01 challenge (optional)
 # ---------------------------------------------------------------------------
 # Populates DNS_CHALLENGE_ARGS with the certbot flags for DNS-01, and
-# DNS_CREDENTIALS_RESOLVED with the credentials file, when DNS_PROVIDER is set.
+# DNS_CREDENTIALS_RESOLVED with the credentials file, when ACME_DNS_PROVIDER is set.
 # WHY the credentials file is generated: certbot's DNS plugins read an ini holding
 # an API token, and requiring the operator to hand-write one is the step they skip —
 # CLOUDFLARE_API_TOKEN is turned into exactly the file the cloudflare plugin expects.
-# An empty DNS_PROVIDER leaves both empty, so the HTTP-01 webroot path is unchanged.
+# An empty ACME_DNS_PROVIDER leaves both empty, so the HTTP-01 webroot path is unchanged.
 DNS_CHALLENGE_ARGS=()
 DNS_CREDENTIALS_RESOLVED=""
 _resolve_dns_challenge() {
   DNS_CHALLENGE_ARGS=()
   DNS_CREDENTIALS_RESOLVED=""
-  [[ -n "$DNS_PROVIDER" ]] || return 0
+  [[ -n "$ACME_DNS_PROVIDER" ]] || return 0
 
-  local creds="$DNS_CREDENTIALS_FILE"
-  if [[ -z "$creds" && "$DNS_PROVIDER" == "cloudflare" && -n "$CLOUDFLARE_API_TOKEN" ]]; then
+  local creds="$ACME_DNS_CREDENTIALS_FILE"
+  if [[ -z "$creds" && "$ACME_DNS_PROVIDER" == "cloudflare" && -n "$CLOUDFLARE_API_TOKEN" ]]; then
     creds="$(_cert_store_dir)/cloudflare.ini"
     if [[ "$DRY_RUN" -eq 0 ]]; then
       mkdir -p "$(dirname -- "$creds")"
       ( umask 077; printf 'dns_cloudflare_api_token = %s\n' "$CLOUDFLARE_API_TOKEN" > "$creds" )
     fi
   fi
-  [[ -n "$creds" ]] || log_die "DNS-01 ($DNS_PROVIDER) requires --dns-credentials or CLOUDFLARE_API_TOKEN" 1
+  [[ -n "$creds" ]] || log_die "DNS-01 ($ACME_DNS_PROVIDER) requires --dns-credentials or CLOUDFLARE_API_TOKEN" 1
 
   DNS_CREDENTIALS_RESOLVED="$creds"
-  DNS_CHALLENGE_ARGS=(--dns-"$DNS_PROVIDER" --dns-"$DNS_PROVIDER"-credentials "$creds")
+  DNS_CHALLENGE_ARGS=(--dns-"$ACME_DNS_PROVIDER" --dns-"$ACME_DNS_PROVIDER"-credentials "$creds")
   return 0
 }
 
@@ -937,35 +982,12 @@ _json_escape() {
 # ---------------------------------------------------------------------------
 # Let's Encrypt setup
 # ---------------------------------------------------------------------------
-_setup_letsencrypt() {
-  if [[ "$DRY_RUN" -eq 1 ]]; then
-    log_info "[dry-run] would run certbot certonly for $(_domain_list)"
-    return 0
-  fi
-
-  build_cert_domains
-  build_certbot_flags
-  _resolve_dns_challenge
-
-  local cert_dir
-  cert_dir="$(_cert_store_dir)"
-  mkdir -p "${cert_dir}/www"
-
-  # HTTP-01 only: waiting on :80 is pointless when validation is a TXT record.
-  if [[ -z "$DNS_PROVIDER" ]]; then
-    _wait_for_port80
-  fi
-
-  if ! command -v certbot >/dev/null 2>&1; then
-    log_warn "certbot not found on host — attempting via docker"
-    _run_certbot_docker
-    return
-  fi
-
-  # --config-dir points certbot at the store the proxy bind-mounts, so the
-  # lineage lands at <store>/live/<domain>/ — the path nginx reads. The former
-  # --cert-path/--key-path were no-ops outside `certonly --csr`.
-  if [[ -n "$DNS_PROVIDER" ]]; then
+# Runs certbot certonly on the host with the challenge the configuration selected.
+# --config-dir points certbot at the store the proxy bind-mounts, so the lineage lands at
+# <store>/live/<domain>/ — the path nginx reads.
+_run_certbot_certonly() {
+  local cert_dir="$1"
+  if [[ -n "$ACME_DNS_PROVIDER" ]]; then
     _retry_certbot certbot certonly "${DNS_CHALLENGE_ARGS[@]}" \
       "${CERT_DOMAINS[@]}" "${CERTBOT_FLAGS[@]}" \
       --config-dir "$cert_dir" \
@@ -979,6 +1001,40 @@ _setup_letsencrypt() {
   log_info "Let's Encrypt certificates obtained"
 }
 
+_setup_letsencrypt() {
+  # TLS-ALPN-01 never reaches certbot; lego owns its own preview and handover.
+  if [[ "$ACME_CHALLENGE" == "tls-alpn-01" ]]; then
+    acme_issue_tls_alpn
+    return 0
+  fi
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log_info "[dry-run] would run certbot certonly for $(_domain_list)"
+    return 0
+  fi
+
+  build_cert_domains
+  build_certbot_flags
+  _resolve_dns_challenge
+
+  local cert_dir
+  cert_dir="$(_cert_store_dir)"
+  mkdir -p "${cert_dir}/www"
+
+  # Probing :80 only means something when validation happens there.
+  if [[ "$ACME_CHALLENGE" == "http-01" ]]; then
+    _wait_for_port80
+  fi
+
+  if ! command -v certbot >/dev/null 2>&1; then
+    log_warn "certbot not found on host — attempting via docker"
+    _run_certbot_docker
+    return
+  fi
+
+  _run_certbot_certonly "$cert_dir"
+}
+
 _run_certbot_docker() {
   local cert_dir
   cert_dir="$(_cert_store_dir)"
@@ -987,13 +1043,13 @@ _run_certbot_docker() {
   # The store root is mounted at /etc/letsencrypt so certbot's lineage appears at
   # <store>/live/<domain>/; mounting <store>/live here (the earlier form) nested
   # a second live/ level and nginx never saw the certificate.
-  if [[ -n "$DNS_PROVIDER" ]]; then
+  if [[ -n "$ACME_DNS_PROVIDER" ]]; then
     _retry_certbot docker run --rm \
       -v "${cert_dir}:/etc/letsencrypt" \
       -v "${cert_dir}/www:/var/www/certbot" \
       -v "${DNS_CREDENTIALS_RESOLVED}:/etc/letsencrypt/dns-creds.ini:ro" \
-      "${CERTBOT_IMAGE:-certbot/dns-$DNS_PROVIDER}" certonly \
-      --dns-"$DNS_PROVIDER" --dns-"$DNS_PROVIDER"-credentials /etc/letsencrypt/dns-creds.ini \
+      "${ACME_CERTBOT_IMAGE:-certbot/dns-$ACME_DNS_PROVIDER}" certonly \
+      --dns-"$ACME_DNS_PROVIDER" --dns-"$ACME_DNS_PROVIDER"-credentials /etc/letsencrypt/dns-creds.ini \
       "${CERT_DOMAINS[@]}" "${CERTBOT_FLAGS[@]}" \
       || log_die "certbot docker run failed" 1
   else
@@ -1027,6 +1083,7 @@ _setup_provided_cert() {
   else
     log_info "certificate passed openssl verify"
   fi
+  cert_validate_supplied_certificate "$CERT_PATH" "$KEY_PATH"
 
   # The lineage directory nginx reads, not a flat live/ level: nginx requests
   # live/<domain>/fullchain.pem, so a flat copy is invisible to it.
@@ -1183,9 +1240,11 @@ EOF
   fi
   export NGINX_METRICS_LOCATION="$nginx_metrics_location"
 
+  _acme_export_challenge_locations
+
   _domain_routes_build
 
-  envsubst '${DOMAIN_NAME} ${ADMIN_DOMAIN} ${OJ_DOMAIN} ${RANKING_DOMAIN} ${CERT_LINEAGE_DOMAIN} ${ACME_HOST_NAMES} ${HSTS_MAX_AGE} ${CONTEST_LISTEN_PORT} ${ADMIN_LISTEN_PORT} ${RANKING_LISTEN_PORT} ${OJ_BACKEND_PORT} ${RANKING_AUTH_DIRECTIVES} ${REDIS_UPSTREAM_BLOCK} ${REDIS_LUA_PLACEHOLDER} ${PER_USER_LOGIN_DIRECTIVES} ${PER_USER_RANKING_DIRECTIVES} ${NGINX_METRICS_LOCATION} ${UPSTREAM_BLOCKS} ${PRIMARY_ROUTE_BLOCKS} ${ADMIN_ROUTE_BLOCKS} ${OJ_ROUTE_BLOCKS} ${RANKING_ROUTE_BLOCKS} ${PRIMARY_UPSTREAM}' < "$template" \
+  envsubst '${DOMAIN_NAME} ${ADMIN_DOMAIN} ${OJ_DOMAIN} ${RANKING_DOMAIN} ${CERT_LINEAGE_DOMAIN} ${ACME_HOST_NAMES} ${HSTS_MAX_AGE} ${CONTEST_LISTEN_PORT} ${ADMIN_LISTEN_PORT} ${RANKING_LISTEN_PORT} ${OJ_BACKEND_PORT} ${RANKING_AUTH_DIRECTIVES} ${REDIS_UPSTREAM_BLOCK} ${REDIS_LUA_PLACEHOLDER} ${PER_USER_LOGIN_DIRECTIVES} ${PER_USER_RANKING_DIRECTIVES} ${NGINX_METRICS_LOCATION} ${ACME_HTTP01_CHALLENGE_ON_80} ${ACME_HTTP01_CHALLENGE_ON_443} ${UPSTREAM_BLOCKS} ${PRIMARY_ROUTE_BLOCKS} ${ADMIN_ROUTE_BLOCKS} ${OJ_ROUTE_BLOCKS} ${RANKING_ROUTE_BLOCKS} ${PRIMARY_UPSTREAM}' < "$template" \
     | _filter_optional_blocks > "$output"
   log_info "nginx config rendered: $output (domains: $(_domain_list) | lineage: $CERT_LINEAGE_DOMAIN | REDIS_RATE_LIMIT=${REDIS_RATE_LIMIT} PER_USER_LIMIT=${PER_USER_LIMIT} MONITORING_ENABLED=${MONITORING_ENABLED} WAF_ENABLED=${WAF_ENABLED:-0})"
   if [[ "${WAF_ENABLED:-0}" == "1" ]]; then
@@ -1347,6 +1406,8 @@ _status_renewal_timer() {
     grader-cert-renew.timer) log_info "Renewal timer: grader-cert-renew.timer is enabled" ;;
     certbot.timer)           log_info "Renewal timer: certbot.timer is enabled" ;;
     certbot-container)       log_info "Renewal timer: certbot container is running" ;;
+    lego)                    acme_report_lego_renewal ;;
+    external)                _report_unmanaged_certificate ;;
     *)                       log_warn "No renewal mechanism detected (grader-cert-renew.timer, certbot.timer or certbot container)" ;;
   esac
 }
@@ -1381,6 +1442,16 @@ _resolve_host() {
 # ships (config/systemd/), and the earlier check only knew certbot.timer, so a
 # correctly configured host reported "no renewal mechanism".
 _renewal_mechanism() {
+  # Name the owner before any timer: certbot ignores a lineage it has no config for.
+  if [[ -f "$(_cert_fullchain_path)" ]] \
+     && [[ ! -f "$(_cert_store_dir)/renewal/${CERT_LINEAGE_DOMAIN}.conf" ]]; then
+    if acme_cert_is_lego_issued; then
+      printf 'lego'
+    else
+      printf 'external'
+    fi
+    return 0
+  fi
   if systemctl is-enabled grader-cert-renew.timer 2>/dev/null | grep -q enabled; then
     printf 'grader-cert-renew.timer'
   elif systemctl is-enabled certbot.timer 2>/dev/null | grep -q enabled; then
@@ -1409,13 +1480,15 @@ cmd_status_json() {
   done < <(_configured_domains)
   dns_json="${dns_json%,}"
 
-  local days_left expiry
+  local days_left expiry renewal_state
   days_left="$(_cert_days_left)"
   expiry="$(openssl x509 -enddate -noout -in "$(_cert_fullchain_path)" 2>/dev/null | sed 's/notAfter=//' || true)"
+  renewal_state="$(_renewal_mechanism)"
 
-  printf '{"domains":"%s","primary":"%s","dns":{%s},"certificate":{"days_left":%s,"expiry":"%s"},"renewal":"%s"}\n' \
+  printf '{"domains":"%s","primary":"%s","dns":{%s},"certificate":{"days_left":%s,"expiry":"%s"},"renewal":"%s","renewal_managed":%s}\n' \
     "$(_json_escape "$(_domain_list)")" "$(_json_escape "$PRIMARY_DOMAIN")" "$dns_json" \
-    "$days_left" "$(_json_escape "$expiry")" "$(_renewal_mechanism)"
+    "$days_left" "$(_json_escape "$expiry")" "$renewal_state" \
+    "$(acme_render_renewal_managed_json "$renewal_state")"
 }
 
 # ---------------------------------------------------------------------------
@@ -1471,8 +1544,30 @@ cmd_revoke() {
 # ---------------------------------------------------------------------------
 # Renew subcommand
 # ---------------------------------------------------------------------------
+# Renews a lineage certbot already has a renewal config for.
+_run_certbot_renew() {
+  if command -v certbot >/dev/null 2>&1; then
+    _retry_certbot certbot renew ${RENEW_FLAGS[@]+"${RENEW_FLAGS[@]}"} --cert-name "$CERT_LINEAGE_DOMAIN" || log_die "certbot renew failed" 1
+    log_info "certificates renewed via certbot"
+    return 0
+  fi
+  if docker ps --format '{{.Names}}' 2>/dev/null | grep -q certbot; then
+    local container
+    container="$(docker ps --format '{{.Names}}' | grep certbot | head -1)"
+    _retry_certbot docker exec "$container" certbot renew ${RENEW_FLAGS[@]+"${RENEW_FLAGS[@]}"} || log_die "certbot renew failed in container" 1
+    log_info "certificates renewed via certbot container ($container)"
+    return 0
+  fi
+  log_die "no certbot found on host or in docker" 1
+}
+
 cmd_renew() {
   _resolve_domain_targets
+  acme_validate_config
+  if [[ "$ACME_CHALLENGE" == "tls-alpn-01" && "$DOMAIN_CERT_METHOD" == "letsencrypt" ]]; then
+    _renew_via_tls_alpn
+    return 0
+  fi
   log_info "Certificate renewal — mode: $([ "$DRY_RUN" -eq 1 ] && echo 'DRY-RUN' || echo 'APPLY')"
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -1483,21 +1578,14 @@ cmd_renew() {
   _backup_certificates
   build_renew_flags
 
-  if command -v certbot >/dev/null 2>&1; then
-    _retry_certbot certbot renew "${RENEW_FLAGS[@]}" --cert-name "$CERT_LINEAGE_DOMAIN" || log_die "certbot renew failed" 1
-    log_info "certificates renewed via certbot"
-  elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q certbot; then
-    local container
-    container="$(docker ps --format '{{.Names}}' | grep certbot | head -1)"
-    _retry_certbot docker exec "$container" certbot renew "${RENEW_FLAGS[@]}" || log_die "certbot renew failed in container" 1
-    log_info "certificates renewed via certbot container ($container)"
-  else
-    log_die "no certbot found on host or in docker" 1
+  # certbot discovers renewals by renewal/<lineage>.conf, so without one it never renews.
+  if [[ ! -f "$(_cert_store_dir)/renewal/${CERT_LINEAGE_DOMAIN}.conf" ]]; then
+    acme_report_unrenewable_certificate
+    return 0
   fi
 
-  # Reload nginx to pick up new certs
+  _run_certbot_renew
   _reload_running_nginx
-
   discord_alert "Certificates renewed for ${CERT_LINEAGE_DOMAIN}" 65280
   log_info "Renewal complete"
 }
@@ -1705,14 +1793,20 @@ while [[ $# -gt 0 ]]; do
     --deploy-hook) DEPLOY_HOOK="$2"; shift 2 ;;
     --staging)    LE_STAGING=1; shift ;;
     --force)      FORCE_RENEWAL=1; shift ;;
+    --due)        RENEW_DUE_ONLY=1; shift ;;
     --wait-port80) WAIT_PORT80_TIMEOUT="$2"; shift 2 ;;
     --backup-certs) BACKUP_CERTS=1; shift ;;
     --lock)       USE_LOCK=1; shift ;;
     --json)       JSON_OUTPUT=1; shift ;;
     --days)       CHECK_EXPIRY_DAYS="$2"; shift 2 ;;
     --reason)     REVOKE_REASON="$2"; shift 2 ;;
-    --dns)        DNS_PROVIDER="$2"; shift 2 ;;
-    --dns-credentials) DNS_CREDENTIALS_FILE="$2"; shift 2 ;;
+    --dns)        ACME_DNS_PROVIDER="$2"; shift 2 ;;
+    --dns-credentials) ACME_DNS_CREDENTIALS_FILE="$2"; shift 2 ;;
+    --challenge)  ACME_CHALLENGE="$2"; shift 2 ;;
+    --ca)         ACME_CA="$2"; shift 2 ;;
+    --acme-server) ACME_DIRECTORY_URL="$2"; shift 2 ;;
+    --acme-client) ACME_CLIENT="$2"; shift 2 ;;
+    --tls-address) ACME_TLS_ALPN_ADDRESS="$2"; shift 2 ;;
     --config)     CONFIG_FILE="$2"; shift 2 ;;
     --help|-h)    usage; exit 0 ;;
     *)            log_die "unknown option: $1 — see --help" 1 ;;
@@ -1723,6 +1817,12 @@ done
 [[ "$CERT_RETRY_INTERVAL" =~ ^[0-9]+$ ]] || log_die "--retry-interval must be a non-negative integer" 1
 [[ "$WAIT_PORT80_TIMEOUT" =~ ^[0-9]+$ ]] || log_die "--wait-port80 must be a non-negative integer" 1
 [[ "$CHECK_EXPIRY_DAYS" =~ ^[0-9]+$ ]] || log_die "--days must be a non-negative integer" 1
+
+acme_report_config_override "--cert" "$CONFIGURED_DOMAIN_CERT_METHOD" "$DOMAIN_CERT_METHOD"
+acme_report_config_override "--challenge" "$CONFIGURED_ACME_CHALLENGE" "$ACME_CHALLENGE"
+acme_report_config_override "--ca" "$CONFIGURED_ACME_CA" "$ACME_CA"
+acme_report_config_override "--acme-server" "$CONFIGURED_ACME_DIRECTORY_URL" "$ACME_DIRECTORY_URL"
+acme_report_config_override "--acme-client" "$CONFIGURED_ACME_CLIENT" "$ACME_CLIENT"
 
 _acquire_run_lock
 

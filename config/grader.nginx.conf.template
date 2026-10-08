@@ -51,11 +51,7 @@ server {
     listen 80 default_server;
     server_name ${ACME_HOST_NAMES};
 
-    location /.well-known/acme-challenge/ {
-        root /var/www/certbot;
-        allow all;
-    }
-
+    ${ACME_HTTP01_CHALLENGE_ON_80}
     ${NGINX_METRICS_LOCATION}
 
     location / {
@@ -73,6 +69,8 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/privkey.pem;
     include /etc/nginx/conf.d/nginx-ssl.conf;
     add_header Strict-Transport-Security "max-age=${HSTS_MAX_AGE}; includeSubDomains" always;
+
+    ${ACME_HTTP01_CHALLENGE_ON_443}
 
     client_max_body_size 10M;
     client_body_buffer_size 128k;
@@ -125,6 +123,8 @@ server {
     include /etc/nginx/conf.d/nginx-ssl.conf;
     add_header Strict-Transport-Security "max-age=${HSTS_MAX_AGE}; includeSubDomains" always;
 
+    ${ACME_HTTP01_CHALLENGE_ON_443}
+
     client_max_body_size 10M;
     client_body_buffer_size 128k;
     proxy_connect_timeout 90;
@@ -159,6 +159,8 @@ server {
     include /etc/nginx/conf.d/nginx-ssl.conf;
     add_header Strict-Transport-Security "max-age=${HSTS_MAX_AGE}; includeSubDomains" always;
 
+    ${ACME_HTTP01_CHALLENGE_ON_443}
+
     client_max_body_size 100M;
     client_body_buffer_size 128k;
     proxy_connect_timeout 90;
@@ -186,6 +188,8 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/privkey.pem;
     include /etc/nginx/conf.d/nginx-ssl.conf;
     add_header Strict-Transport-Security "max-age=${HSTS_MAX_AGE}; includeSubDomains" always;
+
+    ${ACME_HTTP01_CHALLENGE_ON_443}
 
     client_max_body_size 10M;
     client_body_buffer_size 128k;

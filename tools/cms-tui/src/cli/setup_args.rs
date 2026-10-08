@@ -120,6 +120,21 @@ pub struct DomainSetupArgs {
     /// Credential file for the DNS-01 plugin.
     #[arg(long)]
     pub dns_credentials: Option<String>,
+    /// ACME challenge (http-01|dns-01|tls-alpn-01); unset lets `ACME_CHALLENGE` apply.
+    #[arg(long)]
+    pub challenge: Option<String>,
+    /// ACME certificate authority; unset lets `ACME_CA` apply.
+    #[arg(long)]
+    pub ca: Option<String>,
+    /// Explicit ACME directory URL; unset lets `ACME_DIRECTORY_URL` apply.
+    #[arg(long)]
+    pub acme_server: Option<String>,
+    /// ACME client (certbot|lego); unset lets `ACME_CLIENT` apply.
+    #[arg(long)]
+    pub acme_client: Option<String>,
+    /// Address lego binds for tls-alpn-01; unset lets `ACME_TLS_ALPN_ADDRESS` apply.
+    #[arg(long)]
+    pub tls_address: Option<String>,
     /// Command run after a successful renewal.
     #[arg(long)]
     pub deploy_hook: Option<String>,

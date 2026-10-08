@@ -94,6 +94,11 @@ fn domain_setup_from(cmd: &DomainCmd) -> DomainSetupRequest {
         extra_domains: clone_or_empty(args.extra_domains.as_ref()),
         dns: clone_or_empty(args.dns.as_ref()),
         dns_credentials: clone_or_empty(args.dns_credentials.as_ref()),
+        challenge: clone_or_empty(args.challenge.as_ref()),
+        ca: clone_or_empty(args.ca.as_ref()),
+        acme_server: clone_or_empty(args.acme_server.as_ref()),
+        acme_client: clone_or_empty(args.acme_client.as_ref()),
+        tls_address: clone_or_empty(args.tls_address.as_ref()),
         switches: DomainSwitches {
             is_staging: args.run.staging,
             is_force: args.run.force,

@@ -114,6 +114,16 @@ pub struct DomainSetupRequest {
     pub extra_domains: String,
     pub dns: String,
     pub dns_credentials: String,
+    /// `--challenge`; blank leaves `ACME_CHALLENGE` in force.
+    pub challenge: String,
+    /// `--ca`; blank leaves `ACME_CA` in force.
+    pub ca: String,
+    /// `--acme-server`; blank leaves `ACME_DIRECTORY_URL` in force.
+    pub acme_server: String,
+    /// `--acme-client`; blank leaves `ACME_CLIENT` in force.
+    pub acme_client: String,
+    /// `--tls-address`; blank leaves `ACME_TLS_ALPN_ADDRESS` in force.
+    pub tls_address: String,
     /// The three switches that change how the run itself behaves.
     pub switches: DomainSwitches,
     /// What happens to the certificate store around the run.
@@ -141,7 +151,7 @@ type BoolFlagFn = fn(&DomainSetupRequest) -> bool;
 /// WHY a table rather than repeated pushes: the order here is the order the operator
 /// sees in `--help` and in the CLI test assertions, and one list is the only place that
 /// order is written down.
-const VALUE_FLAGS: [(&str, ValueFlagFn); 12] = [
+const VALUE_FLAGS: [(&str, ValueFlagFn); 17] = [
     ("--domain", |s| opt_str(&s.domain)),
     ("--admin-domain", |s| opt_str(&s.admin_domain)),
     ("--oj-domain", |s| opt_str(&s.oj_domain)),
@@ -153,6 +163,11 @@ const VALUE_FLAGS: [(&str, ValueFlagFn); 12] = [
     ("--extra-domains", |s| opt_str(&s.extra_domains)),
     ("--dns", |s| opt_str(&s.dns)),
     ("--dns-credentials", |s| opt_str(&s.dns_credentials)),
+    ("--challenge", |s| opt_str(&s.challenge)),
+    ("--ca", |s| opt_str(&s.ca)),
+    ("--acme-server", |s| opt_str(&s.acme_server)),
+    ("--acme-client", |s| opt_str(&s.acme_client)),
+    ("--tls-address", |s| opt_str(&s.tls_address)),
     ("--deploy-hook", |s| opt_str(&s.deploy_hook)),
 ];
 
