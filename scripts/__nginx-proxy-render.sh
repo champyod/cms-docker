@@ -74,6 +74,10 @@ if [ "${ENABLE_TLS:-false}" = "true" ]; then
 server {
     listen 80;
     server_name ${NGINX_HOST};
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        allow all;
+    }
     return 301 https://\$host\$request_uri;
 }
 server {
@@ -124,6 +128,10 @@ server {
     listen 80 default_server;
     server_name ${NGINX_HOST};
 $PROXY_COMMON
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        allow all;
+    }
     location = /login {
         limit_req zone=cms_login burst=20 nodelay;
         proxy_set_header Host \$host;

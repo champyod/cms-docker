@@ -420,6 +420,8 @@ services:
       - ./config/nginx-contest.conf:/etc/nginx/templates/default.conf.template:ro
       - ./scripts/__nginx-proxy-render.sh:/usr/local/bin/render.sh:ro
       - ./config/funnel.htpasswd:/etc/nginx/funnel.htpasswd:ro
+      # Shared webroot so this proxy can answer the HTTP-01 challenge when it owns :80.
+      - ./config/letsencrypt/www:/var/www/certbot:ro
       - nginx-cache:/var/cache/nginx
       - nginx-logs:/var/log/nginx
     networks:
