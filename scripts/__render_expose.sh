@@ -38,34 +38,39 @@ resolve_ips() {
   if [[ -n "$explicit" ]]; then printf '%s\n' "$explicit"; fi
 }
 
-# service|host_port_var|default_host_port|container_port|bind_key
+# service|host_port_var|default_host_port|container_port|bind_key|image
+# The image is the one from docker-compose.yml, emitted so the fragment configures standalone.
 TABLE="$(cat <<'EOF'
-database|POSTGRES_PORT_EXTERNAL|5432|5432|DB_BIND_IP
-log-service|LOG_SERVICE_PORT_EXTERNAL|29000|29000|INNER_IP
-resource-service|RESOURCE_SERVICE_PORT_EXTERNAL|28000|28000|INNER_IP
-scoring-service|SCORING_SERVICE_PORT_EXTERNAL|28500|28500|INNER_IP
-checker-service|CHECKER_SERVICE_PORT_EXTERNAL|22000|22000|INNER_IP
-evaluation-service|EVALUATION_SERVICE_PORT_EXTERNAL|25000|25000|INNER_IP
-proxy-service|PROXY_SERVICE_PORT_EXTERNAL|28600|28600|INNER_IP
-contest-web-server|CONTEST_PORT_EXTERNAL|8888|8888|CONTEST_BIND_IP
-nginx-proxy|NGINX_HTTP_PORT|80|80|NGINX_BIND_IP
-nginx-proxy|NGINX_HTTPS_PORT|443|443|NGINX_BIND_IP
-admin-panel-next|ADMIN_NEXT_PORT_EXTERNAL|8891|3000|ADMIN_NEXT_BIND_IP
-admin-web-server|ADMIN_PORT_EXTERNAL|8889|8889|ADMIN_BIND_IP
-ranking-web-server|RANKING_PORT_EXTERNAL|8890|8890|RANKING_BIND_IP
-worker|WORKER_PORT|26000|26000|WORKER_BIND_ADDR
+database|POSTGRES_PORT_EXTERNAL|5432|5432|DB_BIND_IP|postgres:15
+log-service|LOG_SERVICE_PORT_EXTERNAL|29000|29000|INNER_IP|ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
+resource-service|RESOURCE_SERVICE_PORT_EXTERNAL|28000|28000|INNER_IP|ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
+scoring-service|SCORING_SERVICE_PORT_EXTERNAL|28500|28500|INNER_IP|ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
+checker-service|CHECKER_SERVICE_PORT_EXTERNAL|22000|22000|INNER_IP|ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
+evaluation-service|EVALUATION_SERVICE_PORT_EXTERNAL|25000|25000|INNER_IP|ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
+proxy-service|PROXY_SERVICE_PORT_EXTERNAL|28600|28600|INNER_IP|ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
+contest-web-server|CONTEST_PORT_EXTERNAL|8888|8888|CONTEST_BIND_IP|ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
+nginx-proxy|NGINX_HTTP_PORT|80|80|NGINX_BIND_IP|nginx:alpine
+nginx-proxy|NGINX_HTTPS_PORT|443|443|NGINX_BIND_IP|nginx:alpine
+admin-panel-next|ADMIN_NEXT_PORT_EXTERNAL|8891|3000|ADMIN_NEXT_BIND_IP|ghcr.io/champyod/cms-docker-admin-panel:${IMG_TAG:-major-admin-panel}
+admin-web-server|ADMIN_PORT_EXTERNAL|8889|8889|ADMIN_BIND_IP|ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
+ranking-web-server|RANKING_PORT_EXTERNAL|8890|8890|RANKING_BIND_IP|ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
+worker|WORKER_PORT|26000|26000|WORKER_BIND_ADDR|ghcr.io/champyod/cms-docker-worker:${IMG_TAG:-major-admin-panel}
 EOF
 )"
 
 declare -A SVC_PORTS=()
+declare -A SVC_IMAGES=()
 declare -a SVC_ORDER=()
 
-while IFS='|' read -r svc port_var default_port container_port bind_key; do
+while IFS='|' read -r svc port_var default_port container_port bind_key image; do
   [[ -n "$svc" ]] || continue
   host_port="${!port_var:-$default_port}"
   mapfile -t ips < <(resolve_ips "$bind_key" | tr ',' '\n' | sed '/^[[:space:]]*$/d')
   (( ${#ips[@]} > 0 )) || continue
-  if [[ -z "${SVC_PORTS[$svc]:-}" ]]; then SVC_ORDER+=("$svc"); fi
+  if [[ -z "${SVC_PORTS[$svc]:-}" ]]; then
+    SVC_ORDER+=("$svc")
+    SVC_IMAGES[$svc]="$image"
+  fi
   for ip in "${ips[@]}"; do
     ip="${ip//[[:space:]]/}"
     SVC_PORTS[$svc]+="      - \"${ip}:${host_port}:${container_port}\""$'\n'
@@ -82,7 +87,7 @@ tmp="$(mktemp "${REPO_ROOT}/.expose.XXXXXX")"
 {
   printf 'services:\n'
   for svc in "${SVC_ORDER[@]}"; do
-    printf '  %s:\n    ports: !override\n' "$svc"
+    printf '  %s:\n    image: %s\n    ports: !override\n' "$svc" "${SVC_IMAGES[$svc]}"
     printf '%s' "${SVC_PORTS[$svc]}"
   done
 } > "$tmp"

@@ -109,5 +109,37 @@ else
   no "the front door still follows its own key"
 fi
 
+echo "case 5: every service carries an image, so the fragment configures standalone"
+# WHY: a bare `services: <name>: ports: !override` is a config
+# error under `docker compose -f docker-compose.expose.yml config`
+# (a service with no image and no build), which is how the
+# fragment is validated on its own. The image is the canonical
+# one from docker-compose.yml, so emitting it cannot change the
+# merged project — the !override on ports keeps ports authoritative.
+dir="$(sandbox)"
+cat > "${dir}/.env" <<'ENV'
+DB_BIND_IP=9.9.9.9
+ADMIN_BIND_IP=203.0.113.10,100.64.0.1
+NGINX_BIND_IP=10.0.0.1
+ENV
+out="$(render "${dir}")"
+# every service block carries an image: line before its ports:
+if awk '
+  /^  [a-zA-Z0-9_-]+:$/ { if (svc && !img) exit 1; svc=$0; img=0 }
+  /^    image:/ { img=1 }
+  END { if (svc && !img) exit 1 }
+' "${out}"; then
+  ok "every service carries an image"
+else
+  no "every service carries an image"
+fi
+for expect in "image: postgres:15" "image: nginx:alpine" "image: ghcr.io/champyod/cms-docker-core:"; do
+  if grep -qF -- "$expect" "${out}"; then
+    ok "canonical image present: ${expect}"
+  else
+    no "canonical image present: ${expect}"
+  fi
+done
+
 printf '\n%s passed, %s failed\n' "${pass}" "${fail}"
 (( fail == 0 ))
