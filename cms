@@ -44,6 +44,10 @@ Commands:
   clean [stack]             clean one stack or all
   pull [stack]              pull images for one stack or all
   db <init|reset|clean|sync|use>  database lifecycle shortcuts (use <name> switches db profile)
+  db create <name> [--dry-run]  CREATE DATABASE in the cms-database container
+  db rename <old> <new> [--dry-run]
+                            ALTER DATABASE ... RENAME TO (stop core first)
+  db clean|reset                delete ALL cms volumes; requires "yes" on a TTY or CONFIRM_DB_DESTROY=yes
   admin-create              create superadmin account
   status                    live service status dashboard
   monitor                   monitoring/backup operations UI
@@ -72,6 +76,7 @@ Examples:
   ./cms setup
   ./cms deploy core --img
   ./cms db reset
+  ./cms db create cmsdb_evaluate --dry-run
   ./cms backup drill
 CMDS
 }
@@ -123,6 +128,25 @@ run_tui() {
 # Single source: cli/mod.rs + core/dispatch.rs. No bash duplication.
 # Lifecycle below only runs for no-args non-TTY bootstrap.
 
+# [db_<name>] profile names from config.toml, one per line. Empty when the file
+# has no profile section yet (the old layout cmd_db_use migrates).
+profile_names() {
+  grep -oE '^\[db_[^]]+\]' config.toml 2>/dev/null | sed -E 's/^\[db_(.+)\]$/\1/' || true
+}
+
+# ACTIVE_DATABASE as config.toml's [core] section declares it, or empty when the
+# key is absent / its value is not a quoted string. Reads the same section the
+# switch below rewrites, so "changed" and "did not change" are comparable.
+profile_active_name() {
+  awk '
+    /^\[core\]/ { in_core = 1 }
+    /^\[/ && !/^\[core\]/ { in_core = 0 }
+    in_core && /^ACTIVE_DATABASE[[:space:]]*=/ {
+      if (match($0, /"[^"]*"/)) { print substr($0, RSTART + 1, RLENGTH - 2); exit }
+    }
+  ' config.toml 2>/dev/null || true
+}
+
 # `db use <name>` switches the active database profile. Handled here because
 # the Rust CLI predates profile switching; keep the config mutation in one
 # place (config.toml -> scripts/__config_sync.sh -> stack restart).
@@ -137,19 +161,44 @@ cmd_db_use() {
     exit 1
   fi
   if ! grep -q "^\[db_${name}\]" config.toml; then
-    echo "Error: no [db_${name}] section in config.toml." >&2
     if ! grep -q '^\[db_' config.toml; then
-      # Old layout: POSTGRES_* still live in [core], no [db_*] profile exists yet.
-      echo "No [db_*] profile sections found — your config.toml uses the old layout." >&2
-      echo "Run './cms config sync' to migrate POSTGRES_* into [db_default], then retry." >&2
+      # OLD LAYOUT, not "unknown profile": POSTGRES_* still live under [core] and
+      # no [db_*] profile exists yet. scripts/__config_sync.sh migrates that in
+      # place, so run it FIRST and only then switch — switching first would write
+      # ACTIVE_DATABASE pointing at a section the file does not have yet and the
+      # following config sync would fail on the unresolved profile, leaving .env
+      # describing the old database.
+      echo "config.toml uses the old layout (no [db_*] sections yet) — migrating POSTGRES_* into [db_default] first." >&2
+      echo "Running './cms config sync' (scripts/__config_sync.sh) as the migration step..." >&2
+      if ! bash scripts/__config_sync.sh; then
+        echo "Error: migration failed — ACTIVE_DATABASE was NOT switched and .env was not rewritten. Fix the error above, then retry (or run './cms config sync' on its own)." >&2
+        exit 1
+      fi
+      if ! grep -q "^\[db_${name}\]" config.toml; then
+        echo "Error: migration finished but config.toml still has no [db_${name}] section." >&2
+        echo "Available profiles:" >&2
+        profile_names >&2
+        exit 1
+      fi
     else
+      # Profiles exist, but not this one: an unknown name was typed. Keep the
+      # plain error plus the listing.
+      echo "Error: no [db_${name}] section in config.toml." >&2
       echo "Available profiles:" >&2
-      grep -oE '^\[db_[^]]+\]' config.toml | sed -E 's/^\[db_(.+)\]$/  \1/' >&2
+      profile_names >&2
+      exit 1
     fi
-    exit 1
   fi
 
-  local tmp
+  # Rewrite [core] ACTIVE_DATABASE with awk, then report what actually happened:
+  # the previous version printed "ACTIVE_DATABASE set to ..." unconditionally, so
+  # a file whose [core] had no ACTIVE_DATABASE line got a success message and
+  # exit 0 while the old profile stayed active — and the config sync below then
+  # projected that old profile into .env. Both values are read from [core] only,
+  # the same scope the rewrite mutates, so "did not change" and "could not
+  # change" are distinguishable.
+  local tmp before after
+  before="$(profile_active_name)"
   tmp="$(mktemp)"
   awk -v name="$name" '
     /^\[core\]/ { in_core = 1 }
@@ -159,9 +208,25 @@ cmd_db_use() {
     }
     { print }
   ' config.toml > "$tmp" && mv "$tmp" config.toml
-  echo "ACTIVE_DATABASE set to \"${name}\" in config.toml"
+  after="$(profile_active_name)"
+  if [[ "$before" == "$name" ]]; then
+    echo "ACTIVE_DATABASE is already \"${name}\" in config.toml — no change needed."
+  elif [[ "$after" == "$name" ]]; then
+    echo "ACTIVE_DATABASE set to \"${name}\" in config.toml"
+  elif [[ -z "$after" ]]; then
+    echo "Error: no ACTIVE_DATABASE key in the [core] section of config.toml (or its value is not a quoted string) — ACTIVE_DATABASE was NOT switched to \"${name}\"." >&2
+    echo "Add/fix the key (see config.toml.example) or run './cms config sync' to merge missing keys, then retry." >&2
+    exit 1
+  else
+    echo "Error: ACTIVE_DATABASE is still \"${after}\" after the rewrite — it was NOT switched to \"${name}\"." >&2
+    echo "Fix the key in the [core] section of config.toml, then retry." >&2
+    exit 1
+  fi
 
-  bash scripts/__config_sync.sh
+  if ! bash scripts/__config_sync.sh; then
+    echo "Error: ACTIVE_DATABASE is now \"${name}\" in config.toml, but './cms config sync' failed — .env may still describe the previous profile. Fix the error above, then run './cms config sync'." >&2
+    exit 1
+  fi
 
   local deploy_type
   deploy_type="$(grep -E '^DEPLOYMENT_TYPE=' .env 2>/dev/null | tail -n1 | cut -d '=' -f2 | cut -d '#' -f1 | tr -d '[:space:]' | tr -d '\"' | tr -d "'" || true)"
@@ -197,6 +262,38 @@ cmd_db_use() {
 if [[ $# -ge 2 && "$1" == "db" && "$2" == "use" ]]; then
   cmd_db_use "${3:-}"
   exit $?
+fi
+
+# `db clean` / `db reset` delete EVERY volume in the cms project. They must
+# clear the shared guard (scripts/__db_destroy_guard.sh owns the policy: the
+# literal word on a TTY, or CONFIRM_DB_DESTROY=yes) before the TUI/make path can
+# reach `down -v`; the guard's exit code is propagated so a refusal stops here.
+# Only the exact two-word shape is admitted: any extra/unknown argument is
+# refused instead of forwarded, because a shape this gate did not classify must
+# never fall through to make db-clean / db-reset.
+if [[ $# -ge 2 && "$1" == "db" && ( "${2:-}" == "clean" || "${2:-}" == "reset" ) ]]; then
+  if [[ $# -ne 2 ]]; then
+    echo "Error: unexpected arguments after 'db ${2}' (got: $*)." >&2
+    echo "Refusing to forward this shape to the destructive teardown path." >&2
+    echo "The only accepted form is: ./cms db ${2}" >&2
+    exit 2
+  fi
+  if [[ "${2:-}" == "reset" ]]; then
+    _db_guard_action="db-reset"
+  else
+    _db_guard_action="db-clean"
+  fi
+  bash scripts/__db_destroy_guard.sh "$_db_guard_action" || exit $?
+fi
+
+# `db create <name> [--dry-run]` / `db rename <old> <new> [--dry-run]` delegate
+# to scripts/__db_admin.sh — the single authority for the container-side SQL,
+# the CONFIRM_DB_ADMIN policy and the exit codes. This shim only routes and
+# forwards --dry-run verbatim; the admin script validates the argument shape.
+if [[ $# -ge 2 && "$1" == "db" && ( "${2:-}" == "create" || "${2:-}" == "rename" ) ]]; then
+  _db_admin_rc=0
+  bash scripts/__db_admin.sh "$2" "${@:3}" || _db_admin_rc=$?
+  exit "$_db_admin_rc"
 fi
 
 if [[ $# -eq 1 && "$1" == "help" ]]; then
