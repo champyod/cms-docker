@@ -1097,13 +1097,13 @@ _render_nginx_config() {
   local redis_upstream_block redis_lua_placeholder per_user_login per_user_ranking
 
   if [[ "${REDIS_RATE_LIMIT:-0}" == "1" ]]; then
-    redis_upstream_block=$(cat <<EOF
+    redis_upstream_block=$(cat <<'EOF'
 # Redis distributed rate limit — enabled (REDIS_RATE_LIMIT=1)
 # Docker DNS resolver for future OpenResty lua-resty-redis (request-time resolution; nginx starts even if redis absent)
 resolver 127.0.0.11 valid=10s ipv6=off;
 resolver_timeout 3s;
 # Upstream deferred to lua request-time connect to avoid startup DNS failure when redis absent
-# upstream redis_rate_limit_backend { server ${REDIS_HOST}:${REDIS_PORT} max_fails=2 fail_timeout=10s; }
+# upstream redis_rate_limit_backend { server __REDIS_BACKEND__ max_fails=2 fail_timeout=10s; }
 # Local limit_req remains as primary until OpenResty image with resty.redis is deployed
 #
 # FAILURE BEHAVIOUR — for NGINX, a Redis outage cannot degrade or block anything,
@@ -1134,6 +1134,9 @@ resolver_timeout 3s;
 # rather than degrade. Fix both before enabling — see docs/waf-tuning.md.
 EOF
 )
+    # Delimiter quoted so the backtick spans in the block stay literal; the one
+    # dynamic reference is substituted here.
+    redis_upstream_block="${redis_upstream_block//__REDIS_BACKEND__/${REDIS_HOST}:${REDIS_PORT}}"
     redis_lua_placeholder=$(cat <<'EOLUA'
 # Redis rate limiting active: future OpenResty path would use lua-resty-redis token bucket here
 # lua_shared_dict redis_limit 10m;
