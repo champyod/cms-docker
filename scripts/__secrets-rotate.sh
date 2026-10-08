@@ -6,7 +6,7 @@
 #
 # Alternative: HashiCorp Vault (optional, VAULT_ENABLED=0) — see config.toml.example [infra] VAULT_*
 #   Vault provides auto-rotation + audit via hashicorp/vault:1.15 (--profile vault)
-#   This script works without Vault; Vault is opt-in, disabled by default, local overrides gitignored via .env.local
+#   This script works without Vault; Vault is opt-in, disabled by default, local overrides gitignored via config.toml
 #
 # Usage:
 #   __secrets-rotate.sh --audit              list weak secrets (read-only)

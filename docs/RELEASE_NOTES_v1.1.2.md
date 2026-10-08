@@ -36,9 +36,9 @@ This release fixes the **Ranking Web Server** not displaying the scoreboard prop
 
 ```bash
 git pull
-docker compose -f docker-compose.admin.yml build --no-cache ranking-web-server
-docker compose -f docker-compose.admin.yml up -d ranking-web-server
-docker compose -f docker-compose.core.yml restart proxy-service
+docker compose --profile admin build --no-cache ranking-web-server
+docker compose --profile admin up -d ranking-web-server
+docker compose --profile core restart proxy-service
 ```
 
 ## Known Issues

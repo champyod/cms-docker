@@ -9,11 +9,11 @@ manual paths. This card covers day-2 operations only.
 ### Start Services
 ```bash
 make pull              # Pull latest images
-make core-img          # Start core services
-make admin-img         # Start admin panel
-make contest-img       # Start contest interface
-make worker-img        # Start workers
-make infra-img         # Start monitoring
+make core              # Start core services
+make admin             # Start admin panel
+make contest           # Start contest interface
+make worker            # Start workers
+make infra             # Start monitoring
 ```
 
 ### Stop Services
@@ -48,7 +48,7 @@ make db-clean          # FULL RESET (deletes all data!)
 ./cms config sync
 
 # Restart services
-make core-img
+make core
 
 # Non-interactive fleet deploy / status
 ./cms worker deploy
@@ -95,7 +95,7 @@ docker logs cms-database -f
 
 # Reset database (WARNING: Deletes all data!)
 make db-clean
-make core-img
+make core
 make cms-init
 ```
 
@@ -104,7 +104,7 @@ Edit `config.toml`:
 ```ini
 POSTGRES_PORT_EXTERNAL=5433  # Change from 5432
 ```
-Then: `./cms config sync && make core-img`
+Then: `./cms config sync && make core`
 
 ### Submissions Stuck
 ```bash
@@ -165,11 +165,11 @@ docker restart <name>  # Restart container
    ```bash
    make db-clean
    make pull
-   make core-img
+   make core
    sleep 10
    make cms-init
    make admin-create
-   make admin-img contest-img worker-img
+   make admin contest worker
    ```
 
 2. **Config Corruption**:
@@ -183,7 +183,7 @@ docker restart <name>  # Restart container
    ```bash
    docker compose down
    docker system prune -f
-   make core-img
+   make core
    ```
 
 ## Documentation

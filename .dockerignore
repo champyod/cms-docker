@@ -26,7 +26,6 @@ config.toml
 .env
 .env.*
 !.env.*.example
-!.env.example
 config/cms.toml
 config/grader.nginx.conf
 config/letsencrypt/
@@ -39,6 +38,6 @@ grafana-data/
 .omo/
 .tools/
 
-# Preserve src submodule completeness despite docs/md exclusions above
+# Preserve the src/ tree in the image despite the docs/md exclusions above
 !src/
 !src/**

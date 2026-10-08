@@ -2,7 +2,7 @@
 
 ## Worker Management API
 
-The Admin Panel can manage workers through environment variables that persist across `make env` regenerations.
+The Admin Panel can manage workers through environment variables that persist across `./cms config sync` regenerations.
 
 ### Available Scripts
 
@@ -52,19 +52,19 @@ exec('cd /repo-root && ./scripts/__manage_workers.sh add cms-worker-1 26001',
 
 2. **Regenerate configuration**
    - UI shows notification: "Click 'Regenerate Config' to apply changes"
-   - When clicked, UI executes: `cd /repo-root && make env`
+   - When clicked, UI executes: `cd /repo-root && ./cms config sync`
    - This runs `scripts/inject_config.sh` which reads `WORKER_N` env vars and injects them into `cms.toml`
 
 3. **Restart services**
    - UI prompts: "Changes applied. Restart core services?"
    - On confirm, executes:
-     - For image deployment: `cd /repo-root && make core-img`
-     - For source deployment: `cd /repo-root && make core`
+     - For image deployment: `cd /repo-root && DEPLOYMENT_TYPE_OVERRIDE=img make core`
+     - For source deployment: `cd /repo-root && DEPLOYMENT_TYPE_OVERRIDE=src make core`
    - Or simpler: `docker restart cms-log-service`
 
 ### Environment Variables Available
 
-The Admin UI has access to these environment variables (see `docker-compose.admin.yml`):
+The Admin UI has access to these environment variables (see `docker-compose.yml`):
 
 ```yaml
 environment:
@@ -122,11 +122,11 @@ export async function regenerateConfig() {
   
   try {
     // Step 1: Regenerate config
-    await execAsync('cd /repo-root && make env');
+    await execAsync('cd /repo-root && ./cms config sync');
     
     // Step 2: Restart services based on deployment type
     if (deploymentType === 'img') {
-      await execAsync('cd /repo-root && docker compose -f docker-compose.core.yml -f docker-compose.core.img.yml up -d --no-build');
+      await execAsync('cd /repo-root && docker compose -f docker-compose.yml --profile core up -d --no-build');
     } else {
       await execAsync('cd /repo-root && docker restart cms-log-service');
     }
@@ -251,7 +251,7 @@ Test the integration locally:
 grep WORKER_ .env.core
 
 # 3. Regenerate config
-make env
+./cms config sync
 
 # 4. Verify it was injected into cms.toml
 grep -A 5 "^Worker = " config/cms.toml

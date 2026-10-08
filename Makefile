@@ -93,7 +93,7 @@ help:
 	@echo "  make backup         - Run cms-monitor backup"
 	@echo ""
 	@echo "Deprecated aliases (print warning, still work):"
-	@echo "  make core-img, admin-img, contest-img, worker-img, infra-img  (deprecated) use 'make <stack>' with DEPLOYMENT_TYPE=img or IMG override"
+	@echo "  make core-img, admin-img, contest-img, worker-img, infra-img  (deprecated) use 'make <stack>' — DEPLOYMENT_TYPE already defaults to img"
 	@echo "  make pull-core, pull-admin, pull-contest, pull-worker, pull-infra (deprecated) use 'docker compose --profile <stack> pull'"
 	@echo "  make admin-dev, admin-dev-stop, contest-down                     (deprecated — contest-down now alias for down)"
 

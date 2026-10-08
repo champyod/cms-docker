@@ -73,8 +73,8 @@ Two things to know about the secret:
 
 ### Where the values enter the container
 
-The six variables reach three containers, declared in `docker-compose.yml` and
-`docker-compose.admin.yml`: `admin-panel-next` reads them directly from its environment,
+The six variables reach three containers, declared in `docker-compose.yml`:
+`admin-panel-next` reads them directly from its environment,
 while `admin-web-server` and `contest-web-server` cannot — the Python process reads only
 the TOML named by `CMS_CONFIG`. `scripts/__inject_config.sh` therefore copies each value
 into the `[admin_web_server.captcha]` and `[contest_web_server.captcha]` tables of

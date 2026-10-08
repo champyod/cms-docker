@@ -814,31 +814,37 @@ The admin panel mounts `/var/run/docker.sock`. All Docker operations (`getContai
 ### Multi-Stack Architecture
 
 ```
-docker-compose.core.yml              # DB, RPC services, evaluation
-docker-compose.admin.yml             # Admin panel (Next.js + Python)
-docker-compose.contests.generated.yml # Per-contest web servers (generated)
-docker-compose.worker.yml            # Sandboxed workers
-# monitor                            # Backups, health monitoring (profile in docker-compose.yml)
+docker-compose.yml                     # the single project: every stack, each gated by a
+                                       # profile — core, admin, contest, worker, monitor, proxy
+docker-compose.domain.yml              # optional domain front: grader-nginx-proxy + certbot
+docker-compose.waf.yml                 # optional ModSecurity front over the domain stack
+docker-compose.tailscale.yml           # optional funnel, merged on top of docker-compose.yml
+docker-compose.vault.yml / .monitoring.yml / .socket-proxy.yml   # optional extras
+# generated, never tracked:
+#   docker-compose.expose.yml          # the *_BIND_IP / *_PORT_EXTERNAL override (make expose)
+#   docker-compose.override.yml        # local pins (see docker-compose.override.yml.example)
 ```
 
 ### Makefile Targets
 
 ```bash
-make env            # Generate .env, cms.toml, admin-panel/.env
+./cms config sync   # Generate .env, cms.toml, admin-panel/.env
 make core           # Deploy core stack (DEPLOYMENT_TYPE=img → pull+up, else src build)
 make admin          # Deploy admin panel
 make contest        # Deploy contest interfaces (CONTEST_ID canonical)
 make worker         # Deploy workers
 make infra          # Deploy monitor/backup stack (alias: infra → monitor)
+make proxy          # Optional contest nginx front (publishes 80/443 only with NGINX_BIND_IP)
 make pull           # Pull images for ALL profiles (offline-tolerant, warns on failure)
-make stack-stop     # core|admin|contest|worker|infra -stop (contest-down removes containers)
-make stack-clean    # down -v per stack
+make core-stop      # stop one stack (admin-stop, contest-stop, proxy-stop, worker-stop, infra-stop)
+make contest-clean  # down -v one stack (same suffix for every stack above)
 make db-clean       # down -v ALL profiles (destructive)
 make db-reset       # db-clean + core with img override
 make cms-init       # Initialize CMS database
 make admin-create   # Create superadmin account interactively
 make prisma-sync    # Sync Prisma schema to DB
 make lint           # shellcheck/hadolint/yamllint + compose config validation
+make test           # the developer suites in tests/
 make preflight      # Run scripts/__preflight.sh
 make smoke-test     # Run scripts/__smoke-test.sh
 make backup         # Run cms-monitor backup

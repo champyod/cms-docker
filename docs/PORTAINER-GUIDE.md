@@ -38,7 +38,7 @@ Deploy stacks in this order:
    - **Build method**: "Upload" or "Web editor"
 
 3. **Upload/Paste Compose File**
-   - Upload: Choose `docker-compose.core.yml`
+   - Upload: Choose `docker-compose.yml` (set `COMPOSE_PROFILES=core` as a stack variable)
    - Or paste the contents in web editor
 
 4. **Add Environment Variables**
@@ -88,7 +88,7 @@ Deploy stacks in this order:
 
 1. **Create New Stack**
    - Name: `cms-admin`
-   - Upload/paste `docker-compose.admin.yml`
+   - Upload/paste `docker-compose.yml` (set `COMPOSE_PROFILES=admin` as a stack variable)
 
 2. **Environment Variables**
 
@@ -132,7 +132,7 @@ Deploy stacks in this order:
 
 1. **Create New Stack**
    - Name: `cms-contest-1`
-   - Upload/paste `docker-compose.contest.yml`
+   - Upload/paste `docker-compose.yml` (set `COMPOSE_PROFILES=contest` as a stack variable)
 
 2. **Generate Secret Key**
    
@@ -188,7 +188,7 @@ Repeat the process for each contest:
 
 1. **Create New Stack**
    - Name: `cms-worker-0`
-   - Upload/paste `docker-compose.worker.yml`
+   - Upload/paste `docker-compose.yml` (set `COMPOSE_PROFILES=worker` as a stack variable)
 
 2. **Environment Variables**
 
@@ -470,7 +470,7 @@ Use Nginx or Traefik for load balancing.
      "description": "Contest web server",
      "repository": {
        "url": "https://github.com/your-repo",
-       "stackfile": "docker-compose.contest.yml"
+       "stackfile": "docker-compose.yml"
      },
      "env": [
        {

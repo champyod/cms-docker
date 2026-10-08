@@ -337,7 +337,7 @@ _prompt_optional_features() {
       printf "  HSM module (softhsm|yubihsm|cloudhsm) [%s]: " "$HSM_MODULE"
       read -r ans || true
       [[ -n "$ans" ]] && HSM_MODULE="$ans"
-      printf "  HSM PIN (will be stored in .env.local — gitignored): "
+      printf "  HSM PIN (config.toml [infra] HSM_PIN — gitignored): "
       read -r -s ans || true; echo ""
       [[ -n "$ans" ]] && HSM_PIN="$ans"
       printf "  HSM key label [%s]: " "$HSM_KEY_LABEL"
@@ -353,7 +353,7 @@ _prompt_optional_features() {
       printf "  Vault addr [%s]: " "$VAULT_ADDR"
       read -r ans || true
       [[ -n "$ans" ]] && VAULT_ADDR="$ans"
-      printf "  Vault token (gitignored via .env.local): "
+      printf "  Vault token (config.toml [infra] VAULT_TOKEN — gitignored): "
       read -r -s ans || true; echo ""
       [[ -n "$ans" ]] && VAULT_TOKEN="$ans"
       printf "  Vault path [%s]: " "$VAULT_PATH"

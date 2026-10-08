@@ -143,10 +143,13 @@ CONTEST_PORT_EXTERNAL=8886
 
 Deploy each with different project names:
 ```bash
-CONTEST_ID=1 CONTEST_PORT_EXTERNAL=8888 docker compose -f docker-compose.contest.yml -p cms-contest-1 up -d
-CONTEST_ID=2 CONTEST_PORT_EXTERNAL=8887 docker compose -f docker-compose.contest.yml -p cms-contest-2 up -d
-CONTEST_ID=3 CONTEST_PORT_EXTERNAL=8886 docker compose -f docker-compose.contest.yml -p cms-contest-3 up -d
+CONTEST_ID=1 CONTEST_PORT_EXTERNAL=8888 docker compose -f docker-compose.yml --profile core --profile contest -p cms-contest-1 up -d
+CONTEST_ID=2 CONTEST_PORT_EXTERNAL=8887 docker compose -f docker-compose.yml --profile core --profile contest -p cms-contest-2 up -d
+CONTEST_ID=3 CONTEST_PORT_EXTERNAL=8886 docker compose -f docker-compose.yml --profile core --profile contest -p cms-contest-3 up -d
 ```
+> **Note:** every service in `docker-compose.yml` carries a fixed `container_name`, so `-p`
+> changes the project label but not the container names. Two contests cannot run side by side
+> without a `docker-compose.override.yml` per project that renames the containers.
 
 ---
 

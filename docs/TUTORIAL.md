@@ -235,12 +235,12 @@ docker ps
 docker restart cms-contest-web-server-1
 
 # Restart all core services
-make core-img
+make core
 
 # Restart everything
 docker compose down
 make pull
-make core-img admin-img contest-img worker-img
+make core admin contest worker
 ```
 
 ## Common Tasks
@@ -254,9 +254,9 @@ or the fleet TUI — never by hand-editing `.env.*` (generated files):
 # Interactive fleet editor: add worker entries (hostname:port)
 ./cms worker edit
 
-# Regenerate .env.* and restart core
+# Regenerate .env and restart core
 ./cms config sync
-make core-img
+make core
 ```
 
 On the main server, attach each worker box (prints the worker-side block):
@@ -339,7 +339,7 @@ so `--scale` cannot multiply it). Add shards via the fleet:
 3. If needed, reset database:
    ```bash
    make db-clean
-   make core-img
+   make core
    make cms-init
    ```
 
@@ -355,7 +355,7 @@ so `--scale` cannot multiply it). Add shards via the fleet:
 2. Regenerate and restart:
    ```bash
    ./cms config sync
-   make core-img
+   make core
    ```
 
 ## Next Steps
@@ -369,10 +369,10 @@ so `--scale` cannot multiply it). Add shards via the fleet:
 ```bash
 # Daily Operations
 ./cms config sync     # Regenerate configuration from config.toml
-make core-img         # Start/restart core services
-make admin-img        # Start/restart admin panel
-make contest-img      # Start/restart contest interface
-make worker-img       # Start/restart workers
+make core              # Start/restart core services
+make admin             # Start/restart admin panel
+make contest           # Start/restart contest interface
+make worker            # Start/restart workers
 
 # Maintenance
 make pull             # Pull latest images
@@ -382,7 +382,7 @@ make cms-init         # Initialize database
 # Monitoring
 docker ps             # List running containers
 docker logs <name>    # View logs
-make infra-img        # Start monitoring (Discord alerts)
+make infra           # Start monitoring (Discord alerts)
 
 # Service Control
 make {service}-stop   # Stop service

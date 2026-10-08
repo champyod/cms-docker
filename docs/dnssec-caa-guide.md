@@ -100,9 +100,10 @@ Multiple `issue` lines mean OR (any listed may issue).
 ### 3. Enable locally
 
 ```bash
-# config.toml [infra] or .env.local (gitignored)
-CAA_ENABLED=1
-CAA_ISSUER=letsencrypt.org
+# config.toml [infra] (gitignored) — the only config source; .env is generated from it
+#   CAA_ENABLED = 1
+#   CAA_ISSUER  = "letsencrypt.org"
+./cms config sync
 ```
 
 ### 4. Validate
@@ -130,13 +131,15 @@ dig CAA grader.mwit.ac.th +short
 
 ---
 
-## How to Enable via Env + Check
+## How to Enable via config.toml + Check
 
 ```bash
 # enable (optional, not for prod by default — asked in TUI)
-echo 'DNSSEC_ENABLED=1' >> .env.local   # gitignored
-echo 'CAA_ENABLED=1'     >> .env.local
-echo 'CAA_ISSUER=letsencrypt.org' >> .env.local
+# config.toml [infra] (gitignored):
+#   DNSSEC_ENABLED = 1
+#   CAA_ENABLED    = 1
+#   CAA_ISSUER     = "letsencrypt.org"
+./cms config sync
 
 # check status (logs without forcing)
 ./scripts/__domain.sh status
