@@ -16,6 +16,8 @@ examples/
 *.md
 backups/
 drills/
+# Developer/CI suites only; a running deployment never reaches them.
+tests/
 
 # Never ship live secrets or runtime state in image layers: config.toml and
 # .env are the generated sources of truth (auto-generated secrets), and the

@@ -43,7 +43,7 @@ WAF_COMPOSE_FLAGS    := -f docker-compose.yml -f docker-compose.domain.yml -f do
 # binds the same host 80/443 and would fail to publish.
 WAF_UP_PROFILES      := --profile core --profile waf
 
-.PHONY: expose setup audit help env core admin contest worker infra domain waf core-stop admin-stop contest-stop contest-down worker-stop infra-stop domain-stop waf-stop core-clean admin-clean contest-clean worker-clean infra-clean domain-clean waf-clean db-clean clean pull pull-core pull-admin pull-contest pull-worker pull-infra core-img admin-img contest-img worker-img infra-img admin-dev admin-dev-stop contest-down cms-init admin-create prisma-sync lint smoke-test preflight backup db-reset
+.PHONY: expose setup audit help env core admin contest worker infra domain waf core-stop admin-stop contest-stop contest-down worker-stop infra-stop domain-stop waf-stop core-clean admin-clean contest-clean worker-clean infra-clean domain-clean waf-clean db-clean clean pull pull-core pull-admin pull-contest pull-worker pull-infra core-img admin-img contest-img worker-img infra-img admin-dev admin-dev-stop contest-down cms-init admin-create prisma-sync lint test smoke-test preflight backup db-reset
 
 # Regenerate the bind override from .env before a stack comes up. The base compose
 # files publish the front-door ports on 0.0.0.0; this override rebinds them to the
@@ -83,6 +83,7 @@ help:
 	@echo "  make admin-create   - Create first superadmin account"
 	@echo "  make prisma-sync    - Apply Prisma migrations (migrate deploy) + seed permissions"
 	@echo "  make lint           - Run shellcheck/hadolint/yamllint + compose config validation"
+	@echo "  make test           - Run the developer suites in tests/ (needs a checkout, not a stack)"
 	@echo "  make smoke-test     - Run scripts/__smoke-test.sh"
 	@echo "  make preflight      - Run scripts/__preflight.sh"
 	@echo "  make backup         - Run cms-monitor backup"
@@ -453,7 +454,7 @@ lint:
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		echo "→ shellcheck"; \
 		files=(); \
-		for pattern in scripts/*.sh tools/*.sh src/tools/*.sh docker/*.sh src/docker/*.sh; do \
+		for pattern in scripts/*.sh tools/*.sh src/tools/*.sh docker/*.sh src/docker/*.sh tests/*.sh tests/__lib/*.sh tests/fixtures/*; do \
 			for f in $$pattern; do \
 				[ -f "$$f" ] && files+=("$$f"); \
 			done; \
@@ -518,6 +519,29 @@ lint:
 	else \
 		echo "→ docker not found, skipping compose validation"; \
 	fi
+
+# Developer/CI checks: they need a checkout, not a running stack (see preflight/smoke-test).
+# env -i: the suites stage their own .env, so make's exported .env vars must not leak in.
+test:
+	@rc=0; \
+	ran=0; \
+	for f in tests/test_*.sh tests/test_*.py; do \
+		[ -f "$$f" ] || continue; \
+		ran=1; \
+		case "$$f" in *.py) runner=python3 ;; *) runner=bash ;; esac; \
+		printf '\n== %s ==\n' "$$f"; \
+		env -i PATH="$$PATH" HOME="$${HOME:-/tmp}" TMPDIR="$${TMPDIR:-/tmp}" LC_ALL=C "$$runner" "$$f" \
+			|| { echo "[FAIL] $$f" >&2; rc=1; }; \
+	done; \
+	if [ "$$ran" -eq 0 ]; then \
+		echo "ERROR: no tests/test_*.sh or tests/test_*.py found — run from the repository root." >&2; \
+		exit 1; \
+	fi; \
+	if [ "$$rc" -ne 0 ]; then \
+		echo ""; echo "FAILED: one or more suites failed" >&2; \
+		exit 1; \
+	fi; \
+	echo ""; echo "all suites passed"
 
 smoke-test:
 	@if [ -x scripts/__smoke-test.sh ]; then \

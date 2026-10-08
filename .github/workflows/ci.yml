@@ -44,6 +44,7 @@ jobs:
       worker: ${{ steps.filter.outputs.worker }}
       admin: ${{ steps.filter.outputs.admin }}
       monitor: ${{ steps.filter.outputs.monitor }}
+      scheduler: ${{ steps.filter.outputs.scheduler }}
       rust: ${{ steps.filter.outputs.rust }}
     steps:
       - uses: actions/checkout@v4
@@ -64,6 +65,13 @@ jobs:
             monitor:
               - 'docker/monitor/**'
               - 'scripts/__monitor.sh'
+            scheduler:
+              - 'admin-panel/src/scheduler/**'
+              - 'admin-panel/src/lib/**'
+              - 'admin-panel/prisma/**'
+              - 'admin-panel/package.json'
+              - 'admin-panel/tsconfig.json'
+              - 'docker/scheduler/**'
             rust:
               - 'tools/cms-tui/**'
               - '.tools/cms-tui/**'
@@ -94,7 +102,7 @@ jobs:
       - name: ShellCheck
         run: |
           files=()
-          for pattern in 'scripts/*.sh' 'tools/*.sh' 'src/tools/*.sh' 'docker/*.sh' 'src/docker/*.sh'; do
+          for pattern in 'scripts/*.sh' 'tools/*.sh' 'src/tools/*.sh' 'docker/*.sh' 'src/docker/*.sh' 'tests/*.sh' 'tests/__lib/*.sh' 'tests/fixtures/*'; do
             for f in ${pattern}; do
               [ -f "$f" ] && files+=("$f")
             done
@@ -192,6 +200,24 @@ jobs:
 
       - name: RLS SQL freshness
         run: bash scripts/__generate_rls_sql.sh --check
+
+  # Runs the repo suites, which nothing else does; they need a checkout, not a stack.
+  suites:
+    name: Suites (repo tests/)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name != 'workflow_dispatch'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # The harness fails (not skips) when a tool it stages is missing.
+      - name: Install suite prerequisites
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends jq
+
+      # Needs DISK_FLOOR_GB free outside the checkout for its scratch tree.
+      - name: Run the repo suites
+        run: make test
 
   # WHY a separate job: nothing else type-checks or tests the admin panel, so a
   # type error or a failing unit test could reach main unnoticed. The secret
@@ -621,3 +647,105 @@ jobs:
           labels: ${{ steps.meta-monitor.outputs.labels }}
           cache-from: type=gha,scope=monitor
           cache-to: type=gha,mode=max,scope=monitor
+
+  # Built only by the removed build-and-push workflow; folded in so it still ships.
+  build-and-push-scheduler:
+    name: Build scheduler image
+    needs: changes
+    if: needs.changes.outputs.scheduler == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the Container registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Backup Scheduler
+        id: meta-scheduler
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-scheduler
+          tags: |
+            type=ref,event=branch
+            type=sha,format=long
+            type=raw,value=latest,enable=${{ github.ref_name == 'main' || github.ref_name == 'major/admin-panel' }}
+
+      - name: Build and push Backup Scheduler
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/scheduler/Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-scheduler.outputs.tags }}
+          labels: ${{ steps.meta-scheduler.outputs.labels }}
+          cache-from: type=gha,scope=scheduler
+          cache-to: type=gha,mode=max,scope=scheduler
+
+  # Single required check: passes when every other job succeeded or was skipped.
+  gate:
+    name: CI
+    if: always()
+    needs:
+      - changes
+      - lint
+      - gates
+      - suites
+      - panel
+      - container-scan
+      - rust
+      - release-binary
+      - build-and-push-core
+      - build-and-push-worker
+      - build-and-push-admin
+      - build-and-push-monitor
+      - build-and-push-scheduler
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every upstream job to have succeeded or been skipped
+        run: |
+          declare -A result=(
+            [changes]="${{ needs.changes.result }}"
+            [lint]="${{ needs.lint.result }}"
+            [gates]="${{ needs.gates.result }}"
+            [suites]="${{ needs.suites.result }}"
+            [panel]="${{ needs.panel.result }}"
+            [container-scan]="${{ needs.container-scan.result }}"
+            [rust]="${{ needs.rust.result }}"
+            [release-binary]="${{ needs.release-binary.result }}"
+            [build-and-push-core]="${{ needs.build-and-push-core.result }}"
+            [build-and-push-worker]="${{ needs.build-and-push-worker.result }}"
+            [build-and-push-admin]="${{ needs.build-and-push-admin.result }}"
+            [build-and-push-monitor]="${{ needs.build-and-push-monitor.result }}"
+            [build-and-push-scheduler]="${{ needs.build-and-push-scheduler.result }}"
+          )
+          failed=0
+          for job in "${!result[@]}"; do
+            outcome="${result[$job]}"
+            case "$outcome" in
+              success|skipped) ;;
+              *) echo "::error::$job did not succeed ($outcome)"; failed=1 ;;
+            esac
+          done
+          if (( failed != 0 )); then
+            echo "one or more jobs failed — open the failing job above for the step"
+            exit 1
+          fi
+          echo "all jobs succeeded or were skipped"
