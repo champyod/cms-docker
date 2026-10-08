@@ -242,6 +242,7 @@ readonly PORT80_PROBE_TIMEOUT_S=5
 readonly CERT_DIR_NAME="letsencrypt"
 readonly CERT_BACKUP_KEEP=5
 readonly DOMAIN_LOCK_FILE=".domain.lock"
+readonly DOMAIN_PROXY_CONTAINER="grader-nginx-proxy"
 
 # ---------------------------------------------------------------------------
 # Usage
@@ -1197,35 +1198,42 @@ EOF
 # ---------------------------------------------------------------------------
 # Nginx config validation
 # ---------------------------------------------------------------------------
+# The domain proxy by exact container name, or empty when it is down. The contest
+# front door is also an nginx container, so "the first nginx one" is the wrong proxy.
+_running_domain_proxy() {
+  if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DOMAIN_PROXY_CONTAINER"; then
+    printf '%s' "$DOMAIN_PROXY_CONTAINER"
+  fi
+}
+
 _validate_nginx_config() {
   if [[ "$DRY_RUN" -eq 1 ]]; then
     log_info "[dry-run] would run nginx -t inside docker"
     return 0
   fi
 
-  if docker ps --format '{{.Names}}' 2>/dev/null | grep -q 'nginx'; then
-    local container
-    container="$(docker ps --format '{{.Names}}' | grep 'nginx' | head -1)"
-    if docker exec "$container" nginx -t 2>&1; then
-      log_info "nginx config test passed in $container"
-    else
-      log_warn "nginx config test failed in $container"
-    fi
+  local container
+  container="$(_running_domain_proxy)"
+  if [[ -z "$container" ]]; then
+    log_warn "domain proxy (${DOMAIN_PROXY_CONTAINER}) is not running — skipping nginx -t"
+    return 0
+  fi
+  if docker exec "$container" nginx -t 2>&1; then
+    log_info "nginx config test passed in $container"
   else
-    log_warn "no nginx container running — skipping nginx -t"
+    log_warn "nginx config test failed in $container"
   fi
 }
 
-# Reloads the first running nginx container so it picks up a freshly rendered config
-# or a renewed certificate. A container that is not running is not an error: the
-# caller has already produced the config on disk, and whether the proxy is up right
-# now is a separate question answered by status/preflight.
+# Reloads the domain proxy so it re-resolves its upstreams: a redeployed backend has a
+# new container IP, and nginx caches the old one until it reloads. A proxy that is not
+# running is not an error — the rendered config is already on disk.
 _reload_running_nginx() {
-  docker ps --format '{{.Names}}' 2>/dev/null | grep -q nginx || return 0
-  local nginx_container
-  nginx_container="$(docker ps --format '{{.Names}}' | grep nginx | head -1)"
-  docker exec "$nginx_container" nginx -s reload 2>/dev/null || log_warn "nginx reload failed"
-  log_info "nginx reloaded in $nginx_container"
+  local container
+  container="$(_running_domain_proxy)"
+  [[ -n "$container" ]] || return 0
+  docker exec "$container" nginx -s reload 2>/dev/null || log_warn "nginx reload failed"
+  log_info "nginx reloaded in $container"
 }
 
 # ---------------------------------------------------------------------------
