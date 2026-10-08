@@ -84,9 +84,9 @@ pub struct DomainStoreArgs {
 /// [`crate::core::domain_setup::DomainSetupRequest`].
 #[derive(Args, Clone, Debug)]
 pub struct DomainSetupArgs {
-    /// Certificate type (letsencrypt|provided|selfsigned).
-    #[arg(long, default_value = "letsencrypt")]
-    pub cert: String,
+    /// Certificate type (letsencrypt|provided|selfsigned); unset lets `DOMAIN_CERT_METHOD` apply.
+    #[arg(long)]
+    pub cert: Option<String>,
     /// Primary domain (default from `DOMAIN_NAME` env).
     #[arg(long)]
     pub domain: Option<String>,

@@ -5,33 +5,31 @@ use super::{
     domain_setup_args, DomainRetryPolicy, DomainSetupRequest, DomainStorePolicy, DomainSwitches,
 };
 
-/// The baseline every caller starts from: `cms domain setup` with no flags.
+/// The baseline every caller starts from: `cms domain setup` with no flags, cert untyped.
 fn base() -> DomainSetupRequest {
     DomainSetupRequest {
-        cert: "letsencrypt".to_string(),
         is_yes: true,
         ..DomainSetupRequest::default()
     }
 }
 
 #[test]
-fn an_empty_request_is_only_the_verb_cert_and_non_interactive_flag() {
-    assert_eq!(
-        domain_setup_args("setup", &base()),
-        vec!["setup", "--cert", "letsencrypt", "--yes"]
-    );
+fn an_empty_request_is_only_the_verb_and_non_interactive_flag() {
+    assert_eq!(domain_setup_args("setup", &base()), vec!["setup", "--yes"]);
 }
 
 #[test]
-fn a_blank_cert_falls_back_to_the_script_default() {
-    let setup = DomainSetupRequest {
-        cert: String::new(),
+fn a_typed_cert_is_emitted_and_an_empty_one_is_left_to_the_script() {
+    let typed = DomainSetupRequest {
+        cert: "provided".to_string(),
         ..base()
     };
     assert_eq!(
-        domain_setup_args("setup", &setup),
-        vec!["setup", "--cert", "letsencrypt", "--yes"]
+        domain_setup_args("setup", &typed),
+        vec!["setup", "--cert", "provided", "--yes"]
     );
+    // An empty cert reaches the script as the absence of --cert, leaving DOMAIN_CERT_METHOD to apply.
+    assert_eq!(domain_setup_args("setup", &base()), vec!["setup", "--yes"]);
 }
 
 #[test]
@@ -54,8 +52,6 @@ fn every_value_flag_is_emitted_in_script_order() {
         domain_setup_args("setup", &setup),
         vec![
             "setup",
-            "--cert",
-            "letsencrypt",
             "--domain",
             "contest.example.org",
             "--admin-domain",
@@ -131,8 +127,6 @@ fn auto_retry_alone_keeps_the_typed_cap() {
         domain_setup_args("setup", &setup),
         vec![
             "setup",
-            "--cert",
-            "letsencrypt",
             "--auto-retry",
             "--retry-attempts",
             "3",
@@ -174,8 +168,6 @@ fn the_boolean_flags_keep_their_established_order() {
         domain_setup_args("setup", &setup),
         vec![
             "setup",
-            "--cert",
-            "letsencrypt",
             "--wait-port80",
             "60",
             "--staging",

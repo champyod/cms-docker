@@ -186,12 +186,12 @@ const BOOL_FLAGS: [(&str, BoolFlagFn); 5] = [
 /// input struct, so a request always produces argv rather than failing.
 #[must_use]
 pub fn domain_setup_args(verb: &str, setup: &DomainSetupRequest) -> Vec<String> {
-    let cert = if setup.cert.is_empty() {
-        DEFAULT_CERT_METHOD
-    } else {
-        setup.cert.as_str()
-    };
-    let mut out = vec![verb.to_string(), "--cert".to_string(), cert.to_string()];
+    let mut out = vec![verb.to_string()];
+    // An empty cert must reach the script as the absence of --cert so DOMAIN_CERT_METHOD applies.
+    if !setup.cert.is_empty() {
+        out.push("--cert".to_string());
+        out.push(setup.cert.clone());
+    }
 
     for (flag, field) in VALUE_FLAGS {
         if let Some(value) = field(setup) {

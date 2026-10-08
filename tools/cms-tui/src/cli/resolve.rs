@@ -73,7 +73,7 @@ fn domain_setup_from(cmd: &DomainCmd) -> DomainSetupRequest {
     let args = args.as_ref();
 
     DomainSetupRequest {
-        cert: args.cert.clone(),
+        cert: args.cert.clone().unwrap_or_default(),
         domain: clone_or_empty(args.domain.as_ref()),
         admin_domain: clone_or_empty(args.admin_domain.as_ref()),
         oj_domain: clone_or_empty(args.oj_domain.as_ref()),

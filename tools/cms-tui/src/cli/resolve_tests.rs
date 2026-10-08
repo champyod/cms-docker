@@ -36,7 +36,7 @@ fn config_sync_forwards_dry_run_and_no_secrets() {
 fn domain_setup_keeps_its_original_shape_when_nothing_extra_is_asked() {
     let (key, args) = parse(&["cms", "domain", "setup"]).expect("resolves");
     assert_eq!(key, crate::core::dispatch::DispatchKey::DomainSetup);
-    assert_eq!(args, vec!["setup", "--cert", "letsencrypt"]);
+    assert_eq!(args, vec!["setup"]);
 }
 
 #[test]
@@ -75,8 +75,6 @@ fn domain_setup_forwards_every_advanced_flag() {
         args,
         vec![
             "setup",
-            "--cert",
-            "letsencrypt",
             "--domain",
             "grader.example.org",
             "--wait-port80",
@@ -119,7 +117,7 @@ fn every_setup_shaped_verb_forwards_its_flags() {
         assert_eq!(got_key, key);
         assert_eq!(
             args,
-            vec![verb, "--cert", "letsencrypt", "--domain", "x.example.org"],
+            vec![verb, "--domain", "x.example.org"],
             "{verb} forwards the same payload as setup"
         );
     }
