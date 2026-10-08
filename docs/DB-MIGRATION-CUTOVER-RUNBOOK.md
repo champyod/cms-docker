@@ -46,7 +46,7 @@ It performs, in order:
 |---|---|---|
 | 1 | Record pre-update state | git HEAD + image digests → `/tmp/cms-update-<timestamp>.txt` |
 | 2 | `git pull --ff-only` | **The code pull happens here** — before any schema step |
-| 3 | `make env` | Regenerates `.env`; the RPC secret is fail-closed, so this must succeed before the restart |
+| 3 | `./cms config sync` | Regenerates `.env`; the RPC secret is fail-closed, so this must succeed before the restart |
 | 4 | `scripts/__apply_sql.sh --bootstrap-roles` | Creates/updates the two roles **before** services restart, so `cms_backup` can connect |
 | 5 | `scripts/__preflight.sh --stack all` | Aborts cleanly if the host is not ready |
 | 6 | `scripts/__backup.sh` | Safety backup for this specific upgrade; aborts the update if it fails |
@@ -102,7 +102,7 @@ Two orderings matter:
 If `update-server` cannot be used, run the same order by hand:
 
 ```bash
-make env                                       # alias of ./cms config sync
+./cms config sync                                 # was `make env`, now a deprecated alias of this
 make core                                      # database + core services up
 make cms-init
 bash scripts/__apply_sql.sh --bootstrap-roles  # role preflight — must succeed
@@ -203,7 +203,7 @@ Run from the repo root. `psql` examples use the default names; substitute `POSTG
 
 ## 5. When a step fails
 
-- **Backup or `make env` fails** → stop. Nothing has changed yet.
+- **Backup or `./cms config sync` fails** → stop. Nothing has changed yet.
 - **Role bootstrap fails** (update-server step 4, or the `./cms` preflight message `role bootstrap failed — fix DB roles then re-run`): ensure `.env` has `POSTGRES_BACKUP_PASSWORD` (`./cms config sync`) and `cms-database` is healthy, then re-run `bash scripts/__apply_sql.sh --bootstrap-roles`. Creating `cms_backup` (BYPASSRLS) requires superuser — still available at this point, because the owner demotion is the final migration.
 - **The grants migration raises** `role cms_backup is missing — run the role bootstrap step before migrate deploy`: that is `20260912000150_backup_grants` failing **on purpose**. It is the last line of defence against continuing without the backup role, not a bug. Migrations before it are applied and committed. Fix the role (`bash scripts/__apply_sql.sh --bootstrap-roles`), then re-run `make prisma-sync`.
 - **Any other migration fails part-way:** each migration runs in a single transaction, so the failed one leaves no partial state; everything before it stays applied and recorded. There is no rollback to a mid-list state. Resumption:

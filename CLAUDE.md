@@ -865,7 +865,7 @@ Deployment workflow:
 git pull origin main
 
 # 2. Regenerate environment files
-make env
+./cms config sync
 
 # 3. Pull + deploy with pre-built images (production)
 make pull
@@ -942,7 +942,7 @@ Secret inputs are masked (`tui::input --password`, gum `--password`), validated 
 ./cms fix               # non-interactive repair of missing/insecure config (validate_value + generators)
 ```
 
-Offsite sync config: `.env.infra`/`.env.core` — `BACKUP_DIR`, `OFFSITE_TAILNET_NODE`, `OFFSITE_REMOTE_PATH`; optional `OFFSITE_ENCRYPT_KEY` enables GPG-encrypted archives (`.gpg` suffix). Offsite sync sources `__lib/common.sh`, resolves `__offsite-sync.sh`.
+Offsite sync config: `config.toml` `[infra]`, rendered into `.env` — `BACKUP_DIR`, `OFFSITE_TAILNET_NODE`, `OFFSITE_REMOTE_PATH`; optional `OFFSITE_ENCRYPT_KEY` enables GPG-encrypted archives (`.gpg` suffix). Offsite sync sources `__lib/common.sh`, resolves `__offsite-sync.sh`.
 
 ### Input Validation Conventions
 
@@ -1067,7 +1067,7 @@ Every runtime value lives in `config.toml` (seeded from `config.toml.example` on
 
 ### Generated outputs
 
-`make env` (or `./cms config sync`) renders exactly two files from `config.toml`:
+`./cms config sync` renders exactly two files from `config.toml`:
 
 | File | Consumer | Contents |
 |------|----------|----------|
@@ -1221,7 +1221,7 @@ cms-docker/
 | Interval fields show 0 | Use `parseInterval()` helper to parse Postgres interval objects |
 | Toast not showing | Ensure component is wrapped in `ToastProvider` |
 | Notification polling loop | Use `useRef` for mutable state in polling effects, not `useState` in deps |
-| `.env` not applied | Run `make env` to regenerate combined .env files |
+| `.env` not applied | Run `./cms config sync` to regenerate the .env file |
 | Contest not switching | Check `CONTEST_ID` in `config.toml` `[contest]` is the wanted contest id, then run `./cms config sync` and redeploy the contest stack |
 
 ---

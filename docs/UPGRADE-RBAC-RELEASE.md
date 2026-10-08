@@ -9,7 +9,7 @@ This release changes the **database schema** (drops 5 columns), **rewrites the p
 Two consequences to accept up front:
 
 1. **It is a hard cutover, not a rolling update.** The old and new admin panels cannot both run against the migrated database (the old one selects the dropped `permission_*` columns). Plan a short maintenance window.
-2. **`make env` MUST run before services restart.** The RPC secret is fail-closed: if `config/cms.toml` has no `[rpc] secret`, every inter-service RPC is rejected and the cluster stops working. `config sync` generates it.
+2. **`./cms config sync` MUST run before services restart.** The RPC secret is fail-closed: if `config/cms.toml` has no `[rpc] secret`, every inter-service RPC is rejected and the cluster stops working. `config sync` generates it.
 
 ## Pre-flight
 
@@ -52,7 +52,7 @@ What it does, in order, and why the order matters:
 |---|---|---|
 | 1 | records old git HEAD + image digests to `/tmp/cms-update-*.txt` | your rollback reference |
 | 2 | `git pull --ff-only` | get the new code |
-| 3 | `make env` → regenerates `.env` + `config/cms.toml` | generates the new `RPC_SECRET` and the role passwords; without this the RPC layer fails closed |
+| 3 | `./cms config sync` → regenerates `.env` + `config/cms.toml` | generates the new `RPC_SECRET` and the role passwords; without this the RPC layer fails closed |
 | 4 | bootstraps DB roles | `cms_backup` must exist and carry its password before the restart so backups succeed; schema sync later ensures all roles are correct |
 | 5 | preflight | abort cleanly before touching anything running |
 | 6 | safety backup | restore point for this specific upgrade |
@@ -112,9 +112,9 @@ The database rollback matters more than the code rollback: the schema change is 
 
 ## What changed for you operationally
 
-- **`make env` is now mandatory before restart**, not optional. The RPC secret is fail-closed.
+- **`./cms config sync` is now mandatory before restart**, not optional. The RPC secret is fail-closed.
 - **One `.env` instead of six.** Edit `config.toml` and re-run `./cms config sync` — never edit `.env` by hand, it is overwritten.
-- **`make env` now adds newly-introduced config keys** to an existing `config.toml` without touching values you already set.
+- **`./cms config sync` now adds newly-introduced config keys** to an existing `config.toml` without touching values you already set.
 - **New secrets are generated automatically**: `RPC_SECRET` and `POSTGRES_BACKUP_PASSWORD`. Nothing to set by hand.
 - **Backups use `cms_backup` (BYPASSRLS, member of `cmsuser`).** Only `cmsuser` and `cms_backup` exist; the database owner `cmsuser` is demoted to `NOBYPASSRLS` so RLS binds.
 - **Schema sync is `prisma migrate deploy`**, with a role bootstrap step before the restart so `cms_backup` is available immediately.

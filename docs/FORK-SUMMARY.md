@@ -30,8 +30,8 @@ Note: `cmscommon/crypto.py` **untouched** — `bcrypt:`/`plaintext:` prefix logi
 
 ## Built new (not upstream at all)
 
-Root: `Dockerfile`, `Makefile`, `cms` launcher, `config.toml.example`, 12 `docker-compose*.yml`, `CLAUDE.md`, `CHANGELOG.md`.
-Dirs: `admin-panel/` (Next.js 16 + React 19 + Prisma 6 + Bun), `scripts/` (41 files + `__lib/`, `__tui/`), `config/` (nginx, fail2ban, grafana, modsecurity, prometheus, tailscale, vault), `docs/`, `docker/`, `tools/` (Rust `cms-tui` source), `.tools/cms-tui/` (vendored binary), `examples/`, `backups/`, `debian/`.
+Root: `Dockerfile`, `Makefile`, `cms` launcher, `config.toml.example`, 7 `docker-compose*.yml`, `CLAUDE.md`, `CHANGELOG.md`.
+Dirs: `admin-panel/` (Next.js 16 + React 19 + Prisma 6 + Bun), `scripts/` (59 entries incl. `__lib/`, `__tui/`), `config/` (nginx, fail2ban, grafana, modsecurity, prometheus, tailscale, vault), `docs/`, `docker/`, `tools/` (Rust `cms-tui` source), `.tools/cms-tui/` (vendored binary), `examples/`, `backups/`, `debian/`.
 
 No `cms-docker` string anywhere inside `src/` — Python tree has zero Docker coupling. Containers wired via generated `cms.toml`/env.
 
@@ -51,11 +51,11 @@ No `cms-docker` string anywhere inside `src/` — Python tree has zero Docker co
 
 ## Scale today
 
-- 12 `docker-compose*.yml` at root (+2 in `tools/`). Profiles: `core`, `admin`, `contest`, `worker`, `monitor`.
-- Makefile: 44 named targets.
-- admin-panel: 22 `page.tsx`, 28 API `route.ts`, 26 server-action files, 27 Prisma models, 12 vitest suites.
+- 7 `docker-compose*.yml` at root (the per-stack `core`/`admin`/`contest`/`worker`/`monitor` files were consolidated into `docker-compose.yml` + profiles). Profiles: `core`, `admin`, `contest`, `proxy`, `worker`, `monitor`.
+- Makefile: 54 named targets.
+- admin-panel: Next.js 16 + React 19 + Prisma 6 + Bun; 178 vitest test files, 2577 tests.
 - `docs/`: TUTORIAL, QUICKREF, ACCESS-CONFIGURATION, DEPENDENCIES, SERVICE_GUIDE, TROUBLESHOOTING, WORKER-SETUP, PORTAINER-GUIDE, optional-features, waf-tuning, csp-implementation, dnssec-caa-guide, 2 release-notes, `decisions/ranking-logo-storage.md`, `superpowers/specs|plans/2026-08-23-admin-panel-refactor*`.
-- CI: 2 workflows + dependabot.
+- CI: one workflow (`ci.yml` — lint, gates, suites, panel, scans, builds) + dependabot (pip, npm, docker, github-actions).
 - Latest release tag: v1.1.2.
 
 ## Permission rebuild (branch `feat/requirements-catalog`)

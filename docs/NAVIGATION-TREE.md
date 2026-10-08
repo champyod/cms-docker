@@ -129,9 +129,9 @@ Siblings ✅ (groups + module rail) · Back: record landings declare parentId an
 | Fact | Worst offenders (file:line) | Sources | Proposed mechanism |
 |---|---|---|---|
 | Container / service names | Makefile:151-152 · cms:298 (+ cms:303-306 probes) · `__smoke-test.sh`:424-427,448,458,465,487 · `__update-server.sh`:127,130,133 · `__restore.sh`:120-134 · docker-compose.yml (the only compose file — the per-stack `.core`/`.admin`/`.contest`/`.worker` files were removed) · config/prometheus/prometheus.yml:47 · `__nginx-proxy-render.sh`:46,80,121 · `__config_sync.sh`:410 | **≥12 files** | `stacks.toml`: `stack → {profile, services[], ports{}}`; all scripts resolve via one `__lib/stacks.sh` reader |
-| Stack names core/admin/contest/worker/infra | docker.rs:4,7 · Makefile:69,83,97,111,125,142-180,224-248 · cms:42,56 · compose `--profile` | **≥5** | same `stacks.toml` |
+| Stack names core/admin/contest/proxy/worker/monitor | docker.rs:4,7 · Makefile (stack targets) · cms:42,56 · compose `--profile` | **≥5** | same `stacks.toml` |
 | Health-check target list | cms:298 vs `__smoke-test.sh`:458,465 | 2 lists + compose | derive from `stacks.toml` |
-| Ports 8888/8889/8890/8891 | cms:303-306 · `__smoke-test.sh`:475-480 · compose port maps · `__nginx-proxy-render.sh`:46,80,121 | **≥4** | one `ports.toml` consumed by all |
+| Ports 8888/8889/8890/8891 | `__render_expose.sh` (the `*_PORT_EXTERNAL` / `*_BIND_IP` table) · `__smoke-test.sh`:475-480 · compose port maps · `__nginx-proxy-render.sh`:46,80,121 | **≥4** | one `ports.toml` consumed by all |
 | Role literal `'Superadmin'` | handlers/admin.py:42,188-194 | ≥2 | permission registry constant |
 
 ## 3c. Non-templated (hand-written where a table should generate)

@@ -332,15 +332,16 @@ rotation policy (count/age/size) enforced by the monitor container.
 
 ## Architecture
 
-One [`docker-compose.yml`](docker-compose.yml), five profiles:
+One [`docker-compose.yml`](docker-compose.yml), six profiles:
 
 | Profile | Services |
 |---------|----------|
 | `core` | PostgreSQL · LogService · ResourceService · ScoringService · CheckerService |
 | `admin` | AdminPanelNext (:8891) · AdminWebServer (:8889) · RankingWebServer (:8890) |
-| `contest` | ContestWebServer (:8888+) · EvaluationService · ProxyService · nginx (TLS option) |
+| `contest` | ContestWebServer (:8888+) · EvaluationService · ProxyService · redis-rate-limit |
+| `proxy` | Optional contest nginx front — publishes no host port until `NGINX_BIND_IP` is set |
 | `worker` | Sandboxed isolate workers (`WORKER_SHARD` unique per instance) |
-| `monitor` | Health/backups/Discord alerting (non-root, docker.sock via `DOCKER_GID`) |
+| `monitor` | Health/backups/Discord alerting (non-root, docker.sock via `DOCKER_GID`) · scheduler |
 
 Startup ordering is healthcheck-gated (`depends_on: condition:
 service_healthy`) — no sleep hacks. Shared resources are plain named
