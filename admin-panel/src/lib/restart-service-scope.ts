@@ -1,9 +1,9 @@
 import { scopedServiceList, STACK_SERVICES } from './compose-command';
 
 /** Profiles of the unified project, in the order the Makefile lists them. */
-export type ComposeProfile = 'core' | 'admin' | 'contest' | 'monitor';
+export type ComposeProfile = 'core' | 'admin' | 'contest' | 'proxy' | 'monitor';
 
-const PROFILE_ORDER: readonly ComposeProfile[] = ['core', 'admin', 'contest', 'monitor'];
+const PROFILE_ORDER: readonly ComposeProfile[] = ['core', 'admin', 'contest', 'proxy', 'monitor'];
 
 /**
  * Every service of the unified project and the profile gating it, as docker-compose.yml declares
@@ -24,7 +24,7 @@ const SERVICE_PROFILES: Readonly<Record<string, ComposeProfile>> = {
   'evaluation-service': 'contest',
   'proxy-service': 'contest',
   'contest-web-server': 'contest',
-  'nginx-proxy': 'contest',
+  'nginx-proxy': 'proxy',
   monitor: 'monitor',
 };
 
@@ -56,6 +56,12 @@ export function profilesForServices(services: readonly string[]): readonly Compo
     if (profile) wanted.add(profile);
   }
   if (wanted.has('admin') || wanted.has('contest')) wanted.add('core');
+  // The optional contest front depends on the contest services, so enabling its profile
+  // alone would leave compose rejecting it as a project whose dependencies are disabled.
+  if (wanted.has('proxy')) {
+    wanted.add('core');
+    wanted.add('contest');
+  }
   return PROFILE_ORDER.filter(profile => wanted.has(profile));
 }
 
@@ -64,6 +70,7 @@ const PROFILE_SERVICES: Readonly<Record<ComposeProfile, readonly string[]>> = {
   core: STACK_SERVICES.core,
   admin: STACK_SERVICES.admin,
   contest: STACK_SERVICES.contest,
+  proxy: ['nginx-proxy'],
   monitor: ['monitor'],
 };
 

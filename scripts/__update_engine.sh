@@ -734,7 +734,7 @@ VAR_SPECS=(
   "Contest|[contest]|CONTEST_WEB_SERVER_SHARD|num||0"
   "Contest|[contest]|CONTEST_WEB_CPU_RESERVATION|str||0.1"
   "Contest|[contest]|CONTEST_WEB_MEMORY_RESERVATION|str||256M"
-  "Contest|[contest]|NGINX_BIND_IP|str||0.0.0.0"
+  "Contest|[contest]|NGINX_BIND_IP|str||"
   "Contest|[contest]|NGINX_HTTP_PORT|port||80"
   "Contest|[contest]|NGINX_HTTPS_PORT|port||443"
   "Contest|[contest]|NGINX_EXTERNAL_PORT|port||80"

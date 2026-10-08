@@ -5,8 +5,9 @@ import type { DeploymentMode } from '@/lib/deployment-mode';
 /** The profiles the Makefile's contest target enables; core comes with contest for depends_on validation. */
 const CONTEST_PROFILES = ['--profile', 'core', '--profile', 'contest'];
 
-/** The contest stack's own services, which are also what the retired per-stack file contained. */
-const CONTEST_SERVICES = ['evaluation-service', 'proxy-service', 'contest-web-server', 'nginx-proxy'];
+/** The contest stack's own services. The optional nginx front is its own profile, so it is not in
+ * the scope: naming a service the enabled profiles do not expose makes compose reject the command. */
+const CONTEST_SERVICES = ['evaluation-service', 'proxy-service', 'contest-web-server'];
 
 /**
  * Everything the compose invocation needs, resolved by the caller the same way a restart resolves it
@@ -32,7 +33,7 @@ export interface ContestDeployPlan {
  * this defect; this mirrors it rather than inventing a second convention (the shared home would be
  * that file, which another change owns).
  *
- * Why the four contest services stay the scope: `--force-recreate` applies to the services named, and
+ * Why the three contest services stay the scope: `--force-recreate` applies to the services named, and
  * the contest stack carries core in its profiles for depends_on validation — naming the scope keeps
  * activating a contest from restarting the database.
  */

@@ -12,7 +12,8 @@ use std::fmt;
 pub enum Ui {
     /// Contestant-facing contest web server.
     ContestWeb,
-    /// The standalone contest nginx that owns :80/:443 without the domain stack.
+    /// The optional standalone contest nginx; it publishes :80/:443 only once
+    /// `NGINX_BIND_IP` is set, and the domain stack owns those ports by default.
     NginxFront,
     /// Legacy Python admin UI, served under `/classic/` by the admin vhost.
     ClassicAdmin,
@@ -174,9 +175,9 @@ impl fmt::Display for UiSpec {
 /// Whether the domain nginx currently owns :80/:443 for the whole host.
 ///
 /// WHY this is a host-wide fact and not a per-UI one: the domain stack publishes one
-/// `nginx-proxy` container on 80 and 443 that reverse-proxies every configured vhost.
-/// Once it is up, any UI also bound to `0.0.0.0` on a port the operator is about to
-/// forward competes with it for the same inbound traffic.
+/// `grader-nginx-proxy` container on 80 and 443 that reverse-proxies every configured
+/// vhost. Once it is up, any UI also bound to `0.0.0.0` on a port the operator is about
+/// to forward competes with it for the same inbound traffic.
 ///
 /// WHY the running proxy is the input rather than the configured vhosts: `config.toml`
 /// records what the operator means to publish, and a box routinely carries vhost names

@@ -8,8 +8,8 @@
 # silently ignored.
 
 services:
-  # Extends `nginx-proxy` — the contest front door declared in docker-compose.yml
-  # (container cms-nginx-contest, profile `contest`). The domain stack's TLS proxy is a
+  # Extends `nginx-proxy` — the optional contest front door declared in docker-compose.yml
+  # (container cms-nginx-contest, profile `proxy`). The domain stack's TLS proxy is a
   # different service, `grader-nginx-proxy`, and it is not reachable from this file.
   nginx-proxy:
     # WHY this key is here even though the base file already sets it: a service that

@@ -23,6 +23,9 @@ COMPOSE_FLAGS = $(foreach f,$(COMPOSE_FILES),-f $(f))
 # targets keep the stack's own profile so teardown never removes dependencies.
 ADMIN_UP_PROFILES   := --profile core --profile admin
 CONTEST_UP_PROFILES := --profile core --profile contest
+# The contest front door is its own profile so `make contest` never publishes host
+# 80/443. It depends on the contest services, so starting it activates those too.
+PROXY_UP_PROFILES   := --profile core --profile contest --profile proxy
 
 # Additive stacks that publish host ports the default COMPOSE_FILES must never
 # pull in implicitly. WHY separate: docker-compose.domain.yml and
@@ -38,16 +41,16 @@ WAF_COMPOSE_FLAGS    := -f docker-compose.yml -f docker-compose.domain.yml -f do
 
 # WHY waf carries --profile core only: grader-waf's BACKEND is
 # http://grader-nginx-proxy:80, the domain stack's proxy, which has no profile.
-# --profile contest must stay OUT of this list: it would activate the contest
-# profile's separate `nginx-proxy` service (container cms-nginx-contest), which
-# binds the same host 80/443 and would fail to publish.
+# --profile contest stays OUT because it would bring up the whole contest stack,
+# which WAF does not front.
 WAF_UP_PROFILES      := --profile core --profile waf
 
-.PHONY: expose setup audit help env core admin contest worker infra domain waf core-stop admin-stop contest-stop contest-down worker-stop infra-stop domain-stop waf-stop core-clean admin-clean contest-clean worker-clean infra-clean domain-clean waf-clean db-clean clean pull pull-core pull-admin pull-contest pull-worker pull-infra core-img admin-img contest-img worker-img infra-img admin-dev admin-dev-stop contest-down cms-init admin-create prisma-sync lint test smoke-test preflight backup db-reset
+.PHONY: expose setup audit help env core admin contest worker infra domain waf proxy proxy-stop proxy-clean core-stop admin-stop contest-stop contest-down worker-stop infra-stop domain-stop waf-stop core-clean admin-clean contest-clean worker-clean infra-clean domain-clean waf-clean db-clean clean pull pull-core pull-admin pull-contest pull-worker pull-infra core-img admin-img contest-img worker-img infra-img admin-dev admin-dev-stop contest-down cms-init admin-create prisma-sync lint test smoke-test preflight backup db-reset
 
 # Regenerate the bind override from .env before a stack comes up. The base compose
-# files publish the front-door ports on 0.0.0.0; this override rebinds them to the
-# configured *_BIND_IP addresses, one entry per address, so a comma list expands.
+# file publishes front-door ports on 0.0.0.0 — except the contest nginx front, which
+# publishes none — and this override rebinds them to the configured *_BIND_IP
+# addresses, one entry per address, so a comma list expands.
 expose:
 	@bash scripts/__render_expose.sh
 
@@ -61,6 +64,7 @@ help:
 	@echo "  make infra          - Build+start monitor profile (alias: infra → monitor)"
 	@echo "  make domain         - Start domain stack: grader-nginx-proxy (host 80/443) + certbot + redis-rate-limit"
 	@echo "  make waf            - Start WAF profile on top of the domain stack (OWASP CRS, DetectionOnly by default)"
+	@echo "  make proxy          - Start the optional contest nginx front (publishes 80/443 only if NGINX_BIND_IP is set)"
 	@echo "  make core-stop      - Stop core profile (down --profile core)"
 	@echo "  make admin-stop     - Stop admin profile"
 	@echo "  make contest-stop   - Stop contest profile (stop — keeps containers, use contest-down to remove)"
@@ -244,14 +248,27 @@ admin-clean:
 	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile admin down -v $(ADMIN_SERVICES)
 
 contest-stop:
-	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile contest stop $(CONTEST_SERVICES)
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile contest --profile proxy stop $(CONTEST_SERVICES)
 
 contest-down:
 	@echo "[deprecated] use 'make contest-stop' for stop or 'docker compose --profile core --profile contest down <services>' for down — contest-down runs a scoped down" >&2
-	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile contest down $(CONTEST_SERVICES)
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile contest --profile proxy down $(CONTEST_SERVICES)
 
 contest-clean:
-	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile contest down -v $(CONTEST_SERVICES)
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile contest --profile proxy down -v $(CONTEST_SERVICES)
+
+# The contest front door has its own target because it is not part of `make contest`.
+# It publishes nothing on the host until NGINX_BIND_IP is set: the expose override then
+# adds 80/443, and until then only the loopback funnel gateways are reachable.
+proxy: expose
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) $(PROXY_UP_PROFILES) up -d nginx-proxy
+	@echo "Contest nginx front started (set NGINX_BIND_IP + NGINX_HTTP_PORT to publish 80/443)."
+
+proxy-stop:
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) $(PROXY_UP_PROFILES) stop nginx-proxy
+
+proxy-clean:
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) $(PROXY_UP_PROFILES) down -v nginx-proxy
 
 worker-stop:
 	bash scripts/__worker_tui.sh stop all
@@ -284,7 +301,7 @@ waf-clean:
 
 db-clean: expose
 	@echo "WARNING: This will delete all database data and reset everything."
-	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile admin --profile contest --profile worker --profile monitor down -v --remove-orphans
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile admin --profile contest --profile proxy --profile worker --profile monitor down -v --remove-orphans
 
 db-reset: db-clean
 	@$(MAKE) -e DEPLOYMENT_TYPE_OVERRIDE=img core

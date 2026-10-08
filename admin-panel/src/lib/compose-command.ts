@@ -50,7 +50,8 @@ const ALL_STACKS: readonly ComposeService[] = ['core', 'admin', 'contest'];
  * The services each stack owns, from the profiles docker-compose.yml declares (core:
  * database, log-service, resource-service, scoring-service, checker-service; admin:
  * admin-panel-next, admin-web-server, ranking-web-server; contest: evaluation-service,
- * proxy-service, contest-web-server, nginx-proxy).
+ * proxy-service, contest-web-server). The optional contest nginx front (`nginx-proxy`)
+ * is its own profile, so it belongs to no stack and an `up` never starts it.
  *
  * Why core is enumerated rather than left empty: an empty list means "the whole enabled
  * profile", and core is enabled next to admin and contest for depends_on validation. An
@@ -60,7 +61,7 @@ const ALL_STACKS: readonly ComposeService[] = ['core', 'admin', 'contest'];
 export const STACK_SERVICES: Readonly<Record<ComposeService, readonly string[]>> = {
   core: ['database', 'log-service', 'resource-service', 'scoring-service', 'checker-service'],
   admin: ['admin-panel-next', 'admin-web-server', 'ranking-web-server'],
-  contest: ['evaluation-service', 'proxy-service', 'contest-web-server', 'nginx-proxy'],
+  contest: ['evaluation-service', 'proxy-service', 'contest-web-server'],
   worker: [],
 };
 

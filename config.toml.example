@@ -154,7 +154,7 @@ CONTEST_PORT_EXTERNAL = 8888    # port; host port the contest UI is published on
 CONTEST_WEB_SERVER_SHARD = 0    # num; shard index handed to cmsContestWebServer; 0 = single instance — raise only when running multiple shards
 CONTEST_WEB_CPU_RESERVATION = "0.1"     # str; guaranteed CPU for the contest web server container — compose deploy.resources.reservations.cpus
 CONTEST_WEB_MEMORY_RESERVATION = "256M" # str; guaranteed memory for the contest web server container — compose deploy.resources.reservations.memory
-NGINX_BIND_IP = "0.0.0.0"       # csv; addresses the standalone contest nginx publishes NGINX_HTTP_PORT/NGINX_HTTPS_PORT on
+NGINX_BIND_IP = ""              # csv; addresses the contest nginx publishes NGINX_HTTP_PORT/NGINX_HTTPS_PORT on — empty keeps the host ports closed (set a value to open them; the domain stack owns 80/443)
 NGINX_HTTP_PORT = 80            # port; host port the standalone contest nginx publishes its HTTP listener on
 NGINX_HTTPS_PORT = 443          # port; host port the standalone contest nginx publishes its TLS listener on
 NGINX_EXTERNAL_PORT = 80        # port; reserved legacy key — only lands in an unread NGINX_PORT env on the standalone contest nginx; NGINX_HTTP_PORT/NGINX_HTTPS_PORT publish the real ports

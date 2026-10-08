@@ -385,17 +385,18 @@ services:
       retries: 5
       start_period: 10s
 
-  # Optional: Nginx reverse proxy for contest web server (TLS via ENABLE_TLS=true)
-  # WHY the plain name: the contest stack is the default owner of this service
-  # name. The domain stack's TLS proxy is a distinct service named
-  # `grader-nginx-proxy` (docker-compose.domain.yml) — a same-named key here
-  # would merge the two blocks and drop one proxy from the project.
+  # Optional contest front door (TLS via ENABLE_TLS=true). On its own profile so
+  # `make contest` never publishes host 80/443 — start it with `make proxy`, and
+  # expose it only by setting NGINX_BIND_IP (the bind model below rebinds 80/443).
+  # WHY the plain name: a same-named key as the domain stack's
+  # `grader-nginx-proxy` (docker-compose.domain.yml) would merge the two blocks
+  # and drop one proxy from the project.
   nginx-proxy:
     image: nginx:alpine
     container_name: cms-nginx-contest
     restart: unless-stopped
     profiles:
-      - contest
+      - proxy
     depends_on:
       contest-web-server:
         condition: service_healthy
@@ -427,8 +428,9 @@ services:
     networks:
       - cms-network
     ports:
-      - "0.0.0.0:${NGINX_HTTP_PORT:-80}:80"
-      - "0.0.0.0:${NGINX_HTTPS_PORT:-443}:443"
+      # Funnel gateways only, loopback by default. Host 80/443 are deliberately not
+      # published: exposing this proxy means setting NGINX_BIND_IP, or using the
+      # service's own *_PORT_EXTERNAL. The domain stack owns 80/443 for domain users.
       - "${FUNNEL_BIND_IP:-127.0.0.1}:${FUNNEL_PANEL_LISTEN:-8892}:8892"
       - "${FUNNEL_BIND_IP:-127.0.0.1}:${FUNNEL_RANKING_LISTEN:-8893}:8893"
     command: ["/usr/local/bin/render.sh"]

@@ -17,7 +17,7 @@ const FILES = '-f docker-compose.yml';
 // redis-rate-limit service of the contest profile (see tests/protected-compose-scope.test.ts).
 const CORE_SERVICES = 'database log-service resource-service scoring-service checker-service';
 const ADMIN_SERVICES = 'admin-panel-next admin-web-server ranking-web-server';
-const CONTEST_SERVICES = 'evaluation-service proxy-service contest-web-server nginx-proxy';
+const CONTEST_SERVICES = 'evaluation-service proxy-service contest-web-server';
 const ALL_SERVICES = `${CORE_SERVICES} ${ADMIN_SERVICES} ${CONTEST_SERVICES}`;
 
 const HOST_CONTAINERISED: HostComposeLocation = {

@@ -855,11 +855,9 @@ describe('contest deploy lifecycle', () => {
     // The retired per-stack docker-compose.contest.yml declared no image names, so this used to build
     // <project>-<service> images nothing else in the project builds or pulls.
     expect(mocks.script).toContain('docker compose -f docker-compose.yml --profile core --profile contest');
-    expect(mocks.script).toContain(
-      'up -d --no-build --force-recreate evaluation-service proxy-service contest-web-server nginx-proxy',
-    );
+    expect(mocks.script).toContain('up -d --no-build --force-recreate evaluation-service proxy-service contest-web-server');
     // Image deployments pull the registry images first, exactly as the Makefile's contest target does.
-    expect(mocks.script).toContain(' pull evaluation-service proxy-service contest-web-server nginx-proxy || true) && docker compose');
+    expect(mocks.script).toContain(' pull evaluation-service proxy-service contest-web-server || true) && docker compose');
     expect(mocks.script.indexOf('pull')).toBeLessThan(mocks.script.indexOf('up -d'));
     expect(mocks.script).toContain('bash scripts/__contest_dns_refresh.sh');
     // The deploy writes its own outcome markers, from the paths handed to it as argv.
@@ -874,7 +872,7 @@ describe('contest deploy lifecycle', () => {
       location: { projectDirectory: '/host/repo', envFile: '/host/repo/.env' },
     });
     expect(command).toBe(
-      "docker compose --project-directory '/host/repo' --env-file '/host/repo/.env' -f docker-compose.yml -f docker-compose.override.yml --profile core --profile contest up -d --build --force-recreate evaluation-service proxy-service contest-web-server nginx-proxy && bash scripts/__contest_dns_refresh.sh",
+      "docker compose --project-directory '/host/repo' --env-file '/host/repo/.env' -f docker-compose.yml -f docker-compose.override.yml --profile core --profile contest up -d --build --force-recreate evaluation-service proxy-service contest-web-server && bash scripts/__contest_dns_refresh.sh",
     );
   });
 
@@ -887,7 +885,9 @@ describe('contest deploy lifecycle', () => {
     // The deploy carries its own copy of the contest services, so a protected one added there would
     // reach its container without any guard seeing it. The shared filter is what prevents that.
     for (const service of PROTECTED_COMPOSE_SERVICES) expect(command).not.toContain(service);
-    expect(command).toContain('nginx-proxy');
+    // The optional front is its own profile; a contest deploy must not name it or compose
+    // rejects the command for a service the enabled profiles do not expose.
+    expect(command).not.toContain('nginx-proxy');
   });
 
   it('recovers a completed outcome whose effects never ran, instead of reporting success forever', async () => {

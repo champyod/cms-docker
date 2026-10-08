@@ -17,7 +17,7 @@ const ALL_PROFILES = '--profile core --profile admin --profile contest --profile
 // panel must never act on (see tests/protected-compose-scope.test.ts).
 const CORE_SERVICES = 'database log-service resource-service scoring-service checker-service';
 const ADMIN_SERVICES = 'admin-panel-next admin-web-server ranking-web-server';
-const CONTEST_SERVICES = 'evaluation-service proxy-service contest-web-server nginx-proxy';
+const CONTEST_SERVICES = 'evaluation-service proxy-service contest-web-server';
 const CORE_CONTEST_SERVICES = `${CORE_SERVICES} ${CONTEST_SERVICES}`;
 const CORE_ADMIN_SERVICES = `${CORE_SERVICES} ${ADMIN_SERVICES}`;
 const ALL_SERVICES = `${CORE_SERVICES} ${ADMIN_SERVICES} ${CONTEST_SERVICES} monitor`;
@@ -160,19 +160,19 @@ const PROFILE_CASES: ProfileCase[] = [
     // (and admin-panel-next) to nginx, whose /ranking/ upstream goes stale.
     name: 'a container name of the admin profile, which core is required alongside',
     requested: ['cms-ranking-web-server'],
-    profiles: '--profile core --profile admin --profile contest',
+    profiles: '--profile core --profile admin --profile contest --profile proxy',
     services: 'ranking-web-server nginx-proxy',
   },
   {
     name: 'the one container whose name is not its service behind a cms- prefix',
     requested: ['cms-nginx-contest'],
-    profiles: '--profile core --profile contest',
+    profiles: '--profile core --profile contest --profile proxy',
     services: 'nginx-proxy',
   },
   {
     name: 'services from several profiles',
     requested: ['cms-ranking-web-server', 'monitor'],
-    profiles: '--profile core --profile admin --profile contest --profile monitor',
+    profiles: '--profile core --profile admin --profile contest --profile proxy --profile monitor',
     services: 'ranking-web-server nginx-proxy monitor',
   },
 ];

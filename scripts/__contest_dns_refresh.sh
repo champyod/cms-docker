@@ -62,8 +62,10 @@ refresh_restart() {
   fi
   cmd="$(compose_cmd)"
   flags="$(compose_flags)"
+  # The front door is its own profile; requesting it without the contest services
+  # would not enable nginx-proxy at all.
   # shellcheck disable=SC2086
-  (cd "$REPO_ROOT" && $cmd $flags --profile core --profile contest restart nginx-proxy)
+  (cd "$REPO_ROOT" && $cmd $flags --profile core --profile contest --profile proxy restart nginx-proxy)
 }
 
 refresh_reload() {
