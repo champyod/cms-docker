@@ -16,6 +16,19 @@ services:
     container_name: grader-nginx-proxy
     restart: unless-stopped
     depends_on: []
+    # Sign a stand-in cert when the lineage is empty; certbot cannot issue one until nginx serves :80.
+    entrypoint: >
+      /bin/sh -c 'LINEAGE="$${CERT_LINEAGE_DOMAIN:-}";
+      [ -n "$$LINEAGE" ] || LINEAGE="$${DOMAIN_NAME:-}";
+      [ -n "$$LINEAGE" ] || LINEAGE="$${ADMIN_DOMAIN:-}";
+      [ -n "$$LINEAGE" ] || LINEAGE="$${OJ_DOMAIN:-}";
+      [ -n "$$LINEAGE" ] || LINEAGE="$${RANKING_DOMAIN:-}";
+      if [ -n "$$LINEAGE" ] && [ ! -f "/etc/letsencrypt/live/$$LINEAGE/fullchain.pem" ]; then
+        command -v openssl >/dev/null 2>&1 || apk add --no-cache openssl >/dev/null 2>&1 || true;
+        mkdir -p "/etc/letsencrypt/live/$$LINEAGE";
+        openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout "/etc/letsencrypt/live/$$LINEAGE/privkey.pem" -out "/etc/letsencrypt/live/$$LINEAGE/fullchain.pem" -subj "/CN=$$LINEAGE/O=CMS/ST=Bootstrap" 2>/dev/null;
+      fi;
+      exec nginx -g "daemon off;"'
     environment:
       # WHY empty rather than a .local default: an unset domain must stay unset. A
       # leftover default name becomes a server_name and a SAN for a name nobody
@@ -25,6 +38,8 @@ services:
       ADMIN_DOMAIN: ${ADMIN_DOMAIN:-}
       OJ_DOMAIN: ${OJ_DOMAIN:-}
       RANKING_DOMAIN: ${RANKING_DOMAIN:-}
+      # Certbot's lineage name; the entrypoint signs the stand-in certificate here.
+      CERT_LINEAGE_DOMAIN: ${CERT_LINEAGE_DOMAIN:-}
       CONTEST_LISTEN_PORT: ${CONTEST_LISTEN_PORT:-8888}
       ADMIN_LISTEN_PORT: ${ADMIN_LISTEN_PORT:-8889}
       RANKING_LISTEN_PORT: ${RANKING_LISTEN_PORT:-8890}
@@ -40,7 +55,8 @@ services:
       - ./config/nginx-ssl.conf:/etc/nginx/conf.d/nginx-ssl.conf:ro
       # Host binds rather than named volumes, so the on-host certbot in
       # scripts/__domain.sh writes exactly the tree nginx reads here.
-      - ./config/letsencrypt:/etc/letsencrypt:ro
+      # Read-write: the entrypoint signs a stand-in certificate here on first start.
+      - ./config/letsencrypt:/etc/letsencrypt
       - ./config/letsencrypt/www:/var/www/certbot:ro
       - nginx-logs:/var/log/nginx
     networks:
