@@ -1,0 +1,316 @@
+#!/usr/bin/env bash
+# scripts/__db_admin.sh — create/rename a PostgreSQL database inside the running
+# `cms-database` container.
+#
+# WHY this exists: `./cms` had no CREATE DATABASE path and no rename path at
+# all, so provisioning a sibling database (cmsdb -> cmsdb_evaluate) meant
+# hand-written SQL against a container nobody documented. Both operations
+# MUTATE the server, so they follow the same confirmation philosophy as
+# scripts/__db_destroy_guard.sh: an explicit non-interactive authorisation
+# (CONFIRM_DB_ADMIN=yes) or the literal word `yes` typed at a terminal.
+# Nothing here deletes a database — no create can overwrite, and rename only
+# moves a name — so the gate is deliberately lighter than the destroy guard.
+#
+# Not a database drop tool: Postgres has no `DROP DATABASE IF EXISTS` and a
+# drop cannot be undone, so `drop` is intentionally absent. Use psql directly
+# if you really mean it.
+#
+# Credentials come from the existing environment/.env conventions (POSTGRES_*
+# exported by `make env` / scripts/__config_sync.sh, the same keys
+# scripts/__restore.sh reads); when they are absent this script falls back to
+# the values the container was created with, read from the container itself.
+# No credential literal lives in this file.
+#
+# Usage:
+#   __db_admin.sh create <name> [--dry-run]
+#   __db_admin.sh rename <old> <new> [--dry-run]
+#
+# Authorise non-interactively with:
+#   CONFIRM_DB_ADMIN=yes scripts/__db_admin.sh create cmsdb_evaluate
+#
+# Exit codes: 0 = done (or dry-run printed), 1 = refused/failed.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+cd "$REPO_ROOT"
+
+# Shared helpers: log_info/log_warn/log_die, env_unquote (used to read the
+# quoted values scripts/__config_sync.sh writes into .env).
+if [[ ! -f "${SCRIPT_DIR}/__lib/common.sh" ]]; then
+  printf '[FAIL] %s\n' "missing ${SCRIPT_DIR}/__lib/common.sh — deliver scripts/__lib beside this script" >&2
+  exit 1
+fi
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__lib/common.sh"
+
+DB_CONTAINER="${CMS_DB_CONTAINER:-cms-database}"
+
+# Postgres identifiers: unquoted, lower-case, no leading digit, <= 63 bytes.
+# WHY this is stricter than the server: every value here is interpolated into
+# SQL and into a database URI, so the allowlist is the injection boundary and
+# it must not lean on server-side folding to catch a bad name.
+readonly DB_IDENT_RE='^[a-z_][a-z0-9_]{0,50}$'
+# Not a database: renaming onto either name would break the cluster itself.
+readonly DB_RESERVED_REGEX='^(template0|template1|postgres|all)$'
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  __db_admin.sh create <name> [--dry-run]
+  __db_admin.sh rename <old> <new> [--dry-run]
+
+  create  CREATE DATABASE <name> if it does not already exist (idempotent).
+  rename  ALTER DATABASE <old> RENAME TO <new> (no overwrite, no drop).
+
+  --dry-run          print the exact SQL and exit 0 without touching docker.
+  CONFIRM_DB_ADMIN=yes  authorise non-interactively (scripts/CI). On a
+                        terminal you are otherwise asked to type "yes".
+
+Notes:
+  rename cannot run inside a transaction block and fails while other sessions
+  are connected to <old>, so stop the dependent services first
+  (make core-stop). renaming does NOT update .env or config.toml — repoint the
+  db_<profile> POSTGRES_DB yourself, then run: ./cms config sync
+USAGE
+}
+
+require_ident() {
+  local name="$1" label="$2"
+  if [[ ! "$name" =~ $DB_IDENT_RE ]]; then
+    log_die "invalid ${label} '${name}' — database identifiers must match ${DB_IDENT_RE} (lower-case letters, digits, '_'; cannot start with a digit; max 51 chars)."
+  fi
+  if [[ "$name" =~ $DB_RESERVED_REGEX ]]; then
+    log_die "'${name}' is not a database — 'template0', 'template1', 'postgres' and 'all' are not valid targets for ${label}."
+  fi
+}
+
+# Credentials: an already-exported POSTGRES_* wins; otherwise take them from
+# the generated .env (same precedence scripts/__restore.sh uses). Values are
+# unquoted with the shared helper so a quoted .env value reads back verbatim.
+load_db_env() {
+  local file key raw
+  for file in "${REPO_ROOT}/.env" "${REPO_ROOT}/.env.core"; do
+    [[ -f "$file" ]] || continue
+    for key in POSTGRES_USER POSTGRES_DB POSTGRES_PASSWORD; do
+      [[ -n "$(eval "printf '%s' \"\${${key}:-}\"")" ]] && continue
+      raw="$(awk -F= -v k="$key" '$1==k {v=$0; sub(/^[^=]*=/,"",v); print v; exit}' "$file" 2>/dev/null || true)"
+      [[ -z "$raw" ]] && continue
+      export "$key"="$(env_unquote "$raw")"
+    done
+  done
+}
+
+# Last resort: the credentials the container was actually created with. `docker
+# inspect` on the container itself, so still no literal in this file.
+load_container_env() {
+  local v
+  for key in POSTGRES_USER POSTGRES_DB POSTGRES_PASSWORD; do
+    [[ -n "$(eval "printf '%s' \"\${${key}:-}\"")" ]] && continue
+    v="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$DB_CONTAINER" 2>/dev/null \
+      | awk -F= -v k="$key" '$1==k {sub(/^[^=]*=/,""); print; exit}' || true)"
+    [[ -z "$v" ]] && continue
+    export "$key"="$v"
+  done
+}
+
+require_docker() {
+  command -v docker >/dev/null 2>&1 \
+    || log_die "docker CLI not found — run this on the host that runs the cms-database container."
+  docker inspect "$DB_CONTAINER" >/dev/null 2>&1 \
+    || log_die "container '${DB_CONTAINER}' is not available — start the core stack first: make core"
+  local state
+  state="$(docker inspect -f '{{.State.Running}}' "$DB_CONTAINER" 2>/dev/null || echo false)"
+  [[ "$state" == "true" ]] \
+    || log_die "container '${DB_CONTAINER}' exists but is not running — start it first: make core"
+}
+
+# psql inside the container. PGPASSWORD travels through `docker exec -e`, never
+# on the host argv. -v ON_ERROR_STOP=1 makes SQL failures exit non-zero instead
+# of being swallowed by psql's default continue-on-error.
+psql_exec() {
+  local db="$1" sql="$2"
+  docker exec -e PGPASSWORD="${POSTGRES_PASSWORD:-}" "$DB_CONTAINER" \
+    psql -U "${POSTGRES_USER:-cmsuser}" -d "$db" -v ON_ERROR_STOP=1 -c "$sql"
+}
+
+# Existence probe against the maintenance database. -tAc yields a bare 1/0.
+db_exists() {
+  local name="$1" out
+  out="$(docker exec -e PGPASSWORD="${POSTGRES_PASSWORD:-}" "$DB_CONTAINER" \
+    psql -U "${POSTGRES_USER:-cmsuser}" -d "postgres" -tAc \
+    "SELECT 1 FROM pg_database WHERE datname = '${name}'" 2>/dev/null || true)"
+  [[ "$(printf '%s' "$out" | tr -d '[:space:]')" == "1" ]]
+}
+
+# Report the sessions blocking a rename. ALTER DATABASE ... RENAME fails while
+# any other session (including the pre-migration services' pools) is attached, so
+# naming the blockers turns "transaction is not allowed" into an action list.
+# Never fatal: the ALTER below is the authority, this only explains it.
+list_blocking_sessions() {
+  local old="$1" out rc=0
+  out="$(docker exec -e PGPASSWORD="${POSTGRES_PASSWORD:-}" "$DB_CONTAINER" \
+    psql -U "${POSTGRES_USER:-cmsuser}" -d "postgres" -tAc \
+    "SELECT datname || ' | ' || usename || ' | ' || application_name || ' | ' || pid \
+       FROM pg_stat_activity WHERE datname = '${old}' AND pid <> pg_backend_pid()" 2>/dev/null)" || rc=$?
+  if [[ $rc -ne 0 ]]; then
+    log_warn "could not enumerate sessions connected to '${old}' (psql exited ${rc})."
+  elif [[ -z "$(printf '%s' "$out" | tr -d '[:space:]')" ]]; then
+    log_warn "no connected sessions visible for '${old}', but the rename still reports an open connection."
+  else
+    log_warn "sessions connected to '${old}' (datname | user | application | pid):"
+    printf '%s\n' "$out" | sed 's/^/    /' >&2
+  fi
+}
+
+# Same philosophy as scripts/__db_destroy_guard.sh: explicit authorisation is
+# the only path available to a non-interactive caller, and an interactive caller
+# must type the literal word. A stray newline is not consent.
+confirm_admin() {
+  local action="$1" detail="$2"
+  if [[ "${CONFIRM_DB_ADMIN:-no}" == "yes" ]]; then
+    log_info "CONFIRM_DB_ADMIN=yes — proceeding with: ${detail}"
+    return 0
+  fi
+  if [[ ! -t 0 ]]; then
+    {
+      echo "REFUSED: '${action}' mutates the database and there is no terminal to confirm on."
+      echo ""
+      echo "To authorise it deliberately, re-run with:"
+      echo "    CONFIRM_DB_ADMIN=yes $0 ${action}"
+    } >&2
+    exit 1
+  fi
+  printf 'Type "yes" to run: %s : ' "$detail"
+  local answer
+  read -r answer || answer=""
+  if [[ "$answer" == "yes" ]]; then
+    log_info "Confirmed — proceeding."
+    return 0
+  fi
+  echo "Aborted. The database was not modified." >&2
+  echo "To authorise non-interactively: CONFIRM_DB_ADMIN=yes $0 ${action}" >&2
+  exit 1
+}
+
+cmd_create() {
+  local name="$1" dry_run="$2" sql
+  require_ident "$name" "database name"
+  # CREATE DATABASE cannot run inside a transaction block, and `-c` sends one
+  # statement: exactly one CREATE DATABASE per successful probe.
+  sql="CREATE DATABASE \"${name}\";"
+
+  if [[ "$dry_run" == "1" ]]; then
+    echo "SELECT 1 FROM pg_database WHERE datname = '${name}';   # skip when it returns 1"
+    echo "$sql"
+    log_info "Dry run — no database was created."
+    return 0
+  fi
+
+  require_docker
+  load_db_env
+  load_container_env
+
+  if db_exists "$name"; then
+    log_info "database \"${name}\" already exists — nothing to create."
+    return 0
+  fi
+
+  confirm_admin "create" "create database \"${name}\" in ${DB_CONTAINER}"
+  psql_exec "postgres" "$sql"
+  log_info "created \"${name}\" in ${DB_CONTAINER}."
+  log_info "next: point the owning db_<profile> POSTGRES_DB at \"${name}\", then run: ./cms config sync"
+}
+
+cmd_rename() {
+  local old="$1" new="$2" dry_run="$3" sql
+  require_ident "$old" "source database name"
+  require_ident "$new" "target database name"
+  if [[ "$old" == "$new" ]]; then
+    log_die "source and target name are both '${old}' — nothing to rename."
+  fi
+  sql="ALTER DATABASE \"${old}\" RENAME TO \"${new}\";"
+
+  # The "connections must be re-pointed" warning is part of the SQL printout, not
+  # a post-action note: in dry-run nothing runs, so the warning must still reach
+  # the operator, and in the real path it belongs beside the statement.
+  {
+    echo "# ALTER DATABASE cannot run inside a transaction block."
+    echo "# PostgreSQL splits ALTER DATABASE ... RENAME TO into two statements, so"
+    echo "# this fails while any other session is connected to \"${old}\" (including"
+    echo "# the core/admin/contest services' pools)."
+    echo "# Stop the dependent services first:   make core-stop"
+    echo "# Services still running will NOT find the database under the new name —"
+    echo "# this command does not update the db_<profile> POSTGRES_DB in"
+    echo "# config.toml or the POSTGRES_DB line in .env. Point db_<profile> at"
+    echo "# \"${new}\" yourself, then run: ./cms config sync"
+  }
+
+  if [[ "$dry_run" == "1" ]]; then
+    echo "$sql"
+    log_info "Dry run — no database was renamed."
+    return 0
+  fi
+
+  require_docker
+  load_db_env
+  load_container_env
+
+  if ! db_exists "$old"; then
+    log_die "source database \"${old}\" does not exist — nothing to rename (see ./cms db use)."
+  fi
+  if db_exists "$new"; then
+    log_die "target database \"${new}\" already exists — refusing to rename onto it (no overwrite on Postgres)."
+  fi
+
+  confirm_admin "rename" "rename database \"${old}\" to \"${new}\" in ${DB_CONTAINER}"
+
+  if ! psql_exec "postgres" "$sql"; then
+    log_warn "the rename failed — PostgreSQL reports the blocking sessions below."
+    list_blocking_sessions "$old"
+    log_die "stop the dependent services (make core-stop) and re-run: $0 rename ${old} ${new} — the database was NOT renamed."
+  fi
+
+  log_info "renamed \"${old}\" to \"${new}\" in ${DB_CONTAINER}."
+  log_info "next: point db_<profile> POSTGRES_DB at \"${new}\" in config.toml, then run: ./cms config sync"
+}
+
+main() {
+  local action="${1:-}" dry_run=0
+  shift || true
+
+  local args=()
+  local a
+  for a in "$@"; do
+    case "$a" in
+      --dry-run) dry_run=1 ;;
+      -h|--help) usage; exit 0 ;;
+      *) args+=("$a") ;;
+    esac
+  done
+
+  case "$action" in
+    create)
+      [[ ${#args[@]} -eq 1 ]] || { usage >&2; exit 1; }
+      cmd_create "${args[0]}" "$dry_run"
+      ;;
+    rename)
+      [[ ${#args[@]} -eq 2 ]] || { usage >&2; exit 1; }
+      cmd_rename "${args[0]}" "${args[1]}" "$dry_run"
+      ;;
+    ""|-h|--help|help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Error: unknown action '${action}'." >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
+fi
