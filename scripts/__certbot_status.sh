@@ -17,6 +17,7 @@
 #   1  issuance is pending and still retrying (warn — transient)
 #   2  issuance failed terminally or the attempt budget is exhausted (error)
 #   3  the domain stack is not running at all (not an error on a local box)
+#   4  status says ok but the lineage directory is absent (real inconsistency)
 
 set -uo pipefail
 
@@ -73,10 +74,9 @@ fi
 
 case "$state" in
   ok)
-    # Status says ok but the lineage directory is absent: the record disagrees
-    # with the filesystem, which is itself the thing worth reporting.
+    # Record and filesystem disagree; exit 4 keeps this distinct from an issuance failure (2).
     echo "certbot: status claims a certificate for ${lineage} but ${LE_ROOT}/${lineage} is absent"
-    exit 2
+    exit 4
     ;;
   pending)
     echo "certbot: issuance pending for ${lineage}${detail:+ — ${detail}}"

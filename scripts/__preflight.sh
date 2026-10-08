@@ -619,9 +619,9 @@ check_config_stale() {
 # the first issuance ever succeeded, so a fresh domain stack with no certificate
 # looks identical to a healthy one from container state alone. The certbot
 # container records the outcome in certbot-status; __certbot_status.sh maps it to
-# PASS/WARN/FAIL. A pending issuance is WARN, not FAIL, because retriable
-# failures back off and retry on their own — only a terminal failure or an
-# exhausted attempt budget means someone has to act.
+# PASS/WARN/FAIL. A pending or terminal issuance (1/2) is a domain-lifecycle state
+# the domain stack owns, so it warns without blocking config sync; only a status
+# that disagrees with the filesystem (4) is a failure.
 check_certbot_issuance() {
   local script="${REPO_ROOT}/scripts/__certbot_status.sh"
   if [[ ! -f "$script" ]]; then
@@ -636,8 +636,9 @@ check_certbot_issuance() {
   case "$rc" in
     0) record_result "tls certificate" "PASS" "${out##*: }" ;;
     1) record_result "tls certificate" "WARN" "${out##*: }" ;;
-    2) record_result "tls certificate" "FAIL" "${out##*: }" ;;
+    2) record_result "tls certificate" "WARN" "${out##*: }" ;;
     3) record_result "tls certificate" "PASS" "skipped (domain stack not running)" ;;
+    4) record_result "tls certificate" "FAIL" "${out##*: }" ;;
     *) record_result "tls certificate" "WARN" "status helper exited $rc" ;;
   esac
 }
