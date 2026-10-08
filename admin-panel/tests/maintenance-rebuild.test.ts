@@ -60,7 +60,8 @@ describe('the rebuild command stays inside what the Makefile offers', () => {
           expect(match).not.toBeNull();
           if (match === null) continue;
           expect(match[1]).toBe(mode);
-          expect(makefile).toMatch(new RegExp(`^${match[2]}:$`, 'm'));
+          // A stack target may carry prerequisites (`core: expose`), so match the name only.
+          expect(makefile).toMatch(new RegExp(`^${match[2]}:(?:\\s|$)`, 'm'));
         }
       }
     }
