@@ -10,7 +10,7 @@ address it answers on. There is no system-wide switch.
 
 | Variable | Scope | Meaning |
 | --- | --- | --- |
-| `<SVC>_BIND_IP` | front-door service | The address one service's published ports answer on. A comma list publishes on several at once. |
+| `<SVC>_BIND_IP` | front-door service | The address one service's published ports answer on. One address in the compose files' port specs; a comma list is expanded only by `scripts/__render_expose.sh` (see "Publishing on several addresses"). |
 | `INNER_IP` | peer-facing services | The address `database`, the six RPC services and `worker` publish on, and the address a worker dials to reach the main server. Empty leaves each on its compose default (`127.0.0.1`). |
 | `PUBLIC_IP` | not a bind key | Your box's public IP. Used for `CORE_SERVICES_HOST` and apt-mirror selection, **not** for binding a port. Keep it separate from `INNER_IP` — they answer different questions and merging them silently repoints one of the two. |
 
@@ -20,8 +20,9 @@ The front-door keys are `CONTEST_BIND_IP`, `NGINX_BIND_IP`, `ADMIN_BIND_IP`,
 
 ## Resolution
 
-1. `<SVC>_BIND_IP` — the service's own key. A comma-separated list is several
-   addresses, one published entry each.
+1. `<SVC>_BIND_IP` — the service's own key. One address in the compose files'
+   port specs; a comma-separated list is expanded only by
+   `scripts/__render_expose.sh` into the generated override (see below).
 2. Nothing set → the service is not emitted and keeps its compose default. For
    `database` and the six RPC services that default is `${INNER_IP:-127.0.0.1}`,
    so an unset key means loopback, not every interface.
@@ -44,14 +45,14 @@ drift apart silently, and the drift would only surface as an unreachable worker 
 
 ## Publishing on several addresses
 
-`ADMIN_BIND_IP = "203.0.113.10,100.64.0.1"` publishes that service's ports on the
-public address and the tailnet address together. Comma-separated is how several
-addresses are published — there is no second key and no mode to set.
-
-docker compose pins one `host_ip` per port entry, so N addresses need N entries, and
-a single `${VAR}` cannot expand into several lines. `scripts/__render_expose.sh`
+`ADMIN_BIND_IP = "203.0.113.10,100.64.0.1"` names the public address and the
+tailnet address together. A comma-separated list is how several addresses are
+requested — there is no second key and no mode to set — but the list is not
+something the compose files' port specs can carry: docker compose pins one
+`host_ip` per port entry and rejects a comma in it. `scripts/__render_expose.sh`
 resolves the model and writes `docker-compose.expose.yml`, which the `Makefile`
-includes automatically when present (`COMPOSE_FILES`).
+includes automatically when present (`COMPOSE_FILES`), expanding the list into
+one published entry per address.
 
 ```
 bash scripts/__render_expose.sh
@@ -146,7 +147,9 @@ Public host, single address:
 ADMIN_BIND_IP = "203.0.113.10"
 ```
 
-Public plus tailnet on the same service:
+Public plus tailnet on the same service — set the comma list, then run
+`bash scripts/__render_expose.sh` and `make` (or `./cms deploy`) so the
+generated override expands it:
 
 ```
 ADMIN_BIND_IP = "203.0.113.10,100.64.0.1"
