@@ -69,10 +69,10 @@ Usage:
                         terminal you are otherwise asked to type "yes".
 
 Notes:
-  rename cannot run inside a transaction block and fails while other sessions
-  are connected to <old>, so stop the dependent services first
-  (make core-stop). renaming does NOT update .env or config.toml — repoint the
-  db_<profile> POSTGRES_DB yourself, then run: ./cms config sync
+  rename takes <old> out of service on its own: it blocks new connections,
+  drops the sessions the running services hold, renames, then re-opens the new
+  name — no service is stopped. renaming does NOT update .env or config.toml —
+  repoint the db_<profile> POSTGRES_DB yourself, then run: ./cms config sync
 USAGE
 }
 
@@ -224,31 +224,29 @@ cmd_create() {
 }
 
 cmd_rename() {
-  local old="$1" new="$2" dry_run="$3" sql
+  local old="$1" new="$2" dry_run="$3"
   require_ident "$old" "source database name"
   require_ident "$new" "target database name"
   if [[ "$old" == "$new" ]]; then
     log_die "source and target name are both '${old}' — nothing to rename."
   fi
-  sql="ALTER DATABASE \"${old}\" RENAME TO \"${new}\";"
 
-  # The "connections must be re-pointed" warning is part of the SQL printout, not
-  # a post-action note: in dry-run nothing runs, so the warning must still reach
-  # the operator, and in the real path it belongs beside the statement.
-  {
-    echo "# ALTER DATABASE cannot run inside a transaction block."
-    echo "# PostgreSQL splits ALTER DATABASE ... RENAME TO into two statements, so"
-    echo "# this fails while any other session is connected to \"${old}\" (including"
-    echo "# the core/admin/contest services' pools)."
-    echo "# Stop the dependent services first:   make core-stop"
-    echo "# Services still running will NOT find the database under the new name —"
-    echo "# this command does not update the db_<profile> POSTGRES_DB in"
-    echo "# config.toml or the POSTGRES_DB line in .env. Point db_<profile> at"
-    echo "# \"${new}\" yourself, then run: ./cms config sync"
-  }
+  # Take <old> out of service, rename it, put it back. Blocking new connections
+  # first is what makes the terminate hold: a pool reconnecting between the two
+  # statements would block the rename again.
+  local sql_disable="ALTER DATABASE \"${old}\" WITH ALLOW_CONNECTIONS false;"
+  local sql_terminate="SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${old}' AND pid <> pg_backend_pid();"
+  local sql_rename="ALTER DATABASE \"${old}\" RENAME TO \"${new}\";"
+  local sql_enable="ALTER DATABASE \"${new}\" WITH ALLOW_CONNECTIONS true;"
+  local sql_reopen_old="ALTER DATABASE \"${old}\" WITH ALLOW_CONNECTIONS true;"
 
   if [[ "$dry_run" == "1" ]]; then
-    echo "$sql"
+    echo "# Each statement is sent on its own: ALTER DATABASE cannot run in a transaction block."
+    echo "# No service is stopped — the running pools are dropped and error until repointed."
+    echo "$sql_disable"
+    echo "$sql_terminate"
+    echo "$sql_rename"
+    echo "$sql_enable"
     log_info "Dry run — no database was renamed."
     return 0
   fi
@@ -266,11 +264,25 @@ cmd_rename() {
 
   confirm_admin "rename" "rename database \"${old}\" to \"${new}\" in ${DB_CONTAINER}"
 
-  if ! psql_exec "postgres" "$sql"; then
+  if ! psql_exec "postgres" "$sql_disable"; then
+    log_die "could not take \"${old}\" out of service — the database was NOT renamed."
+  fi
+
+  # A failure past this point must re-open <old>, or it is left refusing connections.
+  if ! psql_exec "postgres" "$sql_terminate"; then
+    psql_exec "postgres" "$sql_reopen_old" >/dev/null 2>&1 || true
+    log_die "could not drop the sessions on \"${old}\" — it accepts connections again; the database was NOT renamed."
+  fi
+
+  if ! psql_exec "postgres" "$sql_rename"; then
+    psql_exec "postgres" "$sql_reopen_old" >/dev/null 2>&1 || true
     log_warn "the rename failed — PostgreSQL reports the blocking sessions below."
     list_blocking_sessions "$old"
-    log_die "stop the dependent services (make core-stop) and re-run: $0 rename ${old} ${new} — the database was NOT renamed."
+    log_die "\"${old}\" accepts connections again; the database was NOT renamed."
   fi
+
+  psql_exec "postgres" "$sql_enable" \
+    || log_die "renamed to \"${new}\" but it still refuses connections — run: ${sql_enable}"
 
   log_info "renamed \"${old}\" to \"${new}\" in ${DB_CONTAINER}."
   log_info "next: point db_<profile> POSTGRES_DB at \"${new}\" in config.toml, then run: ./cms config sync"
