@@ -84,6 +84,8 @@ services:
       ADMIN_DOMAIN: ${ADMIN_DOMAIN:-}
       OJ_DOMAIN: ${OJ_DOMAIN:-}
       RANKING_DOMAIN: ${RANKING_DOMAIN:-}
+      # The lineage certbot names the certificate under; empty = derived from the first domain above.
+      CERT_LINEAGE_DOMAIN: ${CERT_LINEAGE_DOMAIN:-}
       CERT_EMAIL: ${CERT_EMAIL:-}
       # Empty = HTTP-01 webroot. Set to e.g. cloudflare to issue/renew with DNS-01;
       # the credentials ini is read from /etc/letsencrypt/<provider>.ini.
@@ -107,8 +109,9 @@ services:
     # bootstrap to succeed; otherwise it is skipped and only renewals run.
     # WHY the shell loop builds the -d list instead of passing four flags: every domain
     # is optional, and `certbot certonly -d ""` requests an unnamed SAN, which fails
-    # validation for the whole certificate instead of skipping the domain. The first
-    # domain that is set becomes the lineage directory, matching scripts/__domain.sh.
+    # validation for the whole certificate instead of skipping the domain. --cert-name
+    # pins the lineage to CERT_LINEAGE_DOMAIN, else the first domain that is set,
+    # matching scripts/__domain.sh, so nginx reads the directory certbot writes.
     #
     # WHY the issuance loop classifies failures instead of always retrying: a
     # misconfigured challenge plugin or an unregistered email fails identically on
@@ -128,7 +131,7 @@ services:
     # the script therefore live here in the YAML, not inside the entrypoint string.
     entrypoint: >
       /bin/sh -c 'trap exit TERM;
-      LINEAGE="$${DOMAIN_NAME:-$${ADMIN_DOMAIN:-$${OJ_DOMAIN:-$${RANKING_DOMAIN}}}}";
+      LINEAGE="$${CERT_LINEAGE_DOMAIN:-$${DOMAIN_NAME:-$${ADMIN_DOMAIN:-$${OJ_DOMAIN:-$${RANKING_DOMAIN}}}}}";
       STATUS=/etc/letsencrypt/certbot-status;
       if [ -n "$$DNS_PROVIDER" ]; then
         CHALLENGE="--dns-$$DNS_PROVIDER --dns-$$DNS_PROVIDER-credentials /etc/letsencrypt/$$DNS_PROVIDER.ini";
@@ -156,7 +159,7 @@ services:
         mark pending "attempting issuance for $$LINEAGE";
         attempt=1; interval="$$CERT_RETRY_INTERVAL";
         while :; do
-          out=$$(certbot certonly $$CHALLENGE "$$@" --email "$$CERT_EMAIL" --agree-tos --non-interactive 2>&1);
+          out=$$(certbot certonly $$CHALLENGE "$$@" --cert-name "$$LINEAGE" --email "$$CERT_EMAIL" --agree-tos --non-interactive 2>&1);
           rc=$$?;
           if [ $$rc -eq 0 ] && [ -d "/etc/letsencrypt/live/$$LINEAGE" ]; then
             mark ok "certificate issued for $$LINEAGE";

@@ -770,6 +770,7 @@ VAR_SPECS=(
   "Infra & Monitoring|[backup]|BACKUP_DEFAULT_LOCATION|str||default"
   "Infra & Monitoring|[backup]|BACKUP_LOCATIONS|str||[{\"id\":\"default\",\"label\":\"Primary volume\",\"path\":\"./backups\"}]"
   "Admin Panel|[admin]|DOMAIN_NAME|str||cms.local"
+  "Admin Panel|[admin]|CERT_LINEAGE_DOMAIN|str||"
   "Admin Panel|[admin]|DOMAIN_NGINX_BIND_IP|str||"
   "Admin Panel|[admin]|DOMAIN_CERT_METHOD|str||letsencrypt"
   "Admin Panel|[admin]|AUTO_RETRY|enum:0,1||0"

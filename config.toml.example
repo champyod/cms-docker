@@ -86,6 +86,7 @@ RANKING_LOGO_PATH = ""          # str; host path to ranking logo (png/jpg/gif/bm
 CMS_RANKING_LOG_DIR = "/var/local/log/cms/ranking" # str; reserved — no code reads it; the injector never sets log_dir in cms.ranking.toml
 CMS_RANKING_LIB_DIR = "/var/local/lib/cms/ranking" # str; container path written as lib_dir into cms.ranking.toml and used by the logo hot-swap — must match the cms-ranking-data volume mount
 DOMAIN_NAME = ""                # str; primary FQDN (e.g. grader.example.org); empty=cms.local
+CERT_LINEAGE_DOMAIN = ""        # str; certbot lineage name under config/letsencrypt/live, and the certbot --cert-name; empty=derived from DOMAIN_NAME (same as scripts/__domain.sh)
 DOMAIN_CERT_METHOD = "letsencrypt" # enum:letsencrypt,provided,selfsigned; how the primary domain certificate is obtained
 AUTO_RETRY = 0            # enum:0,1; retry cert issuance while DNS/:80 propagate
 CERT_RETRY_ATTEMPTS = 8   # num; 0 = unlimited
