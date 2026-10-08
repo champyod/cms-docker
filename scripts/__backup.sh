@@ -710,7 +710,7 @@ run_backup() {
   # reason is captured instead, and the manifest, the rotation and the notification
   # all run before the run is reported as partial.
   log_info "Archiving volume $VOLUME_DATA ..."
-  local vol_image="alpine:3.19"
+  local vol_image="alpine:3.22"
   # Pull quietly if needed (ignore failure — try busybox fallback)
   docker pull "$vol_image" >/dev/null 2>&1 || true
   local vol_fail_reason=""

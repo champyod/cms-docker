@@ -73,7 +73,7 @@ ARCHIVE="$(find "${RUN_ROOT}/backups/volumes" -maxdepth 1 -type f -name '*.tar.g
 check_eq "the fallback wrote the archive, not a truncated first attempt" \
   "$(sha_of "$STUB_ARCHIVE")" "$(sha_of "$ARCHIVE")"
 check_eq "the named image was tried first" "yes" \
-  "$(grep_yes "$STREAM_LOG" 'alpine:3.19')"
+  "$(grep_yes "$STREAM_LOG" 'alpine:3.22')"
 check_eq "the fallback image is the one that produced the archive" "busybox" \
   "$(archive_image "$STREAM_LOG")"
 check_eq "the second attempt is a second invocation, not a retry of the first" "2" \

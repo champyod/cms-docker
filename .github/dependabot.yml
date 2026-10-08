@@ -15,3 +15,35 @@ updates:
     schedule:
       interval: "daily"
     open-pull-requests-limit: 30
+  # Base images otherwise move only by hand-editing, which is how pins drift years
+  # behind. One entry per Dockerfile directory: Dependabot resolves each image
+  # against its own registry, so an unpinned or :latest tag becomes a concrete
+  # update rather than a guess.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 30
+  - package-ecosystem: "docker"
+    directory: "/src"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "docker"
+    directory: "/admin-panel"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "docker"
+    directory: "/docker/monitor"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "docker"
+    directory: "/docker/scheduler"
+    schedule:
+      interval: "daily"
+  # Action versions move only by hand-editing otherwise; shellcheck and yamllint are
+  # installed unpinned in CI, so this covers the pins that do exist.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 30

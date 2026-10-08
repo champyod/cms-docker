@@ -213,7 +213,7 @@ if [[ "$RESTORE_TARGET" == "scratch" ]]; then
       log_info "Restoring volumes from $WITH_VOLUMES..."
       docker run --rm -v "$SCRATCH_VOLUME:/volume:z" \
         -v "$(dirname -- "$WITH_VOLUMES"):/backup:ro" \
-        alpine:3.19 sh -c "tar xzf \"/backup/$(basename -- "$WITH_VOLUMES")\" -C /volume" 2>/dev/null || \
+        alpine:3.22 sh -c "tar xzf \"/backup/$(basename -- "$WITH_VOLUMES")\" -C /volume" 2>/dev/null || \
         log_warn "Volume restore from tar had issues"
       log_info "Volume restore attempted"
     fi
@@ -284,7 +284,7 @@ if [[ -n "$WITH_VOLUMES" ]]; then
     log_info "Restoring volumes from $WITH_VOLUMES..."
     # Use a helper container to extract into the live volume
     docker run --rm -v "$VOLUME_DATA:/volume:z" -v "$(dirname -- "$WITH_VOLUMES"):/backup:ro" \
-      alpine:3.19 sh -c "tar xzf \"/backup/$(basename -- "$WITH_VOLUMES")\" -C /volume" 2>/dev/null || \
+      alpine:3.22 sh -c "tar xzf \"/backup/$(basename -- "$WITH_VOLUMES")\" -C /volume" 2>/dev/null || \
       log_warn "Volume restore from tar had issues"
     log_info "Volume restore attempted"
   fi
