@@ -597,27 +597,33 @@ run_backup() {
     return 1
   fi
 
-  # WHY mkdir before the guard: the guard runs df, and df fails outright on a
-  # path that does not exist yet — the normal state of a --root target on its
-  # first run. The default root is pre-created by config sync; custom ones are
-  # not, and empty directories below a disk floor cost nothing.
+  # Disk guard — abort when the backup filesystem has less free than the floor.
+  # WHY the nearest existing ancestor and not BACKUP_ROOT itself: a custom target
+  # (BACKUP_DIR or --root) does not exist on its first run, and df fails outright on a path that
+  # does not exist — measuring BACKUP_ROOT directly would abort a healthy first run. The
+  # filesystem is the same for the whole path, so the deepest ancestor that exists is the one to
+  # measure. WHY a subshell: require_disk_free_gb dies with its own exit code, and a die in a plain
+  # call ends the process before anything can be announced. The subshell keeps that code and
+  # that log line, and the caller decides what the operator is told.
+  local disk_guard_target="$BACKUP_ROOT"
+  while [[ ! -e "$disk_guard_target" && "$disk_guard_target" != "/" ]]; do
+    disk_guard_target="$(dirname -- "$disk_guard_target")"
+  done
+  local disk_guard_status=0
+  ( require_disk_free_gb "$disk_guard_target" "$DISK_FLOOR_GB" "$DISK_WARN_GB" ) || disk_guard_status=$?
+  if (( disk_guard_status != 0 )); then
+    send_discord "❌ **Backup Failed** — disk guard aborted at \`${BACKUP_ROOT}\`: free space unreadable or under the ${DISK_FLOOR_GB} GB floor" 16711680 "true"
+    exit "$disk_guard_status"
+  fi
+
+  # Created only once the guard has passed, so a run that cannot start leaves no
+  # half-made directories behind.
   mkdir -p "$BACKUP_DB_DIR" "$BACKUP_VOL_DIR"
   # WHY g+rwx,g+s and not a mode clamp: it converges on the same dual-writer state
   # ensure_backup_dir_perms establishes, because a forced 700 strips the group off the shared tree
   # and locks the host operator out of its own backups. Ownership is that repair's alone.
   chmod g+rwx,g+s "$BACKUP_DB_DIR" "$BACKUP_VOL_DIR" 2>/dev/null || true
   chmod g+rwx,g+s "$BACKUP_ROOT" 2>/dev/null || true
-
-  # Disk guard — abort when the backup filesystem has less free than the floor
-  # WHY a subshell: require_disk_free_gb dies with its own exit code, and a die in a plain
-  # call ends the process before anything can be announced. The subshell keeps that code and
-  # that log line, and the caller decides what the operator is told.
-  local disk_guard_status=0
-  ( require_disk_free_gb "$BACKUP_ROOT" "$DISK_FLOOR_GB" "$DISK_WARN_GB" ) || disk_guard_status=$?
-  if (( disk_guard_status != 0 )); then
-    send_discord "❌ **Backup Failed** — disk guard aborted at \`${BACKUP_ROOT}\`: free space unreadable or under the ${DISK_FLOOR_GB} GB floor" 16711680 "true"
-    exit "$disk_guard_status"
-  fi
 
   if [[ -z "$POSTGRES_PASSWORD_VAL" ]]; then
     log_warn "POSTGRES_PASSWORD is empty — pg_dump may fail if auth required"

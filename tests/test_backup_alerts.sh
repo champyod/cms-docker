@@ -211,15 +211,36 @@ expect_exit "a run with no database container is exit 1" "1"
 expect_verdict "a missing database container" "$ALERT_RED" 1 "ping"
 expect_says "a missing database container" "$ALERT_RED" 'container cms-database not running'
 
-printf '\n== the backup filesystem cannot be read ==\n'
+printf '\n== the backup filesystem report is unreadable ==\n'
 new_run_root failed-disk-guard
-# A path that does not exist is the one way to reach the guard without arranging a nearly full
-# filesystem, and the guard treats an unreadable report and a low one the same way.
-run_backup BACKUP_DIR="${RUN_ROOT}/backups/never-created" BACKUP_MAX_COUNT=1
+# df is the guard's only input and the scratch tree always clears the floor, so the report
+# itself is the lever: a stub that fails the way df does on a path it cannot stat.
+run_backup STUB_DF=unreadable BACKUP_MAX_COUNT=1
 expect_exit "a run the disk guard aborted is exit 2" "2"
 expect_verdict "an unreadable backup filesystem" "$ALERT_RED" 1 "ping"
 expect_says "an unreadable backup filesystem" "$ALERT_RED" 'disk guard aborted'
 expect_says "an unreadable backup filesystem" "$ALERT_RED" "under the ${DISK_FLOOR_GB} GB floor"
+
+printf '\n== the backup filesystem is under the floor ==\n'
+new_run_root failed-disk-floor
+# The guard treats an unreadable report and a low one the same way, so the two scenarios share
+# their verdict and differ only in which report reaches df.
+run_backup STUB_DF=low BACKUP_MAX_COUNT=1
+expect_exit "a run under the disk floor is exit 2" "2"
+expect_verdict "a backup filesystem under the floor" "$ALERT_RED" 1 "ping"
+expect_says "a backup filesystem under the floor" "$ALERT_RED" 'disk guard aborted'
+expect_says "a backup filesystem under the floor" "$ALERT_RED" "under the ${DISK_FLOOR_GB} GB floor"
+
+printf '\n== a first run on a fresh custom target is allowed ==\n'
+# The guard measures the nearest ancestor that exists, not the target itself: a custom
+# BACKUP_DIR/--root does not exist on its first run, and a guard that read the missing path as
+# unreadable would abort a healthy run. This pins the case the ancestor walk exists to keep.
+new_run_root first-run-custom-root
+run_backup BACKUP_DIR="${RUN_ROOT}/backups/never-created"
+expect_exit "a first run on a new custom root succeeds" "0"
+expect_verdict "a first run on a new custom root" "$ALERT_GREEN" 1 "noping"
+check_eq "the new custom root holds a dump directory" "yes" \
+  "$([[ -d "${RUN_ROOT}/backups/never-created/db" ]] && printf yes || printf no)"
 
 printf '\n== docker is not on the PATH ==\n'
 new_run_root failed-no-docker

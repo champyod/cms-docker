@@ -79,9 +79,12 @@ cp -- "${ROOT}/scripts/__lib/common.sh" "${HARNESS_REPO}/scripts/__lib/common.sh
 # The stubs are files rather than strings so what a suite runs against can be read on its
 # own, without reading this file to find it. curl records the alert each run sends; jq, mv and
 # rm are the same faulting fixture under three names, because the manifest and rotation
-# branches that report a failure are only reachable when one of those tools misbehaves.
+# branches that report a failure are only reachable when one of those tools misbehaves; df
+# answers the disk guard with a report a suite chooses, so an unreadable or under-floor
+# filesystem is a scenario rather than a property of the box.
 cp -- "${TESTS_LIB_DIR}/../fixtures/docker" "${HARNESS_BIN}/docker"
 cp -- "${TESTS_LIB_DIR}/../fixtures/curl" "${HARNESS_BIN}/curl"
+cp -- "${TESTS_LIB_DIR}/../fixtures/df" "${HARNESS_BIN}/df"
 for faulted_tool in jq mv rm; do
   cp -- "${TESTS_LIB_DIR}/../fixtures/faulty-tool" "${HARNESS_BIN}/${faulted_tool}"
 done
@@ -92,14 +95,14 @@ chmod 755 "${HARNESS_BIN}"/*
 # itself again. A stub with nothing to delegate to fails on its own rather than standing in
 # for a tool and letting a run pass for the wrong reason.
 declare -A HARNESS_REAL_TOOL=()
-for faulted_tool in jq mv rm; do
-  real_tool_path="$(command -v "$faulted_tool" 2>/dev/null || true)"
+for staged_tool in jq mv rm df; do
+  real_tool_path="$(command -v "$staged_tool" 2>/dev/null || true)"
   if [[ -z "$real_tool_path" ]]; then
-    printf '[FAIL] %s is not installed — its faulting stub has nothing to delegate to\n' \
-      "$faulted_tool" >&2
+    printf '[FAIL] %s is not installed — its staged stub has nothing to delegate to\n' \
+      "$staged_tool" >&2
     exit 1
   fi
-  HARNESS_REAL_TOOL["${faulted_tool^^}"]="$real_tool_path"
+  HARNESS_REAL_TOOL["${staged_tool^^}"]="$real_tool_path"
 done
 
 cat > "${HARNESS_REPO}/.env" <<'STUB_ENV'
@@ -272,6 +275,7 @@ run_staged_backup() {
     STUB_ARCHIVE="$STUB_ARCHIVE" \
     STUB_VOLUME=ok \
     STUB_DUMP=ok \
+    STUB_DF=ok \
     STUB_PG_VERSION="$STUB_PG_VERSION" \
     STUB_FAULT_JQ="" \
     STUB_FAULT_MV="" \
@@ -279,6 +283,7 @@ run_staged_backup() {
     STUB_REAL_JQ="${HARNESS_REAL_TOOL[JQ]}" \
     STUB_REAL_MV="${HARNESS_REAL_TOOL[MV]}" \
     STUB_REAL_RM="${HARNESS_REAL_TOOL[RM]}" \
+    STUB_REAL_DF="${HARNESS_REAL_TOOL[DF]}" \
     "$@" \
     "$BASH_BIN" "$HARNESS_SCRIPT" "$script_arg" >"$RUN_LOG" 2>&1
   LAST_EXIT=$?

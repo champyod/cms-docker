@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# tests/fixtures/df — the df a backup suite puts on the PATH.
+#
+# WHY a stub rather than real space: the disk guard must abort on an unreadable or an
+# under-floor report, and the harness refuses to run unless its scratch tree clears the floor,
+# so neither condition can be arranged with a real filesystem. df is the guard's only input,
+# so the report is the lever, and making it a scenario decision keeps the suite from depending
+# on how much room the box it runs on happens to have.
+#
+# STUB_DF selects the report:
+#   ok          the real df (the default)
+#   unreadable  nothing on stdout and a failure status — the shape df leaves on a path it
+#               cannot stat, which the guard reads as "free space unreadable"
+#   low         a POSIX report whose available field is below the floor, in 1K blocks
+# STUB_REAL_DF is the real df to delegate to, resolved by the harness: this file cannot find
+# it by name, because the directory holding this file is first on the PATH the run was given.
+set -u
+
+case "${STUB_DF:-ok}" in
+  ok)
+    exec "${STUB_REAL_DF:?STUB_REAL_DF is not set}" "$@"
+    ;;
+  unreadable)
+    exit 1
+    ;;
+  low)
+    # A header and one data line, matching the `df -Pk` shape require_disk_free_gb parses:
+    # field 4 is the available 1K blocks, and one block is below any GB floor.
+    printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n'
+    printf 'stubfs 1000000 1000000 1 100%% /stub\n'
+    exit 0
+    ;;
+esac
