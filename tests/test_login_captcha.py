@@ -23,7 +23,9 @@ Usage: python3 tests/test_login_captcha.py
 
 import importlib.util
 import os
+import re
 import sys
+import tempfile
 import types
 import unittest
 
@@ -31,11 +33,33 @@ import unittest
 REPO_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 SRC_ROOT = os.path.join(REPO_ROOT, "src")
 
+# The loader rejects the sample's shipped default secret, so a generated config carries a
+# non-default 16-byte hex key.
+SUITE_SECRET_KEY: str = "0123456789abcdef0123456789abcdef"
+
+
+def _config_path() -> str:
+    """Return a config the loader accepts: config/cms.toml when present, else the tracked
+    sample with a real secret. Only conf.CaptchaConfig is under test."""
+    live: str = os.path.join(REPO_ROOT, "config", "cms.toml")
+    if os.path.exists(live):
+        return live
+    with open(os.path.join(REPO_ROOT, "config", "cms.sample.toml"), encoding="utf-8") as source:
+        sample: str = source.read()
+    sample = re.sub(r'^secret_key = ".*"$', f'secret_key = "{SUITE_SECRET_KEY}"',
+                    sample, count=1, flags=re.MULTILINE)
+    path: str = os.path.join(tempfile.mkdtemp(prefix="cms-captcha-config-"), "cms.toml")
+    with open(path, "w", encoding="utf-8") as generated:
+        generated.write(sample)
+    return path
+
+
 # Order matters: conf.py reads sys.prefix to locate the installation root before it
 # parses anything, so the prefix has to be corrected before sys.path is extended.
 if sys.prefix == "/usr":
     sys.prefix = REPO_ROOT
-os.environ.setdefault("CMS_CONFIG", os.path.join(REPO_ROOT, "config", "cms.toml"))
+if "CMS_CONFIG" not in os.environ:
+    os.environ["CMS_CONFIG"] = _config_path()
 sys.path.insert(0, SRC_ROOT)
 
 
