@@ -449,7 +449,9 @@ admin-create:
 # so `config -q` only succeeds for the pair. docker-compose.waf.yml declares
 # depends_on grader-nginx-proxy, the domain stack's proxy, so its base is
 # docker-compose.domain.yml; only docker-compose.tailscale.yml depends on
-# contest-web-server, so only its base is docker-compose.yml.
+# contest-web-server, so only its base is docker-compose.yml. A profile-gated
+# target also needs its profiles enabled (overlay_profiles) or compose reports
+# the gated service as undefined instead of validating it.
 # Validating an overlay standalone reports a false failure; this mirrors the
 # merge .github/workflows/ci.yml performs.
 lint:
@@ -519,8 +521,6 @@ lint:
 			[docker-compose.tailscale.yml]=docker-compose.yml \
 			[docker-compose.waf.yml]=docker-compose.domain.yml \
 		); \
-		# A profile-gated target has to enable its profiles, or compose reports the
-		# service as undefined instead of validating it.
 		declare -A overlay_profiles=( \
 			[docker-compose.tailscale.yml]="--profile core --profile contest" \
 		); \
