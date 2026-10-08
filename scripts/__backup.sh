@@ -597,18 +597,12 @@ run_backup() {
     return 1
   fi
 
-  # Disk guard — abort when the backup filesystem has less free than the floor.
-  # WHY the nearest existing ancestor and not BACKUP_ROOT itself: a custom target
-  # (BACKUP_DIR or --root) does not exist on its first run, and df fails outright on a path that
-  # does not exist — measuring BACKUP_ROOT directly would abort a healthy first run. The
-  # filesystem is the same for the whole path, so the deepest ancestor that exists is the one to
-  # measure. WHY a subshell: require_disk_free_gb dies with its own exit code, and a die in a plain
-  # call ends the process before anything can be announced. The subshell keeps that code and
-  # that log line, and the caller decides what the operator is told.
+  # df fails on a path that does not exist, so measure the nearest ancestor instead.
   local disk_guard_target="$BACKUP_ROOT"
   while [[ ! -e "$disk_guard_target" && "$disk_guard_target" != "/" ]]; do
     disk_guard_target="$(dirname -- "$disk_guard_target")"
   done
+  # Subshell: require_disk_free_gb dies with its own exit code, which the caller must catch.
   local disk_guard_status=0
   ( require_disk_free_gb "$disk_guard_target" "$DISK_FLOOR_GB" "$DISK_WARN_GB" ) || disk_guard_status=$?
   if (( disk_guard_status != 0 )); then
@@ -616,8 +610,7 @@ run_backup() {
     exit "$disk_guard_status"
   fi
 
-  # Created only once the guard has passed, so a run that cannot start leaves no
-  # half-made directories behind.
+  # After the guard, so a run that cannot start leaves no directories behind.
   mkdir -p "$BACKUP_DB_DIR" "$BACKUP_VOL_DIR"
   # WHY g+rwx,g+s and not a mode clamp: it converges on the same dual-writer state
   # ensure_backup_dir_perms establishes, because a forced 700 strips the group off the shared tree

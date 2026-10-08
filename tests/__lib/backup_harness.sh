@@ -80,8 +80,7 @@ cp -- "${ROOT}/scripts/__lib/common.sh" "${HARNESS_REPO}/scripts/__lib/common.sh
 # own, without reading this file to find it. curl records the alert each run sends; jq, mv and
 # rm are the same faulting fixture under three names, because the manifest and rotation
 # branches that report a failure are only reachable when one of those tools misbehaves; df
-# answers the disk guard with a report a suite chooses, so an unreadable or under-floor
-# filesystem is a scenario rather than a property of the box.
+# answers the disk guard with a report a suite chooses.
 cp -- "${TESTS_LIB_DIR}/../fixtures/docker" "${HARNESS_BIN}/docker"
 cp -- "${TESTS_LIB_DIR}/../fixtures/curl" "${HARNESS_BIN}/curl"
 cp -- "${TESTS_LIB_DIR}/../fixtures/df" "${HARNESS_BIN}/df"

@@ -213,8 +213,7 @@ expect_says "a missing database container" "$ALERT_RED" 'container cms-database 
 
 printf '\n== the backup filesystem report is unreadable ==\n'
 new_run_root failed-disk-guard
-# df is the guard's only input and the scratch tree always clears the floor, so the report
-# itself is the lever: a stub that fails the way df does on a path it cannot stat.
+# The scratch clears the floor, so the guard is reached through df's report.
 run_backup STUB_DF=unreadable BACKUP_MAX_COUNT=1
 expect_exit "a run the disk guard aborted is exit 2" "2"
 expect_verdict "an unreadable backup filesystem" "$ALERT_RED" 1 "ping"
@@ -223,8 +222,7 @@ expect_says "an unreadable backup filesystem" "$ALERT_RED" "under the ${DISK_FLO
 
 printf '\n== the backup filesystem is under the floor ==\n'
 new_run_root failed-disk-floor
-# The guard treats an unreadable report and a low one the same way, so the two scenarios share
-# their verdict and differ only in which report reaches df.
+# A low report and an unreadable one reach the same verdict.
 run_backup STUB_DF=low BACKUP_MAX_COUNT=1
 expect_exit "a run under the disk floor is exit 2" "2"
 expect_verdict "a backup filesystem under the floor" "$ALERT_RED" 1 "ping"
@@ -232,9 +230,7 @@ expect_says "a backup filesystem under the floor" "$ALERT_RED" 'disk guard abort
 expect_says "a backup filesystem under the floor" "$ALERT_RED" "under the ${DISK_FLOOR_GB} GB floor"
 
 printf '\n== a first run on a fresh custom target is allowed ==\n'
-# The guard measures the nearest ancestor that exists, not the target itself: a custom
-# BACKUP_DIR/--root does not exist on its first run, and a guard that read the missing path as
-# unreadable would abort a healthy run. This pins the case the ancestor walk exists to keep.
+# Pins the ancestor walk: a new custom root does not exist on its first run.
 new_run_root first-run-custom-root
 run_backup BACKUP_DIR="${RUN_ROOT}/backups/never-created"
 expect_exit "a first run on a new custom root succeeds" "0"
