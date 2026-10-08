@@ -388,6 +388,26 @@ collect_docker_event() {
         return 0
     fi
 
+    # WHY start events are dropped by default: every container start — the initial
+    # stack boot, the throwaway `docker run --rm` containers __backup.sh uses, and
+    # every routine restart — fired a green "up" digest that carries no actionable
+    # signal, so a stack boot buried the real alerts under one line per container.
+    # WHY not a blanket mute: a crash-restart loop IS the thing this monitor exists
+    # to report, and Docker counts every automatic restart in .RestartCount. A start
+    # with RestartCount still 0 is a plain boot (or a --rm throwaway, whose inspect
+    # finds nothing and lands on 0) and is suppressed; a start on a container that
+    # has already auto-restarted keeps its green entry, so a restart loop still
+    # reaches Discord. die/stop/restart events are untouched and keep reporting.
+    if [ "$event_type" = "start" ]; then
+        local start_container_id start_restart_count
+        start_container_id=$(docker ps -aqf "name=$cont_name" 2>/dev/null | head -1)
+        start_restart_count=$(docker inspect "$start_container_id" --format='{{.RestartCount}}' 2>/dev/null || echo "0")
+        is_integer "$start_restart_count" || start_restart_count=0
+        if [ "$start_restart_count" -eq 0 ]; then
+            return 0
+        fi
+    fi
+
     local container_id restart_count config auto_restart max_restarts
     container_id=$(docker ps -aqf "name=$cont_name" 2>/dev/null | head -1)
     restart_count=$(docker inspect "$container_id" --format='{{.RestartCount}}' 2>/dev/null || echo "0")

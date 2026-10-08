@@ -9,7 +9,13 @@ FROM alpine:3.22
 # bc: for calculations in backup script.
 # jq: for JSON parsing of container config.
 # python3: manifest.json entries, where kind and the table list are written.
-RUN apk add --no-cache bash curl docker-cli procps postgresql-client bc jq python3
+# docker-cli is pinned: __monitor.sh runs only inside this container and shells out
+# to this bundled CLI, so an unpinned package would let the CLI version (and the
+# behaviour of the --format verbs the script uses) change silently on rebuild.
+# Pinned version verified against the Alpine v3.22 community index for both x86_64
+# and aarch64 (docker-cli 28.3.3-r5, built from docker 28.3.3). To re-resolve after
+# a base-image bump: curl -s https://dl-cdn.alpinelinux.org/alpine/v3.22/community/x86_64/APKINDEX.tar.gz | tar -xzO APKINDEX | awk -v RS='' '/\nP:docker-cli\n/'
+RUN apk add --no-cache bash curl docker-cli=28.3.3-r5 procps postgresql-client bc jq python3
 
 # We copy the script from the context (repo root)
 COPY scripts/__monitor.sh /usr/local/bin/monitor.sh
