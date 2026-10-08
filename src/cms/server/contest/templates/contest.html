@@ -123,6 +123,7 @@ $(document).ready(function () {
                 </p>
                 {% endif %}
             </div>
+            {% include "license_notice.html" %}
         </div>
 {% else %}
         <div id="notifications" class="notifications"></div>
@@ -209,6 +210,7 @@ $(document).ready(function () {
                 </div>
     {% block core %}{% endblock core %}
             </div>
+            {% include "license_notice.html" %}
         </div>
 
 {% endif %}

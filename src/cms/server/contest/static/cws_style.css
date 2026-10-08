@@ -794,6 +794,7 @@ td.token_rules p:last-child {
     display: block;
     text-align: center;
     padding: 0 6%;
+    margin: 24px 0 0;
     font-size: 11px;
 }
 

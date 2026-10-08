@@ -1,0 +1,12 @@
+{# WHY a fragment every layout places, and not inline in one shared position:
+   section 13 of the licence addresses every visitor of this server, including
+   the ones without an account who only ever see the login form, but the notice
+   has to sit inside the page's own content flow or the sidebar offset of
+   "contest" pages paints over it. #}
+<p class="license_notice">
+{{ credits.project.name }} is released under the
+<a href="{{ credits.license.url }}" rel="license noreferrer" target="_blank">{{ credits.license.name }}</a>.
+Under section 13 of that licence the corresponding source of the software running here is offered at
+<a href="{{ config.global_.source_url }}" rel="author noreferrer" target="_blank">{{ config.global_.source_url }}</a>.
+<a href="{{ contest_url("credits") }}">Credits</a> lists the third-party software it bundles.
+</p>

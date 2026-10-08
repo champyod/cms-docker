@@ -20,23 +20,5 @@
     </head>
     <body>
         {% block body %}{% endblock body %}
-        {# WHY here and not in a page template: section 13 of the licence
-           addresses every user reaching this server over the network, and the
-           ones without an account only ever see the login form. Placing it
-           below the body block makes it unconditional on every page, whichever
-           template fills that block and whether anyone is logged in. #}
-        <div class="container">
-            <div class="row">
-                <div class="span12">
-                    <p class="license_notice">
-                    {{ credits.project.name }} is released under the
-                    <a href="{{ credits.license.url }}" rel="license noreferrer" target="_blank">{{ credits.license.name }}</a>.
-                    Under section 13 of that licence the corresponding source of the software running here is offered at
-                    <a href="{{ config.global_.source_url }}" rel="author noreferrer" target="_blank">{{ config.global_.source_url }}</a>.
-                    <a href="{{ contest_url("credits") }}">Credits</a> lists the third-party software it bundles.
-                    </p>
-                </div>
-            </div>
-        </div>
     </body>
 </html>
