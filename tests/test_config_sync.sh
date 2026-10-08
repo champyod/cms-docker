@@ -56,6 +56,14 @@ setup_test_root() {
   cp "$REPO_ROOT/config/cms.sample.toml" "$TEST_ROOT/config/" 2>/dev/null || true
   cp "$REPO_ROOT/config/cms.ranking.sample.toml" "$TEST_ROOT/config/" 2>/dev/null || true
   write_old_layout
+  # `cms` resolves its root from its own path and then runs `scripts/__config_sync.sh`
+  # relative to that root, so a copy is what keeps `db use` inside the throwaway tree.
+  # Without it the test wrote config.toml, .env and config/cms.toml into the checkout —
+  # and a suite reading that generated cms.toml fails on it.
+  mkdir -p "$TEST_ROOT/scripts"
+  cp "$REPO_ROOT/cms" "$TEST_ROOT/cms"
+  cp "$REPO_ROOT/scripts/__config_sync.sh" "$TEST_ROOT/scripts/"
+  cp -r "$REPO_ROOT/scripts/__lib" "$TEST_ROOT/scripts/"
 }
 
 run_sync() {
@@ -105,11 +113,27 @@ assert_exit 0 $? "second dry-run exits 0"
 echo ""
 echo "=== Test 6: cmd_db_use on old layout suggests config sync ==="
 write_old_layout
+if [[ -f "$REPO_ROOT/config.toml" ]]; then
+  repo_config_before="$(sha256sum "$REPO_ROOT/config.toml")"
+else
+  repo_config_before="(absent)"
+fi
 (
   cd "$TEST_ROOT"
-  bash "$REPO_ROOT/cms" db use default
+  bash "$TEST_ROOT/cms" db use default
 ) > "$TEST_ROOT/db-use.log" 2>&1 || true
 assert_grep "$TEST_ROOT/db-use.log" "config sync" "cmd_db_use suggests running config sync"
+assert_grep "$TEST_ROOT/config.toml" 'ACTIVE_DATABASE = "default"' "the sandbox config.toml was the one db use rewrote"
+if [[ -f "$REPO_ROOT/config.toml" ]]; then
+  repo_config_after="$(sha256sum "$REPO_ROOT/config.toml")"
+else
+  repo_config_after="(absent)"
+fi
+if [[ "$repo_config_before" == "$repo_config_after" ]]; then
+  pass "the checkout's config.toml was left untouched"
+else
+  fail "db use rewrote the checkout's config.toml — the test is not isolated"
+fi
 
 echo ""
 echo "=== Test 7: dry-run does not modify config.toml ==="
