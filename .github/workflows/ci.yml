@@ -149,15 +149,21 @@ jobs:
             [docker-compose.tailscale.yml]=docker-compose.yml
             [docker-compose.waf.yml]=docker-compose.domain.yml
           )
+          # An overlay whose target is profile-gated has to enable those profiles, or
+          # compose reports the gated service as undefined instead of validating it.
+          declare -A OVERLAY_PROFILES=(
+            [docker-compose.tailscale.yml]="--profile core --profile contest"
+          )
           for f in docker-compose*.yml docker/docker-compose*.yml; do
             [ -f "$f" ] || continue
             if [ -n "${OVERLAY_BASE[$f]:-}" ]; then
               base="${OVERLAY_BASE[$f]}"
+              profiles="${OVERLAY_PROFILES[$f]:-}"
               echo "::group::docker compose config -q -- $base + $f"
               if [ "${#ENV_ARGS[@]}" -gt 0 ]; then
-                docker compose "${ENV_ARGS[@]}" -f "$base" -f "$f" config -q
+                docker compose "${ENV_ARGS[@]}" -f "$base" -f "$f" $profiles config -q
               else
-                docker compose -f "$base" -f "$f" config -q
+                docker compose -f "$base" -f "$f" $profiles config -q
               fi
             else
               echo "::group::docker compose config -q -- $f"

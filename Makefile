@@ -519,13 +519,18 @@ lint:
 			[docker-compose.tailscale.yml]=docker-compose.yml \
 			[docker-compose.waf.yml]=docker-compose.domain.yml \
 		); \
+		# A profile-gated target has to enable its profiles, or compose reports the
+		# service as undefined instead of validating it.
+		declare -A overlay_profiles=( \
+			[docker-compose.tailscale.yml]="--profile core --profile contest" \
+		); \
 		compose_failed=0; \
 		for f in docker-compose*.yml docker/docker-compose*.yml; do \
 			[ -f "$$f" ] || continue; \
 			base="$${overlay_base[$$f]:-}"; \
 			if [ -n "$$base" ]; then \
 				echo "compose config -- $$base + $$f"; \
-				docker compose "$${env_args[@]}" -f "$$base" -f "$$f" config -q || { echo "compose config FAILED ($$f)" >&2; compose_failed=1; }; \
+				docker compose "$${env_args[@]}" -f "$$base" -f "$$f" $${overlay_profiles[$$f]:-} config -q || { echo "compose config FAILED ($$f)" >&2; compose_failed=1; }; \
 			else \
 				echo "compose config -- $$f"; \
 				docker compose "$${env_args[@]}" -f "$$f" config -q || { echo "compose config FAILED ($$f)" >&2; compose_failed=1; }; \
