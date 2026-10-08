@@ -122,9 +122,7 @@ services:
       mark() { printf "%s %s\n" "$$1" "$$2" > "$$STATUS"; };
       is_retriable() {
         case "$$1" in
-          *"urn:ietf:params:acme:error:dns"*|*"Timeout during connect"*|*"Connection refused"*|\
-          *"Invalid response from http://"*|*"urn:ietf:params:acme:error:connection"*|\
-          *"urn:ietf:params:acme:error:rateLimited"*|*"too many certificates"*) return 0 ;;
+          *"urn:ietf:params:acme:error:dns"*|*"Type: dns"*|*"no valid A records found"*|*"Timeout during connect"*|*"Connection refused"*|*"Invalid response from http://"*|*"urn:ietf:params:acme:error:connection"*|*"urn:ietf:params:acme:error:rateLimited"*|*"too many certificates"*) return 0 ;;
           *) return 1 ;;
         esac;
       };
