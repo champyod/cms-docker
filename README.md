@@ -392,6 +392,7 @@ preflight hard-fails on placeholder/default secrets with fix instructions.
 | [docs/QUICKREF.md](docs/QUICKREF.md) | Command cheat sheet for daily operations |
 | [docs/ACCESS-CONFIGURATION.md](docs/ACCESS-CONFIGURATION.md) | Binding IPs, ports, and exposure modes |
 | [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) | External dependencies and versions |
+| [docs/acme-challenges.md](docs/acme-challenges.md) | ACME challenge, CA, cert import and renewal |
 | [docs/optional-features.md](docs/optional-features.md) | HSM, Vault, DNSSEC/CAA, mTLS, rate limiting, monitoring stack |
 | [docs/waf-tuning.md](docs/waf-tuning.md) | WAF (ModSecurity CRS) enablement and tuning |
 | [docs/csp-implementation.md](docs/csp-implementation.md) | Content-Security-Policy details |
