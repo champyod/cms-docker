@@ -1,0 +1,11 @@
+--- a/config.toml.example
++++ b/config.toml.example
+@@ -165,7 +165,7 @@
+ WORKER_SHARD = 0                # num; shard index handed to cmsWorker — also names the container cms-worker-<n>; MUST be unique per instance
+ WORKER_NAME = "worker-0"        # str; label exported to the worker container env (compose default worker-<shard>); the fleet TUI stamps it per shard — CMS itself does not read it
+ WORKER_PORT = 26000             # port; worker RPC port — published as WORKER_BIND_ADDR:WORKER_PORT:WORKER_PORT; the core dials a worker at these coordinates (Worker list in config/cms.toml)
+-WORKER_BIND_ADDR = "0.0.0.0"    # str; RPC bind address; a remote worker sets this to its own Tailscale IP so 26000 is not published on every interface
++WORKER_BIND_ADDR = "127.0.0.1"  # str; RPC bind address; loopback by default so a fresh setup is NOT reachable from the LAN (the compose fallback is loopback too) — a remote worker sets this to its own Tailscale IP so 26000 is published only there
+ WORKER_REPLICAS = 1             # num; worker container count — compose deploy.replicas
+ WORKER_CPU_LIMIT = "2"          # str; worker container CPU cap — compose deploy.resources.limits.cpus; also the fleet TUI's global default for per-shard overrides
+ WORKER_MEMORY_LIMIT = "2G"      # str; worker container memory cap — compose deploy.resources.limits.memory; also the fleet TUI's global default for per-shard overrides

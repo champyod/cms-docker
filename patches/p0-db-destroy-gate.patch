@@ -1,0 +1,23 @@
+--- a/Makefile
++++ b/Makefile
+@@ -273,8 +273,19 @@
+ waf-clean:
+ 	$(COMPOSE_CMD) $(WAF_COMPOSE_FLAGS) $(WAF_UP_PROFILES) rm -f -s -v grader-waf
+ 
++# Destructive teardown: `down -v --remove-orphans` across every profile deletes
++# every volume in the cms project (cms-database-data, cms-logs, cms-data,
++# cms-cache, cms-ranking-data, cms-submissions-contest, the nginx caches/logs,
++# worker-tmp, redis-rate-limit-data) AND sweeps containers that share the
++# project but not this file set (grader-certbot, grader-waf). None of that is
++# recoverable, so both targets pass through scripts/__db_destroy_guard.sh first.
++# WHY a guard and not an inline prompt: an unattended caller with no terminal
++# must be REFUSED, not silently waved through. Authorise non-interactively with
++# `CONFIRM_DB_DESTROY=yes make db-clean`. For a teardown that keeps the database
++# volume, use the per-stack targets instead (core-stop, admin-clean,
++# contest-clean, worker-clean, infra-clean, domain-clean, waf-clean).
+ db-clean:
+-	@echo "WARNING: This will delete all database data and reset everything."
++	@bash scripts/__db_destroy_guard.sh db-clean
+ 	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile admin --profile contest --profile worker --profile monitor down -v --remove-orphans
+ 
+ db-reset: db-clean

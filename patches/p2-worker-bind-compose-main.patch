@@ -1,0 +1,17 @@
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -619,7 +619,13 @@
+       # - ${MTLS_WORKER_CERT:-config/mtls/worker.pem}:/etc/cms/mtls/worker.pem:ro
+       # - ${MTLS_WORKER_KEY:-config/mtls/worker-key.pem}:/etc/cms/mtls/worker-key.pem:ro
+     ports:
+-      - "${WORKER_BIND_ADDR:-0.0.0.0}:${WORKER_PORT:-26000}:${WORKER_PORT:-26000}"
++      # WHY loopback by default: a 0.0.0.0 fallback published the worker RPC port on
++      # EVERY host interface, so any LAN peer could reach it directly. This fallback is
++      # what applies when .env has no WORKER_BIND_ADDR (fresh checkout, or a config
++      # synced before the key existed), so it has to be safe on its own. A worker that
++      # must accept remote RPC sets WORKER_BIND_ADDR in config.toml [worker] to its own
++      # Tailscale IP, and the port is then published on that address only.
++      - "${WORKER_BIND_ADDR:-127.0.0.1}:${WORKER_PORT:-26000}:${WORKER_PORT:-26000}"
+     networks:
+       - cms-network
+     privileged: true
