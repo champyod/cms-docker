@@ -449,7 +449,7 @@ admin-create:
 # so `config -q` only succeeds for the pair. docker-compose.waf.yml declares
 # depends_on grader-nginx-proxy, the domain stack's proxy, so its base is
 # docker-compose.domain.yml; only docker-compose.tailscale.yml depends on
-# contest-web-server, so only its base is docker-compose.contest.yml.
+# contest-web-server, so only its base is docker-compose.yml.
 # Validating an overlay standalone reports a false failure; this mirrors the
 # merge .github/workflows/ci.yml performs.
 lint:
@@ -516,7 +516,7 @@ lint:
 			export POSTGRES_PASSWORD=x AUTH_SECRET=x SECRET_KEY=x CONTEST_ID=1; \
 		fi; \
 		declare -A overlay_base=( \
-			[docker-compose.tailscale.yml]=docker-compose.contest.yml \
+			[docker-compose.tailscale.yml]=docker-compose.yml \
 			[docker-compose.waf.yml]=docker-compose.domain.yml \
 		); \
 		compose_failed=0; \

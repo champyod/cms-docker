@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/__test_config_sync.sh — regression tests for db-profile migration and
+# tests/test_config_sync.sh — regression tests for db-profile migration and
 # dry-run consistency. Runs in a throwaway directory; never touches the real
 # config.toml or .env.
 set -eu
@@ -59,7 +59,7 @@ setup_test_root() {
 }
 
 run_sync() {
-  CMS_DOCKER_ROOT="$TEST_ROOT" bash "$SCRIPT_DIR/__config_sync.sh" "$@" \
+  CMS_DOCKER_ROOT="$TEST_ROOT" bash "$REPO_ROOT/scripts/__config_sync.sh" "$@" \
     > "$TEST_ROOT/sync-output.log" 2>&1
 }
 

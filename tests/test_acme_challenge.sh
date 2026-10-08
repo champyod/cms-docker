@@ -59,14 +59,13 @@ for enable_tls in true false; do
   fi
 done
 
-# The webroot must be mounted into cms-nginx-contest in both compose models.
-for compose in docker-compose.yml docker-compose.contest.yml; do
-  if grep -q -- '- \./config/letsencrypt/www:/var/www/certbot:ro' "${REPO_ROOT}/${compose}"; then
-    ok "${compose}: webroot mounted into nginx-proxy"
-  else
-    no "${compose}: webroot mounted into nginx-proxy"
-  fi
-done
+# The webroot must be mounted into cms-nginx-contest, which lives in the unified
+# compose model.
+if grep -q -- '- \./config/letsencrypt/www:/var/www/certbot:ro' "${REPO_ROOT}/docker-compose.yml"; then
+  ok "docker-compose.yml: webroot mounted into nginx-proxy"
+else
+  no "docker-compose.yml: webroot mounted into nginx-proxy"
+fi
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]]

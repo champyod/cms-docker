@@ -143,10 +143,10 @@ jobs:
           fi
           # Overlay stacks reference services from a base stack
           # (e.g. docker-compose.tailscale.yml depends on contest-web-server
-          # from docker-compose.contest.yml), so they must be validated
+          # from docker-compose.yml), so they must be validated
           # merged with their base instead of standalone.
           declare -A OVERLAY_BASE=(
-            [docker-compose.tailscale.yml]=docker-compose.contest.yml
+            [docker-compose.tailscale.yml]=docker-compose.yml
             [docker-compose.waf.yml]=docker-compose.domain.yml
           )
           for f in docker-compose*.yml docker/docker-compose*.yml; do
