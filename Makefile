@@ -523,21 +523,21 @@ lint:
 # Developer/CI checks: they need a checkout, not a running stack (see preflight/smoke-test).
 # env -i: the suites stage their own .env, so make's exported .env vars must not leak in.
 test:
-	@rc=0; \
-	ran=0; \
-	for f in tests/test_*.sh tests/test_*.py; do \
-		[ -f "$$f" ] || continue; \
-		ran=1; \
-		case "$$f" in *.py) runner=python3 ;; *) runner=bash ;; esac; \
-		printf '\n== %s ==\n' "$$f"; \
-		env -i PATH="$$PATH" HOME="$${HOME:-/tmp}" TMPDIR="$${TMPDIR:-/tmp}" LC_ALL=C "$$runner" "$$f" \
-			|| { echo "[FAIL] $$f" >&2; rc=1; }; \
+	@status=0; \
+	suites_ran=0; \
+	for suite_file in tests/test_*.sh tests/test_*.py; do \
+		[ -f "$$suite_file" ] || continue; \
+		suites_ran=1; \
+		case "$$suite_file" in *.py) interpreter=python3 ;; *) interpreter=bash ;; esac; \
+		printf '\n== %s ==\n' "$$suite_file"; \
+		env -i PATH="$$PATH" HOME="$${HOME:-/tmp}" TMPDIR="$${TMPDIR:-/tmp}" LC_ALL=C "$$interpreter" "$$suite_file" \
+			|| { echo "[FAIL] $$suite_file" >&2; status=1; }; \
 	done; \
-	if [ "$$ran" -eq 0 ]; then \
+	if [ "$$suites_ran" -eq 0 ]; then \
 		echo "ERROR: no tests/test_*.sh or tests/test_*.py found — run from the repository root." >&2; \
 		exit 1; \
 	fi; \
-	if [ "$$rc" -ne 0 ]; then \
+	if [ "$$status" -ne 0 ]; then \
 		echo ""; echo "FAILED: one or more suites failed" >&2; \
 		exit 1; \
 	fi; \
