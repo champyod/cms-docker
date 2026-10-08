@@ -49,7 +49,7 @@ const BOOTSTRAP_SOURCE = readFileSync(fileURLToPath(new URL('../src/scheduler/bo
 const BACKUPS_ACTION_SOURCE = readFileSync(fileURLToPath(new URL('../src/app/actions/backups.ts', import.meta.url)), 'utf8');
 const SCHEDULER_DOCKERFILE = readFileSync(fileURLToPath(new URL('../../docker/scheduler/Dockerfile', import.meta.url)), 'utf8');
 const COMPOSE_SOURCE = readFileSync(fileURLToPath(new URL('../../docker-compose.yml', import.meta.url)), 'utf8');
-const WORKFLOW_SOURCE = readFileSync(fileURLToPath(new URL('../../.github/workflows/build-and-push.yml', import.meta.url)), 'utf8');
+const WORKFLOW_SOURCE = readFileSync(fileURLToPath(new URL('../../.github/workflows/ci.yml', import.meta.url)), 'utf8');
 
 function composeService(name: string): string {
   const start = COMPOSE_SOURCE.indexOf(`\n  ${name}:\n`);
