@@ -14,8 +14,10 @@ export
 COMPOSE_CMD := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
 # Explicit -f list (auto-merge of docker-compose.override.yml is disabled
 # whenever -f is passed, so the override must be included here when present)
-COMPOSE_FILES := $(wildcard docker-compose.yml docker-compose.override.yml docker-compose.expose.yml)
-COMPOSE_FLAGS := $(foreach f,$(COMPOSE_FILES),-f $(f))
+# WHY recursive (= not :=): the `expose` target writes or removes
+# docker-compose.expose.yml, so both lists must re-evaluate after it runs.
+COMPOSE_FILES = $(wildcard docker-compose.yml docker-compose.override.yml docker-compose.expose.yml)
+COMPOSE_FLAGS = $(foreach f,$(COMPOSE_FILES),-f $(f))
 # Compose v5 does not auto-activate the profiles of depends_on targets, so
 # stack bring-up must request dependency profiles explicitly. Stop/clean
 # targets keep the stack's own profile so teardown never removes dependencies.
@@ -41,7 +43,13 @@ WAF_COMPOSE_FLAGS    := -f docker-compose.yml -f docker-compose.domain.yml -f do
 # binds the same host 80/443 and would fail to publish.
 WAF_UP_PROFILES      := --profile core --profile waf
 
-.PHONY: setup audit help env core admin contest worker infra domain waf core-stop admin-stop contest-stop contest-down worker-stop infra-stop domain-stop waf-stop core-clean admin-clean contest-clean worker-clean infra-clean domain-clean waf-clean db-clean clean pull pull-core pull-admin pull-contest pull-worker pull-infra core-img admin-img contest-img worker-img infra-img admin-dev admin-dev-stop contest-down cms-init admin-create prisma-sync lint smoke-test preflight backup db-reset
+.PHONY: expose setup audit help env core admin contest worker infra domain waf core-stop admin-stop contest-stop contest-down worker-stop infra-stop domain-stop waf-stop core-clean admin-clean contest-clean worker-clean infra-clean domain-clean waf-clean db-clean clean pull pull-core pull-admin pull-contest pull-worker pull-infra core-img admin-img contest-img worker-img infra-img admin-dev admin-dev-stop contest-down cms-init admin-create prisma-sync lint smoke-test preflight backup db-reset
+
+# Regenerate the bind override from .env before a stack comes up. The base compose
+# files publish the front-door ports on 0.0.0.0; this override rebinds them to the
+# configured *_BIND_IP addresses, one entry per address, so a comma list expands.
+expose:
+	@bash scripts/__render_expose.sh
 
 help:
 	@echo "Available commands:"
@@ -101,7 +109,7 @@ env:
 setup:
 	@./cms $(CMS_ARGS)
 
-core:
+core: expose
 	@DEPLOY_TYPE="$${DEPLOYMENT_TYPE_OVERRIDE:-}"; \
 	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
@@ -115,7 +123,7 @@ core:
 	fi
 	@echo "Core profile started."
 
-admin:
+admin: expose
 	@DEPLOY_TYPE="$${DEPLOYMENT_TYPE_OVERRIDE:-}"; \
 	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
@@ -129,7 +137,7 @@ admin:
 	fi
 	@echo "Admin profile started."
 
-contest:
+contest: expose
 	@DEPLOY_TYPE="$${DEPLOYMENT_TYPE_OVERRIDE:-}"; \
 	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
@@ -144,7 +152,7 @@ contest:
 	@bash scripts/__contest_dns_refresh.sh
 	@echo "Contest profile started (CONTEST_ID canonical)."
 
-worker:
+worker: expose
 	@DEPLOY_TYPE="$${DEPLOYMENT_TYPE_OVERRIDE:-}"; \
 	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
@@ -158,7 +166,7 @@ worker:
 	bash scripts/__worker_tui.sh deploy all
 	@echo "Worker fleet deployed."
 
-infra:
+infra: expose
 	@DEPLOY_TYPE="$${DEPLOYMENT_TYPE_OVERRIDE:-}"; \
 	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
@@ -273,7 +281,7 @@ waf-stop:
 waf-clean:
 	$(COMPOSE_CMD) $(WAF_COMPOSE_FLAGS) $(WAF_UP_PROFILES) rm -f -s -v grader-waf
 
-db-clean:
+db-clean: expose
 	@echo "WARNING: This will delete all database data and reset everything."
 	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile admin --profile contest --profile worker --profile monitor down -v --remove-orphans
 
@@ -285,7 +293,7 @@ db-reset: db-clean
 # ---------------------------------------------------------------------------
 # Pull — offline-tolerant but LOUD
 # ---------------------------------------------------------------------------
-pull:
+pull: expose
 	@echo "Pulling images for all profiles..."
 	@pull_failed=0; \
 	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile admin --profile contest --profile worker --profile monitor pull || { echo "[WARN] pull failed — continuing with local images (may be stale)" >&2; pull_failed=1; }; \

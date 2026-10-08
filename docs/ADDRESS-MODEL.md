@@ -47,20 +47,26 @@ drift apart silently, and the drift would only surface as an unreachable worker 
 
 `ADMIN_BIND_IP = "203.0.113.10,100.64.0.1"` names the public address and the
 tailnet address together. A comma-separated list is how several addresses are
-requested — there is no second key and no mode to set — but the list is not
-something the compose files' port specs can carry: docker compose pins one
-`host_ip` per port entry and rejects a comma in it. `scripts/__render_expose.sh`
-resolves the model and writes `docker-compose.expose.yml`, which the `Makefile`
-includes automatically when present (`COMPOSE_FILES`), expanding the list into
-one published entry per address.
+requested — there is no second key and no mode to set. The base compose files
+cannot carry the list: docker compose pins one `host_ip` per port entry and
+rejects a comma in it, so they publish the front-door ports on `0.0.0.0` and
+`scripts/__render_expose.sh` rewrites them — one published entry per address.
+The `Makefile` runs that generator before every stack target (`expose`) and
+includes the file when present (`COMPOSE_FILES`), so a comma list needs no
+hand-editing:
 
 ```
-bash scripts/__render_expose.sh
-make core        # or ./cms deploy all
+ADMIN_BIND_IP = "203.0.113.10,100.64.0.1"
+make admin        # or ./cms deploy all
 ```
 
 The override uses Compose's `!override` tag to replace a service's `ports` list, so
 it needs Compose >= 2.24. The generated file is gitignored.
+
+Because the base files no longer read the `*_BIND_IP` keys themselves, a bare
+`docker compose up` that skips the generator binds the front-door ports on
+`0.0.0.0` — including the ones that default to loopback. Bring stacks up through
+`make`/`./cms deploy` so the configured addresses apply.
 
 ## Hand-written local overrides
 
