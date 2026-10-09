@@ -186,14 +186,18 @@ async fn listen_once(
         let table = parts.next().unwrap_or_default();
         let operation = parts.next().unwrap_or_default();
         let key = parts.next().unwrap_or_default();
+        // Python's DataWatcher registered score callbacks but no submission or
+        // subchange callbacks, so those two tables move scores and publish nothing
+        // else; an entity event there would name something the page cannot read.
         if affects_scores(table) {
             let next = publish_changes(db, feed, board).await?;
             *board = next;
+        } else {
+            feed.publish(
+                entity_kind(table),
+                format!("{} {key}", operation_name(operation)),
+            );
         }
-        feed.publish(
-            entity_kind(table),
-            format!("{} {key}", operation_name(operation)),
-        );
     }
 }
 
