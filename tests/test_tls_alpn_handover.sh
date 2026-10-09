@@ -53,6 +53,13 @@ case "${1:-}" in
     fi
     ;;
   start) printf 'start %s\n' "${2:-}" >> "${DOCKER_LOG}" ;;
+  inspect)
+    # The health state a restored container reports, from HEALTH_STATE. The default is
+    # "none", which is what docker says for a container with no healthcheck — the common
+    # case for the proxy, and the one that must not be waited on.
+    printf '%s\n' "${HEALTH_STATE:-none}"
+    exit 0
+    ;;
   run)
     printf 'run %s\n' "$*" >> "${DOCKER_LOG}"
     [[ -f "${RUN_FAILS:-}" ]] && exit 1
@@ -108,10 +115,12 @@ handover_only() {
   shift
   export DOCKER_LOG="${dir}/docker.log"
   : > "$DOCKER_LOG"
+  # WHY log_info/log_warn are kept rather than silenced: the health-wait reports which of
+  # the three outcomes it reached, and that line is the whole assertion for those cases.
+  # The handover's own chatter is unchanged, so callers still match on it as before.
   PATH="${dir}/bin:${PATH}" ACME_HANDOVER_TIMEOUT=0 bash -c '
-    log_info() { :; }
-    log_warn() { :; }
     log_die() { printf "DIE %s\n" "$1" >&2; exit "${2:-1}"; }
+    source "'"${REPO_ROOT}"'/scripts/__lib/common.sh"
     source "'"${REPO_ROOT}"'/scripts/__acme_tls_alpn.sh"
     eval "$1"
   ' _ "$*" 2>&1
@@ -332,6 +341,38 @@ if [[ "$status" -ne 0 ]] && grep -qF -- "could not list the running containers" 
   ok "an unreadable container list is not read as a free :443"
 else
   no "an unreadable container list is not read as a free :443 (status $status, out: $out)"
+fi
+
+echo "a restored container is given a chance to report healthy"
+# `docker start` returns before the healthcheck has run, so a status read straight after a
+# renewal showed the WAF as starting or briefly unhealthy on a clean restore. The wait
+# exists to close that, and these cases pin what it does with each answer docker can give.
+dir="$(sandbox)"
+ps_rows "$dir" 'grader-waf|0.0.0.0:443->8080/tcp'
+out="$(HEALTH_STATE=healthy handover_only "$dir" 'acme_release_port443; acme_restore_port443')"
+if grep -qF -- "grader-waf is healthy" <<<"$out"; then
+  ok "a healthy container is reported healthy after the restore"
+else
+  no "a healthy container is reported healthy after the restore (out: $out)"
+fi
+
+dir="$(sandbox)"
+ps_rows "$dir" 'grader-waf|0.0.0.0:443->8080/tcp'
+out="$(HEALTH_STATE=none handover_only "$dir" 'acme_release_port443; acme_restore_port443')"
+if grep -qF -- "grader-waf has no healthcheck" <<<"$out"; then
+  ok "a container with no healthcheck is not waited on"
+else
+  no "a container with no healthcheck is not waited on (out: $out)"
+fi
+
+dir="$(sandbox)"
+ps_rows "$dir" 'grader-waf|0.0.0.0:443->8080/tcp'
+out="$(HEALTH_STATE=unhealthy handover_only "$dir" 'acme_release_port443; acme_restore_port443')"
+status=$?
+if [[ "$status" -eq 0 ]] && grep -qF -- "grader-waf is unhealthy" <<<"$out"; then
+  ok "an unhealthy container warns but does not fail a completed certificate"
+else
+  no "an unhealthy container warns but does not fail a completed certificate (status $status, out: $out)"
 fi
 
 echo "restoring twice starts nothing twice"

@@ -8,6 +8,9 @@
 readonly ACME_TLS_PORT=443
 readonly ACME_PORT_RELEASE_POLL_S=1
 readonly ACME_HANDOVER_TIMEOUT_DEFAULT=60
+# Seconds a restored container is given to report healthy. Sized above the WAF's own
+# start_period (20s) and retries (3) because it has to cover them, not race them.
+readonly ACME_RESTORE_HEALTH_TIMEOUT_DEFAULT=90
 
 # The containers the handover stopped, so exactly those are put back. Empty means nothing to
 # undo, which is what makes the restore safe to call twice.
@@ -107,6 +110,55 @@ acme_release_port443() {
   return 0
 }
 
+# Waits for one restored container to report healthy.
+#
+# WHY this exists: `docker start` returns as soon as the container is created, well before
+# its healthcheck has run, so a status read straight after a renewal showed the WAF as
+# `starting` or briefly `unhealthy` even on a clean restore — the restore looked like a
+# failure it was not.
+#
+# WHY a container with no healthcheck counts as done: docker reports no health state at
+# all for it, so there is nothing to wait for. Waiting would burn the whole timeout on
+# every proxy restart and then report a failure that describes nothing.
+#
+# WHY an unreadable state also counts as done: `docker inspect` can fail on its own —
+# no daemon, a container already reaped. Looping on an answer that will never arrive
+# turns a cosmetic wait into a stalled handover, and this runs inside an EXIT trap.
+#
+# WHY a timeout warns instead of failing: the certificate is already installed and the
+# container is already running by this point. Refusing to return would leave the EXIT
+# trap re-running the restore, and a slow healthcheck endangers nothing that matters.
+_acme_wait_healthy() {
+  local holder="$1" timeout="${ACME_RESTORE_HEALTH_TIMEOUT:-$ACME_RESTORE_HEALTH_TIMEOUT_DEFAULT}"
+  local elapsed=0 state
+  while (( elapsed < timeout )); do
+    state="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \
+      "$holder" 2>/dev/null)" || state=""
+    case "$state" in
+      healthy)
+        log_info "${holder} is healthy ${elapsed}s after restart"
+        return 0
+        ;;
+      none)
+        log_info "${holder} has no healthcheck — running is the most it reports"
+        return 0
+        ;;
+      unhealthy)
+        log_warn "${holder} is unhealthy ${elapsed}s after restart — it is running, and the certificate is installed"
+        return 0
+        ;;
+      '')
+        log_warn "could not read the health of ${holder} — it is running, and the certificate is installed"
+        return 0
+        ;;
+    esac
+    sleep "$ACME_PORT_RELEASE_POLL_S"
+    elapsed=$(( elapsed + ACME_PORT_RELEASE_POLL_S ))
+  done
+  log_warn "${holder} did not report healthy within ${timeout}s — it is running, and the certificate is installed"
+  return 0
+}
+
 # Puts back what acme_release_port443 took; a second call finds nothing and does nothing,
 # so the exit trap and the normal path can both call it.
 acme_restore_port443() {
@@ -117,6 +169,7 @@ acme_restore_port443() {
   for holder in "${pending[@]}"; do
     if docker start "$holder" >/dev/null; then
       log_info "${holder} restarted"
+      _acme_wait_healthy "$holder"
     else
       log_warn "could not restart ${holder} — start it by hand"
     fi
