@@ -54,6 +54,9 @@ DB_CONTAINER="${CMS_DB_CONTAINER:-cms-database}"
 readonly DB_IDENT_RE='^[a-z_][a-z0-9_]{0,50}$'
 # Not a database: renaming onto either name would break the cluster itself.
 readonly DB_RESERVED_REGEX='^(template0|template1|postgres|all)$'
+# config.toml groups every database credential set under a [db_<profile>]
+# section; scripts/__config_sync.sh reads the same prefix.
+readonly DB_PROFILE_PREFIX='db_'
 
 usage() {
   cat <<'USAGE'
@@ -223,6 +226,97 @@ cmd_create() {
   log_info "next: point the owning db_<profile> POSTGRES_DB at \"${name}\", then run: ./cms config sync"
 }
 
+# The right-hand side of a `key = ...`, but only when it is one plain quoted
+# string. Fails on a bare word, an array, an inline table or a multi-line string
+# instead of guessing: the one mistake this reader must not make is reporting a
+# stale profile as clean.
+toml_plain_string() {
+  local raw="$1" quote rest value tail
+  raw="${raw#"${raw%%[![:space:]]*}"}"       # ltrim
+  [[ "$raw" == '"'* || "$raw" == "'"* ]] || return 1
+  quote="${raw:0:1}"
+  rest="${raw:1}"
+  [[ "$rest" == *"${quote}"* ]] || return 1
+  value="${rest%%"${quote}"*}"                # up to the first closing quote
+  tail="${rest#"$value"}"                     # exact-string removal, not a glob
+  tail="${tail:1}"                            # the closing quote itself
+  tail="${tail#"${tail%%[![:space:]]*}"}"   # ltrim
+  [[ -z "$tail" || "$tail" == '#'* ]] || return 1
+  printf '%s\n' "$value"
+}
+
+# The profiles whose [db_<profile>] POSTGRES_DB still names <target>, one per
+# line in file order. Exit 2 when config.toml is absent or unreadable, because
+# "cannot determine" and "nothing points there" are different answers.
+#
+# WHY a hand-rolled reader: scripts/__config_sync.sh's parse_toml is a
+# script-local function rather than a shared library, and this needs one key out
+# of one section shape, not a whole parse.
+db_profiles_pointing_at() {
+  local target="$1"
+  local file="${REPO_ROOT}/config.toml"
+  local section="" line trimmed rest
+
+  [[ -r "$file" ]] || return 2
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    trimmed="${line%%$'\r'}"
+    trimmed="${trimmed#"${trimmed%%[![:space:]]*}"}"   # ltrim
+    [[ -z "$trimmed" || "$trimmed" == '#'* ]] && continue
+
+    # The exact `[name]` form __config_sync.sh writes. A header carrying a
+    # trailing comment is not recognised, which drops the section rather than
+    # misreading its keys.
+    if [[ "$trimmed" == "["*"]" ]]; then
+      section="${trimmed:1:${#trimmed}-2}"
+      continue
+    fi
+
+    [[ "$section" == "${DB_PROFILE_PREFIX}"* ]] || continue
+    [[ "$trimmed" == POSTGRES_DB* ]] || continue
+    rest="${trimmed#POSTGRES_DB}"
+    rest="${rest#"${rest%%[![:space:]]*}"}"            # ltrim
+    [[ "$rest" == "="* ]] || continue
+
+    # In the condition, not an assignment: a value that is not a plain quoted
+    # string makes this substitution fail, and an assignment would abort the
+    # script under set -e.
+    if [[ "$(toml_plain_string "${rest#=}")" == "$target" ]]; then
+      printf '%s\n' "${section:${#DB_PROFILE_PREFIX}}"
+    fi
+  done < "$file"
+}
+
+# How many db_<profile> entries still name <old>, and which ones. WHY the count:
+# POSTGRES_DB is per-profile, so an N-profile deployment needs N repoints, and
+# until they are made every service is configured with a database name that no
+# longer exists and fails at connect time with a generic error. Never fatal: the
+# rename has already happened by the time this runs.
+report_profiles_pointing_at() {
+  local old="$1" new="$2" profiles profile count
+  local -a names=()
+
+  if ! profiles="$(db_profiles_pointing_at "$old")"; then
+    log_warn "config.toml is missing or unreadable — cannot say which db_<profile> entries still point at \"${old}\"."
+    log_info "grep -n 'POSTGRES_DB' config.toml to find them, point them at \"${new}\", then run: ./cms config sync"
+    return 0
+  fi
+
+  while IFS= read -r profile; do
+    [[ -n "$profile" ]] && names+=("$profile")
+  done <<<"${profiles}"
+  count=${#names[@]}
+
+  if [[ "$count" -eq 0 ]]; then
+    log_info "no db_<profile> section in config.toml points at \"${old}\" — nothing to repoint there."
+    return 0
+  fi
+
+  log_warn "db_<profile> sections in config.toml still pointing at \"${old}\" (${count} found):"
+  printf '%s\n' "${names[@]}" | sed "s/^/    ${DB_PROFILE_PREFIX}/" >&2
+  log_info "point them at \"${new}\" in config.toml, then run: ./cms config sync"
+}
+
 cmd_rename() {
   local old="$1" new="$2" dry_run="$3"
   require_ident "$old" "source database name"
@@ -285,7 +379,7 @@ cmd_rename() {
     || log_die "renamed to \"${new}\" but it still refuses connections — run: ${sql_enable}"
 
   log_info "renamed \"${old}\" to \"${new}\" in ${DB_CONTAINER}."
-  log_info "next: point db_<profile> POSTGRES_DB at \"${new}\" in config.toml, then run: ./cms config sync"
+  report_profiles_pointing_at "$old" "$new"
 }
 
 main() {
