@@ -4,7 +4,8 @@ set -uo pipefail
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="${REPO_ROOT}/scripts/__inject_config.sh"
-SAMPLE="${REPO_ROOT}/config/cms.toml"
+# config/cms.toml is gitignored, so a fresh checkout has only the tracked sample.
+SAMPLE="${REPO_ROOT}/config/cms.sample.toml"
 
 pass=0
 fail=0
@@ -14,7 +15,13 @@ no() { fail=$((fail + 1)); printf '  FAIL %s\n' "$1"; }
 SANDBOX="$(mktemp -d)"
 trap 'rm -rf "$SANDBOX"' EXIT
 mkdir -p "${SANDBOX}/config"
-cp "$SAMPLE" "${SANDBOX}/config/cms.toml"
+# The regression is a write into a table the config lacks, so the captcha tables are
+# stripped; a copy that already had them would only exercise the update path.
+awk '
+  /^\[(admin|contest)_web_server\.captcha\]$/ { skip = 1; next }
+  /^\[/                                        { skip = 0 }
+  !skip                                         { print }
+' "$SAMPLE" > "${SANDBOX}/config/cms.toml"
 [[ -f "${REPO_ROOT}/config/cms_ranking.toml" ]] \
   && cp "${REPO_ROOT}/config/cms_ranking.toml" "${SANDBOX}/config/"
 printf 'RANKING_USERNAME=admin\nRANKING_PASSWORD=secret\n' > "${SANDBOX}/.env"
