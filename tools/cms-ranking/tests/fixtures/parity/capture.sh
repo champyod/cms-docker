@@ -8,7 +8,7 @@ set -euo pipefail
 
 readonly HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly BASE_URL="${RANKING_URL:-http://127.0.0.1:8890}"
-OUT_DIR="${1:-${HERE}/captured/$(date +%Y%m%dT%H%M%S)}"
+OUT_DIR="${HERE}/captured/$(date +%Y%m%dT%H%M%S)}"
 readonly EVENTS_SECONDS="${EVENTS_SECONDS:-5}"
 
 require_command() {
@@ -85,25 +85,20 @@ done
 emit_stdout() {
     local name
     for name in root scores history config credits logo users_list user_one; do
-        printf '
-===== %s (status + headers) =====
-' "$name"
+        echo
+        echo "===== $name (status + headers) ====="
         cat "$OUT_DIR/$name.headers" 2>/dev/null || true
-        printf '===== %s (body) =====
-' "$name"
+        echo "===== $name (body) ====="
         cat "$OUT_DIR/$name.body" 2>/dev/null || true
     done
-    printf '
-===== events (first %s s) =====
-' "$EVENTS_SECONDS"
+    echo
+    echo "===== events (first $EVENTS_SECONDS s) ====="
     cat "$OUT_DIR/events.stream" 2>/dev/null || true
-    printf '
-===== manifest =====
-'
+    echo
+    echo "===== manifest ====="
     cat "$OUT_DIR/MANIFEST.txt" 2>/dev/null || true
-    printf '
-===== end of capture =====
-'
+    echo
+    echo "===== end of capture ====="
 }
 
 main() {
