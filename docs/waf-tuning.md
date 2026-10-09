@@ -83,7 +83,9 @@ Keep host 443 on `grader-nginx-proxy`; test via `curl http://127.0.0.1:8080/` th
 **Production option B — WAF fronts 443**:
 Set `WAF_PORT=443` and move `DOMAIN_NGINX_HTTPS_PORT` off 443 (e.g., 8443), or run a host LB in front. Only do this after DetectionOnly is clean. Document choice in your runbook; nothing forces it.
 
-**Alternative**: point `grader-nginx-proxy` BACKEND-style from WAF via `BACKEND=http://grader-nginx-proxy:80` (already wired). No nginx `upstream` change needed — nginx continues to terminate TLS.
+**Wiring for option B**: set `WAF_BACKEND=https://grader-nginx-proxy:8443` (or whatever port `DOMAIN_NGINX_HTTPS_PORT` moved to), then `WAF_PORT=443`, `WAF_BIND_IP=<host address>` and `DOMAIN_NGINX_HTTPS_PORT=8443`. TLS terminates at grader-waf and again at the proxy on its new port.
+
+Leaving `WAF_BACKEND` at `http://grader-nginx-proxy:80` once the proxy has moved to 8443 sends every request into the proxy's redirect-only `:80` vhost, which answers `301 https://$host` — straight back to the WAF, in a loop.
 
 ---
 

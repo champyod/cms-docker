@@ -26,7 +26,7 @@
 #
 # Architecture:
 #   grader-waf (OWASP CRS nginx) → grader-nginx-proxy (domain stack nginx) → backends
-#   - grader-waf BACKEND=http://grader-nginx-proxy:80 (internal port 80, TLS terminates at grader-nginx-proxy or at grader-waf if routed via host)
+#   - grader-waf BACKEND=${WAF_BACKEND:-http://grader-nginx-proxy:80} — set it to https://grader-nginx-proxy:<DOMAIN_NGINX_HTTPS_PORT> when the WAF terminates TLS
 #   - `grader-nginx-proxy` is the compose *service* name in docker-compose.domain.yml.
 #     The contest profile's own proxy is a different service (`nginx-proxy`,
 #     container cms-nginx-contest) and is not in this chain.
@@ -91,11 +91,9 @@ services:
       # and SecResponseBodyAccess from config.toml.
       MODSEC_RULE_ENGINE: ${WAF_RULE_ENGINE:-DetectionOnly}
       MODSEC_RESP_BODY_ACCESS: ${WAF_RESP_BODY_ACCESS:-Off}
-      # Service name of the domain stack's TLS proxy. It matches its
-      # container_name, so DNS, depends_on and `docker compose ... up <name>`
-      # all address it the same way.
-      BACKEND: http://grader-nginx-proxy:80
-      BACKEND_WS: http://grader-nginx-proxy:80
+      # Re-point at the proxy's new port once DOMAIN_NGINX_HTTPS_PORT leaves :80, or requests loop.
+      BACKEND: ${WAF_BACKEND:-http://grader-nginx-proxy:80}
+      BACKEND_WS: ${WAF_BACKEND:-http://grader-nginx-proxy:80}
       PROXY: "1"
       # WHY 8080 and not 80: the image runs as the unprivileged `nginx` user and its
       # 01-check-low-port.sh entrypoint aborts on any PORT below 1024. `PORT: "80"`

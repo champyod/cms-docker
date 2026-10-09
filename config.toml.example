@@ -121,11 +121,6 @@ REDIS_RATE_LIMIT = 0            # enum:0,1; preparatory — with 1 the domain ng
 PER_USER_LIMIT = 1              # num; 1 = per-user limit_req buckets (burst 20) on the domain nginx login and ranking-auth routes; 0 = disabled
 REDIS_HOST = "redis-rate-limit" # str; Redis host for the domain-nginx distributed rate limit — the upstream line that would use it is commented out (see REDIS_RATE_LIMIT)
 REDIS_PORT = 6379               # port; Redis port for the same commented-out rate-limit upstream
-WAF_ENABLED = 0                 # enum:0,1; warning: tune DetectionOnly 1 week first
-WAF_PORT = 8080                 # port; host port grader-waf publishes on WAF_BIND_IP when the waf profile runs (the container listens on 8080 internally)
-WAF_PARANOIA = 1                # num; OWASP CRS paranoia level passed to the grader-waf container
-WAF_ANOMALY_INBOUND = 5         # num; CRS inbound anomaly-score threshold passed to the grader-waf container
-WAF_RESP_BODY_ACCESS = "Off"    # enum:Off,On,Force,Rejected; ModSecurity respBodyAccess; buffers every response body to inspect it
 DOMAIN_NGINX_HTTP_PORT = 80     # port; domain nginx HTTP publish port
 DOMAIN_NGINX_HTTPS_PORT = 443   # port; domain nginx HTTPS publish port
 RANKING_AUTH_DIRECTIVES = ""    # str; extra nginx auth directives for the ranking vhost
@@ -224,17 +219,16 @@ VAULT_PATH = "secret/cms"       # str; Vault KV path the CMS secrets are stored 
 DNSSEC_ENABLED = 0              # enum:0,1; requires DNS control
 CAA_ENABLED = 0                 # enum:0,1; 1 = publish a DNS CAA record restricting issuance to CAA_ISSUER — set at your DNS provider (docs/dnssec-caa-guide.md)
 CAA_ISSUER = "letsencrypt.org"  # str; certificate authority allowed to issue for the domain when CAA_ENABLED=1
-ACME_DNS_PROVIDER = ""          # enum:"",cloudflare; mirror of [admin] — "" = HTTP-01 webroot, cloudflare = DNS-01 (wildcard / :80 unreachable)
 CLOUDFLARE_API_TOKEN = ""       # secret; DNS-01 only — zone:DNS:Edit token, turned into certbot's cloudflare.ini
-MTLS_WORKERS_ENABLED = 0        # enum:0,1; mirrors [core]
-WAF_ENABLED = 0                 # enum:0,1; mirrors [admin]
+WAF_ENABLED = 0                 # enum:0,1; warning: tune WAF_RULE_ENGINE to DetectionOnly for a week first
 WAF_PORT = 8080                 # port; host port the WAF container publishes on (WAF_BIND_IP:WAF_PORT:8080) when the waf profile is up — set 443 to front the domain nginx
 WAF_BIND_IP = "127.0.0.1"       # str; address the WAF publishes on; loopback keeps it host-local until fronted
+WAF_BACKEND = "http://grader-nginx-proxy:80"  # str; upstream grader-waf proxies to; https://grader-nginx-proxy:<port> when the WAF terminates TLS and the proxy moved off :80
 WAF_PARANOIA = 1                # num; OWASP CRS paranoia level — passed to the WAF container as PARANOIA
 WAF_ANOMALY_INBOUND = 5         # num; CRS inbound anomaly score threshold (ANOMALY_INBOUND) — requests scoring over it trip the WAF
 WAF_ANOMALY_OUTBOUND = 4        # num; CRS outbound anomaly score threshold (ANOMALY_OUTBOUND) for response inspection
 WAF_RULE_ENGINE = "DetectionOnly" # str; ModSecurity SecRuleEngine (MODSEC_RULE_ENGINE) — DetectionOnly logs without blocking, On enforces
-WAF_RESP_BODY_ACCESS = "Off"    # enum:Off,On,Force,Rejected; mirrors [admin]
+WAF_RESP_BODY_ACCESS = "Off"    # enum:Off,On,Force,Rejected; ModSecurity SecResponseBodyAccess — buffers every response body to inspect it
 CMS_LOG_MAX_AGE_DAYS = 7            # num; CMS service logs older than this many days are deleted by the monitor's log-retention pass
 CMS_LOG_MAX_SIZE_GB = 5             # num; oldest CMS logs pruned (newest truncated) once the log tree exceeds this size
 CMS_LOG_PRUNE_INTERVAL_MINS = 60    # num; minutes between the monitor's CMS log-retention passes
