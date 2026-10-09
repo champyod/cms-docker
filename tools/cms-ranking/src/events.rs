@@ -15,6 +15,9 @@ use crate::AppState;
 /// Python pings after a quiet period, so the first tick is a full interval away
 /// rather than immediate.
 const PING: Duration = Duration::from_secs(15);
+/// Python closed every stream after ten minutes; the client's EventSource reconnects
+/// on its own, so this is what bounds one subscriber's resource use.
+const LIFETIME: Duration = Duration::from_secs(600);
 const CHANNEL: usize = 64;
 
 #[derive(Deserialize)]
@@ -126,8 +129,11 @@ async fn pump(
         }
     }
     let mut ping = tokio::time::interval_at(tokio::time::Instant::now() + PING, PING);
+    let deadline = tokio::time::sleep(LIFETIME);
+    tokio::pin!(deadline);
     loop {
         tokio::select! {
+            _ = &mut deadline => return,
             event = receiver.recv() => match event {
                 Ok(event) => {
                     if send(&sender, Bytes::from(event.frame())).await.is_err() {
