@@ -127,5 +127,5 @@
 - [x] A rehearsal that needs no stack: tests/process_e2e.rs starts the shipped binary and reads its refusals back over HTTP, including that /login stays reachable while every state-dependent route refuses, and that an unreachable database refuses instead of hanging.
 - [x] A host-runnable full-stack rehearsal: tests/e2e/ranking_e2e.sh applies the five migrations, seeds the fixture projection, compares /scores and /history against the Python scorer's own output, asserts a write reaches an open event stream, and asserts protected mode sends an anonymous visitor to the sign-in page. It needs a database, which is why it is a script and not a cargo test.
 - [ ] Run the script against a real stack and record the result, including anything that fails, as an acceptance note in the spec.
-- [ ] Rotation rehearsal per docs/DB-ROTATION.md with ranking in the pass criteria.
+- [ ] Rotation rehearsal per the rotation guide (docs/DB-ROTATION.md on major/admin-panel) with ranking in the pass criteria.
 - **Commit:** test(ranking): rehearse the service end to end
