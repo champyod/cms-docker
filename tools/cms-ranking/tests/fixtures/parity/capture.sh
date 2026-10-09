@@ -159,8 +159,9 @@ main() {
     capture_entity contests_list /contests/ contest_one
     capture_entity tasks_list /tasks/ task_one
     capture_entity teams_list /teams/ team_one
+    capture_entity teams_list /flags/ flag
     capture_entity users_list /faces/ face
-    capture_entity users_list /submissions/ submissions
+    capture_entity users_list /sublist/ sublist
     stop_events
     write_manifest
     if [ "$STDOUT_ONLY" = 1 ]; then
