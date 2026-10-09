@@ -32,6 +32,9 @@ config.toml
 docker-compose.override.yml
 docker-compose.expose.yml
 
+# Security agent queue, results and state — written by the panel, applied on the host
+.security-agent/
+
 # VSCode settings
 .vscode/
 

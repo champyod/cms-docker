@@ -45,7 +45,7 @@ WAF_COMPOSE_FLAGS    := -f docker-compose.yml -f docker-compose.domain.yml -f do
 # which WAF does not front.
 WAF_UP_PROFILES      := --profile core --profile waf
 
-.PHONY: expose setup audit help env core admin contest worker infra domain waf cert-timer-install proxy proxy-stop proxy-clean core-stop admin-stop contest-stop contest-down worker-stop infra-stop domain-stop waf-stop core-clean admin-clean contest-clean worker-clean infra-clean domain-clean waf-clean db-clean clean pull pull-core pull-admin pull-contest pull-worker pull-infra core-img admin-img contest-img worker-img infra-img admin-dev admin-dev-stop contest-down cms-init admin-create prisma-sync lint test smoke-test preflight backup db-reset
+.PHONY: expose setup audit help env core admin contest worker infra domain waf cert-timer-install proxy proxy-stop proxy-clean core-stop admin-stop contest-stop contest-down worker-stop infra-stop domain-stop waf-stop core-clean admin-clean contest-clean worker-clean infra-clean domain-clean waf-clean security-agent security-state security-unban db-clean clean pull pull-core pull-admin pull-contest pull-worker pull-infra core-img admin-img contest-img worker-img infra-img admin-dev admin-dev-stop contest-down cms-init admin-create prisma-sync lint test smoke-test preflight backup db-reset
 
 # Regenerate the bind override from .env before a stack comes up. The base compose
 # file publishes front-door ports on 0.0.0.0 — except the contest nginx front, which
@@ -304,6 +304,18 @@ domain-clean:
 
 waf-stop:
 	$(COMPOSE_CMD) $(WAF_COMPOSE_FLAGS) $(WAF_UP_PROFILES) rm -f -s grader-waf
+
+# The host-side half of the security surface: the panel validates a request and writes
+# it under .security-agent/queue; this agent applies it (unban, certificate renewal).
+security-agent:
+	@bash scripts/__security-agent.sh --install-timer
+
+security-state:
+	@bash scripts/__security-agent.sh --state
+
+security-unban:
+	@[ -n "$(JAIL)" ] && [ -n "$(IP)" ] || { echo "usage: make security-unban JAIL=<jail> IP=<address>" >&2; exit 2; }
+	@bash scripts/__security-agent.sh --unban "$(JAIL)" "$(IP)"
 
 waf-clean:
 	$(COMPOSE_CMD) $(WAF_COMPOSE_FLAGS) $(WAF_UP_PROFILES) rm -f -s -v grader-waf
