@@ -14,7 +14,7 @@
 
 import { isAbsolute } from 'node:path';
 
-import { BACKUP_TABLES, validateTableSelection } from '@/lib/backup-table-catalog';
+import { BACKUP_TABLE_NAMES, BACKUP_TABLES, validateTableSelection } from '@/lib/backup-table-catalog';
 import { computeNextRun, isScheduleDue } from '@/lib/backup-schedules';
 import type { WriteRootResolution } from '@/lib/backup-locations';
 
@@ -176,6 +176,18 @@ function rejection(error: string): BackupArgvResult {
   return { valid: false, tables: [], args: [], error };
 }
 
+/**
+ * A schedule naming no table means every table. The default lives here, at the
+ * argv boundary, rather than in the schedule action: this is the one point every
+ * stored row passes through, so a row written by hand, by a migration or by an
+ * older panel version resolves the same way a freshly created one does. Resolving
+ * it before validation keeps the catalog the single allowlist, and keeps the
+ * ordering below applied to the whole catalog rather than bypassed by it.
+ */
+function resolveSelection(tables: readonly string[]): readonly string[] {
+  return tables.length === 0 ? BACKUP_TABLE_NAMES : tables;
+}
+
 function buildArgv(tables: readonly string[], includeLargeObjects: boolean, writeRoot: string | null): string[] {
   const args = ['exec', '-d', MONITOR_CONTAINER, 'bash', MONITOR_BACKUP_SCRIPT, '--tables', tables.join(',')];
   if (includeLargeObjects) args.push('--large-objects');
@@ -185,10 +197,11 @@ function buildArgv(tables: readonly string[], includeLargeObjects: boolean, writ
 
 /**
  * The argv `docker exec -d cms-monitor bash cms-backup.sh` is given, built from
- * catalog-validated names only. An empty selection is refused rather than
- * emitted, because `pg_dump` with no `-t` dumps the whole database. A non-null
- * writeRoot must be absolute: a relative one would resolve against the
- * monitor's working directory and silently land somewhere else.
+ * catalog-validated names only. An empty selection resolves to the whole catalog
+ * and is emitted as that explicit list, so `pg_dump` always receives `-t` names
+ * and the archive records exactly which tables it carries. A non-null writeRoot
+ * must be absolute: a relative one would resolve against the monitor's working
+ * directory and silently land somewhere else.
  */
 export function buildBackupArgv(tables: readonly string[], writeRoot: string | null = null): BackupArgvResult {
   if (!Array.isArray(tables) || !tables.every((table) => typeof table === 'string')) {
@@ -197,10 +210,11 @@ export function buildBackupArgv(tables: readonly string[], writeRoot: string | n
   if (writeRoot !== null && !isAbsolute(writeRoot)) {
     return rejection(`Backup root must be an absolute path: ${writeRoot}`);
   }
-  const validation = validateTableSelection([...tables]);
+  const requested = resolveSelection(tables);
+  const validation = validateTableSelection([...requested]);
   if (validation.unknown.length > 0) return rejection(`${REJECTED_UNKNOWN_TABLES}: ${validation.unknown.join(', ')}`);
   if (!validation.valid) return rejection(REJECTED_EMPTY_SELECTION);
-  const selection = orderSelection(tables);
+  const selection = orderSelection(requested);
   return {
     valid: true,
     tables: selection,

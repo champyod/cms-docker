@@ -319,13 +319,6 @@ describe('buildBackupArgv', () => {
     expect(result.error).toContain('contests; rm -rf /');
   });
 
-  it('rejects an empty selection that would dump the whole database', () => {
-    const result = buildBackupArgv([]);
-    expect(result.valid).toBe(false);
-    expect(result.args).toEqual([]);
-    expect(result.error).toBe('At least one table must be selected.');
-  });
-
   it('rejects a selection that is not a list of names', () => {
     expect(buildBackupArgv([42] as unknown as string[]).error).toBe('Table selection must be a list of names.');
   });
@@ -335,7 +328,7 @@ describe('buildBackupArgv', () => {
   });
 
   it('never leaves an error null on a rejected selection', () => {
-    expect(buildBackupArgv([]).error).not.toBeNull();
+    expect(buildBackupArgv(['contests', 'monitor_targets']).error).not.toBeNull();
     expect(buildBackupArgv(['nope']).error).not.toBeNull();
   });
 
@@ -354,6 +347,61 @@ describe('buildBackupArgv', () => {
     const result = buildBackupArgv(['contests'], './backups');
     expect(result.valid).toBe(false);
     expect(result.error).toContain('absolute path');
+  });
+});
+
+describe('a schedule that names no table backs up every table', () => {
+  it('resolves an empty selection to the whole catalog instead of refusing it', () => {
+    const result = buildBackupArgv([]);
+    expect(result.valid).toBe(true);
+    expect(result.error).toBeNull();
+    expect(result.tables).toEqual([...BACKUP_TABLE_NAMES]);
+  });
+
+  it('hands pg_dump an explicit --tables list naming every table, never an empty one', () => {
+    const result = buildBackupArgv([]);
+    expect(result.args).toEqual([
+      'exec',
+      '-d',
+      MONITOR_CONTAINER,
+      'bash',
+      MONITOR_BACKUP_SCRIPT,
+      '--tables',
+      BACKUP_TABLE_NAMES.join(','),
+      '--large-objects',
+    ]);
+  });
+
+  it('takes the all-tables selection through the same catalog ordering as an explicit one', () => {
+    expect(buildBackupArgv([]).tables).toEqual(buildBackupArgv([...BACKUP_TABLE_NAMES]).tables);
+  });
+
+  it('adds --large-objects, because the catalog holds fsobjects and its digest consumers', () => {
+    const result = buildBackupArgv([]);
+    expect(result.args).toContain('--large-objects');
+    expect(selectionNeedsLargeObjects(result.tables)).toBe(true);
+  });
+
+  it('still dumps exactly an explicit subset, unchanged', () => {
+    const result = buildBackupArgv(['users', 'contests']);
+    expect(result.valid).toBe(true);
+    expect(result.tables).toEqual(['contests', 'users']);
+    expect(result.args).toContain('contests,users');
+  });
+
+  it('still rejects an explicitly named table outside the catalog', () => {
+    const result = buildBackupArgv(['contests', 'monitor_targets']);
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('Not in the backup table catalog: monitor_targets');
+  });
+
+  it('does not let the default excuse a name that smuggled in alongside nothing else', () => {
+    expect(buildBackupArgv(['; rm -rf /']).valid).toBe(false);
+  });
+
+  it('refuses a non-list selection instead of reading its length as an absent one', () => {
+    expect(buildBackupArgv('contests' as unknown as string[]).valid).toBe(false);
+    expect(buildBackupArgv({ length: 0 } as unknown as string[]).valid).toBe(false);
   });
 });
 
@@ -560,6 +608,31 @@ describe('fireSchedule on a selection that left the catalog', () => {
     await fireDueSchedules(store.rows, at(60), deps);
     expect(launcher.launched).toEqual([['exec', '-d', MONITOR_CONTAINER, 'bash', MONITOR_BACKUP_SCRIPT, '--tables', 'contests']]);
     expect(launcher.alerts.map((alert) => alert.title)).toEqual(['Scheduled Backup Rejected', 'Scheduled Backup Launched']);
+  });
+});
+
+describe('fireSchedule on a schedule that names no table', () => {
+  const NO_SELECTION = schedule({ tables: [] });
+
+  it('launches a dump of the whole catalog instead of rejecting the row', async () => {
+    const { launcher, deps } = fakeDeps();
+    await fireSchedule(NO_SELECTION, REFERENCE, deps);
+    expect(launcher.launched).toHaveLength(1);
+    expect(launcher.launched[0]).toContain(BACKUP_TABLE_NAMES.join(','));
+    expect(launcher.alerts.map((alert) => alert.title)).toEqual(['Scheduled Backup Launched']);
+  });
+
+  it('records the resolved table list on the run, so history shows what was dumped', async () => {
+    const { store, deps } = fakeDeps();
+    await fireSchedule(NO_SELECTION, REFERENCE, deps);
+    expect(store.created).toEqual([{ scheduleId: 'sch_1', tables: [...BACKUP_TABLE_NAMES], startedAt: REFERENCE, message: startedRunNote() }]);
+  });
+
+  it('reports the resolved table count, not zero, in the run note and the alert', async () => {
+    const { store, launcher, deps } = fakeDeps();
+    await fireSchedule(NO_SELECTION, REFERENCE, deps);
+    expect(store.outcomes.map((entry) => entry.outcome.message)).toEqual([launchedRunNote('nightly', BACKUP_TABLE_NAMES.length)]);
+    expect(launcher.alerts[0]?.body).toContain(`${BACKUP_TABLE_NAMES.length} table(s)`);
   });
 });
 
