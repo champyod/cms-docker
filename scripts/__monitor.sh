@@ -28,8 +28,12 @@ MEM_THRESHOLD=${MONITOR_MEM_THRESHOLD:-80}
 DISK_THRESHOLD=${MONITOR_DISK_THRESHOLD:-80}
 
 # Backup Settings
-BACKUP_INTERVAL_MINS=${BACKUP_INTERVAL_MINS:-1440}
-LAST_BACKUP_TIME=0
+# WHY nothing here schedules a backup: the `scheduler` container owns that job and the
+# note in check_once says why. What is left is a staleness watch — how old the newest
+# archive may get before the monitor says so out loud.
+BACKUP_STALE_HOURS=${BACKUP_STALE_HOURS:-26}
+BACKUP_STALE_WARN_INTERVAL_SECS=3600
+LAST_BACKUP_STALE_WARN_TIME=0
 
 # Log retention. The CMS services open a fresh <epoch>.log under CMS_LOG_DIR at
 # every start and never rotate it (src/cms/io/service.py, service/LogService.py),
@@ -557,15 +561,13 @@ check_once() {
         PREV_STATE="OK"
     fi
 
-    BACKUP_INTERVAL_SECS=$((BACKUP_INTERVAL_MINS * 60))
-    if [ "$BACKUP_INTERVAL_MINS" -gt 0 ] && [ "$LAST_BACKUP_TIME" -gt 0 ]; then
-        if [ $((CURRENT_TIME - LAST_BACKUP_TIME)) -ge "$BACKUP_INTERVAL_SECS" ]; then
-            bash /usr/local/bin/cms-backup.sh &
-            LAST_BACKUP_TIME=$CURRENT_TIME
-        fi
-    elif [ "$BACKUP_INTERVAL_MINS" -gt 0 ] && [ "$LAST_BACKUP_TIME" -eq 0 ]; then
-        LAST_BACKUP_TIME=$CURRENT_TIME
-    fi
+    # WHY no backup timer lives here: the `scheduler` container is the sole owner of
+    # scheduled backups. It polls backup_schedules, execs cms-backup.sh inside this
+    # container and records every run in backup_runs, so an operator sees each one in the
+    # panel. A second timer here chose its own table set and its own timestamps and
+    # recorded nothing — an unrecorded backup run that no operator can see in the panel,
+    # which makes a failed nightly backup silent. One scheduler, one record.
+    warn_if_backups_stale "$CURRENT_TIME"
 
     # First pass prunes straight away, so a volume that is already over the cap
     # is brought back under it without waiting for the interval to elapse.
@@ -577,7 +579,7 @@ check_once() {
 }
 
 PREV_STATE="OK"
-LAST_BACKUP_TIME=0
+LAST_BACKUP_STALE_WARN_TIME=0
 
 # WHY: the backup script sources __lib/common.sh, so a container that never received
 # the lib aborts every backup cycle at that source. Warn loudly but keep looping —
@@ -628,6 +630,43 @@ probe_backup_dir_writable() {
     echo "[WARN] DOCKER_UID in config.toml [infra] to that directory's owner" >&2
     echo "[WARN] (stat -c %u <backup dir>), then recreate the monitor container." >&2
     echo "[WARN] Monitoring continues without backups." >&2
+    echo "[WARN] ===========================================================" >&2
+}
+
+# The scheduler fires nothing until an operator creates a backup_schedules row, and a
+# schedule that keeps failing leaves a row in backup_runs that says so — but a schedule
+# that was never created leaves nothing at all. This is the only place left that can
+# report the gap: the monitor has no database credential and no way to read
+# backup_schedules, but the newest archive under the tree it already probes is a fact on
+# disk, and it is the one fact that says whether a backup actually landed.
+# WHY rate-limited rather than every cycle: the loop runs every few seconds and a line
+# that repeats forever stops being read.
+warn_if_backups_stale() {
+    local now="$1" newest newest_mtime age_hours reason
+    newest=$(ls -1t "${BACKUP_ROOT}/db"/cmsdb-*.dump 2>/dev/null | head -n 1)
+    if [ -z "$newest" ]; then
+        reason="no backup archive has ever landed under ${BACKUP_ROOT}/db"
+    else
+        newest_mtime=$(stat -c %Y "$newest" 2>/dev/null || printf '0')
+        is_integer "$newest_mtime" || return 0
+        age_hours=$(( (now - newest_mtime) / 3600 ))
+        [ "$age_hours" -ge "$BACKUP_STALE_HOURS" ] || return 0
+        reason="the newest backup is ${age_hours}h old, past the ${BACKUP_STALE_HOURS}h window"
+    fi
+
+    # WHY the window is checked before the rate limit is consumed: a healthy cycle must
+    # leave the window unspent, or the next check_once would stay silent for a whole
+    # interval after the tree went stale.
+    [ $((now - LAST_BACKUP_STALE_WARN_TIME)) -ge "$BACKUP_STALE_WARN_INTERVAL_SECS" ] || return 0
+    LAST_BACKUP_STALE_WARN_TIME="$now"
+
+    echo "[WARN] ===========================================================" >&2
+    echo "[WARN] $reason." >&2
+    echo "[WARN] Backups are scheduled by the cms-scheduler container from the" >&2
+    echo "[WARN] panel's backup_schedules rows; this monitor does not run them." >&2
+    echo "[WARN] With no enabled schedule nothing will run, and nothing will" >&2
+    echo "[WARN] record a run. Create one in the admin panel (Maintenance →" >&2
+    echo "[WARN] Backups), and check the last backup_runs entry for its verdict." >&2
     echo "[WARN] ===========================================================" >&2
 }
 
