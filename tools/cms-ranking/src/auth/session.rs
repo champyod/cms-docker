@@ -100,6 +100,19 @@ pub fn set_cookie(token: &str, secure: bool) -> String {
     )
 }
 
+/// The session a request carries, if any. A missing secret or a malformed cookie is
+/// simply no session: there is nothing to report back to an anonymous caller.
+pub fn from_headers(secret: Option<&str>, headers: &axum::http::HeaderMap) -> Option<Session> {
+    let secret = secret?;
+    let header = headers.get(axum::http::header::COOKIE)?.to_str().ok()?;
+    let token = cookie_value(header, COOKIE_NAME)?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_secs() as i64;
+    verify(secret, &token, now).ok()
+}
+
 pub fn clear_cookie() -> String {
     format!("{COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0")
 }

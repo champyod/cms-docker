@@ -24,6 +24,9 @@ pub struct RankingConfig {
     /// is a refusal rather than an open door.
     pub session_secret: Option<String>,
     pub captcha: CaptchaConfig,
+    /// The Redis the failure counters live in. Absent means the console cannot track
+    /// failures, which is a refusal at login rather than an unguarded door.
+    pub redis_url: Option<String>,
 }
 
 /// Every CAPTCHA key stays in config.toml and is never edited from the panel, as you
@@ -83,6 +86,7 @@ impl Default for RankingConfig {
             logo_path: None,
             session_secret: None,
             captcha: CaptchaConfig::default(),
+            redis_url: None,
         }
     }
 }
@@ -116,6 +120,7 @@ impl RankingConfig {
             logo_path: read_path(&vars, "RANKING_LOGO_PATH", ""),
             session_secret: read_secret(&vars),
             captcha: read_captcha(&vars),
+            redis_url: read_trimmed_optional(&vars, "RANKING_REDIS_URL"),
         })
     }
 }
@@ -145,6 +150,15 @@ fn read_path(vars: &HashMap<String, String>, key: &str, fallback: &str) -> Optio
         None
     } else {
         Some(PathBuf::from(raw))
+    }
+}
+
+fn read_trimmed_optional(vars: &HashMap<String, String>, key: &str) -> Option<String> {
+    let raw = read_trimmed(vars, key);
+    if raw.is_empty() {
+        None
+    } else {
+        Some(raw)
     }
 }
 
