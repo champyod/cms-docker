@@ -49,6 +49,11 @@ export const EXPECTED_ROUTE_MANIFEST: readonly RouteFixture[] = [
   { id: 'evaluation.submission-tabs.evaluation', path: '/evaluation/submissions/[id]/evaluation', kind: 'nested-tab', parentId: 'evaluation.submission-record', tabIds: [], legacyPaths: [], enabled: true },
   { id: 'evaluation.lanes', path: '/evaluation/lanes', kind: 'page', tabIds: [], legacyPaths: ['/submissions/lanes'], enabled: true },
 
+  { id: 'security.overview', path: '/security/overview', kind: 'page', tabIds: [], legacyPaths: [], enabled: true },
+  { id: 'security.waf', path: '/security/waf', kind: 'page', tabIds: [], legacyPaths: [], enabled: true },
+  { id: 'security.blocks', path: '/security/blocks', kind: 'page', tabIds: [], legacyPaths: [], enabled: true },
+  { id: 'security.tls', path: '/security/tls', kind: 'page', tabIds: [], legacyPaths: [], enabled: true },
+
   { id: 'administration.admins', path: '/administration/admins', kind: 'page', tabIds: [], legacyPaths: ['/admins'], enabled: true },
   { id: 'administration.groups', path: '/administration/groups', kind: 'page', tabIds: [], legacyPaths: ['/groups'], enabled: true },
   { id: 'administration.audit', path: '/administration/audit', kind: 'page', tabIds: [], legacyPaths: ['/audit'], enabled: true },
@@ -103,6 +108,10 @@ export const EXPECTED_ROUTE_PERMISSIONS = {
   'administration.admins': { all: ['admin:list', 'admin:read'] },
   'administration.groups': { all: ['group:list', 'group:read'] },
   'administration.audit': { all: ['audit:list', 'audit:read'] },
+  'security.overview': { all: ['security:read'] },
+  'security.waf': { all: ['security:read', 'waf:read'] },
+  'security.blocks': { all: ['security:read'], any: ['ban:read', 'lockout:read'] },
+  'security.tls': { all: ['security:read', 'tls:read'] },
   'infrastructure.deployments': { all: ['deployment:list', 'deployment:read', 'env:read', 'env:list', 'contest:list', 'container:read', 'settings:read', 'settings:list', 'task:read'] },
   'infrastructure.containers': { all: ['container:list', 'container:read'] },
   'infrastructure.resources': { all: ['resource:list', 'resource:read'] },
@@ -122,6 +131,7 @@ export const EXPECTED_NAVIGATION_GROUPS: readonly NavigationGroupDescriptor[] = 
   { id: 'people', labelKey: 'navigation.groups.people', routeIds: ['people.users', 'people.teams'] },
   { id: 'evaluation', labelKey: 'navigation.groups.evaluation', routeIds: ['evaluation.submissions', 'evaluation.lanes'] },
   { id: 'administration', labelKey: 'navigation.groups.administration', routeIds: ['administration.admins', 'administration.groups', 'administration.audit'] },
+  { id: 'security', labelKey: 'navigation.groups.security', routeIds: ['security.overview', 'security.waf', 'security.blocks', 'security.tls'] },
   { id: 'infrastructure', labelKey: 'navigation.groups.infrastructure', routeIds: ['infrastructure.deployments', 'infrastructure.containers', 'infrastructure.resources', 'infrastructure.ranking'] },
   { id: 'system', labelKey: 'navigation.groups.system', routeIds: ['system.appearance', 'system.maintenance', 'system.backup-restore', 'system.settings', 'system.docs', 'system.about'] },
 ];

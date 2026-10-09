@@ -3,6 +3,7 @@ import { COMPETITION_ROUTES } from '@/lib/navigation/registry-competition';
 import { EVALUATION_ROUTES } from '@/lib/navigation/registry-evaluation';
 import { PEOPLE_ROUTES } from '@/lib/navigation/registry-people';
 import { PLATFORM_ROUTES } from '@/lib/navigation/registry-platform';
+import { SECURITY_ROUTE_IDS, SECURITY_ROUTES } from '@/lib/navigation/registry-security';
 import type {
   NavigationGroupDescriptor,
   NavigationSurface,
@@ -17,6 +18,7 @@ export const ROUTE_REGISTRY: readonly RouteDescriptor[] = [
   ...COMPETITION_ROUTES,
   ...PEOPLE_ROUTES,
   ...EVALUATION_ROUTES,
+  ...SECURITY_ROUTES,
   ...PLATFORM_ROUTES,
 ];
 
@@ -31,6 +33,7 @@ export const NAVIGATION_GROUPS: readonly NavigationGroupDescriptor[] = [
   { id: 'people', labelKey: 'navigation.groups.people', routeIds: ['people.users', 'people.teams'] },
   { id: 'evaluation', labelKey: 'navigation.groups.evaluation', routeIds: ['evaluation.submissions', 'evaluation.lanes'] },
   { id: 'administration', labelKey: 'navigation.groups.administration', routeIds: [...ADMINISTRATION_ROUTE_IDS] },
+  { id: 'security', labelKey: 'navigation.groups.security', routeIds: [...SECURITY_ROUTE_IDS] },
   { id: 'infrastructure', labelKey: 'navigation.groups.infrastructure', routeIds: ['infrastructure.deployments', 'infrastructure.containers', 'infrastructure.resources', 'infrastructure.ranking'] },
   { id: 'system', labelKey: 'navigation.groups.system', routeIds: ['system.appearance', 'system.maintenance', 'system.backup-restore', 'system.settings', 'system.docs', 'system.about'] },
 ];

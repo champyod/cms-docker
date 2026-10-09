@@ -3,6 +3,7 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   Activity,
+  Ban,
   BookOpen,
   Box,
   DatabaseBackup,
@@ -10,6 +11,7 @@ import {
   Globe,
   Home,
   Info,
+  Lock,
   Palette,
   Rocket,
   ScrollText,
@@ -53,6 +55,10 @@ const ROUTE_ICONS: ReadonlyMap<RouteId, LucideIcon> = new Map<RouteId, LucideIco
   ['administration.admins', ShieldCheck],
   ['administration.groups', ShieldCheck],
   ['administration.audit', ScrollText],
+  ['security.overview', ShieldCheck],
+  ['security.waf', ShieldCheck],
+  ['security.blocks', Ban],
+  ['security.tls', Lock],
   ['infrastructure.deployments', Rocket],
   ['infrastructure.containers', Box],
   ['infrastructure.resources', Activity],

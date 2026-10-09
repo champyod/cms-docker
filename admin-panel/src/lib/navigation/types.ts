@@ -36,6 +36,10 @@ export type RouteId =
   | 'administration.admins'
   | 'administration.groups'
   | 'administration.audit'
+  | 'security.overview'
+  | 'security.waf'
+  | 'security.blocks'
+  | 'security.tls'
   | 'infrastructure.deployments'
   | 'infrastructure.containers'
   | 'infrastructure.resources'
@@ -82,7 +86,7 @@ export interface RouteDescriptor {
 }
 
 export interface NavigationGroupDescriptor {
-  readonly id: 'direct' | 'people' | 'evaluation' | 'administration' | 'infrastructure' | 'system';
+  readonly id: 'direct' | 'people' | 'evaluation' | 'administration' | 'security' | 'infrastructure' | 'system';
   readonly labelKey: string;
   readonly routeIds: readonly RouteId[];
 }

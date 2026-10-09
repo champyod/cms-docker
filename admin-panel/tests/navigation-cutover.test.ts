@@ -88,6 +88,7 @@ describe('final navigation cutover', () => {
       'people',
       'evaluation',
       'administration',
+      'security',
       'infrastructure',
       'system',
     ]);

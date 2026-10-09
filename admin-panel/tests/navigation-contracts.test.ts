@@ -9,6 +9,7 @@ import {
 } from '@/lib/navigation/registry';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { PERMISSION_REGISTRY } from '@/lib/permission-registry';
+import { SECURITY_ROUTE_IDS } from '@/lib/navigation/registry-security';
 import { buildRoute } from '@/lib/navigation/routes';
 import { resolveLegacyRedirect } from '@/lib/navigation/redirects';
 import en from '@/dictionaries/en.json';
@@ -125,7 +126,7 @@ describe('target route registry', () => {
   });
 
   it('enables the direct three plus the Contest, Task, User, Team, and Evaluation routes', () => {
-    expect(ROUTE_REGISTRY).toHaveLength(46);
+    expect(ROUTE_REGISTRY).toHaveLength(50);
     const directIds = DIRECT_ROUTE_CASES.map(({ routeId }) => routeId);
     // Why: the Evaluation shell proves the Submission list, the lane module, and
     // the Submission record landing with its four tabs, and the Administration
@@ -164,6 +165,7 @@ describe('target route registry', () => {
       'evaluation.submission-tabs.logs',
       'evaluation.submission-tabs.evaluation',
       'evaluation.lanes',
+      ...SECURITY_ROUTE_IDS,
       ...ADMINISTRATION_ROUTE_IDS,
       ...INFRASTRUCTURE_ROUTE_IDS,
       ...SYSTEM_ROUTE_IDS,

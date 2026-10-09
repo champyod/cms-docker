@@ -541,8 +541,14 @@
     "users": "User actions"
   },
   "navigation": {
-    "groups": { "direct": "Direct", "people": "People", "evaluation": "Evaluation", "administration": "Administration", "infrastructure": "Infrastructure", "system": "System" },
+    "groups": { "direct": "Direct", "people": "People", "evaluation": "Evaluation", "administration": "Administration", "security": "Security", "infrastructure": "Infrastructure", "system": "System" },
     "home": { "label": "Dashboard" },
+    "security": {
+      "overview": { "label": "Security overview", "description": "Posture of the WAF, blocked addresses, lockouts and certificates." },
+      "waf": { "label": "WAF", "description": "ModSecurity engine mode, paranoia level and anomaly thresholds." },
+      "blocks": { "label": "Blocks", "description": "Banned addresses and locked-out admin accounts." },
+      "tls": { "label": "TLS", "description": "Certificate lineages and ingress container state." }
+    },
     "contests": {
       "list": { "label": "Contests" },
       "record": { "label": "Contest" },

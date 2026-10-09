@@ -541,8 +541,14 @@
     "users": "การดำเนินการผู้ใช้"
   },
   "navigation": {
-    "groups": { "direct": "การแข่งขัน", "people": "บุคคล", "evaluation": "การประเมิน", "administration": "การดูแลระบบ", "infrastructure": "โครงสร้างพื้นฐาน", "system": "ระบบ" },
+    "groups": { "direct": "การแข่งขัน", "people": "บุคคล", "evaluation": "การประเมิน", "administration": "การดูแลระบบ", "security": "ความปลอดภัย", "infrastructure": "โครงสร้างพื้นฐาน", "system": "ระบบ" },
     "home": { "label": "แดชบอร์ด" },
+    "security": {
+      "overview": { "label": "ภาพรวมความปลอดภัย", "description": "สถานะของ WAF ที่อยู่ที่ถูกบล็อก การล็อกบัญชี และใบรับรอง" },
+      "waf": { "label": "WAF", "description": "โหมดของ ModSecurity ระดับ paranoia และค่าเกณฑ์ anomaly" },
+      "blocks": { "label": "การบล็อก", "description": "ที่อยู่ที่ถูกแบนและบัญชีผู้ดูแลที่ถูกล็อก" },
+      "tls": { "label": "TLS", "description": "สายใบรับรองและสถานะคอนเทนเนอร์ ingress" }
+    },
     "contests": {
       "list": { "label": "การแข่งขัน" },
       "record": { "label": "การแข่งขัน" },
