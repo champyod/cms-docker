@@ -68,6 +68,16 @@ export default async function InfrastructureRankingPage({
             {copy.appearance.creditsField}
             <input name="creditsText" defaultValue={appearance.creditsText} className={FIELD_CLASS} />
           </label>
+          <label className={LABEL_CLASS}>
+            {copy.credits.field}
+            <textarea
+              name="credits"
+              rows={8}
+              defaultValue={appearance.credits}
+              className={`${FIELD_CLASS} font-mono`}
+            />
+          </label>
+          <p className="text-xs text-white/50">{copy.credits.hint}</p>
           <button type="submit" className="rounded-xl bg-indigo-500/20 px-4 py-2 text-indigo-300">
             {copy.appearance.save}
           </button>

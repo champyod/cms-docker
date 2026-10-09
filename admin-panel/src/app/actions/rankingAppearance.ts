@@ -2,6 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 
+import { Prisma } from '@prisma/client';
+
 import { recordAudit } from '@/lib/audit';
 import { ensurePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
@@ -17,6 +19,9 @@ export interface RankingAppearance {
   showIdColumn: boolean;
   footerText: string;
   creditsText: string;
+  /// The full credit list, pretty-printed for the textarea. Empty means the vendored
+  /// credits.json is still the list.
+  credits: string;
 }
 
 const DEFAULTS: RankingAppearance = {
@@ -27,6 +32,7 @@ const DEFAULTS: RankingAppearance = {
   showIdColumn: false,
   footerText: '',
   creditsText: '',
+  credits: '',
 };
 
 /** Reads what the scoreboard shows. A row that does not exist yet is the defaults, not an error. */
@@ -42,6 +48,7 @@ export async function getRankingAppearance(): Promise<RankingAppearance> {
     showIdColumn: readShowIdColumn(row.columns),
     footerText: row.footer_text ?? '',
     creditsText: row.credits_text ?? '',
+    credits: formatCredits(row.credits),
   };
 }
 
@@ -81,6 +88,38 @@ export async function submitRankingAppearance(formData: FormData): Promise<void>
   }
 }
 
+/**
+ * The panel's list replaces the vendored one, so it is parsed and shape-checked here: a
+ * credit entry with no name would render as an anonymous asset in a licence offer.
+ */
+function parseCredits(raw: string): Prisma.InputJsonValue | typeof Prisma.JsonNull {
+  const trimmed = raw.trim();
+  if (trimmed === "") {
+    // Prisma distinguishes a JSON null from SQL NULL; an emptied box means SQL NULL, so
+    // the vendored credits.json is served again rather than an empty list.
+    return Prisma.JsonNull;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new Error("the credit list must be valid JSON");
+  }
+  if (!Array.isArray(parsed) || parsed.length > 100) {
+    throw new Error("the credit list must be an array of at most 100 entries");
+  }
+  for (const entry of parsed) {
+    if (typeof entry !== "object" || entry === null || typeof (entry as { name?: unknown }).name !== "string") {
+      throw new Error("every credit entry needs a name");
+    }
+  }
+  return parsed as Prisma.InputJsonValue;
+}
+
+function formatCredits(value: unknown): string {
+  return value === null || value === undefined ? '' : JSON.stringify(value, null, 2);
+}
+
 /** Only a real boolean turns the id column on: a missing or mistyped value must not show ids. */
 function readShowIdColumn(columns: unknown): boolean {
   if (typeof columns !== "object" || columns === null) return false;
@@ -92,6 +131,7 @@ function readForm(formData: FormData): RankingAppearance {
   const text = (name: string) => String(formData.get(name) ?? '').trim();
   return {
     title: text("title"),
+    credits: String(formData.get("credits") ?? ''),
     subtitle: text("subtitle"),
     organisation: text("organisation"),
     accessMode: formData.get("accessMode") === "protected" ? "protected" : "public",
@@ -108,6 +148,7 @@ function toRow(appearance: RankingAppearance) {
     organisation: appearance.organisation || null,
     access_mode: appearance.accessMode,
     columns: { show_id_column: appearance.showIdColumn },
+    credits: parseCredits(appearance.credits),
     footer_text: appearance.footerText || null,
     credits_text: appearance.creditsText || null,
   };

@@ -226,6 +226,10 @@
       "add": "Add override",
       "end": "End"
     },
+    "credits": {
+      "field": "Full credit list (JSON)",
+      "hint": "Leave empty to serve the vendored credits.json. The licence source line is added by the service and cannot be removed here."
+    },
     "lockouts": {
       "title": "Console lockouts",
       "failures": "failures",
