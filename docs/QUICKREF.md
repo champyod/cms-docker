@@ -29,7 +29,10 @@ make infra-stop        # Stop monitoring
 make cms-init          # Initialize database
 make admin-create      # Create admin account
 make db-clean          # FULL RESET (deletes all data!)
+./cms db create <name>      # Create a database in cms-database (empty — migrations are a separate step)
+./cms db rename <old> <new> # Rename one; repoint every [db_<profile>] POSTGRES_DB, then ./cms config sync
 ```
+`db create` / `db rename` mutate the server: type `yes` at the prompt, or run them with `CONFIRM_DB_ADMIN=yes`. Add `--dry-run` to print the SQL without touching the container. Neither verb repoints a profile or applies migrations. Details: [DB-ROTATION.md](DB-ROTATION.md).
 
 ## Service URLs
 - **Modern Admin**: http://localhost:8891
