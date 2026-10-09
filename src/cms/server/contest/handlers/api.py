@@ -125,11 +125,23 @@ class ApiLoginHandler(ApiContestHandler):
         so that neither layer is accidentally moved past the credential check.
 
         """
+        # WHY a token is exempt from the challenge as well as from the lockout
+        # below: a script, a client or a WAF authenticating with an admin token
+        # is not guessing, and this endpoint is JSON with no page to host an
+        # interactive challenge, so demanding one would reproduce exactly the
+        # unsatisfiable gate the contest form had. The token is still validated
+        # afterwards by validate_login, so one that turns out to be invalid
+        # fails as an ordinary rejected login.
+        captcha_demanded = admin_token == "" and self.captcha.is_required(
+            username, self.request.remote_ip)
+
         # WHY the captcha comes first: a wrong or forged answer must not reach
         # the password check at all, or the layer only slows the part of the
-        # attempt that costs the attacker nothing.
-        if not self.captcha.verify(username, self.request.remote_ip,
-                                   extract_token(self)):
+        # attempt that costs the attacker nothing. is_required() is the single
+        # authority on whether a captcha is demanded, so an attempt below the
+        # threshold never reaches the provider at all.
+        if captcha_demanded and not self.captcha.verify(
+                username, self.request.remote_ip, extract_token(self)):
             self.captcha.record_failure(username, self.request.remote_ip)
             self.json({"error": "Login failed"}, 403)
             return False

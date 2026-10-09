@@ -189,6 +189,25 @@ $(document).ready(function() {
                     </div>
                 </div>
                 <br>
+                {# WHY the markup belongs in the form: this handler answers a
+                   challenged registration with a 429 and its own script shows the
+                   widget again after the refusal, so the answer it asks for has to
+                   be a field this form posts back.
+
+                   WHY the guard is on captcha_widget alone: that fact is filled with
+                   the provider's markup when the captcha is configured and left
+                   empty when it is not, so a deployment that sets no CAPTCHA_* key
+                   renders exactly the form it always did. Whether a captcha is
+                   demanded at all is the handler's adaptive decision, not the
+                   template's. The markup is built by cms.server.captcha so the field
+                   names stay the ones the registration client idiom already posts. #}
+                {% if captcha_widget %}
+                <div class="control-group">
+                    <div class="controls">
+                        {{ captcha_widget|safe }}
+                    </div>
+                </div>
+                {% endif %}
                 <div class="control-group">
                     <div class="controls">
                         <button type="submit" class="btn btn-primary btn-large">{% trans %}Register{% endtrans %}</button>

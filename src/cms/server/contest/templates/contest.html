@@ -109,6 +109,32 @@ $(document).ready(function () {
                                 <input type="password" class="input-xlarge" name="password" id="password">
                             </div>
                         </div>
+                        {# WHY the widget lives in this base template rather than on
+                           the login box alone: every page an unauthenticated
+                           contestant reaches -- the overview that answers the contest
+                           root, and each task, documentation, communication and
+                           submissions page -- extends this one, so there is no
+                           separate login URL to hang the widget off. A form served
+                           without it cannot answer the challenge the login handler
+                           demands of it, and that refusal stands until the failure
+                           window lapses, so a contestant past the threshold had no
+                           way in at all.
+
+                           WHY the guard is on captcha_widget alone: that fact is
+                           filled with the provider's markup when the captcha is
+                           configured and left empty when it is not, so a deployment
+                           that sets no CAPTCHA_* key renders exactly the form it
+                           always did. Whether a captcha is demanded at all is the
+                           handler's adaptive decision, not the template's. The markup
+                           is built by cms.server.captcha so the field names stay the
+                           ones the contestant-facing client idiom already posts. #}
+                        {% if captcha_widget %}
+                        <div class="control-group">
+                            <div class="controls">
+                                {{ captcha_widget|safe }}
+                            </div>
+                        </div>
+                        {% endif %}
                         <div class="control-group">
                             <div class="controls">
                                 <button type="submit" class="btn btn-primary btn-large">{% trans %}Login{% endtrans %}</button>

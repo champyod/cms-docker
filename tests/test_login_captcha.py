@@ -29,9 +29,14 @@ import tempfile
 import types
 import unittest
 
+import jinja2
+
 
 REPO_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 SRC_ROOT = os.path.join(REPO_ROOT, "src")
+# The loader the contest web server itself uses, so the pages under test are the
+# shipped ones rather than a copy that could drift from them.
+TEMPLATES = os.path.join(SRC_ROOT, "cms", "server", "contest", "templates")
 
 # The loader rejects the sample's shipped default secret, so a generated config carries a
 # non-default 16-byte hex key.
@@ -101,6 +106,80 @@ counters = _load("cms.server.login_counters", "cms/server/login_counters.py")
 captcha = _load("cms.server.captcha", "cms/server/captcha.py")
 
 REMOTE_IP = "203.0.113.7"
+
+CONTESTANT = "contestant"
+# One failure past the captcha threshold of `configured`, and one short of its
+# ban threshold: the count demands a challenge without also locking the account,
+# so a refusal can only have come from the captcha gate.
+OVER_CAPTCHA_THRESHOLD = 4
+
+
+def _stub(name, **attributes):
+    """Register a placeholder module under *name* and return it.
+
+    WHY the handlers reach so much that this exists: loading api.py imports the
+    ORM models and the database session machinery, none of which is installed
+    here. Only the login gates are under test, so what they import is replaced
+    by placeholders and the file itself is executed unmodified -- the code that
+    decides the refusal is the real one.
+    """
+    module = types.ModuleType(name)
+    module.__dict__.update(attributes)
+    sys.modules[name] = module
+    return module
+
+
+def _passthrough_decorator(*args, **kwargs):
+    """A decorator that changes nothing, in the bare and the called form.
+
+    WHY both forms: the handlers use `@multi_contest` bare and
+    `@actual_phase_required(0, 3)` with arguments. A stub written for only one
+    of them turns the other into a lambda, so the module still loads while the
+    method it wrapped is no longer the real one.
+    """
+    if len(args) == 1 and not kwargs and callable(args[0]):
+        return args[0]
+    return lambda function: function
+
+
+def _load_api_module():
+    """Return the real contest API handler module with its imports stubbed."""
+    _stub("cms.db", __path__=[os.path.join(SRC_ROOT, "cms", "db")])
+    _stub("cms.db.submission", Submission=type("Submission", (), {}))
+    _stub("cms.db.user", Participation=type("Participation", (), {}))
+
+    contest_package = os.path.join(SRC_ROOT, "cms", "server", "contest")
+    _stub("cms.server.contest", __path__=[contest_package])
+    _stub("cms.server.contest.handlers",
+          __path__=[os.path.join(contest_package, "handlers")])
+    _stub("cms.server.contest.handlers.contest",
+          ContestHandler=type("ContestHandler", (), {}),
+          api_login_required=_passthrough_decorator)
+    _stub("cms.server.contest.phase_management",
+          actual_phase_required=_passthrough_decorator)
+    _stub("cms.server.contest.authentication", validate_login=_stubbed_login)
+    _stub("cms.server.contest.submission",
+          UnacceptableSubmission=type("UnacceptableSubmission", (Exception,), {}),
+          accept_submission=lambda *_args, **_kwargs: None)
+
+    sys.modules["cms.server"].multi_contest = _passthrough_decorator
+    return _load("cms.server.contest.handlers.api",
+                 "cms/server/contest/handlers/api.py")
+
+
+# WHY the stand-in records its calls: an admin token is only ever checked by the
+# real validate_login, so the thing that shows a token is not waved through by
+# the exemption is that the gate still lets the attempt reach it.
+VALIDATED_LOGINS: list = []
+
+
+def _stubbed_login(*args, **kwargs):
+    """The stand-in validate_login: records the attempt and refuses it."""
+    VALIDATED_LOGINS.append((args, kwargs))
+    return None, None
+
+
+api = _load_api_module()
 
 
 class ManualClock:
@@ -306,6 +385,201 @@ class VerifyTokenTest(unittest.TestCase):
         # past the captcha, and must not raise into the login handler either.
         self.assertFalse(
             captcha.verify_token("t", "s", conf.CaptchaConfig(provider="turnstile")))
+
+
+class Attributes:
+    """A bag of attributes for the names a template reads off an object."""
+
+    def __init__(self, **attributes):
+        self.__dict__.update(attributes)
+
+
+def _render(template_name: str, facts: dict) -> str:
+    """Render one contest template the way the contest web server does.
+
+    WHY the templates are rendered here instead of being grepped for the
+    widget: the defect was a form served without a challenge it was then
+    refused for, so what matters is that the rendered page carries the field
+    back to the server. The loader, the i18n extension and StrictUndefined are
+    the ones the server itself configures; the context is the smallest set of
+    names the login pages read, and the captcha facts are the ones
+    ContestHandler.render_params really returns.
+    """
+    environment = jinja2.Environment(
+        trim_blocks=True, lstrip_blocks=True, autoescape=True,
+        undefined=jinja2.StrictUndefined,
+        loader=jinja2.FileSystemLoader(TEMPLATES),
+        extensions=["jinja2.ext.i18n"])
+    environment.install_null_translations(newstyle=True)
+    # The two filters the pages declare for a logged-in client; the login pages
+    # never reach them, but the whole file is compiled at once.
+    environment.filters["to_language"] = lambda value: Attributes(
+        source_extensions=[])
+    environment.filters["make_timestamp"] = lambda value: 0
+    return environment.get_template(template_name).render(**facts)
+
+
+def _login_page_facts(captcha_facts: dict) -> dict:
+    """Return a render context for the pages an unauthenticated client reaches."""
+    return {
+        "url": lambda *_args, **_kwargs: "/static/x",
+        "contest_url": lambda *_args, **_kwargs: "/contest",
+        "handler": Attributes(get_argument=lambda _name, default="": default),
+        "xsrf_form_html": "",
+        "translation": Attributes(identifier="en"),
+        "contest": Attributes(description="A contest", name="contest",
+                              languages=[], tasks=[], allow_registration=True),
+        "available_translations": [],
+        "credits": Attributes(project=Attributes(name="CMS"),
+                              license=Attributes(url="/license", name="AGPL")),
+        "config": Attributes(global_=Attributes(source_url="/source")),
+        "teams": [],
+        "MAX_INPUT_LENGTH": 50,
+        "MIN_PASSWORD_LENGTH": 6,
+        **captcha_facts,
+    }
+
+
+def _over_threshold() -> "captcha.Captcha":
+    """A captcha demanding a challenge, with every answer refused.
+
+    WHY every answer is refused: the pages have to carry a field the client can
+    answer, and a stub that accepted anything would make a template that posts
+    no field look correct.
+    """
+    subject = configured(verify=lambda *_args: False)
+    for _ in range(OVER_CAPTCHA_THRESHOLD):
+        subject.record_failure(CONTESTANT, REMOTE_IP)
+    return subject
+
+
+class ContestFormWidgetTest(unittest.TestCase):
+    """The widget the contest login and registration forms have to post back."""
+
+    def test_the_contest_login_form_carries_the_widget(self):
+        # contest.html is the base template every other contest page extends, so
+        # this is the form an unauthenticated contestant is served on the contest
+        # root, and it is refused at main.py's gate when the captcha is demanded.
+        subject = _over_threshold()
+        page = _render("contest.html", _login_page_facts(
+            subject.render_params(CONTESTANT, REMOTE_IP)))
+
+        self.assertIn("captchaToken", page)
+        self.assertIn(subject.config.site_key, page)
+
+    def test_the_registration_form_carries_the_widget(self):
+        # The registration handler refuses a challenged attempt with a 429 and
+        # its own script shows the widget again, so the form has to post the
+        # answer it asks for.
+        subject = _over_threshold()
+        page = _render("register.html", _login_page_facts(
+            subject.render_params(CONTESTANT, REMOTE_IP)))
+
+        self.assertIn("captchaToken", page)
+        self.assertIn(subject.config.site_key, page)
+
+    def test_a_deployment_without_a_captcha_renders_no_widget(self):
+        # render_params leaves the widget empty when nothing is configured, so
+        # the guard has to keep the markup out of a deployment that sets no key
+        # rather than emitting an empty container.
+        subject = configured(enabled=False)
+        facts = subject.render_params(CONTESTANT, REMOTE_IP)
+        self.assertEqual(facts["captcha_widget"], "")
+
+        for template in ("contest.html", "register.html"):
+            with self.subTest(template=template):
+                page = _render(template, _login_page_facts(facts))
+
+                self.assertNotIn("captchaToken", page)
+
+
+class ApiLoginHandler:
+    """A contest API login handler with only what its login path touches.
+
+    WHY the real handler class rather than a copy of the gates: the refusal is
+    the handler's decision, so the method under test has to be the one the
+    server runs. What is replaced is everything around it -- the session, the
+    ORM and the response writer -- none of which decides whether a captcha is
+    demanded.
+    """
+
+    def __init__(self, subject, arguments=None):
+        self.captcha = subject
+        self.arguments = arguments if arguments is not None else {}
+        self.request = Attributes(remote_ip=REMOTE_IP)
+        self.answers: list = []
+        self.contest = None
+        self.sql_session = None
+        self.timestamp = None
+
+    post = api.ApiLoginHandler.post
+    _may_examine_password = api.ApiLoginHandler._may_examine_password
+    _answer_login_result = api.ApiLoginHandler._answer_login_result
+
+    def get_argument(self, name, default=""):
+        return self.arguments.get(name, default)
+
+    def get_current_user(self):
+        return None
+
+    def create_signed_value(self, _name, value):
+        return value
+
+    def json(self, payload, status=200):
+        self.answers.append((payload, status))
+
+
+class ApiCaptchaGateTest(unittest.TestCase):
+    """The captcha gate of the JSON login endpoint, which has no page."""
+
+    def setUp(self):
+        VALIDATED_LOGINS.clear()
+
+    def test_a_token_login_is_not_challenged_over_the_threshold(self):
+        # The endpoint answers JSON and never renders a widget, so a script
+        # presenting an admin token could not answer a challenge however many
+        # times it tried.
+        subject = _over_threshold()
+        handler = ApiLoginHandler(subject)
+
+        self.assertTrue(handler._may_examine_password(CONTESTANT, "admin-token"))
+        self.assertEqual(handler.answers, [])
+
+    def test_a_login_without_a_token_is_still_challenged_over_the_threshold(self):
+        # The exemption is for the token alone: a browser or a script that
+        # presents none is taxed exactly as before.
+        subject = _over_threshold()
+        handler = ApiLoginHandler(subject)
+
+        self.assertFalse(handler._may_examine_password(CONTESTANT, ""))
+        self.assertEqual(handler.answers, [({"error": "Login failed"}, 403)])
+
+    def test_a_login_below_the_threshold_never_reaches_the_provider(self):
+        # is_required() is the single authority on whether a captcha is
+        # demanded, so an untaxed attempt must not be verified at all.
+        def refuse(*_args):
+            raise AssertionError("the provider was reached below the threshold")
+
+        subject = configured(verify=refuse)
+        handler = ApiLoginHandler(subject)
+
+        self.assertTrue(handler._may_examine_password(CONTESTANT, ""))
+        self.assertEqual(handler.answers, [])
+
+    def test_an_exempted_token_still_reaches_validate_login(self):
+        # The exemption waives the challenge, not the credential check: the
+        # token is handed on to be validated, so one that is invalid fails as an
+        # ordinary rejected login rather than authenticating anyone.
+        subject = _over_threshold()
+        handler = ApiLoginHandler(subject, {
+            "username": CONTESTANT, "password": "",
+            "admin_token": "admin-token"})
+
+        handler.post()
+
+        self.assertEqual(len(VALIDATED_LOGINS), 1)
+        self.assertEqual(VALIDATED_LOGINS[0][1]["admin_token"], "admin-token")
+        self.assertEqual(handler.answers, [({"error": "Login failed"}, 403)])
 
 
 if __name__ == "__main__":
