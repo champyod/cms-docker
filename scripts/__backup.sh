@@ -9,7 +9,8 @@ fi
 # CMS Backup Script
 # - Logical pg_dump via docker exec (PGPASSWORD in env, not argv)
 # - Full database, or a --tables selection turned into one -t per table
-# - Volume tar via helper container (cms-data:ro mount)
+# - Volume tar via helper container (every volume mounted under the CMS data
+#   root, each :ro, all of them carried in one archive)
 # - manifest.json, rotation across BOTH dirs, disk guard, Discord webhook
 # - --root <path> retargets the archive set; --stdout streams the dump to the
 #   caller and archives nothing
@@ -69,7 +70,35 @@ POSTGRES_BACKUP_USER_VAL="cms_backup"
 POSTGRES_BACKUP_PASSWORD_VAL="${POSTGRES_BACKUP_PASSWORD:-}"
 
 CONTAINER_DB="cms-database"
+# The name a whole archive set keys on — list_backup_timestamps, delete_backup_set,
+# the size total and the manifest's vol_tar all name this one archive per run.
 VOLUME_DATA="cms-data"
+
+# Every named volume mounted UNDER the CMS data root, as <prefix>=<docker name>.
+# WHY a prefix beside each name: one archive carries all of them, so the archive
+# itself has to say whose files each member belongs to and a restore has to be able
+# to read that back. WITHOUT this table the two volumes mounted underneath
+# /var/local/lib/cms were never archived at all: a tar of cms-data alone walks past
+# them and finds empty mount points, so contest submissions and ranking data reached
+# no backup set and no restore could put them back.
+# WHY the prefix is not the compose key: docker-compose.yml:824-825 declares the
+# volume as `cms-submissions` with `name: cms-submissions-contest`, so a -v naming
+# the compose key mounts a fresh empty volume docker creates on the spot — the same
+# silent hole, opened through a different name.
+# WHY these three and not others: these are the volumes that live inside the CMS
+# data root. cms-database-data is held by the pg_dump, the cache and log volumes are
+# either reconstructible or already on the host filesystem, and the worker tmp volume
+# is shard-indexed and needs discovery rather than a fixed list.
+BACKUP_VOLUMES=(
+  "cms-data=cms-data"
+  "cms-submissions=cms-submissions-contest"
+  "cms-ranking=cms-ranking-data"
+)
+
+# The two halves of one table entry. A single table with a separator is what keeps
+# the prefix and the docker name from drifting apart into two parallel lists.
+volume_prefix() { printf '%s' "${1%%=*}"; }
+volume_docker_name() { printf '%s' "${1#*=}"; }
 
 # Exit contract — a caller must be able to separate "the database is safe" from
 # "nothing was archived" without reading the log:
@@ -79,8 +108,9 @@ VOLUME_DATA="cms-data"
 #   2 = the disk guard stopped the run — free space at the backup root was unreadable or under the
 #       floor, so nothing was written and there is no dump from this run to judge
 #   3 = partial backup — the dump was kept, but the run is not whole: the volume archive
-#       did not yield one a restore could put back (it failed, or it carried no file), or
-#       the manifest does not record this run.
+#       did not yield one a restore could put back (it failed, or it carried no file for
+#       at least one of the volumes it claims to hold), or the manifest does not record
+#       this run.
 # --cleanup-only writes no backup and runs no disk guard, so it only ever returns 0 (the rotation
 # reclaimed disk) or 1 (the rotation itself failed) and never 2 or 3.
 readonly EXIT_PARTIAL_BACKUP=3
@@ -223,42 +253,82 @@ get_pg_version() {
 }
 
 # ---------------------------------------------------------------------------
-# stream_volume_tar <image> — gzipped tar of VOLUME_DATA on stdout
+# stream_volume_tar <image> — gzipped tar of every mounted CMS volume on stdout
 # ---------------------------------------------------------------------------
 # WHY stdout instead of `-v BACKUP_VOL_DIR:/backup`: the docker CLI only sends the
 # mount request to the host daemon, which resolves a bind-mount source on the
 # HOST, so the archive lands in the host's tree and never in this container's
 # filesystem — the file then does not exist here and every later step that reads
-# it is skipped. VOLUME_DATA is a named volume, which the daemon resolves on its
-# own side, so the mount is identical from host or container and only the output
-# channel has to move. The caller redirects this function's stdout to the archive
-# and reads its exit status, so no pipeline is involved: a failing docker cannot
-# be masked by a succeeding writer, with or without pipefail.
+# it is skipped. A named volume is one the daemon resolves on its own side, so the
+# mount is identical from host or container and only the output channel has to move.
+# The caller redirects this function's stdout to the archive and reads its exit
+# status, so no pipeline is involved: a failing docker cannot be masked by a
+# succeeding writer, with or without pipefail.
+# WHY one helper run and one archive: each volume is mounted at its own path under
+# a single parent, so the tar records every volume's files under that path as a
+# prefix and a restore can put each back where the stack mounts it. One file per
+# volume would buy per-volume status that no reader of this manifest has, and would
+# put new names into every filename list, rotation path, size total and manifest
+# field — all of which must keep working for the single-archive sets already on disk.
 stream_volume_tar() {
-  local image="$1"
-  docker run --rm -v "${VOLUME_DATA}:/volume:ro" "$image" tar czf - -C /volume .
+  local image="$1" entry
+  local -a mounts=()
+  local -a prefixes=()
+  for entry in "${BACKUP_VOLUMES[@]}"; do
+    mounts+=(-v "$(volume_docker_name "$entry"):/volume/$(volume_prefix "$entry"):ro")
+    prefixes+=("$(volume_prefix "$entry")")
+  done
+  docker run --rm "${mounts[@]}" "$image" tar czf - -C /volume "${prefixes[@]}"
 }
 
 # ---------------------------------------------------------------------------
-# volume_archive_has_files <archive> — true when the archive carries at least one
-# member that is not a directory, i.e. a restore would put something back.
+# volume_archive_has_files <archive> — true when the archive carries, under EVERY
+# volume prefix it claims, at least one member that is not a directory, i.e. a
+# restore would put something back from each of them.
 # ---------------------------------------------------------------------------
 # WHY the mode column and not the member name: both tars a backup run can meet — BusyBox
 # on the monitor image, GNU on the host — mark a directory with a leading "d" in the
 # permissions field, while only one of them appends a trailing slash to a directory in a
 # listing. A name test therefore passes for the wrong reason on one of them, and a check
 # that cannot fail is not guarding anything.
-# WHY awk stops at the first one: it closes the pipe, so an archive that does hold files
-# costs one header read rather than a second pass over every byte of it.
+# WHY the first file no longer ends the scan: a run whose cms-data archived its files
+# while cms-submissions came back empty has lost a volume, and a test that stopped at
+# the first member found would call that run complete. Whether a prefix is absent
+# cannot be known before the archive ends, so one pass over every member is what the
+# answer costs — and that is what makes the lost volume nameable at all.
+# WHY the pipeline's own status is dropped: a tar that could not read the archive at
+# all prints no listing — which fails the same way a file-less archive does, and an
+# unreadable archive is no use to a restore either.
 volume_archive_has_files() {
-  local first_file
-  # WHY the pipeline's own status is dropped: the early exit leaves tar writing into a
-  # closed pipe, so that status reports SIGPIPE rather than anything about the archive.
-  # The answer is the member awk printed, and a tar that could not read the archive at
-  # all printed none — which fails the same way a file-less archive does, and both are
-  # unusable for a restore.
-  first_file="$(tar -tzvf "$1" 2>/dev/null | awk '$1 !~ /^d/ { print; exit }')" || true
-  [[ -n "$first_file" ]]
+  local archive="$1" entry prefix listing
+  listing="$(tar -tzvf "$archive" 2>/dev/null | awk '$1 !~ /^d/ { print $NF }')" || true
+  for entry in "${BACKUP_VOLUMES[@]}"; do
+    prefix="$(volume_prefix "$entry")"
+    # WHY the member is matched whole and not as a substring: a bare substring test is
+    # satisfied by cms-data-legacy/x when the question is about cms-data, so a volume
+    # would be declared backed up on the strength of another volume's files.
+    if ! printf '%s\n' "$listing" | grep -q -e "^${prefix}/"; then
+      return 1
+    fi
+  done
+  return 0
+}
+
+# volume_archive_missing_files <archive> — the volume prefixes the archive holds no
+# file under, comma-separated, or nothing when it holds all of them.
+# WHY this beside the boolean above: the run has to say WHICH volume it lost. An
+# operator handed "volume tar holds no files" for an archive that in fact holds two
+# volumes' files has been told nothing they can act on.
+volume_archive_missing_files() {
+  local archive="$1" entry prefix listing missing=""
+  listing="$(tar -tzvf "$archive" 2>/dev/null | awk '$1 !~ /^d/ { print $NF }')" || true
+  for entry in "${BACKUP_VOLUMES[@]}"; do
+    prefix="$(volume_prefix "$entry")"
+    if ! printf '%s\n' "$listing" | grep -q -e "^${prefix}/"; then
+      missing="${missing:+${missing}, }${prefix}"
+    fi
+  done
+  printf '%s' "$missing"
 }
 
 # ---------------------------------------------------------------------------
@@ -732,7 +802,7 @@ run_backup() {
   # failure and record nothing, which is indistinguishable from a failed dump. The
   # reason is captured instead, and the manifest, the rotation and the notification
   # all run before the run is reported as partial.
-  log_info "Archiving volume $VOLUME_DATA ..."
+  log_info "Archiving mounted CMS volumes ($VOLUME_DATA, cms-submissions-contest, cms-ranking-data) ..."
   local vol_image="alpine:3.22"
   # Pull quietly if needed (ignore failure — try busybox fallback)
   docker pull "$vol_image" >/dev/null 2>&1 || true
@@ -768,8 +838,15 @@ run_backup() {
   # state either way — a kept dump and no volume — so it takes the same verdict, the
   # same partial alert and the same status rather than a second shape to reason about.
   if [[ -z "$vol_fail_reason" ]] && ! volume_archive_has_files "$vol_file"; then
+    # WHY the missing volumes are read before the archive is removed, and named in the
+    # reason: an archive that holds cms-data's files and none of cms-submissions' is not
+    # a failed archive, it is a partial run, and "volume tar holds no files" sent an
+    # operator looking for an archive that was never there. The reason travels into the
+    # log line and the amber alert alike.
+    local vol_missing
+    vol_missing="$(volume_archive_missing_files "$vol_file")"
     rm -f "$vol_file"
-    vol_fail_reason="volume tar holds no files"
+    vol_fail_reason="volume tar holds no files for: ${vol_missing}"
   fi
 
   # WHY the path is empty and the byte count zero when the archive is missing: a

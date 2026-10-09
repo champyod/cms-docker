@@ -113,6 +113,17 @@ check_eq "a complete entry names the archive relative to the root" \
   "volumes/cms-data-${FIRST_TS}.tar.gz" "$(entry_field "$QUIET_MANIFEST" 0 '.vol_tar')"
 check_eq "a complete entry carries the archive checksum" "64" \
   "$(printf '%s' "$(entry_field "$QUIET_MANIFEST" 0 '.vol_sha256')" | wc -c | tr -d ' ')"
+
+# The entry names one archive and that archive has to hold every volume. The manifest
+# is the record of what a restore can get back, so an entry that pointed at an archive
+# holding only cms-data would be a true statement about a false one — submissions and
+# ranking are mounted under the CMS data root and a tar of that root alone walks past
+# both of them.
+RECORDED_ARCHIVE="${RUN_ROOT}/backups/$(entry_field "$QUIET_MANIFEST" 0 '.vol_tar')"
+for archived_prefix in cms-data cms-submissions cms-ranking; do
+  check_eq "the archive the manifest names holds ${archived_prefix}'s files" "yes" \
+    "$( { tar tzf "$RECORDED_ARCHIVE" | grep -q "^${archived_prefix}/" && printf yes || printf no; } )"
+done
 check_eq "a complete entry keeps vol_bytes a number" "true" \
   "$(entry_field "$QUIET_MANIFEST" 0 '.sizes.vol_bytes | type == "number"')"
 

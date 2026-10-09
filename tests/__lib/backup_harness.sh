@@ -70,6 +70,16 @@ HARNESS_BIN="${WORK}/bin"
 HARNESS_QUIET_BIN="${WORK}/jq-only-bin"
 STUB_ARCHIVE="${WORK}/helper-archive.tar.gz"
 STUB_PAYLOAD_MEMBER="uploads/keep.txt"
+# One distinct member per volume, each filed under the prefix __backup.sh records that
+# volume's files under. WHY one member each and not one shared blob: a suite that
+# cannot tell cms-data's bytes from cms-submissions' cannot tell an archive holding
+# one volume from an archive holding three, which is the whole defect this fixture
+# exists to make reachable.
+STUB_VOLUME_MEMBERS=(
+  "cms-data/uploads/keep.txt"
+  "cms-submissions/entries/2026-contest.txt"
+  "cms-ranking/leaderboard.csv"
+)
 STUB_PG_VERSION="15.4"
 HARNESS_PATH="${HARNESS_BIN}:${PATH}"
 
@@ -114,10 +124,18 @@ POSTGRES_DB=cmsdb
 STUB_ENV
 
 build_stub_archive() {
-  local payload="${WORK}/payload"
-  mkdir -p "${payload}/uploads"
-  printf 'contest attachment bytes\n' > "${payload}/${STUB_PAYLOAD_MEMBER}"
-  tar czf "$STUB_ARCHIVE" -C "$payload" .
+  local payload="${WORK}/payload" member
+  # WHY an explicit member list rather than ".": a tar of "." records members as
+  # "./uploads/keep.txt" with no volume prefix, and __backup.sh now judges an archive
+  # by whether each volume prefix carries a file. An archive shaped like that would
+  # look like a run that lost every volume, so the fixture has to speak the shape the
+  # script writes.
+  for member in "${STUB_VOLUME_MEMBERS[@]}"; do
+    mkdir -p "${payload}/$(dirname -- "$member")"
+    printf 'stub bytes for %s\n' "$member" > "${payload}/${member}"
+  done
+  tar czf "$STUB_ARCHIVE" -C "$payload" \
+    cms-data cms-submissions cms-ranking
 }
 
 # ---------------------------------------------------------------------------

@@ -56,14 +56,55 @@ check_eq "a checksum sidecar is written next to it" "1" \
 # The recorded argv is the whole regression: a host bind mount is the bug, a named volume
 # and a stdout stream are the fix, and a backup path on the helper invocation means the old
 # shape came back.
+# WHY no `--` before the pattern: grep_yes reads <file> <pattern>, so a `--` there is
+# the pattern. Every invocation below was matching the literal two dashes in the
+# recorded `docker run --rm`, which every argv matches, and none of them could fail.
 check_eq "the helper mounts the named volume read-only" "yes" \
-  "$(grep_yes "$STREAM_LOG" -- '-v cms-data:/volume:ro')"
+  "$(grep_yes "$STREAM_LOG" '-v cms-data:/volume/cms-data:ro')"
 check_eq "the archive is streamed on stdout" "yes" \
   "$(grep_yes "$STREAM_LOG" 'tar czf - -C /volume')"
 check_eq "no backup path reached the helper invocation" "yes" \
   "$(not_grep_yes "$STREAM_LOG" "${RUN_ROOT}")"
 check_eq "one helper invocation, no needless second attempt" "1" \
   "$(count_lines "$STREAM_LOG")"
+
+# ---------------------------------------------------------------------------
+# 1b. Every volume mounted under the data root is archived, not just cms-data
+# ---------------------------------------------------------------------------
+# WHY this is its own block and not an amendment to the argv check above: the argv
+# check passes for a run that mounts cms-data alone, which is exactly the shape this
+# defect had. Two volumes were mounted under /var/local/lib/cms and no archive the
+# script could write reached them, so contest submissions and ranking data existed in
+# no backup set at all.
+printf '\n== every mounted volume reaches the archive ==\n'
+
+for volume_prefix in cms-data cms-submissions cms-ranking; do
+  check_eq "the archive carries ${volume_prefix}'s own files" "yes" \
+    "$( { tar tzf "$ARCHIVE" | grep -q "^${volume_prefix}/" && printf yes || printf no; } )"
+done
+
+# WHY the submissions volume is named by its docker name and not its compose key:
+# docker-compose.yml:824-825 declares `cms-submissions` with `name: cms-submissions-contest`,
+# so a -v naming the compose key mounts a fresh empty volume docker creates on the spot.
+# A run that misspelt it would archive nothing at all and say so nowhere.
+check_eq "the submissions volume is mounted by its docker name" "yes" \
+  "$(grep_yes "$STREAM_LOG" '-v cms-submissions-contest:/volume/cms-submissions:ro')"
+check_eq "the ranking volume is mounted by its docker name" "yes" \
+  "$(grep_yes "$STREAM_LOG" '-v cms-ranking-data:/volume/cms-ranking:ro')"
+check_eq "the compose key is never used as a volume name" "yes" \
+  "$(not_grep_yes "$STREAM_LOG" '-v cms-submissions:/')"
+check_eq "the tar is told to record all three prefixes" "yes" \
+  "$(grep_yes "$STREAM_LOG" '-C /volume cms-data cms-submissions cms-ranking')"
+
+for member in "${STUB_VOLUME_MEMBERS[@]}"; do
+  check_eq "the archive holds ${member}" "yes" \
+    "$( { tar tzf "$ARCHIVE" | grep -q "^${member}$" && printf yes || printf no; } )"
+done
+
+# One archive, one name. Every filename list, rotation path and manifest field in the
+# script keys on cms-data-${ts}.tar.gz, and the sets already on disk have that name.
+check_eq "all three volumes ride in the one archive the set is named for" "1" \
+  "$(count_matching "${RUN_ROOT}/backups/volumes" '*.tar.gz')"
 
 # ---------------------------------------------------------------------------
 # 2. The helper image is unavailable: the fallback still lands real bytes
@@ -169,6 +210,94 @@ check_eq "the run announces a partial, not a success" "1" \
   "$(alerts_with_colour "$WEBHOOK_LOG" "$ALERT_AMBER")"
 check_eq "no green success is announced for a run with no volume" "0" \
   "$(alerts_with_colour "$WEBHOOK_LOG" "$ALERT_GREEN")"
+
+# ---------------------------------------------------------------------------
+# 6. One volume came back empty and the others did not: a partial run
+# ---------------------------------------------------------------------------
+# The defect the multi-volume archive creates if the emptiness test is left where it
+# was. A test that stops at the first file member it finds is satisfied by cms-data,
+# so a run that lost cms-submissions outright — the whole contest submissions tree —
+# reports a complete backup, a green alert and a manifest entry pointing at an archive
+# that yields nothing for that volume. Weight is not content, and neither is the first
+# volume's content.
+printf '\n== one volume empty, another not ==\n'
+PARTIAL_TREE="${WORK}/partial-volume-tree"
+PARTIAL_ARCHIVE="${WORK}/partial-volume.tar.gz"
+mkdir -p "${PARTIAL_TREE}/cms-data/uploads" "${PARTIAL_TREE}/cms-ranking"
+printf 'contest attachment bytes\n' > "${PARTIAL_TREE}/cms-data/uploads/keep.txt"
+printf 'score,rank\n' > "${PARTIAL_TREE}/cms-ranking/leaderboard.csv"
+tar czf "$PARTIAL_ARCHIVE" -C "$PARTIAL_TREE" cms-data cms-ranking
+
+check_eq "the staged archive weighs something, so -s cannot catch this run" "yes" \
+  "$(file_bytes "$PARTIAL_ARCHIVE" | awk '{print ($1 > 0) ? "yes" : "no"}')"
+check_eq "the staged archive really does carry one volume's files" "yes" \
+  "$( { tar tzf "$PARTIAL_ARCHIVE" | grep -q '^cms-data/' && printf yes || printf no; } )"
+check_eq "the staged archive really does carry no submissions member" "no" \
+  "$( { tar tzf "$PARTIAL_ARCHIVE" | grep -q '^cms-submissions/' && printf yes || printf no; } )"
+
+new_run_root partial-volume
+run_backup "STUB_ARCHIVE=${PARTIAL_ARCHIVE}"
+expect_exit "a run that lost one volume of three is partial, not a success" "3"
+
+check_eq "no archive is kept for a run that lost a volume" "0" \
+  "$(count_matching "${RUN_ROOT}/backups/volumes" '*.tar.gz')"
+check_eq "the run names the volume it lost" "yes" \
+  "$(grep_yes "$RUN_LOG" 'cms-submissions')"
+check_eq "the reason says the archive holds nothing for that volume" "yes" \
+  "$(grep_yes "$RUN_LOG" 'volume tar holds no files for: cms-submissions')"
+check_eq "the dump is kept" "1" \
+  "$(count_matching "${RUN_ROOT}/backups/db" '*.dump')"
+
+PARTIAL_MANIFEST="${RUN_ROOT}/backups/manifest.json"
+check_eq "the manifest holds the run" "1" "$(entry_count "$PARTIAL_MANIFEST")"
+check_eq "the entry is marked" "failed" \
+  "$(entry_field "$PARTIAL_MANIFEST" 0 '.volume_status')"
+check_eq "vol_tar is null rather than a path to an archive missing a volume" "null" \
+  "$(entry_field "$PARTIAL_MANIFEST" 0 '.vol_tar')"
+
+check_eq "the run announces a partial, not a success" "1" \
+  "$(alerts_with_colour "$WEBHOOK_LOG" "$ALERT_AMBER")"
+check_eq "no green success is announced for a run that lost a volume" "0" \
+  "$(alerts_with_colour "$WEBHOOK_LOG" "$ALERT_GREEN")"
+check_eq "the amber alert names the volume the operator has to go and fetch" "yes" \
+  "$(has_yes "$(alert_description_of "$WEBHOOK_LOG" "$ALERT_AMBER")" 'cms-submissions')"
+
+# ---------------------------------------------------------------------------
+# 7. A pre-change set is still recognised, and still rotated away
+# ---------------------------------------------------------------------------
+# The single-archive sets already on disk carry cms-data's files with no prefix at
+# all. Rotation keys on the filename, so those sets have to keep being reclaimed or a
+# deployment that upgrades this script starts keeping every set it ever took.
+printf '\n== a pre-change set is rotated like any other ==\n'
+new_run_root legacy-rotation
+LEGACY_TS=20200101-000000
+printf 'superseded dump\n' > "${RUN_ROOT}/backups/db/cmsdb-${LEGACY_TS}.dump"
+printf '%s  cmsdb-%s.dump\n' \
+  "0000000000000000000000000000000000000000000000000000000000000000" "$LEGACY_TS" \
+  > "${RUN_ROOT}/backups/db/cmsdb-${LEGACY_TS}.dump.sha256"
+mkdir -p "${WORK}/legacy-tree/uploads"
+printf 'contest attachment bytes\n' > "${WORK}/legacy-tree/uploads/keep.txt"
+tar czf "${RUN_ROOT}/backups/volumes/cms-data-${LEGACY_TS}.tar.gz" \
+  -C "${WORK}/legacy-tree" .
+printf '%s  cms-data-%s.tar.gz\n' \
+  "0000000000000000000000000000000000000000000000000000000000000000" "$LEGACY_TS" \
+  > "${RUN_ROOT}/backups/volumes/cms-data-${LEGACY_TS}.tar.gz.sha256"
+
+run_backup BACKUP_MAX_COUNT=1 BACKUP_MAX_AGE_DAYS=0 BACKUP_MAX_SIZE_GB=0
+expect_exit "a run that pruned a pre-change set is still a complete run" "0"
+
+check_eq "rotation removed the pre-change archive" "0" \
+  "$(count_matching "${RUN_ROOT}/backups/volumes" "cms-data-${LEGACY_TS}.tar.gz")"
+check_eq "rotation removed the pre-change checksum" "0" \
+  "$(count_matching "${RUN_ROOT}/backups/volumes" "cms-data-${LEGACY_TS}.tar.gz.sha256")"
+check_eq "the pre-change dump went with it" "0" \
+  "$(count_matching "${RUN_ROOT}/backups/db" "cmsdb-${LEGACY_TS}.dump")"
+check_eq "the run's own set is the only one left" "1" \
+  "$(count_matching "${RUN_ROOT}/backups/volumes" '*.tar.gz')"
+check_eq "the run's own set is still named the way every set on disk is named" "1" \
+  "$(count_matching "${RUN_ROOT}/backups/volumes" 'cms-data-2*.tar.gz')"
+check_eq "no artefact of the retired timestamp survives" "0" \
+  "$(count_matching "${RUN_ROOT}/backups/volumes" "*${LEGACY_TS}*")"
 
 printf '\n== summary ==\n'
 printf 'PASS: %d  FAIL: %d\n' "$PASS" "$FAIL"
