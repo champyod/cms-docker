@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
-# scripts/__domain_proxy_reload.sh — re-resolve grader-nginx-proxy's upstreams after a deploy.
-#
-# nginx caches an upstream's address at config load, so a recreated backend keeps the old
-# IP until something reloads the config. Always exits 0: a reload that cannot run must not
-# turn an otherwise successful deploy red.
+# scripts/__domain_proxy_reload.sh — re-resolve grader-nginx-proxy's upstreams after a deploy; always exits 0.
 set -eu
 if (set -o pipefail 2>/dev/null); then set -o pipefail; fi
 
