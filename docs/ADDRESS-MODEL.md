@@ -27,6 +27,15 @@ The front-door keys are `CONTEST_BIND_IP`, `NGINX_BIND_IP`, `ADMIN_BIND_IP`,
    `database` and the six RPC services that default is `${INNER_IP:-127.0.0.1}`,
    so an unset key means loopback, not every interface.
 
+The bind keys follow the repository's one-way generation chain, so there is no
+precedence to reconcile between the sources. `config.toml` is the only one that is
+edited by hand; `./cms config sync` renders `.env` from it; `scripts/__render_expose.sh`
+sources that `.env` and writes the generated `docker-compose.expose.yml`. The
+generated file therefore never overrides what was configured — it is that
+configuration, in the form Compose can use. Re-run the two generators after editing
+`config.toml`; editing `.env` or the generated override by hand has no effect on the
+next sync.
+
 A port answers on an address only when the key owning that port names that
 address. There is no fallback that puts the peer ports — postgres, the RPC
 services, the worker's 26000 — on an address set for the web tier, so widening

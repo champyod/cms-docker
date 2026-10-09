@@ -825,6 +825,8 @@ docker-compose.vault.yml / .monitoring.yml / .socket-proxy.yml   # optional extr
 #   docker-compose.override.yml        # local pins (see docker-compose.override.yml.example)
 ```
 
+`*_BIND_IP` is not read by the compose files themselves — the base files publish the front-door ports on `0.0.0.0`, and `scripts/__render_expose.sh` rewrites them into `docker-compose.expose.yml`, one published entry per address. [`docs/ADDRESS-MODEL.md`](docs/ADDRESS-MODEL.md) is authoritative for that model: which key resolves a port, the single-address vs comma-list forms, what wins between `config.toml`, `.env` and the generated override, and how a hand-written `docker-compose.override.yml` joins every stack target. Bring stacks up through `make`/`./cms deploy`, never a bare `docker compose up`, or the configured addresses do not apply.
+
 ### Makefile Targets
 
 ```bash
@@ -1076,7 +1078,7 @@ Every runtime value lives in `config.toml` (seeded from `config.toml.example` on
 
 `.env.contest` is not one of them: it is an optional, operator-maintained per-contest override for a few deploy scripts. `CONTEST_ID` — which contest the stack serves — lives in `config.toml` `[contest]`, and the admin panel writes it there, never into a generated file.
 
-Generated files are output-only: never edit them directly — the next `config sync` overwrites them. Change `config.toml` and re-run sync instead.
+Generated files are output-only: never edit them directly — the next `config sync` overwrites them. Change `config.toml` and re-run sync instead. The same chain carries the bind keys: `config.toml` → `.env` → `docker-compose.expose.yml`, so nothing to reconcile between them — see [`docs/ADDRESS-MODEL.md`](docs/ADDRESS-MODEL.md).
 
 ```bash
 # admin-panel/.env
