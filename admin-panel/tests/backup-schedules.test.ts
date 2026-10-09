@@ -10,6 +10,8 @@ import {
   validateScheduleInput,
 } from '@/lib/backup-schedules';
 import type { ScheduleInput } from '@/lib/backup-schedules';
+import { BACKUP_TABLE_NAMES, validateTableSelection } from '@/lib/backup-table-catalog';
+import { buildBackupArgv } from '@/scheduler/tick';
 
 const SCHEMA_SOURCE = readFileSync(fileURLToPath(new URL('../prisma/schema.prisma', import.meta.url)), 'utf8');
 const MIGRATION_SOURCE = readFileSync(
@@ -154,12 +156,6 @@ describe('validateScheduleInput', () => {
     expect(result.errors).toEqual(['Not in the backup table catalog: monitor_targets']);
   });
 
-  it('rejects an empty selection that would dump the whole database', () => {
-    const result = validateScheduleInput(scheduleInput({ tables: [] }));
-    expect(result.valid).toBe(false);
-    expect(result.errors).toEqual(['At least one table must be selected.']);
-  });
-
   it('rejects a selection that is not a list of names', () => {
     const result = validateScheduleInput(scheduleInput({ tables: [42] as unknown as string[] }));
     expect(result.valid).toBe(false);
@@ -210,6 +206,44 @@ describe('validateScheduleInput', () => {
   it('reports every problem at once instead of only the first', () => {
     const result = validateScheduleInput(scheduleInput({ name: '', tables: ['nope'], intervalMins: 0 }));
     expect(result.errors).toHaveLength(3);
+  });
+});
+
+describe('a schedule that names no table means every table', () => {
+  it('accepts an empty selection instead of refusing it', () => {
+    const result = validateScheduleInput(scheduleInput({ tables: [] }));
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+    expect(result.schedule).not.toBeNull();
+  });
+
+  it('stores the selection empty, unresolved, because the scheduler is where it resolves', () => {
+    expect(validateScheduleInput(scheduleInput({ tables: [] })).schedule?.tables).toEqual([]);
+  });
+
+  it('stores exactly what the scheduler resolves to the whole catalog', () => {
+    const stored = validateScheduleInput(scheduleInput({ tables: [] })).schedule?.tables;
+    expect(stored).toBeDefined();
+    const fired = buildBackupArgv(stored ?? []);
+    expect(fired.valid).toBe(true);
+    expect(fired.tables).toEqual([...BACKUP_TABLE_NAMES]);
+  });
+
+  it('warns that the empty selection covers the whole database rather than accepting it silently', () => {
+    const result = validateScheduleInput(scheduleInput({ tables: [] }));
+    expect(result.warnings.join(' ')).toContain('entire database');
+  });
+
+  it('still rejects a table outside the catalog, so relaxing empty did not relax the allowlist', () => {
+    const result = validateScheduleInput(scheduleInput({ tables: ['contests', 'monitor_targets'] }));
+    expect(result.errors).toEqual(['Not in the backup table catalog: monitor_targets']);
+    expect(result.schedule).toBeNull();
+  });
+
+  it('still rejects an empty selection in the catalog gate the manual, export and restore paths share', () => {
+    const result = validateTableSelection([]);
+    expect(result.valid).toBe(false);
+    expect(result.warnings.join(' ')).toContain('entire database');
   });
 });
 

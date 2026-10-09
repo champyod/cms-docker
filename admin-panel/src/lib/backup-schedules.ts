@@ -75,7 +75,17 @@ function checkName(name: unknown): string[] {
   return [];
 }
 
-/** An empty selection reaches `pg_dump` with no `-t` flag and dumps everything. */
+/**
+ * A schedule naming no table names every table. The selection is stored empty and
+ * resolved to the whole catalog by the scheduler, at the argv boundary, so a row
+ * written here, by hand or by a migration resolves the same way; the catalog's own
+ * empty-selection warning is carried so the operator is told the dump covers the
+ * whole database rather than handed a different thing without a word.
+ *
+ * `validateTableSelection` keeps rejecting empty for the manual-run, export and
+ * restore paths, none of which has that resolver, so only the unreachable-here
+ * emptiness is relaxed — an unknown name is still refused.
+ */
 function checkTables(tables: unknown): TablesCheck {
   if (!Array.isArray(tables) || !tables.every((table) => typeof table === 'string')) {
     return { errors: ['Table selection must be a list of names.'], warnings: [], tables: [] };
@@ -84,8 +94,8 @@ function checkTables(tables: unknown): TablesCheck {
   if (selection.unknown.length > 0) {
     return { errors: [`Not in the backup table catalog: ${selection.unknown.join(', ')}`], warnings: [], tables: [] };
   }
-  if (!selection.valid) {
-    return { errors: ['At least one table must be selected.'], warnings: selection.warnings, tables: [] };
+  if (tables.length === 0) {
+    return { errors: [], warnings: selection.warnings, tables: [] };
   }
   return { errors: [], warnings: selection.warnings, tables: orderSelection(tables) };
 }
