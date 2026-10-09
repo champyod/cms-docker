@@ -241,6 +241,10 @@ _set_contest('cookie_duration', 'COOKIE_DURATION')
 _set_contest('max_submission_length', 'MAX_SUBMISSION_LENGTH')
 _set_contest('max_input_length', 'MAX_INPUT_LENGTH')
 _set_contest('submit_local_copy', 'SUBMIT_LOCAL_COPY')
+# WHY registered beside the one above: workflow.py stores testcase copies under the
+# same switch idea as submissions, and reading tests_local_copy while no config key
+# could set it left the operator with no way to turn that copy off.
+_set_contest('tests_local_copy', 'TESTS_LOCAL_COPY')
 
 # config.toml [admin] CAPTCHA_* -> cms.toml [<server>.captcha]. WHY both servers
 # get the same table: they verify against the same provider with the same keys,

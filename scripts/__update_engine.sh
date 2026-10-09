@@ -215,6 +215,17 @@ propagate_generated() {
         return 0
     fi
     run_or_print "make env"
+    # WHY the re-export below: run_or_print runs each command in its own process, so
+    # the exports `make env` made died with that subprocess and the injector then
+    # read an empty environment. Every _set_* found nothing to write and returned
+    # without a word, so a value edited in the panel reached .env and stopped there —
+    # a silent no-op covering every injected family, CAPTCHA_* and the login rate
+    # limits included. Sourcing .env puts those values in this process, which the
+    # injector's child inherits; the same pattern __config_sync.sh uses for the same
+    # two steps. Guarded because set -eu would otherwise abort the run on a bad line.
+    if [ "$DRY_RUN" != "true" ] && [ -f .env ]; then
+        set -a; . ./.env 2>/dev/null || true; set +a
+    fi
     if [ -x ./scripts/__inject_config.sh ] || [ -f ./scripts/__inject_config.sh ]; then
         run_or_print "./scripts/__inject_config.sh"
     fi
@@ -727,6 +738,7 @@ VAR_SPECS=(
   "Contest|[contest]|MAX_SUBMISSION_LENGTH|num||100000"
   "Contest|[contest]|MAX_INPUT_LENGTH|num||5000000"
   "Contest|[contest]|SUBMIT_LOCAL_COPY|bool||true"
+  "Contest|[contest]|TESTS_LOCAL_COPY|bool||true"
   "Contest|[contest]|CONTEST_WEB_CPU_LIMIT|str||2"
   "Contest|[contest]|CONTEST_WEB_MEMORY_LIMIT|str||2G"
   "Contest|[contest]|ENABLE_TLS|bool||false"
@@ -799,6 +811,7 @@ VAR_SPECS=(
   "Admin Panel|[admin]|ACME_RENEW_AT_UTC|str||03:00"
   "Admin Panel|[admin]|ACME_RENEW_BEFORE_DAYS|num||7"
   "Admin Panel|[admin]|HSTS_MAX_AGE|num||31536000"
+  "Admin Panel|[admin]|MAX_TESTCASE_UPLOAD_BYTES|num||52428800"
   "Infra & Monitoring|[infra]|OFFSITE_TAILNET_NODE|str||"
   "Infra & Monitoring|[infra]|OFFSITE_ENCRYPT_KEY|secret||"
   "Infra & Monitoring|[infra]|OFFSITE_BACKUP_PATH|str||/var/local/backups/cms"

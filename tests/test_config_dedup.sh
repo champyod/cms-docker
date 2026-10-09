@@ -35,6 +35,26 @@ else
   printf '%s\n' "$duplicated"
 fi
 
+echo "both copy switches are keys the admin panel can edit"
+# VAR_SPECS is what puts a key in front of an operator; a key the example
+# declares but VAR_SPECS omits is configurable only by hand-editing config.toml.
+for row in 'SUBMIT_LOCAL_COPY|bool||true' 'TESTS_LOCAL_COPY|bool||true'; do
+  if grep -qF "\"Contest|[contest]|${row}\"" "$SPEC"; then
+    ok "VAR_SPECS maps ${row%%|*} in [contest] with default true"
+  else
+    no "VAR_SPECS maps ${row%%|*} in [contest] with default true"
+  fi
+done
+
+echo "both copy switches are declared in the example"
+for key in SUBMIT_LOCAL_COPY TESTS_LOCAL_COPY; do
+  if awk '/^\[contest\]$/{inside=1; next} /^\[/{inside=0} inside && $1 == "'"${key}"'" {found=1} END{exit !found}' "$EXAMPLE"; then
+    ok "${key} is declared in config.toml.example [contest]"
+  else
+    no "${key} is declared in config.toml.example [contest]"
+  fi
+done
+
 echo "the families stay together"
 check_single_section() {
   local pattern="$1" expect="$2" label="$3" sections

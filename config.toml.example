@@ -115,6 +115,7 @@ ACME_RENEW_AT_UTC = "03:00" # str; HH:MM UTC at which an unattended tls-alpn-01 
 ACME_RENEW_BEFORE_DAYS = 7 # num; days of validity left before a tls-alpn-01 certificate counts as due; the handover waits for ACME_RENEW_AT_UTC on the first such day
 DOMAIN_NGINX_BIND_IP = "" # str; address the domain nginx publishes 80/443 on; empty=engine wildcard on every interface (IPv4 and IPv6) — the public entry, set it to the box address to narrow it
 HSTS_MAX_AGE = 31536000        # num; seconds; Strict-Transport-Security max-age emitted on every domain nginx vhost; 1 year — lower it only while staging
+MAX_TESTCASE_UPLOAD_BYTES = 52428800 # num; bytes; total size of one bulk testcase upload the panel accepts, 50 MB. WHY it sits beside PROXY_MAX_BODY_SIZE ([infra]): a request the proxy refuses never reaches the panel, so an upload between the two caps dies as a bare nginx 413 with nothing from the panel explaining it. Keep this at or below the proxy limit — ./cms preflight warns when it is not.
 SOCKET_PROXY = 0                # enum:0,1; reserved toggle — no code reads it; the filtered-Docker-API proxy for the panel is started manually via docker-compose.socket-proxy.yml
 MONITOR_ENHANCED = 0            # enum:0,1; enables the monitor-targets editor in the admin panel settings (HTTP health checks)
 REDIS_RATE_LIMIT = 0            # enum:0,1; preparatory — with 1 the domain nginx emits only resolver lines for a future Redis token bucket; limiting stays the local limit_req zones
@@ -152,6 +153,7 @@ NUM_PROXIES_USED = 1            # num; proxies crossed before the contest server
 MAX_SUBMISSION_LENGTH = 100000  # num; bytes; max submission size — injected into cms.toml [contest_web_server] max_submission_length; raise the proxy's client_max_body_size with it
 MAX_INPUT_LENGTH = 5000000      # num; bytes; max user-test input size — injected into cms.toml [contest_web_server] max_input_length
 SUBMIT_LOCAL_COPY = true        # bool; write submissions to the data volume before storing them in the DB — injected into cms.toml [contest_web_server] submit_local_copy
+TESTS_LOCAL_COPY = true         # bool; write testcases to the data volume before storing them in the DB — injected into cms.toml [contest_web_server] tests_local_copy. WHY an operator would turn it off: true also pickles every testcase under /var/local/lib/cms/, and the DB copy is authoritative either way — fsobjects keys content by SHA1 digest precisely so the database stays uncoupled from file storage — so false discards the on-disk history, not the testcases
 CONTEST_WEB_CPU_LIMIT = "2"     # str; CPU cap of the contest web server container — compose deploy.resources.limits.cpus
 CONTEST_WEB_MEMORY_LIMIT = "2G" # str; memory cap of the contest web server container — compose deploy.resources.limits.memory
 ENABLE_TLS = false              # bool; HTTPS for the contest UI — sets the traefik router's tls flag and makes the standalone contest nginx redirect :80 to a TLS :443 server

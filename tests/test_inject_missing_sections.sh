@@ -210,5 +210,113 @@ else
   no "an absent config raises no warning"
 fi
 
+# --- the testcase-copy switch, which CMS read but no config key could set ----
+
+# contest_web_server holds both copy switches, so a bare grep cannot tell them
+# apart; this reads a key out of that one section and nowhere else.
+contest_value() {
+  awk -v key="$1" '
+    /^\[contest_web_server\]$/ { inside=1; next }
+    /^\[/                      { inside=0 }
+    inside && $0 ~ "^" key " = " { sub("^" key " = ", ""); print; exit }
+  ' "$2"
+}
+
+echo "TESTS_LOCAL_COPY reaches cms.toml as contest_web_server.tests_local_copy"
+COPY_SANDBOX="${SANDBOX}/local-copy"
+new_sandbox "$COPY_SANDBOX"
+if (cd "$COPY_SANDBOX" && TESTS_LOCAL_COPY=false bash "$SCRIPT" >/dev/null 2>&1); then
+  ok "the injector ran with TESTS_LOCAL_COPY set"
+else
+  no "the injector ran with TESTS_LOCAL_COPY set"
+fi
+COPY_TOML="${COPY_SANDBOX}/config/cms.toml"
+if [[ "$(contest_value tests_local_copy "$COPY_TOML")" == "false" ]]; then
+  ok "an operator-set false reached contest_web_server.tests_local_copy"
+else
+  no "an operator-set false reached contest_web_server.tests_local_copy (found '$(contest_value tests_local_copy "$COPY_TOML")')"
+fi
+
+echo "the submission-copy switch still resolves as it did"
+if [[ "$(contest_value submit_local_copy "$COPY_TOML")" == "true" ]]; then
+  ok "submit_local_copy keeps its shipped default when unset"
+else
+  no "submit_local_copy keeps its shipped default when unset (found '$(contest_value submit_local_copy "$COPY_TOML")')"
+fi
+
+echo "the two copy switches do not collide"
+if [[ "$(contest_value tests_local_copy "$COPY_TOML")" != "$(contest_value submit_local_copy "$COPY_TOML")" ]]; then
+  ok "setting one copy switch leaves the other alone"
+else
+  no "setting one copy switch leaves the other alone (both '$(contest_value submit_local_copy "$COPY_TOML")')"
+fi
+for key in submit_local_copy tests_local_copy; do
+  count="$(awk -v key="$key" '/^\[contest_web_server\]$/{inside=1; next} /^\[/{inside=0} inside && $0 ~ "^" key " = "{n++} END{print n+0}' "$COPY_TOML")"
+  if [[ "$count" -eq 1 ]]; then
+    ok "${key} is written once in [contest_web_server]"
+  else
+    no "${key} is written once in [contest_web_server] (found $count)"
+  fi
+done
+
+echo "an unset TESTS_LOCAL_COPY leaves the shipped default alone"
+DEFAULT_SANDBOX="${SANDBOX}/local-copy-default"
+new_sandbox "$DEFAULT_SANDBOX"
+if (cd "$DEFAULT_SANDBOX" && bash "$SCRIPT" >/dev/null 2>&1) \
+   && [[ "$(contest_value tests_local_copy "${DEFAULT_SANDBOX}/config/cms.toml")" == "true" ]]; then
+  ok "tests_local_copy stays true when the operator configures nothing"
+else
+  no "tests_local_copy stays true when the operator configures nothing"
+fi
+
+# --- propagate_generated: make env and the injector must share one process ---
+
+# Pull a function out of the engine by name rather than by line number, so an
+# edit that moves it does not silently reduce this to a test of nothing.
+extract_function() {
+  awk -v fn="$1" '
+    $0 ~ "^" fn "\\(\\) \\{" { inside=1 }
+    inside                   { print }
+    inside && /^}$/          { exit }
+  ' "$REPO_ROOT/scripts/__update_engine.sh"
+}
+
+echo "propagate_generated carries a .env value into cms.toml"
+PROP="${SANDBOX}/propagate"
+new_sandbox "$PROP"
+mkdir -p "${PROP}/scripts"
+cp "$SCRIPT" "${PROP}/scripts/__inject_config.sh"
+# The injector sources its logger out of scripts/__lib; without it the run dies
+# on a missing file and the propagation is never reached.
+cp -R "${REPO_ROOT}/scripts/__lib" "${PROP}/scripts/__lib"
+# Stands in for `make env`: rewriting .env is the whole contract, and the value
+# differs from the shipped default so only a real propagation can produce it.
+cat >"${PROP}/Makefile" <<'MK'
+env:
+	@printf 'RANKING_USERNAME=admin\nRANKING_PASSWORD=secret\nSUBMIT_LOCAL_COPY=false\n' > .env
+MK
+{
+  printf 'set -eu\nDRY_RUN=false\nprint_warning(){ echo "[!] $1"; }\n'
+  extract_function run_or_print
+  extract_function propagate_generated
+  printf 'propagate_generated\n'
+} >"${PROP}/engine_excerpt.sh"
+
+if (cd "$PROP" && bash engine_excerpt.sh >"${PROP}/propagate.out" 2>&1); then
+  ok "propagate_generated ran to completion"
+else
+  no "propagate_generated ran to completion"
+fi
+if [[ "$(contest_value submit_local_copy "${PROP}/config/cms.toml")" == "false" ]]; then
+  ok "a value written by make env reached cms.toml through the engine"
+else
+  no "a value written by make env reached cms.toml through the engine (found '$(contest_value submit_local_copy "${PROP}/config/cms.toml")')"
+fi
+if grep -qi "warn\|error\|fail" "${PROP}/propagate.out"; then
+  no "propagate_generated neither warned nor failed on the happy path"
+else
+  ok "propagate_generated neither warned nor failed on the happy path"
+fi
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]]
