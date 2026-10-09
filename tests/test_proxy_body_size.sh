@@ -350,5 +350,63 @@ else
   no "an absent config falls back to the declared defaults (got: $(tr '\n' ' ' < "${WORK}/preflight-empty.txt"))"
 fi
 
+echo "every setting the panel reads is one an operator can actually set"
+# WHY this assertion exists: MAX_TESTCASE_UPLOAD_BYTES was read from process.env by the
+# panel while nothing put it in the container, so the cap was not configurable at all and
+# the unit test above still passed — it exercised the resolver, not the delivery. Three
+# more settings were in the same state (BACKUP_LOCATIONS, BACKUP_DEFAULT_LOCATION
+# unregistered, MONITOR_ENHANCED registered but never passed through). The failure mode is
+# silent in both directions: a value the operator sets that the panel never sees, and a
+# setting the panel advertises that no config.toml key fills.
+#
+# WHY NODE_ENV is exempt: the panel Dockerfile sets it (ENV NODE_ENV=production) and
+# compose has no business overriding a value the image already fixes.
+panel_env_vars="$(grep -rhoE 'process\.env\.[A-Z_][A-Z0-9_]*' "${REPO_ROOT}/admin-panel/src" \
+  | sed 's/process\.env\.//' | sort -u)"
+for var in ${panel_env_vars}; do
+  [[ "${var}" == "NODE_ENV" ]] && continue
+  if grep -qE "^[[:space:]]*${var}:" "${REPO_ROOT}/docker-compose.yml"; then
+    ok "${var} reaches the panel container"
+  else
+    no "${var} is read by the panel but never put in the container"
+  fi
+done
+
+# WHY registered as well as delivered: a value compose passes through but no config.toml
+# key writes can only be set by hand-editing .env, which the next config sync discards.
+for var in MAX_TESTCASE_UPLOAD_BYTES BACKUP_LOCATIONS BACKUP_DEFAULT_LOCATION; do
+  if grep -qE "\|\[admin\]\|${var}\|" "${UPDATE_ENGINE}"; then
+    ok "${var} is registered under [admin]"
+  else
+    no "${var} is delivered to the panel but no [admin] key writes it"
+  fi
+  if grep -qE "^[[:space:]]*${var}[[:space:]]*=" "${REPO_ROOT}/config.toml.example"; then
+    ok "${var} is documented in config.toml.example"
+  else
+    no "${var} is registered but not documented in config.toml.example"
+  fi
+done
+
+# WHY BACKUP_DIR is checked for the volume, not just the env: the panel reading a path it
+# cannot resolve reports an empty archive tree rather than an error, so a missing mount is
+# indistinguishable from a machine with no backups.
+panel_block="$(awk '/^  admin-panel-next:/,/^  admin-web-server:/' "${REPO_ROOT}/docker-compose.yml")"
+for var in BACKUP_DIR BACKUP_LOCATIONS BACKUP_DEFAULT_LOCATION MAX_TESTCASE_UPLOAD_BYTES; do
+  # WHY the block is captured once rather than piped per variable: grep -q closes the pipe
+  # on its first match, which kills awk with SIGPIPE, and the pipeline status then reflects
+  # awk rather than grep — so a variable that IS set reports as absent depending on where
+  # it falls in the block.
+  if grep -qE "^[[:space:]]*${var}:" <<<"${panel_block}"; then
+    ok "${var} is set on the admin-panel-next service"
+  else
+    no "${var} is not set on admin-panel-next"
+  fi
+done
+if grep -qE '^[[:space:]]*- \./backups:/app/backups' "${REPO_ROOT}/docker-compose.yml"; then
+  ok "the panel mounts the archive tree at the path BACKUP_DIR names"
+else
+  no "the panel has no ./backups:/app/backups mount, so BACKUP_DIR resolves to nothing"
+fi
+
 printf '\n%d passed, %d failed\n' "${pass}" "${fail}"
 (( fail == 0 ))

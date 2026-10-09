@@ -465,12 +465,43 @@ services:
       CAPTCHA_THRESHOLD: ${CAPTCHA_THRESHOLD:-3}
       CAPTCHA_BAN_THRESHOLD: ${CAPTCHA_BAN_THRESHOLD:-5}
 
+      # WHY this is here and not only in config.toml: the panel reads its limits from
+      # process.env, and compose is what puts them in the container. Without this line
+      # the value reaches .env and stops there, and the panel keeps its built-in
+      # default no matter what the operator configures.
+      MAX_TESTCASE_UPLOAD_BYTES: ${MAX_TESTCASE_UPLOAD_BYTES:-52428800}
+
+      # Backup destinations the panel offers, and the one preselected. Both were read from
+      # process.env by the panel with nothing putting them in the container, so every
+      # deployment saw the single implicit default no matter what was configured. Empty
+      # means "the one implicit location", which is what the panel already falls back to.
+      BACKUP_LOCATIONS: ${BACKUP_LOCATIONS:-}
+      BACKUP_DEFAULT_LOCATION: ${BACKUP_DEFAULT_LOCATION:-}
+      # WHY the same value the monitor gets: the panel already reads BACKUP_DIR as the
+      # fallback when BACKUP_LOCATIONS is empty, and it is given the identical mount so
+      # one configured path means one directory in both containers rather than two
+      # spellings of the same host folder that can drift apart.
+      BACKUP_DIR: ${BACKUP_DIR:-/app/backups}
+
+      # WHY the panel receives these: discord-webhook.ts reads them for the alerts the
+      # panel sends itself, and compose was the only thing that could have delivered them.
+      # They are already [infra] keys, so this needs no new configuration surface.
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      DISCORD_ROLE_ID: ${DISCORD_ROLE_ID:-}
+
+      MONITOR_ENHANCED: ${MONITOR_ENHANCED:-0}
+
       REPO_ROOT: /repo-root
       DEPLOYMENT_TYPE: ${DEPLOYMENT_TYPE:-img}
       IS_DOCKER: "true"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./:/repo-root
+      # WHY this mount exists for BACKUP_DIR to mean one thing: the monitor mounts the
+      # archive tree at /app/backups and the panel reads the same BACKUP_DIR. Without the
+      # panel holding it too, the value resolves to a directory that is not there and every
+      # archive lookup reports an empty tree rather than failing.
+      - ./backups:/app/backups
       - cms-logs:/var/local/log/cms
       - cms-ranking-data:/var/local/lib/cms/ranking:rw
       # Read-only: the security surface parses grader-waf's ModSecurity audit log

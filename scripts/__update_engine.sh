@@ -812,6 +812,11 @@ VAR_SPECS=(
   "Admin Panel|[admin]|ACME_RENEW_BEFORE_DAYS|num||7"
   "Admin Panel|[admin]|HSTS_MAX_AGE|num||31536000"
   "Admin Panel|[admin]|MAX_TESTCASE_UPLOAD_BYTES|num||52428800"
+  # WHY str and not a structured type: the panel parses this as a JSON array of
+  # {id,label,path} entries, and the value travels through .env as text. env_quote in
+  # __config_sync.sh quotes it, so the spaces and braces survive the shell that sources it.
+  "Admin Panel|[admin]|BACKUP_LOCATIONS|str||"
+  "Admin Panel|[admin]|BACKUP_DEFAULT_LOCATION|str||"
   "Infra & Monitoring|[infra]|OFFSITE_TAILNET_NODE|str||"
   "Infra & Monitoring|[infra]|OFFSITE_ENCRYPT_KEY|secret||"
   "Infra & Monitoring|[infra]|OFFSITE_BACKUP_PATH|str||/var/local/backups/cms"
@@ -853,6 +858,10 @@ VAR_SPECS=(
   "Infra & Monitoring|[infra]|WAF_PORT|port||8080"
   "Infra & Monitoring|[infra]|WAF_RULE_ENGINE|str||DetectionOnly"
   "Infra & Monitoring|[infra]|WAF_RESP_BODY_ACCESS|enum:Off,On,Force,Rejected||Off"
+  # WHY it is a key when it was a container-local default: the panel and the monitor now
+  # resolve the same BACKUP_DIR, so one configured path has to be able to name it. The
+  # value is a path INSIDE the container, not on the host.
+  "Infra & Monitoring|[infra]|BACKUP_DIR|str||/app/backups"
   "Infra & Monitoring|[infra]|CMS_LOG_MAX_AGE_DAYS|num||7"
   "Infra & Monitoring|[infra]|CMS_LOG_MAX_SIZE_GB|num||5"
   "Infra & Monitoring|[infra]|CMS_LOG_PRUNE_INTERVAL_MINS|num||60"

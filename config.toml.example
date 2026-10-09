@@ -116,6 +116,9 @@ ACME_RENEW_BEFORE_DAYS = 7 # num; days of validity left before a tls-alpn-01 cer
 DOMAIN_NGINX_BIND_IP = "" # str; address the domain nginx publishes 80/443 on; empty=engine wildcard on every interface (IPv4 and IPv6) — the public entry, set it to the box address to narrow it
 HSTS_MAX_AGE = 31536000        # num; seconds; Strict-Transport-Security max-age emitted on every domain nginx vhost; 1 year — lower it only while staging
 MAX_TESTCASE_UPLOAD_BYTES = 52428800 # num; bytes; total size of one bulk testcase upload the panel accepts, 50 MB. WHY it sits beside PROXY_MAX_BODY_SIZE ([infra]): a request the proxy refuses never reaches the panel, so an upload between the two caps dies as a bare nginx 413 with nothing from the panel explaining it. Keep this at or below the proxy limit — ./cms preflight warns when it is not.
+BACKUP_LOCATIONS = ""       # str; JSON array of the backup destinations the panel offers, e.g. [{"id":"nas","label":"NAS","path":"/mnt/nas/backups"}]; empty offers the single implicit location the container writes to
+BACKUP_DEFAULT_LOCATION = "" # str; id from BACKUP_LOCATIONS preselected in the switcher and on new schedules; empty picks the first entry, never an id the list lacks
+BACKUP_DIR = "/app/backups"   # str; path INSIDE the monitor and admin-panel containers where archives live — one value for both, since they mount the same host directory; change it only alongside the compose volumes that back it
 SOCKET_PROXY = 0                # enum:0,1; reserved toggle — no code reads it; the filtered-Docker-API proxy for the panel is started manually via docker-compose.socket-proxy.yml
 MONITOR_ENHANCED = 0            # enum:0,1; enables the monitor-targets editor in the admin panel settings (HTTP health checks)
 REDIS_RATE_LIMIT = 0            # enum:0,1; preparatory — with 1 the domain nginx emits only resolver lines for a future Redis token bucket; limiting stays the local limit_req zones
