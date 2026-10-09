@@ -374,9 +374,15 @@ done
 
 # WHY registered as well as delivered: a value compose passes through but no config.toml
 # key writes can only be set by hand-editing .env, which the next config sync discards.
+#
+# WHY the section is not named here: BACKUP_LOCATIONS and BACKUP_DEFAULT_LOCATION already
+# lived in [backup] with working defaults, and asserting [admin] here would have demanded
+# a second registration of a key that already had one — which is a duplicate key in
+# config.toml and the exact failure the TOML write gate was added to catch. Any section is
+# correct so long as there is exactly one.
 for var in MAX_TESTCASE_UPLOAD_BYTES BACKUP_LOCATIONS BACKUP_DEFAULT_LOCATION; do
-  if grep -qE "\|\[admin\]\|${var}\|" "${UPDATE_ENGINE}"; then
-    ok "${var} is registered under [admin]"
+  if grep -qE "\|\[[a-z_]+\]\|${var}\|" "${UPDATE_ENGINE}"; then
+    ok "${var} is registered under some section"
   else
     no "${var} is delivered to the panel but no [admin] key writes it"
   fi

@@ -172,7 +172,60 @@ for (f, full), ln in sorted(seen.items()):
     if not ok:
         track(f"D {f}:{ln}: compose profile set {list(full)} INVALID: {why}")
 
-# ---------- E. CLI-contract audit ----------
+# ---------- F. config-surface audit ----------
+print("== F. config-surface audit ==")
+# WHY this is a whole section rather than one check: a duplicate key is a hard error in
+# TOML, so a config.toml carrying two lines for one name does not parse at all — and the
+# failure lands on whichever service reloads first, far from the edit that caused it. The
+# registry side of the same mistake is quieter: two rows for one key both look valid, so
+# config sync emits the key twice and the last row silently wins.
+CONFIG_EXAMPLE = Path("config.toml.example")
+if CONFIG_EXAMPLE.exists():
+    seen_in_section = {}
+    section = None
+    for lineno, raw in enumerate(open(CONFIG_EXAMPLE, encoding="utf-8"), 1):
+        line = raw.rstrip("\n")
+        if line.startswith("[") and line.endswith("]"):
+            section = line.strip()
+            continue
+        # An assignment at the top level of a section, not a continuation or a comment.
+        assign = re.match(r"^([A-Za-z0-9_]+)\s*=", line)
+        if not assign:
+            continue
+        name = assign.group(1)
+        where = f"{section or 'top'}|{name}"
+        if where in seen_in_section:
+            track(f"F {CONFIG_EXAMPLE}:{lineno}: key {name} is already set at "
+                  f"{CONFIG_EXAMPLE}:{seen_in_section[where]} in the same section")
+            checks += 1
+        else:
+            seen_in_section[where] = lineno
+
+REGISTRY_FILE = Path("scripts/__update_engine.sh")
+seen_registry_rows = {}
+if REGISTRY_FILE.exists():
+    for lineno, raw in enumerate(open(REGISTRY_FILE, encoding="utf-8"), 1):
+        for name in re.findall(r'\|\[[a-z_]+\]\|([A-Z0-9_]+)\|', raw):
+            if name in seen_registry_rows:
+                track(f"F {REGISTRY_FILE}:{lineno}: key {name} is already registered at "
+                      f"{REGISTRY_FILE}:{seen_registry_rows[name]}")
+                checks += 1
+            else:
+                seen_registry_rows[name] = lineno
+
+# WHY a registered key must appear in config.toml.example: the example is the only place
+# an operator learns a key exists. A registered key with no line in the example is one
+# that can only be set from the TUI, while config sync is the documented path.
+if CONFIG_EXAMPLE.exists() and REGISTRY_FILE.exists():
+    documented = set(re.findall(r"^([A-Za-z0-9_]+)\s*=",
+                                CONFIG_EXAMPLE.read_text(encoding="utf-8"), re.M))
+    for name, _ in sorted(seen_registry_rows.items()):
+        checks += 1
+        if name not in documented:
+            track(f"F {REGISTRY_FILE}: key {name} is registered but has no line in "
+                  f"{CONFIG_EXAMPLE}")
+
+# ---------- G. CLI-contract audit ----------
 print("== E. cli-contract audit ==")
 CONTRACTS = {
     "__preflight.sh": lambda a: a == [] or (a[0] == "--stack" and len(a) >= 2),

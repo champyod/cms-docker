@@ -79,10 +79,9 @@ mkdir -p "$DRILLS_DIR"
 
 DRILLS_BACKUP_ROOT="${DRILLS_DIR}/backups"
 DRILLS_BACKUP_DB_DIR="${DRILLS_BACKUP_ROOT}/db"
-DRILLS_BACKUP_VOL_DIR="${DRILLS_BACKUP_ROOT}/volumes"
 DRILLS_MANIFEST="${DRILLS_BACKUP_ROOT}/manifest.json"
 
-mkdir -p "$DRILLS_BACKUP_DB_DIR" "$DRILLS_BACKUP_VOL_DIR"
+mkdir -p "$DRILLS_BACKUP_DB_DIR"
 
 log_info "Running backup into drills/ subdir ..."
 export BACKUP_DIR="$DRILLS_BACKUP_ROOT"
@@ -97,16 +96,15 @@ if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$CONTAINER_DB"; the
 fi
 
 # WHY the status is captured rather than flattened into one warning: exit 3 is the
-# contract's "the dump was kept but the volume archive is missing (or the manifest does
-# not record this run)". A drill that then restores only the dump has verified the
-# database half of the backup and knows nothing about the volume half, so it must not
-# go on to report a pass.
+# contract's "the dump was kept but the manifest does not record this run". A dump that
+# no manifest entry points at is not one a restore can find, so the drill must not go on
+# to report a pass over it.
 BACKUP_PARTIAL=0
 BACKUP_STATUS=0
 bash "${SCRIPT_DIR}/__backup.sh" "" 2>&1 || BACKUP_STATUS=$?
 
 if [ "$BACKUP_STATUS" -eq 3 ]; then
-  log_warn "Backup reported PARTIAL (exit 3): no volume archive was produced, or the manifest does not record this run."
+  log_warn "Backup reported PARTIAL (exit 3): the dump was kept but the manifest does not record this run."
   BACKUP_PARTIAL=1
 elif [ "$BACKUP_STATUS" -ne 0 ]; then
   log_warn "Backup script exited with status ${BACKUP_STATUS} (may be expected if db issues)"
@@ -121,7 +119,7 @@ fi
 
 log_info "Manifest found at $DRILLS_MANIFEST"
 
-# Manifest format: {ts, db_dump, db_sha256, vol_tar, vol_sha256, pg_version, sizes}
+# Manifest format: {ts, db_dump, db_sha256, pg_version, tables, sizes, kind}
 LATEST_TS="$(python3 -c "
 import json
 with open('$DRILLS_MANIFEST') as f:
@@ -154,16 +152,6 @@ else:
     print('0')
 ")"
 
-EXPECTED_VOL_BYTES="$(python3 -c "
-import json
-with open('$DRILLS_MANIFEST') as f:
-    data = json.load(f)
-if isinstance(data, list) and data:
-    print(data[-1]['sizes']['vol_bytes'])
-else:
-    print('0')
-")"
-
 EXPECTED_PG_VER="$(python3 -c "
 import json
 with open('$DRILLS_MANIFEST') as f:
@@ -174,7 +162,7 @@ else:
     print('unknown')
 ")"
 
-log_info "Expected from manifest: db_bytes=$EXPECTED_DB_BYTES vol_bytes=$EXPECTED_VOL_BYTES pg_version=$EXPECTED_PG_VER"
+log_info "Expected from manifest: db_bytes=$EXPECTED_DB_BYTES pg_version=$EXPECTED_PG_VER"
 
 # ---------------------------------------------------------------------------
 # Run cms-restore.sh into scratch container
@@ -197,7 +185,7 @@ if echo "$RESTORE_OUTPUT" | grep -q "Submissions count:"; then
 fi
 
 log_info "Actual from restore: submissions=$ACTUAL_SUB_COUNT pg_largeobject=$ACTUAL_LOB_COUNT"
-log_info "Expected from manifest: db_bytes=$EXPECTED_DB_BYTES vol_bytes=$EXPECTED_VOL_BYTES pg_version=$EXPECTED_PG_VER"
+log_info "Expected from manifest: db_bytes=$EXPECTED_DB_BYTES pg_version=$EXPECTED_PG_VER"
 
 # ---------------------------------------------------------------------------
 # Assertions: counts >0 and match manifest numbers
@@ -205,7 +193,7 @@ log_info "Expected from manifest: db_bytes=$EXPECTED_DB_BYTES vol_bytes=$EXPECTE
 PASS=1
 
 if [ "$BACKUP_PARTIAL" -eq 1 ]; then
-  log_warn "FAIL: backup was partial (exit 3) — this drill only verified the database dump; the volume archive was not archived"
+  log_warn "FAIL: backup was partial (exit 3) — the dump was kept but the manifest does not record it, so a restore could not have found it"
   PASS=0
 fi
 
