@@ -53,6 +53,10 @@ const CATALOG = [
   // Roots. Nothing the catalog selects above these resolves through one of them,
   // and three content tables name `admins` as the author of a row, so it leads.
   { name: 'admins', label: 'Admins', pk: ['id'], sensitive: true },
+  // The ranking console's own accounts. Sensitive for the same reason as `admins`:
+  // the table holds password hashes, so a restore changes who may operate the
+  // scoreboard rather than what the scoreboard shows.
+  { name: 'ranking_console_users', label: 'Ranking Console Users', pk: ['id'], sensitive: true },
   { name: 'permissions', label: 'Permissions', pk: ['id'], sensitive: true },
   { name: 'groups', label: 'Groups', pk: ['id'], sensitive: true },
   { name: 'contests', label: 'Contests', pk: ['id'] },

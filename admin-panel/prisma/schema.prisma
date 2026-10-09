@@ -671,6 +671,24 @@ model security_blocks {
   @@map("security_blocks")
 }
 
+/// A ranking console account. Separate from `admins` on purpose: the scoreboard is
+/// a different surface with a different audience, and an operator trusted to change
+/// the appearance should not thereby hold a panel account.
+///
+/// `password` uses the panel's own storage format, `bcrypt:<hash>` or
+/// `plaintext:<value>`, so the two surfaces share one credential convention and a
+/// reviewer only has to know one.
+model ranking_console_users {
+  id            Int       @id @default(autoincrement())
+  username      String    @unique @db.VarChar
+  password      String    @db.VarChar
+  enabled       Boolean   @default(true)
+  created_at    DateTime  @default(now())
+  last_login_at DateTime?
+
+  @@map("ranking_console_users")
+}
+
 /// The ranking projection the proxy pushes: one table per entity kind, so the
 /// wire shape and the consistency rules stay readable instead of hiding inside a
 /// jsonb blob.

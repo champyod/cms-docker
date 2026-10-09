@@ -135,10 +135,14 @@ describe('BACKUP_TABLES', () => {
     expect(BACKUP_TABLES.at(-1)?.needsLargeObjects).toBe(true);
   });
 
-  it('flags admins and the grant tables sensitive, and nothing else', () => {
+  it('flags the credential and grant tables sensitive, and nothing else', () => {
     const flagged = BACKUP_TABLES.filter((table) => 'sensitive' in table && table.sensitive).map((table) => table.name);
-    expect(flagged).toEqual([ADMIN_TABLE, 'permissions', 'groups', 'group_permissions', 'admin_groups', 'admin_permission_overrides']);
-    expect(GRANT_TABLES).toEqual(flagged.filter((name) => name !== ADMIN_TABLE));
+    // Two kinds of authority table: one holds an account and its password hash, the
+    // other holds what that account may do. The ranking console keeps its own
+    // accounts, so it joins admins in the first kind rather than the second.
+    const credentialTables = [ADMIN_TABLE, 'ranking_console_users'];
+    expect(flagged).toEqual([...credentialTables, ...GRANT_TABLES]);
+    expect(GRANT_TABLES).toEqual(flagged.filter((name) => !credentialTables.includes(name)));
   });
 });
 
