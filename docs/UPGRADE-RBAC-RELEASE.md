@@ -1,5 +1,7 @@
 # Migration instructions — prod upgrade to the permission/RBAC release
 
+> **Security module:** see `docs/SECURITY-MODULE.md` for the panel's security surface, its permission groups and the host agent that applies unbans and renewals.
+
 How to take a running production deployment from the old build to this branch.
 
 ## Read this first

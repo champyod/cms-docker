@@ -1,5 +1,7 @@
 # WAF Tuning Guide — OWASP ModSecurity CRS (Plan-First, Optional)
 
+> **Security module:** see `docs/SECURITY-MODULE.md` for the panel's security surface, its permission groups and the host agent that applies unbans and renewals.
+
 > WAF is **available but disabled by default** (`WAF_ENABLED=0`). It never replaces CAPTCHA — both can run together. This document explains tuning, price, wiring, and how to enable safely.
 
 ---

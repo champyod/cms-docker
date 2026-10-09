@@ -1,5 +1,7 @@
 # NAVIGATION-TREE — cms-re-catalog (3 surfaces side by side)
 
+> **Security module:** see `docs/SECURITY-MODULE.md` for the panel's security surface, its permission groups and the host agent that applies unbans and renewals.
+
 Read-only audit. Markers: `[cms]` = `./cms` (bash + Rust CLI + Rust TUI) · `[panel]` = Next.js `admin-panel/` · `[py]` = vendored Python admin. `✗` = surface lacks the node.
 
 Rule measured: **siblings reachable · back = parent (exactly one level) · home always reachable.**
