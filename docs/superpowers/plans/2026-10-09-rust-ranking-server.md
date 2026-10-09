@@ -43,11 +43,12 @@
 
 ### Slice 1: Scaffold the crate and its gates
 
-- [ ] Create tools/cms-ranking (Cargo.toml, src/main.rs, src/lib.rs, .cargo/config.toml mirroring tools/cms-tui), workspace-style manifest with the vetted dependencies only.
-- [ ] Add the crate to .github/workflows/ci.yml: a rust-ranking filter and job (fmt, clippy -D warnings, build, test) with the crate as working-directory.
-- [ ] Add the Rust build stage to the Dockerfile and build the binary into the ranking image; do not rely on the Debian rustc already in the package list.
-- [ ] Add a health endpoint and one smoke test that starts the server against an unconfigured database and asserts a fail-closed response.
-- **Verify:** cargo gates green locally; the ci.yml YAML parses; docker compose config still valid.
+- [x] Created tools/cms-ranking (Cargo.toml, Cargo.lock, src/{main,lib,config,db,http}.rs, tests/fail_closed.rs) on edition 2021, depending only on what the code uses: axum, serde, sqlx (postgres, runtime-tokio), thiserror, tokio.
+- [x] No .cargo/config.toml musl pin, unlike tools/cms-tui: the ranking service ships inside the image rather than as a checked-in standalone binary, so a musl target would drag a C toolchain into the build for no gain.
+- [x] Added the rust_ranking paths filter and the rust-ranking job (fmt, clippy -D warnings, test) to .github/workflows/ci.yml.
+- [x] Added the ranking-build stage to the Dockerfile and copied the binary to /home/cmsuser/cms/bin/cms-ranking, so the runtime layer carries no compiler next to the submission tooling.
+- [x] /healthz answers 503 until a real SELECT 1 succeeds, and the fallback refuses every unimplemented route, so a misconfigured deployment shows nothing instead of an empty scoreboard.
+- **Verify:** fmt clean, clippy -D warnings silent, 6 tests green locally; ci.yml parses under js-yaml. docker compose config could not run here: no Docker daemon in the authoring environment.
 - **Commit:** feat(ranking): scaffold the rust ranking server
 
 ### Slice 2: The ranking tables
