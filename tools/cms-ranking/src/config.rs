@@ -20,6 +20,9 @@ pub struct RankingConfig {
     pub static_dir: Option<PathBuf>,
     pub credits_file: Option<PathBuf>,
     pub logo_path: Option<PathBuf>,
+    /// Signs the console cookie. Absent means the console cannot log anyone in, which
+    /// is a refusal rather than an open door.
+    pub session_secret: Option<String>,
 }
 
 impl Default for RankingConfig {
@@ -30,6 +33,7 @@ impl Default for RankingConfig {
             static_dir: None,
             credits_file: None,
             logo_path: None,
+            session_secret: None,
         }
     }
 }
@@ -61,6 +65,7 @@ impl RankingConfig {
             static_dir: read_path(&vars, "RANKING_STATIC_DIR", DEFAULT_STATIC_DIR),
             credits_file: read_path(&vars, "CMS_CREDITS_FILE", DEFAULT_CREDITS_FILE),
             logo_path: read_path(&vars, "RANKING_LOGO_PATH", ""),
+            session_secret: read_secret(&vars),
         })
     }
 }
@@ -91,6 +96,15 @@ fn read_path(vars: &HashMap<String, String>, key: &str, fallback: &str) -> Optio
     } else {
         Some(PathBuf::from(raw))
     }
+}
+
+/// The console cannot issue or verify a cookie without this, so an unset value is a
+/// refusal at the login route rather than a session nobody signed.
+fn read_secret(vars: &HashMap<String, String>) -> Option<String> {
+    vars.get("RANKING_SESSION_SECRET")
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
 }
 
 #[cfg(test)]

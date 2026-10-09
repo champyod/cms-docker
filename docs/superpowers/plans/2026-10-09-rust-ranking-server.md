@@ -82,14 +82,15 @@
 - **Verify:** six feed tests green locally (framing, replay, uncovered gap, subscriber delivery, entity mapping); the trigger has an ignored round-trip test that CI runs against postgres after applying all three migrations.
 - **Commit:** feat(ranking): stream live ranking events
 
-### Slice 5: The two authentication planes
+### Slice 5: The console's authentication plane
 
-- [ ] Machine plane: constant-time comparison of the provisioned token for the CRUD routes, failing closed when unset.
-- [ ] Human plane: verify admins.authentication with bcrypt (bcrypt:<hash> prefix, plaintext: prefix for seeded accounts), the same format the panel writes.
-- [ ] Generate the ranking key subset from admin-panel/src/lib/permission-registry.ts into the crate, with a CI gate that fails on drift; resolve group grants plus per-admin overrides with deny-wins and all:all expansion for that subset.
-- [ ] Session cookie, adaptive CAPTCHA against the provider siteverify endpoint using the existing CAPTCHA_* keys, 5-failure lockout, 429 with Retry-After.
-- **Verify:** unit tests for the resolver and the lockout; a drift test that fails when the TypeScript registry gains a ranking key the crate does not know.
-- **Commit:** feat(ranking): protect the ranking console
+- [x] The machine plane is gone, and not by omission: you retired the HTTP push path, so the CRUD routes it authenticated no longer exist and nothing is left to authenticate with a token.
+- [x] The console keeps its own accounts (ranking_console_users, migration 20261009170000) in the panel's bcrypt:/plaintext: format, and signs its own cookie with RANKING_SESSION_SECRET — your two decisions from this slice.
+- [x] A malformed credential row is an error, never a wrong password. The lockout is a pure function (5 attempts, 15 minutes, one account key and one address key) with counters in the stack's own Redis under a ranking namespace, so an unblock here cannot forgive a contest-surface brute force.
+- [ ] Still open: the login and logout routes, the gate when ranking_settings.access_mode is protected, and CAPTCHA verification, which waits on the transport decision recorded below.
+- [ ] The ranking permission subset generation moved with the panel surfaces to Slice 6.
+- **Verify:** 42 tests green (31 in-crate, covering password, lockout and session), clippy silent, 5 ignored tests that CI runs with postgres and redis services.
+- **Commit:** feat(ranking): verify console credentials and count failures
 
 ### Slice 6: Panel control surfaces
 
