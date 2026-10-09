@@ -94,6 +94,9 @@ pub enum StartupError {
     },
 }
 
+/// How long start-up will wait for the counter store before serving without it.
+const COUNTER_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
 pub async fn run() -> Result<(), StartupError> {
     let config = RankingConfig::from_env()?;
     let db = match config.database_url.as_deref() {
@@ -102,14 +105,31 @@ pub async fn run() -> Result<(), StartupError> {
     };
     // A console with no counters cannot refuse a repeated failure, and the login route
     // treats that as a refusal rather than as an unguarded door.
+    // Bounded on purpose: this runs before the listener binds, so a counter store that
+    // accepts a connection and then stalls would keep the whole service from answering.
+    // Logins refuse without counters, which is the same fail-closed answer an unreachable
+    // store gets, so waiting longer buys nothing.
     let counter = match config.redis_url.as_deref() {
-        Some(url) => match auth::counter::Counter::connect(url).await {
-            Ok(counter) => Some(counter),
-            Err(error) => {
-                eprintln!("cms-ranking: failure counters unavailable: {error}");
-                None
+        Some(url) => {
+            match tokio::time::timeout(
+                COUNTER_CONNECT_TIMEOUT,
+                auth::counter::Counter::connect(url),
+            )
+            .await
+            {
+                Ok(Ok(counter)) => Some(counter),
+                Ok(Err(error)) => {
+                    eprintln!("cms-ranking: failure counters unavailable: {error}");
+                    None
+                }
+                Err(_) => {
+                    eprintln!(
+                        "cms-ranking: the counter store did not answer in {COUNTER_CONNECT_TIMEOUT:?}; logins will refuse"
+                    );
+                    None
+                }
             }
-        },
+        }
         None => None,
     };
     let state = AppState::new(db, config.clone(), counter);
