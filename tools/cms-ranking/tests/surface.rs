@@ -59,6 +59,50 @@ fn a_page_without_a_head_is_returned_untouched() {
     assert_eq!(rendered, "<html><body>bare</body></html>");
 }
 
+fn notice(footer: Option<&str>, credits: Option<&str>) -> Appearance {
+    Appearance {
+        footer_text: footer.map(str::to_string),
+        credits_text: credits.map(str::to_string),
+        ..appearance(None, None)
+    }
+}
+
+const PAGE_WITH_NOTICE: &str = "<html><body><div id=\"LicenseNotice\">Powered by CMS</div><div id=\"InnerFrame\"></div></body></html>";
+
+/// /config carries only two keys, so the panel's footer and credit line must reach
+/// the page in the rendered HTML. They land inside the byline block it already has.
+#[test]
+fn the_panel_footer_lands_inside_the_license_notice() {
+    let rendered = render_page(
+        PAGE_WITH_NOTICE,
+        Some(&notice(Some("Hosted by ACME"), Some("Icons by Foo"))),
+    );
+    assert!(rendered.contains("<div id=\"ranking-footer\">Hosted by ACME</div>"));
+    assert!(rendered.contains("<div id=\"ranking-credits\">Icons by Foo</div>"));
+    let notice_at = rendered.find("LicenseNotice").expect("the notice is there");
+    let footer_at = rendered
+        .find("ranking-footer")
+        .expect("the footer is there");
+    let frame_at = rendered.find("InnerFrame").expect("the frame is there");
+    assert!(footer_at > notice_at && footer_at < frame_at);
+}
+
+#[test]
+fn a_footer_line_is_escaped_rather_than_injected() {
+    let rendered = render_page(
+        PAGE_WITH_NOTICE,
+        Some(&notice(Some("<script>x</script>"), None)),
+    );
+    assert!(!rendered.contains("<script>x"));
+    assert!(rendered.contains("&lt;script&gt;"));
+}
+
+#[test]
+fn an_empty_footer_leaves_the_page_untouched() {
+    let rendered = render_page(PAGE_WITH_NOTICE, Some(&notice(Some("  "), None)));
+    assert_eq!(rendered, PAGE_WITH_NOTICE);
+}
+
 /// The vendored credits.html reads project["name"], license["name"], license["url"]
 /// and license["spdx_id"], so the route must serve objects, not the flattened strings
 /// the port used to emit.

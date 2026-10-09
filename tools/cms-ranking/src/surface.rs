@@ -75,12 +75,50 @@ pub fn read_page(path: &Path) -> Result<String, SurfaceError> {
         .map_err(|error| SurfaceError::Page(format!("{}: {error}", path.display())))
 }
 
-/// Applies what the panel owns to the vendored page: the title and the theme.
-/// Everything else reaches the page through /config, which Config.js already
-/// fetches synchronously before the scoreboard renders.
+/// Applies what the panel owns to the vendored page: the title, the theme and the
+/// footer lines. /config carries only the two keys the capture records, so the rest
+/// reaches the page through the rendered HTML rather than through a wider object.
 pub fn render_page(html: &str, appearance: Option<&Appearance>) -> String {
     let titled = apply_title(html, appearance.and_then(|row| row.title.as_deref()));
-    apply_theme(&titled, appearance.and_then(|row| row.theme.as_ref()))
+    let themed = apply_theme(&titled, appearance.and_then(|row| row.theme.as_ref()));
+    apply_notice(&themed, appearance)
+}
+
+/// The panel's footer and compact credit line land inside the vendored
+/// #LicenseNotice block, below the AGPL line: it is the one place the page already
+/// reserves for a byline, so nothing new has to be positioned. The div holds no
+/// nested div, so the first close after the id is its own.
+fn apply_notice(html: &str, appearance: Option<&Appearance>) -> String {
+    let Some(row) = appearance else {
+        return html.to_string();
+    };
+    let footer = present(row.footer_text.as_deref());
+    let credits = present(row.credits_text.as_deref());
+    if footer.is_none() && credits.is_none() {
+        return html.to_string();
+    }
+    let Some(anchor) = html.find("id=\"LicenseNotice\"") else {
+        return html.to_string();
+    };
+    let Some(close) = html[anchor..].find("</div>") else {
+        return html.to_string();
+    };
+    let mut block = String::new();
+    for (id, text) in [("ranking-footer", footer), ("ranking-credits", credits)] {
+        if let Some(text) = text {
+            block.push_str(&format!("<div id=\"{id}\">{}</div>", escape_html(text)));
+        }
+    }
+    let position = anchor + close;
+    let mut rendered = String::with_capacity(html.len() + block.len());
+    rendered.push_str(&html[..position]);
+    rendered.push_str(&block);
+    rendered.push_str(&html[position..]);
+    rendered
+}
+
+fn present(value: Option<&str>) -> Option<&str> {
+    value.filter(|text| !text.trim().is_empty())
 }
 
 fn apply_title(html: &str, title: Option<&str>) -> String {
