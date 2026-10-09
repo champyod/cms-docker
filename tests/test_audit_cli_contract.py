@@ -14,7 +14,7 @@ from pathlib import Path
 
 ROOT: Path = Path(__file__).resolve().parent.parent
 AUDIT: Path = ROOT / "scripts" / "__regression_audit.py"
-SECTION_HEAD: str = "# ---------- E. CLI-contract audit ----------"
+SECTION_HEAD: str = "# ---------- G. CLI-contract audit ----------"
 SECTION_TAIL: str = "print()\nif issues:"
 
 
