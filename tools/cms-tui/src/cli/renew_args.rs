@@ -4,17 +4,19 @@
 //! `cli::setup_args`: that file is about `setup`'s flags, and the two payloads together
 //! are wider than one file should be.
 //!
-//! WHY three of the groups are flattened in from `setup_args` instead of being declared
-//! here: retry and the run switches are the same flags on both verbs, and the script's
+//! WHY two of the groups are flattened in from `setup_args` instead of being declared
+//! here: retry and the renewal timer are the same flags on both verbs, and the script's
 //! own help groups them as shared. Declaring a second copy would be free to drift.
-//! The two groups below are renew-specific precisely because `setup`'s counterparts carry
-//! a flag renew must never accept — `--yes` prompts for optional features that
-//! `cmd_renew` does not offer, and `--auto-renew` is how a *setup* run triggers a
-//! renewal, which on `renew` would ask for the thing the verb is already doing.
+//! The three groups below are renew-specific precisely because `setup`'s counterparts
+//! carry a flag renew must never accept — `--yes` prompts for optional features that
+//! `cmd_renew` does not offer, `--auto-renew` is how a *setup* run triggers a renewal,
+//! which on `renew` would ask for the thing the verb is already doing, and `--force` is
+//! answered by `renew`'s own default: `build_renew_flags` passes `--force-renewal`
+//! unless `--due` withholds it, so renew force-renews without being asked.
 
 use clap::Args;
 
-use super::setup_args::{DomainRetryArgs, DomainRunArgs, DomainTimerArgs};
+use super::setup_args::{DomainRetryArgs, DomainTimerArgs};
 
 /// Whether the run acts on the certificate or only previews it.
 #[derive(Args, Clone, Copy, Debug, Default)]
@@ -22,6 +24,23 @@ pub struct DomainRenewExecutionArgs {
     /// Actually renew; without it the script prints a dry-run line and returns.
     #[arg(long, default_value_t = false)]
     pub apply: bool,
+}
+
+/// How the renewal itself runs, as opposed to what it renews.
+///
+/// WHY this is not [`super::setup_args::DomainRunArgs`] with one field left off: that
+/// struct is the shared group three verbs flatten, so a flag dropped from it would drop
+/// from all of them. Splitting the group keeps `setup`'s `--force` intact and still makes
+/// the omission here structural — `renew` has no field to carry the flag, so the encoder
+/// cannot emit it even if a caller asks.
+#[derive(Args, Clone, Copy, Debug, Default)]
+pub struct DomainRenewRunArgs {
+    /// Use the Let's Encrypt test CA.
+    #[arg(long, default_value_t = false)]
+    pub staging: bool,
+    /// Hold a flock so overlapping renewals cannot collide.
+    #[arg(long, default_value_t = false)]
+    pub lock: bool,
 }
 
 /// What happens to the certificate store around the renewal.
@@ -106,7 +125,7 @@ pub struct DomainRenewArgs {
     #[command(flatten)]
     pub store: DomainRenewStoreArgs,
     #[command(flatten)]
-    pub run: DomainRunArgs,
+    pub run: DomainRenewRunArgs,
     #[command(flatten)]
     pub retry: DomainRetryArgs,
     #[command(flatten)]

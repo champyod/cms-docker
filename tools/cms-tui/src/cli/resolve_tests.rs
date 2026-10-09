@@ -213,7 +213,6 @@ fn renew_forwards_every_flag_the_script_parses() {
         "--retry-interval",
         "30",
         "--staging",
-        "--force",
         "--backup-certs",
         "--lock",
         "--due",
@@ -264,7 +263,6 @@ fn renew_forwards_every_flag_the_script_parses() {
             "30",
             "--due",
             "--staging",
-            "--force",
             "--backup-certs",
             "--lock",
             "--apply",
@@ -312,6 +310,33 @@ fn renew_cannot_name_a_setup_scope() {
     let (_, args) = parse(&["cms", "domain", "renew", "--due", "--apply"]).expect("resolves");
     for flag in ["--cert-only", "--proxy-only", "--install-timer"] {
         assert!(!args.iter().any(|arg| arg == flag), "{flag} came back");
+    }
+}
+
+// WHY clap has to refuse it rather than drop it: `build_renew_flags` passes
+// `--force-renewal` unless `--due` withholds it, so renew already force-renews and the
+// flag could only tell the operator they had asked for something they were already getting.
+// An accepted-then-ignored flag leaves them believing the run differed when it did not.
+#[test]
+fn renew_refuses_force_because_it_force_renews_by_default() {
+    let parsed =
+        <crate::Args as clap::Parser>::try_parse_from(["cms", "domain", "renew", "--force"]);
+    assert!(
+        parsed.is_err(),
+        "renew accepted --force, which it already honours unconditionally"
+    );
+}
+
+// WHY setup, cert and proxy are named: they share the run-args group renew gave up, so
+// splitting that group is the change that could silently take `--force` from them too.
+#[test]
+fn the_verbs_that_issue_keep_force() {
+    for verb in ["setup", "cert", "proxy"] {
+        let (_, args) = parse(&["cms", "domain", verb, "--force"]).expect("resolves");
+        assert!(
+            args.iter().any(|arg| arg == "--force"),
+            "{verb} dropped --force"
+        );
     }
 }
 

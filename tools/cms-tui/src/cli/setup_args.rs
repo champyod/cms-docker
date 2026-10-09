@@ -17,8 +17,10 @@
 //! one it cannot honour.
 //!
 //! WHY [`DomainRetryArgs`], [`DomainRunArgs`] and [`DomainTimerArgs`] are not private to
-//! this file: `cli::renew_args` flattens the same three groups into the `renew` payload,
-//! because the script offers the same flags on both verbs.
+//! this file: [`crate::cli::renew_args`] flattens the retry and timer groups into the
+//! `renew` payload too, because the script offers the same flags on both verbs. It
+//! deliberately flattens neither [`DomainRunArgs`] nor the rest — each of the groups it
+//! replaces there carries a flag renew must never accept, `--force` among them.
 
 use clap::Args;
 

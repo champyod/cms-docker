@@ -8,12 +8,26 @@
 //! put flags on the wire that the renew path parses and then ignores — the operator
 //! would have typed `--auto-renew` on a verb whose entire job is the renewal.
 //!
-//! WHY `DomainRetryPolicy`, `retry_args` and `DomainSwitches` are imported rather than
-//! redeclared: the script's own help heads the retry group "Retry options (setup,
-//! renew)", and the run switches are the same three in both verbs. A second copy is
-//! free to drift.
+//! WHY [`DomainRetryPolicy`] and `retry_args` are imported rather than redeclared: the
+//! script's own help heads the retry group "Retry options (setup, renew)". A second copy
+//! is free to drift. The run switches are the exception — see [`DomainRenewSwitches`],
+//! which exists precisely because renew does not accept the same three.
 
-use crate::core::domain_setup::{retry_args, DomainRetryPolicy, DomainSwitches};
+use crate::core::domain_setup::{retry_args, DomainRetryPolicy};
+
+/// The run switches `renew` shares with `setup`, minus the one it answers by default.
+///
+/// WHY this is not [`crate::core::domain_setup::DomainSwitches`]: that struct carries
+/// `--force`, and renew force-renews whether or not the operator asks, so the field would
+/// be a value the encoder could only ignore. Making the omission structural here means no
+/// renew request can carry a flag that changes nothing.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DomainRenewSwitches {
+    /// Passes `--staging` (the untrusted Let's Encrypt test CA).
+    pub is_staging: bool,
+    /// Passes `--lock` so a flock serialises overlapping renewals.
+    pub is_lock: bool,
+}
 
 /// Every value `scripts/__domain.sh renew` accepts, before it becomes argv.
 ///
@@ -44,8 +58,8 @@ pub struct DomainRenewRequest {
     pub acme_client: String,
     /// `--tls-address`; blank leaves `ACME_TLS_ALPN_ADDRESS` in force.
     pub tls_address: String,
-    /// The three switches that change how the run itself behaves, shared with `setup`.
-    pub switches: DomainSwitches,
+    /// The run switches, shared with `setup` except for the one renew answers by default.
+    pub switches: DomainRenewSwitches,
     /// The retry controls, as one policy.
     pub retry: DomainRetryPolicy,
     pub deploy_hook: String,
@@ -104,15 +118,16 @@ fn opt_str(value: &str) -> Option<String> {
 
 /// The flag-only flags, emitted in the order the CLI has always emitted them.
 ///
-/// WHY `--due` leads: it is the one choice that decides what gets renewed at all, and
-/// `build_renew_flags` reads `RENEW_DUE_ONLY` as the switch that withholds
-/// `--force-renewal`. `--force` stays separate because the renew path never reads
-/// `FORCE_RENEWAL` — `build_renew_flags` is the only builder that builds `RENEW_FLAGS`
-/// and it does not consult it — so the two are not halves of one choice.
-const BOOL_FLAGS: [(&str, BoolFlagFn); 5] = [
+/// WHY `--due` leads and `--force` is absent: `build_renew_flags` adds `--force-renewal`
+/// unless `RENEW_DUE_ONLY` is set, so `renew` force-renews by default and `--due` is the
+/// one switch that withholds that. A `--force` here would name a choice the verb has
+/// already made — and because `--due` overrides the default, it could only ever have meant
+/// "force despite `--due`", which is a second spelling of the flag's own absence rather than
+/// a fact about this verb. `--force` stays on `setup`/`cert`, where `FORCE_RENEWAL` is
+/// actually read by `build_certbot_flags`.
+const BOOL_FLAGS: [(&str, BoolFlagFn); 4] = [
     ("--due", |r| r.is_due),
     ("--staging", |r| r.switches.is_staging),
-    ("--force", |r| r.switches.is_force),
     ("--backup-certs", |r| r.is_backup_certs),
     ("--lock", |r| r.switches.is_lock),
 ];

@@ -336,6 +336,8 @@ Extended options:
   --deploy-hook <command>     Run <command> after a successful issue or renewal
   --staging                   Use the Let's Encrypt staging CA (untrusted certs)
   --force                     Re-issue even when the current certificate is valid
+                              (setup, cert). renew always reissues unless --due
+                              narrows it, so it takes no --force
   --due                       Renew only what the CA reports as due instead of
                               reissuing now — what a scheduler passes
   --wait-port80 <seconds>     Wait for HTTP :80 to answer before issuing
@@ -1835,7 +1837,15 @@ while [[ $# -gt 0 ]]; do
     --extra-domains) EXTRA_DOMAINS="$2"; shift 2 ;;
     --deploy-hook) DEPLOY_HOOK="$2"; shift 2 ;;
     --staging)    LE_STAGING=1; shift ;;
-    --force)      FORCE_RENEWAL=1; shift ;;
+    --force)
+      # WHY a refusal rather than a silent no-op: build_renew_flags already adds
+      # --force-renewal unless --due withholds it, so on renew this flag could never
+      # change the run. Saying so, and naming the flag that does, is the difference
+      # between an operator who knows what happened and one who thinks they forced it.
+      if [[ "$cmd" == "renew" ]]; then
+        log_die "--force is not accepted on renew: renew force-renews by default. Use --due to renew only what the CA reports as due instead, or drop --force — a plain renew already reissues now" 2
+      fi
+      FORCE_RENEWAL=1; shift ;;
     --due)        RENEW_DUE_ONLY=1; shift ;;
     --wait-port80) WAIT_PORT80_TIMEOUT="$2"; shift 2 ;;
     --backup-certs) BACKUP_CERTS=1; shift ;;

@@ -1,8 +1,8 @@
 //! Encoder assertions for `__domain.sh renew`, kept out of the encoder file so both
 //! stay readable.
 
-use super::{domain_renew_args, DomainRenewRequest};
-use crate::core::domain_setup::{DomainRetryPolicy, DomainSwitches};
+use super::{domain_renew_args, DomainRenewRequest, DomainRenewSwitches};
+use crate::core::domain_setup::DomainRetryPolicy;
 
 /// The baseline every caller starts from: `cms domain renew` with no flags.
 fn base() -> DomainRenewRequest {
@@ -41,9 +41,8 @@ fn a_fully_specified_request_emits_every_value_flag_in_script_order_and_nothing_
         is_due: true,
         is_apply: true,
         is_backup_certs: true,
-        switches: DomainSwitches {
+        switches: DomainRenewSwitches {
             is_staging: true,
-            is_force: true,
             is_lock: true,
         },
         retry: DomainRetryPolicy {
@@ -97,7 +96,6 @@ fn a_fully_specified_request_emits_every_value_flag_in_script_order_and_nothing_
             "10",
             "--due",
             "--staging",
-            "--force",
             "--backup-certs",
             "--lock",
             "--apply",
@@ -114,6 +112,33 @@ fn a_fully_specified_request_emits_every_value_flag_in_script_order_and_nothing_
         assert!(
             !args.iter().any(|arg| arg == forbidden),
             "{forbidden} leaked"
+        );
+    }
+}
+
+// WHY this is pinned rather than left to the exact-argv test above: a maximal request sets
+// every field it has, so it can only prove the field is gone from the struct. This one
+// asserts the property the removal exists for — no renew request, however built, can put
+// `--force` on the wire, because renew force-renews unless `--due` withholds it and a
+// second switch to say so could only disagree with the default.
+#[test]
+fn no_renew_request_can_emit_force() {
+    for renew in [
+        base(),
+        DomainRenewRequest {
+            is_due: true,
+            is_apply: true,
+            is_backup_certs: true,
+            switches: DomainRenewSwitches {
+                is_staging: true,
+                is_lock: true,
+            },
+            ..base()
+        },
+    ] {
+        assert!(
+            !domain_renew_args(&renew).iter().any(|arg| arg == "--force"),
+            "renew emitted --force for {renew:?}"
         );
     }
 }
@@ -204,9 +229,8 @@ fn no_retry_related_argv_at_all_when_retry_is_off() {
 #[test]
 fn the_boolean_flags_keep_their_established_order() {
     let renew = DomainRenewRequest {
-        switches: DomainSwitches {
+        switches: DomainRenewSwitches {
             is_staging: true,
-            is_force: true,
             is_lock: true,
         },
         is_due: true,
@@ -220,7 +244,6 @@ fn the_boolean_flags_keep_their_established_order() {
             "renew",
             "--due",
             "--staging",
-            "--force",
             "--backup-certs",
             "--lock",
             "--apply",

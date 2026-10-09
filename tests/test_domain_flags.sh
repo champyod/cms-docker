@@ -128,6 +128,40 @@ else
   no "--proxy-only was removed"
 fi
 
+echo "renew force-renews by default, so it has no --force to accept"
+dir="$(sandbox)"
+out="$(run_in "${dir}" renew --dry-run --force)"; rc=$?
+# WHY both greps and the exit code: a refusal that names only the flag leaves the operator
+# with no alternative, and one that names only --due reads as though --due were the thing
+# being rejected.
+if (( rc != 0 )) && grep -q -- '--force' <<<"${out}" && grep -q -- '--due' <<<"${out}"; then
+  ok "renew refuses --force and names --due"
+else
+  no "renew refuses --force and names --due"
+fi
+
+# WHY both paths still run: removing the flag must not remove the verb. renew forces by
+# default and --due is what withholds that, so each half of the real choice survives.
+# shellcheck disable=SC2086
+for pair in "--dry-run" "--dry-run --due"; do
+  # shellcheck disable=SC2086
+  if grep -q 'Certificate renewal' <<<"$(run_in "${dir}" renew ${pair})"; then
+    ok "renew ${pair} still runs"
+  else
+    no "renew ${pair} still runs"
+  fi
+done
+
+# WHY setup and cert are here and renew alone is not enough: they share the run-args group
+# renew gave up, so taking --force with them is the regression this guards.
+for verb in setup cert; do
+  if grep -q 'unknown option' <<<"$(run_in "${dir}" "${verb}" --dry-run --force)"; then
+    no "${verb} still accepts --force"
+  else
+    ok "${verb} still accepts --force"
+  fi
+done
+
 echo "each verb touches only its own half"
 dir="$(sandbox)"
 cert_out="$(run_in "${dir}" cert --dry-run)"

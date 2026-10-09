@@ -1,5 +1,5 @@
 use crate::core::dispatch::DispatchKey;
-use crate::core::domain_renew::{domain_renew_args, DomainRenewRequest};
+use crate::core::domain_renew::{domain_renew_args, DomainRenewRequest, DomainRenewSwitches};
 use crate::core::domain_setup::{
     domain_setup_args, scope_from, DomainRetryPolicy, DomainSetupRequest, DomainStorePolicy,
     DomainSwitches,
@@ -142,9 +142,8 @@ fn domain_renew_from(args: &DomainRenewArgs) -> DomainRenewRequest {
         acme_server: clone_or_empty(args.acme.acme_server.as_ref()),
         acme_client: clone_or_empty(args.acme.acme_client.as_ref()),
         tls_address: clone_or_empty(args.acme.tls_address.as_ref()),
-        switches: DomainSwitches {
+        switches: DomainRenewSwitches {
             is_staging: args.run.staging,
-            is_force: args.run.force,
             is_lock: args.run.lock,
         },
         retry: DomainRetryPolicy {
