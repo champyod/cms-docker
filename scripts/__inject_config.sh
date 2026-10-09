@@ -120,8 +120,7 @@ text = config_path.read_text()
 
 def toml_escape(v): return v.replace("\\", "\\\\").replace('"', '\\"')
 
-# Section-scoped: keys like num_proxies_used exist in multiple sections, so a
-# global sub would cross-contaminate them. Appends the key if absent.
+# Section-scoped so shared keys are not cross-contaminated; creates the section when absent.
 def set_section_key(text, section, key, value):
     lines = text.splitlines()
     out, in_section, replaced = [], False, False
@@ -140,6 +139,11 @@ def set_section_key(text, section, key, value):
             continue
         out.append(line)
     if in_section and not replaced:
+        out.append(f'{key} = {value}')
+    elif not replaced:
+        if out and out[-1] != '':
+            out.append('')
+        out.append(f'[{section}]')
         out.append(f'{key} = {value}')
     return "\n".join(out)
 
