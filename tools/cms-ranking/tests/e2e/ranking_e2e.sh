@@ -122,6 +122,39 @@ events_follow_a_write() {
     pass "a write reaches an open event stream"
 }
 
+/**
+ * A console account, seeded as plaintext instead of a hash: the password format supports
+ * both, seeding a hash would need a hashing tool this script does not require, and the
+ * plaintext branch is the one a fresh deployment starts with.
+ */
+seed_console_user() {
+    psql "${DATABASE_URL}" -q -c "DELETE FROM ranking_console_users WHERE username = 'e2e'" >/dev/null
+    psql "${DATABASE_URL}" -q -c "INSERT INTO ranking_console_users (username, password) VALUES ('e2e', 'plaintext:e2e-secret')" >/dev/null
+    pass "the console account is seeded"
+}
+
+console_login() {
+    local jar code
+    jar="$(mktemp)"
+    code="$(curl -sS -o /dev/null -w "%{http_code}" -c "${jar}" \
+        -d "username=e2e" -d "password=e2e-secret" "${BASE}/login")"
+    [[ "${code}" == "303" || "${code}" == "307" ]] || fail "a correct password should be accepted, got ${code}"
+    grep -q ranking_session "${jar}" || fail "an accepted login set no session cookie"
+    code="$(curl -sS -o /dev/null -w "%{http_code}" -b "${jar}" "${BASE}/scores")"
+    [[ "${code}" == "200" ]] || fail "the session should open the scoreboard, got ${code}"
+    rm -f "${jar}"
+    pass "a seeded console account signs in and reaches the scoreboard"
+}
+
+console_login_refuses_a_wrong_password() {
+    local headers
+    headers="$(curl -sS -D - -o /dev/null -d "username=e2e" -d "password=wrong" "${BASE}/login")"
+    if grep -qi "^set-cookie:.*ranking_session" <<<"${headers}"; then
+        fail "a refused login handed out a session"
+    fi
+    pass "a wrong password is refused and sets no session"
+}
+
 protected_mode_redirects() {
     psql "${DATABASE_URL}" -q -c \
         "INSERT INTO ranking_settings (id, access_mode) VALUES (1, 'protected') ON CONFLICT (id) DO UPDATE SET access_mode = 'protected'" \
@@ -129,6 +162,8 @@ protected_mode_redirects() {
     local code
     code="$(curl -sS -o /dev/null -w "%{http_code}" "${BASE}/")"
     [[ "${code}" == "303" || "${code}" == "307" ]] || fail "expected a redirect to the sign-in page, got ${code}"
+    console_login
+    console_login_refuses_a_wrong_password
     psql "${DATABASE_URL}" -q -c "UPDATE ranking_settings SET access_mode = 'public' WHERE id = 1" >/dev/null
     pass "protected mode sends an anonymous visitor to the sign-in page"
 }
@@ -141,6 +176,7 @@ main() {
     compare_to_oracle "/scores" "scores"
     compare_to_oracle "/history" "history"
     events_follow_a_write
+    seed_console_user
     protected_mode_redirects
     printf "\nacceptance rehearsal passed\n"
 }
