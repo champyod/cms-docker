@@ -56,6 +56,7 @@ export const DEFAULT_GROUPS: readonly GroupDefinition[] = [
       'ranking:read',
       'ranking:snapshot',
       'ranking:appearance',
+      'ranking:override',
       'testcase:list',
       'testcase:read',
       'user:list',
