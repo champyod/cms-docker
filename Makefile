@@ -23,9 +23,22 @@ COMPOSE_FLAGS = $(foreach f,$(COMPOSE_FILES),-f $(f))
 # targets keep the stack's own profile so teardown never removes dependencies.
 ADMIN_UP_PROFILES   := --profile core --profile admin
 CONTEST_UP_PROFILES := --profile core --profile contest
+# WHY monitor carries --profile core: the monitor profile is not just the monitor.
+# It also holds cms-scheduler, whose depends_on is `database: service_healthy`, and
+# database sits behind profiles: [core]. Compose validates the whole project before
+# starting anything and rejects a depends_on whose target is not in the enabled model,
+# so `--profile monitor` alone failed with `service "scheduler" depends on undefined
+# service "database": invalid compose project` and nothing in the profile ever started.
+# That left every monitor setting (BACKUP_MAX_*, thresholds, retention, webhook target)
+# frozen at whatever the container was first created with.
+MONITOR_UP_PROFILES := --profile core --profile monitor
 # The contest front door is its own profile so `make contest` never publishes host
 # 80/443. It depends on the contest services, so starting it activates those too.
-PROXY_UP_PROFILES   := --profile core --profile contest --profile proxy
+# WHY --profile admin: nginx-proxy's depends_on lists admin-panel-next and
+# ranking-web-server, both gated behind profiles: [admin], and Compose rejects a project
+# whose depends_on target is missing from the enabled model. Without admin enabled the
+# proxy target failed validation the same way `make infra` did.
+PROXY_UP_PROFILES   := --profile core --profile contest --profile proxy --profile admin
 
 # Additive stacks that publish host ports the default COMPOSE_FILES must never
 # pull in implicitly. WHY separate: docker-compose.domain.yml and
@@ -190,11 +203,11 @@ infra: expose
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
 	if [ "$$DEPLOY_TYPE" = "img" ]; then \
 		echo "DEPLOYMENT_TYPE=img → pulling monitor images..."; \
-		$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile monitor pull || true; \
-		$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile monitor up -d --no-build; \
+		$(COMPOSE_CMD) $(COMPOSE_FLAGS) $(MONITOR_UP_PROFILES) pull || true; \
+		$(COMPOSE_CMD) $(COMPOSE_FLAGS) $(MONITOR_UP_PROFILES) up -d --no-build; \
 	else \
 		echo "DEPLOYMENT_TYPE=src → building monitor images..."; \
-		$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile monitor up -d --build; \
+		$(COMPOSE_CMD) $(COMPOSE_FLAGS) $(MONITOR_UP_PROFILES) up -d --build; \
 	fi
 	@echo "Infra (monitor) profile started."
 
@@ -270,14 +283,14 @@ admin-clean:
 	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile admin down -v $(ADMIN_SERVICES)
 
 contest-stop:
-	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile contest --profile proxy stop $(CONTEST_SERVICES)
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile contest --profile proxy --profile admin stop $(CONTEST_SERVICES)
 
 contest-down:
 	@echo "[deprecated] use 'make contest-stop' for stop or 'docker compose --profile core --profile contest down <services>' for down — contest-down runs a scoped down" >&2
-	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile contest --profile proxy down $(CONTEST_SERVICES)
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile contest --profile proxy --profile admin down $(CONTEST_SERVICES)
 
 contest-clean:
-	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile contest --profile proxy down -v $(CONTEST_SERVICES)
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile contest --profile proxy --profile admin down -v $(CONTEST_SERVICES)
 
 # The contest front door has its own target because it is not part of `make contest`.
 # It publishes nothing on the host until NGINX_BIND_IP is set: the expose override then
@@ -298,11 +311,17 @@ worker-stop:
 worker-clean:
 	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile worker down -v
 
+# WHY the dependency profile and the service list both appear, as in admin-stop above:
+# --profile core is what makes the project graph validate, and the explicit service
+# list is what keeps the teardown from reaching into core now that core is enabled.
+# Without the list, `down` would act on every service the enabled profiles cover.
+MONITOR_SERVICES := monitor scheduler
+
 infra-stop:
-	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile monitor down
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile monitor down $(MONITOR_SERVICES)
 
 infra-clean:
-	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile monitor down -v
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile monitor down -v $(MONITOR_SERVICES)
 
 # Scoped by service name so a domain teardown never reaches into core/contest,
 # whose containers share the project. WHY an explicit list: the domain compose
@@ -400,9 +419,9 @@ pull-worker:
 	if [ "$$pull_failed" -eq 0 ]; then echo "Pull complete."; else echo "Pull finished WITH FAILURES (see above)" >&2; fi
 
 pull-infra:
-	@echo "[deprecated] use 'docker compose --profile monitor pull'" >&2
+	@echo "[deprecated] use 'docker compose $(MONITOR_UP_PROFILES) pull'" >&2
 	@pull_failed=0; \
-	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile monitor pull || { echo "[WARN] pull failed for monitor — continuing with local images (may be stale)" >&2; pull_failed=1; }; \
+	$(COMPOSE_CMD) $(COMPOSE_FLAGS) $(MONITOR_UP_PROFILES) pull || { echo "[WARN] pull failed for monitor — continuing with local images (may be stale)" >&2; pull_failed=1; }; \
 	if [ "$$pull_failed" -eq 0 ]; then echo "Pull complete."; else echo "Pull finished WITH FAILURES (see above)" >&2; fi
 
 admin-dev:
