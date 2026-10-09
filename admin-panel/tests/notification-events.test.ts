@@ -66,12 +66,22 @@ describe('notification events', () => {
     // edit is the same shape: one permission covers three verbs, because creating,
     // changing and removing a schedule are all gated by backup:schedule (or
     // backup:delete), so the verbs name the action rather than a key.
+    // Why the security verbs: each one names the action it performed (WAF config
+    // write, WAF recreate, unban queue, lockout release, renewal queue) while the
+    // gate is the surface key — waf:config, waf:control, ban:unban, lockout:unlock
+    // or tls:renew — so no single verb maps onto a permission key.
     const auditOnlyVerbs = new Set([
       'admin_groups:set',
       'override:clear',
       'backup_schedule:create',
       'backup_schedule:update',
       'backup_schedule:delete',
+      'waf:config:update',
+      'waf:control:apply',
+      'waf:control:restart',
+      'ban:unban:queue',
+      'lockout:unlock',
+      'tls:renew:queue',
     ]);
     for (const verb of CRITICAL_AUDIT_VERBS) {
       expect(keys.has(verb) || auditOnlyVerbs.has(verb)).toBe(true);

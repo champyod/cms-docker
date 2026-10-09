@@ -1,6 +1,6 @@
 import { PERMISSION_REGISTRY, type GroupDefinition } from './permission-registry';
 
-// Why a separate file: the eight seeded groups are ~230 lines on their own.
+// Why a separate file: the nine seeded groups are ~260 lines on their own.
 // Registry keeps keys + system-owned docs; this file keeps grants. Importers
 // reference this path directly so there is no registry↔groups cycle.
 export type { GroupDefinition };
@@ -13,11 +13,11 @@ export const DEFAULT_GROUPS: readonly GroupDefinition[] = [
   {
     name: 'Superadmin',
     description: 'Unrestricted access to every permission in the registry.',
-    // Why backup:* excluded: backup rights are manual-grant only (per-admin
-    // override or direct link), never inherited — not even here. The engine
-    // carve-out below keeps the all:all expansion from re-granting them.
+    // Why only backup:schedule is excluded: the rest of the backup family is an
+    // explicit Superadmin grant, while scheduling a recurring backup stays a
+    // deliberate per-admin act — the engine carve-out keeps it out of all:all.
     permissions: PERMISSION_REGISTRY.map((definition) => definition.key).filter(
-      (key) => !key.startsWith('backup:'),
+      (key) => key !== 'backup:schedule',
     ),
   },
   {
@@ -224,6 +224,22 @@ export const DEFAULT_GROUPS: readonly GroupDefinition[] = [
       'resource:update',
       // No backup:* grants: backup rights are manual-grant only, so no
       // default group carries them. Re-seed prunes stale backup links.
+    ],
+  },
+  {
+    name: 'Security Admin',
+    description: 'Runs the security surface: WAF, blocked addresses, lockouts and certificates.',
+    permissions: [
+      'security:read',
+      'waf:read',
+      'waf:config',
+      'waf:control',
+      'ban:read',
+      'ban:unban',
+      'lockout:read',
+      'lockout:unlock',
+      'tls:read',
+      'tls:renew',
     ],
   },
   {

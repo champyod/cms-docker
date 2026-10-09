@@ -266,13 +266,10 @@ describe('permission coverage', () => {
     for (const keys of demandedByEntry.values()) for (const key of keys) enforced.add(key);
     const granted = new Set<string>();
     for (const group of DEFAULT_GROUPS) for (const key of group.permissions) granted.add(key);
-    // Why backup:* exempt: manual-grant-only by design (per-person override or
-    // direct link), never inherited — not even Superadmin holds them. The
-    // exemption is prefix-wide so the destructive and data-writing backup keys
-    // (restore, schedule, settle, delete) stay manual-only too, rather than each
-    // needing its own carve-out as the subsystem grows.
+    // Why backup:schedule exempt: manual-grant-only by design, never inherited —
+    // not even Superadmin holds it, and the engine carve-out keeps it out of all:all.
     const unreachable = [...enforced].filter(
-      (key) => key !== 'all:all' && !key.startsWith('backup:') && !granted.has(key),
+      (key) => key !== 'all:all' && key !== 'backup:schedule' && !granted.has(key),
     );
     expect(unreachable).toEqual([]);
   });
@@ -324,10 +321,10 @@ describe('permission coverage', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('expands all:all safely with deny-wins and no backup grant', () => {
+  it('expands all:all safely with deny-wins and no backup:schedule grant', () => {
     const effective = resolveEffectivePermissions(['all:all'], []);
     for (const d of PERMISSION_REGISTRY) {
-      if (d.key.startsWith('backup:')) {
+      if (d.key === 'backup:schedule') {
         expect(hasEffectivePermission(effective, d.key)).toBe(false);
       } else {
         expect(hasEffectivePermission(effective, d.key)).toBe(true);

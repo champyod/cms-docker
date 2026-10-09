@@ -26,8 +26,11 @@ import { buildRestartCommand } from '@/lib/restart-planner';
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const FILES = '-f docker-compose.yml';
 
-/** The stacks whose containers are the deployment's ingress and key boundary. */
-const INGRESS_FILES: readonly string[] = ['docker-compose.domain.yml', 'docker-compose.waf.yml'];
+/** The stack whose containers are the deployment's ingress and key boundary. */
+const INGRESS_FILES: readonly string[] = ['docker-compose.domain.yml'];
+
+/** The WAF stack, which the security surface recreates through its own scoped invocation. */
+const WAF_FILE = 'docker-compose.waf.yml';
 
 const readCompose = (file: string): string => fs.readFileSync(path.join(REPO_ROOT, file), 'utf-8');
 
@@ -66,9 +69,18 @@ describe('the protected name list matches the ingress stacks it claims to cover'
       .flatMap((file) => [...serviceContainerNames(readCompose(file)).values()])
       .sort();
 
-    // Why equality and not "contains": a container added to the domain or WAF stack is unprotected
+    // Why equality and not "contains": a container added to the domain stack is unprotected
     // until someone remembers the list, so the omission has to fail a test rather than a review.
     expect(declared).toEqual([...PROTECTED_CONTAINER_NAMES].sort());
+  });
+
+  it('leaves the WAF out of the list, because the panel now controls it on its own keys', (): void => {
+    const waf = [...serviceContainerNames(readCompose(WAF_FILE)).values()];
+
+    expect(waf).toEqual(['grader-waf']);
+    for (const name of waf) {
+      expect(PROTECTED_CONTAINER_NAMES).not.toContain(name);
+    }
   });
 });
 

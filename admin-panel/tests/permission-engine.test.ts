@@ -178,9 +178,11 @@ describe('PERMISSION_REGISTRY', () => {
   // Why pinned: MODULES / DOMAIN_VERBS edits must be deliberate, not silent.
   // 200 + 5 RESERVED keys, minus 5 retired, plus 7 backup keys (list, read, create,
   // restore, schedule, settle, delete), plus 2 lane keys, plus 2 platform-boundary
-  // keys (waf:control, domain:control) = 211.
-  it('holds exactly 211 keys', () => {
-    expect(PERMISSION_REGISTRY.length).toBe(211);
+  // keys (waf:control, domain:control), plus 9 security-surface keys
+  // (security:read, waf:read, waf:config, ban:read, ban:unban, lockout:read,
+  // lockout:unlock, tls:read, tls:renew) = 220.
+  it('holds exactly 220 keys', () => {
+    expect(PERMISSION_REGISTRY.length).toBe(220);
   });
 
   it.each(PERMISSION_REGISTRY)('entry $key equals ${module}:${verb}', (definition) => {
@@ -213,8 +215,8 @@ describe('PERMISSION_REGISTRY', () => {
 describe('DEFAULT_GROUPS', () => {
   const registryKeys = new Set(PERMISSION_REGISTRY.map((definition) => definition.key));
 
-  it('defines exactly eight groups with unique names', () => {
-    expect(DEFAULT_GROUPS).toHaveLength(8);
+  it('defines exactly nine groups with unique names', () => {
+    expect(DEFAULT_GROUPS).toHaveLength(9);
     const names = DEFAULT_GROUPS.map((group) => group.name);
     expect(new Set(names).size).toBe(names.length);
   });
@@ -224,21 +226,42 @@ describe('DEFAULT_GROUPS', () => {
     expect(missing).toEqual([]);
   });
 
-  it('grants Superadmin every registry key except backup:*', () => {
+  it('grants Superadmin every registry key except backup:schedule', () => {
     const superadmin = DEFAULT_GROUPS.find((group) => group.name === 'Superadmin');
     expect(superadmin).toBeDefined();
-    const expected = new Set([...registryKeys].filter((key) => !key.startsWith('backup:')));
+    const expected = new Set([...registryKeys].filter((key) => key !== 'backup:schedule'));
     expect(new Set(superadmin?.permissions ?? [])).toEqual(expected);
   });
 
-  it('never expands all:all into backup:*', () => {
+  it('never expands all:all into backup:schedule', () => {
     const effective = resolveEffectivePermissions(['all:all'], []);
-    // Why the whole backup family, not a sample: destructive and data-writing keys
-    // (restore, schedule, settle, delete) are exactly the ones a wildcard must not reach.
-    for (const key of ['backup:create', 'backup:list', 'backup:restore', 'backup:schedule', 'backup:settle', 'backup:delete']) {
-      expect(hasEffectivePermission(effective, key)).toBe(false);
+    // Why only schedule stays out: it is the one backup key Superadmin does not hold,
+    // so a wildcard that reached it would schedule recurring backups silently.
+    expect(hasEffectivePermission(effective, 'backup:schedule')).toBe(false);
+    for (const key of ['backup:create', 'backup:list', 'backup:restore', 'backup:settle', 'backup:delete']) {
+      expect(hasEffectivePermission(effective, key)).toBe(true);
     }
     expect(hasEffectivePermission(effective, 'contest:list')).toBe(true);
+  });
+
+  it('grants the security surface to Security Admin and to Superadmin', () => {
+    const securityAdmin = DEFAULT_GROUPS.find((group) => group.name === 'Security Admin');
+    expect(securityAdmin?.permissions).toEqual([
+      'security:read',
+      'waf:read',
+      'waf:config',
+      'waf:control',
+      'ban:read',
+      'ban:unban',
+      'lockout:read',
+      'lockout:unlock',
+      'tls:read',
+      'tls:renew',
+    ]);
+    const superadmin = DEFAULT_GROUPS.find((group) => group.name === 'Superadmin');
+    for (const key of securityAdmin?.permissions ?? []) {
+      expect(superadmin?.permissions).toContain(key);
+    }
   });
 
   it('includes the all:all key for Superadmin', () => {
@@ -254,9 +277,11 @@ describe('DEFAULT_GROUPS', () => {
     }
   });
 
-  it('keeps backup:* out of every default group', () => {
+  it('keeps backup:schedule out of every default group', () => {
     for (const group of DEFAULT_GROUPS) {
-      expect(group.permissions.filter((key) => key.startsWith('backup:'))).toEqual([]);
+      expect(group.permissions).not.toContain('backup:schedule');
     }
+    const superadmin = DEFAULT_GROUPS.find((group) => group.name === 'Superadmin');
+    expect(superadmin?.permissions).toContain('backup:restore');
   });
 });

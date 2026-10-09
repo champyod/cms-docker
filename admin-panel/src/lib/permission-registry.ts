@@ -75,12 +75,21 @@ const DOMAIN_VERBS: readonly { module: string; verb: string }[] = [
   { module: 'password', verb: 'reveal' },
   { module: 'container', verb: 'read' },
   { module: 'container', verb: 'control' },
-  // Why these two are minted only to be reserved: the WAF and the TLS/ingress stack are refused
-  // structurally in lib/protected-containers.ts, so no gate can ever read them. Having the keys in
-  // the registry is what lets an operator see "cannot be granted" instead of guessing whether a
-  // missing key means a missing capability or a forgotten one.
+  // waf:control is live: the container guard no longer refuses grader-waf, so a gate reads it.
+  // domain:control stays reserved — the TLS/ingress containers are still refused structurally.
   { module: 'waf', verb: 'control' },
   { module: 'domain', verb: 'control' },
+  // Why per-surface security verbs: one coarse read key could not separate "may lift a block" from
+  // "may reconfigure the WAF", so each surface owns exactly the verbs its actions check.
+  { module: 'security', verb: 'read' },
+  { module: 'waf', verb: 'read' },
+  { module: 'waf', verb: 'config' },
+  { module: 'ban', verb: 'read' },
+  { module: 'ban', verb: 'unban' },
+  { module: 'lockout', verb: 'read' },
+  { module: 'lockout', verb: 'unlock' },
+  { module: 'tls', verb: 'read' },
+  { module: 'tls', verb: 'renew' },
   { module: 'service', verb: 'restart' },
   { module: 'service', verb: 'deploy' },
   { module: 'deployment', verb: 'deploy' },
@@ -88,11 +97,9 @@ const DOMAIN_VERBS: readonly { module: string; verb: string }[] = [
   { module: 'maintenance', verb: 'enable' },
   { module: 'maintenance', verb: 'disable' },
   // Why domain verbs, not a module: the backup subsystem does not map onto CRUD.
-  // Destructive and data-writing paths (restore, schedule, settle, delete) do
-  // exist as actions and are gated, but no group carries any backup key by
-  // default — not even Superadmin, and not through the all:all expansion in
-  // permission-engine. Every one of these arrives only as a manual per-admin
-  // override or direct link, so a backup right is always a deliberate act.
+  // Superadmin carries every backup key except backup:schedule, and the engine
+  // carve-out keeps schedule out of the all:all expansion, so scheduling a
+  // recurring backup always takes a deliberate per-admin grant.
   { module: 'backup', verb: 'list' },
   { module: 'backup', verb: 'read' },
   { module: 'backup', verb: 'create' },
@@ -183,8 +190,7 @@ const RESERVED_KEYS: readonly { key: string; reason: string }[] = [
   { key: 'attachment:update', reason: 'Attachments upsert via the create path; no update path exists.' },
   { key: 'container:create', reason: 'Containers come from compose; no admin create path exists.' },
   { key: 'container:delete', reason: 'Containers come from compose; no admin delete path exists.' },
-  { key: 'waf:control', reason: 'WAF is a platform security boundary; lib/protected-containers.ts refuses it structurally, so no gate reads this key.' },
-  { key: 'domain:control', reason: 'TLS/ingress containers are a platform security boundary; lib/protected-containers.ts refuses them structurally, so no gate reads this key.' },
+  { key: 'domain:control', reason: 'TLS/ingress containers are a platform security boundary; the panel renews through the host agent under tls:renew, so no gate reads this key.' },
   { key: 'deployment:create', reason: 'Deploy operations are spawned by deploy, not created as rows.' },
   { key: 'deployment:update', reason: 'Deploy operations are immutable once spawned.' },
   { key: 'deployment:delete', reason: 'Deploy operations are settled, never deleted via UI.' },

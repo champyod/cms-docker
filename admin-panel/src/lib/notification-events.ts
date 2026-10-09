@@ -19,6 +19,12 @@ export const CRITICAL_AUDIT_VERBS: ReadonlySet<string> = new Set([
   'backup_schedule:create',
   'backup_schedule:update',
   'backup_schedule:delete',
+  'waf:config:update',
+  'waf:control:apply',
+  'waf:control:restart',
+  'ban:unban:queue',
+  'lockout:unlock',
+  'tls:renew:queue',
 ]);
 
 // Sensitive verbs whose FAILURE is also critical (possible break-in attempt).
@@ -27,6 +33,9 @@ const SENSITIVE_FAILURE_VERBS: ReadonlySet<string> = new Set([
   'override:set',
   'admin_groups:set',
   'admin:delete',
+  'waf:config:update',
+  'waf:control:apply',
+  'ban:unban:queue',
 ]);
 
 // Verbs whose every occurrence also pages Discord. Everything else critical
@@ -34,6 +43,9 @@ const SENSITIVE_FAILURE_VERBS: ReadonlySet<string> = new Set([
 export const DISCORD_SENSITIVE_VERBS: ReadonlySet<string> = new Set([
   ...SENSITIVE_FAILURE_VERBS,
   'override:clear',
+  'waf:control:restart',
+  'lockout:unlock',
+  'tls:renew:queue',
 ]);
 
 export const SUBMIT_BURST_PER_MINUTE = 20;

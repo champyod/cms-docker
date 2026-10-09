@@ -473,6 +473,11 @@ services:
       - ./:/repo-root
       - cms-logs:/var/local/log/cms
       - cms-ranking-data:/var/local/lib/cms/ranking:rw
+      # Read-only: the security surface parses grader-waf's ModSecurity audit log
+      # from this shared volume (docker-compose.waf.yml mounts the same one at
+      # /var/log inside the WAF). Never mounted read-write, so the panel cannot
+      # rewrite the evidence it reports.
+      - waf-logs:/var/log/waf:ro
     networks:
       - cms-network
     # WHY: the image runs as the unprivileged node user; this supplementary
@@ -828,3 +833,7 @@ volumes:
   # the one container, so the appendonly data must survive whichever is up.
   redis-rate-limit-data:
     name: cms-redis-rate-limit-data
+  # Same key and name as docker-compose.waf.yml's volume, so a merged WAF project
+  # sees one volume rather than two that name the same directory.
+  waf-logs:
+    name: cms-waf-logs

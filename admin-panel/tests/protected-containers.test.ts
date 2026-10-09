@@ -68,9 +68,9 @@ describe('controlContainer', () => {
   });
 
   it('refuses a protected container and records the refusal', async () => {
-    mockDocker((command) => (isInspect(command) ? { stdout: '/grader-waf\n' } : { stdout: '' }));
+    mockDocker((command) => (isInspect(command) ? { stdout: '/grader-nginx-proxy\n' } : { stdout: '' }));
 
-    const result = await controlContainer('grader-waf', 'stop');
+    const result = await controlContainer('grader-nginx-proxy', 'stop');
 
     expect(result).toEqual({ success: false, error: PROTECTED_CONTAINER_ERROR });
     // Why exactly one call: the inspect is the only docker call — no stop was ever issued.
@@ -78,9 +78,19 @@ describe('controlContainer', () => {
     expect(mocks.exec.mock.calls[0][0]).toContain('inspect');
     expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({
       verb: 'container:control',
-      entityId: 'grader-waf',
+      entityId: 'grader-nginx-proxy',
       result: 'failure',
     }));
+  });
+
+  it('controls the WAF, which the security surface owns through its own keys', async () => {
+    mockDocker((command) => (isInspect(command) ? { stdout: '/grader-waf\n' } : { stdout: 'grader-waf' }));
+
+    const result = await controlContainer('grader-waf', 'stop');
+
+    expect(result).toEqual({ success: true });
+    expect(isProtectedContainerName('grader-waf')).toBe(false);
+    expect(mocks.exec.mock.calls[1][0]).toBe('docker stop grader-waf');
   });
 
   it('still controls an ordinary cms container', async () => {

@@ -76,11 +76,11 @@ export function resolveEffectivePermissions(
   }
 
   // Why: expand all:all into concrete registry keys before applying denies so a per-person deny always wins over the wildcard grant.
-  // Why backup:* skipped: backup rights are manual-grant only and must never
-  // arrive via wildcard — not through Superadmin, not through an override.
+  // Why backup:schedule skipped: scheduling a recurring backup is manual-grant
+  // only and must never arrive via the wildcard, for a Superadmin or an override.
   if (granted.has(ALL_PERMISSION) && !denied.has(ALL_PERMISSION)) {
     for (const definition of PERMISSION_REGISTRY) {
-      if (!definition.key.startsWith('backup:')) granted.add(definition.key);
+      if (definition.key !== 'backup:schedule') granted.add(definition.key);
     }
   } else {
     granted.delete(ALL_PERMISSION);

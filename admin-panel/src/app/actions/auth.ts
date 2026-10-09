@@ -11,8 +11,17 @@ import { getCaptchaEnv, getCaptchaPublicConfig, verifyCaptcha, type CaptchaProvi
 import { prisma } from '@/lib/prisma';
 import { safeAdminSelect, type SafeAdmin } from '@/lib/prisma-selects';
 import { redirect } from '@/lib/redirect';
-import { buildIpBucketKey, clearBucket, isRateLimited, pruneExpiredLoginBuckets, recordFailedAttempt } from '@/lib/auth-rate-limit';
+import {
+  LOGIN_LOCKOUT_MS,
+  buildAccountBucketKey,
+  buildIpBucketKey,
+  clearBucket,
+  isRateLimited,
+  pruneExpiredLoginBuckets,
+  recordFailedAttempt,
+} from '@/lib/auth-rate-limit';
 import { buildCaptchaRequiredState, extractCaptchaToken, isCaptchaRequiredForIp, shouldRequireCaptcha } from '@/lib/auth-captcha-helpers';
+import { recordLoginLockout } from '@/lib/security/lockouts';
 
 const DUMMY_BCRYPT_HASH = '$2a$10$C6UzMDM.H6dfI/f/IKcEeO7ZBpQz0l8Dp5uJHnKzTKmPqR3sWbGyq';
 const PLAINTEXT_PREFIX = 'plaintext:';
@@ -55,8 +64,17 @@ function isLoopbackIp(ip: string): boolean {
 async function resolveBucketKeys(username: string): Promise<readonly string[]> {
   const requestHeaders = await headers();
   const ip = requestHeaders.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'local';
-  if (isLoopbackIp(ip)) return [`${username}|${ip}`];
-  return [`${username}|${ip}`, buildIpBucketKey(ip)];
+  const accountKey = buildAccountBucketKey(username, ip);
+  if (isLoopbackIp(ip)) return [accountKey];
+  return [accountKey, buildIpBucketKey(ip)];
+}
+
+/** One ledger row per lockout, never per attempt; the counter itself stays in memory. */
+async function recordLoginFailure(bucketKeys: readonly string[], username: string): Promise<void> {
+  recordFailedAttempt(bucketKeys);
+  if (!isRateLimited(bucketKeys)) return;
+  const ip = bucketKeys[0].split('|')[1] ?? 'local';
+  await recordLoginLockout({ username, ip, expiresAt: new Date(Date.now() + LOGIN_LOCKOUT_MS) });
 }
 
 export async function getCaptchaState(username?: string): Promise<{ required: boolean; enabled: boolean; provider: CaptchaProvider; siteKey: string; threshold: number; banThreshold: number }> {
@@ -119,13 +137,13 @@ export async function login(_prevState: LoginActionState | null, formData: FormD
     const admin = await findActiveAdmin(username);
     if (!admin) {
       await bcrypt.compare(password, DUMMY_BCRYPT_HASH);
-      recordFailedAttempt(bucketKeys);
+      await recordLoginFailure(bucketKeys, username);
       const nextState: LoginActionState = { error: 'Invalid credentials' };
       if (shouldRequireCaptcha(bucketKeys[0])) Object.assign(nextState, buildCaptchaRequiredState());
       return nextState;
     }
     if (!(await verifyStoredPassword(password, admin.authentication))) {
-      recordFailedAttempt(bucketKeys);
+      await recordLoginFailure(bucketKeys, username);
       const nextState: LoginActionState = { error: 'Invalid credentials' };
       if (shouldRequireCaptcha(bucketKeys[0])) Object.assign(nextState, buildCaptchaRequiredState());
       return nextState;

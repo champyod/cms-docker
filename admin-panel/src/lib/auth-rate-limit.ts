@@ -1,5 +1,5 @@
 const MAX_LOGIN_ATTEMPTS = 5;
-const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
+export const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
 const MAX_LOGIN_BUCKETS = 1000;
 
 // Both bucket families share one map, and usernames are operator-defined, so
@@ -14,6 +14,11 @@ export const loginBuckets = new Map<string, { count: number; resetAt: number }>(
 
 export function buildIpBucketKey(ip: string): string {
   return `${IP_BUCKET_PREFIX}${ip}`;
+}
+
+/** The per-account bucket key, so an unlock clears exactly the bucket a lockout filled. */
+export function buildAccountBucketKey(username: string, ip: string): string {
+  return `${username}|${ip}`;
 }
 
 function evictSafestLoginBucket(): void {
