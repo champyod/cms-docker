@@ -15,6 +15,12 @@
 # "-f" then records a complete archive. An empty volume still tars to a non-zero gzip
 # header, so a zero-byte result means the stream died, not that there was nothing to send.
 #
+# That second half is the case this suite also guards: a helper that succeeds and archives
+# an empty tree returns 0 and hands over a real gzip stream — 132 bytes for one empty
+# directory here — which weighs something, so "-s" is satisfied and the run would report a
+# complete archive for a restore that puts nothing back. Weight is not content, so the run
+# lists what it kept.
+#
 # It runs the real script against a staged copy with a stubbed docker, so the recorded
 # command line is the evidence. No daemon, no network, no credentials.
 #
@@ -119,6 +125,50 @@ check_eq "the run names the failed stream as the reason" "yes" \
   "$(grep_yes "$RUN_LOG" 'volume tar failed')"
 check_eq "the dump is kept" "1" \
   "$(count_matching "${RUN_ROOT}/backups/db" '*.dump')"
+
+# ---------------------------------------------------------------------------
+# 5. The helper succeeds and archives nothing: real bytes, no file to restore
+# ---------------------------------------------------------------------------
+# WHY the archive is staged here instead of through a new STUB_VOLUME mode: the fixture
+# already streams whatever STUB_ARCHIVE names, so pointing it at an empty tree reaches the
+# case without a second knob on a fixture every backup suite shares.
+printf '\n== helper archives an empty tree ==\n'
+EMPTY_TREE="${WORK}/empty-volume-tree"
+EMPTY_ARCHIVE="${WORK}/empty-volume.tar.gz"
+mkdir -p "${EMPTY_TREE}/uploads"
+tar czf "$EMPTY_ARCHIVE" -C "$EMPTY_TREE" .
+
+# The weight the run has to reject: an archive of nothing is not a zero-byte stream.
+check_yes "the empty archive is a real gzip stream, so -s is satisfied" \
+  "$(file_bytes "$EMPTY_ARCHIVE" | awk '{print ($1 > 0) ? "yes" : "no"}')"
+check_eq "the empty archive carries no member a restore could put back" "0" \
+  "$(tar -tzvf "$EMPTY_ARCHIVE" | awk '$1 !~ /^d/' | wc -l | tr -d '[:space:]')"
+
+new_run_root no-files
+run_backup "STUB_ARCHIVE=${EMPTY_ARCHIVE}"
+expect_exit "an archive that restores nothing is reported as partial" "3"
+
+check_eq "no volume archive is kept for a restore that would yield nothing" "0" \
+  "$(count_matching "${RUN_ROOT}/backups/volumes" '*.tar.gz')"
+check_eq "no checksum is written for an archive that was never usable" "0" \
+  "$(count_matching "${RUN_ROOT}/backups/volumes" '*.tar.gz.sha256')"
+check_eq "the run names a file-less archive as the reason" "yes" \
+  "$(grep_yes "$RUN_LOG" 'volume tar holds no files')"
+check_eq "the dump is kept" "1" \
+  "$(count_matching "${RUN_ROOT}/backups/db" '*.dump')"
+
+MANIFEST="${RUN_ROOT}/backups/manifest.json"
+check_eq "the manifest exists and holds the run" "1" "$(entry_count "$MANIFEST")"
+check_eq "the entry is marked" "failed" "$(entry_field "$MANIFEST" 0 '.volume_status')"
+check_eq "vol_tar is null rather than a path to nothing" "null" \
+  "$(entry_field "$MANIFEST" 0 '.vol_tar')"
+check_eq "vol_bytes stays a number" "0" "$(entry_field "$MANIFEST" 0 '.sizes.vol_bytes')"
+
+# The verdict is the defect: a run that archived nothing announced a green success.
+check_eq "the run announces a partial, not a success" "1" \
+  "$(alerts_with_colour "$WEBHOOK_LOG" "$ALERT_AMBER")"
+check_eq "no green success is announced for a run with no volume" "0" \
+  "$(alerts_with_colour "$WEBHOOK_LOG" "$ALERT_GREEN")"
 
 printf '\n== summary ==\n'
 printf 'PASS: %d  FAIL: %d\n' "$PASS" "$FAIL"

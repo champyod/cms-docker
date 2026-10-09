@@ -79,7 +79,8 @@ VOLUME_DATA="cms-data"
 #   2 = the disk guard stopped the run — free space at the backup root was unreadable or under the
 #       floor, so nothing was written and there is no dump from this run to judge
 #   3 = partial backup — the dump was kept, but the run is not whole: the volume archive
-#       failed, or the manifest does not record this run.
+#       did not yield one a restore could put back (it failed, or it carried no file), or
+#       the manifest does not record this run.
 # --cleanup-only writes no backup and runs no disk guard, so it only ever returns 0 (the rotation
 # reclaimed disk) or 1 (the rotation itself failed) and never 2 or 3.
 readonly EXIT_PARTIAL_BACKUP=3
@@ -236,6 +237,28 @@ get_pg_version() {
 stream_volume_tar() {
   local image="$1"
   docker run --rm -v "${VOLUME_DATA}:/volume:ro" "$image" tar czf - -C /volume .
+}
+
+# ---------------------------------------------------------------------------
+# volume_archive_has_files <archive> — true when the archive carries at least one
+# member that is not a directory, i.e. a restore would put something back.
+# ---------------------------------------------------------------------------
+# WHY the mode column and not the member name: both tars a backup run can meet — BusyBox
+# on the monitor image, GNU on the host — mark a directory with a leading "d" in the
+# permissions field, while only one of them appends a trailing slash to a directory in a
+# listing. A name test therefore passes for the wrong reason on one of them, and a check
+# that cannot fail is not guarding anything.
+# WHY awk stops at the first one: it closes the pipe, so an archive that does hold files
+# costs one header read rather than a second pass over every byte of it.
+volume_archive_has_files() {
+  local first_file
+  # WHY the pipeline's own status is dropped: the early exit leaves tar writing into a
+  # closed pipe, so that status reports SIGPIPE rather than anything about the archive.
+  # The answer is the member awk printed, and a tar that could not read the archive at
+  # all printed none — which fails the same way a file-less archive does, and both are
+  # unusable for a restore.
+  first_file="$(tar -tzvf "$1" 2>/dev/null | awk '$1 !~ /^d/ { print; exit }')" || true
+  [[ -n "$first_file" ]]
 }
 
 # ---------------------------------------------------------------------------
@@ -728,10 +751,25 @@ run_backup() {
 
   # WHY -s and not just -f: a stream that died before the first tar block leaves a
   # file that exists and is 0 bytes, which -f accepts and the manifest then records
-  # as a complete archive. An empty volume still tars to a non-zero gzip header.
+  # as a complete archive.
   if [[ -z "$vol_fail_reason" && ! -s "$vol_file" ]]; then
     rm -f "$vol_file"
     vol_fail_reason="volume tar empty"
+  fi
+
+  # WHY a listing here and not a byte floor: -s is answered by the gzip envelope, and an
+  # empty volume still tars to a non-zero gzip header, so an archive holding nothing at
+  # all passes the test above and the manifest then records a complete one. A byte floor
+  # would also encode a policy about how much counts as backed up that no reader of this
+  # file owns, and it would still pass an archive that is large and holds none of the
+  # volume's files. The question a restore actually asks is whether the archive carries
+  # any member that is not a directory, and the listing answers exactly that.
+  # WHY the same vol_fail_reason channel as a stream that died: the run is in the same
+  # state either way — a kept dump and no volume — so it takes the same verdict, the
+  # same partial alert and the same status rather than a second shape to reason about.
+  if [[ -z "$vol_fail_reason" ]] && ! volume_archive_has_files "$vol_file"; then
+    rm -f "$vol_file"
+    vol_fail_reason="volume tar holds no files"
   fi
 
   # WHY the path is empty and the byte count zero when the archive is missing: a
