@@ -388,6 +388,24 @@ jobs:
     timeout-minutes: 30
     needs: changes
     if: github.event_name != 'workflow_dispatch' && needs.changes.outputs.rust_ranking == 'true'
+    # WHY a service: three tests in this crate need a database, and an ignored
+    # test is a claim nobody checks. The service makes the SQL path real, so a
+    # query that no longer matches the schema fails here instead of in a contest.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ranking_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      RANKING_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/ranking_test
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -407,6 +425,9 @@ jobs:
           key: ${{ runner.os }}-cargo-ranking-${{ hashFiles('tools/cms-ranking/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-ranking-
 
+      - name: Apply the ranking tables
+        run: psql "$RANKING_TEST_DATABASE_URL" -f admin-panel/prisma/migrations/20261009150000_ranking_tables/migration.sql
+
       - name: Format check
         working-directory: tools/cms-ranking
         run: cargo fmt --check
@@ -417,7 +438,7 @@ jobs:
 
       - name: Test
         working-directory: tools/cms-ranking
-        run: cargo test --all-targets
+        run: cargo test --all-targets -- --include-ignored
 
   # ./cms execs .tools/cms-tui/cms-tui-linux-<arch> before it will build from source,
   # so that checked-in binary is what an operator actually runs. Without this job it

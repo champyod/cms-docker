@@ -64,12 +64,13 @@
 
 ### Slice 3: Read path and public surface
 
-- [ ] Implement the sqlx queries for each entity kind and the score assembly that mirrors src/cmsranking/Scoring.py.
-- [ ] Implement the public routes with the same shapes as today: /, /history, /scores, /config, /logo, and the full editable credit list on /credits.
-- [ ] Do not implement the Basic-authenticated CRUD routes: the push path is retired with the file store, so the service is a reader of the pushed tables.
-- [ ] Patch the vendored page only as far as the new /config fields require (CSS custom properties for the theme, title/subtitle/columns from PublicConfig).
-- **Verify:** the parity fixtures pass field by field; the page renders in a browser against the fixture database.
-- **Commit:** feat(ranking): serve the scoreboard from postgres
+- [x] Ported cmsranking.Scoring into src/scoring.rs and verified it against the shipping Python scorer: the fixture values are executed output, not a reading.
+- [x] src/store.rs reads the projection over sqlx; /scores, /history and /config serve it. A missing database, an unreachable one and an unknown score mode all answer 503, because an empty board during a contest is worse than an error.
+- [x] Three database-backed tests are ignored without a live PostgreSQL, so the CI job now runs a postgres service, applies the CreateTable migration and passes --include-ignored. An ignored test nobody runs is a claim, not a check.
+- [ ] Still open in this slice: /, /logo and /credits (the vendored page, the logo and the compact credit text) and the page-side patch for the new /config fields.
+- [ ] The HTTP-level parity gate needs capture.sh run where the Python service is up.
+- **Verify:** scoring parity green (2 tests), clippy silent, the ignored tests compile; full HTTP parity still pending.
+- **Commit:** feat(ranking): serve scores and history from postgres
 
 ### Slice 4: Live events
 
