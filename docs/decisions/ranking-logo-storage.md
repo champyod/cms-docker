@@ -1,6 +1,6 @@
 # ADR: Ranking Logo Storage — Volume vs DB vs S3
 
-- **Status:** Accepted
+- **Status:** Accepted — the volume-plus-mirror decision still stands. Updated 2026-10-09: the reader named below is now the Rust service, which probes the same extensions in the same order instead of negotiating over Accept.
 - **Date:** 2026-08-31
 - **Deciders:** Admin Panel, Ranking Service
 - **Scope:** `RANKING_LOGO_PATH` / `/logo` asset lifecycle

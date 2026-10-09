@@ -211,7 +211,11 @@ Consequences accepted explicitly:
 
 No new mechanism. The service reads the same database credentials the panel and the core services
 read from the generated .env, so ./cms db rename + repointing every [db_<profile>] POSTGRES_DB +
-./cms config sync + redeploy behaves exactly as docs/DB-ROTATION.md section 5 describes. The plan
+./cms config sync + redeploy behaves exactly as the rotation guide describes.
+
+That guide is docs/DB-ROTATION.md on major/admin-panel; it is NOT on this branch's base, so the
+rotation model was verified against the sibling worktree rather than against this checkout. Anyone
+updating the guide's pass criteria must do so where the file lives, not here. The plan
 adds one pass-criterion line for ranking to that document, because the service is now a database
 client and a skipped repoint would otherwise look like a ranking outage rather than a stale name.
 
