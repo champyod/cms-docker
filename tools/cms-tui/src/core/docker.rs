@@ -58,8 +58,10 @@ impl DockerClient {
 
     /// Deploys the requested stack via `make`.
     ///
-    /// Contest deploys recreate the web server, so a successful contest
-    /// deploy refreshes nginx through the shared script (parity with `make`).
+    /// A deploy can recreate an upstream on a new container address, and
+    /// grader-nginx-proxy resolved the old one when it loaded its config, so
+    /// every successful deploy reloads it through the shared script. The
+    /// `make` deploy targets run that same script, so both paths behave alike.
     ///
     /// # Errors
     ///

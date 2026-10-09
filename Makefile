@@ -105,6 +105,17 @@ env:
 	@echo "  Edit config.toml, then run: ./cms config sync"
 	@bash scripts/__config_sync.sh
 
+# WHY every recreate-capable deploy refreshes the domain proxy: `up -d` replaces
+# a container whenever its image or config changed, the replacement is a new
+# container on a new address, and grader-nginx-proxy resolved the old address
+# when it loaded its upstreams at startup. Without a reload the domain keeps
+# proxying a stale IP and 502s until someone runs './cms domain proxy --apply'.
+# WHY invoked plainly rather than with '|| true': the script always exits 0 and
+# only warns when nginx itself refuses the reload, so a failed reload cannot fail
+# the deploy. A script that cannot run at all still does fail the deploy, which
+# is what the Rust deploy path does too.
+DOMAIN_PROXY_RELOAD := bash scripts/__domain_proxy_reload.sh
+
 # ---------------------------------------------------------------------------
 # Canonical profile targets — DEPLOYMENT_TYPE=img → pull + up --no-build, src → up --build
 # DEPLOYMENT_TYPE_OVERRIDE env var (set by *-img aliases) takes precedence over files.
@@ -140,6 +151,7 @@ admin: expose
 		echo "DEPLOYMENT_TYPE=src → building admin images..."; \
 		$(COMPOSE_CMD) $(COMPOSE_FLAGS) $(ADMIN_UP_PROFILES) up -d --build; \
 	fi
+	@$(DOMAIN_PROXY_RELOAD)
 	@echo "Admin profile started."
 
 contest: expose
@@ -155,6 +167,7 @@ contest: expose
 		$(COMPOSE_CMD) $(COMPOSE_FLAGS) $(CONTEST_UP_PROFILES) up -d --build; \
 	fi
 	@bash scripts/__contest_dns_refresh.sh
+	@$(DOMAIN_PROXY_RELOAD)
 	@echo "Contest profile started (CONTEST_ID canonical)."
 
 worker: expose

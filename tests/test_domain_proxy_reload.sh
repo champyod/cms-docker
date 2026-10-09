@@ -5,6 +5,7 @@ set -uo pipefail
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="${REPO_ROOT}/scripts/__domain_proxy_reload.sh"
 DOCKER_RS="${REPO_ROOT}/tools/cms-tui/src/core/docker.rs"
+MAKEFILE="${REPO_ROOT}/Makefile"
 
 pass=0
 fail=0
@@ -60,6 +61,41 @@ if grep -q '__domain_proxy_reload.sh' "$DOCKER_RS"; then
   ok "DockerClient::deploy delegates to the script"
 else
   no "DockerClient::deploy delegates to the script"
+fi
+
+# `make -n` rather than grepping the Makefile: a grep would still pass on a
+# commented-out line, and it would not follow the DOMAIN_PROXY_RELOAD variable
+# to the command it expands to. The dry run asks make itself what it would
+# execute, so a line make would never run cannot satisfy this.
+if ! command -v make >/dev/null 2>&1; then
+  no "make is available to resolve the deploy targets"
+else
+  ok "make is available to resolve the deploy targets"
+
+  for stack in admin contest; do
+    if make -n -C "$REPO_ROOT" "$stack" 2>/dev/null \
+      | grep -q '__domain_proxy_reload\.sh'; then
+      ok "make ${stack} reloads the domain proxy"
+    else
+      no "make ${stack} reloads the domain proxy"
+    fi
+  done
+
+  # Teardown removes containers instead of recreating them, so a reload there
+  # would fire against a proxy that is on its way down.
+  teardown_ok=1
+  for target in admin-stop admin-clean contest-stop contest-clean core-stop; do
+    if make -n -C "$REPO_ROOT" "$target" 2>/dev/null \
+      | grep -q '__domain_proxy_reload\.sh'; then
+      teardown_ok=0
+      echo "        unexpected reload in make ${target}"
+    fi
+  done
+  if [[ "$teardown_ok" -eq 1 ]]; then
+    ok "make teardown targets leave the proxy alone"
+  else
+    no "make teardown targets leave the proxy alone"
+  fi
 fi
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
