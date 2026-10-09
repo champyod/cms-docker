@@ -6,8 +6,8 @@ use crate::core::domain_setup::{
 };
 
 use super::{
-    BackupSub, Commands, ConfigSub, ContestSub, DbSub, DomainCmd, FunnelSub, SecretsSub,
-    TailscaleSub, WorkerSub,
+    BackupSub, Commands, ConfigSub, ContestSub, DbSub, DomainCmd, DomainRenewArgs, FunnelSub,
+    SecretsSub, TailscaleSub, WorkerSub,
 };
 
 const fn db_key(sub: &DbSub) -> DispatchKey {
@@ -68,10 +68,13 @@ const fn funnel_dispatch(sub: &FunnelSub) -> (DispatchKey, &'static str) {
 /// keep that same distinction for the TUI form. One conversion, three callers — the
 /// three setup-shaped verbs carry the same payload, so all three land here.
 fn domain_setup_from(cmd: &DomainCmd) -> DomainSetupRequest {
-    let (DomainCmd::Setup(args) | DomainCmd::Cert(args) | DomainCmd::Proxy(args)) = cmd else {
-        return DomainSetupRequest::default();
+    let common = match cmd {
+        DomainCmd::Setup(args) => &args.common,
+        DomainCmd::Cert(args) => &args.common,
+        DomainCmd::Proxy(args) => &args.common,
+        _ => return DomainSetupRequest::default(),
     };
-    let args = args.as_ref();
+    let args = common;
 
     DomainSetupRequest {
         cert: args.cert.clone().unwrap_or_default(),
@@ -118,12 +121,11 @@ fn domain_setup_from(cmd: &DomainCmd) -> DomainSetupRequest {
 /// WHY a projection of its own rather than a narrowed [`DomainSetupRequest`]: `renew` has
 /// no scope to project, and filling a setup request here would mean carrying
 /// `--cert-only`/`--proxy-only` — the two flags `cmd_renew` must never be able to emit.
-fn domain_renew_from(cmd: &DomainCmd) -> DomainRenewRequest {
-    let DomainCmd::Renew(args) = cmd else {
-        return DomainRenewRequest::default();
-    };
-    let args = args.as_ref();
-
+///
+/// WHY the payload rather than the whole [`DomainCmd`]: the only caller already matched
+/// the `Renew` arm, so re-deriving that here would add an unreachable fallback that
+/// silently encodes a bare `renew` instead of failing.
+fn domain_renew_from(args: &DomainRenewArgs) -> DomainRenewRequest {
     DomainRenewRequest {
         cert: clone_or_empty(args.acme.cert.as_ref()),
         domain: clone_or_empty(args.names.domain.as_ref()),
@@ -163,9 +165,13 @@ fn clone_or_empty(value: Option<&String>) -> String {
 }
 
 /// Whether this run asked for the cert-renewal timer to be installed.
+///
+/// WHY these three verbs and not `proxy`: `proxy` renders nginx and leaves the
+/// certificate store alone, so its payload does not carry the flag at all — clap rejects
+/// it there rather than accepting one this function would drop.
 fn install_timer_requested(sub: &DomainCmd) -> bool {
     match sub {
-        DomainCmd::Setup(args) => args.timer.install_timer,
+        DomainCmd::Setup(args) | DomainCmd::Cert(args) => args.timer.install_timer,
         DomainCmd::Renew(args) => args.timer.install_timer,
         _ => false,
     }
@@ -194,16 +200,16 @@ fn domain_dispatch(sub: &DomainCmd) -> (DispatchKey, Vec<String>) {
             DispatchKey::DomainProxy,
             domain_setup_args("proxy", &domain_setup_from(sub)),
         ),
-        DomainCmd::Status(args) => {
+        DomainCmd::Status { json } => {
             let mut status_args = vec!["status".to_string()];
-            if args.json {
+            if *json {
                 status_args.push("--json".to_string());
             }
             (DispatchKey::DomainStatus, status_args)
         }
-        DomainCmd::Renew(_) => (
+        DomainCmd::Renew(args) => (
             DispatchKey::DomainRenew,
-            domain_renew_args(&domain_renew_from(sub)),
+            domain_renew_args(&domain_renew_from(args)),
         ),
         DomainCmd::Preflight => (DispatchKey::DomainPreflight, vec!["preflight".into()]),
         DomainCmd::CheckExpiry { days } => {

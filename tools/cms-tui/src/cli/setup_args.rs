@@ -5,11 +5,16 @@
 //! `DomainCmd` and the outer `Commands` enum up to that size. One box keeps every
 //! enum pointer-sized.
 //!
-//! WHY the flags arrive in six flattened groups rather than as one flat list: each
-//! group is a decision the operator makes together, and a flat list of bare booleans
-//! gives no way to see which flags belong to which decision. Flattening keeps the
-//! command line byte-for-byte identical while making the grouping visible in the
-//! struct, which is where the projection in `cli::resolve` reads it.
+//! WHY the flags arrive in grouped blocks rather than as one flat list: each group is a
+//! decision the operator makes together, and a flat list of bare booleans gives no way
+//! to see which flags belong to which decision. Flattening keeps the command line
+//! byte-for-byte identical while making the grouping visible in the struct, which is
+//! where the projection in `cli::resolve` reads it.
+//!
+//! WHY [`DomainSetupArgs`] and [`DomainProxyArgs`] are two payloads over one
+//! [`DomainCommonArgs`] rather than one payload for all three verbs: `--install-timer`
+//! is the only flag they part company on, and `proxy` must refuse it rather than accept
+//! one it cannot honour.
 //!
 //! WHY [`DomainRetryArgs`], [`DomainRunArgs`] and [`DomainTimerArgs`] are not private to
 //! this file: `cli::renew_args` flattens the same three groups into the `renew` payload,
@@ -83,8 +88,8 @@ pub struct DomainStoreArgs {
 
 /// The one flag this group holds is consumed by the CLI and is never forwarded to
 /// `scripts/__domain.sh`: the script has no `--install-timer` option and exits with
-/// `unknown option` on one, so the projection in `cli::resolve` has to drop it rather
-/// than emit it alongside the script's own flags.
+/// `unknown option` on one, so `install_timer_requested` in `cli::resolve` decides
+/// whether to honour it, and neither encoder emits it.
 #[derive(Args, Clone, Copy, Debug, Default)]
 pub struct DomainTimerArgs {
     /// Install and enable the hourly cert-renewal timer, then stop.
@@ -92,13 +97,14 @@ pub struct DomainTimerArgs {
     pub install_timer: bool,
 }
 
-/// Every flag `scripts/__domain.sh setup` accepts, as parsed from argv.
+/// Every flag `scripts/__domain.sh setup` shares with `cert` and `proxy`, as parsed
+/// from argv.
 ///
 /// The values stay `Option`/`bool` here so clap keeps "not typed" distinct from
 /// "typed as 0"; `cli::resolve` performs the single projection onto
 /// [`crate::core::domain_setup::DomainSetupRequest`].
 #[derive(Args, Clone, Debug)]
-pub struct DomainSetupArgs {
+pub struct DomainCommonArgs {
     /// Certificate type (letsencrypt|provided|selfsigned); unset lets `DOMAIN_CERT_METHOD` apply.
     #[arg(long)]
     pub cert: Option<String>,
@@ -163,6 +169,29 @@ pub struct DomainSetupArgs {
     pub run: DomainRunArgs,
     #[command(flatten)]
     pub store: DomainStoreArgs,
+}
+
+/// Every flag `scripts/__domain.sh setup` accepts, as parsed from argv.
+///
+/// `cert` takes this payload unchanged: both verbs issue a certificate, so both are
+/// allowed to schedule the renewal of one.
+#[derive(Args, Clone, Debug)]
+pub struct DomainSetupArgs {
+    #[command(flatten)]
+    pub common: DomainCommonArgs,
     #[command(flatten)]
     pub timer: DomainTimerArgs,
+}
+
+/// `proxy`'s payload: the shared flags without the renewal timer.
+///
+/// WHY the timer is absent rather than merely ignored: `proxy` renders, validates and
+/// reloads nginx and leaves the certificate store untouched — its own help says so, and
+/// `__domain.sh` runs it with `SETUP_ISSUE_CERT=0`. A timer that reissues certificates
+/// would contradict that contract, so clap refuses the flag on this verb instead of
+/// accepting one that is then dropped.
+#[derive(Args, Clone, Debug)]
+pub struct DomainProxyArgs {
+    #[command(flatten)]
+    pub common: DomainCommonArgs,
 }

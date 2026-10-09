@@ -333,8 +333,8 @@ fn revoke_forwards_the_reason() {
 // Both verbs reach the same key because the operator types the flag where they already
 // are; there is no separate `domain install-timer` verb to remember instead.
 #[test]
-fn install_timer_reaches_the_timer_key_from_either_verb() {
-    for verb in ["setup", "renew"] {
+fn install_timer_reaches_the_timer_key_from_every_verb_that_owns_the_store() {
+    for verb in ["setup", "cert", "renew"] {
         let (key, args) = parse(&["cms", "domain", verb, "--install-timer"]).expect("resolves");
         assert_eq!(
             key,
@@ -345,11 +345,54 @@ fn install_timer_reaches_the_timer_key_from_either_verb() {
     }
 }
 
+// `proxy` renders nginx and leaves the certificate store untouched, so scheduling a
+// certificate renewal from it contradicts the verb's own contract. Refusal has to happen
+// at the clap level: an accepted-then-ignored flag would leave the operator believing a
+// timer was installed.
+#[test]
+fn proxy_refuses_the_certificate_renewal_timer() {
+    let parsed = <crate::Args as clap::Parser>::try_parse_from([
+        "cms",
+        "domain",
+        "proxy",
+        "--install-timer",
+    ]);
+    assert!(
+        parsed.is_err(),
+        "proxy accepted --install-timer, which it cannot honour"
+    );
+}
+
+#[test]
+fn proxy_still_forwards_every_flag_its_own_payload_carries() {
+    let (key, args) = parse(&[
+        "cms",
+        "domain",
+        "proxy",
+        "--domain",
+        "x.example.org",
+        "--proxy-only",
+        "--apply",
+    ])
+    .expect("resolves");
+    assert_eq!(key, crate::core::dispatch::DispatchKey::DomainProxy);
+    assert_eq!(
+        args,
+        vec![
+            "proxy",
+            "--domain",
+            "x.example.org",
+            "--proxy-only",
+            "--apply"
+        ]
+    );
+}
+
 // The script has no --install-timer option, so emitting it would end in
 // `unknown option: --install-timer` rather than an install.
 #[test]
 fn install_timer_is_never_forwarded_to_the_domain_script() {
-    for verb in ["setup", "renew"] {
+    for verb in ["setup", "cert", "renew"] {
         let (_, args) = parse(&["cms", "domain", verb, "--install-timer"]).expect("resolves");
         assert!(
             !args.iter().any(|arg| arg == "--install-timer"),
