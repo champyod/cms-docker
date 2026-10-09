@@ -70,6 +70,28 @@ fn credits_keep_the_names_the_python_route_used() {
     assert_eq!(credits.text.as_deref(), Some("Compact text"));
 }
 
+/// The Python route served the whole asset list for its surface. The route has to stay a
+/// complete offer even though the footer only shows the compact line.
+#[test]
+fn the_full_ranking_credit_list_is_served() {
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/parity/credits-sample.json");
+    let credits = credits_from_file(&path, None).expect("the sample reads");
+    assert_eq!(credits.surface["title"], "Ranking");
+}
+
+/// A credits file written for another surface must serve nothing rather than the wrong
+/// list: an offer that names somebody else's assets is worse than an empty one.
+#[test]
+fn a_credits_file_without_a_ranking_surface_serves_null() {
+    let path = std::env::temp_dir().join(format!("credits-{}.json", std::process::id()));
+    let body = r#"{ "project": { "name": "CMS Docker", "url": "https://example.invalid" }, "license": { "id": "AGPL-3.0" } }"#;
+    std::fs::write(&path, body).expect("the fixture is written");
+    let credits = credits_from_file(&path, None).expect("it reads");
+    assert_eq!(credits.surface, serde_json::Value::Null);
+    std::fs::remove_file(&path).ok();
+}
+
 #[test]
 fn a_missing_credits_file_is_refused_rather_than_emptied() {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/parity/absent.json");
