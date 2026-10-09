@@ -33,13 +33,13 @@
 
 ---
 
-### Slice 0: Capture the parity baseline before any code
+### Slice 0: Parity baseline before any code
 
-- [ ] Run the current Python service against a seeded fixture database and capture, for a fixed contest: GET /, GET /scores, GET /history, GET /config, GET /logo (bytes plus headers), and a bounded /events capture (first N events with ids).
-- [ ] Store them under tools/cms-ranking/tests/fixtures/parity/ with a README stating the capture command, the contest id, and the service commit.
-- [ ] Record the same shapes the pusher sends by reading src/cmsranking/{User,Team,Task,Contest,Submission,Subchange}.py and src/cms/service/ProxyService.py, and keep them beside the fixtures.
-- **Verify:** fixtures exist, are non-empty, and their structure is described in the README. Nothing else changes.
-- **Commit:** test(ranking): capture the python parity fixtures
+- [x] Derive the wire shapes and the endpoint contract from source (the src/cmsranking entity classes, the RankingWebServer.py handlers and dispatch mounts, src/cmscommon/eventsource.py, Scoring.py) into tools/cms-ranking/tests/fixtures/parity/{entities,endpoints,events,seed}.json.
+- [x] Ship capture.sh, which reproduces the golden bytes on a host where the Python service is running. Docker is absent in the authoring environment, so no capture has been taken and every derived expectation is labelled as derived.
+- [ ] Run capture.sh on the target host before Slice 3 and commit its captured/ output.
+- **Verify:** every JSON fixture parses, capture.sh passes bash -n, and the README states what is derived and what is captured.
+- **Commit:** test(ranking): add the parity baseline
 
 ### Slice 1: Scaffold the crate and its gates
 
@@ -61,8 +61,8 @@
 ### Slice 3: Read path and public surface
 
 - [ ] Implement the sqlx queries for each entity kind and the score assembly that mirrors src/cmsranking/Scoring.py.
-- [ ] Implement the public routes with the same shapes as today: /, /history, /scores, /config, /logo. Keep /credits until the spec question 4 is answered.
-- [ ] Implement the Basic-authenticated CRUD routes over the same tables, so cmsRWSHelper keeps working during the transition.
+- [ ] Implement the public routes with the same shapes as today: /, /history, /scores, /config, /logo, and the full editable credit list on /credits.
+- [ ] Do not implement the Basic-authenticated CRUD routes: the push path is retired with the file store, so the service is a reader of the pushed tables.
 - [ ] Patch the vendored page only as far as the new /config fields require (CSS custom properties for the theme, title/subtitle/columns from PublicConfig).
 - **Verify:** the parity fixtures pass field by field; the page renders in a browser against the fixture database.
 - **Commit:** feat(ranking): serve the scoreboard from postgres

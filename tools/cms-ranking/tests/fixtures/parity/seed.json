@@ -1,0 +1,157 @@
+{
+  "note": "Deterministic payloads for capture.sh. expected_* values are derived from Scoring.py, not captured; the capture confirms or falsifies them. Times are fixed so history order is reproducible.",
+  "path_prefixes": {
+    "contest": "contests",
+    "task": "tasks",
+    "team": "teams",
+    "user": "users",
+    "submission": "submissions",
+    "subchange": "subchanges"
+  },
+  "entities": {
+    "contests": {
+      "c0": {
+        "name": "Parity Fixture Contest",
+        "begin": 1700000000,
+        "end": 1700036000,
+        "score_precision": 2
+      }
+    },
+    "tasks": {
+      "t0": {
+        "name": "Fixture Task Zero",
+        "short_name": "T0",
+        "contest": "c0",
+        "max_score": 100,
+        "score_precision": 2,
+        "extra_headers": [],
+        "order": 0,
+        "score_mode": "max"
+      },
+      "t1": {
+        "name": "Fixture Task One",
+        "short_name": "T1",
+        "contest": "c0",
+        "max_score": 100,
+        "score_precision": 2,
+        "extra_headers": [],
+        "order": 1,
+        "score_mode": "max"
+      }
+    },
+    "teams": {
+      "team0": {
+        "name": "Fixture Team"
+      }
+    },
+    "users": {
+      "u0": {
+        "f_name": "Ada",
+        "l_name": "Zero",
+        "team": "team0"
+      },
+      "u1": {
+        "f_name": "Bob",
+        "l_name": "One",
+        "team": null
+      }
+    },
+    "submissions": {
+      "s0": {
+        "user": "u0",
+        "task": "t0",
+        "time": 1700001000
+      },
+      "s1": {
+        "user": "u0",
+        "task": "t0",
+        "time": 1700002000
+      },
+      "s2": {
+        "user": "u1",
+        "task": "t0",
+        "time": 1700003000
+      },
+      "s3": {
+        "user": "u1",
+        "task": "t1",
+        "time": 1700003100
+      }
+    },
+    "subchanges": {
+      "sc0": {
+        "submission": "s0",
+        "time": 1700001000,
+        "score": 50,
+        "token": false,
+        "extra": []
+      },
+      "sc1": {
+        "submission": "s1",
+        "time": 1700002000,
+        "score": 100,
+        "token": false,
+        "extra": []
+      },
+      "sc2": {
+        "submission": "s2",
+        "time": 1700003000,
+        "score": 0,
+        "token": false,
+        "extra": []
+      },
+      "sc3": {
+        "submission": "s3",
+        "time": 1700003100,
+        "score": 30,
+        "token": false,
+        "extra": []
+      }
+    }
+  },
+  "expected_scores": {
+    "derivation": "ScoreHandler emits {user: {task: score}} for scores strictly greater than 0.0 (RankingWebServer.py ScoreHandler).",
+    "value": {
+      "u0": {
+        "t0": 100
+      },
+      "u1": {
+        "t1": 30
+      }
+    },
+    "excluded": {
+      "u1": {
+        "t0": 0
+      }
+    }
+  },
+  "expected_history": {
+    "derivation": "ScoringStore.get_global_history yields (user, task, time, score) merged by time across every user/task (Scoring.py).",
+    "value": [
+      [
+        "u0",
+        "t0",
+        1700001000,
+        50
+      ],
+      [
+        "u0",
+        "t0",
+        1700002000,
+        100
+      ],
+      [
+        "u1",
+        "t0",
+        1700003000,
+        0
+      ],
+      [
+        "u1",
+        "t1",
+        1700003100,
+        30
+      ]
+    ]
+  }
+}
