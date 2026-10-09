@@ -15,6 +15,7 @@ fn appearance(title: Option<&str>, theme: Option<serde_json::Value>) -> Appearan
         score_format: None,
         footer_text: None,
         credits_text: None,
+        credits: None,
         access_mode: "public".to_string(),
     }
 }
@@ -63,7 +64,7 @@ fn credits_keep_the_names_the_python_route_used() {
     let path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/parity/credits-sample.json");
     let credits =
-        credits_from_file(&path, Some("Compact text".to_string())).expect("the sample reads");
+        credits_from_file(&path, Some("Compact text".to_string()), None).expect("the sample reads");
     assert_eq!(credits.project, "CMS Docker");
     assert_eq!(credits.license, "AGPL-3.0");
     assert_eq!(credits.source_url, "https://example.invalid/fork");
@@ -76,7 +77,7 @@ fn credits_keep_the_names_the_python_route_used() {
 fn the_full_ranking_credit_list_is_served() {
     let path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/parity/credits-sample.json");
-    let credits = credits_from_file(&path, None).expect("the sample reads");
+    let credits = credits_from_file(&path, None, None).expect("the sample reads");
     assert_eq!(credits.surface["title"], "Ranking");
 }
 
@@ -87,7 +88,7 @@ fn a_credits_file_without_a_ranking_surface_serves_null() {
     let path = std::env::temp_dir().join(format!("credits-{}.json", std::process::id()));
     let body = r#"{ "project": { "name": "CMS Docker", "url": "https://example.invalid" }, "license": { "id": "AGPL-3.0" } }"#;
     std::fs::write(&path, body).expect("the fixture is written");
-    let credits = credits_from_file(&path, None).expect("it reads");
+    let credits = credits_from_file(&path, None, None).expect("it reads");
     assert_eq!(credits.surface, serde_json::Value::Null);
     std::fs::remove_file(&path).ok();
 }
@@ -95,7 +96,7 @@ fn a_credits_file_without_a_ranking_surface_serves_null() {
 #[test]
 fn a_missing_credits_file_is_refused_rather_than_emptied() {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/parity/absent.json");
-    assert!(credits_from_file(&path, None).is_err());
+    assert!(credits_from_file(&path, None, None).is_err());
 }
 
 /// The panel stores one file per format and removes the others, so the configured path
@@ -126,4 +127,19 @@ fn a_logo_with_no_file_falls_back_to_the_vendored_asset() {
     let fallback = logo_path(None, Some(&directory.join("absent")), &directory);
     assert_eq!(fallback, directory.join("img").join("logo.png"));
     std::fs::remove_dir_all(&directory).ok();
+}
+
+/// The panel's list wins over the vendored one, and a panel that has none leaves the file
+/// in charge: the credit list is the one thing an operator may replace wholesale.
+#[test]
+fn the_panels_credit_list_wins_over_the_vendored_one() {
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/parity/credits-sample.json");
+    let panel = serde_json::json!([{ "name": "Panel Asset" }]);
+    let credits = credits_from_file(&path, None, Some(panel.clone())).expect("the sample reads");
+    assert_eq!(credits.surface, panel);
+    assert_eq!(
+        credits.license, "AGPL-3.0",
+        "the licence is never taken from the panel"
+    );
 }

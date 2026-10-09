@@ -59,6 +59,8 @@ pub struct Appearance {
     pub score_format: Option<serde_json::Value>,
     pub footer_text: Option<String>,
     pub credits_text: Option<String>,
+    /// The panel's full credit list, when it has one.
+    pub credits: Option<serde_json::Value>,
     pub access_mode: String,
 }
 
@@ -107,7 +109,7 @@ pub async fn touch_last_login(pool: &PgPool, id: i32) -> Result<(), StoreError> 
 pub async fn load_appearance(pool: &PgPool) -> Result<Option<Appearance>, StoreError> {
     let row = sqlx::query_as::<_, Appearance>(
         "SELECT title, subtitle, organisation, logo_asset, favicon_asset, theme, \
-         columns, score_format, footer_text, credits_text, access_mode \
+         columns, score_format, footer_text, credits_text, credits, access_mode \
          FROM ranking_settings WHERE id = 1",
     )
     .fetch_optional(pool)

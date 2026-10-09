@@ -170,11 +170,12 @@ async fn credits(State(state): State<AppState>) -> Response {
         Ok(appearance) => appearance,
         Err(refusal) => return refusal.response(),
     };
-    let text = appearance.and_then(|row| row.credits_text);
+    let text = appearance.as_ref().and_then(|row| row.credits_text.clone());
+    let panel_list = appearance.as_ref().and_then(|row| row.credits.clone());
     let Some(path) = state.config().credits_file.as_ref() else {
         return refuse("no credits file is configured");
     };
-    match credits_from_file(path, text) {
+    match credits_from_file(path, text, panel_list) {
         Ok(credits) => Json(credits).into_response(),
         Err(error) => refuse(&error.to_string()),
     }
@@ -333,6 +334,7 @@ mod tests {
             score_format: None,
             footer_text: Some("footer".to_string()),
             credits_text: Some("credits".to_string()),
+            credits: None,
             access_mode: access_mode.to_string(),
         }
     }

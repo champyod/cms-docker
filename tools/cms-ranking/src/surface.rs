@@ -28,7 +28,11 @@ pub enum SurfaceError {
 /// Section 13 of the licence requires the running deployment to name its own
 /// source, so a missing credits file is a compliance failure rather than a
 /// cosmetic one: every caller refuses instead of serving an empty offer.
-pub fn credits_from_file(path: &Path, text: Option<String>) -> Result<Credits, SurfaceError> {
+pub fn credits_from_file(
+    path: &Path,
+    text: Option<String>,
+    panel_list: Option<serde_json::Value>,
+) -> Result<Credits, SurfaceError> {
     let raw = std::fs::read_to_string(path)
         .map_err(|error| SurfaceError::Credits(format!("{}: {error}", path.display())))?;
     let parsed: serde_json::Value = serde_json::from_str(&raw)
@@ -51,11 +55,15 @@ pub fn credits_from_file(path: &Path, text: Option<String>) -> Result<Credits, S
         .and_then(serde_json::Value::as_str)
         .unwrap_or("https://github.com/champyod/cms-docker")
         .to_string();
-    let surface = parsed
-        .get("surfaces")
-        .and_then(|surfaces| surfaces.get("ranking"))
-        .cloned()
-        .unwrap_or(serde_json::Value::Null);
+    // The panel's list wins when it has one; the vendored file is the fallback. The source
+    // offer is never taken from either, because the licence requires it to stay ours.
+    let surface = panel_list.unwrap_or_else(|| {
+        parsed
+            .get("surfaces")
+            .and_then(|surfaces| surfaces.get("ranking"))
+            .cloned()
+            .unwrap_or(serde_json::Value::Null)
+    });
     Ok(Credits {
         project,
         license,

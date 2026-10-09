@@ -785,6 +785,9 @@ model ranking_settings {
   score_format  Json?
   footer_text   String?  @db.VarChar
   credits_text  String?  @db.VarChar
+  /// The full credit list the panel edits, when it has one. Absent means the vendored
+  /// credits.json is the list; the source-offer line is never taken from here.
+  credits       Json?
   access_mode   String   @default("public") @db.VarChar
   updated_at    DateTime @default(now())
   updated_by    Int?
